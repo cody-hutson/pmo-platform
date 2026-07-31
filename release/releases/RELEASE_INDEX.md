@@ -2,6 +2,8 @@
 
 Corpus-level index of all pmo-platform releases. Chronological-recent-first row order. Appended at Stage 13 chore PR per [`stage-13-close.md § Phase B`](../references/pipeline/stage-13-close.md).
 
+**Date anchor — merge event.** The `Date` column dates the **merge of the release PR to `main`**, sourced from the matching `RELEASE_LOG.md` row rather than from the close-out clock. The two ledgers share this anchor deliberately: they are the only pair carrying an automated cross-assertion (`generate_release_index.py --verify`, `deploy.sh` Check 23), and an equality check across two *different* anchors is red by construction and can no longer detect real drift. The close-out instant lives on `RELEASE_DIGEST.md` and `CHANGELOG.md`. Taxonomy and format rules: [`date-variable-convention.md § Emission-Time Anchors`](../../core/standards/date-variable-convention.md). **Grandfathering:** rows written before this declaration carry the close-out date and are **not** rewritten — regenerating this file without `--verify` would rewrite them all in one pass and forge the audit trail.
+
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
 | v4.01 | decision-audit-and-learning | 2026-07-30 | — | #4167 | [notes/v4.01_RELEASE_NOTES.md](notes/v4.01_RELEASE_NOTES.md) |

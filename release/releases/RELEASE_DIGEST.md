@@ -3,6 +3,8 @@
 
 Corpus-level digest grouped by version family. Per-version 3-5 line summary. Appended at Stage 13 chore PR per [`stage-13-close.md § Phase B`](../references/pipeline/stage-13-close.md).
 
+**Date anchor — close-out event (UTC).** The `(<date>)` in each `### vX.Y (<date>)` heading dates the **Stage-13 close-out run**, sampled once per run in UTC — not the merge. `RELEASE_LOG.md` and `RELEASE_INDEX.md` carry the **merge** anchor, so this file may read a day later for a release whose close-out crossed a UTC midnight; that is the two anchors working, not a contradiction. Taxonomy and format rules: [`date-variable-convention.md § Emission-Time Anchors`](../../core/standards/date-variable-convention.md). Entries predating this declaration are grandfathered — anchors are declared forward, never backfilled.
+
 ## Knowledge Corpus
 
 ### v4.01 (2026-07-30) — The session learning retro can now actually run
@@ -26,17 +28,17 @@ A `novel`-class release on milestone #183 (`56-runtime-config-and-posture`), **D
 
 ### v3.94 (2026-07-26) — Intake and gate hardening: a Stage-2 acceptance-fit gate (reject-by-default for agent-authored / net-new-sweeping items), an issue-body author-association trust boundary, a module skill-consultation forcing function, and an extend-before-create gate at Stage 5
 
-### v3.93 (2026-07-25) — <headline — populated by operator at chore PR review>
+### v3.93 (2026-07-25) — Release version numbers now bind when a release ships, not when it is planned
 
 ### v3.92 (2026-07-25) — Architecture baseline: a consolidated actor-model + governance-as-contract statement, a cross-chain index, and a standing as-built conformance audit that checks delivered work against the platform's own architecture
 
 ### v3.91 (2026-07-25) — Cross-platform install foundation: Windows entry-points, a doctor command, and safer multi-destination tracking
 
-### v3.90 (2026-07-25) — <headline — populated by operator at chore PR review>
+### v3.90 (2026-07-25) — Accurate release-impact analysis: path-true counts + directory-move detection
 
 ### v3.89 (2026-07-25) — Reusable Change Impact Matrix and Training Plan templates, plus a RAID-log template header reconcile
 
-### v3.88 (2026-07-25) — <headline — populated by operator at chore PR review>
+### v3.88 (2026-07-25) — Six deploy & tooling defects cleaned up — including an XSS sink hardened
 
 ### v3.87 (2026-07-24) — Design diagrams and process flows in the docs are now labeled and findable
 A `novel`-class knowledge-corpus release on milestone #291 (`design-artifact-backfill`), one release PR (#3796), 66 files (+809/−22), 14 `.skill` packages rebuilt. The platform's *default* design artifact — a section embedded in a parent doc — previously carried no marker, so the artifact set was unenumerable and its completion condition untestable. **#3725** ships the identification mechanism: `design-artifact-standard.md` §9 promotes `depicts:` / `flow_class:` to required, §2 corrects the Human-process current-state cell, and a new §12 adds per-flow-type detection criteria (table-aware — 3 of 7 flow types render as tables and are blind to any fence/Mermaid heuristic) plus the enumeration query; **ADR-089** records the chosen section-level `<!-- design-artifact: … -->` marker over a drift-prone frontmatter index. **#3614**'s spike produced the real gap as a query result and rendered **D-FissionScope → COLLAPSE**: 5 of 6 planned builds were already covered, so **#3798** swept them into 24 embedded-marker declarations (rebuilding the 14 skill-flow packages), and only **#3441** human-process kept a full build — the new dedicated `docs/release-record-keeping.md`. The set at ship time is **24 embedded + 2 dedicated-frontmatter** declarations across the seven flow types. Re-rendered provisional v3.86 → v3.87 after a concurrent claim; no orphan tag, no re-version ledger row. **MODERATE reversibility / HIGH confidence** — a single `git revert -m 1` of the merge; the only wrinkle is re-stripping the markers, nothing to migrate.
@@ -56,9 +58,9 @@ A `cross-cutting`-class release on milestone #266, **D-C SINGLE** topology, one 
 
 ### v3.82 (2026-07-22) — Exec briefs name the real consequence; status updates cite their sources
 
-### v3.81 (2026-07-22) — <headline — populated by operator at chore PR review>
+### v3.81 (2026-07-22) — Theme-named releases no longer vanish from the release record
 
-### v3.80 (2026-07-22) — <headline — populated by operator at chore PR review>
+### v3.80 (2026-07-22) — Release close-outs are now reliable for theme-named releases
 
 ### v3.79 (2026-07-17) — Both link checkers now agree, and the deploy tooling stops repeating itself
 
@@ -69,7 +71,7 @@ Project→portfolio rollup made explicit and deterministic — one PR (#3549), 5
 A skill-suite hardening release — three disjoint slices on one PR (#3540). **#155** extends `health-check` with a `rollup` mode (`--scope portfolio|project`, `--depth full|status`) under a compose-not-absorb scope-lock (ADR-019): `--scope portfolio` invokes `weekly-status-rollup` Section 6 for the PORTFOLIO.md composition and stages the proposal to `08-Generated/_health-check/`, never writing the bridge file; the 7 existing modes + the 5-section contract are byte-identically preserved. **#2699** adds `run_routing_audit.py` — a three-tier Jaccard→embed→judge pipeline with a lazily-imported optional embedding backend + stub fallback that keeps the zero-dependency offline CI contract intact; **ADR-084** records the optional-heavy-dependency precedent, and `run_eval_audit.py` is imported read-only. **#3114** re-baselines the ~500-line SKILL.md authoring guideline in `canonical-skill-structure.md §5` as advisory, distinct from the hard `references/` gate (`C6_LINE_THRESHOLD=400`); additive, no skill splits. Re-anchored provisional v3.75→v3.77 after concurrent releases claimed v3.75/v3.76; commits re-signed (CLEAN merge, no admin override). All three slices Stage-8 ACCEPT, Stage-9 GO. CHEAP reversibility.
 
 ### v3.76 (2026-07-17) — The knowledge base now orients a fresh reader: frontmatter enforced corpus-wide, self-audit paths refreshed, vision + install model codified
-Knowledge-corpus hygiene across `core/` — one PR (#3545), 5 issues, Class **novel**. #2221 frontmatter backfill (38 docs) + Check 50 → global committed-default enforce (Approach D); #2701 REFRESHES AUDIT_FRAMEWORK (19 stale paths → current homes, methodology retained; Collective Review reversed RETIRE→REFRESH on adversarial evidence); #2917 single-sources SPI bands to channel-formats.md; #2702 classifies `[PROJECT_KEY]` example-data; #380 codifies vision/build-surface + ADR-083 (extends ADR-017). Squash-merge `da4c116`, CI 35/35; re-versioned v3.75→v3.76 (concurrent #264 took v3.75). CHEAP.
+Knowledge-corpus hygiene across `core/` — one PR (#3545), 5 issues, Class **novel**. #2221 frontmatter backfill (38 docs) + Check 50 → global committed-default enforce (Approach D); #2701 REFRESHES AUDIT_FRAMEWORK (19 stale paths → current homes, methodology retained; Collective Review reversed RETIRE→REFRESH on adversarial evidence); #2917 single-sources SPI bands to channel-formats.md; #2702 classifies `[PROJECT_KEY]` example-data; #380 codifies vision/build-surface + ADR-083 (extends ADR-017). Squash-merge `da4c116`, CI 35/35; re-versioned v3.75→v3.76 (concurrent milestone #244 took v3.75). CHEAP.
 
 ### v3.75 (2026-07-17) — A first-class Finding entity and an ownership-collision build check
 A housekeeping release for the platform's data model and skill packaging. **#2166** promotes the findings register to a first-class `Finding` entity (#19) per **ADR-044** — a §3.19 field schema (8 validation rules + 4 negative tests), a §6 owning-agent triplet (created by `build-reviewer` / `pmo-qa-auditor` / `pmo-technical-analyst`, maintained by `pmo-qa-lead`), and a §7 storage row — and reclassifies the remaining no-entity-home skill outputs (exec status, weekly roll-up, decision briefing, daily-status Teams, comms drafts) as ownerless *renderings*; the draft `severity` enum was reconciled to the shared `{CRITICAL,HIGH,MEDIUM,LOW}` model at Stage-5 review. **#2168** wires the ownership model into `deploy.sh` as Check 54 (ADR-044 I1/I3/I4) — it reconciles declared skill outputs against the owning-agent matrix and escalates on a second maintainer, renderings exempt: 0 collisions / 0 false-positives across 19 entities on release. **#2074** converges `extract-roster-needles.sh` on the shared `pmo_people_roster()` accessor; **#2066** retrofits a `design-exploration.md` ASCII flow-block to Mermaid. Routine class; resumed from an interrupted prior hub session (Stages 4–8 complete) and driven Stage 9 → 13 this session; provisional v3.75 bound at Stage 12 with the concurrent v3.76 milestone re-anchoring cleanly. MODERATE reversibility.
@@ -88,13 +90,13 @@ Hardens `release-hub` Mode R (readiness) + Mode O (orchestration). The readiness
 
 ### v3.71 (2026-07-12) — New projects use one simpler folder set and a single inbox
 
-### v3.70 (2026-07-12) — <headline — populated by operator at chore PR review>
+### v3.70 (2026-07-12) — Release pipeline re-verifies freshness and constrains agent write-access
 
-### v3.69 (2026-07-11) — <headline — populated by operator at chore PR review>
+### v3.69 (2026-07-11) — Platform maintenance: deploy-check validation cleared to green
 
 ### v3.68 (2026-07-10) — Release quality checks now run automatically and escalate only on failure
 
-### v3.67 (2026-07-10) — <headline — populated by operator at chore PR review>
+### v3.67 (2026-07-10) — Intake now adapts to your project's methodology
 
 ### v3.66 (2026-07-09) — Engineering documents now start from a canonical template, not a blank page
 
@@ -126,15 +128,15 @@ Installs the tooling to turn project documents into a searchable index — a nod
 
 Methodology (Scrum, Kanban, or your own) becomes a self-contained, swappable pack — a shipped best-practice baseline you select, or your own config you bring and override, without hand-editing skills. Foundation release: the pack format (a widened type-pack meta-schema with a `role`/`extends`/`[[labels]]`/optional-`kinds` composition layer), two starter packs + a shared `_common` base, and a methodology-neutral label grammar. Consuming skills are wired in a follow-up (#2021). ADR-069 (composing-unit) + ADR-070 (composition grammar); MODERATE reversibility.
 
-### v3.59 (2026-07-03) — <headline — populated by operator at chore PR review>
+### v3.59 (2026-07-03) — One structural vocabulary for docs, backlog, and release records
 
-### v3.58 (2026-07-02) — <headline — populated by operator at chore PR review>
+### v3.58 (2026-07-02) — System-Specialist template — one method, a specialist per system
 
 ### v3.57 (2026-07-02) — Impact analysis reads code, and git-native releases stop dead-ending
 
 Two release-pipeline improvements on milestone `80-solutioning-and-engineering-skill-modes` (2 issues, PR #3082). **#505** adds `domain-blast-radius.sh`, which traces change impact through the code import graph (`from x import y` edges) for `domain: software` deliverables and emits the same schema-v1 surface the design-review checklist consumes; the markdown-tree `blast-radius.sh` default is unchanged and now shares a common emitter library (architecture recorded in ADR-068). **#674** stops the release-executor Dry-Run-Record halt from dead-ending git-native releases (where the PR diff *is* the dry-run review), fixed at both the Step-1 input-validation check and the failure-mode entry; Cowork-lineage plans still route to release-planner Mode C. Provisional **v3.54** re-versioned forward to **v3.57** at the atomic tag claim (forward-only per bundle-composition-doctrine §5.3). MODERATE / `git revert -m 1` of PR #3082 reverses both cleanly; additive tooling + one routing-condition fix, no data migration.
 
-### v3.53 (2026-07-02) — <headline — populated by operator at chore PR review>
+### v3.53 (2026-07-02) — ADRs gain a canonical frontmatter schema, and the durability lint stops mis-flagging colors
 
 ### v3.52 (2026-07-02) — The eval framework is complete — tested refiner scripts, runnable eval sets, and chain-aware QA
 

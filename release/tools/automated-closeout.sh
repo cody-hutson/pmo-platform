@@ -9,7 +9,7 @@
 #   1  parse_args         CLI validation
 #   2  preflight          gh auth, clean tree, worktree cwd, DEPLOYED row, tag exists
 #   3  read_state         RELEASE_LOG row + visible-H4 Deployment Log + Milestone state + release-PR MERGE_SHA (#1682)
-#   4  detect_open_issues auto-close anomaly enumeration (#38: --exclude-issue + Stage-13-subtask title-regex auto-exclude)
+#   4  detect_open_issues auto-close anomaly enumeration (#38: --exclude-issue + Stage-13-subtask sub-task-label+title-regex auto-exclude, #3665)
 #   5  create_chore_branch chore/v<X.Y>-stage-13-corpus-update
 #   6  transition_release_log  DEPLOYED → VERIFIED
 #   6.5 inject_outcome_field  **Outcome:** field on the visible-H4 Deployment Log block (#37; default SUCCESS, --outcome overrides)
@@ -236,6 +236,12 @@ CHORE_PR_SKIPPED=0       # set by phase_create_chore_pr's zero-commit guard so
 MERGE_POLL_STEP=10       # await-merge poll interval (seconds). Not a CLI flag —
                          # internal; the self-test overrides it to keep hermetic
                          # runs fast.
+VERIFY_RECHECK_DELAY=2   # check-5 post-close re-read replication-lag delay, in
+                         # seconds (#3587 D-4). `gh issue close` writes via REST
+                         # while `gh issue list` reads via GraphQL, so a
+                         # milestone-filtered read is not guaranteed
+                         # read-after-write. Not a CLI flag — internal; the
+                         # self-test overrides it to 0 to stay hermetic.
 
 # State populated by phases (used by generate_report)
 RUN_TS=""
@@ -245,8 +251,23 @@ STATE_MILESTONE_STATE=""
 STATE_MILESTONE_SLUG=""
 STATE_CYCLE_TIME=""
 STATE_TAG_EXISTS=0
-OPEN_ISSUE_LIST=""        # newline-separated list of issue numbers
-OPEN_ISSUE_COUNT=0
+OPEN_ISSUE_LIST=""        # newline-separated list of issue numbers. PRE-CLOSE
+                         # SNAPSHOT, taken once at Phase 4 (#3587): 6 of its 7
+                         # consumers document the population as it stood BEFORE
+                         # the D-1 manual close (chore-PR "Deferred items" body,
+                         # the `closed N/M` denominator, the D-1 Manual-Close
+                         # Candidates report section, the JSON payload). Only
+                         # verification check 5 wants post-close truth, and it
+                         # re-derives into LOCALS rather than refreshing these.
+OPEN_ISSUE_COUNT=0        # pre-close snapshot — see OPEN_ISSUE_LIST above
+COLLECTED_OPEN_ISSUES=""  # collect_open_release_issues output channel (#3587):
+                         # newline-separated surviving issue numbers from the most
+                         # recent call. Write-then-immediately-read; no phase holds
+                         # it across a later call.
+EXCLUDED_DETAIL=""        # collect_open_release_issues side channel (#3587): the
+                         # "#N (<reason>) " fragments for the caller's mark_phase
+                         # detail string. phase_detect_open_issues reads it;
+                         # phase_run_verification ignores it.
 CHORE_BRANCH=""
 CHORE_PR_NUMBER=""
 VERIFICATION_RESULTS=""
@@ -282,6 +303,20 @@ die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
 
 ts_now() { /bin/date -u +%Y-%m-%dT%H:%M:%SZ; }
 date_today() { /bin/date -u +%Y-%m-%d; }
+
+# Run-scoped CLOSE-OUT anchor (#3718). Sampled ONCE at script load and reused by
+# every close-out-anchored write: RELEASE_DIGEST, the release-note frontmatter
+# `date:` (and thence CHANGELOG, which derives its date from that frontmatter),
+# and RELEASE_REVERSIONS. Before this, each phase called date_today() freshly, so
+# a close-out run spanning a UTC midnight could write TWO different dates into
+# ONE atomic Stage-13 chore PR — the same "sampled more than once" defect the
+# Stage-5 date variable exists to prevent, at a smaller unit of work. Per
+# core/standards/date-variable-convention.md § Emission-Time Anchors
+# (sample-once-per-unit-of-work; the unit here is one close-out run).
+#
+# NOT used for the RELEASE_INDEX Date cell — that column carries the MERGE
+# anchor and is read from the RELEASE_LOG row. See phase_append_release_index.
+CLOSEOUT_ANCHOR_UTC="$(date_today)"
 
 # Workspace-boundary safety per cleanup-orphan-state.sh pattern.
 workspace_boundary_check() {
@@ -453,6 +488,53 @@ extract_row_state() {
     }'
 }
 
+# Extract the MERGE-anchored Date column from a RELEASE_LOG row (#3718).
+#
+# Pinned by HEADER NAME, not by ordinal: the Date column's position has moved
+# before (the legacy 5-column schema had no Date at all), and an ordinal pin
+# reads the wrong cell silently the next time it moves. Resolves the column index
+# from the RELEASE_LOG header row, then returns that field iff it is a
+# well-formed YYYY-MM-DD. Emits EMPTY — never a guess — when the header, the
+# column, or a well-formed value cannot be resolved, so the caller can fail
+# loudly rather than substitute the close-out clock and re-open the divergence.
+extract_row_date() {
+  local row="$1"
+  [[ -z "$row" ]] && return 0
+  /usr/bin/python3 - "$RELEASE_LOG" "$row" <<'PY'
+import re, sys
+
+log_path, row = sys.argv[1], sys.argv[2]
+
+def cells(line):
+    s = line.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|"):
+        s = s[:-1]
+    return [c.strip() for c in s.split("|")]
+
+col = None
+try:
+    with open(log_path, encoding="utf-8") as f:
+        for line in f:
+            if not line.lstrip().startswith("|"):
+                continue
+            header = cells(line)
+            if "Version" in header and "Date" in header:
+                col = header.index("Date")
+                break
+except OSError:
+    pass
+
+if col is None:
+    sys.exit(0)
+
+fields = cells(row)
+if col < len(fields) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", fields[col]):
+    sys.stdout.write(fields[col])
+PY
+}
+
 # Unified RELEASE_LOG row-match predicate (#2539 AC-3 — dry-run/apply parity).
 # Matches the row whose Milestone column is <slug> (any field position) and whose
 # State field is one of <state-regex> (an alternation, e.g. 'DEPLOYED' or
@@ -621,21 +703,36 @@ phase_read_state() {
   return 0
 }
 
-# ─── Phase 4: detect_open_release_issues (D6 — auto-close anomaly) ───────────
+# ─── Shared: collect_open_release_issues (#3665 matcher · #3587 single home) ──
+#
+# Enumerate the milestone's OPEN release issues minus the Stage-13 orchestration
+# exclusions. This is the SINGLE home of the exclusion predicate, called by both
+# the PRE-close detect (Phase 4) and the POST-close verification re-read (Phase 15
+# check 5), so the count the close-out reports and the count it verifies cannot
+# disagree with themselves (#3587 x #3665). A second copy of the matcher would make
+# that agreement a discipline promise instead of a structural invariant.
+#
+# Projection `--json number,title,labels`; line format "<number>\t<labels-csv>\t<title>".
+# The TITLE IS LAST deliberately: `${_rest#*$'\t'}` is non-greedy, so a title
+# containing a literal tab still parses intact.
+#
+# Outputs (globals, NOT stdout — bash runs `$( … )` in a subshell, which would
+# discard the EXCLUDED_DETAIL side channel and silently empty the "(excluded: …)"
+# fragment of the Phase-4 report line):
+#   COLLECTED_OPEN_ISSUES — surviving issue numbers, newline-separated, trimmed
+#   EXCLUDED_DETAIL       — "#N (<reason>) " fragments for the caller's mark_phase
+# Returns 0 = query succeeded (empty output legitimately means zero open)
+#         1 = `gh issue list` failed — output undefined. The caller MUST NOT read
+#             empty as zero: Phase 4 deliberately keeps today's tolerant behaviour
+#             (pre-existing fail-open, routed separately), check 5 fails closed.
+collect_open_release_issues() {
+  local slug="$1"
+  local raw _rc=0
+  raw="$($GH issue list --repo "$REPO_SLUG" --milestone "$slug" --state open --json number,title,labels --jq '.[] | "\(.number)\t\(.labels|map(.name)|join(","))\t\(.title)"' 2>/dev/null)" || _rc=1
 
-phase_detect_open_issues() {
-  local slug="$STATE_MILESTONE_SLUG"
-  [[ -z "$slug" ]] && slug="$VERSION"
-
-  # Fetch number+title so the Stage-13-subtask auto-exclude (title-regex fallback)
-  # can run. Format: "<number>\t<title>" per line (tab-separated).
-  local raw
-  raw="$($GH issue list --repo "$REPO_SLUG" --milestone "$slug" --state open --json number,title --jq '.[] | "\(.number)\t\(.title)"' 2>/dev/null || true)"
-
-  # Build the explicit-exclude set (#38 primary path). The Stage-13 orchestration
-  # sub-task is passed by NUMBER (--exclude-issue <N>) so it is deterministically
-  # filtered and cannot self-close mid-run (Risk R5).
-  local _excluded_detail=""
+  # Explicit-exclude set (#38 primary path). The Stage-13 orchestration sub-task is
+  # passed by NUMBER (--exclude-issue <N>) so it is deterministically filtered and
+  # cannot self-close mid-run (Risk R5).
   _is_excluded() {
     local n="$1" e
     for e in "${EXCLUDE_ISSUES[@]:-}"; do
@@ -644,28 +741,63 @@ phase_detect_open_issues() {
     return 1
   }
 
-  OPEN_ISSUE_LIST=""
-  local _n _title _line
+  COLLECTED_OPEN_ISSUES=""
+  EXCLUDED_DETAIL=""
+  # Declared here, not in the loop body: bash 3.2 does not scope loop-body
+  # assignments, and a leaked _is_subtask would make exclusion STICKY.
+  local _n _title _labels _rest _line _is_subtask
   while IFS= read -r _line; do
     [[ -z "$_line" ]] && continue
     _n="${_line%%$'\t'*}"
-    _title="${_line#*$'\t'}"
+    _rest="${_line#*$'\t'}"
+    _labels="${_rest%%$'\t'*}"
+    _title="${_rest#*$'\t'}"
     # (1) explicit --exclude-issue (deterministic, primary)
     if _is_excluded "$_n"; then
-      _excluded_detail="${_excluded_detail}#${_n} (explicit --exclude-issue) "
+      EXCLUDED_DETAIL="${EXCLUDED_DETAIL}#${_n} (explicit --exclude-issue) "
       continue
     fi
-    # (2) title-regex fallback: a Stage-13 close orchestration sub-task that the
-    # hub did NOT pass by number is still excluded so it cannot self-close.
-    # Pattern: title matches `stage.?13` AND `close` (case-insensitive).
-    if /usr/bin/printf '%s' "$_title" | /usr/bin/grep -qiE 'stage.?13.*close'; then
-      _excluded_detail="${_excluded_detail}#${_n} (title-regex stage-13-close) "
+    # Structural discriminator (#3665): is this an ORCHESTRATION SUB-TASK, per its
+    # LABEL? `sub-task` is canonical (label-taxonomy.md § Concrete rows, stamped by
+    # the Stage-6 scaffolding at creation); `type:subtask` is a tolerated legacy
+    # alias. EXACT comma-wrapped membership, never a substring test, so a
+    # hypothetical `not-a-sub-task` label cannot satisfy it. Set unconditionally
+    # each iteration — never `[[ … ]] && _is_subtask=1` alone.
+    case ",${_labels}," in
+      *",sub-task,"*|*",type:subtask,"*) _is_subtask=1 ;;
+      *)                                 _is_subtask=0 ;;
+    esac
+    # (2) label+title fallback: a Stage-13 close ORCHESTRATION SUB-TASK that the hub
+    # did NOT pass by number is still excluded so it cannot self-close (R5). BOTH
+    # conjuncts are required. The label answers the structural question (orchestration
+    # artifact vs delivered work item); the title tokens narrow it to the STAGE-13
+    # sub-task — the label alone matches every stage sub-task in the milestone. Title
+    # text alone was the defect: it false-excluded 13 delivered work items across the
+    # repo's history whose SUBJECT MATTER is Stage-13 close-out (#3665).
+    if [[ "$_is_subtask" -eq 1 ]] \
+       && /usr/bin/printf '%s' "$_title" | /usr/bin/grep -qiE 'stage.?13.*close'; then
+      EXCLUDED_DETAIL="${EXCLUDED_DETAIL}#${_n} (sub-task label + title-regex stage-13-close) "
       continue
     fi
-    OPEN_ISSUE_LIST="${OPEN_ISSUE_LIST}${_n}"$'\n'
+    COLLECTED_OPEN_ISSUES="${COLLECTED_OPEN_ISSUES}${_n}"$'\n'
   done <<< "$raw"
   # Trim a trailing newline so grep -c counts correctly.
-  OPEN_ISSUE_LIST="$(/usr/bin/printf '%s' "$OPEN_ISSUE_LIST" | /usr/bin/sed '/^$/d')"
+  COLLECTED_OPEN_ISSUES="$(/usr/bin/printf '%s' "$COLLECTED_OPEN_ISSUES" | /usr/bin/sed '/^$/d')"
+  return "$_rc"
+}
+
+# ─── Phase 4: detect_open_release_issues (D6 — auto-close anomaly) ───────────
+
+phase_detect_open_issues() {
+  local slug="$STATE_MILESTONE_SLUG"
+  [[ -z "$slug" ]] && slug="$VERSION"
+
+  # Tolerant by design: a `gh` failure reads as "zero open" here, exactly as it did
+  # before the helper extraction. Preserved deliberately — tightening it changes
+  # Phase-4 semantics and is routed to its own ticket, not fixed in passing.
+  collect_open_release_issues "$slug" || true
+  OPEN_ISSUE_LIST="$COLLECTED_OPEN_ISSUES"
+  local _excluded_detail="$EXCLUDED_DETAIL"
 
   if [[ -z "$OPEN_ISSUE_LIST" ]]; then
     OPEN_ISSUE_COUNT=0
@@ -924,13 +1056,35 @@ phase_append_release_index() {
   ver_cell="$(index_version_cell)"   # "<version>" | "<slug> (version-less)"
   note_rel="$(notes_rel_path)"       # notes/… | notes/_unversioned/…
 
+  # Date cell — MERGE anchor (#3718). Read from the RELEASE_LOG row for this
+  # version, NOT sampled from the close-out clock. LOG and INDEX are the only
+  # ledger pair carrying an automated cross-assertion
+  # (generate_release_index.py --verify, invoked by deploy.sh Check 23, asserts
+  # the INDEX row equals the LOG row field-for-field). While this phase sampled
+  # the close-out clock, that check was red BY CONSTRUCTION on every close-out
+  # that crossed a UTC midnight — it reported the design working correctly and
+  # so could no longer report real drift. The close-out instant is not lost: it
+  # is carried by DIGEST, the release note, and CHANGELOG, each declaring so.
+  # Per core/standards/date-variable-convention.md § Emission-Time Anchors.
+  #
+  # Resolved BEFORE the dry-run branch so dry-run predicts exactly what --apply
+  # writes, including the failure (#2539 AC-3 dry-run/apply parity). Preflight
+  # already asserted the LOG row exists at DEPLOYED, so an unresolvable Date is
+  # a real schema anomaly — fail loudly rather than silently substituting the
+  # clock and re-opening the very divergence this phase now closes.
+  local date_str
+  date_str="$(extract_row_date "$(find_log_row "$VERSION")")"
+  if [[ -z "$date_str" ]]; then
+    mark_phase "append_release_index" "FAIL" "could not resolve the merge-anchored Date from the RELEASE_LOG row for $VERSION (expected a YYYY-MM-DD cell under the 'Date' header); refusing to substitute the close-out clock — see date-variable-convention.md § Emission-Time Anchors"
+    return 3
+  fi
+
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "append_release_index" "DRY-RUN" "would insert a 6-col row (| $ver_cell | $slug | $(date_today) | — | #${PR_NUMBER} | $note_rel |) at the top of RELEASE_INDEX.md"
+    mark_phase "append_release_index" "DRY-RUN" "would insert a 6-col row (| $ver_cell | $slug | $date_str | — | #${PR_NUMBER} | $note_rel |) at the top of RELEASE_INDEX.md (Date = merge anchor, read from the RELEASE_LOG row)"
     return 0
   fi
 
-  local date_str note_link pr_cell
-  date_str="$(date_today)"
+  local note_link pr_cell
   note_link="[${note_rel}](${note_rel})"
   pr_cell="#${PR_NUMBER}"
 
@@ -1006,7 +1160,8 @@ phase_append_release_digest() {
   # The date cell carries the "(<date>, version-less)" marker for a version-less
   # release, matching the shipped DIGEST convention (#2048).
   local date_cell
-  if is_version_less; then date_cell="$(date_today), version-less"; else date_cell="$(date_today)"; fi
+  # CLOSE-OUT anchor, run-scoped (#3718) — one sample per close-out run.
+  if is_version_less; then date_cell="${CLOSEOUT_ANCHOR_UTC}, version-less"; else date_cell="$CLOSEOUT_ANCHOR_UTC"; fi
 
   if [[ "$MODE" == "dry-run" ]]; then
     mark_phase "append_release_digest" "DRY-RUN" "would prepend '### $VERSION ($date_cell) — $headline' under the topmost working H2 in RELEASE_DIGEST.md"
@@ -1224,7 +1379,8 @@ PY
 
   # (5) Apply — write exactly the rows classified `record` above (no re-probe; the
   #     disposition/tag_pushed carried through from the shared classifier).
-  local date_str; date_str="$(date_today)"
+  # CLOSE-OUT anchor, run-scoped (#3718) — one sample per close-out run.
+  local date_str; date_str="$CLOSEOUT_ANCHOR_UTC"
   local appended=0 disp tag_pushed
   while IFS='|' read -r abv disp tag_pushed; do
     [[ -z "$abv" ]] && continue
@@ -1282,8 +1438,10 @@ phase_scaffold_release_notes() {
     return 0
   fi
 
+  # CLOSE-OUT anchor, run-scoped (#3718). This frontmatter `date:` is ALSO the
+  # source CHANGELOG derives its date from, so the two surfaces cannot disagree.
   local date_str
-  date_str="$(date_today)"
+  date_str="$CLOSEOUT_ANCHOR_UTC"
 
   /bin/cat > "$notes_path" <<EOF
 ---
@@ -1475,7 +1633,7 @@ phase_append_changelog() {
   # per K-a-C 1.1.0 convention).
 
   if ! /usr/bin/python3 - "$changelog_path" "$notes_path" "$VERSION" "$REPO_SLUG" <<'PY' 2>/dev/null
-import sys, re, datetime
+import sys, re
 changelog, notes, version, repo_slug = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 
 # Parse notes frontmatter (existing convention: YAML between --- markers)
@@ -1485,7 +1643,19 @@ m = re.match(r'---\n(.*?)\n---\n', content, re.DOTALL)
 fm = m.group(1) if m else ""
 date_m = re.search(r'^date:\s*([0-9-]+)', fm, re.MULTILINE)
 summary_m = re.search(r'^summary:\s*"?([^"\n]+)"?', fm, re.MULTILINE)
-date = date_m.group(1) if date_m else datetime.date.today().isoformat()
+# CLOSE-OUT anchor, inherited from the release-note frontmatter (#3718). The
+# previous fallback here was `datetime.date.today()` — an OPERATOR-LOCAL date,
+# with no offset recorded, persisted into a durable CHANGELOG.md row that no
+# later reader could resolve to an instant. It also fired silently: a note
+# missing its `date:` produced a plausible-looking wrong row rather than an
+# error. Fail loudly instead. The frontmatter is written by
+# scaffold_release_notes from the run-scoped close-out anchor, so on every
+# normal path this field is present.
+if not date_m:
+    sys.stderr.write(
+        "release-note frontmatter has no `date:` field: %s\n" % notes)
+    sys.exit(1)
+date = date_m.group(1)
 summary = summary_m.group(1).strip() if summary_m else "(see release notes)"
 
 block = f"""## [{version}] - {date}
@@ -1521,7 +1691,7 @@ with open(changelog, 'w') as f:
     f.write(new)
 PY
   then
-    mark_phase "append_changelog" "FAIL" "python3 CHANGELOG synthesis failed (frontmatter malformed or file unreadable)"
+    mark_phase "append_changelog" "FAIL" "python3 CHANGELOG synthesis failed (frontmatter malformed, missing its \`date:\` field, or file unreadable)"
     return 3
   fi
 
@@ -2265,7 +2435,62 @@ phase_run_verification() {
   else
     v_log="PENDING"
   fi
-  v_subs="$([[ "$OPEN_ISSUE_COUNT" -eq 0 ]] && echo PASS || echo "PARTIAL (${OPEN_ISSUE_COUNT} open)")"
+  # Check 5 (#3587): OPEN_ISSUE_COUNT is a PRE-CLOSE snapshot, written once in
+  # Phase 4 and never re-read — and Phase 14 (manual_close_release_issues) runs
+  # immediately before this phase. Reading it here made every successful close
+  # render `PARTIAL (N open)` for the very N issues the same run had just closed,
+  # and that text propagates into the durable Gate-Passage Proof comment. Re-derive
+  # at point of use, into LOCALS: 6 of the 7 OPEN_ISSUE_COUNT consumers legitimately
+  # want the pre-close population (chore-PR "Deferred items", the `closed N/M`
+  # denominator, the D-1 Manual-Close Candidates section, the JSON payload), so a
+  # blanket refresh would trade a display bug for an erased audit record. The
+  # re-read goes through collect_open_release_issues, NOT a raw query: stage
+  # sub-tasks carry the release milestone and the Stage-13 sub-task is open by
+  # construction at this moment, so an unfiltered read would render PARTIAL on every
+  # run. Dry-run keeps the cached read — it closes nothing, so cached == live
+  # (mirrors check 4 above).
+  if [[ "$MODE" == "dry-run" ]]; then
+    v_subs="$([[ "$OPEN_ISSUE_COUNT" -eq 0 ]] && echo PASS || echo "PARTIAL (${OPEN_ISSUE_COUNT} open)")"
+  else
+    # Declare first, assign second — `local x="$(cmd)"` masks cmd's exit status,
+    # and this branch's whole point is discriminating query-failure from empty.
+    local _v5_rc _v5_list _v5_count _v5_nums _v5_straggler _v5_all_ours
+    _v5_rc=0
+    collect_open_release_issues "$slug" || _v5_rc=1
+    _v5_list="$COLLECTED_OPEN_ISSUES"
+
+    # D-4 bounded replication-lag guard: `gh issue close` writes via REST while
+    # `gh issue list` reads via GraphQL, so the re-read is not guaranteed
+    # read-after-write and could reproduce a smaller instance of the very bug this
+    # fixes. Retry ONCE, and only when every straggler is an issue this run just
+    # attempted to close — a straggler outside that set is real news, report it now.
+    if [[ "$_v5_rc" -eq 0 && -n "$_v5_list" ]]; then
+      _v5_all_ours=1
+      while IFS= read -r _v5_straggler; do
+        [[ -z "$_v5_straggler" ]] && continue
+        /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx "$_v5_straggler" \
+          || { _v5_all_ours=0; break; }
+      done <<< "$_v5_list"
+      if [[ "$_v5_all_ours" -eq 1 ]]; then
+        /bin/sleep "${VERIFY_RECHECK_DELAY:-2}"
+        collect_open_release_issues "$slug" || _v5_rc=1
+        _v5_list="$COLLECTED_OPEN_ISSUES"
+      fi
+    fi
+
+    if [[ "$_v5_rc" -ne 0 ]]; then
+      # Fail closed. UNVERIFIED, not FAIL: a query that could not run establishes
+      # nothing about whether issues are open — but it must never read as PASS.
+      v_subs="UNVERIFIED (post-close re-query failed)"
+    elif [[ -z "$_v5_list" ]]; then
+      v_subs="PASS"
+    else
+      _v5_count="$(/usr/bin/printf '%s\n' "$_v5_list" | /usr/bin/grep -c .)"
+      _v5_nums="$(/usr/bin/printf '%s' "$_v5_list" | /usr/bin/tr '\n' ',' | /usr/bin/sed 's/,$//')"
+      # Enumerate the numbers so the operator can act without re-querying.
+      v_subs="PARTIAL (${_v5_count} open: #${_v5_nums//,/, #})"
+    fi
+  fi
 
   VERIFICATION_RESULTS=$(/bin/cat <<EOF
 | # | Check | Method | Result |
@@ -3029,10 +3254,27 @@ EOF
   local _ai_saved_root="$REPO_ROOT" _ai_saved_mode="$MODE" _ai_saved_version="$VERSION"
   local _ai_saved_slug="$STATE_MILESTONE_SLUG" _ai_saved_idx="$RELEASE_INDEX" _ai_saved_dig="$RELEASE_DIGEST"
   local _ai_saved_pr="$PR_NUMBER" _ai_saved_notesdir="$RELEASE_NOTES_DIR"
+  local _ai_saved_log="$RELEASE_LOG" _ai_saved_anchor="$CLOSEOUT_ANCHOR_UTC"
   local _ai_tmp; _ai_tmp="$(/usr/bin/mktemp -d -t appendidx-selftest.XXXXXX)"
   REPO_ROOT="$_ai_tmp"; MODE="apply"; VERSION="v9.97"; STATE_MILESTONE_SLUG="88-some-theme-named-milestone"; PR_NUMBER=9999
   RELEASE_INDEX="$_ai_tmp/RELEASE_INDEX.md"; RELEASE_DIGEST="$_ai_tmp/RELEASE_DIGEST.md"
+  RELEASE_LOG="$_ai_tmp/RELEASE_LOG.md"
   RELEASE_NOTES_DIR="$_ai_tmp/notes"   # absent dir => headline placeholder path
+  # #3718 merge-anchor fixture. The LOG Date deliberately differs from BOTH the
+  # close-out anchor and any plausible "today", so an INDEX row carrying it
+  # proves the phase read the LOG rather than sampling the clock. The Date column
+  # sits at a NON-terminal position here (Notes trails it) so the header-name pin
+  # in extract_row_date is exercised rather than an incidental last-field guess.
+  local _ai_log_date="2026-03-04"
+  CLOSEOUT_ANCHOR_UTC="2026-09-09"   # deliberately != _ai_log_date
+  /bin/cat > "$RELEASE_LOG" <<EOF
+# RELEASE_LOG
+
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date | Notes |
+|---|---|---|---|---|---|---|---|---|
+| v9.97 | 88-some-theme-named-milestone | #1 | #9999 | \`abc\` | \`v9.97\` | DEPLOYED | ${_ai_log_date} | — |
+| 77-some-version-less-theme | 77-some-version-less-theme | #2 | #9998 | \`def\` | — | DEPLOYED | ${_ai_log_date} | — |
+EOF
   /bin/cat > "$RELEASE_INDEX" <<'EOF'
 # RELEASE_INDEX
 
@@ -3076,6 +3318,38 @@ EOF
   # 6-column schema ⇒ a well-formed row has exactly 7 pipes (| a | b | c | d | e | f |).
   local _ai_pipes; _ai_pipes="$(/usr/bin/printf '%s' "$_ai_row" | /usr/bin/tr -cd '|' | /usr/bin/wc -c | /usr/bin/tr -d ' ')"
   [[ "$_ai_pipes" -eq 7 ]] || { echo "FAIL: INDEX row must be 6-column (7 pipes), got $_ai_pipes pipes in: $_ai_row"; failures=$((failures+1)); }
+  # (b2) #3718 MERGE ANCHOR — the INDEX Date must equal the RELEASE_LOG Date, and
+  # must NOT be the close-out anchor. This is the regression surface for the
+  # writer/checker reconciliation: while this phase sampled the close-out clock,
+  # generate_release_index.py --verify (deploy.sh Check 23) was red by
+  # construction on every UTC-midnight-crossing close.
+  local _ai_date; _ai_date="$(/usr/bin/printf '%s' "$_ai_row" | /usr/bin/awk -F ' \\| ' '{print $3}')"
+  [[ "$_ai_date" == "$_ai_log_date" ]] || { echo "FAIL: INDEX Date must carry the MERGE anchor from the RELEASE_LOG row ($_ai_log_date), got '$_ai_date' in: $_ai_row"; failures=$((failures+1)); }
+  [[ "$_ai_date" != "$CLOSEOUT_ANCHOR_UTC" ]] || { echo "FAIL: INDEX Date must NOT be the close-out anchor ($CLOSEOUT_ANCHOR_UTC) — the merge anchor is canonical for the LOG/INDEX pair"; failures=$((failures+1)); }
+  # (b3) #3718 — DIGEST keeps the CLOSE-OUT anchor (the two anchors are distinct
+  # by design; collapsing them would destroy the close-out instant).
+  /usr/bin/grep -qE "^### v9\.97 \(${CLOSEOUT_ANCHOR_UTC}\)" "$RELEASE_DIGEST" \
+    || { echo "FAIL: DIGEST H3 must carry the run-scoped CLOSE-OUT anchor ($CLOSEOUT_ANCHOR_UTC)"; failures=$((failures+1)); }
+  # (b4) #3718 — unresolvable LOG Date must FAIL loudly, never fall back to the
+  # clock. Point RELEASE_LOG at a row whose Date cell is malformed.
+  local _ai_badlog="$_ai_tmp/RELEASE_LOG_bad.md" _ai_savedlog2="$RELEASE_LOG" _ai_savedidx2="$RELEASE_INDEX"
+  /bin/cat > "$_ai_badlog" <<'EOF'
+# RELEASE_LOG
+
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.95 | 86-bad | #3 | #9997 | `ghi` | `v9.95` | DEPLOYED | (unrecoverable) |
+EOF
+  RELEASE_LOG="$_ai_badlog"; RELEASE_INDEX="$_ai_tmp/RELEASE_INDEX_bad.md"
+  /usr/bin/printf '# RELEASE_INDEX\n\n| Version | Milestone | Date | Theme | Release PR | Release Notes |\n|---|---|---|---|---|---|\n' > "$RELEASE_INDEX"
+  local _ai_saved_v2="$VERSION"; VERSION="v9.95"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  # `|| true` per the existing self-test idiom — the phase now returns 3 on this
+  # path by design, and `set -e` would otherwise abort the whole self-test.
+  phase_append_release_index >/dev/null 2>&1 || true
+  [[ "$(get_phase append_release_index)" == FAIL\|* ]] || { echo "FAIL: unresolvable RELEASE_LOG Date must FAIL append_release_index (no clock fallback), got '$(get_phase append_release_index)'"; failures=$((failures+1)); }
+  ! /usr/bin/grep -qE '^\| v9\.95 \|' "$RELEASE_INDEX" || { echo "FAIL: a FAILed append_release_index must write no INDEX row"; failures=$((failures+1)); }
+  VERSION="$_ai_saved_v2"; RELEASE_LOG="$_ai_savedlog2"; RELEASE_INDEX="$_ai_savedidx2"
 
   # (c) idempotency — re-run both phases → SKIPPED on the H3 / bare-version guards
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
@@ -3124,6 +3398,7 @@ EOF
   REPO_ROOT="$_ai_saved_root"; MODE="$_ai_saved_mode"; VERSION="$_ai_saved_version"
   STATE_MILESTONE_SLUG="$_ai_saved_slug"; RELEASE_INDEX="$_ai_saved_idx"; RELEASE_DIGEST="$_ai_saved_dig"
   PR_NUMBER="$_ai_saved_pr"; RELEASE_NOTES_DIR="$_ai_saved_notesdir"
+  RELEASE_LOG="$_ai_saved_log"; CLOSEOUT_ANCHOR_UTC="$_ai_saved_anchor"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 4c: phase_inject_outcome_field (#37) — offline, hermetic. Drives the
@@ -3207,32 +3482,40 @@ EOF
   RELEASE_LOG="$_oc_saved_log"; OUTCOME="$_oc_saved_outcome"; OUTCOME_RATIONALE="$_oc_saved_rat"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
-  # Test 4d: phase_detect_open_issues exclude filter (#38) — offline, hermetic.
-  # Stubs $GH so `gh issue list … --json number,title --jq …` returns a fixed
-  # `<number>\t<title>` fixture (gh applies --jq server-side, so the stub emits the
-  # already-jq'd lines), then drives phase_detect_open_issues and asserts the
-  # filter: explicit --exclude-issue removes a number; the Stage-13 sub-task is
-  # excluded by explicit number; the title-regex `(?i)stage.?13.*close` fallback
-  # excludes an un-numbered Stage-13-close sub-task; the AC-4 mixed fixture leaves
-  # ONLY the anomaly issue in OPEN_ISSUE_LIST.
+  # Test 4d: phase_detect_open_issues exclude filter (#38, #3665) — offline, hermetic.
+  # Stubs $GH so `gh issue list … --json number,title,labels --jq …` returns a fixed
+  # `<number>\t<labels-csv>\t<title>` fixture (gh applies --jq server-side, so the
+  # stub emits the already-jq'd lines), then drives phase_detect_open_issues and
+  # asserts the filter: explicit --exclude-issue removes a number; the Stage-13
+  # sub-task is excluded by explicit number; the `sub-task`-label + title-regex
+  # `(?i)stage.?13.*close` fallback excludes an un-numbered Stage-13-close sub-task;
+  # a delivered work item whose TITLE matches but which carries no sub-task label
+  # SURVIVES (#3665 AC-4); and a sub-task labelled but NOT Stage-13 also survives —
+  # the guard proving the label alone is not the matcher.
   local _ex_saved_gh="$GH" _ex_saved_mode="$MODE" _ex_saved_slug="$STATE_MILESTONE_SLUG"
   local _ex_saved_list="$OPEN_ISSUE_LIST" _ex_saved_count="$OPEN_ISSUE_COUNT"
   local _ex_tmp; _ex_tmp="$(/usr/bin/mktemp -d -t excl-selftest.XXXXXX)"
   local _ex_stub="$_ex_tmp/gh-stub.sh"
   # Stub: fixture has a normal anomaly issue (#401), an explicit-exclude target
-  # (#999), the Stage-13 orchestration sub-task (#500, title matches the regex),
-  # and a decoy with "stage 13" but NOT "close" (#600, must NOT be excluded).
+  # (#999), the Stage-13 orchestration sub-task (#500, label + title match), a decoy
+  # with "stage 13" but NOT "close" (#600), the #3665 regression fixture (#2678 —
+  # delivered work item, Stage-13-close TITLE, NO sub-task label), the legacy-alias
+  # sub-task (#501, `type:subtask`), and the anti-over-exclude control (#502 —
+  # sub-task label but a Stage-5 title).
   /bin/cat > "$_ex_stub" <<'STUB'
 #!/usr/bin/env bash
-# Minimal gh stub for the #38 detect_open_issues self-test. Emits the jq'd
-# number<TAB>title lines for `issue list`; no-op (exit 0) for anything else.
+# Minimal gh stub for the #38 / #3665 detect_open_issues self-test. Emits the jq'd
+# number<TAB>labels<TAB>title lines for `issue list`; no-op (exit 0) otherwise.
 case "$1" in
   issue)
     if [[ "$2" == "list" ]]; then
-      printf '%s\t%s\n' 401 "Normal auto-close anomaly issue"
-      printf '%s\t%s\n' 999 "Some explicitly-excluded sub-task"
-      printf '%s\t%s\n' 500 "Stage 13 — Close: corpus update orchestration"
-      printf '%s\t%s\n' 600 "Stage 13 plan-review follow-up task"
+      printf '%s\t%s\t%s\n' 401 "bug" "Normal auto-close anomaly issue"
+      printf '%s\t%s\t%s\n' 999 "sub-task" "Some explicitly-excluded sub-task"
+      printf '%s\t%s\t%s\n' 500 "sub-task,status: bundled" "Stage 13 — Close: corpus update orchestration"
+      printf '%s\t%s\t%s\n' 600 "improvement,type:task" "Stage 13 plan-review follow-up task"
+      printf '%s\t%s\t%s\n' 2678 "bug,project:pipeline" "Stage-13 automated close-out publishes GitHub Release with placeholder notes"
+      printf '%s\t%s\t%s\n' 501 "type:subtask" "Stage 13 Close — legacy-alias-milestone"
+      printf '%s\t%s\t%s\n' 502 "sub-task" "Stage 5 Solutioning — matcher design (release-closeout-integrity)"
       exit 0
     fi
     ;;
@@ -3254,14 +3537,36 @@ STUB
   /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '999' && { echo "FAIL: #999 (explicit --exclude-issue) must be filtered out"; failures=$((failures+1)); }
   /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '500' && { echo "FAIL: #500 (Stage-13 sub-task by number) must be filtered out — cannot self-close (R5)"; failures=$((failures+1)); }
 
-  # (b) title-regex fallback alone (no explicit number for #500): #500 is still
-  #     excluded by `(?i)stage.?13.*close`; #401 + #600 survive.
+  # (b) label+title fallback alone (no explicit numbers): #500 and #501 are still
+  #     excluded; #401, #600, #999, #2678 and #502 survive. Legs (b1)-(b6) below are
+  #     the #3665 contract — (b2) and (b4) FAIL against the pre-#3665 title-only
+  #     matcher, which is what makes this fixture a regression test rather than
+  #     decoration.
   EXCLUDE_ISSUES=()
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   phase_detect_open_issues >/dev/null 2>&1
-  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '500' && { echo "FAIL: #500 must be excluded by the title-regex fallback when not passed by number"; failures=$((failures+1)); }
-  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '401' || { echo "FAIL: #401 must survive (title-regex fallback path)"; failures=$((failures+1)); }
-  [[ "$OPEN_ISSUE_COUNT" -eq 3 ]] || { echo "FAIL: title-regex-only path must leave 3 issues (401,600,999), got $OPEN_ISSUE_COUNT"; failures=$((failures+1)); }
+  # (b1) R5 preserved: a real Stage-13 orchestration sub-task is still excluded.
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '500' && { echo "FAIL: #500 must be excluded by the label+title fallback when not passed by number"; failures=$((failures+1)); }
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '401' || { echo "FAIL: #401 must survive (label+title fallback path)"; failures=$((failures+1)); }
+  # (b2) #3665 AC-4 regression: a DELIVERED work item whose title matches the
+  #      Stage-13-close regex but which carries no sub-task label must SURVIVE and be
+  #      closed. Title-only matching false-excluded 13 such issues.
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '2678' || { echo "FAIL: #2678 (delivered work item, Stage-13-close title, NO sub-task label) must SURVIVE — this is the #3665 false-exclusion"; failures=$((failures+1)); }
+  # (b3) legacy alias `type:subtask` is accepted as a sub-task-family label.
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '501' && { echo "FAIL: #501 (type:subtask legacy alias + Stage-13-close title) must be excluded"; failures=$((failures+1)); }
+  # (b4) anti-over-exclude control: the LABEL ALONE IS NOT THE MATCHER. A sub-task
+  #      with a non-Stage-13 title must survive — without this leg, a naive
+  #      label-only implementation would pass (b1)-(b3) while stranding every
+  #      Stage 5-8 sub-task open at close.
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '502' || { echo "FAIL: #502 (sub-task label, Stage-5 title) must SURVIVE — the label alone must not exclude"; failures=$((failures+1)); }
+  # (b5) decoy preserved (unchanged behaviour): "stage 13" without "close".
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '600' || { echo "FAIL: #600 (decoy 'stage 13' but not 'close') must NOT be excluded"; failures=$((failures+1)); }
+  # (b6) count: 401, 600, 999, 2678, 502.
+  [[ "$OPEN_ISSUE_COUNT" -eq 5 ]] || { echo "FAIL: label+title fallback path must leave 5 issues (401,600,999,2678,502), got $OPEN_ISSUE_COUNT"; failures=$((failures+1)); }
+  # (b7) the excluded-detail side channel survives the helper extraction (#3587):
+  #      the report's only window into WHY an issue was excluded must name BOTH
+  #      conjuncts, and must not be silently emptied by the extraction.
+  get_phase detect_open_issues | /usr/bin/grep -qF 'sub-task label + title-regex stage-13-close' || { echo "FAIL: detect detail must name both conjuncts of the fallback exclusion, got '$(get_phase detect_open_issues)'"; failures=$((failures+1)); }
 
   # (c) per-issue --close-comment override resolution (Defect 1): the override
   #     text is returned for the named issue; the anomaly default for others.
@@ -3275,6 +3580,100 @@ STUB
   /bin/rm -rf "$_ex_tmp" 2>/dev/null || true
   GH="$_ex_saved_gh"; MODE="$_ex_saved_mode"; STATE_MILESTONE_SLUG="$_ex_saved_slug"
   OPEN_ISSUE_LIST="$_ex_saved_list"; OPEN_ISSUE_COUNT="$_ex_saved_count"
+  EXCLUDE_ISSUES=(); CLOSE_COMMENTS=()
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # Test 4d.3: check 5 re-reads issue state AFTER the close phase (#3587) — offline,
+  # hermetic. Phase 14 (manual_close_release_issues) runs immediately before Phase 15
+  # (run_verification), and OPEN_ISSUE_COUNT is a pre-close snapshot written once in
+  # Phase 4, so every run that closed all N issues still rendered `PARTIAL (N open)`
+  # — text that propagates into the durable Gate-Passage Proof comment. Drives
+  # detect -> close -> verification against a CALL-COUNTER stub whose `issue list`
+  # returns the pre-close fixture on call 1 and a controllable post-close fixture on
+  # every later call, so the re-read is observed rather than assumed.
+  local _v5_saved_gh="$GH" _v5_saved_mode="$MODE" _v5_saved_slug="$STATE_MILESTONE_SLUG"
+  local _v5_saved_list="$OPEN_ISSUE_LIST" _v5_saved_count="$OPEN_ISSUE_COUNT"
+  local _v5_saved_rowstate="$STATE_LOG_ROW_STATE" _v5_saved_results="$VERIFICATION_RESULTS"
+  local _v5_saved_delay="$VERIFY_RECHECK_DELAY" _v5_saved_nomerge="$NO_MERGE"
+  local _v5_row
+  local _v5_tmp; _v5_tmp="$(/usr/bin/mktemp -d -t verify5-selftest.XXXXXX)"
+  local _v5_stub="$_v5_tmp/gh-stub.sh"
+  /bin/cat > "$_v5_stub" <<'STUB'
+#!/usr/bin/env bash
+# Call-counter gh stub for the #3587 check-5 re-read self-test. `issue list` returns
+# the PRE-close fixture on call 1 (Phase 4 detect) and the contents of ./post on
+# every later call (Phase 15 check-5 re-read). `issue close` is a no-op exit 0.
+_d="$(dirname "$0")"
+if [[ "$1" == "issue" && "$2" == "list" ]]; then
+  n=$(( $(cat "$_d/calls" 2>/dev/null || echo 0) + 1 ))
+  printf '%s' "$n" > "$_d/calls"
+  if [[ "$n" -eq 1 ]]; then
+    printf '%s\t%s\t%s\n' 401 "bug" "Normal auto-close anomaly issue"
+    printf '%s\t%s\t%s\n' 402 "bug" "Another auto-close anomaly issue"
+  else
+    cat "$_d/post" 2>/dev/null || true
+  fi
+  exit 0
+fi
+exit 0
+STUB
+  /bin/chmod +x "$_v5_stub"
+  GH="$_v5_stub"; MODE="apply"; STATE_MILESTONE_SLUG="88-some-milestone"
+  STATE_LOG_ROW_STATE=""; NO_MERGE=0; EXCLUDE_ISSUES=(); CLOSE_COMMENTS=()
+  VERIFY_RECHECK_DELAY=0   # keep the D-4 replication-lag retry hermetic + instant
+
+  # (a) post-close truth: the close drains the milestone, so the re-read finds it
+  #     empty and check 5 renders PASS — NOT the pre-close `PARTIAL (2 open)`.
+  : > "$_v5_tmp/post"; : > "$_v5_tmp/calls"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_detect_open_issues >/dev/null 2>&1
+  phase_manual_close_release_issues >/dev/null 2>&1
+  phase_run_verification >/dev/null 2>&1
+  _v5_row="$(/usr/bin/printf '%s\n' "$VERIFICATION_RESULTS" | /usr/bin/grep '^| 5 |')"
+  [[ "$_v5_row" == *"| PASS |"* ]] || { echo "FAIL: check 5 must render PASS once the close phase drained the milestone, got '$_v5_row'"; failures=$((failures+1)); }
+
+  # (d) blast-radius regression guard: the re-read writes LOCALS ONLY. The pre-close
+  #     globals must survive untouched — 6 of their 7 consumers (chore-PR body, the
+  #     closed N/M denominator, the D-1 Manual-Close Candidates section, the JSON
+  #     payload) document the population as it stood BEFORE the close.
+  [[ "$OPEN_ISSUE_COUNT" -eq 2 ]] || { echo "FAIL: check 5 must NOT clobber the pre-close OPEN_ISSUE_COUNT (expected 2), got $OPEN_ISSUE_COUNT"; failures=$((failures+1)); }
+  [[ "$OPEN_ISSUE_LIST" == $'401\n402' ]] || { echo "FAIL: check 5 must NOT clobber the pre-close OPEN_ISSUE_LIST (expected 401,402), got '${OPEN_ISSUE_LIST//$'\n'/,}'"; failures=$((failures+1)); }
+
+  # (b) regression-direction control: #401 is STILL open at re-read time, so check 5
+  #     must render PARTIAL and enumerate it. Without this leg a hardcoded PASS would
+  #     satisfy legs (a) and (d) — this is what proves the read is live.
+  /usr/bin/printf '%s\t%s\t%s\n' 401 "bug" "Normal auto-close anomaly issue" > "$_v5_tmp/post"
+  : > "$_v5_tmp/calls"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_detect_open_issues >/dev/null 2>&1
+  phase_manual_close_release_issues >/dev/null 2>&1
+  phase_run_verification >/dev/null 2>&1
+  _v5_row="$(/usr/bin/printf '%s\n' "$VERIFICATION_RESULTS" | /usr/bin/grep '^| 5 |')"
+  [[ "$_v5_row" == *"PARTIAL (1 open: #401)"* ]] || { echo "FAIL: check 5 must render the LIVE post-close state 'PARTIAL (1 open: #401)', got '$_v5_row'"; failures=$((failures+1)); }
+
+  # (c) fail closed: an unevaluable re-query reads UNVERIFIED, never PASS. UNVERIFIED
+  #     rather than FAIL because a query that could not run establishes nothing about
+  #     whether issues are open.
+  GH="/bin/false"; MODE="apply"; OPEN_ISSUE_LIST=$'401\n402'; OPEN_ISSUE_COUNT=2
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_run_verification >/dev/null 2>&1
+  _v5_row="$(/usr/bin/printf '%s\n' "$VERIFICATION_RESULTS" | /usr/bin/grep '^| 5 |')"
+  [[ "$_v5_row" == *"UNVERIFIED"* ]] || { echo "FAIL: check 5 must fail closed to UNVERIFIED when the post-close re-query fails, got '$_v5_row'"; failures=$((failures+1)); }
+  [[ "$_v5_row" == *"| PASS |"* ]] && { echo "FAIL: a failed re-query must NEVER read as PASS, got '$_v5_row'"; failures=$((failures+1)); }
+
+  # (e) dry-run non-regression: preview mode closes nothing, so cached == live and no
+  #     second query fires. $GH is /bin/false — a query here would render UNVERIFIED.
+  MODE="dry-run"; OPEN_ISSUE_LIST=$'401\n402'; OPEN_ISSUE_COUNT=2
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_run_verification >/dev/null 2>&1
+  _v5_row="$(/usr/bin/printf '%s\n' "$VERIFICATION_RESULTS" | /usr/bin/grep '^| 5 |')"
+  [[ "$_v5_row" == *"PARTIAL (2 open)"* ]] || { echo "FAIL: dry-run check 5 must read the cached pre-close count and fire no query, got '$_v5_row'"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_v5_tmp" 2>/dev/null || true
+  GH="$_v5_saved_gh"; MODE="$_v5_saved_mode"; STATE_MILESTONE_SLUG="$_v5_saved_slug"
+  OPEN_ISSUE_LIST="$_v5_saved_list"; OPEN_ISSUE_COUNT="$_v5_saved_count"
+  STATE_LOG_ROW_STATE="$_v5_saved_rowstate"; VERIFICATION_RESULTS="$_v5_saved_results"
+  VERIFY_RECHECK_DELAY="$_v5_saved_delay"; NO_MERGE="$_v5_saved_nomerge"
   EXCLUDE_ISSUES=(); CLOSE_COMMENTS=()
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
@@ -3303,8 +3702,13 @@ if [[ "$1" == "issue" && "$2" == "list" ]]; then
     shift
   done
   if [[ "$ms" == "close-out-reliability-hardening" ]]; then
-    printf '%s\t%s\n' 2578 "Some open sub-task"
-    printf '%s\t%s\n' 1771 "Another open sub-task"
+    # 3-field format: number \t comma-joined LABELS \t title — the shape
+    # collect_open_release_issues parses (--jq emits labels as field 2). Row 3 is the
+    # exclusion probe: it is the ONLY row whose classification depends on field 2 being
+    # the LABEL set rather than the title. See leg (c).
+    printf '%s\t%s\t%s\n' 2578 "sub-task" "Some open sub-task"
+    printf '%s\t%s\t%s\n' 1771 "sub-task" "Another open sub-task"
+    printf '%s\t%s\t%s\n' 3990 "sub-task,release" "Stage 13 close-out orchestration"
   fi
   exit 0
 fi
@@ -3328,6 +3732,27 @@ STUB
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   phase_detect_open_issues >/dev/null 2>&1
   [[ "$OPEN_ISSUE_COUNT" -eq 0 ]] || { echo "FAIL: mis-resolved Version key must reproduce the historical false-0 (gh empty+exit0), got $OPEN_ISSUE_COUNT"; failures=$((failures+1)); }
+
+  # (c) STUB-FORMAT regression guard (F-01). Legs (a) and (b) assert COUNTS only, and
+  #     the counts are identical under the pre-migration 2-field stub (number \t title)
+  #     — so reverting this stub to 2 fields left the whole suite green and the
+  #     migration had no covering test. This leg makes field 2 load-bearing: #3990 is a
+  #     `sub-task`-LABELLED Stage-13-close orchestration issue, which collect_open_
+  #     release_issues must EXCLUDE via the label+title conjunct so the close cannot
+  #     self-close its own orchestration sub-task (R5). Under a 2-field stub field 2
+  #     holds the TITLE, `,<title>,` cannot contain `,sub-task,`, the conjunct never
+  #     fires, and #3990 is counted — 3 instead of 2. The exclusion REASON is asserted
+  #     too, so a count that happens to be right for the wrong reason still reddens.
+  STATE_MILESTONE_SLUG="close-out-reliability-hardening"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_detect_open_issues >/dev/null 2>&1
+  [[ "$OPEN_ISSUE_COUNT" -eq 2 ]] || { echo "FAIL: the sub-task-labelled Stage-13-close issue #3990 must be EXCLUDED from the open count (expected 2, got $OPEN_ISSUE_COUNT) — field 2 of the stub must be the LABEL set, not the title"; failures=$((failures+1)); }
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '3990' && { echo "FAIL: #3990 must not appear in OPEN_ISSUE_LIST — a close that lists its own orchestration sub-task can self-close it (R5)"; failures=$((failures+1)); }
+  [[ "$(get_phase detect_open_issues)" == *"#3990 (sub-task label + title-regex stage-13-close)"* ]] || { echo "FAIL: the exclusion of #3990 must be reported with its structural reason, got '$(get_phase detect_open_issues)'"; failures=$((failures+1)); }
+  #     Anti-vacuity control: the OTHER two sub-task-labelled rows carry no stage-13-close
+  #     title, so the label alone must NOT exclude them — proving the conjunct is a
+  #     conjunct and leg (c) is not passing because everything labelled sub-task is dropped.
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '2578' || { echo "FAIL: control — a sub-task label WITHOUT a stage-13-close title must NOT be excluded (#2578 missing); the conjunct has degraded to a label-only test"; failures=$((failures+1)); }
 
   /bin/rm -rf "$_ag_tmp" 2>/dev/null || true
   GH="$_ag_saved_gh"; MODE="$_ag_saved_mode"; STATE_MILESTONE_SLUG="$_ag_saved_slug"
@@ -4007,7 +4432,7 @@ STUB
   echo "  extract_row_state + extract_milestone_slug validated (3 shapes: vX.Y- / NN- / pure-alpha incl. hyphen-less #2539 a4 branch; version-less end-anchor; #667 F2 bare theme-named slug → title)" >&2
   echo "  phase_append_release_digest + phase_append_release_index validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency; #2048 — version-less marker + _unversioned notes link + marker-aware idempotency + CHANGELOG SKIP)" >&2
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped)" >&2
-  echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0)" >&2
+  echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache)" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
