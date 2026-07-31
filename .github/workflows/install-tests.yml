@@ -42,6 +42,13 @@ name: Install tests
 #                                  regression-checks.md case) + drift-guards that
 #                                  both consumers source the fragment and neither
 #                                  re-inlines a canonical-source resolver
+#   - test_check45_governing_doc_name_match.sh  deploy.sh Check 45(b): the
+#                                  design-principle-register governing_doc pin must
+#                                  resolve AND name its own principle. Fixture
+#                                  register + synthetic charter in a tmpdir; asserts
+#                                  the mis-pin, unresolvable and empty-name branches
+#                                  are distinguishable, reproduces the pre-fix silent
+#                                  pass, and drift-guards the live predicate (#4177)
 #
 # hook-tests — runs the core/hooks/tests/*.test.sh bypass-mode hook tests +
 # their test-runner.sh against a sandbox that materializes the DEPLOYED hook
@@ -191,6 +198,19 @@ jobs:
         # 3-arm fixture table (incl. the #94 regression-checks.md case that broke the
         # rebuild), and drift-guards that neither consumer re-inlines a divergent copy.
         run: bash core/deploy/tests/test_resolve_canonical_source.sh
+
+      - name: Run Check 45(b) governing_doc name-match fixture self-test (test_check45_governing_doc_name_match.sh)
+        # #4177: Check 45(b) validated a design-principle-register governing_doc pin
+        # by asserting only that the file existed and the pinned line was non-empty,
+        # so a pin that had drifted onto a DIFFERENT principle passed silently. This
+        # test builds a synthetic register + charter in a tmpdir (the live corpus is
+        # never read or mutated by the assertions) and pins all three failure
+        # branches apart — NAME-MATCH, RESOLVE, EMPTY-NAME — plus an anti-vacuity
+        # control and a reproduction of the pre-fix silent pass. Its drift guard
+        # greps deploy.sh by the `# (b) FMF-1` inline MARKER, never a line number, so
+        # a silent edit to the live predicate fails this test rather than passing it
+        # stale.
+        run: bash core/deploy/tests/test_check45_governing_doc_name_match.sh
 
   hook-tests:
     name: Hook test harness (macOS)
