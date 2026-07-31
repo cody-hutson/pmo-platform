@@ -65,10 +65,26 @@ CLAIM_REPO_ROOT="$(git rev-parse --show-toplevel)"
 # shellcheck source=/dev/null
 source "${CLAIM_REPO_ROOT}/release/tools/version-grammar.sh" ""
 
-# OWNER/repo for the GitHub adapter calls. Resolved upstream from `gh repo view`
-# (never hardcoded) and passed in via CLAIM_REPO. In --self-test the host calls
-# are stubbed, so CLAIM_REPO is not required there.
+# OWNER/repo for the GitHub adapter calls. NEVER hardcoded. Resolved lazily by
+# _host_resolve_repo() (the fifth host seam) through a three-tier chain:
+#   1. CLAIM_REPO env, when non-empty  — wins, so every existing caller that sets
+#      it keeps working byte-identically and the caller cascade stays at zero.
+#   2. `gh repo view --json nameWithOwner` — the idiom the governed pipeline
+#      surfaces already canonicalize, now internalized into the adapter that owns
+#      host mechanism (repo-host-adapter-versioning.md §4).
+#   3. Hard fail (return 1) naming every attempted source.
+# Deliberately NOT derived from the git remote URL: a fork, mirror, or multi-
+# remote checkout resolves a DIFFERENT repo, whose Releases form a plausible-
+# looking WRONG claimed set — the same fail-open class this resolver closes,
+# re-introduced by the fix.
+# In --self-test the host calls are stubbed, so no resolution is required there.
 CLAIM_REPO="${CLAIM_REPO:-}"
+# Resolver memo (success AND failure), so the ≤10 seam calls per claim (2 per
+# attempt x up to 5 attempts) issue at most ONE `gh repo view` and the failure
+# diagnostic prints once rather than once per call. Initialized at top level so a
+# first read under `set -u` cannot trip.
+_CLAIM_REPO_RESOLVED=""
+_CLAIM_REPO_RESOLVE_TRIED=0
 MAX_ATTEMPTS_DEFAULT=5
 
 # Claim-time plan-file stamping (post-CAS; ADR-092). When --stamp-slug is passed,
@@ -83,7 +99,7 @@ STAMP_FILES=()
 # ---------------------------------------------------------------------------
 # Host I/O seams (the ONLY place GitHub/git mechanism lives).
 #
-# These four wrappers issue the actual `gh` / `git` calls. The adapter operations
+# These five wrappers issue the actual `gh` / `git` calls. The adapter operations
 # below call ONLY these seams for host I/O, so the self-test can override the
 # seams (stub the host) and exercise the full adapter + retry logic hermetically,
 # with no network and no real tag push. This is what makes the discriminated-
@@ -91,27 +107,107 @@ STAMP_FILES=()
 # without a live remote — the defect the Stage-5 adversarial review flagged as
 # "every fixture mocks a clean rejection" is closed by injecting non-collision
 # failures here.
+#
+# RC CONTRACT (load-bearing — do NOT weaken to a `: "${VAR:?msg}"` assertion).
+# Every seam that can fail returns NON-ZERO and its callers rc-check it. The
+# `:?` idiom CANNOT be used here: these seams are only ever reached through
+# command substitution, so a tripped `:?` aborts the substitution SUBSHELL and
+# nothing else — the enclosing function still returns its own rc (0, from a
+# trailing `while`), and the caller sees an EMPTY arm with a SUCCESS signal.
+# `set -e` is structurally incapable of catching that shape. An unavailable arm
+# and a legitimately-empty (greenfield) arm are both "empty string"; only the rc
+# distinguishes them, which is why arm availability must travel as an rc and
+# never as an output-emptiness inference.
 # ---------------------------------------------------------------------------
+
+# _host_resolve_repo  — echo `owner/repo` for the GitHub adapter calls, or return 1.
+#   The chain is documented at CLAIM_REPO above. Lazy (never at load: a load-time
+#   `gh repo view` would make `source` do network I/O and break the freeness layer
+#   and the release-executor claim-mode) and memoized on BOTH outcomes.
+_host_resolve_repo() {
+  # Env tier — wins, and is re-read every call so a caller (or a fixture) that
+  # sets CLAIM_REPO after a failed resolution is honored rather than memo-locked.
+  if [[ -n "${CLAIM_REPO:-}" ]]; then
+    printf '%s\n' "$CLAIM_REPO"
+    return 0
+  fi
+  # Memoized success.
+  if [[ -n "$_CLAIM_REPO_RESOLVED" ]]; then
+    printf '%s\n' "$_CLAIM_REPO_RESOLVED"
+    return 0
+  fi
+  # Memoized failure — stay silent on repeat so the diagnostic prints once.
+  if [[ "$_CLAIM_REPO_RESOLVE_TRIED" -eq 1 ]]; then
+    return 1
+  fi
+  _CLAIM_REPO_RESOLVE_TRIED=1
+  local out rc=0
+  out="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" || rc=$?
+  if [[ "$rc" -eq 0 && -n "$out" && "$out" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+    _CLAIM_REPO_RESOLVED="$out"
+    printf '%s\n' "$out"
+    return 0
+  fi
+  printf 'claim-version: HALT — cannot resolve the repo host identity for the published-Releases arm. CLAIM_REPO is unset and `gh repo view` did not yield owner/repo (rc=%s). Set CLAIM_REPO=owner/repo.\n' \
+    "$rc" >&2
+  return 1
+}
 
 # _host_published_tags  — echo the published-Release tag_names, one per line.
 #   GitHub impl: the published Releases set (the mainline-published sequence).
+#   Returns non-zero when the repo identity cannot be resolved OR when the API
+#   call itself fails. The second limb is not redundant: an auth expiry, a rate
+#   limit, or a network fault with CLAIM_REPO perfectly set produces the SAME
+#   empty-arm outcome, and it is the more probable trigger of the two.
 _host_published_tags() {
-  : "${CLAIM_REPO:?set CLAIM_REPO=owner/repo}"
-  gh api "repos/${CLAIM_REPO}/releases" --paginate --jq '.[].tag_name'
+  local _repo
+  _repo="$(_host_resolve_repo)" || return 1
+  gh api "repos/${_repo}/releases" --paginate --jq '.[].tag_name' || return 1
 }
 
 # _host_latest_release  — echo the single "latest published release" tag_name.
 #   GitHub impl of anchor(): repos/{REPO}/releases/latest. GitHub orders this by
 #   created_at and returns the top of the mainline-published line; it self-excludes
 #   an orphan version lineage that is not the newest published release.
+#   Same rc contract as _host_published_tags.
 _host_latest_release() {
-  : "${CLAIM_REPO:?set CLAIM_REPO=owner/repo}"
-  gh api "repos/${CLAIM_REPO}/releases/latest" --jq '.tag_name'
+  local _repo
+  _repo="$(_host_resolve_repo)" || return 1
+  gh api "repos/${_repo}/releases/latest" --jq '.tag_name' || return 1
 }
 
 # _host_origin_tags  — echo origin's tag refs, one bare tag name per line.
+#   RC CONTRACT (load-bearing — #4339). This is the SAME defect class #3724 closed
+#   on the published-Releases arm and DT-2 closed on deploy.sh's DEPLOYED arm, one
+#   seam over: in the script that PUSHES tags rather than the one that gates merges.
+#   Previously the body was a single `git ls-remote | sed | sort -u` pipeline, so the
+#   function's exit status was `sort`'s — always 0 — and `2>/dev/null` discarded the
+#   diagnostic as well. Measured against a genuinely-failing remote (`git ls-remote`
+#   rc=128) the seam returned rc=0 with empty stdout: byte-identical to a healthy
+#   read of a TAGLESS repository.
+#   Why that is a collision and not merely under-reporting: this arm is the one that
+#   catches a concurrent claimer's PUSHED-but-Release-unpublished tag (claimed_set()
+#   member (2), e.g. v2.39). An arm that silently empties makes that in-flight claim
+#   invisible, and the allocator hands out a version another writer already took —
+#   precisely what the atomic claim exists to prevent.
+#   The repair mirrors DT-2: the READ is its own command (so `$?` is git's, not the
+#   pipeline's) and is separated from the TRANSFORM. The two states are separated by
+#   the RC, never by output-emptiness.
 _host_origin_tags() {
-  git ls-remote --tags origin 2>/dev/null \
+  local _raw _rc=0
+  # stderr is deliberately NOT redirected — git's own diagnostic is half the point of
+  # making the failure observable, and `2>/dev/null` discarding it was part of the
+  # defect. (Same posture as deploy.sh::_vf_deployed_rows_from_log's awk stderr.)
+  _raw="$(git ls-remote --tags origin)" || _rc=$?
+  if [[ "$_rc" -ne 0 ]]; then
+    printf 'claim-version: HALT — _host_origin_tags cannot read origin tags (git ls-remote rc=%s); an unevaluable tag set is NOT an empty one\n' \
+      "$_rc" >&2
+    return 1
+  fi
+  # A genuinely TAGLESS repo answers rc 0 with no output. Guarded explicitly so the
+  # transform never turns "no tags" into a spurious blank line.
+  [[ -n "$_raw" ]] || return 0
+  printf '%s\n' "$_raw" \
     | sed -e 's#.*refs/tags/##' -e 's/\^{}$//' \
     | sort -u
 }
@@ -119,17 +215,45 @@ _host_origin_tags() {
 # _host_release_log_deployed  — echo the Version column of every RELEASE_LOG row
 #   whose State column is exactly DEPLOYED (the in-flight, tag-pushed-but-Release-
 #   unpublished claims). Schema: | Version | Milestone | Issues | Release PR |
-#   Merge SHA | Tag | State | Date |  — under `awk -F'|'` the leading pipe makes
-#   $1 empty, so Version = $2 and State = $8 (NOT $7, which is the Tag column).
+#   Merge SHA | Tag | State | Date |.
+#
+#   COLUMNS ARE PINNED BY HEADER NAME, NEVER BY ORDINAL (#4339 R2 — convergence
+#   with deploy.sh::_vf_deployed_rows_from_log, which was pinned by name during the
+#   v4.02 DT-fix while this parallel copy still read ordinal `$8`). The ordinal read
+#   was CORRECT for today's schema, but it is the same latent mechanism DT-2 closed:
+#   one column insertion shifts `$8` off State onto Tag, a Tag cell never holds the
+#   literal DEPLOYED, and the arm goes structurally dead — a silently-empty arm in
+#   the claim path, which is exactly the fail-open class this release is closing.
+#   Resolving by NAME removes the failure mode rather than correcting one instance.
+#
+#   RC CONTRACT: an unreadable schema is REPORTED (rc 3 + stderr), never inferred
+#   from emptiness — the same posture as the origin-tags arm above. A MISSING file
+#   stays rc 0 (absence is not drift; a greenfield repo has no RELEASE_LOG).
 _host_release_log_deployed() {
   local log="${CLAIM_REPO_ROOT}/release/releases/RELEASE_LOG.md"
   [[ -f "$log" ]] || return 0
+  # awk stderr is deliberately NOT sent to /dev/null: the END-block diagnostic is
+  # the whole point — an unreadable schema must be visible, not inferred.
   awk -F'|' '
+    function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
     /^\|/ {
-      ver=$2; st=$8
-      gsub(/^[ \t]+|[ \t]+$/, "", ver)
-      gsub(/^[ \t]+|[ \t]+$/, "", st)
+      if (!have) {
+        # Header row = the first pipe-row carrying BOTH column names. Prose pipes
+        # and stray tables above the schema are skipped rather than misread.
+        v = 0; s = 0
+        for (i = 1; i <= NF; i++) {
+          c = trim($i)
+          if (c == "Version") v = i
+          if (c == "State")   s = i
+        }
+        if (v && s) { vcol = v; scol = s; have = 1 }
+        next
+      }
+      ver = trim($vcol); st = trim($scol)
       if (st == "DEPLOYED" && ver ~ /^v[0-9]/) print ver
+    }
+    END {
+      if (!have) { print "claim-version: HALT — RELEASE_LOG header row has no Version+State columns; the DEPLOYED arm was not evaluated" > "/dev/stderr"; exit 3 }
     }
   ' "$log"
 }
@@ -290,7 +414,13 @@ lineage() {
 # ---------------------------------------------------------------------------
 anchor() {
   local cs best="" v
-  cs="$(claimed_set)"
+  # rc-check, same contract as claim_version()/the --dry-run path: a FAILED
+  # claimed_set() must not be read as a greenfield EMPTY one, which would send us
+  # down the latest-release fallback and answer with a partial-view anchor.
+  cs="$(claimed_set)" || {
+    printf 'claim-version: HALT — anchor() cannot read the claimed set (partial view); not answering with a stale frontier\n' >&2
+    return 1
+  }
   while IFS= read -r v; do
     [[ -n "$v" ]] || continue
     if [[ -z "$best" || "$(version_cmp "$v" "$best")" == "1" ]]; then best="$v"; fi
@@ -298,7 +428,10 @@ anchor() {
   if [[ -n "$best" ]]; then printf '%s\n' "$best"; return 0; fi
   # Greenfield: no claimed mainline version yet -> the latest published release.
   local tip
-  tip="$(_host_latest_release)"
+  tip="$(_host_latest_release)" || {
+    printf 'claim-version: HALT — anchor() greenfield fallback cannot read the latest published release\n' >&2
+    return 1
+  }
   version_canonical "$tip" || {
     printf 'claim-version: anchor() — no claimed mainline version and latest release %q is not canonical\n' \
       "$tip" >&2
@@ -330,13 +463,44 @@ anchor() {
 # ---------------------------------------------------------------------------
 claimed_set() {
   local published
-  published="$(_host_published_tags)"
+  # FAIL CLOSED. An unavailable published arm is NOT an empty published arm: with
+  # `published` empty the frontier major fmaj is empty too, lineage() takes its
+  # greenfield over-include branch, and EVERY origin tag — including a genuine
+  # orphan — reads as MAINLINE. So a silently-unavailable arm does not merely
+  # under-report claims, it also disables the orphan filter for the other two
+  # arms. Refusing to claim against a partial view is the only safe response.
+  published="$(_host_published_tags)" || {
+    printf 'claim-version: HALT — claimed_set() cannot evaluate the published-Releases arm; refusing to claim against a partial view\n' >&2
+    return 1
+  }
+  # Arms (2) and (3) are evaluated OUTSIDE the union pipeline so their rc survives
+  # to be checked (#4339; mirrors the DT-2 rc-contract on deploy.sh). Called from
+  # INSIDE the `{ … } | sed` group their exit status was structurally unobservable —
+  # the group's rc is the pipeline's, i.e. `sed`'s — so a failed read degraded to a
+  # silently-empty arm and this function reported a partial view as authoritative.
+  #
+  # Both fail CLOSED, on the same reasoning that governs the published arm above and
+  # with the SAME refusal vocabulary (one contract, not a second convention):
+  #   (2) origin tags is the arm that catches a concurrent claimer's pushed-but-
+  #       unpublished tag; losing it silently is the collision itself.
+  #   (3) DEPLOYED rows catch that same window from the RELEASE_LOG side; an
+  #       unreadable schema is a repo defect to fix, not a state to degrade around.
+  local origin_tags
+  origin_tags="$(_host_origin_tags)" || {
+    printf 'claim-version: HALT — claimed_set() cannot evaluate the origin-tags arm; refusing to claim against a partial view\n' >&2
+    return 1
+  }
+  local deployed_rows
+  deployed_rows="$(_host_release_log_deployed)" || {
+    printf 'claim-version: HALT — claimed_set() cannot evaluate the RELEASE_LOG DEPLOYED arm; refusing to claim against a partial view\n' >&2
+    return 1
+  }
   # Build the raw candidate union (published U origin-tags U DEPLOYED-log-rows).
   local raw
   raw="$(
     { printf '%s\n' "$published"
-      _host_origin_tags
-      _host_release_log_deployed
+      printf '%s\n' "$origin_tags"
+      printf '%s\n' "$deployed_rows"
     } | sed '/^$/d'
   )"
   # Split the published newline-list into positional args for lineage(). Disable
@@ -695,7 +859,15 @@ _main() {
       printf 'claim-version: dry-run HALT — git fetch failed\n' >&2; exit 1
     fi
     local claimed claimed_arr=() tag
-    claimed="$(claimed_set)"
+    # FAIL CLOSED here too. The dry-run is the DETECTOR rung (Stage-12 A.5.6a /
+    # Stage-9 A6.5 / deploy.sh Check 41) for the very collision the real claim
+    # prevents; if it fails open it degrades in lockstep with the rung it is
+    # supposed to be checking, and reports a confident number computed from a
+    # partial view.
+    claimed="$(claimed_set)" || {
+      printf 'claim-version: dry-run HALT — claimed_set() failed (cannot read authoritative claimed state); no candidate reported\n' >&2
+      exit 1
+    }
     if [[ -n "$claimed" ]]; then
       while IFS= read -r _l; do [[ -n "$_l" ]] && claimed_arr+=("$_l"); done <<<"$claimed"
     fi
@@ -736,6 +908,12 @@ _claim_self_test() {
   local failures=0
   local _t_label
 
+  # Assertion helpers are defined FIRST (ahead of the fixture seams) because the
+  # pre-stub fixtures — U-0 and U-14a, which must run against the REAL host seams
+  # before the stubs shadow them — need them too.
+  _ct_fail() { echo "FAIL [$_t_label]: $*"; failures=$((failures+1)); }
+  _ct_eq()   { [[ "$1" == "$2" ]] || _ct_fail "expected '$2' got '$1' ($3)"; }
+
   # ----- Fixture seams + helpers (function-local: exist only while this runs) --
   # Fixture state is FILE-BACKED under $_ST_DIR so that observations made inside a
   # `$(claim_version ...)` command-substitution SUBSHELL survive into the parent
@@ -759,27 +937,264 @@ _claim_self_test() {
   # NOT. The prior st=$7 read the Tag column, so category-3 was silently dead — the
   # hermetic fixture stub (next block) reads a pre-parsed list and could never catch
   # it. Synthetic v9.0x versions avoid any real-lineage semantics.
-  _t_label="U-0 real RELEASE_LOG parser (State=\$8)"
+  # Columns are pinned by HEADER NAME (#4339 R2 — convergence with deploy.sh). The
+  # anti-vacuity legs are the point: (a) alone would pass on a Tag cell that happens
+  # to read DEPLOYED, and (a)+(b) alone would pass on a hardcoded ordinal $8. Leg (c)
+  # pins that the value read is the STATE cell, not the Tag; leg (d) SHIFTS the column
+  # order, which only a name-pinned parser survives; leg (e) pins that an unreadable
+  # schema is reported rather than presenting as an empty arm.
+  _t_label="U-0 real RELEASE_LOG parser (columns pinned by header NAME)"
   {
     local _u0d; _u0d="$(mktemp -d "${TMPDIR:-/tmp}/claim-version-u0.XXXXXX")"
     mkdir -p "$_u0d/release/releases"
+    local _u0log="$_u0d/release/releases/RELEASE_LOG.md"
+    local _u0out _u0err _u0rc
+
+    # (a)/(b) canonical schema: the DEPLOYED row is extracted, the VERIFIED row is not.
+    # Prose pipes above the table prove the header scan skips non-schema pipe rows.
     printf '%s\n' \
+      'Prose that | contains | pipes | before the table.' \
       '| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |' \
       '|---|---|---|---|---|---|---|---|' \
       '| v9.01 | m-verified | #1 | #2 | aaa | v9.01 | VERIFIED | 2026-07-18 |' \
       '| v9.02 | m-deployed | #3 | #4 | bbb | v9.02 | DEPLOYED | 2026-07-19 |' \
-      > "$_u0d/release/releases/RELEASE_LOG.md"
-    local _u0out; _u0out="$(CLAIM_REPO_ROOT="$_u0d" _host_release_log_deployed 2>/dev/null)"
-    grep -qx 'v9.02' <<< "$_u0out" || { echo "FAIL [$_t_label]: must extract the DEPLOYED row v9.02 (State=\$8)"; failures=$((failures+1)); }
-    grep -qx 'v9.01' <<< "$_u0out" && { echo "FAIL [$_t_label]: must NOT extract the VERIFIED row v9.01"; failures=$((failures+1)); }
+      > "$_u0log"
+    _u0out="$(CLAIM_REPO_ROOT="$_u0d" _host_release_log_deployed 2>/dev/null)"
+    grep -qx 'v9.02' <<< "$_u0out" || _ct_fail "U-0(a) must extract the DEPLOYED row v9.02 (State by name)"
+    grep -qx 'v9.01' <<< "$_u0out" && _ct_fail "U-0(b) must NOT extract the VERIFIED row v9.01"
+
+    # (c) anti-vacuity: the literal DEPLOYED sits in the TAG column of an otherwise-
+    #     VERIFIED row. A name-pinned read ignores it; an ordinal read is fooled.
+    printf '%s\n' \
+      '| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |' \
+      '|---|---|---|---|---|---|---|---|' \
+      '| v9.03 | m-tagtrap | #5 | #6 | ccc | DEPLOYED | VERIFIED | 2026-07-19 |' \
+      > "$_u0log"
+    _u0out="$(CLAIM_REPO_ROOT="$_u0d" _host_release_log_deployed 2>/dev/null)"
+    grep -qx 'v9.03' <<< "$_u0out" && _ct_fail "U-0(c) a DEPLOYED-valued TAG cell on a VERIFIED row must not be read as State"
+
+    # (d) anti-vacuity: SHIFTED column order. Any ordinal pin breaks here; a
+    #     name-pinned parser keeps working. This is what makes the fix durable
+    #     rather than a one-time correction of one instance.
+    printf '%s\n' \
+      '| Version | State | Milestone | Issues | Release PR | Merge SHA | Tag | Date |' \
+      '|---|---|---|---|---|---|---|---|' \
+      '| v9.04 | DEPLOYED | m-shifted | #7 | #8 | ddd | v9.04 | 2026-07-19 |' \
+      '| v9.05 | VERIFIED | m-shifted | #9 | #10 | eee | v9.05 | 2026-07-19 |' \
+      > "$_u0log"
+    _u0out="$(CLAIM_REPO_ROOT="$_u0d" _host_release_log_deployed 2>/dev/null)"
+    grep -qx 'v9.04' <<< "$_u0out" || _ct_fail "U-0(d) a re-ordered header must still resolve State by NAME (v9.04 missing)"
+    grep -qx 'v9.05' <<< "$_u0out" && _ct_fail "U-0(d) a re-ordered header must still exclude VERIFIED (v9.05 wrongly included)"
+
+    # (e) unreadable schema -> REPORTED (non-zero rc + stderr), never a silent empty arm.
+    printf '%s\n' \
+      '| Release | Milestone | Status |' \
+      '|---|---|---|' \
+      '| v9.06 | m-noheader | DEPLOYED |' \
+      > "$_u0log"
+    _u0rc=0; _u0out="$(CLAIM_REPO_ROOT="$_u0d" _host_release_log_deployed 2>/dev/null)" || _u0rc=$?
+    [[ "$_u0rc" -ne 0 ]] || _ct_fail "U-0(e) an unresolvable Version+State header must return non-zero, not a silently-empty arm"
+    _u0rc=0; _u0err="$(CLAIM_REPO_ROOT="$_u0d" _host_release_log_deployed 2>&1 1>/dev/null)" || _u0rc=$?
+    grep -q 'Version+State' <<< "$_u0err" || _ct_fail "U-0(e) an unresolvable header must be named on stderr"
+
+    # (f) negative control for (e): a MISSING RELEASE_LOG is rc 0 (absence is not
+    #     drift — greenfield has no log). Without this, (e) would also pass on a
+    #     parser hardwired to fail.
+    rm -f "$_u0log"
+    _u0rc=0; _u0out="$(CLAIM_REPO_ROOT="$_u0d" _host_release_log_deployed 2>/dev/null)" || _u0rc=$?
+    _ct_eq "$_u0rc" "0" "U-0(f) control: a MISSING RELEASE_LOG is rc 0 (absence is not drift)"
+    _ct_eq "$_u0out" "" "U-0(f) control: a missing RELEASE_LOG emits no rows"
     rm -rf "$_u0d"
   }
 
+  # ----- U-0b: REAL _host_origin_tags rc contract (#4339) -----------------------
+  # Runs BEFORE the stub seams below shadow _host_origin_tags, so it exercises the
+  # ACTUAL production body. Hermetic by construction: both remotes are LOCAL paths
+  # on disk, so no network call occurs in either leg.
+  #
+  # The two legs ARE the fixture. A failed read and a tagless repo both present as
+  # empty stdout; only the rc separates them — and before this fix BOTH answered
+  # rc 0, so the probe could not produce two different answers at all. That is
+  # precisely why the pre-existing suite could not have caught this defect: there
+  # was no observable on which a test could discriminate.
+  _t_label="U-0b real _host_origin_tags rc contract (failed read vs. tagless repo)"
+  {
+    local _u0bd; _u0bd="$(mktemp -d "${TMPDIR:-/tmp}/claim-version-u0b.XXXXXX")"
+    local _rc _out _err
+
+    # (a) GENUINELY-FAILING remote: `origin` points at a path that does not exist,
+    #     which is the rc=128 condition #4339 reproduces.
+    git -C "$_u0bd" init -q broken >/dev/null 2>&1
+    git -C "$_u0bd/broken" remote add origin "$_u0bd/does-not-exist.git"
+    # PROBE CONTROL: assert the raw read genuinely fails first. Without this the
+    # leg below could go green against a fixture that never drove a real failure —
+    # a test that cannot fail is the defect this release is about.
+    _rc=0; ( cd "$_u0bd/broken" && git ls-remote --tags origin ) >/dev/null 2>&1 || _rc=$?
+    [[ "$_rc" -ne 0 ]] || _ct_fail "U-0b probe control: raw git ls-remote must FAIL against a non-existent remote (the fixture is not driving a real failure)"
+
+    _rc=0; _out="$( cd "$_u0bd/broken" && _host_origin_tags 2>/dev/null )" || _rc=$?
+    [[ "$_rc" -ne 0 ]] || _ct_fail "U-0b a FAILED origin read must return non-zero (rc=0 means the seam is still reporting the PIPELINE's status — sort's — instead of git's)"
+    _ct_eq "$_out" "" "U-0b a failed origin read emits no tags"
+    _rc=0; _err="$( cd "$_u0bd/broken" && _host_origin_tags 2>&1 1>/dev/null )" || _rc=$?
+    grep -qi 'HALT' <<< "$_err" || _ct_fail "U-0b the failure must be OBSERVABLE — stderr must name the HALT (2>/dev/null discarding it was half the defect)"
+
+    # (b) NEGATIVE CONTROL — a genuinely TAGLESS repo. Same empty stdout, rc 0. This
+    #     leg is what proves the probe can produce BOTH answers, and it is also the
+    #     greenfield-regression guard: a guard that also failed a tagless repo would
+    #     break every greenfield claim rather than fix anything.
+    git init -q --bare "$_u0bd/empty.git" >/dev/null 2>&1
+    git -C "$_u0bd" init -q tagless >/dev/null 2>&1
+    git -C "$_u0bd/tagless" remote add origin "$_u0bd/empty.git"
+    _rc=0; _out="$( cd "$_u0bd/tagless" && _host_origin_tags 2>/dev/null )" || _rc=$?
+    _ct_eq "$_rc" "0" "U-0b control: a TAGLESS repo must answer rc 0 (empty is a VALID answer when the read succeeded)"
+    _ct_eq "$_out" "" "U-0b control: a tagless repo emits no tags"
+
+    # (c) NEGATIVE CONTROL — a repo WITH tags still parses. Without this leg, (a) and
+    #     (b) would both pass on a seam that returns empty unconditionally.
+    git -C "$_u0bd/tagless" -c user.email=selftest@example.invalid -c user.name=selftest \
+        -c commit.gpgsign=false commit -q --allow-empty -m seed >/dev/null 2>&1
+    git -C "$_u0bd/tagless" -c tag.gpgsign=false tag v9.11 >/dev/null 2>&1
+    git -C "$_u0bd/tagless" push -q origin v9.11 >/dev/null 2>&1
+    _rc=0; _out="$( cd "$_u0bd/tagless" && _host_origin_tags 2>/dev/null )" || _rc=$?
+    _ct_eq "$_rc" "0" "U-0b control: a healthy read WITH tags is rc 0"
+    grep -qx 'v9.11' <<< "$_out" || _ct_fail "U-0b control: a healthy read must still parse the bare tag name (the seam is not returning empty unconditionally)"
+
+    rm -rf "$_u0bd"
+  }
+
+  # ----- U-14a: REAL seam rc contract when repo identity is unresolvable --------
+  # Runs BEFORE the stub seams below shadow _host_published_tags/_host_latest_release,
+  # so it exercises the ACTUAL production bodies. Hermetic by construction: with
+  # resolution failing, `gh api` is NEVER reached, so no network call occurs. The
+  # prior `: "${CLAIM_REPO:?…}"` idiom could not be caught here at all — the stub
+  # shadowed the assertion, which is exactly why CI stayed green through the defect.
+  _t_label="U-14a real seam rc contract (unresolvable repo identity)"
+  {
+    local _save_repo="${CLAIM_REPO:-}"
+    local _rc _out _err
+
+    # (1) Env tier of the REAL resolver wins and short-circuits before any host
+    #     call — this is what keeps the caller cascade at zero.
+    _CLAIM_REPO_RESOLVED=""; _CLAIM_REPO_RESOLVE_TRIED=0
+    CLAIM_REPO="acme/widget"
+    _rc=0; _out="$(_host_resolve_repo 2>/dev/null)" || _rc=$?
+    _ct_eq "$_rc" "0" "U-14a env tier resolves rc 0"
+    _ct_eq "$_out" "acme/widget" "U-14a env tier echoes CLAIM_REPO verbatim"
+
+    # (2) Hard-fail tier: CLAIM_REPO unset AND `gh repo view` unavailable. `gh` is
+    #     shadowed by a local function so no real host call can occur; it is unset
+    #     immediately after, leaving the rest of the suite untouched.
+    CLAIM_REPO=""
+    _CLAIM_REPO_RESOLVED=""; _CLAIM_REPO_RESOLVE_TRIED=0
+    gh() { return 127; }
+    _rc=0; _out="$(_host_resolve_repo 2>/dev/null)" || _rc=$?
+    [[ "$_rc" -ne 0 ]] || _ct_fail "U-14a unresolvable repo identity must return non-zero"
+    _ct_eq "$_out" "" "U-14a unresolvable resolution emits nothing on stdout"
+
+    _CLAIM_REPO_RESOLVED=""; _CLAIM_REPO_RESOLVE_TRIED=0
+    _rc=0; _err="$(_host_resolve_repo 2>&1 1>/dev/null)" || _rc=$?
+    grep -q 'CLAIM_REPO' <<< "$_err" || _ct_fail "U-14a diagnostic must name CLAIM_REPO"
+    grep -qi 'HALT' <<< "$_err" || _ct_fail "U-14a diagnostic must name the HALT"
+
+    # (3) Failure memo: the diagnostic prints ONCE, not once per seam call. The
+    #     original defect surfaced as a DOUBLED message (two seam reaches per attempt).
+    _CLAIM_REPO_RESOLVED=""; _CLAIM_REPO_RESOLVE_TRIED=0
+    _rc=0; _err="$( { _host_resolve_repo; _host_resolve_repo; } 2>&1 1>/dev/null )" || _rc=$?
+    _ct_eq "$(grep -c 'cannot resolve the repo host identity' <<< "$_err" | tr -d ' ')" "1" \
+           "U-14a failure is memoized — diagnostic prints once, not per call"
+
+    # (4) The REAL published-arm seams propagate the failure as an rc. This is the
+    #     defect: previously they yielded an EMPTY arm with rc 0.
+    _CLAIM_REPO_RESOLVED=""; _CLAIM_REPO_RESOLVE_TRIED=0
+    _rc=0; _out="$(_host_published_tags 2>/dev/null)" || _rc=$?
+    [[ "$_rc" -ne 0 ]] || _ct_fail "U-14a REAL _host_published_tags must return non-zero (not empty-with-rc-0)"
+    _ct_eq "$_out" "" "U-14a REAL _host_published_tags emits no tags"
+
+    _CLAIM_REPO_RESOLVED=""; _CLAIM_REPO_RESOLVE_TRIED=0
+    _rc=0; _out="$(_host_latest_release 2>/dev/null)" || _rc=$?
+    [[ "$_rc" -ne 0 ]] || _ct_fail "U-14a REAL _host_latest_release must return non-zero"
+
+    # (5) claimed_set() rc-checks the arm and refuses to answer on a partial view.
+    _CLAIM_REPO_RESOLVED=""; _CLAIM_REPO_RESOLVE_TRIED=0
+    _rc=0; _out="$(claimed_set 2>/dev/null)" || _rc=$?
+    [[ "$_rc" -ne 0 ]] || _ct_fail "U-14a claimed_set must return non-zero when the published arm is unavailable"
+    _ct_eq "$_out" "" "U-14a claimed_set emits no claimed versions on a partial view"
+
+    _CLAIM_REPO_RESOLVED=""; _CLAIM_REPO_RESOLVE_TRIED=0
+    _rc=0; _err="$(claimed_set 2>&1 1>/dev/null)" || _rc=$?
+    grep -qi 'partial view' <<< "$_err" || _ct_fail "U-14a claimed_set must name the partial-view refusal"
+
+    # (6) anchor() must not read a FAILED claimed_set as a greenfield EMPTY one.
+    _CLAIM_REPO_RESOLVED=""; _CLAIM_REPO_RESOLVE_TRIED=0
+    _rc=0; _out="$(anchor 2>/dev/null)" || _rc=$?
+    [[ "$_rc" -ne 0 ]] || _ct_fail "U-14a anchor must return non-zero on an unavailable published arm"
+
+    unset -f gh
+    CLAIM_REPO="$_save_repo"
+    _CLAIM_REPO_RESOLVED=""; _CLAIM_REPO_RESOLVE_TRIED=0
+  }
+
   # --- stub seams (override the real host I/O; all state via $_ST_DIR files) ---
-  _host_published_tags()       { cat "$(_st_f published)"    2>/dev/null || true; }
-  _host_latest_release()       { cat "$(_st_f latest)"       2>/dev/null || true; }
-  _host_origin_tags()          { cat "$(_st_f origin_tags)"  2>/dev/null || true; }
-  _host_release_log_deployed() { cat "$(_st_f log_deployed)" 2>/dev/null || true; }
+  # The published-arm stubs MIRROR THE PRODUCTION CONTRACT (resolve-then-read, and
+  # a programmable arm rc) rather than unconditionally succeeding. That fidelity is
+  # what lets U-14/U-14b/U-15 exercise the fail-closed path hermetically; a stub
+  # that always returns 0 would make the guard structurally untestable — the exact
+  # blind spot that kept this defect green in CI.
+  _host_resolve_repo() {
+    local rc; rc="$(cat "$(_st_f resolve_rc)" 2>/dev/null || echo 0)"
+    if [[ "$rc" -ne 0 ]]; then
+      printf 'claim-version: HALT — cannot resolve the repo host identity (CLAIM_REPO unset)\n' >&2
+      return "$rc"
+    fi
+    printf '%s\n' "$(cat "$(_st_f resolve_repo)" 2>/dev/null || echo 'acme/widget')"
+  }
+  # POST-EMIT rc knobs (published_rc / latest_rc), independent of the shared arm_rc.
+  # arm_rc models "the arm is unavailable" — it returns BEFORE emitting and gates BOTH
+  # seams together. The post-emit knobs model the other real shape: the host call
+  # produced output and THEN failed (a paginated `gh api` that dies mid-walk). That
+  # shape is what separates a caller's rc-CHECK from a downstream value guard — with
+  # empty-output-on-failure the two are indistinguishable, which is exactly why the
+  # anchor() rc-checks were removable with the suite staying green. Both default to 0,
+  # so every pre-existing fixture behaves byte-identically.
+  _host_published_tags() {
+    _host_resolve_repo >/dev/null || return 1
+    local rc; rc="$(cat "$(_st_f arm_rc)" 2>/dev/null || echo 0)"
+    [[ "$rc" -eq 0 ]] || return "$rc"
+    cat "$(_st_f published)" 2>/dev/null || true
+    return "$(cat "$(_st_f published_rc)" 2>/dev/null || echo 0)"
+  }
+  _host_latest_release() {
+    _host_resolve_repo >/dev/null || return 1
+    local rc; rc="$(cat "$(_st_f arm_rc)" 2>/dev/null || echo 0)"
+    [[ "$rc" -eq 0 ]] || return "$rc"
+    cat "$(_st_f latest)" 2>/dev/null || true
+    return "$(cat "$(_st_f latest_rc)" 2>/dev/null || echo 0)"
+  }
+  # Arms (2) and (3) MIRROR THE PRODUCTION RC CONTRACT (#4339) rather than
+  # unconditionally succeeding. A stub that always returns 0 makes the guard
+  # structurally untestable — it is how the sibling defect survived CI for its whole
+  # life, and a `|| true` here would silently re-create it. Both knobs default to 0,
+  # so every pre-existing fixture behaves byte-identically.
+  #   origin_rc  !=0 -> the origin-tags read FAILED (vs. a tagless repo: rc 0, empty)
+  #   deployed_rc !=0 -> the RELEASE_LOG schema was unreadable (vs. no DEPLOYED rows)
+  _host_origin_tags() {
+    local rc; rc="$(cat "$(_st_f origin_rc)" 2>/dev/null || echo 0)"
+    [[ "$rc" -eq 0 ]] || {
+      printf 'claim-version: HALT — _host_origin_tags cannot read origin tags (git ls-remote rc=%s); an unevaluable tag set is NOT an empty one\n' "$rc" >&2
+      return "$rc"
+    }
+    cat "$(_st_f origin_tags)" 2>/dev/null || true
+    return 0
+  }
+  _host_release_log_deployed() {
+    local rc; rc="$(cat "$(_st_f deployed_rc)" 2>/dev/null || echo 0)"
+    [[ "$rc" -eq 0 ]] || {
+      printf 'claim-version: HALT — RELEASE_LOG header row has no Version+State columns; the DEPLOYED arm was not evaluated\n' >&2
+      return "$rc"
+    }
+    cat "$(_st_f log_deployed)" 2>/dev/null || true
+    return 0
+  }
   # stamp seam: record the follow-on stamp commit message; never a real add/commit/
   # push. The REAL _stamp_release_identity still runs (git mv + sed on a sandbox
   # tree), so U-11/U-13 exercise the substitution + rename hermetically.
@@ -851,17 +1266,31 @@ _claim_self_test() {
     : > "$(_st_f pushed_tags)"; : > "$(_st_f local_tags)"
     : > "$(_st_f published)"; : > "$(_st_f origin_tags)"; : > "$(_st_f log_deployed)"
     : > "$(_st_f latest)"; printf '0\n' > "$(_st_f fetch_rc)"; : > "$(_st_f push_plan)"; : > "$(_st_f advance)"
+    # Host-identity + arm-availability fixture state. Default = resolvable arm
+    # that succeeds, so every pre-existing fixture behaves byte-identically.
+    printf '0\n' > "$(_st_f resolve_rc)"; printf '0\n' > "$(_st_f arm_rc)"
+    printf '0\n' > "$(_st_f published_rc)"; printf '0\n' > "$(_st_f latest_rc)"
+    # Arm-(2)/(3) availability knobs (#4339). Default 0 = the arm READ SUCCEEDED,
+    # so an empty fixture means "genuinely nothing", never "the read failed".
+    printf '0\n' > "$(_st_f origin_rc)"; printf '0\n' > "$(_st_f deployed_rc)"
+    printf 'acme/widget\n' > "$(_st_f resolve_repo)"
     local kv k v
     for kv in "$@"; do
       k="${kv%%=*}"; v="${kv#*=}"
       case "$k" in
-        latest)    printf '%s\n' "$v" > "$(_st_f latest)";;
-        published) printf '%s\n' "$v" | tr ' ' '\n' | sed '/^$/d' > "$(_st_f published)";;
-        origin)    printf '%s\n' "$v" | tr ' ' '\n' | sed '/^$/d' > "$(_st_f origin_tags)";;
-        deployed)  printf '%s\n' "$v" | tr ' ' '\n' | sed '/^$/d' > "$(_st_f log_deployed)";;
-        fetch_rc)  printf '%s\n' "$v" > "$(_st_f fetch_rc)";;
-        plan)      printf '%s\n' "$v" > "$(_st_f push_plan)";;       # NB: pass via $'...\n...'
-        advance)   printf '%s\n' "$v" > "$(_st_f advance)";;
+        latest)     printf '%s\n' "$v" > "$(_st_f latest)";;
+        published)  printf '%s\n' "$v" | tr ' ' '\n' | sed '/^$/d' > "$(_st_f published)";;
+        origin)     printf '%s\n' "$v" | tr ' ' '\n' | sed '/^$/d' > "$(_st_f origin_tags)";;
+        deployed)   printf '%s\n' "$v" | tr ' ' '\n' | sed '/^$/d' > "$(_st_f log_deployed)";;
+        fetch_rc)   printf '%s\n' "$v" > "$(_st_f fetch_rc)";;
+        plan)       printf '%s\n' "$v" > "$(_st_f push_plan)";;      # NB: pass via $'...\n...'
+        advance)    printf '%s\n' "$v" > "$(_st_f advance)";;
+        resolve_rc) printf '%s\n' "$v" > "$(_st_f resolve_rc)";;     # !=0 -> repo identity unresolvable
+        arm_rc)     printf '%s\n' "$v" > "$(_st_f arm_rc)";;         # !=0 -> published arm UNAVAILABLE (vs. empty)
+        published_rc) printf '%s\n' "$v" > "$(_st_f published_rc)";; # !=0 -> published arm emits, THEN fails (partial view)
+        latest_rc)  printf '%s\n' "$v" > "$(_st_f latest_rc)";;      # !=0 -> latest-release seam emits, THEN fails
+        origin_rc)  printf '%s\n' "$v" > "$(_st_f origin_rc)";;      # !=0 -> origin-tags READ failed (vs. tagless repo)
+        deployed_rc) printf '%s\n' "$v" > "$(_st_f deployed_rc)";;   # !=0 -> RELEASE_LOG schema unreadable (vs. no DEPLOYED rows)
       esac
     done
   }
@@ -874,8 +1303,8 @@ _claim_self_test() {
   _ct_local_n()     { awk 'NF{n++} END{print n+0}' "$(_st_f local_tags)"  2>/dev/null || echo 0; }
   _ct_has_local()   { grep -qxF "$1" "$(_st_f local_tags)" 2>/dev/null; }
 
-  _ct_fail() { echo "FAIL [$_t_label]: $*"; failures=$((failures+1)); }
-  _ct_eq()   { [[ "$1" == "$2" ]] || _ct_fail "expected '$2' got '$1' ($3)"; }
+  # (_ct_fail / _ct_eq are defined at the top of this function — the pre-stub
+  #  fixtures U-0 and U-14a need them before the fixture seams exist.)
   # _ct_run captures stdout into REPLY and the rc into REPLY_RC without letting a
   # non-zero exit trip `set -e` (a failing $(...) in an assignment aborts under
   # set -e — many fixtures EXPECT non-zero, so this guard is required).
@@ -1171,8 +1600,188 @@ _claim_self_test() {
     rm -rf "$_sb13"
   }
 
+  # ---- U-14: fail-closed on unresolvable repo identity (the whole claim path) ----
+  # The full CAS caller loop with the repo identity unresolvable. The claim MUST
+  # HALT strictly BEFORE any push — the guard exists to stop a claim computed from
+  # a partial collision set, so a HALT that happens after the tag is pushed is no
+  # guard at all. Asserts push_idx == 0 (not merely "no successful push").
+  _t_label="U-14 fail-closed on unresolvable repo identity"
+  _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" \
+            plan="ok" resolve_rc=1
+  _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-14 expected non-zero exit when repo identity is unresolvable"
+  _ct_eq "$(_ct_push_idx)" "0" "U-14 ZERO push attempts (HALT strictly before the CAS)"
+  _ct_eq "$(_ct_pushed_n)" "0" "U-14 nothing pushed to origin"
+  _ct_eq "$(_ct_local_n)"  "0" "U-14 no orphan local tag"
+  grep -q 'CLAIM_REPO' <<< "$err" || _ct_fail "U-14 stderr must name CLAIM_REPO (the unresolved input)"
+  grep -qiE 'partial view|HALT' <<< "$err" || _ct_fail "U-14 stderr must name the HALT"
+  # The dry-run DETECTOR rung must fail closed in lockstep with the prevention rung.
+  _ct_run_err claimed_set; err="$REPLY"; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-14 claimed_set must fail closed for the --dry-run path too"
+
+  # ---- U-14b: detector negative control (U-14 can still pass) ----
+  # Same shape with the identity RESOLVABLE and the arm carrying data: the claim
+  # must succeed with exactly one push. Without this, U-14's non-zero assertion
+  # could be vacuously green (a guard that fails everything is not a guard).
+  _t_label="U-14b detector negative control (U-14 can still pass)"
+  _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" \
+            plan="ok" resolve_rc=0
+  _ct_run claim_version "deadbeefcafe" "minor" "" ""; out="$REPLY"; rc="$REPLY_RC"
+  _ct_eq "$rc" "0" "U-14b exit 0 when the repo identity resolves"
+  _ct_eq "$out" "v2.16" "U-14b returns v2.16 (normal claim proceeds)"
+  _ct_eq "$(_ct_push_idx)" "1" "U-14b exactly 1 push attempt"
+
+  # ---- U-15: arm-UNAVAILABLE is not arm-EMPTY (the tri-state distinction) ----
+  # This is what makes the wider `gh api`-failure trigger safe to close without
+  # breaking greenfield. Both states present as an EMPTY published arm; only the
+  # rc separates them, so the rc — never output-emptiness — must drive the verdict.
+  #
+  # (i) UNAVAILABLE: identity resolves, but the API call itself fails (auth expiry,
+  #     rate limit, network). Ordinary operating conditions, and the MORE probable
+  #     trigger than an unset env var.
+  _t_label="U-15 arm unavailable (gh api failure) -> HALT"
+  _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" \
+            plan="ok" resolve_rc=0 arm_rc=1
+  _ct_run_err claimed_set; err="$REPLY"; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-15 claimed_set must return non-zero when the published arm is UNAVAILABLE"
+  grep -qi 'partial view' <<< "$err" || _ct_fail "U-15 claimed_set must name the partial-view refusal"
+  _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-15 expected non-zero exit on an unavailable published arm"
+  _ct_eq "$(_ct_push_idx)" "0" "U-15 ZERO push attempts on an unavailable arm"
+  _ct_eq "$(_ct_pushed_n)" "0" "U-15 nothing pushed to origin"
+  _ct_eq "$(_ct_local_n)"  "0" "U-15 no orphan local tag"
+  #
+  # (ii) EMPTY (true greenfield): the arm is AVAILABLE and correctly reports no
+  #      published Releases. The claim MUST proceed — a fail-closed guard that also
+  #      blocks greenfield would be a regression, not a fix.
+  _t_label="U-15 arm empty (true greenfield) -> claim proceeds"
+  _ct_setup latest="v2.15" published="" origin="" plan="ok" resolve_rc=0 arm_rc=0
+  _ct_run claimed_set; out="$REPLY"; rc="$REPLY_RC"
+  _ct_eq "$rc" "0" "U-15 claimed_set rc 0 when the arm is available but EMPTY (greenfield)"
+  _ct_run claim_version "deadbeefcafe" "minor" "" ""; out="$REPLY"; rc="$REPLY_RC"
+  _ct_eq "$rc" "0" "U-15 greenfield claim proceeds (exit 0)"
+  _ct_eq "$out" "v2.16" "U-15 greenfield claims v2.16 off the latest-release anchor"
+  _ct_eq "$(_ct_push_idx)" "1" "U-15 greenfield exactly 1 push attempt"
+
+  # ---- U-16: anchor() rc-checks — a FAILED read is not a greenfield/valid one ----
+  # DEV-4 added two rc-checks to anchor(): one on claimed_set(), one on the greenfield
+  # _host_latest_release() fallback. Removing EITHER — or BOTH — left this suite fully
+  # green (rc=0, 0 failures). What looked like coverage was the pre-existing downstream
+  # `version_canonical ""` guard on a THIRD path that neither check owns: with the old
+  # fixtures every failing seam also emitted nothing, so a dropped rc-check funnelled
+  # into that guard and still exited non-zero. The distinction only becomes observable
+  # when a seam emits a plausible value AND fails — hence the post-emit knobs above.
+  # Both legs assert the OUTPUT, not just the rc: the harm is anchor() answering with a
+  # frontier it could not actually establish, and every consumer of that answer
+  # (claim_version's next-free computation) then allocates against a partial view.
+  #
+  # (a) claimed_set() FAILS having emitted a partial view; the greenfield fallback seam
+  #     is healthy and would happily answer. Without the rc-check anchor() silently
+  #     takes the fallback and returns a frontier BELOW the true one.
+  _t_label="U-16 anchor() rc-checks claimed_set (partial view -> HALT, never the fallback)"
+  _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" \
+            plan="ok" resolve_rc=0 arm_rc=0 published_rc=1 latest_rc=0
+  _ct_run claimed_set; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-16(a) precondition: claimed_set must fail when the published arm fails post-emit"
+  _ct_run anchor; out="$REPLY"; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-16(a) anchor() must return non-zero when claimed_set() failed (rc=0 means the rc-check is gone and the greenfield fallback answered)"
+  _ct_eq "$out" "" "U-16(a) anchor() must emit NO version on a failed claimed_set (a fallback answer here is the stale-frontier defect)"
+  _ct_run_err anchor; err="$REPLY"
+  grep -qi 'cannot read the claimed set' <<< "$err" || _ct_fail "U-16(a) anchor() must name the claimed-set read failure, not a downstream canonicality complaint"
+
+  # (b) TRUE greenfield (claimed_set available and legitimately empty), but the
+  #     latest-release seam emits a canonical-looking value AND fails. Without the
+  #     rc-check `version_canonical` passes on that value and anchor() answers rc 0
+  #     off a host call that did not succeed.
+  _t_label="U-16 anchor() rc-checks the greenfield fallback (emitted-then-failed -> HALT)"
+  _ct_setup latest="v2.15" published="" origin="" deployed="" \
+            plan="ok" resolve_rc=0 arm_rc=0 published_rc=0 latest_rc=1
+  _ct_run claimed_set; out="$REPLY"; rc="$REPLY_RC"
+  _ct_eq "$rc" "0" "U-16(b) precondition: claimed_set is AVAILABLE and empty (true greenfield)"
+  _ct_eq "$out" "" "U-16(b) precondition: the greenfield claimed_set is empty"
+  _ct_run anchor; out="$REPLY"; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-16(b) anchor() must return non-zero when the greenfield fallback seam failed (rc=0 means the rc-check is gone and a failed read was answered as authoritative)"
+  _ct_eq "$out" "" "U-16(b) anchor() must emit NO version when the fallback seam failed"
+  _ct_run_err anchor; err="$REPLY"
+  grep -qi 'greenfield fallback' <<< "$err" || _ct_fail "U-16(b) anchor() must name the greenfield-fallback read failure"
+
+  # (c) + (d) NEGATIVE CONTROLS. Without these, (a) and (b) would both pass on an
+  #     anchor() hardwired to fail — the same vacuity this fixture exists to close.
+  _t_label="U-16 control — healthy claimed_set answers the true frontier"
+  _ct_setup latest="v2.10" published="v2.14 v2.15" origin="v2.14 v2.15" \
+            plan="ok" resolve_rc=0 arm_rc=0 published_rc=0 latest_rc=0
+  _ct_run anchor; out="$REPLY"; rc="$REPLY_RC"
+  _ct_eq "$rc" "0" "U-16(c) control: a healthy claimed_set must answer rc 0"
+  _ct_eq "$out" "v2.15" "U-16(c) control: anchor() returns max(claimed_set), not the latest-release pointer"
+
+  _t_label="U-16 control — healthy greenfield answers off the latest-release pointer"
+  _ct_setup latest="v2.15" published="" origin="" deployed="" \
+            plan="ok" resolve_rc=0 arm_rc=0 published_rc=0 latest_rc=0
+  _ct_run anchor; out="$REPLY"; rc="$REPLY_RC"
+  _ct_eq "$rc" "0" "U-16(d) control: healthy greenfield must answer rc 0"
+  _ct_eq "$out" "v2.15" "U-16(d) control: greenfield anchor() falls back to the latest published release"
+
+  # ---- U-17: arms (2)/(3) UNAVAILABLE is not arms (2)/(3) EMPTY (#4339) --------
+  # U-15 established this tri-state distinction for the published arm. U-17 extends
+  # the SAME contract to the other two arms of claimed_set() — it does not fork a
+  # second convention. The claim path must refuse on a partial view no matter WHICH
+  # arm went unevaluable, because the harm is identical: an origin-tags arm that is
+  # empty-because-the-read-failed hides a concurrent claimer's pushed tag, and the
+  # allocator then hands out a version that is already taken.
+  #
+  # Each leg asserts the PUSH COUNT, not merely the rc. That is the property that
+  # actually matters: a guard that returns non-zero after already pushing a tag has
+  # not prevented the collision, it has only reported it.
+  _t_label="U-17 origin-tags arm UNAVAILABLE -> HALT (never a claim)"
+  _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" \
+            plan="ok" resolve_rc=0 arm_rc=0 origin_rc=128
+  _ct_run_err claimed_set; err="$REPLY"; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-17 claimed_set must return non-zero when the origin-tags arm is UNAVAILABLE"
+  grep -qi 'partial view' <<< "$err" || _ct_fail "U-17 claimed_set must name the partial-view refusal (same vocabulary as the published arm — one contract)"
+  _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-17 expected non-zero exit on an unavailable origin-tags arm"
+  _ct_eq "$(_ct_push_idx)" "0" "U-17 ZERO push attempts on an unavailable origin-tags arm"
+  _ct_eq "$(_ct_pushed_n)" "0" "U-17 nothing pushed to origin"
+  _ct_eq "$(_ct_local_n)"  "0" "U-17 no orphan local tag"
+
+  _t_label="U-17 RELEASE_LOG DEPLOYED arm UNAVAILABLE -> HALT (never a claim)"
+  _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" \
+            plan="ok" resolve_rc=0 arm_rc=0 deployed_rc=3
+  _ct_run_err claimed_set; err="$REPLY"; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-17 claimed_set must return non-zero when the DEPLOYED arm is UNAVAILABLE"
+  grep -qi 'partial view' <<< "$err" || _ct_fail "U-17 claimed_set must name the partial-view refusal for the DEPLOYED arm"
+  _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-17 expected non-zero exit on an unavailable DEPLOYED arm"
+  _ct_eq "$(_ct_push_idx)" "0" "U-17 ZERO push attempts on an unavailable DEPLOYED arm"
+
+  # (c) DETECTOR NEGATIVE CONTROL — arms AVAILABLE and legitimately EMPTY. The claim
+  #     must proceed. Without this leg the two above would pass on a claimed_set()
+  #     hardwired to refuse, and the "guard" would be an outage.
+  _t_label="U-17 control — arms available but EMPTY -> claim proceeds"
+  _ct_setup latest="v2.15" published="v2.14 v2.15" origin="" deployed="" \
+            plan="ok" resolve_rc=0 arm_rc=0 origin_rc=0 deployed_rc=0
+  _ct_run claimed_set; rc="$REPLY_RC"
+  _ct_eq "$rc" "0" "U-17(c) control: empty-but-AVAILABLE arms are rc 0 (empty is a valid answer)"
+  _ct_run claim_version "deadbeefcafe" "minor" "" ""; out="$REPLY"; rc="$REPLY_RC"
+  _ct_eq "$rc" "0" "U-17(c) control: the claim proceeds when the arms merely have nothing to report"
+  _ct_eq "$out" "v2.16" "U-17(c) control: claims v2.16"
+  _ct_eq "$(_ct_push_idx)" "1" "U-17(c) control: exactly 1 push attempt"
+
+  # (d) DETECTOR NEGATIVE CONTROL — the origin-tags arm CONTRIBUTES. This is the leg
+  #     that proves the arm is actually read rather than merely rc-checked: v2.39 is
+  #     a pushed-but-unpublished mainline tag present ONLY in the origin arm, and it
+  #     must be claimed so the next-free lands at v2.40, not v2.16.
+  _t_label="U-17 control — the origin-tags arm materially contributes to the claim"
+  _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15 v2.39" \
+            plan="ok" resolve_rc=0 arm_rc=0 origin_rc=0
+  _ct_run claimed_set; out="$REPLY"; rc="$REPLY_RC"
+  _ct_eq "$rc" "0" "U-17(d) control: healthy arms answer rc 0"
+  grep -qx 'v2.39' <<< "$out" || _ct_fail "U-17(d) control: the origin-only tag v2.39 must be IN the claimed set (else the arm is not being read at all)"
+  _ct_run claim_version "deadbeefcafe" "minor" "" ""; out="$REPLY"; rc="$REPLY_RC"
+  _ct_eq "$out" "v2.40" "U-17(d) control: next-free must clear the origin-only claim v2.39 (this is the collision the fail-open would have caused)"
+
   if [[ $failures -eq 0 ]]; then
-    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-13 incl. real-RELEASE_LOG-parser(State=\$8), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, never-bypass-signing + its detector-negative-control(U-6/U-6b), claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once)"
+    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-17 incl. real-RELEASE_LOG-parser(header-name-pinned + shifted-column control), real-origin-tags-rc-contract(U-0b: failed-read vs tagless-repo + probe/healthy controls), real-seam-rc-contract-on-unresolvable-identity(U-14a), all-three-claimed_set-arms-fail-closed + their controls(U-17), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, never-bypass-signing + its detector-negative-control(U-6/U-6b), fail-closed-on-unresolvable-repo-identity + its detector-negative-control(U-14/U-14b), arm-unavailable-is-not-arm-empty(U-15), anchor-rc-checks-claimed-set-and-greenfield-fallback + their controls(U-16), claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once)"
     return 0
   else
     echo "claim-version.sh --self-test: FAIL ($failures failing fixture(s))"
