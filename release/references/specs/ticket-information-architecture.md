@@ -130,7 +130,7 @@ HASH_REF    ::= "#" INTEGER                          (required)
 | Consumer | Use |
 |---|---|
 | Stage 2 G2-04 dependency validation | Validate every `#N` reference against compatible state (type prefix transparent to validation) |
-| Stage 3 G3-04 / G3-07 / G3-08 gates | Read body; prefix transparent (validation operates on `#N` substring) |
+| Stage 3 G3-01 / G3-07 / G3-08 gates | Read body; prefix transparent (validation operates on `#N` substring) |
 | release-planner Bundle mode | `IssueRecord.dependencies` carries typed edges for dependency-graph construction |
 | Critical-path / longest-chain algorithms | Consume full typed schema (FS/SS/FF/SF + lead/lag) for forward-pass / backward-pass calculations |
 

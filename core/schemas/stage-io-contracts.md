@@ -124,9 +124,9 @@ Stage 3 (Bundle) produces a versioned Milestone for Stage 4 (Planning) to plan a
 | Artifact | Format | Required | Human Decision | Cognitive Load | Delivery | Validation |
 |----------|--------|----------|----------------|----------------|----------|------------|
 | Milestone | GitHub Milestone (`<slug>`) with assigned issues | YES | Bundle approval — Tier 3 (Stage 3 Phase B) | Summary | GitHub Milestone with issues + due date (slug-named; the version is not bound until the Stage-12 claim) | `gh milestone view <slug>` returns Milestone with ≥1 issue assigned |
-| Dependency graph | Structured section in Stage 3 sub-task comment | YES | NO | Detail | "Output for Stage 4" section on Stage 3 sub-task | All `#N` dependency refs validated; no circular deps; compatible states per Gate 3 G3-04 |
+| Dependency graph | Structured section in Stage 3 sub-task comment | YES | NO | Detail | "Output for Stage 4" section on Stage 3 sub-task | All `#N` dependency refs validated; no circular deps per Gate 3 **G3-02**; compatible states per Gate 3 **G3-01** |
 | Capacity assessment | Structured section in Stage 3 sub-task comment | YES | NO | Summary | "Output for Stage 4" section on Stage 3 sub-task | Capacity heuristics applied per Stage 3 Bundle sizing |
-| Bundle rationale | Text in Stage 3 sub-task comment | YES | NO | Summary | "Output for Stage 4" section on Stage 3 sub-task | Rationale text present per Gate 3 G3-06 |
+| Bundle rationale | Text in Stage 3 sub-task comment | YES | NO | Summary | "Output for Stage 4" section on Stage 3 sub-task | Rationale text present — recorded at Stage 3 Phase B1; no Gate-3 criterion asserts its bare presence |
 | Re-review artifact | Structured section at HEAD of Stage 4 sub-task comment | YES (post-cutover) | C3 → operator decision Tier 0 — Tier 3 (Phase 1) | Detail | Stage 4 sub-task comment, BEFORE "Output for Stage 5" | Header metadata present (8 fields); per-requirement table covers all ACs + proposed-changes + risks; D1/D2/D3 findings + citations per Rule 3; classification per requirement; PT taxonomy if C3. Validated per [`triage-design-rereview.md`](../../release/references/standards/triage-design-rereview.md) § 1-3. |
 
 ### Validation Rules
@@ -134,7 +134,7 @@ Stage 3 (Bundle) produces a versioned Milestone for Stage 4 (Planning) to plan a
 1. **Cutover applicability:** Re-review artifact required for all releases entering Stage 4 going forward.
 2. **Effort tier required:** Header metadata `effort_tier` field (trivial / standard / complex) determines artifact form per [`triage-design-rereview.md`](../../release/references/standards/triage-design-rereview.md) § 7.
 3. **C3 classification HOLDs the boundary:** When any requirement is classified C3, the Stage 4 sub-task HOLDS pending Tier 0 — Premise Rejection routing. Stage 5 cannot claim the issue until Tier 0 resolution.
-4. **Dependency state validation:** Per Gate 3 G3-04, all `#N` dependency refs must be in compatible states (Approved / Bundled / In Progress / Done) before Stage 4 proceeds.
+4. **Dependency state validation:** Per Gate 3 **G3-01**, all `#N` dependency refs must be in compatible states (Approved / Bundled / Done) before Stage 4 proceeds.
 
 ---
 
@@ -165,7 +165,7 @@ Stage 2 (Triage) produces the classified, prioritized, DoR-validated issue for S
 
 | Artifact | Format | Required | Human Decision | Cognitive Load | Delivery | Validation |
 |----------|--------|----------|----------------|----------------|----------|------------|
-| Board Status | Projects field (Approved / Rejected / Deferred) | YES | Approve/Defer/Reject verdict — Tier 3 | Summary | Projects board status field, set by agent | Only `Approved` issues are bundle-eligible; verified per Gate 3 G3-01 (issue in Approved state). Rejected/Deferred do not cross. |
+| Board Status | Projects field (Approved / Rejected / Deferred) | YES | Approve/Defer/Reject verdict — Tier 3 | Summary | Projects board status field, set by agent | Only `Approved` issues are bundle-eligible; the verdict is assigned at Stage 2 Triage and Gate 3 treats it as a bundle-eligibility precondition (no Gate-3 criterion asserts the issue's own board status). Rejected/Deferred do not cross. |
 | Decision Date | Projects Date field | YES | NO | Summary | `gh project item-edit --date` (agent-set) | Date field populated on the item |
 | Priority (confirmed/adjusted) | Label | YES | Priority-adjust — Tier 2 | Summary | Priority label on issue, verified at triage | Priority label present and current |
 | Category Label (verified) | Label | YES | NO | Summary | Category label per `label-taxonomy.md` | Label verified against taxonomy |
@@ -174,8 +174,8 @@ Stage 2 (Triage) produces the classified, prioritized, DoR-validated issue for S
 
 ### Validation Rules
 
-1. **Approved-only crossing:** Only issues in `Approved` board status are eligible for Stage 3 bundling; `Deferred` / `Rejected` issues do not cross this boundary. Verified per Gate 3 **G3-01** (issue in Approved state — LIVE in gate-criteria-spec.md § Gate 3).
-2. **Dependency-state compatibility fed forward:** the mirrored native `blocked-by` set feeds Stage 3's dependency-graph build; state compatibility is validated downstream at Gate 3 **G3-04** (all `#N` refs in Approved/Bundled/In-Progress/Done). This boundary supplies the substrate; it does not itself gate on dep-state.
+1. **Approved-only crossing:** Only issues in `Approved` board status are eligible for Stage 3 bundling; `Deferred` / `Rejected` issues do not cross this boundary. Verified at Stage 2 Triage board-status assignment; Gate 3 treats it as a bundle-eligibility precondition (no Gate-3 criterion asserts the issue's own board status).
+2. **Dependency-state compatibility fed forward:** the mirrored native `blocked-by` set feeds Stage 3's dependency-graph build; state compatibility is validated downstream at Gate 3 **G3-01** (all `#N` refs in Approved/Bundled/Done). This boundary supplies the substrate; it does not itself gate on dep-state.
 3. **State-anchor completeness:** Board Status + Decision Date + Priority + Category label MUST all be set before bundling — a partially-triaged issue (missing any state anchor) is not bundle-ready.
 
 ### Failure Handling

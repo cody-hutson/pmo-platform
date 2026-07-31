@@ -219,7 +219,7 @@ The flow that constructs the dependency graph, validates dependency state at gat
 | Stage 4 Planning | Dependency ordering refined in implementation sequence | Primary |
 | Stage 5 Solutioning | QC2 re-validation after blast-radius analysis | Primary |
 
-**Canonical source.** [`schemas/gate-criteria-spec.md`](../schemas/gate-criteria-spec.md) G2-04 (Stage 2 dependency state) + G3-06 (Stage 3 dependency graph); QC2 checkpoint in [`release/governance/release-process.md`](../../release/governance/release-process.md).
+**Canonical source.** [`schemas/gate-criteria-spec.md`](../schemas/gate-criteria-spec.md) G2-04 (Stage 2 dependency state) + G3-02 (Stage 3 dependency graph); QC2 checkpoint in [`release/governance/release-process.md`](../../release/governance/release-process.md).
 
 ### Count Rationale
 
