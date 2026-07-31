@@ -206,6 +206,21 @@ New projects use one simpler five-folder set and a single inbox that auto-files 
 
 [Full notes](release/releases/notes/v3.70_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.70)
 
+## [v3.69.1] - 2026-07-11
+
+Security patch: the PreToolUse hook perimeter no longer fails open when `jq` cannot be resolved, stored XSS is closed in the eval-review tool, and the shared hook helper now deploys with the hooks that need it.
+
+### Security
+
+- **Hooks fail closed when a dependency is missing.** The PreToolUse security hooks permitted the action instead of blocking it when `jq` was unresolvable under the pinned PATH — silently disabling the perimeter on documented Homebrew installs. All twelve hooks now resolve `jq` through a shared absolute-path helper and fail closed in enforce mode. A second fail-open (`..` traversal permitted when `python3` was unavailable) was closed in the same pass. ([GHSA-9cjm-v22x-4x33](https://github.com/cody-hutson/pmo-platform/security/advisories/GHSA-9cjm-v22x-4x33))
+- **Stored XSS closed in the eval-review tool.** Attacker-influenced eval output reached HTML render sinks unescaped; each sink now escapes at the point of render, with transport escaping and spreadsheet-hyperlink sanitization behind it. ([GHSA-rw36-5pf9-w2vc](https://github.com/cody-hutson/pmo-platform/security/advisories/GHSA-rw36-5pf9-w2vc))
+
+### Fixed
+
+- **The hook hardening now reaches installed workspaces.** The shared helper the hardened hooks depend on was not copied into the deployed hook directory, so the fix would have shipped without taking effect on any install. ([pull request 3384](https://github.com/cody-hutson/pmo-platform/pull/3384))
+
+[Full notes](release/releases/notes/v3.69.1_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.69.1)
+
 ## [v3.69] - 2026-07-11
 
 <one-sentence ≤140 chars; plain language; agent-search target>
