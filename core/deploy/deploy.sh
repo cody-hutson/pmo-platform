@@ -545,14 +545,18 @@ _vf_compute_verdict() {
 #                          entry / NOTES file under version-stem OR milestone-slug)
 # It is an aggregating invariant, NOT a parallel checker.
 #
-# CUTOVER + DORMANCY (mirrors Check 32/47): the full assertion runs only for rows
-# at/after $cc_cutoff (CLOSE_COMPLETENESS_CHECK_CUTOFF), which DEFAULTS to the
-# __none__ sentinel — so the gate is DORMANT by default (no historical false-positive
-# storm; reflexive-pipeline-loop honored — the introducing release v2.37 closes under
-# the pre-merge runbook and the cutover is anchored strictly AFTER its merge). The
-# network sub-checks (Surface-1 Release + body-drift) need `gh`; offline ⇒ N/A on the
-# lifecycle surface, fail-closed on the gate surface (the merge gate must not certify
-# completeness blind, per the version-freeness FM-2 precedent).
+# CUTOVER (mirrors Check 32/47): the full assertion runs only for rows at/after
+# $cc_cutoff (CLOSE_COMPLETENESS_CHECK_CUTOFF), which ships as a COMMITTED DEFAULT —
+# so the gate is ARMED by default and dormancy is an explicit opt-out (__none__), NOT
+# the resting state (#4176). The cutoff VALUE is what prevents a historical
+# false-positive storm and honors the reflexive-pipeline-loop exemption (the
+# introducing release v2.37 closed under the pre-merge runbook; the cutover is anchored
+# strictly AFTER its merge). The network sub-checks (Surface-1 Release + body-drift)
+# need `gh`; offline ⇒ N/A on the lifecycle surface, fail-closed on the gate surface
+# (the merge gate must not certify completeness blind, per the version-freeness FM-2
+# precedent). NOTE: the SEPARATE network cutover CLOSE_COMPLETENESS_RELEASE_CUTOFF
+# below is still __none__-defaulted, so those two sub-checks remain dormant — "armed"
+# refers to the ROW cutover only.
 #
 # LOG-ROW BLIND SPOT (inherited, documented): like Check 32, this gate is LOG-row-
 # driven — a close that never wrote its `RELEASE_LOG` row is invisible to it. LOG-row
@@ -690,12 +694,30 @@ _cc_compute_verdict() {
   local surface="${1:-lifecycle}"
   local cc_log="${CC_LOG:-release/releases/RELEASE_LOG.md}"
   local cc_allowlist="${CC_ALLOWLIST:-.claude/skip-close-completeness-check.txt}"
-  local cc_cutoff="${CLOSE_COMPLETENESS_CHECK_CUTOFF:-__none__}"
+  # ARMED BY COMMITTED DEFAULT (#4176). The cutover ships with its value rather than
+  # awaiting a later stamping step — the Check 61 convention (see the SELF-ARMING
+  # CUTOVER note below): "A version literal would have needed stamping by a later
+  # spoke — a step that can be forgotten, leaving the gate permanently dormant."
+  # Check 48 is the proof: it shipped at v2.37 expecting a stamp and gated nothing
+  # for 62 releases.
+  #   Why v3.89: the OLDEST cutoff with zero standing findings, so the gate asserts the
+  #   maximum row set against a CLEAN warn-log baseline — the precondition that makes
+  #   the ">=3-day review with zero false positives" flip threshold in
+  #   .github/close-completeness.enforce evaluable at all. v3.88 arms with a permanent
+  #   resident finding, which would make "zero false positives" structurally
+  #   unobservable. (Posture is unchanged by arming: warn on both surfaces.)
+  #   Arming baseline: cutoff resolves to LOG row `v3.89`, 14 VERIFIED rows in scope,
+  #   0 findings. A different in-scope count means a different arm row — the runtime
+  #   assertion after the row loop names the row that actually armed.
+  # Setting CLOSE_COMPLETENESS_CHECK_CUTOFF=__none__ still re-dormants the gate.
+  local cc_cutoff="${CLOSE_COMPLETENESS_CHECK_CUTOFF:-v3.89}"
 
-  # Dormant by default — the cutover sentinel keeps the gate from retroactively
-  # flagging historical VERIFIED rows (and honors the reflexive-loop exemption).
+  # Dormancy is now an EXPLICIT opt-out, not the default: the __none__ sentinel is the
+  # escape hatch by which an operator or a CI job can re-dormant the gate (e.g. to honor
+  # a reflexive-pipeline-loop exemption), and the cutoff VALUE — not the dormancy — is
+  # what keeps the gate from retroactively flagging historical VERIFIED rows.
   if [[ "$cc_cutoff" == "__none__" ]]; then
-    printf 'SKIP close-completeness gate dormant (CLOSE_COMPLETENESS_CHECK_CUTOFF unset) — opt in by setting it to the first post-v2.37-merge release\n'
+    printf 'SKIP close-completeness gate re-dormanted explicitly (CLOSE_COMPLETENESS_CHECK_CUTOFF=__none__) — unset it to restore the committed armed default\n'
     return 0
   fi
   if [[ ! -f "$cc_log" ]]; then
@@ -734,7 +756,7 @@ _cc_compute_verdict() {
         print v "|" ms "|" tg "|" st
       }') || cc_rows=""
 
-  local cc_past_cutoff=false cc_targets=0 cc_findings=0 cc_detail="" _last_verified=""
+  local cc_past_cutoff=false cc_targets=0 cc_findings=0 cc_detail="" _last_verified="" _cc_arm_row=""
   local _row _ver _ms _tag _state _rf
   while IFS= read -r _row; do
     [[ -n "$_row" ]] || continue
@@ -746,6 +768,7 @@ _cc_compute_verdict() {
     # Cutover gate (walk LOG order; arm on first cutoff-prefix match).
     if [[ "$cc_past_cutoff" == "false" && "$_ver" == "$cc_cutoff"* ]]; then
       cc_past_cutoff=true
+      _cc_arm_row="$_ver"          # #4176: record WHICH row armed, for the R8 assertion
     fi
     [[ "$cc_past_cutoff" == "true" ]] || continue
 
@@ -762,6 +785,30 @@ _cc_compute_verdict() {
       cc_findings=$((cc_findings + $(printf '%s\n' "$_rf" | /usr/bin/grep -c . )))
     fi
   done <<<"$cc_rows"
+
+  # R8 mis-arm assertion (#4176). The cutover arm above is a string PREFIX match, not a
+  # version comparison: `v3.9` silently arms at `v3.90` and still verdicts clean, because
+  # the shortened prefix lands on a clean sub-range. Name the row that actually armed on
+  # every armed run, and WARN when it is not the literal.
+  # Non-fatal by design — a mis-typed cutoff is a CONFIG error, not a completeness
+  # finding, and must not become an INCOMPLETE verdict under a future enforce posture
+  # (that would block a PR on a configuration error rather than a completeness defect).
+  # STDERR ONLY: the stdout protocol line (CLEAN/INCOMPLETE/SKIP) is parsed by string
+  # surgery at all three call sites (Check 48, the probe, the self-test) — do not touch it.
+  if [[ -n "$_cc_arm_row" ]]; then
+    if [[ "$_cc_arm_row" != "$cc_cutoff" ]]; then
+      printf 'close-completeness: WARNING — cutoff %s armed at LOG row %s (prefix match, not an exact row). Scope is %s VERIFIED row(s); verify this is intended.\n' \
+        "$cc_cutoff" "$_cc_arm_row" "$cc_targets" >&2
+    else
+      printf 'close-completeness: armed at LOG row %s; %s VERIFIED row(s) in scope\n' \
+        "$_cc_arm_row" "$cc_targets" >&2
+    fi
+  else
+    # A cutoff matching NO row yields CLEAN 0 — a vacuous pass that READS as success.
+    # Anti-vacuity: say so out loud rather than letting zero assertions report OK.
+    printf 'close-completeness: WARNING — cutoff %s matched NO LOG row; zero rows asserted (the gate is vacuously clean).\n' \
+      "$cc_cutoff" >&2
+  fi
 
   # (e-aggregate) .version stamp — must exist AND equal the most-recent VERIFIED
   # in-scope release. N/A (no finding) when .version is absent (version-less /
@@ -5960,13 +6007,15 @@ cmd_check() {
   # VERIFIED-full-set-completeness contract. Inherits Check 32's LOG-row blind spot
   # (a never-written LOG row is invisible — owned by the close-time Step 4 table).
   #
-  # DORMANT-BY-DEFAULT + warn-mode-initial: gated on a per-check mode via
-  # resolve_check_mode "close-completeness" (independent graduation from the shared
-  # cohort), and the assertion itself is DORMANT until CLOSE_COMPLETENESS_CHECK_CUTOFF
-  # is set (the verdict SKIPs). The cutover is anchored strictly AFTER this release's
-  # (v2.37) merge — the reflexive-pipeline-loop discipline: a release never gates its
-  # own close. The CI-blocking switch is the committed .github/close-completeness.enforce
-  # sentinel (read by the workflow, mirroring version-freeness).
+  # ARMED + warn-mode-initial: gated on a per-check mode via resolve_check_mode
+  # "close-completeness" (independent graduation from the shared cohort). The assertion
+  # itself is ARMED by the committed CLOSE_COMPLETENESS_CHECK_CUTOFF default (#4176) —
+  # only the warn/enforce mode remains a graduation dial; setting the cutoff to __none__
+  # re-dormants it explicitly. The cutover is anchored strictly AFTER the introducing
+  # release's (v2.37) merge — the reflexive-pipeline-loop discipline: a release never
+  # gates its own close. The CI-blocking switch is the committed
+  # .github/close-completeness.enforce sentinel (read by the workflow, mirroring
+  # version-freeness).
   CLOSE_COMPLETENESS_MODE="$(resolve_check_mode "close-completeness")"
   if [[ "$CLOSE_COMPLETENESS_MODE" != "off" ]]; then
     log "Check 48: Close-completeness (every VERIFIED RELEASE_LOG row has the full Stage-13 output-set on main)"
@@ -8166,9 +8215,23 @@ EOF
     _cc_compute_verdict "lifecycle" 2>/dev/null
   }
 
-  local _v _tok
+  # STDERR-capturing sibling (#4176). The arm-row diagnostic is emitted on stderr, so it
+  # is the thing under test in assertions (5)-(7) and must NOT be discarded. Note that
+  # `_cc_selftest_verdict ... 2>&1 >/dev/null` captures NOTHING — the helper above
+  # hard-codes `2>/dev/null` inside its own body, so stderr is already gone by the time
+  # the caller's redirect applies. Hence a sibling rather than a redirect at the call.
+  _cc_selftest_stderr() {
+    CC_LOG="$_log" CC_INDEX="$_index" CC_DIGEST="$_digest" CC_CHANGELOG="$_changelog" \
+    CC_VERSIONFILE="$_version" CC_NOTES_DIR="$_notes" CC_LINT="$_lint" CC_DRIFT="$_drift" \
+    CC_ALLOWLIST="$_t/none.txt" \
+    CLOSE_COMPLETENESS_CHECK_CUTOFF="$1" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
+    _cc_compute_verdict "lifecycle" 2>&1 >/dev/null
+  }
 
-  # (3) dormant — cutover unset ⇒ SKIP (assert FIRST: the safe default).
+  local _v _tok _e
+
+  # (3) explicit re-dormant — cutover __none__ ⇒ SKIP (assert FIRST: the escape hatch
+  #     the committed armed default must never take away).
   _v="$(_cc_selftest_verdict "__none__")"; _tok="${_v%% *}"
   [[ "$_tok" == "SKIP" ]] || { echo "FAIL: dormant (cutover __none__) must SKIP, got '$_v'"; failures=$((failures+1)); }
 
@@ -8199,6 +8262,37 @@ EOF
         CLOSE_COMPLETENESS_CHECK_CUTOFF="v9.98" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
         _cc_compute_verdict "lifecycle" 2>/dev/null)"; _tok="${_v%% *}"
   [[ "$_tok" == "INCOMPLETE" ]] || { echo "FAIL: a now-VERIFIED incomplete row (v9.98) must be caught once it is VERIFIED-scoped, got '$_v'"; failures=$((failures+1)); }
+
+  # ─── R8 mis-arm assertions (#4176) — the ANTI-VACUITY group for the arming change ──
+  # The cutover arm is a string PREFIX match, not a version comparison. A shortened
+  # prefix landing on a clean sub-range verdicts CLEAN and exits 0 — a silent mis-arm
+  # that reads as success. These three assertions prove the mis-arm is now VISIBLE.
+  # (Fixture state after (4): both v9.98 and v9.99 are VERIFIED; v9.98's output-set is
+  # absent, so a v9.9-prefixed cutoff arms at v9.98 and pulls both rows into scope.)
+
+  # (5) a prefix-SHORTENED cutoff must still verdict, AND must WARN naming the row that
+  #     actually armed — the silent-mis-arm case this mitigation exists for.
+  _v="$(_cc_selftest_verdict "v9.9")"; _tok="${_v%% *}"
+  [[ "$_tok" == "INCOMPLETE" || "$_tok" == "CLEAN" ]] || { echo "FAIL: a prefix-shortened cutoff must still verdict, got '$_v'"; failures=$((failures+1)); }
+  _e="$(_cc_selftest_stderr "v9.9")"
+  printf '%s' "$_e" | /usr/bin/grep -q 'WARNING — cutoff v9.9 armed at LOG row v9.98' \
+    || { echo "FAIL: a prefix-shortened cutoff must WARN naming the armed row, got '$_e'"; failures=$((failures+1)); }
+
+  # (6) an EXACT-row cutoff must NOT emit the mis-arm WARNING (no false-positive noise;
+  #     without this, (5) could pass on a warning that fires unconditionally).
+  _e="$(_cc_selftest_stderr "v9.98")"
+  if printf '%s' "$_e" | /usr/bin/grep -q 'WARNING — cutoff'; then
+    echo "FAIL: an exact-row cutoff must not emit the mis-arm WARNING, got '$_e'"; failures=$((failures+1))
+  fi
+  printf '%s' "$_e" | /usr/bin/grep -q 'armed at LOG row v9.98' \
+    || { echo "FAIL: an exact-row cutoff must still name the armed row, got '$_e'"; failures=$((failures+1)); }
+
+  # (7) a cutoff matching NO row asserts nothing and would report CLEAN 0 — vacuously
+  #     clean. It must say so out loud. (Anti-vacuity: a gate that passes on zero
+  #     assertions is indistinguishable from a gate that passes.)
+  _e="$(_cc_selftest_stderr "v0.01")"
+  printf '%s' "$_e" | /usr/bin/grep -q 'matched NO LOG row' \
+    || { echo "FAIL: a no-match cutoff must WARN that zero rows were asserted, got '$_e'"; failures=$((failures+1)); }
 
   /bin/rm -rf "$_t" 2>/dev/null || true
 
@@ -8331,8 +8425,9 @@ EOF
     return 1
   fi
   echo "self-test: PASS" >&2
-  echo "  close-completeness invariant validated (#1290 AC5):" >&2
-  echo "    dormant cutover SKIPs / abbreviated scaffold caught (INCOMPLETE) / complete set CLEAN / VERIFIED-scoped (DEPLOYED excluded, VERIFIED included)" >&2
+  echo "  close-completeness invariant validated (#1290 AC5; mis-arm group #4176):" >&2
+  echo "    explicit-__none__ cutover SKIPs / abbreviated scaffold caught (INCOMPLETE) / complete set CLEAN / VERIFIED-scoped (DEPLOYED excluded, VERIFIED included)" >&2
+  echo "    mis-arm (5) prefix-shortened cutoff WARNs naming the armed row / (6) exact-row cutoff does NOT warn but still names it / (7) no-match cutoff WARNs vacuous (zero rows asserted)" >&2
   echo "  decision-emission minimum set validated (#4026, group DE):" >&2
   echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET" >&2
   return 0

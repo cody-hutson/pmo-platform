@@ -11,11 +11,13 @@ name: Close-completeness (pre-merge Stage-13 output-set gate)
 #   falsification: on a PR that adds a VERIFIED RELEASE_LOG row (at/after the armed
 #                  cutover) without its INDEX/DIGEST/NOTES companions -> this gate
 #                  reports INCOMPLETE (warn-mode: summary + exit 0; enforce: red +
-#                  exit 1). A complete output-set, or the dormant default (no cutover
-#                  set) -> green/SKIP.
+#                  exit 1). A complete output-set -> green; an explicitly re-dormanted
+#                  cutover -> SKIP.
 # Path-filtered, so ADVISORY by skip-semantics: absence on an unrelated PR MUST NOT
-# block. DORMANT by default — _cc_compute_verdict SKIPs until an operator arms
-# CLOSE_COMPLETENESS_CHECK_CUTOFF (honoring the reflexive-pipeline-loop exemption).
+# block. ARMED by default — CLOSE_COMPLETENESS_CHECK_CUTOFF ships as a committed
+# default in deploy.sh, so _cc_compute_verdict returns a real verdict on every run;
+# setting it to __none__ re-dormants the gate explicitly (the escape hatch honoring
+# the reflexive-pipeline-loop exemption).
 # Ships warn-mode-initial: the committed .github/close-completeness.enforce sentinel
 # token governs blocking (warn reports, enforce blocks) and is read by the probe
 # itself; flipping it to `enforce` plus adding this job to required_status_checks
@@ -67,14 +69,16 @@ jobs:
           uname -s
           command -v bash
           command -v git
-          command -v gh || echo "::warning::gh not on PATH — post-cutover network sub-checks degrade (dormant default is unaffected)"
+          command -v gh || echo "::warning::gh not on PATH — the published-Release and body-drift sub-checks would degrade, but they are gated behind the SEPARATE network cutover, which is still dormant, so today they are skipped regardless of gh. Arming the ROW cutover did not make this gate network-dependent (measured: gh off PATH -> still a clean verdict, exit 0). This warning becomes materially consequential only once the network cutover is armed, because the gate surface is fail-closed on an unreadable network anchor."
           test -x /usr/bin/python3 || echo "::warning::/usr/bin/python3 missing — note-content lint delegation degrades"
 
       - name: Run close-completeness check (single check, via the deploy.sh engine)
         id: check
         # THIN caller. The probe reads .github/close-completeness.enforce itself:
         # warn swallows INCOMPLETE into exit 0 (reported), enforce propagates exit 1;
-        # an unexpected verdict fail-closes. Dormant default (no cutover) -> SKIP/exit 0.
+        # an unexpected verdict fail-closes. The cutover ships ARMED (committed default
+        # in deploy.sh), so this step returns a real verdict; only an explicit
+        # __none__ re-dormant -> SKIP/exit 0.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

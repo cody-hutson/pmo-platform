@@ -10,13 +10,26 @@
 #   warn      → report only (exit-0); a finding is surfaced but does not block.
 #   enforce   → block on an INCOMPLETE verdict (exit-1 propagates to any CI caller).
 #
-# Ships DORMANT (warn) during the calibration window, per the warn-mode-initial
-# posture and the reflexive-pipeline-loop discipline (the introducing release
-# v2.37 closes under the pre-merge runbook; the gate's row-cutover is anchored
-# strictly AFTER this release's merge). Flip the token below to `enforce` after a
-# >=3-day warn-log review with zero false positives — that single edit, plus
-# setting CLOSE_COMPLETENESS_CHECK_CUTOFF to the first post-v2.37 release, arms
-# the gate. No code change is needed to graduate.
+# Stays `warn` during the calibration window, per the warn-mode-initial posture and
+# the reflexive-pipeline-loop discipline (the introducing release v2.37 closed under
+# the pre-merge runbook; the gate's row-cutover is anchored strictly AFTER that
+# merge).
+#
+# ARMING STATUS (#4176): the row cutover is ARMED. CLOSE_COMPLETENESS_CHECK_CUTOFF now
+# ships as a committed default in deploy.sh, so the gate evaluates on every run rather
+# than SKIPping — that clause of the graduation path is DISCHARGED and is recorded here
+# rather than left as outstanding work. The cutoff was chosen as the oldest value with
+# zero standing findings, precisely so the warn log below starts CLEAN: a log
+# pre-poisoned by known legacy debt could never evidence the zero-false-positive
+# threshold, which would make this flip unevaluable.
+#
+# REMAINING FLIP-TO-ENFORCE WORK (both required, neither done):
+#   1. Flip the token below to `enforce` after a >=3-day warn-log review with ZERO
+#      false positives.
+#   2. Add the `close-completeness` job to branch-protection required checks
+#      (per core/standards/gate-efficacy-standard.md — a token flip alone does not
+#      make the context required).
+# No code change is needed to graduate.
 #
 # (Content-flagged rather than presence-flagged so the file can ship now — the
 #  docs reference it — while the gate stays non-blocking; the version-freeness
