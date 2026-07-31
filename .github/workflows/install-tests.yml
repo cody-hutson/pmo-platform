@@ -137,6 +137,24 @@ jobs:
           fi
           python3 -m pytest --version
 
+      - name: Ensure PyYAML
+        # The skill packager (release/skills/pmo-skill-refiner/scripts/package_skill.py)
+        # imports scripts.quick_validate, which imports yaml — a TRANSITIVE PyYAML
+        # dependency that a direct grep of the packager does not reveal. deploy.sh's
+        # build_skill_to_dir() invokes that packager to stage the comparison rebuild
+        # behind _c7_compute_verdict, so without PyYAML the freshness verdict can
+        # never be FRESH and test_package_freshness_exit_codes.sh PF-4 fails on a
+        # restored (non-stale) fixture. Mirrors the pinned install in
+        # eval-viewer-tests.yml, which documents PyYAML as the one non-stdlib
+        # dependency in the pmo-skill-refiner script tooling. Same --user
+        # --break-system-packages idiom as the pytest step above (PEP 668).
+        # Idempotent: only install when yaml is not already importable.
+        run: |
+          if ! python3 -c 'import yaml' >/dev/null 2>&1; then
+            python3 -m pip install --user --break-system-packages 'pyyaml==6.0.2'
+          fi
+          python3 -c 'import yaml; print("PyYAML", yaml.__version__)'
+
       - name: Run sandbox-roots regression (test_sandbox_roots.sh)
         run: bash core/deploy/tests/test_sandbox_roots.sh
 
