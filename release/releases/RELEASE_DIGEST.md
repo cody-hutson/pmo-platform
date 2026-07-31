@@ -3,6 +3,8 @@
 
 Corpus-level digest grouped by version family. Per-version 3-5 line summary. Appended at Stage 13 chore PR per [`stage-13-close.md § Phase B`](../references/pipeline/stage-13-close.md).
 
+**Date anchor — close-out event (UTC).** The `(<date>)` in each `### vX.Y (<date>)` heading dates the **Stage-13 close-out run**, sampled once per run in UTC — not the merge. `RELEASE_LOG.md` and `RELEASE_INDEX.md` carry the **merge** anchor, so this file may read a day later for a release whose close-out crossed a UTC midnight; that is the two anchors working, not a contradiction. Taxonomy and format rules: [`date-variable-convention.md § Emission-Time Anchors`](../../core/standards/date-variable-convention.md). Entries predating this declaration are grandfathered — anchors are declared forward, never backfilled.
+
 ## Knowledge Corpus
 
 ### v4.01 (2026-07-30) — The session learning retro can now actually run

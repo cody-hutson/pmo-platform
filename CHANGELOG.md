@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
+**Date anchor — close-out event (UTC).** The date in each `## [vX.Y] - <date>`
+heading dates the **Stage-13 close-out run**, derived from the release note's
+frontmatter `date:` and therefore sampled once per close-out run in UTC. It is
+**not** the merge date: `release/releases/RELEASE_LOG.md` and
+`release/releases/RELEASE_INDEX.md` carry the merge anchor, so a release whose
+close-out crossed a UTC midnight reads a day later here — the two anchors
+working, not a contradiction. Taxonomy and format rules:
+[`core/standards/date-variable-convention.md` § Emission-Time Anchors](core/standards/date-variable-convention.md).
+Entries predating this declaration are grandfathered — anchors are declared
+forward, never backfilled.
+
 ## [Unreleased]
 
 ## [v4.01] - 2026-07-30

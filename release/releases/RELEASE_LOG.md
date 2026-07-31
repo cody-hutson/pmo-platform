@@ -4,6 +4,8 @@ Per-release append log. State transitions: `DEPLOYED` (Stage 12 Phase B5) → `V
 
 Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execute.md) (DEPLOYED row + visible-H4 Deployment Log); [`stage-13-close.md § Phase B`](../references/pipeline/stage-13-close.md) (DEPLOYED → VERIFIED transition).
 
+**Date anchor — merge event.** The `Date` column dates the **merge of the release PR to `main`** (written at Stage 12), not the Stage-13 close-out. It is written once and never rewritten by the close. `RELEASE_INDEX.md` carries the **same** anchor and is sourced from this column; `RELEASE_DIGEST.md` and `CHANGELOG.md` carry the **close-out** anchor and may therefore differ by a day without contradicting this row. Taxonomy and format rules: [`date-variable-convention.md § Emission-Time Anchors`](../../core/standards/date-variable-convention.md). Rows predating that declaration are grandfathered — anchors are declared forward, never backfilled.
+
 ## Releases
 
 | Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
