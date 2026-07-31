@@ -295,6 +295,34 @@ TEMPLATE_SYNC_MAP=(
   "project-initiator:change-log-template.md:references/templates/change-log-template.md"
   "project-initiator:raci-template.md:references/templates/raci-template.md"
   "project-initiator:stakeholder-register-template.csv:references/templates/stakeholder-register-template.csv"
+  # ── Registered complementary pair: tracker-manager (#4178 — 1 entry) ──
+  # NOT a template mirror. tracker-manager's SKILL.md cites
+  # core/schemas/tracker-schemas.md four times for the Tracker 5-10 field sets,
+  # and the shipped package carried only the skill-local half — so from the
+  # package root those citations resolved to nothing and the skill's own
+  # "if neither copy defines it, BLOCK" rule had to fire on 6 of 10 trackers.
+  #
+  # The target is the canonical's REPO-RELATIVE path, not a references/ path, so
+  # the existing citations resolve verbatim with no SKILL.md edit. Check 13 then
+  # asserts the injected copy is byte-identical to the canonical at both runtime
+  # targets — byte-identity between the canonical and ITS OWN injected copy,
+  # which is exactly right; it asserts nothing between the two halves of the
+  # complementary pair, whose relationship Check 13b owns.
+  #
+  # WHY A MAP ENTRY AND NOT A HAND-CODED INJECTION. Two builders stage a skill:
+  # build-skill-packages.sh build_one() writes the committed .skill, and
+  # deploy.sh build_skill_to_dir() stages the rebuild Check 7 hashes against the
+  # committed sidecar. Their agreement is declared in a comment and enforced by
+  # nothing. Injecting in one alone makes the two hashes disagree BY
+  # CONSTRUCTION — a permanent STALE that no rebuild can clear, on an
+  # always-enforce check. Both builders consume THIS array from this one
+  # declaration (build-skill-packages.sh extracts it at runtime), so a map entry
+  # keeps them aligned by construction instead of by hope.
+  #
+  # The resolver arm for this basename is load-bearing: see
+  # core/deploy/lib-template-sync-source.sh. Without it the basename falls to
+  # the default arm and resolves to a path that does not exist.
+  "tracker-manager:tracker-schemas.md:core/schemas/tracker-schemas.md"
 )
 
 # ─── Shared Functions ────────────────────────────────────────────────────────

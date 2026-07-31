@@ -227,6 +227,33 @@ build_one() {
     cp "$canonical_source" "$tmp_dir/$skill/$m_target_rel"
   done
 
+  # POST-CONDITION — a registered complementary pair's canonical MUST be present
+  # in the staged tree at its repo-relative path (#4178).
+  #
+  # This is deliberately verified from a DIFFERENT source than the one that
+  # performs the injection. The actor is TEMPLATE_SYNC_MAP (above); the verifier
+  # is the complementary-pair registry. Derive both from the same place and a
+  # single edit silently disables the fix and its verification together — which
+  # is the failure shape this whole release is about. Drop the map entry and this
+  # assertion fails the build; drop the registry and the guard at the top of this
+  # script fails the build. Neither omission ships quietly.
+  local cp_entry cp_canon cp_mirror
+  for cp_entry in "${COMPLEMENTARY_PAIRS[@]}"; do
+    cp_canon="$(awk -F'\\|\\|\\|' '{print $1}' <<< "$cp_entry")"
+    cp_mirror="$(awk -F'\\|\\|\\|' '{print $2}' <<< "$cp_entry")"
+    # Does this record belong to the skill being built?
+    [[ "$cp_mirror" == "$module/skills/$skill/"* ]] || continue
+    if [[ ! -f "$tmp_dir/$skill/$cp_canon" ]]; then
+      echo "ERROR: registered complementary pair not resolved into $skill's package" >&2
+      echo "       expected the canonical at the staged path: <skill-root>/$cp_canon" >&2
+      echo "       register the injection in deploy.sh TEMPLATE_SYNC_MAP as" >&2
+      echo "         \"$skill:$(basename "$cp_canon"):$cp_canon\"" >&2
+      echo "       (and give the basename a resolver arm in core/deploy/lib-template-sync-source.sh)." >&2
+      echo "       Without it a deployed $skill cannot resolve its own canonical citations." >&2
+      return 1
+    fi
+  done
+
   # Invoke the per-skill packager. Run from the pmo-skill-refiner module so
   # its `from scripts.quick_validate` import resolves.
   (
