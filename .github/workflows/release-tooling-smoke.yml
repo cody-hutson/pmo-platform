@@ -5,7 +5,11 @@ name: Release tooling smoke
 #              checks when release tooling or the RELEASE_LOG schema changes — (1) the
 #              Stage 13 close-out automation (self-test + corpus-path smoke), the
 #              version allocator claim-version.sh --self-test, the release-body drift
-#              check check-release-body-drift.sh --self-test, AND the blast-radius tool
+#              check check-release-body-drift.sh --self-test, the Stage-13 close-out
+#              learnings-register producer produce-learnings-register.sh --self-test
+#              (whose assertions pin the read-model contract it feeds: every canonical
+#              marker survives verbatim, and the L<n>/A<n> reflection rows stay
+#              placeholder-bearing), AND the blast-radius tool
 #              family (doc-tracer default-path regression under a normalized diff + the
 #              domain-fan-out software import-graph scanner) in the closeout-smoke job;
 #              (2) each of the three core/deploy/tools node-graph tools runs its
@@ -23,7 +27,11 @@ name: Release tooling smoke
 #   falsification: on a PR touching the close-out tooling, break a corpus path the
 #                  script asserts -> the closeout-smoke job fails; regress a
 #                  claim-version.sh or check-release-body-drift.sh self-test fixture ->
-#                  the closeout-smoke job fails; break the schema-v1 emit so the doc
+#                  the closeout-smoke job fails; make produce-learnings-register.sh seed
+#                  a triple value into the register's L<n>/A<n> reflection rows (or drop
+#                  a canonical marker from the rendered register) -> its T2 / T1
+#                  assertions fail and the closeout-smoke job fails;
+#                  break the schema-v1 emit so the doc
 #                  tracer's normalized output changes -> the blast-radius tool-family
 #                  test fails; regress a node-graph tool's --self-test -> the
 #                  node-graph-tools-selftest job fails; add a class to
@@ -55,13 +63,17 @@ name: Release tooling smoke
 # A warn-only gate is blind to false negatives — this keeps the gate honest, the
 # same discipline reference-durability.yml applies to its fragile-ref detector.
 #
-# Two sibling offline self-tests run in the same closeout-smoke job for the same
+# Three sibling offline self-tests run in the same closeout-smoke job for the same
 # anti-rot reason: the version allocator (claim-version.sh --self-test, its
-# U-1..U-10 fixtures) and the release-body drift check
-# (check-release-body-drift.sh --self-test). Both are hermetic — fixture-driven,
+# U-1..U-10 fixtures), the release-body drift check
+# (check-release-body-drift.sh --self-test), and the Stage-13 close-out
+# learnings-register producer (produce-learnings-register.sh --self-test). All three
+# are hermetic — fixture-driven,
 # with any gh/network call degrading to a self-test-internal N/A — so they gate on
-# exit code, credential-free, exactly like the close-out self-test above. Their
-# fixtures previously ran only when invoked manually.
+# exit code, credential-free, exactly like the close-out self-test above. The
+# register producer goes one better: its seed source is INJECTED via --triple-file
+# fixtures, so no synthesizer / event-log / gh / network call is reachable at all.
+# Their fixtures previously ran only when invoked manually.
 #
 # A second job — node-graph-tools-selftest — runs the committed --self-test of the
 # three v3.55 node-graph stdlib tools (stamp-node-frontmatter / backfill-relationship-
@@ -162,6 +174,15 @@ jobs:
         # NOTES_DIR_OVERRIDE, and gh/network calls degrade to a self-test-internal N/A.
         # Gate on exit code.
         run: bash release/tools/check-release-body-drift.sh --self-test
+
+      - name: Self-test — produce-learnings-register.sh (offline; template render + seed fixtures)
+        # The Stage-13 Phase A7.2 register producer. Hermetic by construction: the seed
+        # source is injected via --triple-file fixtures, so no synthesizer / event-log /
+        # gh / network call is reachable, and --print-path touches no filesystem. Its
+        # assertions pin the contract its live consumer (compute-close-class-telemetry.sh)
+        # reads — canonical markers survive verbatim, L<n>/A<n> rows stay placeholder-
+        # bearing. Gate on exit code.
+        run: bash release/tools/produce-learnings-register.sh --self-test
 
       - name: Blast-radius tool-family tests (schema-v1 lib + domain fan-out)
         # Exercises the blast-radius doc tracer's default-path regression under a
