@@ -75,7 +75,7 @@ Four new checks harden how the pipeline accepts, builds, and extends work — an
 
 ## [v3.93] - 2026-07-25
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+Release version numbers now bind at merge-claim time, not at planning — a release keeps its capability-slug identity until it ships, ending the early-bound-number collisions and re-version churn that hit concurrent releases.
 
 [Full notes](release/releases/notes/v3.93_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.93)
 
@@ -99,13 +99,13 @@ The release-impact analysis tool now returns accurate, path-true consumer counts
 
 ## [v3.89] - 2026-07-25
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+Two ready-to-use planning templates (Change Impact Matrix, Training Plan) for go-lives and upgrades, plus a RAID-log template header fix.
 
 [Full notes](release/releases/notes/v3.89_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.89)
 
 ## [v3.88] - 2026-07-25
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+Six deploy/tooling/test defect fixes: a false --check drift alarm, skill-count roster drift, a flaky test, doc naming, an XSS-sink refactor, and an honest CLAUDE.md maintenance contract.
 
 [Full notes](release/releases/notes/v3.88_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.88)
 
@@ -213,13 +213,13 @@ New projects use one simpler five-folder set and a single inbox that auto-files 
 
 ## [v3.70] - 2026-07-12
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+Internal release-pipeline hardening — a freshness gate re-checks bundled work against live main before building, and agent write-access is constrained. Day-to-day use is unchanged.
 
 [Full notes](release/releases/notes/v3.70_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.70)
 
 ## [v3.69] - 2026-07-11
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+Routine maintenance clearing accumulated deploy-check drift — stale skill packages rebuilt, a governance file deduplicated, validation back to green.
 
 [Full notes](release/releases/notes/v3.69_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.69)
 
@@ -293,13 +293,13 @@ Foundation release — the packs aren't read by the skills yet ([#2021](https://
 
 ## [v3.59] - 2026-07-03
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+Docs, backlog, and release-plan folders now follow one structural vocabulary, with a written git-tracking policy.
 
 [Full notes](release/releases/notes/v3.59_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.59)
 
 ## [v3.58] - 2026-07-02
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+A parameterized System-Specialist template stands up a principal-level specialist for any specific system (WMS/ERP/CRM) from one reusable learn-a-system method.
 
 [Full notes](release/releases/notes/v3.58_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.58)
 
@@ -317,7 +317,7 @@ Stage 3 Bundling becomes a self-triggering composer with automated milestone-pos
 
 ## [v3.53] - 2026-07-02
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+ADRs get a canonical frontmatter schema doc; the durability lint stops flagging hex colors; the operator name is permitted in ADR deciders.
 
 [Full notes](release/releases/notes/v3.53_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.53)
 

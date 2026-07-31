@@ -28,17 +28,17 @@ A `novel`-class release on milestone #183 (`56-runtime-config-and-posture`), **D
 
 ### v3.94 (2026-07-26) — Intake and gate hardening: a Stage-2 acceptance-fit gate (reject-by-default for agent-authored / net-new-sweeping items), an issue-body author-association trust boundary, a module skill-consultation forcing function, and an extend-before-create gate at Stage 5
 
-### v3.93 (2026-07-25) — <headline — populated by operator at chore PR review>
+### v3.93 (2026-07-25) — Release version numbers now bind when a release ships, not when it is planned
 
 ### v3.92 (2026-07-25) — Architecture baseline: a consolidated actor-model + governance-as-contract statement, a cross-chain index, and a standing as-built conformance audit that checks delivered work against the platform's own architecture
 
 ### v3.91 (2026-07-25) — Cross-platform install foundation: Windows entry-points, a doctor command, and safer multi-destination tracking
 
-### v3.90 (2026-07-25) — <headline — populated by operator at chore PR review>
+### v3.90 (2026-07-25) — Accurate release-impact analysis: path-true counts + directory-move detection
 
 ### v3.89 (2026-07-25) — Reusable Change Impact Matrix and Training Plan templates, plus a RAID-log template header reconcile
 
-### v3.88 (2026-07-25) — <headline — populated by operator at chore PR review>
+### v3.88 (2026-07-25) — Six deploy & tooling defects cleaned up — including an XSS sink hardened
 
 ### v3.87 (2026-07-24) — Design diagrams and process flows in the docs are now labeled and findable
 A `novel`-class knowledge-corpus release on milestone #291 (`design-artifact-backfill`), one release PR (#3796), 66 files (+809/−22), 14 `.skill` packages rebuilt. The platform's *default* design artifact — a section embedded in a parent doc — previously carried no marker, so the artifact set was unenumerable and its completion condition untestable. **#3725** ships the identification mechanism: `design-artifact-standard.md` §9 promotes `depicts:` / `flow_class:` to required, §2 corrects the Human-process current-state cell, and a new §12 adds per-flow-type detection criteria (table-aware — 3 of 7 flow types render as tables and are blind to any fence/Mermaid heuristic) plus the enumeration query; **ADR-089** records the chosen section-level `<!-- design-artifact: … -->` marker over a drift-prone frontmatter index. **#3614**'s spike produced the real gap as a query result and rendered **D-FissionScope → COLLAPSE**: 5 of 6 planned builds were already covered, so **#3798** swept them into 24 embedded-marker declarations (rebuilding the 14 skill-flow packages), and only **#3441** human-process kept a full build — the new dedicated `docs/release-record-keeping.md`. The set at ship time is **24 embedded + 2 dedicated-frontmatter** declarations across the seven flow types. Re-rendered provisional v3.86 → v3.87 after a concurrent claim; no orphan tag, no re-version ledger row. **MODERATE reversibility / HIGH confidence** — a single `git revert -m 1` of the merge; the only wrinkle is re-stripping the markers, nothing to migrate.
@@ -58,9 +58,9 @@ A `cross-cutting`-class release on milestone #266, **D-C SINGLE** topology, one 
 
 ### v3.82 (2026-07-22) — Exec briefs name the real consequence; status updates cite their sources
 
-### v3.81 (2026-07-22) — <headline — populated by operator at chore PR review>
+### v3.81 (2026-07-22) — Theme-named releases no longer vanish from the release record
 
-### v3.80 (2026-07-22) — <headline — populated by operator at chore PR review>
+### v3.80 (2026-07-22) — Release close-outs are now reliable for theme-named releases
 
 ### v3.79 (2026-07-17) — Both link checkers now agree, and the deploy tooling stops repeating itself
 
@@ -90,13 +90,13 @@ Hardens `release-hub` Mode R (readiness) + Mode O (orchestration). The readiness
 
 ### v3.71 (2026-07-12) — New projects use one simpler folder set and a single inbox
 
-### v3.70 (2026-07-12) — <headline — populated by operator at chore PR review>
+### v3.70 (2026-07-12) — Release pipeline re-verifies freshness and constrains agent write-access
 
-### v3.69 (2026-07-11) — <headline — populated by operator at chore PR review>
+### v3.69 (2026-07-11) — Platform maintenance: deploy-check validation cleared to green
 
 ### v3.68 (2026-07-10) — Release quality checks now run automatically and escalate only on failure
 
-### v3.67 (2026-07-10) — <headline — populated by operator at chore PR review>
+### v3.67 (2026-07-10) — Intake now adapts to your project's methodology
 
 ### v3.66 (2026-07-09) — Engineering documents now start from a canonical template, not a blank page
 
@@ -128,15 +128,15 @@ Installs the tooling to turn project documents into a searchable index — a nod
 
 Methodology (Scrum, Kanban, or your own) becomes a self-contained, swappable pack — a shipped best-practice baseline you select, or your own config you bring and override, without hand-editing skills. Foundation release: the pack format (a widened type-pack meta-schema with a `role`/`extends`/`[[labels]]`/optional-`kinds` composition layer), two starter packs + a shared `_common` base, and a methodology-neutral label grammar. Consuming skills are wired in a follow-up (#2021). ADR-069 (composing-unit) + ADR-070 (composition grammar); MODERATE reversibility.
 
-### v3.59 (2026-07-03) — <headline — populated by operator at chore PR review>
+### v3.59 (2026-07-03) — One structural vocabulary for docs, backlog, and release records
 
-### v3.58 (2026-07-02) — <headline — populated by operator at chore PR review>
+### v3.58 (2026-07-02) — System-Specialist template — one method, a specialist per system
 
 ### v3.57 (2026-07-02) — Impact analysis reads code, and git-native releases stop dead-ending
 
 Two release-pipeline improvements on milestone `80-solutioning-and-engineering-skill-modes` (2 issues, PR #3082). **#505** adds `domain-blast-radius.sh`, which traces change impact through the code import graph (`from x import y` edges) for `domain: software` deliverables and emits the same schema-v1 surface the design-review checklist consumes; the markdown-tree `blast-radius.sh` default is unchanged and now shares a common emitter library (architecture recorded in ADR-068). **#674** stops the release-executor Dry-Run-Record halt from dead-ending git-native releases (where the PR diff *is* the dry-run review), fixed at both the Step-1 input-validation check and the failure-mode entry; Cowork-lineage plans still route to release-planner Mode C. Provisional **v3.54** re-versioned forward to **v3.57** at the atomic tag claim (forward-only per bundle-composition-doctrine §5.3). MODERATE / `git revert -m 1` of PR #3082 reverses both cleanly; additive tooling + one routing-condition fix, no data migration.
 
-### v3.53 (2026-07-02) — <headline — populated by operator at chore PR review>
+### v3.53 (2026-07-02) — ADRs gain a canonical frontmatter schema, and the durability lint stops mis-flagging colors
 
 ### v3.52 (2026-07-02) — The eval framework is complete — tested refiner scripts, runnable eval sets, and chain-aware QA
 
