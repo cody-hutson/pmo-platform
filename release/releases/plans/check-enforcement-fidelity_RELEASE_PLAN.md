@@ -1,22 +1,30 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
-# v4.03 Release Plan — check-enforcement-fidelity
+# the release version (bound at Stage 12) Release Plan — check-enforcement-fidelity
 
-> **Milestone:** `check-enforcement-fidelity` (#307) · **Release Class:** novel · **Version:** v4.03 *(bump-class minor; anchor `v4.01`. Provisional display value — the concrete number is recomputed next-free and claimed atomically at the Stage-12 merge tag, forward-only re-version-up)* · **Scope:** 6 issues, 22 effective pts (inside the 15–25 band) · One release branch, one PR, one merge gate · **Branch:** `release/check-enforcement-fidelity` (slug-only, no version prefix).
+> **Milestone:** `check-enforcement-fidelity` (#307) · **Release Class:** novel · **Version:** the release version (bound at Stage 12) *(bump-class minor; anchor `v4.01`. Provisional display value — the concrete number is recomputed next-free and claimed atomically at the Stage-12 merge tag, forward-only re-version-up)* · **Scope:** 6 issues, 22 effective pts (inside the 15–25 band) · One release branch, one PR, one merge gate · **Branch:** `release/check-enforcement-fidelity` (slug-only, no version prefix).
 
 This plan is the Stage-4 release plan (rendered on #4240, 2026-07-30 Thursday) written to disk as **Engineering Commit 0** by the first Stage-6 spoke, reconciled with the four Stage-5 Solutioning outputs, the Phase A6.5 Adversarial Design Review, and the **Collective Review scope-lock** (LOCKED, 2026-07-30). Deltas discovered after Stage 4 are folded into the Deviation Log below rather than silently applied.
 
 ## Summary (30 seconds)
 
-> **Re-versioned v4.02 → v4.03 at Stage 8.** The sibling release
-> `release-closeout-integrity` (PR #4330) merged and claimed `v4.02` while this
-> release was in flight, so the provisional name was recomputed against
-> authoritative state: tag free, absent from `RELEASE_LOG`, no plan file, zero open
-> PRs claiming it. Per `re-version-recovery.md` this is `disposition = none` — no
-> tag was ever cut for this release, and `v4.02` is now the live canonical tag of
-> the sibling that won the slot, so it is **not** reaped. R-2 residue is zero: the
-> branch is slug-only (`release/check-enforcement-fidelity`) and no commit subject
-> carries a version. R-3 residue is zero: no ledger row had been written.
+> **Version is NOT bound in this plan.** This release lost two version slots to concurrent
+> siblings while in flight — `v4.02` to `release-closeout-integrity` (PR #4330, merged
+> 2026-07-31) and `the release version (bound at Stage 12)` to `closeout-output-set-integrity` (PR #4333, merged 2026-08-01).
+> Both were legitimate: neither slot was ever tagged by this release, and each is now the
+> live canonical tag of the sibling that won it, so under `re-version-recovery.md` both are
+> `disposition = none` and neither is reaped.
+>
+> Rather than rename a third time, the operator decided at the Stage 9 re-gate to **decouple
+> the plan filename from the version entirely** — matching what the release branch has done
+> since Stage 6. This is the founding defer-to-merge architecture applied consistently: the
+> concrete number is *provisional-display* and binds only at the **Stage 12 atomic claim**.
+> The durable declaration here is the **bump-class (minor)**, not a number.
+>
+> Stage 12 computes next-free against authoritative state at claim time and stamps it into
+> the tag, the `RELEASE_LOG` row, and the close-out corpus. Residue from the two abandoned
+> names is zero on every surface: no tag was cut, the branch is slug-only, no commit subject
+> carries a version, and no ledger row had been written.
 
 Six cards, one theme: **every verification instrument that claims to enforce something actually does.** All six repros were re-run against the pinned baseline at planning time — **6/6 still reproduce**; nothing was silently fixed upstream.
 
@@ -199,7 +207,7 @@ Sourcing-exempt: the entire File Change Matrix is internal platform artifacts, s
 
 **Recorded determinations (rule-determined or standing-authorized, not operator gates):**
 
-- **D-Version → `v4.03`.** Anchor `v4.01`; bump-class minor floor → `v4.03`; absent from the claimed set (0 tags, 0 branches, 0 plan files) against authoritative refs. Re-verified at Engineering Commit 0 (PROCEED — see Deviation Log entry (a)) and again at the Stage-12 atomic claim.
+- **D-Version → `the release version (bound at Stage 12)`.** Anchor `v4.01`; bump-class minor floor → `the release version (bound at Stage 12)`; absent from the claimed set (0 tags, 0 branches, 0 plan files) against authoritative refs. Re-verified at Engineering Commit 0 (PROCEED — see Deviation Log entry (a)) and again at the Stage-12 atomic claim.
 - **D-Concurrency Posture → P0 fully-serial.** Stage 6 is write-serialized by its parallelism class regardless, and four cards co-edit `deploy.sh`. Parallelism remains available at Stages 5 / 7 / 8. Force-push, including `--force-with-lease`, is prohibited on the shared release branch under any multi-chip activity.
 - **Branch naming → `release/check-enforcement-fidelity`,** slug-only with no version prefix, matching the two most recent releases. The version is a display value until the Stage-12 claim; encoding it in the branch name is what produces rename churn.
 - **ADR-104 allocated** for D-1 (the complementary-pair registration mechanism) + D-2′ (Option A), homed in `core/ADRs/`, authored at Stage 6 on the release branch. Number verified next-free with the governed checker.
@@ -238,7 +246,7 @@ Machine-readable — one path per line, `INTENT  path  — note`.
 
 ```
 # ── Release plan + ADR (Engineering Commit 0 and its companion, #4208) ──
-ADD   release/releases/plans/v4.03_check-enforcement-fidelity_RELEASE_PLAN.md  — written after the Commit-0 version re-verify
+ADD   release/releases/plans/the release version (bound at Stage 12)_check-enforcement-fidelity_RELEASE_PLAN.md  — written after the Commit-0 version re-verify
 ADD   core/ADRs/ADR-104-complementary-reference-pair-registration.md           — D-1 + D-2' (Option A); number verified next-free at authoring time
 # ── #4208 — prose-declared normative predicates admitted to gate-efficacy scope ──
 EDIT  core/standards/gate-efficacy-standard.md   — scope table (3rd class), Req (b) 3rd realization, runner-resolution rule, 3 register rows, consumer refs, version history
@@ -327,7 +335,7 @@ Paths marked with a leading `#` and no INTENT verb are review-only, deliberately
 
 | # | Deviation from the Stage-4 baseline | Source | Disposition |
 |---|---|---|---|
-| **(a)** | **Commit-0 version re-verify — PROCEED.** Re-run against freshly fetched authoritative refs at Engineering Commit 0. The `v4.03` tag is absent from the fetched tag set; the release-log ledger's highest row on the mainline is `v4.01` (VERIFIED); no `v4.03` plan file exists. Recomputed next-free for bump-class minor equals the planned version, so the plan file is written at this path. | Commit-0 re-verify | **Recorded determination.** Re-verified again at the Stage-12 atomic claim. |
+| **(a)** | **Commit-0 version re-verify — PROCEED.** Re-run against freshly fetched authoritative refs at Engineering Commit 0. The `the release version (bound at Stage 12)` tag is absent from the fetched tag set; the release-log ledger's highest row on the mainline is `v4.01` (VERIFIED); no `the release version (bound at Stage 12)` plan file exists. Recomputed next-free for bump-class minor equals the planned version, so the plan file is written at this path. | Commit-0 re-verify | **Recorded determination.** Re-verified again at the Stage-12 atomic claim. |
 | **(b)** | **Branch named `release/check-enforcement-fidelity`, slug-only.** Stage 4 did not fix a branch name. Version-prefixed branch names produce rename churn when the version re-versions forward; the two most recent releases are slug-only. | Commit-0 | **Applied.** |
 | **(c)** | **#4208 does NOT edit `estimation-standards.md` or `tracker-schemas.md`.** The Stage-4 matrix assumed AC-5 was a remediation. Both files already carry conformant runner declarations (seven across the two), so AC-5 closes on **verification plus register rows** with zero body edits. | Stage 5 (#4242) | **Applied.** Consequences: `packages/delivery-engine.skill` is not staled (verified fresh independently three times), so the terminal rebuild narrows to `tracker-manager` alone; and **edge E2 dissolves**. |
 | **(d)** | **CIAC-5 is solely #4178's**, and its real constraint is narrower than "preserve four names" — the byte-exact anchor line and the no-interior-H2 rule are the actual hazards. | Stage 5 + hub correction | **Applied.** The four names match as substrings; the exact-heading assertion applies to a template file no card edits. |

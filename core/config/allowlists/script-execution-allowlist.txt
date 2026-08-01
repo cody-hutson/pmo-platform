@@ -67,6 +67,16 @@ release/tools/append-pipeline-event.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/synthesize-release-learnings.sh
 ./release/tools/synthesize-release-learnings.sh
 release/tools/synthesize-release-learnings.sh
+# produce-learnings-register.sh — Stage 13 Phase A7.2 close-out learnings-register
+# producer (renders the tracked template to the operator-instance register path,
+# seeded from the A7 triple). Invoked agent-side by the Stage 13 spoke, so all four
+# invocation forms per the per-tool form convention above are required — without
+# them the Phase A7.2 step is BLOCK-DESTRUCTIVE-022-blocked and the feature is dead
+# agent-side.
+[PMO_PLATFORM_ROOT]/release/tools/produce-learnings-register.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/produce-learnings-register.sh
+./release/tools/produce-learnings-register.sh
+release/tools/produce-learnings-register.sh
 [PMO_PLATFORM_ROOT]/release/tools/compute-cycle-time.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/compute-cycle-time.sh
 ./release/tools/compute-cycle-time.sh
@@ -83,6 +93,18 @@ release/tools/query-pipeline-event.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/automated-closeout.sh
 ./release/tools/automated-closeout.sh
 release/tools/automated-closeout.sh
+# test_corpus_home_tolerance.sh — corpus-home adapter tolerance conformance suite
+# (CH-1..CH-4 of release/references/standards/corpus-home-adapter-constraints.md).
+# Runs in the closeout-smoke CI job AND is invoked agent-side at Stage 7 Dev Testing
+# and by anyone building the corpus-home seam; without all four invocation forms it
+# is BLOCK-DESTRUCTIVE-022-blocked agent-side and the suite cannot be run to verify
+# a change against the constraint. NOTE: this is the FIRST release/tools/tests/
+# entry in this file — the four pre-existing suites in that directory are
+# unallowlisted and run only in CI (tracked separately; not fixed here).
+[PMO_PLATFORM_ROOT]/release/tools/tests/test_corpus_home_tolerance.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_corpus_home_tolerance.sh
+./release/tools/tests/test_corpus_home_tolerance.sh
+release/tools/tests/test_corpus_home_tolerance.sh
 # version-grammar.sh — sourced SSOT library (validate/parse/compare); consumers
 # source it, so all four invocation forms (incl. source/.) must be allowlisted
 # (BLOCK-DESTRUCTIVE-022 gates both `bash <path>` execution and `source <path>`).
