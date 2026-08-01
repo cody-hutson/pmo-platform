@@ -8314,6 +8314,116 @@ cmd_check() {
   fi
 
 
+  # Check 63 — theme-token undeclared-consumer lint, TH-3 (ENFORCING) [#4197]
+  #
+  # WHAT IT ASSERTS. Every CSS custom property CONSUMED by a themed document — after
+  # resolving that document's DOCUMENTED substitution placeholders — is DECLARED in every
+  # theme block of that document. It catches a `var(--x)` with no matching `--x:`.
+  #
+  # WHY A LITERAL GREP CANNOT DO THIS. The defect that motivated the check was invisible to
+  # one. A themed SVG emitted status colours through `var(--{{S}}bg)` / `var(--{{S}}ln)` /
+  # `var(--{{S}})` where {{S}} resolved to ok / warn / neut; for neut only `--neutbg` was
+  # declared, so stroke fell back to `none` and fill to initial black in BOTH themes. The
+  # broken token names `--neutln` and `--neut` are PRODUCED by substitution, never written,
+  # so nothing to grep for exists in the source. It was found by reading the mechanism.
+  #
+  # WHY THE NEIGHBOURING INVARIANTS MISS IT. The template's own TH-1 (no hardcoded hex
+  # outside the style block) and TH-2 (declaration parity between the two theme blocks) both
+  # PASS on the defect: a token absent from BOTH blocks satisfies parity trivially. That is
+  # the gap, and the fixture set proves the three invariants are independent in both
+  # directions rather than asserting it.
+  #
+  # THE DOMAIN IS DECLARED, NOT INFERRED — and that choice is what makes the check usable.
+  # Inferring {{S}}'s value set from the prose comment documenting it does not work: the live
+  # comments read "ok on GO, bad on NO-GO" and "ok when class is C1 or C2; warn when C3",
+  # and a lowercase-word extractor returns {ok, on, bad} and {ok, when, class, is, or, warn}.
+  # An instrument that cannot separate a token value from an English word OVER-MATCHES, and
+  # an over-matching probe is unusable rather than lenient. The domain is therefore stated at
+  # the usage site as `<!-- subst: {{NAME}} = v1|v2|… ; <prose> -->`, with the prose retained
+  # on the same line so the machine domain and the human explanation cannot drift apart.
+  #
+  # NEVER A SILENT SKIP. An unmanifested placeholder is UNRESOLVABLE and the runner exits 2,
+  # which this block treats as a FAIL. Skipping it would print a clean zero over a partial
+  # population — precisely the miss that produced the original defect. A domain genuinely
+  # unbounded at authoring time declares `*` and its consumers are counted into a printed
+  # declared-uncoverable bucket named in the verdict line, so the coverage boundary is on the
+  # face of every run and cannot be quietly widened.
+  #
+  # SCOPE — tracked DOCUMENTS (.md / .html / .htm / .svg / .xhtml) carrying BOTH a `<style>`
+  # element and >=1 `var(--` consumer, with core/hooks/testdata/** exempt. Fixture trees
+  # carry deliberate defects as their whole purpose, so counting them would make the gate red
+  # by construction — the same exemption Check 62 carries, for the same reason. The gate is a
+  # CONTENT predicate rather than an enumerated path list, so a new themed artifact is covered
+  # on creation rather than on someone remembering to register it. Live population: 2.
+  #
+  # DECLARED COVERAGE BOUNDARY — state this, do not imply more. NOT covered: a consumer
+  # produced by a substitution the source text does not document AT ALL (a token name
+  # assembled at run time by string concatenation) — an undocumented MECHANISM, as distinct
+  # from an undocumented VALUE SET, which IS caught as INDETERMINATE; a generator that emits
+  # themed CSS at run time, since the check reads documents on disk; the full CSS cascade,
+  # since TH-3 models root-scope theming, this corpus's documented convention, and counts
+  # non-root declarations as OUT-OF-ROOT rather than absorbing them; and whether a declared
+  # token's VALUE is legible, which is the property that made the original defect visible and
+  # is a different invariant.
+  #
+  # ENFORCING BY THE CODE'S SHAPE, NOT BY A DEFAULT. Note what is absent from the FAIL arms
+  # below: no `case` on any mode, no mode gate of any kind. The live population is clean at
+  # this pin, so there is no pre-existing debt to baseline and no red-wall vector to hedge
+  # against — the conditions that forced Check 62 to ship a committed baseline do not hold
+  # here. A new undeclared consumer increments ISSUES on every run.
+  #
+  # THE CHECK CARRIES ITS OWN RECORD (PV-6, core/disciplines/review-discipline-principles.md
+  # § 8.1). Its denominator and BOTH control arms are fields of its own emitted output, not of
+  # any prose report about it, so a reader can distinguish "zero found" from "nothing
+  # examined". A fixture regression is a hard FAIL: a probe that can no longer be shown to
+  # detect AND to discriminate proves nothing by returning zero.
+  #
+  # Primitive: core/hooks/run-theme-token-fixtures.sh (bare invocation runs the fixture set).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 63: Theme-token undeclared-consumer lint (every var(--x) consumer is declared in every theme block; enforcing; fixture trees exempt)"
+    local c63_runner="core/hooks/run-theme-token-fixtures.sh"
+    if [[ ! -f "$c63_runner" ]]; then
+      log "  FAIL:  theme-token — runner missing: $c63_runner (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
+      ISSUES=$((ISSUES + 1))
+    else
+      # ── The precision probe: the committed two-armed fixture set. ──────────────
+      local c63_fx_out c63_fx_rc=0
+      c63_fx_out=$(bash "$c63_runner" 2>&1) || c63_fx_rc=$?
+      log "  CTRL:  theme-token — $(echo "$c63_fx_out" | sed -n '1s/^TH-3 fixture self-test: //p')"
+      log "  CTRL:  theme-token — $(echo "$c63_fx_out" | sed -n '2s/^ *//p')"
+      if [[ $c63_fx_rc -ne 0 ]]; then
+        log "  FAIL:  theme-token-fixtures — fixture regression (hard-fail on every mode). A probe that can no longer be shown to detect AND to discriminate proves nothing by returning zero."
+        echo "$c63_fx_out" | sed 's/^/         /'
+        ISSUES=$((ISSUES + 1))
+      else
+        log "  OK:    theme-token-fixtures — $(echo "$c63_fx_out" | tail -1 | sed 's/^TH-3 fixture self-test: //; s|  *(fixtures:.*||')"
+      fi
+
+      # ── The enforcing arm: scan the gated corpus population. ───────────────────
+      local c63_out c63_rc=0
+      c63_out=$(bash "$c63_runner" --scan-corpus 2>&1) || c63_rc=$?
+      local c63_pop c63_res
+      c63_pop=$(echo "$c63_out" | sed -n 's/^TH-3 corpus scan: //p' | tail -1)
+      c63_res=$(echo "$c63_out" | awk -F'DENOMINATOR *: ' '/DENOMINATOR/{split($2,a," "); s+=a[1]} END{print s+0}')
+      log "  DENOM: theme-token — ${c63_pop:-unreported}; ${c63_res} consumer resolution(s) examined across the population"
+
+      case "$c63_rc" in
+        0)
+          log "  OK:    theme-token — no undeclared consumer in any gated document"
+          ;;
+        1)
+          log "  FAIL:  theme-token — a consumed custom property is not declared in every theme block at: $(echo "$c63_out" | awk '/^  MISSING /{print $2}' | sort -u | paste -sd, -). The remedy is to declare the token (or correct the consumer), never to widen the manifest to hide it."
+          ISSUES=$((ISSUES + 1))
+          ;;
+        *)
+          log "  FAIL:  theme-token — INDETERMINATE: $(echo "$c63_out" | sed -n 's/^  VERDICT  *: INDETERMINATE (PV-1) — //p' | sort -u | paste -sd'; ' -). The denominator was not established, so a zero here would be untrustworthy — this is not a clean result."
+          ISSUES=$((ISSUES + 1))
+          ;;
+      esac
+    fi
+  fi
+
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
