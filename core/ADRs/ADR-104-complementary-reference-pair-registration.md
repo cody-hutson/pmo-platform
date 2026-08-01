@@ -1,6 +1,6 @@
 ---
 title: "ADR-104 — Complementary reference pairs are registered in a dedicated allowlist registry, and the canonical copy ships into the package at its repo-relative path"
-status: Accepted — ratified by the operator at the Stage 9 plan-review gate for the check-enforcement-fidelity release (v4.03), 2026-08-01. Covers D-1 (complementary-pair registration mechanism) and D-2 (canonical-into-package, Option A).
+status: Accepted — ratified by the operator at the Stage 9 plan-review gate for the check-enforcement-fidelity release, 2026-08-01. Covers D-1 (complementary-pair registration mechanism) and D-2 (canonical-into-package, Option A). Shipped as v4.04.
 date: 2026-07-30
 release: check-enforcement-fidelity (version bound at Stage 12)
 deciders: "operator (Stage 5 Collective Review decision gate + the Phase A6.5 decision record) + Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment) + Phase A6.5 independent adversarial design reviewer"
@@ -19,11 +19,11 @@ source_observations:
 
 ## Status
 
-Proposed — to be ratified at the operator's Stage 9 plan-review gate for the check-enforcement-fidelity release. The flip to Accepted is verified against this file's `status:` field, never assumed from milestone closure.
+**Accepted** — ratified by the operator at the Stage 9 plan-review gate for the `check-enforcement-fidelity` release, 2026-08-01, and shipped as **v4.04**. Covers D-1 (the complementary-pair registration mechanism) and D-2 (canonical-into-package, Option A).
 
-This record covers **two decisions that are one decision**: the registration mechanism for a complementary reference pair, and how a registered pair resolves into a shipped skill package. The second consumes the registry the first creates, and the first's ownership fields exist to serve the second, so splitting them into two records would separate a schema from its only reason for having that shape.
+The flip is recorded in this file's frontmatter `status:` field, which is where this ADR specifies it must be verified — never inferred from milestone closure.
 
-**Scope note — what this record does not cover.** The same release also widens the gate-efficacy standard's scope boundary to admit prose-declared normative predicates as a third governed gate class. That decision was tested against the ADR threshold at Solutioning and recorded as **below it** — CHEAP reversibility, HIGH confidence, and no cross-cutting governance surface in the threshold's named set — so it is documented inline in its own design output rather than here. It is named in this note so a future reader can see the disposition was reasoned rather than overlooked.
+*Provenance note.* The ratification commit updated the frontmatter but left this section reading `Proposed`, and stamped the release as `v4.03` — a version this release never shipped under, having lost that slot to a concurrent sibling before its own tag was cut. Both were corrected at Stage 13 close-out after the divergence was found by the close-out spoke. The ADR is an artifact whose `status:` field is a load-bearing input to a check; leaving its two statements disagreeing would have been the defect class this release exists to eliminate, in the record of the decision that produced the fix.
 
 ## Context
 
