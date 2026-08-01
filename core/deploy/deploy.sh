@@ -8261,6 +8261,26 @@ cmd_check() {
           ISSUES=$((ISSUES + 1))
         fi
 
+        # The committed labeled expected-match set, run through the SAME predicate the
+        # corpus scan just used, so the gate and manual verification measure the same
+        # thing rather than two drifting copies. A fixture regression is a hard FAIL on
+        # every mode: if the predicate has stopped discriminating on the pair that
+        # falsified two earlier candidates, no verdict it reports is trustworthy.
+        local c62_fx="core/deploy/tools/run-count-structure-fixtures.sh"
+        if [[ -x "$c62_fx" ]]; then
+          local c62_fx_out c62_fx_exit=0
+          c62_fx_out=$(bash "$c62_fx" 2>&1) || c62_fx_exit=$?
+          if [[ $c62_fx_exit -ne 0 ]]; then
+            log "  FAIL:  count-structure-fixtures — $(echo "$c62_fx_out" | tail -1) (fixture regression; hard-fail on every mode)"
+            ISSUES=$((ISSUES + 1))
+          else
+            log "  OK:    count-structure-fixtures — $(echo "$c62_fx_out" | tail -1 | sed 's|  (.*||')"
+          fi
+        else
+          log "  FAIL:  count-structure-fixtures — harness missing or not executable: $c62_fx (the gate would assert nothing about the predicate's discrimination)"
+          ISSUES=$((ISSUES + 1))
+        fi
+
         local c62_new c62_known c62_stale
         c62_new=$(echo "$c62_out" | awk -F'\t' '$1=="FAIL"{print $2":"$3}' | paste -sd, -)
         c62_known=$(echo "$c62_out" | awk -F'\t' '$1=="KNOWN"' | wc -l | tr -d ' ')
