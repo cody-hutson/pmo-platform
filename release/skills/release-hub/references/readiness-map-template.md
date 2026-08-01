@@ -58,6 +58,29 @@ An emission with the briefing and no map is **complete**. An emission with the m
 |---|---|---|
 | TH-1 | No literal hex outside the `<style>` block | `sed '/<style>/,/<\/style>/d' <file> \| grep -coE '#[0-9a-fA-F]{6}'` → `0` |
 | TH-2 | Light and dark declare the same key set | each `--token:` appears exactly twice (18 tokens, 2× each) |
+| TH-3 | Every `var(--X)` consumer — after documented substitution — is declared in every theme block | `bash core/hooks/run-theme-token-fixtures.sh --scan <file>` → `0 undeclared consumer(s)`; the run prints its own denominator and both control-arm results |
+
+TH-2 and TH-3 are independent in both directions and neither contains the other. TH-2 owns
+*parity across blocks for every declared token*; TH-3 owns *declaredness in every block for every
+consumed token*. A token absent from **both** blocks satisfies parity trivially and fails TH-3 —
+that asymmetry is the whole reason TH-3 exists. A token declared in one block and consumed
+nowhere fails TH-2 and is correctly clean under TH-3.
+
+**Substitution manifest — what TH-3 reads.** A placeholder consumed inside a `var(--…)` is
+resolvable only where its value set is stated. State it on the same comment line that already
+explains the rule, in the form `<!-- subst: {{NAME}} = v1|v2|… ; <the existing prose> -->`: the
+domain is the field before the `;`, each value matches `^[a-z][a-z0-9-]*$`, and the prose survives
+verbatim after it. One line, not two — the machine domain and the human explanation must not
+become separate sources that drift apart. TH-3 reads declarations from the `<style>` element and
+consumers from the whole fenced scaffold, so prose *about* the mechanism elsewhere in this file
+never enters the population.
+
+**When the value set is not stated, or cannot be.** An unmanifested placeholder is never skipped:
+TH-3 reports it `UNRESOLVABLE`, returns `INDETERMINATE`, and exits 2, because a denominator that
+silently excludes it cannot support a trustworthy zero. A domain genuinely unbounded at authoring
+time declares `= *`; its consumers are counted into a printed `UNBOUNDED / declared-uncoverable`
+bucket and named in the verdict line, so the coverage boundary is visible on every run instead of
+implied — and an author cannot quietly disable the check by declaring everything open.
 
 ## 4. Self-containment predicate
 
@@ -176,7 +199,7 @@ Placeholders are `{{…}}`. `REPEAT` blocks emit one element per data row.
 <rect x="{{PILL_X}}" y="13" width="128" height="30" rx="15" fill="var(--{{V}}bg)" stroke="var(--{{V}}ln)"/>
 <circle cx="{{PILL_X_PLUS_20}}" cy="28" r="5" fill="var(--{{V}})"/>
 <text x="{{PILL_X_PLUS_32}}" y="32" class="b" font-size="14" fill="var(--{{V}})">{{VERDICT}}</text>
-<!-- {{V}} = ok on GO, bad on NO-GO -->
+<!-- subst: {{V}} = ok|bad ; ok on GO, bad on NO-GO -->
 
 <!-- 2. ISSUE PANEL -->
 <rect x="24" y="68" width="{{PANEL_W}}" height="{{PANEL_H}}" rx="12" fill="var(--panel)" stroke="var(--panelln)"/>
@@ -190,7 +213,7 @@ Placeholders are `{{…}}`. `REPEAT` blocks emit one element per data row.
   <text x="56" y="{{CARD_Y_PLUS_32}}" class="mut" font-size="11">{{SIZE}} · {{CLASS}}{{PT}} · {{DISPOSITION_OR_NOTE}}</text>
   <text x="{{CARD_RIGHT}}" y="{{CARD_Y_PLUS_25}}" text-anchor="end" class="sb" fill="var(--{{T}})">{{PTS}} pts</text>
 </g>
-<!-- {{T}} = ok when class is C1 or C2; warn when C3. DASH_IF_C3 = stroke-dasharray="5 3" -->
+<!-- subst: {{T}} = ok|warn ; ok when class is C1 or C2; warn when C3. DASH_IF_C3 = stroke-dasharray="5 3" -->
 
 <!-- 3. CROSS-MILESTONE PANEL + EDGE — Layout A only; omit entirely in Layout B -->
 <defs>
@@ -220,7 +243,7 @@ Placeholders are `{{…}}`. `REPEAT` blocks emit one element per data row.
 <text x="{{CEIL_X}}" y="{{G_TY_PLUS_44}}" text-anchor="middle" class="b" font-size="10" fill="var(--bad)">25 ceiling</text>
 <rect x="24" y="{{G_TY_PLUS_6}}" width="{{BAR_W}}" height="14" rx="4" fill="var(--{{GT}})" opacity="0.85"/>
 <text x="{{BAR_LABEL_X}}" y="{{G_TY_PLUS_17}}" class="b" font-size="11" fill="var(--{{GT}})">{{TOTAL_PTS}} pts</text>
-<!-- {{GT}} = ok when 15 <= total <= 25; warn otherwise -->
+<!-- subst: {{GT}} = ok|warn ; ok when 15 <= total <= 25; warn otherwise -->
 
 <!-- 5. LEGEND · COMPOSITION RAIL — one row per checklist group, in table order -->
 <g id="legend">
@@ -233,7 +256,7 @@ Placeholders are `{{…}}`. `REPEAT` blocks emit one element per data row.
   <text x="876" y="{{ROW_Y_PLUS_11}}" text-anchor="end" class="mut" font-size="10.5">{{OWNER}}</text>
 </g>
 </g>
-<!-- {{S}} = ok on PASS, warn on FINDING, neut on NOT RUN -->
+<!-- subst: {{S}} = ok|warn|neut ; ok on PASS, warn on FINDING, neut on NOT RUN -->
 
 <!-- 6. TONE KEY — defines the tone vocabulary; NOT the legend -->
 <g id="tonekey" font-size="10.5">
