@@ -9308,6 +9308,96 @@ EOF
 
   /bin/rm -rf "$_p" 2>/dev/null || true
 
+  # ─── Assertion group RR — register runner-resolution (Check 62) [#4208] ───────
+  #
+  # Offline, hermetic, sandbox-only: every path is re-pointed through RR_STANDARD /
+  # RR_ROOT at a mktemp tree, so this never reads the live standard or the live check
+  # bank. Extends this ONE self-test entry rather than adding a second, so the CI
+  # invocation stays single.
+  #
+  # RR-1 vs RR-2 IS the discrimination claim. A register whose pointers resolve must
+  # verdict CLEAN while one whose named runner has stopped carrying the predicate must
+  # verdict UNRESOLVED. A check that reported the same for both would be exactly the
+  # vacuous control this milestone exists to eliminate — and RR-2 reproduces, in fixture
+  # form, the defect the introducing release actually shipped.
+  # RR-4/RR-5 are the anti-vacuity assertions: a check whose input set is EMPTY must SAY
+  # so rather than pass. A resolution check that silently passes with zero pointers is
+  # the "instrument that cannot fire" class one level up.
+  # RR-6 is the PARSER control: the standard legitimately mentions the bare token in
+  # prose, so a parser that matched prose would inflate the pointer count and could
+  # report failures against sentences. It must parse to zero here.
+  echo "self-test: starting assertion group RR (register runner-resolution, #4208)" >&2
+  local _r; _r="$(/usr/bin/mktemp -d -t registerrunner-selftest.XXXXXX)"
+  /bin/mkdir -p "$_r/core/standards"
+  local _rstd="$_r/core/standards/fixture-standard.md"
+  local _rdef="$_r/core/standards/fixture-runner-def.md"
+
+  _rr_seed_standard() {
+    /bin/cat > "$_rstd" <<'EOF'
+# Fixture standard
+
+A row declaring a `runner-def:` resolution pointer must resolve. This sentence is the
+PARSER CONTROL: it mentions the bare token and declares nothing.
+
+| Invariant | Enforcing gate |
+|---|---|
+| first invariant | **Runner:** fixture, `runner-def: core/standards/fixture-runner-def.md::FIX-01` |
+| second invariant | **Runner:** fixture, `runner-def: core/standards/fixture-runner-def.md::FIX-02` |
+EOF
+  }
+  _rr_seed_def() {
+    /bin/cat > "$_rdef" <<'EOF'
+# Fixture runner definition
+
+**FIX-01 (first):** the first encoded predicate.
+**FIX-02 (second):** the second encoded predicate.
+EOF
+  }
+  _rr_selftest_verdict() {
+    RR_STANDARD="${1:-$_rstd}" RR_ROOT="$_r" _rr_compute_verdict 2>/dev/null
+  }
+
+  # RR-5 — standard ABSENT ⇒ NOSET. Asserted FIRST: the anti-vacuity default.
+  _rr_seed_standard; _rr_seed_def
+  _v="$(_rr_selftest_verdict "$_r/core/standards/no-such-standard.md")"; _tok="${_v%%|*}"
+  [[ "$_tok" == "NOSET" ]] || { echo "FAIL: RR-5 an absent gate-efficacy standard must verdict NOSET (not CLEAN), got '$_v'"; failures=$((failures+1)); }
+
+  # RR-1 — every pointer resolves ⇒ CLEAN, and the COUNT is reported (2, not 3 — the
+  # prose control must not have been counted).
+  _v="$(_rr_selftest_verdict)"
+  [[ "$_v" == "CLEAN|2" ]] || { echo "FAIL: RR-1 a register whose pointers all resolve must verdict CLEAN|2, got '$_v'"; failures=$((failures+1)); }
+
+  # RR-2 — the named runner no longer CARRIES the predicate ⇒ UNRESOLVED. This is the
+  # falsification test, and it reproduces the defect the introducing release shipped:
+  # the row is untouched and still names its runner; only the runner's check set changed.
+  /usr/bin/sed 's/FIX-01/FIXX01/g' "$_rdef" > "$_rdef.tmp" && /bin/mv "$_rdef.tmp" "$_rdef"
+  _v="$(_rr_selftest_verdict)"
+  [[ "$_v" == "UNRESOLVED|1|2" ]] || { echo "FAIL: RR-2 a runner that no longer carries its declared anchor must verdict UNRESOLVED|1|2, got '$_v'"; failures=$((failures+1)); }
+
+  # RR-3 — the runner-definition FILE is gone ⇒ UNRESOLVED for every pointer.
+  /bin/rm -f "$_rdef"
+  _v="$(_rr_selftest_verdict)"
+  [[ "$_v" == "UNRESOLVED|2|2" ]] || { echo "FAIL: RR-3 an absent runner-definition file must verdict UNRESOLVED|2|2, got '$_v'"; failures=$((failures+1)); }
+
+  # RR-4 — a register declaring ZERO pointers ⇒ NOSET, never CLEAN.
+  _rr_seed_def
+  /usr/bin/sed 's/runner-def: /runnerdef /g' "$_rstd" > "$_rstd.tmp" && /bin/mv "$_rstd.tmp" "$_rstd"
+  _v="$(_rr_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "NOSET" ]] || { echo "FAIL: RR-4 a register declaring zero runner-def pointers must verdict NOSET (not CLEAN), got '$_v'"; failures=$((failures+1)); }
+
+  # RR-6 — PARSER control: a file carrying ONLY prose mentions of the bare token parses
+  # to zero declarations. Without this, RR-1's CLEAN|2 could be CLEAN|3 with one
+  # nonsense pointer that happens to resolve, and the count assertion would be the only
+  # thing standing between the check and matching sentences.
+  /bin/cat > "$_r/core/standards/prose-only.md" <<'EOF'
+A row declaring a `runner-def:` resolution pointer must resolve.
+Another sentence mentioning runner-def: with no pointer form at all.
+EOF
+  _v="$(_rr_selftest_verdict "$_r/core/standards/prose-only.md")"; _tok="${_v%%|*}"
+  [[ "$_tok" == "NOSET" ]] || { echo "FAIL: RR-6 prose-only mentions of the runner-def token must parse to zero declarations (NOSET), got '$_v'"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_r" 2>/dev/null || true
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failure(s))" >&2
     return 1
@@ -9321,6 +9411,8 @@ EOF
   echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET" >&2
   echo "  complementary-pair ownership validated (#4178, group CP):" >&2
   echo "    CP-4 absent registry NOSET / CP-1 intact pair PASS / CP-2 leaked owned-section OWNERSHIP-DRIFT / CP-5 missing shared-section OWNERSHIP-DRIFT / CP-6 divergent shared-section SHARED-DIVERGENCE / CP-3 unregistered cross-tree pair UNREGISTERED-PAIR / CP-3b named README.md exclusion holds / CP-7 malformed record MALFORMED" >&2
+  echo "  register runner-resolution validated (#4208, group RR):" >&2
+  echo "    RR-5 absent standard NOSET / RR-1 all pointers resolve CLEAN|2 / RR-2 runner no longer carries its anchor UNRESOLVED|1|2 (the shipped defect, in fixture form) / RR-3 absent runner-definition file UNRESOLVED|2|2 / RR-4 zero pointers NOSET / RR-6 prose-only token mentions parse to zero (parser control)" >&2
   return 0
 }
 
