@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run-count-structure-fixtures.sh — the Check 62 labeled expected-match harness.
+# run-count-structure-fixtures.sh — the Check 63 labeled expected-match harness.
 #
 # Asserts that every FLAG case in the fixture file is flagged by the shipped predicate
 # and every CLEAN case is examined AND not flagged, and that every SCOPE-OUT case is

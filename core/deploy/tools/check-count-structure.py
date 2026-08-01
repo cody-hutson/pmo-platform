@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""check-count-structure.py — the Check 62 predicate (count-vs-structure lint).
+"""check-count-structure.py — the Check 63 predicate (count-vs-structure lint).
 
 WHAT IT ASSERTS
     A stated cardinality that sits immediately above an enumerable structure must
@@ -528,7 +528,7 @@ def collect_paths(root, explicit, paths_from, apply_exempt=True):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Check 62 — count-vs-structure lint")
+    ap = argparse.ArgumentParser(description="Check 63 — count-vs-structure lint")
     ap.add_argument("--root", default=".")
     ap.add_argument("--path", action="append", default=[])
     ap.add_argument("--paths-from")

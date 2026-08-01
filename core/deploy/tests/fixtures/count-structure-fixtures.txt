@@ -1,9 +1,9 @@
-# count-structure-fixtures.txt — labeled expected-match set for Check 62
+# count-structure-fixtures.txt — labeled expected-match set for Check 63
 #
 # PROVENANCE. The FLAG/CLEAN pair below is the two-armed fixture handed over by the
 # probe-validity card at core/hooks/testdata/count-structure-fixtures.txt. That file
 # is authoritative for the pair's SEMANTICS and is not modified here. Its two arms are
-# written as INLINE enumerations (`preamble: item; item; …`), a structure form Check 62
+# written as INLINE enumerations (`preamble: item; item; …`), a structure form Check 63
 # v1 deliberately does not examine — so the arms are restated here in the block form
 # the shipped predicate reads, preserving both discriminating properties:
 #   (a) the numeral counts SHAPES while the enumeration lists CLASSES, so the units are

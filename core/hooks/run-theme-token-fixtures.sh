@@ -88,7 +88,7 @@
 #      region, no theme block, no consumer, an unresolvable placeholder, a malformed domain
 #      value, or a duplicate manifest entry. Never reported as clean.
 #
-# Shared by manual verification, core/deploy/deploy.sh Check 63, and any CI surface, so all
+# Shared by manual verification, core/deploy/deploy.sh Check 64, and any CI surface, so all
 # three measure the same thing rather than three drifting copies.
 
 set -euo pipefail
@@ -478,7 +478,7 @@ if [ "$MODE" = "corpus" ]; then
   # TWO EXCLUSIONS, both load-bearing, both stated rather than implied.
   #   core/hooks/testdata/**  — fixture trees carry deliberate defects as their whole
   #                             purpose. Scanning them makes the gate red by construction
-  #                             and says nothing about the corpus. Same exemption Check 62
+  #                             and says nothing about the corpus. Same exemption Check 63
   #                             carries, for the same reason.
   #   non-document files      — a shell script or a generator that merely MENTIONS `var(--`
   #                             in a comment is not a themed artifact. Without this, THIS

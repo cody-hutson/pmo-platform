@@ -1,6 +1,6 @@
-# count-structure-baseline.txt - Check 62 accepted population at introduction
+# count-structure-baseline.txt - Check 63 accepted population at introduction
 #
-# WHAT THIS FILE IS. Check 62 (count-vs-structure lint) ships ENFORCING. At its
+# WHAT THIS FILE IS. Check 63 (count-vs-structure lint) ships ENFORCING. At its
 # introducing commit the live corpus already carried 73 count preambles that do not
 # reconcile with the structure beneath them. Failing all 73 on day one would red-wall
 # the deploy gate for work that has nothing to do with this check, so the pre-existing
@@ -9,7 +9,7 @@
 #
 # THIS FILE IS A DEBT REGISTER, NOT A PERMANENT EXEMPTION. It is expected to shrink.
 # The `STALE:` arm is the ratchet: when a baselined pair is fixed or removed, its entry
-# stops matching and Check 62 reports it as stale so the row can be deleted.
+# stops matching and Check 63 reports it as stale so the row can be deleted.
 #
 # KEY FORMAT (tab-separated, three fields):
 #   <path>  <sha1-16(whitespace-normalized preamble text)>  <class-tag>
