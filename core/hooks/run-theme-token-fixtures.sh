@@ -470,13 +470,30 @@ if [ "$MODE" = "scan" ]; then
 fi
 
 if [ "$MODE" = "corpus" ]; then
-  # Scope gate: tracked files carrying BOTH a <style> element and >=1 var(-- consumer.
-  # A content predicate, not an enumerated path list — a new themed artifact is covered
-  # on creation rather than on someone remembering to register it.
+  # Scope gate: a tracked DOCUMENT (.md / .html / .htm / .svg / .xhtml) carrying BOTH a
+  # <style> element and >=1 var(-- consumer. A content predicate, not an enumerated path
+  # list — a new themed artifact is covered on creation rather than on someone remembering
+  # to register it.
+  #
+  # TWO EXCLUSIONS, both load-bearing, both stated rather than implied.
+  #   core/hooks/testdata/**  — fixture trees carry deliberate defects as their whole
+  #                             purpose. Scanning them makes the gate red by construction
+  #                             and says nothing about the corpus. Same exemption Check 62
+  #                             carries, for the same reason.
+  #   non-document files      — a shell script or a generator that merely MENTIONS `var(--`
+  #                             in a comment is not a themed artifact. Without this, THIS
+  #                             FILE scans itself: its own documentation quotes the manifest
+  #                             grammar and the `<style>` tag, and the scan returns
+  #                             INDETERMINATE on the checker rather than on the corpus.
+  #
+  # DECLARED COVERAGE BOUNDARY. A generator that EMITS themed CSS at run time (markup built
+  # inside a .py or .js) is not covered: the check reads documents on disk, and a generated
+  # document is not one until it is written. Stated, not implied.
   worst=0; scanned=0
-  files="$(/usr/bin/git grep -l -- "var(--" 2>/dev/null || true)"
-  "$PRINTF" 'TH-3 corpus scan — scope gate: tracked files with a <style> element AND >=1 var(--) consumer\n'
+  files="$(/usr/bin/git grep -l -- "var(--" -- '*.md' '*.html' '*.htm' '*.svg' '*.xhtml' 2>/dev/null || true)"
+  "$PRINTF" 'TH-3 corpus scan — scope gate: tracked documents with a <style> element AND >=1 var(--) consumer (fixture trees exempt)\n'
   for f in $files; do
+    case "$f" in core/hooks/testdata/*) continue ;; esac
     /usr/bin/grep -q -- "<style" "$f" || continue
     scanned=$((scanned + 1))
     rc=0; th3_scan "$f" || rc=$?
