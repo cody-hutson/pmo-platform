@@ -8775,8 +8775,11 @@ cmd_check() {
   # A shipped release plan or note describes the corpus AS IT WAS; "fixing" a count
   # inside one would rewrite a historical record. Fixture trees are excluded because
   # they carry deliberate defects as their whole purpose. Lifting the exemption at this
-  # pin adds 10 findings, and all 10 resolve under release/releases/plans/ — the
-  # exemption is load-bearing, not decorative.
+  # pin adds 17 findings, and all 17 resolve under release/releases/plans/ — the
+  # exemption is load-bearing, not decorative. (Re-measured at Stage 7: --no-exempt
+  # takes the population from 701 files / 414 pairs / 73 findings to 1031 / 471 / 90.
+  # The scope claim held; the magnitude was a prototype-era figure, the same lineage
+  # as the 51-vs-73 baseline count, and had never been true on this branch.)
   #
   # ENFORCING BY THE CODE'S SHAPE, NOT BY A DEFAULT. Note what is absent from the FAIL
   # arm below: there is no `case` on any mode and no mode gate of any kind. A new
@@ -8807,6 +8810,41 @@ cmd_check() {
   # hard-wrapped preamble that does not end in a colon; or an inline semicolon-delimited
   # enumeration. Those forms have not had their false-positive surface measured, and
   # shipping them unmeasured is the defect this check exists to prevent.
+  #
+  # DECLARED BLIND SPOTS *INSIDE* THE COVERED SHAPE (added at Stage-7 adversarial
+  # defeat-testing). The boundary above describes which PAIR SHAPES are read. It is not
+  # sufficient on its own: a pair can sit squarely inside the covered shape and still be
+  # declined or silently passed, by the suppressors or by the reconciliation rule. A
+  # reader must not infer "colon + adjacent list + same file" => "covered". Measured over
+  # the 872 in-scope candidate preambles (colon-terminated, above a real structure,
+  # carrying >= 1 numeral) of which 414 are examined:
+  #   (a) SUPPRESSOR DECLINE. 458 candidates are never examined. Most are correct refusals
+  #       (S1 identifier numerals, S2 units, S3 bounds), but the refusal is by keyword and
+  #       WILL decline genuine counts. Isolated single-variable controls: "The platform has
+  #       four gates:" is BLIND while "The platform four gates:" FLAGs -- the word `has`
+  #       alone (S5, matching declaratives as well as conditionals) disables the pair;
+  #       87 candidates are declined this way. "The four are:" is BLIND while "The four
+  #       gates:" FLAGs -- a copula/modal after the cardinal drops it (NP_STOP).
+  #   (b) HYPHENATED COMPOUND CARDINAL. "The five-type mapping:" is not read at all --
+  #       neither arm fires, so the form is invisible rather than merely unflagged. This
+  #       form occurs in the live corpus.
+  #   (c) MULTI-CARDINAL DISJUNCTION MASKS A DRIFTED CO-CARDINAL. R-a reconciles when ANY
+  #       stated cardinal equals the item count, so a preamble carrying several counts
+  #       passes on the one that happens to match. 52 of the 414 examined pairs are in
+  #       this state. Demonstrated by mutation on live content: at
+  #       core/disciplines/knowledge-architecture.md:207, corrupting a NON-matching
+  #       cardinal (`four` -> `forty`) yields FAIL=0, while corrupting the matching one
+  #       (`seven` -> `eight`) yields FAIL=1 reporting `stated=[8, 40, 2] items=7` -- the
+  #       bad 40 was in hand and drew no objection. These pairs count toward the examined
+  #       denominator, so they inflate apparent coverage.
+  #   (d) SINGLE-ITEM STRUCTURE. `items < 2` is never examined (7 candidates).
+  #   (e) UNBALANCED CODE FENCE. An odd number of fence markers flips the in-fence toggle
+  #       and blinds the check for the REST OF THE FILE -- a file-scope failure, not a
+  #       pair-scope one. 1 in-scope file is currently in this state.
+  # None of (a)-(e) is fixed here: this release ships the check enforcing and narrowly
+  # scoped, and widening the predicate without measuring each form's false-positive
+  # surface is the defect this check exists to prevent. They are DECLARED so the check's
+  # coverage claim can never be read as larger than its delivery.
   #
   # NOT ON THE REQUIRED-SUBSET ROSTER. Check 63 is deliberately absent from
   # --check-required-subset. That roster is seeded with Check 38 alone; joining it is a
