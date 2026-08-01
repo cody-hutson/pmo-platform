@@ -9,9 +9,10 @@ name: Skill package content-freshness (pre-merge gate)
 #              only at Stage-13 close-out, not by CI). Mirrors deploy.sh Check 7 (which
 #              ran only at deploy time) into a pre-merge status check per Req (b').
 #   falsification: edit a skills/*/SKILL.md (or references/) without rebuilding the
-#                  .skill package -> this gate reports STALE (warn-mode: summary +
-#                  exit 0; enforce: red + exit 1). Rebuild via build-skill-packages.sh
-#                  and commit the package + .sha256 sidecar -> FRESH/green.
+#                  .skill package -> the probe reports STALE and exits 2 (warn-mode:
+#                  job green with a ::warning:: annotation) or 1 (enforce: job red).
+#                  It never exits 0 on STALE. Rebuild via build-skill-packages.sh
+#                  and commit the package + .sha256 sidecar -> FRESH, exit 0, green.
 # Path-filtered to skill sources + packages, so ADVISORY by skip-semantics: absence on
 # an unrelated PR MUST NOT block. Ships warn-mode-initial. Dep #2159 (Check 7's
 # non-reproducible-archive false-positives) is CLOSED, so mirroring the content-hash
@@ -74,8 +75,8 @@ jobs:
       - name: Run package-freshness check (single check, via the deploy.sh engine)
         id: check
         # THIN caller. The probe reads .github/skill-package-freshness.enforce itself:
-        # warn swallows STALE into exit 0 (reported), enforce propagates exit 1; an
-        # unexpected verdict fail-closes.
+        # warn maps STALE to exit 2 (advisory), enforce to exit 1 (blocking); an
+        # unexpected verdict fail-closes to 1. The probe never exits 0 on STALE.
         run: |
           set -uo pipefail
           set +e
@@ -89,16 +90,31 @@ jobs:
           RC: ${{ steps.check.outputs.rc }}
         run: |
           set -euo pipefail
-          if [ "$RC" -eq 0 ]; then
-            echo ":white_check_mark: package-freshness: every rostered skill package is content-fresh (or a stale package was reported in warn-mode)" \
-              | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          {
-            echo "## :x: skill package-freshness gate FAILED (enforce mode) or fail-closed"
-            echo ""
-            echo "A rostered skill's SKILL.md or references/ changed without rebuilding its .skill package,"
-            echo "with the enforce sentinel active — OR the verdict was unexpected (fail-closed)."
-            echo "Rebuild via core/deploy/tools/build-skill-packages.sh <skill> and commit the package + .sha256 sidecar before merge."
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-          exit 1
+          case "$RC" in
+            0)
+              echo ":white_check_mark: package-freshness: every rostered skill package is content-fresh" \
+                | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+              ;;
+            2)
+              {
+                echo "## :warning: skill package-freshness reported STALE (warn mode — not blocking)"
+                echo ""
+                echo "A rostered skill's SKILL.md or references/ changed without rebuilding its .skill package."
+                echo "Rebuild via core/deploy/tools/build-skill-packages.sh <skill> and commit the package + .sha256 sidecar."
+                echo "This is ADVISORY while .github/skill-package-freshness.enforce holds a non-enforce token."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::warning::package-freshness: stale .skill package reported in WARN mode — not blocking (flip the enforce sentinel token to block)"
+              exit 0
+              ;;
+            *)
+              {
+                echo "## :x: skill package-freshness gate FAILED (enforce mode) or fail-closed"
+                echo ""
+                echo "A rostered skill's .skill package is stale with the enforce sentinel active,"
+                echo "OR the verdict was unexpected (fail-closed). Probe exit code: $RC."
+                echo "Rebuild via core/deploy/tools/build-skill-packages.sh <skill> and commit the package + .sha256 sidecar before merge."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 1
+              ;;
+          esac

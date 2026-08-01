@@ -4,6 +4,26 @@
 ## Purpose
 Defines the schema for every operational tracker in 04-PMO-Operations/. Used by the Tracker Manager to validate updates, produce consolidated change summaries, and maintain data integrity.
 
+## Division of Labour (registered complementary pair)
+
+This file is the **skill-local** half of a registered complementary pair with
+`core/schemas/tracker-schemas.md`. The two are **complementary, not duplicates**:
+
+- **This file owns** **§ Tracker Integrity Rules** — the RAID dedup threshold,
+  the cascade-trigger signal set, and the lifecycle-state predicate. That section
+  appears **only** here.
+- **The canonical copy owns** the full **Tracker 1–10** field sets, and is the
+  sole home of **Trackers 5–10**.
+- **Trackers 1–4 are shared** — both copies define them, and both are expected
+  to agree. Where they do not, that divergence is a reported finding, not a
+  silent difference.
+- **Do not define a new tracker here.** New trackers are defined in
+  `core/schemas/tracker-schemas.md`.
+
+The split is registered — with this ownership machine-checkable — in
+`core/deploy/allowlists/complementary-reference-pairs.txt`, and asserted by
+`deploy.sh --check` Check 13b.
+
 ## Schema Format
 Each tracker schema defines: column name, data type, valid values (if constrained), required/optional, description, and update rules.
 

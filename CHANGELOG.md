@@ -19,6 +19,18 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.04] - 2026-08-01
+
+Six of ten trackers were silently refusing writes and now work; five checks that reported success while proving nothing were made able to fail.
+
+[Full notes](release/releases/notes/v4.04_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.04)
+
+## [v4.03] - 2026-08-01
+
+Every shipped release now appears in all four release records, and the check that confirms it runs instead of silently skipping.
+
+[Full notes](release/releases/notes/v4.03_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.03)
+
 ## [v4.02] - 2026-07-31
 
 Release close-out now reports what is true after the work is done, stops skipping delivered work, and refuses to guess when it cannot see.

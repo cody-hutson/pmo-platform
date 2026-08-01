@@ -7,6 +7,10 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.04 (2026-08-01) — Blocked tracker writes now work, and checks that could not fail now can
+
+### v4.03 (2026-08-01) — Release records are now complete, and the check that proves it actually runs
+
 ### v4.02 (2026-07-31) — Release close-out results can now be trusted as read
 
 ### v4.01 (2026-07-30) — The session learning retro can now actually run

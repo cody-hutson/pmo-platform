@@ -292,6 +292,50 @@ These checks verify skill-unique behaviors and output contracts.
 - Validation: When PD output includes process maps and requirements, confirm: (a) each requirement maps to one or more process steps, (b) each process step is traceable to a requirement, (c) chain integrity metrics are calculated (e.g., "% of requirements mapped")
 - Failure mode: Orphaned requirement (not linked to any process step)
 
+### Category 7: Registered Corpus Predicates (RCP-01 through RCP-03)
+
+**Applies to:** any edit touching a corpus document named by a **class-3 row** of the
+gate-coverage register in `core/standards/gate-efficacy-standard.md`.
+
+**Why these live here, and why deleting one is a defect.** The register names
+`pmo-skill-editor` **Mode C** as the runner for three prose-declared predicates. A
+register row whose named runner does not itself carry the predicate is a runner that
+cannot fail — it satisfies the convention's letter while asserting nothing, which is the
+`unresolvable-runner` defect `gate-efficacy-standard.md` § *Runner resolution* defines.
+Encoding the three predicates here is what makes that register claim **true rather than
+asserted**. The check IDs below are the register's **resolution anchors**: each class-3
+row declares `runner-def:` pointing at this file plus the anchor it must contain, and
+`deploy.sh --check` Check 62 recomputes that resolution on every run. Deleting or
+renaming `RCP-01`, `RCP-02`, or `RCP-03` therefore turns Check 62 red rather than
+silently re-opening the gap.
+
+**Trigger table** — keyed on the **edited file**, not on a skill, because each predicate
+is a property of a corpus document rather than of a skill's output:
+
+| Edited file | Run |
+|---|---|
+| `core/schemas/tracker-schemas.md`, its `tracker-manager` skill-local half, or `operations/templates/sprint-tracker-template.md` | RCP-01 |
+| `operations/skills/delivery-engine/references/estimation-standards.md` | RCP-02, RCP-03 |
+
+Every RCP check **fails closed**: a check that was not run is a FAIL, not a pass. Report
+the verdict per check with the evidence that produced it — never "no issues found"
+without naming what was compared.
+
+**RCP-01 (tracker-schemas ↔ sprint-tracker-template):** calibration-path column headers equal the governing schema's field names, **in order**
+- Intent: a positional writer fills the column it intends to. Order — not merely membership — is the property that makes the template safe to write against.
+- Validation: extract the calibration-path column headers from `operations/templates/sprint-tracker-template.md` under `## Estimate-Actual Pairs`, and the corresponding field names from `core/schemas/tracker-schemas.md` § Tracker 10. Compare them as **ordered sequences**. An unordered-but-complete header set is a **FAIL**.
+- Failure mode: two headers are swapped, the set still matches, an order-blind comparison reports PASS, and the next writer fills two columns backwards.
+
+**RCP-02 (estimation-standards §8):** the §8 grant table is complete against both consumers
+- Intent: the grant table is the contract between §8 and the skills that read it; a table that has drifted from its consumers grants nothing reliable.
+- Validation: diff the §8 grant table against what each consumer actually reads. An element a consumer reads that the table does not grant is `used-but-not-granted`; a granted element no consumer exercises is `granted-but-unused`; an element read as a condition but rendered nowhere is `used-but-unobservable`. Each is a **FAIL**, and an **unrun diff is a FAIL, not a pass**.
+- Failure mode: a consumer's instruction text gains a read of a §8 element with no matching grant row, and the edit ships because the diff was never run.
+
+**RCP-03 (estimation-standards §8.6.2):** exactly one literal corpus-wide per §8 negative-path element
+- Intent: "rendered verbatim" is only falsifiable while a single literal exists to compare against. Two literals make the claim unverifiable in both directions.
+- Validation: for each §8 negative-path element, count the **distinct** literals corpus-wide. More than one is a **FAIL** — an abbreviated, relabelled, or reflowed copy counts as a second literal.
+- Failure mode: a second, reflowed copy of the §8.3 `estimation bias: not computable …` fenced literal is introduced into a consumer's instruction text, and each copy is checked only against itself.
+
 ---
 
 ## Skill-to-Check Mapping

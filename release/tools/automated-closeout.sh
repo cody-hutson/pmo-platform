@@ -415,6 +415,29 @@ notes_rel_path() {
   fi
 }
 
+# The SAME file as notes_rel_path(), as an ABSOLUTE path. Every phase that opens,
+# writes or stats the release note resolves it HERE — producer and consumers alike.
+#
+# Why a second resolver rather than a second copy of the conditional: the version-less
+# branch was previously retyped at each site, and the PRODUCER
+# (phase_scaffold_release_notes) was the one site that never got it. It wrote a
+# version-less note FLAT while preflight (f) read notes/_unversioned/ and the
+# preflight (b) tolerance whitelisted notes/_unversioned/ — so the residue gate was a
+# silent no-op, and preflight (b) FAILED on the scaffold the script itself had just
+# written. That is the resume deadlock the (b) tolerance exists to prevent, and it did
+# not clear when the operator authored the note: the blocking record is the untracked
+# FLAT path, which no tolerance names. One resolver, one rule, no site left behind.
+#
+# DERIVED from notes_rel_path() rather than restating its conditional, so the two
+# forms cannot drift apart — the whole defect above was two hand-kept copies of one
+# rule. Resolved off $RELEASE_NOTES_DIR (never a hardcoded root) so a self-test that
+# sandboxes the notes dir is honored. The relative form stays in notes_rel_path() —
+# git porcelain and the INDEX link are repo-root-relative, this is filesystem-absolute.
+notes_abs_path() {
+  local rel; rel="$(notes_rel_path)"
+  printf '%s/%s' "$RELEASE_NOTES_DIR" "${rel#notes/}"
+}
+
 # The INDEX Version-cell label: version-less rows carry the "(version-less)" marker.
 index_version_cell() {
   if is_version_less; then printf '%s (version-less)' "$VERSION"; else printf '%s' "$VERSION"; fi
@@ -795,8 +818,7 @@ phase_preflight() {
   # The token set is NOT retyped here — it is read from lint_release_corpus.py via
   # --print-scaffold-tokens, so the producer (the scaffold heredoc), the python
   # anchor (A2) and the two shell anchors (A1, A3) cannot drift apart.
-  local _note="${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md"
-  is_version_less && _note="${RELEASE_NOTES_DIR}/_unversioned/${VERSION}_RELEASE_NOTES.md"
+  local _note; _note="$(notes_abs_path)"
   if [[ -f "$_note" ]]; then
     local _res _rc=0
     _res="$(/usr/bin/awk '{print NR "\t" $0}' "$_note" | scan_scaffold_residue)" || _rc=$?
@@ -1265,7 +1287,7 @@ PY
 # `^### vX\.Y` will NEVER match. (Legacy `## v3.* —` / `## v1.* —` / `## v2.* —`
 # family H2s still exist LOWER in the file as historical arc sections; they are
 # not the append target.) This rewrite emits the H3 form directly. Headline
-# source: the H1 of notes/${VERSION}_RELEASE_NOTES.md minus the `# ` prefix (the
+# source: the H1 of the release note at notes_abs_path() minus the `# ` prefix (the
 # same extraction phase_publish_github_release uses), falling back to a
 # placeholder only when the note is not yet authored.
 phase_append_release_digest() {
@@ -1281,10 +1303,10 @@ phase_append_release_digest() {
 
   # Headline from the note H1 (minus `# `); placeholder only when the note is
   # absent (e.g. dry-run before scaffold, or scaffold-without-prose).
-  # Version-less notes live under notes/_unversioned/ (#2048). Resolve off
-  # RELEASE_NOTES_DIR (not a hardcoded root) so the self-test override is honored.
-  local notes_path="${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md"
-  if is_version_less; then notes_path="${RELEASE_NOTES_DIR}/_unversioned/${VERSION}_RELEASE_NOTES.md"; fi
+  # Version-less notes live under notes/_unversioned/ (#2048) — notes_abs_path()
+  # owns that rule for every phase, and resolves off RELEASE_NOTES_DIR (not a
+  # hardcoded root) so the self-test override is honored.
+  local notes_path; notes_path="$(notes_abs_path)"
   local headline=""
   if [[ -f "$notes_path" ]]; then
     headline="$(/usr/bin/grep -m1 '^# ' "$notes_path" 2>/dev/null | /usr/bin/sed 's/^# //' || echo "")"
@@ -1560,7 +1582,11 @@ PY
 # ─── Phase 9: scaffold_release_notes (D5 — SCAFFOLD-ONLY) ────────────────────
 
 phase_scaffold_release_notes() {
-  local notes_path="${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md"
+  # PRODUCER/CONSUMER AGREEMENT (#3113 Records 2+3). This phase writes the file that
+  # preflight (f) scans for residue and that the preflight (b) tolerance whitelists.
+  # All three MUST name the same path, which is why all three resolve it through
+  # notes_abs_path()/notes_rel_path() instead of retyping the version-less branch.
+  local notes_path; notes_path="$(notes_abs_path)"
 
   if [[ -f "$notes_path" ]]; then
     mark_phase "scaffold_release_notes" "SKIPPED" "RELEASE_NOTES.md already present for $VERSION (preserving operator prose)"
@@ -1576,6 +1602,11 @@ phase_scaffold_release_notes() {
   # source CHANGELOG derives its date from, so the two surfaces cannot disagree.
   local date_str
   date_str="$CLOSEOUT_ANCHOR_UTC"
+
+  # A version-less note lands one level deeper (notes/_unversioned/). `cat >` does
+  # not create the parent, so a corpus that has never held a version-less note would
+  # fail the redirect outright. Idempotent and a no-op for the versioned path.
+  /bin/mkdir -p "$(/usr/bin/dirname "$notes_path")"
 
   /bin/cat > "$notes_path" <<EOF
 ---
@@ -1669,7 +1700,10 @@ EOF
 # gate; this is shift-left value, not a DRY-RUN skip.
 phase_lint_release_notes() {
   local lint_script="${REPO_ROOT}/core/deploy/tools/lint_release_corpus.py"
-  local note_rel="release/releases/notes/${VERSION}_RELEASE_NOTES.md"
+  # Repo-root-relative, because that is the form the lint prints in every finding.
+  # Built from notes_rel_path() so a version-less release scopes to the note that
+  # actually exists — a hand-typed flat path would be a needle nothing can match.
+  local note_rel; note_rel="release/releases/$(notes_rel_path)"
 
   if [[ ! -f "$lint_script" ]]; then
     mark_phase "lint_release_notes" "FAIL" "lint tooling missing: ${lint_script} — cannot enforce the §3.2 note-content close gate"
@@ -1725,7 +1759,7 @@ phase_lint_release_notes() {
 # CHANGELOG.md is introduced.
 #
 phase_append_changelog() {
-  local notes_path="${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md"
+  local notes_path; notes_path="$(notes_abs_path)"
   local changelog_path="$REPO_ROOT/CHANGELOG.md"
 
   # (0) Version-less SKIP — CHANGELOG is keyed on `## [vX.Y]`; a version-less
@@ -1998,7 +2032,7 @@ ${VERSION} Stage 13 close-out chore PR — release-corpus updates per pipeline/s
 | release/releases/RELEASE_INDEX.md | EDIT | Append ${slug} row per D6 |
 | release/releases/RELEASE_DIGEST.md | EDIT | Prepend \`### ${VERSION} (date) — …\` H3 under the topmost working H2 per D6 |
 | release/releases/RELEASE_REVERSIONS.md | EDIT | Append re-version row(s) — one per abandoned version — ONLY when this release re-versioned mid-pipeline (N/A on the common no-collision path) |
-| release/releases/notes/${VERSION}_RELEASE_NOTES.md | NEW | Scaffolded per release-notes-standard.md Part 1 Template; operator-filled prose |
+| release/releases/$(notes_rel_path) | NEW | Scaffolded per release-notes-standard.md Part 1 Template; operator-filled prose |
 | CHANGELOG.md | EDIT | Prepend ## [${slug}] - YYYY-MM-DD section per Keep-a-Changelog 1.1.0 (Surface 2 of Layer-1 dual-write — SKIPPED if CHANGELOG.md absent) |
 | .version | EDIT | Stamp repo-root .version source-of-truth to ${VERSION} (release-cut-owned; read by the SessionStart version-skew hook — SKIPPED if version-less) |
 
@@ -2253,12 +2287,15 @@ phase_commit_chore_pr() {
     return 0
   fi
 
+  # The note entry is resolved, not retyped: staging is guarded by `[[ -f ]]`, so a
+  # path that disagrees with the producer does not error — it silently stages
+  # nothing, and the release note never reaches the chore commit.
   local files=(
     "release/releases/RELEASE_LOG.md"
     "release/releases/RELEASE_INDEX.md"
     "release/releases/RELEASE_DIGEST.md"
     "release/releases/RELEASE_REVERSIONS.md"
-    "release/releases/notes/${VERSION}_RELEASE_NOTES.md"
+    "release/releases/$(notes_rel_path)"
     "CHANGELOG.md"
     ".version"
     "${REBUILT_PACKAGES[@]:-}"      # .skill packages + .sha256 sidecars staged by
@@ -2336,7 +2373,7 @@ phase_create_chore_pr() {
       local _dig_on_main _idx_on_main _notes_on_main _corpus_present=1
       _dig_on_main="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_DIGEST.md" 2>/dev/null | /usr/bin/grep -cE "^### ${VERSION//./\\.}[[:space:](]" || true)"
       _idx_on_main="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_INDEX.md" 2>/dev/null | /usr/bin/grep -cE "^\|[[:space:]]*${VERSION//./\\.}[[:space:]]*\|" || true)"
-      _notes_on_main="$(git_net -C "$REPO_ROOT" cat-file -e "origin/main:release/releases/notes/${VERSION}_RELEASE_NOTES.md" 2>/dev/null && echo 1 || echo 0)"
+      _notes_on_main="$(git_net -C "$REPO_ROOT" cat-file -e "origin/main:release/releases/$(notes_rel_path)" 2>/dev/null && echo 1 || echo 0)"
       [[ "${_dig_on_main:-0}" -ge 1 && "${_idx_on_main:-0}" -ge 1 && "${_notes_on_main:-0}" -ge 1 ]] || _corpus_present=0
       if [[ "$_corpus_present" -eq 1 ]]; then
         CHORE_PR_SKIPPED=1
@@ -2702,7 +2739,9 @@ phase_run_verification() {
 
   # 5 universal verification commands per hub-spoke-bridge.md Procedure 7 Step 4
   local v_notes v_tag v_milestone v_log v_subs
-  v_notes="$([[ -f "${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md" ]] && echo PASS || echo FAIL)"
+  # notes_abs_path(), not a retyped flat path: the note this release actually
+  # produced is the note this verification must stat, version-less included.
+  v_notes="$([[ -f "$(notes_abs_path)" ]] && echo PASS || echo FAIL)"
   v_tag="$([[ "$STATE_TAG_EXISTS" -eq 1 ]] && echo PASS || echo FAIL)"
   v_milestone="$([[ "$STATE_MILESTONE_STATE" == "closed" ]] && echo PASS || echo PENDING)"
   # Check 4 (#1681): the row-state string is NOT trusted blind — a VERIFIED PASS
@@ -2780,7 +2819,7 @@ phase_run_verification() {
   VERIFICATION_RESULTS=$(/bin/cat <<EOF
 | # | Check | Method | Result |
 |---|-------|--------|--------|
-| 1 | RELEASE_NOTES.md present | test -f releases/notes/${VERSION}_RELEASE_NOTES.md | ${v_notes} |
+| 1 | RELEASE_NOTES.md present | test -f release/releases/$(notes_rel_path) | ${v_notes} |
 | 2 | Annotated tag present | git tag -l ${VERSION} | ${v_tag} |
 | 3 | Milestone closed | gh api milestones/${MILESTONE} | ${v_milestone} |
 | 4 | RELEASE_LOG row VERIFIED (corroborated by release-PR merge to main) | grep + gh pr view ${PR_NUMBER} | ${v_log} |
@@ -2830,7 +2869,7 @@ phase_publish_github_release() {
     return 0
   fi
 
-  local notes_path="${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md"
+  local notes_path; notes_path="$(notes_abs_path)"
 
   # Preflight 1: tag must exist on origin (Stage 12 Phase B3 push pre-requisite).
   # git_net layers the gh-backed credential helper (locked-Keychain degradation).
@@ -4977,6 +5016,107 @@ DG2
   _sr_tol="$(printf '%s\n' "?? release/releases/notes/v9.99_RELEASE_NOTES.md.bak" | filter_tolerated_worktree_state)"
   [[ -n "$_sr_tol" ]] || { echo "FAIL: AC2-T5 — a same-prefix sibling (.bak) must still block; the tolerance is a whole-line match, not a prefix"; failures=$((failures+1)); }
 
+  # (f) AC1/AC2 VERSION-LESS SHAPE (#3113 Records 2+3). Every fixture above binds a
+  # canonical vX.Y version, so the whole AC1/AC2 block was green over a population
+  # that structurally excluded the failing case — the corpus carries version-less
+  # releases (notes live under notes/_unversioned/), and for those the producer and
+  # the two preflight consumers named DIFFERENT files. Consequences, all reproduced
+  # by the assertions below: preflight (f) scanned a path that never existed, so the
+  # residue gate was a silent no-op; and preflight (b) rejected the untracked
+  # scaffold the script itself had just written — the resume deadlock the (b)
+  # tolerance exists to prevent, and one that does NOT clear when the operator
+  # authors the note, because the blocking record is the flat path no rule names.
+  #
+  # This block re-runs the SAME contract as (a) and (e) with is_version_less TRUE.
+  # It is the mutation-sensitive fixture: revert phase_scaffold_release_notes to a
+  # hand-typed flat path and VL-1, VL-3 and VL-4 all go red.
+  local _sr_vl="77-selftest-version-less-theme"
+  local _sr_vl_other="78-selftest-other-version-less-theme"
+  VERSION="$_sr_vl"
+  is_version_less || { echo "FAIL: AC1/AC2-VL setup — '$_sr_vl' must classify as version-less; the fixture is not exercising the branch it claims"; failures=$((failures+1)); }
+
+  # VL-0 — the two resolvers must name the SAME file. notes_abs_path() is DERIVED
+  # from notes_rel_path(), so this is the structural guard against them drifting
+  # apart again; it is asserted in BOTH identity modes.
+  local _sr_vl_expect="${RELEASE_NOTES_DIR}/_unversioned/${_sr_vl}_RELEASE_NOTES.md"
+  [[ "$(notes_abs_path)" == "$_sr_vl_expect" ]] || { echo "FAIL: AC1/AC2-VL-0 — notes_abs_path() must resolve to '$_sr_vl_expect', got '$(notes_abs_path)'"; failures=$((failures+1)); }
+  VERSION="v9.97"
+  [[ "$(notes_abs_path)" == "${RELEASE_NOTES_DIR}/v9.97_RELEASE_NOTES.md" ]] || { echo "FAIL: AC1/AC2-VL-0 (versioned control) — notes_abs_path() must stay FLAT for a canonical version, got '$(notes_abs_path)'"; failures=$((failures+1)); }
+  VERSION="$_sr_vl"
+
+  # VL-1 — the PRODUCER writes where the consumers read. The _unversioned/ dir is
+  # deliberately NOT pre-created: a corpus that has never held a version-less note
+  # must still work, so the producer owns creating it.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  # `|| true` so a producer that cannot write (e.g. the parent dir does not exist)
+  # is reported by VL-1's assertion rather than aborting the suite under `set -e`
+  # with no diagnostic — a red run nobody can read is barely better than a green one.
+  phase_scaffold_release_notes >/dev/null 2>&1 || true
+  [[ -f "$_sr_vl_expect" ]] || { echo "FAIL: AC1/AC2-VL-1 — phase_scaffold_release_notes must write the version-less note to $_sr_vl_expect (producer/consumer path agreement); the phase reported: $(get_phase scaffold_release_notes)"; failures=$((failures+1)); }
+  # Anti-vacuity twin: VL-1 must not be satisfiable by writing BOTH paths.
+  [[ ! -f "${RELEASE_NOTES_DIR}/${_sr_vl}_RELEASE_NOTES.md" ]] || { echo "FAIL: AC1/AC2-VL-2 — a version-less note must NOT be written FLAT; that is the shape preflight (b) cannot tolerate and preflight (f) cannot see"; failures=$((failures+1)); }
+
+  # VL-3 — preflight (f)'s residue gate must FIRE on the version-less scaffold. On
+  # the defective shape this returned "file absent" and the gate passed vacuously,
+  # which is why an entirely unauthored version-less note could reach the Releases
+  # page. rc MUST be 1 (residue found), never 0 (clean) and never 2 (unreadable).
+  local _sr_vlres _sr_vlrc=0
+  _sr_vlres="$(/usr/bin/awk '{print NR "\t" $0}' "$(notes_abs_path)" 2>/dev/null | scan_scaffold_residue)" || _sr_vlrc=$?
+  [[ "$_sr_vlrc" -eq 1 ]] || { echo "FAIL: AC1/AC2-VL-3 — the version-less scaffold must trip the residue detector, got rc=$_sr_vlrc (0 = the gate read the file and saw nothing; 2 = it could not read the file at all — on the defective shape there is no file at this path). Either way the residue gate does not see this shape"; failures=$((failures+1)); }
+  [[ "${_sr_vlres#*|}" =~ ^[0-9]+$ ]] || { echo "FAIL: AC1/AC2-VL-3 must report a numeric line, got '$_sr_vlres'"; failures=$((failures+1)); }
+
+  # VL-4 — preflight (b) must TOLERATE the untracked record for the file the
+  # producer just wrote. The porcelain record is built by DISCOVERING the produced
+  # file, never by re-deriving it from notes_rel_path() — a record built from the
+  # consumer's own rule would be tolerated by construction and could never catch a
+  # producer that writes somewhere else. This is the deadlock closure assertion.
+  local _sr_vlfound
+  _sr_vlfound="$(cd "$RELEASE_NOTES_DIR" && /usr/bin/find . -name "${_sr_vl}_RELEASE_NOTES.md" 2>/dev/null | /usr/bin/sed 's|^\./||' | /usr/bin/head -1)"
+  if [[ -z "$_sr_vlfound" ]]; then
+    echo "FAIL: AC1/AC2-VL-4 — the producer wrote no version-less note anywhere under $RELEASE_NOTES_DIR; nothing to tolerate"; failures=$((failures+1))
+  else
+    _sr_tol="$(printf '%s\n' "?? release/releases/notes/${_sr_vlfound}" | filter_tolerated_worktree_state)"
+    [[ -z "$_sr_tol" ]] || { echo "FAIL: AC1/AC2-VL-4 — preflight (b) must tolerate the untracked note this run PRODUCED ('?? release/releases/notes/${_sr_vlfound}'), got '$_sr_tol' — RESUME DEADLOCK on the script's own scaffold"; failures=$((failures+1)); }
+  fi
+
+  # VL-5 — controls. The tolerance must not have generalized: the FLAT form of THIS
+  # slug (the defective bucket) and the _unversioned/ note of ANOTHER version-less
+  # release must both still block. Without these, VL-4 would pass on a tolerance
+  # that had simply stopped discriminating.
+  _sr_tol="$(printf '%s\n' "?? release/releases/notes/${_sr_vl}_RELEASE_NOTES.md" | filter_tolerated_worktree_state)"
+  [[ -n "$_sr_tol" ]] || { echo "FAIL: AC1/AC2-VL-5 — the FLAT form of this version-less slug is the wrong bucket and must still block"; failures=$((failures+1)); }
+  _sr_tol="$(printf '%s\n' "?? release/releases/notes/_unversioned/${_sr_vl_other}_RELEASE_NOTES.md" | filter_tolerated_worktree_state)"
+  [[ -n "$_sr_tol" ]] || { echo "FAIL: AC1/AC2-VL-5 — another version-less release's note must still block (tolerance is scoped to THIS release)"; failures=$((failures+1)); }
+
+  # VL-6 — the §3.2 lint's version-scoping needle must name the file that exists.
+  # A flat needle can never match a version-less finding, so a real content finding
+  # would be mis-classified as another version's legacy debt and NOT block the close.
+  # Same LN_EXIT/LN_OUT stub Test 5.5 uses, planted under THIS block's sandbox root
+  # so the phase reaches its grep-scoping logic instead of the missing-tooling FAIL.
+  /bin/mkdir -p "$_sr_tmp/core/deploy/tools"
+  /bin/cat > "$_sr_tmp/core/deploy/tools/lint_release_corpus.py" <<'VLSTUB'
+import os, sys
+sys.stdout.write(os.environ.get("LN_OUT", ""))
+sys.exit(int(os.environ.get("LN_EXIT", "0")))
+VLSTUB
+  local _sr_vlneedle; _sr_vlneedle="release/releases/$(notes_rel_path)"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=1 LN_OUT="NOTE-6A-MISSING: ${_sr_vlneedle} lacks section" phase_lint_release_notes >/dev/null 2>&1; then
+    echo "FAIL: AC1/AC2-VL-6 — a §3.2 finding naming THIS version-less release's note must BLOCK the close"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase lint_release_notes | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: AC1/AC2-VL-6 — the this-release finding must mark the phase FAIL, got '$(get_phase lint_release_notes)'"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=1 LN_OUT="NOTE-6A-MISSING: release/releases/notes/_unversioned/${_sr_vl_other}_RELEASE_NOTES.md lacks section" phase_lint_release_notes >/dev/null 2>&1 || { echo "FAIL: AC1/AC2-VL-6 — another release's finding must NOT block (audit-baseline control)"; failures=$((failures+1)); }
+  [[ "$(get_phase lint_release_notes | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: AC1/AC2-VL-6 — the other-release-only finding must mark PASS (audit-baseline), got '$(get_phase lint_release_notes)'"; failures=$((failures+1)); }
+
+  # VL-7 — the commit stage list must name the produced note. Staging is `[[ -f ]]`
+  # guarded, so a disagreeing path does not error: it silently stages nothing and
+  # the release note never reaches the chore commit.
+  local _sr_vlstage; _sr_vlstage="$(build_chore_pr_body 2>/dev/null | /usr/bin/grep -cF "release/releases/$(notes_rel_path) | NEW" || true)"
+  [[ "$_sr_vlstage" -eq 1 ]] || { echo "FAIL: AC1/AC2-VL-7 — the chore-PR File Change Matrix must name the version-less note's real path (matches=$_sr_vlstage)"; failures=$((failures+1)); }
+
+  VERSION="v9.99"
+
   /bin/rm -rf "$_sr_tmp" 2>/dev/null || true
   REPO_ROOT="$_sr_saved_root"; MODE="$_sr_saved_mode"; VERSION="$_sr_saved_version"
   RELEASE_NOTES_DIR="$_sr_saved_notesdir"; RELEASE_DIGEST="$_sr_saved_digest"
@@ -5329,6 +5469,7 @@ FOLOG
   echo "  LEDGER-ROW-PARITY fail-open closed (#3113 F-QA-3 — present-but-empty INDEX vs 3-row LOG now FAILs naming both counts / equal populated ledgers still PASS / both-empty 0==0 correctly clean / missing INDEX still FAILs / grep_count single-integer contract on empty-file, missing-file, match and empty-stdin shapes / reintroduction blocked structurally, needle proven against a known-bad control)" >&2
   echo "  phase_sync_primary_checkout validated (AC7 — behind-primary-on-main fast-forwards and HEAD verifiably MOVES to origin/main / non-main primary SKIPPED and NOT moved / absent primary clean no-op (CI hermeticity) / dry-run no-write / source carries no reset-stash-checkout-push-force-cd)" >&2
   echo "  scaffold-residue detector + pre-authored-note tolerance validated (AC1/AC2 — T1 round-trip: the REAL scaffold trips the REAL token set (anti-drift) / T2 authored note clean / T4 this-version CHANGELOG+DIGEST residue FAILs naming surface:line / T3 audit-baseline control: another version's residue does NOT block / AC2 tolerance: this-version untracked note passes, other-version + modified-tracked + unrelated-untracked all still block)" >&2
+  echo "  AC1/AC2 VERSION-LESS shape validated (#3113 Records 2+3 — VL-0 notes_abs_path()==notes_rel_path() in BOTH identity modes / VL-1 producer writes notes/_unversioned/ and creates the dir / VL-2 anti-vacuity: NOT written flat / VL-3 preflight (f) residue gate FIRES (no longer a silent no-op) / VL-4 preflight (b) tolerates the note this run produced (deadlock closed) / VL-5 controls: flat bucket + another version-less release still block / VL-6 §3.2 needle blocks this release, not another / VL-7 chore-PR File Change Matrix names the real path)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2

@@ -21,6 +21,7 @@
 #   output-format.md          → core/standards/<name>   (explicit; #316)
 #   operational-artifacts.md  → core/standards/<name>   (explicit; #316)
 #   regression-checks.md      → core/standards/<name>   (explicit; #94)
+#   tracker-schemas.md        → core/schemas/<name>     (explicit; #4178)
 #   template-*.md             → core/standards/<name>
 #   *-template.{md,csv} / …   → operations/templates/<name>   (default)
 # (templates → operations, template-* standards → core. The modular canonical is
@@ -35,6 +36,22 @@
 # core/standards/" catch-all — a catch-all would silently re-home any future
 # non-template basename and is deliberately avoided. Add a new explicit basename
 # to arm 1 below when a further shared standards doc is single-sourced.
+#
+# tracker-schemas.md gets its OWN arm rather than joining arm 1 because it homes
+# to core/schemas/, not core/standards/. It is the canonical half of a registered
+# COMPLEMENTARY pair (core/deploy/allowlists/complementary-reference-pairs.txt),
+# injected into tracker-manager's package at its repo-relative path so the
+# SKILL.md citations of that path resolve verbatim from the package root.
+#
+# THE ARM IS LOAD-BEARING, NOT COSMETIC. Without it the basename matches no
+# explicit arm and no template-*.md pattern, so it falls to the DEFAULT and
+# resolves to operations/templates/tracker-schemas.md — a THIRD path that does
+# not exist, neither half of the pair. Check 13 (always-enforce) would then
+# report "canonical missing from registry" and build_one() would return 1 on
+# every tracker-manager build. Because this resolver is the ONE definition both
+# deploy.sh and build-skill-packages.sh source, the arm keeps the two staging
+# paths resolving identically by construction — which is the whole reason the
+# injection is expressed as a map entry rather than hand-coded into one builder.
 #
 # The function is a pure stdout-echoing resolver (no side effects, no mutation);
 # safe to call under `set -euo pipefail`. Sourceable AND idempotent: re-sourcing
@@ -52,6 +69,7 @@ resolve_template_sync_source() {
   local name="$1"
   case "$name" in
     output-format.md|operational-artifacts.md|regression-checks.md) echo "core/standards/$name" ;;
+    tracker-schemas.md)                        echo "core/schemas/$name" ;;
     template-*.md)                             echo "core/standards/$name" ;;
     *)                                         echo "operations/templates/$name" ;;
   esac
