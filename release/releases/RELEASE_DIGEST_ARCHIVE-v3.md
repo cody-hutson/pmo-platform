@@ -1,4 +1,5 @@
 <!-- repo-integrity: allow-issue-ref -->
+<!-- repo-integrity: allow-memory-ref -->
 <!-- reference-durability: allow-link -->
 <!-- reference-durability: allow-url -->
 # RELEASE_DIGEST_ARCHIVE-v3
