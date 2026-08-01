@@ -195,14 +195,31 @@ Rewrite using the formula: **state the merge-time observable in the AC; restate 
 
 **Exception:** A mechanism choice already committed in an upstream dependency's spec (e.g., frontmatter fields established by a prerequisite) MAY be extended at intake without counting as mechanism-creep — you are applying a committed convention, not picking a new one.
 
+### Anti-pattern F — Naming the mechanism inside an acceptance criterion
+
+**Over-specified (T2 fails inside the Acceptance Criteria field):**
+> "Acceptance: `test_existing_suite.py` executed by a CI job and scoped to `the_generator.py`."
+
+**Rewrite (WHAT framing):**
+> "Acceptance: predicate: the generator is exercised by a CI job; method: a CI-run test imports the generator and asserts on its output."
+
+**Why it matters:** the AC named the *instrument* (one specific test file) rather than the *observable* (the generator is exercised in CI). The pattern this rule comes from was a security-hardening slice that brought a generator under CI through a **purpose-built** test importing it, rather than through the pre-existing suite the AC had named — fully delivering the intent, yet the literal wording read as a partial miss and the criterion had to be graded with interpretation. An acceptance criterion states the observable the system must exhibit; it does not prescribe the instrument that produces it, so a superior implementation cannot grade as a miss.
+
+**Why the existing controls did not catch it:** this is a missing *pattern*, not a missing *field*. The over-definition patterns below catch pseudocode, named design patterns, line-level directives, file-**internal** naming, and algorithm description — a bare file name matches none of them, in any field, so the same string passes the test in a Proposed Change today. The new sixth bullet is what closes the gap; extending the test's field scope is what makes it reachable from an acceptance criterion. Both are required, and neither substitutes for the other.
+
+**The line to hold:** an AC names the artifact **whose state is asserted**, not the **instrument that produces** that state — *unless the instrument is itself the deliverable* (an AC on a build artifact, or on a script being authored, legitimately names that file). This does not weaken verifiability: an intent-shaped AC still carries a checkable predicate plus a stated verification method, which is the behavioral/domain AC shape the Triage readiness gate already accepts.
+
+**Cutover:** applies to acceptance criteria authored after this rule lands. Existing open ACs are not re-graded.
+
 ### General test for over-definition
 
-If the Proposed Change contains any of these, T2 fails:
+If the Proposed Change **or any Acceptance Criterion** contains any of these, T2 fails:
 - Pseudocode (`for x in xs: if x.foo: ...`)
 - Named patterns without `[ASSUMPTION – CONFIRM]` (visitor, factory, observer, etc.)
 - Line-level surgical directives ("change line N", "insert at line N+5")
 - File-internal naming (specific function names, internal section anchors as design choices not surfaced markers)
 - Specific algorithm description ("loop over", "filter then map", "reduce to")
+- A named instrument inside an acceptance criterion where the observable is the outcome rather than the instrument (per Anti-pattern F) — unless the instrument is itself the deliverable
 
 Rewrite using the formula: **state the observable outcome the system must produce, the constraints that bound it, and the directional file pointer — let Solutioning choose the mechanism.**
 
@@ -222,6 +239,7 @@ The decision table below operationalizes the WHAT/HOW boundary. Items in the **S
 | Pattern naming (e.g., "use the visitor pattern", "apply the strategy pattern") | Observable outcome (e.g., "traversal must support 3 caller types without re-parsing") |
 | Pseudocode (`for x in xs: if x.foo: emit(x)`) | Acceptance criteria (e.g., "verify only active items are rendered; method: snapshot test of the dashboard with 10 items, 3 active") |
 | Temporal-window metrics committed in Acceptance Criteria (e.g., "30-day rescore", "60-day adoption") | Merge-time-verifiable Acceptance Criteria + post-close Monitoring commitment in Notes (e.g., "Monitoring: re-run query N at merge+30d; target band 20-50%") |
+| A named instrument committed inside an Acceptance Criterion (e.g., "`<specific-test-file>` executed by a CI job") | Observable-intent Acceptance Criteria naming the artifact whose state is asserted (e.g., "predicate: the generator is exercised by a CI job; method: a CI-run test imports it and asserts on its output") |
 
 ### How Triage uses this table
 
