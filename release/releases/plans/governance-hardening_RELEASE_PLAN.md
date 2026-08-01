@@ -345,3 +345,51 @@ Every count below was re-run from its own command at Engineering time. **No numb
 **Final census at `f97c5ff2`** — concept 1: **0** · concept 2: **22** · concept 3: **0** · concept 4: **0** · concept 5: **10** · concept 6: **9** · known non-declarations: **3**. Identity: `0 + 22 + 0 + 0 + 10 + 9 + 3 = 44`, reconciling exactly against the live sweep. **This identity is recorded here, in the plan, and deliberately *not* in the registry** — the registry states no count anywhere, which is what makes a population change a zero-row-edit event.
 
 ---
+
+## Change Description
+
+> **Refresh discipline.** This section is authored at Stage 6 PR creation by Engineering chip 1 of 8 and is **refreshed as each subsequent chip lands**, per the Change Description Protocol. Per-issue status below reflects the branch state at authoring time; a `PENDING` row means the chip has not yet been routed under the P0 fully-serial posture, not that it was cut. Every row resolves to `DONE` / `PARTIAL` / `DEFERRED` before the Stage-9 gate.
+
+### Outcome
+
+This release hardens four governance surfaces that had drifted apart from what the corpus actually does: records retention and archive segmentation, the memory-versus-corpus knowledge boundary, template-system provenance, and the overloaded `domain` token. The first surface to land is the `domain` disambiguation — the bare word named six distinct concepts across four folders with no index anywhere, so a reader who learned it in one file carried the wrong meaning into the next. `core/specs/domain-token-registry.md` is now the single enumerating source for all six, and every site that declares or defines the token points at it. No field was renamed; the ambiguity is resolved by indexing, which is the direction ADR-050 settled and the note it recorded as a residual and never got.
+
+### Issues resolved
+
+| Issue | Outcome | Status |
+|---|---|---|
+| #3825 | Six-concept `domain` registry at `core/specs/domain-token-registry.md`, plus a pointer at each of eight declaration sites. Concept-keyed with a three-factor declaration matcher and a known-non-declarations exclusion channel, so the coverage check is deterministic and a population change edits zero rows. | **DONE** (terminal Step-9 reconciliation pending, by design) |
+| #3816 | Intake DoR / AC guidance restated around intent rather than mechanism. | PENDING |
+| #3715 | Release-corpus retention amendment plus archive segmentation of the four unbounded logs. | PENDING |
+| #3387 | Recorded decision on whether a generated-artifact purge terminal is built. | PENDING |
+| #3413 | External-target knowledge axis recorded on the memory and knowledge architecture surfaces. | PENDING |
+| #3556 | Platform and product vision codified to the corpus, then the tied memories evicted — in that order. | PENDING |
+| #3196 | `pipeline-output` template family plus its governed L3 home. | PENDING |
+| #3290 | Template-system governance wave — provenance retro-fit and the missing registry rows. | PENDING |
+
+All eight are marked as closed at Stage 13 via the close-out output set; none is closed at Engineering or Execute.
+
+### Key decisions
+
+- **Registry keying — concept × owning file, not per-declaration.** Forced rather than preferred: two of the six concepts have zero `domain:` declarations (one is a tag path segment, one is adjectival prose), so a declaration-keyed registry cannot represent them at all. The same choice makes a growing declaration population a zero-row-edit event.
+- **Placement — `core/specs/`, not `core/schemas/`.** Decided on folder-declared artifact class. The card's "beside the schemas it indexes" premise was falsified: the six owning files span four folders, so no "beside" exists.
+- **`project-schema.md` receives a cross-link only.** The Stage-5 spec directed backfilling three concept rows there; that would have produced a second complete corpus-wide index maintained in parallel with the registry — the duplicate-source defect this card exists to close. Superseded by the re-repaired acceptance criterion and the adversarial review's coupled disposition.
+- **The registry's completeness claim is scoped to declared-field senses.** Three further live prose senses of the bare word exist, including a PMBOK Performance-Domain axis sitting two lines from a paragraph this change edits. They are recorded as explicitly excluded adjacent senses rather than shipped under an unqualified "every concept the token names."
+- **Drift check specified, not built.** A convention-linter coverage dimension is the right durable answer, but building it would add an executable surface to a doc card whose Stage-7 skip rests on having none. The registry carries its update trigger and reconciliation command inline as the interim.
+
+### Reversibility
+
+**CHEAP / Confidence HIGH** for the landed work — one added file plus additive prose clauses in eight existing files; `git revert` of the merge commit restores prior state with no runtime, package, or deploy consequence, and no field was renamed so there is no migration to unwind. **The release as a whole is MODERATE / Confidence HIGH**, and the reason is one carve-out: #3556's memory eviction mutates a store outside the repository, so reverting the merge does not restore it. Do not treat "revert the PR" as full rollback while #3556 is in scope.
+
+### Downstream impact
+
+- **A terminal reconciliation step is owed** after #3290's template provenance retro-fit lands: re-run the registry's reconciliation command over the merged state and record the coverage verdict. Expect zero row edits — the added declarations are all instances of a concept the registry already maps. A required row edit means the retro-fit introduced a new concept or owning file and should be surfaced, not silently absorbed.
+- **Expected post-retro-fit population: 63 declarations across 58 files.** Seven target files are hard-blocked by a silent duplicate-key collision and keep a single declaration each; they are covered by concept pattern and are deliberately not enumerated.
+- **Two follow-up cards are named and routed:** the convention-linter registry-coverage dimension, and an ADR binding the registry's update trigger on future authors.
+- **Six out-of-scope drifts** surfaced during design and are routed to next-release intake, none executed here. One of them — a governance standard whose own two sections contradict each other on this exact field — is materially why the sixth concept went unnoticed by several prior surveys.
+
+### Cross-references
+
+- Release plan: this file, `release/releases/plans/governance-hardening_RELEASE_PLAN.md` (top).
+- Milestone: `governance-hardening` — https://github.com/cody-hutson/pmo-platform/milestone/290
+- User-facing release notes: authored at Stage 13 to `release/releases/notes/` under the version claimed at Stage 12.
