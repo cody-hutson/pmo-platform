@@ -56,7 +56,7 @@ PY
 }
 refresh() { bash "${SETUP}" --refresh-hooks --workspace-root "$1" --source-repo "${REPO_ROOT}" "${@:2}" 2>&1; }
 
-printf '\nCase 1-3: stale hook refreshed · missing awk co-deployed · .mode preserved\n'
+printf '\nCase 1-3: stale hook refreshed · missing hook libs co-deployed (awk + constants) · .mode preserved\n'
 WS="${SBX}/ws1"; deploy_ws "${WS}"
 printf '#!/bin/bash\n# STALE\nexit 0\n' > "${WS}/.claude/hooks/block-gh-path-leak.sh"   # stale
 rm -f "${WS}/.claude/hooks/lib/positional-issueref.awk"                                 # never-deployed
