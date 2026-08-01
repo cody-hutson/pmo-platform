@@ -24,7 +24,7 @@ The platform holds memory across several surfaces — the codified corpus, the o
 
 1. **One cross-surface contract governs read-vs-write for every memory surface.** [`core/disciplines/memory-architecture.md`](../disciplines/memory-architecture.md) is the SSOT *contract surface*: a per-surface table enumerating every surface with its memory-type(s), reader(s), writer(s), write-authority (Autonomy Tier), update cadence, read-only/auto-write/operator-write-only class, and trigger. It is the one place an agent consults to decide read-vs-write and where a fact belongs.
 
-2. **The no-shadow-SSOT invariant generalizes from the Knowledge cut to all four types** — moved **verbatim** from ADR-029 § The memory architecture and [`knowledge-architecture.md §6`](../disciplines/knowledge-architecture.md#no-shadow-ssot):
+2. **The no-shadow-SSOT invariant generalizes from the Knowledge cut to all four types** — moved **verbatim** from ADR-029 § The memory architecture and [`knowledge-architecture.md §7`](../disciplines/knowledge-architecture.md#no-shadow-ssot):
 
    > **No-shadow-SSOT invariant.** A fact has exactly one source of truth — the SSOT surface of its memory type. No surface holds a second, shadowing copy of another surface's SSOT. A shadow copy can drift, and an agent reading it lets the copy silently override its owner. Codified Knowledge appears in memory only as a pointer to its corpus home (a temporary eviction-pointer while an encode issue is in flight, or a durable cross-reference), never as a duplicate of the governed text.
 
