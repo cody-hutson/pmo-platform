@@ -319,9 +319,11 @@ refblock_line="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$REFBLOCK_RE" | /us
 # (core/hooks/lib/positional-issueref.awk — the same file the fixture-runner and the CI
 # invoke, so the positional logic is single-sourced and cannot drift). The hook has true
 # file lines already (NR over the stripped payload) and the refblock line from Pass 1; it
-# feeds the classifier "<NR>\t<line>" records and passes its own ISSUEREF_RE in so the
-# byte-identical-regex invariant is preserved. Output shape ("<lineno>:VERDICT:<line>") is
-# identical to the previous inline awk, so the downstream report wiring is unchanged.
+# feeds the classifier "<NR>\t<line>" records and passes ISSUEREF_RE in. That regex is the
+# sourced lib's bytes, as it is on every other invocation path, so the classifier's parameters
+# are the same values everywhere by construction rather than by a maintained invariant.
+# Output shape ("<lineno>:VERDICT:<line>") is identical to the previous inline awk, so the
+# downstream report wiring is unchanged.
 # Verify the classifier actually WORKS before trusting its (possibly empty) output — a
 # present-but-empty/truncated/corrupt awk otherwise runs to nothing and silently yields no
 # findings, re-opening the fail-OPEN this advisory closes (GHSA-g9g6-28c9-vrx5). Canary: a

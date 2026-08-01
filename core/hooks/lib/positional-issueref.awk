@@ -2,12 +2,15 @@
 #
 # Reference-durability issue (cross-reference-integrity-ci, issue #314):
 # Single source of the positional-#N decision so it cannot drift across the three
-# enforcement surfaces. The bare-issue-ref REGEX was already byte-identical across
-# {hook, fixture-runner, CI}; only the POSITIONAL logic was hand-reimplemented per
-# surface and one copy (the CI) diverged (position-blind existence check vs the hook's
-# line-position check). This file makes the positional logic single-sourced too: each
-# caller derives the three inputs its own way (its input shapes differ) and calls this
-# one classifier for the decision.
+# enforcement surfaces. At the time, the POSITIONAL logic was hand-reimplemented per surface
+# and one copy (the CI) diverged (position-blind existence check vs the hook's line-position
+# check), so this file made that decision single-sourced: each caller derives the three inputs
+# its own way (its input shapes differ) and calls this one classifier for the decision.
+#
+# The detector CONSTANTS were a separate copy set, held together only by a comment asserting
+# byte-identity. They are now single-sourced in their own right — declared once in
+# lib/fragile-ref-patterns.sh and sourced by all three callers — so byte-identity across the
+# regexes is no longer a property that can hold or fail either.
 #
 # Consumed via `awk -f` (NOT sourced as shell) by:
 #   - core/hooks/block-fragile-refs.sh        (PreToolUse hook; lines over the stdin payload)
@@ -17,10 +20,11 @@
 # so this include needs no script-execution-allowlist entry.
 #
 # INPUT CONTRACT
-#   -v issuere=<ISSUEREF_RE>    the bare-issue-ref regex, passed in (kept byte-identical
-#                              to the three callers — this file does NOT own the regex).
-#   -v hexcolor=<HEXCOLOR_RE>  companion hex-color mask regex, passed in (kept byte-identical
-#                              to the three callers — this file does NOT own it either). Three
+#   -v issuere=<ISSUEREF_RE>    the bare-issue-ref regex, passed in by the calling surface,
+#                              which sources it from lib/fragile-ref-patterns.sh — this file
+#                              does NOT own the regex and declares nothing.
+#   -v hexcolor=<HEXCOLOR_RE>  companion hex-color mask regex, passed in from the same sourced
+#                              lib by the same callers — this file does not own it either. Three
 #                              ERE branches (no lookbehind available): (a) a # + a run of
 #                              hex-legal chars containing >=1 hex letter [A-Fa-f] (e.g. #28A745,
 #                              #FFF); (b) a colon-prefixed hex run `:#<3-8 hex digits>` — the
@@ -37,7 +41,8 @@
 #                              brackets (branch (c) requires one), so it is never masked.
 #   -v refline=<N>             reference-block header file-line number (0 = no block in file).
 #   -v minwords=<MIN>          minimum non-reference words for an in-block ref to count as
-#                              self-describing (= MIN_SELFDESCRIBE_WORDS, currently 3).
+#                              self-describing (= MIN_SELFDESCRIBE_WORDS, whose value is
+#                              declared in lib/fragile-ref-patterns.sh — not restated here).
 #   stdin: one record per scanned line, formatted "<FILE_LINE_NUMBER>\t<CONTENT>".
 #          The FILE_LINE_NUMBER is the line's position in the FILE (not a delta index) —
 #          each caller is responsible for supplying a true file line (the CI uses a

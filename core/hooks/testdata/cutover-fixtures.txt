@@ -15,7 +15,7 @@
 # where
 #   <EXPECT>  = FLAG  (the detector MUST match this line)
 #             | CLEAN (the detector MUST NOT match this line)
-#   <CLASS>   = LINK | VERSION | ISSUEREF-OUT | ISSUEREF-IN | ISSUEREF-POS | URL
+#   <CLASS>   = LINK | VERSION | ISSUEREF-OUT | ISSUEREF-IN | ISSUEREF-POS | URL | PATTERNDECL
 #   <content> = the literal line content presented to the detector
 #
 # The ISSUEREF-POS class is a TRUE positional test (the -OUT/-IN classes fake block
@@ -148,3 +148,23 @@ CLEAN	URL	Clone the repo: github.com/owner/repo then run install.
 CLEAN	URL	The install URL https://github.com/owner/repo is documentation-exempt.
 CLEAN	URL	The pullrequest workflow guide at github.com/owner/repo/pulls-guide is fine.
 CLEAN	URL	State the rule unconditionally and summarize the referenced content inline.
+
+# ─── Class PATTERNDECL (re-declaration of a single-sourced detector constant) ─
+# The seven detector constants are declared once, in core/hooks/lib/fragile-ref-patterns.sh,
+# and sourced by the hook, this runner, and the reference-durability CI. Sourcing removes the
+# ability for the copies to DIVERGE; it does not remove the ability for a future edit to paste
+# a literal back into a consuming surface, which would silently restore a second source of
+# truth. These cases are the committed arms for the detector that the runner's scan arm then
+# applies to the three real surfaces.
+# Positives cover all THREE declaration syntaxes that existed before single-sourcing — the
+# hook's `readonly N=`, the runner's plain `N=`, and the CI's copy indented inside a YAML
+# block scalar. A checker that parsed only one of these was the rejected alternative, so a
+# fixture that tested only one would leave the widening unproven.
+FLAG	PATTERNDECL	readonly ISSUEREF_RE='#\[?[0-9]+\]?'
+FLAG	PATTERNDECL	MIN_SELFDESCRIBE_WORDS=3
+FLAG	PATTERNDECL	          HEXCOLOR_RE='(:#[0-9A-Fa-f]{3,8})'
+# Negatives are true near-misses: each NAMES the constants and DECLARES none, differing from
+# the positives only in the property under test (a declaration anchored at line start). An
+# unrelated line would pass vacuously and prove nothing about the detector's precision.
+CLEAN	PATTERNDECL	  -v issuere="$ISSUEREF_RE" -v hexcolor="$HEXCOLOR_RE" \
+CLEAN	PATTERNDECL	# MIN_SELFDESCRIBE_WORDS operationalizes the rung-5 summarize-inline rule.
