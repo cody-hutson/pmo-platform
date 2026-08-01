@@ -101,7 +101,12 @@ S3_PREFIX_TOKENS = {
     "another", "additional", "further", "only", "just", "max", "min", "maximum",
     "minimum",
 }
-S3_SYMBOLS = ("≥", "≤", "~", "±", ">", "<", "+")
+# NOTE `+` is absent here on purpose. An inexact bound writes the plus AFTER the
+# numeral (`5+ files`), so a `+` BEFORE it is an additive partition separator
+# (`10 PreToolUse hooks + 3 SessionStart hooks`) — suppressing on it would discard the
+# second operand and silently disable the partition reading. Handled below as a
+# trailing-`+` test instead.
+S3_SYMBOLS = ("≥", "≤", "~", "±", ">", "<")
 
 # S5 — conditional clauses. A condition in the preamble means the numeral is a
 # threshold in that condition, not a count of what follows.
@@ -267,6 +272,11 @@ def extract_cardinals(preamble: str):
             continue
         # S3 — inexact bound (`>= 4 files`, `up to 5 rows`, `2-3 items`).
         if prev in S3_PREFIX_TOKENS or stripped.endswith(S3_SYMBOLS):
+            suppressed.append(("S3", val))
+            continue
+        # S3 — a trailing plus (`5+ files`) is an open-ended floor, not a cardinality.
+        if re.match(r"\+\s*\D", scan[m.end():]) or scan[m.end():m.end() + 1] == "+" \
+                and not re.match(r"\+\s*\d", scan[m.end():]):
             suppressed.append(("S3", val))
             continue
         # S3 — a range operand (either end) is a bound, not a cardinality.
