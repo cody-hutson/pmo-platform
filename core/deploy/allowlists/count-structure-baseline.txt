@@ -1,0 +1,108 @@
+# count-structure-baseline.txt - Check 62 accepted population at introduction
+#
+# WHAT THIS FILE IS. Check 62 (count-vs-structure lint) ships ENFORCING. At its
+# introducing commit the live corpus already carried 73 count preambles that do not
+# reconcile with the structure beneath them. Failing all 73 on day one would red-wall
+# the deploy gate for work that has nothing to do with this check, so the pre-existing
+# population is accepted HERE and reported as `KNOWN:` rather than `FAIL:`. A pair that
+# is NOT in this file and does not reconcile is a hard FAIL on its first run.
+#
+# THIS FILE IS A DEBT REGISTER, NOT A PERMANENT EXEMPTION. It is expected to shrink.
+# The `STALE:` arm is the ratchet: when a baselined pair is fixed or removed, its entry
+# stops matching and Check 62 reports it as stale so the row can be deleted.
+#
+# KEY FORMAT (tab-separated, three fields):
+#   <path>  <sha1-16(whitespace-normalized preamble text)>  <class-tag>
+#
+# The key carries NO line number. An edit elsewhere in the file cannot invalidate an
+# entry. But editing a baselined PREAMBLE ITSELF re-keys its sha1, the entry stops
+# matching, and the pair FAILs - which is correct, because editing a count preamble is
+# exactly the moment to re-verify its count.
+#
+# CLASS TAGS
+#   pre-existing:list / pre-existing:table   mechanically derived at introduction; the
+#                                            structure kind of the accepted pair.
+#                                            Deliberately NOT a true-positive /
+#                                            false-positive judgment - no such
+#                                            classification was measured, and asserting
+#                                            one would be the exact defect this check
+#                                            exists to prevent.
+#   known:#NNNN                              a pair whose fix is owned by a named
+#                                            tracking issue; the fix lands on that
+#                                            issue's card, not here.
+#
+# REGENERATE: core/deploy/tools/check-count-structure.py --no-baseline --emit-baseline
+# ENTRIES: 73
+core/ADRs/ADR-007-core-module-boundary.md	bd98e343435b2a93	pre-existing:list
+core/ADRs/ADR-012-roadmap-instance-descope.md	ae635bdcd85d9651	pre-existing:list
+core/ADRs/ADR-019-specialists-compose-not-absorb.md	325abb18917758b1	pre-existing:list
+core/ADRs/ADR-033-methodology-conditional-skill-activation.md	7987600fda105ed3	pre-existing:table
+core/ADRs/ADR-068-domain-fan-out-sibling-vs-extend.md	2514ed6369146885	pre-existing:list
+core/ADRs/ADR-101-finops-store-frozen-kind-versioning-exemption.md	cfcede59439c1d23	pre-existing:list
+core/artifact-workflow-protocol.md	0c53daff33101cea	pre-existing:table
+core/disciplines/applicability-framework.md	10bf38915768be0c	pre-existing:table
+core/disciplines/applicability-framework.md	7066fb2d5953ae63	pre-existing:list
+core/disciplines/discovery-discipline.md	e4e2d89115593143	pre-existing:table
+core/disciplines/execution-framework.md	aed80018b565004c	pre-existing:table
+core/rules/bypass-mode-readiness.md	02bdc48268da2b6b	pre-existing:table
+core/rules/bypass-mode-readiness/_cross-cutting.md	02bdc48268da2b6b	pre-existing:table
+core/rules/operations-bridge.md	753b4dc7ef22d2d0	pre-existing:list
+core/schemas/entity-field-lifecycle-matrix.md	17beb8ab1a1246b0	pre-existing:table
+core/schemas/entity-field-schemas.md	004730f689e86524	pre-existing:table
+core/schemas/navigation-layer-schema.md	1bfa0f12ff0cccd1	pre-existing:list
+core/schemas/project-schema.md	b0a1cf951b635314	pre-existing:list
+core/schemas/stage-io-contracts.md	7a44b9c9f125abd1	pre-existing:list
+core/schemas/touchpoint-phaseout-schema.md	263f7aea12c70a91	pre-existing:table
+core/skills/eval-writer/references/acceptance-assertion-type.md	9699e699de6e57f2	pre-existing:table
+core/skills/eval-writer/references/acceptance-assertion-type.md	a31b661ac63dcb3b	pre-existing:table
+core/skills/pmo-qa-auditor/SKILL.md	20c869e085281b0d	pre-existing:list
+core/skills/pmo-qa-auditor/references/failure-mode-detectors.md	ba6e91c6c7a76558	pre-existing:table
+core/skills/skill-compliance-auditor/SKILL.md	164b392d407bbf3d	pre-existing:list
+core/specs/engagement-charter.md	e3e306fcf2b0b7a0	pre-existing:list
+core/specs/label-taxonomy.md	a41822d7ffcf7342	pre-existing:table
+core/specs/label-taxonomy.md	ca5cb31080024a06	pre-existing:list
+core/specs/reversibility-protocol.md	f159c913a4ec58b7	pre-existing:list
+core/specs/skill-consultation-map.md	61d9064c1211e0ae	pre-existing:table
+core/specs/staleness-confidence-standard.md	9664822c2cb48d2c	pre-existing:table
+core/standards/artifact-naming-standard.md	681f6b0b1dc07d34	pre-existing:list
+core/standards/c2-intake-sweep-path-a.md	74d0b9662b95ca41	pre-existing:list
+core/standards/design-artifact-standard.md	9f11f59cd0ded60e	pre-existing:list
+core/standards/entity-lifecycle-protocol-shared-portfolio.md	cf90762262abd3e2	pre-existing:list
+core/standards/failure-mode-standard.md	8b7a8f73ec477705	pre-existing:list
+core/standards/initiative-roadmap-framework.md	0ccfc25d465d04fa	pre-existing:table
+core/standards/km-governance-framework.md	160acf2d8cd2ba81	pre-existing:list
+core/standards/public-repo-vs-operator-instance-taxonomy.md	01ff8760ef0604e3	pre-existing:table
+core/standards/public-repo-vs-operator-instance-taxonomy.md	06abf19525b96601	pre-existing:list
+core/standards/universal-vs-localized-context.md	c1c0fdb6517aff87	pre-existing:table
+core/standards/version-field-semantics.md	52efd36df877e1f7	pre-existing:table
+docs/GETTING_STARTED.md	6b03b4f001bdbd97	pre-existing:table
+docs/module-apis.md	965df7a5030020ed	known:#4039
+operations/skills/delivery-engine/references/estimation-standards.md	43494f38ff14e6ad	pre-existing:table
+operations/skills/delivery-engine/references/estimation-standards.md	c723cf20d46c6f87	pre-existing:table
+operations/skills/pmo-portfolio-manager/SKILL.md	ccdaa7403554ded9	pre-existing:table
+operations/skills/pmo-program-manager/SKILL.md	ac1d098229d6529d	pre-existing:table
+operations/skills/pmo-project-manager/SKILL.md	2c29fa1d77c2b712	pre-existing:list
+operations/skills/pmo-tier-1-support/SKILL.md	84831c1633af62bf	pre-existing:table
+operations/skills/weekly-status-rollup/SKILL.md	65ae87d077c95982	pre-existing:table
+release/ADRs/ADR-024-cross-release-impact-model.md	5dd90f2f8a8fb13c	pre-existing:list
+release/governance/release-process.md	793f5463c7015b0f	pre-existing:table
+release/references/how-to/design-artifact-backfill-completion-condition.md	283b3c923ccd89a2	pre-existing:list
+release/references/how-to/hub-spoke-bridge.md	a74e27dbb0e8be13	pre-existing:list
+release/references/pipeline/stage-13-close.md	264019ab33515dbb	pre-existing:table
+release/references/protocols/architecture-conformance-cadence.md	1b22da692e306b0f	pre-existing:list
+release/references/protocols/architecture-conformance-cadence.md	1ea1c05747487ba6	pre-existing:list
+release/references/protocols/blast-radius-protocol.md	692a51e8a01e59ac	pre-existing:list
+release/references/protocols/decision-audit-cadence.md	07dde9f3652b21ce	pre-existing:list
+release/references/protocols/decision-audit-cadence.md	1ea1c05747487ba6	pre-existing:list
+release/references/protocols/structural-audit-cadence.md	1ea1c05747487ba6	pre-existing:list
+release/references/standards/bundle-composition-doctrine.md	e13fa38d868f367c	pre-existing:table
+release/references/standards/close-class-telemetry.md	b2fc9cf6464209cd	pre-existing:table
+release/references/standards/phase-telemetry-front-cluster.md	b65c53b2a32a78a4	pre-existing:table
+release/references/standards/phase-telemetry-middle-cluster.md	0963227b1c2fc54c	pre-existing:table
+release/references/standards/release-velocity-tracking.md	5edc995acdfb4451	pre-existing:list
+release/references/standards/release-velocity-tracking.md	e67cb673d9ed70cc	pre-existing:table
+release/skills/implementation-planner/references/output-format-spec.md	957acab1bd522826	pre-existing:list
+release/skills/pmo-skill-editor/SKILL.md	014ddbb6f6cedfb0	pre-existing:list
+release/skills/pmo-skill-refiner/references/pmo-platform-context.md	e5c9ebb526f3c6ce	pre-existing:table
+release/skills/release-executor/references/execution-checklist.md	4bc806cacbacbbc1	pre-existing:table
+release/skills/release-executor/references/progressive-rollout.md	9107decf4c60974e	pre-existing:table
