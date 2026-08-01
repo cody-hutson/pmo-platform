@@ -962,6 +962,87 @@ _cc_compute_verdict() {
   return 0
 }
 
+# ─── Register runner-resolution (Check 62) — #4208 ────────────────────────────────
+# Check 62 — register-runner-resolution (advisory; deploy-time-only)
+# gate-efficacy: posture=advisory  enforcement-surface=deploy-time-only
+#   invariant: every gate-coverage register row declaring a `runner-def:` resolution
+#              pointer RESOLVES — the named runner-definition file exists AND still
+#              contains the declared anchor (condition R1 of the standard's § Resolution).
+#   falsification: delete the `RCP-01` anchor from core/standards/regression-checks.md and
+#                  leave the row naming it -> UNRESOLVED (deploy.sh --self-test group RR-2).
+#
+# WHY THIS EXISTS. The release that introduced the class-3 obligation shipped three
+# register rows naming `pmo-skill-editor` Mode C as their runner while Mode C's encoded
+# check set carried ZERO of their predicates. The rows satisfied the convention's letter
+# and asserted nothing. The remedy attempted at the time was a REVIEWER INSTRUCTION
+# ("verify the named runner actually carries the check") and it failed on its own FIRST
+# application. This check is that instruction turned into a computation — which is the
+# whole difference between an obligation that fires and one that must be remembered.
+#
+# WHAT IT ASSERTS, AND WHAT IT DOES NOT. It asserts R1 — CARRIED: the named
+# runner-definition file exists and contains the declared anchor. It does NOT assert R2
+# (reached), does NOT read the anchor's body, and cannot distinguish a well-written
+# predicate from a stub carrying the right heading. Naming that bound is the difference
+# between a gate and gate theatre — a control that reads as enforcement while functioning
+# as a no-op is worse than no control, which is this milestone's whole thesis.
+#
+# ANTI-VACUITY. A register carrying zero resolution pointers verdicts NOSET, never CLEAN,
+# and an unreadable standard verdicts NOSET too: a check whose input set is empty must SAY
+# so (the Check 61 DE-9 / Check 13b CP-4 precedent). The CLEAN verdict carries the live
+# pointer COUNT, so a parser that silently stopped matching surfaces as a count change
+# rather than as a quiet pass.
+#
+# PARSING. Pointers are read as `runner-def: <path>::<anchor>` with path and anchor
+# restricted to a conservative character class, so the standard's own PROSE mentions of
+# the bare token (e.g. "declaring a `runner-def:` resolution pointer") cannot parse as
+# declarations — a backtick is outside the class, so the match fails rather than
+# half-succeeding.
+_rr_compute_verdict() {
+  local std="${RR_STANDARD:-core/standards/gate-efficacy-standard.md}"
+  local root="${RR_ROOT:-.}"
+
+  if [[ ! -f "$std" ]]; then
+    printf 'NOSET|gate-efficacy standard not readable at %s — no register to resolve\n' "$std"
+    return 0
+  fi
+
+  local decls
+  decls="$(/usr/bin/grep -o 'runner-def:[[:space:]]*[A-Za-z0-9._/-]\{1,\}::[A-Za-z0-9._-]\{1,\}' "$std" 2>/dev/null || true)"
+
+  if [[ -z "$decls" ]]; then
+    printf 'NOSET|register at %s declares zero runner-def resolution pointers — the check would assert nothing\n' "$std"
+    return 0
+  fi
+
+  local total=0 bad=0 detail=""
+  local d body p a
+  while IFS= read -r d; do
+    [[ -n "$d" ]] || continue
+    total=$((total + 1))
+    body="${d#*runner-def:}"
+    body="${body#"${body%%[![:space:]]*}"}"   # strip leading whitespace
+    p="${body%%::*}"
+    a="${body#*::}"
+    if [[ ! -f "$root/$p" ]]; then
+      bad=$((bad + 1))
+      detail="${detail}    runner-def ${p}::${a} — runner-definition file not found"$'\n'
+      continue
+    fi
+    if ! /usr/bin/grep -qF -- "$a" "$root/$p"; then
+      bad=$((bad + 1))
+      detail="${detail}    runner-def ${p}::${a} — file exists but does NOT carry anchor '${a}' (R1 fails: named runner cannot surface this predicate)"$'\n'
+    fi
+  done <<< "$decls"
+
+  if [[ $bad -eq 0 ]]; then
+    printf 'CLEAN|%s\n' "$total"
+  else
+    printf '%s' "$detail" | /usr/bin/sed '/^$/d' >&2
+    printf 'UNRESOLVED|%s|%s\n' "$bad" "$total"
+  fi
+  return 0
+}
+
 # ─── Decision-emission minimum set (Check 61 / --check-decision-emission) — #4026 ──
 # Check 61 — decision-emission-minimum-set (advisory; deploy-time-only)
 # gate-efficacy: posture=advisory  enforcement=deploy-time-only  skip-semantics=pre-cutover-is-skip
@@ -8545,6 +8626,57 @@ cmd_check() {
         ;;
       *)
         log "  WARN:  decision-emission — unexpected verdict '$c61_verdict'"
+        ;;
+    esac
+  fi
+
+  # Check 62 — register runner-resolution (advisory; deploy-time-only) [#4208]
+  #
+  # Recomputes condition R1 (CARRIED) for every gate-coverage register row that declares
+  # a `runner-def:` pointer: the named runner-definition file must exist and must still
+  # contain the declared anchor. This is the standard's § Resolution rule executed rather
+  # than reviewed — the reviewer-instruction form of this same obligation failed on its
+  # own first application, which is why it is a computation here.
+  #
+  # HONEST GUARANTEE: R1 only. It does not assert R2 (reached), does not read the
+  # anchor's body, and is deploy-time-only with NO pre-merge surface — so a PR can merge
+  # with an unresolvable row and this check catches it at the next deploy-time run. The
+  # flip to `enforce` is an OPERATOR DECISION recorded in gate-efficacy-standard.md's
+  # flip ledger, and Requirement (b′) blocks `required` until a CI mirror exists.
+  REGISTER_RUNNER_MODE="$(resolve_check_mode "register-runner-resolution" "warn")"
+  if [[ "$REGISTER_RUNNER_MODE" != "off" ]]; then
+    log "Check 62: Register runner-resolution (every runner-def pointer resolves to a runner that carries the predicate; advisory / deploy-time-only; warn-mode initial)"
+    local c62_verdict c62_tok
+    c62_verdict="$(_rr_compute_verdict)"
+    c62_tok="${c62_verdict%%|*}"
+    case "$c62_tok" in
+      NOSET)
+        # A repo defect, NOT a benign absence: the gate would assert nothing. Flagged on
+        # every mode — this is the vacuous-control class the milestone exists to close.
+        flag_warn_or_issue "register-runner-resolution" "${c62_verdict#NOSET|}"
+        ;;
+      CLEAN)
+        log "  OK:    all ${c62_verdict#CLEAN|} gate-coverage register runner-def pointer(s) resolve (R1: named runner carries the predicate)"
+        ;;
+      UNRESOLVED)
+        local _c62_rest="${c62_verdict#UNRESOLVED|}"
+        local _c62_bad="${_c62_rest%%|*}" _c62_tot="${_c62_rest##*|}"
+        case "$REGISTER_RUNNER_MODE" in
+          enforce)
+            log "  FAIL:  register-runner-resolution — $_c62_bad of $_c62_tot register runner-def pointer(s) do not resolve (see stderr detail); the remedy is to encode the predicate in the named runner or re-point the row, never to delete the pointer"
+            ISSUES=$((ISSUES + 1))
+            ;;
+          warn)
+            log "  WARN:  register-runner-resolution — $_c62_bad of $_c62_tot register runner-def pointer(s) do not resolve — a row naming a runner that does not carry its predicate asserts nothing (warn-mode; the flip to enforce is an operator decision recorded in gate-efficacy-standard.md, never auto-promoted by hit count)"
+            local _c62_ts
+            _c62_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            printf '{"ts":"%s","check":"%s","detail":"%s of %s runner-def pointer(s) unresolved"}\n' \
+              "$_c62_ts" "register-runner-resolution" "$_c62_bad" "$_c62_tot" >> "$WARN_LOG" 2>/dev/null || true
+            ;;
+        esac
+        ;;
+      *)
+        log "  WARN:  register-runner-resolution — unexpected verdict '$c62_verdict'"
         ;;
     esac
   fi
