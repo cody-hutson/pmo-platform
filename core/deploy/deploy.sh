@@ -8173,6 +8173,127 @@ cmd_check() {
     esac
   fi
 
+
+  # Check 62 — count-vs-structure lint (ENFORCING, narrowly scoped) [#4196]
+  #
+  # WHAT IT ASSERTS. A stated cardinality that sits immediately above an enumerable
+  # structure must reconcile with that structure under at least ONE reading. A pair is
+  # EXAMINED only when a colon-TERMINATED line carries >=1 cardinal bound to a plural
+  # head noun AND the next non-blank line opens a markdown list or table. It FLAGs only
+  # when NO reading reconciles: identity (a stated cardinal equals the item count),
+  # partition (the stated cardinals sum to it), or sub-count (a stated cardinal equals
+  # the sum of per-item parenthetical cardinals). Four suppressors strip identifier
+  # numerals (`Stage 6`), unit numerals (`2 hours`), inexact bounds (`>=4 files`), and
+  # conditional clauses.
+  #
+  # SCOPE — FROZEN-ARTIFACT EXEMPTION (stated here because the scope IS the contract).
+  # The predicate reads tracked `*.md` only, and EXCLUDES release/releases/**,
+  # core/hooks/testdata/**, core/deploy/tests/fixtures/**, packages/**, and .github/**.
+  # A shipped release plan or note describes the corpus AS IT WAS; "fixing" a count
+  # inside one would rewrite a historical record. Fixture trees are excluded because
+  # they carry deliberate defects as their whole purpose. Lifting the exemption at this
+  # pin adds 10 findings, and all 10 resolve under release/releases/plans/ — the
+  # exemption is load-bearing, not decorative.
+  #
+  # ENFORCING BY THE CODE'S SHAPE, NOT BY A DEFAULT. Note what is absent from the FAIL
+  # arm below: there is no `case` on any mode and no mode gate of any kind. A new
+  # non-reconciling pair increments ISSUES on every run. That is the inverse of the
+  # flag_advisory_only idiom — the posture is a property of the code, not a default
+  # value some later edit could quietly flip.
+  #
+  # WHY A COMMITTED BASELINE RATHER THAN WARN-MODE. The live corpus already carried 73
+  # non-reconciling pairs at this check's introducing commit. Enforcing against all 73
+  # on day one would red-wall the deploy gate for work unrelated to this check, and
+  # warn-mode was rejected upstream. Both are avoided by accepting the pre-existing
+  # population in core/deploy/allowlists/count-structure-baseline.txt and reporting it
+  # as KNOWN. The baseline is keyed by sha1 of the whitespace-normalized preamble, NOT
+  # by line number, so an edit elsewhere in a file cannot invalidate an entry — but
+  # editing a baselined preamble ITSELF re-keys it and the pair FAILs, which is correct:
+  # editing a count preamble is exactly the moment to re-verify its count.
+  #
+  # THE STALE ARM IS COMMITTED-WARN, DELIBERATELY. A sibling release that FIXES a
+  # baselined count would otherwise turn this check red for work outside its scope.
+  # That is the one red-wall vector an always-enforce hygiene arm would open, and it is
+  # closed here via resolve_check_mode with a committed `warn` default (the Check 47 /
+  # Check 61 precedent). Stale rows are reported so the debt register can be pruned.
+  #
+  # DECLARED COVERAGE BOUNDARY — state this, do not imply more. The predicate covers a
+  # colon-terminated preamble over an adjacent list or table, WITHIN one file. It does
+  # NOT cover: a count stated inside a table CELL; a count whose structure lives in a
+  # DIFFERENT file (a cross-file claim has no adjacent structure to read); a
+  # hard-wrapped preamble that does not end in a colon; or an inline semicolon-delimited
+  # enumeration. Those forms have not had their false-positive surface measured, and
+  # shipping them unmeasured is the defect this check exists to prevent.
+  #
+  # NOT ON THE REQUIRED-SUBSET ROSTER. Check 62 is deliberately absent from
+  # --check-required-subset. That roster is seeded with Check 38 alone; joining it is a
+  # separate, later, evidence-gated decision, and staying off it is what makes shipping
+  # enforcing safe today (no CI workflow runs the full --check suite).
+  #
+  # Primitive: core/deploy/tools/check-count-structure.py (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 62: Count-vs-structure lint (a stated cardinality must reconcile with the structure beneath it; enforcing, narrowly scoped; frozen artifacts exempt)"
+    local c62_script="core/deploy/tools/check-count-structure.py"
+    if [[ ! -f "$c62_script" ]]; then
+      log "  FAIL:  count-structure — primitive script missing: $c62_script (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
+      ISSUES=$((ISSUES + 1))
+    else
+      local c62_out c62_exit=0
+      c62_out=$(/usr/bin/python3 "$c62_script" --root . --output-format tsv 2>&1) || c62_exit=$?
+      if [[ $c62_exit -eq 3 ]]; then
+        log "  FAIL:  count-structure — input failure (exit 3): $(echo "$c62_out" | head -1). A clean zero over an empty population is exactly what this check must never report."
+        ISSUES=$((ISSUES + 1))
+      else
+        # PV-1 / PV-5: report the denominator and BOTH control arms as fields, so a
+        # reader can always distinguish "zero found" from "nothing examined".
+        local c62_denom c62_control c62_ctl_verdict
+        c62_denom=$(echo "$c62_out" | awk -F'\t' '$1=="DENOM"{print $2" "$3" "$4}')
+        c62_control=$(echo "$c62_out" | awk -F'\t' '$1=="CONTROL"{print $3}')
+        c62_ctl_verdict=$(echo "$c62_out" | awk -F'\t' '$1=="CONTROL"{print $2}')
+        log "  DENOM: count-structure — ${c62_denom:-unreported}"
+        log "  CTRL:  count-structure — ${c62_ctl_verdict:-UNREPORTED}: ${c62_control:-unreported}"
+
+        # A broken or over-matching control arm invalidates the whole result. Hard FAIL
+        # on every mode — the Check 31 fixture-regression precedent. A probe that cannot
+        # be shown to detect and to discriminate proves nothing by returning zero.
+        if [[ "$c62_ctl_verdict" != "PASS" ]]; then
+          log "  FAIL:  count-structure — control arms did not pass; the result is INDETERMINATE, not clean. Fix the predicate before trusting any zero it reports."
+          ISSUES=$((ISSUES + 1))
+        fi
+
+        local c62_new c62_known c62_stale
+        c62_new=$(echo "$c62_out" | awk -F'\t' '$1=="FAIL"{print $2":"$3}' | paste -sd, -)
+        c62_known=$(echo "$c62_out" | awk -F'\t' '$1=="KNOWN"' | wc -l | tr -d ' ')
+        c62_stale=$(echo "$c62_out" | awk -F'\t' '$1=="STALE"{print $2}' | paste -sd, -)
+
+        # ── The enforcing arm. No mode gate, by design. ──────────────────────────
+        if [[ -n "$c62_new" ]]; then
+          log "  FAIL:  count-structure — stated count does not reconcile with the adjacent structure at: $c62_new. The remedy is to correct the count or the structure, never to add a baseline row for new drift."
+          ISSUES=$((ISSUES + 1))
+        else
+          log "  OK:    count-structure — no unbaselined non-reconciling pair (${c62_known:-0} pre-existing pair(s) accepted via core/deploy/allowlists/count-structure-baseline.txt)"
+        fi
+
+        # ── The ratchet. Committed warn: a sibling release FIXING a baselined count
+        #    must never turn this check red for work outside its scope. ────────────
+        if [[ -n "$c62_stale" ]]; then
+          local c62_stale_mode
+          c62_stale_mode="$(resolve_check_mode "count-structure-baseline" "warn")"
+          case "$c62_stale_mode" in
+            enforce)
+              log "  FAIL:  count-structure-baseline — stale entr(ies) whose pair no longer exists or now reconciles: $c62_stale"
+              ISSUES=$((ISSUES + 1))
+              ;;
+            *)
+              log "  WARN:  count-structure-baseline — stale entr(ies) whose pair no longer exists or now reconciles: $c62_stale (committed warn-mode: prune the row(s); a sibling release fixing a baselined count must not red-wall this check)"
+              ;;
+          esac
+        fi
+      fi
+    fi
+  fi
+
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
