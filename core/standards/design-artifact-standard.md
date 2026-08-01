@@ -52,7 +52,7 @@ This standard is the **META framework** governing design-artifact discipline. It
 
 For each class, the tool column names the source-of-truth format. All formats are text-based and agent-readable. Per § 6, proprietary tools (Lucid / Figma / Miro / Whimsical), binary formats (SVG), and server-side-rendered formats (PlantUML) are rejected.
 
-**Machine-identification of each class** — how an artifact of a given flow type is *declared* (so the set is enumerable) and how its region is *conformance-checked* (table-aware for the three table-rendered types) is specified in [§ 12 Artifact Identification & Detection](#-12-artifact-identification--detection). Identification is declaration-based, not rendering-based: the `Current-state reference` column above is a human navigation aid, not the query surface.
+**Machine-identification of each class** — how an artifact of a given flow type is *declared* (so the set is enumerable) and how its region is *conformance-checked* (table-aware for four of the seven types) is specified in [§ 12 Artifact Identification & Detection](#-12-artifact-identification--detection). Identification is declaration-based, not rendering-based: the `Current-state reference` column above is a human navigation aid, not the query surface.
 
 ## § 3. Storage Model
 
@@ -298,7 +298,7 @@ Design-artifact identification is **declaration-based, not rendering-based.** A 
 
 ### § 12.1 Per-flow-type detection criteria (all 7 types)
 
-Discovery is declaration-based (immune to table-invisibility). The rule below is the **classification + conformance** layer, applied to the **declared region** only — the dedicated file's body, or an embedded artifact's marker-bounded region (§ 9). The `Table-aware?` column marks the three types whose conformance rule inspects the region's **table shape**, explicitly NOT a global fence tally.
+Discovery is declaration-based (immune to table-invisibility). The rule below is the **classification + conformance** layer, applied to the **declared region** only — the dedicated file's body, or an embedded artifact's marker-bounded region (§ 9). The `Table-aware?` column marks the four types whose conformance rule inspects the region's **table shape**, explicitly NOT a global fence tally.
 
 | # | Flow type | Rendering-tool conformance rule (names the tool it tests for) | Table-aware? |
 |---|---|---|---|
@@ -308,9 +308,9 @@ Discovery is declaration-based (immune to table-invisibility). The rule below is
 | 4 | **human-process** | same rule as agent-process | fence/Mermaid |
 | 5 | **concept-model** | declared region contains a fenced ASCII tree AND/OR ≥1 structured relationship table naming the concept | **YES** — region tree + table |
 | 6 | **skill-flow** | declared region contains a ` ```mermaid ` fence OR Mode-card tables (a table whose header names modes/phases) | **YES** — region Mode-card table |
-| 7 | **decision-tree** | declared region contains a ` ```mermaid ` fence with gate/branch nodes OR a fenced ASCII decision-block | Mermaid/fence |
+| 7 | **decision-tree** | declared region contains a ` ```mermaid ` fence with gate/branch nodes OR a fenced ASCII decision-block OR ≥1 markdown table carrying the **decision-table signature**: a *discriminator* column (the case / condition / class being tested) paired with a *branch* column stating the routed outcome (routing · action · disposition · verdict · authority · behavior), whose rows enumerate a **closed, mutually-exclusive branch set**. An instance **register** — rows keyed by an `ID` / `#` / `Risk` / `Finding` / `File` column, i.e. records rather than branches — is **NOT** a decision table even when it carries a Resolution / Mitigation / Disposition column | **YES** — region table-shape inspection (discriminator→branch signature); Mermaid/fence limbs retained |
 
-**Why this is table-aware and the fence-count under-measurement is cured:** rows 2, 5, 6 never rely on a fence/Mermaid tally — they inspect the *declared region* for the type's own table signature. Because **discovery** is by declaration, the type is known before the conformance rule runs, so a pure-table artifact (0 fences) is still found and still classified.
+**Why this is table-aware and the fence-count under-measurement is cured:** rows 2, 5, 6, 7 never rely on a fence/Mermaid tally — they inspect the *declared region* for the type's own table signature. Row 7 retains its Mermaid and fenced-ASCII limbs alongside the table limb, so a decision tree rendered either way conforms, and a decision tree rendered *only* as a table is no longer missed. Because **discovery** is by declaration, the type is known before the conformance rule runs, so a pure-table artifact (0 fences) is still found and still classified.
 
 ### § 12.2 Enumeration harness (runnable, deterministic)
 
@@ -347,8 +347,11 @@ The marker mechanism gives an **unambiguous** artifact-vs-prose verdict even for
 | `core/disciplines/architecture-overview.md` | an embedded ASCII structure tree | marker under the heading | **ARTIFACT** (unambiguous — marker present) |
 | `core/disciplines/architecture-overview.md` | an ordinary prose+table governance-tier section | no marker | **PROSE** (unambiguous — no marker) |
 | `core/schemas/stage-io-contracts.md` | the boundary producer→consumer contract tables | marker under the heading | **ARTIFACT** (even though the file has 0 fences / 0 Mermaid / 100 table rows) |
+| `release/references/standards/triage-design-rereview.md` | `§ 3 Classifications` — the C1/C2/C3 routing table at `\| Cls \| Name \| Definition \| Routing \|` | marker under the heading | **ARTIFACT**, `decision-tree` — the region carries **0 Mermaid fences and 0 fenced ASCII decision-blocks**, and conforms on rule 7's decision-table limb: `Cls` is the discriminator, `Routing` is the branch, and C1/C2/C3 is a closed mutually-exclusive branch set |
 
-The third row is the decisive one: under a fence-count mechanism `stage-io-contracts.md` is invisible; under the marker mechanism it is unambiguously an artifact. That is the whole point of declaration-based identification.
+The third row is the decisive one for **discovery**: under a fence-count mechanism `stage-io-contracts.md` is invisible; under the marker mechanism it is unambiguously an artifact. That is the whole point of declaration-based identification.
+
+The fourth row is the decisive one for **rule-7 conformance**, and it is the reason it is recorded here rather than left implicit. Before rule 7 carried its table limb, this exact region was the standing counter-example — genuine decision logic that the rule could not classify, recorded as a known rule-gap rather than forced to pass. Naming the conforming instance is what keeps the limb falsifiable: a reader who doubts that rule 7 is table-aware can settle it by reading one named region, instead of re-deriving "not table-aware" from the rule text and logging the gap a second time.
 
 ## Related References
 
