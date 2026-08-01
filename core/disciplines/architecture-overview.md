@@ -33,6 +33,41 @@ The platform serves a specific set of **human** roles and models every **other**
 
 ---
 
+## The Self-Improving Loop
+
+The platform improves itself by running a closed six-step cycle across its own two areas: PMO operations surface the friction, the release pipeline processes the fix, and deployment returns the improved platform to operations. That cycle is the platform's self-improving loop. It is the architectural reason the two areas in [One Agent, One Workspace](#one-agent-one-workspace) are a **cycle** rather than a pair — and the reason the platform's own tooling is the pipeline's most frequent input.
+
+```
+(1) operational workspace
+      ↓
+(2) improvement identification
+      ↓
+(3) pipeline intake
+      ↓
+(4) pipeline processing
+      ↓
+(5) deployment
+      ↓
+(6) loop  ──────▶  back to (1); the improved platform runs the next cycle of operational work
+```
+
+**The pipeline is self-referential — it processes improvements to itself.** Work that changes the platform is not exempt from the process the platform defines; it routes through the same 13 stages as any other backlog item. The routing rule that enforces this is stated at [`release-process.md` § Pipeline Self-Governance](../../release/governance/release-process.md) — stated there, cited here, not restated.
+
+**The loop is a composition of mechanisms that already exist.** It adds no machinery. Each step is enforced by a named surface, and that binding is what keeps this section honest: if an enforcing surface is removed or relocated, its link stops resolving and the repository's link-integrity gates surface it. A step with no enforcing surface would be visibly empty — a named gap, not a silent omission.
+
+| # | Step | What happens | Enforcing surface |
+|---|---|---|---|
+| 1 | **Operational workspace** | PMO work runs in the operations area — projects, transcripts, trackers, communications. | [`operations-bridge.md` § Layer Classification](../rules/operations-bridge.md) — the Layer-2 operations domain |
+| 2 | **Improvement identification** | A gap, inconsistency, broken handoff, missing artifact, or friction is observed *during* that work. | The workspace charter's **Continuous Improvement → Auto-logging rule** (seeded from [`CLAUDE.md.template`](../CLAUDE.md.template)), which routes the signal to [`intake-desk`](../../operations/skills/intake-desk/SKILL.md) Mode C |
+| 3 | **Pipeline intake** | The signal becomes a typed work item on the tracker — never a scratch file. | [`stage-01-intake.md`](../../release/references/pipeline/stage-01-intake.md) + the issue-template set |
+| 4 | **Pipeline processing** | Triage → bundle → plan → solution → engineer → dev-test → QA → review. | [`release-process.md` § Pipeline Self-Governance](../../release/governance/release-process.md) + the [per-stage shards](../../release/references/pipeline/README.md) |
+| 5 | **Deployment** | The change merges to `main` and propagates to the runtime the agent actually loads. | [`stage-12-execute.md`](../../release/references/pipeline/stage-12-execute.md) + [`skill-deployment.md`](../rules/skill-deployment.md) |
+| 6 | **Loop** | Close-out returns the improved platform to step 1, where the next cycle of operational work exercises it. | [`stage-13-close.md`](../../release/references/pipeline/stage-13-close.md) |
+
+**What the loop is not.** It is not a claim that every improvement originates in operations — platform work also arrives from audits, reviews, and direct operator direction, all of which enter at step 3. The loop names one path specifically: the one where the platform's own use is what surfaces the next change to it.
+
+---
+
 ## One Agent, One Workspace
 
 Claude Code is the single agent that operates the platform. It works across two areas without role separation — the same agent both builds the platform and runs the PMO:
@@ -302,6 +337,7 @@ The 13-stage pipeline (above) and the hub-spoke execution model load ≥9 peer s
 | **Review Composition Framework + 7-dim taxonomy** (WHEN × WHAT × WHO/POSTURE × DETAIL × FOCUS × OUTPUT × AUTHORITY) | `core/standards/review-composition-framework.md` | per-section § | Which review fires at which pipeline stage with what posture, detail, focus, output, and authority — and how does the same object reviewed at multiple stages compose? |
 | **Initiative-roadmap framework + cohesion-check** | `core/standards/initiative-roadmap-framework.md` | per-section (§3 / §4 / §5 / §6 / §7.9) | When does an initiative warrant a roadmap, what lifecycle does it follow, how does it differ from an ADR or Initiative Issue, and how is cross-milestone cohesion checked? |
 | **KM Governance Framework + 4-class ownership enum + 4-source retirement protocol** | `core/standards/km-governance-framework.md` | per-section (§2 ownership / §3 approval / §4 retirement / §5 meta-governance / §6 composition boundaries / §9 schema-stability) | Who owns each K1 artifact, what authority approves new K1 entries by evidence tier, what triggers and workflow govern KM artifact retirement, who governs the KM-governance framework itself, and how does this compose with records-management, DRAFT→APPROVED, operating-model, and Anthropic-base-vs-build? |
+| **Backlog-retention guardrails** (BRG-1..BRG-4 — the restraints on a recommendation to remove work from the platform's own backlog) | `release/references/standards/bundle-composition-doctrine.md` | § 12 | What may an agent recommend removing from the improvement backlog, and on what evidence? Two same-vocabulary neighbours, both distinct: Stage-2 Triage Phase A6.5 Pattern (1) "Backlog hygiene" is a per-issue *detector*, not a judgment restraint; and `core/governance/RECORDS_POLICY.md` § Retention Schedule uses *retention* for a records **preservation floor** (the minimum period before a record is eligible for disposition), which is a different question from what may be recommended for removal. |
 
 **How to use this map.** When applying a concept, follow the section anchor. When two specs appear to define the same concept, the owning spec wins; the other spec is a citation. When a new concept emerges, add a row before the duplicate-source-discipline check fails — see [`standards/duplicate-source-discipline.md`](../standards/duplicate-source-discipline.md).
 

@@ -2,7 +2,7 @@
 title: Bundle Composition Doctrine
 type: standard
 version: v11.28
-purpose: Codifies the agent-readable methodology for deciding WHAT belongs in a given milestone and WHY those items cohere as a shippable unit — the 7-step vertical capability slice method + tight-merge mechanics + naming convention + size-target heuristics + risk-weighted capacity model + sequence rules
+purpose: Codifies the agent-readable methodology for deciding WHAT belongs in a given milestone and WHY those items cohere as a shippable unit — the 7-step vertical capability slice method + tight-merge mechanics + naming convention + size-target heuristics + risk-weighted capacity model + sequence rules + the retention guardrails constraining a recommendation to remove work from the backlog
 parallel_to:
   - reference/explanation/discovery-discipline.md
   - reference/specs/release-class-taxonomy.md
@@ -13,7 +13,9 @@ consumers:
   - release/references/pipeline/stage-03-bundle.md (§5 Phase A6 reframe; §5 Phase B3 milestone-description schema)
   - release/governance/release-process.md + mirror (Stage 3 Bundle section cross-reference)
   - release/governance/RELEASE_PROTOCOL.md (Implementation Plan Format section cross-reference)
-last-updated: 2026-05-25
+  - release/references/pipeline/stage-02-triage.md (§ 12 read when A6.5 Pattern (1) surfaces a removal candidate)
+  - release/skills/roadmap-curator/SKILL.md (§ 12 read at Mode B re-baseline and Mode C drift audit)
+last-updated: 2026-08-01
 ---
 <!-- reference-durability: allow-link -->
 
@@ -83,8 +85,9 @@ The frame-pluggability discipline allows the platform to switch to F2, F3, a hyb
 - Sequence rules within a release bundle (§ 9).
 - Cutover semantics (§ 10) — REFLEXIVE-EXEMPT-ALL with substrate anchor.
 - Composition with sibling Stage 5 outputs (§ 11) — boundary articulation per the source ticket's AC #5.
-- Cross-reference catalog (§ 12).
-- Version history (§ 13).
+- Backlog-retention guardrails (§ 12) — the restraints on a recommendation to REMOVE work from the backlog.
+- Cross-reference catalog (§ 13).
+- Version history (§ 14).
 
 **Out of scope (deliberate non-overlap).**
 
@@ -524,7 +527,50 @@ The doctrine composes with the nine sibling Stage 5 outputs by **referencing the
 
 **Boundary:** two distinct conventions over the same `vX.Y` string — this doctrine owns how a milestone's number is *allocated*; version-field-semantics owns what a skill's `version:` field *means*. A skill's `version:` records the platform release tag it was validated against, not a chronological ordinal; the allocation and ship-order semantics behind that tag live here. The runtime parallel-release sequencing that makes merge order the ordering authority is owned by the Sequence Rules (§ 9, extended by the forthcoming parallel-release semantics subsection), not by either of these two surfaces.
 
-## 12. Cross-Reference
+## 12. Backlog-Retention Guardrails
+
+§ 3 decides what **enters** a milestone. This section constrains the opposite move — a recommendation to **remove** work from the backlog: to prune an issue, retire a queued milestone, or declare a body of planned work dead. The doctrine already emits recommendations of that kind (§ 3 Step 4 outputs *retirement candidates*; § 3 Step 5 outputs a size disposition that can read "too big, split or cut") and previously carried no restraint on them. These four are that restraint.
+
+They are stated as prohibitions because the failure they prevent is an over-eager one: an agent asked to "clean up the backlog" reaches for the nearest sizing heuristic, finds a queue of not-yet-started milestones, and recommends killing planned work as bloat.
+
+> **Two same-vocabulary neighbours — read before grepping.** Both words in this section's title are already in use elsewhere in the corpus for different concepts. The compound name is therefore load-bearing, and **neither neighbour is a precedent for it**.
+>
+> - **"Backlog hygiene"** — [`stage-02-triage.md`](../pipeline/stage-02-triage.md) Phase A6.5 **Pattern (1)** is a *per-issue detector* (stale issues, orphaned dependencies, conflicting scope) that surfaces candidates for the operator. This section is a *judgment restraint* on what may be concluded about them at the population level. The detector finds candidates; these guardrails govern what may be recommended.
+> - **"Retention"** — [`RECORDS_POLICY.md`](../../../core/governance/RECORDS_POLICY.md) § Retention Schedule uses the bare word for a records **preservation floor**: the minimum period a record is kept before it becomes *eligible* for disposition, keyed by record type, where the disposition is never destruction. That is a period, not a restraint on a recommendation. **Backlog-retention** here means keeping *planned work* on the backlog against an unevidenced case for removing it — a different subject with a different test.
+
+### BRG-1 — Do not size-judge the product backlog against a delivery-team backlog model
+
+The platform's own improvement backlog is a **multi-role product backlog**: it carries work for every role the platform models, across enabling and capability tracks, on a sequence-not-time horizon. The **delivery-team** backlog-health model — its item-count alarm threshold, its months-of-throughput sizing target, and its age-based re-triage and kill thresholds ([`backlog-health.md`](../../../operations/skills/delivery-engine/references/backlog-health.md) § 1.1 and § 3) — is calibrated for one team's committed delivery queue and is **not** a yardstick for this backlog.
+
+Do not import an item-count target from any delivery-team backlog model, in-corpus or external, and do not present one as evidence that this backlog is oversized. A backlog is too large when its *sequence* no longer resolves — when nothing can be shown to depend on an item and no horizon places it — not when its cardinality exceeds a number borrowed from a different altitude.
+
+This is the retention-side sibling of two boundaries the platform already draws: the capacity-altitude boundary at § 3 Step 5 (release-bundle capacity ≠ delivery-team capacity), and the intake-priority altitude boundary in [`gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md) § Gate 2 (pipeline-intake priority ≠ delivery-engine sequencing).
+
+### BRG-2 — Do not label a queued milestone "aspirational" or "zombie"
+
+A milestone that is bundled and sequenced but not yet started is **planned work awaiting its turn**. Its position in the queue is a scheduling fact, not evidence of abandonment.
+
+Do not apply "aspirational", "zombie", "dead", "wishlist", or an equivalent judgment token to a milestone on the basis of queue position, age, or track. A foundation-first sequence deliberately places enabling work ahead of the capability work that depends on it, so an early-track milestone that has not yet shipped is **on plan, not stalled** — and reading the sequence as neglect inverts its meaning.
+
+**"Zombie" is not a free label — the corpus already spends it twice, and neither use licenses this one.** It names an *unreferenced generated artifact* past its staleness window ([`lifecycle-states.md`](../../../operations/skills/artifact-generator/references/lifecycle-states.md)), and it names a *backlog work item* held past an aging threshold ([`backlog-health.md`](../../../operations/skills/delivery-engine/references/backlog-health.md) § 7, the "Backlog as graveyard" anti-pattern, whose remedy prescribes recurring zombie hunts against explicit age thresholds). The second sense is the nearer one and the one an agent is likeliest to reach for — and it is still not applicable here, because it is scoped to a delivery-team queue and keyed on *age*: the yardstick BRG-1 rules out and the evidence BRG-3 rules out.
+
+### BRG-3 — Recommend closure only on concrete evidence, never on age
+
+A recommendation to close, retire, or de-scope a milestone or an issue must cite evidence that the work is **no longer needed** or **already delivered**: the shipped surface, the superseding item, the retired dependency, the changed decision, the removed consumer.
+
+Elapsed time since creation, time since last update, and position in the queue are **not** that evidence. They are signals to go and look — never findings on their own. State the evidence, name the surface it was read from, and carry an evidence-quality label. A closure recommendation whose only support is age is not a finding, and is rejected as one.
+
+### BRG-4 — Do not delete or rewrite retired-milestone history
+
+A milestone that has been retired, superseded, renumbered, emptied, or absorbed **keeps its record**. Do not delete its description, rewrite its scope to match what actually shipped, or renumber it to close a gap in the sequence. The retired record is how a later reader reconstructs what was planned, what changed, and why — and § 5.3 already forbids retroactive milestone renaming for the same reason.
+
+Amend by **appending**: an amendment-log entry naming what changed and when. Never by overwriting. This is the milestone-surface application of the append-not-overwrite discipline the platform applies to ADRs (superseded, never edited) and to roadmap findings (permanent, status-transitioned).
+
+### Who reads these
+
+Any agent producing a **removal recommendation** over the platform's own backlog: Stage-2 Triage (when Phase A6.5 Pattern (1) surfaces a candidate), Stage-3 Bundle (§ 3 Step 4 retirement candidates), roadmap re-baseline and drift-audit passes, milestone-readiness assessment, and any platform-health audit that reports on backlog state. The guardrails are **positive guidance**, not gate enforcement — consistent with § 2, which assigns enforcement to the sibling gate specs.
+
+## 13. Cross-Reference
 
 **Sibling K1 standards (parallel-to):**
 
@@ -565,7 +611,7 @@ The doctrine composes with the nine sibling Stage 5 outputs by **referencing the
 
 - Unified pmo-platform config mechanism (adapter-config-foundation) — SHIPPED; the live `[bundling].bundle_doctrine_frame` field (`core/config/platform-config.toml.template`) makes the § 1 frame swappable on milestone-creation and milestone-update without doctrine prose rewrite, resolved per `core/governance/OPERATIONS.md § Platform-Config Resolution Protocol`
 
-## 13. Version History
+## 14. Version History
 
 | Version | Date | Change | Authority |
 |---|---|---|---|
@@ -573,3 +619,4 @@ The doctrine composes with the nine sibling Stage 5 outputs by **referencing the
 | v11.28 | 2026-06-17 | Adds the § 3 Step 5 Risk-Weighting (Release-Class capacity multiplier) sub-block — `effective_pts = round_half_up(sum(member_pts) * class_weight)`, weights cited by role from `[bundling].release_class_capacity_weights` (single numeric home), round-half-up pinned at this definitional home, delivery-team-capacity boundary clause, `[CALIBRATE-AFTER-3]` recalibration linkage to the RELEASE_LOG velocity instrument, and an enforcement-layer reference to the decomposition-review gate family. Consolidates the sizing guidance: names the point-band as the governing capacity ceiling and the Stage-3 "5-8 issues" item-count as a secondary readability heuristic. Additive only; no existing rule restated. | Stage 5 Solutioning design + scope-lock; Stage 6 Engineering (release v2.02, milestone 61-bundling-capacity-and-sizing-gates) |
 | — | 2026-06-21 | Hardens § 5 milestone numbering semantics: promotes the previously-parenthetical chronological rule to named sub-sections — § 5.1 Slot allocation (next-free-within-active-major, intent-to-bump in pipeline, claimed atomically at merge, cross-referencing the founding version-claim-determinism ADR + the Release Protocol allocation rule for the mechanism), § 5.2 Numeric order is not ship order (a version number is not a chronological ordinal; ship order = merge order = tag order; runtime sequencing owned by § 9), § 5.3 Reservation and renumbering (no early reservation; forward-only re-version-up on collision; no retroactive renaming). Reconciles the stale multi-track gloss in the `<MAJOR>` row + § 5.4 Major-version semantics to a single active track (major = work-mode re-baseline; multi-track is permitted-future, not active). Adds § 11.10 boundary row (numbering convention ⊥ skill `version:` field). Cross-references the forthcoming parallel-release semantics subsection (§ 9) by name. Additive + one normative→informative gloss reconciliation; no existing rule restated. | Stage 5 Solutioning + Collective Review scope-lock (numbering doctrine home prevails); Stage 6 Engineering (milestone release-version-claim-determinism) |
 | — | 2026-06-21 | Adds § 9.1 Parallel-release semantics — the runtime counterpart to the § 5.2 chronological caveat: the version number is a slot identifier not a sequence ordinal; ship order = merge order = tag order with the held-but-unclaimed window eliminated by claim-at-merge; two concurrent releases cannot both hold a number (atomic compare-and-swap on the host version ref, recompute-and-retry-up on collision, never overwrite); a declared cross-milestone dependency edge (G3-07) is the single hard constraint overriding free merge order; sibling-claims-first detection is by reference to the shipped Stage-9 + Stage-12 checks with no new gate (carrying inline the caveat that the Stage-9 Phase A6.5 / `G-PR8` divergence verdict is named in Release-Protocol prose but is not yet a registered gate-criteria row, whereas the Stage-9 `G-PR9` baseline-currency check is a registered row); re-versioning up at Stage 12 is the expected runtime behavior, with the post-tag recovery procedure deferred to the post-tag re-version recovery doctrine; plus a worked parallel-ship example. References the host-agnostic repository-host adapter atomic-claim operation + the founding version-claim-determinism ADR for the mechanism. Additive; no existing rule restated; no new gate added. | Stage 5 Solutioning + adversarial review + Collective Review scope-lock (§ 9 home prevails; cite live gates, add none); Stage 6 Engineering (milestone release-version-claim-determinism) |
+| — | 2026-08-01 | Adds § 12 Backlog-Retention Guardrails (BRG-1..BRG-4) — the restraints on a recommendation to REMOVE work from the backlog, complementing § 3's what-enters method: no delivery-team backlog model as a sizing yardstick for the multi-role product backlog (with the altitude boundary stated against the delivery-engine backlog-health reference); no "aspirational"/"zombie" label on a queued milestone, with both live in-corpus senses of *zombie* named and each shown not to license the label; concrete evidence (never age) required for a closure recommendation; retired-milestone history amended by appending, never deleted or rewritten. Carries a two-neighbour disambiguation clause covering both same-vocabulary collisions — the Stage-2 Triage A6.5 Pattern (1) "Backlog hygiene" per-issue detector, and the `RECORDS_POLICY.md` § Retention Schedule preservation-floor sense of *retention*. Renumbers Cross-Reference § 12 → § 13 and Version History § 13 → § 14 (§ 10 and § 11 unchanged — `§ 11.8` is externally cited); widens the frontmatter `purpose` by one clause, adds two consumers, and reconciles a `last-updated` field three prior amendments left stale. Additive; no existing rule restated; no gate added. | Stage 5 Solutioning design + Collective Review scope-lock (Tier-1 [ADJUST] amendments from the adversarial design review); Stage 6 Engineering (milestone governance-hardening) |
