@@ -13,7 +13,8 @@ reversibility: CHEAP / Confidence HIGH
 > spec defines no dimension, no cut-point, and no cadence rule of its own.
 
 Mode I is the **retrospective** counterpart to the forward, per-ticket architecture-fit
-gate (the Stage-5 SR-G architecture gate + the deferred Stage-2 architectural-fit gate):
+gate (the Stage-5 SR-G architecture gate + the Stage-2 acceptance-fit gate **G2-13** in
+`core/schemas/gate-criteria-spec.md`, shipped and enforcing):
 those gates hold *new* work pre-merge, one ticket at a time; Mode I reads the release
 record *after* the fact and audits *delivered* work against the platform's architecture
 baseline. It is an OBSERVE-only, dated-audit-folder mode structurally cloned from Modes
