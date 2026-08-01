@@ -488,4 +488,4 @@ for the residual: an "N of M" with no M is exactly what Rule 15 forbids.
 
 ## See also
 
-- [`../standards/review-composition-framework.md § 8 Agent-Correction Layer`](../standards/review-composition-framework.md) — references the anti-laziness rules of Section 1 as the human-inherited mitigation pool; its § 8.4 maps a named subset of those rules to agent-context applications alongside 3 novel agent-only failure modes (self-preference bias, hallucinated specificity, context anxiety). The rule count is owned by Section 1 of this file and is not restated there.
+- `core/standards/review-composition-framework.md` § 8 Agent-Correction Layer — references the anti-laziness rules of Section 1 as the human-inherited mitigation pool; its § 8.4 maps a named subset of those rules to agent-context applications alongside 3 novel agent-only failure modes (self-preference bias, hallucinated specificity, context anxiety). The rule count is owned by Section 1 of this file and is not restated there.
