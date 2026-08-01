@@ -8174,7 +8174,7 @@ cmd_check() {
   fi
 
 
-  # Check 62 — count-vs-structure lint (ENFORCING, narrowly scoped) [#4196]
+  # Check 63 — count-vs-structure lint (ENFORCING, narrowly scoped) [#4196]
   #
   # WHAT IT ASSERTS. A stated cardinality that sits immediately above an enumerable
   # structure must reconcile with that structure under at least ONE reading. A pair is
@@ -8225,38 +8225,38 @@ cmd_check() {
   # enumeration. Those forms have not had their false-positive surface measured, and
   # shipping them unmeasured is the defect this check exists to prevent.
   #
-  # NOT ON THE REQUIRED-SUBSET ROSTER. Check 62 is deliberately absent from
+  # NOT ON THE REQUIRED-SUBSET ROSTER. Check 63 is deliberately absent from
   # --check-required-subset. That roster is seeded with Check 38 alone; joining it is a
   # separate, later, evidence-gated decision, and staying off it is what makes shipping
   # enforcing safe today (no CI workflow runs the full --check suite).
   #
   # Primitive: core/deploy/tools/check-count-structure.py (carries --self-test).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 62: Count-vs-structure lint (a stated cardinality must reconcile with the structure beneath it; enforcing, narrowly scoped; frozen artifacts exempt)"
-    local c62_script="core/deploy/tools/check-count-structure.py"
-    if [[ ! -f "$c62_script" ]]; then
-      log "  FAIL:  count-structure — primitive script missing: $c62_script (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
+    log "Check 63: Count-vs-structure lint (a stated cardinality must reconcile with the structure beneath it; enforcing, narrowly scoped; frozen artifacts exempt)"
+    local c63_script="core/deploy/tools/check-count-structure.py"
+    if [[ ! -f "$c63_script" ]]; then
+      log "  FAIL:  count-structure — primitive script missing: $c63_script (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
       ISSUES=$((ISSUES + 1))
     else
-      local c62_out c62_exit=0
-      c62_out=$(/usr/bin/python3 "$c62_script" --root . --output-format tsv 2>&1) || c62_exit=$?
-      if [[ $c62_exit -eq 3 ]]; then
-        log "  FAIL:  count-structure — input failure (exit 3): $(echo "$c62_out" | head -1). A clean zero over an empty population is exactly what this check must never report."
+      local c63_out c63_exit=0
+      c63_out=$(/usr/bin/python3 "$c63_script" --root . --output-format tsv 2>&1) || c63_exit=$?
+      if [[ $c63_exit -eq 3 ]]; then
+        log "  FAIL:  count-structure — input failure (exit 3): $(echo "$c63_out" | head -1). A clean zero over an empty population is exactly what this check must never report."
         ISSUES=$((ISSUES + 1))
       else
         # PV-1 / PV-5: report the denominator and BOTH control arms as fields, so a
         # reader can always distinguish "zero found" from "nothing examined".
-        local c62_denom c62_control c62_ctl_verdict
-        c62_denom=$(echo "$c62_out" | awk -F'\t' '$1=="DENOM"{print $2" "$3" "$4}')
-        c62_control=$(echo "$c62_out" | awk -F'\t' '$1=="CONTROL"{print $3}')
-        c62_ctl_verdict=$(echo "$c62_out" | awk -F'\t' '$1=="CONTROL"{print $2}')
-        log "  DENOM: count-structure — ${c62_denom:-unreported}"
-        log "  CTRL:  count-structure — ${c62_ctl_verdict:-UNREPORTED}: ${c62_control:-unreported}"
+        local c63_denom c63_control c63_ctl_verdict
+        c63_denom=$(echo "$c63_out" | awk -F'\t' '$1=="DENOM"{print $2" "$3" "$4}')
+        c63_control=$(echo "$c63_out" | awk -F'\t' '$1=="CONTROL"{print $3}')
+        c63_ctl_verdict=$(echo "$c63_out" | awk -F'\t' '$1=="CONTROL"{print $2}')
+        log "  DENOM: count-structure — ${c63_denom:-unreported}"
+        log "  CTRL:  count-structure — ${c63_ctl_verdict:-UNREPORTED}: ${c63_control:-unreported}"
 
         # A broken or over-matching control arm invalidates the whole result. Hard FAIL
         # on every mode — the Check 31 fixture-regression precedent. A probe that cannot
         # be shown to detect and to discriminate proves nothing by returning zero.
-        if [[ "$c62_ctl_verdict" != "PASS" ]]; then
+        if [[ "$c63_ctl_verdict" != "PASS" ]]; then
           log "  FAIL:  count-structure — control arms did not pass; the result is INDETERMINATE, not clean. Fix the predicate before trusting any zero it reports."
           ISSUES=$((ISSUES + 1))
         fi
@@ -8266,46 +8266,46 @@ cmd_check() {
         # thing rather than two drifting copies. A fixture regression is a hard FAIL on
         # every mode: if the predicate has stopped discriminating on the pair that
         # falsified two earlier candidates, no verdict it reports is trustworthy.
-        local c62_fx="core/deploy/tools/run-count-structure-fixtures.sh"
-        if [[ -x "$c62_fx" ]]; then
-          local c62_fx_out c62_fx_exit=0
-          c62_fx_out=$(bash "$c62_fx" 2>&1) || c62_fx_exit=$?
-          if [[ $c62_fx_exit -ne 0 ]]; then
-            log "  FAIL:  count-structure-fixtures — $(echo "$c62_fx_out" | tail -1) (fixture regression; hard-fail on every mode)"
+        local c63_fx="core/deploy/tools/run-count-structure-fixtures.sh"
+        if [[ -x "$c63_fx" ]]; then
+          local c63_fx_out c63_fx_exit=0
+          c63_fx_out=$(bash "$c63_fx" 2>&1) || c63_fx_exit=$?
+          if [[ $c63_fx_exit -ne 0 ]]; then
+            log "  FAIL:  count-structure-fixtures — $(echo "$c63_fx_out" | tail -1) (fixture regression; hard-fail on every mode)"
             ISSUES=$((ISSUES + 1))
           else
-            log "  OK:    count-structure-fixtures — $(echo "$c62_fx_out" | tail -1 | sed 's|  (.*||')"
+            log "  OK:    count-structure-fixtures — $(echo "$c63_fx_out" | tail -1 | sed 's|  (.*||')"
           fi
         else
-          log "  FAIL:  count-structure-fixtures — harness missing or not executable: $c62_fx (the gate would assert nothing about the predicate's discrimination)"
+          log "  FAIL:  count-structure-fixtures — harness missing or not executable: $c63_fx (the gate would assert nothing about the predicate's discrimination)"
           ISSUES=$((ISSUES + 1))
         fi
 
-        local c62_new c62_known c62_stale
-        c62_new=$(echo "$c62_out" | awk -F'\t' '$1=="FAIL"{print $2":"$3}' | paste -sd, -)
-        c62_known=$(echo "$c62_out" | awk -F'\t' '$1=="KNOWN"' | wc -l | tr -d ' ')
-        c62_stale=$(echo "$c62_out" | awk -F'\t' '$1=="STALE"{print $2}' | paste -sd, -)
+        local c63_new c63_known c63_stale
+        c63_new=$(echo "$c63_out" | awk -F'\t' '$1=="FAIL"{print $2":"$3}' | paste -sd, -)
+        c63_known=$(echo "$c63_out" | awk -F'\t' '$1=="KNOWN"' | wc -l | tr -d ' ')
+        c63_stale=$(echo "$c63_out" | awk -F'\t' '$1=="STALE"{print $2}' | paste -sd, -)
 
         # ── The enforcing arm. No mode gate, by design. ──────────────────────────
-        if [[ -n "$c62_new" ]]; then
-          log "  FAIL:  count-structure — stated count does not reconcile with the adjacent structure at: $c62_new. The remedy is to correct the count or the structure, never to add a baseline row for new drift."
+        if [[ -n "$c63_new" ]]; then
+          log "  FAIL:  count-structure — stated count does not reconcile with the adjacent structure at: $c63_new. The remedy is to correct the count or the structure, never to add a baseline row for new drift."
           ISSUES=$((ISSUES + 1))
         else
-          log "  OK:    count-structure — no unbaselined non-reconciling pair (${c62_known:-0} pre-existing pair(s) accepted via core/deploy/allowlists/count-structure-baseline.txt)"
+          log "  OK:    count-structure — no unbaselined non-reconciling pair (${c63_known:-0} pre-existing pair(s) accepted via core/deploy/allowlists/count-structure-baseline.txt)"
         fi
 
         # ── The ratchet. Committed warn: a sibling release FIXING a baselined count
         #    must never turn this check red for work outside its scope. ────────────
-        if [[ -n "$c62_stale" ]]; then
-          local c62_stale_mode
-          c62_stale_mode="$(resolve_check_mode "count-structure-baseline" "warn")"
-          case "$c62_stale_mode" in
+        if [[ -n "$c63_stale" ]]; then
+          local c63_stale_mode
+          c63_stale_mode="$(resolve_check_mode "count-structure-baseline" "warn")"
+          case "$c63_stale_mode" in
             enforce)
-              log "  FAIL:  count-structure-baseline — stale entr(ies) whose pair no longer exists or now reconciles: $c62_stale"
+              log "  FAIL:  count-structure-baseline — stale entr(ies) whose pair no longer exists or now reconciles: $c63_stale"
               ISSUES=$((ISSUES + 1))
               ;;
             *)
-              log "  WARN:  count-structure-baseline — stale entr(ies) whose pair no longer exists or now reconciles: $c62_stale (committed warn-mode: prune the row(s); a sibling release fixing a baselined count must not red-wall this check)"
+              log "  WARN:  count-structure-baseline — stale entr(ies) whose pair no longer exists or now reconciles: $c63_stale (committed warn-mode: prune the row(s); a sibling release fixing a baselined count must not red-wall this check)"
               ;;
           esac
         fi
@@ -8314,7 +8314,7 @@ cmd_check() {
   fi
 
 
-  # Check 63 — theme-token undeclared-consumer lint, TH-3 (ENFORCING) [#4197]
+  # Check 64 — theme-token undeclared-consumer lint, TH-3 (ENFORCING) [#4197]
   #
   # WHAT IT ASSERTS. Every CSS custom property CONSUMED by a themed document — after
   # resolving that document's DOCUMENTED substitution placeholders — is DECLARED in every
@@ -8352,7 +8352,7 @@ cmd_check() {
   # SCOPE — tracked DOCUMENTS (.md / .html / .htm / .svg / .xhtml) carrying BOTH a `<style>`
   # element and >=1 `var(--` consumer, with core/hooks/testdata/** exempt. Fixture trees
   # carry deliberate defects as their whole purpose, so counting them would make the gate red
-  # by construction — the same exemption Check 62 carries, for the same reason. The gate is a
+  # by construction — the same exemption Check 63 carries, for the same reason. The gate is a
   # CONTENT predicate rather than an enumerated path list, so a new themed artifact is covered
   # on creation rather than on someone remembering to register it. Live population: 2.
   #
@@ -8369,7 +8369,7 @@ cmd_check() {
   # ENFORCING BY THE CODE'S SHAPE, NOT BY A DEFAULT. Note what is absent from the FAIL arms
   # below: no `case` on any mode, no mode gate of any kind. The live population is clean at
   # this pin, so there is no pre-existing debt to baseline and no red-wall vector to hedge
-  # against — the conditions that forced Check 62 to ship a committed baseline do not hold
+  # against — the conditions that forced Check 63 to ship a committed baseline do not hold
   # here. A new undeclared consumer increments ISSUES on every run.
   #
   # THE CHECK CARRIES ITS OWN RECORD (PV-6, core/disciplines/review-discipline-principles.md
@@ -8380,43 +8380,43 @@ cmd_check() {
   #
   # Primitive: core/hooks/run-theme-token-fixtures.sh (bare invocation runs the fixture set).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 63: Theme-token undeclared-consumer lint (every var(--x) consumer is declared in every theme block; enforcing; fixture trees exempt)"
-    local c63_runner="core/hooks/run-theme-token-fixtures.sh"
-    if [[ ! -f "$c63_runner" ]]; then
-      log "  FAIL:  theme-token — runner missing: $c63_runner (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
+    log "Check 64: Theme-token undeclared-consumer lint (every var(--x) consumer is declared in every theme block; enforcing; fixture trees exempt)"
+    local c64_runner="core/hooks/run-theme-token-fixtures.sh"
+    if [[ ! -f "$c64_runner" ]]; then
+      log "  FAIL:  theme-token — runner missing: $c64_runner (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
       ISSUES=$((ISSUES + 1))
     else
       # ── The precision probe: the committed two-armed fixture set. ──────────────
-      local c63_fx_out c63_fx_rc=0
-      c63_fx_out=$(bash "$c63_runner" 2>&1) || c63_fx_rc=$?
-      log "  CTRL:  theme-token — $(echo "$c63_fx_out" | sed -n '1s/^TH-3 fixture self-test: //p')"
-      log "  CTRL:  theme-token — $(echo "$c63_fx_out" | sed -n '2s/^ *//p')"
-      if [[ $c63_fx_rc -ne 0 ]]; then
+      local c64_fx_out c64_fx_rc=0
+      c64_fx_out=$(bash "$c64_runner" 2>&1) || c64_fx_rc=$?
+      log "  CTRL:  theme-token — $(echo "$c64_fx_out" | sed -n '1s/^TH-3 fixture self-test: //p')"
+      log "  CTRL:  theme-token — $(echo "$c64_fx_out" | sed -n '2s/^ *//p')"
+      if [[ $c64_fx_rc -ne 0 ]]; then
         log "  FAIL:  theme-token-fixtures — fixture regression (hard-fail on every mode). A probe that can no longer be shown to detect AND to discriminate proves nothing by returning zero."
-        echo "$c63_fx_out" | sed 's/^/         /'
+        echo "$c64_fx_out" | sed 's/^/         /'
         ISSUES=$((ISSUES + 1))
       else
-        log "  OK:    theme-token-fixtures — $(echo "$c63_fx_out" | tail -1 | sed 's/^TH-3 fixture self-test: //; s|  *(fixtures:.*||')"
+        log "  OK:    theme-token-fixtures — $(echo "$c64_fx_out" | tail -1 | sed 's/^TH-3 fixture self-test: //; s|  *(fixtures:.*||')"
       fi
 
       # ── The enforcing arm: scan the gated corpus population. ───────────────────
-      local c63_out c63_rc=0
-      c63_out=$(bash "$c63_runner" --scan-corpus 2>&1) || c63_rc=$?
-      local c63_pop c63_res
-      c63_pop=$(echo "$c63_out" | sed -n 's/^TH-3 corpus scan: //p' | tail -1)
-      c63_res=$(echo "$c63_out" | awk -F'DENOMINATOR *: ' '/DENOMINATOR/{split($2,a," "); s+=a[1]} END{print s+0}')
-      log "  DENOM: theme-token — ${c63_pop:-unreported}; ${c63_res} consumer resolution(s) examined across the population"
+      local c64_out c64_rc=0
+      c64_out=$(bash "$c64_runner" --scan-corpus 2>&1) || c64_rc=$?
+      local c64_pop c64_res
+      c64_pop=$(echo "$c64_out" | sed -n 's/^TH-3 corpus scan: //p' | tail -1)
+      c64_res=$(echo "$c64_out" | awk -F'DENOMINATOR *: ' '/DENOMINATOR/{split($2,a," "); s+=a[1]} END{print s+0}')
+      log "  DENOM: theme-token — ${c64_pop:-unreported}; ${c64_res} consumer resolution(s) examined across the population"
 
-      case "$c63_rc" in
+      case "$c64_rc" in
         0)
           log "  OK:    theme-token — no undeclared consumer in any gated document"
           ;;
         1)
-          log "  FAIL:  theme-token — a consumed custom property is not declared in every theme block at: $(echo "$c63_out" | awk '/^  MISSING /{print $2}' | sort -u | paste -sd, -). The remedy is to declare the token (or correct the consumer), never to widen the manifest to hide it."
+          log "  FAIL:  theme-token — a consumed custom property is not declared in every theme block at: $(echo "$c64_out" | awk '/^  MISSING /{print $2}' | sort -u | paste -sd, -). The remedy is to declare the token (or correct the consumer), never to widen the manifest to hide it."
           ISSUES=$((ISSUES + 1))
           ;;
         *)
-          log "  FAIL:  theme-token — INDETERMINATE: $(echo "$c63_out" | sed -n 's/^  VERDICT  *: INDETERMINATE (PV-1) — //p' | sort -u | paste -sd'; ' -). The denominator was not established, so a zero here would be untrustworthy — this is not a clean result."
+          log "  FAIL:  theme-token — INDETERMINATE: $(echo "$c64_out" | sed -n 's/^  VERDICT  *: INDETERMINATE (PV-1) — //p' | sort -u | paste -sd'; ' -). The denominator was not established, so a zero here would be untrustworthy — this is not a clean result."
           ISSUES=$((ISSUES + 1))
           ;;
       esac
