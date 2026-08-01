@@ -111,6 +111,8 @@ a pointer to the latest analysis folder. It exists so a **deployed consumer** (t
 skill) can read the conformance flag off any instance — not only the producing one. Schema:
 mode-spec §7b.
 
+**Emitted counts carry probe records.** The conformance scorecard, the classification and fragmentation-group counts, and the single `## Coverage Gap` aggregate row each state the denominator examined and the control that proves the probe detects, per [`review-discipline-principles.md`](../../../core/disciplines/review-discipline-principles.md) § 1 Rule 15 + § 8 Probe Validity — `PV-6` binds an emitting instrument, so a run whose output states only a finding count cannot be read as "zero divergences" rather than "nothing examined".
+
 ---
 
 ## §5 Baseline Continuity
