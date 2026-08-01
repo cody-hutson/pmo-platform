@@ -6,6 +6,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.04 | check-enforcement-fidelity | 2026-08-01 | — | #4334 | [notes/v4.04_RELEASE_NOTES.md](notes/v4.04_RELEASE_NOTES.md) |
 | v4.03 | closeout-output-set-integrity | 2026-08-01 | — | #4333 | [notes/v4.03_RELEASE_NOTES.md](notes/v4.03_RELEASE_NOTES.md) |
 | v4.02 | release-closeout-integrity | 2026-07-31 | — | #4330 | [notes/v4.02_RELEASE_NOTES.md](notes/v4.02_RELEASE_NOTES.md) |
 | v4.01 | decision-audit-and-learning | 2026-07-30 | — | #4167 | [notes/v4.01_RELEASE_NOTES.md](notes/v4.01_RELEASE_NOTES.md) |
