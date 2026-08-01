@@ -1245,6 +1245,29 @@ install_hooks() {
     printf 'rm-file:%s\n' "${posawk_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
+  # Co-deploy the reference-durability detector constants into .claude/hooks/lib/.
+  # block-fragile-refs.sh sources it from ${HOOK_DIR}/lib/fragile-ref-patterns.sh at runtime
+  # to obtain EVERY detector pattern it evaluates; the source lib lives at core/hooks/lib/
+  # (shared with the fixture-runner and the reference-durability CI), which the deployed
+  # .claude/hooks/ cannot reach. Without this copy the hook has no patterns at all — and an
+  # unset pattern is an EMPTY ERE that matches every line, so a missing copy would INVERT the
+  # detector rather than disable it. The hook therefore fails CLOSED in enforce (blocking every
+  # durable-corpus write) and stands down entirely in warn/off. Sourced lib, not a registered
+  # hook (no block-* name), so hook-registry checks ignore it. HARD dependency; mirrors the
+  # positional-issueref.awk co-deploy above.
+  local patternslib_src="${SOURCE_REPO}/core/hooks/lib/fragile-ref-patterns.sh"
+  local patternslib_dst="${WORKSPACE_ROOT}/.claude/hooks/lib/fragile-ref-patterns.sh"
+  if [ ! -r "${patternslib_src}" ]; then
+    warn "fragile-ref-patterns.sh not found at ${patternslib_src}; block-fragile-refs will fail CLOSED in enforce (all detectors unavailable)"
+  elif [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would co-deploy fragile-ref-patterns.sh → ${patternslib_dst}"
+  else
+    mkdir -p "${WORKSPACE_ROOT}/.claude/hooks/lib"
+    cp "${patternslib_src}" "${patternslib_dst}"
+    info "INSTALLED: fragile-ref-patterns.sh (block-fragile-refs detector constants)"
+    printf 'rm-file:%s\n' "${patternslib_dst}" >> "${ROLLBACK_OPS_FILE}"
+  fi
+
   # Co-deploy the master-activation gate lib into .claude/hooks/lib/. Every block-* hook
   # sources it from ${HOOK_DIR}/lib/master-enable.sh at runtime (#310) to resolve the
   # durable opt-in master-enable state (default OFF). A MISSING copy is

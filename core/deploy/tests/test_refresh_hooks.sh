@@ -7,7 +7,10 @@
 #
 # Asserts the checksum-aware, non-interactive refresh contract:
 #   1. a STALE deployed hook is refreshed to source
-#   2. a never-deployed co-shipped primitive (positional-issueref.awk) is co-deployed
+#   2. a never-deployed co-shipped primitive is co-deployed — asserted for BOTH hook-lib
+#      primitives (positional-issueref.awk and fragile-ref-patterns.sh), because the
+#      co-deploy list in setup-workspace.sh is enumerated per named file, so each primitive
+#      is a separate way for the list to be incomplete
 #   3. the operator's .mode is preserved (install-if-missing)
 #   4. an operator-EDITED hook (diverged from its recorded baseline) is preserved, not clobbered
 #   5. a true no-op (all hooks match source) emits ZERO "REFRESHED" (so update.sh's EX_NOCHANGE
@@ -39,7 +42,7 @@ deploy_ws() {
   local ws="$1" h
   mkdir -p "${ws}/.claude/hooks/lib"
   for h in "${REPO_ROOT}/core/hooks/"*.sh; do cp "${h}" "${ws}/.claude/hooks/"; done
-  cp "${REPO_ROOT}/core/hooks/lib/positional-issueref.awk" "${REPO_ROOT}/core/hooks/lib/dep-resolve.sh" "${ws}/.claude/hooks/lib/"
+  cp "${REPO_ROOT}/core/hooks/lib/positional-issueref.awk" "${REPO_ROOT}/core/hooks/lib/dep-resolve.sh" "${REPO_ROOT}/core/hooks/lib/fragile-ref-patterns.sh" "${ws}/.claude/hooks/lib/"
   cp "${REPO_ROOT}/core/deploy/tools/path-leak-patterns.sh" "${ws}/.claude/hooks/" 2>/dev/null || true
   printf 'warn\n' > "${ws}/.claude/hooks/.mode"
   # record baselines = current source SHAs
@@ -57,6 +60,7 @@ printf '\nCase 1-3: stale hook refreshed · missing awk co-deployed · .mode pre
 WS="${SBX}/ws1"; deploy_ws "${WS}"
 printf '#!/bin/bash\n# STALE\nexit 0\n' > "${WS}/.claude/hooks/block-gh-path-leak.sh"   # stale
 rm -f "${WS}/.claude/hooks/lib/positional-issueref.awk"                                 # never-deployed
+rm -f "${WS}/.claude/hooks/lib/fragile-ref-patterns.sh"                                 # never-deployed
 # make the stale hook look edited-from-baseline? No — record its baseline as the source SHA so
 # it is treated as an unedited (old) platform copy and gets refreshed:
 python3 - "${REPO_ROOT}" "${WS}/.claude/.workspace-setup.state" <<'PY'
@@ -73,6 +77,11 @@ PY
 OUT="$(refresh "${WS}")"
 grep -q 'path_leak_scan_line' "${WS}/.claude/hooks/block-gh-path-leak.sh" && report "stale hook refreshed to source" 1 || report "stale hook refreshed to source" 0 "still stale"
 [ -f "${WS}/.claude/hooks/lib/positional-issueref.awk" ] && report "never-deployed awk co-deployed" 1 || report "never-deployed awk co-deployed" 0
+# Same assertion for the detector-constant lib. It is a SEPARATE named entry in
+# setup-workspace.sh's co-deploy list, so the awk's presence proves nothing about it — and its
+# absence is worse than the awk's: block-fragile-refs.sh reads EVERY pattern from this file, so
+# a missing copy fails the hook CLOSED in enforce and blocks every durable-corpus write.
+[ -f "${WS}/.claude/hooks/lib/fragile-ref-patterns.sh" ] && report "never-deployed detector constants co-deployed" 1 || report "never-deployed detector constants co-deployed" 0
 [ "$(cat "${WS}/.claude/hooks/.mode")" = "warn" ] && report ".mode preserved (operator choice)" 1 || report ".mode preserved (operator choice)" 0
 
 printf '\nCase 4: operator-edited hook preserved (not clobbered)\n'
