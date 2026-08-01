@@ -10,6 +10,9 @@
 #     (output-format.md, operational-artifacts.md — #316; regression-checks.md —
 #      #94, the case that broke the pmo-skill-editor rebuild when the two former
 #      hand-synced resolver copies diverged)
+#   - tracker-schemas.md                        -> core/schemas/<name>
+#     (#4178 — the canonical half of a registered complementary pair; a DIFFERENT
+#      source root from arm 1, which is why it has its own arm)
 #   - template-*.md                             -> core/standards/<name>
 #   - everything else (*-template.{md,csv}, …)  -> operations/templates/<name>
 #
@@ -70,6 +73,8 @@ echo "── resolve_template_sync_source: canonical-source fixture table ──
 assert_resolve "core/standards/output-format.md"         "output-format.md"         "explicit (#316)"
 assert_resolve "core/standards/operational-artifacts.md" "operational-artifacts.md" "explicit (#316)"
 assert_resolve "core/standards/regression-checks.md"     "regression-checks.md"     "explicit (#94 — the drift that broke the rebuild)"
+# Arm 1b — the complementary-pair canonical -> core/schemas/ (a DIFFERENT root)
+assert_resolve "core/schemas/tracker-schemas.md"         "tracker-schemas.md"       "explicit (#4178 — core/schemas/, NOT core/standards/)"
 # Arm 2 — template-*.md -> core/standards/
 assert_resolve "core/standards/template-storage.md"      "template-storage.md"      "template-*.md standard"
 assert_resolve "core/standards/template-taxonomy.md"     "template-taxonomy.md"     "template-*.md standard"
@@ -79,6 +84,36 @@ assert_resolve "operations/templates/raid-log-template.csv"            "raid-log
 assert_resolve "operations/templates/communications-tracker-template.md" "communications-tracker-template.md" "*-template.md default -> operations"
 assert_resolve "operations/templates/key-terms-glossary-template.csv"  "key-terms-glossary-template.csv"  ".csv default -> operations"
 assert_resolve "operations/templates/people-roster-template.yaml"      "people-roster-template.yaml"      "non-.md non-template-* default -> operations"
+
+echo ""
+echo "── Every resolved canonical must EXIST on disk ───────────────────────────"
+# The fixture table above pins the resolver's STRING output. This guard pins the
+# consequence: a basename that no arm claims falls to the default arm and resolves
+# to a path that may not exist at all, which is a silent-until-deploy failure —
+# the always-enforce injection check reports "canonical missing from registry" and
+# the packager returns non-zero on every build of the owning skill.
+#
+# tracker-schemas.md is the live instance: it matches neither the explicit
+# shared-standards set nor template-*.md, so WITHOUT its own arm it resolves to
+# operations/templates/tracker-schemas.md — a third path that is not either half
+# of the pair and does not exist. Delete the arm and this guard fails; that is
+# what makes the arm's necessity asserted rather than asserted-about.
+REPO_ROOT="$(cd "${DEPLOY_DIR}/../.." && pwd)"
+assert_resolved_exists() {
+  local _name="$1" _note="$2" _got
+  _got="$(resolve_template_sync_source "$_name")"
+  if [[ -f "$REPO_ROOT/$_got" ]]; then
+    PASS_COUNT=$((PASS_COUNT + 1))
+    printf '  ok   %-34s -> %-44s exists  %s\n' "$_name" "$_got" "$_note"
+  else
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    printf '  FAIL %-34s -> %s DOES NOT EXIST  (%s)\n' "$_name" "$_got" "$_note"
+  fi
+}
+assert_resolved_exists "tracker-schemas.md"   "#4178 complementary-pair canonical — arm removal makes this the default arm's non-existent path"
+assert_resolved_exists "regression-checks.md" "#94 — the basename whose mis-resolution broke a package rebuild at release-cut"
+assert_resolved_exists "template-storage.md"  "arm 2 control"
+assert_resolved_exists "raid-log-template.csv" "default-arm control"
 
 echo ""
 echo "── Drift guard: the resolver is single-sourced (no divergent 2nd copy) ───"

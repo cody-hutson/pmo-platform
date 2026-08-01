@@ -5,7 +5,34 @@ name: Release tooling smoke
 #              checks when release tooling or the RELEASE_LOG schema changes — (1) the
 #              Stage 13 close-out automation (self-test + corpus-path smoke), the
 #              version allocator claim-version.sh --self-test, the release-body drift
-#              check check-release-body-drift.sh --self-test, AND the blast-radius tool
+#              check check-release-body-drift.sh --self-test, the Stage-13 close-out
+#              learnings-register producer produce-learnings-register.sh --self-test
+#              (whose assertions pin the read-model contract it feeds: every canonical
+#              marker survives verbatim, and the L<n>/A<n> reflection rows stay
+#              placeholder-bearing), the corpus-home tolerance conformance suite
+#              (test_corpus_home_tolerance.sh — CH-1..CH-4 of
+#              corpus-home-adapter-constraints.md; it ARMS STRUCTURALLY, by
+#              grepping the comment-stripped text of automated-closeout.sh for
+#              instance-corpus resolution vocabulary — pmo_instance_path,
+#              PMO_INSTANCE_PATH, lib-instance-path, corpus_home, an inlined
+#              .../personal/pmo-instance idiom — or, failing that, on fixture A
+#              exiting 0; while neither holds it reports PENDING-SEAM and exits 0.
+#              Once armed it asserts BY CONTENT rather than by exit code alone:
+#              CH-1, an absent instance-corpus root exits 0 (any non-zero,
+#              including a crash, fails); CH-2, a present one exits 0 AND fixture
+#              A's capture carries a per-path resolution record for every corpus
+#              label and no N/A token; CH-4, fixture B's capture carries a per-path
+#              N/A record for every corpus label — a bare N/A somewhere in the
+#              capture does not satisfy it. CH-3 (R1/R2) gates unconditionally,
+#              armed or not. The per-path record vocabulary is derived at run time
+#              from the in-tree baseline's own output rather than hardcoded, and the
+#              arming detector's own non-vacuity is asserted in-suite against
+#              planted / clean / comment-only controls. COVERAGE BOUNDARY, stated
+#              because it is real: arming is a token match, so a resolver that names
+#              none of that vocabulary AND leaves fixture A non-zero is not
+#              detected — the residue is bounded by the needle, not by how many
+#              channels the fixture seeds), AND the
+#              blast-radius tool
 #              family (doc-tracer default-path regression under a normalized diff + the
 #              domain-fan-out software import-graph scanner) in the closeout-smoke job;
 #              (2) each of the three core/deploy/tools node-graph tools runs its
@@ -23,7 +50,25 @@ name: Release tooling smoke
 #   falsification: on a PR touching the close-out tooling, break a corpus path the
 #                  script asserts -> the closeout-smoke job fails; regress a
 #                  claim-version.sh or check-release-body-drift.sh self-test fixture ->
-#                  the closeout-smoke job fails; break the schema-v1 emit so the doc
+#                  the closeout-smoke job fails; make produce-learnings-register.sh seed
+#                  a triple value into the register's L<n>/A<n> reflection rows (or drop
+#                  a canonical marker from the rendered register) -> its T2 / T1
+#                  assertions fail and the closeout-smoke job fails;
+#                  make --check-paths instance-aware with a HARD-FAIL when the
+#                  instance-corpus root is absent -> the corpus-home tolerance suite's
+#                  structural detector arms and rule R3 fires on fixture B's non-zero
+#                  exit, so the closeout-smoke job fails (falsifiable TODAY by running
+#                  the suite with CLOSEOUT_SH_UNDER_TEST pointed at a copy patched
+#                  that way); make it answer a PRESENT instance corpus with an
+#                  unconditional exit 0 that resolves nothing -> R7 fires on fixture
+#                  A's missing per-path records (CH-2); answer an ABSENT one by
+#                  downgrading every path to OK alongside one unrelated N/A banner ->
+#                  R4 fires on the missing per-path N/A records (CH-4); break the
+#                  arming needle so it matches nothing, or drop its comment filter ->
+#                  the suite's own P9 / P11 controls fail;
+#                  or regress the in-tree baseline / stop detecting a broken corpus
+#                  path -> its R1 / R2 rules fail today, with no seam required;
+#                  break the schema-v1 emit so the doc
 #                  tracer's normalized output changes -> the blast-radius tool-family
 #                  test fails; regress a node-graph tool's --self-test -> the
 #                  node-graph-tools-selftest job fails; add a class to
@@ -55,13 +100,17 @@ name: Release tooling smoke
 # A warn-only gate is blind to false negatives — this keeps the gate honest, the
 # same discipline reference-durability.yml applies to its fragile-ref detector.
 #
-# Two sibling offline self-tests run in the same closeout-smoke job for the same
+# Three sibling offline self-tests run in the same closeout-smoke job for the same
 # anti-rot reason: the version allocator (claim-version.sh --self-test and its
-# hermetic fixture suite) and the release-body drift check
-# (check-release-body-drift.sh --self-test). Both are hermetic — fixture-driven,
+# hermetic fixture suite), the release-body drift check
+# (check-release-body-drift.sh --self-test), and the Stage-13 close-out
+# learnings-register producer (produce-learnings-register.sh --self-test). All three
+# are hermetic — fixture-driven,
 # with any gh/network call degrading to a self-test-internal N/A — so they gate on
-# exit code, credential-free, exactly like the close-out self-test above. Their
-# fixtures previously ran only when invoked manually.
+# exit code, credential-free, exactly like the close-out self-test above. The
+# register producer goes one better: its seed source is INJECTED via --triple-file
+# fixtures, so no synthesizer / event-log / gh / network call is reachable at all.
+# Their fixtures previously ran only when invoked manually.
 #
 # A second job — node-graph-tools-selftest — runs the committed --self-test of the
 # three v3.55 node-graph stdlib tools (stamp-node-frontmatter / backfill-relationship-
@@ -163,6 +212,15 @@ jobs:
         # Gate on exit code.
         run: bash release/tools/check-release-body-drift.sh --self-test
 
+      - name: Self-test — produce-learnings-register.sh (offline; template render + seed fixtures)
+        # The Stage-13 Phase A7.2 register producer. Hermetic by construction: the seed
+        # source is injected via --triple-file fixtures, so no synthesizer / event-log /
+        # gh / network call is reachable, and --print-path touches no filesystem. Its
+        # assertions pin the contract its live consumer (compute-close-class-telemetry.sh)
+        # reads — canonical markers survive verbatim, L<n>/A<n> rows stay placeholder-
+        # bearing. Gate on exit code.
+        run: bash release/tools/produce-learnings-register.sh --self-test
+
       - name: Blast-radius tool-family tests (schema-v1 lib + domain fan-out)
         # Exercises the blast-radius doc tracer's default-path regression under a
         # NORMALIZED diff (proves the shared-lib refactor is a no-op) AND the
@@ -237,6 +295,45 @@ jobs:
             exit 1
           fi
           echo "Precision probe OK — broken corpus path correctly failed --check-paths (exit $rc)."
+
+      - name: Corpus-home tolerance conformance (offline; structurally armed)
+        # Asserts CH-1, CH-2 and CH-4 of
+        # release/references/standards/corpus-home-adapter-constraints.md against the
+        # real --check-paths probe once instance-aware resolution is DETECTED in it,
+        # plus CH-3 unconditionally, using four hermetic mktemp fixtures.
+        #
+        # TODAY no instance-resolution vocabulary appears outside comments in
+        # automated-closeout.sh, fixtures A and B are expected-red, the suite reports
+        # PENDING-SEAM and exits 0 — it CANNOT redden a PR before the seam lands.
+        #
+        # Its gating rules run from day one: a regressed in-tree baseline (R1), a
+        # --check-paths that stopped detecting a broken corpus path (R2), a
+        # degenerate resolver (R5), or a broken doc<->test binding (R6) all exit 1.
+        #
+        # ARMING IS STRUCTURAL, not an exit-code proxy. The suite greps the
+        # comment-stripped text of the script under test for instance-corpus
+        # resolution vocabulary; it also arms behaviourally if fixture A exits 0. The
+        # earlier `fixture A passes` proxy let an instance-aware resolver through
+        # whenever it read a channel the fixture does not seed, resolved a layout the
+        # fixture does not model, or crashed — three green escapes that are now red.
+        # Once armed the tolerance rules read the fixtures' OUTPUT, not just their
+        # exit codes, so a resolver that returns 0 while resolving nothing (CH-2) or
+        # that downgrades unresolved paths to OK behind a single N/A banner (CH-4)
+        # cannot reach PASS-SEAM-LANDED. No cutoff date to set, no flag to flip, and
+        # no reviewer who has to remember the standard exists. That matters because
+        # --check-paths is a REQUIRED step of this job: a HARD-FAIL-on-absence
+        # resolver would redden every PR raised from a fresh clone or a CI runner,
+        # for a condition that is not a defect.
+        #
+        # Coverage boundary: a resolver naming none of that vocabulary AND leaving
+        # fixture A non-zero is not detected. Extending ARMING_NEEDLE in the suite is
+        # the one-line remedy; the suite asserts that needle's non-vacuity itself.
+        #
+        # Hermetic: mktemp fixtures only; no network, no gh, no git remote, no write
+        # to the checkout. HOME / CLAUDE_WORKSPACE_ROOT are pinned to an empty temp
+        # dir per fixture so an ambient operator instance cannot leak in and defeat
+        # the absence fixture.
+        run: bash release/tools/tests/test_corpus_home_tolerance.sh
 
   node-graph-tools-selftest:
     name: Node-graph stdlib tools self-test (Ubuntu)

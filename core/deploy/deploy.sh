@@ -295,6 +295,34 @@ TEMPLATE_SYNC_MAP=(
   "project-initiator:change-log-template.md:references/templates/change-log-template.md"
   "project-initiator:raci-template.md:references/templates/raci-template.md"
   "project-initiator:stakeholder-register-template.csv:references/templates/stakeholder-register-template.csv"
+  # ── Registered complementary pair: tracker-manager (#4178 — 1 entry) ──
+  # NOT a template mirror. tracker-manager's SKILL.md cites
+  # core/schemas/tracker-schemas.md four times for the Tracker 5-10 field sets,
+  # and the shipped package carried only the skill-local half — so from the
+  # package root those citations resolved to nothing and the skill's own
+  # "if neither copy defines it, BLOCK" rule had to fire on 6 of 10 trackers.
+  #
+  # The target is the canonical's REPO-RELATIVE path, not a references/ path, so
+  # the existing citations resolve verbatim with no SKILL.md edit. Check 13 then
+  # asserts the injected copy is byte-identical to the canonical at both runtime
+  # targets — byte-identity between the canonical and ITS OWN injected copy,
+  # which is exactly right; it asserts nothing between the two halves of the
+  # complementary pair, whose relationship Check 13b owns.
+  #
+  # WHY A MAP ENTRY AND NOT A HAND-CODED INJECTION. Two builders stage a skill:
+  # build-skill-packages.sh build_one() writes the committed .skill, and
+  # deploy.sh build_skill_to_dir() stages the rebuild Check 7 hashes against the
+  # committed sidecar. Their agreement is declared in a comment and enforced by
+  # nothing. Injecting in one alone makes the two hashes disagree BY
+  # CONSTRUCTION — a permanent STALE that no rebuild can clear, on an
+  # always-enforce check. Both builders consume THIS array from this one
+  # declaration (build-skill-packages.sh extracts it at runtime), so a map entry
+  # keeps them aligned by construction instead of by hope.
+  #
+  # The resolver arm for this basename is load-bearing: see
+  # core/deploy/lib-template-sync-source.sh. Without it the basename falls to
+  # the default arm and resolves to a path that does not exist.
+  "tracker-manager:tracker-schemas.md:core/schemas/tracker-schemas.md"
 )
 
 # ─── Shared Functions ────────────────────────────────────────────────────────
@@ -693,14 +721,18 @@ _vf_compute_verdict() {
 #                          entry / NOTES file under version-stem OR milestone-slug)
 # It is an aggregating invariant, NOT a parallel checker.
 #
-# CUTOVER + DORMANCY (mirrors Check 32/47): the full assertion runs only for rows
-# at/after $cc_cutoff (CLOSE_COMPLETENESS_CHECK_CUTOFF), which DEFAULTS to the
-# __none__ sentinel — so the gate is DORMANT by default (no historical false-positive
-# storm; reflexive-pipeline-loop honored — the introducing release v2.37 closes under
-# the pre-merge runbook and the cutover is anchored strictly AFTER its merge). The
-# network sub-checks (Surface-1 Release + body-drift) need `gh`; offline ⇒ N/A on the
-# lifecycle surface, fail-closed on the gate surface (the merge gate must not certify
-# completeness blind, per the version-freeness FM-2 precedent).
+# CUTOVER (mirrors Check 32/47): the full assertion runs only for rows at/after
+# $cc_cutoff (CLOSE_COMPLETENESS_CHECK_CUTOFF), which ships as a COMMITTED DEFAULT —
+# so the gate is ARMED by default and dormancy is an explicit opt-out (__none__), NOT
+# the resting state (#4176). The cutoff VALUE is what prevents a historical
+# false-positive storm and honors the reflexive-pipeline-loop exemption (the
+# introducing release v2.37 closed under the pre-merge runbook; the cutover is anchored
+# strictly AFTER its merge). The network sub-checks (Surface-1 Release + body-drift)
+# need `gh`; offline ⇒ N/A on the lifecycle surface, fail-closed on the gate surface
+# (the merge gate must not certify completeness blind, per the version-freeness FM-2
+# precedent). NOTE: the SEPARATE network cutover CLOSE_COMPLETENESS_RELEASE_CUTOFF
+# below is still __none__-defaulted, so those two sub-checks remain dormant — "armed"
+# refers to the ROW cutover only.
 #
 # LOG-ROW BLIND SPOT (inherited, documented): like Check 32, this gate is LOG-row-
 # driven — a close that never wrote its `RELEASE_LOG` row is invisible to it. LOG-row
@@ -838,12 +870,30 @@ _cc_compute_verdict() {
   local surface="${1:-lifecycle}"
   local cc_log="${CC_LOG:-release/releases/RELEASE_LOG.md}"
   local cc_allowlist="${CC_ALLOWLIST:-.claude/skip-close-completeness-check.txt}"
-  local cc_cutoff="${CLOSE_COMPLETENESS_CHECK_CUTOFF:-__none__}"
+  # ARMED BY COMMITTED DEFAULT (#4176). The cutover ships with its value rather than
+  # awaiting a later stamping step — the Check 61 convention (see the SELF-ARMING
+  # CUTOVER note below): "A version literal would have needed stamping by a later
+  # spoke — a step that can be forgotten, leaving the gate permanently dormant."
+  # Check 48 is the proof: it shipped at v2.37 expecting a stamp and gated nothing
+  # for 62 releases.
+  #   Why v3.89: the OLDEST cutoff with zero standing findings, so the gate asserts the
+  #   maximum row set against a CLEAN warn-log baseline — the precondition that makes
+  #   the ">=3-day review with zero false positives" flip threshold in
+  #   .github/close-completeness.enforce evaluable at all. v3.88 arms with a permanent
+  #   resident finding, which would make "zero false positives" structurally
+  #   unobservable. (Posture is unchanged by arming: warn on both surfaces.)
+  #   Arming baseline: cutoff resolves to LOG row `v3.89`, 14 VERIFIED rows in scope,
+  #   0 findings. A different in-scope count means a different arm row — the runtime
+  #   assertion after the row loop names the row that actually armed.
+  # Setting CLOSE_COMPLETENESS_CHECK_CUTOFF=__none__ still re-dormants the gate.
+  local cc_cutoff="${CLOSE_COMPLETENESS_CHECK_CUTOFF:-v3.89}"
 
-  # Dormant by default — the cutover sentinel keeps the gate from retroactively
-  # flagging historical VERIFIED rows (and honors the reflexive-loop exemption).
+  # Dormancy is now an EXPLICIT opt-out, not the default: the __none__ sentinel is the
+  # escape hatch by which an operator or a CI job can re-dormant the gate (e.g. to honor
+  # a reflexive-pipeline-loop exemption), and the cutoff VALUE — not the dormancy — is
+  # what keeps the gate from retroactively flagging historical VERIFIED rows.
   if [[ "$cc_cutoff" == "__none__" ]]; then
-    printf 'SKIP close-completeness gate dormant (CLOSE_COMPLETENESS_CHECK_CUTOFF unset) — opt in by setting it to the first post-v2.37-merge release\n'
+    printf 'SKIP close-completeness gate re-dormanted explicitly (CLOSE_COMPLETENESS_CHECK_CUTOFF=__none__) — unset it to restore the committed armed default\n'
     return 0
   fi
   if [[ ! -f "$cc_log" ]]; then
@@ -882,7 +932,7 @@ _cc_compute_verdict() {
         print v "|" ms "|" tg "|" st
       }') || cc_rows=""
 
-  local cc_past_cutoff=false cc_targets=0 cc_findings=0 cc_detail="" _last_verified=""
+  local cc_past_cutoff=false cc_targets=0 cc_findings=0 cc_detail="" _last_verified="" _cc_arm_row=""
   local _row _ver _ms _tag _state _rf
   while IFS= read -r _row; do
     [[ -n "$_row" ]] || continue
@@ -894,6 +944,7 @@ _cc_compute_verdict() {
     # Cutover gate (walk LOG order; arm on first cutoff-prefix match).
     if [[ "$cc_past_cutoff" == "false" && "$_ver" == "$cc_cutoff"* ]]; then
       cc_past_cutoff=true
+      _cc_arm_row="$_ver"          # #4176: record WHICH row armed, for the R8 assertion
     fi
     [[ "$cc_past_cutoff" == "true" ]] || continue
 
@@ -910,6 +961,30 @@ _cc_compute_verdict() {
       cc_findings=$((cc_findings + $(printf '%s\n' "$_rf" | /usr/bin/grep -c . )))
     fi
   done <<<"$cc_rows"
+
+  # R8 mis-arm assertion (#4176). The cutover arm above is a string PREFIX match, not a
+  # version comparison: `v3.9` silently arms at `v3.90` and still verdicts clean, because
+  # the shortened prefix lands on a clean sub-range. Name the row that actually armed on
+  # every armed run, and WARN when it is not the literal.
+  # Non-fatal by design — a mis-typed cutoff is a CONFIG error, not a completeness
+  # finding, and must not become an INCOMPLETE verdict under a future enforce posture
+  # (that would block a PR on a configuration error rather than a completeness defect).
+  # STDERR ONLY: the stdout protocol line (CLEAN/INCOMPLETE/SKIP) is parsed by string
+  # surgery at all three call sites (Check 48, the probe, the self-test) — do not touch it.
+  if [[ -n "$_cc_arm_row" ]]; then
+    if [[ "$_cc_arm_row" != "$cc_cutoff" ]]; then
+      printf 'close-completeness: WARNING — cutoff %s armed at LOG row %s (prefix match, not an exact row). Scope is %s VERIFIED row(s); verify this is intended.\n' \
+        "$cc_cutoff" "$_cc_arm_row" "$cc_targets" >&2
+    else
+      printf 'close-completeness: armed at LOG row %s; %s VERIFIED row(s) in scope\n' \
+        "$_cc_arm_row" "$cc_targets" >&2
+    fi
+  else
+    # A cutoff matching NO row yields CLEAN 0 — a vacuous pass that READS as success.
+    # Anti-vacuity: say so out loud rather than letting zero assertions report OK.
+    printf 'close-completeness: WARNING — cutoff %s matched NO LOG row; zero rows asserted (the gate is vacuously clean).\n' \
+      "$cc_cutoff" >&2
+  fi
 
   # (e-aggregate) .version stamp — must exist AND equal the most-recent VERIFIED
   # in-scope release. N/A (no finding) when .version is absent (version-less /
@@ -930,6 +1005,87 @@ _cc_compute_verdict() {
     # Detail to stderr; the verdict line (stdout) carries the counts.
     printf '%s' "$cc_detail" | /usr/bin/sed '/^$/d' >&2
     printf 'INCOMPLETE %s %s\n' "$cc_findings" "$cc_targets"
+  fi
+  return 0
+}
+
+# ─── Register runner-resolution (Check 62) — #4208 ────────────────────────────────
+# Check 62 — register-runner-resolution (advisory; deploy-time-only)
+# gate-efficacy: posture=advisory  enforcement-surface=deploy-time-only
+#   invariant: every gate-coverage register row declaring a `runner-def:` resolution
+#              pointer RESOLVES — the named runner-definition file exists AND still
+#              contains the declared anchor (condition R1 of the standard's § Resolution).
+#   falsification: delete the `RCP-01` anchor from core/standards/regression-checks.md and
+#                  leave the row naming it -> UNRESOLVED (deploy.sh --self-test group RR-2).
+#
+# WHY THIS EXISTS. The release that introduced the class-3 obligation shipped three
+# register rows naming `pmo-skill-editor` Mode C as their runner while Mode C's encoded
+# check set carried ZERO of their predicates. The rows satisfied the convention's letter
+# and asserted nothing. The remedy attempted at the time was a REVIEWER INSTRUCTION
+# ("verify the named runner actually carries the check") and it failed on its own FIRST
+# application. This check is that instruction turned into a computation — which is the
+# whole difference between an obligation that fires and one that must be remembered.
+#
+# WHAT IT ASSERTS, AND WHAT IT DOES NOT. It asserts R1 — CARRIED: the named
+# runner-definition file exists and contains the declared anchor. It does NOT assert R2
+# (reached), does NOT read the anchor's body, and cannot distinguish a well-written
+# predicate from a stub carrying the right heading. Naming that bound is the difference
+# between a gate and gate theatre — a control that reads as enforcement while functioning
+# as a no-op is worse than no control, which is this milestone's whole thesis.
+#
+# ANTI-VACUITY. A register carrying zero resolution pointers verdicts NOSET, never CLEAN,
+# and an unreadable standard verdicts NOSET too: a check whose input set is empty must SAY
+# so (the Check 61 DE-9 / Check 13b CP-4 precedent). The CLEAN verdict carries the live
+# pointer COUNT, so a parser that silently stopped matching surfaces as a count change
+# rather than as a quiet pass.
+#
+# PARSING. Pointers are read as `runner-def: <path>::<anchor>` with path and anchor
+# restricted to a conservative character class, so the standard's own PROSE mentions of
+# the bare token (e.g. "declaring a `runner-def:` resolution pointer") cannot parse as
+# declarations — a backtick is outside the class, so the match fails rather than
+# half-succeeding.
+_rr_compute_verdict() {
+  local std="${RR_STANDARD:-core/standards/gate-efficacy-standard.md}"
+  local root="${RR_ROOT:-.}"
+
+  if [[ ! -f "$std" ]]; then
+    printf 'NOSET|gate-efficacy standard not readable at %s — no register to resolve\n' "$std"
+    return 0
+  fi
+
+  local decls
+  decls="$(/usr/bin/grep -o 'runner-def:[[:space:]]*[A-Za-z0-9._/-]\{1,\}::[A-Za-z0-9._-]\{1,\}' "$std" 2>/dev/null || true)"
+
+  if [[ -z "$decls" ]]; then
+    printf 'NOSET|register at %s declares zero runner-def resolution pointers — the check would assert nothing\n' "$std"
+    return 0
+  fi
+
+  local total=0 bad=0 detail=""
+  local d body p a
+  while IFS= read -r d; do
+    [[ -n "$d" ]] || continue
+    total=$((total + 1))
+    body="${d#*runner-def:}"
+    body="${body#"${body%%[![:space:]]*}"}"   # strip leading whitespace
+    p="${body%%::*}"
+    a="${body#*::}"
+    if [[ ! -f "$root/$p" ]]; then
+      bad=$((bad + 1))
+      detail="${detail}    runner-def ${p}::${a} — runner-definition file not found"$'\n'
+      continue
+    fi
+    if ! /usr/bin/grep -qF -- "$a" "$root/$p"; then
+      bad=$((bad + 1))
+      detail="${detail}    runner-def ${p}::${a} — file exists but does NOT carry anchor '${a}' (R1 fails: named runner cannot surface this predicate)"$'\n'
+    fi
+  done <<< "$decls"
+
+  if [[ $bad -eq 0 ]]; then
+    printf 'CLEAN|%s\n' "$total"
+  else
+    printf '%s' "$detail" | /usr/bin/sed '/^$/d' >&2
+    printf 'UNRESOLVED|%s|%s\n' "$bad" "$total"
   fi
   return 0
 }
@@ -1431,6 +1587,226 @@ remove_mirror_subtree() {
     return 1
   fi
   return 0
+}
+
+# ─── Complementary-pair ownership (Check 13b passes 2/3/4) — #4178 ───────────
+# The registered-complementary-pair predicate, factored to TOP LEVEL so the
+# lifecycle Check 13b (inside cmd_check, routing each finding through
+# flag_warn_or_issue) and `--self-test` group CP drive ONE body (the DD1 pattern
+# of _vf_/_cc_/_de_/_c32_/_c7_compute_verdict). No predicate is re-encoded on
+# either surface.
+#
+# The registry it reads is core/deploy/allowlists/complementary-reference-pairs.txt,
+# whose header carries the record schema and the asserted predicates. It is read
+# DIRECTLY here and DIRECTLY by core/deploy/tools/build-skill-packages.sh — never
+# awk-extracted out of this script, which is the drift class recorded in
+# core/deploy/lib-template-sync-source.sh.
+#
+# THREE PASSES, one body:
+#   pass 2  ownership — P1/P2/P3/P4 per record (exclusive sections present in
+#           their owner and ABSENT from the peer; shared sections present in
+#           BOTH), plus P5, the shared-section CONTENT comparison. P1-P4 breaches
+#           are ownership drift (a declaration the files contradict); a P5 breach
+#           is content divergence inside a correct declaration. They are
+#           deliberately distinct signals, not one blended verdict.
+#   pass 3  discovery — a same-basename file present BOTH under a skill
+#           references/ tree AND in core|release|operations outside */skills/*,
+#           with no registry record, is a possible ACCIDENTAL fork. This is what
+#           makes a deliberate split and an accidental fork distinguishable.
+#   pass 4  packaging — for each record, if the owning skill's SKILL.md cites the
+#           canonical path, that path must resolve from the built package root
+#           and from the deployed skill root. This is the assertion whose absence
+#           IS the shipped-package defect.
+#
+# FAIL-CLOSED ON ABSENCE. A missing or unreadable registry verdicts NOSET, never
+# a silent pass (the Check 61 DE-9 precedent) — and the packager mirrors that
+# posture, so one deleted file cannot disable the fix and its detector together.
+#
+# CIAC-3: every predicate reads a file directly (`grep -qxF … "$file"`) or uses a
+# here-string (`awk … <<< "$rec"`). No writer is piped into a quiet grep.
+#
+# Env overrides (the self-test seam; committed defaults are the live paths):
+#   CP_PAIRS_FILE   registry path
+#   CP_ROOT         directory the relative paths resolve against
+#   CP_PACKAGES     built-package directory
+#   CP_USER_SKILLS  deployed skill root
+#
+# Echoes ONE LINE PER FINDING on stdout, each `<TOKEN>|<detail>`, in a
+# deterministic token order so the first line is a stable assertion target:
+#   NOSET|<path>                    registry absent/unreadable  (terminal, alone)
+#   MALFORMED|<detail>              a record without exactly 5 '|||' fields
+#   OWNERSHIP-DRIFT|<detail>        P1/P2/P3/P4 breach
+#   SHARED-DIVERGENCE|<detail>      P5 breach (ownership correct, content drifted)
+#   UNREGISTERED-PAIR|<detail>      pass-3 discovery
+#   CITATION-UNRESOLVABLE|<detail>  pass-4 breach
+#   PASS|<n>                        zero findings across n record(s)
+#
+# Index-convention exclusion for pass 3 — NAMED, never a silent skip. README.md
+# is a per-directory index carried by dozens of directories by convention; it is
+# not a canonical/skill-local pair and would flood the pass.
+C13B_INDEX_BASENAMES=(README.md)
+
+_cp_compute_verdict() {
+  (
+    cd "${CP_ROOT:-.}" 2>/dev/null || { echo "NOSET|CP_ROOT unreadable: ${CP_ROOT:-.}"; exit 0; }
+
+    _cp_reg="${CP_PAIRS_FILE:-core/deploy/allowlists/complementary-reference-pairs.txt}"
+    if [[ ! -r "$_cp_reg" ]]; then
+      echo "NOSET|complementary-pair registry absent or unreadable: $_cp_reg"
+      exit 0
+    fi
+
+    # Record set: comment + blank lines are tolerated (both consumers agree).
+    _cp_records="$(grep -v '^[[:space:]]*#' "$_cp_reg" 2>/dev/null | grep -v '^[[:space:]]*$' || true)"
+
+    _cp_malformed=""
+    _cp_ownership=""
+    _cp_divergence=""
+    _cp_citation=""
+    _cp_count=0
+    # Registered (canonical, skill-local) path pairs, newline-delimited, for pass 3.
+    _cp_registered=""
+
+    while IFS= read -r _cp_rec; do
+      [[ -z "$_cp_rec" ]] && continue
+      _cp_count=$((_cp_count + 1))
+
+      _cp_nf="$(awk -F'\\|\\|\\|' '{print NF}' <<< "$_cp_rec")"
+      if [[ "$_cp_nf" != "5" ]]; then
+        _cp_malformed="${_cp_malformed}MALFORMED|record ${_cp_count} has ${_cp_nf} '|||'-delimited field(s), expected 5 (canonical|||skill-local|||canonical-owned|||skill-local-owned|||shared) — see the registry header
+"
+        continue
+      fi
+
+      _cp_canon="$(awk -F'\\|\\|\\|' '{print $1}' <<< "$_cp_rec")"
+      _cp_mirror="$(awk -F'\\|\\|\\|' '{print $2}' <<< "$_cp_rec")"
+      _cp_own_c="$(awk -F'\\|\\|\\|' '{print $3}' <<< "$_cp_rec")"
+      _cp_own_m="$(awk -F'\\|\\|\\|' '{print $4}' <<< "$_cp_rec")"
+      _cp_shared="$(awk -F'\\|\\|\\|' '{print $5}' <<< "$_cp_rec")"
+      _cp_registered="${_cp_registered}${_cp_canon}|${_cp_mirror}
+"
+
+      # ── P3: both halves exist ────────────────────────────────────────────────
+      if [[ ! -f "$_cp_canon" || ! -f "$_cp_mirror" ]]; then
+        _cp_ownership="${_cp_ownership}OWNERSHIP-DRIFT|registered pair is not resolvable on disk: canonical '$_cp_canon' $([[ -f "$_cp_canon" ]] && echo present || echo MISSING), skill-local '$_cp_mirror' $([[ -f "$_cp_mirror" ]] && echo present || echo MISSING)
+"
+        continue
+      fi
+
+      # ── P1: canonical-owned sections — in the canonical, ABSENT from the mirror ─
+      IFS='|' read -r -a _cp_secs <<< "$_cp_own_c"
+      for _cp_s in "${_cp_secs[@]}"; do
+        [[ -z "$_cp_s" ]] && continue
+        if ! grep -qxF "## $_cp_s" "$_cp_canon"; then
+          _cp_ownership="${_cp_ownership}OWNERSHIP-DRIFT|'## $_cp_s' is declared canonical-owned but is NOT an H2 in $_cp_canon
+"
+        fi
+        if grep -qxF "## $_cp_s" "$_cp_mirror"; then
+          _cp_ownership="${_cp_ownership}OWNERSHIP-DRIFT|'## $_cp_s' is declared canonical-owned but ALSO appears in $_cp_mirror — the section moved or was copied across the pair without updating $_cp_reg
+"
+        fi
+      done
+
+      # ── P2: skill-local-owned sections — in the mirror, ABSENT from the canonical ─
+      IFS='|' read -r -a _cp_secs <<< "$_cp_own_m"
+      for _cp_s in "${_cp_secs[@]}"; do
+        [[ -z "$_cp_s" ]] && continue
+        if ! grep -qxF "## $_cp_s" "$_cp_mirror"; then
+          _cp_ownership="${_cp_ownership}OWNERSHIP-DRIFT|'## $_cp_s' is declared skill-local-owned but is NOT an H2 in $_cp_mirror
+"
+        fi
+        if grep -qxF "## $_cp_s" "$_cp_canon"; then
+          _cp_ownership="${_cp_ownership}OWNERSHIP-DRIFT|'## $_cp_s' is declared skill-local-owned but ALSO appears in $_cp_canon — the section moved or was copied across the pair without updating $_cp_reg
+"
+        fi
+      done
+
+      # ── P4 + P5: shared sections — in BOTH, and their blocks compared ─────────
+      IFS='|' read -r -a _cp_secs <<< "$_cp_shared"
+      for _cp_s in "${_cp_secs[@]}"; do
+        [[ -z "$_cp_s" ]] && continue
+        _cp_in_c=false; _cp_in_m=false
+        grep -qxF "## $_cp_s" "$_cp_canon" && _cp_in_c=true
+        grep -qxF "## $_cp_s" "$_cp_mirror" && _cp_in_m=true
+        if [[ "$_cp_in_c" != "true" || "$_cp_in_m" != "true" ]]; then
+          _cp_ownership="${_cp_ownership}OWNERSHIP-DRIFT|'## $_cp_s' is declared SHARED but is missing from $([[ "$_cp_in_c" == "true" ]] || printf '%s ' "$_cp_canon")$([[ "$_cp_in_m" == "true" ]] || printf '%s' "$_cp_mirror")
+"
+          continue
+        fi
+        # P5 — the content comparison. Block = lines from "## <section>" to the
+        # next "## " (or EOF), the same extractor Check 34 uses.
+        if ! diff -q \
+             <(awk -v anchor="## $_cp_s" '$0 == anchor {g=1; next} g && /^## / {exit} g {print}' "$_cp_canon") \
+             <(awk -v anchor="## $_cp_s" '$0 == anchor {g=1; next} g && /^## / {exit} g {print}' "$_cp_mirror") \
+             >/dev/null 2>&1; then
+          _cp_divergence="${_cp_divergence}SHARED-DIVERGENCE|'## $_cp_s' is declared SHARED by $_cp_reg but its content differs between $_cp_canon and $_cp_mirror — reconcile the two, or move the section into an exclusive-ownership field if the difference is deliberate
+"
+        fi
+      done
+
+      # ── pass 4: the canonical resolves where the SKILL.md cites it ───────────
+      # Owning skill = the path segment after 'skills/' in the skill-local path.
+      _cp_skill="${_cp_mirror#*/skills/}"; _cp_skill="${_cp_skill%%/*}"
+      _cp_skillmd="${_cp_mirror%%/skills/*}/skills/${_cp_skill}/SKILL.md"
+      if [[ -n "$_cp_skill" && -f "$_cp_skillmd" ]] && grep -qF "$_cp_canon" "$_cp_skillmd"; then
+        # Built package: the archive root is the skill dir, so the cited
+        # repo-relative path must appear as <skill>/<canonical-path>.
+        _cp_pkg="${CP_PACKAGES:-packages}/${_cp_skill}.skill"
+        if [[ -f "$_cp_pkg" ]]; then
+          # Listing captured to a variable, then matched with a HERE-STRING —
+          # never `unzip … | grep -q`, whose early exit SIGPIPEs the writer under
+          # `set -o pipefail` (the #3833 EPIPE class).
+          _cp_pkglist="$(unzip -l "$_cp_pkg" 2>/dev/null || true)"
+          if ! grep -qF " ${_cp_skill}/${_cp_canon}" <<< "$_cp_pkglist"; then
+            _cp_citation="${_cp_citation}CITATION-UNRESOLVABLE|${_cp_skill}/SKILL.md cites '$_cp_canon' but $_cp_pkg does not carry it — a deployed $_cp_skill cannot resolve that citation
+"
+          fi
+        fi
+        # Deployed skill root.
+        _cp_deployed="${CP_USER_SKILLS:-${USER_LOCAL_SKILLS_PATH:-}}"
+        if [[ -n "$_cp_deployed" && -d "$_cp_deployed/$_cp_skill" && ! -f "$_cp_deployed/$_cp_skill/$_cp_canon" ]]; then
+          _cp_citation="${_cp_citation}CITATION-UNRESOLVABLE|${_cp_skill}/SKILL.md cites '$_cp_canon' but it is absent from the deployed skill root $_cp_deployed/$_cp_skill — run ./deploy.sh --deploy $_cp_skill
+"
+        fi
+      fi
+    done <<< "$_cp_records"
+
+    # ── pass 3: unregistered canonical<->skill-local discovery ────────────────
+    # Intersect the skill-references basename set with the canonical-tree basename
+    # set (two finds, not one per basename), then subtract the named index
+    # convention and every registered pair.
+    _cp_unregistered=""
+    if [[ -d core || -d release || -d operations ]]; then
+      _cp_skill_names="$(find core release operations -path '*/skills/*/references/*' -type f -name '*.md' 2>/dev/null | sed 's|.*/||' | sort -u || true)"
+      _cp_canon_names="$(find core release operations -type f -name '*.md' -not -path '*/skills/*' -not -path 'release/releases/*' 2>/dev/null | sed 's|.*/||' | sort -u || true)"
+      _cp_both="$(comm -12 <(printf '%s\n' "$_cp_canon_names") <(printf '%s\n' "$_cp_skill_names") 2>/dev/null || true)"
+      while IFS= read -r _cp_b; do
+        [[ -z "$_cp_b" ]] && continue
+        _cp_skip=false
+        for _cp_idx in "${C13B_INDEX_BASENAMES[@]}"; do
+          [[ "$_cp_b" == "$_cp_idx" ]] && _cp_skip=true
+        done
+        [[ "$_cp_skip" == "true" ]] && continue
+        while IFS= read -r _cp_cp; do
+          [[ -z "$_cp_cp" ]] && continue
+          while IFS= read -r _cp_mp; do
+            [[ -z "$_cp_mp" ]] && continue
+            if ! grep -qxF "${_cp_cp}|${_cp_mp}" <<< "$_cp_registered"; then
+              _cp_unregistered="${_cp_unregistered}UNREGISTERED-PAIR|'$_cp_cp' and '$_cp_mp' share a basename across the canonical corpus and a skill references/ tree but are NOT registered in $_cp_reg — register them as complementary (declaring what each owns) or consolidate them; an unregistered same-basename pair is indistinguishable from an accidental fork
+"
+            fi
+          done <<< "$(find core release operations -path '*/skills/*/references/*' -type f -name "$_cp_b" 2>/dev/null | sort || true)"
+        done <<< "$(find core release operations -type f -name "$_cp_b" -not -path '*/skills/*' -not -path 'release/releases/*' 2>/dev/null | sort || true)"
+      done <<< "$_cp_both"
+    fi
+
+    _cp_all="${_cp_malformed}${_cp_ownership}${_cp_divergence}${_cp_unregistered}${_cp_citation}"
+    if [[ -z "$_cp_all" ]]; then
+      echo "PASS|${_cp_count} registered complementary pair(s), ownership and packaging intact"
+    else
+      printf '%s' "$_cp_all"
+    fi
+  )
 }
 
 validate_workspace() {
@@ -4019,6 +4395,68 @@ cmd_check() {
 
   [[ "$c13b_collision" == "false" ]] && log "  OK:    no unregistered shared-reference collisions (all multi-skill basenames are registered or single-copy)"
 
+  # ─── Check 13b passes 2/3/4: registered complementary pairs ───────────────
+  # Pass 1 above sees only same-basename copies that BOTH live under a skill
+  # references/ tree. A canonical<->skill-local pair — the canonical in the shared
+  # corpus, the mirror beside its skill — is structurally OUTSIDE that population,
+  # so `uniq -d` can never emit it and the pair is invisible to every check. These
+  # passes close that gap without widening pass 1 (which would drag in dozens of
+  # per-directory README.md copies and false-positive on a pair the corpus declares
+  # deliberate).
+  #
+  #   pass 2  ownership assertion over the registry's declared sections
+  #   pass 3  discovery of an UNREGISTERED cross-tree same-basename pair
+  #   pass 4  the cited canonical resolves in the built package + deployed root
+  #
+  # The predicate body is _cp_compute_verdict() at top level — ONE engine shared
+  # with `--self-test` group CP (DD1), reading
+  # core/deploy/allowlists/complementary-reference-pairs.txt directly. It is the
+  # SAME file core/deploy/tools/build-skill-packages.sh reads; neither consumer
+  # holds a second copy.
+  #
+  # Posture: warn-mode, via the same flag_warn_or_issue emitter pass 1 uses —
+  # Check 13b is a named member of the shared warn-mode cohort
+  # (gate-efficacy-standard.md), so an enforce-mode prong here would make shipped
+  # behavior diverge from declared posture.
+  #
+  # A missing registry verdicts NOSET and is FLAGGED, never a silent pass (the
+  # Check 61 DE-9 precedent); build-skill-packages.sh mirrors that posture by
+  # failing the build, so one deleted file cannot disable the fix and its
+  # detector together.
+  local c13b_cp_line c13b_cp_tok c13b_cp_detail
+  while IFS= read -r c13b_cp_line; do
+    [[ -z "$c13b_cp_line" ]] && continue
+    c13b_cp_tok="${c13b_cp_line%%|*}"
+    c13b_cp_detail="${c13b_cp_line#*|}"
+    case "$c13b_cp_tok" in
+      PASS)
+        log "  OK:    complementary-pair registry — $c13b_cp_detail"
+        ;;
+      NOSET)
+        flag_warn_or_issue "complementary-pair-registry-missing" "$c13b_cp_detail"
+        ;;
+      MALFORMED)
+        flag_warn_or_issue "complementary-pair-registry-malformed" "$c13b_cp_detail"
+        ;;
+      OWNERSHIP-DRIFT)
+        flag_warn_or_issue "complementary-pair-ownership-drift" "$c13b_cp_detail"
+        ;;
+      SHARED-DIVERGENCE)
+        flag_warn_or_issue "complementary-pair-shared-section-divergence" "$c13b_cp_detail"
+        ;;
+      UNREGISTERED-PAIR)
+        flag_warn_or_issue "unregistered-canonical-skill-local-pair" "$c13b_cp_detail"
+        ;;
+      CITATION-UNRESOLVABLE)
+        flag_warn_or_issue "canonical-citation-unresolvable-in-package" "$c13b_cp_detail"
+        ;;
+      *)
+        flag_warn_or_issue "complementary-pair-unknown-verdict" \
+          "unrecognised verdict token '$c13b_cp_tok' from _cp_compute_verdict — fail-closed: an unreadable verdict is never a pass"
+        ;;
+    esac
+  done <<< "$(_cp_compute_verdict)"
+
   # ─── Check 14: Doc-link maintenance — governance + skill SKILL.md scope ───
   # Per Collective Review CR-D1 / CR-D2.
   # Invokes the shared primitive at core/deploy/tools/check-doc-links.py over
@@ -5816,9 +6254,29 @@ cmd_check() {
         local _stripped
         _stripped=$(awk '/^[[:space:]]*```/ { f=!f; next } !f { print }' "$_f" 2>/dev/null)
         # per-file override markers
+        #
+        # PLUMBING (#3833 — same defect class as #4224, fixed the same way): each probe
+        # reads its subject from a HERESTRING, never by piping the stripped body into a
+        # quiet grep. (This note deliberately avoids spelling that pipeline literally, so
+        # the negative assertion that bounds this defect — zero such pipelines in this
+        # file — cannot match its own explanatory text and pass vacuously.)
+        # Under this script's `set -euo pipefail` (line 2) a `grep -q` that matches EARLY
+        # exits before echo has finished writing; echo then takes SIGPIPE and pipefail
+        # promotes its 141 to the pipeline's status — so a SUCCESSFUL match reported
+        # FAILURE, the `&&` never fired, and the file's override marker was silently
+        # ignored. Every in-scope file whose fence-stripped body exceeds the 64 KB pipe
+        # capacity lost its marker deterministically (7 of 164 for Class L, 3 of 26 for
+        # Class V); files near that boundary lost it as a race, which is what made the
+        # reported Class-L count vary run-to-run on a byte-identical corpus. A herestring
+        # gives grep a pre-filled input, so there is no writer left to signal.
+        #
+        # BOTH probes are converted. Class V was asymptomatic at the headline COUNT only
+        # because its 3 dropped files carry no Class-V matches — its skip tally was wrong
+        # on every run just the same. Converting one and not the other leaves the identical
+        # defect armed behind a number that happens not to move yet.
         local _allow_link=0 _allow_version=0
-        echo "$_stripped" | grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->' && _allow_link=1
-        echo "$_stripped" | grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->' && _allow_version=1
+        grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->' <<< "$_stripped" && _allow_link=1
+        grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->' <<< "$_stripped" && _allow_version=1
         if [[ $_allow_link -eq 0 ]]; then
           local _lc
           _lc=$(echo "$_stripped" | grep -cE "$c31_link_re" || true)
@@ -6108,13 +6566,15 @@ cmd_check() {
   # VERIFIED-full-set-completeness contract. Inherits Check 32's LOG-row blind spot
   # (a never-written LOG row is invisible — owned by the close-time Step 4 table).
   #
-  # DORMANT-BY-DEFAULT + warn-mode-initial: gated on a per-check mode via
-  # resolve_check_mode "close-completeness" (independent graduation from the shared
-  # cohort), and the assertion itself is DORMANT until CLOSE_COMPLETENESS_CHECK_CUTOFF
-  # is set (the verdict SKIPs). The cutover is anchored strictly AFTER this release's
-  # (v2.37) merge — the reflexive-pipeline-loop discipline: a release never gates its
-  # own close. The CI-blocking switch is the committed .github/close-completeness.enforce
-  # sentinel (read by the workflow, mirroring version-freeness).
+  # ARMED + warn-mode-initial: gated on a per-check mode via resolve_check_mode
+  # "close-completeness" (independent graduation from the shared cohort). The assertion
+  # itself is ARMED by the committed CLOSE_COMPLETENESS_CHECK_CUTOFF default (#4176) —
+  # only the warn/enforce mode remains a graduation dial; setting the cutoff to __none__
+  # re-dormants it explicitly. The cutover is anchored strictly AFTER the introducing
+  # release's (v2.37) merge — the reflexive-pipeline-loop discipline: a release never
+  # gates its own close. The CI-blocking switch is the committed
+  # .github/close-completeness.enforce sentinel (read by the workflow, mirroring
+  # version-freeness).
   CLOSE_COMPLETENESS_MODE="$(resolve_check_mode "close-completeness")"
   if [[ "$CLOSE_COMPLETENESS_MODE" != "off" ]]; then
     log "Check 48: Close-completeness (every VERIFIED RELEASE_LOG row has the full Stage-13 output-set on main)"
@@ -6264,8 +6724,10 @@ cmd_check() {
   #   field 2  <governing-schema-path>
   #   field 3  <schema H2 anchor>  (the "## <anchor>" heading bounding the schema block)
   #   field 4  <pipe-delimited expected H2 sections the template MUST carry>
-  # Fields are split with `awk -F'\|\|\|'` (NOT `IFS='|||' read`, which bash collapses
-  # to single-'|' separators and silently empties fields 2/3).
+  # Fields are split with `awk -F'\\|\\|\\|'` — the separator needs DOUBLE backslashes.
+  # A single-backslash `-F'\|\|\|'` yields an empty field count inside a command
+  # substitution under BSD awk, producing a FALSE MALFORMED verdict. Not `IFS='|||' read`
+  # either, which bash collapses to single-'|' separators and silently empties fields 2/3.
   #
   # Warn-mode initial via flag_warn_or_issue / deploy-check.mode (the Checks 8-10 /
   # 13b / 14 / 33 precedent): in warn-mode a breach logs WARN: + appends
@@ -7191,7 +7653,7 @@ cmd_check() {
     fi
   fi
 
-  # Check 45 — Design-principle conformance integrity (warn-mode initial) [#320]
+  # Check 45 — Design-principle conformance integrity (advisory; warn-mode initial; enforcement-surface: deploy-time-only — no CI mirror, Requirement (b′)) [#320]
   #
   # Three single-responsibility assertions:
   #  (a) Conformance-mechanism presence — the **Design-Principle Conformance:**
@@ -7199,8 +7661,13 @@ cmd_check() {
   #      per-option conformance mechanism, sibling of Upstream compatibility, regressed).
   #  (b) Register governing_doc drift guard (FMF-1, entry-row-scoped) — every
   #      design-principle-register.md ENTRY ROW's governing_doc (path:line) MUST
-  #      resolve to a real, non-empty line. Extraction is scoped to entry rows
-  #      (^| DP-N ...) so schema/prose path:line mentions are not self-matched.
+  #      resolve to a real, non-empty line AND that line MUST contain the entry's
+  #      `name` (an existence-only assertion passes a drifted pin silently).
+  #      Extraction is scoped to entry rows (^| DP-N ...) so schema/prose path:line
+  #      mentions are not self-matched. EVERY extracted row is examined: an empty
+  #      cell in either operand column is an incomplete-register-entry FINDING,
+  #      never a skip — see the b0 note below for why a skip is the one shape this
+  #      sub-check must not have.
   #  (c) Consumer-id resolution (FMF-2) — every DP-N id referenced in tracked
   #      corpus (outside the register, which defines them) MUST resolve to a
   #      defined register principle_id (catches a dangling principles_emphasis id).
@@ -7224,16 +7691,81 @@ cmd_check() {
     fi
     if [[ -f "$c45_reg" ]]; then
       local c45_gd c45_path c45_line c45_defined c45_ref
-      # (b) FMF-1 — entry-row-scoped governing_doc resolution
-      while IFS= read -r c45_gd; do
-        [[ -z "$c45_gd" ]] && continue
-        c45_path="${c45_gd%%:*}"
-        c45_line="${c45_gd##*:}"
-        if [[ ! -f "$c45_path" ]] || ! [[ "$c45_line" =~ ^[0-9]+$ ]] || [[ -z "$(sed -n "${c45_line}p" "$c45_path" 2>/dev/null)" ]]; then
-          flag_warn_or_issue "design-principle-conformance" "register governing_doc does not resolve to a real path:line: '$c45_gd' (drift — repoint to the principle's current normative line)"
+      local c45_id c45_name c45_target _c45_lead _c45_stmt _c45_rest
+      # (b) FMF-1 — entry-row-scoped governing_doc resolution + name-match
+      #   Three DISTINCT failure branches, deliberately separate so the mis-pin class
+      #   is greppable apart from the unresolvable class:
+      #     b0 WELL-FORMED — the entry carries BOTH assertion operands: a non-empty
+      #                      `governing_doc` to resolve and a non-empty `name` to
+      #                      assert against
+      #     b1 RESOLVE     — path exists, line numeric, target line non-empty
+      #     b2 NAME-MATCH  — the target line CONTAINS the entry's `name`
+      #   b2 is the content assertion. Without it a line-shift silently re-points an
+      #   entry at the WRONG principle and still PASSES: measured at c4dde614, a
+      #   uniform +1 shift clears 8 of 9 pins under b1 alone and 0 of 9 with b2.
+      #   b0 exists because b2's containment is VACUOUSLY TRUE on an empty needle —
+      #   a blank `name` cell would invert "must contain" into "always passes", the
+      #   precise false-confidence shape b2 was added to remove. b0 covers the
+      #   `governing_doc` operand on the SAME grounds and by the SAME guard rather
+      #   than a parallel mechanism: an empty cell in EITHER column leaves the entry
+      #   unassertable, and an unassertable entry is an INCOMPLETE REGISTER ENTRY
+      #   (a finding), never a skip. That widening is the fix for a false-OK defect
+      #   this guard's own shape invited: a bare `[[ -z "$c45_gd" ]] && continue`
+      #   used to sit ABOVE b0, so a blanked `governing_doc` returned the row to the
+      #   loop unexamined AND uncounted — Check 45 emitted zero findings and still
+      #   printed its `OK: … all register governing_doc targets resolve …` line,
+      #   certifying an entry it never looked at. The declaration is universally
+      #   quantified over the entry rows, so the only honest implementation examines
+      #   all of them.
+      #   STRUCTURAL INVARIANT (the reason this is an if/elif/else and not a tally):
+      #   the loop body contains NO `continue`. Every row traverses exactly one arm
+      #   of a total decision tree, and every non-terminal arm sets c45_ok=0, so
+      #   c45_ok can survive as 1 only when every row was fully asserted. The
+      #   unexamined-exit shape is DELETED rather than detected — a skipped-entry
+      #   counter would merely notice the skip, and would itself be a second thing
+      #   to keep in sync. The fixture self-test asserts this shape directly
+      #   (`core/deploy/tests/test_check45_governing_doc_name_match.sh`, the
+      #   zero-`continue` structural assertion), so a future edit that reintroduces
+      #   an early exit fails that test instead of silently restoring the defect.
+      #   Iteration is ROW-scoped (not the former de-duplicated path:line list) —
+      #   name-match needs the (name, governing_doc) pair from the SAME row. Fields
+      #   split on the markdown pipe: $2=principle_id, $3=name, $5=governing_doc; an
+      #   unescaped '|' cannot appear in a markdown cell, so the split is well-defined
+      #   (and an escaped one shifts columns → governing_doc resolves to non-path text
+      #   → b1 fires loudly; the degenerate case fails closed, never silent).
+      #   Containment is the pure-bash `== *"$var"*` form: fixed-string by construction
+      #   (a free-text `name` may carry regex metacharacters) and subprocess-free, so
+      #   it cannot reintroduce the `… | grep -q` EPIPE class.
+      #   Register-side contract: an entry's `name` MUST appear verbatim on its
+      #   governing_doc line — the checkable projection of the register's Index-only
+      #   discipline, documented at core/standards/design-principle-register.md.
+      _c45_trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
+      while IFS='|' read -r _c45_lead c45_id c45_name _c45_stmt c45_gd _c45_rest; do
+        c45_id="$(_c45_trim "$c45_id")"
+        c45_name="$(_c45_trim "$c45_name")"
+        c45_gd="$(_c45_trim "$c45_gd")"
+        if [[ -z "$c45_gd" ]]; then
+          flag_warn_or_issue "design-principle-conformance" "register entry has no governing_doc: '$c45_id' ('$c45_name') has an empty governing_doc cell — there is no pin to resolve, so the entry cannot be asserted at all; fill the governing_doc cell"
           c45_ok=0
+        elif [[ -z "$c45_name" ]]; then
+          flag_warn_or_issue "design-principle-conformance" "register entry has no name: '$c45_id' pins '$c45_gd' but its name cell is empty — the name-match assertion would pass vacuously; fill the name cell"
+          c45_ok=0
+        else
+          c45_path="${c45_gd%%:*}"
+          c45_line="${c45_gd##*:}"
+          c45_target=""
+          if [[ -f "$c45_path" ]] && [[ "$c45_line" =~ ^[0-9]+$ ]]; then
+            c45_target="$(sed -n "${c45_line}p" "$c45_path" 2>/dev/null)"
+          fi
+          if [[ ! -f "$c45_path" ]] || ! [[ "$c45_line" =~ ^[0-9]+$ ]] || [[ -z "$c45_target" ]]; then
+            flag_warn_or_issue "design-principle-conformance" "register governing_doc does not resolve to a real path:line: '$c45_gd' ($c45_id) (drift — repoint to the principle's current normative line)"
+            c45_ok=0
+          elif [[ "$c45_target" != *"$c45_name"* ]]; then
+            flag_warn_or_issue "design-principle-conformance" "register governing_doc MIS-PIN (name-match): $c45_id '$c45_name' pins '$c45_gd', but that line does not contain the entry name — the pin resolves to a DIFFERENT principle (repoint it to the principle's current normative line)"
+            c45_ok=0
+          fi
         fi
-      done < <(grep -E '^\| DP-[0-9]' "$c45_reg" | grep -oE '[A-Za-z0-9_./-]+\.md:[0-9]+' | sort -u)
+      done < <(grep -E '^\| DP-[0-9]' "$c45_reg")
       # (c) FMF-2 — consumer-id resolution (every referenced DP-N resolves)
       c45_defined="$(grep -E '^\| DP-[0-9]' "$c45_reg" | grep -oE 'DP-[0-9]+' | sort -u)"
       while IFS= read -r c45_ref; do
@@ -7247,7 +7779,7 @@ cmd_check() {
       flag_warn_or_issue "design-principle-conformance" "register missing: $c45_reg"
       c45_ok=0
     fi
-    [[ "$c45_ok" -eq 1 ]] && log "  OK:    conformance subsection present; all register governing_doc targets resolve; all DP-id references defined"
+    [[ "$c45_ok" -eq 1 ]] && log "  OK:    conformance subsection present; all register governing_doc targets resolve AND name their own principle; all DP-id references defined"
   fi
 
 
@@ -8173,6 +8705,57 @@ cmd_check() {
     esac
   fi
 
+  # Check 62 — register runner-resolution (advisory; deploy-time-only) [#4208]
+  #
+  # Recomputes condition R1 (CARRIED) for every gate-coverage register row that declares
+  # a `runner-def:` pointer: the named runner-definition file must exist and must still
+  # contain the declared anchor. This is the standard's § Resolution rule executed rather
+  # than reviewed — the reviewer-instruction form of this same obligation failed on its
+  # own first application, which is why it is a computation here.
+  #
+  # HONEST GUARANTEE: R1 only. It does not assert R2 (reached), does not read the
+  # anchor's body, and is deploy-time-only with NO pre-merge surface — so a PR can merge
+  # with an unresolvable row and this check catches it at the next deploy-time run. The
+  # flip to `enforce` is an OPERATOR DECISION recorded in gate-efficacy-standard.md's
+  # flip ledger, and Requirement (b′) blocks `required` until a CI mirror exists.
+  REGISTER_RUNNER_MODE="$(resolve_check_mode "register-runner-resolution" "warn")"
+  if [[ "$REGISTER_RUNNER_MODE" != "off" ]]; then
+    log "Check 62: Register runner-resolution (every runner-def pointer resolves to a runner that carries the predicate; advisory / deploy-time-only; warn-mode initial)"
+    local c62_verdict c62_tok
+    c62_verdict="$(_rr_compute_verdict)"
+    c62_tok="${c62_verdict%%|*}"
+    case "$c62_tok" in
+      NOSET)
+        # A repo defect, NOT a benign absence: the gate would assert nothing. Flagged on
+        # every mode — this is the vacuous-control class the milestone exists to close.
+        flag_warn_or_issue "register-runner-resolution" "${c62_verdict#NOSET|}"
+        ;;
+      CLEAN)
+        log "  OK:    all ${c62_verdict#CLEAN|} gate-coverage register runner-def pointer(s) resolve (R1: named runner carries the predicate)"
+        ;;
+      UNRESOLVED)
+        local _c62_rest="${c62_verdict#UNRESOLVED|}"
+        local _c62_bad="${_c62_rest%%|*}" _c62_tot="${_c62_rest##*|}"
+        case "$REGISTER_RUNNER_MODE" in
+          enforce)
+            log "  FAIL:  register-runner-resolution — $_c62_bad of $_c62_tot register runner-def pointer(s) do not resolve (see stderr detail); the remedy is to encode the predicate in the named runner or re-point the row, never to delete the pointer"
+            ISSUES=$((ISSUES + 1))
+            ;;
+          warn)
+            log "  WARN:  register-runner-resolution — $_c62_bad of $_c62_tot register runner-def pointer(s) do not resolve — a row naming a runner that does not carry its predicate asserts nothing (warn-mode; the flip to enforce is an operator decision recorded in gate-efficacy-standard.md, never auto-promoted by hit count)"
+            local _c62_ts
+            _c62_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            printf '{"ts":"%s","check":"%s","detail":"%s of %s runner-def pointer(s) unresolved"}\n' \
+              "$_c62_ts" "register-runner-resolution" "$_c62_bad" "$_c62_tot" >> "$WARN_LOG" 2>/dev/null || true
+            ;;
+        esac
+        ;;
+      *)
+        log "  WARN:  register-runner-resolution — unexpected verdict '$c62_verdict'"
+        ;;
+    esac
+  fi
+
 
   # Check 63 — count-vs-structure lint (ENFORCING, narrowly scoped) [#4196]
   #
@@ -8565,9 +9148,23 @@ EOF
     _cc_compute_verdict "lifecycle" 2>/dev/null
   }
 
-  local _v _tok
+  # STDERR-capturing sibling (#4176). The arm-row diagnostic is emitted on stderr, so it
+  # is the thing under test in assertions (5)-(7) and must NOT be discarded. Note that
+  # `_cc_selftest_verdict ... 2>&1 >/dev/null` captures NOTHING — the helper above
+  # hard-codes `2>/dev/null` inside its own body, so stderr is already gone by the time
+  # the caller's redirect applies. Hence a sibling rather than a redirect at the call.
+  _cc_selftest_stderr() {
+    CC_LOG="$_log" CC_INDEX="$_index" CC_DIGEST="$_digest" CC_CHANGELOG="$_changelog" \
+    CC_VERSIONFILE="$_version" CC_NOTES_DIR="$_notes" CC_LINT="$_lint" CC_DRIFT="$_drift" \
+    CC_ALLOWLIST="$_t/none.txt" \
+    CLOSE_COMPLETENESS_CHECK_CUTOFF="$1" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
+    _cc_compute_verdict "lifecycle" 2>&1 >/dev/null
+  }
 
-  # (3) dormant — cutover unset ⇒ SKIP (assert FIRST: the safe default).
+  local _v _tok _e
+
+  # (3) explicit re-dormant — cutover __none__ ⇒ SKIP (assert FIRST: the escape hatch
+  #     the committed armed default must never take away).
   _v="$(_cc_selftest_verdict "__none__")"; _tok="${_v%% *}"
   [[ "$_tok" == "SKIP" ]] || { echo "FAIL: dormant (cutover __none__) must SKIP, got '$_v'"; failures=$((failures+1)); }
 
@@ -8598,6 +9195,37 @@ EOF
         CLOSE_COMPLETENESS_CHECK_CUTOFF="v9.98" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
         _cc_compute_verdict "lifecycle" 2>/dev/null)"; _tok="${_v%% *}"
   [[ "$_tok" == "INCOMPLETE" ]] || { echo "FAIL: a now-VERIFIED incomplete row (v9.98) must be caught once it is VERIFIED-scoped, got '$_v'"; failures=$((failures+1)); }
+
+  # ─── R8 mis-arm assertions (#4176) — the ANTI-VACUITY group for the arming change ──
+  # The cutover arm is a string PREFIX match, not a version comparison. A shortened
+  # prefix landing on a clean sub-range verdicts CLEAN and exits 0 — a silent mis-arm
+  # that reads as success. These three assertions prove the mis-arm is now VISIBLE.
+  # (Fixture state after (4): both v9.98 and v9.99 are VERIFIED; v9.98's output-set is
+  # absent, so a v9.9-prefixed cutoff arms at v9.98 and pulls both rows into scope.)
+
+  # (5) a prefix-SHORTENED cutoff must still verdict, AND must WARN naming the row that
+  #     actually armed — the silent-mis-arm case this mitigation exists for.
+  _v="$(_cc_selftest_verdict "v9.9")"; _tok="${_v%% *}"
+  [[ "$_tok" == "INCOMPLETE" || "$_tok" == "CLEAN" ]] || { echo "FAIL: a prefix-shortened cutoff must still verdict, got '$_v'"; failures=$((failures+1)); }
+  _e="$(_cc_selftest_stderr "v9.9")"
+  printf '%s' "$_e" | /usr/bin/grep -q 'WARNING — cutoff v9.9 armed at LOG row v9.98' \
+    || { echo "FAIL: a prefix-shortened cutoff must WARN naming the armed row, got '$_e'"; failures=$((failures+1)); }
+
+  # (6) an EXACT-row cutoff must NOT emit the mis-arm WARNING (no false-positive noise;
+  #     without this, (5) could pass on a warning that fires unconditionally).
+  _e="$(_cc_selftest_stderr "v9.98")"
+  if printf '%s' "$_e" | /usr/bin/grep -q 'WARNING — cutoff'; then
+    echo "FAIL: an exact-row cutoff must not emit the mis-arm WARNING, got '$_e'"; failures=$((failures+1))
+  fi
+  printf '%s' "$_e" | /usr/bin/grep -q 'armed at LOG row v9.98' \
+    || { echo "FAIL: an exact-row cutoff must still name the armed row, got '$_e'"; failures=$((failures+1)); }
+
+  # (7) a cutoff matching NO row asserts nothing and would report CLEAN 0 — vacuously
+  #     clean. It must say so out loud. (Anti-vacuity: a gate that passes on zero
+  #     assertions is indistinguishable from a gate that passes.)
+  _e="$(_cc_selftest_stderr "v0.01")"
+  printf '%s' "$_e" | /usr/bin/grep -q 'matched NO LOG row' \
+    || { echo "FAIL: a no-match cutoff must WARN that zero rows were asserted, got '$_e'"; failures=$((failures+1)); }
 
   /bin/rm -rf "$_t" 2>/dev/null || true
 
@@ -8929,6 +9557,218 @@ EOF
 
   /bin/rm -rf "$_vft" 2>/dev/null || true
 
+  # ─── Assertion group CP — complementary-pair ownership (Check 13b) [#4178] ────
+  #
+  # Offline, hermetic, sandbox-only. Every path is re-pointed through CP_* overrides
+  # at a mktemp tree, so this never reads the live corpus, the live registry, the
+  # built packages, or the operator's deployed skills. Extends this ONE self-test
+  # entry rather than adding a second, so the CI invocation stays single.
+  #
+  # CP-1 vs CP-2/CP-3 IS the parent's opposite-verdict requirement: a DELIBERATE
+  # complementary pair must PASS while an ACCIDENTAL fork must be flagged. A check
+  # that passed both, or flagged both, would not satisfy it — this one does neither.
+  # CP-4 is the anti-vacuity assertion: a check whose own config is missing must SAY
+  # so. A registry-driven check that silently passes with no registry is the exact
+  # "instrument that cannot fire" class this release exists to close.
+  # CP-5/CP-6 are the shared-field assertions: a declared-shared section MISSING from
+  # one copy is an ownership breach, while one whose CONTENT differs is a distinct
+  # divergence signal — collapsing the two would make the live pair unrepresentable.
+  echo "self-test: starting assertion group CP (complementary-pair ownership, #4178)" >&2
+  local _p; _p="$(/usr/bin/mktemp -d -t complementarypair-selftest.XXXXXX)"
+  /bin/mkdir -p "$_p/core/schemas" "$_p/operations/skills/fixture-skill/references" "$_p/packages"
+  local _preg="$_p/pairs.txt"
+  local _pmissing="$_p/no-such-registry.txt"
+  local _pcanon="$_p/core/schemas/fixture-schema.md"
+  local _pmirror="$_p/operations/skills/fixture-skill/references/fixture-schema.md"
+
+  # _cp_seed <canonical-extra-h2...> — rewrite both fixture halves from scratch.
+  # Base shape: canonical owns "Owned By Canonical", mirror owns "Owned By Mirror",
+  # and "Shared Section" is carried by BOTH with identical bodies.
+  _cp_seed_base() {
+    /bin/cat > "$_pcanon" <<'EOF'
+# Fixture Schema (canonical half)
+
+## Shared Section
+shared body line one
+shared body line two
+
+## Owned By Canonical
+canonical-only body
+EOF
+    /bin/cat > "$_pmirror" <<'EOF'
+# Fixture Schema (skill-local half)
+
+## Shared Section
+shared body line one
+shared body line two
+
+## Owned By Mirror
+mirror-only body
+EOF
+  }
+  _cp_seed_registry() {
+    /usr/bin/printf '# fixture registry\ncore/schemas/fixture-schema.md|||operations/skills/fixture-skill/references/fixture-schema.md|||Owned By Canonical|||Owned By Mirror|||Shared Section\n' > "$_preg"
+  }
+  _cp_selftest_verdict() {
+    CP_ROOT="$_p" CP_PAIRS_FILE="${1:-$_preg}" CP_PACKAGES="$_p/packages" CP_USER_SKILLS="$_p/nonexistent-skills" \
+      _cp_compute_verdict 2>/dev/null
+  }
+
+  # CP-4 — registry ABSENT ⇒ NOSET. Asserted FIRST: the anti-vacuity default.
+  _cp_seed_base; _cp_seed_registry
+  _v="$(_cp_selftest_verdict "$_pmissing")"; _tok="${_v%%|*}"
+  [[ "$_tok" == "NOSET" ]] || { echo "FAIL: CP-4 absent complementary-pair registry must verdict NOSET (not PASS), got '$_v'"; failures=$((failures+1)); }
+
+  # CP-1 — registered pair, ownership intact ⇒ PASS.
+  _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "PASS" ]] || { echo "FAIL: CP-1 an intact registered complementary pair must PASS, got '$_v'"; failures=$((failures+1)); }
+
+  # CP-2 — a canonical-owned section LEAKED into the skill-local copy ⇒ OWNERSHIP-DRIFT.
+  # This is the falsification test: move a declared-owned section across the pair
+  # without updating the registry and the gate MUST flip.
+  /usr/bin/printf '\n## Owned By Canonical\nleaked copy\n' >> "$_pmirror"
+  _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "OWNERSHIP-DRIFT" ]] || { echo "FAIL: CP-2 a canonical-owned section leaked into the skill-local copy must verdict OWNERSHIP-DRIFT, got '$_v'"; failures=$((failures+1)); }
+
+  # CP-5 — a declared-SHARED section MISSING from one copy ⇒ OWNERSHIP-DRIFT.
+  # Proves the shared field is asserted, not decorative.
+  _cp_seed_base
+  /usr/bin/sed 's|^## Shared Section$|## Renamed Away|' "$_pmirror" > "$_p/m2" && /bin/mv "$_p/m2" "$_pmirror"
+  _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "OWNERSHIP-DRIFT" ]] || { echo "FAIL: CP-5 a declared-shared section missing from one copy must verdict OWNERSHIP-DRIFT, got '$_v'"; failures=$((failures+1)); }
+
+  # CP-6 — a declared-SHARED section present in BOTH but with DIFFERENT content ⇒
+  # SHARED-DIVERGENCE, distinctly from OWNERSHIP-DRIFT. Without this assertion the
+  # shared field could declare a region and assert nothing about it — which is the
+  # live pair's only real drift surface.
+  _cp_seed_base
+  /usr/bin/sed 's|^shared body line two$|shared body line two (mirror variant)|' "$_pmirror" > "$_p/m3" && /bin/mv "$_p/m3" "$_pmirror"
+  _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "SHARED-DIVERGENCE" ]] || { echo "FAIL: CP-6 a declared-shared section whose content differs must verdict SHARED-DIVERGENCE (not OWNERSHIP-DRIFT, not PASS), got '$_v'"; failures=$((failures+1)); }
+  # …and the divergence must NOT be reported as an ownership breach: the ownership
+  # declaration is correct, only the content drifted. Collapsing the two signals is
+  # what would make the live pair's shared-but-drifted region unrepresentable.
+  grep -qF 'OWNERSHIP-DRIFT|' <<< "$(_cp_selftest_verdict)" && { echo "FAIL: CP-6 content divergence in a shared section must NOT also emit OWNERSHIP-DRIFT"; failures=$((failures+1)); } || true
+
+  # CP-3 — a DIVERGENT same-basename canonical<->skill-local pair that is NOT
+  # registered ⇒ UNREGISTERED-PAIR. Seeded as a SECOND basename so the registered
+  # pair stays intact: the assertion is that registration is what distinguishes the
+  # two, not the mere existence of a cross-tree duplicate.
+  _cp_seed_base
+  /usr/bin/printf '# Forked doc (canonical side)\n\n## Some Section\nalpha\n' > "$_p/core/schemas/forked-doc.md"
+  /usr/bin/printf '# Forked doc (skill side)\n\n## Some Section\nbeta\n' > "$_p/operations/skills/fixture-skill/references/forked-doc.md"
+  _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "UNREGISTERED-PAIR" ]] || { echo "FAIL: CP-3 an unregistered cross-tree same-basename pair must verdict UNREGISTERED-PAIR, got '$_v'"; failures=$((failures+1)); }
+
+  # CP-3b — the NAMED index-convention exclusion holds: README.md is a
+  # per-directory index carried across dozens of directories, and excluding it is a
+  # named decision (C13B_INDEX_BASENAMES), never a silent skip. Same shape as CP-3,
+  # different basename ⇒ back to PASS.
+  /bin/rm -f "$_p/core/schemas/forked-doc.md" "$_p/operations/skills/fixture-skill/references/forked-doc.md"
+  /usr/bin/printf '# index (canonical side)\n' > "$_p/core/schemas/README.md"
+  /usr/bin/printf '# index (skill side)\n' > "$_p/operations/skills/fixture-skill/references/README.md"
+  _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "PASS" ]] || { echo "FAIL: CP-3b the named README.md index-convention exclusion must keep an intact registry at PASS, got '$_v'"; failures=$((failures+1)); }
+
+  # CP-7 — a MALFORMED record (wrong field count) ⇒ MALFORMED, never a silent pass.
+  # Guards the second half of the fail-closed posture: absence is CP-4, corruption
+  # is this.
+  /usr/bin/printf '# fixture registry\ncore/schemas/fixture-schema.md|||operations/skills/fixture-skill/references/fixture-schema.md|||Owned By Canonical\n' > "$_preg"
+  _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "MALFORMED" ]] || { echo "FAIL: CP-7 a registry record without 5 fields must verdict MALFORMED, got '$_v'"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_p" 2>/dev/null || true
+
+  # ─── Assertion group RR — register runner-resolution (Check 62) [#4208] ───────
+  #
+  # Offline, hermetic, sandbox-only: every path is re-pointed through RR_STANDARD /
+  # RR_ROOT at a mktemp tree, so this never reads the live standard or the live check
+  # bank. Extends this ONE self-test entry rather than adding a second, so the CI
+  # invocation stays single.
+  #
+  # RR-1 vs RR-2 IS the discrimination claim. A register whose pointers resolve must
+  # verdict CLEAN while one whose named runner has stopped carrying the predicate must
+  # verdict UNRESOLVED. A check that reported the same for both would be exactly the
+  # vacuous control this milestone exists to eliminate — and RR-2 reproduces, in fixture
+  # form, the defect the introducing release actually shipped.
+  # RR-4/RR-5 are the anti-vacuity assertions: a check whose input set is EMPTY must SAY
+  # so rather than pass. A resolution check that silently passes with zero pointers is
+  # the "instrument that cannot fire" class one level up.
+  # RR-6 is the PARSER control: the standard legitimately mentions the bare token in
+  # prose, so a parser that matched prose would inflate the pointer count and could
+  # report failures against sentences. It must parse to zero here.
+  echo "self-test: starting assertion group RR (register runner-resolution, #4208)" >&2
+  local _r; _r="$(/usr/bin/mktemp -d -t registerrunner-selftest.XXXXXX)"
+  /bin/mkdir -p "$_r/core/standards"
+  local _rstd="$_r/core/standards/fixture-standard.md"
+  local _rdef="$_r/core/standards/fixture-runner-def.md"
+
+  _rr_seed_standard() {
+    /bin/cat > "$_rstd" <<'EOF'
+# Fixture standard
+
+A row declaring a `runner-def:` resolution pointer must resolve. This sentence is the
+PARSER CONTROL: it mentions the bare token and declares nothing.
+
+| Invariant | Enforcing gate |
+|---|---|
+| first invariant | **Runner:** fixture, `runner-def: core/standards/fixture-runner-def.md::FIX-01` |
+| second invariant | **Runner:** fixture, `runner-def: core/standards/fixture-runner-def.md::FIX-02` |
+EOF
+  }
+  _rr_seed_def() {
+    /bin/cat > "$_rdef" <<'EOF'
+# Fixture runner definition
+
+**FIX-01 (first):** the first encoded predicate.
+**FIX-02 (second):** the second encoded predicate.
+EOF
+  }
+  _rr_selftest_verdict() {
+    RR_STANDARD="${1:-$_rstd}" RR_ROOT="$_r" _rr_compute_verdict 2>/dev/null
+  }
+
+  # RR-5 — standard ABSENT ⇒ NOSET. Asserted FIRST: the anti-vacuity default.
+  _rr_seed_standard; _rr_seed_def
+  _v="$(_rr_selftest_verdict "$_r/core/standards/no-such-standard.md")"; _tok="${_v%%|*}"
+  [[ "$_tok" == "NOSET" ]] || { echo "FAIL: RR-5 an absent gate-efficacy standard must verdict NOSET (not CLEAN), got '$_v'"; failures=$((failures+1)); }
+
+  # RR-1 — every pointer resolves ⇒ CLEAN, and the COUNT is reported (2, not 3 — the
+  # prose control must not have been counted).
+  _v="$(_rr_selftest_verdict)"
+  [[ "$_v" == "CLEAN|2" ]] || { echo "FAIL: RR-1 a register whose pointers all resolve must verdict CLEAN|2, got '$_v'"; failures=$((failures+1)); }
+
+  # RR-2 — the named runner no longer CARRIES the predicate ⇒ UNRESOLVED. This is the
+  # falsification test, and it reproduces the defect the introducing release shipped:
+  # the row is untouched and still names its runner; only the runner's check set changed.
+  /usr/bin/sed 's/FIX-01/FIXX01/g' "$_rdef" > "$_rdef.tmp" && /bin/mv "$_rdef.tmp" "$_rdef"
+  _v="$(_rr_selftest_verdict)"
+  [[ "$_v" == "UNRESOLVED|1|2" ]] || { echo "FAIL: RR-2 a runner that no longer carries its declared anchor must verdict UNRESOLVED|1|2, got '$_v'"; failures=$((failures+1)); }
+
+  # RR-3 — the runner-definition FILE is gone ⇒ UNRESOLVED for every pointer.
+  /bin/rm -f "$_rdef"
+  _v="$(_rr_selftest_verdict)"
+  [[ "$_v" == "UNRESOLVED|2|2" ]] || { echo "FAIL: RR-3 an absent runner-definition file must verdict UNRESOLVED|2|2, got '$_v'"; failures=$((failures+1)); }
+
+  # RR-4 — a register declaring ZERO pointers ⇒ NOSET, never CLEAN.
+  _rr_seed_def
+  /usr/bin/sed 's/runner-def: /runnerdef /g' "$_rstd" > "$_rstd.tmp" && /bin/mv "$_rstd.tmp" "$_rstd"
+  _v="$(_rr_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "NOSET" ]] || { echo "FAIL: RR-4 a register declaring zero runner-def pointers must verdict NOSET (not CLEAN), got '$_v'"; failures=$((failures+1)); }
+
+  # RR-6 — PARSER control: a file carrying ONLY prose mentions of the bare token parses
+  # to zero declarations. Without this, RR-1's CLEAN|2 could be CLEAN|3 with one
+  # nonsense pointer that happens to resolve, and the count assertion would be the only
+  # thing standing between the check and matching sentences.
+  /bin/cat > "$_r/core/standards/prose-only.md" <<'EOF'
+A row declaring a `runner-def:` resolution pointer must resolve.
+Another sentence mentioning runner-def: with no pointer form at all.
+EOF
+  _v="$(_rr_selftest_verdict "$_r/core/standards/prose-only.md")"; _tok="${_v%%|*}"
+  [[ "$_tok" == "NOSET" ]] || { echo "FAIL: RR-6 prose-only mentions of the runner-def token must parse to zero declarations (NOSET), got '$_v'"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_r" 2>/dev/null || true
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failure(s))" >&2
     return 1
@@ -8936,10 +9776,15 @@ EOF
   echo "self-test: PASS" >&2
   echo "  version-freeness claimed-set column pinning validated (#3724 AC-N, group VF):" >&2
   echo "    VF-1 DEPLOYED row extracted / VF-2 VERIFIED row excluded / VF-3 State is NOT the Tag column / VF-4 column-order shift survived (name-pinned, not ordinal) / VF-5 malformed header reported on stderr / VF-6 malformed header returns non-zero + VF-6b well-formed returns 0 (control) / VF-7 the CALLER fails closed to UNDECIDABLE(partial-by-failure) + VF-7b FREE control + VF-7c gate surface (DT-2: loud failure is observable, not merely emitted)" >&2
-  echo "  close-completeness invariant validated (#1290 AC5):" >&2
-  echo "    dormant cutover SKIPs / abbreviated scaffold caught (INCOMPLETE) / complete set CLEAN / VERIFIED-scoped (DEPLOYED excluded, VERIFIED included)" >&2
+  echo "  close-completeness invariant validated (#1290 AC5; mis-arm group #4176):" >&2
+  echo "    explicit-__none__ cutover SKIPs / abbreviated scaffold caught (INCOMPLETE) / complete set CLEAN / VERIFIED-scoped (DEPLOYED excluded, VERIFIED included)" >&2
+  echo "    mis-arm (5) prefix-shortened cutoff WARNs naming the armed row / (6) exact-row cutoff does NOT warn but still names it / (7) no-match cutoff WARNs vacuous (zero rows asserted)" >&2
   echo "  decision-emission minimum set validated (#4026, group DE):" >&2
   echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET" >&2
+  echo "  complementary-pair ownership validated (#4178, group CP):" >&2
+  echo "    CP-4 absent registry NOSET / CP-1 intact pair PASS / CP-2 leaked owned-section OWNERSHIP-DRIFT / CP-5 missing shared-section OWNERSHIP-DRIFT / CP-6 divergent shared-section SHARED-DIVERGENCE / CP-3 unregistered cross-tree pair UNREGISTERED-PAIR / CP-3b named README.md exclusion holds / CP-7 malformed record MALFORMED" >&2
+  echo "  register runner-resolution validated (#4208, group RR):" >&2
+  echo "    RR-5 absent standard NOSET / RR-1 all pointers resolve CLEAN|2 / RR-2 runner no longer carries its anchor UNRESOLVED|1|2 (the shipped defect, in fixture form) / RR-3 absent runner-definition file UNRESOLVED|2|2 / RR-4 zero pointers NOSET / RR-6 prose-only token mentions parse to zero (parser control)" >&2
   return 0
 }
 
@@ -9237,9 +10082,23 @@ cmd_check_release_corpus() {
 # Warn-vs-enforce at the CI surface is decided by the committed
 # .github/skill-package-freshness.enforce sentinel. Mirrors cmd_check_close_completeness.
 #
-#   exit 0  — FRESH (every rostered skill package content-current), OR STALE but the
-#             sentinel is warn (true verdict reported, not blocking).
-#   exit 1  — STALE AND the sentinel is enforce, OR an unexpected verdict (fail-closed).
+# VERDICT -> EXIT CONTRACT (the authoring home; every other surface CITES this table).
+# A STALE verdict NEVER maps to exit 0 — a probe that says STALE in prose and OK in $?
+# invites a caller to conclude the opposite of the truth.
+#
+#   verdict   sentinel token   exit   caller reads it as
+#   -------   --------------   ----   ----------------------------------------------
+#   FRESH     any              0      pass — every rostered package is content-current
+#   STALE     != enforce       2      ADVISORY finding: not fresh, not blocking. Non-
+#                                     zero (so `-eq 0` cannot mis-read it) and not 1
+#                                     (so a caller can still tell advisory from block).
+#   STALE     enforce          1      BLOCKING finding — the gate must fail closed
+#   <other>   any              1      unexpected verdict — fail-closed, sentinel-agnostic
+#
+# The advisory value 2 follows the in-tree precedent of core/deploy/tools/cross-module-audit.sh
+# (2 = "violations detected (advisory)" vs 1 = BLOCKER). Enforcement POLICY stays in the
+# sentinel, which this probe remains the single reader of; the CI caller dispatches on the
+# integer and never re-parses the sentinel file.
 cmd_check_package_freshness() {
   validate_workspace
   detect_install_path || true
@@ -9266,8 +10125,8 @@ cmd_check_package_freshness() {
       if [[ "$pf_enforce" == "enforce" ]]; then
         exit 1
       fi
-      log "  WARN-MODE (sentinel '$pf_enforce_file' token != enforce): reporting the true verdict but NOT blocking — flip the token to 'enforce' after shakedown."
-      exit 0
+      log "  WARN-MODE (sentinel '$pf_enforce_file' token != enforce): reporting the true verdict as ADVISORY — exit 2, so no caller can read a STALE package as fresh, and distinct from the blocking exit 1. Flip the token to 'enforce' after shakedown."
+      exit 2
       ;;
     *)
       log "package-freshness: unexpected verdict '$verdict' — fail-closed"
@@ -9772,9 +10631,11 @@ main() {
       ;;
     --check-package-freshness)
       # Single-check CI .skill package content-freshness probe (#2656): runs ONLY
-      # Check 7's full content-hash verdict and exits per the verdict (0 FRESH, 1 STALE
-      # when the .github/skill-package-freshness.enforce sentinel is enforce; fail-closed
-      # on an unexpected verdict). The Check 7 logic ALSO fires inside the full --check
+      # Check 7's full content-hash verdict and exits per the verdict (0 FRESH; 2 STALE
+      # advisory when the .github/skill-package-freshness.enforce sentinel is not enforce;
+      # 1 STALE when it IS enforce; 1 fail-closed on an unexpected verdict — never 0 on
+      # STALE, see the contract table on cmd_check_package_freshness). The Check 7 logic
+      # ALSO fires inside the full --check
       # suite — one shared body (_c7_compute_verdict), no copy. Used by
       # .github/workflows/skill-package-freshness.yml.
       cmd_check_package_freshness
@@ -9803,7 +10664,7 @@ main() {
       echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (seeded: Check 38); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
       echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; advisory/deploy-time-only; exits 1 on INCOMPLETE/NOSET when enforce) (#4026)"
-      echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; exits 1 on a STALE package when enforce) (#2656)"
+      echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, unexpected=1) (#2656)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"
       echo ""

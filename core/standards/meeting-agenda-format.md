@@ -105,7 +105,7 @@ per audience (exec / team / technical) in the consumer's
 |---|---|---|
 | comms-writer | Meeting agenda type (SKILL.md) | **Reference implementation** — its agenda output IS this format. |
 | comms-writer | `references/channel-formats.md` — Meeting Agenda Format | References this doc as the single source (no inline element definition remains). |
-| tracker-manager | `references/tracker-schemas.md` — Open Meetings Tracker `MTG-###` `Agenda` field | References this doc for the agenda-field structure (cross-consistent with the canonical element set). |
+| tracker-manager | `core/schemas/tracker-schemas.md` **and** its skill-local half `references/tracker-schemas.md` — Open Meetings Tracker `MTG-###` `Agenda` field | References this doc for the agenda-field structure (cross-consistent with the canonical element set). The two files are a **registered complementary pair** (`core/deploy/allowlists/complementary-reference-pairs.txt`) whose § Tracker 3 is a declared *shared* section, so the pointer is stated in **both** halves — a pointer present in only one half is a drift finding, not a division of labour. |
 
 ## Cross-references
 
