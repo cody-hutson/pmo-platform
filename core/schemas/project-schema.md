@@ -247,7 +247,9 @@ Optional on legacy files, **required forward**. Names the **deliverable domain**
 
 #### Disambiguation — `deliverable_type` vs. the other `domain`-named concepts
 
-The bare word `domain` is overloaded across the platform; `deliverable_type` is the deliberately **non-colliding** name for the deliverable-domain axis. This note fixes the boundaries once (modeled on the §7 `dual_framing_enabled`-vs-`delivery_approach` Collision Check):
+The bare word `domain` is overloaded across the platform; `deliverable_type` is the deliberately **non-colliding** name for the deliverable-domain axis. This note fixes the boundaries **for `deliverable_type`** — it answers "why isn't this field called `domain`?" at the point of use, and its final column is scoped to that question (modeled on the §7 `dual_framing_enabled`-vs-`delivery_approach` Collision Check):
+
+**The corpus-wide index is `core/specs/domain-token-registry.md`.** That registry is the single enumerating source for every concept the bare token names, including the ones this table does not reach — the behavioral/domain predicate in the gate-criteria spec, the template-provenance classification, and the platform-doc frontmatter `domain`. This table is deliberately **not** extended to cover them: a complete corpus-wide enumeration maintained here would make the PROJECT.md schema authoritative over concepts owned by three other files. Read this table for the `deliverable_type` boundary; read the registry for the whole picture.
 
 | Concept | What it is | Where it lives | Relation to `deliverable_type` |
 |---|---|---|---|
@@ -257,7 +259,7 @@ The bare word `domain` is overloaded across the platform; `deliverable_type` is 
 | content-area `delivery/{domain}` | Obsidian content-area tag (`governance`/`design`/`testing`/…) | `frontmatter-schema.md` Tag Taxonomy | **Distinct.** A content-filing tag, not a deliverable class. |
 | Stage-4 `domain:` class field | Abstract deliverable-domain signal consumed by the impact-analysis selector / guides / guide-index | `stage-04-planning.md` § 5.7 | **Consumes `deliverable_type`.** The Stage-4 field reads `deliverable_type` as its authoritative source where present (the reconciliation seam). |
 
-Renaming the shipped artifact-provenance and content-area `domain` fields is **pre-existing naming-debt, OUT OF SCOPE** for this axis — flagged separately, not addressed here.
+Renaming the shipped artifact-provenance and content-area `domain` fields is **pre-existing naming-debt, OUT OF SCOPE** for this axis. It is resolved by **indexing, not by migration** — the registry cited above maps each concept to its owning file, per the direction ADR-050 settled when it rejected the rename.
 
 ### `org_structure_type`
 

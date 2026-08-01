@@ -13,7 +13,7 @@ composes_with: frontmatter-schema.md, project-schema.md, template-protocol.md, t
 
 The bare word `domain` names **six distinct concepts** in this corpus. They share a token and nothing else: their value spaces are disjoint or only accidentally overlapping, their owning files sit in four different folders, and two of them are not fields at all. A reader who meets `domain:` in one file and carries that meaning into another will read the wrong axis.
 
-This registry is the **single enumerating source** for that overload. Each concept has exactly one row naming its owning file, its value space, and the pattern by which an instance is declared. Every other `domain`-disambiguation surface in the corpus points here rather than duplicating this table.
+This registry — canonically `core/specs/domain-token-registry.md` — is the **single enumerating source** for that overload. Each concept has exactly one row naming its owning file, its value space, and the pattern by which an instance is declared. Every other `domain`-disambiguation surface in the corpus points here rather than duplicating this table; cite it by that path.
 
 **No field is renamed.** `core/ADRs/ADR-050-deliverable-domain-axis.md` settled that direction: it rejected reusing or renaming the bare name, minted the non-colliding name `deliverable_type` for the new field, and prescribed a disambiguation note as the fix for the pre-existing overload. This registry is that note. Renaming a shipped `domain` field would require superseding ADR-050, not a scope note — and the live radius is worse than it looks, because one of these concepts is mid-migration on its own value vocabulary and a second rename would collide with it inside the migration window.
 
