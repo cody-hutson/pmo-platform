@@ -267,7 +267,7 @@ echo ""
 echo "── T6 b0: a blank governing_doc cell is a FINDING, never a silent skip ───"
 # Zero findings here would mean the live check prints its OK: line — "all register
 # governing_doc targets resolve AND name their own principle" — over a row it never
-# examined. That is the AI-053 false-OK defect, and this is its assertion.
+# examined. That is the false-OK defect, and this is its assertion.
 assert_findings 1 "EMPTY-GD DP-2" "blank governing_doc cell -> exactly 1 EMPTY-GD finding, not a silent skip" "${TMP}/reg_emptygd.md"
 assert_findings 1 "EMPTY-GD DP-2" "both operands blank -> the governing_doc arm wins (branch order pinned)" "${TMP}/reg_emptyboth.md"
 
@@ -323,7 +323,7 @@ fi
 
 echo ""
 echo "── Structural: the live (b) loop body contains ZERO \`continue\` ───────────"
-# The durable half of the AI-053 fix. A fragment grep can only see the branches that
+# The durable half of the false-OK fix. A fragment grep can only see the branches that
 # EXIST; it cannot see a newly-added early exit that silently returns a row to the loop
 # unexamined — which is precisely how the false OK: got in. This asserts the SHAPE:
 # every row traverses one arm of a total if/elif/else, so c45_ok can survive as 1 only
@@ -343,7 +343,7 @@ else
     echo "  ok   0 \`continue\` statements in the live (b) body — no row can exit the loop unexamined"
   else
     FAIL_COUNT=$((FAIL_COUNT + 1))
-    printf '  FAIL %s `continue` statement(s) in the live Check 45(b) body — an early exit can return a row to the loop neither asserted nor flagged, which is the AI-053 false-OK shape; make the branch set total instead\n' "$C45B_CONTINUES"
+    printf '  FAIL %s `continue` statement(s) in the live Check 45(b) body — an early exit can return a row to the loop neither asserted nor flagged, which is the false-OK shape this assertion exists to close; make the branch set total instead\n' "$C45B_CONTINUES"
   fi
 fi
 
