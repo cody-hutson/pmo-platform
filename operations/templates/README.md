@@ -46,7 +46,7 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 
 ### Software-domain (engineering best-practice canon anchored)
 
-Canon-per-family binding per [`../standards/template-taxonomy.md` §6](../../core/standards/template-taxonomy.md) rows 1–6 + row 9. Canonical-only — no `TEMPLATE_SYNC_MAP` mirrors registered; sync-map registration follows the first consumer skill with a runtime read-path per [`../standards/template-storage.md` §6](../../core/standards/template-storage.md).
+Canon-per-family binding per [`../standards/template-taxonomy.md` §6](../../core/standards/template-taxonomy.md) rows 1–6 + rows 9 and 12. Canonical-only — no `TEMPLATE_SYNC_MAP` mirrors registered; sync-map registration follows the first consumer skill with a runtime read-path per [`../standards/template-storage.md` §6](../../core/standards/template-storage.md).
 
 | Template | Artifact family | Canon source |
 |---|---|---|
@@ -57,6 +57,7 @@ Canon-per-family binding per [`../standards/template-taxonomy.md` §6](../../cor
 | `prd-template.md` | PRD / Feature spec | Anthropic `product-management:write-spec` plugin convention (secondary: Aha! / Lenny Rachitsky) |
 | `postmortem-template.md` | Postmortem | Google SRE Workbook §Postmortem Culture |
 | `test-plan-template.md` | Test plan / Test case | PMBOK 7 §Quality + `engineering:testing-strategy` plugin convention |
+| `qa-acceptance-report-template.md` | Acceptance report / Stage verdict report (`pipeline-output`) | PMBOK 7 §Quality + ISO/IEC/IEEE 29119-3 §Test Completion Report |
 
 ### Platform-internal (operational instance, not stakeholder-facing)
 
