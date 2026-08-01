@@ -1,6 +1,6 @@
 ---
 title: "ADR-104 — Complementary reference pairs are registered in a dedicated allowlist registry, and the canonical copy ships into the package at its repo-relative path"
-status: Proposed — to be ratified at the operator's Stage 9 plan-review gate for the check-enforcement-fidelity release. The flip to Accepted is verified against this file's `status:` field, never assumed from milestone closure.
+status: Accepted — ratified by the operator at the Stage 9 plan-review gate for the check-enforcement-fidelity release (v4.03), 2026-08-01. Covers D-1 (complementary-pair registration mechanism) and D-2 (canonical-into-package, Option A).
 date: 2026-07-30
 release: check-enforcement-fidelity (version bound at Stage 12)
 deciders: "operator (Stage 5 Collective Review decision gate + the Phase A6.5 decision record) + Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment) + Phase A6.5 independent adversarial design reviewer"
