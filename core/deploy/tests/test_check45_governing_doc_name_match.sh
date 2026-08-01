@@ -16,9 +16,23 @@
 #
 # Three failure branches, asserted independently so a future edit cannot collapse one
 # into another and still pass this file:
-#   b0 WELL-FORMED — the entry carries a non-empty `name` to assert against
+#   b0 WELL-FORMED — the entry carries BOTH assertion operands: a non-empty
+#                    `governing_doc` to resolve and a non-empty `name` to assert against
 #   b1 RESOLVE     — path exists, line numeric, target line non-empty
 #   b2 NAME-MATCH  — the target line CONTAINS the entry's `name`
+#
+# b0's `governing_doc` arm closes a SECOND false-confidence defect, distinct from the
+# existence-only one above and caught after it shipped: a bare
+# `[[ -z "$c45_gd" ]] && continue` sat ABOVE b0, so a row with a blanked
+# `governing_doc` cell left the loop neither examined nor counted — Check 45 emitted
+# zero findings and still printed its `OK: … all register governing_doc targets
+# resolve …` line, certifying an entry it never looked at. T6 / T6′ below reproduce
+# that defect and assert its absence, the same way T2 / T2′ do for the first one.
+#
+# The structural assertion at the bottom of this file is the durable half of that fix:
+# the live Check 45(b) loop body must contain ZERO `continue`, so no future edit can
+# reintroduce a path that exits the loop without either asserting or flagging. The
+# unexamined-exit shape is deleted, not detected.
 #
 # Hermetic by construction: every fixture is built under a mktemp -d and the predicate
 # runs with that tmpdir as cwd. The live core/standards/design-principle-register.md
@@ -43,11 +57,68 @@ FAIL_COUNT=0
 # ── Faithful copy of the Check 45(b) predicate (kept in lock-step with deploy.sh via
 #    the drift guard at the end). Emits one line per finding, in the shape
 #    "<branch> <principle_id>", and nothing at all when the register is clean.
-#    Branches: EMPTY-NAME (b0) / RESOLVE (b1) / NAME-MATCH (b2).
+#    Branches: EMPTY-GD (b0) / EMPTY-NAME (b0) / RESOLVE (b1) / NAME-MATCH (b2).
+#    Zero findings here means the live check would print its OK: line, which is what
+#    makes "0 findings on a degenerate register" the falsifying observation, not a
+#    merely-quiet one.
+#
+#    Branch ORDER is load-bearing and mirrors deploy.sh: `governing_doc` is tested
+#    BEFORE `name`, because the empty-name finding's message interpolates the pin
+#    ("'DP-N' pins '<gd>' but its name cell is empty") and would read as a claim about
+#    an empty pin if it could fire on a row with no pin at all. T6c asserts that order.
 
 _c45_trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
 
 c45b_findings() {
+  local _reg="$1"
+  local c45_id c45_name c45_gd c45_path c45_line c45_target _c45_lead _c45_stmt _c45_rest
+  while IFS='|' read -r _c45_lead c45_id c45_name _c45_stmt c45_gd _c45_rest; do
+    c45_id="$(_c45_trim "$c45_id")"
+    c45_name="$(_c45_trim "$c45_name")"
+    c45_gd="$(_c45_trim "$c45_gd")"
+    if [[ -z "$c45_gd" ]]; then
+      printf 'EMPTY-GD %s\n' "$c45_id"
+    elif [[ -z "$c45_name" ]]; then
+      printf 'EMPTY-NAME %s\n' "$c45_id"
+    else
+      c45_path="${c45_gd%%:*}"
+      c45_line="${c45_gd##*:}"
+      c45_target=""
+      if [[ -f "$c45_path" ]] && [[ "$c45_line" =~ ^[0-9]+$ ]]; then
+        c45_target="$(sed -n "${c45_line}p" "$c45_path" 2>/dev/null)"
+      fi
+      if [[ ! -f "$c45_path" ]] || ! [[ "$c45_line" =~ ^[0-9]+$ ]] || [[ -z "$c45_target" ]]; then
+        printf 'RESOLVE %s\n' "$c45_id"
+      elif [[ "$c45_target" != *"$c45_name"* ]]; then
+        printf 'NAME-MATCH %s\n' "$c45_id"
+      fi
+    fi
+  done < <(grep -E '^\| DP-[0-9]' "$_reg")
+}
+
+# ── The PRE-FIX predicate (existence-only), carried so this test can demonstrate the
+#    defect rather than merely assert the fix. It is deliberately NOT drift-guarded:
+#    it no longer exists in deploy.sh, and that is the point.
+c45b_findings_prefix_existence_only() {
+  local _reg="$1"
+  local c45_gd c45_path c45_line
+  while IFS= read -r c45_gd; do
+    [[ -z "$c45_gd" ]] && continue
+    c45_path="${c45_gd%%:*}"
+    c45_line="${c45_gd##*:}"
+    if [[ ! -f "$c45_path" ]] || ! [[ "$c45_line" =~ ^[0-9]+$ ]] || [[ -z "$(sed -n "${c45_line}p" "$c45_path" 2>/dev/null)" ]]; then
+      printf 'RESOLVE %s\n' "$c45_gd"
+    fi
+  done < <(grep -E '^\| DP-[0-9]' "$_reg" | grep -oE '[A-Za-z0-9_./-]+\.md:[0-9]+' | sort -u)
+}
+
+# ── The SECOND pre-fix predicate — the skip-empty-governing_doc form — carried for the
+#    same reason as the one above: so T6′ can demonstrate the false-OK defect rather
+#    than merely assert its fix. Byte-identical to the shipped predicate except for the
+#    one line that caused it: a bare `continue` ABOVE the b0 guard, which returned the
+#    row to the loop unexamined AND unflagged. It is deliberately NOT drift-guarded —
+#    it no longer exists in deploy.sh, and that is the point.
+c45b_findings_prefix_skip_empty_gd() {
   local _reg="$1"
   local c45_id c45_name c45_gd c45_path c45_line c45_target _c45_lead _c45_stmt _c45_rest
   while IFS='|' read -r _c45_lead c45_id c45_name _c45_stmt c45_gd _c45_rest; do
@@ -73,22 +144,6 @@ c45b_findings() {
       printf 'NAME-MATCH %s\n' "$c45_id"
     fi
   done < <(grep -E '^\| DP-[0-9]' "$_reg")
-}
-
-# ── The PRE-FIX predicate (existence-only), carried so this test can demonstrate the
-#    defect rather than merely assert the fix. It is deliberately NOT drift-guarded:
-#    it no longer exists in deploy.sh, and that is the point.
-c45b_findings_prefix_existence_only() {
-  local _reg="$1"
-  local c45_gd c45_path c45_line
-  while IFS= read -r c45_gd; do
-    [[ -z "$c45_gd" ]] && continue
-    c45_path="${c45_gd%%:*}"
-    c45_line="${c45_gd##*:}"
-    if [[ ! -f "$c45_path" ]] || ! [[ "$c45_line" =~ ^[0-9]+$ ]] || [[ -z "$(sed -n "${c45_line}p" "$c45_path" 2>/dev/null)" ]]; then
-      printf 'RESOLVE %s\n' "$c45_gd"
-    fi
-  done < <(grep -E '^\| DP-[0-9]' "$_reg" | grep -oE '[A-Za-z0-9_./-]+\.md:[0-9]+' | sort -u)
 }
 
 # ── Fixture tree (tmpdir only; the live corpus is never touched) ────────────────
@@ -140,6 +195,13 @@ reg_write "${TMP}/reg_substring.md"  "$R_D"
 # T5: a blank `name` cell — the b0 operand-degeneracy guard. Without b0 the
 # containment test is vacuously true and this row passes against any non-empty line.
 reg_write "${TMP}/reg_emptyname.md"  "$R_A" '| DP-2 |  | indexed statement | philosophy.md:5 | synthetic |' "$R_C"
+# T6: a blank `governing_doc` cell — the OTHER b0 operand. The pre-fix predicate
+# SKIPPED this row, so it reached the end of the loop unexamined and unflagged, and the
+# check printed OK: over an entry it never looked at.
+reg_write "${TMP}/reg_emptygd.md"    "$R_A" '| DP-2 | Bravo | indexed statement |  | synthetic |' "$R_C"
+# T6c: BOTH operands blank — pins the branch order (governing_doc arm wins), so the
+# empty-name message can never claim a row "pins ''".
+reg_write "${TMP}/reg_emptyboth.md"  "$R_A" '| DP-2 |  | indexed statement |  | synthetic |' "$R_C"
 
 cd "$TMP" || { echo "cannot cd to fixture dir"; exit 1; }
 
@@ -202,6 +264,29 @@ echo "── T5 b0: an empty name cell cannot pass vacuously ──────�
 assert_findings 1 "EMPTY-NAME DP-2" "blank name cell -> exactly 1 EMPTY-NAME finding, not a silent pass" "${TMP}/reg_emptyname.md"
 
 echo ""
+echo "── T6 b0: a blank governing_doc cell is a FINDING, never a silent skip ───"
+# Zero findings here would mean the live check prints its OK: line — "all register
+# governing_doc targets resolve AND name their own principle" — over a row it never
+# examined. That is the AI-053 false-OK defect, and this is its assertion.
+assert_findings 1 "EMPTY-GD DP-2" "blank governing_doc cell -> exactly 1 EMPTY-GD finding, not a silent skip" "${TMP}/reg_emptygd.md"
+assert_findings 1 "EMPTY-GD DP-2" "both operands blank -> the governing_doc arm wins (branch order pinned)" "${TMP}/reg_emptyboth.md"
+
+echo ""
+echo "── T6' the DEFECT, measured: the skip-form predicate passes that same input"
+# The counterpart of T2′, for the second defect. The skip-empty-gd predicate returns
+# NOTHING on the blanked-governing_doc register — so c45_ok survives as 1 and the OK:
+# line prints. A test that asserted only T6 could not tell a real fix from a fixture
+# that never reproduced the defect.
+PREFIX_GD_OUT="$(c45b_findings_prefix_skip_empty_gd "${TMP}/reg_emptygd.md")"
+if [[ -z "$PREFIX_GD_OUT" ]]; then
+  PASS_COUNT=$((PASS_COUNT + 1))
+  echo "  ok   pre-fix skip-form predicate -> 0 findings on the SAME blanked governing_doc (false OK: reproduced)"
+else
+  FAIL_COUNT=$((FAIL_COUNT + 1))
+  printf '  FAIL pre-fix skip-form predicate unexpectedly flagged: %s\n' "$PREFIX_GD_OUT"
+fi
+
+echo ""
 echo "── Invariant: the run never read or wrote the live register ──────────────"
 if [[ -n "$(c45b_findings "${TMP}/reg_clean.md")" ]]; then
   FAIL_COUNT=$((FAIL_COUNT + 1))
@@ -229,10 +314,37 @@ while IFS='|' read -r _c45_lead c45_id c45_name _c45_stmt c45_gd _c45_rest
 != *"$c45_name"*
 MIS-PIN (name-match)
 register entry has no name
+register entry has no governing_doc
 FRAGS
 if [[ "$DRIFT_OK" == "true" ]]; then
   PASS_COUNT=$((PASS_COUNT + 1))
   echo "  ok   live Check 45(b) carries the marker + the b0/b1/b2 branches this test pins"
+fi
+
+echo ""
+echo "── Structural: the live (b) loop body contains ZERO \`continue\` ───────────"
+# The durable half of the AI-053 fix. A fragment grep can only see the branches that
+# EXIST; it cannot see a newly-added early exit that silently returns a row to the loop
+# unexamined — which is precisely how the false OK: got in. This asserts the SHAPE:
+# every row traverses one arm of a total if/elif/else, so c45_ok can survive as 1 only
+# when every row was fully asserted. Block bounds are the two inline markers, never
+# line numbers. Comment lines are excluded so prose ABOUT `continue` (this fix is
+# documented in that block) cannot make the assertion fire spuriously.
+C45B_BLOCK="$(/usr/bin/awk 'index($0,"# (b) FMF-1"){f=1} f{print} f && index($0,"# (c) FMF-2"){exit}' "$DEPLOY_SH")"
+if [[ -z "$C45B_BLOCK" ]]; then
+  # Fail closed: an unlocatable block must never read as "zero continues found".
+  FAIL_COUNT=$((FAIL_COUNT + 1))
+  echo "  FAIL cannot locate the Check 45(b) block between its '# (b) FMF-1' and '# (c) FMF-2' markers — NOSET, not a pass"
+else
+  C45B_CODE="$(/usr/bin/grep -vE '^[[:space:]]*#' <<< "$C45B_BLOCK")"
+  C45B_CONTINUES="$(/usr/bin/grep -cE '(^|[[:space:];&|])continue([[:space:];&|]|$)' <<< "$C45B_CODE")"
+  if [[ "$C45B_CONTINUES" == "0" ]]; then
+    PASS_COUNT=$((PASS_COUNT + 1))
+    echo "  ok   0 \`continue\` statements in the live (b) body — no row can exit the loop unexamined"
+  else
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    printf '  FAIL %s `continue` statement(s) in the live Check 45(b) body — an early exit can return a row to the loop neither asserted nor flagged, which is the AI-053 false-OK shape; make the branch set total instead\n' "$C45B_CONTINUES"
+  fi
 fi
 
 echo ""
