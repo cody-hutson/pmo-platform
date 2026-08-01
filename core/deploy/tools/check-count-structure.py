@@ -21,9 +21,10 @@ THE PREDICATE (H-G — disjunctive reconciliation over a colon-anchored preamble
     bounds, S5 conditional clauses.
 
 WHY THERE IS NO S4 (preposition suppressor) AND NO TERMINAL WINDOW
-    Both were in an earlier candidate (H-F) that scored 8 flags instead of 51 — six
-    times better on false positives — and both were deleted because the two-armed
-    fixture pair at core/hooks/testdata/count-structure-fixtures.txt falsified them.
+    Both were in an earlier candidate (H-F) that scored 8 flags against the H-G
+    PROTOTYPE's 51 — six times better on false positives — and both were deleted
+    because the two-armed fixture pair at
+    core/hooks/testdata/count-structure-fixtures.txt falsified them.
     The terminal window makes the FLAG arm unexaminable (a BROKEN sensitivity arm:
     0 pairs, 0 flags, reported as "clean"). The preposition suppressor discards the
     very cardinal that RECONCILES the CLEAN arm (`across 6 classes`), turning the
@@ -39,7 +40,7 @@ SELF-CONTROL ON EVERY RUN (PV-5 / INT-2)
     regardless of the caller's mode — the Check 31 fixture-regression precedent.
 
 BASELINE
-    51 non-reconciling pairs pre-exist in the live corpus at introduction. They ship
+    73 non-reconciling pairs pre-exist in the live corpus at introduction. They ship
     in core/deploy/allowlists/count-structure-baseline.txt keyed
     `<path>\\t<sha1(normalized preamble)>\\t<class-tag>` — line-number-free, so
     ordinary edits elsewhere in a file cannot invalidate an entry. Editing a
@@ -195,9 +196,19 @@ class Pair:
 def sha1_preamble(text: str) -> str:
     """Whitespace-normalized sha1. Line-number-free by construction, so an edit
     elsewhere in the file cannot invalidate a baseline entry — but an edit to the
-    preamble ITSELF re-keys it, which is the intended ratchet."""
+    preamble ITSELF re-keys it, which is the intended ratchet.
+
+    `usedforsecurity=False` is load-bearing and must not be dropped: this digest is
+    a CONTENT KEY for baseline lookup, never an integrity or authentication
+    primitive, and the flag is what states that to both a reader and to bandit
+    (B324/CWE-327, which the repo's Python SAST gate runs at --severity-level high).
+    The flag does NOT change the digest — the key is byte-identical with and
+    without it — so setting it re-keys nothing. Do NOT "fix" this by switching
+    algorithm or truncation: the committed baseline is keyed on sha1(preamble)[:16]
+    and any change there re-keys every entry in it.
+    """
     norm = " ".join(text.split())
-    return hashlib.sha1(norm.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha1(norm.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
 
 
 def cardinal_value(tok: str) -> int:
