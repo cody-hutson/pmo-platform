@@ -316,6 +316,33 @@ die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
 ts_now() { /bin/date -u +%Y-%m-%dT%H:%M:%SZ; }
 date_today() { /bin/date -u +%Y-%m-%d; }
 
+# Match-count that cannot fail open. THE ONLY sanctioned way to capture a
+# `grep -c` result in this file.
+#
+# THE DEFECT THIS REPLACES (#3113 QA F-QA-3). A zero-match `grep -c` prints `0`
+# AND exits 1. So the common substitution that appends a fallback
+#   ... || echo 0
+# emits a SECOND `0` and captures the two-line string `0\n0`. A subsequent
+# `[[ "$x" -ne "$y" ]]` then raises "syntax error in expression" and — because a
+# failed arithmetic test evaluates FALSE — takes the PASS branch. A *missing*
+# ledger correctly FAILs (grep prints nothing, exit 2, the value is empty); a
+# *present-but-empty* ledger, which is the worse case, passed clean. That guard
+# mechanizes LEDGER-ROW-PARITY, this release's own CIAC-2 acceptance criterion.
+#
+# `|| true` keeps grep's own single `0` on a zero-match hit; `${n:-0}` covers the
+# paths that emit NOTHING (missing/unreadable file, exit 2). The captured value is
+# therefore always exactly one integer, and the missing-file FAIL is preserved.
+#
+# Callers pass ONE file (or read stdin); a multi-file count emits `file:count`
+# lines and is not a supported call shape. Self-test Test 14 (g) asserts the
+# single-integer contract, drives the shipped phase against a present-but-empty
+# ledger, and blocks reintroduction of the fallback idiom structurally.
+grep_count() {
+  local n
+  n="$(/usr/bin/grep -c "$@" 2>/dev/null || true)"
+  /usr/bin/printf '%s' "${n:-0}"
+}
+
 # Run-scoped CLOSE-OUT anchor (#3718). Sampled ONCE at script load and reused by
 # every close-out-anchored write: RELEASE_DIGEST, the release-note frontmatter
 # `date:` (and thence CHANGELOG, which derives its date from that frontmatter),
@@ -3015,8 +3042,11 @@ phase_assert_anchor_hygiene() {
   # a sibling card backfills ledger rows in this same release, so a pinned magnitude
   # would go stale inside one merge.
   local _idx _log
-  _idx="$(/usr/bin/grep -cE '^\|[[:space:]]*v[0-9]' "$RELEASE_INDEX" 2>/dev/null || echo 0)"
-  _log="$(/usr/bin/grep -cE '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$RELEASE_LOG" 2>/dev/null || echo 0)"
+  # grep_count, never a raw count with an appended fallback: that shape captures
+  # `0\n0` on a present-but-empty ledger, which makes the `-ne` below throw and
+  # evaluate FALSE, silently taking the PASS branch (#3113 QA F-QA-3).
+  _idx="$(grep_count -E '^\|[[:space:]]*v[0-9]' "$RELEASE_INDEX")"
+  _log="$(grep_count -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$RELEASE_LOG")"
   if [[ "$_idx" -ne "$_log" ]]; then
     findings="${findings}LEDGER-ROW-PARITY RELEASE_INDEX has ${_idx} version rows, RELEASE_LOG has ${_log}"$'\n'
   fi
@@ -3042,7 +3072,9 @@ phase_assert_anchor_hygiene() {
     return 1
   fi
 
-  local _annn; _annn="$(/usr/bin/grep -c . <<< "$(annotated_tags_of "$REPO_ROOT")" || echo 0)"
+  # Same idiom, same fix: an empty tag list made this render as `0\n0` inside the
+  # PASS/SKIPPED detail line (a mangled status message, not a wrong verdict).
+  local _annn; _annn="$(grep_count . <<< "$(annotated_tags_of "$REPO_ROOT")")"
   if [[ -n "$_net_note" ]]; then
     mark_phase "assert_anchor_hygiene" "SKIPPED" "offline assertions clean (${_annn} annotated tags; INDEX ${_idx} == LOG ${_log} rows)${_net_note}"
   else
@@ -5167,6 +5199,110 @@ RELEQ
   # a `wc -l` comparison of the two lists is the regression this guard replaces.
   declare -f anchor_parity_violations | /usr/bin/grep -qF 'comm' || { echo "FAIL: AC4-f — anchor_parity_violations must be comm-based (set difference), not a count comparison"; failures=$((failures+1)); }
 
+  # (g) FAIL-OPEN CONTROL on the LEDGER-ROW-PARITY half (#3113 QA F-QA-3), driven
+  # end-to-end through the SHIPPED phase rather than a re-implementation.
+  #
+  # The defect: a zero-match count exits 1 while still printing `0`, so appending a
+  # fallback captured `0\n0`; `[[ "$_idx" -ne "$_log" ]]` then raised "syntax error
+  # in expression", and a failed arithmetic test evaluates FALSE — so the PASS
+  # branch was taken. A MISSING RELEASE_INDEX correctly FAILed, which is precisely
+  # why the hole survived review: the obvious negative control exercised the one
+  # input shape that still worked. The input that failed open is the WORSE one — a
+  # ledger that is present and readable and simply has no rows.
+  #
+  # This half mechanizes CIAC-2, this release's own cross-issue acceptance
+  # criterion, so a fail-open here grades the release's own thesis green for the
+  # wrong reason.
+  #
+  # Hermetic and credential-free: REPO_ROOT is redirected at a bare temp dir (not a
+  # git repo, so the tag probes return empty — which also exercises the third fixed
+  # site, `_annn`) and GH at a nonexistent binary, so the network half
+  # deterministically takes the SKIPPED branch. Safe for the CI smoke job.
+  local _fo_saved_idx="$RELEASE_INDEX" _fo_saved_log="$RELEASE_LOG"
+  local _fo_saved_root="$REPO_ROOT" _fo_saved_gh="$GH"
+  local _fo_tmp; _fo_tmp="$(/usr/bin/mktemp -d -t failopen-selftest.XXXXXX)"
+  REPO_ROOT="$_fo_tmp/norepo"; /bin/mkdir -p "$REPO_ROOT"
+  GH="$_fo_tmp/no-such-gh"
+
+  /bin/cat > "$_fo_tmp/LOG_3" <<'FOLOG'
+| v9.60 | a-slug | 2026-01-01 | #1 | merge | v9.60 | VERIFIED | 2026-01-01 |
+| v9.61 | b-slug | 2026-01-02 | #2 | merge | v9.61 | VERIFIED | 2026-01-02 |
+| v9.62 | c-slug | 2026-01-03 | #3 | merge | v9.62 | VERIFIED | 2026-01-03 |
+FOLOG
+  /bin/cp "$_fo_tmp/LOG_3" "$_fo_tmp/IDX_3"
+  : > "$_fo_tmp/IDX_EMPTY"   # PRESENT and readable, zero version rows
+
+  # FIXTURE PRECONDITIONS — a fixture that failed to build must FAIL the suite, not
+  # quietly satisfy the assertions below.
+  [[ "$(grep_count -E '^\|[[:space:]]*v[0-9]' "$_fo_tmp/IDX_3")" == "3" ]] || { echo "FAIL: AC4-g fixture — the 3-row ledger fixture did not build; every assertion below would be vacuous"; failures=$((failures+1)); }
+  [[ -f "$_fo_tmp/IDX_EMPTY" && ! -s "$_fo_tmp/IDX_EMPTY" ]] || { echo "FAIL: AC4-g fixture — the degenerate INDEX must exist and be EMPTY (an absent file tests the wrong branch)"; failures=$((failures+1)); }
+
+  # (g1) THE DEFECT — a present-but-empty INDEX against a 3-row LOG is a real
+  # 3-row breach and MUST be reported.
+  local _fo_rc
+  RELEASE_INDEX="$_fo_tmp/IDX_EMPTY"; RELEASE_LOG="$_fo_tmp/LOG_3"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _fo_rc=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _fo_rc=$?
+  [[ "$_fo_rc" -ne 0 ]] || { echo "FAIL: AC4-g1 — a present-but-empty RELEASE_INDEX against a 3-row RELEASE_LOG must FAIL the phase (the #3113 F-QA-3 fail-open)"; failures=$((failures+1)); }
+  [[ "$(get_phase assert_anchor_hygiene)" == FAIL\|* ]] || { echo "FAIL: AC4-g1 — phase must mark FAIL, got '$(get_phase assert_anchor_hygiene)'"; failures=$((failures+1)); }
+  /usr/bin/printf '%s' "$(get_phase assert_anchor_hygiene)" | /usr/bin/grep -qF 'LEDGER-ROW-PARITY RELEASE_INDEX has 0 version rows, RELEASE_LOG has 3' || { echo "FAIL: AC4-g1 — the finding must name LEDGER-ROW-PARITY with SINGLE-INTEGER counts 0 and 3, got '$(get_phase assert_anchor_hygiene)'"; failures=$((failures+1)); }
+
+  # (g2) CONTROL — equal, POPULATED ledgers must still pass, and the counts must
+  # render as single integers (the two-line value mangled this status line too).
+  RELEASE_INDEX="$_fo_tmp/IDX_3"; RELEASE_LOG="$_fo_tmp/LOG_3"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _fo_rc=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _fo_rc=$?
+  [[ "$_fo_rc" -eq 0 ]] || { echo "FAIL: AC4-g2 — equal populated ledgers must PASS the phase, got rc=$_fo_rc"; failures=$((failures+1)); }
+  /usr/bin/printf '%s' "$(get_phase assert_anchor_hygiene)" | /usr/bin/grep -qF 'INDEX 3 == LOG 3 rows' || { echo "FAIL: AC4-g2 — the clean detail must read 'INDEX 3 == LOG 3 rows', got '$(get_phase assert_anchor_hygiene)'"; failures=$((failures+1)); }
+
+  # (g3) BOTH-EMPTY — two present-but-empty ledgers genuinely agree (0 == 0) and
+  # must NOT be reported. Without this, "always FAIL on empty" would pass g1.
+  RELEASE_INDEX="$_fo_tmp/IDX_EMPTY"; RELEASE_LOG="$_fo_tmp/IDX_EMPTY"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _fo_rc=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _fo_rc=$?
+  [[ "$_fo_rc" -eq 0 ]] || { echo "FAIL: AC4-g3 — two empty ledgers agree at 0 == 0 and must NOT be reported as a breach"; failures=$((failures+1)); }
+  /usr/bin/printf '%s' "$(get_phase assert_anchor_hygiene)" | /usr/bin/grep -qF 'INDEX 0 == LOG 0 rows' || { echo "FAIL: AC4-g3 — the detail must render single-integer zeroes 'INDEX 0 == LOG 0 rows' (the old idiom rendered '0\\n0'), got '$(get_phase assert_anchor_hygiene)'"; failures=$((failures+1)); }
+
+  # (g4) REGRESSION FLOOR — a MISSING INDEX already FAILed before the fix and must
+  # keep FAILing after it; the fix must not trade one hole for another.
+  RELEASE_INDEX="$_fo_tmp/does-not-exist.md"; RELEASE_LOG="$_fo_tmp/LOG_3"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _fo_rc=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _fo_rc=$?
+  [[ "$_fo_rc" -ne 0 ]] || { echo "FAIL: AC4-g4 — a MISSING RELEASE_INDEX must still FAIL (pre-fix behaviour preserved)"; failures=$((failures+1)); }
+
+  # (g5) UNIT — grep_count's single-integer contract on every shape that made the
+  # old idiom emit two lines, or none.
+  local _fo_zero _fo_missing _fo_hit _fo_stdin
+  _fo_zero="$(grep_count -E '^\|[[:space:]]*v[0-9]' "$_fo_tmp/IDX_EMPTY")"
+  _fo_missing="$(grep_count -E 'anything' "$_fo_tmp/does-not-exist.md")"
+  _fo_hit="$(grep_count -E '^\|[[:space:]]*v[0-9]' "$_fo_tmp/IDX_3")"
+  _fo_stdin="$(grep_count . <<< "")"
+  [[ "$_fo_zero" == "0" ]] || { echo "FAIL: AC4-g5 — grep_count on a present-but-empty file must be exactly '0', got $(/usr/bin/printf '%q' "$_fo_zero")"; failures=$((failures+1)); }
+  [[ "$_fo_missing" == "0" ]] || { echo "FAIL: AC4-g5 — grep_count on a MISSING file must be exactly '0', got $(/usr/bin/printf '%q' "$_fo_missing")"; failures=$((failures+1)); }
+  [[ "$_fo_hit" == "3" ]] || { echo "FAIL: AC4-g5 — grep_count must still count matches, expected 3, got $(/usr/bin/printf '%q' "$_fo_hit")"; failures=$((failures+1)); }
+  [[ "$_fo_stdin" == "0" ]] || { echo "FAIL: AC4-g5 — grep_count over an empty stdin must be exactly '0' (the _annn call shape), got $(/usr/bin/printf '%q' "$_fo_stdin")"; failures=$((failures+1)); }
+
+  # (g6) STRUCTURAL — reintroduction guard. `declare -f` emits the parsed body with
+  # comments stripped, so this cannot be satisfied or defeated by prose.
+  if declare -f phase_assert_anchor_hygiene | /usr/bin/grep -qE '\|\|[[:space:]]*echo[[:space:]]'; then
+    echo "FAIL: AC4-g6 — the parity guard must not reintroduce an '|| echo' count fallback; it captures a two-line value and makes the arithmetic test evaluate FALSE"; failures=$((failures+1))
+  fi
+  # Whole-file sweep. The needle is ASSEMBLED at runtime so this probe cannot match
+  # its own source line, and it requires the absolute-path call convention so the
+  # explanatory prose above (which writes the idiom bare and split) cannot match it.
+  local _fo_needle; _fo_needle="$(/usr/bin/printf '/usr/bin/gre%s -c[A-Za-z]*.*\\|\\|[[:space:]]*ech%s' 'p' 'o')"
+  [[ "$(grep_count -E "$_fo_needle" "${BASH_SOURCE[0]}")" == "0" ]] || { echo "FAIL: AC4-g6 — a raw count with an appended '|| echo' fallback survives in this file; use grep_count"; failures=$((failures+1)); }
+  # Anti-vacuity for the sweep itself: the needle must match a KNOWN-BAD line, or a
+  # typo in it would make the whole-file probe pass by matching nothing. The control
+  # line is ASSEMBLED at runtime for the same reason as the needle — writing the
+  # defective idiom literally here would make the whole-file sweep flag this file.
+  /usr/bin/printf 'x="$(/usr/bin/gre%s -cE foo bar || ech%s 0)"\n' 'p' 'o' > "$_fo_tmp/needle-control"
+  [[ "$(grep_count -E "$_fo_needle" "$_fo_tmp/needle-control")" == "1" ]] || { echo "FAIL: AC4-g6 — the reintroduction needle does not match a known-bad line; the whole-file sweep is vacuous"; failures=$((failures+1)); }
+
+  RELEASE_INDEX="$_fo_saved_idx"; RELEASE_LOG="$_fo_saved_log"
+  REPO_ROOT="$_fo_saved_root"; GH="$_fo_saved_gh"
+  /bin/rm -rf "$_fo_tmp" 2>/dev/null || true
+
   /bin/rm -rf "$_ah_tmp" 2>/dev/null || true
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
@@ -5190,6 +5326,7 @@ RELEQ
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
   echo "  changed_skills_from_paths + files=() composition validated (#3322 — rule a direct-source / rule b reverse-TEMPLATE_SYNC_MAP / non-skill negative / P1 staging-array guard)" >&2
   echo "  release-anchor hygiene validated (AC4/AC5 — recorded divergences exempt / a NEW divergence reported in BOTH directions / EQUAL-COUNT-UNEQUAL-SET fixture still reported (the count-parity false negative) / non-noreply tagger flagged, noreply tagger not, recorded exemption suppressed, lightweight tag excluded by objecttype / guard is comm-based by construction)" >&2
+  echo "  LEDGER-ROW-PARITY fail-open closed (#3113 F-QA-3 — present-but-empty INDEX vs 3-row LOG now FAILs naming both counts / equal populated ledgers still PASS / both-empty 0==0 correctly clean / missing INDEX still FAILs / grep_count single-integer contract on empty-file, missing-file, match and empty-stdin shapes / reintroduction blocked structurally, needle proven against a known-bad control)" >&2
   echo "  phase_sync_primary_checkout validated (AC7 — behind-primary-on-main fast-forwards and HEAD verifiably MOVES to origin/main / non-main primary SKIPPED and NOT moved / absent primary clean no-op (CI hermeticity) / dry-run no-write / source carries no reset-stash-checkout-push-force-cd)" >&2
   echo "  scaffold-residue detector + pre-authored-note tolerance validated (AC1/AC2 — T1 round-trip: the REAL scaffold trips the REAL token set (anti-drift) / T2 authored note clean / T4 this-version CHANGELOG+DIGEST residue FAILs naming surface:line / T3 audit-baseline control: another version's residue does NOT block / AC2 tolerance: this-version untracked note passes, other-version + modified-tracked + unrelated-untracked all still block)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
