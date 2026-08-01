@@ -36,14 +36,16 @@ The cost asymmetry is the whole argument. Recording the constraint now is one do
 
 | ID | Constraint | Asserted by |
 |---|---|---|
-| **CH-1** | When corpus-path resolution is instance-aware **and the instance-corpus root is absent**, `--check-paths` MUST record **N/A** and **exit 0** — never HARD-FAIL. | Fixture **B** (rule R3) |
-| **CH-2** | When the instance-corpus root **is present**, `--check-paths` MUST resolve all four corpus paths through the active corpus home and **exit 0**. | Fixture **A** (rules R3/R5) |
+| **CH-1** | When corpus-path resolution is instance-aware **and the instance-corpus root is absent**, `--check-paths` MUST record **N/A** and **exit 0** — never HARD-FAIL. A non-zero that is not `1` (a crash) is the same violation. | Fixture **B** exit code (rule R3) |
+| **CH-2** | When the instance-corpus root **is present**, `--check-paths` MUST resolve all four corpus paths through the active corpus home and **exit 0**. | Fixture **A** exit code (rule R5) **and its stdout** (rule R7) |
 | **CH-3** | `--check-paths` MUST still **exit non-zero** on a genuine resolution defect when the corpus **is** present — under **any** corpus home. | Fixtures **C** + **D** (rules R1/R2) |
-| **CH-4** | The N/A outcome MUST be emitted as a **distinguishable per-path record**, never an undifferentiated `OK`, so an unresolved path cannot be read as a resolved one. | Fixture **B** stdout (rule R4) |
+| **CH-4** | The N/A outcome MUST be emitted as a **distinguishable per-path record**, never an undifferentiated `OK`, so an unresolved path cannot be read as a resolved one. | Fixture **B** stdout, **per corpus label** (rule R4) |
 
 > **These IDs are load-bearing.** `release/tools/tests/test_corpus_home_tolerance.sh` rule **R6** greps this file for each of `CH-1`..`CH-4` and fails if the file is absent or any ID is missing. **Do not renumber them.** Adding `CH-5` is safe; renumbering `CH-1`..`CH-4` breaks the doc↔test binding and reddens the gate.
 
 **CH-2 and CH-1 are a pair, and neither is sufficient alone.** A resolver that returns exit 0 unconditionally satisfies CH-1 (tolerance) while resolving nothing at all. CH-2 forbids that degenerate answer by requiring a *present* instance corpus to actually resolve. **CH-4 closes the remaining hole:** without it, an implementer could satisfy CH-1 by silently downgrading an unresolved path to `OK`, which would defeat CH-3.
+
+**Both of those forbidden answers must be asserted against CONTENT, not exit codes** — and in the suite's first shipped form they were not. CH-2 was graded on fixture A's exit code alone, so the degenerate resolver this section names reached the suite's terminal `PASS-SEAM-LANDED` state; CH-4 was graded on a bare `N/A` anywhere in fixture B's capture, so downgrading all four paths to `OK` beside one unrelated `N/A` banner also passed. Rules **R7** and the per-path form of **R4** are the assertions that close them, and they read the fixtures' stdout. The lesson generalizes past this document: a constraint that is *stated* but graded only through an exit code is not enforced.
 
 ## 4. Why N/A and not HARD-FAIL
 
@@ -66,24 +68,37 @@ Two grounds, both already established in the platform — no new vocabulary is i
 | **C** | corpus in-tree, `RELEASE_LOG.md` **omitted** | not used | CH-3 |
 | **D** | corpus in-tree, all four present | not used | CH-3 (baseline) |
 
-Let `a b c d` be the four exit codes. The verdict rules:
+Let `a b c d` be the four exit codes, and let **ARMED** mean *the suite has evidence that corpus-path resolution is instance-aware.* The verdict rules:
 
 ```
+ARMED = the script under test names instance-corpus resolution vocabulary
+        outside a comment   (STRUCTURAL — the primary limb)
+     OR a == 0              (BEHAVIOURAL — retained as a backstop)
+
 R1  d != 0                                -> FAIL   in-tree baseline regressed
 R2  c == 0                                -> FAIL   probe blind: a broken corpus path no longer fails
-R3  a == 0 && b != 0                      -> FAIL   SEAM LANDED, TOLERANCE VIOLATED  (CH-1)
-R4  a == 0 && b == 0 && B has no N/A      -> FAIL   tolerance is silent              (CH-4)
-R5  a != 0 && b == 0                      -> FAIL   degenerate resolver              (CH-2)
-R6  a CH-id claimed by the suite is absent from this file -> FAIL   doc<->test binding broken
-    a != 0 && b != 0                      -> PENDING-SEAM      exit 0 + notice
-    a == 0 && b == 0 && B has N/A         -> PASS-SEAM-LANDED  exit 0 + retire-notice
+R3  ARMED && b != 0                       -> FAIL   SEAM LANDED, TOLERANCE VIOLATED  (CH-1)
+R4  ARMED && b == 0 && B lacks a per-path N/A record for any corpus label
+                                          -> FAIL   tolerance is silent              (CH-4)
+R5  a != 0 && (ARMED || b == 0)           -> FAIL   present corpus does not resolve  (CH-2)
+R7  ARMED && a == 0 && A lacks a per-path record for any corpus label,
+                       or A carries the N/A token
+                                          -> FAIL   CH-2 assumed, not resolved       (CH-2)
+R6  a CH-id claimed by the suite is absent from this file, or the claimed-id
+    list holds fewer than 4 DISTINCT ids   -> FAIL   doc<->test binding broken
+    !ARMED  && no failure                 -> PENDING-SEAM      exit 0 + notice
+    ARMED   && no failure                 -> PASS-SEAM-LANDED  exit 0 + retire-notice
 ```
 
-**The teeth are a divergence rule, not a pass rule — and that is the design.** R1/R2/R5/R6 gate from day one. R3/R4 **arm themselves**: the moment `--check-paths` becomes instance-aware with a HARD-FAIL-on-absence resolver, fixture A starts passing while fixture B still fails, and **the PR that introduced the violation goes red**. There is no cutoff date to set, no flag to flip, and no human who has to remember this document exists.
+**The teeth are a divergence rule, not a pass rule — and that is the design.** R1/R2/R5/R6 gate from day one. R3/R4/R7 **arm on the structural fact**, so the PR that makes `--check-paths` instance-aware is the PR that gets graded. There is no cutoff date to set, no flag to flip, and no human who has to remember this document exists.
 
-**Today's posture is `PENDING-SEAM`.** No instance-aware resolution exists, so `a = 1` and `b = 1`, R3/R4 do not fire, and the suite exits 0. It cannot redden a PR before the seam lands.
+**Arming is structural because the behavioural proxy was not sound.** The rules originally armed on `a == 0` — fixture A passing — as a stand-in for "resolution is instance-aware". The two diverge in both directions. A seam can be fully instance-aware and leave `a != 0` (it reads a channel the fixture does not seed, resolves a layout the fixture does not model, or crashes), and every such seam read `PENDING-SEAM` green; conversely a resolver that resolves *nothing* can reach `a == 0` by exiting 0 unconditionally. `core/standards/gate-efficacy-standard.md` Requirement (a) forbids exactly that shape — a proxy signal as the sole verdict-bearing assertion — so the suite now asserts the content: it greps the comment-stripped text of the script under test for instance-corpus resolution vocabulary, and asserts that needle's own non-vacuity against planted / clean / comment-only controls on every run.
 
-**Retirement condition — state it plainly, because a dormant branch that is never retired is debt.** When fixtures A and B both pass (`PASS-SEAM-LANDED`), the seam has landed conformantly. At that point the `PENDING-SEAM` branch has no remaining purpose: replace it with a hard `a != 0 || b != 0 -> FAIL`, so the suite gates the tolerance property unconditionally rather than tolerating a regression back to the pre-seam state. The suite prints this instruction itself when it reaches `PASS-SEAM-LANDED`.
+**The residue is bounded and named.** Arming is a token match, so a resolver that names none of that vocabulary *and* leaves fixture A non-zero is not detected. That residue is bounded by the needle — a one-line extension in the suite — rather than by how many channels the fixture seeds. Widening the fixture's channel set is deliberately *not* the remedy: a seam can read the right channel at the right layout and still escape by crashing, which is why the structural read, not enumeration, is the mechanism.
+
+**Today's posture is `PENDING-SEAM`.** No instance-aware resolution exists — the vocabulary appears in this repo's `check_paths()` header prose and nowhere in its code — so the suite is not armed, `a = 1` and `b = 1`, R3/R4/R7 do not fire, and the suite exits 0. It cannot redden a PR before the seam lands.
+
+**Retirement condition — state it plainly, because a dormant branch that is never retired is debt.** When the suite reaches `PASS-SEAM-LANDED`, the seam has landed conformantly. At that point the `PENDING-SEAM` branch has no remaining purpose: replace it with a hard `!ARMED -> FAIL`, so the suite gates the tolerance property unconditionally rather than tolerating a regression back to the pre-seam state. The suite prints this instruction itself when it reaches `PASS-SEAM-LANDED`.
 
 ## 6. Composition boundary
 

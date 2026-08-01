@@ -32,24 +32,79 @@
 #      C    | present, LOG omitted  | (pinned absent)       | CH-3    |   1
 #      D    | present, all four     | (pinned absent)       | CH-3    |   0
 #
+# ─── How the suite ARMS: a structural detector, not an exit-code proxy ───────
+#
+# The tolerance rules are conditional — they can only grade a resolver that
+# exists. What decides that a resolver exists is the ARMING question, and it is
+# the one this suite got wrong first time round.
+#
+# The original arming antecedent was `a == 0` — fixture A passing. That is a
+# BEHAVIOURAL PROXY for the structural fact "corpus-path resolution is now
+# instance-aware", and the two diverge in every direction that matters. A seam
+# can be fully instance-aware and still leave `a != 0`: it may read a channel
+# fixture A does not seed (an `operator.toml [adapters] corpus_home` selector),
+# resolve a layout fixture A does not model (Check 26's mixed
+# `$(pmo_instance_path)/RELEASE_LOG.md` flat + `.../releases/notes` nested), or
+# simply crash. Every one of those shipped GREEN as `PENDING-SEAM`. Conversely a
+# resolver that resolves NOTHING can reach `a == 0` by exiting 0 unconditionally.
+# gate-efficacy-standard.md Requirement (a) forbids exactly this: a proxy signal
+# as the sole, verdict-bearing assertion.
+#
+# So arming is now decided by CONTENT. `detect_arming()` greps the
+# comment-stripped text of the script under test for the vocabulary by which any
+# instance-corpus resolution must be expressed (ARMING_NEEDLE below). Its own
+# non-vacuity is asserted in-suite by three synthetic controls (P9/P10/P11): a
+# planted token MUST arm, a clean file MUST NOT, and a file whose only occurrence
+# is inside a comment MUST NOT — the last being today's real shape, since
+# check_paths()'s header names the constraint in prose.
+#
+#   ARMED = detect_arming(script) non-empty  OR  a == 0
+#
+# The union is deliberate: the structural limb catches the seams the exit-code
+# proxy missed, and the behavioural limb is retained so a resolver that reaches
+# exit 0 through vocabulary the detector does not carry is still graded.
+#
 # ─── The teeth are a DIVERGENCE rule, not a pass rule ────────────────────────
 #
-#   R1  d != 0                              -> FAIL  in-tree baseline regressed
-#   R2  c == 0                              -> FAIL  probe blind to a broken path
-#   R3  a == 0 && b != 0                    -> FAIL  SEAM LANDED, TOLERANCE VIOLATED (CH-1)
-#   R4  a == 0 && b == 0 && B has no N/A    -> FAIL  tolerance is silent            (CH-4)
-#   R5  a != 0 && b == 0                    -> FAIL  degenerate resolver            (CH-2)
-#   R6  a claimed CH-id is missing from the standard -> FAIL  doc<->test binding broken
-#       a != 0 && b != 0                    -> PENDING-SEAM     exit 0 + notice
-#       a == 0 && b == 0 && B has N/A       -> PASS-SEAM-LANDED exit 0 + retire-notice
+#   R1  d != 0                                   -> FAIL  in-tree baseline regressed   (CH-3)
+#   R2  c == 0                                   -> FAIL  probe blind to a broken path (CH-3)
+#   R6  claimed CH-id set is not >=4 DISTINCT,
+#       or an id is absent from the standard     -> FAIL  doc<->test binding broken
+#   R5  a != 0 && (ARMED || b == 0)              -> FAIL  present corpus does not resolve (CH-2)
+#   R3  ARMED && b != 0                          -> FAIL  SEAM LANDED, TOLERANCE VIOLATED (CH-1)
+#   R7  ARMED && a == 0 && fixture A's capture
+#       lacks a per-path record for any corpus
+#       label, or carries the N/A token          -> FAIL  CH-2 assumed, not resolved   (CH-2)
+#   R4  ARMED && b == 0 && fixture B's capture
+#       lacks a per-path N/A record for any
+#       corpus label                             -> FAIL  tolerance is silent          (CH-4)
+#       ARMED   && no failure                    -> PASS-SEAM-LANDED  exit 0 + retire-notice
+#       !ARMED  && no failure                    -> PENDING-SEAM      exit 0 + notice
 #
-# R1/R2/R5/R6 gate from day one. R3/R4 ARM THEMSELVES: the instant --check-paths
-# becomes instance-aware with a HARD-FAIL-on-absence resolver, fixture A starts
-# passing while B still fails and the PR introducing it goes red. No cutoff date,
+# R1/R2/R5/R6 gate from day one. R3/R4/R7 arm on the structural detector, so the
+# PR that makes resolution instance-aware is graded on that PR — no cutoff date,
 # no flag to flip, no human who must remember the standard exists.
 #
-# TODAY a=1 and b=1, so the verdict is PENDING-SEAM and the suite exits 0. It
-# CANNOT redden a PR before the seam lands.
+# R4 and R7 are CONTENT assertions, not exit-code assertions, and they read the
+# SAME per-path record shape — derived at runtime from the in-tree baseline's own
+# output (P12), never hardcoded. CH-2 is therefore asserted rather than inferred
+# from `a == 0` (a resolver that resolves nothing cannot reach PASS-SEAM-LANDED),
+# and CH-4's needle is per-path rather than a bare `N/A` anywhere in the capture
+# (all four paths downgraded to OK plus one unrelated N/A banner cannot pass).
+#
+# ─── Coverage boundary — stated, because it is real ──────────────────────────
+#
+# Arming is a token match over the script's text. A seam that expresses instance
+# resolution in vocabulary ARMING_NEEDLE does not carry, AND whose fixture-A exit
+# code is non-zero, is NOT detected — the suite reports PENDING-SEAM and the PR
+# stays green. That residue is bounded by the needle, not by the fixture channel
+# set, and extending the needle is a one-line change. The suite does not claim to
+# arm on every conceivable resolver; it claims to arm on any resolver that names
+# the platform's instance-corpus vocabulary anywhere in its uncommented text.
+#
+# TODAY the detector matches nothing outside comments, a=1 and b=1, so the verdict
+# is PENDING-SEAM and the suite exits 0. It CANNOT redden a PR before the seam
+# lands.
 #
 # ─── Hermeticity contract ────────────────────────────────────────────────────
 #
@@ -85,8 +140,38 @@ STANDARD="$REPO_ROOT/release/references/standards/corpus-home-adapter-constraint
 # The CH ids this suite claims to assert. R6 binds them to the standard.
 CLAIMED_IDS="CH-1 CH-2 CH-3 CH-4"
 
+# The vocabulary by which instance-corpus resolution is expressed in this
+# platform. Matched CASE-INSENSITIVELY, so `PMO_INSTANCE_PATH`, `pmo_instance_path`
+# and `Pmo-Instance-Path` are one pattern rather than three.
+#
+# It is deliberately a CONJUNCTION shape — "instance" adjacent to
+# path/root/dir/home/corpus/aware vocabulary, or "corpus" adjacent to "home" —
+# not a bare `instance`. A bare token would arm on any unrelated future use of the
+# word; this shape arms on instance-CORPUS-RESOLUTION and stays quiet otherwise.
+# Measured against the shipped script: 5 occurrences, ALL inside comments, 0
+# outside them — including `WORKSPACE_ROOT="${CLAUDE_WORKSPACE_ROOT:-}"`, which is
+# a workspace root, not an instance-corpus home, and correctly does not match. So
+# the detector reads NOT-ARMED today and cannot redden a PR before a seam lands.
+#
+# Nine resolver idioms were checked against it and all nine match: a
+# `$(pmo_instance_path)` call, a `${PMO_INSTANCE_PATH:-}` read, a
+# `lib-instance-path.sh` source, the inlined ADR-032
+# `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance` idiom, an
+# `operator.toml [adapters] corpus_home` selector in either read shape, an
+# `instance_root` local, an `INSTANCE_PATH` assignment, and an `OPERATOR_INSTANCE`
+# flag. Extending this list widens detection; it is the single knob that bounds
+# the coverage residue named in the header.
+ARMING_NEEDLE='instance[_-]?(path|root|dir|home|corpus|aware)|(corpus|operator|pmo|active)[_-]?instance|corpus[_-]?home|lib-instance-path'
+
+# The canonical corpus labels, used ONLY as a fallback when the record vocabulary
+# cannot be derived from the in-tree baseline's own output (P12).
+CANONICAL_LABELS="RELEASE_LOG RELEASE_INDEX RELEASE_DIGEST RELEASE_NOTES_DIR"
+
 if [[ "${1:-}" == "--help" ]]; then
-  sed -n '3,60p' "${BASH_SOURCE[0]}"
+  # The header block runs from line 3 to the Usage line; keep this range in sync
+  # if the block grows (the trailing PENDING-SEAM/boundary paragraphs are the part
+  # a seam author most needs).
+  sed -n '3,127p' "${BASH_SOURCE[0]}"
   exit 0
 fi
 
@@ -106,6 +191,42 @@ echo "corpus-home tolerance conformance"
 echo "  repo root:      $REPO_ROOT"
 echo "  script under test: $CLOSEOUT"
 echo
+
+# ─── Structural arming detector ──────────────────────────────────────────────
+#
+# detect_arming <file> — echoes every "<lineno>:<content>" whose content names
+# instance-corpus resolution vocabulary OUTSIDE a comment; echoes nothing when the
+# file carries none. Comment lines are dropped by filtering the numbered output,
+# which preserves the source line numbers a reader needs to diagnose a match.
+#
+# It reports ONLY. Arming, and every rule that depends on it, is decided by the
+# caller — so P9/P10/P11 can exercise this exact code path against synthetic
+# controls rather than a parallel re-implementation.
+detect_arming() {
+  grep -niE "$ARMING_NEEDLE" "$1" 2>/dev/null | grep -vE '^[0-9]+:[[:space:]]*#' || true
+}
+
+# The corpus-path RESOLUTION SURFACE of the script under test: the four corpus
+# path assignments plus check_paths()'s own body. A detector hit inside this
+# surface is definitive instance-aware resolution; a hit outside it still arms
+# (the wider net is deliberate — a missed seam is a false green, a spurious arm
+# is a loud, line-numbered red) but is reported separately so a spurious arm is
+# diagnosable in one read.
+RES_SURFACE="$TMP/res-surface.txt"
+{
+  grep -nE '^(RELEASE_LOG|RELEASE_INDEX|RELEASE_DIGEST|RELEASE_NOTES_DIR|REPO_ROOT)=' "$CLOSEOUT" || true
+  awk '/^[[:space:]]*check_paths\(\)[[:space:]]*\{/{f=1} f{printf "%d:%s\n", NR, $0} f&&/^\}/{exit}' "$CLOSEOUT" || true
+} > "$RES_SURFACE" 2>/dev/null
+
+# ─── Per-path record shape ───────────────────────────────────────────────────
+#
+# record_re <label> — the ERE for one per-path corpus record:
+#     <marker> <LABEL> -> <non-blank path>
+# This is the shape the script itself emits ("  OK   RELEASE_LOG -> /… (file)").
+# It is NOT assumed: P12 derives the live label vocabulary by applying this very
+# regex to the in-tree baseline's own capture, so a script that changes its record
+# format fails P12 loudly instead of making R4/R7 pass for free.
+record_re() { printf '^[[:space:]]*[A-Za-z/]+[[:space:]]+%s[[:space:]]*->[[:space:]]*[^[:space:]]' "$1"; }
 
 # ─── Fixture construction ────────────────────────────────────────────────────
 
@@ -142,6 +263,9 @@ build_repo() {
 #     <instance>/release/releases/...  the repo-mirroring layout
 #   Seeding only one would make fixture A UNSATISFIABLE for an adapter that chose
 #   the other — the gate would look armed while being structurally unable to arm.
+#   Widening this set further is NOT how the coverage residue is closed: a seam can
+#   read the right channel and still escape by crashing, so arming is decided
+#   structurally (detect_arming) rather than by how many channels A seeds.
 build_instance_corpus() {
   local inst="$1" sub
   for sub in "releases" "release/releases"; do
@@ -237,6 +361,52 @@ else
   fail "P7 constraint standard not found at $STANDARD"
 fi
 
+# P9/P10/P11 — the arming detector's own non-vacuity controls.
+#
+# The detector decides whether R3/R4/R7 grade anything at all. A typo in
+# ARMING_NEEDLE would make it match nothing, arm never, and turn the whole
+# tolerance limb into a universal acceptor that reports PENDING-SEAM forever —
+# the exact false-confidence shape gate-efficacy-standard.md exists to forbid.
+# These three synthetic files exercise detect_arming() itself, so the detector is
+# asserted against a known-bad and a known-good control on every run, independent
+# of whatever state the real script is in.
+#
+# P9 asserts a COUNT, not mere non-emptiness: the positive control carries the
+# lower-case idiom AND the upper-case one, so a detector that lost its
+# case-insensitivity would still match the first line and pass an
+# is-it-non-empty check while going blind to `PMO_INSTANCE_PATH` — the single
+# most likely spelling a seam author uses.
+_det_pos="$TMP/det-positive.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'check_paths() {' '  local root="$(pmo_instance_path)/releases"' '  local alt="${PMO_INSTANCE_PATH:-}"' '}' > "$_det_pos"
+_det_neg="$TMP/det-negative.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'check_paths() {' '  local root="$REPO_ROOT/release/releases"' '  WORKSPACE_ROOT="${WORKSPACE_ROOT:-${CLAUDE_WORKSPACE_ROOT:-}}"' '}' > "$_det_neg"
+_det_cmt="$TMP/det-comment-only.sh"
+printf '%s\n' '#!/usr/bin/env bash' '# CH-1: instance-corpus root ABSENT -> record N/A and exit 0' '# see lib-instance-path.sh / PMO_INSTANCE_PATH' 'check_paths() { :; }' > "$_det_cmt"
+
+_p9_hits="$(detect_arming "$_det_pos")"
+if [[ -n "$_p9_hits" ]]; then
+  _p9_n="$(printf '%s\n' "$_p9_hits" | wc -l | tr -d '[:space:]')"
+else
+  _p9_n=0
+fi
+if [[ "$_p9_n" -ge 2 ]]; then
+  pass "P9 arming detector fires on both the lower- and upper-case instance-resolution idiom ($_p9_n/2 planted tokens matched)"
+else
+  fail "P9 arming detector is BLIND or case-sensitive — only $_p9_n of 2 planted instance-resolution idioms matched ARMING_NEEDLE. R3/R4/R7 would never arm for the spelling it misses; the tolerance limb becomes a universal acceptor."
+fi
+
+if [[ -z "$(detect_arming "$_det_neg")" ]]; then
+  pass "P10 arming detector is quiet on a repo-homed resolver (no always-arm)"
+else
+  fail "P10 arming detector ARMS on a repo-homed resolver carrying no instance vocabulary — it would redden every PR."
+fi
+
+if [[ -z "$(detect_arming "$_det_cmt")" ]]; then
+  pass "P11 arming detector ignores comment-only occurrences (today's real shape)"
+else
+  fail "P11 arming detector arms on a COMMENT — check_paths()'s prose header names the constraint, so this would arm the suite against a repo-homed resolver."
+fi
+
 echo
 
 # ─── Fixture execution ───────────────────────────────────────────────────────
@@ -278,12 +448,76 @@ NA_NEEDLE='[N]'"/A"
 
 B_HAS_NA=0
 grep -qE "$NA_NEEDLE" "$CAP_B" && B_HAS_NA=1
+A_HAS_NA=0
+grep -qE "$NA_NEEDLE" "$CAP_A" && A_HAS_NA=1
+
+# ─── Arming ──────────────────────────────────────────────────────────────────
+
+ARM_HITS="$(detect_arming "$CLOSEOUT")"
+if [[ -n "$ARM_HITS" ]]; then
+  ARM_N="$(printf '%s\n' "$ARM_HITS" | wc -l | tr -d '[:space:]')"
+else
+  ARM_N=0
+fi
+ARM_SURFACE_HITS="$(detect_arming "$RES_SURFACE")"
+if [[ -n "$ARM_SURFACE_HITS" ]]; then
+  ARM_SURFACE_N="$(printf '%s\n' "$ARM_SURFACE_HITS" | wc -l | tr -d '[:space:]')"
+else
+  ARM_SURFACE_N=0
+fi
+
+ARMED=0
+ARM_WHY=""
+if [[ "$ARM_N" -gt 0 ]]; then
+  ARMED=1
+  ARM_WHY="structural — $ARM_N instance-resolution token(s) outside comments ($ARM_SURFACE_N inside the corpus-path resolution surface)"
+fi
+if [[ "$a" -eq 0 ]]; then
+  ARMED=1
+  if [[ -n "$ARM_WHY" ]]; then
+    ARM_WHY="$ARM_WHY; behavioural — fixture A exits 0"
+  else
+    ARM_WHY="behavioural — fixture A exits 0 with no in-tree corpus (something resolved, or the resolver accepts unconditionally)"
+  fi
+fi
 
 echo "Fixture results"
-echo "  FIXTURE A [CH-2]     exit=$a  (instance-homed corpus, instance PRESENT)"
+echo "  FIXTURE A [CH-2]     exit=$a  (instance-homed corpus, instance PRESENT; N/A token: $A_HAS_NA)"
 echo "  FIXTURE B [CH-1/4]   exit=$b  (instance-homed corpus, instance ABSENT; N/A token: $B_HAS_NA)"
 echo "  FIXTURE C [CH-3]     exit=$c  (repo-homed, RELEASE_LOG omitted)"
 echo "  FIXTURE D [CH-3]     exit=$d  (repo-homed, all four present)"
+if [[ "$ARMED" -eq 1 ]]; then
+  echo "  ARMING: ARMED  ($ARM_WHY)"
+  if [[ "$ARM_N" -gt 0 ]]; then
+    printf '%s\n' "$ARM_HITS" | sed 's/^/    match /' | head -10
+  fi
+else
+  echo "  ARMING: not armed  (0 instance-resolution tokens outside comments; fixture A exit $a)"
+fi
+echo
+
+# ─── Derived per-path record vocabulary ──────────────────────────────────────
+#
+# R4 and R7 assert on per-path records, so they need the label vocabulary the
+# script actually emits. Deriving it from the in-tree baseline's own capture — the
+# one fixture R1 already forces to exit 0 with all four paths resolved — keeps the
+# needle calibrated to the live script instead of to a hardcoded guess, and makes
+# a format change fail HERE (loudly, once) rather than silently weakening R4/R7.
+CORPUS_LABELS="$(sed -nE 's|^[[:space:]]*[A-Za-z/]+[[:space:]]+([A-Za-z0-9_]+)[[:space:]]*->[[:space:]]*[^[:space:]].*|\1|p' "$CAP_D" | sort -u | tr '\n' ' ')"
+CORPUS_LABELS="${CORPUS_LABELS% }"
+_lab_n=0
+for _lab in $CORPUS_LABELS; do _lab_n=$((_lab_n + 1)); done
+
+if [[ "$_lab_n" -ge 4 ]]; then
+  pass "P12 per-path record vocabulary derived from the in-tree baseline: $CORPUS_LABELS ($_lab_n labels)"
+elif [[ "$d" -eq 0 ]]; then
+  fail "P12 the in-tree baseline exits 0 but emits fewer than 4 per-path records matching '<marker> <LABEL> -> <path>' (found $_lab_n: ${CORPUS_LABELS:-none}). R4/R7 would assert against a vocabulary the script no longer emits — update record_re() to the script's current record shape."
+  CORPUS_LABELS="$CANONICAL_LABELS"
+else
+  echo "  NOTE  P12 record vocabulary not derivable (fixture D exit $d — see R1); falling back to the canonical labels: $CANONICAL_LABELS"
+  CORPUS_LABELS="$CANONICAL_LABELS"
+fi
+
 echo
 
 # ─── Verdict rules ───────────────────────────────────────────────────────────
@@ -308,41 +542,94 @@ fi
 if [[ ! -f "$STANDARD" ]]; then
   fail "R6 doc<->test binding BROKEN — the constraint standard is absent: $STANDARD"
 else
-  # Non-vacuity floor FIRST. R6 is a loop over CLAIMED_IDS; an empty or truncated
-  # list makes the loop body unreachable and turns R6 into a universal acceptor
-  # that reports PASS having grepped for nothing. Assert the population before
+  # Non-vacuity floor FIRST, and it counts DISTINCT ids. R6 is a loop over
+  # CLAIMED_IDS; an empty, truncated, OR DUPLICATED list makes the loop assert
+  # less than it claims — "CH-1 CH-1 CH-1 CH-1" has cardinality 4 and asserts one
+  # id, leaving CH-2/3/4 unbound. Assert the population's distinctness before
   # trusting the result.
-  _r6_count=0
-  for _id in $CLAIMED_IDS; do _r6_count=$((_r6_count + 1)); done
+  _r6_total=0
+  for _id in $CLAIMED_IDS; do _r6_total=$((_r6_total + 1)); done
+  _r6_count="$(printf '%s\n' $CLAIMED_IDS | sort -u | grep -c . || true)"
+  _r6_count="${_r6_count:-0}"
   if [[ "$_r6_count" -lt 4 ]]; then
-    fail "R6 claimed-id list is DEGENERATE — $_r6_count id(s), expected at least 4 (CH-1..CH-4). R6 would grade a PASS having asserted nothing."
+    fail "R6 claimed-id list is DEGENERATE — $_r6_count DISTINCT id(s) among $_r6_total entr(ies) ($CLAIMED_IDS), expected at least 4 distinct (CH-1..CH-4). R6 would grade a PASS having asserted fewer constraints than it claims."
   else
     _r6_missing=""
     for _id in $CLAIMED_IDS; do
       grep -q "\*\*${_id}\*\*" "$STANDARD" || _r6_missing="$_r6_missing $_id"
     done
     if [[ -z "$_r6_missing" ]]; then
-      pass "R6 all $_r6_count claimed constraint ids ($CLAIMED_IDS) are present in the standard"
+      pass "R6 all $_r6_count distinct claimed constraint ids ($CLAIMED_IDS) are present in the standard"
     else
       fail "R6 doc<->test binding BROKEN — constraint id(s) missing from the standard:$_r6_missing"
     fi
   fi
 fi
 
-# R3 / R4 / R5 — the self-arming tolerance rules.
-if [[ "$a" -eq 0 && "$b" -ne 0 ]]; then
-  fail "R3 SEAM LANDED, TOLERANCE VIOLATED (CH-1) — corpus-path resolution is now instance-aware (fixture A passes) but HARD-FAILS when the instance-corpus root is absent (fixture B exit $b). Per release/references/standards/corpus-home-adapter-constraints.md CH-1, instance-absence MUST record N/A and exit 0. As written, --check-paths reddens the required closeout-smoke gate on every PR from a fresh clone or CI runner."
-elif [[ "$a" -ne 0 && "$b" -eq 0 ]]; then
-  fail "R5 DEGENERATE RESOLVER (CH-2) — fixture B passes (absence tolerated) but fixture A fails (a PRESENT instance corpus does not resolve). A resolver that tolerates absence without resolving presence satisfies the letter of CH-1 while resolving nothing."
-elif [[ "$a" -eq 0 && "$b" -eq 0 ]]; then
-  if [[ "$B_HAS_NA" -eq 1 ]]; then
-    pass "R3/R5 tolerance property holds — presence resolves, absence is tolerated"
-    pass "R4 tolerance is explicit (CH-4) — fixture B emits a distinguishable N/A record"
-  else
-    fail "R4 TOLERANCE IS SILENT (CH-4) — fixture B exits 0 with an absent instance-corpus root but emits no distinguishable N/A record. An unresolved path that reads as OK defeats CH-3: a genuine resolution defect would be indistinguishable from a tolerated absence."
-  fi
+# R5 — CH-2's exit-code limb. Fires unconditionally on the pre-seam degenerate
+# shape (b == 0 with a != 0: absence tolerated while presence resolves nothing),
+# and additionally whenever the suite is ARMED — because an armed resolver that
+# leaves fixture A failing has not demonstrated CH-2 at all.
+if [[ "$a" -ne 0 ]] && { [[ "$ARMED" -eq 1 ]] || [[ "$b" -eq 0 ]]; }; then
+  fail "R5 CH-2 NOT DEMONSTRATED — a PRESENT instance corpus does not resolve (fixture A exit $a) while the suite is armed ($ARM_WHY). Two causes, and they need different fixes: (i) the resolver tolerates absence without resolving presence — the degenerate answer CH-2 forbids; or (ii) the resolver reads a corpus-home channel or layout fixture A does not seed (it seeds PMO_INSTANCE_PATH at <inst>/releases/ and <inst>/release/releases/). If (ii), seed your channel in build_instance_corpus() in this file — do NOT relax the rule."
+elif [[ "$ARMED" -eq 1 ]]; then
+  pass "R5 CH-2 exit limb — a present instance corpus resolves (fixture A exit 0)"
 else
-  pass "R3/R4/R5 dormant — no instance-aware resolution present (fixtures A and B both fail)"
+  pass "R5 live but not triggered — no resolver tolerates absence without resolving presence (fixture A exit $a, fixture B exit $b)"
+fi
+
+# R3 — CH-1. Armed by the STRUCTURAL detector, not by fixture A's exit code, so a
+# resolver that is instance-aware but invisible to fixture A is still graded.
+if [[ "$ARMED" -eq 1 ]] && [[ "$b" -ne 0 ]]; then
+  fail "R3 SEAM LANDED, TOLERANCE VIOLATED (CH-1) — corpus-path resolution is instance-aware ($ARM_WHY) but --check-paths exits $b when the instance-corpus root is absent. Per release/references/standards/corpus-home-adapter-constraints.md CH-1, instance-absence MUST record N/A and exit 0. As written, --check-paths reddens the required closeout-smoke gate on every PR from a fresh clone or CI runner. A non-1 exit (a crash) is the same violation: absence must be TOLERATED, not merely not-hard-failed."
+elif [[ "$ARMED" -eq 1 ]]; then
+  pass "R3 CH-1 tolerance holds — an absent instance-corpus root exits 0"
+fi
+
+# R7 — CH-2's CONTENT limb (the assertion whose absence let a resolver that
+# resolves NOTHING reach PASS-SEAM-LANDED). Fixture A's capture is READ here: an
+# exit code alone cannot distinguish "resolved four paths through the instance
+# corpus" from "printed one N/A and returned 0".
+if [[ "$ARMED" -eq 1 ]] && [[ "$a" -eq 0 ]]; then
+  _r7_missing=""
+  _r7_hits="$TMP/r7-hits.txt"
+  for _lab in $CORPUS_LABELS; do
+    grep -E "$(record_re "$_lab")" "$CAP_A" > "$_r7_hits" 2>/dev/null || : > "$_r7_hits"
+    [[ -s "$_r7_hits" ]] || _r7_missing="$_r7_missing $_lab"
+  done
+  if [[ -n "$_r7_missing" ]]; then
+    fail "R7 CH-2 ASSUMED, NOT RESOLVED — fixture A exits 0 but its output carries no per-path resolution record for:$_r7_missing. A present instance corpus MUST resolve all four corpus paths through the active corpus home (CH-2); an unconditional exit 0 satisfies the letter of CH-1 while resolving nothing at all, which is exactly the degenerate answer the standard's §3 says CH-2 exists to forbid."
+  elif [[ "$A_HAS_NA" -eq 1 ]]; then
+    fail "R7 CH-2 VIOLATED — fixture A exits 0 but its output carries the N/A token. Fixture A's instance corpus is PRESENT and complete (P2), so nothing in it is legitimately N/A; a resolver reporting N/A here is tolerating absence it should be resolving."
+  else
+    pass "R7 CH-2 content limb — fixture A resolves a per-path record for every corpus label ($CORPUS_LABELS) and reports no N/A"
+  fi
+fi
+
+# R4 — CH-4. The needle is PER-PATH, matched against the same record shape R7
+# uses. A bare N/A anywhere in the capture is not evidence of a distinguishable
+# per-path record: all four paths downgraded to OK plus one unrelated N/A banner
+# would satisfy it, which is precisely the hole CH-4 closes.
+if [[ "$ARMED" -eq 1 ]] && [[ "$b" -eq 0 ]]; then
+  _r4_missing=""
+  _r4_hits="$TMP/r4-hits.txt"
+  for _lab in $CORPUS_LABELS; do
+    grep -E "$(record_re "$_lab")" "$CAP_B" > "$_r4_hits" 2>/dev/null || : > "$_r4_hits"
+    if [[ -s "$_r4_hits" ]] && grep -qE "$NA_NEEDLE" "$_r4_hits"; then
+      :
+    else
+      _r4_missing="$_r4_missing $_lab"
+    fi
+  done
+  if [[ -n "$_r4_missing" ]]; then
+    fail "R4 TOLERANCE IS SILENT (CH-4) — fixture B exits 0 with an absent instance-corpus root but emits no distinguishable per-path N/A record for:$_r4_missing (whole-capture N/A token present: $B_HAS_NA). CH-4 requires a per-path record, never an undifferentiated OK: an unresolved path that reads as OK defeats CH-3, because a genuine resolution defect becomes indistinguishable from a tolerated absence."
+  else
+    pass "R4 tolerance is explicit (CH-4) — fixture B emits a per-path N/A record for every corpus label ($CORPUS_LABELS)"
+  fi
+fi
+
+if [[ "$ARMED" -eq 0 ]]; then
+  pass "R3/R4/R7 dormant — no instance-aware resolution detected (0 tokens outside comments, fixture A exit $a)"
 fi
 
 echo
@@ -355,20 +642,23 @@ if [[ "$FAILURES" -gt 0 ]]; then
   exit 1
 fi
 
-if [[ "$a" -ne 0 && "$b" -ne 0 ]]; then
+if [[ "$ARMED" -eq 0 ]]; then
   echo "verdict: PENDING-SEAM"
-  echo "  Corpus-path resolution is not instance-aware yet, so the CH-1/CH-4 tolerance"
-  echo "  rules (R3/R4) are dormant. R1/R2/R5/R6 gated and passed. This suite cannot"
-  echo "  redden a PR until the corpus-home seam lands — and it reddens the PR that"
-  echo "  lands it non-conformantly, with no cutoff to set and no arming step to run."
+  echo "  No instance-aware corpus-path resolution is detected in the script under"
+  echo "  test, so the CH-1/CH-2/CH-4 tolerance rules (R3/R4/R7) are dormant."
+  echo "  R1/R2/R5/R6 gated and passed. This suite cannot redden a PR until the"
+  echo "  corpus-home seam lands — and it grades the PR that lands it, armed by a"
+  echo "  structural read of the resolver rather than by a fixture exit code."
   exit 0
 fi
 
 echo "verdict: PASS-SEAM-LANDED"
 echo "  The corpus-home seam has landed CONFORMANTLY: a present instance corpus"
-echo "  resolves, an absent one is tolerated with an explicit N/A record."
+echo "  resolves with a per-path record for every corpus label (CH-2), an absent"
+echo "  one is tolerated with a per-path N/A record (CH-1, CH-4), and the in-tree"
+echo "  baseline still detects a genuine resolution defect (CH-3)."
 echo "  ACTION — retire the PENDING-SEAM branch of this suite. Replace it with a"
-echo "  hard 'a != 0 || b != 0 -> FAIL' so the tolerance property gates"
-echo "  unconditionally and cannot silently regress to the pre-seam state."
+echo "  hard 'not ARMED -> FAIL' so the tolerance property gates unconditionally"
+echo "  and cannot silently regress to the pre-seam state."
 echo "  (See corpus-home-adapter-constraints.md §5 'Retirement condition'.)"
 exit 0
