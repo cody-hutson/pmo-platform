@@ -5349,10 +5349,24 @@ FOLOG
 #
 # CONSTRAINT (corpus-home adapter seam): if you are making this resolution
 # instance-aware / adapter-driven, read
-# release/references/standards/corpus-home-adapter-constraints.md FIRST.
-# CH-1: instance-corpus root ABSENT -> record N/A and exit 0, never HARD-FAIL
-# (this probe is a REQUIRED CI gate; a HARD-FAIL reddens every PR from a fresh
-# clone). release/tools/tests/test_corpus_home_tolerance.sh enforces CH-1..CH-4.
+# release/references/standards/corpus-home-adapter-constraints.md FIRST. Three of
+# its four constraints bind the code you are about to write, and satisfying only
+# the first is the documented way to ship a broken resolver behind a green gate:
+#   CH-1  instance-corpus root ABSENT  -> record N/A and exit 0, never HARD-FAIL
+#         (this probe is a REQUIRED CI gate; a HARD-FAIL reddens every PR from a
+#         fresh clone). A crash is not tolerance either — any non-zero fails.
+#   CH-2  instance-corpus root PRESENT -> resolve all four corpus paths through
+#         the active corpus home and exit 0. An unconditional exit 0 satisfies
+#         CH-1 while resolving nothing at all; CH-2 exists to forbid exactly that.
+#   CH-4  emit the N/A outcome as a distinguishable PER-PATH record, never an
+#         undifferentiated OK — otherwise an unresolved path reads as a resolved
+#         one and CH-3 is defeated.
+# release/tools/tests/test_corpus_home_tolerance.sh ASSERTS CH-3 unconditionally,
+# and asserts CH-1 / CH-2 / CH-4 by reading the fixtures' OUTPUT once it detects
+# instance-resolution vocabulary in this file (or fixture A starts exiting 0). It
+# does NOT assert them for a resolver that names none of that vocabulary AND leaves
+# its fixture A non-zero — if you introduce a new spelling, extend ARMING_NEEDLE
+# there in the same change.
 check_paths() {
   local rc=0
   local label path kind
