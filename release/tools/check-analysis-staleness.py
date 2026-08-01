@@ -403,7 +403,14 @@ def run_archive(root, flagged):
     if not flagged:
         print("no flagged artifacts to archive.")
         return 0
-    today_iso = datetime.date.today().isoformat()
+    # UTC, not local (#3718). This value is EMITTED AND PERSISTED — it lands in a
+    # SUMMARY.md frontmatter as `status: archived (archived <date> ...)`, a
+    # durable record a later reader must be able to resolve. That puts it in
+    # scope for core/standards/date-variable-convention.md § Emission-Time
+    # Anchors, unlike the date.today() below at the staleness comparison, which
+    # only feeds an inequality and stays local by design (converting it would
+    # shift the human-facing staleness window by up to a day).
+    today_iso = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
     for subfolder in sorted(flagged):
         sub = os.path.join(root, ANALYSIS_DIR, subfolder)
         summary = os.path.join(sub, SUMMARY_NAME)

@@ -77,8 +77,8 @@ name: Release tooling smoke
 # same discipline reference-durability.yml applies to its fragile-ref detector.
 #
 # Three sibling offline self-tests run in the same closeout-smoke job for the same
-# anti-rot reason: the version allocator (claim-version.sh --self-test, its
-# U-1..U-10 fixtures), the release-body drift check
+# anti-rot reason: the version allocator (claim-version.sh --self-test and its
+# hermetic fixture suite), the release-body drift check
 # (check-release-body-drift.sh --self-test), and the Stage-13 close-out
 # learnings-register producer (produce-learnings-register.sh --self-test). All three
 # are hermetic — fixture-driven,
@@ -174,7 +174,7 @@ jobs:
         # Pure helpers only — must NOT reach gh auth / network. Gate on exit code.
         run: bash release/tools/automated-closeout.sh --self-test
 
-      - name: Self-test — claim-version.sh (offline; U-1..U-10 fixtures)
+      - name: Self-test — claim-version.sh (offline; hermetic fixtures)
         # The version allocator's fixtures ran only when invoked manually; CI-gating
         # them here matches the peer close-out tool above. Hermetic: no git remote / gh
         # / network (fetch-fail and signing paths are HALT-tested in-process). Gate on

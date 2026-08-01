@@ -26,10 +26,19 @@ its #N-token "Scope" count are RETIRED — the live INDEX has no Scope column, s
 the #N-token miscount the generator was filed to fix is moot by construction.
 
 Usage:
-    python3 core/deploy/tools/generate_release_index.py
-    python3 core/deploy/tools/generate_release_index.py --output-stdout
-    python3 core/deploy/tools/generate_release_index.py --verify
-    python3 core/deploy/tools/generate_release_index.py --self-test
+    python3 core/deploy/tools/generate_release_index.py --verify        # read-only
+    python3 core/deploy/tools/generate_release_index.py --self-test     # read-only
+    python3 core/deploy/tools/generate_release_index.py --output-stdout # no write
+    python3 core/deploy/tools/generate_release_index.py                 # DESTRUCTIVE
+
+DESTRUCTIVE-DEFAULT WARNING. The bare no-flag invocation is a FULL REGENERATE: it
+rewrites every row of RELEASE_INDEX.md from RELEASE_LOG.md in one pass. The live
+INDEX carries GRANDFATHERED rows whose `Date` cells deliberately hold the close-out
+date rather than the merge anchor, and whose header § Grandfathering states they are
+not to be rewritten. A full regenerate restamps all of them silently — an audit-trail
+forgery, not a refresh. Stage 13 is APPEND-ONLY (release-process.md § D6 / CR-D6):
+append the single new row, then confirm with `--verify`. Reach for the bare form only
+on an explicit operator decision to accept the restamp of every grandfathered row.
 
 Exit codes: 0 = success (or --verify: full match), 1 = --verify drift,
 3 = path-resolution / parse failure (LOG or INDEX missing/unreadable, or a
@@ -191,6 +200,40 @@ CORPUS_INDEX_ORPHAN_PREFIX = "CORPUS-INDEX-ORPHAN"
 # LAST (oldest) deterministically rather than crashing the sort.
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
+# ── Date anchor (#3718) ──────────────────────────────────────────────────────
+#
+# The Date comparison below asserts the INDEX Date equals the LOG Date. That is
+# only a meaningful assertion because both cells carry the SAME anchor — the
+# MERGE event — declared at core/standards/date-variable-convention.md
+# § Emission-Time Anchors and in each ledger's header prose.
+#
+# It was not always so. automated-closeout.sh wrote the INDEX Date from the
+# close-out clock while this checker asserted it equal the LOG's merge date, so
+# every close-out that crossed a UTC midnight manufactured a finding here BY
+# CONSTRUCTION — the check reported the design working correctly, and in doing so
+# lost the ability to report anything else. The emitter now reads the LOG row.
+#
+# The rows written before that reconciliation are an audit trail recorded under
+# the behaviour of their time. They are GRANDFATHERED from the Date comparison
+# only — every other field is still compared, and every version absent from this
+# set is compared on Date exactly as before. Rewriting them would forge history;
+# note that regenerating the INDEX without --verify would rewrite all of them in
+# a single pass, which is why that is an operator-authorized action rather than
+# the routine remedy this check used to recommend.
+#
+# ENUMERATED rather than expressed as a date cutoff, deliberately: the set is
+# closed and known, an enumeration is self-documenting and reviewable in a diff,
+# and it cannot silently widen to swallow a genuine future divergence.
+#
+# DO NOT add a version here to silence a new finding. A Date divergence on a
+# release closed after the reconciliation means the emitter regressed — the
+# INDEX Date must be read from the LOG row, never sampled from the close-out
+# clock. Fix the emitter.
+DATE_ANCHOR_GRANDFATHERED = frozenset({
+    "v3.59", "v3.60", "v3.61", "v3.65", "v3.69", "v3.70", "v3.71",
+    "v3.75", "v3.80", "v3.83", "v3.88", "v3.99", "v3.100",
+})
+
 
 def _date_sort_key(date_cell: str) -> tuple[int, str]:
     """Sort key for one Date cell. Well-formed ISO dates sort by value;
@@ -339,11 +382,19 @@ def verify(log_rows: list[dict], index_rows: list[dict]) -> list[dict]:
                 "recommendation": "LOG Milestone is canonical; re-run generator to refresh INDEX",
             })
 
-        if log_r["date"] != idx_r["date"]:
+        # Date — both cells carry the MERGE anchor; pre-reconciliation rows are
+        # grandfathered on this field only. See DATE_ANCHOR_GRANDFATHERED above.
+        if log_r["date"] != idx_r["date"] and v not in DATE_ANCHOR_GRANDFATHERED:
             findings.append({
                 "version": v, "field": "date",
                 "log_value": log_r["date"], "index_value": idx_r["date"],
-                "recommendation": "LOG is canonical for deploy-date; re-run generator to refresh INDEX",
+                "recommendation": (
+                    "LOG Date is canonical for the INDEX Date — both carry the MERGE anchor per "
+                    "core/standards/date-variable-convention.md § Emission-Time Anchors. A divergence here "
+                    "means the close-out emitter sampled its clock instead of reading the LOG row; fix "
+                    "automated-closeout.sh phase_append_release_index. Do NOT regenerate the whole INDEX to "
+                    "clear this — that rewrites grandfathered historical rows"
+                ),
             })
 
         if log_r["release_pr"] != idx_r["release_pr"]:
@@ -435,6 +486,47 @@ def _self_test() -> int:
     # The aligned version-less row must NOT produce a coexistence finding.
     if ("self-test-vl (version-less)", "coexistence") in actual_signatures:
         print("self-test FAIL: aligned version-less row wrongly flagged", file=sys.stderr)
+        return 1
+
+    # ── Date-anchor grandfathering (#3718) ───────────────────────────────────
+    # Two halves, and BOTH must hold or the exemption is either useless or a
+    # blanket amnesty: a grandfathered version is exempt on Date, and a
+    # non-grandfathered version with the same divergence still fires. Without the
+    # second half a widened set would pass silently.
+    gf_log = parse_log_rows(
+        "# RELEASE_LOG\n\n"
+        "| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |\n"
+        "|---|---|---|---|---|---|---|---|\n"
+        "| v3.83 | m-gf | #1 | #101 | `a` | `v3.83` | VERIFIED | 2026-07-22 |\n"
+        "| v99.77 | m-new | #2 | #102 | `b` | `v99.77` | VERIFIED | 2026-07-22 |\n"
+    )
+    gf_index = parse_index_rows(
+        "# RELEASE_INDEX\n\n"
+        "| Version | Milestone | Date | Theme | Release PR | Release Notes |\n"
+        "|---|---|---|---|---|---|\n"
+        "| v3.83 | m-gf | 2026-07-23 | t | #101 | — |\n"
+        "| v99.77 | m-new | 2026-07-23 | t | #102 | — |\n"
+    )
+    gf_sigs = {(f["version"], f["field"]) for f in verify(gf_log, gf_index)}
+    if ("v3.83", "date") in gf_sigs:
+        print("self-test FAIL: grandfathered version flagged on date", file=sys.stderr)
+        return 1
+    if ("v99.77", "date") not in gf_sigs:
+        print("self-test FAIL: non-grandfathered date divergence must still fire "
+              "— the exemption is per-version, never a blanket date amnesty", file=sys.stderr)
+        return 1
+    # Grandfathering is Date-ONLY: a grandfathered version still drifts on
+    # every other field.
+    gf2_index = parse_index_rows(
+        "# RELEASE_INDEX\n\n"
+        "| Version | Milestone | Date | Theme | Release PR | Release Notes |\n"
+        "|---|---|---|---|---|---|\n"
+        "| v3.83 | WRONG-slug | 2026-07-23 | t | #999 | — |\n"
+    )
+    gf2_sigs = {(f["version"], f["field"]) for f in verify(gf_log[:1], gf2_index)}
+    if ("v3.83", "milestone") not in gf2_sigs or ("v3.83", "release_pr") not in gf2_sigs:
+        print("self-test FAIL: grandfathering must exempt the date field ONLY "
+              f"— other fields still compared; got {gf2_sigs}", file=sys.stderr)
         return 1
     # Theme drift must NOT be flagged (no LOG source of truth).
     if any(f["field"] == "theme" for f in findings):

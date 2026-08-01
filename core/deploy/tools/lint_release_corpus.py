@@ -402,7 +402,13 @@ def check_index_row_count() -> list[str]:
     log_rows = sum(1 for line in LOG_PATH.read_text().splitlines() if re.match(r"^\| v[0-9]", line))
     index_rows = sum(1 for line in INDEX_PATH.read_text().splitlines() if re.match(r"^\| v[0-9]", line))
     if index_rows < log_rows:
-        findings.append(f"INDEX-COUNT-LOW: RELEASE_INDEX.md has {index_rows} version-rows; RELEASE_LOG.md has {log_rows} — INDEX is stale, regenerate via generate_release_index.py")
+        findings.append(
+            f"INDEX-COUNT-LOW: RELEASE_INDEX.md has {index_rows} version-rows; RELEASE_LOG.md has {log_rows} "
+            "— INDEX is stale. Remedy is APPEND-ONLY: add the missing row(s) in place, then confirm with the "
+            "read-only `generate_release_index.py --verify`. Do NOT run a bare `generate_release_index.py` — a "
+            "full regenerate rewrites every row and restamps the grandfathered Date cells the RELEASE_INDEX.md "
+            "header declares must not be rewritten."
+        )
     return findings
 
 

@@ -182,6 +182,19 @@ gh pr view <PR> --json state,mergeCommit
 
 **Phase B5.5 — CHANGELOG.md append (Surface 2 of Layer-1 dual-write):** The Stage 13 chore PR commit includes a CHANGELOG.md append at repo root — Surface 2 of the Layer-1 dual-write mechanism per [`release-notes-standard.md § Part 5`](../standards/release-notes-standard.md). The content is extracted from `release/releases/notes/v<X.Y>_RELEASE_NOTES.md` Section 6a per the §5.3 transform rule (5–15 lines, Keep-a-Changelog 1.1.0 format with `## [v<X.Y>] - YYYY-MM-DD` H2 + `### Added/Changed/...` H3 categories present). Surface 1 (GitHub Releases) was already emitted at Stage 12 Phase B5.5 per [`stage-12-execute.md § Phase B5.5`](stage-12-execute.md); Surface 3 (RELEASE_LOG VERIFIED transition) is in the same Stage 13 chore PR diff per Phase B1.
 
+**Phase B-anchors — which date each Stage-13 corpus write carries.** Every date this stage writes is anchored to a named event, so a reader never has to infer what a ledger date means and two surfaces can differ by a day without contradicting each other. The taxonomy (**merge event** / **close-out event** / **emission instant**), the per-anchor format rules, and the forward-only grandfathering are codified once at [`core/standards/date-variable-convention.md § Emission-Time Anchors`](../../../core/standards/date-variable-convention.md); this table binds the Stage-13 writes to it.
+
+| Stage-13 write | Anchor | Value source |
+|---|---|---|
+| `RELEASE_INDEX.md` new row — `Date` | **merge event** | read from the `RELEASE_LOG.md` row for this version, NOT from the close-out clock |
+| `RELEASE_DIGEST.md` new entry — `### vX.Y (<date>)` | **close-out event** | the run-scoped close-out anchor |
+| `notes/vX.Y_RELEASE_NOTES.md` — frontmatter `date:` | **close-out event** | the run-scoped close-out anchor |
+| `CHANGELOG.md` — `## [vX.Y] - <date>` | **close-out event** | the release-note frontmatter `date:` (hence the same run-scoped anchor, indirectly) |
+| `RELEASE_REVERSIONS.md` — date cell | **close-out event** | the run-scoped close-out anchor |
+| `RELEASE_LOG.md` — `Date` (written at Stage 12, transitioned here) | **merge event** | Stage 12 Phase B5; Stage 13 transitions State only and never rewrites the Date |
+
+**Sample-once discipline.** The close-out anchor is sampled **once per close-out run** and reused by every close-out-anchored write above. It is not re-sampled per phase: a long close-out run can straddle a UTC midnight, and re-sampling would let two writes in one atomic chore PR disagree about which day the close happened. **Why INDEX takes the merge anchor rather than the close-out one:** `RELEASE_LOG` and `RELEASE_INDEX` are the only pair carrying an automated cross-assertion (`generate_release_index.py --verify`, invoked by `deploy.sh` Check 23, asserts the INDEX row equals the LOG row field-for-field). Holding two different anchors across an equality assertion makes that check red by construction, so it can no longer report real drift. The close-out instant is preserved on DIGEST, the release note, and CHANGELOG. **Grandfathering:** pre-cutover INDEX rows carrying the close-out date are **not** rewritten — see the standard's § *Grandfathering*, and note that regenerating the INDEX without `--verify` would rewrite them all in one pass.
+
 **Tier-A design artifact — Layer-1 dual-write emit sequence (ASCII flow-block per [`design-artifact-standard.md § 6`](../../../core/standards/design-artifact-standard.md)):**
 <!-- design-artifact: flow-class=agent-process; name=layer-1-dual-write-emit-sequence; depicts=release/references/pipeline/stage-12-execute.md,release/references/pipeline/stage-13-close.md -->
 
