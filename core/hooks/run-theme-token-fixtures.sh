@@ -65,6 +65,18 @@
 #                         COUNTED and PRINTED as OUT-OF-ROOT rather than silently dropped.
 #   Consumers.            Every `var(--…)` in the subject region, inside or outside `<style>`.
 #                         The consumers live in element attributes, not in the style element.
+#                         ASYMMETRY, stated because it is easy to assume otherwise: consumer
+#                         collection reads the subject region RAW. Unlike the declaration
+#                         scope above, it does NOT blank `<script>` bodies and does not skip
+#                         CSS or HTML comments. A `var(--x)` written inside an inline
+#                         `<script>` therefore COUNTS as a consumer and enters the
+#                         denominator. On this corpus that is the wanted answer — 3 of
+#                         `viewer.html`'s 88 resolutions are `var(--…)` inside JS strings
+#                         that emit CSS at run time, and those really do consume the token —
+#                         but it also means a `var(--…)` appearing only in a comment is
+#                         counted, which would be a false finding. Consumer collection is
+#                         context-blind by construction; that is a known boundary, not an
+#                         inference from the declaration-scope rules.
 #
 # WHAT IS NOT COVERED — stated, not implied. A consumer produced by a substitution the source
 # text does not document AT ALL (no `{{…}}` marker — a token name assembled at render time by
@@ -486,9 +498,14 @@ if [ "$MODE" = "corpus" ]; then
   #                             grammar and the `<style>` tag, and the scan returns
   #                             INDETERMINATE on the checker rather than on the corpus.
   #
-  # DECLARED COVERAGE BOUNDARY. A generator that EMITS themed CSS at run time (markup built
-  # inside a .py or .js) is not covered: the check reads documents on disk, and a generated
-  # document is not one until it is written. Stated, not implied.
+  # DECLARED COVERAGE BOUNDARY. A SEPARATE generator file that emits themed CSS at run time
+  # (markup built inside a standalone .py or .js) is not covered: it is not a document, the
+  # extension gate above excludes it, and a generated document is not one until it is written.
+  # This boundary is about the STANDALONE generator only. An INLINE `<script>` inside a gated
+  # document is a different case and IS read — consumer collection is context-blind, so a
+  # `var(--…)` in an inline script counts (see the Consumers bullet in the header). Do not
+  # read this paragraph as saying run-time-emitted consumers are excluded across the board;
+  # 3 of the live population's resolutions are exactly that. Stated, not implied.
   worst=0; scanned=0
   files="$(/usr/bin/git grep -l -- "var(--" -- '*.md' '*.html' '*.htm' '*.svg' '*.xhtml' 2>/dev/null || true)"
   "$PRINTF" 'TH-3 corpus scan — scope gate: tracked documents with a <style> element AND >=1 var(--) consumer (fixture trees exempt)\n'
