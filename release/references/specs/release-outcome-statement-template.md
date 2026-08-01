@@ -8,6 +8,21 @@ source: "Stage 5 spec for Outcome Statement schema + Stage 3/9/13 verification c
 version: v11.27
 ---
 
+<!-- reference-durability: allow-link -->
+<!--
+  Class-L override, matching the two sibling surfaces this spec is edited alongside
+  (release/references/pipeline/stage-03-bundle.md and
+  release/governance/release-process.md, both of which already carry this marker).
+  This file is a cross-reference spec: it carries 14 intra-repo doc links on
+  pre-existing lines, each pointing at the canonical authority for a rule it
+  restates. The delta gate scans ADDED lines, so any edit to a paragraph that
+  already ends in such a link re-flags a reference that was never introduced by
+  that edit — which is what happened when § 7.1 was reconciled to G3-11's blocking
+  posture. Per the reference-durability standard's override mechanism, a per-file
+  marker is preferred over a path-allowlist entry when one file needs one class.
+  Placed after the frontmatter block so the doc-frontmatter parse is unaffected.
+-->
+
 # Release Outcome Statement Template
 
 > **Source:** Stage 5 Outcome Statement spec — pre-execution goal anchor authored at Stage 3, verified at Stage 9 + Stage 13.
