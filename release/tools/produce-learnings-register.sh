@@ -179,11 +179,43 @@ resolve_target_path() {
 
 # Echo the value of a `**<label>:** <value>` line from a rendered triple block.
 # Empty stdout when the label is absent — the caller substitutes the sentinel.
+#
+# `-m1` takes the FIRST match, which is correct ONLY when this file is a SINGLE
+# release's block. Version-scoping is the caller's job (resolve_triple), not this
+# function's — see triple_block_for_version below.
 triple_field() {
   local file="$1" label="$2"
   [[ -r "$file" ]] || return 0
   /usr/bin/grep -m1 "^\*\*${label}:\*\* " "$file" 2>/dev/null \
     | /usr/bin/sed "s/^\*\*${label}:\*\* //" || true
+}
+
+# True when the source carries at least one `#### Release Learnings <key>` header
+# — i.e. it is a MULTI-RELEASE-CAPABLE source and MUST be version-scoped before
+# any field is read from it.
+triple_has_blocks() {
+  /usr/bin/grep -qE '^#### Release Learnings[[:space:]]+[^[:space:]]' "$1" 2>/dev/null
+}
+
+# Emit the BODY of the `#### Release Learnings <version>` block for the REQUESTED
+# version — header line excluded, terminated by the next block header or EOF.
+# Empty stdout when no header matches; the caller must NOT then fall back to a
+# whole-file parse, because that is exactly the mis-attribution being prevented.
+#
+# Matched on the header's version token rather than by position, so scoping does
+# not depend on block ordering.
+triple_block_for_version() {
+  local file="$1" want="$2"
+  /usr/bin/awk -v want="$want" '
+    /^#### Release Learnings[[:space:]]/ {
+      hdr = $0
+      sub(/^#### Release Learnings[[:space:]]+/, "", hdr)
+      sub(/[[:space:]]+$/, "", hdr)
+      inblock = (hdr == want)
+      next
+    }
+    inblock { print }
+  ' "$file" 2>/dev/null || true
 }
 
 # Populate T_ANCHORS / T_SURPRISE / T_WOULD_CHANGE / T_WATCH_FOR from the triple.
@@ -207,6 +239,41 @@ resolve_triple() {
     fi
   else
     echo "NOTE: no --triple-file and no synthesizer; seeding with the N/A sentinel" >&2
+  fi
+
+  # VERSION-SCOPE THE PARSE (#1550 QA Q1). triple_field() reads the FIRST matching
+  # label line, so a source carrying more than one release's block seeds whichever
+  # block appears first — silently, at exit 0, with the REQUESTED version printed in
+  # the register header. Asking for an older version against a multi-block source
+  # produced a register headed with that version and carrying the newest release's
+  # learnings verbatim, and the read-model scored it a perfect 10/10 because the
+  # canonical FORM was intact. That is this milestone's own defect class living
+  # inside the deliverable.
+  #
+  # It is a plausible input, not a theoretical one: Phase A7 renders the triple INTO
+  # RELEASE_LOG.md immediately before A7.2 consumes it, so "where is the rendered A7
+  # block?" has an obvious, wrong answer. Blocks there are newest-first, so pointing
+  # at the log happens to work for the release being closed and ONLY by accident of
+  # ordering.
+  #
+  # Note the irony this preserves rather than hides: `--triple-file` exists as the
+  # HERMETICITY primitive (no synthesizer, no event log, no host call), yet it was
+  # the UNSAFE path, while the omit-the-flag synthesizer fallback is version-scoped
+  # by construction (`--version "$VERSION"`).
+  #
+  # A source with NO block header carries no version to mis-attribute against and is
+  # parsed whole — the hand-rendered fields-only case, unchanged. A source WITH block
+  # headers but none matching $VERSION degrades to the sentinel and says so LOUDLY;
+  # it never falls through to another release's block.
+  if [[ -n "$src" ]] && triple_has_blocks "$src"; then
+    local scoped="$RENDER_TMP/triple-scoped.md"
+    triple_block_for_version "$src" "$VERSION" > "$scoped"
+    if [[ -s "$scoped" ]]; then
+      src="$scoped"
+    else
+      echo "NOTE: '$src' carries release-learnings blocks but none for $VERSION; seeding with the N/A sentinel rather than another release's learnings" >&2
+      src=""
+    fi
   fi
 
   T_ANCHORS="N/A"
@@ -431,6 +498,77 @@ FIXTURE
 **Watch-for:** $NA_SENTINEL
 FIXTURE
 
+  # ── T13 fixtures — version-scoping (#1550 QA Q1) ───────────────────────
+  # FX_MULTI reproduces the defect ORDER: the wrong release's block sorts FIRST,
+  # which is what an unscoped first-match parse would take. Its values are a
+  # disjoint token set (OTHERREL-*) so a leak in either direction is countable.
+  FX_MULTI="$TMP/triple-multi.md"       # v9.99 block ABOVE the v0.00 block
+  FX_OTHERONLY="$TMP/triple-otheronly.md"  # ONLY a v9.99 block
+  FX_NOHDR="$TMP/triple-nohdr.md"       # fields only, no block header
+
+  /bin/cat > "$FX_MULTI" <<'FIXTURE'
+#### Release Learnings v9.99
+
+**Source-row anchors:** ANCHORS-OTHER-RELEASE
+**Surprise:** OTHERREL-SURPRISE
+**Would-change:** OTHERREL-WOULDCHANGE
+**Watch-for:** OTHERREL-WATCHFOR
+
+#### Release Learnings v0.00
+
+**Source-row anchors:** ANCHORS-WANTED-RELEASE
+**Surprise:** SURPRISE-FIXTURE-ALPHA
+**Would-change:** WOULDCHANGE-FIXTURE-BETA
+**Watch-for:** WATCHFOR-FIXTURE-GAMMA
+FIXTURE
+
+  /bin/cat > "$FX_OTHERONLY" <<'FIXTURE'
+#### Release Learnings v9.99
+
+**Source-row anchors:** ANCHORS-OTHER-RELEASE
+**Surprise:** OTHERREL-SURPRISE
+**Would-change:** OTHERREL-WOULDCHANGE
+**Watch-for:** OTHERREL-WATCHFOR
+FIXTURE
+
+  /bin/cat > "$FX_NOHDR" <<'FIXTURE'
+**Source-row anchors:** ANCHORS-NOHDR
+**Surprise:** NOHDR-SURPRISE
+**Would-change:** NOHDR-WOULDCHANGE
+**Watch-for:** NOHDR-WATCHFOR
+FIXTURE
+
+  # A header carrying TRAILING WHITESPACE. Built with printf, not a heredoc, so
+  # the trailing space is explicit and cannot be stripped by an editor or linter.
+  # Without the matcher's right-trim this header silently fails to match and the
+  # register degrades to the sentinel — fail-safe, but a claimed tolerance that
+  # nothing asserted.
+  FX_TRAILWS="$TMP/triple-trailws.md"
+  {
+    /usr/bin/printf '#### Release Learnings v9.99\n\n'
+    /usr/bin/printf '**Source-row anchors:** ANCHORS-OTHER-RELEASE\n'
+    /usr/bin/printf '**Surprise:** OTHERREL-SURPRISE\n'
+    /usr/bin/printf '**Would-change:** OTHERREL-WOULDCHANGE\n'
+    /usr/bin/printf '**Watch-for:** OTHERREL-WATCHFOR\n\n'
+    /usr/bin/printf '#### Release Learnings v0.00  \n\n'
+    /usr/bin/printf '**Source-row anchors:** ANCHORS-WANTED-RELEASE\n'
+    /usr/bin/printf '**Surprise:** SURPRISE-FIXTURE-ALPHA\n'
+    /usr/bin/printf '**Would-change:** WOULDCHANGE-FIXTURE-BETA\n'
+    /usr/bin/printf '**Watch-for:** WATCHFOR-FIXTURE-GAMMA\n'
+  } > "$FX_TRAILWS"
+
+  # A DUPLICATED label in a header-less source — the shape that makes triple_field's
+  # `-m1` load-bearing. Without it, grep emits both lines and the field becomes a
+  # two-line value that corrupts the §3 Linkage table.
+  FX_DUPLABEL="$TMP/triple-duplabel.md"
+  /bin/cat > "$FX_DUPLABEL" <<'FIXTURE'
+**Source-row anchors:** ANCHORS-DUP
+**Surprise:** DUP-FIRST-SURPRISE
+**Surprise:** DUP-SECOND-SURPRISE
+**Would-change:** DUP-WOULDCHANGE
+**Watch-for:** DUP-WATCHFOR
+FIXTURE
+
   # ── Fixture PRECONDITIONS ──────────────────────────────────────────────
   # A fixture that failed to build must FAIL the suite, never quietly satisfy an
   # assertion that then passes against nothing.
@@ -441,6 +579,19 @@ FIXTURE
   _eq "P3 N/A fixture carries the synthesizer's verbatim sentinel" \
       "$(/usr/bin/grep -cF -- "$NA_SENTINEL" "$FX_NA" || true)" "3"
   if [[ -r "$TEMPLATE" ]]; then _ok "P4 tracked template is readable"; else _bad "P4 tracked template missing at $TEMPLATE"; fi
+  _eq "P6 multi-block fixture carries exactly two release-learnings block headers" \
+      "$(/usr/bin/grep -cE '^#### Release Learnings ' "$FX_MULTI" || true)" "2"
+  _eq "P7 multi-block fixture carries the OTHER release's values (so a leak is countable)" \
+      "$(/usr/bin/grep -c 'OTHERREL-' "$FX_MULTI" || true)" "3"
+  _eq "P8 the OTHER release's block sorts FIRST (reproducing the first-match defect order)" \
+      "$(/usr/bin/grep -E '^#### Release Learnings ' "$FX_MULTI" | /usr/bin/sed -n 1p)" \
+      "#### Release Learnings v9.99"
+  _eq "P9 header-less fixture carries NO block header (the backward-compat shape)" \
+      "$(/usr/bin/grep -cE '^#### Release Learnings ' "$FX_NOHDR" || true)" "0"
+  _eq "P10 trailing-whitespace fixture's wanted header really ends in whitespace" \
+      "$(/usr/bin/grep -cE '^#### Release Learnings v0\.00[[:space:]]+$' "$FX_TRAILWS" || true)" "1"
+  _eq "P11 duplicate-label fixture really carries two Surprise lines" \
+      "$(/usr/bin/grep -cE '^\*\*Surprise:\*\* ' "$FX_DUPLABEL" || true)" "2"
 
   RENDER_A="$TMP/render-alpha.md"
   /bin/bash "$SELF" v0.00 --triple-file "$FX_A" --milestone 304 \
@@ -624,6 +775,78 @@ print(bad)' "$RENDER_PIPE")" "0"
   _eq "T12 version-grammar.sh is sourced with an explicit positional (guard cannot inherit --self-test)" \
       "$(/usr/bin/grep -cE 'source "\$VERSION_LIB" ""' "$SELF" || true)" "1"
 
+  # ── T13 — the triple parse is VERSION-SCOPED (#1550 QA Q1) ──────────────
+  # A mis-attributed parse is the failure this group exists to catch: a register
+  # headed with the requested version but carrying ANOTHER release's learnings,
+  # at exit 0, scoring a perfect read-model conformance because the canonical FORM
+  # is intact. Every assertion below is stated as a COUNT of the other release's
+  # disjoint token set, so "no leak" is measured rather than assumed.
+  RENDER_MULTI="$TMP/render-multi.md"
+  /bin/bash "$SELF" v0.00 --triple-file "$FX_MULTI" > "$RENDER_MULTI" 2>/dev/null \
+    || _bad "T13 multi-block render exited non-zero"
+  _eq "T13a asking for v0.00 seeds v0.00's OWN values on all three linkage rows" \
+      "$(/usr/bin/grep -cE '^\| `(Surprise|Would-change|Watch-for)` \| (SURPRISE|WOULDCHANGE|WATCHFOR)-FIXTURE' "$RENDER_MULTI" || true)" "3"
+  _eq "T13b ZERO of the other release's values appear ANYWHERE in the register" \
+      "$(/usr/bin/grep -c 'OTHERREL-' "$RENDER_MULTI" || true)" "0"
+  _eq "T13c the other release's source-row anchors do not leak into §3 either" \
+      "$(/usr/bin/grep -c 'ANCHORS-OTHER-RELEASE' "$RENDER_MULTI" || true)" "0"
+  _eq "T13d the register header names the REQUESTED version (header/content pair)" \
+      "$(/usr/bin/grep -c '^\*\*Release version:\*\* v0.00$' "$RENDER_MULTI" || true)" "1"
+
+  # Scoping selects by HEADER, not by position — ask for the block that sorts
+  # first and the leak must not run the other way either.
+  RENDER_OTHER="$TMP/render-other.md"
+  /bin/bash "$SELF" v9.99 --triple-file "$FX_MULTI" > "$RENDER_OTHER" 2>/dev/null \
+    || _bad "T13 v9.99 render exited non-zero"
+  _eq "T13e asking for v9.99 selects the v9.99 block by header, not by position" \
+      "$(/usr/bin/grep -cE '^\| `(Surprise|Would-change|Watch-for)` \| OTHERREL-' "$RENDER_OTHER" || true)" "3"
+  _eq "T13f ...and v0.00's values do not leak the other way" \
+      "$(/usr/bin/grep -cE '^\| `(Surprise|Would-change|Watch-for)` \| (SURPRISE|WOULDCHANGE|WATCHFOR)-FIXTURE' "$RENDER_OTHER" || true)" "0"
+
+  # A source that carries blocks but NONE for the requested version must degrade
+  # to the sentinel LOUDLY — never fall through to whatever block is present.
+  RENDER_MISS="$TMP/render-miss.md"
+  set +e
+  /bin/bash "$SELF" v0.00 --triple-file "$FX_OTHERONLY" > "$RENDER_MISS" 2>"$TMP/t13.err"
+  T13_RC=$?
+  set -e
+  _eq "T13g a source with no block for the requested version exits 0 (non-fatal)" "$T13_RC" "0"
+  _eq "T13h ...seeds the N/A sentinel on all three linkage rows" \
+      "$(/usr/bin/grep -E '^\| `(Surprise|Would-change|Watch-for)` \|' "$RENDER_MISS" | /usr/bin/grep -cF -- "$NA_SENTINEL" || true)" "3"
+  _eq "T13i ...and leaks NONE of the present-but-wrong release's values" \
+      "$(/usr/bin/grep -c 'OTHERREL-' "$RENDER_MISS" || true)" "0"
+  _eq "T13j ...and announces the degradation on stderr (silent degradation IS the defect class)" \
+      "$(/usr/bin/grep -c 'none for v0.00' "$TMP/t13.err" || true)" "1"
+
+  # BACKWARD COMPATIBILITY — a header-less source has no version to mis-attribute
+  # against and is still parsed whole. Without this, scoping would silently break
+  # every hand-rendered fields-only triple.
+  RENDER_NOHDR="$TMP/render-nohdr.md"
+  /bin/bash "$SELF" v0.00 --triple-file "$FX_NOHDR" > "$RENDER_NOHDR" 2>/dev/null \
+    || _bad "T13 header-less render exited non-zero"
+  _eq "T13k a header-less triple source is still parsed whole (no version to mis-attribute)" \
+      "$(/usr/bin/grep -cE '^\| `(Surprise|Would-change|Watch-for)` \| NOHDR-' "$RENDER_NOHDR" || true)" "3"
+
+  # The matcher's right-trim is load-bearing, not decorative: a real ledger header
+  # with a trailing space must still match rather than degrade to the sentinel.
+  RENDER_TWS="$TMP/render-trailws.md"
+  /bin/bash "$SELF" v0.00 --triple-file "$FX_TRAILWS" > "$RENDER_TWS" 2>/dev/null \
+    || _bad "T13 trailing-whitespace render exited non-zero"
+  _eq "T13l a header with trailing whitespace still matches the requested version" \
+      "$(/usr/bin/grep -cE '^\| `(Surprise|Would-change|Watch-for)` \| (SURPRISE|WOULDCHANGE|WATCHFOR)-FIXTURE' "$RENDER_TWS" || true)" "3"
+  _eq "T13m ...and does not fall through to the other release's block" \
+      "$(/usr/bin/grep -c 'OTHERREL-' "$RENDER_TWS" || true)" "0"
+
+  # triple_field's `-m1` is load-bearing on the un-scoped (header-less) path: a
+  # duplicated label must yield ONE value, not a two-line value that breaks §3.
+  RENDER_DUP="$TMP/render-duplabel.md"
+  /bin/bash "$SELF" v0.00 --triple-file "$FX_DUPLABEL" > "$RENDER_DUP" 2>/dev/null \
+    || _bad "T13 duplicate-label render exited non-zero"
+  _eq "T13n a duplicated label takes the FIRST value only (-m1 is load-bearing)" \
+      "$(/usr/bin/grep -c 'DUP-SECOND-SURPRISE' "$RENDER_DUP" || true)" "0"
+  _eq "T13o ...and §3 Linkage carries exactly one well-formed Surprise row" \
+      "$(/usr/bin/grep -cE '^\| `Surprise` \| DUP-FIRST-SURPRISE \|' "$RENDER_DUP" || true)" "1"
+
   # ── Summary ────────────────────────────────────────────────────────────
   echo ""
   if [[ "$T_FAIL" -ne 0 ]]; then
@@ -631,12 +854,16 @@ print(bad)' "$RENDER_PIPE")" "0"
     exit 1
   fi
   echo "self-test: PASS"
-  echo "  $T_PASS assertions green (5 fixture preconditions + T1..T12)"
+  echo "  $T_PASS assertions green (11 fixture preconditions + T1..T13)"
   echo "  Indicator-1 contract: every template heading survives verbatim"
   echo "  Indicator-2 contract: L<n>/A<n> rows stay placeholder-bearing (producer seeds, operator authors)"
   echo "  seed placement validated positionally (1.2 learn / 1.2 differently / 2.1 / 2.4 blockquote)"
   echo "  path resolution validated through the shipped resolver only; no inlined literal"
   echo "  absent-instance, version-less, PRESERVE-vs---force and hermeticity paths validated"
+  echo "  triple parse is VERSION-SCOPED (#1550 Q1 — a multi-block source seeds only the requested"
+  echo "    version's block, selected by header not position, zero cross-release leak either way;"
+  echo "    a source with no block for that version degrades to the sentinel LOUDLY; a header-less"
+  echo "    source is still parsed whole)"
   exit 0
 fi
 
