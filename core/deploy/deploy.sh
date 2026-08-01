@@ -7615,7 +7615,10 @@ cmd_check() {
   #      resolve to a real, non-empty line AND that line MUST contain the entry's
   #      `name` (an existence-only assertion passes a drifted pin silently).
   #      Extraction is scoped to entry rows (^| DP-N ...) so schema/prose path:line
-  #      mentions are not self-matched.
+  #      mentions are not self-matched. EVERY extracted row is examined: an empty
+  #      cell in either operand column is an incomplete-register-entry FINDING,
+  #      never a skip — see the b0 note below for why a skip is the one shape this
+  #      sub-check must not have.
   #  (c) Consumer-id resolution (FMF-2) — every DP-N id referenced in tracked
   #      corpus (outside the register, which defines them) MUST resolve to a
   #      defined register principle_id (catches a dangling principles_emphasis id).
@@ -7643,7 +7646,9 @@ cmd_check() {
       # (b) FMF-1 — entry-row-scoped governing_doc resolution + name-match
       #   Three DISTINCT failure branches, deliberately separate so the mis-pin class
       #   is greppable apart from the unresolvable class:
-      #     b0 WELL-FORMED — the entry carries a non-empty `name` to assert against
+      #     b0 WELL-FORMED — the entry carries BOTH assertion operands: a non-empty
+      #                      `governing_doc` to resolve and a non-empty `name` to
+      #                      assert against
       #     b1 RESOLVE     — path exists, line numeric, target line non-empty
       #     b2 NAME-MATCH  — the target line CONTAINS the entry's `name`
       #   b2 is the content assertion. Without it a line-shift silently re-points an
@@ -7651,7 +7656,28 @@ cmd_check() {
       #   uniform +1 shift clears 8 of 9 pins under b1 alone and 0 of 9 with b2.
       #   b0 exists because b2's containment is VACUOUSLY TRUE on an empty needle —
       #   a blank `name` cell would invert "must contain" into "always passes", the
-      #   precise false-confidence shape b2 was added to remove.
+      #   precise false-confidence shape b2 was added to remove. b0 covers the
+      #   `governing_doc` operand on the SAME grounds and by the SAME guard rather
+      #   than a parallel mechanism: an empty cell in EITHER column leaves the entry
+      #   unassertable, and an unassertable entry is an INCOMPLETE REGISTER ENTRY
+      #   (a finding), never a skip. That widening is the fix for a false-OK defect
+      #   this guard's own shape invited: a bare `[[ -z "$c45_gd" ]] && continue`
+      #   used to sit ABOVE b0, so a blanked `governing_doc` returned the row to the
+      #   loop unexamined AND uncounted — Check 45 emitted zero findings and still
+      #   printed its `OK: … all register governing_doc targets resolve …` line,
+      #   certifying an entry it never looked at. The declaration is universally
+      #   quantified over the entry rows, so the only honest implementation examines
+      #   all of them.
+      #   STRUCTURAL INVARIANT (the reason this is an if/elif/else and not a tally):
+      #   the loop body contains NO `continue`. Every row traverses exactly one arm
+      #   of a total decision tree, and every non-terminal arm sets c45_ok=0, so
+      #   c45_ok can survive as 1 only when every row was fully asserted. The
+      #   unexamined-exit shape is DELETED rather than detected — a skipped-entry
+      #   counter would merely notice the skip, and would itself be a second thing
+      #   to keep in sync. The fixture self-test asserts this shape directly
+      #   (`core/deploy/tests/test_check45_governing_doc_name_match.sh`, the
+      #   zero-`continue` structural assertion), so a future edit that reintroduces
+      #   an early exit fails that test instead of silently restoring the defect.
       #   Iteration is ROW-scoped (not the former de-duplicated path:line list) —
       #   name-match needs the (name, governing_doc) pair from the SAME row. Fields
       #   split on the markdown pipe: $2=principle_id, $3=name, $5=governing_doc; an
@@ -7669,26 +7695,26 @@ cmd_check() {
         c45_id="$(_c45_trim "$c45_id")"
         c45_name="$(_c45_trim "$c45_name")"
         c45_gd="$(_c45_trim "$c45_gd")"
-        [[ -z "$c45_gd" ]] && continue
-        if [[ -z "$c45_name" ]]; then
+        if [[ -z "$c45_gd" ]]; then
+          flag_warn_or_issue "design-principle-conformance" "register entry has no governing_doc: '$c45_id' ('$c45_name') has an empty governing_doc cell — there is no pin to resolve, so the entry cannot be asserted at all; fill the governing_doc cell"
+          c45_ok=0
+        elif [[ -z "$c45_name" ]]; then
           flag_warn_or_issue "design-principle-conformance" "register entry has no name: '$c45_id' pins '$c45_gd' but its name cell is empty — the name-match assertion would pass vacuously; fill the name cell"
           c45_ok=0
-          continue
-        fi
-        c45_path="${c45_gd%%:*}"
-        c45_line="${c45_gd##*:}"
-        c45_target=""
-        if [[ -f "$c45_path" ]] && [[ "$c45_line" =~ ^[0-9]+$ ]]; then
-          c45_target="$(sed -n "${c45_line}p" "$c45_path" 2>/dev/null)"
-        fi
-        if [[ ! -f "$c45_path" ]] || ! [[ "$c45_line" =~ ^[0-9]+$ ]] || [[ -z "$c45_target" ]]; then
-          flag_warn_or_issue "design-principle-conformance" "register governing_doc does not resolve to a real path:line: '$c45_gd' ($c45_id) (drift — repoint to the principle's current normative line)"
-          c45_ok=0
-          continue
-        fi
-        if [[ "$c45_target" != *"$c45_name"* ]]; then
-          flag_warn_or_issue "design-principle-conformance" "register governing_doc MIS-PIN (name-match): $c45_id '$c45_name' pins '$c45_gd', but that line does not contain the entry name — the pin resolves to a DIFFERENT principle (repoint it to the principle's current normative line)"
-          c45_ok=0
+        else
+          c45_path="${c45_gd%%:*}"
+          c45_line="${c45_gd##*:}"
+          c45_target=""
+          if [[ -f "$c45_path" ]] && [[ "$c45_line" =~ ^[0-9]+$ ]]; then
+            c45_target="$(sed -n "${c45_line}p" "$c45_path" 2>/dev/null)"
+          fi
+          if [[ ! -f "$c45_path" ]] || ! [[ "$c45_line" =~ ^[0-9]+$ ]] || [[ -z "$c45_target" ]]; then
+            flag_warn_or_issue "design-principle-conformance" "register governing_doc does not resolve to a real path:line: '$c45_gd' ($c45_id) (drift — repoint to the principle's current normative line)"
+            c45_ok=0
+          elif [[ "$c45_target" != *"$c45_name"* ]]; then
+            flag_warn_or_issue "design-principle-conformance" "register governing_doc MIS-PIN (name-match): $c45_id '$c45_name' pins '$c45_gd', but that line does not contain the entry name — the pin resolves to a DIFFERENT principle (repoint it to the principle's current normative line)"
+            c45_ok=0
+          fi
         fi
       done < <(grep -E '^\| DP-[0-9]' "$c45_reg")
       # (c) FMF-2 — consumer-id resolution (every referenced DP-N resolves)
