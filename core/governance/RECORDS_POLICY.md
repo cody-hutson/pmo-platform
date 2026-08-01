@@ -50,6 +50,8 @@ Some governed records are not in the `01-08` project tree; their class is set by
 |---|---|---|
 | `pipeline-event-log.md` + quarterly archives | Vital | the platform's operational audit trail; loss is unrecoverable |
 | `RELEASE_LOG.md` | Vital | release project-of-record; the permanent release audit trail |
+| `RELEASE_DIGEST.md`, `RELEASE_INDEX.md`, `CHANGELOG.md` | Vital | the release corpus's navigation, zoom and public-facing surfaces; each is the sole home of content held nowhere else, so loss is unrecoverable on the same terms as `RELEASE_LOG.md` |
+| Release-corpus archive segments (`*_ARCHIVE-<family>.md`) | Vital | **a segment inherits the class of the ledger it segments — it is the same record, relocated, never a lesser class.** Stated affirmatively so an aged-out entry can never be read as eligible for a disposition its parent ledger would not permit |
 | ADRs (`release/ADRs/`, `core/ADRs/`) | Vital | immutable decision record (Nygard form — superseded by a successor ADR, never deleted) |
 | Governance docs (CLAUDE.md, OPERATIONS.md, RECORDS_POLICY.md, RELEASE_PROTOCOL.md) | Vital | without them the operational/legal state could not be re-established |
 | `CORRECTIONS.md` entries (pre-graduation) | Transient | working redirects; eligible for the fastest disposition until graduated-or-expired |
@@ -71,7 +73,11 @@ Keyed by record type → retention period + disposition location. "Retention" is
 | Record type (concrete platform artifact) | Class | Retention period | Disposition location (on age-out / trigger) |
 |---|---|---|---|
 | `pipeline-event-log.md` + quarterly archives | Vital | **≥ 3 years** (ISO 15489-1:2016 Vital) | `pipeline-event-log-archive-YYYY-QN.md` in place (quarterly sweep owned by `pipeline-event-log-schema.md` §7) |
-| `RELEASE_LOG.md` (release audit trail) | Vital | **Permanent** (project-of-record; never aged out) | retained in place; superseded rows annotated, never deleted |
+| `RELEASE_LOG.md` (release audit trail) | Vital | **Permanent** (project-of-record; never aged out) | retained in place **or in a same-directory archive segment**; superseded rows annotated, never deleted |
+| `RELEASE_DIGEST.md` (corpus zoom surface) | Vital | **Permanent** (never aged out) | retained in place or in a same-directory archive segment; entries relocated, never deleted |
+| `RELEASE_INDEX.md` (corpus navigation surface) | Vital | **Permanent** (never aged out) | retained in place or in a same-directory archive segment; entries relocated, never deleted |
+| `CHANGELOG.md` (Keep-a-Changelog public surface) | Vital | **Permanent** (never aged out) | retained in place or in a same-directory archive segment; sections relocated, never deleted |
+| Release-corpus archive segments (`*_ARCHIVE-<family>.md`) | Vital (inherited) | **Permanent** — inherits the retention of the ledger it segments | retained in place; a segment is a disposition *destination*, never itself a disposition *source* |
 | ADRs (`release/ADRs/`, `core/ADRs/`) | Vital | **Permanent** (immutable decision record) | retained in place; superseded via a successor ADR, never edited/deleted |
 | Governance docs (CLAUDE.md, OPERATIONS.md, this policy, RELEASE_PROTOCOL.md) | Vital | **Permanent** while ACTIVE; on retirement → historical | retained; retirement is a `lifecycle_state: archived` content event (km-governance §4), not a file delete |
 | `01-Governance/` project artifacts (charters, plans, approval records) | Important | **Project lifetime + 1 yr** after CLOSED | `projects/Archive/<Project>/` (closed-projects archive, Layer 2) |
@@ -87,13 +93,15 @@ Keyed by record type → retention period + disposition location. "Retention" is
 
 No retention period is invented where one already exists — each row adopts or generalizes a value already in the corpus. The only *new* values are the +1-yr closed-project tails and the "Permanent" designations for `RELEASE_LOG`/ADRs/governance, which make the existing "never deleted/purged" stance explicit in class language.
 
+**Same-directory archive segments — what the phrase authorizes, and what it does not.** The four release-corpus ledger rows above read "retained in place **or in a same-directory archive segment**." A segment is a **location** for a record that is still fully retained, not a shorter retention and not a step toward disposal: the entry keeps its class, keeps its Permanent retention, and stays greppable from the directory it always lived in (`grep -r release/releases/` continues to find it — the property that makes the move a relocation rather than a removal). This mirrors the quarterly `pipeline-event-log` archive pattern, which is the precedent the phrase generalizes rather than a new mechanism. Relocation preserves the record's **presence** in its source ledger: the entry's heading is retained in place with a pointer to its segment, the same presence-preserving shape § Disposition Rules rule 2 already sanctions for redaction. **No class becomes purgeable by being archived**, and the archive-segment row above states that inheritance affirmatively so the point cannot be read the other way.
+
 ## Disposition Rules
 
 All three sub-rules are stated unconditionally.
 
 1. **Archival trigger.** A record becomes eligible for archival when **either** holds:
    (a) its owning project transitions to **CLOSED** (the project-lifecycle terminal — `project-initiator` Closure mode moves the project tree to `projects/Archive/`), **or**
-   (b) **retention age-out** — the record's retention period (Retention Schedule) elapses (e.g., the 10-business-day `08-Generated/` sweep; the quarterly `pipeline-event-log` archive).
+   (b) **retention age-out** — the record's retention period (Retention Schedule) elapses (e.g., the 10-business-day `08-Generated/` sweep; the quarterly `pipeline-event-log` archive), **or** a bounded-working-set rule names the record as outside the working set. The release-corpus sweep is the second form: entries are relocated **oldest-first until the four ledgers' combined working set is at or under its byte budget**, so the number of releases retained is an **output** of the rule, never an input to it. Age-out is still what orders the sweep; the byte budget is only what stops it. This is deliberately scoped to the release-corpus sweep — the platform's 15-release window continues to govern its own surfaces (snapshots and plan files, whose per-item size is bounded) unchanged.
 
 2. **Destruction stance — none.** The platform **does not destroy records.** This is the least-destructive-disposition discipline already in force corpus-wide. Disposition is a **move** (to an archive location) or, where content must be removed for cause, a **redaction** that preserves the record's *presence* (`[REDACTED for <reason>]`, emitting a tracking event — the pattern `pipeline-event-log-schema.md` §7 specifies). Deletion of a record file is an independent operator-authorized decision-class **outside this policy's scope** (the stance `km-governance-framework.md` §4.3 states for retirement). The low-regulatory-risk posture means no destruction clock is owed today; one is added only by amendment if a regulatory regime attaches.
 
