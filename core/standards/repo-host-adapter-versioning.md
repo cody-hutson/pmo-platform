@@ -25,6 +25,8 @@ The contract is stated with **no host mechanism in it** — no specific CLI, no 
 
 This spec defines **only the interface**. The capability that consumes it is recorded in the version-claim-determinism ADR; the executable claim mechanism that *calls* these operations (the defer-to-claim retry loop) is a separate slice. No executable logic lives here.
 
+*See also:* [`release/references/standards/corpus-home-adapter-constraints.md`](../../release/references/standards/corpus-home-adapter-constraints.md) — the constraint set a future **corpus-home** adapter must honour, sibling to this repo-host interface. That document is a constraint record, not an interface spec: no corpus-home adapter or selector exists yet.
+
 ## 2. The four operations (abstract, host-agnostic semantics)
 
 A conforming `repo_host` adapter MUST provide exactly these four operations. The semantics are abstract — they describe *what* each operation returns, never *how* the host produces it.

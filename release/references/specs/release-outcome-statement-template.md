@@ -8,6 +8,21 @@ source: "Stage 5 spec for Outcome Statement schema + Stage 3/9/13 verification c
 version: v11.27
 ---
 
+<!-- reference-durability: allow-link -->
+<!--
+  Class-L override, matching the two sibling surfaces this spec is edited alongside
+  (release/references/pipeline/stage-03-bundle.md and
+  release/governance/release-process.md, both of which already carry this marker).
+  This file is a cross-reference spec: it carries 14 intra-repo doc links on
+  pre-existing lines, each pointing at the canonical authority for a rule it
+  restates. The delta gate scans ADDED lines, so any edit to a paragraph that
+  already ends in such a link re-flags a reference that was never introduced by
+  that edit — which is what happened when § 7.1 was reconciled to G3-11's blocking
+  posture. Per the reference-durability standard's override mechanism, a per-file
+  marker is preferred over a path-allowlist entry when one file needs one class.
+  Placed after the frontmatter block so the doc-frontmatter parse is unaffected.
+-->
+
 # Release Outcome Statement Template
 
 > **Source:** Stage 5 Outcome Statement spec — pre-execution goal anchor authored at Stage 3, verified at Stage 9 + Stage 13.
@@ -44,7 +59,7 @@ The Outcome serves as the binding intent reference at Stage 9 Plan Review (goal-
 
 | Field | Constraint | Verification mechanism |
 |---|---|---|
-| `### Release Outcome Statement` heading | Exact verbatim H3 | Stage 3 G3-11 (advisory; non-blocking) — grep `^### Release Outcome Statement$` against milestone description |
+| `### Release Outcome Statement` heading | Exact verbatim H3 | Stage 3 G3-11 (auto; **blocking** — bundle blocked until satisfied) — grep `^### Release Outcome Statement$` against milestone description |
 | **AFTER** paragraph | 1–3 sentences; outcome-focused not scope-focused | Stage 9 G-PR7 LLM-graded recommend check (semantic conformance) |
 | **BEFORE** paragraph | 1–3 sentences; current-state baseline | Stage 9 G-PR7 LLM-graded recommend check |
 | `Actor(s):` | Optional; free-form | Informational only |
@@ -241,9 +256,9 @@ Six anti-patterns surface the goal-anchor-as-status-theater risk explicitly flag
 
 Stage 9 G-PR7 + Stage 13 QC4-06 + G-CL7 form the verification cascade per D-VerificationMechanism HYBRID. Mechanism:
 
-### 7.1 Stage 3 G3-11 (advisory, non-blocking)
+### 7.1 Stage 3 G3-11 (auto, blocking)
 
-After Phase B3 (Milestone creation), assert milestone description contains `### Release Outcome Statement` H3. Non-blocking advisory — failure logs to `core/hooks/deploy-check-warn-log.jsonl` and bundle proceeds. See [`gate-criteria-spec.md` Gate 3](../../../core/schemas/gate-criteria-spec.md#gate-3-release-readiness) row G3-11.
+After Phase B3 (Milestone creation), assert milestone description contains `### Release Outcome Statement` H3. **Blocking — the bundle is blocked until satisfied**, matching G3-10, alongside which this criterion is always evaluated. Graduated advisory→blocking; the graduating population was measured and it was empty (the milestones lacking the Outcome Statement were *exactly* those lacking the Release Class, which G3-10 already blocks), so the flip newly blocked zero milestones. Pre-cutover-or-exempt releases: the existing `## Goal` / `**Goal (AFTER/BEFORE):**` form is grandfathered for read purposes. See [`gate-criteria-spec.md` Gate 3](../../../core/schemas/gate-criteria-spec.md#gate-3-release-readiness) row G3-11.
 
 ### 7.2 Stage 9 G-PR7 (judgment-recommend goal-conformance)
 

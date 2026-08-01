@@ -19,17 +19,20 @@
 #   9  scaffold_release_notes  frontmatter + section H2 placeholders (SCAFFOLD-ONLY)
 #   9.2 lint_release_notes  §3.2 note-content close gate — a finding for THIS version BLOCKS close
 #   9.5 append_changelog   prepend ## [vX.Y] section to CHANGELOG.md (Layer-1 dual-write Surface 2)
+#   9.55 assert_derived_surfaces  version-scoped scaffold-residue assert on the CHANGELOG + DIGEST entries for THIS version (read-only)
 #   9.6 bump_version       write .version=$VERSION (versioned releases; SKIP version-less)
 #   9.9 ledger_guard       pre-commit §220 I1/I2 read-modify-write guard on the 4 append-only ledgers (#1680)
 #   9.95 rebuild_skill_packages  rebuild changed skills' .skill packages into the chore commit (content-sidecar-gated; N/A when no skill source changed)
 #   10 commit_chore_pr     git add + git commit (parser-clean message)
 #   11 create_chore_pr     gh pr create with safe-phrasing body throughout
 #   12 await_merge_chore_pr poll mergeStateStatus (#1705: CI-realistic budget, default 300s; --no-merge skips; BLOCKED/UNSTABLE keep-polling)
+#   12.2 sync_primary_checkout  fast-forward the primary checkout to origin/main (git -C only; ff-only; non-fatal)
 #   12.5 reparse_ledgers   post-merge structural re-parse of the ledgers (#1680; detective-only)
 #   13 post_close_milestone gh api -X PATCH state=closed (#2919: DEFERS under --no-merge)
 #   14 manual_close_release_issues operator-authorized D-1 with structured comment (#2919: DEFERS under --no-merge)
 #   15 run_verification + post_gate_passage_proof per the gate-passage-proof template
 #   15.5 publish_github_release gh release create | edit (Layer-1 dual-write Surface 1; #2919: DEFERS under --no-merge, as does 15.6 check_release_body_drift)
+#   15.55 assert_anchor_hygiene  SET-based annotated-tag <-> published-Release parity + tagger identity (dated exemption sets)
 #   15.6 check_release_body_drift  post-emit §5.1 published-body drift assert (gated genuine drift BLOCKS; #2919: DEFERS under --no-merge)
 #   16 invoke_orphan_cleanup cleanup-orphan-state.sh --release-close <slug> --dry-run
 #   16.5 pattern_scan      optional synthesize-release-learnings.sh --mode pattern-detect (only with --with-pattern-scan)
@@ -182,6 +185,15 @@ RELEASE_PLANS_DIR="$REPO_ROOT/release/releases/plans"
 CLEANUP_TOOL="$SCRIPT_DIR/cleanup-orphan-state.sh"
 COMPUTE_CYCLE_TIME="$SCRIPT_DIR/compute-cycle-time.sh"
 SYNTHESIZE_LEARNINGS="$SCRIPT_DIR/synthesize-release-learnings.sh"
+# Scaffold-residue token source (AC1 single-source seam). The token set has exactly
+# ONE definition — SCAFFOLD_RESIDUE_TOKENS in lint_release_corpus.py — and the shell
+# anchors read it from there via --print-scaffold-tokens. Retyping the literals in
+# bash would open a cross-language drift seam: the scaffold heredoc could gain a
+# placeholder the python anchor catches and the shell anchors silently miss.
+# Captured HERE at load time from the script-derived $REPO_ROOT, so a self-test that
+# sandboxes REPO_ROOT still reads the REAL token set — exercising the shipped tokens
+# is the entire value of the round-trip test.
+LINT_RELEASE_CORPUS="$REPO_ROOT/core/deploy/tools/lint_release_corpus.py"
 # Body-source-of-record drift check (release-notes-standard.md §5.1). The SINGLE
 # source of the published-body-vs-stripped-note equality logic; phase 15.6 below
 # invokes it as the post-emit assert. Genuine drift BLOCKS the close (cutoff-gated,
@@ -304,6 +316,33 @@ die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
 ts_now() { /bin/date -u +%Y-%m-%dT%H:%M:%SZ; }
 date_today() { /bin/date -u +%Y-%m-%d; }
 
+# Match-count that cannot fail open. THE ONLY sanctioned way to capture a
+# `grep -c` result in this file.
+#
+# THE DEFECT THIS REPLACES (#3113 QA F-QA-3). A zero-match `grep -c` prints `0`
+# AND exits 1. So the common substitution that appends a fallback
+#   ... || echo 0
+# emits a SECOND `0` and captures the two-line string `0\n0`. A subsequent
+# `[[ "$x" -ne "$y" ]]` then raises "syntax error in expression" and — because a
+# failed arithmetic test evaluates FALSE — takes the PASS branch. A *missing*
+# ledger correctly FAILs (grep prints nothing, exit 2, the value is empty); a
+# *present-but-empty* ledger, which is the worse case, passed clean. That guard
+# mechanizes LEDGER-ROW-PARITY, this release's own CIAC-2 acceptance criterion.
+#
+# `|| true` keeps grep's own single `0` on a zero-match hit; `${n:-0}` covers the
+# paths that emit NOTHING (missing/unreadable file, exit 2). The captured value is
+# therefore always exactly one integer, and the missing-file FAIL is preserved.
+#
+# Callers pass ONE file (or read stdin); a multi-file count emits `file:count`
+# lines and is not a supported call shape. Self-test Test 14 (g) asserts the
+# single-integer contract, drives the shipped phase against a present-but-empty
+# ledger, and blocks reintroduction of the fallback idiom structurally.
+grep_count() {
+  local n
+  n="$(/usr/bin/grep -c "$@" 2>/dev/null || true)"
+  /usr/bin/printf '%s' "${n:-0}"
+}
+
 # Run-scoped CLOSE-OUT anchor (#3718). Sampled ONCE at script load and reused by
 # every close-out-anchored write: RELEASE_DIGEST, the release-note frontmatter
 # `date:` (and thence CHANGELOG, which derives its date from that frontmatter),
@@ -379,6 +418,66 @@ notes_rel_path() {
 # The INDEX Version-cell label: version-less rows carry the "(version-less)" marker.
 index_version_cell() {
   if is_version_less; then printf '%s (version-less)' "$VERSION"; else printf '%s' "$VERSION"; fi
+}
+
+# Working-tree tolerance for preflight step (b). Reads `git status --porcelain` text
+# on stdin and emits the records that BLOCK a close — i.e. everything except the one
+# tolerated record: an UNTRACKED release note for the version being closed.
+#
+# Whole-line matching (`grep -x`) is load-bearing. A substring match would also
+# tolerate ' M <that path>' (a modified TRACKED note — real uncommitted work) and
+# '?? <that path>.bak'. Only the exact untracked record passes.
+#
+# The `release/releases/` prefix is REQUIRED: notes_rel_path() is relative to
+# release/releases/, while porcelain paths are repo-root-relative. Dropping it makes
+# the filter match nothing and the tolerance silently stops working.
+filter_tolerated_worktree_state() {
+  /usr/bin/grep -vxF "?? release/releases/$(notes_rel_path)" || true
+}
+
+# Scaffold-residue token set (AC1) — one token per line on stdout, read from the
+# single definition in lint_release_corpus.py (see LINT_RELEASE_CORPUS above).
+#
+# FAIL-LOUD CONTRACT (#459): returns 1 with NO output when the token source cannot
+# be read or yields an empty set. A caller MUST treat that as a gate failure — an
+# empty token set makes every residue check trivially pass, which is precisely the
+# green-for-the-wrong-reason vacuity these anchors exist to eliminate. Never treat
+# "no tokens" as "no residue".
+scaffold_residue_tokens() {
+  [[ -f "$LINT_RELEASE_CORPUS" ]] || return 1
+  [[ -x "/usr/bin/python3" ]] || return 1
+  local out
+  out="$(/usr/bin/python3 "$LINT_RELEASE_CORPUS" --print-scaffold-tokens 2>/dev/null)" || return 1
+  [[ -n "$out" ]] || return 1
+  printf '%s\n' "$out"
+}
+
+# The single residue scanner both shell anchors (A1 preflight, A3 derived surfaces)
+# call, so there is one implementation to test and one to keep correct.
+#
+# Input:  pre-numbered "<line-no><TAB><text>" records on stdin. Callers number their
+#         own input because A1 scans a whole file while A3 scans a version-scoped
+#         SLICE whose line numbers must still refer to the real file.
+# Output: "<token>|<line-no>" for the FIRST hit.
+# Return: 0 clean · 1 residue found · 2 token set unreadable.
+#
+# Return 2 is NOT clean. A caller that collapses it into 0 reintroduces exactly the
+# green-for-the-wrong-reason failure this gate exists to remove.
+scan_scaffold_residue() {
+  local tokens
+  tokens="$(scaffold_residue_tokens)" || return 2
+  local input; input="$(/bin/cat)"
+  [[ -z "$input" ]] && return 0
+  local tok hit
+  while IFS= read -r tok; do
+    [[ -z "$tok" ]] && continue
+    hit="$(printf '%s\n' "$input" | /usr/bin/grep -F -- "$tok" | /usr/bin/head -1 || true)"
+    if [[ -n "$hit" ]]; then
+      printf '%s|%s\n' "$tok" "${hit%%$'\t'*}"
+      return 1
+    fi
+  done <<< "$tokens"
+  return 0
 }
 
 # Returns 0 if string starts with "v<MAJOR>" else 1
@@ -626,9 +725,22 @@ phase_preflight() {
     return 2
   fi
 
-  # (b) clean working tree
-  if [[ -n "$($GIT -C "$REPO_ROOT" status --porcelain 2>/dev/null)" ]]; then
-    mark_phase "preflight" "FAIL" "working tree not clean"
+  # (b) clean working tree — with ONE tolerated exception: an UNTRACKED release
+  # note for the version being closed. The operator-authored-ahead path is the
+  # supported authoring path (release-notes-standard.md), and step (f) below
+  # rejects that same note if it still carries scaffold residue. Without this
+  # tolerance the two gates deadlock: scaffold writes the note -> (f) fails ->
+  # the re-run is blocked HERE by the untracked scaffold it just wrote.
+  #
+  # Scoping is deliberately exact, not prefix-based:
+  #   - notes_rel_path() is RELATIVE TO release/releases/, git porcelain paths are
+  #     repo-root-relative, so the release/releases/ prefix is REQUIRED.
+  #   - grep -x forces a WHOLE-LINE match, so ' M <that path>' (modified-tracked)
+  #     and '?? <that path>.bak' still FAIL. Only '?? <that exact path>' passes.
+  local _dirty
+  _dirty="$($GIT -C "$REPO_ROOT" status --porcelain 2>/dev/null | filter_tolerated_worktree_state)"
+  if [[ -n "$_dirty" ]]; then
+    mark_phase "preflight" "FAIL" "working tree not clean: $(echo "$_dirty" | /usr/bin/head -3 | /usr/bin/tr '\n' ' ')"
     return 2
   fi
 
@@ -675,7 +787,29 @@ phase_preflight() {
     STATE_TAG_EXISTS=1
   fi
 
-  mark_phase "preflight" "PASS" "gh auth OK; tree clean; cwd worktree; RELEASE_LOG row state=$STATE_LOG_ROW_STATE; tag_exists=$STATE_TAG_EXISTS"
+  # (f) scaffold-residue gate on a PRE-EXISTING note for this version (AC1 anchor A1).
+  # Composes with (b): (b) now ACCEPTS a pre-authored note; (f) REJECTS one that is
+  # still an unfilled scaffold. Fires BEFORE any mutation, which is why it lives in
+  # preflight rather than beside the §3.2 lint at 9.2.
+  #
+  # The token set is NOT retyped here — it is read from lint_release_corpus.py via
+  # --print-scaffold-tokens, so the producer (the scaffold heredoc), the python
+  # anchor (A2) and the two shell anchors (A1, A3) cannot drift apart.
+  local _note="${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md"
+  is_version_less && _note="${RELEASE_NOTES_DIR}/_unversioned/${VERSION}_RELEASE_NOTES.md"
+  if [[ -f "$_note" ]]; then
+    local _res _rc=0
+    _res="$(/usr/bin/awk '{print NR "\t" $0}' "$_note" | scan_scaffold_residue)" || _rc=$?
+    if [[ $_rc -eq 2 ]]; then
+      mark_phase "preflight" "FAIL" "scaffold-residue token set unreadable from ${LINT_RELEASE_CORPUS} (--print-scaffold-tokens) — the residue gate cannot be evaluated; failing loud rather than passing vacuously (#459)"
+      return 2
+    elif [[ $_rc -eq 1 ]]; then
+      mark_phase "preflight" "FAIL" "unfilled scaffold token in ${_note} at line ${_res#*|} — token '${_res%%|*}'; author the release note before close-out (release-notes-standard.md §3.2)"
+      return 2
+    fi
+  fi
+
+  mark_phase "preflight" "PASS" "gh auth OK; tree clean; cwd worktree; RELEASE_LOG row state=$STATE_LOG_ROW_STATE; tag_exists=$STATE_TAG_EXISTS; no scaffold residue in ${VERSION} note"
   return 0
 }
 
@@ -1699,6 +1833,84 @@ PY
   return 0
 }
 
+# ─── Phase 9.55: assert_derived_surfaces (AC1 anchor A3) ─────────────────────
+#
+# The note is not the only surface a Stage-13 close writes. phase_append_changelog
+# copies the note's frontmatter `summary:` into CHANGELOG.md, and
+# phase_append_release_digest writes a DIGEST H3 whose headline falls back to a
+# placeholder when the note does not exist yet — it runs at 8.x, BEFORE the note is
+# scaffolded at 9.1, so on the unattended path it emits a placeholder every time.
+# Both surfaces therefore persist scaffold residue even when the note is authored
+# afterwards, which is precisely how the live corpus accumulated its placeholder rows.
+# The §3.2 note lint never looked at either surface.
+#
+# VERSION-SCOPED BY CONSTRUCTION — the single most important property of this phase.
+# It reads ONLY the closing version's CHANGELOG H2 block and DIGEST H3 line, never
+# either file whole. Pre-existing placeholder rows for already-shipped versions are
+# owned by a separate data-backfill work item; a corpus-wide scan here would block
+# every future close on legacy debt. This is the same audit-baseline discipline
+# phase_lint_release_notes applies when it greps its findings for THIS version's path.
+#
+# Read-only and idempotent — it asserts, never mutates, so a resumed close re-runs it
+# safely. Dry-run RUNS it (side-effect-free) so the operator sees findings at the
+# review gate rather than after the commit, mirroring phase_lint_release_notes.
+#
+# Version-less releases: CHANGELOG is SKIPPED (there is no `## [vX.Y]` key to slice —
+# mirrors phase_append_changelog step (0)); the DIGEST assertion still runs, because
+# phase_append_release_digest writes an H3 for a version-less release too.
+phase_assert_derived_surfaces() {
+  local changelog_path="$REPO_ROOT/CHANGELOG.md"
+
+  # Slice extractors emit "<file-line-number><TAB><line>" so a finding can name the
+  # real line in the real file. Header matching is literal (index()==1), not regex,
+  # so a version containing '.' needs no escaping and cannot mis-anchor.
+  local _cl_slice="" _dg_slice=""
+  if is_version_less; then
+    :   # CHANGELOG has no version key for a version-less release — nothing to slice.
+  elif [[ -f "$changelog_path" ]]; then
+    _cl_slice="$(/usr/bin/awk -v v="$VERSION" '
+      /^## / {
+        if (started) { exit }
+        if (index($0, "## [" v "]") == 1 || index($0, "## " v " ") == 1) { started = 1; print NR "\t" $0; next }
+        next
+      }
+      started { print NR "\t" $0 }
+    ' "$changelog_path")"
+  fi
+  if [[ -f "$RELEASE_DIGEST" ]]; then
+    # The DIGEST entry is a single H3 line: `### vX.Y (date) — headline`.
+    _dg_slice="$(/usr/bin/awk -v v="$VERSION" '
+      index($0, "### " v " ") == 1 || index($0, "### " v "(") == 1 { print NR "\t" $0 }
+    ' "$RELEASE_DIGEST")"
+  fi
+
+  local _surface _slice _file _res _rc
+  for _surface in CHANGELOG DIGEST; do
+    if [[ "$_surface" == "CHANGELOG" ]]; then _slice="$_cl_slice"; _file="CHANGELOG.md"
+    else _slice="$_dg_slice"; _file="release/releases/RELEASE_DIGEST.md"; fi
+    [[ -z "$_slice" ]] && continue
+    _rc=0
+    _res="$(printf '%s\n' "$_slice" | scan_scaffold_residue)" || _rc=$?
+    if [[ $_rc -eq 2 ]]; then
+      mark_phase "assert_derived_surfaces" "FAIL" "scaffold-residue token set unreadable from ${LINT_RELEASE_CORPUS} (--print-scaffold-tokens) — derived-surface residue cannot be evaluated; failing loud rather than passing vacuously (#459)"
+      return 1
+    elif [[ $_rc -eq 1 ]]; then
+      mark_phase "assert_derived_surfaces" "FAIL" "unfilled scaffold residue on a derived surface: ${_file}:${_res#*|} in the ${VERSION} entry carries token '${_res%%|*}' — author the release note and re-derive the entry before close-out (release-notes-standard.md § Part 5 Layer-1 dual-write)"
+      return 1
+    fi
+  done
+
+  local _detail="${VERSION} entries clean"
+  if is_version_less; then
+    _detail="${_detail} (CHANGELOG SKIPPED — version-less release has no ## [vX.Y] key; DIGEST asserted)"
+  elif [[ -z "$_cl_slice" ]]; then
+    _detail="${_detail} (no CHANGELOG entry for ${VERSION} yet — nothing to assert)"
+  fi
+  [[ -z "$_dg_slice" ]] && _detail="${_detail} (no DIGEST entry for ${VERSION} yet)"
+  mark_phase "assert_derived_surfaces" "PASS" "$_detail"
+  return 0
+}
+
 # ─── Phase 9.6: bump_version ─────────────────────────────────────────────────
 #
 # Stamp the repo-root .version source-of-truth to $VERSION on a *versioned*
@@ -2234,6 +2446,79 @@ phase_await_merge_chore_pr() {
   return 3
 }
 
+# ─── Phase 12.2: sync_primary_checkout (AC7) ─────────────────────────────────
+#
+# "The primary checkout sits at origin/main" is a STANDING invariant
+# (core/rules/git-workflow.md § Primary Checkout Discipline), and that file
+# explicitly forbids leaving it as a "want me to sync it?" handoff. Close-out
+# previously neither executed nor emitted the sync — the only mention of the primary
+# anywhere in this script is preflight (c), which REJECTS running from it. This phase
+# executes the sync, once, at the earliest point origin/main actually carries the
+# merge.
+#
+# HARD CONSTRAINTS (git-workflow.md § Primary Checkout Discipline):
+#   - `git -C <primary>` ONLY. Never `cd` into the primary.
+#   - Fast-forward ONLY. Never reset, never stash, never checkout, never force.
+#   - Only when the primary is actually ON main — fast-forwarding some other branch
+#     to origin/main would silently move work the operator did not ask to move.
+#
+# NON-FATAL BY DESIGN — every path returns 0. The chore PR has already merged by the
+# time this runs; a primary-sync problem must never fail a close that already
+# succeeded. It must also stay hermetic: in CI there is no primary checkout at all,
+# so "absent" is a clean SKIP, not an error.
+#
+# Runs under --no-merge too: the invariant is "primary tracks origin/main", which is
+# worth holding regardless of whether this release's chore PR landed.
+phase_sync_primary_checkout() {
+  # Resolution order: explicit override (the self-test seam) → git's own record of the
+  # main working tree. Asking git is exact and, unlike a ${WORKSPACE_ROOT}/<name>
+  # convention, assumes nothing about what the clone directory is called.
+  local _primary="${PRIMARY_CHECKOUT:-}"
+  if [[ -z "$_primary" ]]; then
+    _primary="$($GIT -C "$REPO_ROOT" worktree list --porcelain 2>/dev/null \
+                | /usr/bin/awk 'NR==1 && $1=="worktree" {print $2; exit}')"
+  fi
+
+  if [[ -z "$_primary" || ! -d "${_primary}/.git" ]]; then
+    mark_phase "sync_primary_checkout" "SKIPPED" "primary checkout not resolvable${_primary:+ at $_primary} — nothing to sync (expected in CI and in a clean clone; hermetic no-op)"
+    return 0
+  fi
+
+  # A linked worktree's .git is a FILE, not a directory, so the check above already
+  # excludes them; this guards the degenerate "primary is me" case.
+  if [[ "$_primary" == "$REPO_ROOT" ]]; then
+    mark_phase "sync_primary_checkout" "SKIPPED" "resolved primary is this checkout — close-out is not running in a linked worktree; no sync to perform"
+    return 0
+  fi
+
+  local _pbranch
+  _pbranch="$($GIT -C "$_primary" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+  if [[ "$_pbranch" != "main" ]]; then
+    mark_phase "sync_primary_checkout" "SKIPPED" "primary at ${_primary} is on '${_pbranch:-<detached>}', not main — fast-forwarding a non-main branch to origin/main would move work that was not asked to move; reporting, not forcing"
+    return 0
+  fi
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "sync_primary_checkout" "DRY-RUN" "would fetch origin main and fast-forward the primary checkout at ${_primary} (currently on main)"
+    return 0
+  fi
+
+  if ! git_net -C "$_primary" fetch origin main --quiet 2>/dev/null; then
+    mark_phase "sync_primary_checkout" "SKIPPED" "fetch origin main failed at ${_primary} (offline or credential-less) — primary left untouched"
+    return 0
+  fi
+
+  # --ff-only is the whole safety contract: it refuses on a diverged primary, on a
+  # dirty tree whose changes would be overwritten, and on conflicting local commits.
+  # A refusal is a SKIP, never an escalation to a force.
+  if $GIT -C "$_primary" merge --ff-only origin/main --quiet 2>/dev/null; then
+    mark_phase "sync_primary_checkout" "PASS" "primary checkout at ${_primary} fast-forwarded to origin/main ($($GIT -C "$_primary" rev-parse --short HEAD 2>/dev/null || echo '?'))"
+  else
+    mark_phase "sync_primary_checkout" "SKIPPED" "primary at ${_primary} is not fast-forwardable (diverged, or a local change would be overwritten) — reporting, not forcing; sync it by hand per git-workflow.md § Primary Checkout Discipline"
+  fi
+  return 0
+}
+
 # ─── Phase 12.5: reparse_ledgers (#1680 — post-merge structural re-parse) ─────
 #
 # DETECTIVE-ONLY post-merge validation that the 3-way auto-merge landed a
@@ -2667,6 +2952,137 @@ _drift_block_in_scope() {
   return 1
 }
 
+# ─── Phase 15.55: assert_anchor_hygiene (AC4 + AC5) ──────────────────────────
+#
+# Every shipped release is anchored by three artifacts that must agree: an ANNOTATED
+# git tag, a published GitHub Release, and a row in each of RELEASE_INDEX/RELEASE_LOG.
+# Nothing asserted that they stay in step, and the drift that resulted is invisible to
+# a count: there are 143 annotated tags and 143 published Releases, and the sets are
+# NOT equal — two tags have no Release, and two Releases sit on lightweight tags. A
+# count comparison grades that PASS. This guard is therefore SET-based, and must stay
+# set-based; regressing it to `wc -l` reintroduces the exact false negative it exists
+# to remove.
+#
+# EXEMPTION SETS, NOT A BARE GUARD. Four parity divergences and one tagger-hygiene
+# violation exist today. A bare guard would fail on merge, and the platform does not
+# ship red CI. Each known divergence is listed below WITH its date and reason, so the
+# guard blocks every NEW divergence while the recorded ones stand. Remediating them is
+# separately owned: publishing the two missing Releases is a public-surface mutation,
+# and re-tagging v3.80 force-updates a published tag (EXPENSIVE, operator-gated).
+# Neither is performed here. The idiom follows the linter's existing
+# PRE_CUTOVER_EXEMPT_VERSIONS / NOTE_LINK_EXEMPT_VERSIONS sets rather than inventing a
+# new suppression mechanism.
+#
+# Recorded 2026-07-30. Removing an entry once its divergence is remediated is the
+# intended lifecycle — these are not permanent.
+ANCHOR_PARITY_EXEMPT_TAGS=(
+  v3.31    # annotated tag, no published GitHub Release; Release-publication routed out of this card
+  v3.65.1  # annotated tag, no published GitHub Release; Release-publication routed out of this card
+  v3.28    # published Release sitting on a LIGHTWEIGHT tag; re-tag is operator-gated
+  v3.29    # published Release sitting on a LIGHTWEIGHT tag; re-tag is operator-gated
+)
+TAGGER_HYGIENE_EXEMPT_TAGS=(
+  v3.80    # annotated tag whose tagger is the placeholder identity `t <t@t>`; the fix
+           # force-updates a tag that a published Release points at (EXPENSIVE) and is
+           # a discrete operator decision, deliberately not executed by close-out
+)
+
+# Emits the annotated tags (one per line, sorted) of the repo at $1.
+# `%(objecttype)` filtering is the load-bearing part: a LIGHTWEIGHT tag has
+# objecttype `commit` and carries no tagger at all, so an unfiltered probe mixes two
+# different defect classes and cannot be driven to empty.
+annotated_tags_of() {
+  $GIT -C "$1" for-each-ref refs/tags --format='%(objecttype) %(refname:short)' 2>/dev/null \
+    | /usr/bin/awk '$1=="tag"{print $2}' | /usr/bin/sort
+}
+
+# AC5 — emits annotated tags whose tagger identity is neither a GitHub noreply address
+# nor an accepted exemption. Reads the repo at $1.
+tagger_hygiene_violations() {
+  local exempt; exempt="$(/usr/bin/printf '%s\n' "${TAGGER_HYGIENE_EXEMPT_TAGS[@]}" | /usr/bin/sort -u)"
+  local line name
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    name="$(/usr/bin/printf '%s' "$line" | /usr/bin/awk '{print $2}')"
+    if /usr/bin/printf '%s\n' "$exempt" | /usr/bin/grep -qxF "$name"; then continue; fi
+    /usr/bin/printf 'TAGGER-IDENTITY %s\n' "$line"
+  done < <($GIT -C "$1" for-each-ref refs/tags --format='%(objecttype) %(refname:short) %(taggeremail)' 2>/dev/null \
+           | /usr/bin/awk '$1=="tag"' | /usr/bin/grep -v 'users.noreply.github.com' || true)
+}
+
+# AC4 — emits the two-way set difference between the annotated-tag list in file $1 and
+# the published-Release tag list in file $2, minus the recorded exemptions. Both files
+# must be sorted. Taking files (not live probes) is what makes this testable offline:
+# the self-test drives it with fixtures, no gh and no network.
+anchor_parity_violations() {
+  local ann_file="$1" rel_file="$2"
+  local exempt; exempt="$(/usr/bin/printf '%s\n' "${ANCHOR_PARITY_EXEMPT_TAGS[@]}" | /usr/bin/sort -u)"
+  local t
+  while IFS= read -r t; do
+    [[ -z "$t" ]] && continue
+    if /usr/bin/printf '%s\n' "$exempt" | /usr/bin/grep -qxF "$t"; then continue; fi
+    /usr/bin/printf 'MISSING-RELEASE %s (annotated tag with no published GitHub Release)\n' "$t"
+  done < <(/usr/bin/comm -23 "$ann_file" "$rel_file")
+  while IFS= read -r t; do
+    [[ -z "$t" ]] && continue
+    if /usr/bin/printf '%s\n' "$exempt" | /usr/bin/grep -qxF "$t"; then continue; fi
+    /usr/bin/printf 'MISSING-ANNOTATED-TAG %s (published GitHub Release with no annotated tag)\n' "$t"
+  done < <(/usr/bin/comm -13 "$ann_file" "$rel_file")
+}
+
+phase_assert_anchor_hygiene() {
+  local findings="" tmp
+  tmp="$(/usr/bin/mktemp -d -t anchorhygiene.XXXXXX)"
+
+  # (1) AC5 — tagger identity on annotated tags. Offline; always runs.
+  local _tg; _tg="$(tagger_hygiene_violations "$REPO_ROOT")"
+  [[ -n "$_tg" ]] && findings="${findings}${_tg}"$'\n'
+
+  # (2) AC4a — INDEX/LOG row parity. Offline; always runs. COMPUTED, never hardcoded:
+  # a sibling card backfills ledger rows in this same release, so a pinned magnitude
+  # would go stale inside one merge.
+  local _idx _log
+  # grep_count, never a raw count with an appended fallback: that shape captures
+  # `0\n0` on a present-but-empty ledger, which makes the `-ne` below throw and
+  # evaluate FALSE, silently taking the PASS branch (#3113 QA F-QA-3).
+  _idx="$(grep_count -E '^\|[[:space:]]*v[0-9]' "$RELEASE_INDEX")"
+  _log="$(grep_count -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$RELEASE_LOG")"
+  if [[ "$_idx" -ne "$_log" ]]; then
+    findings="${findings}LEDGER-ROW-PARITY RELEASE_INDEX has ${_idx} version rows, RELEASE_LOG has ${_log}"$'\n'
+  fi
+
+  # (3) AC4b — annotated-tag <-> published-Release set parity. NETWORK. A gh failure is
+  # SKIPPED-with-a-loud-reason, never a silent pass: "could not check" and "checked and
+  # clean" must never render the same.
+  local _net_note=""
+  annotated_tags_of "$REPO_ROOT" > "$tmp/ann"
+  if $GH release list --limit 400 --json tagName -q '.[].tagName' 2>/dev/null | /usr/bin/sort > "$tmp/rel" \
+     && [[ -s "$tmp/rel" ]]; then
+    local _ap; _ap="$(anchor_parity_violations "$tmp/ann" "$tmp/rel")"
+    [[ -n "$_ap" ]] && findings="${findings}${_ap}"$'\n'
+  else
+    _net_note="; tag<->Release set parity NOT CHECKED (gh release list unavailable — offline or credential-less)"
+  fi
+
+  /bin/rm -rf "$tmp" 2>/dev/null || true
+
+  if [[ -n "${findings//[$'\n']/}" ]]; then
+    mark_phase "assert_anchor_hygiene" "FAIL" "release-anchor drift: $(/usr/bin/printf '%s' "$findings" | /usr/bin/tr '\n' ' ' | /usr/bin/sed 's/  */ /g')— a NEW divergence appeared outside the recorded exemption sets; reconcile the anchors before closing"
+    /usr/bin/printf '%s' "$findings" >&2
+    return 1
+  fi
+
+  # Same idiom, same fix: an empty tag list made this render as `0\n0` inside the
+  # PASS/SKIPPED detail line (a mangled status message, not a wrong verdict).
+  local _annn; _annn="$(grep_count . <<< "$(annotated_tags_of "$REPO_ROOT")")"
+  if [[ -n "$_net_note" ]]; then
+    mark_phase "assert_anchor_hygiene" "SKIPPED" "offline assertions clean (${_annn} annotated tags; INDEX ${_idx} == LOG ${_log} rows)${_net_note}"
+  else
+    mark_phase "assert_anchor_hygiene" "PASS" "release anchors in step (${_annn} annotated tags; tag<->Release sets equal modulo ${#ANCHOR_PARITY_EXEMPT_TAGS[@]} recorded exemptions; INDEX ${_idx} == LOG ${_log} rows)"
+  fi
+  return 0
+}
+
 # ─── Phase 15.6: check_release_body_drift (post-emit §5.1 drift assert) ──────────
 #
 # DETECTIVE-ONLY post-emit verification that the just-published Release body
@@ -2862,7 +3278,7 @@ generate_markdown_report() {
 | Phase | Result | Detail |
 |-------|--------|--------|
 EOF
-  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog bump_version ledger_guard rebuild_skill_packages commit_chore_pr create_chore_pr await_merge_chore_pr reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
+  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog assert_derived_surfaces bump_version ledger_guard rebuild_skill_packages commit_chore_pr create_chore_pr await_merge_chore_pr sync_primary_checkout reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release assert_anchor_hygiene check_release_body_drift invoke_orphan_cleanup pattern_scan)
   local p rd r d
   for p in "${phases[@]}"; do
     rd="$(get_phase "$p")"
@@ -4419,6 +4835,477 @@ STUB
     echo "FAIL: phase_commit_chore_pr files=() must expand \"\${REBUILT_PACKAGES[@]:-}\" (P1 staging-omission guard)"; failures=$((failures+1))
   fi
 
+  # Test 12: scaffold-residue detector (AC1) + pre-authored-note tolerance (AC2).
+  # Offline, hermetic, credential-free — the CI smoke job runs --self-test with no
+  # network and no gh token.
+  #
+  # T1 is the ANTI-DRIFT test and the reason this block exists: it runs the REAL
+  # phase_scaffold_release_notes into a sandbox notes dir and asserts the REAL token
+  # set trips on the REAL output. Add a placeholder to the scaffold heredoc without
+  # adding its token to SCAFFOLD_RESIDUE_TOKENS and this test goes red. A detector
+  # derived from its own producer cannot silently diverge from it.
+  local _sr_saved_root="$REPO_ROOT" _sr_saved_mode="$MODE" _sr_saved_version="$VERSION"
+  local _sr_saved_notesdir="$RELEASE_NOTES_DIR" _sr_saved_digest="$RELEASE_DIGEST"
+  local _sr_saved_pr="$PR_NUMBER" _sr_saved_slug="$STATE_MILESTONE_SLUG"
+  local _sr_tmp; _sr_tmp="$(/usr/bin/mktemp -d -t scaffoldresidue-selftest.XXXXXX)"
+  /bin/mkdir -p "$_sr_tmp/notes"
+  REPO_ROOT="$_sr_tmp"; MODE="apply"; VERSION="v9.99"
+  RELEASE_NOTES_DIR="$_sr_tmp/notes"; RELEASE_DIGEST="$_sr_tmp/RELEASE_DIGEST.md"
+  PR_NUMBER="9999"; STATE_MILESTONE_SLUG="selftest-slug"
+
+  # (a) AC1-T1 round-trip — the real scaffold must trip the real detector.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_scaffold_release_notes >/dev/null 2>&1
+  local _sr_note="$RELEASE_NOTES_DIR/${VERSION}_RELEASE_NOTES.md"
+  if [[ ! -f "$_sr_note" ]]; then
+    echo "FAIL: AC1-T1 setup — phase_scaffold_release_notes wrote no note at $_sr_note"; failures=$((failures+1))
+  else
+    local _sr_res _sr_rc=0
+    _sr_res="$(/usr/bin/awk '{print NR "\t" $0}' "$_sr_note" | scan_scaffold_residue)" || _sr_rc=$?
+    [[ "$_sr_rc" -eq 1 ]] || { echo "FAIL: AC1-T1 round-trip — the byte-exact scaffold MUST trip the residue detector (rc=$_sr_rc); the token set has drifted from phase_scaffold_release_notes"; failures=$((failures+1)); }
+    [[ -n "${_sr_res%%|*}" ]] || { echo "FAIL: AC1-T1 must NAME the offending token, got '$_sr_res'"; failures=$((failures+1)); }
+    [[ "${_sr_res#*|}" =~ ^[0-9]+$ ]] || { echo "FAIL: AC1-T1 must report a numeric line, got '$_sr_res'"; failures=$((failures+1)); }
+  fi
+
+  # (b) AC1-T2 — a fully-authored note trips nothing (no false positive). Written
+  # into the sandbox notes dir so (b1) below can use it as the negative control.
+  local _sr_authored="$RELEASE_NOTES_DIR/v9.98_RELEASE_NOTES.md"
+  /bin/cat > "$_sr_authored" <<'AUTHORED'
+---
+version: v9.98
+summary: "A real one-sentence summary written by a human."
+---
+# Close-out now refuses to ship an unauthored release note
+
+## What changed for everyone using the platform
+
+- **Unfilled release notes no longer reach the Releases page.** *Why it matters:* the
+  note you read is the note someone actually wrote.
+AUTHORED
+  local _sr_rc2=0
+  /usr/bin/awk '{print NR "\t" $0}' "$_sr_authored" | scan_scaffold_residue >/dev/null || _sr_rc2=$?
+  [[ "$_sr_rc2" -eq 0 ]] || { echo "FAIL: AC1-T2 — an authored note must produce NO residue finding (rc=$_sr_rc2)"; failures=$((failures+1)); }
+
+  # (b1) AC1-T5 — the PYTHON anchor (lint_release_corpus.py check_note_content).
+  # Drives the real check against a 2-note sandbox population: the scaffold from (a)
+  # and the authored note from (b). Asserts on a NON-EMPTY population with a control —
+  # exactly one NOTE-SCAFFOLD-RESIDUE, naming the scaffold and not the authored note.
+  # Hermetic: the module is imported and NOTES_DIR rebound, so the live corpus is
+  # never read and no network or credential is involved.
+  local _sr_lintout
+  _sr_lintout="$(/usr/bin/python3 - "$LINT_RELEASE_CORPUS" "$RELEASE_NOTES_DIR" <<'PY' 2>&1 || true
+import importlib.util, pathlib, sys
+lint_path, notes_dir = sys.argv[1], sys.argv[2]
+spec = importlib.util.spec_from_file_location("lint_rc_selftest", lint_path)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+mod.NOTES_DIR = pathlib.Path(notes_dir)
+for finding in mod.check_note_content():
+    print(finding)
+PY
+)"
+  local _sr_resn
+  _sr_resn="$(printf '%s\n' "$_sr_lintout" | /usr/bin/grep -c 'NOTE-SCAFFOLD-RESIDUE' || true)"
+  [[ "$_sr_resn" -eq 1 ]] || { echo "FAIL: AC1-T5 — check_note_content() must emit EXACTLY 1 NOTE-SCAFFOLD-RESIDUE over the 2-note sandbox (scaffold + authored), got $_sr_resn"; failures=$((failures+1)); }
+  printf '%s\n' "$_sr_lintout" | /usr/bin/grep 'NOTE-SCAFFOLD-RESIDUE' | /usr/bin/grep -qF 'v9.99_RELEASE_NOTES.md' || { echo "FAIL: AC1-T5 — the residue finding must name the SCAFFOLD note (v9.99)"; failures=$((failures+1)); }
+  if printf '%s\n' "$_sr_lintout" | /usr/bin/grep 'NOTE-SCAFFOLD-RESIDUE' | /usr/bin/grep -qF 'v9.98_RELEASE_NOTES.md'; then
+    echo "FAIL: AC1-T5 — the AUTHORED note (v9.98) must NOT be flagged as residue"; failures=$((failures+1))
+  fi
+
+  # (c) AC1-T4 — residue in THIS version's CHANGELOG slice FAILs and names the token.
+  /bin/cat > "$_sr_tmp/CHANGELOG.md" <<'CL'
+# Changelog
+
+## [v9.99] - 2026-07-30
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+## [v9.98] - 2026-07-01
+
+A properly authored earlier entry.
+CL
+  /bin/cat > "$RELEASE_DIGEST" <<'DG'
+## v9.x
+
+### v9.99 (2026-07-30) — <headline — populated by operator at chore PR review>
+DG
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if phase_assert_derived_surfaces >/dev/null 2>&1; then
+    echo "FAIL: AC1-T4 — phase_assert_derived_surfaces must return non-zero on residue in THIS version's entry"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase assert_derived_surfaces | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: AC1-T4 must mark the phase FAIL, got '$(get_phase assert_derived_surfaces)'"; failures=$((failures+1)); }
+  get_phase assert_derived_surfaces | /usr/bin/grep -qF 'CHANGELOG.md:' || { echo "FAIL: AC1-T4 detail must name the surface and line, got '$(get_phase assert_derived_surfaces)'"; failures=$((failures+1)); }
+
+  # (d) AC1-T3 audit-baseline control — residue for ANOTHER version must NOT block
+  # this version's close. This is the control that proves the phase is version-scoped;
+  # without it a corpus-wide scan would pass every other assertion in this block.
+  /bin/cat > "$_sr_tmp/CHANGELOG.md" <<'CL2'
+# Changelog
+
+## [v9.99] - 2026-07-30
+
+A properly authored current entry.
+
+## [v9.98] - 2026-07-01
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+CL2
+  /bin/cat > "$RELEASE_DIGEST" <<'DG2'
+## v9.x
+
+### v9.99 (2026-07-30) — A properly authored current headline
+
+### v9.98 (2026-07-01) — <headline — populated by operator at chore PR review>
+DG2
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_assert_derived_surfaces >/dev/null 2>&1 || { echo "FAIL: AC1-T3 — another version's pre-existing residue must NOT block this close (audit-baseline discipline)"; failures=$((failures+1)); }
+  [[ "$(get_phase assert_derived_surfaces | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: AC1-T3 must mark PASS, got '$(get_phase assert_derived_surfaces)'"; failures=$((failures+1)); }
+
+  # (e) AC2 — preflight working-tree tolerance. Drives the shipped predicate with
+  # synthetic porcelain text (no git, no network).
+  local _sr_tol
+  _sr_tol="$(printf '%s\n' "?? release/releases/notes/v9.99_RELEASE_NOTES.md" | filter_tolerated_worktree_state)"
+  [[ -z "$_sr_tol" ]] || { echo "FAIL: AC2-T1 — an untracked note for THIS version must be tolerated, got '$_sr_tol'"; failures=$((failures+1)); }
+  _sr_tol="$(printf '%s\n' "?? release/releases/notes/v9.98_RELEASE_NOTES.md" | filter_tolerated_worktree_state)"
+  [[ -n "$_sr_tol" ]] || { echo "FAIL: AC2-T2 — an untracked note for ANOTHER version must still block"; failures=$((failures+1)); }
+  _sr_tol="$(printf '%s\n' " M release/releases/notes/v9.99_RELEASE_NOTES.md" | filter_tolerated_worktree_state)"
+  [[ -n "$_sr_tol" ]] || { echo "FAIL: AC2-T3 — a MODIFIED-tracked note must still block (tolerance is untracked-only)"; failures=$((failures+1)); }
+  _sr_tol="$(printf '%s\n' "?? CHANGELOG.md" | filter_tolerated_worktree_state)"
+  [[ -n "$_sr_tol" ]] || { echo "FAIL: AC2-T4 — an unrelated untracked file must still block (tolerance must not generalize)"; failures=$((failures+1)); }
+  # T5 makes `grep -x` load-bearing: a same-prefix sibling must NOT inherit the
+  # tolerance. Without this case a substring match would pass every other AC2 test.
+  _sr_tol="$(printf '%s\n' "?? release/releases/notes/v9.99_RELEASE_NOTES.md.bak" | filter_tolerated_worktree_state)"
+  [[ -n "$_sr_tol" ]] || { echo "FAIL: AC2-T5 — a same-prefix sibling (.bak) must still block; the tolerance is a whole-line match, not a prefix"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_sr_tmp" 2>/dev/null || true
+  REPO_ROOT="$_sr_saved_root"; MODE="$_sr_saved_mode"; VERSION="$_sr_saved_version"
+  RELEASE_NOTES_DIR="$_sr_saved_notesdir"; RELEASE_DIGEST="$_sr_saved_digest"
+  PR_NUMBER="$_sr_saved_pr"; STATE_MILESTONE_SLUG="$_sr_saved_slug"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # Test 13: phase_sync_primary_checkout (AC7) — offline, hermetic, no network and no
+  # credential. Builds REAL local git repos (a bare "origin", a "primary" clone) and
+  # drives the phase via the PRIMARY_CHECKOUT seam, so the assertions are about
+  # observable repo state (did the primary's HEAD actually move?) rather than exit 0.
+  local _sp_saved_mode="$MODE" _sp_saved_primary="${PRIMARY_CHECKOUT:-}"
+  if [[ -x "$GIT" ]]; then
+    local _sp_tmp; _sp_tmp="$(/usr/bin/mktemp -d -t syncprimary-selftest.XXXXXX)"
+    (
+      set +e
+      # init.defaultBranch is pinned: macOS ships a system gitconfig setting it to
+      # "main", while git's built-in default (what a Linux CI runner uses) is
+      # "master". Left ambient, the bare repo's HEAD would point at an unborn branch
+      # in CI and the clone below would come up with no branch checked out — the
+      # fixture would silently test something different there than here.
+      $GIT -c init.defaultBranch=main init -q --bare "$_sp_tmp/origin.git" 2>/dev/null
+      $GIT clone -q "$_sp_tmp/origin.git" "$_sp_tmp/seed" 2>/dev/null
+      $GIT -C "$_sp_tmp/seed" -c user.email=t@t -c user.name=t checkout -q -b main 2>/dev/null
+      /usr/bin/printf 'one\n' > "$_sp_tmp/seed/f.txt"
+      $GIT -C "$_sp_tmp/seed" add f.txt 2>/dev/null
+      $GIT -C "$_sp_tmp/seed" -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m c1 2>/dev/null
+      $GIT -C "$_sp_tmp/seed" push -q origin main 2>/dev/null
+    ) >/dev/null 2>&1 || true
+    if [[ -d "$_sp_tmp/origin.git" ]]; then
+      $GIT clone -q "$_sp_tmp/origin.git" "$_sp_tmp/primary" >/dev/null 2>&1
+      # Advance origin one commit so the primary is genuinely BEHIND.
+      (
+        set +e
+        /usr/bin/printf 'two\n' >> "$_sp_tmp/seed/f.txt"
+        $GIT -C "$_sp_tmp/seed" add f.txt
+        $GIT -C "$_sp_tmp/seed" -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m c2
+        $GIT -C "$_sp_tmp/seed" push -q origin main
+      ) >/dev/null 2>&1 || true
+      local _sp_before _sp_after _sp_target
+      _sp_before="$($GIT -C "$_sp_tmp/primary" rev-parse HEAD 2>/dev/null || echo x)"
+      _sp_target="$($GIT -C "$_sp_tmp/seed" rev-parse HEAD 2>/dev/null || echo y)"
+
+      # (a) primary on main and behind → PASS, and HEAD actually moves to origin/main.
+      MODE="apply"; PRIMARY_CHECKOUT="$_sp_tmp/primary"
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      phase_sync_primary_checkout >/dev/null 2>&1
+      _sp_after="$($GIT -C "$_sp_tmp/primary" rev-parse HEAD 2>/dev/null || echo z)"
+      [[ "$(get_phase sync_primary_checkout | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: AC7-a — a behind-but-fast-forwardable primary on main must PASS, got '$(get_phase sync_primary_checkout)'"; failures=$((failures+1)); }
+      [[ "$_sp_after" == "$_sp_target" ]] || { echo "FAIL: AC7-a — the primary must actually be fast-forwarded to origin/main (before=$_sp_before after=$_sp_after target=$_sp_target)"; failures=$((failures+1)); }
+      [[ "$_sp_after" != "$_sp_before" ]] || { echo "FAIL: AC7-a — the primary HEAD did not move; a no-op cannot evidence a sync"; failures=$((failures+1)); }
+
+      # (b) primary NOT on main → SKIPPED, and HEAD must NOT move. Without this the
+      # phase would happily fast-forward an unrelated branch to origin/main.
+      $GIT -C "$_sp_tmp/primary" checkout -q -b sidebranch "$_sp_before" >/dev/null 2>&1
+      local _sp_side_before; _sp_side_before="$($GIT -C "$_sp_tmp/primary" rev-parse HEAD 2>/dev/null || echo x)"
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      phase_sync_primary_checkout >/dev/null 2>&1
+      [[ "$(get_phase sync_primary_checkout | /usr/bin/cut -d'|' -f1)" == "SKIPPED" ]] || { echo "FAIL: AC7-b — a primary on a non-main branch must SKIP, got '$(get_phase sync_primary_checkout)'"; failures=$((failures+1)); }
+      [[ "$($GIT -C "$_sp_tmp/primary" rev-parse HEAD 2>/dev/null)" == "$_sp_side_before" ]] || { echo "FAIL: AC7-b — a non-main primary must NOT be moved"; failures=$((failures+1)); }
+
+      # (c) primary absent → SKIPPED, exit 0 (hermeticity; this is the CI path).
+      PRIMARY_CHECKOUT="$_sp_tmp/does-not-exist"
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      phase_sync_primary_checkout >/dev/null 2>&1 || { echo "FAIL: AC7-c — an absent primary must be a clean no-op (exit 0), not an error"; failures=$((failures+1)); }
+      [[ "$(get_phase sync_primary_checkout | /usr/bin/cut -d'|' -f1)" == "SKIPPED" ]] || { echo "FAIL: AC7-c — an absent primary must mark SKIPPED, got '$(get_phase sync_primary_checkout)'"; failures=$((failures+1)); }
+
+      # (d) dry-run → no mutation.
+      $GIT -C "$_sp_tmp/primary" checkout -q main >/dev/null 2>&1
+      $GIT -C "$_sp_tmp/primary" reset -q --hard "$_sp_before" >/dev/null 2>&1
+      MODE="dry-run"; PRIMARY_CHECKOUT="$_sp_tmp/primary"
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      phase_sync_primary_checkout >/dev/null 2>&1
+      [[ "$(get_phase sync_primary_checkout | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: AC7-d — dry-run must preview, got '$(get_phase sync_primary_checkout)'"; failures=$((failures+1)); }
+      [[ "$($GIT -C "$_sp_tmp/primary" rev-parse HEAD 2>/dev/null)" == "$_sp_before" ]] || { echo "FAIL: AC7-d — dry-run must NOT move the primary"; failures=$((failures+1)); }
+
+      # (e) STRUCTURAL guard on the phase source: an ALLOWLIST of the git subcommands
+      # it may invoke, not a denylist of forbidden words (a denylist false-fires on the
+      # phase's own name and on its prose). Every `-C` git call must be one of
+      # {worktree, rev-parse, fetch, merge}; anything else — reset, stash, checkout,
+      # push — fails here. This is the assertion that keeps a future edit from quietly
+      # escalating a refused fast-forward into a force.
+      local _sp_verbs _sp_bad
+      _sp_verbs="$(/usr/bin/sed -n '/^phase_sync_primary_checkout() {/,/^}/p' "$SCRIPT_DIR/$(/usr/bin/basename "${BASH_SOURCE[0]}")" \
+                   | /usr/bin/grep -oE '(\$GIT|git_net) -C "[^"]+" [a-z-]+' \
+                   | /usr/bin/awk '{print $NF}' | /usr/bin/sort -u)"
+      if [[ -z "$_sp_verbs" ]]; then
+        echo "FAIL: AC7-e — could not extract any git subcommand from phase_sync_primary_checkout; the structural guard would pass vacuously"; failures=$((failures+1))
+      fi
+      _sp_bad="$(/usr/bin/printf '%s\n' "$_sp_verbs" | /usr/bin/grep -vE '^(worktree|rev-parse|fetch|merge)$' || true)"
+      [[ -z "$_sp_bad" ]] || { echo "FAIL: AC7-e — phase_sync_primary_checkout may only run {worktree, rev-parse, fetch, merge} against a checkout; found: $(echo "$_sp_bad" | /usr/bin/tr '\n' ' ') (git-workflow.md § Primary Checkout Discipline forbids reset/stash/checkout/push on the primary)"; failures=$((failures+1)); }
+      # And it must address the primary with `git -C`, never by changing directory.
+      if /usr/bin/sed -n '/^phase_sync_primary_checkout() {/,/^}/p' "$SCRIPT_DIR/$(/usr/bin/basename "${BASH_SOURCE[0]}")" \
+         | /usr/bin/grep -vE '^[[:space:]]*#' | /usr/bin/grep -qE '(^|[;&|[:space:]])cd[[:space:]]'; then
+        echo "FAIL: AC7-e — phase_sync_primary_checkout must never cd; address the primary with git -C"; failures=$((failures+1))
+      fi
+    else
+      echo "  (skipped AC7 sync-primary self-test — could not build the local git fixture)" >&2
+    fi
+    /bin/rm -rf "$_sp_tmp" 2>/dev/null || true
+  else
+    echo "  (skipped AC7 sync-primary self-test — git not executable at $GIT)" >&2
+  fi
+  MODE="$_sp_saved_mode"; PRIMARY_CHECKOUT="$_sp_saved_primary"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # Test 14: release-anchor hygiene (AC4 + AC5). Offline, hermetic, CREDENTIAL-FREE —
+  # the CI smoke job runs --self-test with no gh token and no network, so the AC4 half
+  # is driven with FIXTURE tag/release lists and the AC5 half against a real local git
+  # repo. Neither touches gh.
+  #
+  # The anti-vacuity controls are the point of this block: a guard that cannot fail is
+  # the exact defect this release exists to eliminate, and a count-based parity check
+  # is green today on a corpus that is genuinely divergent.
+  local _ah_tmp; _ah_tmp="$(/usr/bin/mktemp -d -t anchorhygiene-selftest.XXXXXX)"
+
+  # ---- AC4: set parity, fixture-driven ----
+  # Baseline: the only divergences are the four recorded exemptions -> clean.
+  /bin/cat > "$_ah_tmp/ann" <<'ANN'
+v3.31
+v3.65.1
+v9.01
+v9.02
+ANN
+  /bin/cat > "$_ah_tmp/rel" <<'REL'
+v3.28
+v3.29
+v9.01
+v9.02
+REL
+  local _ah_out
+  _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel")"
+  [[ -z "$_ah_out" ]] || { echo "FAIL: AC4-a — the four RECORDED divergences must be exempt, got: $_ah_out"; failures=$((failures+1)); }
+
+  # (b) ANTI-VACUITY CONTROL — inject a fifth, unrecorded divergence. Without this the
+  # whole AC4 assertion could be satisfied by a guard that never fires.
+  /usr/bin/printf 'v9.03\n' >> "$_ah_tmp/ann"; /usr/bin/sort -o "$_ah_tmp/ann" "$_ah_tmp/ann"
+  _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel")"
+  /usr/bin/printf '%s' "$_ah_out" | /usr/bin/grep -qF 'MISSING-RELEASE v9.03' || { echo "FAIL: AC4-b — a NEW annotated-tag-without-Release divergence must be reported, got: $_ah_out"; failures=$((failures+1)); }
+
+  # (c) the OTHER direction — a published Release with no annotated tag.
+  /usr/bin/printf 'v9.04\n' >> "$_ah_tmp/rel"; /usr/bin/sort -o "$_ah_tmp/rel" "$_ah_tmp/rel"
+  _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel")"
+  /usr/bin/printf '%s' "$_ah_out" | /usr/bin/grep -qF 'MISSING-ANNOTATED-TAG v9.04' || { echo "FAIL: AC4-c — a Release-without-annotated-tag divergence must be reported, got: $_ah_out"; failures=$((failures+1)); }
+
+  # (d) COUNT-PARITY CONTROL — this is the false negative AC4 exists to kill. The two
+  # lists below have EQUAL LENGTH and UNEQUAL MEMBERSHIP, exactly like the live corpus
+  # (143 == 143, sets divergent). A count comparison grades this PASS; the set guard
+  # must not.
+  /bin/cat > "$_ah_tmp/ann_eq" <<'ANNEQ'
+v9.10
+v9.11
+ANNEQ
+  /bin/cat > "$_ah_tmp/rel_eq" <<'RELEQ'
+v9.10
+v9.12
+RELEQ
+  _ah_out="$(anchor_parity_violations "$_ah_tmp/ann_eq" "$_ah_tmp/rel_eq")"
+  [[ -n "$_ah_out" ]] || { echo "FAIL: AC4-d — equal COUNTS with unequal SETS must still be reported; a count comparison is the exact false negative this guard replaces"; failures=$((failures+1)); }
+
+  # ---- AC5: tagger identity, real local git repo ----
+  if [[ -x "$GIT" ]]; then
+    local _ah_repo="$_ah_tmp/repo"
+    # Signing is disabled explicitly on every fixture command. An operator whose
+    # global config sets tag.gpgsign/commit.gpgsign turns a BARE `git tag` into a
+    # signed (therefore annotated) tag that then fails for want of a message — which
+    # silently destroys the lightweight-tag fixture and leaves the objecttype
+    # assertions passing against a tag that was never created. CI, with no global
+    # config, would build a different fixture than a developer machine.
+    local _ah_nosign=(-c tag.gpgsign=false -c commit.gpgsign=false)
+    (
+      set +e
+      $GIT -c init.defaultBranch=main init -q "$_ah_repo"
+      /usr/bin/printf 'x\n' > "$_ah_repo/f.txt"
+      $GIT -C "$_ah_repo" add f.txt
+      $GIT -C "$_ah_repo" "${_ah_nosign[@]}" -c user.email=a@users.noreply.github.com -c user.name=a commit -q -m c1
+      # A conformant annotated tag (noreply tagger) — must NOT be flagged.
+      $GIT -C "$_ah_repo" "${_ah_nosign[@]}" -c user.email=a@users.noreply.github.com -c user.name=a tag -a v9.50 -m t
+      # A NON-conformant annotated tag (placeholder identity) — MUST be flagged.
+      $GIT -C "$_ah_repo" "${_ah_nosign[@]}" -c user.email=t@t -c user.name=t tag -a v9.51 -m t
+      # An EXEMPTED tag with the same defect — must NOT be flagged.
+      $GIT -C "$_ah_repo" "${_ah_nosign[@]}" -c user.email=t@t -c user.name=t tag -a v3.80 -m t
+      # A LIGHTWEIGHT tag. Written with update-ref, not `git tag`, so no signing or
+      # tagging config can turn it into an annotated one behind our back.
+      $GIT -C "$_ah_repo" update-ref refs/tags/v9.52 HEAD
+    ) >/dev/null 2>&1 || true
+    if [[ -d "$_ah_repo/.git" ]]; then
+      # FIXTURE PRECONDITIONS. Assert the fixture is actually shaped the way the
+      # assertions below assume — one annotated tag and one lightweight tag must both
+      # exist. Without this, a fixture that fails to build leaves every "must NOT be
+      # flagged" assertion passing for the wrong reason.
+      local _ah_kinds
+      _ah_kinds="$($GIT -C "$_ah_repo" for-each-ref refs/tags --format='%(objecttype) %(refname:short)' 2>/dev/null)"
+      /usr/bin/printf '%s\n' "$_ah_kinds" | /usr/bin/grep -qx 'tag v9.51' || { echo "FAIL: AC5 fixture — annotated tag v9.51 was not created; the tagger assertions would be vacuous"; failures=$((failures+1)); }
+      /usr/bin/printf '%s\n' "$_ah_kinds" | /usr/bin/grep -qx 'commit v9.52' || { echo "FAIL: AC5 fixture — LIGHTWEIGHT tag v9.52 was not created (objecttype must be 'commit'); the objecttype-filter assertions would be vacuous"; failures=$((failures+1)); }
+      local _ah_tg; _ah_tg="$(tagger_hygiene_violations "$_ah_repo")"
+      /usr/bin/printf '%s' "$_ah_tg" | /usr/bin/grep -qF 'v9.51' || { echo "FAIL: AC5-a — an annotated tag with a non-noreply tagger MUST be flagged, got: $_ah_tg"; failures=$((failures+1)); }
+      if /usr/bin/printf '%s' "$_ah_tg" | /usr/bin/grep -qF 'v9.50'; then
+        echo "FAIL: AC5-b — a conformant noreply-tagger tag must NOT be flagged"; failures=$((failures+1))
+      fi
+      if /usr/bin/printf '%s' "$_ah_tg" | /usr/bin/grep -qF 'v3.80'; then
+        echo "FAIL: AC5-c — the RECORDED exemption must suppress its tag"; failures=$((failures+1))
+      fi
+      if /usr/bin/printf '%s' "$_ah_tg" | /usr/bin/grep -qF 'v9.52'; then
+        echo "FAIL: AC5-d — a LIGHTWEIGHT tag has no tagger and must be excluded by the objecttype filter, not reported as a tagger violation"; failures=$((failures+1))
+      fi
+      # annotated_tags_of must list annotated tags only (the lightweight one is out).
+      local _ah_at; _ah_at="$(annotated_tags_of "$_ah_repo")"
+      /usr/bin/printf '%s\n' "$_ah_at" | /usr/bin/grep -qx 'v9.50' || { echo "FAIL: AC5-e — annotated_tags_of must list annotated tags"; failures=$((failures+1)); }
+      if /usr/bin/printf '%s\n' "$_ah_at" | /usr/bin/grep -qx 'v9.52'; then
+        echo "FAIL: AC5-e — annotated_tags_of must EXCLUDE lightweight tags (objecttype filter)"; failures=$((failures+1))
+      fi
+    else
+      echo "  (skipped AC5 tagger self-test — could not build the local git fixture)" >&2
+    fi
+  else
+    echo "  (skipped AC5 tagger self-test — git not executable at $GIT)" >&2
+  fi
+
+  # (f) STRUCTURAL — the parity guard must stay SET-based. `comm` is the mechanism;
+  # a `wc -l` comparison of the two lists is the regression this guard replaces.
+  declare -f anchor_parity_violations | /usr/bin/grep -qF 'comm' || { echo "FAIL: AC4-f — anchor_parity_violations must be comm-based (set difference), not a count comparison"; failures=$((failures+1)); }
+
+  # (g) FAIL-OPEN CONTROL on the LEDGER-ROW-PARITY half (#3113 QA F-QA-3), driven
+  # end-to-end through the SHIPPED phase rather than a re-implementation.
+  #
+  # The defect: a zero-match count exits 1 while still printing `0`, so appending a
+  # fallback captured `0\n0`; `[[ "$_idx" -ne "$_log" ]]` then raised "syntax error
+  # in expression", and a failed arithmetic test evaluates FALSE — so the PASS
+  # branch was taken. A MISSING RELEASE_INDEX correctly FAILed, which is precisely
+  # why the hole survived review: the obvious negative control exercised the one
+  # input shape that still worked. The input that failed open is the WORSE one — a
+  # ledger that is present and readable and simply has no rows.
+  #
+  # This half mechanizes CIAC-2, this release's own cross-issue acceptance
+  # criterion, so a fail-open here grades the release's own thesis green for the
+  # wrong reason.
+  #
+  # Hermetic and credential-free: REPO_ROOT is redirected at a bare temp dir (not a
+  # git repo, so the tag probes return empty — which also exercises the third fixed
+  # site, `_annn`) and GH at a nonexistent binary, so the network half
+  # deterministically takes the SKIPPED branch. Safe for the CI smoke job.
+  local _fo_saved_idx="$RELEASE_INDEX" _fo_saved_log="$RELEASE_LOG"
+  local _fo_saved_root="$REPO_ROOT" _fo_saved_gh="$GH"
+  local _fo_tmp; _fo_tmp="$(/usr/bin/mktemp -d -t failopen-selftest.XXXXXX)"
+  REPO_ROOT="$_fo_tmp/norepo"; /bin/mkdir -p "$REPO_ROOT"
+  GH="$_fo_tmp/no-such-gh"
+
+  /bin/cat > "$_fo_tmp/LOG_3" <<'FOLOG'
+| v9.60 | a-slug | 2026-01-01 | #1 | merge | v9.60 | VERIFIED | 2026-01-01 |
+| v9.61 | b-slug | 2026-01-02 | #2 | merge | v9.61 | VERIFIED | 2026-01-02 |
+| v9.62 | c-slug | 2026-01-03 | #3 | merge | v9.62 | VERIFIED | 2026-01-03 |
+FOLOG
+  /bin/cp "$_fo_tmp/LOG_3" "$_fo_tmp/IDX_3"
+  : > "$_fo_tmp/IDX_EMPTY"   # PRESENT and readable, zero version rows
+
+  # FIXTURE PRECONDITIONS — a fixture that failed to build must FAIL the suite, not
+  # quietly satisfy the assertions below.
+  [[ "$(grep_count -E '^\|[[:space:]]*v[0-9]' "$_fo_tmp/IDX_3")" == "3" ]] || { echo "FAIL: AC4-g fixture — the 3-row ledger fixture did not build; every assertion below would be vacuous"; failures=$((failures+1)); }
+  [[ -f "$_fo_tmp/IDX_EMPTY" && ! -s "$_fo_tmp/IDX_EMPTY" ]] || { echo "FAIL: AC4-g fixture — the degenerate INDEX must exist and be EMPTY (an absent file tests the wrong branch)"; failures=$((failures+1)); }
+
+  # (g1) THE DEFECT — a present-but-empty INDEX against a 3-row LOG is a real
+  # 3-row breach and MUST be reported.
+  local _fo_rc
+  RELEASE_INDEX="$_fo_tmp/IDX_EMPTY"; RELEASE_LOG="$_fo_tmp/LOG_3"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _fo_rc=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _fo_rc=$?
+  [[ "$_fo_rc" -ne 0 ]] || { echo "FAIL: AC4-g1 — a present-but-empty RELEASE_INDEX against a 3-row RELEASE_LOG must FAIL the phase (the #3113 F-QA-3 fail-open)"; failures=$((failures+1)); }
+  [[ "$(get_phase assert_anchor_hygiene)" == FAIL\|* ]] || { echo "FAIL: AC4-g1 — phase must mark FAIL, got '$(get_phase assert_anchor_hygiene)'"; failures=$((failures+1)); }
+  /usr/bin/printf '%s' "$(get_phase assert_anchor_hygiene)" | /usr/bin/grep -qF 'LEDGER-ROW-PARITY RELEASE_INDEX has 0 version rows, RELEASE_LOG has 3' || { echo "FAIL: AC4-g1 — the finding must name LEDGER-ROW-PARITY with SINGLE-INTEGER counts 0 and 3, got '$(get_phase assert_anchor_hygiene)'"; failures=$((failures+1)); }
+
+  # (g2) CONTROL — equal, POPULATED ledgers must still pass, and the counts must
+  # render as single integers (the two-line value mangled this status line too).
+  RELEASE_INDEX="$_fo_tmp/IDX_3"; RELEASE_LOG="$_fo_tmp/LOG_3"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _fo_rc=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _fo_rc=$?
+  [[ "$_fo_rc" -eq 0 ]] || { echo "FAIL: AC4-g2 — equal populated ledgers must PASS the phase, got rc=$_fo_rc"; failures=$((failures+1)); }
+  /usr/bin/printf '%s' "$(get_phase assert_anchor_hygiene)" | /usr/bin/grep -qF 'INDEX 3 == LOG 3 rows' || { echo "FAIL: AC4-g2 — the clean detail must read 'INDEX 3 == LOG 3 rows', got '$(get_phase assert_anchor_hygiene)'"; failures=$((failures+1)); }
+
+  # (g3) BOTH-EMPTY — two present-but-empty ledgers genuinely agree (0 == 0) and
+  # must NOT be reported. Without this, "always FAIL on empty" would pass g1.
+  RELEASE_INDEX="$_fo_tmp/IDX_EMPTY"; RELEASE_LOG="$_fo_tmp/IDX_EMPTY"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _fo_rc=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _fo_rc=$?
+  [[ "$_fo_rc" -eq 0 ]] || { echo "FAIL: AC4-g3 — two empty ledgers agree at 0 == 0 and must NOT be reported as a breach"; failures=$((failures+1)); }
+  /usr/bin/printf '%s' "$(get_phase assert_anchor_hygiene)" | /usr/bin/grep -qF 'INDEX 0 == LOG 0 rows' || { echo "FAIL: AC4-g3 — the detail must render single-integer zeroes 'INDEX 0 == LOG 0 rows' (the old idiom rendered '0\\n0'), got '$(get_phase assert_anchor_hygiene)'"; failures=$((failures+1)); }
+
+  # (g4) REGRESSION FLOOR — a MISSING INDEX already FAILed before the fix and must
+  # keep FAILing after it; the fix must not trade one hole for another.
+  RELEASE_INDEX="$_fo_tmp/does-not-exist.md"; RELEASE_LOG="$_fo_tmp/LOG_3"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _fo_rc=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _fo_rc=$?
+  [[ "$_fo_rc" -ne 0 ]] || { echo "FAIL: AC4-g4 — a MISSING RELEASE_INDEX must still FAIL (pre-fix behaviour preserved)"; failures=$((failures+1)); }
+
+  # (g5) UNIT — grep_count's single-integer contract on every shape that made the
+  # old idiom emit two lines, or none.
+  local _fo_zero _fo_missing _fo_hit _fo_stdin
+  _fo_zero="$(grep_count -E '^\|[[:space:]]*v[0-9]' "$_fo_tmp/IDX_EMPTY")"
+  _fo_missing="$(grep_count -E 'anything' "$_fo_tmp/does-not-exist.md")"
+  _fo_hit="$(grep_count -E '^\|[[:space:]]*v[0-9]' "$_fo_tmp/IDX_3")"
+  _fo_stdin="$(grep_count . <<< "")"
+  [[ "$_fo_zero" == "0" ]] || { echo "FAIL: AC4-g5 — grep_count on a present-but-empty file must be exactly '0', got $(/usr/bin/printf '%q' "$_fo_zero")"; failures=$((failures+1)); }
+  [[ "$_fo_missing" == "0" ]] || { echo "FAIL: AC4-g5 — grep_count on a MISSING file must be exactly '0', got $(/usr/bin/printf '%q' "$_fo_missing")"; failures=$((failures+1)); }
+  [[ "$_fo_hit" == "3" ]] || { echo "FAIL: AC4-g5 — grep_count must still count matches, expected 3, got $(/usr/bin/printf '%q' "$_fo_hit")"; failures=$((failures+1)); }
+  [[ "$_fo_stdin" == "0" ]] || { echo "FAIL: AC4-g5 — grep_count over an empty stdin must be exactly '0' (the _annn call shape), got $(/usr/bin/printf '%q' "$_fo_stdin")"; failures=$((failures+1)); }
+
+  # (g6) STRUCTURAL — reintroduction guard. `declare -f` emits the parsed body with
+  # comments stripped, so this cannot be satisfied or defeated by prose.
+  if declare -f phase_assert_anchor_hygiene | /usr/bin/grep -qE '\|\|[[:space:]]*echo[[:space:]]'; then
+    echo "FAIL: AC4-g6 — the parity guard must not reintroduce an '|| echo' count fallback; it captures a two-line value and makes the arithmetic test evaluate FALSE"; failures=$((failures+1))
+  fi
+  # Whole-file sweep. The needle is ASSEMBLED at runtime so this probe cannot match
+  # its own source line, and it requires the absolute-path call convention so the
+  # explanatory prose above (which writes the idiom bare and split) cannot match it.
+  local _fo_needle; _fo_needle="$(/usr/bin/printf '/usr/bin/gre%s -c[A-Za-z]*.*\\|\\|[[:space:]]*ech%s' 'p' 'o')"
+  [[ "$(grep_count -E "$_fo_needle" "${BASH_SOURCE[0]}")" == "0" ]] || { echo "FAIL: AC4-g6 — a raw count with an appended '|| echo' fallback survives in this file; use grep_count"; failures=$((failures+1)); }
+  # Anti-vacuity for the sweep itself: the needle must match a KNOWN-BAD line, or a
+  # typo in it would make the whole-file probe pass by matching nothing. The control
+  # line is ASSEMBLED at runtime for the same reason as the needle — writing the
+  # defective idiom literally here would make the whole-file sweep flag this file.
+  /usr/bin/printf 'x="$(/usr/bin/gre%s -cE foo bar || ech%s 0)"\n' 'p' 'o' > "$_fo_tmp/needle-control"
+  [[ "$(grep_count -E "$_fo_needle" "$_fo_tmp/needle-control")" == "1" ]] || { echo "FAIL: AC4-g6 — the reintroduction needle does not match a known-bad line; the whole-file sweep is vacuous"; failures=$((failures+1)); }
+
+  RELEASE_INDEX="$_fo_saved_idx"; RELEASE_LOG="$_fo_saved_log"
+  REPO_ROOT="$_fo_saved_root"; GH="$_fo_saved_gh"
+  /bin/rm -rf "$_fo_tmp" 2>/dev/null || true
+
+  /bin/rm -rf "$_ah_tmp" 2>/dev/null || true
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failures)" >&2
     exit 1
@@ -4438,6 +5325,10 @@ STUB
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
   echo "  changed_skills_from_paths + files=() composition validated (#3322 — rule a direct-source / rule b reverse-TEMPLATE_SYNC_MAP / non-skill negative / P1 staging-array guard)" >&2
+  echo "  release-anchor hygiene validated (AC4/AC5 — recorded divergences exempt / a NEW divergence reported in BOTH directions / EQUAL-COUNT-UNEQUAL-SET fixture still reported (the count-parity false negative) / non-noreply tagger flagged, noreply tagger not, recorded exemption suppressed, lightweight tag excluded by objecttype / guard is comm-based by construction)" >&2
+  echo "  LEDGER-ROW-PARITY fail-open closed (#3113 F-QA-3 — present-but-empty INDEX vs 3-row LOG now FAILs naming both counts / equal populated ledgers still PASS / both-empty 0==0 correctly clean / missing INDEX still FAILs / grep_count single-integer contract on empty-file, missing-file, match and empty-stdin shapes / reintroduction blocked structurally, needle proven against a known-bad control)" >&2
+  echo "  phase_sync_primary_checkout validated (AC7 — behind-primary-on-main fast-forwards and HEAD verifiably MOVES to origin/main / non-main primary SKIPPED and NOT moved / absent primary clean no-op (CI hermeticity) / dry-run no-write / source carries no reset-stash-checkout-push-force-cd)" >&2
+  echo "  scaffold-residue detector + pre-authored-note tolerance validated (AC1/AC2 — T1 round-trip: the REAL scaffold trips the REAL token set (anti-drift) / T2 authored note clean / T4 this-version CHANGELOG+DIGEST residue FAILs naming surface:line / T3 audit-baseline control: another version's residue does NOT block / AC2 tolerance: this-version untracked note passes, other-version + modified-tracked + unrelated-untracked all still block)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
@@ -4455,6 +5346,27 @@ STUB
 # the CI smoke job is deterministic and credential-free. This is the hard-fail
 # path-resolution check the smoke gate runs to catch re-pathing drift (the
 # migration-drift failure mode) BEFORE the next release does.
+#
+# CONSTRAINT (corpus-home adapter seam): if you are making this resolution
+# instance-aware / adapter-driven, read
+# release/references/standards/corpus-home-adapter-constraints.md FIRST. Three of
+# its four constraints bind the code you are about to write, and satisfying only
+# the first is the documented way to ship a broken resolver behind a green gate:
+#   CH-1  instance-corpus root ABSENT  -> record N/A and exit 0, never HARD-FAIL
+#         (this probe is a REQUIRED CI gate; a HARD-FAIL reddens every PR from a
+#         fresh clone). A crash is not tolerance either — any non-zero fails.
+#   CH-2  instance-corpus root PRESENT -> resolve all four corpus paths through
+#         the active corpus home and exit 0. An unconditional exit 0 satisfies
+#         CH-1 while resolving nothing at all; CH-2 exists to forbid exactly that.
+#   CH-4  emit the N/A outcome as a distinguishable PER-PATH record, never an
+#         undifferentiated OK — otherwise an unresolved path reads as a resolved
+#         one and CH-3 is defeated.
+# release/tools/tests/test_corpus_home_tolerance.sh ASSERTS CH-3 unconditionally,
+# and asserts CH-1 / CH-2 / CH-4 by reading the fixtures' OUTPUT once it detects
+# instance-resolution vocabulary in this file (or fixture A starts exiting 0). It
+# does NOT assert them for a resolver that names none of that vocabulary AND leaves
+# its fixture A non-zero — if you introduce a new spelling, extend ARMING_NEEDLE
+# there in the same change.
 check_paths() {
   local rc=0
   local label path kind
@@ -4547,17 +5459,20 @@ phase_append_reversions || { generate_report; exit 3; }                # Phase 8
 phase_scaffold_release_notes || { generate_report; exit 3; }
 phase_lint_release_notes || { generate_report; exit 3; }              # Phase 9.2 — §3.2 note-content close gate; a finding for THIS version BLOCKS close
 phase_append_changelog || { generate_report; exit 3; }                # Phase 9.5 — Layer-1 dual-write Surface 2
+phase_assert_derived_surfaces || { generate_report; exit 3; }         # Phase 9.55 — AC1 anchor A3: version-scoped scaffold-residue assert on CHANGELOG + DIGEST
 phase_bump_version || { generate_report; exit 3; }                    # Phase 9.6 — stamp .version (versioned releases; SKIP version-less)
 phase_ledger_guard || { generate_report; exit 3; }                    # Phase 9.9 — pre-commit §220 I1/I2 read-modify-write guard (#1680)
 phase_rebuild_skill_packages || { generate_report; exit 3; }          # Phase 9.95 — .skill package rebuild into the chore commit (#3322; content-sidecar-gated)
 phase_commit_chore_pr || { generate_report; exit 3; }
 phase_create_chore_pr || { generate_report; exit 3; }
 phase_await_merge_chore_pr || { generate_report; exit 3; }
+phase_sync_primary_checkout || { generate_report; exit 3; }           # Phase 12.2 — AC7: fast-forward the primary checkout to origin/main (non-fatal; git -C only)
 phase_reparse_ledgers || { generate_report; exit 3; }                 # Phase 12.5 — post-merge structural re-parse (#1680; detective-only)
 phase_post_close_milestone || { generate_report; exit 3; }
 phase_manual_close_release_issues || { generate_report; exit 3; }
 phase_run_verification || { generate_report; exit 3; }
 phase_publish_github_release || { generate_report; exit 3; }          # Phase 15.5 — Layer-1 dual-write Surface 1
+phase_assert_anchor_hygiene || { generate_report; exit 3; }           # Phase 15.55 — AC4/AC5: set-based tag<->Release parity + tagger identity (both anchors exist by now)
 phase_check_release_body_drift || { generate_report; exit 3; }        # Phase 15.6 — post-emit §5.1 drift assert (genuine drift inside the cutoff scope BLOCKS; capability-absent / artifact-missing stay non-blocking)
 phase_invoke_orphan_cleanup || { generate_report; exit 3; }
 phase_pattern_scan || { generate_report; exit 3; }
