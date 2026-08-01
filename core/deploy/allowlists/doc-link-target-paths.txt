@@ -66,8 +66,11 @@ docs/
 .github/
 
 # ── DELIBERATELY EXCLUDED ───────────────────────────────────────────────────
-# release/releases/  — 260 md (RELEASE_LOG/INDEX/DIGEST + plans + notes). NOT
-#   added here: it is already walked recursively by release/tools/
-#   check-release-links.py (the Dead-file-reference gate + release-link-check.yml),
-#   and it carries the heaviest pre-existing rot. Adding it would duplicate
-#   coverage while importing that rot into this gate.
+# release/releases/  — the release corpus (RELEASE_LOG/INDEX/DIGEST + their
+#   archive segments + plans + notes). NOT added here: it is already walked
+#   recursively by release/tools/check-release-links.py (the Dead-file-reference
+#   gate + release-link-check.yml), and it carries the heaviest pre-existing rot.
+#   Adding it would duplicate coverage while importing that rot into this gate.
+#   No file count is pinned here on purpose: the directory grows every release,
+#   so a literal count is a comment that is wrong more often than it is right,
+#   and nothing reads it.

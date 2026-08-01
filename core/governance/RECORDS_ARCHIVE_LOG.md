@@ -24,4 +24,9 @@ One row per archival move. `trigger` is one of `{project-CLOSED, age-out}`.
 
 | date | record (path / id) | class | trigger | from → to | actor |
 |---|---|---|---|---|---|
-| _(no disposition moves yet — seeded empty)_ | | | | | |
+| 2026-08-01 | `release/releases/RELEASE_LOG.md` — Deployment Log + Release Learnings bodies, 160 aged-out releases | Vital | age-out | `RELEASE_LOG.md` → `RELEASE_LOG_ARCHIVE-{v1,v2,v3,v4,_unversioned}.md` (same directory) | `sweep-release-corpus.py` |
+| 2026-08-01 | `release/releases/RELEASE_DIGEST.md` — entry bodies, 160 aged-out releases, plus the legacy `### Releases` table (11 rows, migrated verbatim) | Vital | age-out | `RELEASE_DIGEST.md` → `RELEASE_DIGEST_ARCHIVE-{v1,v2,v3,v4,_unversioned}.md` (same directory) | `sweep-release-corpus.py` |
+| 2026-08-01 | `release/releases/RELEASE_INDEX.md` — Theme-column prose, 160 aged-out releases (rows, order and the five verified columns untouched) | Vital | age-out | `RELEASE_INDEX.md` → `RELEASE_INDEX_ARCHIVE-{v1,v2,v3,v4,_unversioned}.md` (same directory) | `sweep-release-corpus.py` |
+| 2026-08-01 | `CHANGELOG.md` — release-section bodies, 160 aged-out releases (`## [Unreleased]` and every section heading retained) | Vital | age-out | `CHANGELOG.md` → `CHANGELOG_ARCHIVE-{v1,v2,v3,v4,_unversioned}.md` (repository root, same directory) | `sweep-release-corpus.py` |
+
+**Sweep note (2026-08-01).** One sweep, four ledgers, 20 segments. Combined working set 1,549,157 B → 262,161 B (83.1% reduction) against a 300,000 B ceiling. Trigger is age-out; the number of releases retained (4) is an **output** of the byte rule, not a parameter to it. Disposition is a move: every relocated entry keeps its heading in its source ledger with a pointer to its segment, and conservation was asserted at **both** ends — 571 relocated entries reconciled against the pre-sweep tree, with the verifier first falsified against a deliberately truncated segment so the PASS is evidence rather than assertion.

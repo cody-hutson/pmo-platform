@@ -17,6 +17,7 @@ These files are also referenced by the pipeline but are appended/edited at the c
 - `RELEASE_LOG.md` — per-release append log (state = `DEPLOYED` → `VERIFIED`); created on first release at Stage 12 Phase B5 chore PR
 - `RELEASE_INDEX.md` — corpus-level index of all releases; appended at Stage 13 chore PR
 - `RELEASE_DIGEST.md` — corpus-level digest grouped by version family; appended at Stage 13 chore PR
+- `<LEDGER>_ARCHIVE-<family>.md` — **archive segments** of the three ledgers above, one per major release family (`v1` / `v2` / `v3` / `v4` / `_unversioned`). A segment holds the aged-out narrative body of entries whose heading still lives in the parent ledger. It is the **same record, relocated** — a **Vital** record under [`../../core/governance/RECORDS_POLICY.md`](../../core/governance/RECORDS_POLICY.md), permanently retained, never a lesser class for having aged out. Segments sit beside their parent deliberately, so `grep -r` over this directory still finds archived content. Written by [`../tools/sweep-release-corpus.py`](../tools/sweep-release-corpus.py); append-only, and never themselves swept. The root `CHANGELOG.md` follows the same pattern with its segments at the repository root, beside it.
 
 These files do not exist until the first release runs. The Stage 12 / Stage 13 chore-PR mechanism (per [`../references/pipeline/stage-12-execute.md`](../references/pipeline/stage-12-execute.md) and [`../references/pipeline/stage-13-close.md`](../references/pipeline/stage-13-close.md)) creates them on first use.
 

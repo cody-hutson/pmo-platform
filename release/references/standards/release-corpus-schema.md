@@ -61,6 +61,17 @@ The `type:` field discriminates artifact classes for the schema validator and fo
 
 Validator MUST discriminate by `type:` value and apply the type-specific required-fields subset before flagging missing-field errors.
 
+### Archive segments — a ledger class, deliberately outside the `type:` discriminator
+
+`<LEDGER>_ARCHIVE-<family>.md` files (`RELEASE_LOG_ARCHIVE-v2.md`, `RELEASE_DIGEST_ARCHIVE-v3.md`, `RELEASE_INDEX_ARCHIVE-v1.md`, and `CHANGELOG_ARCHIVE-<family>.md` at the repository root) hold the aged-out narrative bodies of ledger entries whose headings remain in the parent ledger. They carry **no frontmatter and no `type:` value**, and that is deliberate rather than an omission: the discriminator above governs per-release *artifacts* (a plan, a note) that each describe one release and carry the six required fields. A segment describes no single release — it is a slice of a ledger, so every one of those fields would be either meaningless or a lie. Adding a row above would oblige a validator to demand fields the class cannot have.
+
+Rules that DO bind archive segments:
+
+- **Same directory as the parent ledger.** This is load-bearing, not cosmetic — it is what preserves `grep -r release/releases/` semantics across the move. A segment is never placed in `releases/archive/`, which is reserved for `abandoned-plan` (a different disposition: abandoned is not aged-out).
+- **No `| vX.Y |` ledger table rows.** The LOG and INDEX row-count parity check counts those rows in the two ledgers by fixed path; segments carry prose, pointers and (in the DIGEST v2 segment) the migrated legacy table under its own heading.
+- **Append-only, and never themselves swept.** A segment is a disposition destination, never a disposition source — the class-inheritance rule in [`../../../core/governance/RECORDS_POLICY.md`](../../../core/governance/RECORDS_POLICY.md).
+- **The `links.log_anchor` invariant survives a sweep unchanged.** The sweep retains every `#### Deployment Log <version>` heading in `RELEASE_LOG.md`, so the fragment IDs that field resolves against are exactly as numerous after a sweep as before. Archiving relocates bodies, never headings, precisely so this invariant is untouched.
+
 ### Links shape
 
 ```yaml
