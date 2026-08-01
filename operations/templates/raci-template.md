@@ -1,3 +1,22 @@
+---
+artifact_type: template
+template_family: RACI / RAEW / RAS
+domain: project
+canonical_path: operations/templates/raci-template.md
+owner: [OPERATOR_NAME]
+review_status: DRAFT
+created: 2026-06-29
+updated: 2026-08-01
+generated_by: release-pipeline {{RELEASE_VERSION}}
+reviewer: N/A
+canon: PMBOK 7 §Stakeholder Performance Domain
+canon_compat: none
+version: "{{RELEASE_VERSION}}"
+supersedes: N/A
+superseded_by: N/A
+---
+<!-- The YAML block above is this TEMPLATE FILE's provenance header (core/standards/template-protocol.md §4.1). Do NOT copy it into rendered RACI matrix instances — an instance starts at the H1 below. -->
+
 # {{PROJECT_NAME}} RACI Matrix
 
 **Purpose:** Assign Responsible / Accountable / Consulted / Informed for each workstream or deliverable (PMBOK Stakeholder domain; RAEW/RAS variants are references).

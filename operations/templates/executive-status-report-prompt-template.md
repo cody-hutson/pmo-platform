@@ -1,3 +1,22 @@
+---
+artifact_type: template
+template_family: Executive Status Report Prompt
+domain: project
+canonical_path: operations/templates/executive-status-report-prompt-template.md
+owner: [OPERATOR_NAME]
+review_status: DRAFT
+created: 2026-06-05
+updated: 2026-08-01
+generated_by: release-pipeline {{RELEASE_VERSION}}
+reviewer: N/A
+canon: PMBOK 7 §Measurement Performance Domain
+canon_compat: none
+version: "{{RELEASE_VERSION}}"
+supersedes: N/A
+superseded_by: N/A
+---
+<!-- The YAML block above is this TEMPLATE FILE's provenance header (core/standards/template-protocol.md §4.1). Do NOT copy it into rendered executive-status-report instances — an instance starts at the H1 below. -->
+
 # Executive Status Report Prompt — {{PROJECT_NAME}}
 
 **Purpose:** Template for generating leadership-ready status reports.
