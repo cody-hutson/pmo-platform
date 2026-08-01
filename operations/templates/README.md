@@ -63,7 +63,7 @@ Canon-per-family binding per [`../standards/template-taxonomy.md` §6](../../cor
 
 | Template | Purpose |
 |---|---|
-| `PMO_Platform_Template.md` | Knowledge-transfer reference for the PMO platform itself |
+| `people-graph-clarification-queue-template.md` | De-identified clarification queue for unresolved person-graph candidates; the filled queue is operator-instance and out-of-tree |
 
 ### Project-data architecture (shared-entity SSOT + typed plans + composed index, v3.37)
 

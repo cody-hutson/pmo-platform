@@ -16,7 +16,7 @@ consumers: operations/templates/ template authors; L3 template-storage (single-s
 
 ## §1 Purpose
 
-This document is L4 of the 5-Layer Template Architecture. It defines (a) the **5-state lifecycle workflow** (DRAFT → REVIEWED → APPROVED → PROMOTED → ARCHIVED) that every canonical template carries, (b) the **provenance header schema** (14 fields) that records that lifecycle state plus authorship, lineage, and canon-compat attribution on each template file, and (c) the **trigger protocol T1-T5 + promotion gates P1-P5** that govern when a document/format becomes a template candidate and when a candidate is promoted to canonical status. It exists in parallel to [`template-taxonomy.md`](template-taxonomy.md) (L1 — what artifact families exist) and [`template-storage.md`](template-storage.md) (L3 — where templates live + how they propagate). Per the layer-per-file architecture, this doc owns the lifecycle + provenance + trigger concerns only; the registry layout and propagation contract live in L3, and the consumer-skill integration pattern lives in L5.
+This document is L4 of the 5-Layer Template Architecture. It defines (a) the **5-state lifecycle workflow** (DRAFT → REVIEWED → APPROVED → PROMOTED → ARCHIVED) that every canonical template carries, (b) the **provenance header schema** (15 fields) that records that lifecycle state plus authorship, lineage, and canon-compat attribution on each template file, and (c) the **trigger protocol T1-T5 + promotion gates P1-P5** that govern when a document/format becomes a template candidate and when a candidate is promoted to canonical status. It exists in parallel to [`template-taxonomy.md`](template-taxonomy.md) (L1 — what artifact families exist) and [`template-storage.md`](template-storage.md) (L3 — where templates live + how they propagate). Per the layer-per-file architecture, this doc owns the lifecycle + provenance + trigger concerns only; the registry layout and propagation contract live in L3, and the consumer-skill integration pattern lives in L5.
 
 This protocol provides L4 **schema primitives** (state names, provenance field shapes, trigger primitives) consumed **downstream** by L3 Storage (P4 gate-evaluation against `canonical_path`), L5 Governance (when-to-templatize routing), and the three instance-level protocols (provenance header for artifact instances in 08-Generated/, DRAFT→APPROVED workflow for AI-generated artifact instances, artifact-to-artifact lineage on instances). The composition boundary with each of those consumers is documented in §8.
 
@@ -85,13 +85,13 @@ The five state sub-sections below establish the authoritative entry/exit conditi
 
 ### APPROVED
 
-**Definition.** All P1-P5 promotion gates have been evaluated and recorded; the template is eligible for propagation to skill `references/` mirrors and for citation from SKILL.md. The lifecycle exemplar in §7 reaches this state.
+**Definition.** All P1-P5 promotion gates have been evaluated and recorded; the template is eligible for propagation to skill `references/` mirrors and for citation from SKILL.md. The lifecycle exemplar in §7 is the designated candidate for this state; it currently sits at `DRAFT` because P3 is unmet registry-wide (see §7.1).
 
 **Entry conditions.** Operator-rendered approval (Autonomy Tier 0 per [`autonomy-tiers.md`](../specs/autonomy-tiers.md) — operator-only authority for promotion; no skill or agent can self-approve). `canon_compat:` is set to one of `plugin-aligned` / `PMO-extension` / `none` per P5 resolution. `review_status: APPROVED`. `updated:` bumped to the approval date.
 
 **Exit conditions.** Template is registered in `TEMPLATE_SYNC_MAP` (per L3 [`template-storage.md`](template-storage.md) §6) AND consumed by ≥1 deployed skill OR cited from an operator-facing governance doc — the template transitions to `PROMOTED`.
 
-**Example.** `PMO_Platform_Template.md` reaches `APPROVED` with `canon_compat: none` (per P5 path (c) — project-domain with no Anthropic plugin counterpart for the KT-Onboarding family). See §7.
+**Example (transition condition, not a live state).** `change-impact-matrix-template.md` would reach `APPROVED` with `canon_compat: none` (per P5 path (c-i) — project-domain with no Anthropic plugin counterpart for the Change Impact Matrix / OCM family) once P1-P5 are evaluated and recorded. No template in the registry currently holds `APPROVED`; the gating condition is P3 (≥1 proof-of-utility instance). See §7.
 
 ### PROMOTED
 
@@ -187,9 +187,10 @@ The provenance header schema in §4.1 is **field-by-field compatible** with the 
 
 **CSV templates** (`*-template.csv` in the canonical registry): CSV files do not support inline frontmatter (the header row is data, not metadata). Provenance for CSV templates lives in a sibling `<file>.provenance.yml` file at the same path. Example: `raid-log-template.csv` has its provenance in `raid-log-template.provenance.yml` in the same directory.
 
-**AC4 verification clauses (per template format):**
-- For markdown exemplars: `grep -l 'review_status: APPROVED' operations/templates/*.md`
-- For CSV exemplars (if ever): `grep -l 'review_status: APPROVED' operations/templates/*.provenance.yml`
+**AC4 verification clauses (per template format).** Verify by locating the provenance block, then reading its `review_status:` — do NOT grep for a literal `review_status: APPROVED`. No template in the registry currently holds `APPROVED` (P3 is unmet registry-wide, per §7.1), so an `APPROVED`-literal grep returns empty and cannot distinguish "no header" from "header present at an earlier lifecycle state".
+
+- For markdown templates: `grep -l '^artifact_type: template' operations/templates/*.md` locates every template carrying the header; `grep -H '^review_status:' operations/templates/*.md` reads the state each one holds.
+- For CSV templates: the sibling provenance file per §4.4 — locate it beside the `.csv`, then read its `review_status:` the same way. (The sibling-file naming in this section describes the specified convention; the live sibling files use a different suffix. Reconciling that drift is out of this section's scope and is tracked separately.)
 
 CSV-specific handling rationale: Foundation Stage 5 hypothesized CSV templates as `keep-canonical-only` with mechanical drift-detection via `md5sum`; sibling-file provenance preserves CSV format integrity while supporting the same gate evaluation against `review_status`.
 
@@ -235,50 +236,60 @@ The `canon_compat:` field in the template provenance header (per §4.1) records 
 
 ### §7.1 Exemplar choice and rationale
 
-The L4 lifecycle exemplar — the template promoted through the full `DRAFT` → `APPROVED` lifecycle as proof-of-protocol — is `operations/templates/PMO_Platform_Template.md`.
+The L4 lifecycle exemplar — the template carried furthest through the `DRAFT` → `APPROVED` lifecycle as proof-of-protocol — is `operations/templates/change-impact-matrix-template.md`.
 
 **Selection criteria** (per AC4 + L4 Stage 5 DD-E):
 
-1. **Clear provenance addable.** Markdown format; frontmatter goes at the top cleanly without disturbing the prose body.
-2. **Viable lineage path.** The template produces stakeholder KT artifacts (HTML or rendered docs) — one observed instance per platform release per L1 [`template-taxonomy.md`](template-taxonomy.md) §3.2 Team domain row.
-3. **Lowest blast radius.** `PMO_Platform_Template.md` is **canonical-only** — no project-initiator mirror, no other-skill-embedded copy. Adding frontmatter does NOT trigger L3-Storage deploy-sync entanglement in the same release.
+1. **Clear provenance present.** Markdown format, and the template already carries the full §4.1 provenance block at the top of the file without disturbing the prose body — the criterion is satisfied by a live header, not merely by one being addable.
+2. **Viable lineage path.** The template produces project change-impact artifacts, and it is classified in an L1 [`template-taxonomy.md`](template-taxonomy.md) family with a named canon (PMBOK 7 §Stakeholder Performance Domain), so P5 resolves against a real family row.
+3. **Lowest blast radius.** `change-impact-matrix-template.md` is **canonical-only** — no project-initiator mirror, no other-skill-embedded copy, and no `TEMPLATE_SYNC_MAP` registration. Editing its provenance does NOT trigger L3-Storage deploy-sync entanglement.
 
-**Comparison vs alternatives.** Of the 12 canonical templates at baseline, `PMO_Platform_Template.md` is the **only** template without a project-initiator mirror — it is the unique candidate with **zero** coupling to L3-Storage's deploy-sync work in the same release. Choosing any mirrored template would couple L4-Lifecycle and L3-Storage Engineering ordering (frontmatter must propagate via deploy-sync, requiring the L3 sync hook to exist before L4 frontmatter add can be end-to-end verified). Choosing `PMO_Platform_Template.md` decouples the two sub-issues entirely.
+**Comparison vs alternatives.** Criterion 3 is the discriminating one: most canonical templates carry a project-initiator mirror, and choosing a mirrored template would couple L4-Lifecycle and L3-Storage ordering (a provenance edit must propagate via deploy-sync, so the L3 sync path has to be exercised before the L4 header change can be end-to-end verified). The candidate set for the exemplar is therefore the templates that both carry a §4.1 header and are absent from `TEMPLATE_SYNC_MAP`; `change-impact-matrix-template.md` is selected from that set, with `training-plan-template.md` as the equivalent alternate on all three criteria. To re-derive the candidate set rather than trust this paragraph, intersect `grep -l '^artifact_type: template' operations/templates/*.md` with the complement of `TEMPLATE_SYNC_MAP`'s registered basenames in `core/deploy/deploy.sh`.
+
+**Why the exemplar sits at `DRAFT`.** No template in the registry currently holds `APPROVED` or `PROMOTED`. The gating condition is P3 — ≥1 proof-of-utility instance — which is unmet registry-wide, so the promotion path in §3 has not yet been exercised past its first state. An exemplar correctly parked at `DRAFT` because a promotion gate is unmet is a faithful worked example of the P-gate protocol, not a defect in it. The §7.2 header below is the exemplar's **real, live** header, rendered verbatim; it is not an aspirational rendering.
 
 ### §7.2 Exemplar provenance header (rendered)
+
+The exemplar's live header, verbatim:
 
 ```yaml
 ---
 artifact_type: template
-template_family: KT-Onboarding
+template_family: Change Impact Matrix
 domain: project
-canonical_path: operations/templates/PMO_Platform_Template.md
+canonical_path: operations/templates/change-impact-matrix-template.md
 owner: [OPERATOR_NAME]
-review_status: APPROVED
-created: 2026-03-27
-updated: 2026-05-10
-generated_by: operator
-reviewer: [OPERATOR_NAME]
-canon: PMBOK 7 §Lifecycle (project closing)
+review_status: DRAFT
+created: 2026-07-24
+updated: 2026-07-24
+generated_by: release-pipeline v3.89
+reviewer: N/A
+canon: PMBOK 7 §Stakeholder Performance Domain
 canon_compat: none
-version: vX.Y
+version: v3.89
 supersedes: N/A
 superseded_by: N/A
 ---
 ```
 
-**`canon_compat: none` rationale.** Per P5 path (c): `domain: project` AND no Anthropic plugin counterpart for the KT-Onboarding artifact family. Note: the Anthropic `human-resources:onboarding` plugin is for HR / employee onboarding, NOT for platform / system knowledge-transfer documentation; semantic mismatch — path (c) `none` is correct for this template per the L1 [`template-taxonomy.md`](template-taxonomy.md) §3.2 emergent-gap analysis row.
+**`canon_compat: none` rationale.** Per P5 path (c-i): `domain: project` AND no Anthropic plugin counterpart for the Change Impact Matrix / OCM artifact family — the L1 [`template-taxonomy.md`](template-taxonomy.md) Stakeholder families carry no plugin cross-reference. Note that at `DRAFT` this value is the **anticipated** P5 resolution; it becomes authoritative only at an `APPROVED` transition, when P1-P5 are evaluated and recorded.
+
+**`reviewer: N/A` at `DRAFT`.** `reviewer` is set on the `DRAFT` → `REVIEWED` transition per §4.2, so `N/A` is the correct value for a template that has not yet been reviewed — not a missing field.
 
 ### §7.3 AC4 verification
 
-The protocol AC4 verification chain:
+The protocol AC4 verification chain — each command below reproduces against current state:
 
 ```
-$ grep -l 'review_status: APPROVED' operations/templates/*.md
-operations/templates/PMO_Platform_Template.md
+$ grep -l '^artifact_type: template' operations/templates/change-impact-matrix-template.md
+operations/templates/change-impact-matrix-template.md
+$ grep -H '^review_status:' operations/templates/change-impact-matrix-template.md
+operations/templates/change-impact-matrix-template.md:review_status: DRAFT
 $ grep -A 8 '^## §9' core/standards/template-protocol.md | head -12
-# (returns the lineage table with the PMO_Platform_Template seed row — see §9)
+# (returns the lineage table with the change-impact-matrix-template seed row — see §9)
 ```
+
+The first command locates the header structurally, via the schema's own mandatory constant discriminator (`artifact_type`, §4.1 first key). The second reads the lifecycle state that header holds rather than asserting one. Verifying the state by reading it — instead of grepping for a hard-coded `review_status:` value — is what keeps this chain reproducible as the exemplar advances through §3's states.
 
 ## §8 Composition Boundary with Downstream Consumers
 
@@ -335,7 +346,7 @@ Each lineage row carries the following fields:
 
 | `template_id` | `canonical_path` | `first_committed` | `supersedes` | `superseded_by` | `known_instance_locations` |
 |---|---|---|---|---|---|
-| `PMO_Platform_Template.md` | `operations/templates/PMO_Platform_Template.md` | 2026-03-27 | N/A | N/A | `projects/Archive/*/PMO_Platform_KT_*.html` (informational; one HTML instance per platform release per L1 §3.2) |
+| `change-impact-matrix-template.md` | `operations/templates/change-impact-matrix-template.md` | 2026-07-24 | N/A | N/A | `projects/*/08-Generated/*_Change_Impact_Matrix.md` (informational; per the §7.2 instance-guard naming) |
 
 Future lineage entries are added at the L4 Stage 6 commit that promotes any subsequent template through the lifecycle. Successor templates' rows also update the predecessor's `superseded_by:` field to maintain a bidirectional chain.
 

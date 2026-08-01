@@ -52,7 +52,7 @@ The PMBOK 7 standard organizes project work into 8 Performance Domains. Each pro
 
 | Artifact Family | Description | Current Canonical PMO Template | Gap? |
 |---|---|---|---|
-| Onboarding / KT doc | Team-onboarding or knowledge-transfer reference | `operations/templates/PMO_Platform_Template.md` | No (operational instance — KT for the platform itself) |
+| Onboarding / KT doc | Team-onboarding or knowledge-transfer reference | `(none — gap)` | Yes |
 
 ### §3.3 Development Approach + Lifecycle
 
