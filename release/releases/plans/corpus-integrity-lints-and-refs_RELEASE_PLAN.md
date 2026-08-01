@@ -265,12 +265,13 @@ release/references/pipeline/stage-06-engineering.md                      # edit 
 core/schemas/gate-criteria-spec.md                                       # edit — #3939 one reference line inside the G2-13 criterion body (cites, does not restate)
 core/disciplines/cross-chain-architecture-map.md                         # edit — #3939 clear the [DEFERRED] forward-note
 core/standards/design-artifact-standard.md                               # edit — #3838 §12.1 rule-7 + §12 table-awareness + §12.2 harness + §3 declared in-milestone; #3839 §9 depicts= convention
+release/references/standards/triage-design-rereview.md                   # edit — #3838 §3 declared as a decision-tree artifact (the Δ-defer (b) in-milestone declaration)
 core/disciplines/review-discipline-principles.md                         # edit — #4195 author the probe-validity discipline (denominator + control)
 core/standards/evidence-grounding-standard.md                            # edit — #4195 denominator/control requirement on grounded claims
 release/references/how-to/hub-spoke-bridge.md                            # edit — #4195 spoke-prompt convention cites the discipline; + CD-2(a)/(b) actor-reach edits
 core/standards/review-composition-framework.md                           # edit — #4195 mandatory 5.6 cascade (accepted D-6)
 release/references/protocols/architecture-conformance-cadence.md         # edit — #4195 fold-in, 1 line (accepted D-6)
-release/references/how-to/design-artifact-backfill-completion-condition.md # edit — #4195 fold-in, 3 lines (accepted D-6)
+release/references/how-to/design-artifact-backfill-completion-condition.md # edit — #3838 reconcile 3 rule-7 table-awareness claims (the Δ-D6 fold-in; attributed to #4195 at planning, owned by #3838 in fact)
 release/references/templates/design-review-checklist.md                  # edit — #4195 R3 row (approved expansion D-7(c))
 core/deploy/deploy.sh                                                    # edit — #4196 Check 62 (def-block + log emitter); #4197 Check 63 (def-block + log emitter). APPEND ONLY, no existing check body edited
 core/deploy/allowlists/count-structure-baseline.txt                      # new  — #4196 committed 51-entry accepted-population baseline
@@ -288,7 +289,7 @@ docs/scripts/setup-workspace.sh                                          # edit 
 release/releases/RELEASE_LOG.md                                          # edit — Stage-13 close-out ledger row [Stage 13, not this build]
 ```
 
-**Path-count note (dogfooding CIAC-4):** the block above enumerates **35** paths. This count is stated adjacent to the structure it describes and is therefore itself in Check 62's population — deliberately so.
+**Path-count note (dogfooding CIAC-4):** the block above enumerates **36** paths. This count is stated adjacent to the structure it describes and is therefore itself in Check 62's population — deliberately so.
 
 **Provisional entries — confirm at the owning chip's commit, amend the § Deviation Log if they change:**
 - **#4198's installer trio.** Collective Review locked scope at *"7 constants / 21 declaration sites / 10 files (lib `core/hooks/lib/fragile-ref-patterns.sh`, co-deploy allowlist across 3 installers)"*. `docs/scripts/setup-workspace.sh` is verified as a hooks-lib co-deploy surface `[SOURCE]`; the remaining two co-deploy surfaces are `[INFERRED]` from the same mechanism and are the **#4198 spoke's** to confirm and append. The matrix lists only the verified one.
@@ -304,7 +305,7 @@ release/releases/RELEASE_LOG.md                                          # edit 
 
 ## Domain Practice Provenance
 
-The File Change Matrix is entirely internal pmo-platform artifacts. 30 of 35 paths are `core/` / `release/` governance, pipeline-spec, and standards documents (`domain: governance`); the secondary class is `software` for the 5 executable paths (`core/deploy/deploy.sh`, 3 × `core/hooks/**`, `.github/workflows/reference-durability.yml`, `docs/scripts/setup-workspace.sh`). Sourcing-exempt per `stage-04-planning.md` § 5.7 — the entire matrix is internal artifacts and no external practice governs criterion-ID citation hygiene — but the domain class is mandatory in every mode and travels unchanged into Solutioning and Engineering.
+The File Change Matrix is entirely internal pmo-platform artifacts. 31 of 36 paths are `core/` / `release/` governance, pipeline-spec, and standards documents (`domain: governance`); the secondary class is `software` for the 5 executable paths (`core/deploy/deploy.sh`, 3 × `core/hooks/**`, `.github/workflows/reference-durability.yml`, `docs/scripts/setup-workspace.sh`). Sourcing-exempt per `stage-04-planning.md` § 5.7 — the entire matrix is internal artifacts and no external practice governs criterion-ID citation hygiene — but the domain class is mandatory in every mode and travels unchanged into Solutioning and Engineering.
 
 domain_practice: { source: N/A — pipeline-internal release, date: 2026-07-31, domain: governance }
 
@@ -327,6 +328,7 @@ Deltas between the Stage-4 plan of record (#4335) and the ratified dispositions 
 | **Δ-slots** | Stage-4 identified Check 62 as free; #4197 and #4198 slots undetermined | **Rule-computed:** `deploy.sh` slot **62 → #4196**, slot **63 → #4197**. **#4198 needs no slot and no `deploy.sh` edit** — its control rides the existing tri-invoked `run-fragile-ref-fixtures.sh` harness. | Collective Review scope-lock |
 | **Δ-baseline** | Stage-4 pinned `c4dde614`; contention map measured there | **Re-pinned at Commit 0 to `93023d8e`** (+25 commits: two siblings merged, `v4.02` claimed by milestone 298). **PROCEED** — 13 of 14 target files verified untouched, Check 62 verified still free. **Every chip re-locates its edit anchors by content, not by line number.** | Collective Review; Commit-0 re-verify |
 | **Δ-version** | — | **`v4.02` was claimed by a sibling mid-run at zero cost to this release.** The early-binding HALT that ADR-092's slug-only rule exists to prevent did not occur. This is the first release to have the mechanism tested by a live concurrent claim rather than in theory. | Collective Review; ADR-092 |
+| **Δ-matrix** | File Change Matrix omitted `triage-design-rereview.md`, and attributed `design-artifact-backfill-completion-condition.md` to #4195 | **Two hub-owned corrections applied by the #3839 chip as next committer.** (a) **ADDED** `release/references/standards/triage-design-rereview.md` — #3838 declared its § 3 marker there (`899ada40`), so that change was invisible to every downstream chip parsing the ` ```paths ` block (verified absent: 0 hits in the 35-path block; control: `design-artifact-standard` = 1). (b) **RE-ATTRIBUTED #4195 → #3838** on the backfill how-to — #3838 edited it (`0f0c48e7`, 3 sites, all rule-7 table-awareness), and the file carries **zero** probe-validity vocabulary (`denominator`/`control`/`probe` = 0; controls: `harness` = 17, `rule 7` = 2), so #4195 has no gap to close there. Forced count cascade applied: path count **35 → 36**, governance split **30/35 → 31/36**. **Flagged, NOT fixed (hub judgment):** the same sentence's "**5** executable paths" parenthetical enumerates 6 items and the block carries 7 executable-class paths (the 4th `core/hooks/**` entry, `positional-issueref.awk`, is uncounted) — pre-existing, independent of this delta, and re-deriving the software/governance split is the hub's classification call. | Stage-6 implementation finding (#3839 chip) |
 
 ---
 
