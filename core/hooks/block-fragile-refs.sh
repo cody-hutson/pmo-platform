@@ -59,6 +59,14 @@ readonly ALLOWLIST="${HOOK_DIR}/reference-durability-allowlist.txt"
 # fixture-runner and the reference-durability CI invoke this same file via `awk -f`, so
 # the positional logic cannot drift across the three surfaces). Resolves beside the hook.
 readonly POSITIONAL_LIB="${HOOK_DIR}/lib/positional-issueref.awk"
+# Shared detector-constant declarations (the sole declaration of LINK_RE / CUTOVER_RE /
+# URL_RE / REFBLOCK_RE / ISSUEREF_RE / HEXCOLOR_RE / MIN_SELFDESCRIBE_WORDS). The
+# fixture-runner and the reference-durability CI source this same file, so the three
+# surfaces read one set of bytes rather than three copies. Sourced below, AFTER the mode
+# read and the jq gate, so its own failure posture is mode-coupled (ADR-078 D6) and so a
+# jq-unresolvable layout still fails at the jq gate rather than here. Resolves beside the
+# hook, like DEP_LIB and POSITIONAL_LIB.
+readonly PATTERNS_LIB="${HOOK_DIR}/lib/fragile-ref-patterns.sh"
 
 # --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
 # Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
@@ -77,48 +85,10 @@ if [ ! -r "$DEP_LIB" ] || ! "${BASH:-/bin/bash}" -n "$DEP_LIB" 2>/dev/null || ! 
 fi
 JQ="$(resolve_jq)"; readonly JQ
 
-# --- THE FLAGGED-CLASS PATTERNS (validated against core/hooks/testdata/cutover-fixtures.txt) ---
-# Class L — markdown link sequence (fenced code blocks are stripped before scanning).
-readonly LINK_RE='\]\('
-# Class V — version-cutover apparatus. Keyed on the cutover IDIOM proximate to a version
-# token, with bounded windows so a benign sentence naming a version does not match:
-#   (a) version token within 40 non-period chars of "merge SHA"
-#   (b) version token immediately governing "exempt" (optional release/itself/is)
-#   (c) "applies to releases" / "Cutover applies|discipline|per" within 80 chars of a version token
-#   (d) the "reflexive-pipeline-loop" cutover idiom
-# A bare version label naming the current line ("v2.1 is now current") does NOT match.
-readonly CUTOVER_RE='v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?[^.\n]{0,40}merge SHA|v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?([[:space:]]+(release|itself|is))*[[:space:]]+(is[[:space:]]+)?exempt|([Aa]pplies to releases|[Cc]utover[[:space:]]+(applies|discipline|per))[^.\n]{0,80}v[0-9]+\.[0-9]+|reflexive-pipeline-loop'
-# Class U — raw github.com/<owner>/<repo>/{issues,pull,milestone} URL. A rung-6 reference
-# that rots on any repository move/migration. Owner/repo-agnostic so it survives the repo's
-# own rename. The terminal anchor ([/#?]|$) is the over-match guard: it matches .../issues/333,
-# .../pull/682, .../milestone/3, and the bare .../issues index, but NOT the bare repo URL
-# github.com/<owner>/<repo> (no 3rd path segment) and NOT a word like "pullrequest".
-readonly URL_RE='github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(issues|pull|milestone)s?([/#?]|$)'
-# Reference-block header (reuses the parser-clean anchor-regex shape; H1-H6, lenient colon).
-readonly REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
-# A bare issue reference: a # followed by digits, optionally bracketed (matches #42, #[42]).
-readonly ISSUEREF_RE='#\[?[0-9]+\]?'
-# Companion hex-color mask (three ERE branches, no lookbehind): (a) a # + a hex-legal run with
-# >=1 hex letter [A-Fa-f] (matches #28A745, #FFF, #0A0); (b) a colon-prefixed hex run
-# `:#<3-8 hex digits>` — the CSS/Mermaid color-value form (color:#155724) that catches
-# PURE-DIGIT hex colors branch (a) cannot see; (c) the regex CHARACTER-CLASS hex form
-# `#[<hex ranges>]` plus an optional {n}/{n,m} quantifier (matches #[0-9a-fA-F]{6}) — the shape
-# a documented hex-scan command carries. In (c) the char after # is `[`, so neither (a) nor (b)
-# fires and ISSUEREF_RE reads the leading `#[0` as a bracketed ref (issue #4182). Branch (c)
-# REQUIRES a well-formed hex range (X-Y) between the brackets — that requirement is what stops
-# it swallowing a genuine bracketed ref (#[42] carries no range and still flags). No branch
-# matches a prose issue ref (#42 / `#42` / "See #42") — refs carry no hex letter, are never
-# colon-abutted, and carry no range. (c) spells its literal brackets/braces as bracket
-# expressions ([[] []] [{] [}]) rather than backslash escapes: `awk -v` strips backslashes, so
-# a `\[` would not survive assignment as written. Masked to spaces in the shared classifier
-# BEFORE the ISSUEREF_RE test so hex-color prefixes (#28) are not read as issue refs (#2068).
-# Must be byte-identical across the same 3 surfaces as
-# ISSUEREF_RE (block-fragile-refs.sh, run-fragile-ref-fixtures.sh, reference-durability.yml) —
-# the #314 anti-drift contract now governs both paired constants. ISSUEREF_RE is NOT changed.
-readonly HEXCOLOR_RE='(:#[0-9A-Fa-f]{3,8}|#[0-9A-Fa-f]*[A-Fa-f][0-9A-Fa-f]*|#[[][0-9A-Fa-f-]*[0-9A-Fa-f]-[0-9A-Fa-f][0-9A-Fa-f-]*[]]([{][0-9]+(,[0-9]+)?[}])?)'
-# Minimum non-reference word count required on an in-block issue-reference line for it to
-# count as self-describing (operationalizes the durability-ladder rung-5 "summarize inline").
-readonly MIN_SELFDESCRIBE_WORDS=3
+# --- THE FLAGGED-CLASS PATTERNS ---
+# Declared once in lib/fragile-ref-patterns.sh (validated against
+# core/hooks/testdata/cutover-fixtures.txt) and sourced below, after the mode read and the
+# jq gate. Each constant's own rationale lives beside its declaration in that file.
 
 # --- ERROR HANDLERS ---
 log_error() {
@@ -182,6 +152,44 @@ if [ -z "$JQ" ]; then
   "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-WARN] jq not found. Reference-durability hook DEGRADED (fail-open in warn-mode). Install: brew install jq (or ensure /usr/bin/jq exists).\n' "$HOOK_NAME" >&2
   exit 0
 fi
+
+# --- DETECTOR-CONSTANT GATE (co-shipped primitive; ADR-078 D6 fail-closed posture) ---
+# Every detector's pattern comes from lib/fragile-ref-patterns.sh. Verify the primitive is
+# USABLE, not merely present: a present-but-empty or truncated lib sources to nothing and
+# leaves the constants unset, and an EMPTY ERE matches every line — so a broken primitive
+# here is not a degraded detector but an inverted one. Precheck syntax with `bash -n` BEFORE
+# sourcing for the same reason DEP_LIB does: sourcing a parse-error file is fatal to this
+# parent and can exit 1 (NON-blocking = fail-OPEN) instead of blocking (GHSA-g9g6-28c9-vrx5).
+#
+# Posture, mode-coupled like the jq gate above and the classifier gate below: in ENFORCE a
+# durable-corpus write whose detectors cannot be constructed fails CLOSED. In warn/off the
+# hook STANDS DOWN entirely (exit 0) rather than degrading — unlike the positional-classifier
+# gate, no partial degrade exists here, because every class (L/V/U and the positional rule)
+# reads its pattern from this file. Running on unset patterns would flag every line.
+#
+# Placed AFTER the jq gate deliberately: a layout missing both jq and this primitive must
+# still fail at the jq gate, so the dependency-hardening tests that build such a layout keep
+# measuring what they name.
+_patterns_ok=0
+if [ -r "$PATTERNS_LIB" ] && "${BASH:-/bin/bash}" -n "$PATTERNS_LIB" 2>/dev/null && . "$PATTERNS_LIB" 2>/dev/null; then
+  if [ -n "${LINK_RE:-}" ] && [ -n "${CUTOVER_RE:-}" ] && [ -n "${URL_RE:-}" ] \
+     && [ -n "${REFBLOCK_RE:-}" ] && [ -n "${ISSUEREF_RE:-}" ] && [ -n "${HEXCOLOR_RE:-}" ] \
+     && [ -n "${MIN_SELFDESCRIBE_WORDS:-}" ]; then
+    _patterns_ok=1
+  fi
+fi
+if [ "$_patterns_ok" -eq 0 ]; then
+  log_error "PRIMITIVE-MISSING-OR-INVALID: detector constants $PATTERNS_LIB unusable"
+  if [ "$MODE" = "enforce" ]; then
+    deny_missing_primitive "fragile-ref-patterns.sh" "$HOOK_NAME" "$PRINTF"
+    exit 2   # caller owns the fail-closed exit — never trust the callee to terminate (GHSA-g9g6)
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:PRIMITIVE-MISSING] WARN (stood down, .mode=%s): co-shipped detector constants fragile-ref-patterns.sh absent or invalid; ALL reference-durability classes skipped this run.\n' "$HOOK_NAME" "$MODE" >&2
+  exit 0
+fi
+# Restore the hook's immutability posture. The lib declares plain so it stays re-sourceable
+# and overridable by a harness; the hook, which wants neither, re-asserts by bare name.
+readonly LINK_RE CUTOVER_RE URL_RE REFBLOCK_RE ISSUEREF_RE HEXCOLOR_RE MIN_SELFDESCRIBE_WORDS
 
 # --- VALIDATE INPUT ---
 if ! "$PRINTF" '%s' "$INPUT" | "$JQ" -e . >/dev/null 2>&1; then
