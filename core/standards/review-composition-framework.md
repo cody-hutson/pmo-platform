@@ -23,7 +23,7 @@ consumers: review-class skills composing across stages; build-reviewer and pmo-q
 
 ## §1 Purpose + Scope
 
-The platform has accumulated substantial review infrastructure — [`review-discipline-principles.md`](../disciplines/review-discipline-principles.md) (14 anti-laziness rules + 6-deliverable structure), [`gate-criteria-spec.md`](../schemas/gate-criteria-spec.md) (named gates G1 / G2 / G3 / G-PR / G-EX / G-CL / G-BR), [`gate-evaluation-spec.md`](../schemas/gate-evaluation-spec.md) (3-layer assessment), [`build-reviewer`](../../release/skills/build-reviewer/SKILL.md)'s 12 dimensions, [`pmo-qa-auditor`](../skills/pmo-qa-auditor/SKILL.md)'s G1-G7 gates, [`handoff-coordinator-spec.md`](../schemas/handoff-coordinator-spec.md) (5-phase orchestration) — but lacks a **structural framework** that defines WHICH review fires at WHICH stage with WHAT posture, detail, focus, output, and authority. Current state: review structure is implicit per-skill; the same review object (e.g., dependencies, acceptance criteria, findings) is examined at multiple stages without explicit composition rules; agent-specific failure modes (self-preference bias, hallucinated specificity, context anxiety) have no human-review equivalent and are not addressed at the framework level.
+The platform has accumulated substantial review infrastructure — [`review-discipline-principles.md`](../disciplines/review-discipline-principles.md) (the anti-laziness rules + 6-deliverable structure), [`gate-criteria-spec.md`](../schemas/gate-criteria-spec.md) (named gates G1 / G2 / G3 / G-PR / G-EX / G-CL / G-BR), [`gate-evaluation-spec.md`](../schemas/gate-evaluation-spec.md) (3-layer assessment), [`build-reviewer`](../../release/skills/build-reviewer/SKILL.md)'s 12 dimensions, [`pmo-qa-auditor`](../skills/pmo-qa-auditor/SKILL.md)'s G1-G7 gates, [`handoff-coordinator-spec.md`](../schemas/handoff-coordinator-spec.md) (5-phase orchestration) — but lacks a **structural framework** that defines WHICH review fires at WHICH stage with WHAT posture, detail, focus, output, and authority. Current state: review structure is implicit per-skill; the same review object (e.g., dependencies, acceptance criteria, findings) is examined at multiple stages without explicit composition rules; agent-specific failure modes (self-preference bias, hallucinated specificity, context anxiety) have no human-review equivalent and are not addressed at the framework level.
 
 This framework:
 
@@ -33,7 +33,7 @@ This framework:
 - **Defines** composition rules for when the same review object is examined at multiple stages with different parameters (§ 5).
 - **Adds** a per-dimension judge-vs-operator agreement Calibration Ledger (§ 6) — rolling agreement < 0.9 flags rubric (not judge) for revision.
 - **Specifies** a forcing function for downstream consumers to apply the framework (§ 7).
-- **Establishes** an Agent-Correction Layer (§ 8) addressing 3 novel agent-only failure modes + referencing ≥ 6 of the 14 human-inherited mitigations from [`review-discipline-principles.md § 1`](../disciplines/review-discipline-principles.md).
+- **Establishes** an Agent-Correction Layer (§ 8) addressing 3 novel agent-only failure modes + referencing ≥ 6 of the human-inherited mitigations from [`review-discipline-principles.md § 1`](../disciplines/review-discipline-principles.md).
 - **Bounds** scope explicitly (§ 9).
 
 ### In scope
@@ -299,7 +299,7 @@ The release authoring this framework is exempt from its own forcing function —
 
 ## §8 Agent-Correction Layer
 
-The Agent-Correction Layer addresses 3 **novel** agent-only failure modes that have no human-review equivalent + references ≥ 6 **human-inherited** mitigations from [`review-discipline-principles.md § 1`](../disciplines/review-discipline-principles.md)'s 14 anti-laziness rules.
+The Agent-Correction Layer addresses 3 **novel** agent-only failure modes that have no human-review equivalent + references ≥ 6 **human-inherited** mitigations from [`review-discipline-principles.md § 1`](../disciplines/review-discipline-principles.md)'s anti-laziness rules.
 
 **Implementation status:** All 3 novel-mode mechanisms are specified at REQUIREMENT level only. Concrete implementations (cross-family judge wiring, citation-grep tool, exit-branch templates) are deferred to downstream issues NOT yet created — operator decides whether/when to spawn them.
 
@@ -330,9 +330,9 @@ The Agent-Correction Layer addresses 3 **novel** agent-only failure modes that h
 - **Implementation:** DEFERRED to downstream issue (exit-branch templates are non-trivial: require runtime token-budget inspection + template injection per skill). Operator decides whether to spawn.
 - **Prior art:** None — N-3 is the most novel of the 3 modes (no human equivalent exists; humans plan around fatigue, not token budgets).
 
-### §8.4 Human-inherited mitigations (≥ 6 of 14)
+### §8.4 Human-inherited mitigations (≥ 6 of the anti-laziness pool)
 
-The Agent-Correction Layer inherits 14 anti-laziness rules from [`review-discipline-principles.md § 1`](../disciplines/review-discipline-principles.md). The 6 rules below are the highest-leverage subset for agent-context application; the full 14-rule pool remains the canonical source. Naming ≥ 6 satisfies AC-4's explicit requirement.
+The Agent-Correction Layer inherits the anti-laziness rules from [`review-discipline-principles.md § 1`](../disciplines/review-discipline-principles.md). The 6 rules below are the highest-leverage subset for agent-context application; the full rule pool remains the canonical source and its cardinality is owned there, not restated here. Naming ≥ 6 satisfies AC-4's explicit requirement.
 
 | Rule # | Human-context formulation | Agent-context application |
 |---|---|---|
@@ -343,7 +343,7 @@ The Agent-Correction Layer inherits 14 anti-laziness rules from [`review-discipl
 | **Rule 7** | "No severity inflation" — severity is measured against thresholds, not vibes. | An agent reviewer that elevates a low-severity finding to medium to "draw attention" violates Rule 7. Agent fix: severity-class definition in review template is normative; review draft fails template validation if severity does not match observable indicators. |
 | **Rule 12** | "Confidence-tiered evidence with file:line cites" — every finding declares its evidence-quality tier. | An agent reviewer that emits a finding without `[SOURCE]` / `[INFERRED]` / `[ASSUMPTION – CONFIRM]` label violates Rule 12. Composes with N-2 (Hallucinated specificity) — file:line cites MUST be programmatically verifiable; unverifiable cites are N-2 violations. Agent fix: review template enforces evidence-quality label per finding; citation-grep pre-emit check (N-2 mechanism) verifies file:line resolves. |
 
-**Full pool reference:** The framework cites only 6 of the 14 rules above; the remaining 8 (Rules 5, 6, 8, 9, 10, 11, 13, 14) apply equally to agent-context reviews and are loaded by reference per [`review-discipline-principles.md § 1`](../disciplines/review-discipline-principles.md). The 6 rules named here are the highest-leverage subset for the 3 novel agent failure modes' composition surface.
+**Full pool reference:** The framework cites only the 6 rules above; the remaining 9 (Rules 5, 6, 8, 9, 10, 11, 13, 14, 15) apply equally to agent-context reviews and are loaded by reference per [`review-discipline-principles.md § 1`](../disciplines/review-discipline-principles.md). The 6 rules named here are the highest-leverage subset for the 3 novel agent failure modes' composition surface.
 
 ---
 
@@ -353,7 +353,7 @@ The Agent-Correction Layer inherits 14 anti-laziness rules from [`review-discipl
 
 | Adjacent doc | What it owns (NOT this framework's concern) |
 |---|---|
-| [`review-discipline-principles.md`](../disciplines/review-discipline-principles.md) | The 14 anti-laziness rules + 6-deliverable output structure + reviewer calibration mechanics + reviewer-posture anti-patterns. This framework REFERENCES that pool from § 8.4; does not duplicate. |
+| [`review-discipline-principles.md`](../disciplines/review-discipline-principles.md) | The anti-laziness rules + 6-deliverable output structure + reviewer calibration mechanics + reviewer-posture anti-patterns. This framework REFERENCES that pool from § 8.4; does not duplicate. |
 | [`gate-criteria-spec.md`](../schemas/gate-criteria-spec.md) | The structured gate-criteria tables (G1-* / G2-* / G3-* / G-PR-* / G-EX-* / G-CL-* / G-BR-*). This framework COMPOSES those criteria into named composed reviews (§ 3 Catalog) and maps them to stage × posture cells (§ 4 Map); does not redefine. |
 | [`gate-evaluation-spec.md`](../schemas/gate-evaluation-spec.md) | The 3-layer assessment protocol (Metrics / Judgment / Calibration) + decision matrix + per-boundary metrics. This framework EXTENDS Layer 3 (Calibration) with per-dimension judge-vs-operator agreement (§ 6 Calibration Ledger); does not replace stage-gate accuracy tracking. |
 | [`handoff-coordinator-spec.md`](../schemas/handoff-coordinator-spec.md) | The 5-phase orchestration (contract validation / gate evaluation / transition routing / iteration tracking / trend reporting). This framework's reviews are CONSUMED by the orchestrator at stage boundaries; framework does not orchestrate. |
@@ -366,7 +366,7 @@ The Agent-Correction Layer inherits 14 anti-laziness rules from [`review-discipl
 
 | Composed-with doc | What this framework references | What the other doc references |
 |---|---|---|
-| [`review-discipline-principles.md`](../disciplines/review-discipline-principles.md) | § 8.4 cites ≥ 6 of the 14 anti-laziness rules from § 1 of that doc. | "See also" pointer added at doc end → this framework § 8 Agent-Correction Layer. |
+| [`review-discipline-principles.md`](../disciplines/review-discipline-principles.md) | § 8.4 cites ≥ 6 of the anti-laziness rules from § 1 of that doc. | "See also" pointer added at doc end → this framework § 8 Agent-Correction Layer. |
 | [`gate-criteria-spec.md`](../schemas/gate-criteria-spec.md) | § 3 Catalog references gate IDs as sub-components of composed reviews (e.g., RC-3-bundle-capacity inherits G3-01 through G3-09). § 4 Map cell at Stage 3 × Peer references RC-3-bundle-capacity. | "See also" pointer added in preamble → this framework § 3 Review Catalog + § 4 Review Map. |
 | [`gate-evaluation-spec.md`](../schemas/gate-evaluation-spec.md) | § 6 Calibration Ledger EXTENDS Layer 3 (Calibration) with per-dimension granularity. | "See also" pointer added in preamble → this framework § 6 Calibration Ledger. |
 
