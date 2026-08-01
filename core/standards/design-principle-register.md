@@ -24,9 +24,9 @@ Every entry's `statement` is a faithful index of a principle **already defined a
 | Field | Type | Purpose |
 |---|---|---|
 | `principle_id` | `DP-N` | Stable identifier (DP = Design Principle). Referenced by D-Gate/QA verdicts and by the per-gate-class framing directive `principles_emphasis` field. |
-| `name` | string | Short principle name. |
+| `name` | string | Short principle name. **Must be non-empty, and must appear verbatim on the entry's `governing_doc` line** — the mechanically-checkable projection of the Index-only discipline, asserted by `deploy.sh --check` Check 45(b). Copy it from the governing document's rendered label; a casing or wording divergence is itself the drift the assertion exists to surface. |
 | `statement` | string | One-line normative statement — indexed from `governing_doc`, never originated here. |
-| `governing_doc` | `path:line` | Exact pin to the normative source where the principle is defined (the AC-1 resolution target + the Check 45 drift-guard target). |
+| `governing_doc` | `path:line` | Exact pin to the normative source where the principle is defined (the AC-1 resolution target + the Check 45 drift-guard target). **Must be non-empty** — an entry with no pin cannot be resolved or name-matched at all, so `deploy.sh --check` Check 45(b) reports it as an incomplete entry rather than passing over it. |
 | `scope_predicate` | string | The class of design surface where this principle's conformance is load-bearing (drives whether a D-Gate option must render a verdict for it). |
 | `conflict_reversibility_default` | enum | Default reversibility tier a CONFLICT against this principle carries, gating annotate-vs-HALT: `CHEAP` / `MODERATE` / `EXPENSIVE` / `IRREVERSIBLE`. |
 | `last_verified_date` | ISO date | Most recent `governing_doc` resolution check. |
@@ -52,7 +52,7 @@ The seed set indexes the platform's first-class engineering values + cross-cutti
 
 ## Drift-check protocol
 
-`deploy.sh --check` Check 45 (warn-mode initial) resolves every entry's `governing_doc` `path:line` to a real, non-empty line; an unresolvable target is flagged as drift (repoint to the principle's current normative line). Stage 13 Close re-verifies and bumps `last_verified_date` / `last_verified_commit`. A governing_doc whose `last_verified_date` is older than 90 days when cited in a verdict has the verdict note the staleness — the principle may still hold, but the entry needs re-verification (same hygiene as the upstream catalog).
+`deploy.sh --check` Check 45 (warn-mode initial) resolves every entry's `governing_doc` `path:line` to a real, non-empty line **and asserts that line contains the entry's `name`**; an unresolvable target, or a target that resolves to a line naming a different principle (a mis-pin), is flagged as drift (repoint to the principle's current normative line). An entry with an empty `name` is flagged too — the containment assertion would otherwise pass vacuously — and so is an entry with an empty `governing_doc`: with no pin there is nothing to resolve, and skipping such a row would leave the check printing its `OK:` line over an entry it never examined. Every entry row is examined, because the check's `OK:` is a claim about all of them. Content, not mere existence, is what makes the pin auditable: inserting a line into a governing document shifts every pin below it, and an existence-only assertion clears the shifted pins silently. Stage 13 Close re-verifies and bumps `last_verified_date` / `last_verified_commit`. A governing_doc whose `last_verified_date` is older than 90 days when cited in a verdict has the verdict note the staleness — the principle may still hold, but the entry needs re-verification (same hygiene as the upstream catalog).
 
 ## Cross-references
 

@@ -1,0 +1,351 @@
+<!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-issue-ref -->
+# the release version (bound at Stage 12) Release Plan — check-enforcement-fidelity
+
+> **Milestone:** `check-enforcement-fidelity` (#307) · **Release Class:** novel · **Version:** the release version (bound at Stage 12) *(bump-class minor; anchor `v4.01`. Provisional display value — the concrete number is recomputed next-free and claimed atomically at the Stage-12 merge tag, forward-only re-version-up)* · **Scope:** 6 issues, 22 effective pts (inside the 15–25 band) · One release branch, one PR, one merge gate · **Branch:** `release/check-enforcement-fidelity` (slug-only, no version prefix).
+
+This plan is the Stage-4 release plan (rendered on #4240, 2026-07-30 Thursday) written to disk as **Engineering Commit 0** by the first Stage-6 spoke, reconciled with the four Stage-5 Solutioning outputs, the Phase A6.5 Adversarial Design Review, and the **Collective Review scope-lock** (LOCKED, 2026-07-30). Deltas discovered after Stage 4 are folded into the Deviation Log below rather than silently applied.
+
+## Summary (30 seconds)
+
+> **Version is NOT bound in this plan.** This release lost two version slots to concurrent
+> siblings while in flight — `v4.02` to `release-closeout-integrity` (PR #4330, merged
+> 2026-07-31) and `the release version (bound at Stage 12)` to `closeout-output-set-integrity` (PR #4333, merged 2026-08-01).
+> Both were legitimate: neither slot was ever tagged by this release, and each is now the
+> live canonical tag of the sibling that won it, so under `re-version-recovery.md` both are
+> `disposition = none` and neither is reaped.
+>
+> Rather than rename a third time, the operator decided at the Stage 9 re-gate to **decouple
+> the plan filename from the version entirely** — matching what the release branch has done
+> since Stage 6. This is the founding defer-to-merge architecture applied consistently: the
+> concrete number is *provisional-display* and binds only at the **Stage 12 atomic claim**.
+> The durable declaration here is the **bump-class (minor)**, not a number.
+>
+> Stage 12 computes next-free against authoritative state at claim time and stamps it into
+> the tag, the `RELEASE_LOG` row, and the close-out corpus. Residue from the two abandoned
+> names is zero on every surface: no tag was cut, the branch is slug-only, no commit subject
+> carries a version, and no ledger row had been written.
+
+Six cards, one theme: **every verification instrument that claims to enforce something actually does.** All six repros were re-run against the pinned baseline at planning time — **6/6 still reproduce**; nothing was silently fixed upstream.
+
+- **The convention comes first.** #4208 widens `core/standards/gate-efficacy-standard.md` to admit a third gate class — **prose-declared normative predicates**, a check stated in corpus prose that nothing in the tree implements — and extends Requirement (b)'s realization set to that surface. Cards 2–5 then conform to it when they add or update their gate-coverage register rows (CIAC-2, applied reflexively).
+- **The rest close instruments that do not fire.** #4183 fixes a freshness probe that exits 0 on STALE; #4177 replaces an existence-only assertion with a content assertion; #3833 removes an `echo … | grep -q` EPIPE race that makes a marker census non-deterministic; #4178 makes a canonical/skill-local reference pair machine-checkable and resolves the deployed skill's four unresolvable citations; #4169 repairs an operator-local judge instrument.
+- **Release Class `novel`** — Stage 5 bias ALL, Stage 9 depth **Deep**, Stage 13 30-day outcome window. Re-classified `routine` → `novel` at the Stage-4 gate (cheaper-to-stricter).
+- **Concurrency posture P0 fully-serial.** One Engineering commit at a time on the shared release branch. Force-push (including `--force-with-lease`) is prohibited on the shared branch under any multi-chip activity.
+- **Five Cross-Issue Acceptance Criteria.** CIAC-2 is the headline: a release about naming runners must name its own.
+
+## Change Description
+
+*Phase C1 (G6-05). Authored after all five Stage-6 commits landed, so it describes what shipped rather than what was planned.*
+
+**What changed.** Six verification instruments that claimed to enforce something were made to actually do so, and the conventions governing that claim were extended to cover the class they had been silently excluding.
+
+- **#4208** widened `gate-efficacy-standard.md` Requirement (b)'s scope table to admit **prose-declared normative predicates** — a third class alongside the two syntaxes already realized — rather than minting a parallel convention. Ships ADR-104 (D-1 + D-2).
+- **#4183** replaced `--check-package-freshness`'s exit-0-on-STALE with a three-way contract (`FRESH→0` / `STALE+warn→2` / `STALE+enforce→1` / unexpected→`1`, fail-closed). The `deploy.sh` mapping and the workflow's gate decision land in **one commit** — split across two, warn-mode CI would go red on the advisory `2`.
+- **#4177** replaced Check 45(b)'s existence-only predicate with a fixed-string containment assertion, so a mis-pinned `governing_doc` can no longer pass silently. Lands at `advisory`/warn — **(b′)-forced**, since Check 45 has no CI mirror — with the flip recorded as *precondition-blocked (CI mirror), evidence-already-met* rather than "shakedown continues."
+- **#3833** converted **both** of Check 31's override-marker probes from a `pipefail`-racing pipe to a here-string. Measured effect: Class L 477→93, Class V 45→9 against a 164/26 census.
+- **#4178** registered the canonical↔skill-local `tracker-schemas.md` pair in a machine-checkable 5-field registry (including D-4's `shared` field for the already-drifted Trackers 1–4), made the packager fail **closed** on a missing registry, and shipped the canonical into `tracker-manager.skill` via a `TEMPLATE_SYNC_MAP` entry — taking package resolution from **6 of 10 trackers BLOCKED to 0**.
+- **#4169** corrects an operator-local judge instrument; it is git-ignored and contributes **no diff to this PR**. Its acceptance is by operator attestation, not PR evidence.
+
+**What did not change, deliberately.** `deploy.sh:6194`'s `grep -qF` (tested: `-qxF` breaks Check 34 4/4); the three `printf … | grep -q` pipes in Checks 34/44/45 (same defect class, filed as #4319); #4177's optional `statement` assertion (7/9 probe).
+
+**Adjacent defects surfaced and filed rather than absorbed:** #4318 (a second declaration-vs-behavior probe), #4319 (the `printf` EPIPE instances), #4332 (the freshness CI mirror never runs its staged rebuild — missing PyYAML degrades it to a weaker predicate).
+
+## Dependency Graph
+
+Directional edges (`A → B` = A lands before B). Every edge is file-evidenced.
+
+```
+  #4208  extend gate-efficacy-standard.md scope table + Requirement (b)
+    │
+    ├── E1 ──> #4183   shared file: core/standards/gate-efficacy-standard.md
+    │                  (#4208 widens the scope table and Req (b) realizations;
+    │                   #4183 rewrites the gate-coverage register row whose
+    │                   falsification text states "warn: summary + exit 0" —
+    │                   the exact behavior #4183 changes)
+    │
+    ├── E1' ─> #4177   same file: appends the absent Check 45 register row
+    │
+    └── E1" ─> #4178   same file: appends the absent Check 13b register row
+
+  #4178 ── E4 ──> #4183   shared surface: package freshness
+                          (#4178 rebuilds packages/tracker-manager.skill and edits
+                           build-skill-packages.sh; #4183 governs the probe that
+                           reads freshness)
+
+  #4177   otherwise independent — its sole deploy.sh region is Check 45(b),
+          line-disjoint from every other card's region.
+
+  #3833   independent as a dependency — but imposes a release-scoped INVARIANT on
+          every other deploy.sh editor (zero `echo "$var" | grep -q`). Classified
+          as CIAC-3, NOT as a dependency edge — it constrains, it does not sequence.
+
+  #4169   fully independent. No repo diff, no shared file, no shared surface.
+```
+
+**Edge E2 is DISSOLVED.** Stage 4 recorded `#4208 → #4178` on `core/schemas/tracker-schemas.md` (#4208's AC-5 was expected to edit § Tracker 10). #4208's Stage 5 design makes **zero** edits to that file — the two named instances already carry conformant runner declarations, so AC-5 closes on verification plus register rows. #4178 receives the file byte-identical to the release base, and **CIAC-5 is solely #4178's**.
+
+**Four cards edit `core/standards/gate-efficacy-standard.md`, not two.** The Stage-4 map paired only #4208 × #4183; #4177 and #4178 each discovered a CIAC-2 register-row obligation during design and each independently recorded itself as "the third editor." The corrected count is four, and the corrected sequencing is `#4208 → {#4183, #4177, #4178}`.
+
+## Implementation Sequence
+
+| # | Issue | Size | Why here | Depends on |
+|---|---|---|---|---|
+| 1 | **#4208** | M | Extends the declaration schema (`enforcement-surface:` / `falsification:`) that cards 2–5 conform to when they add or update their register rows. Convention-first is the correct order. Owns **Engineering Commit 0** (this plan file). | — |
+| 2 | **#4183** | S | The register row it rewrites states the exact behavior it changes. Landing it adjacent to #4208 minimizes the window in which that file is half-updated. | #4208 (E1) |
+| 3 | **#4177** | S | Line-disjoint in `deploy.sh`; appends its own register row above the tail. | #4208 (E1′) |
+| 4 | **#3833** | S | Line-disjoint (`deploy.sh` Check 31 marker probes). Fix pattern already established in-repo. | — |
+| 5 | **#4178** | L | Design-heavy. Slices into 2–3 commits on the shared branch; its package rebuild lands late so earlier edits cannot invalidate it. | #4208 (E1″) |
+| 6 | **#4169** | M | Fully independent; no repo diff. Operator-executed against the git-ignored operator-local analysis workspace. | — |
+| **7** | **[TERMINAL]** | — | **Package rebuild + freshness verify** — see below. | all source edits |
+
+**Anchoring discipline (binding on all four appenders).** All four editors of `core/standards/gate-efficacy-standard.md` anchor their edits **by content, never by line number**. #4208's edits add roughly 35–45 lines above the gate-coverage register and append three rows to its tail, so every register line number moves and no card is last. A line pin authored before #4208 lands is wrong by the time it is applied.
+
+**Terminal step 7 (plan addition, retained from Stage 4 and narrowed at Stage 5).**
+
+```bash
+bash core/deploy/tools/build-skill-packages.sh tracker-manager
+bash core/deploy/deploy.sh --check-package-freshness   # must report FRESH *and* exit 0
+```
+
+Commit the rebuilt `.skill` archive **and** its `.sha256` sidecar. Graded by CIAC-4. **The rebuild is `tracker-manager` alone.** Stage 4 also named `delivery-engine` on the premise that #4208's AC-5 would edit `estimation-standards.md`; #4208 does not edit it, and `packages/delivery-engine.skill` was verified fresh independently by two Stage-5 spokes and by the hub (source byte-size equals packaged byte-size).
+
+**Sequence is intra-release only.** Under D-C SINGLE topology all cards land as commits on one release branch with one PR and one merge — the sequence governs commit order, not merge order.
+
+## Stage Applicability Matrix
+
+Legend: **APPLY** · **SKIP** (with reason) · **N/A** (structurally inapplicable) · **SUB** (satisfied by substitution under the Claude Code path).
+
+| Issue | S5 Solutioning | S6 Eng | S7 DevTest | S8 QA | S9 Review | S10 DryRun | S11 Snapshot | S12 Execute | S13 Close |
+|---|---|---|---|---|---|---|---|---|---|
+| **#4208** M | APPLY | APPLY | APPLY | APPLY | APPLY | SUB | SUB | APPLY | APPLY |
+| **#4183** S | APPLY | APPLY | APPLY | APPLY | APPLY | SUB | SUB | APPLY | APPLY |
+| **#4177** S | APPLY (light) | APPLY | APPLY | APPLY | APPLY | SUB | SUB | APPLY | APPLY |
+| **#3833** S | SKIP | APPLY | APPLY | APPLY | APPLY | SUB | SUB | APPLY | APPLY |
+| **#4178** L | APPLY (mandatory) | APPLY | APPLY | APPLY | APPLY | SUB | SUB | APPLY | APPLY |
+| **#4169** M | SKIP | APPLY\* | **N/A** | **ATTEST** | APPLY | SUB | SUB | **N/A** | APPLY |
+
+Per-cell reasoning where it is not the default:
+
+- **#3833 Stage 5 SKIP.** A two-line here-string substitution whose exact replacement is in the card body, whose fix pattern is already established in this repo, and whose root cause is reproduced and falsification-tested. The genuine trivial case the SKIP criterion exists for.
+- **#4177 Stage 5 APPLY (light).** The name-match algorithm is proven; the residual design question was posture on landing, rendered at Collective Review as `advisory`/warn — forced by Requirement (b′), not a judgment call.
+- **#4178 Stage 5 MANDATORY.** Two undesigned surfaces: the complementary-pair registration mechanism did not exist and had to be designed machine-checkable, and Defect-2's resolution was an explicit two-option fork (a D-class decision).
+- **#4169 Stage 6 APPLY\*, Stage 7 N/A, Stage 12 N/A.** The work is real but operator-executed against a git-ignored operator-local workspace. It contributes **no PR diff**, so there is nothing for a Dev Testing spoke to test and nothing to deploy. N/A by construction, not a skip.
+- **#4169 Stage 8 ATTEST.** Stage 8 records an **operator attestation** per criterion rather than manufacturing a per-criterion PR-side verdict. A silent green from the freshness/drift checks is not evidence of completion here — those surfaces are correctly untouched. The load-bearing criterion is verified downstream by the Round-2 re-run, outside this release. Operator-accepted recorded residual.
+- **Stages 10/11 SUB for all issues.** Under the Claude Code path, PR review **is** the dry-run governance gate (the diff is reviewable) and git history **is** the snapshots.
+
+## Contention Map
+
+**`core/deploy/deploy.sh` — four cards, verified line-disjoint regions at the release base:**
+
+| Card | Region |
+|---|---|
+| #4178 | Check 13b population glob + Check 13b passes 2/3/4 + self-test group CP |
+| #3833 | Check 31 override-marker probes (both the Class L and Class V lines) |
+| #4177 | Check 45(b) — the `# (b)` anchored predicate |
+| #4183 | `cmd_check_package_freshness` STALE branch |
+
+Disjointness verified by reading each region. Under D-C SINGLE topology these are sequential commits on one branch, so merge-conflict risk is nil; the residual risk is **semantic**, not textual — that is what CIAC-1 and CIAC-3 grade.
+
+**Genuine shared-file contention:**
+
+| File | Contending cards | Nature | Resolution |
+|---|---|---|---|
+| `core/standards/gate-efficacy-standard.md` | **#4208** (scope table, Requirement (b) realizations, three appended register rows, consumer references, version history) · **#4183** (rewrites the `skill-package-freshness.yml` register row) · **#4177** (appends the absent Check 45 row) · **#4178** (appends the absent Check 13b row) | The register is an append-pattern surface, so conflict risk is low — but #4208 shifts every existing register line number. | Sequence `#4208 → {#4183, #4177, #4178}`. **All four anchor by content.** |
+| `core/schemas/tracker-schemas.md` | **#4178** only | Stage 4 expected #4208 to co-edit (E2). It does not. | **E2 dissolved** — one writer. CIAC-5 is solely #4178's. |
+
+**Check-34 constraint on § Tracker 10 (CIAC-5), corrected.** The real hazards are narrower than "preserve four section names": (1) the literal line `## Tracker 10: Sprint Tracker` must survive **byte-exact** (the extractor compares whole lines); (2) **no `## ` H2 may be introduced inside the Tracker 10 block** — the block runs from the anchor to the next `^## ` line, so an interior H2 truncates it and drops the later names (`###` sub-headings are safe); (3) the four names must appear as substrings inside the block. The exact `## <name>` heading assertion applies to `operations/templates/sprint-tracker-template.md`, which **no card in this release edits**.
+
+**Cross-PR contention.** Pinned at the Stage-4 base with **0 open PRs** — a **transiently-empty population** per audit-baseline discipline. The finding is pinned to that base and **must be re-checked at Stage 9 Phase A6.5** before it is relied upon (AI-001).
+
+**Structural-blast-radius sub-audit (Tier-S).** The mover-set is **empty** — no rename, relocate, or delete in any card's change spec — so no sibling milestone can intersect this release's surface. **No Tier-S serialization edge.**
+
+**Domain-practice provenance:**
+
+```
+domain_practice: { source: N/A — pipeline-internal release, date: 2026-07-30, domain: software (secondary: governance) }
+```
+
+Sourcing-exempt: the entire File Change Matrix is internal platform artifacts, so no external best-practice sourcing step fires.
+
+## Risk Register
+
+| # | Risk | Sev / Likelihood | Mitigation | Reversibility |
+|---|---|---|---|---|
+| **R-1** | **The release would fail its own new gate.** #4178 stales `tracker-manager.skill`. Check 7 is always-enforce, and #4183's own fix makes the standalone freshness probe exit non-zero on STALE. | MODERATE / HIGH | Terminal sequence step 7 (rebuild + sidecar, verify FRESH **and** exit 0). Graded by CIAC-4. **Narrowed at Stage 5:** `delivery-engine.skill` is not staled by this release — #4208 does not edit `estimation-standards.md`. | **CHEAP** — rebuild + commit |
+| **R-2** | **Check-34 conformance break on § Tracker 10.** #4178 edits a file whose Tracker 10 block is a registered schema anchor. | MODERATE / MODERATE | CIAC-5, with the corrected constraint stated above (byte-exact anchor line; no interior H2). | **CHEAP** |
+| **R-3** | **The canonical injected into `tracker-manager.skill` must not diverge from the builder Check 7 uses.** `deploy.sh`'s `build_skill_to_dir()` declares in a comment that it is kept byte-aligned with the packager's `build_one()` — an invariant asserted in prose and enforced by nothing. A hand-coded injection into one builder only would make the staged hash and the committed sidecar disagree **by construction**, leaving the package permanently STALE and unfixable by rebuilding. | **HIGH impact / eliminated by design constraint** | Operator-rendered **D-3**: implement Option A as a **`TEMPLATE_SYNC_MAP` entry**, never a hand-coded `build_one()` injection. The packager extracts that map from `deploy.sh` at runtime, so both builders consume one source and stay aligned by construction. **Live residual:** verify the template-sync source resolver does not resolve the `tracker-schemas.md` basename ambiguously — that basename exists at two paths. | **CHEAP** if caught pre-merge; **MODERATE** after |
+| **R-4** | **Two independently-correct cards jointly shipping a stale package under a green gate.** #4183's new advisory `exit 2` makes the CI freshness gate report green on exactly the staleness R-3 describes, while lifecycle Check 7 goes non-zero. | MODERATE / MODERATE | **Grade the package-freshness integration criterion against `deploy.sh --check`, NOT CI colour.** Named explicitly so the milestone's own defect class does not reappear *between* cards rather than inside one. | **CHEAP** |
+| **R-5** | **Rollback granularity on `deploy.sh`.** Four check edits land in one file under one PR; a single revert takes all four. | LOW / MODERATE | Line-disjointness makes a surgical follow-up revert straightforward; the four regions are recorded above for exactly that purpose. | **CHEAP** for the release; **MODERATE** once packages are rebuilt and deployed |
+| **R-6** | **#4169 has no PR-side verification path.** Closure rests on operator attestation; a mistaken attestation is undetectable by the pipeline. | LOW / accepted | Stage 8 records the attestation explicitly rather than manufacturing a verdict. The load-bearing criterion is verified downstream by the Round-2 re-run. Operator-accepted residual. | N/A (no repo state) |
+| **R-7** | **#3833's marker census is a moving target.** The card records a figure taken **before** the check's allowlist skip; the criterion compares against a tally drawn **after** the allowlist skip and after fenced-code stripping. | LOW / certain if unrefined | **Re-census at implementation against the post-allowlist, fence-stripped population** (AI-002). Using the pre-allowlist figure produces a permanent gap that mimics the defect and never closes regardless of how correct the fix is. Do not hardcode the filed figure, and do not use a naive corpus-wide grep — that is the wrong population. | **CHEAP** |
+| **R-8** | **#4177's tightened check could surface pre-existing mis-pins.** | **LOW — evidence-mitigated** | All nine register entries were probed with the name-match predicate at the base: **9/9 pass**, with three controls (uniform +1 → 0/9, uniform −1 → 0/9, historical replay → 8/9 as recorded). Re-run the probe at Stage 7 in case an entry is added before merge. | **CHEAP** |
+| **R-9** | **The new registry is a single point of failure for both its consumers and its own verifier.** The packager fails **open** on a missing registry while the check fails **closed**, and the check's discovery pass is registry-driven too — so one absent file disables the fix and its detector together. | MODERATE / LOW | Fail-closed acceptance criterion added to #4178 at the A6.5 gate: absence of the registry is an error at the packager, not a silent zero-iteration no-op. | **CHEAP** |
+| **R-10** | **Semantic contention on `deploy.sh` despite textual disjointness.** A later card could reintroduce the `pipefail`+EPIPE form #3833 removes, or map a failure verdict to `exit 0`. | LOW / MODERATE | CIAC-1 (declaration-vs-behavior agreement) and CIAC-3 (zero `echo … \| grep -q`) grade the merged PR for exactly this. | **CHEAP** |
+| **R-11** | **Baseline-pin staleness.** The contention audit is pinned with a transiently-empty open-PR population; a sibling release merging during Engineering/DT/QA is invisible to it. | LOW / MODERATE | Not mitigable at plan time by construction. Stage 9 Phase A6.5 is the primary HALT-eligible re-check; Stage 7/8 entry checks are secondary warn-only; Stage 12 Phase A.5 is the ultima-ratio detector. | N/A |
+
+**Rollback strategy (release-level).** Single `git revert -m 1 <merge-sha>` on the release PR. **CHEAP** for the source edits alone — `deploy.sh` and the standards/schema files carry no migration and no persisted state. It becomes **MODERATE** once step 7's package rebuild is committed and deployed: a revert must also restore the prior `.skill` archive and `.sha256` sidecar in the same commit, or Check 7 fails in the reverse direction. Then run `deploy.sh --check-package-freshness` to confirm FRESH. #4169 is outside the rollback surface entirely.
+
+## Release Class Declaration
+
+**Class: `novel`.** Re-classified `routine` → `novel` at the Stage-4 gate. `routine` is not defensible: its "zero new D-class decisions" trigger reads FALSE (#4178's Defect-2 fork), and its all-P3/P4-and-size-S/M trigger reads FALSE (#4178 is `size:L`; two cards are P2). `cross-cutting` was considered and **not** rendered — it fires only on the compositional-edge trigger, exactly at the threshold, on a single-trigger reading; its other two triggers read zero (the matrix touches no pipeline stage document and none of the named governance surfaces).
+
+**Posture:** Engagement density **Standard** · Stage 5 activation bias **ALL** · Stage 9 review depth **Deep** · Stage 13 outcome window **30-day**. Re-classification is cheaper-to-stricter: CHEAP reversibility, HIGH confidence — it adds ceremony and invalidates no downstream artifact.
+
+## Operator Decisions (D-Gate Block)
+
+| # | Decision | Rendered | Reversibility / Confidence |
+|---|---|---|---|
+| **D-1** | Approve the Stage 4 release plan | **Approve as briefed** | MODERATE / HIGH |
+| **D-2** | Release Class | **`novel`** | CHEAP / HIGH |
+| **D-2′** | #4178 Defect-2 resolution fork — ship the canonical into the package, or vendor the needed sections at build time | **Option A — ship the canonical** `core/schemas/tracker-schemas.md` into `tracker-manager.skill` at its repo-relative path. Zero `SKILL.md` edits; the four existing canonical citations resolve verbatim. Gates #4178's package-resolution commit; its earlier commits are option-independent. | CHEAP / HIGH |
+| **D-3** | Stage 6 entry given the byte-alignment finding (R-3) | **Proceed — bind Option A to `TEMPLATE_SYNC_MAP`**, never a hand-coded builder injection | MODERATE / HIGH |
+| **D-4** | The registry cannot express Trackers 1–4's shared-but-drifted state | **Widen the record schema with a third `shared` field** (in-card; the schema is unwritten, so the cost is near-zero now and real after the first commit lands) | MODERATE / MEDIUM |
+| **Scope** | Disposition of four adjacent findings surfaced by the wave | **Follow-ups for two; spoke calls accepted on the other two.** #4177's optional statement assertion is **not shipped**; #4177 lands at `advisory`/warn, forced by Requirement (b′) | MODERATE / MEDIUM |
+
+**Collective Review scope-lock: LOCKED** at 6 issues, 22 effective pts, Release Class `novel`. In-card additions only (D-4's schema widening and the fail-closed packager criterion). No card added, removed, split, or merged.
+
+**Recorded determinations (rule-determined or standing-authorized, not operator gates):**
+
+- **D-Version → bump-class `minor`; the concrete number is NOT bound here.** At plan time the anchor was `v4.01` and next-free computed to `v4.02`; that slot and then `v4.03` were both claimed by concurrent siblings while this release was in flight. Per the defer-to-merge architecture the number is *provisional-display* — the durable plan-time declaration is the bump-class, and the version binds once at the **Stage 12 atomic claim**, which recomputes next-free against authoritative state at claim time. Re-verified at Engineering Commit 0 (PROCEED — see Deviation Log entry (a)); the Stage-12 claim is the binding rung.
+- **D-Concurrency Posture → P0 fully-serial.** Stage 6 is write-serialized by its parallelism class regardless, and four cards co-edit `deploy.sh`. Parallelism remains available at Stages 5 / 7 / 8. Force-push, including `--force-with-lease`, is prohibited on the shared release branch under any multi-chip activity.
+- **Branch naming → `release/check-enforcement-fidelity`,** slug-only with no version prefix, matching the two most recent releases. The version is a display value until the Stage-12 claim; encoding it in the branch name is what produces rename churn.
+- **ADR-104 allocated** for D-1 (the complementary-pair registration mechanism) + D-2′ (Option A), homed in `core/ADRs/`, authored at Stage 6 on the release branch. Number verified next-free with the governed checker.
+- **#4177 posture → `advisory`/warn**, forced by Requirement (b′) — a deploy-time-only check may not declare an enforcing posture. Recorded as *precondition-blocked (CI mirror), evidence-already-met*, which is distinct from the existing warn-cohort rows sitting at "shakedown continues."
+
+## Quota Budget
+
+**Verdict: PASS** (Checkpoint A, advisory) — **near the PASS/WARN boundary.** Parallel-eligible spokes: Stage 5 = 4 · Stage 7 = 5 · Stage 8 = 5. Estimated cumulative draw for the worst parallel batch: **< 50 %** of a conservative-default envelope, anchored on two in-repo comparables (a 3-spoke release → PASS; an 8-spoke release → WARN, routed to a 2+2 split) on a flat-per-spoke model, because per-spoke fixed startup cost does not scale down with issue size.
+
+**Recorded WARN-trip condition.** The realistic growth path is #4178 slicing further at Stage 6. **If a Stage 7 or Stage 8 batch reaches six or more spokes, treat the budget as WARN and split the wave 3 + 3.**
+
+The load-bearing gate is **Checkpoint B**, re-validated before **every** parallel wave with PROCEED / SERIALIZE / DEFER / REDUCE-scope against the *remaining* envelope — not this one-time plan-time estimate. Staggering is a rate-limit-only defense and is never the mitigation for a usage-window overrun.
+
+## Cross-Issue Acceptance Criteria
+
+Five cohesion constraints. Each spans ≥2 issues, requires no dependency edge, and is graded on the **merged PR** at Stage 9 under the Stage-8 per-criterion verdict enum (MET / NOT MET / PARTIAL).
+
+- [ ] **CIAC-1 (#4183 × #3833 × #4177) — declared posture matches shipped behavior.** Every check this release touches behaves as its gate-coverage register row declares: the package-freshness probe on a STALE verdict does **not** exit 0 (it exits non-zero, or a documented and distinguishable third value); Check 31 **retains** warn-mode and still does not affect the `--check` exit code; Check 45(b) ships at the posture the plan records. No instrument's shipped behavior diverges from its declaration. *Method:* for each of the three checks, run it against its failure fixture and compare observed **exit code + verdict text** against its register row's declared posture; assert agreement on all three. *This predicate is deliberately written so that preserving warn-mode satisfies rather than violates it — the constraint is declaration-vs-behavior agreement, not universal fail-closed.*
+
+- [ ] **CIAC-2 (all five code-touching cards) — the release obeys its own new convention.** Every check this release adds or modifies carries a row in the gate-coverage register, and each row's `enforcement-surface:` names a **resolvable** runner (a CI job name, a `deploy.sh --check` gate id, a script self-test case, or an explicitly named human review step) with a `falsification:` one-line repro that turns it red. *Method:* enumerate the checks touched in the release diff of `core/deploy/deploy.sh`; for each, grep the register for a row naming it; assert every `enforcement-surface:` value resolves to a real runner. Zero unregistered touched checks. *This is the bundle's headline theme applied reflexively — a release about naming runners must name its own.*
+
+- [ ] **CIAC-3 (#3833 × the three other `deploy.sh` editors) — the EPIPE defect class is not reintroduced.** The merged `deploy.sh` contains **zero** instances of the `echo "$var" | grep -q` pipe form, and no commit in the release introduces one. *Method:* `grep -cE 'echo "\$[A-Za-z_]+" \| grep -q' core/deploy/deploy.sh` → expect **0** on the merged PR (baseline at the release base = 2, both in Check 31). *Every new predicate this release authors uses a here-string or reads the file directly.*
+
+- [ ] **CIAC-4 (#4178 × #4183) — no package ships stale.** Every `.skill` package whose source this release edits is rebuilt and committed together with its `.sha256` sidecar, so the freshness probe reports **FRESH** *and* exits 0 — the two signals agreeing under #4183's own corrected semantics. *Method:* `bash core/deploy/deploy.sh --check-package-freshness`; assert verdict FRESH **and** exit 0; additionally confirm lifecycle Check 7 is OK under `deploy.sh --check`, because the CI gate's new advisory arm can report green on exactly this staleness. *Known-affected:* `packages/tracker-manager.skill`. *Narrowed from Stage 4:* `delivery-engine.skill` is **not** staled by this release and is not rebuilt.
+
+- [ ] **CIAC-5 (#4178 alone, after E2 dissolved) — the schema-anchored § Tracker 10 block survives.** After the edits, `core/schemas/tracker-schemas.md` § Tracker 10 still contains all four declared section names and Check 34 reports conformance. *Method:* `bash core/deploy/deploy.sh --check` → Check 34 OK; plus assert the anchor line `## Tracker 10: Sprint Tracker` is byte-unchanged, that no `## ` H2 was introduced inside the block, and that each of `Current Sprint`, `Sprint History`, `Estimate-Actual Pairs`, `Capture Exceptions` is present within it.
+
+**Integration criteria:**
+
+- **INT-1 (#4208 → {#4183, #4177, #4178} on the gate-coverage register).** The register's column set and posture vocabulary are unchanged by #4208; the three downstream cards' rows use today's shape and are anchored by content. #4183's `skill-package-freshness.yml` row is **byte-unchanged by #4208** and is no longer the table's last row after #4208's three appended rows.
+- **INT-2 (#4178 × the package builders).** The canonical injection resolves identically through both build paths — the packager's `build_one()` and the deploy script's `build_skill_to_dir()`, which Check 7 stages its rebuild with. Graded against `deploy.sh --check`, **not** CI colour.
+
+## File Change Matrix
+
+Machine-readable — one path per line, `INTENT  path  — note`.
+
+```
+# ── Release plan + ADR (Engineering Commit 0 and its companion, #4208) ──
+ADD   release/releases/plans/the release version (bound at Stage 12)_check-enforcement-fidelity_RELEASE_PLAN.md  — written after the Commit-0 version re-verify
+ADD   core/ADRs/ADR-104-complementary-reference-pair-registration.md           — D-1 + D-2' (Option A); number verified next-free at authoring time
+# ── #4208 — prose-declared normative predicates admitted to gate-efficacy scope ──
+EDIT  core/standards/gate-efficacy-standard.md   — scope table (3rd class), Req (b) 3rd realization, runner-resolution rule, 3 register rows, consumer refs, version history
+EDIT  core/disciplines/decision-discipline.md    — one-sentence reconcile (Stage-6 DEV-2: the Stage-5 cascade-sweep's "0 occurrences corpus-wide" was falsified by live evidence)
+# ── #4208 — VERIFIED CONFORMANT, deliberately NOT edited (Stage-5 deviation D2) ──
+#     core/schemas/tracker-schemas.md                                          — § Tracker 10 already names its runner
+#     operations/skills/delivery-engine/references/estimation-standards.md     — §8 already carries six runner declarations
+# ── #4183 — package-freshness exit contract ──
+EDIT  core/deploy/deploy.sh                      — cmd_check_package_freshness STALE branch: FRESH->0, STALE+non-enforce->2, STALE+enforce->1, unexpected->1
+EDIT  .github/workflows/skill-package-freshness.yml — 3-way gate decision (0 green, 2 green + warning annotation, * red)
+EDIT  core/standards/gate-efficacy-standard.md   — rewrite the freshness register row's falsification cell (anchor by content)
+EDIT  core/schemas/gate-criteria-spec.md         — the freshness criterion's method cell
+ADD   .github/skill-package-freshness.enforce    — sentinel token surface
+ADD   core/deploy/tests/test_package_freshness_exit_codes.sh — regression case for the exit contract (PF-1..PF-5)
+EDIT  .github/workflows/install-tests.yml        — pick up the new test case
+EDIT  core/config/allowlists/script-execution-allowlist.txt — register the new test script (path corrected at Stage 6: core/config/, not core/deploy/)
+# ── #4177 — Check 45(b) content assertion ──
+EDIT  core/deploy/deploy.sh                      — replace the existence-only predicate with a name-match content assertion
+EDIT  core/standards/gate-efficacy-standard.md   — append the absent Check 45 register row + flip row (anchor by content)
+EDIT  core/standards/design-principle-register.md — document the constraint Check 45(b) now enforces
+#     ^ Stage-6 reconciliation (AI-029): the plan said READ-ONLY while #4244 Change 2 said MODIFY. MODIFY is correct.
+ADD   core/deploy/tests/test_check45_governing_doc_name_match.sh — regression pinning the mis-pin branch (9 assertions)
+EDIT  .github/workflows/install-tests.yml        — pick up the Check-45 test case
+EDIT  core/config/allowlists/script-execution-allowlist.txt — register the Check-45 test script
+# ── #3833 — EPIPE race in Check 31 marker probes ──
+EDIT  core/deploy/deploy.sh                      — here-string substitution on BOTH probe lines (Class L and Class V), not only the flaky one
+EDIT  core/standards/gate-efficacy-standard.md   — Check 31 register row (CIAC-2; anchor by content)
+ADD   core/deploy/tests/test_check31_marker_probe_determinism.sh — regression pinning determinism against the race (8 assertions)
+EDIT  .github/workflows/install-tests.yml        — pick up the Check-31 test case
+EDIT  core/config/allowlists/script-execution-allowlist.txt — register the Check-31 test script
+#     core/hooks/block-fragile-refs.sh            — REVIEW-ONLY: confirmed zero grep -q instances; its regexes are byte-identical to Check 31's and must stay in step
+# ── #4178 — complementary-pair registration + package resolution (Option A) ──
+ADD   core/deploy/allowlists/complementary-reference-pairs.txt — 5-field records incl. D-4's `shared` field
+EDIT  core/deploy/deploy.sh                      — Check 13b passes 2/3/4 + self-test group; TEMPLATE_SYNC_MAP entry per D-3
+EDIT  core/deploy/tools/build-skill-packages.sh  — registry-driven resolution; fail-CLOSED on a missing registry
+EDIT  core/schemas/tracker-schemas.md            — state the canonical's half of the division of labour (between ## Purpose and ## Schema Format; no H2 inside any anchored block)
+EDIT  operations/skills/tracker-manager/references/tracker-schemas.md — state the mirror's half
+EDIT  core/standards/duplicate-source-discipline.md — 4th disposition (registered complementary pair) + enumerated-set count
+EDIT  core/standards/gate-efficacy-standard.md   — append the absent Check 13b register row (anchor by content)
+EDIT  core/deploy/lib-template-sync-source.sh    — explicit resolver arm for tracker-schemas.md (Stage-6: the basename `case` fell through to a THIRD, non-existent path)
+EDIT  core/deploy/tests/test_resolve_canonical_source.sh — resolver-arm regression coverage
+EDIT  core/standards/meeting-agenda-format.md    — reconcile the Tracker 3 Agenda pointer (Stage-6 DEV-A: the MIRROR carries it; the CANONICAL was stale — the inverse of the Stage-5/A6.5 direction)
+REBUILD packages/tracker-manager.skill           — terminal step 7
+REBUILD packages/tracker-manager.skill.sha256    — same commit as the archive
+#     operations/skills/tracker-manager/SKILL.md  — NOT edited: Option A makes the four canonical citations resolve verbatim
+# ── #4169 — operator-local judge instrument ──
+#     (no repo path; git-ignored operator-local analysis workspace; contributes NO PR diff)
+# ── DELETE (none) ── MOVER-SET (empty) ──
+```
+
+Paths marked with a leading `#` and no INTENT verb are review-only, deliberately-not-edited, or outside the PR diff. #4169's target is **deliberately excluded** from the machine-readable body: it is git-ignored and contributes no diff, and listing it would send downstream chips looking for a path that cannot exist in the diff.
+
+## Verification Plan
+
+| # | Command | Expected |
+|---|---|---|
+| V1 | `bash core/deploy/deploy.sh --check` | Zero genuine `FAIL:` lines (operator-instance drift in the instance-path checks is not a release failure) |
+| V2 | `bash core/deploy/deploy.sh --check` → Check 7 | OK (always-enforce lifecycle; the authoritative package-freshness signal) |
+| V3 | `bash core/deploy/deploy.sh --check-package-freshness` | verdict FRESH **and** exit 0 (CIAC-4) |
+| V4 | `bash core/deploy/deploy.sh --check` → Check 34 | OK; § Tracker 10 anchor byte-unchanged; four section names present (CIAC-5) |
+| V5 | `grep -cE 'echo "\$[A-Za-z_]+" \| grep -q' core/deploy/deploy.sh` | **0** (CIAC-3; base = 2) |
+| V6 | `grep -rln 'enforcement-surface:' --include='*.md' --exclude-dir=.git . \| grep -v 'release/releases/plans/'` | exactly **1** file — `core/standards/gate-efficacy-standard.md`. **The exclusion must be an unanchored substring:** this grep emits paths without a `./` prefix, so a `^\./`-anchored exclusion silently never matches and the criterion would report failing forever while looking correct |
+| V7 | release diff of `core/standards/gate-efficacy-standard.md` | Requirements (a), (b′) and (c) byte-unchanged; every hunk is an insertion or one of the four swept scope-count substitutions |
+| V8 | `bash core/deploy/deploy.sh --self-test` (the new complementary-pair group) | all cases pass, including the unregistered case and the missing-registry fail-closed case |
+| V9 | the Check 45(b) name-match predicate over all register entries | 9/9 pass; controls at ±1 shift → 0/9 |
+| V10 | #3833 census: the check's own skip tally vs an independent census over the **post-allowlist, fence-stripped** population | equal — do not compare against the pre-allowlist figure or a naive corpus-wide grep |
+| V11 | citation-resolution probe against the deployed `tracker-manager` skill | 0 blocked citations (base: 4 unresolvable canonical citations) |
+| V12 | `bash core/deploy/deploy.sh --check` → Check 14 (doc-link integrity) | OK across every modified markdown file |
+| V13 | `python3 release/tools/check-adr-numbers.py` | PASS — contiguous, no duplicates, no gaps, with ADR-104 present |
+
+## Recommendations
+
+1. **[REQUIRED] Anchor by content on `core/standards/gate-efficacy-standard.md`.** Four cards append to one register. #4208 lands first and moves every existing row's line number. A line pin authored before #4208 lands is wrong by the time it is applied.
+2. **[REQUIRED] Implement Option A as a `TEMPLATE_SYNC_MAP` entry** (D-3), never a hand-coded builder injection, and verify the resolver does not resolve the `tracker-schemas.md` basename ambiguously — that basename exists at two paths.
+3. **[REQUIRED] Grade package freshness against `deploy.sh --check`, not CI colour.** #4183's advisory arm makes the CI gate green on exactly the staleness that matters here.
+4. **[REQUIRED] Re-census #3833's marker population** against the post-allowlist, fence-stripped set. The filed figure counts the corpus before the allowlist skip and would make the criterion unsatisfiable.
+5. **[REQUIRED] Fix both `echo … | grep -q` probes**, not only the observably-flaky one. Both carry the identical defect; only one is observably flaky, which is a property of the race, not of the correctness.
+6. **[REQUIRED at authoring time] Re-verify the ADR number immediately before writing the file** — globally across both ADR directories plus any in-flight claim. Cite the ADR downstream by slug where practical.
+7. **[REQUIRED at every parallel wave] Re-validate Checkpoint B** before the Stage 7 and Stage 8 waves, against the remaining envelope rather than this plan-time estimate.
+8. **[FOLLOW-UP — out of scope, authorized]** A second confirmed member of #4183's defect class: a completeness check declares a verdict-driven red exit its body does not implement.
+9. **[FOLLOW-UP — out of scope, authorized]** Three `printf … | grep -q` pipes carry the same EPIPE class as #3833; CIAC-3's predicate does not match that form. Latent, not live.
+10. **[FOLLOW-UP — recorded, not filed here]** A same-basename token split in the CI workflow headers (two of twenty-two header lines use a different field spelling) makes a single-token audit grep over workflows under-report. Cosmetic, no behavior impact.
+11. **[DO NOT ACTION — trap recorded]** The schema-side section probe in Check 34 uses a **substring** match deliberately. Tightening it to a whole-line match would make the check report drift on all four sections and break a currently-passing check. Recorded so it is not harvested later as a known cleanup.
+
+## Deviation Log
+
+| # | Deviation from the Stage-4 baseline | Source | Disposition |
+|---|---|---|---|
+| **(a)** | **Commit-0 version re-verify — PROCEED.** Re-run against freshly fetched authoritative refs at Engineering Commit 0. The `the release version (bound at Stage 12)` tag is absent from the fetched tag set; the release-log ledger's highest row on the mainline is `v4.01` (VERIFIED); no `the release version (bound at Stage 12)` plan file exists. Recomputed next-free for bump-class minor equals the planned version, so the plan file is written at this path. | Commit-0 re-verify | **Recorded determination.** Re-verified again at the Stage-12 atomic claim. |
+| **(b)** | **Branch named `release/check-enforcement-fidelity`, slug-only.** Stage 4 did not fix a branch name. Version-prefixed branch names produce rename churn when the version re-versions forward; the two most recent releases are slug-only. | Commit-0 | **Applied.** |
+| **(c)** | **#4208 does NOT edit `estimation-standards.md` or `tracker-schemas.md`.** The Stage-4 matrix assumed AC-5 was a remediation. Both files already carry conformant runner declarations (seven across the two), so AC-5 closes on **verification plus register rows** with zero body edits. | Stage 5 (#4242) | **Applied.** Consequences: `packages/delivery-engine.skill` is not staled (verified fresh independently three times), so the terminal rebuild narrows to `tracker-manager` alone; and **edge E2 dissolves**. |
+| **(d)** | **CIAC-5 is solely #4178's**, and its real constraint is narrower than "preserve four names" — the byte-exact anchor line and the no-interior-H2 rule are the actual hazards. | Stage 5 + hub correction | **Applied.** The four names match as substrings; the exact-heading assertion applies to a template file no card edits. |
+| **(e)** | **Four cards edit `gate-efficacy-standard.md`, not two.** #4177 and #4178 each derived a CIAC-2 register-row obligation during design — an obligation that by definition post-dates the Stage-4 contention map — and each independently recorded itself as "the third editor." | Phase A6.5 (FMF-5) | **Applied.** Sequencing corrected to `#4208 → {#4183, #4177, #4178}`; all four anchor by content. |
+| **(f)** | **#4208's Stage-5 register-row edit was specified with a line pin.** The same defect class the correction above names. | Phase A6.5 (FMF-5) | **Applied at Stage 6** — re-anchored to the register table's final existing row by content. |
+| **(g)** | **#4208's AC-6 verification method needs TWO corrections, not one.** Stage 4 caught the first (exclude historical release plans, which cite the field without defining it). Running it surfaced a second: a `^\./`-anchored exclusion **silently never matches**, because this grep emits paths without a `./` prefix — so the criterion would report failing forever while looking correct. | Stage 4 R-8 + Stage 5 (#4242 E4) | **Applied.** The corrected form is V6 in the Verification Plan. |
+| **(h)** | **Option A bound to `TEMPLATE_SYNC_MAP`** rather than a hand-coded builder injection. A6.5 found that the two builders' byte-alignment is asserted in a comment and enforced by nothing, so a one-sided injection would make the package permanently stale by construction. The map is extracted from the deploy script at runtime by the packager, so both builders consume one source. | Phase A6.5 (FMF-3/PRF-1) → operator **D-3** | **Applied** as a hard constraint on #4178. The Blocker reduces to an implementation constraint plus one live residual (resolver ambiguity on a basename that exists at two paths). |
+| **(i)** | **Registry record schema widened with a third `shared` field.** Two of the pair's four overlapping trackers **already diverge** in field content, and a two-field exclusive-ownership schema structurally cannot express a shared-but-drifted region — listing them as exclusively owned would flip the live pair to FAIL. | Phase A6.5 (FMF-1/PRF-2) → operator **D-4** | **Applied** in-card. Cost is near-zero while the schema is unwritten and real once the first commit lands. |
+| **(j)** | **Fail-closed acceptance criterion added to the packager.** It fails **open** on a missing registry while the check fails closed, and the check's discovery pass is registry-driven too — deleting one file would disable the fix and its detector together. A fail-open shipped by a release about instruments that do not enforce is off-theme. | Phase A6.5 (FMF-2) | **Applied** as a criterion on #4178, not as new scope — the defect is in the card's own mechanism. |
+| **(k)** | **#3833's census baseline corrected.** The filed figure counts the corpus **before** the allowlist skip; the criterion compares against a tally drawn **after** the allowlist skip and after fenced-code stripping. | Stage-4 hub correction | **Applied** as R-7 and V10. Using the filed figure produces a permanent gap that mimics the defect and never closes. |
+| **(l)** | **Both `echo \| grep -q` probes take the fix**, not only the observably-flaky one. Three consecutive runs on identical source showed one probe's tally varying across a wide spread while the other stayed stable — consistent with the race requiring the match to land early enough in a large enough file. The stable probe carries the identical defect latently. | Stage-4 hub finding | **Applied.** |
+| **(m)** | **#4177 lands at `advisory`/warn and does not ship its optional statement assertion.** The posture is forced by Requirement (b′) — a deploy-time-only check may not declare an enforcing posture — not chosen. | Collective Review scope-lock | **Applied.** |
+| **(n)** | **ADR authored despite the #4208 spoke's below-threshold skip rationale.** #4208's Stage 5 correctly recorded no ADR for its own decisions (CHEAP reversibility, HIGH confidence, no cross-cutting governance surface). The ADR that **is** authored covers the #4178 registration mechanism and Option A, which clear the threshold on cross-cutting governance impact and on MODERATE reversibility. | Stage 5 (#4245) R3 → hub allocation | **Applied.** One ADR, not two — the package-resolution decision consumes the registry the mechanism decision creates. |

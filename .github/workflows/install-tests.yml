@@ -31,12 +31,24 @@ name: Install tests
 #                                  conformance) scan logic: ≥2 findings on a bad
 #                                  agents-dir fixture (missing tools: + recursion
 #                                  surface), 0 on a good fixture (#189)
+#   - test_package_freshness_exit_codes.sh  the --check-package-freshness verdict
+#                                  -> exit contract, asserted in a subprocess
+#                                  (FRESH=0, STALE+warn=2 advisory, STALE+enforce=1,
+#                                  unexpected=1) against a normalized git-archive
+#                                  sandbox with HOME redirected (#4183)
 #   - test_resolve_canonical_source.sh  single-sourced template-sync resolver
 #                                  (#2158): sources lib-template-sync-source.sh +
 #                                  pins the 3-arm fixture table (incl. the #94
 #                                  regression-checks.md case) + drift-guards that
 #                                  both consumers source the fragment and neither
 #                                  re-inlines a canonical-source resolver
+#   - test_check45_governing_doc_name_match.sh  deploy.sh Check 45(b): the
+#                                  design-principle-register governing_doc pin must
+#                                  resolve AND name its own principle. Fixture
+#                                  register + synthetic charter in a tmpdir; asserts
+#                                  the mis-pin, unresolvable and empty-name branches
+#                                  are distinguishable, reproduces the pre-fix silent
+#                                  pass, and drift-guards the live predicate (#4177)
 #
 # hook-tests — runs the core/hooks/tests/*.test.sh bypass-mode hook tests +
 # their test-runner.sh against a sandbox that materializes the DEPLOYED hook
@@ -125,6 +137,44 @@ jobs:
           fi
           python3 -m pytest --version
 
+      - name: Ensure PyYAML
+        # The skill packager (release/skills/pmo-skill-refiner/scripts/package_skill.py)
+        # imports scripts.quick_validate, which imports yaml — a TRANSITIVE PyYAML
+        # dependency that a direct grep of the packager does not reveal. deploy.sh's
+        # build_skill_to_dir() invokes that packager to stage the comparison rebuild
+        # behind _c7_compute_verdict, so without PyYAML the freshness verdict can
+        # never be FRESH and test_package_freshness_exit_codes.sh PF-4 fails on a
+        # restored (non-stale) fixture. Mirrors the pinned install in
+        # eval-viewer-tests.yml, which documents PyYAML as the one non-stdlib
+        # dependency in the pmo-skill-refiner script tooling. Same --user
+        # --break-system-packages idiom as the pytest step above (PEP 668).
+        # Idempotent: only install when yaml is not already importable.
+        run: |
+          # The CONSUMER is /usr/bin/python3: deploy.sh's build_skill_to_dir()
+          # invokes `/usr/bin/python3 -m scripts.package_skill` by absolute path.
+          # So the assertion that matters is that THAT interpreter can import yaml.
+          #
+          # The install path cannot simply target it, though: on macOS runners
+          # /usr/bin/python3 is the Xcode shim and its pip REJECTS
+          # --break-system-packages, while the PATH-resolved python3 is a different
+          # interpreter whose pip accepts it. Try the consumer first, fall back to
+          # the flagged form, then ASSERT against the consumer either way — a
+          # successful install into an interpreter nothing runs is not success.
+          if ! /usr/bin/python3 -c 'import yaml' >/dev/null 2>&1; then
+            /usr/bin/python3 -m pip install --user 'pyyaml==6.0.2' \
+              || python3 -m pip install --user --break-system-packages 'pyyaml==6.0.2' \
+              || true
+          fi
+          /usr/bin/python3 -c 'import yaml; print("PyYAML", yaml.__version__, "via", __import__("sys").executable)'
+          # A --user install lives under $HOME. Tests that sandbox HOME lose sight
+          # of it — test_package_freshness_exit_codes.sh redirects HOME per probe
+          # (SBX_HOME), so the packager inside the probe could not import yaml even
+          # though this step's own check passes under the real HOME. That split is
+          # what made PF-4 fail while this step reported success. Pin the user-site
+          # on PYTHONPATH, which survives HOME redirection, and export it to
+          # subsequent steps.
+          echo "PYTHONPATH=$(/usr/bin/python3 -m site --user-site)${PYTHONPATH:+:${PYTHONPATH}}" >> "$GITHUB_ENV"
+
       - name: Run sandbox-roots regression (test_sandbox_roots.sh)
         run: bash core/deploy/tests/test_sandbox_roots.sh
 
@@ -168,6 +218,17 @@ jobs:
         # real operator memory store (none exists in CI; the test self-contains).
         run: bash core/deploy/tests/test_check36_drift_classes.sh
 
+      - name: Run package-freshness exit-code regression (test_package_freshness_exit_codes.sh)
+        # #4183: the --check-package-freshness probe used to map a warn-mode STALE
+        # verdict to exit 0, so a caller reading the exit status got a false PASS.
+        # This test asserts the verdict -> exit contract DIRECTLY in a subprocess
+        # (FRESH=0, STALE+warn=2 advisory, STALE+enforce=1, unexpected=1) against a
+        # throwaway `git archive HEAD` sandbox with HOME redirected. It normalizes
+        # that sandbox to FRESH before injecting its own staleness, so it tests the
+        # MAPPING and never double-gates committed-tree freshness (which Check 7 and
+        # the skill-package-freshness CI gate already own).
+        run: bash core/deploy/tests/test_package_freshness_exit_codes.sh
+
       - name: Run template-sync resolver regression (test_resolve_canonical_source.sh)
         # #2158: the canonical-source resolver is single-sourced in
         # core/deploy/lib-template-sync-source.sh and sourced by BOTH deploy.sh and
@@ -175,6 +236,33 @@ jobs:
         # 3-arm fixture table (incl. the #94 regression-checks.md case that broke the
         # rebuild), and drift-guards that neither consumer re-inlines a divergent copy.
         run: bash core/deploy/tests/test_resolve_canonical_source.sh
+
+      - name: Run Check 45(b) governing_doc name-match fixture self-test (test_check45_governing_doc_name_match.sh)
+        # #4177: Check 45(b) validated a design-principle-register governing_doc pin
+        # by asserting only that the file existed and the pinned line was non-empty,
+        # so a pin that had drifted onto a DIFFERENT principle passed silently. This
+        # test builds a synthetic register + charter in a tmpdir (the live corpus is
+        # never read or mutated by the assertions) and pins all three failure
+        # branches apart — NAME-MATCH, RESOLVE, EMPTY-NAME — plus an anti-vacuity
+        # control and a reproduction of the pre-fix silent pass. Its drift guard
+        # greps deploy.sh by the `# (b) FMF-1` inline MARKER, never a line number, so
+        # a silent edit to the live predicate fails this test rather than passing it
+        # stale.
+        run: bash core/deploy/tests/test_check45_governing_doc_name_match.sh
+
+      - name: Run Check 31 override-marker probe determinism test (test_check31_marker_probe_determinism.sh)
+        # #3833: Check 31's two per-file override-marker probes piped the stripped
+        # file body into a quiet grep under deploy.sh's `set -euo pipefail`. The grep
+        # exits on its first match, the writer takes SIGPIPE, and pipefail promotes
+        # that 141 to the pipeline — so a SUCCESSFUL match reported failure and the
+        # file's override marker was silently ignored. The reported saturation count
+        # therefore varied run to run on a byte-identical corpus. A single-run count
+        # assertion cannot fail on that defect, so this test asserts run-to-run
+        # EQUALITY across 5 runs, plus completeness against an independent census.
+        # Its T3 negative control runs the pre-fix form on the same above-capacity
+        # fixture and requires it to FAIL, so a fixture that stopped reproducing the
+        # defect fails the test rather than passing it vacuously.
+        run: bash core/deploy/tests/test_check31_marker_probe_determinism.sh
 
   hook-tests:
     name: Hook test harness (macOS)

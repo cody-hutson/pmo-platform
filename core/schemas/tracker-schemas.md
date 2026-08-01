@@ -15,6 +15,28 @@ Defines the schema for every operational tracker in 04-PMO-Operations/. Used by 
 
 > For the cross-artifact entity-derivation inventory (every operational artifact ↔  entity, template/schema status), see [operational-artifact-inventory.md](../specs/operational-artifact-inventory.md).
 
+## Division of Labour (registered complementary pair)
+
+This file is the **canonical** half of a registered complementary pair with
+`operations/skills/tracker-manager/references/tracker-schemas.md`. The two are
+**complementary, not duplicates** — neither is a copy or a subset of the other:
+
+- **This file owns** the full field sets for **Trackers 1–10**, and is the sole
+  home of **Trackers 5–10** (RAID Log, Artifact Register, Milestone Tracker,
+  Stakeholder Register, RACI, Sprint Tracker).
+- **The skill-local copy owns** **§ Tracker Integrity Rules** (the RAID dedup
+  threshold, the cascade-trigger signal set, and the lifecycle-state predicate),
+  which does **not** appear here.
+- **Trackers 1–4 are shared** — both copies define them, and both are expected
+  to agree. Where they do not, that divergence is a reported finding, not a
+  silent difference.
+- **A new tracker is defined HERE**, never in the skill-local copy.
+
+The split is registered — with this ownership machine-checkable — in
+`core/deploy/allowlists/complementary-reference-pairs.txt`, and asserted by
+`deploy.sh --check` Check 13b. Moving a section across the pair without updating
+that registry is a detected ownership breach, not a silent drift.
+
 ## Schema Format
 Each tracker schema defines: column name, data type, valid values (if constrained), required/optional, description, and update rules.
 
@@ -175,7 +197,7 @@ An item can only leave carry-forward if there is evidence:
 - Duration: Expected duration
 - Attendees: Required + optional
 - Objective: What the meeting should accomplish (1-2 sentences)
-- Agenda: Numbered items with time allocations
+- Agenda: Per the canonical meeting-agenda output-format spec [`meeting-agenda-format.md`](../standards/meeting-agenda-format.md) — numbered items with `@Name` owners and time allocations (this MTG-### field stores the agenda; the spec is the single source for its structure)
 - Pre-reads: Documents attendees should review before
 - `lifecycle_state`: The **canonical governed** Meeting Axis-1 state — enum `{scheduled, held, cancelled}` (per `entity-field-schemas.md §3.7` V-MTG-05). This is the state the entity model and lifecycle automation key off.
 - Status: NEEDS SCHEDULING / SCHEDULED / COMPLETED / CANCELLED — the human-readable tracker **display** label (retained for the existing tracker UX; `NEEDS SCHEDULING` is a pre-`scheduled` display sub-step). Display↔governed map: `NEEDS SCHEDULING` / `SCHEDULED` → `lifecycle_state: scheduled`; `COMPLETED` → `held`; `CANCELLED` → `cancelled`.

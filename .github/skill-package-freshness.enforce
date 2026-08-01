@@ -8,7 +8,8 @@
 # (skill-package-freshness.yml) additionally consumes the probe's exit code.
 #
 # The first non-comment, non-blank line is the mode token:
-#   warn      → report only (exit-0); a STALE package is surfaced but does not block.
+#   warn      → report only (exit-2, advisory); a STALE package is surfaced with a
+#               true, non-zero exit code but does not block.
 #   enforce   → block on a STALE package (exit-1 propagates to the CI caller).
 #
 # Ships DORMANT (warn) during the calibration window, per the warn-mode-initial
