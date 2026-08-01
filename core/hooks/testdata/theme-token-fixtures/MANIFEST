@@ -15,6 +15,12 @@
 # specificity arm over an empty input returns zero, which is that arm PASS condition, and so
 # reads as a passing control while proving nothing. That is vacuous, not passing.
 #
+# EDITOR NOTE — keep hex colour literals INSIDE the fenced block. Many of these fixtures use
+# digit-leading hex values, and the repository issue-reference gate matches a hash followed by
+# digits, so a digit-leading hex QUOTED INTO PROSE reads to that gate as an issue reference and
+# fails it. The gate does not read fenced blocks, so the fixture bodies are safe as written;
+# describe the declaration SHAPE in prose rather than quoting a literal value.
+#
 CLEAN	fx-clean.md	the well-formed baseline; prose var(--token) outside the fence must stay outside the subject; one OUT-OF-ROOT declaration
 FINDINGS	fx-defect.md	the original defect: --neutln and --neut removed from BOTH theme blocks, which is why parity passes on it
 FINDINGS	fx-substr.md	substring near-miss: --neutlnx declared where --neutln is consumed; declarations written with no space after the colon

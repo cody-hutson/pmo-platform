@@ -3,8 +3,9 @@
 `--neutlnx` is declared in both blocks where `--neutln` is consumed. A matcher that tests by
 prefix, by substring, or with a whitespace assumption around the colon reads this as
 satisfied and returns a false CLEAN. Note also that every declaration here is written with NO
-space after the colon (`--neut:#5b6169`) — the exact shape that produced a false alarm for a
-whitespace-assuming pattern elsewhere. Both forms must parse identically.
+space after the colon — in the block below, `--neut:` is butted straight onto its hex value,
+the exact shape that produced a false alarm for a whitespace-assuming pattern elsewhere. Both
+forms must parse identically.
 
 TH-2 passes on this file (the key sets are equal across blocks), so this case also proves the
 two invariants are independent in the second direction.
