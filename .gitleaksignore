@@ -1,0 +1,26 @@
+# .gitleaksignore — reviewed false positives, pinned to an exact finding.
+#
+# CONVENTION. Each entry is a gitleaks fingerprint: <commit>:<file>:<rule>:<line>.
+# That is the narrowest dismissal the tool offers — it silences ONE finding at ONE
+# line of ONE file in ONE commit, under ONE rule. Every other line, file, commit and
+# rule stays fully scanned. Prefer this over a .gitleaks.toml allowlist, which
+# exempts a path or pattern wholesale; that file deliberately holds a single entry
+# (a fixture of intentionally-fake tokens) and should stay that way.
+#
+# An entry belongs here ONLY when the finding is verified not to be a secret AND the
+# pattern cannot be removed from history. When a pattern can be eliminated at the
+# source, eliminate it — an ignore is the fallback, not the first move.
+
+# The Check 63 registration entry was written "release-version-tokens:_c63_compute_verdict"
+# — a check id and a shell function name. Gitleaks' generic-api-key rule reads
+# <identifier>:<value> as a credential pair. There is no secret: both halves are
+# source identifiers, and the function is defined in the same file.
+#
+# The pattern was ELIMINATED at the source in abf62790 (separator changed to "|" in
+# both registration entries and both parse expressions), so it cannot recur as new
+# checks are registered. This entry exists only because gitleaks scans full history
+# (security.yml uses fetch-depth: 0 with `gitleaks detect --source .`), so the
+# introducing commit keeps matching forever. Rewriting history was rejected: the
+# release forbids force-push, and eight sub-task records cite commit SHAs on this
+# branch.
+308743e767276f0ba881cebaaf10850c619fdd18:core/deploy/deploy.sh:generic-api-key:9827
