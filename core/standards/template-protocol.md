@@ -285,7 +285,7 @@ $ grep -l '^artifact_type: template' operations/templates/change-impact-matrix-t
 operations/templates/change-impact-matrix-template.md
 $ grep -H '^review_status:' operations/templates/change-impact-matrix-template.md
 operations/templates/change-impact-matrix-template.md:review_status: DRAFT
-$ grep -A 8 '^## §9' core/standards/template-protocol.md | head -12
+$ grep -A 4 '^### §9.2' core/standards/template-protocol.md
 # (returns the lineage table with the change-impact-matrix-template seed row — see §9)
 ```
 
