@@ -24,7 +24,7 @@ The matrix is a **load-bearing data contract** for the HARD downstream handoffs 
 
 | Column | Type | Semantics |
 |---|---|---|
-| **Archetype** | enum / "Custom" | One of the 8 `delivery_approach` enum values, or `Custom` for the 9th row |
+| **Archetype** | enum / "Custom" | One of the 8 `delivery_approach` enum values — 7 named archetypes plus `Custom`, one row each |
 | **Lifecycle** | enum (3 values) | `continuous` (flow-pull) / `phased` (gate-sequential) / `timeboxed` (iteration-bounded). Governs the core cadence pattern |
 | **Ceremonies** | comma-separated list | Named recurring synchronization events the skill recognizes as sync points |
 | **Artifacts** | comma-separated list | Named work-products the skill expects as inputs/outputs |
@@ -46,7 +46,7 @@ Consumer skills reading `delivery_approach: Custom` do NOT read the Custom **mat
 
 ## 3. Archetype Matrix
 
-9 rows (8 archetypes + Custom) × 8 columns. For readability in GitHub markdown, the matrix below renders compact text; fuller prose lives in [`methodology-parameterization-v1.md`](methodology-parameterization-v1.md).
+8 rows (7 archetypes + Custom, matching the 8-value `delivery_approach` enum) × 8 columns. For readability in GitHub markdown, the matrix below renders compact text; fuller prose lives in [`methodology-parameterization-v1.md`](methodology-parameterization-v1.md).
 
 | Archetype | Lifecycle | Ceremonies | Artifacts | Cadence | Primary consumers | Sample project types | Distinguishing constraint |
 |---|---|---|---|---|---|---|---|
