@@ -11,10 +11,15 @@
 # pattern cannot be removed from history. When a pattern can be eliminated at the
 # source, eliminate it — an ignore is the fallback, not the first move.
 
-# The Check 63 registration entry was written "release-version-tokens:_c63_compute_verdict"
-# — a check id and a shell function name. Gitleaks' generic-api-key rule reads
-# <identifier>:<value> as a credential pair. There is no secret: both halves are
-# source identifiers, and the function is defined in the same file.
+# The Check 63 registration entry joined a check id to a shell function name with a
+# colon. Gitleaks' generic-api-key rule reads that identifier-then-value shape as a
+# credential pair. There is no secret: both halves are source identifiers, and the
+# function is defined in the same file.
+#
+# NOTE — this comment deliberately DESCRIBES the shape rather than quoting it. An
+# earlier revision of this file reproduced the literal string to explain it, and
+# gitleaks promptly flagged the ignore file itself. Quoting a pattern re-arms it
+# whenever the medium scans content rather than rendering it.
 #
 # The pattern was ELIMINATED at the source in abf62790 (separator changed to "|" in
 # both registration entries and both parse expressions), so it cannot recur as new
