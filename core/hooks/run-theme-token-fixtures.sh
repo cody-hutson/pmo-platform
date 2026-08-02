@@ -131,26 +131,45 @@ function is_root_selector(sel,   parts, np, k, p) {
   return 1
 }
 
-# Current block label from the selector stack: the media context, or "default".
-# Returns "" when the innermost selector is not root-scope, or when a non-@media
-# wrapper encloses it (a token declared inside .card > svg is not a theme block).
-function block_label(   k, s, media, v, m) {
+# Current block label from the selector stack: the COLOUR-SCHEME context, or "default".
+# Returns "" when the innermost selector is not root-scope, when a non-at-rule wrapper
+# encloses it (a token declared inside .card > svg is not a theme block), or when a
+# NON-COLOUR-SCHEME at-rule encloses it.
+#
+# SCOPED TO COLOUR-SCHEME CONTEXTS, DELIBERATELY. A theme block is a root-scope block whose
+# enclosing at-rule context selects a COLOUR SCHEME: the base block, or one under
+# `@media (prefers-color-scheme: <v>)`. Two ordinary-CSS forms are excluded, because every
+# block in the theme list is required to declare EVERY consumed token, and both would
+# otherwise redden a required gate on correct content:
+#   @media print / width / motion  — an ordinary media query is not a theme. Registering one
+#                                    as a third block demanded the full token set from a
+#                                    print stylesheet that legitimately overrides a few.
+#   @supports                      — a capability guard, not a context switch. It is
+#                                    TRANSPARENT here: a root-scope block inside one keeps
+#                                    the colour-scheme context it already had, rather than
+#                                    being misfiled OUT-OF-ROOT and reading as undeclared.
+# Declarations under a non-colour-scheme at-rule are still COUNTED and PRINTED as
+# OUT-OF-ROOT rather than silently dropped — the same treatment `.card{--pad:4px}` gets.
+# Both forms carry paired must-not-flag fixtures; the narrowing does not touch the
+# sensitivity arm, which keys off the theme blocks that remain.
+function block_label(   k, s, media, v) {
   if (depth < 1) return ""
   if (!is_root_selector(stack[depth])) return ""
   media = ""
   for (k = 1; k < depth; k++) {
     s = trim(stack[k])
-    if (s ~ /^@media/) { media = s } else { return "" }
+    if (s ~ /^@supports/) continue
+    if (s ~ /^@media/) {
+      if (match(s, /prefers-color-scheme[ \t]*:[ \t]*[A-Za-z-]+/)) { media = s; continue }
+      return ""
+    }
+    return ""
   }
   if (media == "") return "default"
-  m = media
-  if (match(m, /prefers-color-scheme[ \t]*:[ \t]*[A-Za-z-]+/)) {
-    v = substr(m, RSTART, RLENGTH)
-    sub(/^prefers-color-scheme[ \t]*:[ \t]*/, "", v)
-    return v
-  }
-  gsub(/[ \t]+/, " ", m)
-  return "media:" trim(m)
+  match(media, /prefers-color-scheme[ \t]*:[ \t]*[A-Za-z-]+/)
+  v = substr(media, RSTART, RLENGTH)
+  sub(/^prefers-color-scheme[ \t]*:[ \t]*/, "", v)
+  return v
 }
 
 function handle_decl(txt,   name, lbl, e) {

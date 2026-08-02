@@ -28,5 +28,7 @@ CLEAN	fx-nc-parity.md	a genuine TH-2 parity break with no consumer; TH-3 must no
 INDETERMINATE	fx-nomanifest.md	a consumed placeholder with no subst manifest: the denominator is incomplete, so a zero would be untrustworthy
 CLEAN	fx-unbounded.md	a domain declared * : counted into the UNBOUNDED bucket, printed, and named in the verdict
 INDETERMINATE	fx-prose-only.md	prose about the mechanism with no style element: nothing to check is not the same as nothing wrong
+CLEAN	fx-media-print.md	an ordinary @media print block must NOT register as a third theme block and demand the full token set; its declaration is still counted OUT-OF-ROOT
+CLEAN	fx-supports.md	@supports is a capability guard, not a context switch: a root-scope block inside one keeps its colour-scheme context instead of being misfiled OUT-OF-ROOT
 CLEAN	fx-html-single-theme.html	HTML surface: one :root block only, plus a style-open-tag inside a script comment that must not open a region
 FINDINGS	fx-html-undeclared.html	HTML surface must-flag partner: --accent-hover consumed, never declared
