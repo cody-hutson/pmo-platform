@@ -289,7 +289,7 @@ docs/scripts/setup-workspace.sh                                          # edit 
 release/releases/RELEASE_LOG.md                                          # edit — Stage-13 close-out ledger row [Stage 13, not this build]
 ```
 
-**Path-count note (dogfooding CIAC-4):** the block above enumerates **36** paths. This count is stated adjacent to the structure it describes and is therefore itself in Check 63's population — deliberately so.
+**Path-count note (dogfooding CIAC-4):** the block above enumerates **36** paths. This count is stated adjacent to the structure it describes, so it is exactly the shape Check 63 grades — but it is NOT in Check 63's population: `release/releases/` is an exempt prefix, because frozen release artifacts must not be rewritten by a linter. The dogfooding here is therefore the discipline, not the lint: the count is reconciled by hand against the block above, with the exemption stated rather than assumed.
 
 **Provisional entries — confirm at the owning chip's commit, amend the § Deviation Log if they change:**
 - **#4198's installer trio.** Collective Review locked scope at *"7 constants / 21 declaration sites / 10 files (lib `core/hooks/lib/fragile-ref-patterns.sh`, co-deploy allowlist across 3 installers)"*. `docs/scripts/setup-workspace.sh` is verified as a hooks-lib co-deploy surface `[SOURCE]`; the remaining two co-deploy surfaces are `[INFERRED]` from the same mechanism and are the **#4198 spoke's** to confirm and append. The matrix lists only the verified one.
