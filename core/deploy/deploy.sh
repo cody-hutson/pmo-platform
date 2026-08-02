@@ -9823,8 +9823,8 @@ cmd_check_required_subset() {
   # Enumerated allowlist: "check-id:verdict-body". Append a row per future
   # posture:required check that lacks a dedicated CI mirror.
   local -a rs_checks=(
-    "hook-registry-index-freshness:_c38_compute_verdict"
-    "release-version-tokens:_c63_compute_verdict"
+    "hook-registry-index-freshness|_c38_compute_verdict"
+    "release-version-tokens|_c63_compute_verdict"
   )
 
   # Members that BLOCK regardless of the shared warn/enforce sentinel. The sentinel
@@ -9842,8 +9842,8 @@ cmd_check_required_subset() {
 
   local rs_fail=0 rs_err=0 rs_pass=0 rs_block=0 _entry _id _fn _verdict _tok
   for _entry in "${rs_checks[@]}"; do
-    _id="${_entry%%:*}"
-    _fn="${_entry##*:}"
+    _id="${_entry%%|*}"
+    _fn="${_entry##*|}"
     _verdict="$("$_fn" "gate")"
     _tok="${_verdict%% *}"
     case "$_tok" in
