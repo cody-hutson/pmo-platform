@@ -438,7 +438,7 @@ MAPPING INTO A CONSUMING VERDICT ENUM
  8  Zero-byte control — a mutation control produced a 0-byte
     mutant and reported "0 flagged"                            empty extraction, on the
                                                                control                      PV-3 + PV-5 yes
- 9  Hard-wrapped corpus defeats a line-anchored grep           match unit != semantic unit  PV-3        yes
+ 9  Hard-wrapped corpus defeats a line-anchored grep           match unit != semantic unit  none        NO — GAP
 10  Ref probe scoped to heads reports an existing non-head
     ref as missing                                             wrong denominator            PV-1        yes
 11  Whitespace assumption — pattern expects a space the live
@@ -446,14 +446,14 @@ MAPPING INTO A CONSUMING VERDICT ENUM
 12  Predicted instead of measured — state reasoned about
     rather than read                                           no probe at all              PV-0        yes
 
-Verdict: 11 of 12 shapes are caught by a self-executable clause; 1 is not (shape 5).
+Verdict: 10 of 12 shapes are caught by a self-executable clause; 2 are not (shapes 5, 9).
 ```
 
 ### § 8.4 — Declared coverage boundary (state this; do not imply more)
 
 ```
-COVERED — 11 of the 12 observed shapes, across 6 classes:
-  wrong-denominator (2 shapes) . truncated-or-empty-extraction (4) .
+COVERED — 10 of the 12 observed shapes, across 6 classes:
+  wrong-denominator (2 shapes) . truncated-or-empty-extraction (3) .
   non-discriminating-predicate (2) . wrong-scope (1) . no-probe (1) .
   wrong-pattern-false-alarm (1).
 The class names are the unit of this list and the shape count is the unit of the
@@ -466,14 +466,21 @@ correctly and the record looks healthy. No self-check detects it. It is caught o
 by a reviewer comparing the artifact named in PV-1 against the artifact the claim
 concerns. Stated as a residual risk, not implied as covered.
 
+NOT COVERED — MATCH-UNIT BOUNDARY: match unit != semantic unit (an 8th class, 1
+shape — shape 9). A line-anchored probe over hard-wrapped text returns zero on a
+clause spanning a line break while PV-3 is satisfied: the extraction was whole and
+untruncated, so no clause fires and the verdict rule returns CLEAN on a false zero.
+Normalize the match unit to the semantic unit before trusting such a zero.
+
 NOT COVERED — ACTOR BOUNDARY: this discipline is DELIVERED to the agents that read
 the surfaces citing it — review-class skills that load this file, the Stage-5
-evidence-grounding review, and the per-stage spoke prompt convention. An
-orchestrating agent that authors those spoke prompts without consuming them, and any
-session outside that prompt convention, is bound by the rule as an ACT and is not
-REACHED by any delivery surface. That is a delivery gap, distinct from the
-enforcement gap: the rule is not merely unenforced there, it is unread. Named here
-so the coverage claim is not larger than the delivery.
+evidence-grounding review, the per-stage spoke prompt convention, and, for the
+orchestrating hub, `hub-spoke-bridge.md` Procedure 7 Step 4, which states itself to
+be the hub's delivery surface for Rule 15. A session outside all of those
+conventions is bound by the rule as an ACT and is not REACHED by any delivery
+surface. That is a delivery gap, distinct from the enforcement gap: the rule is not
+merely unenforced there, it is unread. Named here so the coverage claim is not
+larger than the delivery.
 
 ASYMMETRY BY DESIGN. PV-0..PV-3 fire on a zero/clean/absent claim. PV-4 and the
 PV-2c specificity arm are the two clauses extended to the false-alarm direction.
@@ -481,7 +488,10 @@ PV-2c catches an over-matching pattern whenever a discriminating near-miss input
 available; an over-match the prober could not conceive of remains uncovered — the
 same epistemic boundary PV-1's denominator carries. The observed population for this
 class is a single shape, already caught by PV-4, so no coverage FRACTION is claimed
-for the residual: an "N of M" with no M is exactly what Rule 15 forbids.
+for the residual: an "N of M" with no M is exactly what Rule 15 forbids. That shape
+is the false-ALARM direction only. The same wrong-pattern class can also produce a
+false CLEAN — a pattern that misses text it should have matched — a direction not
+observed here and therefore carrying no row in § 8.3: unobserved, not covered.
 ```
 
 ---
