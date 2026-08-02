@@ -29,3 +29,15 @@
 # release forbids force-push, and eight sub-task records cite commit SHAs on this
 # branch.
 308743e767276f0ba881cebaaf10850c619fdd18:core/deploy/deploy.sh:generic-api-key:9827
+
+# Second finding, same root cause one level up. The revision above (e9bcb801)
+# explained the first dismissal by reproducing the flagged text, so gitleaks matched
+# the ignore file's own comment. 5b8c7f2f removed it and replaced it with a prose
+# description — but history scanning means removing it at the tip does not retire the
+# commit that introduced it, exactly as with the original finding.
+#
+# TERMINATION CONDITION, stated because this loop can run forever: it ends when the
+# tip introduces no new match AND every historical match is pinned. The current tip
+# contains no reproduced pattern, so no further finding can be created by this file;
+# this entry retires the last outstanding one.
+e9bcb8011ebab08f0aeec10bbac74346950623c0:.gitleaksignore:generic-api-key:14
