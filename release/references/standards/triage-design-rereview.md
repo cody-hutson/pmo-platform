@@ -66,6 +66,7 @@ Every requirement is evaluated against three named dimensions. Each dimension MU
 ---
 
 ## § 3 Classifications
+<!-- design-artifact: flow-class=decision-tree; name=triage-design-rereview-classifications; depicts=release/references/standards/triage-design-rereview.md -->
 
 Each requirement is classified as exactly one of three states. The classification determines stage routing.
 

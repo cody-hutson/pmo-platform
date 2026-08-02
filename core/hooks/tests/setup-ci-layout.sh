@@ -154,6 +154,22 @@ else
   log "setup-ci-layout: WARNING positional classifier missing at ${POSAWK_SRC}"
 fi
 
+# 1e') Co-locate the reference-durability detector constants at .claude/hooks/lib/, mirroring
+#      the deployed posture (setup-workspace.sh co-deploys it there). block-fragile-refs.sh
+#      sources it from ${HOOK_DIR}/lib/fragile-ref-patterns.sh for EVERY pattern it evaluates;
+#      the source lives at core/hooks/lib/, a subdir the *.sh loop above does not copy. WITHOUT
+#      this the sandbox hook has no detectors and fails CLOSED in enforce — which blocks even
+#      the clean-prose ALLOW cases, so block-fragile-refs.test.sh would fail on nearly every
+#      assertion. Same CI-fidelity class as the dep-resolve / positional co-locations above.
+PATTERNSLIB_SRC="${HOOKS_SRC}/lib/fragile-ref-patterns.sh"
+if [ -f "${PATTERNSLIB_SRC}" ]; then
+  mkdir -p "${HOOKS_DST}/lib"
+  cp "${PATTERNSLIB_SRC}" "${HOOKS_DST}/lib/"
+  log "setup-ci-layout: co-located detector constants -> ${HOOKS_DST}/lib/fragile-ref-patterns.sh"
+else
+  log "setup-ci-layout: WARNING detector constants missing at ${PATTERNSLIB_SRC}"
+fi
+
 # 1e) Co-locate the master-activation gate lib at .claude/hooks/lib/, mirroring the deployed
 #     posture (setup-workspace.sh co-deploys it there, #310). Every block-*.sh sources it from
 #     ${HOOK_DIR}/lib/master-enable.sh to resolve the durable opt-in master-enable state. WITHOUT

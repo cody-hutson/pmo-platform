@@ -95,7 +95,7 @@ Named-gate criteria: **G6 Engineering Completeness** (G6-01..G6-05) per [`core/s
 
 ## 8. Automation Level
 Overall Tier 1 (AI-Delegated with Threshold Enforcement). Most autonomous stage — agent executes plan without intervention until PR ready. Threshold: inter-stage feedback protocol escalates to human when deviations exceed minor.
-Today: agent implements in conversation. Target: Software Engineer skill Mode 1 end-to-end.
+Today: the `pmo-software-engineer` skill's Mode 1 (Development) executes Stage-6 Engineering end-to-end — turning an approved plan into executed change, verification, and a PR.
 
 ## 9. Gap Summary
 14 gaps: 7 definition + 7 execution. Key: sub-task methodology reference (P2), gate manager expansion (P2), layered review model (P2).

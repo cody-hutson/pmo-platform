@@ -45,11 +45,11 @@ Entities are named as they appear in [`project-entity-model.md`](project-entity-
 
 This index is the authoritative cross-chain surface. Any change that **adds a new management chain, renames a governing source, or moves a referenced home** MUST update this index in the same PR. Outbound link liveness is covered for free by `core/deploy/deploy.sh --check` Check 14 and `link-check.yml` (both scan `core/disciplines/`); Stage 13 Close verifies index currency for any chain-source touched in the release. A bespoke automated **content-currency** scan (assert every canonical chain appears here) is **deferred** until the chain set grows materially or a staleness incident is filed — the same trigger model as the deferred content-scan pattern in [`duplicate-source-discipline.md`](../standards/duplicate-source-discipline.md).
 
-## Architecture-fit gate wiring — [DEFERRED]
+## Architecture-fit gate wiring
 
-The architecture-fit gate that would check new work against this consolidated surface is **not wired in this release**. It depends on the Stage-2 architectural-fit acceptance gate (still open — tracked in § References); until that gate lands there is nothing to wire, and wiring a pipeline spec now would be a separate governed change.
+The architecture-fit gate that checks new work against this consolidated surface is **wired**. It is the Gate-2 acceptance-fit criterion **G2-13** in [`gate-criteria-spec.md`](../schemas/gate-criteria-spec.md) — a scoped, conditional criterion that fires on agent-authored provenance or on a net-new / sweeping architecture-lens flag, and that now **enforces**: when a limb fires, a missing acceptance-fit determination blocks the **Approve** verdict (per ADR-093).
 
-**Deferred design (forward note, builds nothing here):** once that gate ships, its spec adds one reference line — *new intake work is checked for architecture-fit against the consolidated surface `core/disciplines/cross-chain-architecture-map.md`* — which satisfies that acceptance criterion by pointing the gate at this index. The already-shipped Stage-5 SR-G architecture gate ([`stage-05-solutioning.md`](../../release/references/pipeline/stage-05-solutioning.md) §7.2) is the companion wiring point on the design-handoff axis. Neither is edited under this record; each is its own governed change when the dependency is ready.
+**Wiring record (pointer, not a restatement).** The reference line lives in G2-13's § *Acceptance-Fit Predicate* block, which names this index as the management-chain surface to consult when identifying a proposal's governing anchor. That statement has exactly one canonical home — the gate spec — and is deliberately **not** restated here, per [`duplicate-source-discipline.md`](../standards/duplicate-source-discipline.md) §1 condition 2. The already-shipped Stage-5 SR-G architecture gate ([`stage-05-solutioning.md`](../../release/references/pipeline/stage-05-solutioning.md) §7.2) remains the companion wiring point on the design-handoff axis.
 
 ## References
 
@@ -63,7 +63,7 @@ The sources this index joins — referenced, not restated: each linked home keep
 | #365 — Knowledge Architecture epic | The **K1–K5 knowledge layer** every chain's governance draws on; shipped home [`knowledge-architecture.md`](knowledge-architecture.md). | issue-ref + link to the shipped home |
 | #877 — actor-model + governance-as-contract vision | The **actor / agent-model + governance-as-contract target vision** — one indexed entry; home [`actor-model-and-governance-as-contract.md`](actor-model-and-governance-as-contract.md). Orthogonal axis: it states who acts and under what contract, while this index states what governs each chain. | issue-ref + link to the shipped home |
 
-**Deferred gate dependency (AC5).** The architecture-fit gate wiring described above is deferred to the Stage-2 architectural-fit acceptance gate tracked by #779 (open) — the gate that will reference this index once it ships.
+**Gate dependency (AC5) — satisfied.** The architecture-fit gate wiring described above depended on the Stage-2 architectural-fit acceptance gate tracked by #779 (closed); that gate shipped as G2-13 and now references this index, so the dependency is discharged.
 
 **Provenance.** The consolidating work item — the navigational/coherence index this doc satisfies — is #912; the home-decision spike that resolved the index to a new sibling discipline file (rather than folding into an existing per-domain architecture) is #3617.
 

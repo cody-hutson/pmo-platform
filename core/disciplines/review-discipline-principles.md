@@ -5,7 +5,7 @@ type: discipline
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 framework_version_anchor: "v10.2"
-applies_to: build-reviewer, pmo-qa-auditor, pmo-skill-editor Mode D, future audit skills
+applies_to: build-reviewer, pmo-qa-auditor, pmo-skill-editor Mode D, future audit skills; Section 1 Rule 15 and Section 8 additionally bind any agent asserting a zero, clean, absent, or N-of-M verification result — that obligation attaches to the ACT of claiming a verified result, not to the actor's skill class, and reaches orchestrating agents and one-off sessions equally
 source: Extracted from build-reviewer/SKILL.md (2026-04-18 Anthropic mapping analysis)
 ---
 
@@ -15,9 +15,9 @@ Shared discipline methodology for review-class skills. When a skill's primary fu
 
 ---
 
-## Section 1 — Anti-Laziness Rules (14 rules)
+## Section 1 — Anti-Laziness Rules (15 rules)
 
-These rules govern HOW findings are produced — the output discipline that separates principal-grade review from surface pass. Rules 1–10 are extracted verbatim from `release/skills/build-reviewer/SKILL.md` and apply unchanged to any review-class skill; rules 11–14 were added subsequently and are native to this shared discipline.
+These rules govern HOW findings are produced — the output discipline that separates principal-grade review from surface pass. Rules 1–10 are extracted verbatim from `release/skills/build-reviewer/SKILL.md` and apply unchanged to any review-class skill; rules 11–15 were added subsequently and are native to this shared discipline.
 
 1. **No surface-level passes.** "This section looks well-structured" is not a finding. Either identify a specific issue or provide specific evidence that the section is complete and correct.
 
@@ -74,6 +74,10 @@ These rules govern HOW findings are produced — the output discipline that sepa
 14. **N-1 internal edges as cohesion test for grouping decisions.** When deciding whether to bundle items together (e.g., issues into a milestone, findings into a pattern, requirements into a phase), apply the N-1 internal edges criterion: a tight bundle of N items has at least N-1 internal dependency or relational edges. Below N-1, the bundle is loose and should split.
 
     *Application:* For any proposed grouping of N items, compute the count of internal edges. If count ≥ N-1, accept the bundle. If count < N-1, identify the weakest edge cut and split. Document the edge count + cut decision; do not propose tight bundles without the test.
+
+15. **A zero is not a result until the probe is shown to detect, and to discriminate.** A verification probe that returns zero, empty, clean, absent, or "N of M" establishes nothing until the probe has been shown capable of returning non-zero on an input it must flag, and of returning zero on a near-miss input it must not flag. A sensitivity control that returns zero alongside the subject means the probe is broken, not that the data is clean. A specificity control that returns non-zero means the probe over-matches, not that the subject is dirty.
+
+    *Application:* Every claim of the form "0 occurrences" / "no findings" / "CLEAN" / "N of M" carries five values inline — the invocation that produced it, the denominator it searched, the sensitivity arm of its control with its observed non-zero result, the specificity arm with its observed zero result wherever that arm is required, and evidence that the extraction was non-empty and untruncated for the subject and for every control arm. When any required value cannot be established, the verdict is INDETERMINATE naming the missing element — never a pass. Section 8 defines the record format, the arm-selection rule, the verdict rule, and how INDETERMINATE maps into a consuming verdict enum that has no member for it.
 
 ---
 
@@ -261,6 +265,237 @@ Section 1 vs. Section 7 is the output-vs-posture boundary. If a failure shows up
 
 ---
 
+## Section 8 — Probe Validity
+
+Section 1 Rule 15 forbids reporting a zero, clean, absent, or N-of-M result the probe has not been shown to produce validly. Section 8 defines the record format, the arm-selection rule, the verdict rule, the declared coverage boundary, and the rejection threshold.
+
+Element IDs `PV-0` through `PV-6` are stable and citable individually. Consuming surfaces cite them by identifier; they do not restate them.
+
+### § 8.1 — The obligations (PV-0 … PV-6), the riders, and the verdict rule
+
+```
+PV-0  INVOCATION.   Cite the exact command, query, or read that produced the result,
+                    in a form a reviewer can re-run. A claim with no cited invocation
+                    is a prediction, not a verification.
+
+PV-1  DENOMINATOR.  State the population actually examined, as a number, together
+                    with how that number was obtained. The denominator is the
+                    population searched — not the sample returned, not the first
+                    page, not the default scope of the tool. When the tool's default
+                    scope is narrower than the claim's scope, say so.
+
+PV-2  CONTROL — SENSITIVITY ARM.
+                    Run an input the probe MUST flag, in the same invocation shape as
+                    the subject, and record its observed result. This arm's PASS
+                    condition is NON-ZERO. It proves the probe can detect.
+
+      PV-2a  Mutation form. Where the subject is an artifact that should be clean,
+             the sensitivity arm is a deliberately-introduced defect of the class
+             being checked: introduce it, confirm the probe flags it, revert.
+
+      PV-2b  Bounding form. Where the probe is scoped to a region of a larger
+             artifact, additionally assert that the region-scoped count is strictly
+             less than the whole-artifact count for at least one source. Otherwise
+             the probe may have degenerated to an artifact-wide match, and a hit
+             from the wrong region reads as confirmation.
+
+      PV-2c  CONTROL — SPECIFICITY ARM.
+             Run a NEAR-MISS input the probe MUST NOT flag — an input that differs
+             from a true positive only in the property being tested — and record its
+             observed result. This arm's PASS condition is ZERO. It proves the probe
+             can discriminate.
+
+             A control is DISCRIMINATING when BOTH arms are observed as specified.
+             "Discriminating" is the conjunction of the two arms; it is never an
+             adjective asserted over a single arm. An input that both arms would
+             treat alike proves nothing about either.
+
+             REQUIRED when any of these hold:
+               (i)   the probe is a reusable mechanized check rather than a one-shot
+                     invocation;
+               (ii)  the claim is PRESENT-AND-WRONG rather than ABSENT;
+               (iii) the obligation being discharged itself names a must-not-flag
+                     input.
+             OPTIONAL for a one-shot absence probe, where the sensitivity arm alone
+             is proportionate. Stating that PV-2c was not triggered, and why, is part
+             of the record; silence is not.
+
+      PV-2d  FIXTURE FORM (probes reachable only by a remote trigger).
+             Where the probe runs only in CI — no local invocation reproduces it —
+             the control arms are NOT a mutation of a tracked declaration pushed to a
+             live branch. They are a COMMITTED FIXTURE carrying a labeled
+             expected-match set: must-flag cases and must-not-flag cases, exercised
+             by an entry point that is invocable locally AND invoked by the CI job,
+             so both surfaces measure the same thing. Where the CI job asserts inline
+             rather than delegating to such an entry point, extracting the assertion
+             into one is part of the work, not an exemption from this rider.
+
+PV-3  EXTRACTION.   Show that the bytes the probe actually read were non-empty and
+                    untruncated — a byte or line count of the input, not of the
+                    output. A probe over an empty or truncated input returns zero for
+                    a reason unrelated to the claim.
+
+PV-4  QUOTE THE MATCH. A claim that something is PRESENT-AND-WRONG quotes the matched
+                    text verbatim. A pattern that missed by a space, a delimiter, or
+                    a case is visible in the quoted match and invisible in the count.
+
+PV-5  APPLIES TO EACH CONTROL ARM.
+                    PV-0, PV-1, PV-3 and PV-4 bind EVERY arm of the control with the
+                    same force as the subject. Two distinct failures follow, and the
+                    second is the one this rider exists to catch:
+                      - A SENSITIVITY arm whose own extraction was empty reports
+                        "0 flagged" and reads as a probe that cannot detect.
+                      - A SPECIFICITY arm whose own extraction was empty returns
+                        ZERO, which is that arm's PASS condition, and therefore reads
+                        as a PASSING control while proving nothing. It is VACUOUS,
+                        not passing. A specificity arm is only informative when its
+                        input is shown non-empty and shown to contain the near-miss.
+
+PV-6  INSTRUMENT FORM.
+                    PV-0..PV-5 bind the CLAIM, whoever or whatever makes it — an agent
+                    asserting a result in prose, or an instrument emitting one at
+                    runtime. Where the probe is a mechanized, reusable check rather
+                    than an agent's one-shot invocation, THE CHECK ITSELF CARRIES THE
+                    RECORD: its denominator and its control-arm results are fields of
+                    the check's own emitted output, not of the prose report about it.
+                    A check whose runtime output states only a finding count has not
+                    discharged PV-1 or PV-2 — a reader cannot distinguish "zero found"
+                    from "nothing examined." The § 8.2 record form is the shape; a
+                    mechanized check may render it as structured output.
+
+VERDICT RULE
+  (every line names an arm; the bare word "control" is not a verdict input)
+
+  zero + PV-0, PV-1, PV-3 established
+       + PV-2  sensitivity arm observed NON-ZERO
+       + PV-2c specificity arm observed ZERO, wherever PV-2c is triggered
+                                        ->  CLEAN
+
+  zero + any required element above not established
+                                        ->  INDETERMINATE, naming the missing element
+
+  PV-2  sensitivity arm returns ZERO    ->  BROKEN PROBE. The probe cannot detect.
+                                            Report the probe unusable. NEVER report
+                                            the subject as clean.
+
+  PV-2c specificity arm returns NON-ZERO
+                                        ->  OVER-MATCHING PROBE. The probe cannot
+                                            discriminate. Report the probe unusable.
+                                            NEVER report the subject as flagged.
+
+  PV-2c specificity arm returns ZERO    ->  This is that arm's PASS condition. It is
+                                            NOT a broken probe — provided PV-5 holds
+                                            on it. A specificity arm whose own
+                                            extraction was empty is VACUOUS, not
+                                            passing, and the verdict is INDETERMINATE
+                                            naming PV-5.
+
+MAPPING INTO A CONSUMING VERDICT ENUM
+  INDETERMINATE is a statement about the PROBE, not about the deliverable.
+  1. Its FIRST disposition is always REPAIR THE PROBE AND RE-RUN. INDETERMINATE is
+     never a terminal verdict where a valid probe can be constructed.
+  2. Only where no valid probe can be constructed does it map into the consuming
+     context's enum, and then to that enum's NON-PASSING member. In an acceptance-
+     grading enum whose members are MET / NOT MET / PARTIAL / N/A-WITH-RATIONALE /
+     REINTERPRET-WITH-RATIONALE / FLAG-UPSTREAM, the mapping is NOT MET — not
+     PARTIAL, because the deficiency is in the probe's validity, not in the
+     deliverable's completeness.
+  3. Where the missing element is owned upstream of the grading context,
+     FLAG-UPSTREAM is the correct mapping.
+  4. INDETERMINATE NEVER maps to MET, and never to N/A-WITH-RATIONALE. A grader
+     holding an unrepresentable verdict drifts toward the member with no cost
+     attached; naming the mapping is what stops that drift.
+```
+
+### § 8.2 — The probe record (copy-paste form for any output asserting a zero)
+
+```
+**Probe:** <exact command>
+**Denominator:** <N> (<how counted>)
+**Control — sensitivity:** <input the probe must flag> -> observed <non-zero result>
+**Control — specificity:** <near-miss input the probe must not flag> -> observed 0
+                           (or: NOT TRIGGERED — <which PV-2c condition fails>)
+**Extraction:** <bytes or lines read> for the subject; <same> for each control arm
+**Result:** <N>
+**Verdict:** CLEAN | INDETERMINATE (<missing element>) | BROKEN PROBE |
+             OVER-MATCHING PROBE
+```
+
+### § 8.3 — Coverage map: the 12 observed shapes against the catching clause
+
+```
+ #  Shape (as observed)                                        Class                        Clause      Caught
+ 1  Page-1 sampling presented as the population                wrong denominator            PV-1        yes
+ 2  Line truncation on a longer-than-cut line                  truncated extraction         PV-3        yes
+ 3  Shell modifier silently returns 0 bytes; grep over the
+    empty file reports clean                                   empty extraction             PV-3        yes
+ 4  Unsatisfiable expectation — literal count sought against
+    a template holding a repeat block                          non-discriminating predicate PV-2        yes
+ 5  Wrong artifact compared (raw archive vs a content
+    manifest sidecar)                                          wrong subject                none        NO — GAP
+ 6  Anchored grep vs prefixed output                           non-discriminating predicate PV-2        yes
+ 7  Right token, wrong section                                 wrong scope                  PV-2b       yes
+ 8  Zero-byte control — a mutation control produced a 0-byte
+    mutant and reported "0 flagged"                            empty extraction, on the
+                                                               control                      PV-3 + PV-5 yes
+ 9  Hard-wrapped corpus defeats a line-anchored grep           match unit != semantic unit  none        NO — GAP
+10  Ref probe scoped to heads reports an existing non-head
+    ref as missing                                             wrong denominator            PV-1        yes
+11  Whitespace assumption — pattern expects a space the live
+    text does not carry (a false ALARM)                        wrong pattern                PV-4        yes
+12  Predicted instead of measured — state reasoned about
+    rather than read                                           no probe at all              PV-0        yes
+
+Verdict: 10 of 12 shapes are caught by a self-executable clause; 2 are not (shapes 5, 9).
+```
+
+### § 8.4 — Declared coverage boundary (state this; do not imply more)
+
+```
+COVERED — 10 of the 12 observed shapes, across 6 classes:
+  wrong-denominator (2 shapes) . truncated-or-empty-extraction (3) .
+  non-discriminating-predicate (2) . wrong-scope (1) . no-probe (1) .
+  wrong-pattern-false-alarm (1).
+The class names are the unit of this list and the shape count is the unit of the
+numeral; both are stated so the two can be reconciled against Section 8.3 in one
+read rather than inferred.
+
+NOT COVERED — SHAPE BOUNDARY: wrong subject (a 7th class, 1 shape). When the probe
+examines a different artifact than the claim is about, both control arms behave
+correctly and the record looks healthy. No self-check detects it. It is caught only
+by a reviewer comparing the artifact named in PV-1 against the artifact the claim
+concerns. Stated as a residual risk, not implied as covered.
+
+NOT COVERED — MATCH-UNIT BOUNDARY: match unit != semantic unit (an 8th class, 1
+shape — shape 9). A line-anchored probe over hard-wrapped text returns zero on a
+clause spanning a line break while PV-3 is satisfied: the extraction was whole and
+untruncated, so no clause fires and the verdict rule returns CLEAN on a false zero.
+Normalize the match unit to the semantic unit before trusting such a zero.
+
+NOT COVERED — ACTOR BOUNDARY: this discipline is DELIVERED to the agents that read
+the surfaces citing it — review-class skills that load this file, the Stage-5
+evidence-grounding review, the per-stage spoke prompt convention, and, for the
+orchestrating hub, `hub-spoke-bridge.md` Procedure 7 Step 4, which states itself to
+be the hub's delivery surface for Rule 15. A session outside all of those
+conventions is bound by the rule as an ACT and is not REACHED by any delivery
+surface. That is a delivery gap, distinct from the enforcement gap: the rule is not
+merely unenforced there, it is unread. Named here so the coverage claim is not
+larger than the delivery.
+
+ASYMMETRY BY DESIGN. PV-0..PV-3 fire on a zero/clean/absent claim. PV-4 and the
+PV-2c specificity arm are the two clauses extended to the false-alarm direction.
+PV-2c catches an over-matching pattern whenever a discriminating near-miss input is
+available; an over-match the prober could not conceive of remains uncovered — the
+same epistemic boundary PV-1's denominator carries. The observed population for this
+class is a single shape, already caught by PV-4, so no coverage FRACTION is claimed
+for the residual: an "N of M" with no M is exactly what Rule 15 forbids. That shape
+is the false-ALARM direction only. The same wrong-pattern class can also produce a
+false CLEAN — a pattern that misses text it should have matched — a direction not
+observed here and therefore carrying no row in § 8.3: unobserved, not covered.
+```
+
+---
+
 ## See also
 
-- [`../standards/review-composition-framework.md § 8 Agent-Correction Layer`](../standards/review-composition-framework.md) — references the 14 anti-laziness rules of Section 1 as the human-inherited mitigation pool; § 8.4 maps 6 of the 14 rules to agent-context applications alongside 3 novel agent-only failure modes (self-preference bias, hallucinated specificity, context anxiety).
+- `core/standards/review-composition-framework.md` § 8 Agent-Correction Layer — references the anti-laziness rules of Section 1 as the human-inherited mitigation pool; its § 8.4 maps a named subset of those rules to agent-context applications alongside 3 novel agent-only failure modes (self-preference bias, hallucinated specificity, context anxiety). The rule count is owned by Section 1 of this file and is not restated there.

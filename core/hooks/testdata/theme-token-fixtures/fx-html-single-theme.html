@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- Fixture fx-html-single-theme — the HTML surface shape. Expect CLEAN.
+     Two properties are pinned here that the markdown fixtures cannot exercise:
+     (1) SINGLE-THEME DEGRADATION. One :root block, no media query. "Declared in EVERY theme
+         block" must reduce correctly to "declared in the one block" rather than demanding a
+         dark counterpart that the artifact never had.
+     (2) A STYLE OPEN-TAG THAT IS NOT A STYLE ELEMENT — pinned twice over, in the two places
+         it can hide. This very comment carries the literal text <style> in an HTML comment,
+         and the script body below carries it again inside a JavaScript comment describing a
+         sanitizer. Both are blanked before regions are delimited. Either one, left
+         unhandled, opens a bogus region that swallows the rest of the file, never closes,
+         and drags every real declaration out of root scope — the whole artifact then reads
+         as having no theme block at all. The script-comment shape is live in this corpus,
+         not hypothetical; both were caught by this fixture pair during implementation. -->
+<html lang="en">
+<head>
+  <style>
+    :root {
+      --bg: #faf9f5;
+      --text: #141413;
+      --accent: #d97757;
+      --accent-hover: #c4613f;
+      --radius: 6px;
+    }
+    body { background: var(--bg); color: var(--text); }
+    a { color: var(--accent); border-radius: var(--radius); }
+    a:hover { color: var(--accent-hover); }
+  </style>
+</head>
+<body>
+  <a href="#anchor">link</a>
+  <script>
+    // Sanitizer note: to render untrusted markup we (1) drop <script>/<style>,
+    // (2) strip every on* event-handler attribute, (3) apply a scheme allowlist.
+    const swatch = '<span style="color:var(--accent)">ok</span>';
+    document.title = swatch.length;
+  </script>
+</body>
+</html>

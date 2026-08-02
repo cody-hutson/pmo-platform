@@ -111,6 +111,8 @@ a pointer to the latest analysis folder. It exists so a **deployed consumer** (t
 skill) can read the conformance flag off any instance — not only the producing one. Schema:
 mode-spec §7b.
 
+**Emitted counts carry probe records.** The conformance scorecard, the classification and fragmentation-group counts, and the single `## Coverage Gap` aggregate row each state the denominator examined and the control that proves the probe detects, per [`review-discipline-principles.md`](../../../core/disciplines/review-discipline-principles.md) § 1 Rule 15 + § 8 Probe Validity — `PV-6` binds an emitting instrument, so a run whose output states only a finding count cannot be read as "zero divergences" rather than "nothing examined".
+
 ---
 
 ## §5 Baseline Continuity
@@ -179,8 +181,9 @@ This cadence is one axis of a five-axis audit-cadence set; all five mutually cro
 - **Output convention:** [`analysis-workspace-standard.md`](../../../core/standards/analysis-workspace-standard.md) — the analysis-folder home, frontmatter, and sunset rule.
 
 **Relationship to the forward gate.** This axis is the **retrospective** complement to the
-forward, per-ticket architecture-fit gate (the Stage-5 SR-G architecture gate + the deferred
-Stage-2 architectural-fit gate). The forward gate holds new work pre-merge, one ticket at a
+forward, per-ticket architecture-fit gate (the Stage-5 SR-G architecture gate + the Stage-2
+acceptance-fit gate **G2-13**, [`gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md)
+— shipped and enforcing). The forward gate holds new work pre-merge, one ticket at a
 time; this axis reads the release record after the fact and catches the cross-release
 fragmentation the forward gate is structurally blind to. The two are complementary, not
 redundant.

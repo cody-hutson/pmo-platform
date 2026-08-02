@@ -308,6 +308,20 @@ Produce a release plan for Milestone {MILESTONE} covering:
    valid — omit the section when the release has no cross-issue
    cohesion constraint. Graded at Stage 9 QC3.5 / Phase A3.6.
 
+## Probe-Validity Discipline (Stage 4 planning spokes)
+
+Planning output asserts counts constantly — contention-map overlaps, dependency
+edges, "no shared files", "zero circular chains", "N of M issues". Every claim
+of the form "0 occurrences" / "no findings" / "CLEAN" / "absent" / "N of M"
+carries a probe record per `core/disciplines/review-discipline-principles.md`
+Section 1 Rule 15 and Section 8 Probe Validity: the invocation, the denominator
+searched, the sensitivity arm with its observed non-zero result, the specificity
+arm with its observed zero wherever Section 8 triggers it, and evidence the
+extraction was non-empty for the subject AND for each arm. Cite the elements by
+ID (PV-0 through PV-6); do not restate the section. A zero whose control arm
+also returned zero is a BROKEN PROBE, not a clean contention map — report the
+probe unusable rather than the population empty.
+
 ## Output
 Post your output as a comment on sub-task #{SUB_TASK_NUMBER}:
 
@@ -1473,6 +1487,43 @@ AFTER a state change).
 
 **Cutover discipline:** Applies to all releases going forward.
 
+## Probe-Validity Discipline (all spokes)
+
+Every claim in your output of the form "0 occurrences" / "no findings" /
+"CLEAN" / "absent" / "N of M" carries a probe record. The rule is canonical at
+`core/disciplines/review-discipline-principles.md` Section 1 Rule 15 (the
+obligation) and Section 8 Probe Validity (elements PV-0 through PV-6, the
+arm-selection rule, the verdict rule, and the mapping into a consuming verdict
+enum). Read that section; cite it by element ID. Do NOT restate it here or in
+your output — this block reproduces only the record form.
+
+Record form — one per zero-claim:
+
+    Probe: <exact command>
+    Denominator: <N> (<how counted>)
+    Control - sensitivity: <input the probe MUST flag> -> observed <non-zero>
+    Control - specificity: <near-miss the probe MUST NOT flag> -> observed 0
+                           (or: NOT TRIGGERED - <which PV-2c condition fails>)
+    Extraction: <bytes or lines read> for the subject; <same> for each arm
+    Result: <N>
+    Verdict: CLEAN | INDETERMINATE (<missing element>) | BROKEN PROBE |
+             OVER-MATCHING PROBE
+
+Three consequences you are graded on, stated so the record is not ceremony:
+a sensitivity arm returning ZERO is a BROKEN PROBE — report the probe unusable,
+never the subject as clean; a specificity arm returning ZERO is that arm's PASS
+condition, but only when its own input is shown non-empty and shown to carry
+the near-miss (otherwise VACUOUS, not passing); and where any required element
+cannot be established the verdict is INDETERMINATE naming the missing element,
+whose first disposition is repair-the-probe-and-re-run, never a pass.
+
+Scope: this block binds ALL spokes at every stage, not Stage 5 alone — the
+observed failures spanned every stage. It binds by ACT, not by role: whoever
+asserts the zero owns its record, including a hub or a one-off session outside
+this template.
+
+**Cutover discipline:** Applies to all releases going forward.
+
 ## Output
 Post your output as a comment on sub-task #{SUB_TASK_NUMBER}:
 
@@ -1827,6 +1878,8 @@ This mandate is consistent with — and bounded by — the **operator-agency car
 3. Report final status to operator
 3a. **Report decision-discipline metrics for the release:** M2 Opposing-View adoption rate, M3 Pattern Cache Scan applicability rate, count of observations logged this release, count of emergence-confirmations (candidate patterns promoted to permanent entries), and the unauthorized-gate count (operator gates rendered for a NON-gate-eligible Autonomy-Tier-2/3 / Standing-GO Tier-1 action per the Gate-0 precondition — target 0). Operator reviews for theater signals per `decision-discipline.md` § 6 Metrics (five metrics).
 4. **Completion verification:** Before the hub declares "release complete" / "🎉 RELEASE COMPLETE", the hub MUST independently verify each Stage 13 spec'd output exists on main. This applies the governance-theater discipline — "claim only what is observable on disk or in GitHub state" — to release-close declarations. Empirical motivation: a Stage 13 Close declared "🎉 RELEASE COMPLETE" before verifying the user-facing release note existed on main; the retroactive PR authored the missing artifact. Hub completion-verification closes the loop that the Stage 13 chip pattern (Procedure 3 §Stage 13 Chip Pattern — Release-Notes Authoring Discipline) opens — chip mandates spoke authors the artifact; Hub verifies it landed.
+
+   **The hub's own verification claims are bound by the probe-validity discipline.** Every verdict the hub records here — a PASS, an "exists on main", a "0 open issues", an "N of M outputs present" — is a verification claim, and [`review-discipline-principles.md`](../../../core/disciplines/review-discipline-principles.md) Section 1 Rule 15 binds it by the ACT of claiming, not by the claimant's role. The hub is not a spoke and reads no Procedure-3 spoke prompt, so nothing else delivers the rule to it: this is the hub's delivery surface for it. Each command below states the population it examined, and a command whose control arm returns zero alongside its subject is reported as an unusable probe — never as a verified-absent output. A verdict that cannot establish a required element is INDETERMINATE naming the element, and INDETERMINATE **blocks closure** exactly as a failure does: "the probe could not tell" is not "the output landed". Section 8 Probe Validity defines the elements (`PV-0`..`PV-6`), the arm-selection rule, and the verdict rule; cite them, do not restate them.
 
    **Enumerated verification commands** (run each; if any fails, BLOCK closure and route to remediation per [`release-process.md § Inter-Stage Feedback Protocol`](../../governance/release-process.md) Tier 3 Plan Rejection):
 

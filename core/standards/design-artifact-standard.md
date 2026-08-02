@@ -52,7 +52,7 @@ This standard is the **META framework** governing design-artifact discipline. It
 
 For each class, the tool column names the source-of-truth format. All formats are text-based and agent-readable. Per § 6, proprietary tools (Lucid / Figma / Miro / Whimsical), binary formats (SVG), and server-side-rendered formats (PlantUML) are rejected.
 
-**Machine-identification of each class** — how an artifact of a given flow type is *declared* (so the set is enumerable) and how its region is *conformance-checked* (table-aware for the three table-rendered types) is specified in [§ 12 Artifact Identification & Detection](#-12-artifact-identification--detection). Identification is declaration-based, not rendering-based: the `Current-state reference` column above is a human navigation aid, not the query surface.
+**Machine-identification of each class** — how an artifact of a given flow type is *declared* (so the set is enumerable) and how its region is *conformance-checked* (table-aware for four of the seven types) is specified in [§ 12 Artifact Identification & Detection](#-12-artifact-identification--detection). Identification is declaration-based, not rendering-based: the `Current-state reference` column above is a human navigation aid, not the query surface.
 
 ## § 3. Storage Model
 
@@ -227,8 +227,9 @@ Every design artifact carries bidirectional links between itself and the source 
 
   - `flow-class` — exactly one of the 7 enum values (`architecture` `data-flow` `agent-process` `human-process` `concept-model` `skill-flow` `decision-tree`).
   - `name` — the canonical kebab-case subject of the artifact (the `<artifact-name>` form from § 4).
-  - `depicts` — a comma-separated list of repo-root-relative source paths the artifact depicts (same semantics as the dedicated-file `depicts:` frontmatter below).
+  - `depicts` — a comma-separated list of repo-root-relative source paths the artifact depicts. It carries the dedicated-file `depicts:` field's **value** semantics (repo-root-relative source paths; every path resolves to an existing repo file) but **not** that field's bidirectional-link contract: an embedded artifact has no separate file for a depicted source to link back to, so the reciprocation rule below applies to dedicated artifact files only.
   - **Declared region** — the marker bounds the artifact: from the marker line to the next heading of the **same or higher level**. That region *is* the artifact; everything else in the parent doc is ordinary prose. This is the crisp artifact-vs-prose boundary the conformance check in § 12 inspects.
+  - **Whole-file scope.** When the declared region above runs to end-of-file — that is, no heading of the same or higher level follows the marker — the region and the file are the same object, and the **whole document is the artifact**. At this scope `depicts` names the repo files whose structure, flow, or concept the document maps, at the granularity it maps them (the set's index file when the document maps a set through one; the named files otherwise), and the list **MUST NOT contain the document's own path**: where region and file coincide, that path names the artifact itself rather than anything the artifact depicts. (At section scope the region is a proper subset of the file, so the parent doc's path names an object distinct from the artifact and remains a valid `depicts` value — this is the corpus's dominant form and is unaffected by this rule.) A document whose depicted files cannot be named without listing itself is not a whole-file artifact: place the marker on the artifact-bearing section instead, where `depicts` names the parent doc.
   - **Discovery query:** `grep -rnE '<!-- design-artifact:[^>]*flow-class=(architecture|data-flow|agent-process|human-process|concept-model|skill-flow|decision-tree)\b' core operations release docs` → each hit is one embedded artifact; parse `flow-class` / `name` / `depicts` from the line. The query is **enum-anchored** (requires a real flow-class value) and field-order-tolerant (`[^>]*`), so the § 9 grammar line above and the bracketed `<one-of-7>` / `<data-flow>` examples do not self-match — the `>` in `[^>]` is what excludes them.
   - The marker renders invisibly on GitHub (it is an HTML comment), so it carries the machine payload without altering the human reading surface. The rationale for choosing a section-level marker over a parent-frontmatter index or a heading-convention amendment is recorded in [ADR-089](../ADRs/ADR-089-embedded-design-artifact-declaration-marker.md).
 
@@ -298,7 +299,7 @@ Design-artifact identification is **declaration-based, not rendering-based.** A 
 
 ### § 12.1 Per-flow-type detection criteria (all 7 types)
 
-Discovery is declaration-based (immune to table-invisibility). The rule below is the **classification + conformance** layer, applied to the **declared region** only — the dedicated file's body, or an embedded artifact's marker-bounded region (§ 9). The `Table-aware?` column marks the three types whose conformance rule inspects the region's **table shape**, explicitly NOT a global fence tally.
+Discovery is declaration-based (immune to table-invisibility). The rule below is the **classification + conformance** layer, applied to the **declared region** only — the dedicated file's body, or an embedded artifact's marker-bounded region (§ 9). The `Table-aware?` column marks the four types whose conformance rule inspects the region's **table shape**, explicitly NOT a global fence tally.
 
 | # | Flow type | Rendering-tool conformance rule (names the tool it tests for) | Table-aware? |
 |---|---|---|---|
@@ -308,9 +309,9 @@ Discovery is declaration-based (immune to table-invisibility). The rule below is
 | 4 | **human-process** | same rule as agent-process | fence/Mermaid |
 | 5 | **concept-model** | declared region contains a fenced ASCII tree AND/OR ≥1 structured relationship table naming the concept | **YES** — region tree + table |
 | 6 | **skill-flow** | declared region contains a ` ```mermaid ` fence OR Mode-card tables (a table whose header names modes/phases) | **YES** — region Mode-card table |
-| 7 | **decision-tree** | declared region contains a ` ```mermaid ` fence with gate/branch nodes OR a fenced ASCII decision-block | Mermaid/fence |
+| 7 | **decision-tree** | declared region contains a ` ```mermaid ` fence with gate/branch nodes OR a fenced ASCII decision-block OR ≥1 markdown table carrying the **decision-table signature**: a *discriminator* column (the case / condition / class being tested) paired with a *branch* column stating the routed outcome (routing · action · disposition · verdict · authority · behavior), whose rows enumerate a **closed, mutually-exclusive branch set**. An instance **register** — rows keyed by an `ID` / `#` / `Risk` / `Finding` / `File` column, i.e. records rather than branches — is **NOT** a decision table even when it carries a Resolution / Mitigation / Disposition column | **YES** — region table-shape inspection (discriminator→branch signature); Mermaid/fence limbs retained |
 
-**Why this is table-aware and the fence-count under-measurement is cured:** rows 2, 5, 6 never rely on a fence/Mermaid tally — they inspect the *declared region* for the type's own table signature. Because **discovery** is by declaration, the type is known before the conformance rule runs, so a pure-table artifact (0 fences) is still found and still classified.
+**Why this is table-aware and the fence-count under-measurement is cured:** rows 2, 5, 6, 7 never rely on a fence/Mermaid tally — they inspect the *declared region* for the type's own table signature. Row 7 retains its Mermaid and fenced-ASCII limbs alongside the table limb, so a decision tree rendered either way conforms, and a decision tree rendered *only* as a table is no longer missed. Because **discovery** is by declaration, the type is known before the conformance rule runs, so a pure-table artifact (0 fences) is still found and still classified.
 
 ### § 12.2 Enumeration harness (runnable, deterministic)
 
@@ -347,8 +348,11 @@ The marker mechanism gives an **unambiguous** artifact-vs-prose verdict even for
 | `core/disciplines/architecture-overview.md` | an embedded ASCII structure tree | marker under the heading | **ARTIFACT** (unambiguous — marker present) |
 | `core/disciplines/architecture-overview.md` | an ordinary prose+table governance-tier section | no marker | **PROSE** (unambiguous — no marker) |
 | `core/schemas/stage-io-contracts.md` | the boundary producer→consumer contract tables | marker under the heading | **ARTIFACT** (even though the file has 0 fences / 0 Mermaid / 100 table rows) |
+| `release/references/standards/triage-design-rereview.md` | `§ 3 Classifications` — the C1/C2/C3 routing table at `\| Cls \| Name \| Definition \| Routing \|` | marker under the heading | **ARTIFACT**, `decision-tree` — the region carries **0 Mermaid fences and 0 fenced ASCII decision-blocks**, and conforms on rule 7's decision-table limb: `Cls` is the discriminator, `Routing` is the branch, and C1/C2/C3 is a closed mutually-exclusive branch set |
 
-The third row is the decisive one: under a fence-count mechanism `stage-io-contracts.md` is invisible; under the marker mechanism it is unambiguously an artifact. That is the whole point of declaration-based identification.
+The third row is the decisive one for **discovery**: under a fence-count mechanism `stage-io-contracts.md` is invisible; under the marker mechanism it is unambiguously an artifact. That is the whole point of declaration-based identification.
+
+The fourth row is the decisive one for **rule-7 conformance**, and it is the reason it is recorded here rather than left implicit. Before rule 7 carried its table limb, this exact region was the standing counter-example — genuine decision logic that the rule could not classify, recorded as a known rule-gap rather than forced to pass. Naming the conforming instance is what keeps the limb falsifiable: a reader who doubts that rule 7 is table-aware can settle it by reading one named region, instead of re-deriving "not table-aware" from the rule text and logging the gap a second time.
 
 ## Related References
 

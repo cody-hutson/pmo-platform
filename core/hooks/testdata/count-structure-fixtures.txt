@@ -1,0 +1,43 @@
+# count-structure-fixtures.txt — labeled expected-match set for the count-vs-structure lint
+#
+# Provenance: authored by the probe-validity discipline card as a handoff to the
+# count-vs-structure lint card. The FLAG case is a REAL defect — it existed in the
+# design of Section 8.4 of core/disciplines/review-discipline-principles.md, which
+# stated a cardinality of 11 over an enumeration of 8 items. The CLEAN case is that
+# defect's corrected twin, and is the text that actually shipped to the corpus.
+#
+# The defect is preserved HERE rather than left in place deliberately. A live defect
+# in normative text becomes either a permanent lint failure or a permanent exemption
+# entry once the lint ships, and both are worse than a fixture line. Preserving both
+# arms here is also strictly BETTER than the in-place defect, because the pair
+# exercises the specificity arm and not only the sensitivity arm.
+#
+# This file lives under core/hooks/testdata/ which is OUTSIDE the durable-corpus
+# scope gate, so neither the reference-durability hook nor the count-vs-structure
+# lint fires on the fixture's own raw example content.
+#
+# FORMAT (one test case per non-comment line):
+#   <EXPECT>\t<CLASS>\t<content to scan>
+# where
+#   <EXPECT>  = FLAG  (the detector MUST match this line)
+#             | CLEAN (the detector MUST NOT match this line)
+#   <CLASS>   = COUNT (a stated cardinality against its adjacent enumeration)
+#   <content> = the literal line content presented to the detector
+#
+# WHY THIS PAIR IS THE HARD CASE — read before tuning a heuristic against it.
+# The FLAG line's numeral counts SHAPES while its list enumerates CLASSES, so the two
+# are not comparable units and the mismatch is real. The CLEAN line states two
+# cardinalities in one sentence — 11 (shapes) and 6 (classes) — and enumerates 6
+# classes whose parenthesised shape counts sum to 11. A naive detector comparing
+# "nearest numeral against nearest list length" flags the CLEAN line too (6 enumerated
+# classes against the numeral 11 in the same sentence) and therefore fails its own
+# specificity arm while still passing its sensitivity arm. A detector that passes only
+# the FLAG arm here has NOT been shown to discriminate. Both arms are required, per
+# core/disciplines/review-discipline-principles.md Section 1 Rule 15 and Section 8
+# Probe Validity (PV-2 sensitivity arm, PV-2c specificity arm).
+#
+# Arms: 1 FLAG case (sensitivity, must match) and 1 CLEAN case (specificity, must not
+# match) — 2 cases total.
+
+FLAG	COUNT	COVERED (11 of the 12 observed shapes): wrong denominator; truncated extraction; empty extraction; non-discriminating predicate; wrong scope; zero-byte control; no-probe-at-all; wrong pattern in the false-alarm direction.
+CLEAN	COUNT	COVERED - 11 of the 12 observed shapes, across 6 classes: wrong-denominator (2 shapes); truncated-or-empty-extraction (4); non-discriminating-predicate (2); wrong-scope (1); no-probe (1); wrong-pattern-false-alarm (1).

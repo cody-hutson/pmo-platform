@@ -79,7 +79,7 @@ Single-operator PMO platform with Claude Code as primary contributor. The 13-sta
 
 **Consequences:**
 - Native dependencies appear on the PMO Pipeline project board as visual indicators for `FS+0d` edges
-- Body Dependencies field remains the authoritative source for all agent consumption (Stage 2 G2-04, Stage 3 G3-04/G3-07/G3-08, release-planner Bundle, CPM consumer)
+- Body Dependencies field remains the authoritative source for all agent consumption (Stage 2 G2-04, Stage 3 G3-01/G3-07/G3-08, release-planner Bundle, CPM consumer)
 - New Stage 2 substep A3.5 native-mirror fires after G2-04 passes; `deploy.sh --check` Check 21 detects body↔native drift workspace-wide (warn-mode initial)
 - New `upstream-reference-catalog.md` entry `github-issue-dependencies` codifies the upstream API pattern
 - Reversibility: CHEAP-to-MODERATE / HIGH confidence (per Stage 5 § 9 — git revert restores prior state; accumulated native-deps state rebuildable from body via reverse-mirror)

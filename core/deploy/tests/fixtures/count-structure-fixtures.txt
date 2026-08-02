@@ -1,0 +1,126 @@
+# count-structure-fixtures.txt — labeled expected-match set for Check 63
+#
+# PROVENANCE. The FLAG/CLEAN pair below is the two-armed fixture handed over by the
+# probe-validity card at core/hooks/testdata/count-structure-fixtures.txt. That file
+# is authoritative for the pair's SEMANTICS and is not modified here. Its two arms are
+# written as INLINE enumerations (`preamble: item; item; …`), a structure form Check 63
+# v1 deliberately does not examine — so the arms are restated here in the block form
+# the shipped predicate reads, preserving both discriminating properties:
+#   (a) the numeral counts SHAPES while the enumeration lists CLASSES, so the units are
+#       not comparable and the FLAG arm's mismatch is real; and
+#   (b) the corrected twin's per-item parenthetical counts sum to the stated total, so
+#       it reconciles under the sub-count reading as well as the identity reading.
+# The verbatim inline originals ship below as SCOPE-OUT cases, which makes the v1
+# coverage boundary a committed, testable fact rather than a sentence in a design doc —
+# and gives the inline-form graduation its regression set already written.
+#
+# WHY THIS PAIR IS LOAD-BEARING — read before tuning the predicate against it.
+# An earlier candidate scored 8 false positives instead of 51 (six times better) and
+# was ready to ship on the numbers alone. This pair falsified it twice over. Its
+# terminal-window rule left the FLAG arm unexaminable — 0 pairs, 0 flags, reported as
+# "clean" — a BROKEN sensitivity arm. Its preposition suppressor discarded `across 6
+# classes`, the very cardinal that RECONCILES the CLEAN arm, turning the specificity
+# arm into a false alarm. A probe that examines almost nothing scores beautifully on
+# false positives and proves nothing. Both rules were deleted. Do not reintroduce
+# either to lower the flag count.
+#
+# FORMAT (case-block, because a count-vs-structure case is irreducibly multi-line):
+#   --- <EXPECT> <CLASS> <label>
+#   <literal block content, one or more lines>
+#   --- END
+# where
+#   <EXPECT> = FLAG      the predicate MUST flag this block
+#            | CLEAN     the predicate MUST examine this block and MUST NOT flag it
+#            | SCOPE-OUT the predicate MUST examine ZERO pairs in this block
+#   <CLASS>  = COUNT     a stated cardinality against its adjacent enumeration
+#
+# A CLEAN case that examines zero pairs is a FAILURE, not a pass. That is the whole
+# point of the SCOPE-OUT expectation existing as a separate verdict: "not flagged"
+# and "not examined" are different results and this harness refuses to conflate them.
+#
+# Arms: 2 FLAG · 3 CLEAN · 2 SCOPE-OUT — 7 cases total.
+
+--- FLAG COUNT probe-validity-coverage-boundary-defect
+COVERED — 11 of the 12 observed shapes, across these classes:
+
+- wrong denominator
+- truncated extraction
+- empty extraction
+- non-discriminating predicate
+- wrong scope
+- zero-byte control
+- no-probe-at-all
+- wrong pattern in the false-alarm direction
+--- END
+
+--- CLEAN COUNT probe-validity-coverage-boundary-corrected
+COVERED — 11 of the 12 observed shapes, across 6 classes:
+
+- wrong-denominator (2 shapes)
+- truncated-or-empty-extraction (4)
+- non-discriminating-predicate (2)
+- wrong-scope (1)
+- no-probe (1)
+- wrong-pattern-false-alarm (1)
+--- END
+
+--- FLAG COUNT partition-that-does-not-sum
+**Security hooks** (10 PreToolUse hooks + 3 SessionStart hooks):
+
+- block-one
+- block-two
+- block-three
+- block-four
+- block-five
+- block-six
+- block-seven
+- block-eight
+- block-nine
+- block-ten
+- block-eleven
+--- END
+
+--- CLEAN COUNT partition-that-does-sum
+**Security hooks** (8 PreToolUse hooks + 3 SessionStart hooks):
+
+- block-one
+- block-two
+- block-three
+- block-four
+- block-five
+- block-six
+- block-seven
+- block-eight
+- block-nine
+- block-ten
+- block-eleven
+--- END
+
+--- CLEAN COUNT identity-over-a-table
+The 7 anti-patterns map to competency violations:
+
+| # | Anti-pattern | Violation |
+|---|---|---|
+| 1 | a | x |
+| 2 | b | x |
+| 3 | c | x |
+| 4 | d | x |
+| 5 | e | x |
+| 6 | f | x |
+| 7 | g | x |
+--- END
+
+# The two cases below are the VERBATIM inline originals from
+# core/hooks/testdata/count-structure-fixtures.txt. They pin the declared v1 boundary:
+# an inline semicolon-delimited enumeration is NOT examined, because that form's own
+# false-positive surface has not been measured and shipping it unmeasured is the defect
+# this check exists to prevent. When the inline form graduates, these two rows flip
+# from SCOPE-OUT to FLAG and CLEAN respectively and this file is their regression set.
+
+--- SCOPE-OUT COUNT inline-original-flag-arm
+COVERED (11 of the 12 observed shapes): wrong denominator; truncated extraction; empty extraction; non-discriminating predicate; wrong scope; zero-byte control; no-probe-at-all; wrong pattern in the false-alarm direction.
+--- END
+
+--- SCOPE-OUT COUNT inline-original-clean-arm
+COVERED - 11 of the 12 observed shapes, across 6 classes: wrong-denominator (2 shapes); truncated-or-empty-extraction (4); non-discriminating-predicate (2); wrong-scope (1); no-probe (1); wrong-pattern-false-alarm (1).
+--- END

@@ -140,7 +140,30 @@ jobs:
           curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar -xz gitleaks
           sudo mv gitleaks /usr/local/bin/
           gitleaks version
-      - name: Run gitleaks (full history)
+      - name: Run gitleaks (this change only)
+        # SCOPED TO THE CHANGE UNDER REVIEW, not to repository history.
+        #
+        # `gitleaks detect --source .` scans every reachable commit. With fetch-depth: 0
+        # that makes the verdict a property of the REPOSITORY rather than of this PR, so
+        # any high-entropy string anywhere in history blocks EVERY pull request — and no
+        # blocked PR can clear it, because history is append-only. That has now recurred
+        # twice (a synthetic finops fixture, then a deploy.sh check-registry `slug:handler`
+        # literal), each time blocking unrelated, fully-green releases.
+        #
+        # Bounding the scan to merge-base..HEAD makes the gate answer the question it
+        # exists to ask: does THIS change introduce a secret? Pre-existing history is
+        # covered by the non-blocking audit below.
+        run: |
+          set -euo pipefail
+          BASE="$(git merge-base origin/${{ github.base_ref || 'main' }} HEAD)"
+          echo "scanning ${BASE}..HEAD"
+          gitleaks detect --source . --no-banner --redact --verbose \
+            --log-opts="${BASE}..HEAD"
+
+      - name: Full-history audit (non-blocking)
+        # Retains whole-history visibility without gating merges on findings this PR
+        # neither introduced nor can remove. Failures here are reported, not enforced.
+        continue-on-error: true
         run: gitleaks detect --source . --no-banner --redact --verbose
 
   hook-dep-hardening:

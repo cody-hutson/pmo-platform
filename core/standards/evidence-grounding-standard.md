@@ -54,6 +54,8 @@ Each canonicalization produces a 2-part artifact:
 
 **Survey command:** `<exact grep/find command the operator can re-run>`
 **Survey date:** `<YYYY-MM-DD>` at commit `<short SHA>`
+**Survey denominator:** `<N>` (`<how that population count was obtained>`)
+**Survey control:** `<input the survey must return>` → observed `<non-zero result>`
 
 **Canonical choice:** `<value>`
 
@@ -76,6 +78,7 @@ Reviewers reject the artifact as ceremony when ANY of these hold (load-bearing t
 - Canonical-choice justification cites "platform conventions" / "best practice" alone (per [`decision-discipline.md`](../disciplines/decision-discipline.md) G3 evidence-citation requirement)
 - Survey command is missing OR irreproducible (e.g., `grep <pattern>` without file scope)
 - "Out-of-scope drift detected" section omitted entirely (zero entries is valid; **omission is structural defect** — drift may have been observed and ignored)
+- Current-state enumeration whose survey returns zero for any variant, without a stated `Survey denominator` and a `Survey control` whose observed result is non-zero — a zero-yield survey is not evidence of an absent variant until the survey is shown to detect one. The obligations, the arm-selection rule, and the verdict rule are defined once at [`review-discipline-principles.md`](../disciplines/review-discipline-principles.md) § 1 Rule 15 and § 8 Probe Validity; this test cites that section and does not restate it
 
 The "REQUIRED if non-zero" framing for the drift section is intentional: the section must always be present; its contents may be empty when no drift is observed. The omission test is structural, not content-based.
 
@@ -141,6 +144,7 @@ This composition is why operator pre-decision LOCKED D-D KEEP STANDALONE (single
 | Persona behavioral marker (Stage 5) | [`release-personas.md` § Stage 5: Solutioning](../../release/references/specs/release-personas.md) | Stage 5 persona binding (R1) |
 | Persona behavioral marker (Stage 9) | [`release-personas.md` § Stage 9: Plan Review](../../release/references/specs/release-personas.md) | Stage 9 persona binding (R3 — empirical verification before go/no-go) |
 | Decision-discipline ceremony guards | [`decision-discipline.md` § 5](../disciplines/decision-discipline.md) | Load-bearing test parent framework (G1 / G3) |
+| Probe-validity discipline | [`review-discipline-principles.md` § 1 Rule 15 + § 8 Probe Validity](../disciplines/review-discipline-principles.md) | Canonical home of the denominator + control-arm obligations (`PV-0`..`PV-6`), the arm-selection rule, and the verdict rule. The `Survey denominator` / `Survey control` schema fields and the zero-yield rejection criterion cite this section; they do not restate it |
 | Upstream-reference catalog | [`upstream-reference-catalog.md`](upstream-reference-catalog.md) | One of three justification categories (added) |
 | Empirical Verification template (R3) | [`hub-spoke-bridge.md` Operating Principle + Procedure 4 step 6](../../release/references/how-to/hub-spoke-bridge.md) | R3 ↔ R1 composition — Empirical Verification subsection cites this standard for evidence-citation format (added commit) |
 

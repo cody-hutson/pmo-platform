@@ -1,0 +1,34 @@
+# TH-3 fixture manifest — the labeled expected-match set.
+#
+# Format:  <EXPECT><TAB><fixture-filename><TAB><what this case varies>
+#
+#   CLEAN          must-not-flag — the SPECIFICITY arm. PASS condition is ZERO findings.
+#                  It proves the check can discriminate: an input that differs from a true
+#                  positive only in the property under test must come back clean.
+#   FINDINGS       must-flag — the SENSITIVITY arm. PASS condition is NON-ZERO.
+#                  It proves the check can detect at all. A probe never shown to return
+#                  non-zero proves nothing by returning zero.
+#   INDETERMINATE  fail-loud — the VERDICT arm. The check must refuse to report clean when
+#                  it cannot establish a trustworthy denominator.
+#
+# The runner HARD-FAILS when either control arm is empty or when any case is zero bytes: a
+# specificity arm over an empty input returns zero, which is that arm PASS condition, and so
+# reads as a passing control while proving nothing. That is vacuous, not passing.
+#
+# EDITOR NOTE — keep hex colour literals INSIDE the fenced block. Many of these fixtures use
+# digit-leading hex values, and the repository issue-reference gate matches a hash followed by
+# digits, so a digit-leading hex QUOTED INTO PROSE reads to that gate as an issue reference and
+# fails it. The gate does not read fenced blocks, so the fixture bodies are safe as written;
+# describe the declaration SHAPE in prose rather than quoting a literal value.
+#
+CLEAN	fx-clean.md	the well-formed baseline; prose var(--token) outside the fence must stay outside the subject; one OUT-OF-ROOT declaration
+FINDINGS	fx-defect.md	the original defect: --neutln and --neut removed from BOTH theme blocks, which is why parity passes on it
+FINDINGS	fx-substr.md	substring near-miss: --neutlnx declared where --neutln is consumed; declarations written with no space after the colon
+CLEAN	fx-nc-parity.md	a genuine TH-2 parity break with no consumer; TH-3 must not absorb the neighbouring invariant domain
+INDETERMINATE	fx-nomanifest.md	a consumed placeholder with no subst manifest: the denominator is incomplete, so a zero would be untrustworthy
+CLEAN	fx-unbounded.md	a domain declared * : counted into the UNBOUNDED bucket, printed, and named in the verdict
+INDETERMINATE	fx-prose-only.md	prose about the mechanism with no style element: nothing to check is not the same as nothing wrong
+CLEAN	fx-media-print.md	an ordinary @media print block must NOT register as a third theme block and demand the full token set; its declaration is still counted OUT-OF-ROOT
+CLEAN	fx-supports.md	@supports is a capability guard, not a context switch: a root-scope block inside one keeps its colour-scheme context instead of being misfiled OUT-OF-ROOT
+CLEAN	fx-html-single-theme.html	HTML surface: one :root block only, plus a style-open-tag inside a script comment that must not open a region
+FINDINGS	fx-html-undeclared.html	HTML surface must-flag partner: --accent-hover consumed, never declared

@@ -8756,6 +8756,295 @@ cmd_check() {
     esac
   fi
 
+
+  # Check 63 — count-vs-structure lint (ENFORCING, narrowly scoped) [#4196]
+  #
+  # WHAT IT ASSERTS. A stated cardinality that sits immediately above an enumerable
+  # structure must reconcile with that structure under at least ONE reading. A pair is
+  # EXAMINED only when a colon-TERMINATED line carries >=1 cardinal bound to a plural
+  # head noun AND the next non-blank line opens a markdown list or table. It FLAGs only
+  # when NO reading reconciles: identity (a stated cardinal equals the item count),
+  # partition (the stated cardinals sum to it), or sub-count (a stated cardinal equals
+  # the sum of per-item parenthetical cardinals). Four suppressors strip identifier
+  # numerals (`Stage 6`), unit numerals (`2 hours`), inexact bounds (`>=4 files`), and
+  # conditional clauses.
+  #
+  # SCOPE — FROZEN-ARTIFACT EXEMPTION (stated here because the scope IS the contract).
+  # The predicate reads tracked `*.md` only, and EXCLUDES release/releases/**,
+  # core/hooks/testdata/**, core/deploy/tests/fixtures/**, packages/**, and .github/**.
+  # A shipped release plan or note describes the corpus AS IT WAS; "fixing" a count
+  # inside one would rewrite a historical record. Fixture trees are excluded because
+  # they carry deliberate defects as their whole purpose. Lifting the exemption at this
+  # pin adds 17 findings, and all 17 resolve under release/releases/plans/ — the
+  # exemption is load-bearing, not decorative. (Re-measured at Stage 7: --no-exempt
+  # takes the population from 701 files / 414 pairs / 73 findings to 1031 / 471 / 90.
+  # The scope claim held; the magnitude was a prototype-era figure, the same lineage
+  # as the 51-vs-73 baseline count, and had never been true on this branch.)
+  #
+  # ENFORCING BY THE CODE'S SHAPE, NOT BY A DEFAULT. Note what is absent from the FAIL
+  # arm below: there is no `case` on any mode and no mode gate of any kind. A new
+  # non-reconciling pair increments ISSUES on every run. That is the inverse of the
+  # flag_advisory_only idiom — the posture is a property of the code, not a default
+  # value some later edit could quietly flip.
+  #
+  # WHY A COMMITTED BASELINE RATHER THAN WARN-MODE. The live corpus already carried 73
+  # non-reconciling pairs at this check's introducing commit. Enforcing against all 73
+  # on day one would red-wall the deploy gate for work unrelated to this check, and
+  # warn-mode was rejected upstream. Both are avoided by accepting the pre-existing
+  # population in core/deploy/allowlists/count-structure-baseline.txt and reporting it
+  # as KNOWN. The baseline is keyed by sha1 of the whitespace-normalized preamble, NOT
+  # by line number, so an edit elsewhere in a file cannot invalidate an entry — but
+  # editing a baselined preamble ITSELF re-keys it and the pair FAILs, which is correct:
+  # editing a count preamble is exactly the moment to re-verify its count.
+  #
+  # THE STALE ARM IS COMMITTED-WARN, DELIBERATELY. A sibling release that FIXES a
+  # baselined count would otherwise turn this check red for work outside its scope.
+  # That is the one red-wall vector an always-enforce hygiene arm would open, and it is
+  # closed here via resolve_check_mode with a committed `warn` default (the Check 47 /
+  # Check 61 precedent). Stale rows are reported so the debt register can be pruned.
+  #
+  # DECLARED COVERAGE BOUNDARY — state this, do not imply more. The predicate covers a
+  # colon-terminated preamble over an adjacent list or table, WITHIN one file. It does
+  # NOT cover: a count stated inside a table CELL; a count whose structure lives in a
+  # DIFFERENT file (a cross-file claim has no adjacent structure to read); a
+  # hard-wrapped preamble that does not end in a colon; or an inline semicolon-delimited
+  # enumeration. Those forms have not had their false-positive surface measured, and
+  # shipping them unmeasured is the defect this check exists to prevent.
+  #
+  # DECLARED BLIND SPOTS *INSIDE* THE COVERED SHAPE (added at Stage-7 adversarial
+  # defeat-testing). The boundary above describes which PAIR SHAPES are read. It is not
+  # sufficient on its own: a pair can sit squarely inside the covered shape and still be
+  # declined or silently passed, by the suppressors or by the reconciliation rule. A
+  # reader must not infer "colon + adjacent list + same file" => "covered". Measured over
+  # the 872 in-scope candidate preambles (colon-terminated, above a real structure,
+  # carrying >= 1 numeral) of which 414 are examined:
+  #   (a) SUPPRESSOR DECLINE. 458 candidates are never examined. Most are correct refusals
+  #       (S1 identifier numerals, S2 units, S3 bounds), but the refusal is by keyword and
+  #       WILL decline genuine counts. Isolated single-variable controls: "The platform has
+  #       four gates:" is BLIND while "The platform four gates:" FLAGs -- the word `has`
+  #       alone (S5, matching declaratives as well as conditionals) disables the pair;
+  #       87 candidates are declined this way. "The four are:" is BLIND while "The four
+  #       gates:" FLAGs -- a copula/modal after the cardinal drops it (NP_STOP).
+  #   (b) HYPHENATED COMPOUND CARDINAL. "The five-type mapping:" is not read at all --
+  #       neither arm fires, so the form is invisible rather than merely unflagged. This
+  #       form occurs in the live corpus.
+  #   (c) MULTI-CARDINAL DISJUNCTION MASKS A DRIFTED CO-CARDINAL. R-a reconciles when ANY
+  #       stated cardinal equals the item count, so a preamble carrying several counts
+  #       passes on the one that happens to match. 52 of the 414 examined pairs are in
+  #       this state. Demonstrated by mutation on live content: at
+  #       core/disciplines/knowledge-architecture.md:207, corrupting a NON-matching
+  #       cardinal (`four` -> `forty`) yields FAIL=0, while corrupting the matching one
+  #       (`seven` -> `eight`) yields FAIL=1 reporting `stated=[8, 40, 2] items=7` -- the
+  #       bad 40 was in hand and drew no objection. These pairs count toward the examined
+  #       denominator, so they inflate apparent coverage.
+  #   (d) SINGLE-ITEM STRUCTURE. `items < 2` is never examined (7 candidates).
+  #   (e) UNBALANCED CODE FENCE. An odd number of fence markers flips the in-fence toggle
+  #       and blinds the check for the REST OF THE FILE -- a file-scope failure, not a
+  #       pair-scope one. 1 in-scope file is currently in this state.
+  # None of (a)-(e) is fixed here: this release ships the check enforcing and narrowly
+  # scoped, and widening the predicate without measuring each form's false-positive
+  # surface is the defect this check exists to prevent. They are DECLARED so the check's
+  # coverage claim can never be read as larger than its delivery.
+  #
+  # NOT ON THE REQUIRED-SUBSET ROSTER. Check 63 is deliberately absent from
+  # --check-required-subset. That roster is seeded with Check 38 alone; joining it is a
+  # separate, later, evidence-gated decision, and staying off it is what makes shipping
+  # enforcing safe today (no CI workflow runs the full --check suite).
+  #
+  # Primitive: core/deploy/tools/check-count-structure.py (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 63: Count-vs-structure lint (a stated cardinality must reconcile with the structure beneath it; enforcing, narrowly scoped; frozen artifacts exempt)"
+    local c63_script="core/deploy/tools/check-count-structure.py"
+    if [[ ! -f "$c63_script" ]]; then
+      log "  FAIL:  count-structure — primitive script missing: $c63_script (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
+      ISSUES=$((ISSUES + 1))
+    else
+      local c63_out c63_exit=0
+      c63_out=$(/usr/bin/python3 "$c63_script" --root . --output-format tsv 2>&1) || c63_exit=$?
+      if [[ $c63_exit -eq 3 ]]; then
+        log "  FAIL:  count-structure — input failure (exit 3): $(echo "$c63_out" | head -1). A clean zero over an empty population is exactly what this check must never report."
+        ISSUES=$((ISSUES + 1))
+      else
+        # PV-1 / PV-5: report the denominator and BOTH control arms as fields, so a
+        # reader can always distinguish "zero found" from "nothing examined".
+        local c63_denom c63_control c63_ctl_verdict
+        c63_denom=$(echo "$c63_out" | awk -F'\t' '$1=="DENOM"{print $2" "$3" "$4}')
+        c63_control=$(echo "$c63_out" | awk -F'\t' '$1=="CONTROL"{print $3}')
+        c63_ctl_verdict=$(echo "$c63_out" | awk -F'\t' '$1=="CONTROL"{print $2}')
+        log "  DENOM: count-structure — ${c63_denom:-unreported}"
+        log "  CTRL:  count-structure — ${c63_ctl_verdict:-UNREPORTED}: ${c63_control:-unreported}"
+
+        # A broken or over-matching control arm invalidates the whole result. Hard FAIL
+        # on every mode — the Check 31 fixture-regression precedent. A probe that cannot
+        # be shown to detect and to discriminate proves nothing by returning zero.
+        if [[ "$c63_ctl_verdict" != "PASS" ]]; then
+          log "  FAIL:  count-structure — control arms did not pass; the result is INDETERMINATE, not clean. Fix the predicate before trusting any zero it reports."
+          ISSUES=$((ISSUES + 1))
+        fi
+
+        # The committed labeled expected-match set, run through the SAME predicate the
+        # corpus scan just used, so the gate and manual verification measure the same
+        # thing rather than two drifting copies. A fixture regression is a hard FAIL on
+        # every mode: if the predicate has stopped discriminating on the pair that
+        # falsified two earlier candidates, no verdict it reports is trustworthy.
+        local c63_fx="core/deploy/tools/run-count-structure-fixtures.sh"
+        if [[ -x "$c63_fx" ]]; then
+          local c63_fx_out c63_fx_exit=0
+          c63_fx_out=$(bash "$c63_fx" 2>&1) || c63_fx_exit=$?
+          if [[ $c63_fx_exit -ne 0 ]]; then
+            log "  FAIL:  count-structure-fixtures — $(echo "$c63_fx_out" | tail -1) (fixture regression; hard-fail on every mode)"
+            ISSUES=$((ISSUES + 1))
+          else
+            log "  OK:    count-structure-fixtures — $(echo "$c63_fx_out" | tail -1 | sed 's|  (.*||')"
+          fi
+        else
+          log "  FAIL:  count-structure-fixtures — harness missing or not executable: $c63_fx (the gate would assert nothing about the predicate's discrimination)"
+          ISSUES=$((ISSUES + 1))
+        fi
+
+        local c63_new c63_known c63_stale
+        c63_new=$(echo "$c63_out" | awk -F'\t' '$1=="FAIL"{print $2":"$3}' | paste -sd, -)
+        c63_known=$(echo "$c63_out" | awk -F'\t' '$1=="KNOWN"' | wc -l | tr -d ' ')
+        c63_stale=$(echo "$c63_out" | awk -F'\t' '$1=="STALE"{print $2}' | paste -sd, -)
+
+        # ── The enforcing arm. No mode gate, by design. ──────────────────────────
+        if [[ -n "$c63_new" ]]; then
+          log "  FAIL:  count-structure — stated count does not reconcile with the adjacent structure at: $c63_new. The remedy is to correct the count or the structure, never to add a baseline row for new drift."
+          ISSUES=$((ISSUES + 1))
+        else
+          log "  OK:    count-structure — no unbaselined non-reconciling pair (${c63_known:-0} pre-existing pair(s) accepted via core/deploy/allowlists/count-structure-baseline.txt)"
+        fi
+
+        # ── The ratchet. Committed warn: a sibling release FIXING a baselined count
+        #    must never turn this check red for work outside its scope. ────────────
+        if [[ -n "$c63_stale" ]]; then
+          local c63_stale_mode
+          c63_stale_mode="$(resolve_check_mode "count-structure-baseline" "warn")"
+          case "$c63_stale_mode" in
+            enforce)
+              log "  FAIL:  count-structure-baseline — stale entr(ies) whose pair no longer exists or now reconciles: $c63_stale"
+              ISSUES=$((ISSUES + 1))
+              ;;
+            *)
+              log "  WARN:  count-structure-baseline — stale entr(ies) whose pair no longer exists or now reconciles: $c63_stale (committed warn-mode: prune the row(s); a sibling release fixing a baselined count must not red-wall this check)"
+              ;;
+          esac
+        fi
+      fi
+    fi
+  fi
+
+
+  # Check 64 — theme-token undeclared-consumer lint, TH-3 (ENFORCING) [#4197]
+  #
+  # WHAT IT ASSERTS. Every CSS custom property CONSUMED by a themed document — after
+  # resolving that document's DOCUMENTED substitution placeholders — is DECLARED in every
+  # theme block of that document. It catches a `var(--x)` with no matching `--x:`.
+  #
+  # WHY A LITERAL GREP CANNOT DO THIS. The defect that motivated the check was invisible to
+  # one. A themed SVG emitted status colours through `var(--{{S}}bg)` / `var(--{{S}}ln)` /
+  # `var(--{{S}})` where {{S}} resolved to ok / warn / neut; for neut only `--neutbg` was
+  # declared, so stroke fell back to `none` and fill to initial black in BOTH themes. The
+  # broken token names `--neutln` and `--neut` are PRODUCED by substitution, never written,
+  # so nothing to grep for exists in the source. It was found by reading the mechanism.
+  #
+  # WHY THE NEIGHBOURING INVARIANTS MISS IT. The template's own TH-1 (no hardcoded hex
+  # outside the style block) and TH-2 (declaration parity between the two theme blocks) both
+  # PASS on the defect: a token absent from BOTH blocks satisfies parity trivially. That is
+  # the gap, and the fixture set proves the three invariants are independent in both
+  # directions rather than asserting it.
+  #
+  # THE DOMAIN IS DECLARED, NOT INFERRED — and that choice is what makes the check usable.
+  # Inferring {{S}}'s value set from the prose comment documenting it does not work: the live
+  # comments read "ok on GO, bad on NO-GO" and "ok when class is C1 or C2; warn when C3",
+  # and a lowercase-word extractor returns {ok, on, bad} and {ok, when, class, is, or, warn}.
+  # An instrument that cannot separate a token value from an English word OVER-MATCHES, and
+  # an over-matching probe is unusable rather than lenient. The domain is therefore stated at
+  # the usage site as `<!-- subst: {{NAME}} = v1|v2|… ; <prose> -->`, with the prose retained
+  # on the same line so the machine domain and the human explanation cannot drift apart.
+  #
+  # NEVER A SILENT SKIP. An unmanifested placeholder is UNRESOLVABLE and the runner exits 2,
+  # which this block treats as a FAIL. Skipping it would print a clean zero over a partial
+  # population — precisely the miss that produced the original defect. A domain genuinely
+  # unbounded at authoring time declares `*` and its consumers are counted into a printed
+  # declared-uncoverable bucket named in the verdict line, so the coverage boundary is on the
+  # face of every run and cannot be quietly widened.
+  #
+  # SCOPE — tracked DOCUMENTS (.md / .html / .htm / .svg / .xhtml) carrying BOTH a `<style>`
+  # element and >=1 `var(--` consumer, with core/hooks/testdata/** exempt. Fixture trees
+  # carry deliberate defects as their whole purpose, so counting them would make the gate red
+  # by construction — the same exemption Check 63 carries, for the same reason. The gate is a
+  # CONTENT predicate rather than an enumerated path list, so a new themed artifact is covered
+  # on creation rather than on someone remembering to register it. Live population: 2.
+  #
+  # DECLARED COVERAGE BOUNDARY — state this, do not imply more. NOT covered: a consumer
+  # produced by a substitution the source text does not document AT ALL (a token name
+  # assembled at run time by string concatenation) — an undocumented MECHANISM, as distinct
+  # from an undocumented VALUE SET, which IS caught as INDETERMINATE; a generator that emits
+  # themed CSS at run time, since the check reads documents on disk; the full CSS cascade,
+  # since TH-3 models root-scope theming, this corpus's documented convention, and counts
+  # non-root declarations as OUT-OF-ROOT rather than absorbing them; and whether a declared
+  # token's VALUE is legible, which is the property that made the original defect visible and
+  # is a different invariant.
+  #
+  # ENFORCING BY THE CODE'S SHAPE, NOT BY A DEFAULT. Note what is absent from the FAIL arms
+  # below: no `case` on any mode, no mode gate of any kind. The live population is clean at
+  # this pin, so there is no pre-existing debt to baseline and no red-wall vector to hedge
+  # against — the conditions that forced Check 63 to ship a committed baseline do not hold
+  # here. A new undeclared consumer increments ISSUES on every run.
+  #
+  # THE CHECK CARRIES ITS OWN RECORD (PV-6, core/disciplines/review-discipline-principles.md
+  # § 8.1). Its denominator and BOTH control arms are fields of its own emitted output, not of
+  # any prose report about it, so a reader can distinguish "zero found" from "nothing
+  # examined". A fixture regression is a hard FAIL: a probe that can no longer be shown to
+  # detect AND to discriminate proves nothing by returning zero.
+  #
+  # Primitive: core/hooks/run-theme-token-fixtures.sh (bare invocation runs the fixture set).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 64: Theme-token undeclared-consumer lint (every var(--x) consumer is declared in every theme block; enforcing; fixture trees exempt)"
+    local c64_runner="core/hooks/run-theme-token-fixtures.sh"
+    if [[ ! -f "$c64_runner" ]]; then
+      log "  FAIL:  theme-token — runner missing: $c64_runner (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
+      ISSUES=$((ISSUES + 1))
+    else
+      # ── The precision probe: the committed two-armed fixture set. ──────────────
+      local c64_fx_out c64_fx_rc=0
+      c64_fx_out=$(bash "$c64_runner" 2>&1) || c64_fx_rc=$?
+      log "  CTRL:  theme-token — $(echo "$c64_fx_out" | sed -n '1s/^TH-3 fixture self-test: //p')"
+      log "  CTRL:  theme-token — $(echo "$c64_fx_out" | sed -n '2s/^ *//p')"
+      if [[ $c64_fx_rc -ne 0 ]]; then
+        log "  FAIL:  theme-token-fixtures — fixture regression (hard-fail on every mode). A probe that can no longer be shown to detect AND to discriminate proves nothing by returning zero."
+        echo "$c64_fx_out" | sed 's/^/         /'
+        ISSUES=$((ISSUES + 1))
+      else
+        log "  OK:    theme-token-fixtures — $(echo "$c64_fx_out" | tail -1 | sed 's/^TH-3 fixture self-test: //; s|  *(fixtures:.*||')"
+      fi
+
+      # ── The enforcing arm: scan the gated corpus population. ───────────────────
+      local c64_out c64_rc=0
+      c64_out=$(bash "$c64_runner" --scan-corpus 2>&1) || c64_rc=$?
+      local c64_pop c64_res
+      c64_pop=$(echo "$c64_out" | sed -n 's/^TH-3 corpus scan: //p' | tail -1)
+      c64_res=$(echo "$c64_out" | awk -F'DENOMINATOR *: ' '/DENOMINATOR/{split($2,a," "); s+=a[1]} END{print s+0}')
+      log "  DENOM: theme-token — ${c64_pop:-unreported}; ${c64_res} consumer resolution(s) examined across the population"
+
+      case "$c64_rc" in
+        0)
+          log "  OK:    theme-token — no undeclared consumer in any gated document"
+          ;;
+        1)
+          log "  FAIL:  theme-token — a consumed custom property is not declared in every theme block at: $(echo "$c64_out" | awk '/^  MISSING /{print $2}' | sort -u | paste -sd, -). The remedy is to declare the token (or correct the consumer), never to widen the manifest to hide it."
+          ISSUES=$((ISSUES + 1))
+          ;;
+        *)
+          log "  FAIL:  theme-token — INDETERMINATE: $(echo "$c64_out" | sed -n 's/^  VERDICT  *: INDETERMINATE (PV-1) — //p' | sort -u | paste -sd'; ' -). The denominator was not established, so a zero here would be untrustworthy — this is not a clean result."
+          ISSUES=$((ISSUES + 1))
+          ;;
+      esac
+    fi
+  fi
+
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."

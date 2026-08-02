@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- Fixture fx-html-undeclared — the HTML surface's must-flag partner. Expect FINDINGS (1).
+     Differs from fx-html-single-theme.html in exactly one property: --accent-hover is
+     consumed but never declared. Everything else — the single :root block, the script body
+     carrying a style-open-tag inside a comment, the link markup — is identical.
+
+     Without this file the HTML path would carry a specificity arm and no sensitivity arm, and
+     a probe that has only ever been shown to return zero on that surface proves nothing by
+     returning zero on it. The pair is what makes the two-file coverage claim observed. -->
+<html lang="en">
+<head>
+  <style>
+    :root {
+      --bg: #faf9f5;
+      --text: #141413;
+      --accent: #d97757;
+      --radius: 6px;
+    }
+    body { background: var(--bg); color: var(--text); }
+    a { color: var(--accent); border-radius: var(--radius); }
+    a:hover { color: var(--accent-hover); }
+  </style>
+</head>
+<body>
+  <a href="#anchor">link</a>
+  <script>
+    // Sanitizer note: to render untrusted markup we (1) drop <script>/<style>,
+    // (2) strip every on* event-handler attribute, (3) apply a scheme allowlist.
+    const swatch = '<span style="color:var(--accent)">ok</span>';
+    document.title = swatch.length;
+  </script>
+</body>
+</html>

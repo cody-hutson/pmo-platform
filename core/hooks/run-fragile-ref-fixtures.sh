@@ -28,23 +28,43 @@ if [ ! -f "$FIXTURE" ]; then
   exit 1
 fi
 
-# Detectors — byte-identical to block-fragile-refs.sh.
-LINK_RE='\]\('
-CUTOVER_RE='v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?[^.\n]{0,40}merge SHA|v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?([[:space:]]+(release|itself|is))*[[:space:]]+(is[[:space:]]+)?exempt|([Aa]pplies to releases|[Cc]utover[[:space:]]+(applies|discipline|per))[^.\n]{0,80}v[0-9]+\.[0-9]+|reflexive-pipeline-loop'
-URL_RE='github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(issues|pull|milestone)s?([/#?]|$)'
-REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
-ISSUEREF_RE='#\[?[0-9]+\]?'
-# Companion hex-color mask — byte-identical to block-fragile-refs.sh + reference-durability.yml
-# (the #314 anti-drift contract now covers both paired constants). Three ERE branches: letter-
-# bearing hex run; colon-prefixed CSS hex `:#<3-8 hex digits>` (catches pure-digit colors
-# like color:#155724); and the regex CHARACTER-CLASS hex form `#[<hex ranges>]` + optional
-# {n}/{n,m} quantifier (#[0-9a-fA-F]{6}), where the char after # is `[` so neither other branch
-# fires and the leading `#[0` reads as a bracketed ref (issue #4182). That third branch requires
-# a well-formed hex range (X-Y) between the brackets, so a genuine bracketed ref (#[42], no
-# range) is still flagged. Masked to spaces in the shared classifier before the ISSUEREF_RE test
-# so hex-color prefixes (#28) are not read as issue refs (#2068). ISSUEREF_RE itself is unchanged.
-HEXCOLOR_RE='(:#[0-9A-Fa-f]{3,8}|#[0-9A-Fa-f]*[A-Fa-f][0-9A-Fa-f]*|#[[][0-9A-Fa-f-]*[0-9A-Fa-f]-[0-9A-Fa-f][0-9A-Fa-f-]*[]]([{][0-9]+(,[0-9]+)?[}])?)'
-MIN_SELFDESCRIBE_WORDS=3
+# Detectors — SOURCED from lib/fragile-ref-patterns.sh, the sole declaration of the seven
+# constants. The hook and the reference-durability CI source the same file, so all three
+# surfaces evaluate one set of bytes. Each constant's rationale lives beside its declaration
+# in that file. Fail LOUD rather than run on unset patterns: an unset pattern is an EMPTY ERE
+# that matches every line, so a broken lib would not weaken this fixture run, it would make
+# every CLEAN case report FLAG.
+PATTERNS_LIB="${SCRIPT_DIR}/lib/fragile-ref-patterns.sh"
+if [ ! -r "$PATTERNS_LIB" ] || ! "${BASH:-/bin/bash}" -n "$PATTERNS_LIB" 2>/dev/null; then
+  "$PRINTF" 'FAIL: detector constants missing or unparseable: %s\n' "$PATTERNS_LIB" >&2
+  exit 1
+fi
+# shellcheck source=lib/fragile-ref-patterns.sh
+. "$PATTERNS_LIB"
+for _c in LINK_RE CUTOVER_RE URL_RE REFBLOCK_RE ISSUEREF_RE HEXCOLOR_RE MIN_SELFDESCRIBE_WORDS; do
+  eval "_v=\${${_c}:-}"
+  if [ -z "$_v" ]; then
+    "$PRINTF" 'FAIL: %s unset after sourcing %s\n' "$_c" "$PATTERNS_LIB" >&2
+    exit 1
+  fi
+done
+
+# Re-declaration detector (class PATTERNDECL). Sourcing removes the ability for the seven
+# constants to DIVERGE, but not the ability for a future edit to paste a literal back into a
+# consuming surface "for local convenience" — which would silently restore a second source of
+# truth. This is the detector for that, and it is what the PATTERNDECL fixture cases and the
+# scan arm below both exercise, so the scan is a probe with committed arms rather than an
+# unverified assertion.
+#
+# The anchor is the whole property under test: a line that DECLARES one of the seven names
+# (optionally `readonly`-prefixed, any leading indentation — the CI's copies were indented
+# inside a YAML block scalar). A line that merely NAMES the constants — `-v issuere="$ISSUEREF_RE"`
+# — differs from a declaration only in that anchoring, which is exactly why it is the
+# must-not-flag case rather than an unrelated line that would pass vacuously.
+#
+# This declaration does not match itself: the anchor requires one of the seven names at line
+# start, and this line starts with PATTERNDECL_RE.
+PATTERNDECL_RE='^[[:space:]]*(readonly[[:space:]]+)?(LINK_RE|CUTOVER_RE|URL_RE|REFBLOCK_RE|ISSUEREF_RE|HEXCOLOR_RE|MIN_SELFDESCRIBE_WORDS)='
 
 # matches_class — returns 0 (match) / 1 (no match) for a given class + content line.
 # For the ISSUEREF-IN / ISSUEREF-OUT classes, the fixture line is evaluated against the
@@ -70,6 +90,12 @@ matches_class() {
     ISSUEREF-OUT)
       # outside a block: a bare issue ref present is a flag
       "$PRINTF" '%s\n' "$content" | "$GREP" -qE "$ISSUEREF_RE"
+      ;;
+    PATTERNDECL)
+      # A re-declaration of one of the seven single-sourced detector constants on a
+      # consuming surface. FLAG = a declaration; CLEAN = a line that names them without
+      # declaring one. Same detector the scan arm applies to the real files.
+      "$PRINTF" '%s\n' "$content" | "$GREP" -qE "$PATTERNDECL_RE"
       ;;
     ISSUEREF-IN)
       # inside a block: flag only when content-free (too few non-ref words)
@@ -123,6 +149,8 @@ matches_class() {
 
 pass=0
 fail=0
+n_flag=0        # must-flag arm size (sensitivity)
+n_clean=0       # must-not-flag arm size (specificity)
 fail_lines=""
 
 while IFS= read -r raw || [ -n "$raw" ]; do
@@ -134,6 +162,10 @@ while IFS= read -r raw || [ -n "$raw" ]; do
   class="$(printf '%s' "$raw" | cut -f2)"
   content="$(printf '%s' "$raw" | cut -f3-)"
   [ -z "$expect" ] && continue
+  case "$expect" in
+    FLAG)  n_flag=$((n_flag + 1)) ;;
+    CLEAN) n_clean=$((n_clean + 1)) ;;
+  esac
 
   if matches_class "$class" "$content"; then
     got="FLAG"
@@ -149,9 +181,69 @@ while IFS= read -r raw || [ -n "$raw" ]; do
   fi
 done < "$FIXTURE"
 
-"$PRINTF" 'reference-durability fixture: %d passed, %d failed (fixture: %s)\n' "$pass" "$fail" "$FIXTURE"
+# --- NO-LITERAL-REDECLARATION SCAN ARM ---------------------------------------------------
+# The fixture cases above prove the detector works on labeled inputs. This applies that same
+# detector to the real consuming surfaces, so a literal pasted back into one of them fails the
+# run. The lib itself is out of scope BY CONSTRUCTION — it is not in the target list — rather
+# than by an exemption a future edit could widen.
+#
+# Targets resolve from the SOURCE tree. In a deployed or sandbox layout most do not exist, and
+# a scan over a population that is not fully present is VACUOUS, not clean: reporting a bare
+# "0 findings" there would let a reader mistake "nothing examined" for "nothing wrong".
+#
+# Note the denominator never reaches zero in practice — this runner is itself one of the three
+# consuming surfaces, so it is always self-reachable and a zero-target run cannot occur while
+# the scan is executing. PARTIAL, not zero, is therefore the state that actually needs
+# labelling: a deployed-layout run reaches 1 of 3 and must not present that as full coverage.
+# The zero branch is kept only as a defensive floor for a caller that relocates the runner.
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." 2>/dev/null && pwd -P || printf '%s' "$SCRIPT_DIR")"
+SCAN_TARGETS="${SCRIPT_DIR}/block-fragile-refs.sh
+${SCRIPT_DIR}/run-fragile-ref-fixtures.sh
+${REPO_ROOT}/.github/workflows/reference-durability.yml"
+
+scan_present=0
+scan_total=0
+scan_findings=0
+scan_report=""
+while IFS= read -r _t; do
+  [ -z "$_t" ] && continue
+  scan_total=$((scan_total + 1))
+  [ -r "$_t" ] || continue
+  scan_present=$((scan_present + 1))
+  _hits="$("$GREP" -nE "$PATTERNDECL_RE" "$_t" || true)"
+  if [ -n "$_hits" ]; then
+    _n=$("$PRINTF" '%s\n' "$_hits" | "$GREP" -c '' || true)
+    scan_findings=$((scan_findings + _n))
+    scan_report="${scan_report}  ${_t}"$'\n'"${_hits}"$'\n'
+  fi
+done <<EOF
+$SCAN_TARGETS
+EOF
+
+if [ "$scan_present" -eq 0 ]; then
+  scan_summary="redeclaration scan: SKIPPED-VACUOUS (0 of ${scan_total} targets present)"
+elif [ "$scan_present" -lt "$scan_total" ]; then
+  # Findings still fail below; only the COVERAGE claim is withheld. deploy.sh Check 31 and the
+  # reference-durability CI both run from the repo root and reach 3 of 3, so a full-coverage
+  # result is what the gating callers get; a deployed-layout smoke run says so out loud
+  # instead of borrowing their authority.
+  scan_summary="redeclaration scan: PARTIAL — ${scan_findings} findings across ${scan_present} of ${scan_total} targets (NOT a full-coverage result)"
+else
+  scan_summary="redeclaration scan: ${scan_findings} findings across ${scan_present} of ${scan_total} targets scanned"
+fi
+
+# PV-6 instrument form: a finding count is only readable next to its denominator and its arm
+# results. "46 passed, 0 failed" alone cannot distinguish a healthy run from one that examined
+# nothing.
+"$PRINTF" 'reference-durability fixture: %d FLAG / %d CLEAN, %d passed, %d failed (fixture: %s) · %s\n' \
+  "$n_flag" "$n_clean" "$pass" "$fail" "$FIXTURE" "$scan_summary"
+
 if [ "$fail" -gt 0 ]; then
   "$PRINTF" '%s' "$fail_lines" >&2
+  exit 1
+fi
+if [ "$scan_findings" -gt 0 ]; then
+  "$PRINTF" 'FAIL: detector constants re-declared outside lib/fragile-ref-patterns.sh:\n%s' "$scan_report" >&2
   exit 1
 fi
 exit 0
