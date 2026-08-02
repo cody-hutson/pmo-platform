@@ -6,14 +6,28 @@ name: Deploy-check required subset (pre-merge load-bearing gate)
 #              posture:required AND lacking a dedicated CI mirror) holds pre-merge —
 #              asserted as a blocking status check BEFORE the change lands, closing
 #              the gap that the whole --check battery ran only at deploy time
-#              (operator machine, post-merge) and was therefore skippable. Today the
-#              subset resolves to exactly one member: Check 38
-#              (hook-registry-index-freshness); it grows as posture:required checks
-#              lacking a mirror are back-filled (#1036 / #313).
+#              (operator machine, post-merge) and was therefore skippable. The
+#              subset resolves to two members: Check 38 (hook-registry-index-
+#              freshness) and Check 63 (release-version-tokens); it grows as
+#              posture:required checks lacking a mirror are back-filled
+#              (#1036 / #313).
 #   falsification: edit a per-hook source (e.g. add a rule row) under
 #                  core/rules/bypass-mode-readiness/ without regenerating the index
 #                  -> this gate reports STALE (warn-mode: summary + exit 0; enforce:
 #                  red + exit 1). A fresh index -> green.
+#                  For Check 63: leave a literal claim token in a tracked file that
+#                  is neither the pre-claim release plan nor an entry in
+#                  core/deploy/allowlists/skip-release-version-token-check.txt
+#                  -> FAIL. Stamp it at the Stage-12 claim -> CLEAN.
+#   residual (Check 63): the check's POPULATION is every tracked file, but this
+#              workflow is path-filtered, so a token introduced under a path outside
+#              the list below is caught at deploy time (lifecycle Check 63) rather
+#              than pre-merge. The listed paths cover the token's realistic carriers
+#              -- canonical templates, the release corpus, and core governance /
+#              standards / records. Widening to '**' would make the gate total but
+#              would also strip this job's documented path-filtered ADVISORY
+#              skip-semantics from its other members, so it is an operator call, not
+#              a side effect of adding a member.
 # Path-filtered, so ADVISORY by skip-semantics: absence on an unrelated PR MUST NOT
 # block. Ships warn-mode-initial (reports, does not block) until the operator flips
 # the committed .github/deploy-check-ci.enforce sentinel token to `enforce` AND adds
@@ -47,6 +61,14 @@ on:
       - 'core/deploy/deploy.sh'
       - '.github/workflows/deploy-check-ci.yml'
       - '.github/deploy-check-ci.enforce'
+      # Check 63 (release-version-tokens) — the claim token's realistic carriers,
+      # plus the gate's own primitive and its adjudication allowlist.
+      - 'operations/templates/**'
+      - 'release/**'
+      - 'core/standards/**'
+      - 'core/ADRs/**'
+      - 'core/deploy/tools/check-release-version-tokens.py'
+      - 'core/deploy/allowlists/skip-release-version-token-check.txt'
   push:
     branches: [main]
     paths:

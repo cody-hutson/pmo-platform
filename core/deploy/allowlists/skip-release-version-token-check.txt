@@ -1,0 +1,57 @@
+# Allowlist for the unresolved release-version token gate (deploy.sh Check 63 +
+# core/deploy/tools/check-release-version-tokens.py).
+# One path per line; matched as a whole-line exact path; `#` = comment.
+#
+# These files legitimately CONTAIN the claim token because they DEFINE, DOCUMENT,
+# RESOLVE, or HISTORICALLY RECORD it — in each the token is the SUBJECT of the
+# text, not an instance awaiting substitution. No lexical property separates the
+# two (a token quoted in a protocol doc and a token in a template field are the
+# same string), so the split is adjudicated per path and recorded here. A carrier
+# NOT on this list is a finding — new carriers fail closed by design.
+#
+# The pre-claim release plan is NOT listed: it is excluded by the predicate
+# itself, because carrying an unresolved token is what makes it pre-claim
+# (ADR-092 claim-state oracle, read as such by Check 59). An exclusion that is a
+# property of the identity model does not belong in an exceptions list.
+
+# --- The mechanism's own definition and implementation -----------------------
+
+# Resolves the token at the Stage-12 claim (_stamp_release_identity). It holds the
+# most occurrences of any file precisely because it is the resolver.
+release/tools/claim-version.sh
+
+# The detector itself: holds the token constant and the fixture strings. Mirrors
+# the path-leak-patterns.sh detection-signature exclusion (Check 43 allowlist).
+core/deploy/tools/check-release-version-tokens.py
+
+# Reads the token as the pre-claim claim-state ORACLE (Check 59), never as a value
+# to resolve — the one consumer for which an unresolved token is the signal.
+core/deploy/tools/check-identity-conformance.py
+
+# Carries the Check 59 and Check 63 definition-block comments, which name the token.
+core/deploy/deploy.sh
+
+# The founding record for plan-file claim-time stamping — the token IS its subject.
+core/ADRs/ADR-092-plan-file-claim-time-stamping.md
+
+# --- Governance prose describing the identity model --------------------------
+
+release/governance/RELEASE_PROTOCOL.md
+release/governance/release-process.md
+release/references/standards/release-corpus-schema.md
+release/releases/plans/README.md
+
+# The template a release plan is INSTANTIATED FROM. Its token is a live
+# placeholder that is correct unresolved: it resolves when a plan is created from
+# it, not at any release's claim. Stamping this file would destroy the template.
+release/skills/release-planner/references/release-plan-template.md
+
+# --- Historical records (immutable; describe past releases) ------------------
+
+# RELEASE_LOG rows and shipped release notes recording how prior releases used the
+# token. These are the permanent audit trail — rewriting them to resolve a token
+# would falsify the record of what shipped.
+release/releases/RELEASE_LOG.md
+release/releases/RELEASE_LOG_ARCHIVE-v3.md
+release/releases/RELEASE_LOG_ARCHIVE-v4.md
+release/releases/notes/v3.93_RELEASE_NOTES.md

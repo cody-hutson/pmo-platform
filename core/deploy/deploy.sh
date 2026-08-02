@@ -1324,6 +1324,56 @@ _c38_compute_verdict() {
   esac
 }
 
+# ─── Unresolved release-version tokens (Check 63 / --check-required-subset) ──────
+# The unresolved-claim-token predicate, factored to TOP LEVEL so it is shared by
+# two surfaces with ONE body (DD1, like _vf_/_cc_/_c38_/_c32_compute_verdict): the
+# lifecycle Check 63 (inside cmd_check) and the --check-required-subset runner
+# (cmd_check_required_subset, mapping the verdict to an exit code for the PRE-MERGE
+# CI gate). No predicate is re-encoded on either surface (single-engine, CIAC-2).
+#
+# Membership in the required subset is what makes this gate load-bearing BEFORE the
+# merge rather than at deploy time on the operator's machine: claim-version.sh
+# stamps the plan and the explicit --stamp-file arguments only, so an unstamped
+# carrier is caught by nothing else, and catching it post-merge is catching it after
+# it shipped. The subset's admission criteria hold — network-free (git index only),
+# install-independent, and no dedicated CI mirror.
+#
+# Always-enforce/deterministic at the verdict level: a literal claim token surviving
+# outside the release plan and the adjudicated allowlist is unambiguous, not a
+# calibration signal. There is no offline/network anchor, so the surface argument
+# does not change the verdict; it is accepted for signature parity.
+#
+# Echoes ONE protocol line on stdout (the CALLER maps it to a FAIL or an exit code);
+# any per-file detail goes to stderr:
+#   CLEAN                  no unresolved token outside the plan and the allowlist
+#   FAIL <n> file(s)       tracked file(s) carry an unresolved token
+#   ERROR <reason>         primitive absent, python3 absent, or exit >=2 (fail-closed)
+_c63_compute_verdict() {
+  local surface="${1:-lifecycle}"   # accepted for signature parity; verdict is surface-invariant
+  local script="${_audit_src_root:-.}/core/deploy/tools/check-release-version-tokens.py"
+  if [[ ! -f "$script" ]]; then
+    printf 'ERROR primitive-missing:%s\n' "$script"
+    return 0
+  fi
+  if [[ ! -x "/usr/bin/python3" ]]; then
+    printf 'ERROR python3-not-executable (cannot verify token resolution)\n'
+    return 0
+  fi
+  local out rc=0
+  out=$(/usr/bin/python3 "$script" --root "${_audit_src_root:-.}" --output-format tsv 2>&1) || rc=$?
+  case "$rc" in
+    0) printf 'CLEAN\n' ;;
+    1) printf '%s\n' "$out" | /usr/bin/grep '^UNRESOLVED' | /usr/bin/head -20 | \
+         /usr/bin/sed 's/^/         /' >&2 || true
+       printf 'FAIL %s file(s) carry an unresolved claim token outside the release plan\n' \
+         "$(printf '%s\n' "$out" | /usr/bin/awk -F'\t' '$1=="FINDINGS"{print $2}')" ;;
+    3) printf '%s\n' "$out" | /usr/bin/head -3 | /usr/bin/sed 's/^/         /' >&2 || true
+       printf 'ERROR input-failure (token population unverifiable — an absence gate that cannot enumerate its population has not verified the absence)\n' ;;
+    *) printf '%s\n' "$out" | /usr/bin/head -10 | /usr/bin/sed 's/^/         /' >&2 || true
+       printf 'ERROR primitive-exit-%s\n' "$rc" ;;
+  esac
+}
+
 # ─── Release-corpus completeness (Check 32 / --check-release-corpus) — #1484 ─────
 # The LOG-row-driven completeness predicate, factored to TOP LEVEL so it is shared
 # by two surfaces with ONE body (DD1, like _vf_/_cc_/_c38_compute_verdict): the
@@ -8756,6 +8806,52 @@ cmd_check() {
     esac
   fi
 
+  # Check 63 — Unresolved release-version claim tokens outside the release plan
+  #
+  # claim-version.sh resolves {{RELEASE_VERSION}} at the Stage-12 claim, but its
+  # _stamp_release_identity() pass covers only the pre-claim plan and the files named
+  # in explicit --stamp-file arguments; check-identity-conformance.py (Check 59) reads
+  # the token purely as a claim-state ORACLE over the branch and plan NAMES and never
+  # scans content. So a canonical artifact carrying the token in a field a consumer
+  # reads as a version depended entirely on an operator naming it correctly under
+  # release pressure, with nothing verifying they had. This check is that verification.
+  #
+  # ENFORCE from the outset, deliberately breaking the warn-mode-initial default: the
+  # shakedown convention calibrates checks whose finding might be a false positive,
+  # and a literal claim token surviving outside the plan and the adjudicated allowlist
+  # is not a calibration signal — it is the defect, unambiguously. Its remedy is also
+  # unambiguous (stamp the file, or adjudicate it onto the allowlist).
+  #
+  # PRE-MERGE by construction: also registered in cmd_check_required_subset, which
+  # .github/workflows/deploy-check-ci.yml runs as a pull-request status check. The
+  # lifecycle surface below is the deploy-time twin; both call ONE shared body
+  # (_c63_compute_verdict), so they cannot diverge.
+  #
+  # Fail-closed: an ERROR verdict (primitive absent, python3 absent, unreadable file,
+  # empty scan) is an ISSUE, never a pass — an absence gate that cannot enumerate its
+  # population has not verified the absence. Read-only; reversibility CHEAP (additive;
+  # git revert). Primitive: core/deploy/tools/check-release-version-tokens.py
+  # (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 63: Unresolved release-version claim tokens outside the release plan (pre-merge via --check-required-subset; enforce)"
+    local c63_verdict c63_tok
+    c63_verdict="$(_c63_compute_verdict "lifecycle")"
+    c63_tok="${c63_verdict%% *}"
+    case "$c63_tok" in
+      CLEAN)
+        log "  OK:    release-version-tokens — no unresolved claim token outside the release plan"
+        ;;
+      FAIL)
+        log "  FAIL:  release-version-tokens — ${c63_verdict#FAIL }; stamp them at the Stage-12 claim (claim-version.sh --stamp-file) or adjudicate onto core/deploy/allowlists/skip-release-version-token-check.txt"
+        ISSUES=$((ISSUES + 1))
+        ;;
+      *)
+        log "  FAIL:  release-version-tokens — $c63_verdict (fail-closed: an unverifiable population is never a clean read)"
+        ISSUES=$((ISSUES + 1))
+        ;;
+    esac
+  fi
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
@@ -9689,20 +9785,25 @@ cmd_check_decision_emission() {
 # Check 7 (skill-package-freshness.yml #2656), Check 32 (release-corpus-completeness.yml
 # #1484), Check 41 (version-freeness.yml), Check 48 (close-completeness.yml).
 #
-# TODAY the predicate resolves to exactly ONE member — Check 38
-# (hook-registry-index-freshness), the only explicit posture:required check lacking
-# a dedicated mirror. New members are appended here as future posture:required
-# checks are back-filled (#1036 / #313).
+# The predicate resolves to TWO members — Check 38 (hook-registry-index-freshness)
+# and Check 63 (release-version-tokens). New members are appended here as future
+# posture:required checks are back-filled (#1036 / #313).
 #
 # Surface = "gate": fail-closed. Warn-vs-enforce at the CI surface is decided by the
 # committed .github/deploy-check-ci.enforce sentinel — during the warn-mode window an
 # in-scope FAIL is reported but swallowed (exit 0); flip the token to 'enforce' after
 # shakedown to block. Mirrors cmd_check_close_completeness's sentinel-aware contract.
+# TWO classes are exempt from that swallow and block unconditionally: an
+# unexpected/ERROR verdict (a tooling failure, not a finding), and any member listed
+# in rs_always_block (a member whose finding is unambiguous has nothing for a
+# shakedown window to calibrate, so swallowing it would be the silent pass the member
+# exists to prevent).
 #
-#   exit 0  — every subset member passed, OR a member FAILed but the sentinel is warn
-#             (true verdict reported, not blocking).
-#   exit 1  — a subset member FAILed AND the sentinel is enforce, OR any member
-#             returned an unexpected/ERROR verdict (fail-closed regardless of sentinel).
+#   exit 0  — every subset member passed, OR a member FAILed, the sentinel is warn,
+#             and no always-blocking member was among the failures.
+#   exit 1  — a subset member FAILed AND the sentinel is enforce, OR an always-blocking
+#             member FAILed, OR any member returned an unexpected/ERROR verdict (the
+#             last two fail-closed regardless of the sentinel).
 cmd_check_required_subset() {
   validate_workspace
   detect_install_path || true
@@ -9719,13 +9820,27 @@ cmd_check_required_subset() {
     [[ "$_rs_tok_line" == "enforce" ]] && rs_enforce="enforce"
   fi
 
-  # Enumerated allowlist: "check-id:verdict-body". TODAY: Check 38 only. Append a
-  # row per future posture:required check that lacks a dedicated CI mirror.
+  # Enumerated allowlist: "check-id:verdict-body". Append a row per future
+  # posture:required check that lacks a dedicated CI mirror.
   local -a rs_checks=(
     "hook-registry-index-freshness:_c38_compute_verdict"
+    "release-version-tokens:_c63_compute_verdict"
   )
 
-  local rs_fail=0 rs_err=0 rs_pass=0 _entry _id _fn _verdict _tok
+  # Members that BLOCK regardless of the shared warn/enforce sentinel. The sentinel
+  # exists to calibrate checks whose finding might be a false positive; a member
+  # whose finding is unambiguous has nothing to calibrate, and swallowing it would
+  # be the silent pass the member was built to prevent. Same reasoning the ERROR
+  # class below already uses, applied per member. Space-padded for whole-word
+  # membership (bash-3.2 portable; mirrors Check 60's c60_secset idiom).
+  #   release-version-tokens — a literal claim token surviving outside the pre-claim
+  #   plan and the adjudicated allowlist is the defect itself, and its remedy is
+  #   unambiguous (stamp it, or adjudicate it onto the allowlist). Blocking it here
+  #   is the operator's D-3 decision: the token must fail BEFORE merge rather than
+  #   depend on N --stamp-file arguments supplied correctly under release pressure.
+  local rs_always_block=" release-version-tokens "
+
+  local rs_fail=0 rs_err=0 rs_pass=0 rs_block=0 _entry _id _fn _verdict _tok
   for _entry in "${rs_checks[@]}"; do
     _id="${_entry%%:*}"
     _fn="${_entry##*:}"
@@ -9739,6 +9854,7 @@ cmd_check_required_subset() {
       STALE|NOT_FREE|INCOMPLETE|FAIL)
         log "required-subset: $_id — FAIL ($_verdict)"
         rs_fail=$((rs_fail + 1))
+        [[ "$rs_always_block" == *" $_id "* ]] && rs_block=$((rs_block + 1))
         ;;
       *)
         log "required-subset: $_id — ERROR/unexpected verdict ($_verdict) — fail-closed"
@@ -9752,6 +9868,10 @@ cmd_check_required_subset() {
   # cmd_check_close_completeness).
   if [[ $rs_err -gt 0 ]]; then
     log "required-subset: $rs_err check(s) returned an unexpected/ERROR verdict — fail-closed exit 1"
+    exit 1
+  fi
+  if [[ $rs_block -gt 0 ]]; then
+    log "required-subset: $rs_block always-blocking check(s) FAILed — blocking exit 1 regardless of the '$rs_enforce_file' sentinel (their findings are unambiguous, so there is nothing for a shakedown window to calibrate)"
     exit 1
   fi
   if [[ $rs_fail -gt 0 ]]; then
