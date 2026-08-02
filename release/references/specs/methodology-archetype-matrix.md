@@ -46,7 +46,7 @@ Consumer skills reading `delivery_approach: Custom` do NOT read the Custom **mat
 
 ## 3. Archetype Matrix
 
-8 rows (7 archetypes + Custom, matching the 8-value `delivery_approach` enum) × 8 columns. For readability in GitHub markdown, the matrix below renders compact text; fuller prose lives in [`methodology-parameterization-v1.md`](methodology-parameterization-v1.md).
+8 rows (7 archetypes + Custom, matching the 8-value `delivery_approach` enum) × 8 columns. For readability in GitHub markdown, the matrix below renders compact text; the fuller prose — the per-archetype normative definitions — lives in the methodology-parameterization v1 spec named in Cross-references above.
 
 | Archetype | Lifecycle | Ceremonies | Artifacts | Cadence | Primary consumers | Sample project types | Distinguishing constraint |
 |---|---|---|---|---|---|---|---|
