@@ -17,3 +17,14 @@ description = "eval-viewer security-regression test fixtures (fake tokens for re
 paths = [
   '''release/skills/pmo-skill-refiner/eval-viewer/test_generate_review\.py''',
 ]
+
+# The deploy.sh check registry maps a check slug to its handler function as a quoted
+# "<slug>:<function>" literal. gitleaks' generic-api-key rule scores those as
+# high-entropy secrets (e.g. "release-version-tokens:_c63_compute_verdict", entropy
+# 3.65). The regex below allowlists ONLY that shape: the literal slug prefix followed by
+# a snake_case identifier. No real credential can take this form — the character class
+# excludes the uppercase and base64 punctuation every token format requires — so the
+# secret-scanning gate stays fully effective everywhere else.
+regexes = [
+  '''release-version-tokens:[a-z0-9_]+''',
+]
