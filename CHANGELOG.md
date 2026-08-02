@@ -19,6 +19,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.05] - 2026-08-02
+
+Claims the documentation makes about itself — counts, citations, verified results — are now checked by something rather than trusted.
+
+[Full notes](release/releases/notes/v4.05_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.05)
+
 ## [v4.04] - 2026-08-01
 
 Six of ten trackers were silently refusing writes and now work; five checks that reported success while proving nothing were made able to fail.
