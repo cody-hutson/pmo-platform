@@ -50,7 +50,7 @@ Every work item entering execution must satisfy INVEST criteria. This is the ope
 | **N -- Negotiable** | Item describes desired outcome, not prescribed implementation; scope can be adjusted | "Users can search products by name, category, or SKU" (what, not how) | "Implement ElasticSearch with 3 index types and a React component using Material UI" (dictates implementation) | Rewrite as user-facing outcome; move technical decisions to team |
 | **V -- Valuable** | Item delivers identifiable value to a user or stakeholder when completed | "Customers can track their order status in real-time" (clear user value) | "Refactor database connection pooling" (no visible user value as written) | Frame tech work as enabler with explicit value chain: "Refactor pooling to support 2x concurrent users" |
 | **E -- Estimable** | Team can estimate the item with reasonable confidence; unknowns are bounded | "Add email notification when order ships" (team has done similar work; estimates 3-5 points) | "Integrate with the vendor's new API" (team has never seen the API; no documentation available) | Spike first: time-boxed research to reduce unknowns, then re-estimate the resulting stories |
-| **S -- Small** | Item fits within a single iteration; no larger than 1/3 of sprint capacity | "Display order confirmation with order number and estimated delivery" (2-3 days of work) | "Build the entire checkout flow" (2+ sprints of work spanning multiple concerns) | Split by workflow step, business rule variation, CRUD operation, or data variation |
+| **S -- Small** | Item covers one coherent concern and needs no further slicing to deliver; under a time-boxed approach it also fits within a single iteration, no larger than 1/3 of sprint capacity | "Display order confirmation with order number and estimated delivery" (2-3 days of work) | "Build the entire checkout flow" (2+ sprints of work spanning multiple concerns) | Split by workflow step, business rule variation, CRUD operation, or data variation |
 | **T -- Testable** | Clear, specific acceptance criteria exist that can be verified | "Given a valid email, when user clicks reset, then a reset link is sent within 60 seconds" | "The system should be user-friendly" (not testable; subjective) | Write Given/When/Then acceptance criteria; if you cannot write a test, the requirement is not clear enough |
 
 ### 2.2 INVEST Scoring
@@ -101,9 +101,9 @@ Each refinement session should produce:
 
 | Output | Required | Verification |
 |--------|----------|-------------|
-| Items decomposed to sprint-ready size | Yes | INVEST "Small" criterion met |
+| Items decomposed to deliverable size -- sprint-ready under a time-boxed approach | Yes | INVEST "Small" criterion met |
 | Acceptance criteria written | Yes | Given/When/Then format; INVEST "Testable" met |
-| Estimates assigned | Yes | Story points or T-shirt size; team consensus |
+| Estimates assigned | Yes, under a time-boxed approach | Story points or T-shirt size; team consensus. Under any approach the item carries a bound of record -- a size estimate, a time-box, or a scope-box |
 | Dependencies identified and mapped | Yes | Any dependency logged with owner and need-by date |
 | Questions resolved or spikes created | Yes | No "TBD" on items in the next 2-sprint window |
 | Priority validated against current goals | Yes | PO confirms ordering reflects Sprint/PI Goals |
