@@ -20,6 +20,55 @@ Authored per the Stage 5 spec + Collective Review. Composes with [release-notes-
 
 **Forward-only adoption rationale:** Per the precedent that user-facing notes started at an earlier release (an umbrella campaign tracks retroactive coverage), this schema applies prospectively, forward-only, to bound R-1 restructure-integrity risk. Historical backfill of 76 pre-cutover files is registered as F-3 follow-up gated on schema utility.
 
+## Derived-Surface Contract
+
+The release corpus records one fact per release — *release X shipped, containing Y, at SHA Z* — across four ledger surfaces. **Two of those surfaces are SOURCE and two are DERIVED, and the split is per-field, not per-file.** This section is the register that `duplicate-source-discipline.md` § 1 requires: every restatement of a release fact either names its source here or is a defect.
+
+### Roles
+
+| Surface | Role | Authoritative for | Notes |
+|---|---|---|---|
+| `release/releases/RELEASE_LOG.md` — table row | **SOURCE — event record** | the release fact: version, milestone, issues, release PR, merge SHA, tag, state, and the **merge anchor** date | Written by the Stage-12/13 close-out's LOG-transition phase. Carries no `# ` headline and no `summary:` — it is not, and cannot be, the narrative source. |
+| `release/releases/RELEASE_LOG.md` — `#### …` H4 prose | **SOURCE — execution record** | the per-release Deployment Log and Release Learnings blocks | Not projected anywhere. |
+| `release/releases/notes/*_RELEASE_NOTES.md` | **SOURCE — narrative record** | the headline **seed** (`# ` H1) and the `summary:` **seed** (frontmatter) | The note's own `date:` is written *from* the close-out run anchor — the note is downstream of that anchor, never its origin. |
+| `release/releases/RELEASE_INDEX.md` | **DERIVED (5 of 6 columns) · hybrid** | — except the **`Theme`** column, which is the INDEX's own source content | Verified **whole-file**: outside `Theme` the INDEX is not hand-edited. |
+| `release/releases/RELEASE_DIGEST.md` | **DERIVED at emission** | — | Verified **closing entry only**: historical entries carry legitimate post-emission operator edits. |
+| `CHANGELOG.md` | **DERIVED at emission** | — | Same posture as the DIGEST. |
+
+### Per-field provenance
+
+The projector is `core/deploy/tools/generate_release_index.py`. It reads two **files** and takes every non-file input as a **required CLI argument** — it reads no clock, no environment variable, and no operator config.
+
+| Derived field | Source | Kind |
+|---|---|---|
+| INDEX `Version` / `Milestone` / `Release PR` | LOG row | file |
+| INDEX `Date` | LOG row — the **merge anchor**, relayed, never resampled | file |
+| INDEX `Release Notes` | filesystem presence of the note file | file |
+| INDEX `Theme` | the on-disk INDEX itself (round-tripped, never regenerated) | file — the hybrid column |
+| DIGEST headline | the note's `# ` H1, when present; otherwise the operator placeholder filled at chore-PR review | file |
+| DIGEST `(date)` | the **close-out run anchor** | run-scoped required argument (`--closeout-anchor`) |
+| CHANGELOG `- <date>` | the **close-out run anchor** | run-scoped required argument (`--closeout-anchor`) |
+| CHANGELOG summary | the note's frontmatter `summary:`, with the `(see release notes)` fallback | file |
+| CHANGELOG Release URL | the repository slug | required argument (`--repo-slug`) |
+
+**Why the anchors are arguments and not derivations.** The INDEX and the LOG carry the **merge** anchor; the DIGEST, the note's `date:` and the CHANGELOG carry the **close-out run** anchor. Both are sampled exactly once, by the close-out orchestrator, at sites that already exist. A projector that could reach a clock could become a second writer of a fact that already has one — which is precisely the mechanism that produced the INDEX `Date` grandfathering enumeration the projector still carries. Anchor taxonomy and sampling rules: [`date-variable-convention.md § Emission-Time Anchors`](../../../core/standards/date-variable-convention.md).
+
+### Emission and custody
+
+- The projector emits **one entry to stdout**. It never rewrites a ledger. The calling close-out phase performs the insertion and treats a non-zero exit **or an empty emission** as a failure, never as a no-op.
+- Provenance is asserted **at emission**; the file holds **custody** afterwards. A historical DIGEST or CHANGELOG entry edited after emission is that file's own content and is not drift.
+- A **whole-file regenerate of the DIGEST or the CHANGELOG is prohibited** — the majority of historical entries carry post-emission editorial content that exists nowhere else, and a regenerate destroys it silently as a clean diff rather than a conflict.
+
+### Verification posture
+
+| Surface | Scope | Gate |
+|---|---|---|
+| `release/releases/RELEASE_INDEX.md` | whole file, on the 5 derived columns **plus** a `Theme` round-trip integrity limb **plus** a recent-first row-order limb | `generate_release_index.py --verify`, invoked by `deploy.sh` Check 23 |
+| `release/releases/RELEASE_DIGEST.md` | the closing version's entry only | close-out `assert_derived_surfaces` phase (presence + residue) and `deploy.sh` Checks 32/48 (presence) |
+| `CHANGELOG.md` | the closing version's entry only | same |
+
+A hand-edit to any of the INDEX's five derived columns **fails** Check 23. A hand-edit to INDEX `Theme` is **sanctioned** and protected by the integrity limb. A hand-edit to a historical DIGEST or CHANGELOG entry is **allowed**. A closing DIGEST or CHANGELOG entry that diverges at close-out **fails**.
+
 ## Field Specification
 
 ### Required fields (6)
