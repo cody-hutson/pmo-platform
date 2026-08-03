@@ -1187,6 +1187,84 @@ phase_transition_release_log() {
 # Placement (§3): the `**Outcome:**` line lands immediately AFTER the `**Result:**`
 #   line in the v<X.Y> Deployment-Log block. Idempotent: skip if a `**Outcome:**`
 #   line is already present in that block.
+# ─── Two-surface Deployment-Log block resolution ──────────────────────────────
+#
+# The archival sweep relocates aged-out `#### Deployment Log` block BODIES into
+# same-directory `RELEASE_LOG_ARCHIVE-<family>.md` segments, leaving the heading
+# plus an `_Archived: …_` pointer in the hot ledger so every anchor still
+# resolves. A lookup scoped to the hot ledger alone therefore finds the heading
+# and an effectively empty body for every archived release.
+#
+# BOTH lookups in phase_inject_outcome_field — the idempotency probe and the
+# injection itself — resolve through the ONE resolver below, so they can never
+# disagree about which file they mean. This is not a stylistic preference: a
+# single-surface idempotency probe paired with a two-surface injection is
+# strictly WORSE than the defect it fixes. The probe would read the hot ledger,
+# see the stub, conclude nothing had been injected, and inject a SECOND time
+# into the segment — trading a loud, visible failure for a silent duplication
+# inside an archived record.
+#
+# A genuine absence still fails. Some early releases never carried a
+# `**Result:**` field at all, and no amount of segment-awareness recovers a
+# field that was never written; those must remain a hard failure, and the
+# failure now names every surface it searched.
+
+# Sets DEPLOYMENT_LOG_FILES to the hot ledger followed by its same-directory
+# archive segments, in that order. A repository with no segments yields the hot
+# ledger alone, so pre-sweep behaviour is unchanged.
+_collect_deployment_log_files() {
+  DEPLOYMENT_LOG_FILES=( "$RELEASE_LOG" )
+  local _dir _f
+  _dir="$(/usr/bin/dirname "$RELEASE_LOG")"
+  for _f in "$_dir"/RELEASE_LOG_ARCHIVE-*.md; do
+    if [[ -f "$_f" ]]; then DEPLOYMENT_LOG_FILES+=( "$_f" ); fi
+  done
+  return 0
+}
+
+# Space-joined basenames of every surface a block lookup consults — the
+# "searched:" evidence carried in the failure message.
+_deployment_log_surfaces_desc() {
+  _collect_deployment_log_files
+  local _f _out=""
+  for _f in "${DEPLOYMENT_LOG_FILES[@]}"; do
+    _out="${_out:+$_out }$(/usr/bin/basename "$_f")"
+  done
+  printf '%s\n' "$_out"
+}
+
+# Probe ONE file for the `#### Deployment Log <version>` block.
+#   exit 0 — block present AND carries a `**Result:**` line (the injection anchor)
+#   exit 1 — block present, but no `**Result:**` line inside it
+#   exit 2 — block heading absent from this file
+# Lines are compared after trimming surrounding whitespace so this probe and the
+# Python injection below (which compares on a stripped line) resolve the same
+# block rather than diverging on a heading with trailing space.
+_probe_deployment_log_block() {
+  /usr/bin/awk -v ver="$2" '
+    { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+    line == "#### Deployment Log " ver { inblk = 1; seen = 1; next }
+    inblk && line ~ /^#### / { inblk = 0 }
+    inblk && line ~ /^\*\*Result:\*\*/ { found = 1 }
+    END { exit(found ? 0 : (seen ? 1 : 2)) }
+  ' "$1" 2>/dev/null
+}
+
+# Echo the first surface whose `#### Deployment Log <version>` block carries a
+# `**Result:**` line — the file the `**Outcome:**` field belongs in. Returns 1
+# and echoes nothing when no surface carries one.
+_resolve_deployment_log_target() {
+  local _ver="$1" _f
+  _collect_deployment_log_files
+  for _f in "${DEPLOYMENT_LOG_FILES[@]}"; do
+    if _probe_deployment_log_block "$_f" "$_ver"; then
+      printf '%s\n' "$_f"
+      return 0
+    fi
+  done
+  return 1
+}
+
 phase_inject_outcome_field() {
   # Resolve + validate the outcome value (default SUCCESS per §4).
   local outcome="${OUTCOME:-SUCCESS}"
@@ -1201,32 +1279,59 @@ phase_inject_outcome_field() {
     return 3
   fi
 
-  # Idempotent: skip if the v<X.Y> Deployment-Log block already carries Outcome.
-  # (Scope the grep to the block via awk so a sibling release's Outcome line does
-  # not false-positive.)
+  # LOOKUP SITE 1 of 2 — resolve which surface holds this version's block body.
+  # Post-sweep that may be an archive segment rather than the hot ledger. Both
+  # lookups consume this ONE answer, so the idempotency probe below can never
+  # read a different file than the injection writes.
+  local target_log _surfaces
+  target_log="$(_resolve_deployment_log_target "$VERSION" || true)"
+  _surfaces="$(_deployment_log_surfaces_desc)"
+
+  if [[ -z "$target_log" ]]; then
+    # No surface carries a `**Result:**` line for this version. This is a
+    # genuine absence — the field never existed for some early releases — not
+    # an archival artefact, so it stays a hard failure. The message names every
+    # file it looked in, which the pre-fix diagnostic did not: that failure said
+    # only "not found in the block", implying a malformed record when the record
+    # was intact one file over.
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "inject_outcome_field" "DRY-RUN" "would FAIL: no **Result:** line in the $VERSION Deployment Log block on any surface (searched: $_surfaces)"
+      return 0
+    fi
+    mark_phase "inject_outcome_field" "FAIL" "**Result:** line not found in the $VERSION Deployment Log block on any surface (searched: $_surfaces)"
+    return 3
+  fi
+  local target_name; target_name="$(/usr/bin/basename "$target_log")"
+
+  # LOOKUP SITE 2 of 2 — idempotent: skip if the block on the RESOLVED surface
+  # already carries Outcome. (Scope the scan to the block via awk so a sibling
+  # release's Outcome line does not false-positive.)
   if /usr/bin/awk -v ver="$VERSION" '
-      $0 == "#### Deployment Log " ver { inblk=1; next }
-      /^#### / && inblk { inblk=0 }
-      inblk && /^\*\*Outcome:\*\*/ { found=1 }
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { inblk = 1; next }
+      inblk && line ~ /^#### / { inblk = 0 }
+      inblk && line ~ /^\*\*Outcome:\*\*/ { found = 1 }
       END { exit(found ? 0 : 1) }
-    ' "$RELEASE_LOG" 2>/dev/null; then
-    mark_phase "inject_outcome_field" "SKIPPED" "**Outcome:** already present in the $VERSION Deployment Log block"
+    ' "$target_log" 2>/dev/null; then
+    mark_phase "inject_outcome_field" "SKIPPED" "**Outcome:** already present in the $VERSION Deployment Log block ($target_name)"
     return 0
   fi
 
   if [[ "$MODE" == "dry-run" ]]; then
     local _r=""
     [[ -n "$OUTCOME_RATIONALE" ]] && _r=" + **Outcome rationale:** $OUTCOME_RATIONALE"
-    mark_phase "inject_outcome_field" "DRY-RUN" "would inject '**Outcome:** $outcome'${_r} after **Result:** in the $VERSION Deployment Log block"
+    mark_phase "inject_outcome_field" "DRY-RUN" "would inject '**Outcome:** $outcome'${_r} after **Result:** in the $VERSION Deployment Log block ($target_name)"
     return 0
   fi
 
   # In-place edit: within the v<X.Y> Deployment-Log block, insert the Outcome
   # line(s) immediately after the first `**Result:**` line. Bounded to the block
   # (next `#### ` heading or EOF) so a later release's `**Result:**` is untouched.
-  /usr/bin/python3 - "$RELEASE_LOG" "$VERSION" "$outcome" "$OUTCOME_RATIONALE" <<'PY'
+  /usr/bin/python3 - "$target_log" "$VERSION" "$outcome" "$OUTCOME_RATIONALE" <<'PY'
+import os
 import sys
 log_path, version, outcome, rationale = sys.argv[1:5]
+log_name = os.path.basename(log_path)
 with open(log_path, "r", encoding="utf-8") as f:
     lines = f.read().splitlines()
 
@@ -1237,7 +1342,7 @@ for i, line in enumerate(lines):
         start = i
         break
 if start is None:
-    print(f"ERROR: Deployment Log block for {version} not found", file=sys.stderr)
+    print(f"ERROR: Deployment Log block for {version} not found in {log_name}", file=sys.stderr)
     sys.exit(3)
 
 # Block end = next `#### ` heading after start, or EOF.
@@ -1254,7 +1359,7 @@ for j in range(start, end):
         result_idx = j
         break
 if result_idx is None:
-    print(f"ERROR: **Result:** line not found in the {version} Deployment Log block", file=sys.stderr)
+    print(f"ERROR: **Result:** line not found in the {version} Deployment Log block in {log_name}", file=sys.stderr)
     sys.exit(3)
 
 inject = [f"**Outcome:** {outcome}"]
@@ -1265,11 +1370,11 @@ with open(log_path, "w", encoding="utf-8") as f:
     f.write("\n".join(out) + "\n")
 PY
   if [[ $? -ne 0 ]]; then
-    mark_phase "inject_outcome_field" "FAIL" "could not inject **Outcome:** into the $VERSION Deployment Log block (block or **Result:** line not found)"
+    mark_phase "inject_outcome_field" "FAIL" "could not inject **Outcome:** into the $VERSION Deployment Log block (block or **Result:** line not found in $target_name; searched: $_surfaces)"
     return 3
   fi
 
-  local _detail="injected **Outcome:** $outcome after **Result:** in the $VERSION Deployment Log block"
+  local _detail="injected **Outcome:** $outcome after **Result:** in the $VERSION Deployment Log block ($target_name)"
   [[ -n "$OUTCOME_RATIONALE" ]] && _detail="$_detail (+ **Outcome rationale:**)"
   mark_phase "inject_outcome_field" "PASS" "$_detail"
   return 0
@@ -4128,6 +4233,99 @@ EOF
   [[ "$(get_phase inject_outcome_field)" == SKIPPED\|* ]] || { echo "FAIL: phase_inject_outcome_field re-run must SKIP (idempotency), got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
   [[ "$(/usr/bin/grep -c '^\*\*Outcome:\*\*' "$RELEASE_LOG")" -eq 1 ]] || { echo "FAIL: idempotent re-run must not duplicate the **Outcome:** line"; failures=$((failures+1)); }
 
+  # (f)–(h) POST-ARCHIVAL two-surface resolution. After the sweep an aged-out
+  # block's BODY lives in a same-directory `RELEASE_LOG_ARCHIVE-<family>.md`
+  # segment and the hot ledger keeps only the heading plus a pointer. A separate
+  # tmp dir so the segment glob cannot see, or be seen by, cases (a)–(e).
+  local _oc_atmp; _oc_atmp="$(/usr/bin/mktemp -d -t outcome-archived.XXXXXX)"
+  local _oc_aseg="$_oc_atmp/RELEASE_LOG_ARCHIVE-v9.md"
+  local _oc_write_archived
+  _oc_write_archived() {
+    /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+
+#### Deployment Log v9.93
+_Archived: [segment](RELEASE_LOG_ARCHIVE-v9.md)_
+
+#### Deployment Log v9.92
+_Archived: [segment](RELEASE_LOG_ARCHIVE-v9.md)_
+EOF
+    /bin/cat > "$_oc_aseg" <<'EOF'
+# RELEASE_LOG_ARCHIVE-v9
+
+#### Deployment Log v9.93
+**Mechanism:** git merge.
+**Result:** SUCCESS — archived body.
+**Velocity:** 2 issues.
+
+#### Deployment Log v9.92
+**Mechanism:** git merge.
+**Velocity:** 1 issue.
+EOF
+  }
+  RELEASE_LOG="$_oc_atmp/RELEASE_LOG.md"
+
+  # (f) the body lives in a segment → PASS, and the Outcome lands in the SEGMENT
+  # directly after its **Result:** line, with the hot ledger left untouched.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _oc_write_archived; VERSION="v9.93"; OUTCOME=""; OUTCOME_RATIONALE=""
+  # `|| true`: a regression here returns 3, and a BARE call under `set -e` would
+  # abort the whole self-test with `self-test: starting` as its only output. The
+  # get_phase assertions below are the reporting surface.
+  phase_inject_outcome_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_outcome_field)" == PASS\|* ]] || { echo "FAIL: archived-block inject should PASS, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -A1 -F '**Result:** SUCCESS — archived body.' "$_oc_aseg" | /usr/bin/grep -qFx '**Outcome:** SUCCESS' || { echo "FAIL: '**Outcome:** SUCCESS' must directly follow the **Result:** line in the archive segment"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/grep -c '^\*\*Outcome:\*\*' "$RELEASE_LOG")" -eq 0 ]] || { echo "FAIL: nothing may be injected into the hot ledger when the body is archived"; failures=$((failures+1)); }
+  # and it must not leak into the sibling v9.92 block in the same segment
+  /usr/bin/awk '/^#### Deployment Log v9\.92/{b=1} /^#### Deployment Log v9\.93/{b=0} b && /^\*\*Outcome:/{print "LEAK"}' "$_oc_aseg" | /usr/bin/grep -q LEAK && { echo "FAIL: Outcome leaked into the sibling v9.92 block in the segment"; failures=$((failures+1)); }
+
+  # (g) idempotency ACROSS surfaces — the hazard a single-site fix would create.
+  # The idempotency probe must read the SEGMENT (where the field now is), not the
+  # hot ledger (where the stub is), or a re-run double-injects silently.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_outcome_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_outcome_field)" == SKIPPED\|* ]] || { echo "FAIL: archived-block re-run must SKIP (cross-surface idempotency), got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/grep -c '^\*\*Outcome:\*\*' "$_oc_aseg")" -eq 1 ]] || { echo "FAIL: archived-block re-run must not duplicate the **Outcome:** line in the segment"; failures=$((failures+1)); }
+
+  # (h) a GENUINE absence still fails, and names the surfaces it searched. v9.92
+  # exists on both surfaces but never carried a **Result:** field — segment
+  # awareness cannot recover a field that was never written, so this must stay a
+  # hard failure rather than degrade into a silent success.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _oc_write_archived; VERSION="v9.92"; OUTCOME=""; OUTCOME_RATIONALE=""
+  if phase_inject_outcome_field >/dev/null 2>&1; then
+    echo "FAIL: a version whose **Result:** field genuinely does not exist must FAIL"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase inject_outcome_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: genuine **Result:** absence must mark FAIL"; failures=$((failures+1)); }
+  # Assert the RESOLVER-MISS diagnostic specifically, not merely that some
+  # message carried a surface list. A resolver that silently fell back to the hot
+  # ledger would still fail and would still print a surface list from the
+  # downstream message — this needle is what distinguishes the two.
+  /usr/bin/grep -qF '**Result:** line not found in the v9.92 Deployment Log block on any surface (searched: RELEASE_LOG.md RELEASE_LOG_ARCHIVE-v9.md)' <<<"$(get_phase inject_outcome_field)" || { echo "FAIL: the failure must report a resolver miss naming every surface searched, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/grep -c '^\*\*Outcome:\*\*' "$_oc_aseg")" -eq 0 ]] || { echo "FAIL: a failed lookup must write nothing"; failures=$((failures+1)); }
+
+  # (i) the dry run must not promise what the apply run cannot deliver. For a
+  # version whose **Result:** field genuinely does not exist, dry-run reports
+  # that it WOULD fail — a dry run that says "would inject" here is a green
+  # rehearsal for a red run.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  local _oc_saved_mode2="$MODE"; MODE="dry-run"
+  _oc_write_archived
+  phase_inject_outcome_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_outcome_field | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: dry-run over a genuinely absent **Result:** must mark DRY-RUN, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'would FAIL' <<<"$(get_phase inject_outcome_field)" || { echo "FAIL: dry-run must say it would FAIL for a genuinely absent **Result:**, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  # control: the same dry run over the RECOVERABLE archived version says it would inject, naming the segment
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  VERSION="v9.93"
+  phase_inject_outcome_field >/dev/null 2>&1 || true
+  /usr/bin/grep -qF 'would inject' <<<"$(get_phase inject_outcome_field)" || { echo "FAIL: dry-run control — a recoverable archived block must report it would inject, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'RELEASE_LOG_ARCHIVE-v9.md' <<<"$(get_phase inject_outcome_field)" || { echo "FAIL: dry-run must name the segment it would write to, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/grep -c '^\*\*Outcome:\*\*' "$_oc_aseg")" -eq 0 ]] || { echo "FAIL: dry-run must not write"; failures=$((failures+1)); }
+  MODE="$_oc_saved_mode2"
+
+  /bin/rm -rf "$_oc_atmp" 2>/dev/null || true
+  unset -f _oc_write_archived
+
   /bin/rm -rf "$_oc_tmp" 2>/dev/null || true
   unset -f _oc_write_log
   REPO_ROOT="$_oc_saved_root"; MODE="$_oc_saved_mode"; VERSION="$_oc_saved_version"
@@ -5655,7 +5853,7 @@ FOLOG
   echo "  phase_lint_release_notes validated (§3.2 close gate — clean PASS / this-version finding FAIL / other-version PASS / exit-3 fail-loud / missing-tool FAIL)" >&2
   echo "  extract_row_state + extract_milestone_slug validated (3 shapes: vX.Y- / NN- / pure-alpha incl. hyphen-less #2539 a4 branch; version-less end-anchor; #667 F2 bare theme-named slug → title)" >&2
   echo "  phase_append_release_digest + phase_append_release_index + phase_append_changelog validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency; #2048 — version-less marker + _unversioned notes link + marker-aware idempotency + CHANGELOG SKIP; #4455 — all three entries PROJECTED by generate_release_index.py, versioned CHANGELOG block lands above the prior entry WITH its separating blank line intact, re-run SKIPs, and a non-owner/repo-shaped REPO_SLUG FAILs before writing a broken Release URL)" >&2
-  echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped)" >&2
+  echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped; #3715 two-surface — archived body resolves to its segment and the hot ledger is left untouched / cross-surface idempotency re-run SKIPs without duplicating / a genuine **Result:** absence still hard-FAILs naming every surface searched / no sibling leak within a segment)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache)" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2

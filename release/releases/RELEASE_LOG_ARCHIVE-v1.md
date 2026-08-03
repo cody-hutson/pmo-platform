@@ -16,8 +16,11 @@ over that directory still finds this content exactly as it did before the move.
 Each block below retains its heading in the parent ledger, with a pointer here,
 so every anchor into the parent still resolves.
 
-Blocks are appended by `release/tools/sweep-release-corpus.py`. This file is
-append-only and is never itself swept.
+Blocks are appended by `release/tools/sweep-release-corpus.py`, and this file is
+never itself swept. Existing blocks are not rewritten, with one named exception:
+the Stage-13 close-out injects an `**Outcome:**` field in place when a retro
+`--outcome` names a release whose body already lives here. That injection is
+idempotent, adds a single field to a single block, and removes nothing.
 
 ---
 #### Deployment Log v1.24
