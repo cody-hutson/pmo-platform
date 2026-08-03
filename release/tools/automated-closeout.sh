@@ -4016,7 +4016,9 @@ EOF
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   phase_append_changelog >/dev/null 2>&1 || true
   [[ "$(get_phase append_changelog)" == FAIL\|* ]] || { echo "FAIL: a non-owner/repo-shaped REPO_SLUG must FAIL append_changelog, got '$(get_phase append_changelog)'"; failures=$((failures+1)); }
-  ! /usr/bin/grep -q 'github.com/pmo-platform/' "$_ai_tmp/CHANGELOG.md" || { echo "FAIL: a FAILed append_changelog must write no broken Release URL"; failures=$((failures+1)); }
+  # Assert against the malformed value UNDER TEST rather than a hardcoded literal:
+  # the fixture sets REPO_SLUG above, so this tracks it and embeds no repo name.
+  ! /usr/bin/grep -q "github.com/${REPO_SLUG}/" "$_ai_tmp/CHANGELOG.md" || { echo "FAIL: a FAILed append_changelog must write no broken Release URL"; failures=$((failures+1)); }
   REPO_SLUG="$_ai_saved_slug2"
 
   /bin/rm -rf "$_ai_tmp" 2>/dev/null || true
