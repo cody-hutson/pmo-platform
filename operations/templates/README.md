@@ -22,7 +22,7 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 
 | Template | Performance Domain | Canon source |
 |---|---|---|
-| `project-charter-template.md` | Initiating | PMBOK 7 |
+| `project-charter-template.md` | Planning | PMBOK 7 |
 | `communications-tracker-template.md` | Stakeholder | PMBOK 7 |
 | `open-meetings-tracker-template.md` | Stakeholder | PMBOK 7 |
 | `stakeholder-register-template.csv` | Stakeholder | PMBOK 7 |
