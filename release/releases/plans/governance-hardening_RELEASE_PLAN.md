@@ -235,7 +235,7 @@ Release-scoped predicates spanning ≥ 2 issues. Graded at Stage 9 Phase A3.6 / 
 
 ### `verify-release-plan.sh` — known tool gap, measured cross-plan
 
-**Read the residual ERRORs as a tool gap, not a release defect.** `bash release/tools/verify-release-plan.sh release/releases/plans/governance-hardening_RELEASE_PLAN.md` exits **3** with **`0 PASS / 0 FAIL / 0 SKIP / 5 ERROR`**. Every one of the five is the tool failing to *extract* a command, not a criterion failing to *hold*.
+**Read the residual ERRORs as a tool gap, not a release defect.** `bash release/tools/verify-release-plan.sh release/releases/plans/governance-hardening_RELEASE_PLAN.md` exits **3** with **`0 PASS / 0 FAIL / 0 SKIP / 5 ERROR`**. **Not one of the five is a criterion failing to hold** — three are the tool failing to extract a command that is present (CIAC-1/2/3), and two are criteria that declare no method for it to extract (CIAC-4/5). The per-CIAC split is below; do not read the five as one cause.
 
 **The unit matters.** The tool's own roll-up reports **5**. A `grep -c ERROR` over the same output returns **6** — it counts the roll-up line, which contains the word. Cite the roll-up, not the line count.
 
@@ -275,7 +275,7 @@ The leading `.*` is **greedy**, so the captured span is the **last** backtick-de
 | CIAC-4 | `main` | no `*Method:*` clause | **Named residual — NOT repaired here.** Out of this reconciliation's scope; flagged so Stage 9 does not read it as allowlist-caused |
 | CIAC-5 | `domain` | no `*Method:*` clause | **Named residual — NOT repaired here.** Same shape as CIAC-4 |
 
-**Honest scope statement.** Four of the five are tool-side. CIAC-4 and CIAC-5 are *not* — they carry no verification method at all, which is the same defect class CIAC-2 had. Repairing them means authoring two acceptance methods, which is Stage-5 design work rather than plan reconciliation, so they are recorded rather than silently absorbed. **Stage 9 should grade CIAC-4 and CIAC-5 manually.**
+**Honest scope statement — the split is 3 / 2, not 5 / 0.** CIAC-1, CIAC-2 and CIAC-3 are tool-side: each carries a real command the tool cannot extract or cannot run. CIAC-4 and CIAC-5 are **not** — they carry no verification method at all, the same defect class CIAC-2 had before this stage. Repairing them means authoring two acceptance methods, which is Stage-5 design work rather than plan reconciliation, so they are recorded rather than silently absorbed. **Stage 9 should grade CIAC-4 and CIAC-5 manually** — reading all five as "known tool gap" would be false for those two.
 
 `verify-release-plan.sh` is **not modified** by this release.
 
