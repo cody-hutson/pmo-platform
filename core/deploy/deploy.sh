@@ -8406,7 +8406,7 @@ cmd_check() {
   # reversibility CHEAP. Primitive: core/deploy/tools/check-milestone-epic-membership.py
   # (carries --self-test).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 56: Milestone↔epic membership (M1 membership + M2 reconciliation; warn-mode initial; enforce-flip deferred)"
+    log "Check 56: Milestone↔issue-population invariants (M1 membership + M2 reconciliation + M3 scaffold-completeness (advisory); warn-mode initial; enforce-flip deferred)"
     local c56_script="core/deploy/tools/check-milestone-epic-membership.py"
     if [[ ! -f "$c56_script" ]]; then
       flag_warn_or_issue "milestone-epic-membership" "primitive script missing: $c56_script"
@@ -8439,6 +8439,23 @@ cmd_check() {
           if [[ -n "$c56_m2" ]]; then
             flag_warn_or_issue "milestone-epic-membership" "M2 reconciliation (warn-only; advisory) — description↔membership divergence on: $c56_m2"
           fi
+        fi
+        # M3 — scaffold completeness. Routed through flag_advisory_only, NOT
+        # flag_warn_or_issue: this leg's predicate cannot distinguish a genuine
+        # scaffold gap from a milestone that legitimately gained a card after
+        # scaffolding, so it belongs to the class that reports and never gates.
+        # flag_advisory_only has no mode case and no ISSUES increment, so M3
+        # cannot be flipped to FAIL when the shared cohort graduates — the
+        # constraint is a property of the emitter, not a default someone can flip.
+        # No new check number and no new mode dial: M3 is a leg of Check 56.
+        local c56_m3 c56_m3_adv c56_marker
+        c56_m3=$(echo "$c56_out" | awk -F'\t' '$1=="M3"{print "ms#"$2":"$3" "$4}' | paste -sd'; ' -)
+        c56_m3_adv=$(echo "$c56_out" | awk -F'\t' '$1=="COUNT_M3_ADV"{print $2}')
+        c56_marker=$(echo "$c56_out" | awk -F'\t' '$1=="SCAFFOLD_MARKER"{print "ms#"$2" "$3}' | paste -sd', ' -)
+        if [[ -n "$c56_m3" ]]; then
+          flag_advisory_only "milestone-scaffold-completeness" "M3 scaffold completeness — load-bearing finding(s): $c56_m3 [advisory ${c56_m3_adv:-0}; marker adoption ${c56_marker:-none}]"
+        else
+          log "  OK:    milestone scaffold completeness (M3) — 0 load-bearing finding(s) (${c56_m3_adv:-0} advisory; marker adoption ${c56_marker:-none})"
         fi
       else
         flag_warn_or_issue "milestone-epic-membership" "check errored (exit $c56_exit): $(echo "$c56_out" | head -1)"
