@@ -48,6 +48,8 @@ reversibility: MODERATE / Confidence HIGH
 
 **Downstream impact.** No runtime or skill behaviour changes for end users. Every historical INDEX row, DIGEST entry and CHANGELOG block is byte-identical at merge except a single `v3.69.1` `Release PR` reconciliation made **in the LOG**. Check 23 stays **warn-mode**; its flip to enforce is a staged post-merge decision on the check's own ≥3-day zero-false-positive condition, not something this release asserts.
 
+`RELEASE_LOG.md` goes from **783,667 B to 148,558 B** — an 81 % reduction, 51,442 B inside its new 200 KB budget — and becomes readable end-to-end again rather than only grep-addressable. **Nothing is deleted.** The 147 relocated per-release narratives move to four archive segments *in the same directory*, so a recursive grep finds them exactly where it always did; every heading stays in the LOG with a pointer, so every link into it still resolves. Anyone who reads a release ledger sees a shorter file and one extra line per historical release saying where its detail went. The one tool that reads that detail — the FinOps velocity join — was changed in the same commit to read the segments too, and its basis is measurably unchanged. A new warn-mode gate reports the file's size on every `deploy.sh --check` run and says when the next archival chore is due.
+
 **Cross-references.** Stage-4 re-plan #4457 · Stage-5 design + reviews #4467 · Stage-6 sub-task #4470 · milestone #290. Governing standards: `core/standards/duplicate-source-discipline.md` § 1 (register-or-remove), `core/standards/date-variable-convention.md` § Emission-Time Anchors, `core/standards/bypass-mode-readiness.md` § Shakedown.
 
 ---
