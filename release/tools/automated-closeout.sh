@@ -3831,8 +3831,27 @@ EOF
   local _ai_saved_slug="$STATE_MILESTONE_SLUG" _ai_saved_idx="$RELEASE_INDEX" _ai_saved_dig="$RELEASE_DIGEST"
   local _ai_saved_pr="$PR_NUMBER" _ai_saved_notesdir="$RELEASE_NOTES_DIR"
   local _ai_saved_log="$RELEASE_LOG" _ai_saved_anchor="$CLOSEOUT_ANCHOR_UTC"
+  local _ai_saved_repo_slug="$REPO_SLUG"
   local _ai_tmp; _ai_tmp="$(/usr/bin/mktemp -d -t appendidx-selftest.XXXXXX)"
   REPO_ROOT="$_ai_tmp"; MODE="apply"; VERSION="v9.97"; STATE_MILESTONE_SLUG="88-some-theme-named-milestone"; PR_NUMBER=9999
+  # HERMETICITY — REPO_SLUG is a fixture input and must be PINNED, not inherited.
+  # The emit phases below hand REPO_SLUG to the projector, which validates it as
+  # owner/repo-shaped. This script's own resolution is env -> operator.toml ->
+  # the bare literal `pmo-platform`, so on a developer machine (operator.toml
+  # present) the ambient value is well-formed and every phase passes, while on a
+  # hermetic runner (no env var, no config) it falls through to the bare literal,
+  # the projector rejects it, and the phase returns non-zero. These calls are
+  # bare under `set -euo pipefail`, so that aborted the ENTIRE self-test with
+  # exit 3 and `self-test: starting` as its only output — a green local run and
+  # a red CI run from one unpinned input. Pin it exactly as REPO_ROOT / MODE /
+  # VERSION are pinned. `x/y` is the fixture-slug convention already used
+  # elsewhere in this self-test and embeds no real repo name.
+  REPO_SLUG="x/y"
+  # Assert the pin took, in the shape the projector actually validates. This is
+  # the limb that fails NAMED if a later edit drops the pin, instead of the
+  # silent `set -e` abort that shipped it.
+  [[ "$REPO_SLUG" == */* && "$REPO_SLUG" != */*/* && "$REPO_SLUG" != /* && "$REPO_SLUG" != */ ]] \
+    || { echo "FAIL: the append-emit fixture must PIN an owner/repo-shaped REPO_SLUG rather than inherit ambient resolution (got '$REPO_SLUG')"; failures=$((failures+1)); }
   RELEASE_INDEX="$_ai_tmp/RELEASE_INDEX.md"; RELEASE_DIGEST="$_ai_tmp/RELEASE_DIGEST.md"
   RELEASE_LOG="$_ai_tmp/RELEASE_LOG.md"
   RELEASE_NOTES_DIR="$_ai_tmp/notes"   # absent dir => headline placeholder path
@@ -3874,8 +3893,13 @@ EOF
 
   # (a) DIGEST emit → exactly one `### v9.97 (date) — …` H3, under `## Knowledge Corpus`
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
-  phase_append_release_digest >/dev/null 2>&1
-  [[ "$(get_phase append_release_digest)" == PASS\|* ]] || { echo "FAIL: phase_append_release_digest should PASS, got '$(get_phase append_release_digest)'"; failures=$((failures+1)); }
+  # `|| true` so a non-zero return REPORTS on the next line instead of aborting
+  # the whole self-test under `set -e` with no diagnostic. This is the first
+  # emit-phase call in the run, so it is the one an unpinned fixture input
+  # reaches first — the message below is what an operator sees instead of a bare
+  # `self-test: starting` and exit 3.
+  phase_append_release_digest >/dev/null 2>&1 || true
+  [[ "$(get_phase append_release_digest)" == PASS\|* ]] || { echo "FAIL: phase_append_release_digest should PASS, got '$(get_phase append_release_digest)' (fixture REPO_SLUG='$REPO_SLUG' — an unpinned, non-owner/repo-shaped slug is rejected by the projector and fails this phase)"; failures=$((failures+1)); }
   local _ai_dig_n; _ai_dig_n="$(/usr/bin/grep -cE '^### v9\.97[[:space:](]' "$RELEASE_DIGEST" 2>/dev/null || true)"; _ai_dig_n="${_ai_dig_n:-0}"
   [[ "$_ai_dig_n" -eq 1 ]] || { echo "FAIL: DIGEST must carry exactly 1 '### v9.97 (' H3 (Check-32(b) form), got $_ai_dig_n"; failures=$((failures+1)); }
   # the new entry must sit under `## Knowledge Corpus`, above the legacy `## v1.*` family H2
@@ -4023,6 +4047,7 @@ EOF
 
   /bin/rm -rf "$_ai_tmp" 2>/dev/null || true
   REPO_ROOT="$_ai_saved_root"; MODE="$_ai_saved_mode"; VERSION="$_ai_saved_version"
+  REPO_SLUG="$_ai_saved_repo_slug"
   STATE_MILESTONE_SLUG="$_ai_saved_slug"; RELEASE_INDEX="$_ai_saved_idx"; RELEASE_DIGEST="$_ai_saved_dig"
   PR_NUMBER="$_ai_saved_pr"; RELEASE_NOTES_DIR="$_ai_saved_notesdir"
   RELEASE_LOG="$_ai_saved_log"; CLOSEOUT_ANCHOR_UTC="$_ai_saved_anchor"
