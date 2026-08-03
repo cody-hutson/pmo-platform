@@ -42,7 +42,76 @@ Every release declares a **release-identity mode** at Bundle — a closed enum:
 The mode is **orthogonal to bundle size** — all four combinations (`versioned`/`version-less` × single-item/bundle) are supported: see [`bundle-composition-doctrine.md § 3 Step 5`](../standards/bundle-composition-doctrine.md) for the single-item shape and [`§ 5`](../standards/bundle-composition-doctrine.md) for the `version-less` (slug-only) naming form. The single-item-vs-bundle mechanism is a Stage-5 D-class decision, not committed at intake. `version-less` is the shipped spelling (used throughout `automated-closeout.sh`); `versionless` is an accepted synonym. **Cutover:** applies to all releases entering Bundle after this shard's introducing-release merge (reflexive-pipeline discipline).
 
 ## 5. Process
-**Phase A (Agent, Tier 1/2):** A1 Release Readiness gate check (per procedure below; invokes Template-Conversion Rule for `observation`-labeled candidates BEFORE evaluating G3 criteria — see Template-Conversion Rule block below), A2 dependency graph construction (chains, cycles, depth, critical-path — per § A8 below), A3 Release Scope Coverage Analysis (Y/Partial/N per issue), A4 capacity heuristics (5-8 issues max, 60/20/20 allocation target — the governing capacity ceiling is the risk-weighted point-band at [`bundle-composition-doctrine.md § 3 Step 5`](../standards/bundle-composition-doctrine.md); the 5-8 item-count is a secondary readability heuristic, not an independent cap), A5 bundle recommendation (ordered list, allocation, coverage matrix, contention, version rec, exclusions with gate results). A5 additionally surfaces any related-issue cluster detected per **A5.1** (≥3 coordinated Approved issues), with a recommended tracking primitive from the A5.1 selection table for operator confirmation at Phase B1.
+**Phase A (Agent, Tier 1/2):** A1 Release Readiness gate check (per procedure below; invokes Template-Conversion Rule for `observation`-labeled candidates BEFORE evaluating G3 criteria — see Template-Conversion Rule block below), **A1.1** bundle-entry re-validation (existing-milestone claim + fresh subsumption — see the A1.1 block below), A2 dependency graph construction (chains, cycles, depth, critical-path — per § A8 below), A3 Release Scope Coverage Analysis (Y/Partial/N per issue), A4 capacity heuristics (5-8 issues max, 60/20/20 allocation target — the governing capacity ceiling is the risk-weighted point-band at [`bundle-composition-doctrine.md § 3 Step 5`](../standards/bundle-composition-doctrine.md); the 5-8 item-count is a secondary readability heuristic, not an independent cap), A5 bundle recommendation (ordered list, allocation, coverage matrix, contention, version rec, exclusions with gate results). A5 additionally surfaces any related-issue cluster detected per **A5.1** (≥3 coordinated Approved issues), with a recommended tracking primitive from the A5.1 selection table for operator confirmation at Phase B1.
+
+**A1.1 — Bundle-entry re-validation (existing-milestone claim + fresh subsumption):** Two detections that run at bundle entry against each candidate card and answer a question the Gate-3 criteria do not ask: *is this scope already claimed by another live Milestone, and has anything shipped since the card was filed that already covers it?* A1.1 owns the two predicates below and the states they resolve to; it **cites** the parent resolver, the composition-lock boundary, and the subsumption rule rather than restating any of them (ADR-019 compose-not-absorb). Autonomy **Tier 1** — A1.1 recommends and records; it never de-bundles a card, re-parents an issue, re-milestones anything, or closes anything.
+
+*1 — Trigger and population.* A1.1 fires at Phase A1 per candidate card in the bundle set, and again immediately before Phase B3, unconditionally. The candidate set is supplied by the bundling pass itself — A1.1 does **not** re-query it by label, so it cannot measure clean against an empty label-keyed population.
+
+*2 — `claim_state(C)`: is this scope already claimed elsewhere?* Resolved per candidate card `C` against the target Milestone `M_target` (for a not-yet-created Milestone, `M_target = ∅`).
+
+```
+claim(X)  :=  the Milestone attached to issue X, when X.milestone.state == "open"
+              — read from structured GitHub state (issue.milestone.{number,title,state});
+                never inferred from a title, slug, body, or label.
+
+kin(C)    :=  { parent(C) }  resolved by the child→parent read release-planner Mode A
+              Step 4.6(b) (native GraphQL `parent` edge) and Step 4.6(c) (epic-composition
+              table) already perform. A1.1 reproduces neither read.
+
+sib(C)    :=  { s ∈ parent(C).subIssues : s ≠ C }  read from the SAME per-parent record as
+              claim(parent(C)) — one extra field selection, no extra round trip.
+
+claim_state(C), first match wins:
+  1. claim(C) ≠ ∅ ∧ claim(C) ≠ M_target                  → CLAIMED               (FAIL-contributing)
+  2. ∃ k ∈ kin(C) : claim(k) ≠ ∅ ∧ claim(k) ≠ M_target   → CLAIMED               (FAIL-contributing)
+  3. ∃ s ∈ sib(C) : claim(s) ≠ ∅ ∧ claim(s) ≠ M_target   → CO-CLAIMED [ADVISORY]  (recorded basis only)
+  4. kin(C) resolved non-empty ∧ orders 1–3 all negative → CLEAR
+  5. otherwise                                            → UNRESOLVED
+```
+
+**Carriers.** A work card's parent is resolved from **structured GitHub state only**. The title form `(parent #N)` and the body-prose form `Parent: #N` are **not** valid carriers for a work card: measured at introduction (2026-08-03) over the 268 open non-sub-task candidates, the native edge carried **76**, the title form **0**, and the body form **0** — with both text extractors proven working on the stage-sub-task population, so those zeros are genuine non-adoption and not broken reads. Those prose forms are the carrier for *stage sub-tasks*, a different population; do not import them here. Limb (c) is the one non-native carrier and it is not free text either: it parses an **epic's governed composition / scope / pull-in table**, a structured convention the epic maintains. Its coverage was thin at introduction (**2 of 268**), so most cards resolve on the native edge or not at all.
+
+**Grain — state is per card, reporting is per parent.** `claim_state` is a property of the card, so `CLEAR` is unreachable while a live co-claim exists on that card's siblings. **Reporting and disposition are at parent grain: A1.1 emits one finding per distinct parent, listing the affected cards.** A parent whose children legitimately decompose across waves is the normal case, not a defect — restating one parent's fact once per affected card manufactures volume without adding a decision.
+
+*3 — Non-coercion, stated in the imperative.* **`UNRESOLVED` is not `CLEAR`. A zero is never, by itself, a clean finding.** Phase B3 proceeds on an `UNRESOLVED` card only with an explicit basis recorded in the bundle rationale comment; the same requirement applies to `CO-CLAIMED` and, below, to `INDETERMINATE` and `PARTIAL`. Because `UNRESOLVED` is the majority state on today's population, its basis is recorded **once per bundle in aggregate** — `claim basis: UNRESOLVED ×N (leaf cards; no native parent edge, no epic-composition membership): <card list>` — while `CLAIMED`, `CO-CLAIMED`, `SUBSUMED`, and `OVERLAP` each carry per-card prose, because those are the states where the operator is deciding. Non-coercion is not relaxed by the aggregation; only the recording is sized to the decision rate. **Fail direction:** a query error, a partial GraphQL read, or an absent `gh` resolves to `UNRESOLVED`, never `CLEAR`.
+
+*4 — Boundary, cited and not restated.* When the claiming Milestone is at or past **Stage 4 Planning entry** it is composition-locked — see [`release/governance/release-process.md`](../../governance/release-process.md) § A7 § Composition lock, which is the sole definition surface for the act-typed rule, its three-valued state resolution, and its lift conditions. **This subsection cites that definition and restates none of it.** Where A1.1 reports a Milestone's lock posture it reports § A7's three values unchanged and never renders a zero as eligible.
+
+*5 — `subsumption_state(C)`: has anything shipped since filing that already covers this?* The baseline is **bundling time, not filing time** — a card filed weeks before it is bundled is re-checked against everything closed in between.
+
+```
+since(C)  :=  max( timestamp of C's most recent recorded subsumption determination
+                   (Stage-2 A2 per subsumption-convention.md), C.createdAt, now − 90d )
+
+delta(C)  :=  issues closed in (since(C), now], EXCLUDING issues whose title matches the
+              stage-sub-task grammar `^Stage \d` — the scope-bearing population
+
+subsumption_state(C), first match wins:
+  1. ∃ d ∈ delta(C) : scope(d) ⊇ scope(C)                                   → SUBSUMED   (FAIL-contributing)
+  2. ∃ d ∈ delta(C) : partial overlap                                       → OVERLAP    [ADVISORY]
+  3. the now−90d floor bound `since(C)`                                     → PARTIAL    (recorded basis only)
+  4. delta(C) enumerated in full ∧ orders 1–3 negative                      → CLEAR
+  5. delta query errored, or C has no parseable scope                       → INDETERMINATE
+```
+
+The full-subset-versus-partial rule is defined in [`subsumption-convention.md`](../protocols/subsumption-convention.md) § When to Subsume and its § Decision Table; A1.1 **cites** them and defines no second subsumption rule and no new threshold. `OVERLAP` is **advisory**: record the linkage in the bundle rationale and proceed — a partial overlap is by definition not a duplicate, and *link, do not close* is a Stage-2 triage action, not a Stage-3 bundling disposition. When the `now − 90d` floor binds, report **`PARTIAL`** with `window floored at now−90d; determination covers (floor, now] only` — never coerced to `CLEAR`. The **90d floor is `[RECOMMENDED]`, a calibratable starting value and not a derived one** — it is the single uncalibrated number in this sub-step, and `PARTIAL` exists so every floored determination stays visible; recalibrate from the observed `PARTIAL` rate once bundles accumulate.
+
+*6 — Recording.* Both determinations are recorded under a **`Bundle-entry re-validation:`** label carrying three fields — `Command:` / `Result:` / `Checked at:`. The field shape is the one [`triage-design-rereview.md`](../standards/triage-design-rereview.md) § 3.1 already mandates for its own currency check; the label is deliberately distinct so the two audit populations stay separable. **Stated residual:** § 3.1 verifies that a citation already made is still true; A1.1 re-runs *detection*. Stage-2 A2 runs subsumption once at Triage; Stage-4 G-PL4 re-runs a card's own reproduction steps and acceptance criteria, not its subsumption against newly-closed siblings. The three compose; none of them covers this.
+
+*7 — Truncation is a broken probe, not a clean result.* `gh issue list --limit N` silently caps at 1000 regardless of `N`. Use `gh api -X GET search/issues … --jq '.total_count'` for a denominator and `--paginate` for items. **A truncated read that reports `CLEAR` is a broken probe** and must be reported as indeterminate.
+
+*8 — Disposition and conferred consequence.* A `CLAIMED` or `SUBSUMED` finding that is left undispositioned produces an **A1 gate FAIL on that issue**; absent an operator override with documented rationale at Phase B2, that issue is **excluded from the A5 bundle recommendation**, per A1's own `**Gate result:**` and `**Operator override:**` clauses. `CO-CLAIMED`, `OVERLAP`, `PARTIAL`, `UNRESOLVED`, and `INDETERMINATE` are **not** FAIL-contributing — they require a recorded basis, not a stop. The dispositions available for a FAIL-contributing finding are all pre-existing: *(i)* bundle the card into the claiming Milestone rather than creating a second one; *(ii)* re-bundle the claiming Milestone per **§ A9.7 disposition 2** when it is pre-Stage-4-entry; *(iii)* operator override with documented rationale in the bundle rationale comment at Phase B2. When the claiming Milestone is at or past the boundary named in item 4, path (ii) is unavailable and path (i) is constrained by the composition lock. **Stated reach:** exclusion from A5 keeps contended scope out of the new Milestone; it does not forbid creating a Milestone at Phase B3, and A1.1 claims no such authority.
+
+*9 — Staleness.* `claim_state` and `subsumption_state` are true **as of their recorded `Checked at:` only**, and the population moves. The determination is authoritative from the A1 run through Phase B3. A1.1 makes **no** claim about a Milestone created between its read and the Phase B3 write — that residual is named rather than papered over; an atomic guarantee would require a lock this sub-step deliberately does not invent.
+
+*10 — Cutover discipline.* A1.1 applies to bundles entering Stage 3 strictly after this sub-step's introducing-release merge SHA recorded in the release log; the introducing release is exempt (reflexive-pipeline-loop discipline).
+
+*11 — Worked shape.*
+- A candidate card whose **parent** is attached to an open Milestone other than the target ⇒ `CLAIMED`. Two open Milestones would claim one scope; the card fails A1 and is excluded from A5 absent an operator override at Phase B2.
+- A candidate card whose **parent's other children** sit in an open Milestone other than the target ⇒ `CO-CLAIMED [ADVISORY]`, emitted once per parent. The operator question is *"is this one capability or two releases?"* — a decision, not a stop.
+- A candidate card whose scope is fully covered by an issue **closed inside the delta window** ⇒ `SUBSUMED`; partially covered ⇒ `OVERLAP` (record the linkage, proceed).
+- No resolvable parent edge ⇒ `UNRESOLVED`. Never `CLEAR`.
 
 **A5.1 — Related-Issue-Cluster Detection & Tracking-Mechanism Selection (per the cluster-tracking design):** A pre-bundle backlog-scan signal that recognizes when scattered Approved issues — not yet milestoned — form a coordinated cluster that warrants a single tracking container. A5.1 **owns the detection threshold + the selection rule**; it **routes a detected cluster onto already-existing primitives and invents no new mechanism** (the `cluster:` / `epic:` / `project:` label axes and GitHub native sub-issues / Projects all ship today). A5.1 cites [`label-taxonomy.md`](../../../core/specs/label-taxonomy.md) for the primitive definitions (owns neither) and [`work-item-type-schema.md § 1.2.1`](../../../core/schemas/work-item-type-schema.md) for the GitHub adapter mappings.
 
@@ -250,8 +319,8 @@ For each issue in the candidate bundle, evaluate:
 
 **Outcome Statement at Phase B3 (per the outcome-statement template):** The Milestone description authored at Phase B3 MUST include a `### Release Outcome Statement` H3 block per [release-outcome-statement-template.md](../specs/release-outcome-statement-template.md). The block carries REQUIRED `**AFTER**` (post-merge state, 1–3 sentences) and `**BEFORE**` (current state, 1–3 sentences); OPTIONAL `**Actor(s):**` and `**Success Indicator:**` sub-fields. The block is queryable via `gh api repos/.../milestones/<N> --jq .description`. Stage 3 spoke draft selects shape from Release Class (per [release-class-taxonomy.md](../specs/release-class-taxonomy.md) — routine / novel / cross-cutting / hotfix have differentiated AFTER/BEFORE length + Success Indicator requirements per the template § 4). Operator approves Outcome alongside scope at Phase B1 Decision Briefing. The Outcome is downstream-consumed at Stage 9 G-PR7 (goal-conformance check) and Stage 13 QC4-06 + G-CL7 (goal-attainment verification). **Cutover discipline:** The Outcome Statement is required for all milestones created going forward.
 
-**Gate result:** PASS (all structural checks pass, judgment checks assessed) or FAIL (≥1 blocking criterion unresolved). Per-issue results surface in A5 bundle recommendation.
-**Operator override:** On FAIL, operator may override with documented rationale in the bundle rationale comment (Phase B2). Overridden criteria carry forward as risk items to Planning (Stage 4). Issues failing the gate without override are excluded from A5 bundle recommendation.
+**Gate result:** PASS (all structural checks pass, judgment checks assessed) or FAIL (≥1 blocking criterion unresolved, or ≥1 undispositioned A1.1 finding in state `CLAIMED` or `SUBSUMED` on the issue). Per-issue results surface in A5 bundle recommendation.
+**Operator override:** On FAIL, operator may override with documented rationale in the bundle rationale comment (Phase B2). Overridden criteria and findings carry forward as risk items to Planning (Stage 4). Issues failing the gate without override are excluded from A5 bundle recommendation.
 
 **Ticket lifecycle:** Claim: validate Status=Approved, set Stage→3-Bundle. Execute: dependency/capacity analysis (A1-A5 + B1-B4). Resolve: post bundle rationale, set `status: bundled` label + Status→Bundled, assign Milestone. Per [ticket-information-architecture.md](../specs/ticket-information-architecture.md) Ticket Lifecycle Protocol.
 

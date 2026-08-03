@@ -531,7 +531,7 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 **Inherits:** No formal inheritance — composes alongside Gate 3 (the bundle being refreshed must have originally passed Gate 3). Re-validates Gate 3 criteria after amend/re-bundle path.
 
 | ID | Criterion | Type | Check | Automation | Validation method |
-|---|---|---|---|------|
+|---|---|---|---|---|---|
 | G-BR1 | Refresh trigger condition valid (T1 ≥3 new Approved theme-matching issues OR T2 priority shift OR T3 dep-state change OR T4 Stage 4 boundary check) | field | structural | auto | — |
 | G-BR2 | Churn magnitude computed (composition_delta_pct + theme_preserved Y/N) | field | structural | auto | — |
 | G-BR3 | Refresh outcome path selected (no-op / amend / re-bundle / defer) with required evidence per [release-process.md](../../release/governance/release-process.md) § A7 — Bundle Mutability Protocol outcome-path table | field | judgment | recommend | — |
