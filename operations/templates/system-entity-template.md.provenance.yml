@@ -1,0 +1,29 @@
+# L4 provenance header for: system-entity-template.md
+# Sidecar placement per core/standards/template-protocol.md §4.4 — this template is a
+# PAYLOAD-FRONTMATTER TEMPLATE (ADR-107): its inline frontmatter slot is owned by
+# the System entity record the template renders (entity-field-schemas.md 3.11),
+# not by metadata about the template. The whole §4.2 header lives here, verbatim and
+# unchanged; this file is a placement decision, never a schema variant.
+# Do NOT merge these keys into the template's own frontmatter block.
+#
+# canon_compat evidence (template-protocol.md §6 P5 path c-i): domain:project AND
+# no Anthropic plugin counterpart for the System Entity Page family
+# (template-taxonomy.md §3.5 carries no plugin cross-ref; the family takes no §6
+# row per §2.1 F4). `none` is the ANTICIPATED resolution at DRAFT — authoritative
+# only at an APPROVED transition.
+---
+artifact_type: template
+template_family: System Entity Page
+domain: project
+canonical_path: operations/templates/system-entity-template.md
+owner: [OPERATOR_NAME]
+review_status: DRAFT
+created: 2026-06-30
+updated: 2026-08-03
+generated_by: release-pipeline {{RELEASE_VERSION}}
+reviewer: N/A
+canon: PMBOK 7 §Project Work Performance Domain
+canon_compat: none
+version: "{{RELEASE_VERSION}}"
+supersedes: N/A
+superseded_by: N/A

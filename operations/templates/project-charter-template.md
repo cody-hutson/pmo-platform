@@ -1,6 +1,26 @@
+---
+artifact_type: template
+template_family: Project Charter
+domain: project
+canonical_path: operations/templates/project-charter-template.md
+owner: [OPERATOR_NAME]
+review_status: DRAFT
+created: 2026-06-29
+updated: 2026-08-03
+generated_by: release-pipeline {{RELEASE_VERSION}}
+reviewer: N/A
+canon: PMBOK 7 §Planning Performance Domain
+canon_compat: none
+version: "{{RELEASE_VERSION}}"
+supersedes: N/A
+superseded_by: N/A
+---
+<!-- The YAML block above is this TEMPLATE FILE's provenance header (core/standards/template-protocol.md §4.1). Do NOT copy it into a rendered [Project]_Project_Charter.md instance — an instance starts at the H1 below. -->
+<!-- canon_compat evidence (template-protocol.md §6 P5 path c-i): domain:project AND no Anthropic plugin counterpart for the Project Charter family (template-taxonomy.md §3.4 carries no plugin cross-ref; the family takes no §6 row per §2.1 F4). `none` is the ANTICIPATED resolution at DRAFT — authoritative only at an APPROVED transition. -->
+
 # {{PROJECT_NAME}} Project Charter
 
-**Purpose:** Formally authorize the project and establish the sponsor's mandate, objectives, and high-level scope (PMBOK Initiating).
+**Purpose:** Formally authorize the project and establish the sponsor's mandate, objectives, and high-level scope (PMBOK 7 §Planning Performance Domain — PMBOK 6 placed chartering in the Initiating process group).
 **Owner:** [OPERATOR_NAME]
 **Started:** {{CREATION_DATE}}
 

@@ -1,0 +1,29 @@
+# L4 provenance header for: project-rollup-template.md
+# Sidecar placement per core/standards/template-protocol.md §4.4 — this template is a
+# PAYLOAD-FRONTMATTER TEMPLATE (ADR-107): its inline frontmatter slot is owned by
+# the composed Project Rollup the template renders (portfolio-writeback-contract.md),
+# not by metadata about the template. The whole §4.2 header lives here, verbatim and
+# unchanged; this file is a placement decision, never a schema variant.
+# Do NOT merge these keys into the template's own frontmatter block.
+#
+# canon_compat evidence (template-protocol.md §6 P5 path c-i): domain:project AND
+# no Anthropic plugin counterpart for the Project Rollup (composed) family
+# (template-taxonomy.md §3.7 carries no plugin cross-ref; the family takes no §6
+# row per §2.1 F4). `none` is the ANTICIPATED resolution at DRAFT — authoritative
+# only at an APPROVED transition.
+---
+artifact_type: template
+template_family: Project Rollup (composed)
+domain: project
+canonical_path: operations/templates/project-rollup-template.md
+owner: [OPERATOR_NAME]
+review_status: DRAFT
+created: 2026-07-17
+updated: 2026-08-03
+generated_by: release-pipeline {{RELEASE_VERSION}}
+reviewer: N/A
+canon: PMBOK 7 §Measurement Performance Domain
+canon_compat: none
+version: "{{RELEASE_VERSION}}"
+supersedes: N/A
+superseded_by: N/A

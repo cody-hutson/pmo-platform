@@ -24,7 +24,7 @@ This protocol provides L4 **schema primitives** (state names, provenance field s
 
 ### What IS enforced
 
-This protocol governs every file at `operations/templates/` — the canonical-template registry per [`template-storage.md`](template-storage.md) §2.1. Each registered template carries a YAML provenance header (markdown templates) or a sibling `.provenance.yml` file (CSV templates) per §4.4, and progresses through the 5-state lifecycle defined in §3. Sync-map registration in `TEMPLATE_SYNC_MAP` (deploy.sh) is governed by L3 Storage; this protocol governs only the provenance + state attributes on the canonical source files.
+This protocol governs every file at `operations/templates/` — the canonical-template registry per [`template-storage.md`](template-storage.md) §2.1. Each registered template carries a YAML provenance header — inline as frontmatter, or in a sibling `.provenance.yml` file where the inline slot is owned by another schema, per §4.4 — and progresses through the 5-state lifecycle defined in §3. Sync-map registration in `TEMPLATE_SYNC_MAP` (deploy.sh) is governed by L3 Storage; this protocol governs only the provenance + state attributes on the canonical source files.
 
 ### What is NOT enforced (intentional non-enforcement boundary)
 
@@ -117,7 +117,7 @@ The five state sub-sections below establish the authoritative entry/exit conditi
 
 ### §4.1 YAML schema block (canonical, copy-pasteable)
 
-The canonical YAML provenance block placed at the top of every markdown template (or in a sibling `.provenance.yml` file for CSV templates, per §4.4):
+The canonical YAML provenance block placed at the top of every markdown template (or in a sibling `.provenance.yml` file where the inline frontmatter slot is owned by another schema, per §4.4):
 
 ```yaml
 ---
@@ -144,7 +144,7 @@ superseded_by: <filename | N/A>
 | Field | Required | Type | Allowed values / format | Source / Purpose |
 |---|---|---|---|---|
 | `artifact_type` | YES | string | `template` (constant) | Distinguishes template files from instance files (which use the  instance enum). The constant `template` value is L4-owned. |
-| `template_family` | YES | string (enum) | A value from L1 [`template-taxonomy.md`](template-taxonomy.md) §3-§5 family enumeration | Anchors the template to the L1 taxonomy; informs P5 gate and §8 composition routing. |
+| `template_family` | YES | string (enum) | A value from L1 [`template-taxonomy.md`](template-taxonomy.md) §3-§5 family enumeration, taken **verbatim** from an Artifact Family cell | Anchors the template to the L1 taxonomy; informs P5 gate and §8 composition routing. **Which family, and whether a new one is needed, is decided by the [`template-taxonomy.md`](template-taxonomy.md) §2.1 Family-Assignment Rule (F-RULE)** — F2 discriminates on field schema rather than page shell, and F4 governs whether a §6 row is also owed. A discovery annotation appended to a cell elsewhere in the corpus (e.g. `ADR (Architecture Decision Record)` in the registry README) is **not** part of the value. |
 | `domain` | YES | enum | `project` \| `software` \| `platform-internal` | Three-domain classification per [`template-taxonomy.md`](template-taxonomy.md) §2; informs P5 path (c) eligibility. **Which `domain` this is:** concept 5 (template-provenance) of the six the bare token names — corpus index at `core/specs/domain-token-registry.md`. It classifies a **template structure**. The artifact-provenance `domain` (`source`/`managed`/`generated`, `frontmatter-schema.md` § Category 6) classifies an **artifact instance**; both are called *"three-domain classification"* at their own files and their value spaces are disjoint. **Where the two meet:** a template whose frontmatter slot is occupied by the born-entity block of the artifact it produces carries this header in a **sidecar, not inline** — writing it into the occupied block would place two `domain:` keys in one YAML document, which resolves last-wins with no error. Seven templates are in that class; see the registry §3 and ADR-107. |
 | `canonical_path` | YES | path string | repo-relative path | P4 gate evaluation input; declares the single-source-of-truth location per L3 propagation mechanism ([`template-storage.md`](template-storage.md) §3 deploy-sync). |
 | `owner` | YES | string | skill-name OR operator-name | P1 gate evaluation input. |
@@ -183,15 +183,34 @@ The provenance header schema in §4.1 is **field-by-field compatible** with the 
 
 ### §4.4 Frontmatter placement convention
 
-**Markdown templates** (`*-template.md` in the canonical registry): Provenance header is a YAML block between `---` markers placed at the top of the file, before any prose content. Standard markdown frontmatter convention.
+**Default — inline.** A template's provenance header is a YAML block between `---` markers at the top of the file, before any prose content. Standard markdown frontmatter convention. This is the placement for every template whose top-of-file frontmatter slot is free.
 
-**CSV templates** (`*-template.csv` in the canonical registry): CSV files do not support inline frontmatter (the header row is data, not metadata). Provenance for CSV templates lives in a sibling `<file>.provenance.yml` file at the same path. Example: `raid-log-template.csv` has its provenance in `raid-log-template.provenance.yml` in the same directory.
+**Exception — sidecar.** Where the template's inline frontmatter slot is **owned by another schema**, the provenance header lives in a sibling file instead. A markdown file has exactly one frontmatter slot; when something else already owns it, provenance cannot go there, and the sidecar is how the template is *resolved* rather than exempted. Two causes put a template in this class, and the rule is the same for both:
 
-**AC4 verification clauses (per template format):**
-- For markdown exemplars: `grep -l 'review_status: APPROVED' operations/templates/*.md`
-- For CSV exemplars (if ever): `grep -l 'review_status: APPROVED' operations/templates/*.provenance.yml`
+| Cause | Why the slot is unavailable | Class |
+|---|---|---|
+| **Format** | The file format cannot carry inline YAML at all — a CSV's header row is data, not metadata. | CSV templates (`*-template.csv`) |
+| **Payload** | The top-of-file YAML block is the **born-entity frontmatter of the artifact the template produces**, copied into the rendered instance verbatim rather than read as metadata about the template. | **Payload-frontmatter templates** — the class named and decided in [ADR-107](../ADRs/ADR-107-payload-frontmatter-template-provenance.md) |
 
-CSV-specific handling rationale: Foundation Stage 5 hypothesized CSV templates as `keep-canonical-only` with mechanical drift-detection via `md5sum`; sibling-file provenance preserves CSV format integrity while supporting the same gate evaluation against `review_status`.
+**Filename form (settled here).** The sidecar is the template's **full filename with `.provenance.yml` appended**, in the same directory — `person-entity-template.md` → `person-entity-template.md.provenance.yml`; `raid-log-template.csv` → `raid-log-template.csv.provenance.yml`. Append, never substitute: substituting the extension would collide two sidecars whenever a family ships both a `.md` and a `.csv` template, and it discards the format the provenance describes. *(This settles the open item ADR-107 recorded as "the sidecar's filename form and field set" and corrects a prior internal inconsistency in this section, which specified `<file>.provenance.yml` in the rule and then gave an extension-substituting example.)*
+
+**Field set (settled here).** The sidecar carries the **whole §4.2 header — all 15 fields, the 12 Required ones included — verbatim and unchanged**. The sidecar is a placement decision, not a schema variant: there is exactly one provenance schema and one set of gate-evaluation inputs, read from a different path. A sidecar that carried a subset would fork the contract and force every consumer and gate to hold two read paths for one schema.
+
+**`.provenance.yml` is not `.meta.yml` — the two are complementary, not competing.** A `<file>.meta.yml` sidecar carries the **produced artifact's** born frontmatter for a format that cannot hold it inline (`raid-log-template.csv.meta.yml` carries `type: tracker` / `domain: managed` / `trust_category:` — the payload). A `<file>.provenance.yml` sidecar carries **this template file's** L4 provenance header. They describe different subjects and a single template may legitimately own both. Neither supersedes the other, and neither is renamed.
+
+**Consequence for coverage checks — this is load-bearing.** A probe for template provenance that reads only `operations/templates/*.md` under-reports by exactly the sidecar population and will report every payload-frontmatter template as un-provenanced forever. Any such check must read both:
+
+```
+grep -l '^artifact_type: template' operations/templates/*.md operations/templates/*.provenance.yml
+```
+
+**AC4 verification clauses (per placement):**
+- Inline carriers: `grep -l 'review_status: APPROVED' operations/templates/*.md`
+- Sidecar carriers: `grep -l 'review_status: APPROVED' operations/templates/*.provenance.yml`
+
+**Rationale for the sidecar route generally.** Foundation Stage 5 hypothesized CSV templates as `keep-canonical-only` with mechanical drift-detection via `md5sum`; sibling-file provenance preserves the file's own format integrity while supporting the same gate evaluation against `review_status`. ADR-107 extends that rationale to the payload cause on the identical predicate — *the frontmatter position holds data, not metadata* — reached by a different route.
+
+**Reading the class off the file, not off an absence.** A template whose frontmatter *is* its own provenance header carries an explicit marker instructing readers not to copy the block into a rendered instance. A payload-frontmatter template carries the opposite signal: a comment naming the block as the produced entity's schema. Classify by reading the block, never by observing that a header is missing.
 
 ## §5 Trigger Protocol — When to Templatize (T1-T5)
 

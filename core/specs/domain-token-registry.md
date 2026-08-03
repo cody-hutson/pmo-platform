@@ -37,11 +37,18 @@ The bare token `domain` names **six different concepts** in this corpus. Nothing
 
 Of the six concepts, exactly two can meet in one file, and they do so in exactly one place: a **canonical template that carries the frontmatter of the artifact it produces**.
 
-**The class.** A *payload-frontmatter template* is a template whose top-of-file YAML block is not metadata **about the template** — it is the born-entity frontmatter **of the artifact the template produces**, copied into the instance verbatim with its placeholders substituted. The block is the template's payload. Seven templates are in this class:
+**The class.** A *payload-frontmatter template* is a template whose top-of-file YAML block is not metadata **about the template** — it is the born-entity frontmatter **of the artifact the template produces**, copied into the instance verbatim with its placeholders substituted. The block is the template's payload.
 
-`operations/templates/communications-tracker-template.md` · `daily-status-log-template.md` · `milestone-tracker-template.md` · `open-meetings-tracker-template.md` · `project-md-composed-index-template.md` · `sprint-tracker-template.md` · `transcript-register-template.md`
+**The class is defined structurally, and it is larger than the collision.** Measured across the 35 canonical markdown templates, the registry partitions exactly three ways with no remainder: **14** carry frontmatter *and* the do-not-copy marker (their block is their own provenance header), **14** carry frontmatter *without* that marker (payload-frontmatter), and **7** carry no frontmatter at all. The payload-frontmatter class is therefore **14 templates**, in two groups distinguished by whether concept 2 is also present:
 
-Each carries a concept-2 `domain: managed` — correct, because the artifact each produces is managed knowledge. Each is also a template, and every template owes a concept-5 `domain:` in its L4 provenance header. **Two different entities, each legitimately owning a `domain` field, and one frontmatter slot between them.**
+| Group | Members | Concept-2 `domain: managed` present? | Consequence |
+|---|---|---|---|
+| **Collision subset — 7** | `communications-tracker-template.md` · `daily-status-log-template.md` · `milestone-tracker-template.md` · `open-meetings-tracker-template.md` · `project-md-composed-index-template.md` · `sprint-tracker-template.md` · `transcript-register-template.md` | **Yes** | Two `domain` concepts would meet in one YAML document — the silent last-wins deletion described below. This is the group §3 is *about*. |
+| **Non-collision subset — 7** | `decision-entity-template.md` · `dependency-entity-template.md` · `person-entity-template.md` · `project-rollup-template.md` · `system-entity-template.md` · `vendor-entity-template.md` · `workstream-entity-template.md` | **No** — none declares `domain:` | No key collision, but the slot is occupied just the same. Same class, same resolution, different reason for being blocked. |
+
+The two subsets take the identical resolution because the blocker is **slot ownership**, of which the key collision is one consequence rather than the cause. The non-collision seven carry their sidecars as of the `governance-hardening` release; the collision seven do not yet.
+
+Each member of the collision subset carries a concept-2 `domain: managed` — correct, because the artifact each produces is managed knowledge. Each is also a template, and every template owes a concept-5 `domain:` in its L4 provenance header. **Two different entities, each legitimately owning a `domain` field, and one frontmatter slot between them.**
 
 **Why this is structural, not lexical.** A markdown file has exactly one top-of-file frontmatter slot. In these seven it is occupied by payload. Writing the L4 provenance header into that same block would place two `domain:` keys in one YAML document, and duplicate keys resolve **last-wins with no error** — silently deleting the value that every artifact these templates produce is born with. The failure is invisible: no parser complains, no gate fires, and the loss surfaces only downstream as artifacts with the wrong provenance. This is why the collision must be resolved deliberately rather than discovered by a sweep.
 
@@ -59,7 +66,7 @@ Each carries a concept-2 `domain: managed` — correct, because the artifact eac
 
 - **It renames nothing.** All six concepts keep their field names, and the `domain: managed` in each of the seven stays exactly where it is, byte for byte.
 - **It does not perform the migration.** No sidecar file is created by the decision itself; authoring them is separate, sequenced work.
-- **It does not settle the sidecar's filename form or field set.** Two forms are live in the corpus — a `.meta.yml` suffix in use today, and a `.provenance.yml` form declared by the template protocol with no files yet written to it. Reconciling them belongs to the work that generalizes the placement convention, not to this registry.
+- **It did not settle the sidecar's filename form or field set** — that was routed to the work generalizing the placement convention. **Settled in the same release by [ADR-108](../ADRs/ADR-108-template-provenance-sidecar-form.md)** and written into `template-protocol.md` §4.4: the sidecar is `<full template filename>.provenance.yml` (append, never extension-substitute) and carries the whole §4.2 header — all 15 fields, the 12 Required ones included — verbatim. The two live forms are **complementary, not competing**: `.meta.yml` carries the *produced artifact's* frontmatter, `.provenance.yml` carries the *template's* L4 header. Neither is renamed and a template may own both.
 
 The full decision, its rejected alternatives and its consequences are recorded in **ADR-107**. This section is the index entry; that ADR is the record.
 

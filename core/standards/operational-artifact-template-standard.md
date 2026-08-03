@@ -86,7 +86,7 @@ Every conformant operational-artifact template carries these six structural elem
 
 | # | Element | Required | Source / Definition | Consolidated or Net-New |
 |---|---|---|---|---|
-| **A** | Provenance header | YES | The L4 14-field YAML block per `template-protocol.md` §4.1 (markdown) or sibling `.provenance.yml` per §4.4 (CSV). Verbatim; no field added/removed. | Consolidated (L4) |
+| **A** | Provenance header | YES | The L4 14-field YAML block per `template-protocol.md` §4.1 (inline frontmatter) or sibling `.provenance.yml` per §4.4 (where the inline slot is owned by another schema — CSV format, or a payload-frontmatter template per ADR-107). Verbatim; no field added/removed. | Consolidated (L4) |
 | **B** | Instance-frontmatter contract | YES | A declaration of which `frontmatter-schema.md` Category 1–7 fields the *instances* produced from this template MUST carry (the template specifies the contract; the frontmatter-schema owns the schema). | Consolidated (frontmatter-schema) |
 | **C** | Body typed-format spec | YES | The existing typed-format content: column headers (CSV) or section structure + placeholder semantics (MD). Unchanged from current template practice. | Consolidated (existing practice) |
 | **D** | Entity-Derivation Table | YES | NEW. One row per template field: `field · entity_binding (#N Entity.field \| template-local) · ead_class (7-class) · level (L1/L2/L3) · rationale-if-local`. Per §4 rule. | **Net-new** |
@@ -97,7 +97,7 @@ The per-element subsections below restate each element so the AC-2 conformance g
 
 ### Element A — Provenance header (consolidated, L4)
 
-The template file carries the L4 14-field provenance block **verbatim** per `template-protocol.md` §4.1 (markdown frontmatter) or the sibling `.provenance.yml` per §4.4 (CSV companion). This standard adds **no** field to the L4 schema — provenance is L4's, not PDA's (compose-not-modify, §2).
+The template file carries the L4 14-field provenance block **verbatim** per `template-protocol.md` §4.1 (inline frontmatter) or the sibling `.provenance.yml` per §4.4 (where the inline slot is owned by another schema). This standard adds **no** field to the L4 schema — provenance is L4's, not PDA's (compose-not-modify, §2).
 
 ### Element B — Instance-frontmatter contract (consolidated, frontmatter-schema)
 
