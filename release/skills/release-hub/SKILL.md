@@ -109,7 +109,7 @@ If the trigger is ambiguous, ask one disambiguating question naming the candidat
 **Run sequence (state machine — every invocation):**
 1. **Resume first (Procedure 0b)** — read hub-state per `hub-session-continuity.md`; if a run is in flight, resume at its next gate; else start fresh.
 2. **Procedure 0 — Planning (Stage 4):** spawn the `release-planner` planning spoke → Decision Briefing → **GATE: operator approves the plan + Release Outcome Statement.**
-3. **Procedure 1 — Scaffolding:** create one sub-task per stage per issue; close skips with the Skip Closure Format → **GATE: scaffold reviewed.**
+3. **Procedure 1 — Scaffolding:** create the release's stage sub-tasks per the stage-number scope rule — **per-issue for Stages 5–8, one release-scoped sub-task for each of Stages 9–13** (Stage 4's already exists) — each stamped with the milestone, the `sub-task` label and its `<!-- subtask-scope: … -->` marker in the creating call; close skips with the Skip Closure Format; verify completeness at Step 6.5 → **GATE: scaffold reviewed.**
 4. **Procedure 2 — Routing:** select the dependency-met actionable set; before each parallel wave run the **quota-budget gate** (Step 5.5) and honor the **stage parallelism class** (5/7/8 parallel-safe; 6/13 write-serialized); spawn the wave.
 5. **Procedure 4 — Completion:** read each spoke's return + output comment; verify closure; produce a **Decision Briefing**; route only after the operator renders every decision in it.
 6. **Procedure 4a — Emit on every decision (MANDATORY):** both surfaces, never one — the sub-task comment AND an `append-pipeline-event.sh` row (`references/orchestration-playbook.md` Procedure 4a). A routing step that advances with a rendered decision and no emitted row is incomplete.
