@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.06 (2026-08-03) — One release record, three generated views, and a file you can actually read
+
 ### v4.05 (2026-08-02) — Claims the documentation makes about itself are now checked
 
 ### v4.04 (2026-08-01) — Blocked tracker writes now work, and checks that could not fail now can
