@@ -175,7 +175,22 @@ NOTE_SUMMARY_RE = re.compile(r'^summary:\s*"?([^"\n]+)"?', re.MULTILINE)
 # anchor must admit both, so it is NOT pinned to a leading "v". Header/separator
 # rows are excluded by requiring field 1 to be non-empty and rejecting the
 # literal "Version" header and the "---" separator in parse_log_rows.
-LOG_ROW_RE = re.compile(r"^\|(?P<cells>(?:[^\|]*\|){7}[^\|]*)\|\s*$")
+#
+# EIGHT OR MORE cells, and the fields are then pinned BY HEADER NAME when a header
+# row is present. The stricter exactly-8 form silently SKIPPED any row from a LOG
+# carrying a trailing column, which meant the projector and the close-out — which
+# has always pinned by header name — disagreed about what a LOG row is. Two
+# components with two rules for one schema is the shape this whole card exists to
+# remove. Measured at adoption: the relaxed form matches exactly the same 167 lines
+# of the live LOG as the strict one, so the corpus reading is unchanged; the
+# positional fallback below preserves the previous behaviour when no header is found.
+LOG_ROW_RE = re.compile(r"^\|(?P<cells>(?:[^\|]*\|){7,}[^\|]*)\|\s*$")
+
+# Canonical field positions (0-based) used when no header row is available.
+LOG_POSITIONAL_FIELDS = {"version": 0, "milestone": 1, "release_pr": 3, "state": 6, "date": 7}
+# Header cell name per field, for the name-pinned resolution.
+LOG_HEADER_NAMES = {"version": "Version", "milestone": "Milestone",
+                    "release_pr": "Release PR", "state": "State", "date": "Date"}
 
 # Live INDEX schema: | Version | Milestone | Date | Theme | Release PR | Release Notes |
 INDEX_ROW_RE = re.compile(
@@ -264,24 +279,29 @@ def parse_log_rows(log_text: str) -> list[dict]:
     the slug qualifier is retained in the cell and stripped at artifact lookup.
     """
     rows: list[dict] = []
+    fields = dict(LOG_POSITIONAL_FIELDS)
     for raw_line in log_text.splitlines():
         m = LOG_ROW_RE.match(raw_line)
         if not m:
             continue
         cells = [c.strip() for c in m.group("cells").split("|")]
-        if len(cells) != 8:
+        if len(cells) < 8:
             continue
         version = cells[0]
-        # Skip header + separator rows.
-        if not version or version == "Version" or set(version) <= set("-: "):
+        # Header row: re-pin every field index by NAME, then skip the row. A LOG
+        # that grows a column stays readable instead of silently mis-mapping —
+        # the field-mismap this parser's own self-test was written to catch.
+        if version == "Version":
+            resolved = {k: cells.index(n) for k, n in LOG_HEADER_NAMES.items() if n in cells}
+            if len(resolved) == len(LOG_HEADER_NAMES):
+                fields = resolved
             continue
-        rows.append({
-            "version": version,
-            "milestone": cells[1],
-            "release_pr": cells[3],
-            "state": cells[6],
-            "date": cells[7],
-        })
+        # Skip separator + empty rows.
+        if not version or set(version) <= set("-: "):
+            continue
+        if max(fields.values()) >= len(cells):
+            continue
+        rows.append({k: cells[i] for k, i in fields.items()})
     return rows
 
 
@@ -532,7 +552,10 @@ def read_note(version_key: str, milestone: str) -> dict:
     out: dict = {"path": rel, "text": None, "headline": None, "summary": None}
     if not rel:
         return out
-    abs_path = WORKSPACE_ROOT / "release" / "releases" / rel
+    # Resolve relative to NOTES_DIR's parent, not a hard-coded corpus path:
+    # find_artifact returns "<NOTES_DIR.name>/…", so this is correct both in the
+    # repo and under an injected --notes-dir fixture.
+    abs_path = NOTES_DIR.parent / rel
     try:
         text = abs_path.read_text(encoding="utf-8")
     except OSError:
@@ -550,22 +573,41 @@ def read_note(version_key: str, milestone: str) -> dict:
     return out
 
 
-def emit_index_entry(log_row: dict, merge_anchor: str, theme: str = "") -> str:
-    """ONE INDEX table row, dated with the MERGE anchor."""
-    return render_index_row(log_row, theme, date_override=merge_anchor, predict_note=True)
+def emit_index_entry(log_row: dict, merge_anchor: str, theme: str = "",
+                     version_less: bool = False) -> str:
+    """ONE INDEX table row, dated with the MERGE anchor.
+
+    A version-less release's Version cell carries the "(version-less)" qualifier
+    and its note link resolves under notes/_unversioned/ — the shipped corpus
+    convention. The qualifier is applied from the caller's DECLARATION when the
+    LOG cell does not already carry it, so the emitted row matches the shipped
+    shape regardless of which of the two the LOG happens to record.
+    """
+    row = log_row
+    if version_less and VERSION_LESS_MARKER not in log_row["version"]:
+        row = dict(log_row)
+        row["version"] = f"{_slug_from_version_cell(log_row['version'])} {VERSION_LESS_MARKER}"
+    return render_index_row(row, theme, date_override=merge_anchor, predict_note=True)
 
 
-def emit_digest_entry(version_cell: str, closeout_anchor: str, headline: str | None) -> str:
+def emit_digest_entry(version_cell: str, closeout_anchor: str, headline: str | None,
+                      version_less: bool = False) -> str:
     """ONE DIGEST H3 entry, dated with the CLOSE-OUT anchor.
 
     Version-less releases carry the ", version-less" date-cell marker, matching
     the shipped DIGEST convention. An absent or version-echoing headline becomes
     the operator placeholder — the DIGEST is emitted before the note exists.
+
+    `version_less` is DECLARED by the caller rather than inferred, because the
+    caller owns the version grammar and a LOG Version cell does not always carry
+    the qualifier. Inferring it here would put a second, subtly different rule
+    for the same fact in a second component. The cell marker is honoured too, so
+    either source is sufficient and they cannot disagree in a harmful direction.
     """
     version = _slug_from_version_cell(version_cell)
     if not headline or headline == version:
         headline = DIGEST_HEADLINE_PLACEHOLDER
-    if VERSION_LESS_MARKER in version_cell:
+    if version_less or VERSION_LESS_MARKER in version_cell:
         date_cell = f"{closeout_anchor}, version-less"
     else:
         date_cell = closeout_anchor
@@ -759,6 +801,26 @@ def _self_test() -> int:
     # Version-less row must parse (relaxed anchor).
     if log_rows[2]["version"] != "self-test-vl (version-less)":
         print(f"self-test FAIL: version-less LOG row dropped: {log_rows}", file=sys.stderr)
+        return 1
+    # Field indices are pinned by HEADER NAME, so a LOG that grows a column stays
+    # readable rather than silently mis-mapping. The trailing column here shifts
+    # nothing, so the discriminating fixture below MOVES Date away from its
+    # canonical index — positional parsing would read the wrong cell.
+    shifted = parse_log_rows(
+        "| Version | Milestone | Date | Issues | Release PR | Merge SHA | Tag | State |\n"
+        "|---|---|---|---|---|---|---|---|\n"
+        "| v99.55 | m-shift | 2026-05-25 | #1 | #500 | `a` | `v99.55` | VERIFIED |\n"
+    )
+    if len(shifted) != 1 or shifted[0]["date"] != "2026-05-25" or shifted[0]["release_pr"] != "#500":
+        print(f"self-test FAIL: header-name field pin did not hold on a reordered schema: {shifted}",
+              file=sys.stderr)
+        return 1
+    # Extra trailing column must not drop the row (the close-out's own fixture shape).
+    if len(parse_log_rows(
+            "| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date | Notes |\n"
+            "|---|---|---|---|---|---|---|---|---|\n"
+            "| v99.56 | m-extra | #1 | #501 | `a` | `v99.56` | VERIFIED | 2026-05-26 | — |\n")) != 1:
+        print("self-test FAIL: a LOG row with a trailing column was dropped", file=sys.stderr)
         return 1
 
     # Synthetic INDEX — live 6-column schema, with deliberate drift:
@@ -1199,7 +1261,7 @@ def _rel(path: Path) -> str:
 
 
 def emit(surface: str, version: str, merge_anchor: str, closeout_anchor: str,
-         repo_slug: str, log_rows: list[dict]) -> int:
+         repo_slug: str, log_rows: list[dict], version_less: bool = False) -> int:
     """Print ONE entry for `surface` to stdout. Never writes a file."""
     log_by_version = {r["version"]: r for r in log_rows}
     row = log_by_version.get(version)
@@ -1225,7 +1287,7 @@ def emit(surface: str, version: str, merge_anchor: str, closeout_anchor: str,
                   file=sys.stderr)
             return 3
         theme = _existing_theme_map().get(row["version"], "")
-        print(emit_index_entry(row, merge_anchor, theme))
+        print(emit_index_entry(row, merge_anchor, theme, version_less))
         return 0
 
     note = read_note(row["version"], row.get("milestone", ""))
@@ -1234,11 +1296,11 @@ def emit(surface: str, version: str, merge_anchor: str, closeout_anchor: str,
         # Note absence is EXPECTED here, not an error: the DIGEST entry is
         # emitted before the note is scaffolded, so the placeholder is the
         # normal fresh-close path and the operator fills it at chore-PR review.
-        print(emit_digest_entry(row["version"], closeout_anchor, note["headline"]))
+        print(emit_digest_entry(row["version"], closeout_anchor, note["headline"], version_less))
         return 0
 
     # surface == "changelog"
-    if VERSION_LESS_MARKER in row["version"]:
+    if version_less or VERSION_LESS_MARKER in row["version"]:
         print(f"error: '{row['version']}' is version-less and has no '## [vX.Y]' key to write. "
               f"The close-out SKIPs the CHANGELOG for a version-less release; refusing to invent "
               f"a slug-keyed entry", file=sys.stderr)
@@ -1268,10 +1330,28 @@ def main() -> int:
     p.add_argument("--merge-anchor", help="MERGE-event date (YYYY-MM-DD) carried by the LOG and INDEX. REQUIRED with --emit; never sampled here")
     p.add_argument("--closeout-anchor", help="CLOSE-OUT run date (YYYY-MM-DD) carried by the DIGEST, the note and the CHANGELOG. REQUIRED with --emit; never sampled here")
     p.add_argument("--repo-slug", help="Repository slug as owner/repo, used in the CHANGELOG Release URL. REQUIRED with --emit; never resolved from the environment or operator config here")
+    p.add_argument("--version-less", action="store_true", help="Declare this release version-less. Declared by the caller, which owns the version grammar; never inferred here")
+    # DECLARED path overrides, not ambient ones. The corpus paths are read from
+    # arguments so the projector is fixture-drivable — the close-out's own
+    # hermetic self-test drives these phases against a sandbox corpus in a temp
+    # dir, and a tool that could only ever read the live repo would either break
+    # that self-test or silently read the wrong corpus during it. Omitted =>
+    # the repo-resolved defaults, so Check 23's `--verify` invocation is unchanged.
+    p.add_argument("--log-path", help="Override the RELEASE_LOG.md path (fixture injection)")
+    p.add_argument("--index-path", help="Override the RELEASE_INDEX.md path (fixture injection)")
+    p.add_argument("--notes-dir", help="Override the release-notes directory (fixture injection)")
     args = p.parse_args()
 
     if args.self_test:
         return _self_test()
+
+    global LOG_PATH, INDEX_PATH, NOTES_DIR
+    if args.log_path:
+        LOG_PATH = Path(args.log_path).resolve()
+    if args.index_path:
+        INDEX_PATH = Path(args.index_path).resolve()
+    if args.notes_dir:
+        NOTES_DIR = Path(args.notes_dir).resolve()
 
     # Path-resolution failure (clause 1): LOG missing → exit 3, NOT a silent
     # pass and NOT a drift-exit-1. The check is unverifiable; deploy.sh maps
@@ -1312,7 +1392,7 @@ def main() -> int:
             p.error(f"--repo-slug must be owner/repo-shaped; got '{args.repo_slug}'. A bare repo "
                     "name emits a permanently broken Release URL into a durable CHANGELOG row")
         return emit(args.emit, args.version, args.merge_anchor, args.closeout_anchor,
-                    args.repo_slug, rows)
+                    args.repo_slug, rows, args.version_less)
 
     if args.verify:
         if not INDEX_PATH.exists():

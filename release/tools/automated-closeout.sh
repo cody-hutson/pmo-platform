@@ -168,6 +168,14 @@ WORKSPACE_ROOT="${WORKSPACE_ROOT:-${HOME}/Claude}"
 
 # Repo slug resolution (env-override → operator.toml → default). Empty operator
 # config → bare "pmo-platform"; gh calls below tolerate a non-resolving slug.
+#
+# THAT TOLERANCE IS FALSE OF ONE CONSUMER. phase_append_changelog persists this
+# value into a durable CHANGELOG.md Release URL rather than passing it to a
+# tolerant API, so a non-resolving slug there is not a soft failure — it is a
+# permanently broken link in a shipped artifact, and the bare fallback below is
+# not owner/repo-shaped. That phase therefore gates on WELL-FORMEDNESS before it
+# writes, and fails loudly rather than emitting a plausible-looking wrong row —
+# the same posture the frontmatter `date:` accessor in that phase already takes.
 REPO_SLUG="${REPO_SLUG:-}"
 if [[ -z "$REPO_SLUG" ]] && [[ -r "${HOME}/.config/pmo-platform/operator.toml" ]]; then
   _gh=$(/usr/bin/grep -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | /usr/bin/head -1 | /usr/bin/awk -F= '{gsub(/[" ]/,"",$2); print $2}')
@@ -194,6 +202,13 @@ SYNTHESIZE_LEARNINGS="$SCRIPT_DIR/synthesize-release-learnings.sh"
 # sandboxes REPO_ROOT still reads the REAL token set — exercising the shipped tokens
 # is the entire value of the round-trip test.
 LINT_RELEASE_CORPUS="$REPO_ROOT/core/deploy/tools/lint_release_corpus.py"
+# Release-corpus PROJECTOR — the single writer of the three DERIVED ledger
+# surfaces (RELEASE_INDEX / RELEASE_DIGEST / CHANGELOG). Phases 7, 8 and 9.5 no
+# longer synthesise their own entry content; each asks the projector for ONE
+# entry and inserts it. Captured HERE at load time from the script-derived
+# $REPO_ROOT for the same reason as the line above: a self-test that sandboxes
+# REPO_ROOT must still invoke the REAL projector, against its sandbox corpus.
+PROJECTOR="$REPO_ROOT/core/deploy/tools/generate_release_index.py"
 # Body-source-of-record drift check (release-notes-standard.md §5.1). The SINGLE
 # source of the published-body-vs-stripped-note equality logic; phase 15.6 below
 # invokes it as the post-emit assert. Genuine drift BLOCKS the close (cutoff-gated,
@@ -441,6 +456,95 @@ notes_abs_path() {
 # The INDEX Version-cell label: version-less rows carry the "(version-less)" marker.
 index_version_cell() {
   if is_version_less; then printf '%s (version-less)' "$VERSION"; else printf '%s' "$VERSION"; fi
+}
+
+# ─── Derived-surface projection (#4455) ──────────────────────────────────────
+#
+# ONE writer for the three DERIVED ledgers. Phases 7 / 8 / 9.5 used to synthesise
+# their entry content inline — three independent write paths for one release
+# fact, which is the duplication this card exists to end. Each now asks the
+# projector for ONE ENTRY on stdout and performs the insertion itself.
+#
+# The projector emits ENTRIES, NEVER FILES. That division is deliberate and is
+# the design's central safety property: the majority of historical DIGEST and
+# CHANGELOG entries carry post-emission operator edits that exist nowhere else,
+# so a component able to rewrite a whole ledger makes a silent, clean-diff
+# destruction of ~100 hand-authored entries reachable. Insertion stays here.
+#
+# Two rules this function owns:
+#
+#  (1) FAIL-CLOSED ON AN EMPTY EMISSION. The inline heredocs could not emit
+#      nothing — they wrote the file directly. A `$(...)` capture CAN, and an
+#      unguarded capture inserts a blank line and returns 0. This is a failure
+#      mode the refactor CREATES, so it is gated in the same change: non-zero
+#      exit OR empty stdout is a FAIL, never a silent no-op insertion.
+#  (2) EVERY NON-FILE INPUT IS PASSED, NEVER RE-DERIVED. Both date anchors and
+#      the repo slug are sampled or resolved exactly once, by this script, which
+#      already owns them. The projector cannot reach a clock or an operator
+#      config; a value it could re-derive is a second writer of a fact that
+#      already has one, which is exactly what produced the permanent INDEX-Date
+#      grandfathering enumeration in the checker.
+#
+# Corpus paths are passed as arguments too, so the hermetic self-test drives the
+# projector against its sandbox fixtures instead of the live corpus.
+#
+# The MERGE anchor is resolved for every surface, not just the INDEX, so one rule
+# covers all three. Preflight already asserts the LOG row exists at DEPLOYED
+# before any of these phases run, so an unresolvable Date here is a real schema
+# anomaly — fail loudly rather than substitute a clock.
+#
+# stdout: the emitted entry, trailing newlines intact (the CHANGELOG block ends
+# with a blank line, and that blank line is load-bearing separation).
+# stderr: the projector's own diagnostics. Return: 0, or non-zero on any failure.
+emit_derived_entry() {
+  local _surface="$1"
+
+  if [[ ! -f "$PROJECTOR" ]]; then
+    printf 'release-corpus projector not found at %s\n' "$PROJECTOR" >&2
+    return 3
+  fi
+
+  local _merge_anchor
+  _merge_anchor="$(extract_row_date "$(find_log_row "$VERSION")")"
+  if [[ -z "$_merge_anchor" ]]; then
+    printf 'could not resolve the merge-anchored Date from the RELEASE_LOG row for %s\n' "$VERSION" >&2
+    return 3
+  fi
+
+  local -a _args=(
+    --emit "$_surface"
+    --version "$VERSION"
+    --merge-anchor "$_merge_anchor"
+    --closeout-anchor "$CLOSEOUT_ANCHOR_UTC"
+    --repo-slug "$REPO_SLUG"
+    --log-path "$RELEASE_LOG"
+    --index-path "$RELEASE_INDEX"
+    --notes-dir "$RELEASE_NOTES_DIR"
+  )
+  if is_version_less; then _args+=(--version-less); fi
+
+  # The `printf X` sentinel preserves trailing newlines that $( ) would strip,
+  # and the explicit `exit` propagates the PROJECTOR's status rather than
+  # printf's — the same class of mistake as reading `$?` after a pipe.
+  local _out _rc=0
+  _out="$(/usr/bin/python3 "$PROJECTOR" "${_args[@]}"; _prc=$?; /usr/bin/printf 'X'; exit "$_prc")" || _rc=$?
+  _out="${_out%X}"
+
+  if [[ $_rc -ne 0 ]]; then
+    printf 'projector exited %s emitting the %s entry for %s\n' "$_rc" "$_surface" "$VERSION" >&2
+    return "$_rc"
+  fi
+  # Emptiness is tested on the WHITESPACE-STRIPPED value: a projector that
+  # emitted only a newline would otherwise read as non-empty and insert a blank
+  # line, which is the exact silent no-op this rule exists to prevent.
+  local _out_stripped
+  _out_stripped="$(/usr/bin/printf '%s' "$_out" | /usr/bin/tr -d '[:space:]')"
+  if [[ -z "$_out_stripped" ]]; then
+    printf 'projector emitted an EMPTY %s entry at exit 0 — refusing to insert a blank line\n' "$_surface" >&2
+    return 3
+  fi
+  printf '%s' "$_out"
+  return 0
 }
 
 # Working-tree tolerance for preflight step (b). Reads `git status --porcelain` text
@@ -1208,10 +1312,6 @@ phase_append_release_index() {
     return 0
   fi
 
-  local ver_cell note_rel
-  ver_cell="$(index_version_cell)"   # "<version>" | "<slug> (version-less)"
-  note_rel="$(notes_rel_path)"       # notes/… | notes/_unversioned/…
-
   # Date cell — MERGE anchor (#3718). Read from the RELEASE_LOG row for this
   # version, NOT sampled from the close-out clock. LOG and INDEX are the only
   # ledger pair carrying an automated cross-assertion
@@ -1235,37 +1335,45 @@ phase_append_release_index() {
     return 3
   fi
 
+  # PROJECT the row (#4455). Resolved BEFORE the dry-run branch so dry-run shows
+  # the exact bytes --apply will write, including a failure — the same
+  # dry-run/apply parity rule the Date resolution above follows. Content
+  # synthesis now has exactly one owner; this phase owns only the INSERTION.
+  # The `printf X` sentinel is required at EVERY capture site, not only inside
+  # the helper: `$( )` strips trailing newlines at each nesting level, and the
+  # CHANGELOG block's trailing blank line is load-bearing separation. Applying it
+  # only once let two release entries run together on one line — caught by the
+  # self-test limb below, not by reading the code.
+  local new_row _emit_rc=0
+  new_row="$(emit_derived_entry index; _erc=$?; /usr/bin/printf 'X'; exit "$_erc")" || _emit_rc=$?
+  new_row="${new_row%X}"
+  if [[ $_emit_rc -ne 0 ]]; then
+    mark_phase "append_release_index" "FAIL" "release-corpus projector could not emit the INDEX row for $VERSION (exit $_emit_rc) — see the diagnostic above; refusing to insert an unprojected or empty row"
+    return 3
+  fi
+  new_row="${new_row%$'\n'}"
+
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "append_release_index" "DRY-RUN" "would insert a 6-col row (| $ver_cell | $slug | $date_str | — | #${PR_NUMBER} | $note_rel |) at the top of RELEASE_INDEX.md (Date = merge anchor, read from the RELEASE_LOG row)"
+    mark_phase "append_release_index" "DRY-RUN" "would insert the projected 6-col row ($new_row) at the top of RELEASE_INDEX.md (Date = merge anchor, read from the RELEASE_LOG row)"
     return 0
   fi
 
-  local note_link pr_cell
-  note_link="[${note_rel}](${note_rel})"
-  pr_cell="#${PR_NUMBER}"
-
   # Pure single-row insert in the 6-column schema. Insert immediately after the
   # first separator line (`|---`), keeping chronological-recent-first order.
-  /usr/bin/python3 - "$RELEASE_INDEX" "$ver_cell" "$slug" "$date_str" "$pr_cell" "$note_link" <<'PY'
-import sys
-path, version, slug, date, pr_cell, note_link = sys.argv[1:7]
-with open(path, "r", encoding="utf-8") as f:
-    lines = f.read().splitlines()
-# 6-column live schema: | Version | Milestone | Date | Theme | Release PR | Release Notes |
-new_row = f"| {version} | {slug} | {date} | — | {pr_cell} | {note_link} |"
-out = []
-inserted = False
-for line in lines:
-    out.append(line)
-    if (not inserted) and line.startswith("|---"):
-        out.append(new_row)
-        inserted = True
-if not inserted:
-    out.append(new_row)
-with open(path, "w", encoding="utf-8") as f:
-    f.write("\n".join(out) + "\n")
-PY
-  mark_phase "append_release_index" "PASS" "inserted 6-col row for $VERSION (Version | Milestone | Date | Theme | Release PR | Release Notes)"
+  # Head-insert, NOT append: "chronological-recent-first" is a declared invariant
+  # of RELEASE_INDEX.md, rendered into its own header prose and asserted by the
+  # projector's verify() row-order limb.
+  #
+  # The row travels through ENVIRON rather than `awk -v`, which processes
+  # backslash escapes in the value and would corrupt a Theme cell containing one.
+  local _idx_tmp; _idx_tmp="$(/usr/bin/mktemp -t aco-index.XXXXXX)"
+  NEW_ROW="$new_row" /usr/bin/awk '
+    { print }
+    !ins && /^\|---/ { print ENVIRON["NEW_ROW"]; ins=1 }
+    END { if (!ins) print ENVIRON["NEW_ROW"] }
+  ' "$RELEASE_INDEX" > "$_idx_tmp" && /bin/mv "$_idx_tmp" "$RELEASE_INDEX"
+
+  mark_phase "append_release_index" "PASS" "inserted the projected 6-col row for $VERSION (Version | Milestone | Date | Theme | Release PR | Release Notes)"
   return 0
 }
 
@@ -1301,63 +1409,57 @@ phase_append_release_digest() {
     return 0
   fi
 
-  # Headline from the note H1 (minus `# `); placeholder only when the note is
-  # absent (e.g. dry-run before scaffold, or scaffold-without-prose).
-  # Version-less notes live under notes/_unversioned/ (#2048) — notes_abs_path()
-  # owns that rule for every phase, and resolves off RELEASE_NOTES_DIR (not a
-  # hardcoded root) so the self-test override is honored.
-  local notes_path; notes_path="$(notes_abs_path)"
-  local headline=""
-  if [[ -f "$notes_path" ]]; then
-    headline="$(/usr/bin/grep -m1 '^# ' "$notes_path" 2>/dev/null | /usr/bin/sed 's/^# //' || echo "")"
+  # PROJECT the entry (#4455). Headline source (the note's `# ` H1, with the
+  # operator placeholder when the note is absent) and the run-scoped CLOSE-OUT
+  # anchor are both the projector's job now; this phase owns only the INSERTION.
+  # Resolved BEFORE the dry-run branch so dry-run shows the exact bytes --apply
+  # will write, including a failure.
+  #
+  # The note is normally ABSENT at this point — this phase runs before the note
+  # is scaffolded — so the placeholder is the expected fresh-close path, not an
+  # error. That is deliberately different from the CHANGELOG phase, which runs
+  # after the scaffold and fails loudly on an absent note.
+  # Sentinel-preserved capture — see phase_append_release_index for why.
+  local new_entry _emit_rc=0
+  new_entry="$(emit_derived_entry digest; _erc=$?; /usr/bin/printf 'X'; exit "$_erc")" || _emit_rc=$?
+  new_entry="${new_entry%X}"
+  if [[ $_emit_rc -ne 0 ]]; then
+    mark_phase "append_release_digest" "FAIL" "release-corpus projector could not emit the DIGEST entry for $VERSION (exit $_emit_rc) — see the diagnostic above; refusing to insert an unprojected or empty entry"
+    return 3
   fi
-  [[ -z "$headline" || "$headline" == "$VERSION" ]] && headline="<headline — populated by operator at chore PR review>"
-
-  # The date cell carries the "(<date>, version-less)" marker for a version-less
-  # release, matching the shipped DIGEST convention (#2048).
-  local date_cell
-  # CLOSE-OUT anchor, run-scoped (#3718) — one sample per close-out run.
-  if is_version_less; then date_cell="${CLOSEOUT_ANCHOR_UTC}, version-less"; else date_cell="$CLOSEOUT_ANCHOR_UTC"; fi
+  new_entry="${new_entry%$'\n'}"
 
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "append_release_digest" "DRY-RUN" "would prepend '### $VERSION ($date_cell) — $headline' under the topmost working H2 in RELEASE_DIGEST.md"
+    mark_phase "append_release_digest" "DRY-RUN" "would prepend the projected entry '$new_entry' under the topmost working H2 in RELEASE_DIGEST.md"
     return 0
   fi
 
   # Prepend the H3 entry under the topmost `## ` working H2 (the most-recent
   # entry sits immediately after the H2 + its blank line, above the current top
-  # `### ` entry). Drop the family-H2 search + the `### Releases` table scaffold.
-  /usr/bin/python3 - "$RELEASE_DIGEST" "$VERSION" "$date_cell" "$headline" <<'PY'
-import sys
-path, version, date, headline = sys.argv[1:5]
-with open(path, "r", encoding="utf-8") as f:
-    lines = f.read().splitlines()
+  # `### ` entry). No family-H2 search, no `### Releases` table scaffold.
+  #
+  # The awk below reproduces the prior insertion arithmetic exactly: print
+  # through the first `## ` H2 and any blank lines immediately following it, then
+  # the entry plus a blank, then the remainder. The two EOF branches are kept
+  # distinct — H2-seen appends "entry, blank"; no-H2-at-all appends "blank,
+  # entry" — because those were two different degraded paths and collapsing them
+  # would change the bytes on a malformed corpus.
+  local _dg_tmp; _dg_tmp="$(/usr/bin/mktemp -t aco-digest.XXXXXX)"
+  NEW_ENTRY="$new_entry" /usr/bin/awk '
+    {
+      if (!ins && seen && $0 != "") { print ENVIRON["NEW_ENTRY"]; print ""; ins=1 }
+      print
+      if (!seen && substr($0,1,3) == "## ") seen=1
+    }
+    END {
+      if (!ins) {
+        if (seen) { print ENVIRON["NEW_ENTRY"]; print "" }
+        else      { print ""; print ENVIRON["NEW_ENTRY"] }
+      }
+    }
+  ' "$RELEASE_DIGEST" > "$_dg_tmp" && /bin/mv "$_dg_tmp" "$RELEASE_DIGEST"
 
-new_entry = f"### {version} ({date}) — {headline}"
-
-# Locate the topmost working H2 (first `## ` line).
-h2_idx = None
-for i, line in enumerate(lines):
-    if line.startswith("## "):
-        h2_idx = i
-        break
-
-if h2_idx is None:
-    # No H2 at all — append the entry at EOF (degraded; should not happen on a
-    # well-formed corpus, but never silently drops the entry).
-    out = lines + ["", new_entry]
-else:
-    # Insert after the H2 and any immediately-following blank line, ABOVE the
-    # current top `### ` entry — making this the most-recent entry.
-    insert_at = h2_idx + 1
-    while insert_at < len(lines) and lines[insert_at].strip() == "":
-        insert_at += 1
-    out = lines[:insert_at] + [new_entry, ""] + lines[insert_at:]
-
-with open(path, "w", encoding="utf-8") as f:
-    f.write("\n".join(out) + "\n")
-PY
-  mark_phase "append_release_digest" "PASS" "prepended '### $VERSION (date) — …' H3 under the topmost working H2"
+  mark_phase "append_release_digest" "PASS" "prepended the projected '### $VERSION (date) — …' H3 under the topmost working H2"
   return 0
 }
 
@@ -1785,85 +1887,86 @@ phase_append_changelog() {
     return 0
   fi
 
-  if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "append_changelog" "DRY-RUN" "would prepend ## [${VERSION}] section to CHANGELOG.md (content sourced from ${notes_path} Section 6a per release-notes-standard.md § 5.3 transform)"
-    return 0
-  fi
-
-  # Synthesize Keep-a-Changelog block from RELEASE_NOTES frontmatter + Section 6a
-  # Implementation: read notes_path frontmatter (date, themes, summary); compose:
-  #   ## [vX.Y] - YYYY-MM-DD
-  #   <one-line summary from frontmatter `summary` field>
-  #   [Full notes](release/releases/notes/vX.Y_RELEASE_NOTES.md) · [Release](https://github.com/${REPO_SLUG}/releases/tag/vX.Y)
-  #
-  # Then prepend to CHANGELOG.md immediately under "## [Unreleased]" (if present)
-  # OR immediately below the K-a-C header (preserves header + reverse-chronological order
-  # per K-a-C 1.1.0 convention).
-
-  if ! /usr/bin/python3 - "$changelog_path" "$notes_path" "$VERSION" "$REPO_SLUG" <<'PY' 2>/dev/null
-import sys, re
-changelog, notes, version, repo_slug = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-
-# Parse notes frontmatter (existing convention: YAML between --- markers)
-with open(notes) as f:
-    content = f.read()
-m = re.match(r'---\n(.*?)\n---\n', content, re.DOTALL)
-fm = m.group(1) if m else ""
-date_m = re.search(r'^date:\s*([0-9-]+)', fm, re.MULTILINE)
-summary_m = re.search(r'^summary:\s*"?([^"\n]+)"?', fm, re.MULTILINE)
-# CLOSE-OUT anchor, inherited from the release-note frontmatter (#3718). The
-# previous fallback here was `datetime.date.today()` — an OPERATOR-LOCAL date,
-# with no offset recorded, persisted into a durable CHANGELOG.md row that no
-# later reader could resolve to an instant. It also fired silently: a note
-# missing its `date:` produced a plausible-looking wrong row rather than an
-# error. Fail loudly instead. The frontmatter is written by
-# scaffold_release_notes from the run-scoped close-out anchor, so on every
-# normal path this field is present.
-if not date_m:
-    sys.stderr.write(
-        "release-note frontmatter has no `date:` field: %s\n" % notes)
-    sys.exit(1)
-date = date_m.group(1)
-summary = summary_m.group(1).strip() if summary_m else "(see release notes)"
-
-block = f"""## [{version}] - {date}
-
-{summary}
-
-[Full notes](release/releases/notes/{version}_RELEASE_NOTES.md) · [Release](https://github.com/{repo_slug}/releases/tag/{version})
-
-"""
-
-with open(changelog) as f:
-    existing = f.read()
-
-# Find insertion point per K-a-C convention:
-# Prefer immediately after `## [Unreleased]` block if present;
-# Otherwise immediately before first existing `## [vN...` entry;
-# Otherwise append at end.
-unreleased_m = re.search(r'^## \[Unreleased\][^\n]*\n', existing, re.MULTILINE)
-first_version_m = re.search(r'^## \[?v[0-9]', existing, re.MULTILINE)
-
-if unreleased_m:
-    # Insert after the Unreleased H2 block (find next H2 or end)
-    after_unreleased = unreleased_m.end()
-    next_h2 = re.search(r'^## ', existing[after_unreleased:], re.MULTILINE)
-    insert_pos = after_unreleased + (next_h2.start() if next_h2 else len(existing) - after_unreleased)
-    new = existing[:insert_pos] + block + existing[insert_pos:]
-elif first_version_m:
-    new = existing[:first_version_m.start()] + block + existing[first_version_m.start():]
-else:
-    new = existing.rstrip() + "\n\n" + block
-
-with open(changelog, 'w') as f:
-    f.write(new)
-PY
-  then
-    mark_phase "append_changelog" "FAIL" "python3 CHANGELOG synthesis failed (frontmatter malformed, missing its \`date:\` field, or file unreadable)"
+  # REPO_SLUG WELL-FORMEDNESS GATE. Unlike every other consumer of this value,
+  # the block below persists it into a durable CHANGELOG Release URL rather than
+  # passing it to a `gh` call that tolerates a non-resolving slug. The module-load
+  # fallback is a bare repo name, which is NOT owner/repo-shaped and would ship a
+  # permanently broken link — a plausible-looking wrong row, which is exactly the
+  # class this phase's own `date:` accessor was changed to reject. Fail loudly,
+  # BEFORE anything is written.
+  if [[ "$REPO_SLUG" != */* || "$REPO_SLUG" == */*/* || "$REPO_SLUG" == /* || "$REPO_SLUG" == */ ]]; then
+    mark_phase "append_changelog" "FAIL" \
+      "REPO_SLUG '${REPO_SLUG}' is not owner/repo-shaped — set REPO_SLUG in the environment, or set operator_github + pmo_platform_repo_name in the operator config. Refusing to write a permanently broken Release URL into a durable CHANGELOG row"
     return 3
   fi
 
-  mark_phase "append_changelog" "PASS" "prepended ## [${VERSION}] section to CHANGELOG.md (Surface 2 of Layer-1 dual-write)"
+  # PROJECT the block (#4455). The note's frontmatter `summary:` (with its silent
+  # "(see release notes)" fallback) and the run-scoped CLOSE-OUT anchor are the
+  # projector's job now; this phase owns only the INSERTION. An unresolvable note
+  # is a LOUD failure here — this phase runs AFTER the note is scaffolded, so an
+  # absent note is a real anomaly rather than an ordering artifact.
+  #
+  # Resolved BEFORE the dry-run branch so dry-run shows the exact bytes --apply
+  # will write, including the failure.
+  # Sentinel-preserved capture. This is the site where losing it corrupts the
+  # artifact: the emitted block ENDS with a blank line, and that blank line is
+  # the separation between two release entries. See phase_append_release_index.
+  local block _emit_rc=0
+  block="$(emit_derived_entry changelog; _erc=$?; /usr/bin/printf 'X'; exit "$_erc")" || _emit_rc=$?
+  block="${block%X}"
+  if [[ $_emit_rc -ne 0 ]]; then
+    mark_phase "append_changelog" "FAIL" "release-corpus projector could not emit the CHANGELOG block for $VERSION (exit $_emit_rc) — see the diagnostic above (release note unreadable or missing); refusing to insert an unprojected or empty block"
+    return 3
+  fi
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "append_changelog" "DRY-RUN" "would prepend the projected ## [${VERSION}] section to CHANGELOG.md (summary sourced from ${notes_path} frontmatter per release-notes-standard.md § 5.3 transform)"
+    return 0
+  fi
+
+  # Insertion point, Keep-a-Changelog 1.1.0 convention — the SAME three branches,
+  # in the same precedence, as the heredoc this replaces:
+  #   (a) `## [Unreleased]` present → insert at the start of the next `## ` H2;
+  #       if there is no following H2, append at EOF VERBATIM (no reflow)
+  #   (b) otherwise → insert before the first `## [vN…` entry
+  #   (c) otherwise → trailing-whitespace-strip, blank line, then the block
+  # The branch is chosen up front, not in-stream, so a `## [vN` line appearing
+  # ABOVE Unreleased cannot win — that is what the original `if/elif` guaranteed.
+  #
+  # Insertion is a LINE SPLIT (head + block + tail) rather than a filter, because
+  # the block's own bytes — including its trailing blank line, which is the
+  # separation between two release entries — must pass through untouched. An
+  # earlier filter-shaped version of this code lost exactly that blank line and
+  # ran two entries together; it was caught by diffing against the original
+  # implementation on four fixtures rather than by reading the code.
+  local _cl_mode="eof" _ins_line=0
+  if /usr/bin/grep -qE '^## \[Unreleased\]' "$changelog_path"; then
+    _cl_mode="unreleased"
+    _ins_line="$(/usr/bin/awk '
+      seen && substr($0,1,3) == "## " { print NR; exit }
+      /^## \[Unreleased\]/ { seen=1 }
+    ' "$changelog_path")"
+    _ins_line="${_ins_line:-0}"
+  elif /usr/bin/grep -qE '^## \[?v[0-9]' "$changelog_path"; then
+    _cl_mode="first-version"
+    _ins_line="$(/usr/bin/awk '/^## \[?v[0-9]/ { print NR; exit }' "$changelog_path")"
+    _ins_line="${_ins_line:-0}"
+  fi
+
+  local _cl_tmp; _cl_tmp="$(/usr/bin/mktemp -t aco-changelog.XXXXXX)"
+  if [[ "$_ins_line" -gt 0 ]]; then
+    { /usr/bin/head -n "$((_ins_line - 1))" "$changelog_path"
+      /usr/bin/printf '%s' "$block"
+      /usr/bin/tail -n "+${_ins_line}" "$changelog_path"; } > "$_cl_tmp"
+  elif [[ "$_cl_mode" == "unreleased" ]]; then
+    { /bin/cat "$changelog_path"; /usr/bin/printf '%s' "$block"; } > "$_cl_tmp"
+  else
+    { /usr/bin/awk 'BEGIN { RS="\1" } { sub(/[[:space:]]+$/, ""); printf "%s", $0 }' "$changelog_path"
+      /usr/bin/printf '\n\n%s' "$block"; } > "$_cl_tmp"
+  fi
+  /bin/mv "$_cl_tmp" "$changelog_path"
+
+  mark_phase "append_changelog" "PASS" "prepended the projected ## [${VERSION}] section to CHANGELOG.md (Surface 2 of Layer-1 dual-write)"
   return 0
 }
 
@@ -1922,7 +2025,25 @@ phase_assert_derived_surfaces() {
   for _surface in CHANGELOG DIGEST; do
     if [[ "$_surface" == "CHANGELOG" ]]; then _slice="$_cl_slice"; _file="CHANGELOG.md"
     else _slice="$_dg_slice"; _file="release/releases/RELEASE_DIGEST.md"; fi
-    [[ -z "$_slice" ]] && continue
+    # PRESENCE (#4455). An empty slice means the closing version has NO entry on
+    # this surface — the caller dropped it — and this phase used to treat that as
+    # "nothing to check" and pass. So `projector emitted, caller dropped it` had
+    # no close-out-time detector anywhere; Checks 32 and 48 were its only gate in
+    # the whole platform. That failure is made MORE reachable by moving synthesis
+    # behind a `$(...)` capture, so it is gated in the same change, and the phase
+    # name finally describes what the phase does.
+    #
+    # The two legitimate N/A branches are preserved exactly and are handled ABOVE
+    # this loop, not here: a version-less release has no `## [vX.Y]` CHANGELOG key
+    # to slice, and a pre-CHANGELOG repo has no CHANGELOG file. Both leave
+    # _cl_slice empty for a reason that is not a dropped write.
+    if [[ -z "$_slice" ]]; then
+      if [[ "$_surface" == "CHANGELOG" ]] && { is_version_less || [[ ! -f "$changelog_path" ]]; }; then
+        continue
+      fi
+      mark_phase "assert_derived_surfaces" "FAIL" "no ${VERSION} entry on the derived surface ${_file} — the projector emitted an entry but it is not in the file, or the append phase was skipped. Re-run the ${_surface} append phase; do NOT regenerate the file"
+      return 1
+    fi
     _rc=0
     _res="$(printf '%s\n' "$_slice" | scan_scaffold_residue)" || _rc=$?
     if [[ $_rc -eq 2 ]]; then
@@ -3849,6 +3970,55 @@ EOF
   [[ "$(get_phase append_changelog)" == SKIPPED\|* ]] || { echo "FAIL: version-less CHANGELOG must SKIP, got '$(get_phase append_changelog)'"; failures=$((failures+1)); }
   ! /usr/bin/grep -q "\[${_vl}\]" "$_ai_tmp/CHANGELOG.md" || { echo "FAIL: version-less release must not write a ## [$_vl] CHANGELOG entry"; failures=$((failures+1)); }
 
+  # (e) VERSIONED CHANGELOG emit (#4455) — the branch the version-less SKIP above
+  # never reaches, and the one whose insertion arithmetic is most intricate
+  # (Keep-a-Changelog: insert at the next H2 after `## [Unreleased]`). Asserts the
+  # projected block lands with its own trailing blank line intact, so two release
+  # entries do not run together, and that the projector — not this phase — is the
+  # source of the summary and the close-out anchor.
+  VERSION="v9.97"; STATE_MILESTONE_SLUG="88-some-theme-named-milestone"
+  /bin/mkdir -p "$RELEASE_NOTES_DIR"
+  /bin/cat > "${RELEASE_NOTES_DIR}/v9.97_RELEASE_NOTES.md" <<'EOF'
+---
+version: v9.97
+date: 2026-09-09
+summary: "A self-test summary line."
+---
+# A self-test headline
+EOF
+  /usr/bin/printf '# Changelog\n\n## [Unreleased]\n\n## [v9.96] - 2026-06-27\n\nprior\n\n' > "$_ai_tmp/CHANGELOG.md"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_changelog >/dev/null 2>&1 || true
+  [[ "$(get_phase append_changelog)" == PASS\|* ]] || { echo "FAIL: versioned phase_append_changelog should PASS, got '$(get_phase append_changelog)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qE "^## \[v9\.97\] - ${CLOSEOUT_ANCHOR_UTC}\$" "$_ai_tmp/CHANGELOG.md" \
+    || { echo "FAIL: CHANGELOG block must be '## [v9.97] - <close-out anchor>'"; failures=$((failures+1)); }
+  /usr/bin/grep -q 'A self-test summary line.' "$_ai_tmp/CHANGELOG.md" \
+    || { echo "FAIL: CHANGELOG block must carry the note frontmatter summary"; failures=$((failures+1)); }
+  # The new block must sit ABOVE the prior entry, and a BLANK LINE must separate
+  # them — a filter-shaped insertion loses that blank and runs the entries
+  # together, which is a silent corruption of a durable artifact.
+  local _cl_new _cl_prior
+  _cl_new="$(/usr/bin/grep -n '^## \[v9\.97\]' "$_ai_tmp/CHANGELOG.md" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  _cl_prior="$(/usr/bin/grep -n '^## \[v9\.96\]' "$_ai_tmp/CHANGELOG.md" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  [[ -n "$_cl_new" && -n "$_cl_prior" && "$_cl_new" -lt "$_cl_prior" ]] \
+    || { echo "FAIL: new CHANGELOG block (line ${_cl_new:-none}) must precede the prior entry (line ${_cl_prior:-none})"; failures=$((failures+1)); }
+  [[ -n "$_cl_prior" ]] && [[ -z "$(/usr/bin/sed -n "$((_cl_prior - 1))p" "$_ai_tmp/CHANGELOG.md")" ]] \
+    || { echo "FAIL: the projected CHANGELOG block must end with a blank line — two entries ran together"; failures=$((failures+1)); }
+  # Idempotent re-run must SKIP, not duplicate.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_changelog >/dev/null 2>&1 || true
+  [[ "$(get_phase append_changelog)" == SKIPPED\|* ]] || { echo "FAIL: versioned CHANGELOG re-run must SKIP, got '$(get_phase append_changelog)'"; failures=$((failures+1)); }
+  # (f) REPO_SLUG well-formedness gate — a bare repo name must FAIL LOUDLY before
+  # a permanently broken Release URL reaches a durable row.
+  local _ai_saved_slug2="$REPO_SLUG"
+  REPO_SLUG="pmo-platform"; VERSION="v9.97"
+  /usr/bin/printf '# Changelog\n\n## [Unreleased]\n\n' > "$_ai_tmp/CHANGELOG.md"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_changelog >/dev/null 2>&1 || true
+  [[ "$(get_phase append_changelog)" == FAIL\|* ]] || { echo "FAIL: a non-owner/repo-shaped REPO_SLUG must FAIL append_changelog, got '$(get_phase append_changelog)'"; failures=$((failures+1)); }
+  ! /usr/bin/grep -q 'github.com/pmo-platform/' "$_ai_tmp/CHANGELOG.md" || { echo "FAIL: a FAILed append_changelog must write no broken Release URL"; failures=$((failures+1)); }
+  REPO_SLUG="$_ai_saved_slug2"
+
   /bin/rm -rf "$_ai_tmp" 2>/dev/null || true
   REPO_ROOT="$_ai_saved_root"; MODE="$_ai_saved_mode"; VERSION="$_ai_saved_version"
   STATE_MILESTONE_SLUG="$_ai_saved_slug"; RELEASE_INDEX="$_ai_saved_idx"; RELEASE_DIGEST="$_ai_saved_dig"
@@ -5457,7 +5627,7 @@ FOLOG
   echo "  phase_append_reversions validated (#1679; SLIM #3109 — N/A common path / none-path SLIM gate → N/A no-row across round-trip + multi-abandoned fan-out + re-run + historical-none immutability / tag-orphaned positive → 1 row abandoned_tag_pushed=true / dry-run no-write + orphan-row idempotency); dry-run<=>apply parity validated on the GATED paths (F-01 — none-path preview 0 == apply 0; mixed orphan+none preview 1 == apply 1, orphan recorded, gated surfaced)" >&2
   echo "  phase_lint_release_notes validated (§3.2 close gate — clean PASS / this-version finding FAIL / other-version PASS / exit-3 fail-loud / missing-tool FAIL)" >&2
   echo "  extract_row_state + extract_milestone_slug validated (3 shapes: vX.Y- / NN- / pure-alpha incl. hyphen-less #2539 a4 branch; version-less end-anchor; #667 F2 bare theme-named slug → title)" >&2
-  echo "  phase_append_release_digest + phase_append_release_index validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency; #2048 — version-less marker + _unversioned notes link + marker-aware idempotency + CHANGELOG SKIP)" >&2
+  echo "  phase_append_release_digest + phase_append_release_index + phase_append_changelog validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency; #2048 — version-less marker + _unversioned notes link + marker-aware idempotency + CHANGELOG SKIP; #4455 — all three entries PROJECTED by generate_release_index.py, versioned CHANGELOG block lands above the prior entry WITH its separating blank line intact, re-run SKIPs, and a non-owner/repo-shaped REPO_SLUG FAILs before writing a broken Release URL)" >&2
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache)" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
