@@ -5516,6 +5516,20 @@ cmd_check() {
   # Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks
   # 8/9/10/14/15/18/19/20/21/22 precedent); flip-to-enforce after ≥3-day
   # warn-log review with zero false positives.
+  #
+  # FLIP STATUS: STAGED, NOT TAKEN. The release-corpus normalization removed the
+  # false-positive class that warn-mode was justifying — the INDEX Date is now
+  # relayed from the LOG row by one projector rather than sampled from a second
+  # clock — but the flip's own precondition is an OBSERVATION WINDOW (≥3 days of
+  # warn-log review with zero false positives), and no release can satisfy a
+  # post-merge observation condition inside its own merge. Flipping here would
+  # bypass the shakedown convention that ten prior checks observed, to satisfy a
+  # criterion. The flip is an operator decision on the condition stated above.
+  #
+  # Interim posture, deliberate and not an inconsistency: Check 23 stays WARN
+  # while the derived-surface PRESENCE limbs in Checks 32 and 48 stay ENFORCED.
+  # They assert different propositions — presence of an entry vs. agreement of
+  # its fields — and only the second one's false-positive class was removed.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 23: RELEASE_LOG ↔ RELEASE_INDEX consistency"
     local c23_script="core/deploy/tools/generate_release_index.py"
@@ -5539,8 +5553,18 @@ cmd_check() {
       else
         local c23_findings
         c23_findings=$(echo "$c23_output" | wc -l | tr -d ' ')
+        # REMEDIATION IS APPEND-ONLY, NEVER A BARE REGENERATE. This string used
+        # to say "re-run 'python3 <script>' to regenerate" — and a BARE
+        # invocation of that script is the documented DESTRUCTIVE full
+        # regenerate: it rewrites every row, restamps the grandfathered Date
+        # cells the INDEX header declares must not be rewritten, and (until this
+        # release) deleted the header paragraph declaring the anchor. Three
+        # commits rewrote that guidance in the generator, the tools README,
+        # release-process.md and plans/README.md, and none of them reached this
+        # file — so the one gate that renders the instruction at merge time kept
+        # telling the operator to run the one action the design forbids.
         flag_warn_or_issue "release-log-index-consistency" \
-          "$c23_findings LOG↔INDEX drift finding(s) — re-run 'python3 $c23_script' to regenerate"
+          "$c23_findings LOG↔INDEX drift finding(s) — reconcile the named field IN PLACE (the LOG row is canonical for milestone/date/release-pr; the INDEX Theme cell has no LOG source and is never drift-checked), then confirm with the read-only 'python3 $c23_script --verify'. Do NOT run a bare 'python3 $c23_script' — that is a destructive full regenerate"
         echo "$c23_output" | head -10 | sed 's/^/         /' || true
       fi
     fi

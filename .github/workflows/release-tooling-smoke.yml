@@ -336,12 +336,23 @@ jobs:
         run: bash release/tools/tests/test_corpus_home_tolerance.sh
 
   node-graph-tools-selftest:
-    name: Node-graph stdlib tools self-test (Ubuntu)
+    name: Python corpus-tool self-tests (Ubuntu)
     # The doc-warehouse stdlib tools ship a committed --self-test; without this job
     # those self-tests rot unexercised (Stage-8 QA finding F2). Pure-stdlib and
     # OS-agnostic, so ubuntu-latest — no pip install, no network, no gh/credentials.
     # Roster: the three v3.55 node-graph tools + compose-portfolio (the
-    # pda-rollup-and-portfolio PORTFOLIO.md composer, same doc-warehouse FK-chain family).
+    # pda-rollup-and-portfolio PORTFOLIO.md composer, same doc-warehouse FK-chain
+    # family) + generate_release_index (the release-corpus projector).
+    #
+    # generate_release_index was added because its self-test carries REGRESSION
+    # GUARDS that are TRUE TODAY — the projector is clock-free and config-free by
+    # contract, and every date-anchor grandfathering entry is a pre-reconciliation
+    # release — and a guard nothing executes cannot fire, so it cannot fail. Check
+    # 23 runs that tool's `--verify`, never its `--self-test`, and this roster was
+    # its only other candidate caller. The `core/deploy/tools/**` path filter above
+    # already triggers on every edit to the module, and the
+    # `release/releases/RELEASE_LOG.md` filter triggers on the corpus the
+    # grandfathering-closure limb reads.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -352,13 +363,13 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Node-graph tool --self-tests (offline, stdlib-only)
-        # Runs all three (no fail-fast) so one run reports every regression; emits a
-        # ::error:: annotation per failing tool and exits non-zero if any failed.
+      - name: Python corpus-tool --self-tests (offline, stdlib-only)
+        # Runs the whole roster (no fail-fast) so one run reports every regression;
+        # emits a ::error:: annotation per failing tool and exits non-zero if any failed.
         run: |
           set -uo pipefail
           rc=0
-          for t in stamp-node-frontmatter backfill-relationship-edges build-doc-index compose-portfolio; do
+          for t in stamp-node-frontmatter backfill-relationship-edges build-doc-index compose-portfolio generate_release_index; do
             echo "::group::${t}.py --self-test"
             if python3 "core/deploy/tools/${t}.py" --self-test; then
               echo "OK: ${t}"
