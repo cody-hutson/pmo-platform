@@ -21,7 +21,7 @@ This document is the **single cross-surface SSOT contract** for platform memory:
 It **composes with — and does not restate —** its neighbors:
 
 - [`knowledge-architecture.md`](knowledge-architecture.md) classifies *knowledge* by universality (the K1–K5 axis) and names the four-memory-type model; its [§2.1 four-memory-type model and four-axis reconciliation](knowledge-architecture.md#four-type-reconciliation) is the **type-axis authority** this contract cites (single-home — the type definitions and the four-axis composition live there, not here).
-- [`knowledge-architecture.md §6`](knowledge-architecture.md#memory-corpus-boundary) is the **Knowledge cut** — the corpus↔memory boundary, the encode-and-evict lifecycle, and the three drift classes.
+- [`knowledge-architecture.md §7`](knowledge-architecture.md#memory-corpus-boundary) is the **Knowledge cut** — the corpus↔memory boundary, the encode-and-evict lifecycle, the five drift classes, and the [§7.1 external-target scope](knowledge-architecture.md#external-target-scope).
 - [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md) (superseded by [ADR-045](../ADRs/ADR-045-cross-surface-memory-contract.md)) ratified the Knowledge cut; **ADR-045** generalizes that cut into this cross-surface contract across all four memory types.
 
 The pairing is deliberate: `knowledge-architecture.md` **classifies** knowledge; this document **governs cross-surface read/write flow** over the four memory types it classifies. They are sibling disciplines.
@@ -55,11 +55,13 @@ This is the **normative core**. Every current memory surface is a row. The colum
 
 ## §3 The no-shadow-SSOT invariant {#no-shadow-ssot}
 
-This invariant is absorbed **verbatim** from [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md) § The memory architecture and [knowledge-architecture.md §6](knowledge-architecture.md#no-shadow-ssot), which ratified it for the Knowledge cut. This contract is the SSOT *contract surface* — it absorbs the invariant the ADR ratified rather than re-deriving it:
+This invariant is absorbed **verbatim** from [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md) § The memory architecture and [knowledge-architecture.md §7](knowledge-architecture.md#no-shadow-ssot), which ratified it for the Knowledge cut. This contract is the SSOT *contract surface* — it absorbs the invariant the ADR ratified rather than re-deriving it:
 
 > **No-shadow-SSOT invariant.** A fact has exactly one source of truth — the SSOT surface of its memory type. No surface holds a second, shadowing copy of another surface's SSOT. A shadow copy can drift, and an agent reading it lets the copy silently override its owner. Codified Knowledge appears in memory only as a pointer to its corpus home (a temporary eviction-pointer while an encode issue is in flight, or a durable cross-reference), never as a duplicate of the governed text.
 
 The contract **generalizes** the invariant from the Knowledge cut (ADR-029's scope) to **all four memory types**: each row's `class` column plus the per-type SSOT verdict in [knowledge-architecture.md §2.1](knowledge-architecture.md#four-type-reconciliation) together enforce "exactly one SSOT per fact" across every surface. The per-type SSOT homes are: **Work** → the operational surface (`projects/` tree + state files); **Knowledge** → the codified corpus (when universal — the K1 class); **People** → the operator-local roster (`people-roster.yaml`) + `CLAUDE.md §Workspace Owner` for identity, never repo-tracked PII; **Learning** → the operator auto-memory store (`~/.claude/memory/`), which is also the graduation source for Knowledge.
+
+The invariant reaches **external-target** facts by the same logic: a resolved target-side referent held on any surface of this install is a shadow of a source of truth that lives in another repository, and is prohibited on exactly the same grounds — see [`knowledge-architecture.md §7.1`](knowledge-architecture.md#external-target-scope). The target's *address* is the one exception, and it is exempt because it is irreducible rather than because it is safe to hold.
 
 ---
 
@@ -87,7 +89,7 @@ A write is permitted only to a surface this table marks writable for the writing
 Three contract-level write rules:
 
 1. **Write-first-speak-second.** Never report a surface "written" before the write is executed and confirmed (CLAUDE.md guardrail). Generalizes to any externally-observable state mutation.
-2. **No shadow on write.** Do not write a fact to a non-SSOT surface as a second copy. A learning that generalizes into reusable Knowledge **graduates** into the corpus and is then evicted to a pointer (the encode-and-evict lifecycle — [knowledge-architecture.md §6](knowledge-architecture.md#encode-and-evict)); it is not duplicated into both.
+2. **No shadow on write.** Do not write a fact to a non-SSOT surface as a second copy. A learning that generalizes into reusable Knowledge **graduates** into the corpus and is then evicted to a pointer (the encode-and-evict lifecycle — [knowledge-architecture.md §7](knowledge-architecture.md#encode-and-evict)); it is not duplicated into both.
 3. **Layer boundary holds.** An engineering PR cannot mutate a Layer-2 operator surface (`~/.claude/memory/`, `projects/`); those writes are operator-side per [`operations-bridge.md`](../rules/operations-bridge.md). The PORTFOLIO.md bridge is Cowork-write / Claude-Code-read.
 
 ---
@@ -96,10 +98,11 @@ Three contract-level write rules:
 
 This contract is the cross-surface **index**, not the union of every surface's full spec. It holds **one row per surface** and points at the surface's normative home rather than copying it (single-home / no-shadow-SSOT — copying another home's fields into this table would itself be a shadow SSOT):
 
-- **The Knowledge↔corpus boundary is preserved, not relocated.** This contract governs which surface owns a fact; it does **not** move codifiable knowledge into memory. The corpus stays SSOT for codified Knowledge; memory holds it only as an eviction-pointer (the [knowledge-architecture.md §6](knowledge-architecture.md#memory-corpus-boundary) boundary is authoritative).
+- **The Knowledge↔corpus boundary is preserved, not relocated.** This contract governs which surface owns a fact; it does **not** move codifiable knowledge into memory. The corpus stays SSOT for codified Knowledge; memory holds it only as an eviction-pointer (the [knowledge-architecture.md §7](knowledge-architecture.md#memory-corpus-boundary) boundary is authoritative).
 - **The People surface's normative spec is its own home.** This table enumerates the People *row*; the read-time composition contract for the people-capability/coverage graph is [`people-coverage-graph.md`](people-coverage-graph.md) (a read-only VIEW over the operator-instance `people-roster.yaml`, composed not absorbed, never repo-tracked). This contract cites the shipped graph — it does not describe a new surface.
 - **Operational-tracker lifecycle fields live in their inventory.** The "operational trackers" row's per-artifact lifecycle (eviction / archive / cadence detail) is governed by [`operational-artifact-inventory.md`](../specs/operational-artifact-inventory.md) and the OPERATIONS.md Operational Artifacts table. This contract names the row; it does not duplicate the per-tracker schema.
 - **The `08-Generated/` staging area is out-of-table.** It is a transient pre-approval working surface, not a durable memory surface — noted here to forestall a "missing row" reading.
+- **External-target facts are out-of-table.** A repository or system the toolkit *operates upon* is not a memory surface of this install — it is an external source of truth, and its facts are read live rather than held. The rule (the decomposition gate, the target-SSOT assignment, the read requirements, and the divergence behaviour) is [`knowledge-architecture.md §7.1`](knowledge-architecture.md#external-target-scope); the only item this install stores for a target is its address, the `identifier` field of an `operator.toml [trackers.<id>]` destination — already covered by the `operator.toml` row above. Noted here to forestall a "missing row" reading.
 - **Enforcement gate: DEFERRED.** A `deploy.sh --check` analog (a "memory-write-respects-contract" detector, sibling to Check 36 `memory-corpus-tie-drift`) is a follow-up, not part of this contract's first version. The contract ships doc-only; a follow-up improvement Issue carries the enforcement gate (warn-mode-initial, matching ADR-029's posture for Check 36).
 
 ---
@@ -107,7 +110,8 @@ This contract is the cross-surface **index**, not the union of every surface's f
 ## §7 Related references + provenance {#references}
 
 - **Type-axis authority** — [`knowledge-architecture.md §2.1`](knowledge-architecture.md#four-type-reconciliation): the four-memory-type model (Work / Knowledge / People / Learning) and the four-axis reconciliation (type × K1–K5 × Context-Tier × Document-Tier). This contract's `memory-type(s)` column draws from there.
-- **Knowledge cut** — [`knowledge-architecture.md §6`](knowledge-architecture.md#memory-corpus-boundary): the corpus↔memory SSOT assignment, the no-shadow invariant origin, the encode-and-evict lifecycle, the three drift classes.
+- **Knowledge cut** — [`knowledge-architecture.md §7`](knowledge-architecture.md#memory-corpus-boundary): the corpus↔memory SSOT assignment, the no-shadow invariant origin, the encode-and-evict lifecycle, the five drift classes.
+- **External-target scope** — [`knowledge-architecture.md §7.1`](knowledge-architecture.md#external-target-scope): the decomposition gate, the target-SSOT rule, and the read requirements for a fact whose source of truth is a repository other than this install's platform. Ratified by [ADR-109](../ADRs/ADR-109-external-target-knowledge-scope.md), which extends ADR-045 with a third scope.
 - **Ratifying ADRs** — [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md) (the Knowledge cut, superseded) and [ADR-045](../ADRs/ADR-045-cross-surface-memory-contract.md) (this cross-surface contract; supersedes ADR-029).
 - **Write-authority enum** — [`autonomy-tiers.md`](../specs/autonomy-tiers.md): the Autonomy Tier 0–3 definitions the `write-authority` column binds to.
 - **Read order** — the [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) Context File Hierarchy + Session Management sections.

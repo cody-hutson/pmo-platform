@@ -56,6 +56,12 @@ Learned by doing, hard to externalize — the CORRECTIONS.md class. **Source fra
 Implementation-ready, deterministic. **Q1 is the universality test** — the single load-bearing classifier and the exact predicate the [§4 leakage register](#local-context-leakage-register) applies.
 
 ```
+Q0. Does this fact assert something about a repository or system OTHER than this
+    install's own platform (an external TARGET the toolkit operates upon)?
+      YES → decompose it before homing (§7.1): the target-side referent is read
+             live from the target and stored nowhere; the operator-side practice
+             continues to Q1 with the target-side referent REMOVED.
+      NO  → go to Q1
 Q1. Would this knowledge be TRUE-AND-USEFUL verbatim for a *different* org or
     project running the PMO platform?
       YES → K1 Codified  (universal; lives in Layer 1 platform corpus)
@@ -233,6 +239,7 @@ The altitude ladder's seven rungs are **aliased onto** the canonical work-organi
 | ** / [`operating-model.md`](../disciplines/operating-model.md)** — K2 model home | This doc's placement model assigns the K2 *model* to `operating-model.md`; K2 *values* are CLAUDE.md parameters. | Compose, do not restate. |
 | **[`terminology-glossary.md`](../specs/terminology-glossary.md)** — disjoint methodology glossary | Carries Area/Domain/Function/Process/Stage/WBS/Scope — **no** knowledge-tier terms. No collision, no redefinition risk. | Cross-reference; redefine nothing. |
 | **[`architecture-evaluative-lens.md`](architecture-evaluative-lens.md)** — design-time plug-and-play lens | The lens **consumes** this doc's [§1 Q1 universality classifier](#tier-classifier) + [§3 placement model](#placement-model) as the *proactive proposal-time* application; the [§4 leakage register](#local-context-leakage-register) is its *retrospective* twin. This doc = the taxonomy; the lens = its design-time application. | Cross-reference; redefine nothing. |
+| **External-target facts** — a repository or system the toolkit *operates upon* | The universality axis routes by *whose context*, and its [Q2 scope enumeration](#tier-classifier) is closed over this install's own contexts — it carries no scope value for a repo that is neither this install's platform nor one of its projects. [§7.1](#external-target-scope) adds that scope and its SSOT rule. | Cross-reference; the scope adds no tier and redefines nothing. |
 
 ---
 
@@ -316,6 +323,41 @@ The drift audit treats issue-number identity as **fragile** (re-versioning renum
 | **ledger-pointer-to-closed-issue** | a `MEMORY.md` ledger ("Temporary enhancement pointers") row ties a `#N` that is CLOSED yet the memory was not absorbed/evicted — the partial-absorption residue (the upstream gap) | scan the ledger section; for each row's `#N` tie that **resolves** → `gh issue view N --json state` == CLOSED ⇒ flag (re-home to a live issue per Phase B-OPS5). **Disambiguated** from `deployed-but-not-evicted` by file-section: a `MEMORY.md` ledger row ⇒ this class; a standalone topic memory file ⇒ `deployed-but-not-evicted` |
 
 The decision record for this boundary — the rejected memory-as-cache alternative, the Option-C trigger choice, and the encode-then-evict ordering guarantee — is [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md), generalized across all four memory types by [ADR-045](../ADRs/ADR-045-cross-surface-memory-contract.md); the RE-POINT step and close-time reconciliation added here extend the lifecycle both ADRs cite as its canonical home, leaving each ADR's decision record byte-unchanged.
+
+### §7.1 External-target scope {#external-target-scope}
+
+§7 above assigns SSOT between two surfaces that are both **this install's own** — the codified corpus and the auto-memory store. A third case exists and neither pole covers it: a fact about an **external target**, a repository or system the toolkit *operates upon* rather than *is*. The [§1 classifier](#tier-classifier) Q2 contextual-scope enumeration is closed over this install's own contexts and carries no scope value for a target, so a target fact routes by nearest fit — usually to K5 tacit, hence the memory store — where nothing refreshes it. This subsection closes that gap. It is a scope addition on a different axis from [§4.1](#host-binding-leakage-class)'s host-binding class, and it grants no surface any new permission to hold anything.
+
+**The fused fact — the failure this closes.** A target fact is rarely atomic. It fuses an **operator-side practice** (the operator's own decision about how they work with that target — legitimately holdable) with a **target-side referent** (anything observable in the target: a name, an identifier, a state, a file's content). Homing the fused fact by its practice half carries the referent half along as an unowned payload that nothing ever reconciles against the target. Decomposition is therefore a **precondition of homing**, not an optional refinement.
+
+**The decomposition rule (Q0).** Before homing any fact, ask whether it asserts something about a repository or system other than this install's own platform. If it does, split it:
+
+| Half | What it is | Where it lives |
+|---|---|---|
+| **Target-side referent** | anything observable in the target | **nowhere.** Read live from the target at every use. |
+| **Operator-side practice** | the operator's own decision about working with that target, stated *without* the referent | continue to [Q1](#tier-classifier) and home normally |
+
+A fact that cannot be cleanly split is treated as target-side and read live.
+
+**The target-SSOT rule.** **The target is the sole source of truth for its own facts.** No surface of this install may hold a resolved target-side value — not the corpus, not the auto-memory store, not operator config. The one permitted stored item is the target's **address**, which already exists as the `identifier` field of an `operator.toml [trackers.<id>]` destination. The address is irreducible (no read is possible without it), operator-declared rather than agent-inferred, and fails hard rather than plausibly when it goes stale.
+
+**Reading a target-side referent — the requirement, and the operation that does not yet exist.** The read is subject to three requirements, stated host-agnostically because a host tool named as *the* way to perform a K1-governed operation is itself a [§4.1 host-binding leak](#host-binding-leakage-class):
+
+1. **Fresh at every use.** The value is resolved at the moment it is used, against authoritative target state — never from a planning-time snapshot, a prior session, or a remembered answer.
+2. **Through the selected host surface.** Which host is active is operator configuration, resolved from the `operator.toml [adapters]` selector table; capability text names the *operation*, never the host tool that satisfies it.
+3. **Nothing retained.** The resolved value is used and discarded. Retaining it on any surface of this install re-creates the defect.
+
+**No adapter interface specifies a referent-read operation today.** [`repo-host-adapter-versioning.md`](../standards/repo-host-adapter-versioning.md) is the one adapter interface the corpus specifies, and its operation set is scoped entirely to **version-claiming** — it returns versions and claim outcomes, never a referent. This rule therefore states a **requirement on the read**, not a delegation to an existing operation; an adapter operation that resolves a target-side referent is a named gap, owned by the adapter-interface work, and the requirements above are what that operation must satisfy when it ships. Until then the read is performed directly against the target under the same three requirements, and the absence is recorded here rather than papered over with a citation that would not resolve.
+
+**Behaviour on divergence.** Because no value is stored, a target that has changed cannot produce a stale answer. It produces a **resolution failure**: the live read returns zero matches, or more than one, where the practice expects exactly one. That is a loud, halting signal. The agent surfaces it and asks the operator to restate the practice; it does not guess and does not fall back to a remembered value. **A session that cannot reach the target cannot resolve a target-side referent and halts — there is no offline cache by design, because a fallback cache would reintroduce the very defect this rule removes.**
+
+**Where a target self-describes, that is the preferred source.** When the target documents its own conventions in-repo, reading that file *is* a target-side derivation and is preferred over any operator-side restatement — the convention and its subject then version together. This rule does not require a target to self-describe, and it creates no obligation on a repository the operator may not control.
+
+**Bound — this scope does not weaken the corpus↔memory cut.** The scope applies **only** to a fact whose source of truth is a repository other than this install's platform. Content whose SSOT is the corpus (`core/`, `release/`) is **definitionally outside this scope** and remains governed by [the two-tier assignment](#two-tier-ssot) and [the no-shadow-SSOT invariant](#no-shadow-ssot) unchanged. External-target facts are never universal-for-this-platform, so they never become K1 and never enter the [encode-and-evict lifecycle](#encode-and-evict); that lifecycle, its VERIFY-CORPUS gate, and its ordering guarantee are untouched by this subsection. Nothing here authorises a memory-resident copy of codified knowledge.
+
+**Drift class — `external-target-referent-stored`.** Any surface of this install holding a resolved target-side referent (a target's label name, milestone title, issue state, or file content recorded as a value rather than read live). **Detector deferred** — this class ships doc-only, matching the deferred-enforcement posture recorded in [`memory-architecture.md` §6](memory-architecture.md#composition-boundaries). It is therefore **not** one of [the five drift classes](#drift-classes) Check 36 emits, and that count is unchanged; when a detector ships, the class joins that table and the count moves five → six.
+
+The decision record for this scope — the four rejected alternatives and the bound above — is [ADR-109](../ADRs/ADR-109-external-target-knowledge-scope.md), which **extends** ADR-045's cross-surface cut with a third scope and supersedes nothing.
 
 ---
 
