@@ -17,6 +17,7 @@ Authored per the Stage 5 spec + Collective Review. Composes with [release-notes-
 | Phase plan | `release/releases/plans/v*-*_PHASE_PLAN.md` | YES (`type: phase-plan`) | Forward-only — pre-existing phase plans grandfathered with frontmatter only (filename retained) |
 | Audit plan | `release/releases/plans/v*-*-audit_RELEASE_PLAN.md` | YES (`type: audit-plan`) | Forward-only |
 | RELEASE_LOG row | `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>` | NO (out of scope for this schema) | LOG-row schema owned elsewhere; this schema covers FILE-level frontmatter only |
+| Archive segment | `release/releases/RELEASE_LOG_ARCHIVE-<family>.md` | NO (it carries the parent ledger's content, not file-level frontmatter) | § Archive Segments below |
 
 **Forward-only adoption rationale:** Per the precedent that user-facing notes started at an earlier release (an umbrella campaign tracks retroactive coverage), this schema applies prospectively, forward-only, to bound R-1 restructure-integrity risk. Historical backfill of 76 pre-cutover files is registered as F-3 follow-up gated on schema utility.
 
@@ -68,6 +69,26 @@ The projector is `core/deploy/tools/generate_release_index.py`. It reads two **f
 | `CHANGELOG.md` | the closing version's entry only | same |
 
 A hand-edit to any of the INDEX's five derived columns **fails** Check 23. A hand-edit to INDEX `Theme` is **sanctioned** and protected by the integrity limb. A hand-edit to a historical DIGEST or CHANGELOG entry is **allowed**. A closing DIGEST or CHANGELOG entry that diverges at close-out **fails**.
+
+## Archive Segments
+
+An **archive segment** is a same-directory, same-schema continuation of a ledger, holding block bodies that have aged out of that ledger's hot working set. It is a fourth artifact class alongside SOURCE and DERIVED surfaces, and it is neither: it is the **same record as its parent, relocated**.
+
+| Property | Rule |
+|---|---|
+| Naming | `<PARENT_STEM>_ARCHIVE-<family>.md`, in the parent's own directory. `<family>` is the major release family (`v1`, `v2`, `v3`, …) or `version-less`. |
+| Applies to | `release/releases/RELEASE_LOG.md` only. The three derived ledgers are projections; their volume is a projector concern, not an archival one. |
+| Class | **Inherited from the parent**, always. A segment is a disposition *destination*, never itself a disposition *source*, and is never eligible for a disposition its parent is not. It is never itself swept. |
+| What relocates | `#### Deployment Log <key>` block **bodies**. The release table never relocates and is never split. `#### Release Learnings` blocks never relocate — heading or body, at any window. |
+| What stays | Every `#### ` heading stays in the parent, followed by a one-line pointer to its segment. This is what keeps `links.log_anchor` values and in-corpus anchors resolving, and it is the redaction-preserves-presence shape `RECORDS_POLICY.md` § Disposition Rules rule 2 sanctions. |
+| Ordering | Selection is oldest-first by the **LOG table's chronology**, never by a block's position in the file. Block order in the file is a convention, not a contract. |
+| Boundary | Byte-denominated. Blocks relocate until the hot file is at or under its budget; the number of releases retained is an **output** of that rule and appears nowhere as an input. |
+| Growth | Append-only. Idempotent: a block already carrying the pointer line is never moved again. |
+| Verification | Destination-side. Conservation is asserted by re-reading the segment FILE and comparing against the pre-sweep content from git — never from a manifest the writer produced about itself. Every named machine contract is satisfied by the retained headings alone, so a truncated segment would pass all of them and fail only here. |
+
+**Reader rule, stated unconditionally.** Any tool that parses content from **inside** a `#### ` block of a ledger with archive segments must read the ledger **and** its sibling segments. Reading the hot file alone shrinks the tool's basis population silently on every sweep. This is the general form of the census question a content relocation must answer: *what reads inside a block* — never *what declares an anchor at it*. An anchor records who points at content and breaks visibly; a body parser degrades silently, and a tolerant body parser degrades silently at exit zero.
+
+Mechanism owned by `release/tools/sweep-release-corpus.py`; disposition classified by `core/governance/RECORDS_POLICY.md` § Retention Schedule; each sweep records one row in `core/governance/RECORDS_ARCHIVE_LOG.md`.
 
 ## Field Specification
 

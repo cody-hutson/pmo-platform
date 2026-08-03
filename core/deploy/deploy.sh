@@ -9069,6 +9069,49 @@ cmd_check() {
   fi
 
 
+  # ─── Check 65: RELEASE_LOG hot working-set budget (warn-mode) ──────────────
+  # The archival chore's TRIGGER. The authoritative release record grows without
+  # bound by construction — one Deployment-Log block per release, and the recent
+  # blocks are materially larger than the old ones — so the hot file needs a
+  # budget and something that notices when it is crossed. This is that something.
+  #
+  # It reports a MEASUREMENT, not a diff, so it cannot false-positive on content:
+  # the budget is either crossed or it is not. What it can do is go stale, which
+  # is why the size is logged on every run whether or not it warns — a probe that
+  # only speaks when it fails cannot be shown to be alive.
+  #
+  # Warn-mode, and this one stays warn-mode on its own merits rather than pending
+  # a shakedown: crossing the budget is a signal to schedule a chore, never a
+  # reason to block a merge. The remedy is a separate, revertible sweep commit.
+  #
+  # The budget is stated in ONE place — BUDGET_BYTES in the sweep tool — and read
+  # from there, so the gate and the sweep can never disagree about the figure.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 65: RELEASE_LOG hot working-set budget (warn-mode; the archival chore's trigger)"
+    local c65_log="release/releases/RELEASE_LOG.md"
+    local c65_tool="release/tools/sweep-release-corpus.py"
+    if [[ ! -f "$c65_log" ]]; then
+      flag_warn_or_issue "release-log-budget" "the release log is not at $c65_log — the probe has nothing to measure, which is a repo defect rather than a clean result"
+    elif [[ ! -f "$c65_tool" ]]; then
+      flag_warn_or_issue "release-log-budget" "the sweep tool is missing at $c65_tool, so the budget figure has no single source and the remedy has no mechanism"
+    else
+      local c65_bytes c65_budget
+      c65_bytes=$(/usr/bin/wc -c < "$c65_log" | /usr/bin/tr -d ' ')
+      c65_budget=$(/usr/bin/sed -n 's/^BUDGET_BYTES = \([0-9_]*\)$/\1/p' "$c65_tool" | /usr/bin/head -1 | /usr/bin/tr -d '_')
+      if [[ -z "$c65_budget" ]]; then
+        flag_warn_or_issue "release-log-budget" "could not read BUDGET_BYTES from $c65_tool — the probe would otherwise compare against an invented figure"
+      else
+        log "  DENOM: release-log-budget — hot ledger ${c65_bytes} B against a ${c65_budget} B budget ($(( c65_bytes * 100 / c65_budget ))% used)"
+        if [[ "$c65_bytes" -gt "$c65_budget" ]]; then
+          flag_warn_or_issue "release-log-budget" "the hot release log is ${c65_bytes} B, over its ${c65_budget} B budget. Run 'python3 ${c65_tool} --plan' to see what would move, then '--apply' and '--verify' in a separate commit. This is a MOVE: every relocated byte lands in a same-directory archive segment and every heading stays put"
+        else
+          log "  OK:    release-log-budget — $(( c65_budget - c65_bytes )) B of headroom; no archival chore due"
+        fi
+      fi
+    fi
+  fi
+
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
