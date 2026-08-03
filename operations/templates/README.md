@@ -61,11 +61,11 @@ The **Artifact family** column below is a *discovery annotation*, not the typed 
 | `test-plan-template.md` | Test plan / Test case | PMBOK 7 §Quality + `engineering:testing-strategy` plugin convention |
 | `qa-acceptance-report-template.md` | Acceptance report / Stage verdict report | PMBOK 7 §Quality + ISO/IEC/IEEE 29119-3 §Test Completion Report |
 
-### Platform-internal (operational instance, not stakeholder-facing)
+### Platform-internal (skill-embedded — deliberately not registered here)
 
-| Template | Purpose |
-|---|---|
-| `PMO_Platform_Template.md` | Knowledge-transfer reference for the PMO platform itself |
+**This section carries no rows, by construction.** Platform-internal templates are skill-runtime authoring guidance rather than stakeholder-facing artifacts; per [`../standards/template-taxonomy.md` §2 and §5](../../core/standards/template-taxonomy.md) they remain inside their owning skill's `references/` directory and are **not promoted to this canonical registry**. Taxonomy §5 enumerates them, with the owning skill and the reason each is platform-internal.
+
+The group is retained here so a reader scanning the four domains sees where the fourth one lives instead of concluding it was omitted. A template registered in this folder is `project`, `software`, or project-data architecture — never platform-internal.
 
 ### Project-data architecture (shared-entity SSOT + typed plans + composed index, v3.37)
 
