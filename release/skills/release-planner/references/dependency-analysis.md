@@ -109,10 +109,14 @@ If the dependency graph contains a cycle (e.g., #A depends on #B, #B depends on 
 
 ### Step 4: Topological Sort
 
-Apply topological sort to the DAG to produce a valid implementation sequence. When multiple valid orderings exist, prefer:
-1. Issues with highest leverage (unblock the most downstream work) first
-2. Lower-risk issues first (validate approach before high-risk changes)
-3. Smaller issues first (faster feedback)
+Apply topological sort to the DAG to produce a valid implementation sequence. When multiple valid orderings exist, the ordering key is **selected by dependency density, not fixed**: apply the sequencing-mode selector in `core/disciplines/discovery-discipline.md` § 2.4, which reads the same internal-edge count against the same `N-1` threshold `review-discipline-principles.md` § 1 rule 14 already defines. The selector is cited here, not restated.
+
+| Selector verdict | Ordering key for the ready set | Defined at |
+|---|---|---|
+| **dense** (`E ≥ N-1`) → **topology-first** | leverage descending, then the tie-breaker | § Leverage Analysis |
+| **flat** (`E < N-1`) → **value/WIP-first** | the tie-breaker key `tie_breaker_key`; concurrent batch size capped by the capacity check | § Tie-Breaker Rule + § Capacity Assessment |
+
+Both keys are defined elsewhere in this document and are not duplicated here. § Tie-Breaker Rule's rejection of leverage as a *tie-breaker* stands unchanged: under topology-first the graph is already built — a dense graph is the mode's precondition — so the circularity objection does not apply, leverage is the *primary* key, and `tie_breaker_key` still resolves ties within equal leverage. Risk-ordering and size-ordering remain rejected in **both** modes, for the reasons § Tie-Breaker Rule gives. This count admits only precedence-bearing edges — soft and file-contention edges do not enter it (§ Hard-vs-Soft Edge Classifier); they constrain adjacency in the technical layer (§ Two Dependency Layers) and never select a mode.
 
 ## Dependency Graph Construction Algorithm: Kahn's Implementation
 
@@ -432,7 +436,7 @@ Leverage measures how much downstream work an issue unblocks:
 | #M | 0 | 0 | None (independent) |
 | #P | 1 | 1 | Low |
 
-**Leverage-based sequencing rule:** Issues with highest leverage score should be implemented earliest, even if they are more complex. Blocking the highest-leverage issue blocks the most work.
+**Leverage-based sequencing rule:** Issues with highest leverage score should be implemented earliest **when the density selector at § Step 4 reads dense** (`E ≥ N-1` → topology-first), even if they are more complex. Blocking the highest-leverage issue blocks the most work. Under a flat verdict this rule does not govern the ready set — § Tie-Breaker Rule does — and leverage remains a reported quantity rather than the ordering key.
 
 ## Blast Radius Analysis
 
