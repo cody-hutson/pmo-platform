@@ -265,18 +265,78 @@ Inter-stage feedback protocol (above) is the Handoff dimension; stage transition
 
 **Sub-window mutability:**
 
-| Sub-window | Boundary | Mutability posture | Required ceremony |
+| Sub-window | Boundary | Additions (new issues into the bundle) | Removals / deferrals (issues out of the bundle) | Required ceremony |
+|---|---|---|---|---|
+| A | Phase B3 → Stage 4 Planning entry | Permitted — fully mutable | Permitted — fully mutable | None — operator amends/re-bundles freely |
+| B | Stage 4 Planning entry → Stage 5 per-issue Solutioning | **FORBIDDEN — composition lock** | Permitted with amend-log | `[BUNDLE *]` comment on Milestone + release plan deviation log entry; Stage 4 Phase A0 mandatory currency check |
+| C | Stage 5 per-issue Solutioning → Collective Review approval | **FORBIDDEN — composition lock** | Permitted with Tier 2 SCOPE CHANGE escalation | `[BUNDLE *]` comment + release plan deviation log entry + Tier 2 `[SCOPE CHANGE]` per § Inter-Stage Feedback Protocol |
+| (hard lock) | Collective Review approval → onward | FORBIDDEN (scope lock) | Governed override only | Override governed by § Collective Review Protocol Scope Lock Rules |
+
+**Composition lock (Stage-4 Planning entry):**
+
+**The rule (act-typed).** For a Milestone **at or past Stage-4 Planning entry**, `issues_added` MUST be **0** for every refresh disposition. No outcome path may add an issue to a composition-locked Milestone; newly-Approved theme-matching work routes to a **next** bundle.
+
+The lock binds the **act** (adding an issue), not the disposition bucket. `amend` remains fully available in sub-windows B and C for removals (T3, T6, path-(4)-adjacent descope) and for zero-delta re-sequences, at their existing ceremony. Every enforcement surface — the outcome-path table below, `stage-03-bundle.md` § A9.8, and `gate-criteria-spec.md` G-BR5 — **cites this rule; none restates it**, so a future outcome path inherits the guard without an edit.
+
+**`re-bundle` is not an exception to this rule** — it is the lock's lift condition. It re-executes Stage 3 Phase A1-A5 and returns the bundle to **sub-window A**, so any addition it carries occurs *after* the lock lifts, never under it.
+
+**Why the direction is asymmetric.** Additions invalidate every artifact Stage 4 computed over the composition — File Change Matrix, Contention Map, dependency graph, Parallelization Map, quota budget, Release Class. Removals shrink that surface and cannot invalidate a completed design. Removal must also stay legal because trigger **T3** (an in-bundle dependency going Rejected / Closed-Wontfix / Deferred) and trigger **T6** (namesake removed via re-milestone) are themselves removal events. A symmetric freeze would additionally be a **monotonicity inversion**: it would make sub-windows B/C stricter than the post-Collective-Review hard lock, which sanctions descope-with-deviation-log at Stage 6 (`gate-criteria-spec.md` G6-02 self-repair) and names "defer issue" in the Collective Review **Adjust** arm. A removal in sub-window C that severs a cross-issue dependency is caught by the existing **Collective Review** cross-issue dependency-satisfaction check — no new obligation is added here.
+
+**Boundary state.** The boundary is **definitional** (the Milestone has entered Stage 4 Planning); the marker is the detection mechanism. `lock_state(M)` is evaluated at the moment an `amend` disposition carrying `issues_added > 0` is contemplated, and resolves **in order**:
+
+| Order | Predicate | State | Evidence type |
 |---|---|---|---|
-| A | Phase B3 → Stage 4 Planning entry | Fully mutable | None — operator amends/re-bundles freely |
-| B | Stage 4 Planning entry → Stage 5 per-issue Solutioning | Mutable with amend-log | `[BUNDLE *]` comment on Milestone + release plan deviation log entry; Stage 4 Phase A0 mandatory currency check |
-| C | Stage 5 per-issue Solutioning → Collective Review approval | Mutable with Tier 2 SCOPE CHANGE escalation | `[BUNDLE *]` comment + release plan deviation log entry + Tier 2 `[SCOPE CHANGE]` per § Inter-Stage Feedback Protocol |
-| (hard lock) | Collective Review approval → onward | Immutable | Override governed by § Collective Review Protocol Scope Lock Rules |
+| 1 | Milestone description contains the verbatim H3 `### Composition Lock` | **LOCKED** | positive — emitted at the boundary-crossing act (Procedure 0 Step 5) |
+| 2 | **Attachment limb ≥1** OR **exact-title limb ≥1** | **LOCKED** `[LEGACY-TITLE-INFERRED]` | positive evidence that Stage 4 was entered |
+| 3 | neither | **UNMARKED** — *eligibility not established* | absence; proves nothing in either direction |
+
+- **Limb A (attachment):** `gh issue list --milestone "<title>" --state all --limit 300 --json title --jq '[.[]|select(.title|test("^Stage 4\\b"))]|length'`
+- **Limb B (exact title):** `gh issue list --state all --limit 300 --search '"Stage 4 Release Planning — <slug>" in:title' --json title --jq '[.[]|select(.title=="Stage 4 Release Planning — <slug>")]|length'` — the server-side phrase search narrows; the client-side equality restores exactness.
+
+The order-2 union is used **monotonically**: it may only ever *establish* a lock, never certify openness. Its false negatives fall through to `UNMARKED` (safe); its false positives over-lock, which is the correct failure direction for a lock whose value is refusing an amend. The limbs deliberately do **not** require a `sub-task` label — genuinely unlabelled Stage-4 sub-tasks exist, and a label requirement would fail *open* on them; the cost is an occasional false positive, which fails *closed*.
+
+**Disposition rule.** `amend` carrying `issues_added > 0` is available **only** when the state is not `LOCKED` **and** the eligibility basis is recorded. `LOCKED` (either order) ⇒ forbidden. `UNMARKED` ⇒ permitted **only** with an explicit basis stated in the `[BUNDLE AMENDMENT]` comment that outcome path (2) already mandates — e.g. `eligibility: sub-window A — no Stage-4 planning sub-task on either limb; no release plan`. **A zero probe result is never, by itself, an eligibility finding**, and no surface may coerce `UNMARKED` to "pre-Stage-4".
+
+**Fail-closed.** The *only* affirmative eligibility is a non-`LOCKED` state with the basis recorded. Every other read — a determinate zero without a recorded basis, an indeterminate read, a query error, absent tooling — is **non-eligibility**. The failure direction is toward refusing a legal amend, which the operator clears with one recorded line.
+
+**What the composition lock does NOT lock** (each item preserves a live protocol):
+
+1. per-issue **scope and AC refinement** (preserves § AC-Drift Handling Protocol and the Stage-4 G-PL1 currency gate);
+2. **implementation sequence / ordering** (preserves § Re-sequence disambiguation — a pure re-sequence computes 0% delta and stays an `amend`);
+3. **removals and deferrals** (per the sub-window table above);
+4. **release-plan revisions** (§ Release-Plan Versioning Protocol continues to classify them);
+5. **stage sub-task scaffolding** (sub-tasks are pipeline artifacts, not bundle composition).
+
+**Lock lift.** Three conditions, all mapped onto existing paths — no fifth outcome path is created. (1) **Stage 13 Close** — the Milestone closes and is not an amend target. (2) **Refresh outcome path (3) `re-bundle`** — the governed re-composition route; its description rewrite clears the `### Composition Lock` block and returns the bundle to sub-window A. Its price (re-running Stage 4) is what keeps it from being a rubber-stamp bypass. (3) **Run abandonment** — recorded as a path (3) `re-bundle` or path (4) `defer` of the whole set, not as a separate mechanism.
+
+**No exception path.** There is **no** hotfix or P1 carve-out inside this lock. A P1/P2 defect raised against a deployed release forms its **own** `hotfix`-class bundle per the Release Class taxonomy (≤3 issues, corrective scope) — which reaches Stage 12 faster than a host bundle it would also contaminate with corrective scope, since injecting corrective work into a `novel`/`cross-cutting` bundle inherits that bundle's Deep Stage-9 review posture and its Stage-12 date.
+
+```
+Milestone lifecycle — where composition is mutable
+
+  B3 create ──▶ [A] additions ✔  removals ✔      fully mutable
+                    │
+       Stage 4 Planning entry ═══ COMPOSITION LOCK ═══  (additions closed)
+                    │              emits ### Composition Lock  →  lock_state = LOCKED
+                    │
+                ▼ [B] additions ✘  removals ✔ (amend-log)
+                ▼ [C] additions ✘  removals ✔ (Tier 2 SCOPE CHANGE)
+                    │
+       Collective Review approval ═══ SCOPE LOCK ═══   (all scope closed)
+                    │
+                ▼ [hard lock] governed override only
+
+  lock_state:     LOCKED (marker)  ·  LOCKED [LEGACY-TITLE-INFERRED] (union, lock-only)
+                  UNMARKED = NOT eligibility — an addition-amend needs a recorded basis
+  Lock lifts on:  Stage 13 Close  ·  outcome path (3) re-bundle → returns to [A]
+  Not locked:     per-issue scope + AC · sequencing · removals · plan revisions · sub-task scaffolding
+```
 
 **Refresh-trigger conditions (any one fires a refresh decision):**
 
 | # | Trigger | Threshold | Mechanism |
 |---|---|---|---|
-| T1 | Approved-queue depth — new theme-matching Approved issues since bundle creation | **≥3** (MEDIUM confidence — `[CALIBRATE-AFTER-3]` per RELEASE_LOG calibration trigger) | `gh issue list --label "status: approved" --search "no:milestone"` filtered by milestone-theme labels |
+| T1 | Approved-queue depth — new theme-matching Approved issues since bundle creation | **≥3** (MEDIUM confidence — `[CALIBRATE-AFTER-3]` per RELEASE_LOG calibration trigger) | `gh issue list --label "status: approved" --search "no:milestone"` filtered by milestone-theme labels. Candidate targets are filtered by the composition lock above: a Milestone at or past Stage-4 Planning entry is not an eligible `amend` target for an addition. |
 | T2 | Priority shift — in-bundle or out-of-bundle priority transition | Any in-bundle priority change OR out-of-bundle Approved escalation to P1/P2 with theme overlap | Per-issue priority-label diff since bundle creation |
 | T3 | Dependency-state change — in-bundle dep transition | Any in-bundle dep transitions to incompatible state (Rejected, Closed-Wontfix, Deferred) OR cross-milestone violation surfaces (G3-07 retro) | Per-issue dep walk against current GitHub state |
 | T4 | Stage 4 boundary currency check | Mandatory at Stage 4 Phase A0 entry — re-evaluates T1/T2/T3 since bundle creation | Stage 4 Planning spoke runs `release/tools/check-bundle-refresh.sh` (or equivalent in-line bash); logs zero or one triggers fired |
@@ -292,16 +352,18 @@ re-bundle := (composition_delta_pct > 30%)  OR  (theme_preserved == FALSE)
 
 where `composition_delta_pct = (issues_added + issues_removed) / |original_bundle|`. 30% threshold carries MEDIUM confidence — `[CALIBRATE-AFTER-3]`. Tie-break at exactly 30%: classify as `amend`.
 
+**Sub-window scope.** Both terms are live in **sub-window A**. In **sub-windows B and C** `issues_added` is **identically zero by the composition lock**, so the effective computation is `issues_removed / |original_bundle|`. A non-zero `issues_added` computed in B or C is **not a churn measurement — it is a composition-lock violation**; the disposition is to route the added issues out (next bundle) or re-bundle, never to classify the delta. That same term is the gate's conditional — `gate-criteria-spec.md` G-BR5 fires exactly when `issues_added > 0` — so the churn detector and the gate are **one mechanism, not two**. The 30% threshold and the exactly-30% `amend` tie-break are unchanged.
+
 **Refresh outcome paths (operator selects after trigger fires):**
 
 | Path | Trigger | Decision | Recording |
 |---|---|---|---|
-| (1) no-op | Refresh check ran, zero triggers | Hub spoke (autonomous) | `[BUNDLE REFRESH: no-op]` comment on active stage spoke |
-| (2) amend | Trigger fired AND ≤ 30% AND theme preserved | Operator | `[BUNDLE AMENDMENT]` comment + Milestone description amendment + per-issue label sync; release plan deviation log entry (sub-window B/C) |
-| (3) re-bundle | Trigger fired AND (> 30% OR theme broken) AND release viable | Operator | Milestone description rewrite (or new Milestone) + per-issue label sync; release plan deviation log entry (sub-window B/C); re-execute Stage 3 Phase A1-A5 per `pipeline/stage-03-bundle.md § 5 Process` |
+| (1) no-op | Refresh check ran, zero triggers — OR a T1/T2 out-of-bundle-candidate trigger fired against a composition-locked bundle, leaving that bundle unchanged (candidates route forward) | Hub spoke (autonomous) | `[BUNDLE REFRESH: no-op]` comment on active stage spoke; when the composition-lock arm applies, the annotated form `[BUNDLE REFRESH: no-op — composition-locked; candidates routed forward]`. T3 and T6 are removal-class and keep `amend`; they never fall through to `no-op` |
+| (2) amend | Trigger fired AND ≤ 30% AND theme preserved AND (`issues_added == 0` OR the target Milestone is pre-Stage-4-entry per § Composition lock) | Operator | `[BUNDLE AMENDMENT]` comment + Milestone description amendment + per-issue label sync; release plan deviation log entry (sub-window B/C). When `issues_added > 0` against an `UNMARKED` target, the comment MUST state the eligibility basis per § Composition lock → Disposition rule |
+| (3) re-bundle | Trigger fired AND (> 30% OR theme broken) AND release viable | Operator | Milestone description rewrite (or new Milestone) + per-issue label sync; release plan deviation log entry (sub-window B/C); re-execute Stage 3 Phase A1-A5 per `pipeline/stage-03-bundle.md § 5 Process`. The description rewrite clears the `### Composition Lock` block — the re-bundled Milestone returns to sub-window A |
 | (4) defer | Trigger fired AND release no longer viable in current sequence | Operator | `gh issue edit --remove-milestone` per affected issue + status-label sync; `[BUNDLE DEFER]` comment naming target milestone; release plan deviation log entry (sub-window B/C) |
 
-**Gate:** See `gate-criteria-spec.md § Gate G-BR: Bundle Refresh Readiness` (G-BR1..G-BR4).
+**Gate:** See `gate-criteria-spec.md § Gate G-BR: Bundle Refresh Readiness` (G-BR1..G-BR5).
 
 **Cutover discipline:** Applies to all releases going forward.
 

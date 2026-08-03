@@ -536,6 +536,7 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 | G-BR2 | Churn magnitude computed (composition_delta_pct + theme_preserved Y/N) | field | structural | auto | — |
 | G-BR3 | Refresh outcome path selected (no-op / amend / re-bundle / defer) with required evidence per [release-process.md](../../release/governance/release-process.md) § A7 — Bundle Mutability Protocol outcome-path table | field | judgment | recommend | — |
 | G-BR4 | Decision recorded on Milestone (description amendment AND/OR `[BUNDLE *]` comment per outcome-path recording mechanism) | artifact | structural | auto | — |
+| G-BR5 | **Conditional — fires only when the selected outcome path is `amend` AND `issues_added > 0`.** The target Milestone's composition-lock state is not `LOCKED`, and the eligibility basis is recorded, per the act-typed rule defined in [release-process.md](../../release/governance/release-process.md) § A7 § Composition lock. That rule and its three-valued `lock_state` resolution are defined there and cited here — this criterion restates neither. `UNMARKED` is **not** affirmative eligibility: it passes only with an explicit basis stated in the `[BUNDLE AMENDMENT]` comment. Removal-amends, zero-delta re-sequence-amends, and the `no-op` / `re-bundle` / `defer` paths pass trivially. | validation | structural | auto | Resolve `lock_state(M)` per the resolution defined in `release-process.md` § A7 § Composition lock → Boundary state; expect a non-`LOCKED` state **with a recorded basis**. Fail-closed: an indeterminate read is non-eligibility |
 
 ### Self-Repair Actions
 
@@ -545,6 +546,7 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 | G-BR2 | Churn not computed | Re-run computation; missing computation blocks operator decision. |
 | G-BR3 | Outcome path selected without required evidence | Return to operator with evidence-gap list; block recording until evidence complete. |
 | G-BR4 | Recording absent post-decision | Author the `[BUNDLE *]` comment + Milestone-description update per outcome-path table. Decision is INVALID without recording — Stage 4/5 spokes treat unrecorded refresh as "no decision made" and re-prompt operator. |
+| G-BR5 | An `amend` carrying `issues_added > 0` targets a `LOCKED` Milestone — or targets an `UNMARKED` one with no recorded eligibility basis | **The addition** is unavailable for that Milestone; the `amend` path itself remains available for that Milestone's removals and zero-delta re-sequences. Re-render the disposition for the added issues only: route them to a pre-Stage-4 or new Milestone via a Stage-3 Phase-B bundling pass, or defer; record the running bundle's own outcome as path (1) `no-op` with the composition-lock annotation. On the `UNMARKED` arm the operator may instead record the eligibility basis in the `[BUNDLE AMENDMENT]` comment and re-evaluate. Never add on an indeterminate eligibility read. |
 
 ---
 
@@ -655,7 +657,14 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 
 ## Versioning
 
-**Schema version:** 2.5
+**Schema version:** 2.6
+
+**v2.6 changes (non-breaking — minor; additive — G-BR5; no criterion ID renumber; existing IDs stable):**
+
+- Added **G-BR5** (Composition-lock eligibility of an addition-carrying `amend` target) to Gate G-BR (Bundle Refresh Readiness) — 1 criterion row + 1 self-repair row, section-local to § Gate G-BR. Registers the enforcement half of the **composition lock at Stage-4 Planning entry**: once a Milestone enters Stage 4 Planning its composition is closed to additions, and newly-Approved theme-matching work routes to a next bundle rather than into the running one. The criterion is **act-typed, not path-typed** — it fires on `path == amend AND issues_added > 0`, never on the `amend` path itself, so removals (triggers T3/T6), deferrals, and zero-delta re-sequences keep their existing disposition and ceremony. It **cites** the rule, the three-valued `lock_state` resolution, and the non-eligibility default defined in `release-process.md` § A7 § Composition lock rather than restating any of them: one surface states, the others cite (ADR-019). Row is `validation` / `structural` / `auto`.
+- **Why `UNMARKED` is a state and not a pass.** The boundary resolves three-valued — `LOCKED` (emitted `### Composition Lock` marker) → `LOCKED [LEGACY-TITLE-INFERRED]` (attachment ∨ exact-title union, used monotonically) → `UNMARKED`. A zero probe result is an **absence**, not an affirmative eligibility finding, and no consumer may coerce it to "pre-Stage-4"; on the `UNMARKED` arm the criterion passes only with an explicit eligibility basis recorded in the `[BUNDLE AMENDMENT]` comment. Soundness therefore rests on the state machine's default rather than on probe coverage. Recorded here as inline rationale so a future release does not "simplify" the resolution back to a two-valued probe.
+- Schema bump v2.5 → v2.6 (non-breaking minor; additive — G-BR5). Schema consumers (automated gate-validation tooling, stage-gate evaluator, CER Claim agents) require no structural change — the stage-gate evaluator routes by the `Check` column and an `auto` structural row uses the existing structural checker; no evaluator, no `deploy.sh` check, and no field-lifecycle-matrix entry changes. Existing G1-01..G1-09 / G2-01..G2-13 / G3-01..G3-19 + G4-01..G4-05 + G6-01..G6-06 + **G-BR1..G-BR5** + G-PR1..G-PR10 + G-EX1..G-EX8 + G-CL1..G-CL9 IDs unchanged (G-BR5 is the v2.6 addition; the prior max in the G-BR range was G-BR4); no ID renumber, no column/type change.
+- **Cutover discipline (v2.6 additions):** G-BR5 applies to refresh-trigger events occurring strictly AFTER its introducing-release merge SHA recorded in the release log; pre-cutover evaluations are grandfathered; the introducing release itself is exempt (reflexive-pipeline-loop discipline — it cannot fire its own new gate).
 
 **v2.5 changes (non-breaking — minor; additive — G2-13; no criterion ID renumber; existing IDs stable):**
 
