@@ -30,6 +30,7 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 | `key-terms-glossary-template.csv` | Stakeholder | PMBOK 7 |
 | `change-impact-matrix-template.md` | Stakeholder | PMBOK 7 |
 | `training-plan-template.md` | Stakeholder | PMBOK 7 |
+| `people-graph-clarification-queue-template.md` | Stakeholder | PMBOK 7 (de-identified queue of unresolved person-graph candidates; the filled queue is operator-instance and out-of-tree) |
 | `change-log-template.md` | Project Work | PMBOK 7 (Waterfall change-control log) |
 | `lessons-learned-template.md` | Project Work | PMBOK 7 (PRINCE2 lessons log) |
 | `daily-status-log-template.md` | Measurement | PMBOK 7 |
