@@ -1,4 +1,23 @@
+---
+artifact_type: template
+template_family: Acceptance report / Stage verdict report
+domain: software
+canonical_path: operations/templates/qa-acceptance-report-template.md
+owner: [OPERATOR_NAME]
+review_status: DRAFT
+created: 2026-07-03
+updated: 2026-08-03
+generated_by: release-pipeline {{RELEASE_VERSION}}
+reviewer: N/A
+canon: PMBOK 7 §Quality + ISO/IEC/IEEE 29119-3 §Test Completion Report
+canon_compat: none
+version: "{{RELEASE_VERSION}}"
+supersedes: N/A
+superseded_by: N/A
+---
 <!-- repo-integrity: allow-issue-ref -->
+<!-- The YAML block above is this TEMPLATE FILE's provenance header (core/standards/template-protocol.md §4.1). It must sit at line 1 to parse as frontmatter, which is why it precedes the repo-integrity marker rather than following it. Do NOT copy it into a rendered Stage-8 acceptance-report instance — an instance starts at the H1 below. -->
+<!-- canon_compat evidence (template-protocol.md §6 P5 path c-ii): domain:software AND the required canon: field names an external canon (ISO/IEC/IEEE 29119-3 §Test Completion Report, alongside PMBOK 7 §Quality) AND no Anthropic plugin counterpart exists for the family (template-taxonomy.md §4.8; §6 row 12 records "no Anthropic plugin equivalent"). `none` is the ANTICIPATED resolution at DRAFT — authoritative only at an APPROVED transition. Family values consumed verbatim from the #3196 contention contract. -->
 # QA Acceptance Report Template — PMO Reference
 
 ## Purpose
