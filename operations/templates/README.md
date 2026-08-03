@@ -46,7 +46,9 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 
 ### Software-domain (engineering best-practice canon anchored)
 
-Canon-per-family binding per [`../standards/template-taxonomy.md` §6](../../core/standards/template-taxonomy.md) rows 1–6 + row 9. Canonical-only — no `TEMPLATE_SYNC_MAP` mirrors registered; sync-map registration follows the first consumer skill with a runtime read-path per [`../standards/template-storage.md` §6](../../core/standards/template-storage.md).
+Canon-per-family binding per [`../standards/template-taxonomy.md` §6](../../core/standards/template-taxonomy.md) rows 1–6 + rows 9 and 12. Canonical-only — no `TEMPLATE_SYNC_MAP` mirrors registered; sync-map registration follows the first consumer skill with a runtime read-path per [`../standards/template-storage.md` §6](../../core/standards/template-storage.md).
+
+The **Artifact family** column below is a *discovery annotation*, not the typed binding. Several cells carry the form `<family> (<annotation>)` — the parenthetical is reader guidance and is not part of the value. The load-bearing, enum-bound `template_family` value is the one in each template's own provenance header, sourced from [`../standards/template-taxonomy.md` §3–§5](../../core/standards/template-taxonomy.md) per [`../standards/template-protocol.md` §4.2](../../core/standards/template-protocol.md). Where the two differ in spelling, the header is authoritative.
 
 | Template | Artifact family | Canon source |
 |---|---|---|
@@ -57,6 +59,7 @@ Canon-per-family binding per [`../standards/template-taxonomy.md` §6](../../cor
 | `prd-template.md` | PRD / Feature spec | Anthropic `product-management:write-spec` plugin convention (secondary: Aha! / Lenny Rachitsky) |
 | `postmortem-template.md` | Postmortem | Google SRE Workbook §Postmortem Culture |
 | `test-plan-template.md` | Test plan / Test case | PMBOK 7 §Quality + `engineering:testing-strategy` plugin convention |
+| `qa-acceptance-report-template.md` | Acceptance report / Stage verdict report | PMBOK 7 §Quality + ISO/IEC/IEEE 29119-3 §Test Completion Report |
 
 ### Platform-internal (operational instance, not stakeholder-facing)
 
