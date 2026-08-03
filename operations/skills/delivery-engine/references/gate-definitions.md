@@ -118,10 +118,10 @@ Every gate below uses the fixed 6-field block. Exit criteria are the machine-che
 **Exit criteria** (ALL must hold to PASS and transition to LG-5 — these ARE the Definition of Ready; run the template, do not restate it):
 - [LG-4-EX-1] Acceptance criteria are defined as specific, testable conditions (evidence: AC written in Given/When/Then or equivalent — per [`gate-checklists.md §2.2`](gate-checklists.md) DoR criterion 1).
 - [LG-4-EX-2] Dependencies are identified and none are in a blocked state (evidence: the item's dependency links are mapped and clear — DoR criterion 2).
-- [LG-4-EX-3] The item is sized/estimated (evidence: an estimate is assigned — DoR criterion 3; estimation discipline per [`estimation-standards.md`](estimation-standards.md)).
+- [LG-4-EX-3] The item is bounded (evidence: a bound of record is assigned — a size estimate, a time-box, or a scope-box carrying both stated acceptance criteria and an explicit out-of-scope boundary; stated scope with no out-of-scope boundary is not a bound — DoR criterion 3; estimation discipline per [`estimation-standards.md`](estimation-standards.md)).
 - [LG-4-EX-4] The technical approach is reviewed where applicable, with no open architecture question (evidence: design note or a recorded "no design needed" — DoR criterion 4).
 - [LG-4-EX-5] A test approach is identified with test data available or a plan to create it (evidence: a stated test strategy — DoR criterion 5).
-- [LG-4-EX-6] The item is small enough to fit one iteration (evidence: it meets the INVEST "Small" criterion; otherwise it is sliced — DoR criterion 6).
+- [LG-4-EX-6] The item is small enough (evidence: it meets the INVEST "Small" criterion, and under a time-boxed approach it also fits one iteration; otherwise it is sliced — DoR criterion 6).
 **Key decisions:** Admit to execution (Ready) / return for refinement (not Ready) / slice into smaller items.
 **Artifacts required:** The DoR checklist run against the item ([`gate-checklists.md §2.2`](gate-checklists.md)); the refined work item (AC, estimate, dependencies).
 **Escalation path:** Escalate to the Product Owner when an item is repeatedly returned as not-Ready (≥2 refinement cycles) or when a blocking dependency cannot be cleared by the team; trigger = repeat not-Ready or an unclearable blocker.
