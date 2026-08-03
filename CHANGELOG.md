@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.06] - 2026-08-03
+
+The release history stops being four hand-kept copies of one fact, and the file that holds it is 81% smaller without losing a byte.
+
+[Full notes](release/releases/notes/v4.06_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.06)
+
 ## [v4.05] - 2026-08-02
 
 Claims the documentation makes about itself — counts, citations, verified results — are now checked by something rather than trusted.
