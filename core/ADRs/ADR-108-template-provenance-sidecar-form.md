@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-108 — The provenance sidecar is a full-filename `.provenance.yml` carrying the whole L4 header
-status: Proposed
+status: Accepted
 date: 2026-08-03
 release: governance-hardening
 deciders: "Workspace owner — ADR-107 named the class and routed the sidecar's filename form and field set forward to the work that generalizes the placement convention. This is that work. Designed and authored at Stage 6 against the Stage-5 architecture assessment, whose DD-4 selected the sidecar mechanism (M3) after independent review falsified the registry-binding alternative."

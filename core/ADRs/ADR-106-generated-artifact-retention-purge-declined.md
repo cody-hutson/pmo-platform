@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: ADR-106 — Archive is the permanent terminal for generated artifacts, and the derived release ledgers carry a read-path volume obligation, not a disposition one
-status: Proposed
+status: Accepted
 date: 2026-08-03
 release: governance-hardening
 deciders: "Workspace owner — the ratify-vs-build fork was rendered directly by the operator at the Stage-5 Wave B briefing (RATIFY; the build branch declined). The derived-ledger disposition was added to the card's acceptance criteria after that briefing and is decided here against the post-normalization corpus. Designed at Stage 5 (Principal Engineer — Architecture Assessment); authored at Stage 6."

@@ -3,7 +3,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: ADR-105 — The release corpus has two typed file sources and two run-scoped inputs, one projector, and per-field provenance — not one authoritative ledger
-status: Proposed
+status: Accepted
 date: 2026-08-02
 release: governance-hardening
 deciders: "Workspace owner — the single-source counter-design was surfaced explicitly at Collective Review and REJECTED on measured grounds; INT-4 (the RECORDS_POLICY classification) was decided directly by the operator. Designed at Stage 5 across a design pass, two independent adversarial reviews and a Blocker-revision pass; authored at Stage 6."

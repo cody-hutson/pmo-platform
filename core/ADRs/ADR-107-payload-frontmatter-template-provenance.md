@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-107 — Payload-frontmatter templates carry their provenance header in a sidecar, not inline
-status: Proposed
+status: Accepted
 date: 2026-08-03
 release: governance-hardening
 deciders: "Workspace owner — the operator assigned the key-collision decision to the domain-disambiguation card at the Stage-4 re-plan gate, expressly separating the DECISION from the migration. Designed and authored at Stage 6 against the reused Stage-5 architecture assessment."

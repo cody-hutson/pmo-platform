@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-memory-ref -->
 ---
 title: ADR-109 — External-target knowledge scope — the target is SSOT for its own facts
-status: Proposed
+status: Accepted
 date: 2026-08-03
 release: governance-hardening
 deciders: "Workspace owner (ratified at the Stage 9 review); design authored at Stage 5 Solutioning and corrected at Stage 6 against the live adapter interface"
