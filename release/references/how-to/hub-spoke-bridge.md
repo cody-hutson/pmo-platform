@@ -212,7 +212,11 @@ Release planning runs once per Milestone at release scope (all issues) before an
 2. Generate a Stage 4 Release Planning spoke prompt using the Release Planning Spoke Template below, and invoke the Agent tool per the Spoke Launch Mechanisms § Default subsection (`Agent({subagent_type, prompt, description, model, isolation, run_in_background})`) — OR fall back to printing the prompt if a fallback condition applies
 3. Hub auto-launches the spoke within authorized scope and awaits the result inline; OR, under fallback, the operator copy/pastes the printed prompt into a new session
 4. Spoke reads all issues and produces: dependency graph, implementation sequence, contention map, stage applicability per issue, risk register
-5. Spoke posts output as a comment on a release planning sub-task (hub creates this sub-task first: `Stage 4 Release Planning — {MILESTONE}`). **Creating that sub-task is the Stage-4-Planning-entry act, so the same step emits the composition-lock marker:** hub composes a `gh api repos/.../milestones/<N> -X PATCH` payload — the same mechanism Step 7 below uses for the Release Outcome Statement — appending this verbatim H3 block to the Milestone description:
+5. Spoke posts output as a comment on a release planning sub-task (hub creates this sub-task first: `Stage 4 Release Planning — {MILESTONE}`). The hub performs three clauses here, **in this order** — the ordering is semantic, not stylistic: the sub-task must exist before clause (b) can record its number and before clause (c) can post to it.
+
+   **(a) Create the sub-task, stamped at creation.** The same `gh issue create` carries `--milestone "{MILESTONE}"` and `--label sub-task` — neither optional, neither deferred to a later pass. One invocation, three durable fields. The `sub-task` label is what the downstream enumerators filter on: the Procedure 0b Resume Procedure's member scan, and the Stage-4 Phase A0 `G-PL5` cache-read's card-set fingerprint, which *excludes* `sub-task`-labelled members precisely so a per-stage comment cannot invalidate the cache. A sub-task created unlabelled is invisible to the first and corrupting to the second, so the stamp belongs in the creating call rather than in a follow-up edit.
+
+   **(b) Emit the composition-lock marker.** **Creating that sub-task is the Stage-4-Planning-entry act, so the same step emits the composition-lock marker:** hub composes a `gh api repos/.../milestones/<N> -X PATCH` payload — the same mechanism Step 7 below uses for the Release Outcome Statement — appending this verbatim H3 block to the Milestone description:
 
    ```
    ### Composition Lock
@@ -220,6 +224,30 @@ Release planning runs once per Milestone at release scope (all issues) before an
    ```
 
    The marker is the order-1 (positive) resolution of `lock_state(M)`; the boundary, the act-typed rule it makes observable, the order-2/order-3 fallbacks for pre-cutover Milestones, and the lift conditions are all defined in [`release/governance/release-process.md`](../../governance/release-process.md) § A7 § Composition lock — cite it, do not restate it. Emission is **going forward**; pre-cutover Milestones resolve at orders 2–3 and are never reported as an affirmative pass. The block is cleared only by refresh outcome path (3) `re-bundle`, whose description rewrite returns the bundle to sub-window A. **Cutover discipline:** Applies to all releases going forward.
+
+   **(c) Relay the Mode R readiness briefing as the sub-task's first comment.** The hub holds a `release-hub` Mode R briefing at this moment by construction — the Output Contract places the re-run Mode R immediately before Mode O, whose run sequence enters this procedure. The hub posts it here, verbatim, as the durable form Stage-4 Phase A0's `G-PL5` cache-read consumes ([`stage-04-planning.md`](../pipeline/stage-04-planning.md)). **Mode R itself persists nothing** — the relay is the hub's act; Mode R's read-only contract, including *"files nothing, posts no comment"*, is unchanged. Form: an opening H2 (the Sub-Task Template's `### Output` convention for this surface) plus the machine key as an HTML comment carrying the currency operands `G-PL5` recomputes:
+
+   ```
+   ## Milestone Readiness Briefing — {MILESTONE}
+
+   <!-- mode-r-briefing
+   schema_version: v1.0
+   emitted_at: <ISO-8601 UTC of the Mode R run this relays>
+   emitted_by: release-hub Mode R (relayed by the hub at Procedure 0 Step 5)
+   part: <i>/<n>
+   card_set: |
+     <NNNN>:<ISO-8601 UTC updatedAt>
+   card_set_fingerprint: <64 hex>
+   milestone_updated_at: <ISO-8601 UTC>
+   milestone_description_sha256: <64 hex>
+   main_head_sha: <40 hex>
+   -->
+
+   <per-card triage-design-rereview § 1 re-review artifact: the 8 header fields
+   plus the six-column per-requirement table>
+   ```
+
+   The operand recipes are the literal pipelines published in `stage-04-planning.md` § G-PL5 — run **those**, not a paraphrase: the fingerprint is byte-fragile, and a reworded pipeline yields a different digest and a silent permanent MISS. **Multi-part:** a large milestone's briefing can exceed GitHub's comment-size limit, so the hub posts parts, each carrying the marker and `part: i/n` under one shared `emitted_at`; Phase A0 reads the newest **complete** part-set and MISSes on an incomplete one. **Refresh:** after an `R → cleanup → re-run R` cycle the hub may post a refreshed briefing, and the newest complete part-set supersedes — recency selects which briefing is tested, never whether it is current. **A missing briefing is not an error:** Mode R is a pre-flight, not a precondition; Phase A0 MISSes and runs PT-1..4 exactly as it does without a cache. **Under a hub-direct Stage 4 the hub still posts**, reading back a comment it wrote itself — the comment is the audit trail regardless of execution path (Hub-direct ≡ spoke). **Cutover discipline:** Applies to all releases going forward.
 6. Hub reads the spoke output and presents the release plan to the operator for review
 7. Operator approves, modifies, or requests iteration. The Phase B1 Decision Briefing presentation surface includes a **Release Outcome Statement (draft)** row (per [release-outcome-statement-template.md](../specs/release-outcome-statement-template.md)) — the operator approves the Outcome at the same Phase B1 gate where bundle scope is accepted. After Phase B1 acceptance, hub composes the `gh api repos/.../milestones/<N> -X PATCH` payload to include the `### Release Outcome Statement` H3 block in the Milestone description. **Cutover discipline:** Applies to all releases going forward.
 
@@ -277,6 +305,9 @@ Read these in order:
 4. For each issue: gh issue view {NUMBER} --repo {REPO}
 5. release/references/pipeline/stage-04-planning.md
 6. release/references/how-to/hub-spoke-bridge.md — Procedure 0
+7. The `<!-- mode-r-briefing` comment(s) on sub-task
+   #{SUB_TASK_NUMBER}, if present — the Mode R readiness
+   briefing your Phase A0 G-PL5 cache-read consumes
 
 ## Persona
 {FULL_STAGE_4_PERSONA_CARD_FROM_RELEASE_PERSONAS_MD}
