@@ -37,7 +37,7 @@ This standard defines what makes an operational-artifact template **"highly mach
 
 **Four consolidation sources (cited, never duplicated):**
 
-1. L4 `template-protocol.md` §4.1 — the 14-field provenance header schema (the template *file* carries it verbatim).
+1. L4 `template-protocol.md` §4.1 — the 15-field provenance header schema (the template *file* carries it verbatim).
 2. `frontmatter-schema.md`  — instance-frontmatter Category 1–7 + 7 MVP relationship types + Domain A/B/C.
 3. L1 `template-taxonomy.md` §2 — the three-domain model (operational artifacts are the `project`-domain subset).
 4. `project-schema.md` §5–§6 — the V-style validation-rule structural pattern this standard mirrors.
@@ -54,14 +54,14 @@ Citing the future/authoritative home rather than restating it is the consolidati
 
 ## §2 Scope & Relationship to the 5-Layer Template Architecture
 
-The 5-Layer Template Architecture (SHIPPED — `template-taxonomy.md` / `template-storage.md` / `template-protocol.md`) **already governs** template lifecycle, 14-field provenance, taxonomy, storage, and the PDA boundary. This standard is **not a 6th layer and not a competitor** — it is the **PDA-side contract overlay** that adds the exact three clauses the 5-Layer Architecture deliberately scoped OUT.
+The 5-Layer Template Architecture (SHIPPED — `template-taxonomy.md` / `template-storage.md` / `template-protocol.md`) **already governs** template lifecycle, 15-field provenance, taxonomy, storage, and the PDA boundary. This standard is **not a 6th layer and not a competitor** — it is the **PDA-side contract overlay** that adds the exact three clauses the 5-Layer Architecture deliberately scoped OUT.
 
 ### D1 — Architectural placement: contract overlay, NOT a competing layer
 
 | Concern | Authoritative home (SHIPPED) | This standard's relationship |
 |---|---|---|
 | Template lifecycle (DRAFT→…→ARCHIVED) | L4 `template-protocol.md` §3 | **REFERENCES** — operational-artifact templates obey the L4 lifecycle unchanged |
-| 14-field provenance header | L4 `template-protocol.md` §4.1 | **REFERENCES** — the template *file* carries the L4 header verbatim; this standard adds NO field to it |
+| 15-field provenance header | L4 `template-protocol.md` §4.1 | **REFERENCES** — the template *file* carries the L4 header verbatim; this standard adds NO field to it |
 | Artifact-family taxonomy + 3-domain model | L1 `template-taxonomy.md` §2–§6 | **REFERENCES** — operational artifacts are the `project` domain subset |
 | Registry layout, deploy-sync, **PDA boundary** | L3 `template-storage.md` §2–§5 | **REFERENCES** — esp. §5: *"Templates declare structure; PDA instances populate structure"* |
 | Instance frontmatter (Category 1–7, 7 MVP rels, Domain A/B/C) | `frontmatter-schema.md` | **REFERENCES** — the instance contract a template points at; the frontmatter-schema owns it |
@@ -86,7 +86,7 @@ Every conformant operational-artifact template carries these six structural elem
 
 | # | Element | Required | Source / Definition | Consolidated or Net-New |
 |---|---|---|---|---|
-| **A** | Provenance header | YES | The L4 14-field YAML block per `template-protocol.md` §4.1 (inline frontmatter) or sibling `.provenance.yml` per §4.4 (where the inline slot is owned by another schema — CSV format, or a payload-frontmatter template per ADR-107). Verbatim; no field added/removed. | Consolidated (L4) |
+| **A** | Provenance header | YES | The L4 15-field YAML block per `template-protocol.md` §4.1 (inline frontmatter) or sibling `.provenance.yml` per §4.4 (where the inline slot is owned by another schema — CSV format, or a payload-frontmatter template per ADR-107). Verbatim; no field added/removed. | Consolidated (L4) |
 | **B** | Instance-frontmatter contract | YES | A declaration of which `frontmatter-schema.md` Category 1–7 fields the *instances* produced from this template MUST carry (the template specifies the contract; the frontmatter-schema owns the schema). | Consolidated (frontmatter-schema) |
 | **C** | Body typed-format spec | YES | The existing typed-format content: column headers (CSV) or section structure + placeholder semantics (MD). Unchanged from current template practice. | Consolidated (existing practice) |
 | **D** | Entity-Derivation Table | YES | NEW. One row per template field: `field · entity_binding (#N Entity.field \| template-local) · ead_class (7-class) · level (L1/L2/L3) · rationale-if-local`. Per §4 rule. | **Net-new** |
@@ -97,7 +97,7 @@ The per-element subsections below restate each element so the AC-2 conformance g
 
 ### Element A — Provenance header (consolidated, L4)
 
-The template file carries the L4 14-field provenance block **verbatim** per `template-protocol.md` §4.1 (inline frontmatter) or the sibling `.provenance.yml` per §4.4 (where the inline slot is owned by another schema). This standard adds **no** field to the L4 schema — provenance is L4's, not PDA's (compose-not-modify, §2).
+The template file carries the L4 15-field provenance block **verbatim** per `template-protocol.md` §4.1 (inline frontmatter) or the sibling `.provenance.yml` per §4.4 (where the inline slot is owned by another schema). This standard adds **no** field to the L4 schema — provenance is L4's, not PDA's (compose-not-modify, §2).
 
 ### Element B — Instance-frontmatter contract (consolidated, frontmatter-schema)
 
@@ -304,7 +304,7 @@ AC-checkable assertions (mirrors `project-schema.md` §5 / `template-protocol.md
 
 | Reference | Role |
 |---|---|
-| L4 `core/standards/template-protocol.md` §3/§4.1/§4.4/§8 | Template lifecycle + 14-field provenance + composition boundary (REFERENCED, not modified) |
+| L4 `core/standards/template-protocol.md` §3/§4.1/§4.4/§8 | Template lifecycle + 15-field provenance + composition boundary (REFERENCED, not modified) |
 | L1 `core/standards/template-taxonomy.md` §2 | Three-domain model; operational artifacts = `project`-domain subset (REFERENCED) |
 | L3 `core/standards/template-storage.md` §5 | PDA boundary — the load-bearing placement evidence (REFERENCED, not modified) |
 | `core/schemas/frontmatter-schema.md` | Instance-frontmatter Category 1–7 + 7 MVP rels + Domain A/B/C (REFERENCED) |
