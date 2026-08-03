@@ -249,6 +249,8 @@ Optional on legacy files, **required forward**. Names the **deliverable domain**
 
 The bare word `domain` is overloaded across the platform; `deliverable_type` is the deliberately **non-colliding** name for the deliverable-domain axis. This note fixes the boundaries once (modeled on the §7 `dual_framing_enabled`-vs-`delivery_approach` Collision Check):
 
+**Scope of this note vs. the corpus index.** This note answers one question at its point of use — *why isn't this field called `domain`?* — and its final column is always the relation to `deliverable_type`. The corpus-wide index of **every** concept the bare token names, with each concept's owning file, value space and declaration pattern, is `core/specs/domain-token-registry.md`. Read this note to place `deliverable_type`; read the registry to resolve a `domain` found anywhere else.
+
 | Concept | What it is | Where it lives | Relation to `deliverable_type` |
 |---|---|---|---|
 | **`deliverable_type`** | *What kind of deliverable a project produces* (project-level) | `project-schema.md` §3 frontmatter | — (this field) |
@@ -256,8 +258,11 @@ The bare word `domain` is overloaded across the platform; `deliverable_type` is 
 | artifact-provenance `domain: source\|managed\|generated` | Three-domain artifact classification | `frontmatter-schema.md` Category 6 | **Distinct.** A per-artifact provenance tag, not a project-level deliverable class. |
 | content-area `delivery/{domain}` | Obsidian content-area tag (`governance`/`design`/`testing`/…) | `frontmatter-schema.md` Tag Taxonomy | **Distinct.** A content-filing tag, not a deliverable class. |
 | Stage-4 `domain:` class field | Abstract deliverable-domain signal consumed by the impact-analysis selector / guides / guide-index | `stage-04-planning.md` § 5.7 | **Consumes `deliverable_type`.** The Stage-4 field reads `deliverable_type` as its authoritative source where present (the reconciliation seam). |
+| behavioral/domain predicate | An *adjective* naming a class of acceptance-criterion outcome — not a field at all | `gate-criteria-spec.md` G1-05a | **Distinct.** Never appears as a `domain:` key; a field-shaped probe never finds it. |
+| template-provenance `domain: project\|software\|platform-internal` | Three-domain classification of a *template structure* by canon family and rendered-output audience | `template-protocol.md` § 4.2; rule at `template-taxonomy.md` § 2 | **Distinct.** Classifies a template, not a project or its deliverable. Value space is disjoint from every other row's. |
+| K1 platform-doc `domain` | The subject domain an authored `core/**` reference doc belongs to | `platform-doc-frontmatter-standard.md` § 6 | **Distinct.** Says what a *document is about*; `deliverable_type` says what a *project builds*. Shares most of its live values, which is why the two are confusable. |
 
-Renaming the shipped artifact-provenance and content-area `domain` fields is **pre-existing naming-debt, OUT OF SCOPE** for this axis — flagged separately, not addressed here.
+Renaming the shipped artifact-provenance and content-area `domain` fields is **pre-existing naming-debt, OUT OF SCOPE** for this axis — flagged separately per ADR-050, and indexed rather than migrated by the registry named above.
 
 ### `org_structure_type`
 

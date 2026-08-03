@@ -14,7 +14,12 @@ Validates:
   (b) Frontmatter schema validity on plans + notes (forward-only from
       v11.04b-3 per D2 phasing — pre-v11.04b-3 files exempt until the F-3
       backfill).
-  (c) INDEX surface row count >= LOG entry count.
+  (c) RETIRED (identifier reserved, must NOT be reused) — was "INDEX surface
+      row count >= LOG entry count". Strictly weaker than the LOG<->INDEX
+      coexistence limb of generate_release_index.py --verify (deploy.sh
+      Check 23), which names the drifted version instead of a count and also
+      catches a same-count-different-set INDEX. `--check index` is still an
+      accepted value and now runs nothing.
   (d) Frontmatter `type:` field matches filename type-suffix (Tier 3
       discriminator coherence per release-corpus-schema.md).
   (e) Note-content lint (release-notes-standard.md §3.2 checks 9-14):
@@ -388,28 +393,27 @@ def check_schema_validity() -> list[str]:
     return findings
 
 
-def check_index_row_count() -> list[str]:
-    findings: list[str] = []
-    if not LOG_PATH.exists() or not INDEX_PATH.exists():
-        # Either surface missing is a PATH-RESOLUTION FAILURE (the row-count gate
-        # cannot run). Emit CORPUS-PATH-UNRESOLVED so main() exits 3 rather than
-        # silently returning a near-empty finding set.
-        if not LOG_PATH.exists():
-            findings.append(f"{CORPUS_PATH_UNRESOLVED_PREFIX}: RELEASE_LOG.md does not resolve at {_rel(LOG_PATH)} — corpus path misconfigured")
-        if not INDEX_PATH.exists():
-            findings.append(f"{CORPUS_PATH_UNRESOLVED_PREFIX}: RELEASE_INDEX.md does not resolve at {_rel(INDEX_PATH)} — corpus path misconfigured")
-        return findings
-    log_rows = sum(1 for line in LOG_PATH.read_text().splitlines() if re.match(r"^\| v[0-9]", line))
-    index_rows = sum(1 for line in INDEX_PATH.read_text().splitlines() if re.match(r"^\| v[0-9]", line))
-    if index_rows < log_rows:
-        findings.append(
-            f"INDEX-COUNT-LOW: RELEASE_INDEX.md has {index_rows} version-rows; RELEASE_LOG.md has {log_rows} "
-            "— INDEX is stale. Remedy is APPEND-ONLY: add the missing row(s) in place, then confirm with the "
-            "read-only `generate_release_index.py --verify`. Do NOT run a bare `generate_release_index.py` — a "
-            "full regenerate rewrites every row and restamps the grandfathered Date cells the RELEASE_INDEX.md "
-            "header declares must not be rewritten."
-        )
-    return findings
+# ── Sub-check (c) — INDEX row count — RETIRED (identifier RESERVED) ──────────
+#
+# `check_index_row_count()` is RETIRED. Its identifier is RESERVED for citation
+# continuity and MUST NOT be reused for a different assertion — the same
+# convention deploy.sh applies to retired check numbers.
+#
+# Why retired, and why this one only. Its entire content was
+# `index_rows < log_rows`, which is strictly WEAKER than Check 23's coexistence
+# limb: `generate_release_index.py --verify` already fires on any LOG row absent
+# from the INDEX, names the version rather than a count, and fires on a
+# same-count-different-set INDEX that a row-count comparison cannot see at all.
+# Under the release-corpus Derived-Surface Contract the INDEX is a PROJECTION of
+# the LOG written by one emitter, so a count-only gate on the pair is the weakest
+# available restatement of a stronger check that is already wired.
+#
+# Sub-checks (a) filename compliance, (b) frontmatter schema, (d) type-discriminator
+# coherence and (e) note-content are UNRELATED to the ledger pair and are untouched.
+#
+# `--check index` remains an ACCEPTED value so no existing invocation breaks; it
+# now runs nothing and says so. Callers wanting the LOG↔INDEX assertion should
+# invoke `generate_release_index.py --verify` (deploy.sh Check 23) directly.
 
 
 def check_type_coherence() -> list[str]:
@@ -785,8 +789,12 @@ def main() -> int:
         findings.extend(check_filename_compliance())
     if args.check in ("all", "schema"):
         findings.extend(check_schema_validity())
-    if args.check in ("all", "index"):
-        findings.extend(check_index_row_count())
+    # Sub-check (c) RETIRED — see the reserved-identifier block above. The choice
+    # value is retained so existing invocations keep working; it runs nothing.
+    if args.check == "index":
+        print("NOTE: sub-check (c) (INDEX row count) is RETIRED — it was strictly weaker than "
+              "the LOG↔INDEX coexistence limb of `generate_release_index.py --verify` "
+              "(deploy.sh Check 23). Run that instead. No checks were executed.")
     if args.check in ("all", "type-coherence"):
         findings.extend(check_type_coherence())
     if args.check in ("all", "note-content"):

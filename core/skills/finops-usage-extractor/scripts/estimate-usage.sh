@@ -48,6 +48,9 @@
 #   > default ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/finops
 # Release-log resolution (in-repo, path-resolved, never an operator root):
 #   env FINOPS_RELEASE_LOG > <repo>/release/releases/RELEASE_LOG.md
+#   plus every sibling <same-stem>_ARCHIVE-*.md in that file's own directory —
+#   the archival sweep relocates aged-out Deployment-Log narrative there and the
+#   Velocity basis follows its content rather than shrinking silently.
 # Test-only offline override for the OPT-IN label tier:
 #   env FINOPS_LABEL_MAP=<path to {"#N":{"points":P,"type":T}} json>
 #
@@ -193,10 +196,27 @@ size_to_points() {
 #    unparsable yields NO entry — the caller excludes it with reason `unkeyable`.
 #    It is NEVER defaulted to zero: a defaulted point count would silently admit
 #    an unsized release as a comparable. One function, one grammar coupling. ──
+#    THE BASIS IS THE LEDGER PLUS ITS ARCHIVE SEGMENTS. Deployment-Log narrative
+#    older than the release log's hot window is relocated by
+#    release/tools/sweep-release-corpus.py into sibling
+#    RELEASE_LOG_ARCHIVE-<family>.md files, which keep the same `#### Deployment
+#    Log <version>` heading and the same field lines. A `**Velocity:**` row is
+#    read for ANY historical release, not just the newest, so reading the hot
+#    file alone would silently shrink this accessor's basis population every
+#    time the archival chore runs — and it would shrink SILENTLY, because an
+#    unresolvable version is excluded as `unkeyable` rather than raising. The
+#    glob is resolved against the ledger's OWN directory, so a fixture ledger
+#    picks up only its own siblings and never the live corpus.
 release_log_velocity_map() {
   local log="$1"
   if [ ! -r "$log" ]; then printf '{}'; return 0; fi
+  local -a sources=("$log")
+  local seg
+  for seg in "$(dirname "$log")"/"$(basename "$log" .md)"_ARCHIVE-*.md; do
+    [ -r "$seg" ] && sources+=("$seg")
+  done
   awk '
+    FNR == 1 { ver=""; have=0 }
     /^#### Deployment Log / { ver=$4; have=0; next }
     (ver != "") && (have == 0) && /^\*\*Velocity:\*\*/ {
       have=1; line=$0; pts=""; cls="";
@@ -204,7 +224,7 @@ release_log_velocity_map() {
       if (match(line, /class [a-z][a-z-]*/))  { cls=substr(line, RSTART+6, RLENGTH-6) }
       if (pts != "" && cls != "") printf "%s\t%s\t%s\n", ver, pts, cls
     }
-  ' "$log" \
+  ' "${sources[@]}" \
   | jq -R -s 'split("\n") | map(select(length > 0) | split("\t"))
               | map({key: .[0], value: {points: (.[1] | tonumber), class: .[2]}})
               | from_entries'

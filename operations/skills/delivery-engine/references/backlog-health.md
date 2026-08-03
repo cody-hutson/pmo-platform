@@ -50,7 +50,7 @@ Every work item entering execution must satisfy INVEST criteria. This is the ope
 | **N -- Negotiable** | Item describes desired outcome, not prescribed implementation; scope can be adjusted | "Users can search products by name, category, or SKU" (what, not how) | "Implement ElasticSearch with 3 index types and a React component using Material UI" (dictates implementation) | Rewrite as user-facing outcome; move technical decisions to team |
 | **V -- Valuable** | Item delivers identifiable value to a user or stakeholder when completed | "Customers can track their order status in real-time" (clear user value) | "Refactor database connection pooling" (no visible user value as written) | Frame tech work as enabler with explicit value chain: "Refactor pooling to support 2x concurrent users" |
 | **E -- Estimable** | Team can estimate the item with reasonable confidence; unknowns are bounded | "Add email notification when order ships" (team has done similar work; estimates 3-5 points) | "Integrate with the vendor's new API" (team has never seen the API; no documentation available) | Spike first: time-boxed research to reduce unknowns, then re-estimate the resulting stories |
-| **S -- Small** | Item fits within a single iteration; no larger than 1/3 of sprint capacity | "Display order confirmation with order number and estimated delivery" (2-3 days of work) | "Build the entire checkout flow" (2+ sprints of work spanning multiple concerns) | Split by workflow step, business rule variation, CRUD operation, or data variation |
+| **S -- Small** | Item covers one coherent concern and needs no further slicing to deliver; under a time-boxed approach it also fits within a single iteration, no larger than 1/3 of sprint capacity | "Display order confirmation with order number and estimated delivery" (2-3 days of work) | "Build the entire checkout flow" (2+ sprints of work spanning multiple concerns) | Split by workflow step, business rule variation, CRUD operation, or data variation |
 | **T -- Testable** | Clear, specific acceptance criteria exist that can be verified | "Given a valid email, when user clicks reset, then a reset link is sent within 60 seconds" | "The system should be user-friendly" (not testable; subjective) | Write Given/When/Then acceptance criteria; if you cannot write a test, the requirement is not clear enough |
 
 ### 2.2 INVEST Scoring
@@ -101,9 +101,9 @@ Each refinement session should produce:
 
 | Output | Required | Verification |
 |--------|----------|-------------|
-| Items decomposed to sprint-ready size | Yes | INVEST "Small" criterion met |
+| Items decomposed to deliverable size -- sprint-ready under a time-boxed approach | Yes | INVEST "Small" criterion met |
 | Acceptance criteria written | Yes | Given/When/Then format; INVEST "Testable" met |
-| Estimates assigned | Yes | Story points or T-shirt size; team consensus |
+| Estimates assigned | Yes, under a time-boxed approach | Story points or T-shirt size; team consensus. Under any approach the item carries a bound of record -- a size estimate, a time-box, or a scope-box |
 | Dependencies identified and mapped | Yes | Any dependency logged with owner and need-by date |
 | Questions resolved or spikes created | Yes | No "TBD" on items in the next 2-sprint window |
 | Priority validated against current goals | Yes | PO confirms ordering reflects Sprint/PI Goals |
@@ -129,7 +129,7 @@ Regardless of methodology, no item should enter active work without:
 
 1. **Clear outcome statement** -- what "done" looks like from the user/stakeholder perspective
 2. **At least one testable acceptance criterion** -- verifiable, not subjective
-3. **Size appropriate for delivery cadence** -- fits within one iteration or one reasonable flow cycle
+3. **Bounded for delivery** -- a size estimate, a time-box (fits within one iteration or one reasonable flow cycle), or a scope-box (stated acceptance criteria plus an explicit out-of-scope boundary); scope with no out-of-scope boundary is not a bound
 4. **Known dependencies declared** -- or explicitly stated as "none identified"
 5. **Assigned to a team or individual** -- ownership clear
 
@@ -154,8 +154,8 @@ Regardless of methodology, no item should enter active work without:
 | **Backlog as graveyard** | >200 items; items untouched 90+ days; 12+ month old items; growing faster than throughput | No retirement criteria; political unwillingness to kill items; treating backlog as wish list rather than economic queue | Quarterly zombie hunts; enforce aging thresholds (3mo = attention, 6mo = re-triage, 12mo = kill or re-justify); connect backlog size to throughput |
 | **Everything is priority 1** | All items marked highest priority; no differentiation; "97 of 100 items marked priority 1" (Reinertsen) | No explicit prioritization framework; political pressure; fear of saying "not now" | Enforce MoSCoW (Must-haves <=60% of effort); apply WSJF for sequencing; require "if we do this, what do we stop?" |
 | **No refinement cadence** | Items enter sprint unrefined; acceptance criteria missing at planning; estimates done under time pressure | Refinement seen as optional; PO unavailable; team sees refinement as overhead | Dedicate 10% of sprint capacity; track refinement ratio as health metric; make it non-negotiable |
-| **One workflow fits all** | Bugs queue behind stories in refinement; spikes run without time limits; CRs bypass governance | Tool configured with single workflow for all types; no type-specific lifecycle awareness | Configure type-specific workflows; spike DoR/DoD with time-box; severity-driven routing for bugs |
+| **One workflow fits all** | Bugs queue behind stories in refinement; spikes run with no bound of any kind; CRs bypass governance | Tool configured with single workflow for all types; no type-specific lifecycle awareness | Configure type-specific workflows; spike DoR/DoD with an explicit bound (a time-box or a scope-box); severity-driven routing for bugs |
 | **Severity/priority conflation** | All bugs marked Sev-1/P1; no triage differentiation; everything urgent | No clear definitions; single dimension used for both; fear of deprioritization | Separate severity (technical impact, QA-assessed) from priority (business urgency, PO-set); define thresholds |
-| **Spike without boundaries** | Open-ended research with no time limit, no defined question, no output artifact | Missing spike DoR/DoD; spike treated as story | Strict time-box (max 1 sprint); clear research question; DoD = findings documented + follow-on stories created |
+| **Spike without boundaries** | Open-ended research with no bound of any kind -- neither a time-box nor a scope-box -- no defined question, no output artifact | Missing spike DoR/DoD; spike treated as story | An explicit bound: a time-box (max 1 sprint) **or** a scope-box (stated acceptance criteria plus an explicit out-of-scope boundary); clear research question; DoD = findings documented + follow-on stories created |
 | **Permanent tech debt deferral** | Tech debt items logged but never addressed; no reserved capacity; crisis-driven fixes only | No Intangible Class of Service capacity; no structural mechanism for debt reduction | Reserve 15-20% capacity; dedicated Intangible CoS in Kanban; treat recurring defects as debt signal |
 | **Demand flooding** | Triage backlog growing; average triage time exceeding SLA; intake overwhelmed | Absent project size thresholds; no minimum viable information requirements; political "projectization" of BAU work | WIP limits on intake queue; enforce T-shirt sizing thresholds; auto-route XS items |

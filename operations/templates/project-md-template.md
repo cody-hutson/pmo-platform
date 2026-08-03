@@ -1,3 +1,23 @@
+---
+artifact_type: template
+template_family: PROJECT.md scaffolding
+domain: project
+canonical_path: operations/templates/project-md-template.md
+owner: [OPERATOR_NAME]
+review_status: DRAFT
+created: 2026-06-05
+updated: 2026-08-03
+generated_by: release-pipeline {{RELEASE_VERSION}}
+reviewer: N/A
+canon: PMBOK 7 §Planning Performance Domain
+canon_compat: none
+version: "{{RELEASE_VERSION}}"
+supersedes: N/A
+superseded_by: N/A
+---
+<!-- The YAML block above is this TEMPLATE FILE's provenance header (core/standards/template-protocol.md §4.1). Do NOT copy it into a scaffolded PROJECT.md instance — an instance starts at the second H1 below ("# PROJECT.md — {{PROJECT_NAME}}"); the first H1 and the paragraph under it are authoring guidance for the Project Initiator skill and are not rendered either. -->
+<!-- canon_compat evidence (template-protocol.md §6 P5 path c-i): domain:project AND no Anthropic plugin counterpart for the PROJECT.md scaffolding family (template-taxonomy.md §3.4 carries no plugin cross-ref; the family takes no §6 row per §2.1 F4). `none` is the ANTICIPATED resolution at DRAFT — authoritative only at an APPROVED transition. -->
+
 # PROJECT.md Template
 
 This is the generic template used by the Project Initiator skill. Variables in `{{BRACKETS}}`

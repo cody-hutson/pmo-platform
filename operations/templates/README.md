@@ -22,7 +22,7 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 
 | Template | Performance Domain | Canon source |
 |---|---|---|
-| `project-charter-template.md` | Initiating | PMBOK 7 |
+| `project-charter-template.md` | Planning | PMBOK 7 |
 | `communications-tracker-template.md` | Stakeholder | PMBOK 7 |
 | `open-meetings-tracker-template.md` | Stakeholder | PMBOK 7 |
 | `stakeholder-register-template.csv` | Stakeholder | PMBOK 7 |
@@ -30,6 +30,7 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 | `key-terms-glossary-template.csv` | Stakeholder | PMBOK 7 |
 | `change-impact-matrix-template.md` | Stakeholder | PMBOK 7 |
 | `training-plan-template.md` | Stakeholder | PMBOK 7 |
+| `people-graph-clarification-queue-template.md` | Stakeholder | PMBOK 7 (de-identified queue of unresolved person-graph candidates; the filled queue is operator-instance and out-of-tree) |
 | `change-log-template.md` | Project Work | PMBOK 7 (Waterfall change-control log) |
 | `lessons-learned-template.md` | Project Work | PMBOK 7 (PRINCE2 lessons log) |
 | `daily-status-log-template.md` | Measurement | PMBOK 7 |
@@ -46,7 +47,9 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 
 ### Software-domain (engineering best-practice canon anchored)
 
-Canon-per-family binding per [`../standards/template-taxonomy.md` §6](../../core/standards/template-taxonomy.md) rows 1–6 + row 9. Canonical-only — no `TEMPLATE_SYNC_MAP` mirrors registered; sync-map registration follows the first consumer skill with a runtime read-path per [`../standards/template-storage.md` §6](../../core/standards/template-storage.md).
+Canon-per-family binding per [`../standards/template-taxonomy.md` §6](../../core/standards/template-taxonomy.md) rows 1–6 + rows 9 and 12. Canonical-only — no `TEMPLATE_SYNC_MAP` mirrors registered; sync-map registration follows the first consumer skill with a runtime read-path per [`../standards/template-storage.md` §6](../../core/standards/template-storage.md).
+
+The **Artifact family** column below is a *discovery annotation*, not the typed binding. Several cells carry the form `<family> (<annotation>)` — the parenthetical is reader guidance and is not part of the value. The load-bearing, enum-bound `template_family` value is the one in each template's own provenance header, sourced from [`../standards/template-taxonomy.md` §3–§5](../../core/standards/template-taxonomy.md) per [`../standards/template-protocol.md` §4.2](../../core/standards/template-protocol.md). Where the two differ in spelling, the header is authoritative.
 
 | Template | Artifact family | Canon source |
 |---|---|---|
@@ -57,12 +60,13 @@ Canon-per-family binding per [`../standards/template-taxonomy.md` §6](../../cor
 | `prd-template.md` | PRD / Feature spec | Anthropic `product-management:write-spec` plugin convention (secondary: Aha! / Lenny Rachitsky) |
 | `postmortem-template.md` | Postmortem | Google SRE Workbook §Postmortem Culture |
 | `test-plan-template.md` | Test plan / Test case | PMBOK 7 §Quality + `engineering:testing-strategy` plugin convention |
+| `qa-acceptance-report-template.md` | Acceptance report / Stage verdict report | PMBOK 7 §Quality + ISO/IEC/IEEE 29119-3 §Test Completion Report |
 
-### Platform-internal (operational instance, not stakeholder-facing)
+### Platform-internal (skill-embedded — deliberately not registered here)
 
-| Template | Purpose |
-|---|---|
-| `PMO_Platform_Template.md` | Knowledge-transfer reference for the PMO platform itself |
+**This section carries no rows, by construction.** Platform-internal templates are skill-runtime authoring guidance rather than stakeholder-facing artifacts; per [`../standards/template-taxonomy.md` §2 and §5](../../core/standards/template-taxonomy.md) they remain inside their owning skill's `references/` directory and are **not promoted to this canonical registry**. Taxonomy §5 enumerates them, with the owning skill and the reason each is platform-internal.
+
+The group is retained here so a reader scanning the four domains sees where the fourth one lives instead of concluding it was omitted. A template registered in this folder is `project`, `software`, or project-data architecture — never platform-internal.
 
 ### Project-data architecture (shared-entity SSOT + typed plans + composed index, v3.37)
 

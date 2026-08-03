@@ -83,7 +83,7 @@ Present-but-not-required on any class. Each is real in the corpus but none is un
 |---|---|
 | `composes_with` | Sibling docs this one composes with (named, not linked). |
 | `parallel_to` | A sibling doc that governs a parallel-but-disjoint population or concern. |
-| `domain` | The domain the doc belongs to (e.g. `governance`). |
+| `domain` | The domain the doc belongs to (e.g. `governance`). **Which `domain` this is:** concept 6 (K1 platform-doc frontmatter) of the six the bare token names — corpus index at `core/specs/domain-token-registry.md`. It says what a *document is about*; it is not the deliverable-class `domain` a release carries, nor the artifact-provenance `domain` on a project artifact, though it shares values with the first. |
 | `tags` | A list of free tags for discovery. |
 | `source` | Provenance of the doc's content. |
 | `version` | A doc-local version string, where the doc carries its own. |

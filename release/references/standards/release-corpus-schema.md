@@ -17,8 +17,78 @@ Authored per the Stage 5 spec + Collective Review. Composes with [release-notes-
 | Phase plan | `release/releases/plans/v*-*_PHASE_PLAN.md` | YES (`type: phase-plan`) | Forward-only — pre-existing phase plans grandfathered with frontmatter only (filename retained) |
 | Audit plan | `release/releases/plans/v*-*-audit_RELEASE_PLAN.md` | YES (`type: audit-plan`) | Forward-only |
 | RELEASE_LOG row | `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>` | NO (out of scope for this schema) | LOG-row schema owned elsewhere; this schema covers FILE-level frontmatter only |
+| Archive segment | `release/releases/RELEASE_LOG_ARCHIVE-<family>.md` | NO (it carries the parent ledger's content, not file-level frontmatter) | § Archive Segments below |
 
 **Forward-only adoption rationale:** Per the precedent that user-facing notes started at an earlier release (an umbrella campaign tracks retroactive coverage), this schema applies prospectively, forward-only, to bound R-1 restructure-integrity risk. Historical backfill of 76 pre-cutover files is registered as F-3 follow-up gated on schema utility.
+
+## Derived-Surface Contract
+
+The release corpus records one fact per release — *release X shipped, containing Y, at SHA Z* — across four ledger surfaces. **Two of those surfaces are SOURCE and two are DERIVED, and the split is per-field, not per-file.** This section is the register that `duplicate-source-discipline.md` § 1 requires: every restatement of a release fact either names its source here or is a defect.
+
+### Roles
+
+| Surface | Role | Authoritative for | Notes |
+|---|---|---|---|
+| `release/releases/RELEASE_LOG.md` — table row | **SOURCE — event record** | the release fact: version, milestone, issues, release PR, merge SHA, tag, state, and the **merge anchor** date | Written by the Stage-12/13 close-out's LOG-transition phase. Carries no `# ` headline and no `summary:` — it is not, and cannot be, the narrative source. |
+| `release/releases/RELEASE_LOG.md` — `#### …` H4 prose | **SOURCE — execution record** | the per-release Deployment Log and Release Learnings blocks | Not projected anywhere. |
+| `release/releases/notes/*_RELEASE_NOTES.md` | **SOURCE — narrative record** | the headline **seed** (`# ` H1) and the `summary:` **seed** (frontmatter) | The note's own `date:` is written *from* the close-out run anchor — the note is downstream of that anchor, never its origin. |
+| `release/releases/RELEASE_INDEX.md` | **DERIVED (5 of 6 columns) · hybrid** | — except the **`Theme`** column, which is the INDEX's own source content | Verified **whole-file**: outside `Theme` the INDEX is not hand-edited. |
+| `release/releases/RELEASE_DIGEST.md` | **DERIVED at emission** | — | Verified **closing entry only**: historical entries carry legitimate post-emission operator edits. |
+| `CHANGELOG.md` | **DERIVED at emission** | — | Same posture as the DIGEST. |
+
+### Per-field provenance
+
+The projector is `core/deploy/tools/generate_release_index.py`. It reads two **files** and takes every non-file input as a **required CLI argument** — it reads no clock, no environment variable, and no operator config.
+
+| Derived field | Source | Kind |
+|---|---|---|
+| INDEX `Version` / `Milestone` / `Release PR` | LOG row | file |
+| INDEX `Date` | LOG row — the **merge anchor**, relayed, never resampled | file |
+| INDEX `Release Notes` | filesystem presence of the note file | file |
+| INDEX `Theme` | the on-disk INDEX itself (round-tripped, never regenerated) | file — the hybrid column |
+| DIGEST headline | the note's `# ` H1, when present; otherwise the operator placeholder filled at chore-PR review | file |
+| DIGEST `(date)` | the **close-out run anchor** | run-scoped required argument (`--closeout-anchor`) |
+| CHANGELOG `- <date>` | the **close-out run anchor** | run-scoped required argument (`--closeout-anchor`) |
+| CHANGELOG summary | the note's frontmatter `summary:`, with the `(see release notes)` fallback | file |
+| CHANGELOG Release URL | the repository slug | required argument (`--repo-slug`) |
+
+**Why the anchors are arguments and not derivations.** The INDEX and the LOG carry the **merge** anchor; the DIGEST, the note's `date:` and the CHANGELOG carry the **close-out run** anchor. Both are sampled exactly once, by the close-out orchestrator, at sites that already exist. A projector that could reach a clock could become a second writer of a fact that already has one — which is precisely the mechanism that produced the INDEX `Date` grandfathering enumeration the projector still carries. Anchor taxonomy and sampling rules: [`date-variable-convention.md § Emission-Time Anchors`](../../../core/standards/date-variable-convention.md).
+
+### Emission and custody
+
+- The projector emits **one entry to stdout**. It never rewrites a ledger. The calling close-out phase performs the insertion and treats a non-zero exit **or an empty emission** as a failure, never as a no-op.
+- Provenance is asserted **at emission**; the file holds **custody** afterwards. A historical DIGEST or CHANGELOG entry edited after emission is that file's own content and is not drift.
+- A **whole-file regenerate of the DIGEST or the CHANGELOG is prohibited** — the majority of historical entries carry post-emission editorial content that exists nowhere else, and a regenerate destroys it silently as a clean diff rather than a conflict.
+
+### Verification posture
+
+| Surface | Scope | Gate |
+|---|---|---|
+| `release/releases/RELEASE_INDEX.md` | whole file, on the 5 derived columns **plus** a `Theme` round-trip integrity limb **plus** a recent-first row-order limb | `generate_release_index.py --verify`, invoked by `deploy.sh` Check 23 |
+| `release/releases/RELEASE_DIGEST.md` | the closing version's entry only | close-out `assert_derived_surfaces` phase (presence + residue) and `deploy.sh` Checks 32/48 (presence) |
+| `CHANGELOG.md` | the closing version's entry only | same |
+
+A hand-edit to any of the INDEX's five derived columns **fails** Check 23. A hand-edit to INDEX `Theme` is **sanctioned** and protected by the integrity limb. A hand-edit to a historical DIGEST or CHANGELOG entry is **allowed**. A closing DIGEST or CHANGELOG entry that diverges at close-out **fails**.
+
+## Archive Segments
+
+An **archive segment** is a same-directory, same-schema continuation of a ledger, holding block bodies that have aged out of that ledger's hot working set. It is a fourth artifact class alongside SOURCE and DERIVED surfaces, and it is neither: it is the **same record as its parent, relocated**.
+
+| Property | Rule |
+|---|---|
+| Naming | `<PARENT_STEM>_ARCHIVE-<family>.md`, in the parent's own directory. `<family>` is the major release family (`v1`, `v2`, `v3`, …) or `version-less`. |
+| Applies to | `release/releases/RELEASE_LOG.md` only. The three derived ledgers are projections; their volume is a projector concern, not an archival one. |
+| Class | **Inherited from the parent**, always. A segment is a disposition *destination*, never itself a disposition *source*, and is never eligible for a disposition its parent is not. It is never itself swept. |
+| What relocates | `#### Deployment Log <key>` block **bodies**. The release table never relocates and is never split. `#### Release Learnings` blocks never relocate — heading or body, at any window. |
+| What stays | Every `#### ` heading stays in the parent, followed by a one-line pointer to its segment. This is what keeps `links.log_anchor` values and in-corpus anchors resolving, and it is the redaction-preserves-presence shape `RECORDS_POLICY.md` § Disposition Rules rule 2 sanctions. |
+| Ordering | Selection is oldest-first by the **LOG table's chronology**, never by a block's position in the file. Block order in the file is a convention, not a contract. |
+| Boundary | Byte-denominated. Blocks relocate until the hot file is at or under its budget; the number of releases retained is an **output** of that rule and appears nowhere as an input. |
+| Growth | Append-only. Idempotent: a block already carrying the pointer line is never moved again. |
+| Verification | Destination-side. Conservation is asserted by re-reading the segment FILE and comparing against the pre-sweep content from git — never from a manifest the writer produced about itself. Every named machine contract is satisfied by the retained headings alone, so a truncated segment would pass all of them and fail only here. |
+
+**Reader rule, stated unconditionally.** Any tool that parses content from **inside** a `#### ` block of a ledger with archive segments must read the ledger **and** its sibling segments. Reading the hot file alone shrinks the tool's basis population silently on every sweep. This is the general form of the census question a content relocation must answer: *what reads inside a block* — never *what declares an anchor at it*. An anchor records who points at content and breaks visibly; a body parser degrades silently, and a tolerant body parser degrades silently at exit zero.
+
+Mechanism owned by `release/tools/sweep-release-corpus.py`; disposition classified by `core/governance/RECORDS_POLICY.md` § Retention Schedule; each sweep records one row in `core/governance/RECORDS_ARCHIVE_LOG.md`.
 
 ## Field Specification
 

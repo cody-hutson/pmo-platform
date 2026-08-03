@@ -1,3 +1,4 @@
+<!-- derived-surface: source=release/releases/RELEASE_LOG.md · projector=core/deploy/tools/generate_release_index.py · anchor=merge · derived-columns=Version,Milestone,Date,Release PR,Release Notes · source-column=Theme (this file's own content, round-tripped and integrity-checked, never derivable) · contract=release/references/standards/release-corpus-schema.md § Derived-Surface Contract · NEVER REGENERATED WHOLE -->
 # RELEASE_INDEX
 
 Corpus-level index of all pmo-platform releases. Chronological-recent-first row order. Appended at Stage 13 chore PR per [`stage-13-close.md § Phase B`](../references/pipeline/stage-13-close.md).

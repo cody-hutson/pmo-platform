@@ -5516,6 +5516,20 @@ cmd_check() {
   # Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks
   # 8/9/10/14/15/18/19/20/21/22 precedent); flip-to-enforce after ≥3-day
   # warn-log review with zero false positives.
+  #
+  # FLIP STATUS: STAGED, NOT TAKEN. The release-corpus normalization removed the
+  # false-positive class that warn-mode was justifying — the INDEX Date is now
+  # relayed from the LOG row by one projector rather than sampled from a second
+  # clock — but the flip's own precondition is an OBSERVATION WINDOW (≥3 days of
+  # warn-log review with zero false positives), and no release can satisfy a
+  # post-merge observation condition inside its own merge. Flipping here would
+  # bypass the shakedown convention that ten prior checks observed, to satisfy a
+  # criterion. The flip is an operator decision on the condition stated above.
+  #
+  # Interim posture, deliberate and not an inconsistency: Check 23 stays WARN
+  # while the derived-surface PRESENCE limbs in Checks 32 and 48 stay ENFORCED.
+  # They assert different propositions — presence of an entry vs. agreement of
+  # its fields — and only the second one's false-positive class was removed.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 23: RELEASE_LOG ↔ RELEASE_INDEX consistency"
     local c23_script="core/deploy/tools/generate_release_index.py"
@@ -5539,8 +5553,18 @@ cmd_check() {
       else
         local c23_findings
         c23_findings=$(echo "$c23_output" | wc -l | tr -d ' ')
+        # REMEDIATION IS APPEND-ONLY, NEVER A BARE REGENERATE. This string used
+        # to say "re-run 'python3 <script>' to regenerate" — and a BARE
+        # invocation of that script is the documented DESTRUCTIVE full
+        # regenerate: it rewrites every row, restamps the grandfathered Date
+        # cells the INDEX header declares must not be rewritten, and (until this
+        # release) deleted the header paragraph declaring the anchor. Three
+        # commits rewrote that guidance in the generator, the tools README,
+        # release-process.md and plans/README.md, and none of them reached this
+        # file — so the one gate that renders the instruction at merge time kept
+        # telling the operator to run the one action the design forbids.
         flag_warn_or_issue "release-log-index-consistency" \
-          "$c23_findings LOG↔INDEX drift finding(s) — re-run 'python3 $c23_script' to regenerate"
+          "$c23_findings LOG↔INDEX drift finding(s) — reconcile the named field IN PLACE (the LOG row is canonical for milestone/date/release-pr; the INDEX Theme cell has no LOG source and is never drift-checked), then confirm with the read-only 'python3 $c23_script --verify'. Do NOT run a bare 'python3 $c23_script' — that is a destructive full regenerate"
         echo "$c23_output" | head -10 | sed 's/^/         /' || true
       fi
     fi
@@ -9041,6 +9065,49 @@ cmd_check() {
           ISSUES=$((ISSUES + 1))
           ;;
       esac
+    fi
+  fi
+
+
+  # ─── Check 65: RELEASE_LOG hot working-set budget (warn-mode) ──────────────
+  # The archival chore's TRIGGER. The authoritative release record grows without
+  # bound by construction — one Deployment-Log block per release, and the recent
+  # blocks are materially larger than the old ones — so the hot file needs a
+  # budget and something that notices when it is crossed. This is that something.
+  #
+  # It reports a MEASUREMENT, not a diff, so it cannot false-positive on content:
+  # the budget is either crossed or it is not. What it can do is go stale, which
+  # is why the size is logged on every run whether or not it warns — a probe that
+  # only speaks when it fails cannot be shown to be alive.
+  #
+  # Warn-mode, and this one stays warn-mode on its own merits rather than pending
+  # a shakedown: crossing the budget is a signal to schedule a chore, never a
+  # reason to block a merge. The remedy is a separate, revertible sweep commit.
+  #
+  # The budget is stated in ONE place — BUDGET_BYTES in the sweep tool — and read
+  # from there, so the gate and the sweep can never disagree about the figure.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 65: RELEASE_LOG hot working-set budget (warn-mode; the archival chore's trigger)"
+    local c65_log="release/releases/RELEASE_LOG.md"
+    local c65_tool="release/tools/sweep-release-corpus.py"
+    if [[ ! -f "$c65_log" ]]; then
+      flag_warn_or_issue "release-log-budget" "the release log is not at $c65_log — the probe has nothing to measure, which is a repo defect rather than a clean result"
+    elif [[ ! -f "$c65_tool" ]]; then
+      flag_warn_or_issue "release-log-budget" "the sweep tool is missing at $c65_tool, so the budget figure has no single source and the remedy has no mechanism"
+    else
+      local c65_bytes c65_budget
+      c65_bytes=$(/usr/bin/wc -c < "$c65_log" | /usr/bin/tr -d ' ')
+      c65_budget=$(/usr/bin/sed -n 's/^BUDGET_BYTES = \([0-9_]*\)$/\1/p' "$c65_tool" | /usr/bin/head -1 | /usr/bin/tr -d '_')
+      if [[ -z "$c65_budget" ]]; then
+        flag_warn_or_issue "release-log-budget" "could not read BUDGET_BYTES from $c65_tool — the probe would otherwise compare against an invented figure"
+      else
+        log "  DENOM: release-log-budget — hot ledger ${c65_bytes} B against a ${c65_budget} B budget ($(( c65_bytes * 100 / c65_budget ))% used)"
+        if [[ "$c65_bytes" -gt "$c65_budget" ]]; then
+          flag_warn_or_issue "release-log-budget" "the hot release log is ${c65_bytes} B, over its ${c65_budget} B budget. Run 'python3 ${c65_tool} --plan' to see what would move, then '--apply' and '--verify' in a separate commit. This is a MOVE: every relocated byte lands in a same-directory archive segment and every heading stays put"
+        else
+          log "  OK:    release-log-budget — $(( c65_budget - c65_bytes )) B of headroom; no archival chore due"
+        fi
+      fi
     fi
   fi
 

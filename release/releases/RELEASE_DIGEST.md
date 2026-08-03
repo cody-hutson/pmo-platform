@@ -1,4 +1,5 @@
 <!-- repo-integrity: allow-memory-ref -->
+<!-- derived-surface: source=release/releases/notes/*_RELEASE_NOTES.md (headline SEED, `# ` H1) · projector=core/deploy/tools/generate_release_index.py · anchor=close-out (a required CLI argument, never sampled by the projector) · contract=release/references/standards/release-corpus-schema.md § Derived-Surface Contract · custody: provenance holds at EMISSION; a historical entry edited afterwards is this file's own content · NEVER REGENERATED WHOLE -->
 # RELEASE_DIGEST
 
 Corpus-level digest grouped by version family. Per-version 3-5 line summary. Appended at Stage 13 chore PR per [`stage-13-close.md § Phase B`](../references/pipeline/stage-13-close.md).

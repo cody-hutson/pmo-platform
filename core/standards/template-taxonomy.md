@@ -24,13 +24,27 @@ Every PMO template is classified into exactly one of three domains. The domain d
 
 | Domain | Description | Canon Family | Realized in PMO By |
 |---|---|---|---|
-| **Project** | Stakeholder-facing artifacts produced during project delivery. Audience: PMs / sponsors / SteerCo / external stakeholders. | PMBOK 7 Performance Domains | 12 canonical templates today (status reports, RAID, communications tracker, etc.) — see §3 |
-| **Software** | Engineering / technical-decision artifacts. Audience: developers / SREs / architects. | Per-family canon (Nygard / Google SRE / IETF / Rust / Anthropic plugin convention / etc.) | 7 canonical templates — `adr` / `runbook` / `design-doc` / `rfc` / `prd` / `postmortem` / `test-plan` (see §4 + §6) |
+| **Project** | Stakeholder-facing artifacts produced during project delivery — trackers and registers, the charter and change/lessons logs, and the shared-entity pages (person, system, vendor, workstream, decision, cross-project dependency) that project artifacts resolve against. Audience: PMs / sponsors / SteerCo / external stakeholders. | PMBOK 7 Performance Domains | 30 artifact families — see §3 for the enumeration and each family's canonical template(s) |
+| **Software** | Engineering / technical-decision artifacts. Audience: developers / SREs / architects. | Per-family canon (Nygard / Google SRE / IETF / Rust / Anthropic plugin convention / etc.) | 8 canonical templates — `adr` / `runbook` / `design-doc` / `rfc` / `prd` / `postmortem` / `test-plan` / `qa-acceptance-report` (see §4 + §6) |
 | **Platform-internal** | Skill-runtime guidance + skill-internal scaffolding. Audience: the skill itself at runtime, not stakeholders. | n/a (not stakeholder-facing artifacts) | 4 skill-embedded standalone templates (raid-templates, rubric-templates, pmo-platform-template, release-plan-template) |
 
 **Domain boundary rule.** Project-domain artifacts represent project state observable to stakeholders. Software-domain artifacts represent engineering decisions or operations procedures observable to engineers. Platform-internal templates represent skill-runtime authoring guidance — they are not produced as stakeholder-visible artifacts. When a template ambiguously straddles two domains, classify by the audience of the rendered output, not by the audience that consumes the template specification.
 
-**Cross-reference to ecosystem-design Three-Domain Architecture.** The PMO platform also defines a `Domain A / B / C` model in [`document-ecosystem-design.md` §3](../disciplines/document-ecosystem-design.md) (Source Artifacts / Managed Knowledge / Synthesized Intelligence). That model classifies **instances** by trust + lifecycle. This taxonomy classifies **template structures** by canon family. Both are valid orthogonal axes; a single template instance carries both classifications (e.g., a status report instance is `Domain B` for trust + `Project` for canon family). No conflict.
+### §2.1 Family-Assignment Rule (F-RULE)
+
+A `template_family` names **one rendered-artifact structure**. This rule states the assignment procedure §3–§6 already practice; it codifies, it does not change any existing binding. It is the authority for answering *"does this template need a new family row, or does it bind to an existing one?"* — the question every provenance-header retro-fit has to answer, and the one that produced three different family counts from the same corpus while it was implicit.
+
+**F1 — Domain.** Classify by the *audience of the rendered output*, per §2's Domain boundary rule: stakeholders / operator → `project` (§3); engineers → `software` (§4); the skill itself at runtime → `platform-internal` (§5).
+
+**F2 — Existing-family test.** Does an enumerated family's *rendered structure* already cover this template — same sections or columns, differing only by altitude or variant? If yes, bind to it and add the file to that row's `Current Canonical PMO Template` cell. Do **not** author a new family.
+
+> **F2's discriminator is the field schema, not the page shell.** Two templates that share a heading skeleton but bind different field schemas, different required keys, or different lifecycle state machines are **different families**. Shipped precedent for the granularity: §3.1 carries `Communications Tracker` and `Open Meetings Tracker` as separate families though both render an ID-keyed tracker table, and §3.7 carries three separate status families. Shipped precedent for the collapse: those same three §3.7 families collapse into a single §6 row 7, and §3.1's `Stakeholder Register` + `RACI / RAEW / RAS` collapse into §6 row 8. **§3–§5 enumerate at schema granularity; §6 collapses by shared canon.** A family count and a §6 row count are therefore different measurements and are not expected to match.
+
+**F3 — New family.** Otherwise author a new row in the §3.x sub-table for the template's PMBOK 7 Performance Domain (project domain) or a new §4.x sub-section (software domain). The `template_family:` value is that new **Artifact Family** cell **verbatim** — the field is typed `string (enum)` against this enumeration ([`template-protocol.md`](template-protocol.md) §4.2), so free text is never permitted and a discovery annotation appended to a cell is not part of the value.
+
+**F4 — §6 row.** Add a §6 row **only** when the family binds a *named external canon beyond bare PMBOK 7* or an Anthropic plugin cross-reference. A family standing on a PMBOK 7 Performance Domain alone is fully enumerated by its §3 row and takes no §6 row.
+
+**Cross-reference to ecosystem-design Three-Domain Architecture.** The PMO platform also defines a three-domain instance model in [`document-ecosystem-design.md` §3](../disciplines/document-ecosystem-design.md) (Source Artifacts / Managed Knowledge / Synthesized Intelligence), carried on artifacts as `domain: source | managed | generated` per [`frontmatter-schema.md`](../schemas/frontmatter-schema.md) § Category 6 — the labels `Domain A / B / C` are **deprecated aliases** of those three and readers may still find either during the migration window. That model classifies **instances** by trust + lifecycle. This taxonomy classifies **template structures** by canon family. Both are valid orthogonal axes; a single template instance carries both classifications (e.g., a status report instance is `managed` for trust + `Project` for canon family). No conflict. **Both are `domain`-named, and they are concepts 2 and 5 of six** the bare token names across the corpus — the full index, including the one place the two meet in a single file and how that is resolved, is `core/specs/domain-token-registry.md`.
 
 ## §3 Project-Domain Taxonomy (PMBOK 7 Performance Domains)
 
@@ -47,12 +61,15 @@ The PMBOK 7 standard organizes project work into 8 Performance Domains. Each pro
 | Glossary / Key Terms | Shared-vocabulary index | `operations/templates/key-terms-glossary-template.csv` | No |
 | Change Impact Matrix | Structured change-impact analysis per topic (current→future state, impact, stakeholders, mgmt plan) | `operations/templates/change-impact-matrix-template.md` | No |
 | Training Plan | Training needs + delivery plan per team (approach, content, topics) | `operations/templates/training-plan-template.md` | No |
+| People-Graph Clarification Queue | Work queue of unresolved person-name candidates awaiting operator confirmation before they resolve to a `person_id` | `operations/templates/people-graph-clarification-queue-template.md` | No |
+| Person Entity Page | Shared-entity page for one person — the cross-project SSOT on `person_id`, with identity/aliases and per-project allocation | `operations/templates/person-entity-template.md` | No |
+| Vendor Entity Page | Shared-entity page for one vendor — profile, category, primary contact, `active → inactive` lifecycle | `operations/templates/vendor-entity-template.md` | No |
 
 ### §3.2 Team
 
 | Artifact Family | Description | Current Canonical PMO Template | Gap? |
 |---|---|---|---|
-| Onboarding / KT doc | Team-onboarding or knowledge-transfer reference | `operations/templates/PMO_Platform_Template.md` | No (operational instance — KT for the platform itself) |
+| Onboarding / KT doc | Team-onboarding or knowledge-transfer reference | `(none — gap)` | Yes |
 
 ### §3.3 Development Approach + Lifecycle
 
@@ -68,12 +85,18 @@ The PMBOK 7 standard organizes project work into 8 Performance Domains. Each pro
 | Sprint Tracker | Sprint backlog + velocity + burndown | `operations/templates/sprint-tracker-template.md` | No |
 | Requirements (epics/features/stories) | Decomposition hierarchy aligned with PMBOK 7 §Planning | `operations/templates/requirements-template.md` (promoted to canonical per L3 Storage) | No |
 | PROJECT.md scaffolding | Per-project canonical state file | `operations/templates/project-md-template.md` (promoted to canonical per L3 Storage) | No |
+| Project Charter | Formal project authorization — sponsor mandate, objectives, high-level scope, success criteria | `operations/templates/project-charter-template.md` | No |
+| Workstream Entity Page | Shared-entity page for one workstream — scope + deliverables, `BELONGS_TO` project anchor, lead, `active → paused → closed` lifecycle | `operations/templates/workstream-entity-template.md` | No |
 
 ### §3.5 Project Work
 
 | Artifact Family | Description | Current Canonical PMO Template | Gap? |
 |---|---|---|---|
 | Transcript Register | Log of meeting/call transcripts + processing state | `operations/templates/transcript-register-template.md` | No |
+| Artifact Register | Per-project configuration-management catalog of project artifacts — version, baseline status, owner, retention (schema in `core/schemas/tracker-schemas.md` § Tracker 6) | `operations/templates/artifact-register-template.md` | No |
+| Change Log | Change requests against the project baseline — scope/schedule/cost impact, approval, decision owner (Waterfall change-control log) | `operations/templates/change-log-template.md` | No |
+| Lessons Learned | Lessons register — what happened, impact, root cause, recommendation, adoption owner (PRINCE2 lessons log referenced as secondary) | `operations/templates/lessons-learned-template.md` | No |
+| System Entity Page | Shared-entity page for one system — profile, owner, `active → deprecated → retired` lifecycle | `operations/templates/system-entity-template.md` | No |
 
 ### §3.6 Delivery
 
@@ -86,12 +109,15 @@ The PMBOK 7 standard organizes project work into 8 Performance Domains. Each pro
 | Daily Status Log | Carry-forward log of daily status updates | `operations/templates/daily-status-log-template.md` | No |
 | Daily Status Update Framework | Structural framework for daily status messages | `operations/templates/daily-status-update-framework-template.md` | No |
 | Executive Status Report Prompt | Template for leadership-ready status reports | `operations/templates/executive-status-report-prompt-template.md` | No |
+| Project Rollup (composed) | Per-project portfolio publishing rollup — a composed read-surface over six source entities under the 7-field write-back contract; owns no field it publishes | `operations/templates/project-rollup-template.md` | No |
 
 ### §3.8 Uncertainty
 
 | Artifact Family | Description | Current Canonical PMO Template | Gap? |
 |---|---|---|---|
 | RAID Log | Risks + Assumptions + Issues + Decisions/Dependencies | `operations/templates/raid-log-template.csv` | No |
+| Decision Entity Page | Shared-entity page for one decision — statement, rationale, maker, `proposed → accepted → reversed \| superseded` lifecycle. Distinct from the RAID Log's Decision *rows*: the log is a per-project table, this is a per-decision cross-project record | `operations/templates/decision-entity-template.md` | No |
+| Cross-Project Dependency Entity Page | Shared-entity page for one directed cross-project dependency — from/to entity refs, kind, `open → satisfied \| broken \| waived` lifecycle. Same distinction from the RAID Log's Dependency rows | `operations/templates/dependency-entity-template.md` | No |
 
 ## §4 Software-Domain Taxonomy (engineering best-practice canons)
 
@@ -139,6 +165,14 @@ The software domain organizes around the documents engineers produce. Each artif
 |---|---|---|---|---|
 | Test plan / Test case | **PMBOK 7 §Quality** + **Anthropic `engineering:testing-strategy` plugin convention** | `engineering:testing-strategy` plugin | `operations/templates/test-plan-template.md` | No |
 
+### §4.8 Quality / Pipeline output (`pipeline-output`)
+
+Pipeline-produced **verdict** artifacts — the report a governed process emits when it *finishes* evaluating something. The discriminator from §4.7 is execution order, not subject matter: **§4.7 is the pre-execution artifact (the test plan — what will be verified and how); §4.8 is the post-execution artifact (the verdict report — what was verified and what the outcome was).** The two share PMBOK 7 §Quality and are separate families because they are produced at opposite ends of the same activity by different authors for different decisions. `pipeline-output` is the greppable category slug for this family; the load-bearing `template_family` value is the Artifact Family cell below.
+
+| Artifact Family | Primary Canon | Anthropic Plugin Cross-Ref | Current PMO Template | Gap Status |
+|---|---|---|---|---|
+| Acceptance report / Stage verdict report | **PMBOK 7 §Quality** — companion: **ISO/IEC/IEEE 29119-3 §Test Completion Report** (successor to IEEE 829-2008 §Test Summary Report) | (no Anthropic plugin equivalent) | `operations/templates/qa-acceptance-report-template.md` | No (shipped) |
+
 ## §5 Platform-Internal Domain
 
 Skill-embedded templates whose audience is the skill at runtime (not project stakeholders). These are skill-internal scaffolding / authoring guidance, not project artifacts. They remain inside their owning skills' `references/` directories — they are NOT promoted to the canonical registry.
@@ -152,7 +186,9 @@ Skill-embedded templates whose audience is the skill at runtime (not project sta
 
 ## §6 Canon-per-Artifact-Family Mapping (REQUIRED — AC4)
 
-Single authoritative table — 11 rows binding each artifact family to its native canon plus Anthropic plugin cross-reference (rows 1–8 per Foundation Stage 5 DD-2 + Stage 4 D4 operator-approved 2026-05-10 per the D-Gate Decision Record; row 9 — Test plan / Test case — added per the D-TaxonomyRowShape operator decision, 2026-07-03; rows 10–11 — Change Impact Matrix + Training Plan — added 2026-07-24 as project-domain §Stakeholder families, both `canon_compat: none`). Localization Notes per §7.
+Single authoritative table — 12 rows binding each artifact family to its native canon plus Anthropic plugin cross-reference (rows 1–8 per Foundation Stage 5 DD-2 + Stage 4 D4 operator-approved 2026-05-10 per the D-Gate Decision Record; row 9 — Test plan / Test case — added per the D-TaxonomyRowShape operator decision, 2026-07-03; rows 10–11 — Change Impact Matrix + Training Plan — added 2026-07-24 as project-domain §Stakeholder families, both `canon_compat: none`; row 12 — Acceptance report / Stage verdict report — added 2026-08-03 as the §4.8 pipeline-output family, `canon_compat: none`). Localization Notes per §7.
+
+**This table is a canon map over a subset of §3–§5, not a mirror of it.** A family earns a §6 row only when it binds a *named external canon beyond bare PMBOK 7* or an Anthropic plugin cross-reference; families that stand on a PMBOK 7 Performance Domain alone are enumerated in §3 and carry no row here. The enumeration `template_family` is bound to is **§3–§5** (per [`template-protocol.md`](template-protocol.md) §4.2), so §6's row count is always ≤ the §3–§5 family count and the two are not expected to agree. See §2.1 F4.
 
 | # | Family | Domain | Primary Canon | Anthropic Plugin Cross-Ref | Current Canonical PMO Template | Localization Note |
 |---|---|---|---|---|---|---|
@@ -167,6 +203,7 @@ Single authoritative table — 11 rows binding each artifact family to its nativ
 | 9 | Test plan / Test case | software | PMBOK 7 §Quality + Anthropic `engineering:testing-strategy` plugin convention | `engineering:testing-strategy` plugin | `test-plan-template.md` | Dual-anchor family — PMBOK 7 §Quality (quality-management framing) + plugin convention (engineer-facing structure); plugin availability re-verified at promotion per L4 P5; registered per the D-TaxonomyRowShape operator decision (2026-07-03) |
 | 10 | Change Impact Matrix | project | PMBOK 7 §Stakeholder Performance Domain | (no Anthropic plugin equivalent) | `change-impact-matrix-template.md` | Project-domain OCM change-impact artifact; no Anthropic plugin counterpart — stands on the PMBOK 7 §Stakeholder canon alone (`canon_compat: none`, P5 path c-i); one of the first two project-domain templates to carry the L4 provenance header (added 2026-07-24) |
 | 11 | Training Plan | project | PMBOK 7 §Stakeholder Performance Domain | (no Anthropic plugin equivalent) | `training-plan-template.md` | Project-domain stakeholder-enablement artifact; no Anthropic plugin counterpart — stands on the PMBOK 7 §Stakeholder canon alone (`canon_compat: none`, P5 path c-i); column model aligns with the change-management skill's `references/training-plan.md` (added 2026-07-24) |
+| 12 | Acceptance report / Stage verdict report | software | PMBOK 7 §Quality + ISO/IEC/IEEE 29119-3 §Test Completion Report | (no Anthropic plugin equivalent) | `qa-acceptance-report-template.md` | Dual-anchor family — PMBOK 7 §Quality (quality-management framing) + ISO/IEC/IEEE 29119-3 §Test Completion Report (report structure; successor to the withdrawn IEEE 829-2008 §Test Summary Report). **Post-execution counterpart to row 9**: row 9 is the pre-execution test plan, row 12 the verdict report that closes the same activity. No Anthropic plugin counterpart, so it stands on the external canon alone (`canon_compat: none`, **P5 path c-ii** — `domain: software` with a named external canon and no plugin equivalent). Category slug `pipeline-output`; §4.8 (added 2026-08-03) |
 
 ## §7 Localization Notes (Mechanism 1 audit trail)
 
@@ -176,7 +213,7 @@ For each canon mapping in §6, this section records the Localization Check audit
 
 **What invalidates the generic heuristic:** several of these canons have a named Anthropic-plugin authoring convention — a row that cites only the upstream canon misses the operational authoring route the PMO skill ecosystem maps to (per the Anthropic offload-routing pattern). These plugin references are **convention-anchors**: each names the plugin authoring convention its canon corresponds to, NOT a claim that the plugin is installed today. A 2026-05-10 system-reminder skills-list snapshot observed `engineering:architecture`, `engineering:documentation`, `engineering:debug`, `engineering:incident-response`, `engineering:system-design`, `engineering:testing-strategy`, `product-management:write-spec`, `operations:runbook`, `operations:process-doc`, `customer-support:kb-article`, plus role-suite skills for sales / marketing / data / finance / hr / legal. **That snapshot is superseded:** a 2026-07-03 re-survey (`~/.claude/plugins/installed_plugins.json` plus the official-marketplace roster) found the `engineering:*`, `product-management:*`, and `operations:*` suites **absent** — see the Row 9 addendum below, which is the governing statement of live availability. The canon bindings are load-bearing regardless of install state; live plugin availability is re-verified per template at the L4 P5 promotion gate.
 
-**Reconciliation applied per row:** keep the upstream canon as PRIMARY; ADD an Anthropic plugin cross-reference — a convention-anchor naming the plugin's authoring convention, never an install claim — for the 6 rows where a plugin is named (rows 1–3, 5, 6 at the 2026-05-10 D-Gate; row 9 at its 2026-07-03 addition). No row CHANGES the underlying canon. Rows 1-3, 5, 6, and 9 carry plugin cross-references; row 4 (RFC), row 7 (Status report — consumed by a PMO skill, no Anthropic plugin), and row 8 (Stakeholder Register / RACI) have no Anthropic plugin equivalent and stand on the upstream canon alone.
+**Reconciliation applied per row:** keep the upstream canon as PRIMARY; ADD an Anthropic plugin cross-reference — a convention-anchor naming the plugin's authoring convention, never an install claim — for the 6 rows where a plugin is named (rows 1–3, 5, 6 at the 2026-05-10 D-Gate; row 9 at its 2026-07-03 addition). No row CHANGES the underlying canon. Rows 1-3, 5, 6, and 9 carry plugin cross-references; row 4 (RFC), row 7 (Status report — consumed by a PMO skill, no Anthropic plugin), row 8 (Stakeholder Register / RACI), rows 10–11 (Change Impact Matrix, Training Plan), and row 12 (Acceptance report / Stage verdict report) have no Anthropic plugin equivalent and stand on the upstream canon alone. *(Rows 10–11 were added to this enumeration 2026-08-03 alongside row 12 — they were `canon_compat: none` from their 2026-07-24 registration and the omission was a transcription gap, not a classification.)*
 
 **Per-row Localization Check status:** load-bearing per `decision-discipline.md § 2.1` (cites specific evidence — system-reminder skills inventory 2026-05-10; articulates heuristic; produces reconciliation). Not optional check-the-box; reconciliation modified DD-2 mapping (added cross-ref column to 6 of the then-8 rows).
 

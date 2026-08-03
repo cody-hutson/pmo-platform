@@ -65,10 +65,12 @@ If the answer is unclear, default to the gate type matching the decision authori
 |---|-----------|---------------|
 | 1 | Acceptance criteria defined | Specific, testable criteria written in Given/When/Then or equivalent |
 | 2 | Dependencies identified | All dependencies mapped; none in "blocked" state |
-| 3 | Sized/estimated | Estimate assigned (story points, T-shirt, or time-box for spikes) |
+| 3 | Sized/estimated | The work is bounded by one of: a size estimate (story points or T-shirt); a time-box; or a scope-box -- stated acceptance criteria plus an explicit out-of-scope boundary. Stated scope with no out-of-scope boundary is not a bound and does not pass. |
 | 4 | Design reviewed (if applicable) | Technical approach agreed; no open architecture questions |
 | 5 | Test approach identified | Test strategy clear; test data available or plan to create |
-| 6 | Small enough | Fits within one iteration; meets INVEST "Small" criterion |
+| 6 | Small enough | Meets INVEST "Small" criterion; under a time-boxed approach it also fits one iteration |
+
+**Note -- bounding forms.** Criterion 3 tests that the work is *bounded*, not that a human estimated it. A size estimate, a time-box, and a scope-box are three forms of one control. A scope-box is a bound only when it carries **both** stated acceptance criteria **and** an explicit out-of-scope boundary -- a stated line of the form "Out of scope: the upstream API contract; migration of existing records." Scope with no out-of-scope boundary is unbounded and fails criterion 3. Criterion 6 is the separate *smallness* test and stays INVEST-anchored: the "fits one iteration" clause applies under a time-boxed approach, where an iteration exists to fit inside; an item bounded by a scope-box is judged small by INVEST alone, never by its own scope statement (an item always fits the scope it declares, so that would test nothing). An item admitted on a scope-box carries no estimate of record, so no calibration admission row is emitted for it at DoR exit. **Vocabulary:** the platform glossary defines TIME-BOXED / SCOPE-BOXED / DEPLOYMENT-BOXED at the *container* tier (Sprint / Milestone / Release); "time-box" and "scope-box" are used here at the *work-item* tier for the same bounding senses -- the same distinction, one altitude down.
 
 #### Definition of Done (DoD) -- Exit from Execution
 

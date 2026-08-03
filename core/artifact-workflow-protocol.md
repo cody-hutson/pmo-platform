@@ -113,7 +113,7 @@ The generated-artifact lifecycle runs a regular **lint → promote → archive**
 - **promote** — the `artifact-generator` Promotion Workflow above (`staged → promoted`, provenance preserved).
 - **archive** — `artifact-generator` Auto-Archive (unreviewed `staged` > 10 business days → `_generated/_archived/`, `promotion_state: archived-in-place`) **plus** the `generated-cleanup` skill (Tier-1 recommend-only retirement proposals; `/schedule`-able, so the cadence "runs regularly").
 
-Every retirement terminal is **recoverable** — a file is moved to `_generated/_archived/` or flipped to `lifecycle_state: archived` **in place**, **never hard-deleted** (the platform never-delete guarantee). This upholds **archive-before-delete**: archive *is* the terminal. No autonomous **purge** (hard-delete) step is defined; a retention-windowed purge, if ever wanted, is a scope expansion under its own governed Issue — it is not self-authorized in this protocol.
+Every retirement terminal is **recoverable** — a file is moved to `_generated/_archived/` or flipped to `lifecycle_state: archived` **in place**, **never hard-deleted** (the platform never-delete guarantee). This upholds **archive-before-delete**: archive *is* the terminal. No autonomous **purge** (hard-delete) step is defined. A retention-windowed purge was **evaluated and declined** — archive is the permanent terminal for this artifact class; see ADR `generated-artifact-retention-purge-declined` for the rationale and the named conditions under which the question re-opens.
 
 ### §4.2 Refusal / autonomy
 
