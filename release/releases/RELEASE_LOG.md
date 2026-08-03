@@ -134,7 +134,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v3.67 | 87-methodology-pack-catalog | #1085, #1067, #1788, #1803, #1973 | #3316 | `883baa6ca27ea0936bfc5d7a8ff23930f99953dd` | `v3.67` | VERIFIED | 2026-07-10 |
 | v3.68 | 79-qa-devtest-modes-and-automated-eval-execution | #222, #219, #2226, #172 | #3314 | `3103304260d6b2b930e2477fa4825a220a61a369` | `v3.68` | VERIFIED | 2026-07-10 |
 | v3.69 | 94-deploy-check-drift-remediation | #3198, #2213, #2217, #3375 | #3376 | `68740d58e947ed17ed6fcbed0c36986531460e54` | `v3.69` | VERIFIED | 2026-07-10 |
-| v3.69.1 | security-advisories-9cjm-rw36 | GHSA-9cjm, GHSA-rw36, #3384 | #3384 (advisory merges are private-fork — no PR number) | `075390e5da82f00c6484ca35108988a4ea6a4810` (#3384), `849e3ec5af05f67cda5963ffaf7a1f5be948bd56` (GHSA-rw36), `8304098c30d95d8703e02abfb7f84b7ac6da4240` (GHSA-9cjm) | `v3.69.1` | VERIFIED | 2026-07-11 |
+| v3.69.1 | security-advisories-9cjm-rw36 | GHSA-9cjm, GHSA-rw36, #3384 | #3384 | `075390e5da82f00c6484ca35108988a4ea6a4810` (#3384), `849e3ec5af05f67cda5963ffaf7a1f5be948bd56` (GHSA-rw36), `8304098c30d95d8703e02abfb7f84b7ac6da4240` (GHSA-9cjm) | `v3.69.1` | VERIFIED | 2026-07-11 |
 | v3.70 | 98-pipeline-freshness-and-spoke-safety | #1685, #1960, #2083, #2215, #1561 | #3379 | `452dc96645d25f4c8191db5bf39c2802993dd9e8` | `v3.70` | VERIFIED | 2026-07-11 |
 | v3.71 | pda-folder-intake-and-provenance | #2374, #2375, #2376, #2377 | #3391 | `080876925c7d0624ea3e765d48d36188c56fb472` | `v3.71` | VERIFIED | 2026-07-11 |
 | v3.72 | release-hub-mode-r-and-o | #2680, #2657, #2576, #2355, #2428 | #3405 | `61b0ae1d95830aea5e2d3281a8744cd8f20506ec` | `v3.72` | VERIFIED | 2026-07-12 |

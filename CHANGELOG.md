@@ -1,3 +1,4 @@
+<!-- derived-surface: source=release/releases/notes/*_RELEASE_NOTES.md (frontmatter `summary:` SEED) · projector=core/deploy/tools/generate_release_index.py · anchor=close-out (a required CLI argument, never sampled by the projector) · repo slug is a required CLI argument, never read from the environment or operator config · contract=release/references/standards/release-corpus-schema.md § Derived-Surface Contract · custody: provenance holds at EMISSION; a historical entry edited afterwards is this file's own content · NEVER REGENERATED WHOLE -->
 # Changelog
 
 All notable changes to this project will be documented in this file.
