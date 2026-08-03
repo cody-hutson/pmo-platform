@@ -82,7 +82,7 @@ The decision is a commitment with named reversal conditions, not a permanent clo
 
 ### Decision 2 — The derived release ledgers carry a volume obligation, and it is a read-path obligation
 
-**The release index, the release digest and the changelog carry a volume obligation that is distinct from the authoritative record's — distinct in kind, not merely in degree.** They are not exempt. The alternative reading — that a projected view has no volume question because it can be re-acquired — is **rejected**, because it is the reading the classification in force already forecloses: these three are `Important` precisely because they are *not* supersedable by re-acquisition.
+**`release/releases/RELEASE_INDEX.md`, `release/releases/RELEASE_DIGEST.md` and root `CHANGELOG.md` carry a volume obligation that is distinct from the authoritative record's — distinct in kind, not merely in degree.** They are not exempt. The alternative reading — that a projected view has no volume question because it can be re-acquired — is **rejected**, because it is the reading the classification in force already forecloses: these three are `Important` precisely because they are *not* supersedable by re-acquisition.
 
 The distinction is exact, and it follows from the dispositions already shipped:
 
