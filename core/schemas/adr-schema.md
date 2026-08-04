@@ -59,7 +59,7 @@ The section set and each section's requirement level are **defined here, once**.
 | [`operations/templates/adr-template.md`](../../operations/templates/adr-template.md) | CITES (project-ADR population) | Adopts the same requirement level for its own **disjoint** population; keeps its §5 scope boundary intact. |
 | [`core/skills/adr-helper/references/scaffolding-procedure.md`](../skills/adr-helper/references/scaffolding-procedure.md) | CITES | Scaffolds the set; emits every section as an author-fill placeholder. |
 | `.github/ISSUE_TEMPLATE/adr.yml` | CITES | Intake fields mirror the set. |
-| [`release/tools/check-adr-durability.py`](../../release/tools/check-adr-durability.py) | CITES (scope-declaring) | Declares it does **not** enforce the set, and its self-test asserts its cited copy matches this section. |
+| [`release/tools/check-adr-durability.py`](../../release/tools/check-adr-durability.py) | CITES (scope-declaring) + **enforces DELTA-ONLY** | Its self-test asserts its cited copy matches this section, membership **and** order. Rule R5 asserts **presence** of this set — never position, never a heading-form count — on two delta limbs only: a **net-new** ADR that lacks a section, and a **changed** ADR that has **lost** one it carried at the diff base. It asserts nothing about a section a record was already missing, and nothing at all without a diff base. Warn-mode at the CI surface. |
 
 ## 4. Value conventions
 

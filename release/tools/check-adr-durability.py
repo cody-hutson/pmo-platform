@@ -29,27 +29,64 @@ RULES
                        THE RECORD IS, so a number that rots there corrupts identity
                        rather than merely provenance. See R4 SCOPE + EXEMPTIONS below.
 
-SCOPE — WHAT THIS LINT DOES NOT CHECK
--------------------------------------
-This lint governs ADR *durability* (the rules above). It does NOT check *structural
-section conformance* — whether an ADR carries the required body sections at all. The
-canonical section set is DEFINED once, in `core/schemas/adr-schema.md` §3; this file
-only CITES it (see DOC_SECTION_SET below) and enforces nothing about it.
+  R5  STRUCT           a NET-NEW ADR that does not carry the §3 body-section set, or
+                       a CHANGED ADR that has LOST a section it carried at the diff
+                       base. Delta-scoped and requires `--diff-base`. See the SCOPE
+                       block below for exactly what it does and does not assert.
 
-Structural conformance is unenforced BY DESIGN, pending the ADR corpus's full
-structural-conformance pass. An enforcing structural rule over a corpus that is still
-mid-remediation is the same guarding-before-cleaning hazard the WARN-MODE note below
-describes, wearing a different hat.
+SCOPE — WHAT THIS LINT CHECKS STRUCTURALLY, AND WHAT IT STILL DOES NOT
+----------------------------------------------------------------------
+This lint governs ADR *durability* (R1-R4). It additionally carries ONE structural
+rule, R5, and that rule is deliberately narrow. The canonical section set is DEFINED
+once, in `core/schemas/adr-schema.md` §3; this file only CITES it (see DOC_SECTION_SET
+below) and R5 asserts against the cited copy, which `--self-test` pins to the schema.
+
+R5's population is DELTA-SCOPED on two limbs, and both have an EMPTY POPULATION over
+the existing corpus by construction — which is the whole reason the rule is admissible
+at all:
+
+  R5-NEW   an ADR file that does not exist at `--diff-base` and is missing a §3
+           section. A record the repository has never seen has no pre-existing
+           condition to grandfather.
+  R5-LOST  an ADR file that existed at `--diff-base` carrying section S whose head
+           revision no longer carries it. A section that disappears in a diff is a
+           net-new defect on any corpus, clean or not.
+
+WHAT R5 DOES NOT ASSERT, AND WHY — each measured, not assumed:
+
+  * NOT a pre-existing absence on a merely-CHANGED file. Measured at the conformance
+    sweep's own exit: 29 of 111 sweepable records carry a §3 gap the sweep scoped OUT
+    with a named blocking authority (25 `## Related ADRs`, 12 `## Reversibility`, 1
+    `## Consequences` — backfilling any of them is authoring decision content, not
+    hygiene). Asserting over changed files would fire on 26% of ADR-touching PRs
+    against records the sweep deliberately did not reach — precisely the
+    guarding-before-cleaning condition that got a whole-corpus structural rule
+    rejected. The NEW/LOST split keeps the delta posture and keeps the population
+    empty on a corpus that is still mid-remediation.
+  * NOT position. 27 records carry `## Alternatives Considered` AFTER
+    `## Consequences`; the schema's conformance assertion is PRESENCE, and it says so
+    ("structurally checkable … never that nothing else is").
+  * NOT a heading-form COUNT. A literal `#{2,4}` census cannot reach 1: `ADR-003` and
+    `ADR-004` carry legitimate `### Decision N alternatives` H3 sub-headings BENEATH an
+    already-canonical H2, pairing one-to-one with their `### Decision N` blocks. R5
+    asserts exact H2 membership, so those records pass a check they should pass.
+  * NOT the frozen records. `Superseded` / `Deprecated` are whole-file exempt and can
+    never conform — one live record needs two edits the immutability policy forbids.
+    A predicate over the full glob can never go green; R5 runs over the sweepable set.
+  * NOTHING AT ALL without `--diff-base`. A run with no delta base emits a visible
+    `CONFIG` row saying R5 scanned nothing, rather than reading green — the same
+    "never read green on a scan that examined nothing" discipline R3 applies to an
+    unresolved handle.
 
 The consequence, stated so that no reader has to infer it: a GREEN run of this lint
 does NOT mean the scanned ADRs are structurally conformant. It means they carry no
-durability violation. Those are different claims.
+durability violation AND introduced no net-new structural one. Those are different
+claims, and the second is the narrower.
 
 `--self-test` asserts that DOC_SECTION_SET still equals the schema's §3 table, so the
 citation cannot drift from the standard without a test failing. When the schema does
 not resolve (running outside a clone), that case reports a visible SKIP rather than
-passing silently — the same "never read green on a scan that examined nothing"
-discipline R3 applies to an unresolved handle.
+passing silently — the same discipline again.
 
 NEVER HARDCODE THE HANDLE
 -------------------------
@@ -178,6 +215,8 @@ OUTPUT (TSV) / EXIT CODES
   R2-COUNT  <path>:<line>\t<detail>      # live corpus-population count
   R3        <path>:<line>\t<detail>      # operator handle
   R4        <path>:<line>\t<detail>      # issue ref in an identity frontmatter field
+  R5-NEW    <path>:1\t<detail>           # net-new ADR missing a §3 section (file-scoped)
+  R5-LOST   <path>:1\t<detail>           # changed ADR lost a §3 section it had (file-scoped)
   EXEMPT    <path>\t<reason>             # whole-file exemption applied
   COUNT     <n>                          # total violations
 
@@ -286,9 +325,25 @@ COUNT_RE = re.compile(
     re.IGNORECASE,
 )
 # Preceding tokens that make the number an ORDINAL REFERENCE, not a population count.
+#
+# THE WORD BOUNDARY IS LOAD-BEARING, and its absence was a measured recall defect.
+# The word alternatives were originally unanchored, so the single-letter members `v`
+# and `g` matched the TAIL of any longer word — `addin[g] 24 cross-references`,
+# `containin[g] 14 files`, `Existin[g] 115 refs` were each silently demoted to an
+# ordinal reference and never reported. Measured over the 111-record mainline corpus:
+# 97 COUNT_RE hits clear the floor and ceiling guards, of which the unanchored form
+# suppressed 9 and the anchored form suppresses 6 — three genuine live counts
+# recovered, with the six real reference-word suppressions preserved as the control.
+#
+# `\b` is applied to the WORD GROUP and deliberately not to `§`, which is not a word
+# character (a boundary assertion before it fails against a preceding space and would
+# disable the section-symbol arm entirely). Anchoring the whole group rather than only
+# `v` and `g` was measured to recover EXACTLY the same three findings — `\b` can only
+# ever narrow a match set, so the broader anchor closes the whole shape class at zero
+# observed cost rather than patching the two members that happened to be observed.
 REFERENCE_PREFIX_RE = re.compile(
-    r"(?:§|§§|stage|gate|check|adr|phase|wave|tier|step|rule|section|part|"
-    r"chapter|item|option|qc|v|g)\s*$",
+    r"(?:§|§§|\b(?:stage|gate|check|adr|phase|wave|tier|step|rule|section|part|"
+    r"chapter|item|option|qc|v|g))\s*$",
     re.IGNORECASE,
 )
 # Preceding tokens that make the number a CEILING the population is authored to stay
@@ -480,12 +535,70 @@ def has_historical_anchor(line):
     return any(a in low for a in HISTORICAL_ANCHORS)
 
 
-def scan_text(path, text, handle, allowed_lines=None):
+def body_h2_set(text):
+    """Exact H2 heading strings in an ADR body, fence-aware and space-normalized.
+
+    PRESENCE, not position, and H2 only — see the R5 half of the SCOPE block for the
+    two measurements (27 out-of-position records; two records with legitimate H3
+    sub-headings beneath a canonical H2) that make both choices load-bearing rather
+    than stylistic.
+    """
+    out = set()
+    for line in strip_fences(text.splitlines()):
+        if line.startswith("## "):
+            out.add(" ".join(line.split()))
+    return out
+
+
+def struct_findings(text, base_text, is_new):
+    """R5. Returns [(rule, detail)] — file-scoped, so no line number.
+
+    `is_new`   the file does not exist at the diff base.
+    `base_text` the file's content at the diff base, or None when it is net-new.
+
+    Both limbs are DELTA properties. Neither can fire on a record whose gap
+    pre-dates the diff base, which is what keeps this rule out of the
+    guarding-before-cleaning hazard a whole-corpus structural rule would hit.
+    """
+    head = body_h2_set(text)
+    if is_new:
+        missing = [s for s in DOC_SECTION_SET if s not in head]
+        if missing:
+            return [(
+                "R5-NEW",
+                "net-new ADR is missing the required §3 section(s) %s — the set is "
+                "defined in %s §3 and this is a presence assertion, not a position or "
+                "heading-count one (add the exact H2 string; a section declaring a "
+                "single forced approach is conformant content)"
+                % (", ".join(repr(s) for s in missing), SECTION_SET_SOURCE),
+            )]
+        return []
+    if base_text is None:
+        return []
+    base = body_h2_set(base_text)
+    lost = [s for s in DOC_SECTION_SET if s in base and s not in head]
+    if lost:
+        return [(
+            "R5-LOST",
+            "this change REMOVES the required §3 section(s) %s, which the record "
+            "carried at the diff base — a section that disappears in a diff is a "
+            "net-new structural defect regardless of the rest of the corpus's state"
+            % ", ".join(repr(s) for s in lost),
+        )]
+    return []
+
+
+def scan_text(path, text, handle, allowed_lines=None, struct=None):
     """Evaluate one ADR's text. Returns (findings, exempt_reason_or_None).
 
     findings — list of (rule, line_no_1based, detail).
     allowed_lines — when not None, only these 1-based line numbers may yield a
                     finding (the net-new added-lines delta posture).
+    struct — when not None, a dict {"is_new": bool, "base_text": str|None} that
+             activates R5. R5 is NOT gated on `allowed_lines`: a section that is
+             absent has no added line to be allowed, so the added-line gate would
+             silence it in every case. Its delta scoping is the NEW/LOST split
+             instead, which is the structural analogue of the same posture.
     """
     findings = []
     raw = text.splitlines()
@@ -518,6 +631,17 @@ def scan_text(path, text, handle, allowed_lines=None):
 
     body = strip_fences(raw)
     src_obs = source_observation_lines(raw)
+
+    # --- R5 (structural, delta-scoped) -------------------------------------------
+    # Keyed on `frozen`, never on `exempt`: a frozen record can never conform (it
+    # would need edits the immutability policy forbids), while the per-file anchor
+    # marker is a DURABILITY override and says nothing about structure. The
+    # repo-integrity `allow-adr-durability` marker is honored at the CI surface,
+    # which filters the file list before this function ever sees it.
+    if struct is not None and not frozen:
+        for rule, detail in struct_findings(text, struct.get("base_text"),
+                                            struct.get("is_new", False)):
+            findings.append((rule, 1, detail))
 
     # --- R4 (frontmatter identity fields) ---------------------------------------
     # Keyed on `frozen` DIRECTLY, never on `exempt`: `exempt` is also set by the
@@ -665,6 +789,36 @@ def collect_adrs(root, explicit_files):
     return out
 
 
+def base_blob_map(diff_base, paths, root):
+    """{path: (is_new, base_text_or_None)} at `diff_base` — R5's delta substrate.
+
+    `git show <base>:<path>` is invoked through a subprocess ARGUMENT LIST, never a
+    shell string: some shells apply their own history/modifier expansion to a
+    `rev:path` word and silently mangle it, which reads back as a file that does not
+    exist at the base — i.e. as a false "net-new". A read error is reported as
+    `(False, None)`, which makes BOTH R5 limbs silent for that file rather than
+    inventing a net-new verdict from a failed read.
+    """
+    result = {}
+    for p in paths:
+        rel = os.path.relpath(p, root)
+        try:
+            proc = subprocess.run(["git", "show", "%s:%s" % (diff_base, rel)],
+                                  capture_output=True, text=True, cwd=root)
+        except Exception:
+            result[p] = (False, None)
+            continue
+        if proc.returncode == 0:
+            result[p] = (False, proc.stdout)
+            continue
+        # Distinguish "absent at the base" (net-new — the R5-NEW population) from
+        # any other git failure (bad ref, not a repo), which must stay silent.
+        exists = subprocess.run(["git", "cat-file", "-e", "%s^{commit}" % diff_base],
+                                capture_output=True, text=True, cwd=root).returncode == 0
+        result[p] = (True, None) if exists else (False, None)
+    return result
+
+
 def added_line_map(diff_base, paths, root):
     """{path: set(1-based added line numbers)} since `diff_base` (net-new posture)."""
     result = {}
@@ -750,6 +904,32 @@ def _mutation_kill_count_re(cases, rules_fn):
         return [name for name, text in cases if "R2-COUNT" in rules_fn(text)]
     finally:
         COUNT_RE = live
+
+
+#: The pre-fix REFERENCE_PREFIX_RE — unanchored word alternatives, so the bare `v`
+#: and `g` members matched the tail of any longer word. Kept ONLY as a mutation
+#: control; never call it outside the self-test.
+_LEGACY_UNANCHORED_REFERENCE_PREFIX_RE = re.compile(
+    r"(?:§|§§|stage|gate|check|adr|phase|wave|tier|step|rule|section|part|"
+    r"chapter|item|option|qc|v|g)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _mutation_revert_reference_prefix(text, rules_fn):
+    """Re-evaluate `text` with the PRE-FIX unanchored reference-prefix predicate.
+
+    The third mutation arm. The word-boundary recall cases must be SILENT here: a case
+    that reports R2-COUNT both before and after the anchor was never measuring the
+    anchor, and the suite would read green over an unrepaired predicate.
+    """
+    global REFERENCE_PREFIX_RE
+    live, REFERENCE_PREFIX_RE = (REFERENCE_PREFIX_RE,
+                                 _LEGACY_UNANCHORED_REFERENCE_PREFIX_RE)
+    try:
+        return rules_fn(text)
+    finally:
+        REFERENCE_PREFIX_RE = live
 
 
 def _mutation_revert_frontmatter(text, rules_fn):
@@ -1032,6 +1212,104 @@ def self_test():
         check("collect_adrs ignores non-ADR filenames",
               collect_adrs(tmp, ["core/ADRs/README.md"]) == [])
 
+    # ── R5 STRUCT — delta-scoped structural conformance ──────────────────────────
+    # The full §3 set, plus a deliberately-noisy shape: an out-of-position section, an
+    # H3 sub-heading beneath a canonical H2, and an EXTRA H2. All three must pass, or
+    # R5 is asserting position / heading-count / a closed vocabulary rather than
+    # presence — the three things the SCOPE block says it must not assert.
+    FULL = (
+        "---\n"
+        "title: ADR-999 — Fixture\n"
+        "status: Accepted\n"
+        "---\n"
+        "\n# ADR-999 — Fixture\n"
+        "\n## Status\n\nAccepted.\n"
+        "\n## Context\n\nx\n"
+        "\n## Decision\n\nx\n"
+        "\n## Consequences\n\nx\n"                    # DELIBERATELY before Alternatives
+        "\n## Alternatives Considered\n\nx\n"          # position 5, not 4 — 27 live records
+        "\n### Decision 1 alternatives\n\nx\n"         # legitimate H3 beneath the H2
+        "\n## Reversibility\n\nCHEAP\n"
+        "\n## Related ADRs\n\nnone\n"
+        "\n## References\n\n- #999902 — an extra section, legal under §3.1\n"
+    )
+
+    def struct_rules(head_text, base_text, is_new):
+        f, _ = scan_text("fixture.md", head_text, FIXTURE_HANDLE,
+                         struct={"is_new": is_new, "base_text": base_text})
+        return sorted(set(r for r, _, _ in f if r.startswith("R5")))
+
+    check("R5 passes a conformant NET-NEW record",
+          struct_rules(FULL, None, True) == [])
+    check("R5 passes despite an out-of-position section, an H3 sub-heading and an "
+          "extra H2 — presence, not position or heading-count",
+          struct_rules(FULL, None, True) == [])
+    check("R5-NEW fires on a net-new record missing `## Alternatives Considered`",
+          struct_rules(FULL.replace("## Alternatives Considered", "## Options considered"),
+                       None, True) == ["R5-NEW"])
+    check("R5-NEW fires on a net-new record missing `## Reversibility`",
+          struct_rules(FULL.replace("## Reversibility", "## Rollback"), None, True)
+          == ["R5-NEW"])
+    check("R5-NEW does NOT fire on an H3-only section (the H2 string is the assertion)",
+          struct_rules(FULL.replace("## Reversibility", "### Reversibility"), None, True)
+          == ["R5-NEW"])
+    check("R5-NEW does not fire on a section that only appears inside a fence",
+          struct_rules(FULL.replace("## Related ADRs\n\nnone\n",
+                                    "```\n## Related ADRs\n```\n"), None, True)
+          == ["R5-NEW"])
+    # THE POPULATION-EMPTINESS ARM. A pre-existing gap on a merely-CHANGED record must
+    # stay silent, or the rule re-creates the guarding-before-cleaning hazard that got
+    # a whole-corpus structural rule rejected. 29 of 111 live records are in this class.
+    GAPPY = FULL.replace("\n## Related ADRs\n\nnone\n", "\n")
+    check("R5 stays SILENT on a pre-existing gap in a merely-CHANGED record",
+          struct_rules(GAPPY + "\nOne more line.\n", GAPPY, False) == [])
+    check("R5-LOST fires when a change REMOVES a section the base carried",
+          struct_rules(GAPPY, FULL, False) == ["R5-LOST"])
+    check("R5 stays SILENT on a changed record that ADDS a section",
+          struct_rules(FULL, GAPPY, False) == [])
+    check("R5 is inert without a struct delta (no --diff-base)",
+          [r for r in rules(GAPPY) if r.startswith("R5")] == [])
+    check("R5 is inert on a FROZEN record — it can never conform, by policy",
+          struct_rules(GAPPY.replace("status: Accepted", "status: Superseded by ADR-045"),
+                       FULL, False) == [])
+    check("R5 is NOT suppressed by the durability override marker (structure is not "
+          "durability)",
+          struct_rules(GAPPY.replace("# ADR-999 — Fixture",
+                                     "<!-- " + OVERRIDE_MARKER + " -->\n# ADR-999 — Fixture"),
+                       FULL, False) == ["R5-LOST"])
+
+    # ── REFERENCE_PREFIX_RE word boundary ────────────────────────────────────────
+    # The measured recall defect: an unanchored single-letter alternative matched the
+    # TAIL of a longer word, silently demoting a live count to an ordinal reference.
+    # Both arms, because a suppression guard that suppresses nothing is not a guard.
+    # End-to-end: a VERBATIM live-corpus line that the unanchored form suppressed.
+    check("R2-COUNT fires on a count preceded by a word ENDING in `g` (the recall gap)",
+          rules(CLEAN + "\nThe change would require adding 24 cross-references.\n")
+          == ["R2-COUNT"])
+    # MUTATION KILL — the case above must be SILENT against the pre-fix predicate, or
+    # it is a probe that passes before and after the repair and therefore measures
+    # nothing. This is the same broken-probe signature the R2-COUNT and frontmatter
+    # arms already guard against.
+    check("mutation-kill C: the recall case is SILENT on the unanchored predicate (so "
+          "the word boundary is what makes it pass, not the fixture)",
+          _mutation_revert_reference_prefix(
+              CLEAN + "\nThe change would require adding 24 cross-references.\n", rules)
+          == [])
+
+    # Predicate-level, both directions. Prose cases for the `v` arm are contrived —
+    # few English words end in v — so the guard is asserted on the predicate itself.
+    check("the boundary stops a match on the tail of a word ending in `g`",
+          not REFERENCE_PREFIX_RE.search("would require adding "))
+    check("the boundary stops a match on the tail of a word ending in `v` (e.g. CSV)",
+          not REFERENCE_PREFIX_RE.search("rows in the exported CSV "))
+    check("the standalone single-letter reference tokens still suppress",
+          bool(REFERENCE_PREFIX_RE.search("see v "))
+          and bool(REFERENCE_PREFIX_RE.search("see g ")))
+    check("R2-COUNT is still suppressed after a GENUINE standalone reference word",
+          rules(CLEAN + "\nSee Stage 6 files and § 9 checks and ADR 12 skills.\n") == [])
+    check("the section-symbol arm survives the word-boundary anchor",
+          bool(REFERENCE_PREFIX_RE.search("as recorded in § ")))
+
     # Section-set citation drift — the standard vs. this lint's cited copy. This is the
     # assertion that makes "no drift between the standard and its linter" mechanical:
     # edit §3 without updating DOC_SECTION_SET (or the reverse) and this case fails.
@@ -1068,7 +1346,9 @@ def main():
                     help="operator GitHub handle for R3; derived from the origin remote "
                          "owner when omitted. NEVER hardcoded in this file.")
     ap.add_argument("--diff-base", default=None,
-                    help="restrict findings to lines ADDED since this ref (net-new posture)")
+                    help="restrict findings to lines ADDED since this ref (net-new "
+                         "posture), and ACTIVATE the delta-scoped structural rule R5. "
+                         "Without it R5 reports a visible SKIP rather than reading green.")
     ap.add_argument("--output-format", choices=("tsv",), default="tsv")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
@@ -1096,6 +1376,13 @@ def main():
                    "scanned nothing")
 
     delta = added_line_map(args.diff_base, paths, root) if args.diff_base else {}
+    base_blobs = base_blob_map(args.diff_base, paths, root) if args.diff_base else None
+    if base_blobs is None:
+        out.append("CONFIG\tR5 SKIPPED — no --diff-base, so the structural rule has no "
+                   "delta to scope to; the structural dimension scanned nothing. R5 is "
+                   "delta-only BY DESIGN (see the SCOPE block): a whole-corpus "
+                   "structural rule would fire on records the conformance sweep "
+                   "deliberately did not reach.")
 
     findings = []
     for p in paths:
@@ -1106,7 +1393,11 @@ def main():
             out.append("CONFIG\tunreadable: %s (%s)" % (p, exc))
             continue
         allowed = delta.get(p) if args.diff_base else None
-        f, exempt = scan_text(p, text, handle, allowed_lines=allowed)
+        struct = None
+        if base_blobs is not None:
+            is_new, base_text = base_blobs.get(p, (False, None))
+            struct = {"is_new": is_new, "base_text": base_text}
+        f, exempt = scan_text(p, text, handle, allowed_lines=allowed, struct=struct)
         rel = os.path.relpath(p, root)
         if exempt:
             out.append("EXEMPT\t%s\t%s" % (rel, exempt))
