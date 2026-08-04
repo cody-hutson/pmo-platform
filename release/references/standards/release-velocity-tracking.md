@@ -76,6 +76,29 @@ Worked example (a release whose 24 planned points all shipped, 9 files touched, 
 
 Emit mechanism: the Stage 13 spoke invokes `compute-release-velocity.sh <version> --milestone <N> --merge-sha <SHA>` at the Stage 13 chore PR and embeds the returned value into the visible-H4 block. Per the chore-PR convention the field lands on main via the Stage 13 chore PR, never direct-to-main.
 
+### 3.4 Machine-readable contract — what is NORMATIVE and what is INCIDENTAL
+
+The default emit above is the **preferred rendering**. It is not, line for line, the machine contract. The distinction is load-bearing in both directions: a producer that satisfies only the prose renders a field no consumer can read, and a gate that asserts the prose verbatim reds rows that are entirely correct.
+
+**The normative core is the grammar the shipped consumer actually parses.** That consumer is the velocity accessor in `core/skills/finops-usage-extractor/scripts/estimate-usage.sh`, which reads the `#### Deployment Log <version>` heading and the FIRST `**Velocity:**` line beneath it, and requires BOTH an unbolded `planned <N> pts` AND a `class <release-class>` to key the row. A line it cannot parse yields no entry at all — the release is excluded as *unkeyable*, silently, with no diagnostic anywhere. The contract is therefore stated against that grammar rather than re-derived, so a producer and a gate cannot encode the same token shape twice and drift apart.
+
+| # | Element | Status | Why |
+|---|---|---|---|
+| **N1** | The field line begins `**Velocity:**` at column 0, inside the `#### Deployment Log <version>` block, bounded by the next `#### ` heading or EOF | **NORMATIVE** | The consumer scopes by block and anchors on the line prefix. A field outside its block belongs to whichever release the parser was last inside. |
+| **N2** | It is the FIRST `**Velocity:**` line in the block | **NORMATIVE** | The consumer takes the first and ignores the rest. A second line is dead text that reads as authoritative. |
+| **N3** | A non-N/A field carries an unbolded `planned <N> pts` **and** a `class <release-class>` (lowercase, hyphens allowed) | **NORMATIVE** | Both are required to key the row. Either alone yields no entry. |
+| **N4** | An N/A field begins `**Velocity:** N/A` | **NORMATIVE** | The explicit-N/A discipline of § 5. Distinguishes "no sized membership" from "nobody wrote the field". |
+| **N5** | **No emphasis inside the numerals.** `planned 28 pts`, never `planned **28** pts` | **NORMATIVE** | The consumer matches `planned <digits> pts` as an unbroken token. Bolding the numeral splits it, and the row is dropped as unkeyable — while still reading perfectly to a human, which is exactly why this failed silently in the corpus before it was stated. The producing tool never bolds; the risk is a hand-authored or hand-edited field. |
+| **N6** | The field's position is immediately after `**Cycle-Time:**` (§ 3.3), or immediately after the block heading when the block carries no `**Cycle-Time:**` field | **NORMATIVE for placement, not for parsing** | The consumer does not check position; the reading-order convention does. Stated so a producer has one rule rather than a choice. |
+| **I1** | The `mechanism:` marker, in any form — `; mechanism: compute-release-velocity.sh`, `(mechanism: \`compute-release-velocity.sh <args>\`)`, or absent | **INCIDENTAL** | Discoverability prose. No consumer reads it, and no form dominates the corpus — measured over every `**Velocity:**` line in `RELEASE_LOG.md` plus its `RELEASE_LOG_ARCHIVE-*.md` segments, **neither marker form reaches a third of the population, and the largest single bucket is the rows carrying no marker at all**. A gate asserting any one form verbatim would therefore red the majority of correct rows. |
+| **I2** | `files-changed <F>` | **INCIDENTAL** | Legitimately `N/A` whenever the merge SHA is unknown at capture time. |
+| **I3** | `allocation <f>/<d>/<s> pts (feature/debt/protocol-slack)` | **INCIDENTAL** | Recorded for the recalibration consumer, which reads the tool's `--json` output rather than the prose field. |
+| **I4** | The trailing narrative tail (a parenthetical reason on an N/A field, a note on the ratio) | **INCIDENTAL** | Human context. It must not interrupt an N3 token, which N5 already forbids. |
+
+**How to use this split.** A producer emits the preferred rendering and self-asserts N1–N5 on the composed line *before* writing — an emit-time rejection is a loud failure, whereas an unparseable field is a permanent silent one. A gate asserts N1–N5 and nothing below the line; asserting I1–I4 measures fashion, not correctness. When the preferred rendering and the normative core disagree for a given row, the normative core governs and the row is correct.
+
+**Basis discipline for any consumer or gate.** Deployment-Log narrative older than the release log's hot window is relocated into sibling `RELEASE_LOG_ARCHIVE-*.md` segments that keep the same heading and the same field lines. Anything reading the velocity field across releases MUST read the ledger **plus** those segments — the shipped consumer does — or its population shrinks silently every time the archival chore runs. Correspondingly, a field written for a release whose block body has been relocated belongs in the **segment that holds that block's `**Result:**` line**, not in the hot stub: a field in one file and the rest of its record in another satisfies N1–N5 and is still a broken record.
+
 ## 4. Allocation work-class map (the one new classification)
 
 The allocation actuals require mapping each delivered issue's `type:`/`cluster:` labels onto the three work-classes the 60/20/20 mix names. This map is the single genuinely-new classification this standard introduces; it is grounded in the category-label and cluster-label sets defined at the platform label taxonomy (`core/specs/label-taxonomy.md`).
