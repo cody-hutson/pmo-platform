@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-112 — Composition-aware trigger-collision gate — linkage suppresses WATCH, never ESCALATE
+title: ADR-114 — Composition-aware trigger-collision gate — linkage suppresses WATCH, never ESCALATE
 status: Proposed
 date: 2026-08-04
 release: skill-suite-conformance-and-usability-ac
@@ -14,7 +14,7 @@ source_observations:
   - "Exempting a pair band produces a suppressed set that no one can re-check unless it is printed. Six composition-linked pairs currently sit within 0.034 of the exempted band's floor, and a uniform-template rewrite of role triggers was measured to produce new pairs at 0.278 — inside that band. The argument for exempting is that the suppressed set is benign, and that claim is only falsifiable if the gate emits what it suppressed."
 ---
 
-# ADR-112 — Composition-aware trigger-collision gate — linkage suppresses WATCH, never ESCALATE
+# ADR-114 — Composition-aware trigger-collision gate — linkage suppresses WATCH, never ESCALATE
 
 ## Status
 

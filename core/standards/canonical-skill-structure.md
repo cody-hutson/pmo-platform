@@ -91,7 +91,7 @@ This convention renders no new decision — it operationalizes two existing ones
 
 **The one rule that is easy to violate while appearing to comply: ownership phrasing must be domain-anchored.** Each role's triggers use that role's own scope-noun and decision-verb. A *uniform* ownership scaffold applied across roles — `"act as the X manager"`, `"own this X"`, `"who owns this X"` — does not de-collide anything; it makes the scaffold itself the new shared vocabulary and re-collides the role peers against each other. This is measured, not hypothetical: a uniform-scaffold pass over this corpus cleared every role↔function collision and simultaneously created five new role↔role collisions. Write `"program capacity trade-off"`, not `"own this program"`.
 
-**Standing enforcement:** `deploy.sh --check` **Check 67**, which scores every pair in the audit population and flags collisions. Because a role and its composed function-skill are *expected* to overlap somewhat, a pair carrying a `DEPENDS_ON` edge in the registry is exempt from the check's WATCH band — but never from its ESCALATE band, and every exemption is printed. See [ADR-112](../ADRs/ADR-112-composition-aware-trigger-collision-gate.md).
+**Standing enforcement:** `deploy.sh --check` **Check 67**, which scores every pair in the audit population and flags collisions. Because a role and its composed function-skill are *expected* to overlap somewhat, a pair carrying a `DEPENDS_ON` edge in the registry is exempt from the check's WATCH band — but never from its ESCALATE band, and every exemption is printed. See [ADR-114](../ADRs/ADR-114-composition-aware-trigger-collision-gate.md).
 
 ## §4 File Layout Requirements
 

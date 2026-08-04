@@ -9260,7 +9260,7 @@ cmd_check() {
   # The harness scores each pair's `Triggers:` vocabulary (content-token Jaccard) and
   # bands the result: at or above threshold = ESCALATE, two-thirds of threshold = WATCH.
   #
-  # THE COMPOSITION RULE (CR-1, ADR-112) — WHY A PLAIN SKIP WOULD BE WRONG. A
+  # THE COMPOSITION RULE (CR-1, ADR-114) — WHY A PLAIN SKIP WOULD BE WRONG. A
   # role-Specialist COMPOSES the function-skill it invokes (ADR-019), so the two
   # legitimately share subject-matter vocabulary and a naive gate re-flags them forever.
   # But the composition edge CO-VARIES WITH THE DEFECT on this corpus: when the audit was
