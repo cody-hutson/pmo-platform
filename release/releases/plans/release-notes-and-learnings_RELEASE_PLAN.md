@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 # Release Plan — release-notes-and-learnings
 
-> **Milestone:** `release-notes-and-learnings` (#305) · **Release Class:** `routine` (capacity weight 1.0, **Deep** Stage-9 review depth) · **Version:** `v4.07` *provisional* *(bump-class `minor`; re-verified at Engineering Commit 0 — see § Commit-0 Version Re-Verify; the concrete number is claimed atomically at the Stage-12 merge tag, so this plan file and its branch stay **slug-primary** until then, per ADR-092)* · **Scope:** 5 issues · 22 effective pts · One release branch, one PR, one merge gate (D-C **SINGLE**, D-Concurrency **P0 fully-serial**).
+> **Milestone:** `release-notes-and-learnings` (#305) · **Release Class:** `routine` (capacity weight 1.0, **Deep** Stage-9 review depth) · **Version:** `{{RELEASE_VERSION}}` *(unresolved by design — the token binds to the won tag at the Stage-12 atomic claim, when `claim-version.sh --stamp-slug` resolves it and renames this file; the provisional determination re-verified at Engineering Commit 0 is recorded in § Commit-0 Version Re-Verify, per ADR-092)* · **Scope:** 5 issues · 22 effective pts · One release branch, one PR, one merge gate (D-C **SINGLE**, D-Concurrency **P0 fully-serial**).
 
 This plan is the Stage-4 release plan (rendered on sub-task #4507, approved at the plan gate 2026-08-02 Sunday) written to disk as **Engineering Commit 0** by the first Stage-6 spoke, reconciled against the five Stage-5 Solutioning outputs consumed at the Collective Review scope-lock (2026-08-03 Monday) and against live mainline state at Commit 0. Deltas discovered between plan approval and Commit 0 are folded into the § Deviation Log rather than silently applied.
 
@@ -290,4 +290,6 @@ Milestone #305 · Stage-4 plan #4507 · Stage-5 designs #4538, #4542, #4546, #45
 
 ## Identity Note (ADR-092)
 
-This plan file and its branch are **slug-primary**. The version token `v4.07` appearing above is the *provisional* determination re-verified at Commit 0; the number binds atomically at the Stage-12 merge tag by compare-and-swap. On the claim path this file is stamped and renamed to the version-keyed form. Until then, no downstream artefact may treat `v4.07` as claimed.
+This plan file and its branch are **slug-primary**. The identity field in the header carries the literal `{{RELEASE_VERSION}}` token and is **deliberately left unresolved**: `claim-version.sh --stamp-slug` resolves it to the won tag on the compare-and-swap win path and renames this file to the version-keyed form in the same stamp commit. The token is load-bearing, not decorative — the stamp pre-flight **HALTs the claim** on a plan that carries none, and the slug-primary conformance check keys its pre-claim window on the token's presence, so a plan that hardcodes its provisional number instead is skipped by the very check meant to grade it.
+
+The concrete version named in § Commit-0 Version Re-Verify is a **dated measurement**, not an identity binding — it records what was observed and computed at Commit 0 and is deliberately NOT tokenized, because resolving it at claim time would rewrite the evidence. Until the claim lands, no downstream artefact may treat any version as claimed for this release.
