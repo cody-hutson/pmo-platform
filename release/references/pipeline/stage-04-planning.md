@@ -222,6 +222,28 @@ Scaffold (one row per CIAC — the section is present only when the release decl
 
 CIACs are consumed at Stage 9 by the release-integration check (Phase A3.6 / QC3.5) and, where the verification-execution script consumes them, are a check type that executor dispatches — the executor emits each CIAC verdict at Stage 6/7 (Verification-Evidence) and Stage 9 reads those emitted verdicts read-only (it does not re-run the method — single-runner discipline). They are graded under the Stage-8 per-criterion verdict enum verbatim — no new verdict values. The CIAC entry shape is the stable contract the executor parses (Identifier / Issues spanned / Predicate / Shared surface / Verification method); a CIAC whose method is a reproducible command needs no bespoke DSL — the executor extracts and runs the command string.
 
+### In-Flight Release Roster
+
+The release plan's `## Cross-PR Overlap Audit` section gains an `### In-Flight Release Roster` H3, a sibling to the `### Baseline SHA` H3 that G-PR9 already reads. It records the **in-flight (unmerged) sibling-release population** as measured at the A4 audit-start baseline — the population that the settled-state surfaces (G-PR8, G-PR9, and the Stage-12 claimed-set probe) structurally cannot see, because each of those reads merged or claimed state only.
+
+**The roster is a pinned measurement and carries NO verdict.** Stage 4 is baseline-pinned **by construction** — the A4 audit surveys cross-PR contention against the audit-start commit SHA, and a sibling release that branches, pushes, or opens a PR after that instant is invisible to it. A cross-release contention *verdict* rendered here would be stale on arrival and would read as durable when it is not. Stage 4's honest job is therefore to **pin the measurement so a later stage has a prior to diff against**, and to state that residual plainly. The verdict is rendered downstream at [stage-09-plan-review.md](stage-09-plan-review.md) § Phase A6.6, which re-measures this population fresh pre-GO and emits the `CONTENTION-*` family; the roster below is that phase's baseline input, never its substitute.
+
+One row per in-flight sibling — the population being open PRs with a `release/*` head (**drafts included**) together with remote `release/*` heads carrying no open PR, minus this release itself:
+
+```markdown
+### In-Flight Release Roster
+
+**Measured at:** `<baseline SHA>` · `<YYYY-MM-DDTHH:MM:SSZ>` · **Population:** n=<N> sibling(s)
+
+| Slug | PR | Head SHA | Bump-class | Carried label | Recomputed next-free | EDITSET ∩ FCM |
+|---|---|---|---|---|---|---|
+| `<release slug>` | `#<N>` or `—` | `<short SHA>` | `<major\|minor\|patch>` | `<carried provisional-display>` | `<recomputed>` | `<paths, or —>` |
+```
+
+The **carried label** and the **recomputed next-free** are recorded as separate columns on purpose: they diverge whenever a sibling's label has gone stale, and the recomputed value — never the carried one — is what Phase A6.6's slot predicate keys on. An **empty population is recorded explicitly** as `none in flight at <SHA> / <timestamp>`, never an omitted section: per audit-baseline discipline a default-to-zero over a transiently-empty population is not load-bearing unless the baseline it was measured against is pinned alongside it.
+
+**Cutover discipline:** applies to releases entering Stage 4 strictly AFTER this section's introducing-release merge SHA recorded in the release log; the introducing release itself is exempt (reflexive-pipeline-loop discipline — the section shipping in a release cannot fire on its own Stage 4).
+
 ## 7. Stage-Transition Gate
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.
 Metrics: dep satisfaction, file coverage verified, change spec completeness, contention resolved, risk register populated, verification plan complete, Delivery Strategy specified, routing decision made.
