@@ -19,7 +19,7 @@ This document implements the [Execution Framework](../../../core/disciplines/exe
 | Assignment | Operator ([Role](../../../core/specs/terminology-glossary.md#term-role)) + Hub (Role, current session) + Spokes (Role, spawned sessions) each embodying a [Persona](../../../core/specs/terminology-glossary.md#term-persona) from `release-personas.md` |
 | Tracking | GitHub Issues + `sub-task` labels + Milestone + GitHub Projects board per `github-projects-guide.md` |
 | Handoff | Hub ↔ Spoke via sub-task comments (Procedure 4) + Operator ↔ Hub via Decision Briefings in main-thread chat (Operating Principle § Channel subsection) + Inter-stage per `release/governance/release-process.md` Tier 1/2/3 protocol |
-| State Persistence | Release plan at `release/releases/plans/vX.Y_RELEASE_PLAN.md` (Procedure 0) + sub-task comments (per-stage) + hub-state substrate (Procedure 0b — pending approvals, action items, session lineage; per [`hub-session-continuity.md`](../../../core/standards/hub-session-continuity.md)). Hub-state ships as CUSTOMIZABLE-PUBLIC schema templates at `release/releases/hub-state/*.template` (tracked); runtime instance lives at the operator-instance path `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/*.md` per [`public-repo-vs-operator-instance-taxonomy.md`](../../../core/standards/public-repo-vs-operator-instance-taxonomy.md) §4.3 (NOT tracked). Operator-instance workspace session handoff files (e.g., `projects/_config/SESSION_STATE.md`) are OPTIONAL and live outside the public repo — they supplement, not replace, the hub-state runtime substrate. |
+| State Persistence | Release plan at `release/releases/plans/<slug>_RELEASE_PLAN.md` (Procedure 0) + sub-task comments (per-stage) + hub-state substrate (Procedure 0b — pending approvals, action items, session lineage; per [`hub-session-continuity.md`](../../../core/standards/hub-session-continuity.md)). Hub-state ships as CUSTOMIZABLE-PUBLIC schema templates at `release/releases/hub-state/*.template` (tracked); runtime instance lives at the operator-instance path `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/*.md` per [`public-repo-vs-operator-instance-taxonomy.md`](../../../core/standards/public-repo-vs-operator-instance-taxonomy.md) §4.3 (NOT tracked). Operator-instance workspace session handoff files (e.g., `projects/_config/SESSION_STATE.md`) are OPTIONAL and live outside the public repo — they supplement, not replace, the hub-state runtime substrate. |
 
 Terminology in this document follows the [terminology glossary](../../../core/specs/terminology-glossary.md). Key term links: [Task](../../../core/specs/terminology-glossary.md#term-task), [Sub-task](../../../core/specs/terminology-glossary.md#term-sub-task), [Milestone](../../../core/specs/terminology-glossary.md#term-milestone), [Release](../../../core/specs/terminology-glossary.md#term-release), [Persona](../../../core/specs/terminology-glossary.md#term-persona).
 
@@ -224,7 +224,7 @@ Release planning runs once per Milestone at release scope (all issues) before an
 
 **Gate:** Release plan approved by operator before proceeding to Procedure 1.
 
-**Canonical location:** The approved plan is committed as `release/releases/plans/vX.Y_RELEASE_PLAN.md` per the topology selected at the D-C Branch Topology decision gate:
+**Canonical location:** The approved plan is committed as `release/releases/plans/<slug>_RELEASE_PLAN.md` — slug-primary while the release is in flight, binding to its versioned form only at the Stage-12 atomic claim (`release/governance/RELEASE_PROTOCOL.md` § Versioning; ADR-092) — per the topology selected at the D-C Branch Topology decision gate:
 
 - **Single-branch topology** (D-C SINGLE — default): The plan file is committed on the release branch as **Engineering Commit 0** (the first commit on the release branch produced by the first per-issue Stage 6 Engineering spoke). Until that first Engineering commit lands, the Stage 4 sub-task comment is the working reference.
 
@@ -236,7 +236,7 @@ Release planning runs once per Milestone at release scope (all issues) before an
      The Commit-0 re-verify is a **single detect-and-HALT** — it does NOT auto-recompute-and-retry. On HALT it hands to the operator, who re-renders D-Version; the spoke then re-runs this same single re-verify against the operator's new value. Bounded retry on sustained contention is the atomic-claim rung's job at the tag (Stage 12), not this rung's. This is detection rung 1 (earliest); it composes with — does not replace — the Stage 9 mid-pipeline divergence re-check (file-divergence axis), the Stage 12 pre-merge freeness check, and the atomic version claim.
 
 - **Option-A topology** (D-C OPTION-A — per-issue branches + per-issue PRs per Procedure 6 early-merge precedent): The plan file is committed via a dedicated **Stage 4 release-plan chore PR** authored by the hub from the approved Stage 4 sub-task comment. Mechanics:
-  1. Hub copies the Stage 4 sub-task comment content into a new file at `release/releases/plans/vX.Y_RELEASE_PLAN.md`.
+  1. Hub copies the Stage 4 sub-task comment content into a new file at `release/releases/plans/<slug>_RELEASE_PLAN.md`.
   2. Hub creates branch `chore/vX.Y-stage-4-release-plan` off `main`.
   3. Hub commits with message `chore(vX.Y): Stage 4 — release plan`.
   4. Hub pushes and opens a chore PR titled `chore(vX.Y): Stage 4 — release plan` with milestone `vX.Y-<slug>`, labels mirroring the release issue labels, `--assignee @me`, `--reviewer OPERATOR`, `--project "PMO Pipeline"`.
@@ -540,17 +540,22 @@ Escalation to an operator gate (the ONLY conditions under which
   when a concurrent release is KNOWN to be claiming the computed slot.
   Absent a (B) or (C) condition, render (A) as a recorded
   determination, not a question.
-Blocks: release branch name (release/<slug>), plan-file path, the
-  Stage 12 atomic version claim, and any version: frontmatter the
-  release writes.
+Blocks: the Stage 12 atomic version claim, and any
+  version: frontmatter the release writes. Branch name and plan-file
+  name are NOT blocked — both are slug-primary while the release is
+  in flight and bind only at the claim (RELEASE_PROTOCOL.md
+  § Versioning).
 Upstream compatibility: N/A — version identity is PMO platform
   internal; no Anthropic upstream surface. Upstream compatibility
   check does not apply. (When the version feeds a skill version:
   field, that field's upstream posture is owned by the D-decision
   that edits the skill, not by D-Version.)
 Reversibility / Confidence: CHEAP pre-Engineering (recommendation
-  only); MODERATE after Engineering Commit 0 (identity propagates
-  into branch name, plan-file path, frontmatter) / HIGH.
+  only); CHEAP for filesystem identity after Engineering Commit 0 —
+  branch and plan-file names are slug-primary and do NOT rename on a
+  re-derivation (RELEASE_PROTOCOL.md § Versioning) — with residual
+  MODERATE limited to provisional-display values already copied into
+  sub-task bodies and chip prompts / HIGH.
 Recommendation: spoke recommendation = next-free per the procedure
   below.
 
@@ -672,7 +677,7 @@ Body:
 ## Stage {N} {Stage Name}
 **Parent:** #{ISSUE_NUMBER}
 **Milestone:** {MILESTONE}
-**Release Plan:** `release/releases/plans/vX.Y_RELEASE_PLAN.md` — under single-branch topology, on the release branch (committed at Engineering Commit 0; pre-Engineering: Stage 4 sub-task comment). Under Option-A topology, on main (committed via Stage 4 release-plan chore PR before per-issue sub-task scaffolding; see Procedure 0 § Canonical location).
+**Release Plan:** `release/releases/plans/<slug>_RELEASE_PLAN.md` — under single-branch topology, on the release branch (committed at Engineering Commit 0; pre-Engineering: Stage 4 sub-task comment). Under Option-A topology, on main (committed via Stage 4 release-plan chore PR before per-issue sub-task scaffolding; see Procedure 0 § Canonical location).
 **Persona:** {PERSONA_NAME} ({SKILLS_MAP_REF})
 
 ### Stage Definition
@@ -734,7 +739,7 @@ When closing a skipped sub-task in Step 5 above, post this comment before closin
    | Stage | Parallel-actionable across issues? | Mechanism | Rationale |
    |---|---|---|---|
    | **5 Solutioning** | YES — parallel-safe | Spokes post sub-task comments only; no commit/file write on release branch or main | Output channel is GitHub Issue comment — no contention surface. Multiple Stage 5 chips may run concurrently across issues; Collective Review fires after ALL close. When a Stage 5 spoke emits **integration ACs** (Phase A4.2, present when the issue has an upstream dependency), those `INT-N` ACs are graded by the **per-issue Stage 8 spokes** — they ride the existing acceptance channel, so B+C add **no new grading spoke** to the parallel surface — and the chain-level *validation* is performed at **Stage 9 Phase A3.5** (a gate stage, no spoke). Subject to the per-account 5-hour usage-window envelope — concurrent spokes draw **cumulatively** against the remaining window even though the output channel has no file-contention surface; see § Per-Account Usage Window Constraint for quota-budgeting / window-aware-timing / serialize-on-failure mitigation |
-   | **6 Engineering** | NO — write-serialized | Hub Procedure 2 routes ONE Engineering chip at a time per release plan's Implementation Sequence | Under D-C SINGLE topology, every Engineering commit lands on `release/vX.Y` sequentially; concurrent chips race on branch HEAD. File-disjoint commits still serialize at git's push level. Under D-C OPTION-A (per-issue branches), parallel commits are mechanically permitted but contention shifts to PR-merge order at Stage 12 — same effective serialization, different surface |
+   | **6 Engineering** | NO — write-serialized | Hub Procedure 2 routes ONE Engineering chip at a time per release plan's Implementation Sequence | Under D-C SINGLE topology, every Engineering commit lands on `release/<milestone>` sequentially; concurrent chips race on branch HEAD. File-disjoint commits still serialize at git's push level. Under D-C OPTION-A (per-issue branches), parallel commits are mechanically permitted but contention shifts to PR-merge order at Stage 12 — same effective serialization, different surface |
    | **7 Dev Testing / 8 QA Testing** | YES — parallel-safe | Spokes post sub-task comments + structured Handoff Payloads; no PR mutation, no main mutation | Review-only output. DT↔Engineering iteration loop and DT↔QA handoff carry routing context in comment thread — read-only against PR diff and committed evidence |
    | **13 Close** | NO — write-serialized | Single Close chip per release; release-corpus mutations (`RELEASE_LOG.md` row + visible-H4 Deployment Log + `RELEASE_INDEX.md` + `RELEASE_DIGEST.md` + `RELEASE_NOTES`) bundle into ONE Stage 13 chore PR | All mutations land on main via one chore PR; Milestone close is hub Tier-1 per Standing-GO Authorization Model; structurally serial — no axis of parallelism within Close |
 
@@ -767,10 +772,10 @@ When closing a skipped sub-task in Step 5 above, post this comment before closin
 
    | Topology | Blocker boundary | Detection point | Mitigation |
    |---|---|---|---|
-   | **D-C SINGLE** (default) | **FILE** — any file touched by any in-flight Engineering chip blocks the next Engineering chip until prior commit lands on `release/vX.Y` | Hub Procedure 2 routing reads release plan's Contention Map; refuses to surface concurrent Engineering chips touching the same file (or, under heavy contention, any file at all) | Sequence per Implementation Sequence; append-pattern files (per ADR-005 `overlap_class`) have lower commit-order risk but still serialize at commit/push |
+   | **D-C SINGLE** (default) | **FILE** — any file touched by any in-flight Engineering chip blocks the next Engineering chip until prior commit lands on `release/<milestone>` | Hub Procedure 2 routing reads release plan's Contention Map; refuses to surface concurrent Engineering chips touching the same file (or, under heavy contention, any file at all) | Sequence per Implementation Sequence; append-pattern files (per ADR-005 `overlap_class`) have lower commit-order risk but still serialize at commit/push |
    | **D-C OPTION-A** | **PR merge order** — per-issue branches isolate commit-time writes; contention surfaces at `gh pr merge` of two PRs touching overlapping line ranges | Stage 4 cross-PR overlap audit (per `release-process.md` § Cross-PR Overlap Audit + ADR-005 append-pattern detection) identifies pairs; Stage 12 Phase B0 dependent-PR check  + Phase A.6 polling  catch unresolved cases at merge time | Sequence PR merges per Procedure 6 Early Merge; base-shift dependents ( Option A) before parent merge |
 
-   **"Shared section" is NOT the relevant boundary.** Git's merge mechanics operate at file content (line-level diff), not at conceptual section/heading boundaries. Two Engineering chips editing disjoint sections of the same `hub-spoke-bridge.md` under SINGLE topology still produce commit-sequential writes — the second chip's `git fetch && git checkout release/vX.Y` plus rebase/merge against the first's commit is the actual serialization mechanism, not a section-level diff comparison.
+   **"Shared section" is NOT the relevant boundary.** Git's merge mechanics operate at file content (line-level diff), not at conceptual section/heading boundaries. Two Engineering chips editing disjoint sections of the same `hub-spoke-bridge.md` under SINGLE topology still produce commit-sequential writes — the second chip's `git fetch && git checkout release/<milestone>` plus rebase/merge against the first's commit is the actual serialization mechanism, not a section-level diff comparison.
 
    **ADR-005 composability:** `overlap_class` enrichment (`append-pattern` / `line-range-overlap` / `single-pr`) informs sequencing risk assessment — not the parallelism rule. An append-pattern file in the release Contention Map signals low merge-conflict risk if commit order is preserved; but concurrent commits still race on push regardless of `overlap_class`. The table above treats topology as the primary axis and ADR-005 as a refinement consumed at Stage 4 (Bundle / Planning) to inform sequencing, not at Procedure 2 routing.
 
@@ -782,7 +787,7 @@ When closing a skipped sub-task in Step 5 above, post this comment before closin
    | **Stage 4 Release Plan § Contention Map** | Authoritative file-overlap surface. The hub reads this to confirm which files each Engineering chip will touch before routing |
    | **Hub Procedure 2 (Routing)** | Reads Implementation Sequence; identifies the next Engineering sub-task whose dependencies are met (per existing Step 2); presents ONE chip at a time |
    | **Engineering chip prompt Worktree Discipline** (`hub-spoke-bridge.md` Procedure 3) | Already prescribes `git fetch origin release/<milestone> && git checkout release/<milestone>` — implicit "wait for prior commit to land" assumption |
-   | **Spoke completion (Procedure 4)** | Hub confirms commit landed on `release/vX.Y` (sub-task closed + commit visible via `git log origin/release/<milestone>`) before routing next Engineering chip |
+   | **Spoke completion (Procedure 4)** | Hub confirms commit landed on `release/<milestone>` (sub-task closed + commit visible via `git log origin/release/<milestone>`) before routing next Engineering chip |
 
    **Override-by-spoke detection:** A spoke proceeding when a prior commit has not yet landed produces stale-base or `non-fast-forward` push errors. The Worktree Discipline's `git fetch origin release/<milestone>` step surfaces this at chip-startup time. Hub Procedure 4 spoke-completion handling checks PR/branch state before declaring the sub-task closed; if spoke output shows stale-base symptoms, hub routes to remediation (operator notification + re-run chip after prior commit lands).
 
