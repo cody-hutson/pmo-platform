@@ -1085,17 +1085,27 @@ jobs:
   # ---------------------------------------------------------------------------
   # GATE 9 — ADR durability lint (#1490). The sibling of GATE 4: that gate guards
   #          ADR *identity* (one global, gap-free ADR-NNN sequence); this one guards
-  #          ADR *durability*. Three rules, all in release/tools/check-adr-durability.py:
+  #          ADR *durability*. The rules are enumerated authoritatively in the module
+  #          docstring of release/tools/check-adr-durability.py — read the roster there,
+  #          not from this comment. In outline:
   #            R1 STATUS-ENUM     the `status:` leading token is Proposed | Accepted |
   #                               Deprecated | Superseded (a prose tail is allowed —
   #                               the schema's leading-token rule, not a closed enum).
   #            R2 STALE-ANCHOR    a hardcoded commit SHA or a live corpus-population
-  #                               count baked into durable prose.
+  #                               count baked into durable prose. The count half matches
+  #                               a CLOSED vocabulary of population nouns and is
+  #                               deliberately a HIGH-PRECISION PARTIAL NET: a green run
+  #                               is not evidence that no live count is present. Its
+  #                               admitted shapes, its three excluded classes, and the
+  #                               command to re-derive the bound are stated in the
+  #                               checker's R2-COUNT RECALL BOUND docstring block.
   #            R3 OPERATOR-HANDLE the operator's literal GitHub handle. The sanctioned
   #                               ADR carve-out is NAME-scoped (the literal name on a
   #                               `deciders:` line); the HANDLE is never sanctioned, so
   #                               R3 closes the gap the line-scoped depersonalization
   #                               skip would otherwise leave open.
+  #            R4 IDENT-REF       a bare issue reference in an ADR identity frontmatter
+  #                               field; see the checker's R4 SCOPE block.
   #
   #          DELTA-SCOPED + WARN-MODE: scans only ADR files changed in the PR, and only
   #          lines ADDED since the base (the net-new posture the other gates use), so
