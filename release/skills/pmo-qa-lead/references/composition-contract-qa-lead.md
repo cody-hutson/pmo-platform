@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 # QA Lead — Composition Contract & RECONCILE Boundary Reference
 
-Reference detail for `pmo-qa-lead`. The SKILL.md `## Composition`, `## Modes`, `## Boundary`, and `## Output Contract` sections are the authoritative contract; this file carries the per-mode invocation mapping, the RECONCILE subsumption ledger (the QA-Lead-vs-auditor-hardening boundary stated per issue), the spec-surface-seam detail for Mode 2 / Mode 4, and a worked output. Read it when authoring a Mode 1–4 output or running as a release-QA spoke.
+Reference detail for `pmo-qa-lead`. The SKILL.md `## Composition`, `## Modes`, `## Boundary`, and `## Output Contract` sections are the authoritative contract; this file carries the per-mode invocation mapping, the RECONCILE subsumption ledger (the QA-Lead-vs-auditor-hardening boundary stated per issue), the §2 detail on how Mode 2 / Mode 4 compose the auditor's acceptance + dev-testing modes, and a worked output. Read it when authoring a Mode 1–4 output or running as a release-QA spoke.
 
 ## 1. Per-mode invocation mapping (composed function-skill modes)
 
