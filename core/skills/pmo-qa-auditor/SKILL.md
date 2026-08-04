@@ -2,7 +2,7 @@
 name: pmo-qa-auditor
 description: >
   Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit · Release-process fitness audit · Dev testing (Stage-7 quality report as PR comment) · Acceptance review (Stage-8 per-criterion AC verdicts) · As-built architecture-conformance audit (delivered-work drift + cross-release fragmentation) · Decision-health audit (hub and spoke decision conduct vs corpus oracles). Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality", "dev-test this PR", "run the DT ladder", "acceptance review this PR", "grade this against the issue AC", "run the release-process fitness audit", "as-built architecture-conformance audit", "decision-health audit", "audit how we decided."
-version: v4.01
+version: v4.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -897,10 +897,22 @@ Every QA auditor response follows this structure:
 **Auditor**: PMO QA Auditor (automated)
 ```
 
-This header frames the gate-table report modes only (Modes A–D today — the
-consumer/reviewer modes that emit a gate table, scorecard, or checklist). Producer
-and stage-formatted modes do not emit this frame — each has its own entry under
-Mode-specific output variations.
+This header frames the gate-table report modes only — the consumer/reviewer modes that
+emit a gate table, scorecard, or checklist. **Membership is set by that predicate, not by
+a count or a letter range**: a mode is in the frame iff § 2 below assigns it a gate table,
+a scorecard, or a checklist. Producer and stage-formatted modes do not emit this frame —
+each has its own entry under Mode-specific output variations, where it states its own
+non-membership.
+
+> **Scoping note — this is the report-frame axis, not the mode-set count. Do not re-open
+> as mode-set drift.** The `Mode A–D` shorthand used by the Mode-specific output variations
+> entries below names *this* frame — the set § 2 assigns a gate table, scorecard, or
+> checklist. It is **not** an enumeration of the auditor's invocation modes (the `## Modes`
+> set above, which is larger and grows as modes are added). The two axes are independent
+> and neither bounds the other, so an A–D reading on this axis is not a stale mode-set
+> literal. The partition is closed and self-checking: every invocation mode outside the
+> frame disclaims it explicitly at its own entry below, so a mode added without being placed
+> on one side of the line surfaces as a missing disclaimer rather than as silent drift.
 
 ### 2. Gate Results Table
 
