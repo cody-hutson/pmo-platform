@@ -125,6 +125,7 @@ release/tools/compute-cycle-time.sh
 release/tools/compute-dora-metrics.sh
 packages/session-retro.skill
 packages/session-retro.skill.sha256
+core/deploy/tests/run-install-regression.sh
 release/references/how-to/hub-spoke-bridge.md
 release/releases/plans/v3.55_RELEASE_PLAN.md
 release/releases/plans/v3/v3.61_RELEASE_PLAN.md
@@ -214,7 +215,12 @@ The event log's release key moves from the version string to the **milestone slu
 2. **`compute-cycle-time.sh` carried a second, pre-existing defect.** Re-pointing it to `--release` made it find rows for the first time — and it then died on `ts_iso parse failure`, because it read `$2` (the **version** column) as `ts_iso`. `$1` retains the row's leading `"| "` under `FS=" | "`, so ts_iso is `$1`-minus-the-prefix and `$2` is the key. Verified pre-existing: the pristine tool at the branch head fails identically on a version-keyed release. The tool has therefore **never** produced a number — it returned `N/A` when the filter matched nothing and errored when it matched. Fixed in-scope (both extraction sites) because a consumer re-point that leaves the metric uncomputable does not deliver this card's stated purpose. Evidence: `corpus-integrity-lints-and-refs` now computes `13h21m` where the pristine tool returned `N/A`, with a genuinely-absent release still returning `N/A` as the control.
 3. **The synthesizer's `--version` keeps taking the shipped `vX.Y` at Stage 13.** The spec said "per-release mode routes via `--release`" — correct for row *selection*, which is what changed. But the same argument is rendered verbatim into the `#### Release Learnings <value>` H4 heading that § 11.3 and the RELEASE_LOG placement convention both specify as `vX.Y`. Selection now goes through the § 2a ladder (so a `vX.Y` resolves to its slug-keyed rows instead of matching the raw column); the argument's display role is unchanged. `stage-13-close.md` Phase A7 is therefore **not** re-pointed; Phase A7.1 — the raw `query-pipeline-event.sh --version` call, which has no display role — is.
 
-**Consumer-set correction.** The card names 6 consumers; the true set is **16** — 5 named correctly, 1 phantom (`compute-release-velocity.sh`, not a consumer), 11 omitted, including a second **writer** (`verify-release-plan.sh`, which emitted the version-shaped sentinel `v0.0.0`). That writer now resolves the plan's milestone slug, falling back to the reserved `(none)` rather than to a synthesized placeholder version.
+**Consumer-set correction.** The card names 6 consumers; the true set is **17** — 5 named correctly, 1 phantom (`compute-release-velocity.sh`, not a consumer), and **12** omitted. Two of the omitted are **writers**, not readers, which is the category that breaks loudly rather than silently:
+
+- `release/tools/verify-release-plan.sh` — emitted the version-shaped sentinel `v0.0.0`. Now resolves the plan's milestone slug, falling back to the reserved `(none)` rather than to a synthesized placeholder version. (Named by the Stage-5 design.)
+- `core/deploy/tests/run-install-regression.sh` — **found at Stage 6 by an independent writer sweep; absent from the Stage-5 enumeration of 16.** It emitted the contents of `.version` (currently `v4.06`) with a `v0.0` fallback — both version-shaped, so both now rejected. Its emission is best-effort and swallows failure into an "emission skipped" message, so the rejection would never have surfaced: the suite would simply have stopped emitting, permanently and silently. It now emits under `(none)`, being a regression suite with no release context. **This file is an addition to the card's File Change Matrix**, taken on the same rationale the Stage-5 design used to fold in `verify-release-plan.sh`: shipping a guard that knowingly breaks an in-repo emitter is shipping a self-inflicted defect.
+
+The writer sweep is the load-bearing probe here, because a missed writer is a silent permanent emission loss. Method: every tracked file invoking `append-pipeline-event.sh`, then per-file inspection of the `--version` argument. Denominator **1521** tracked files; **33** invoke the writer; **6** pass a `--version`. Sensitivity arm: the sweep returns both already-known writers. Specificity arm: `append-pipeline-eventZZQ.sh` returns **0**.
 
 ### 5 · #4199 — Pre-claim identifier conformance in `hub-spoke-bridge.md`
 
