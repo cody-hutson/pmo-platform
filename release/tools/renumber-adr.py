@@ -50,6 +50,7 @@ USAGE
         (detection is advisory, never a gate).
 
     python3 release/tools/renumber-adr.py --renumber <old> <new> [--apply]
+        [--extra-path GLOB] [--exclude-path GLOB]
         Dry-run by default. ``--apply`` performs steps R1-R6 below.
 
     python3 release/tools/renumber-adr.py --self-test
@@ -94,6 +95,21 @@ time there always is one, because that is what made this a collision.
   Escape hatch:  ``--extra-path`` for the rare hand-verified case. Logged, never
                  default; if it is reached for more than twice the scoping rule
                  needs revisiting rather than widening.
+  Counterpart:   ``--exclude-path`` NARROWS the scope, and it exists because the
+                 completeness argument above runs one way only. "An unmerged
+                 record cannot be cited from a mainline-unchanged file" is true.
+                 Its converse is FALSE: once the mainline is merged INTO the
+                 release branch, a file the branch also modified carries the
+                 MAINLINE's prose — including the mainline's own citations to
+                 whichever record holds ``<old>``. Those are in the branch diff
+                 and R3 rewrites them. Observed on the first production run: three
+                 mainline citations in a CI workflow the branch had also edited.
+                 Logged, never default, and the pattern is asserted to match.
+
+  Not covered:   the same file carrying BOTH a branch citation and a mainline
+                 citation of ``<old>``. ``--exclude-path`` is whole-file, so that
+                 case still needs a hand pass. The durable fix is to scope R3 to
+                 the branch's own changed LINE RANGES rather than whole files.
 
 The dirty-tree refusal in R1 is load-bearing for exactly this reason: with a
 clean tree, ``<ref>...HEAD`` is the complete branch diff. Uncommitted work would
@@ -145,6 +161,11 @@ DEFAULT_MAINLINE_REF = "origin/main"
 PROJECTED_INDEXES = {
     "release/ADRs/README.md": "generate-adr-index.py",
 }
+
+# The projector's own region fence. R6 must not read INSIDE it — see
+# `_strip_projected_region`.
+PROJECTED_REGION_BEGIN = "<!-- ADR-INDEX:BEGIN -->"
+PROJECTED_REGION_END = "<!-- ADR-INDEX:END -->"
 
 # The § Status provenance note. `at merge time` is MANDATORY, not decorative:
 # it is a member of HISTORICAL_ANCHORS in check-adr-durability.py, so the note
@@ -469,6 +490,36 @@ def append_renumber_log(text, old, new, slug, cause):
 # --------------------------------------------------------------------------
 
 
+def _strip_projected_region(lines):
+    """Drop the projector-owned region from a PROJECTED index surface.
+
+    R6 asks "does any in-scope file still cite ``ADR-<old>``?" and reads a hit as
+    a DANGLING reference to the record it just moved. Inside a projected region
+    that question is malformed. The region is DERIVED from the ADR file set, so a
+    row reading ``ADR-<old>`` is the row of whichever record still legally holds
+    ``<old>`` — and at a DUPLICATE reconciliation, which is this tool's primary
+    case, that is the MAINLINE's record by construction. R4 has already
+    regenerated the region from the post-rename file set and the projector's own
+    ``--verify`` is that surface's correctness check.
+
+    Observed on the first production run: R6 read the mainline's own index row as
+    this branch's dangling citation and reverted a complete, correct move.
+
+    Prose OUTSIDE the region is authored, not derived, so it stays under the scan.
+    """
+    out, inside = [], False
+    for ln in lines:
+        if PROJECTED_REGION_BEGIN in ln:
+            inside = True
+            continue
+        if PROJECTED_REGION_END in ln:
+            inside = False
+            continue
+        if not inside:
+            out.append(ln)
+    return out
+
+
 def _is_utf8_text(path):
     """True when the file decodes as UTF-8 — i.e. it CAN carry a text citation.
 
@@ -490,7 +541,7 @@ def _is_utf8_text(path):
         return False
 
 
-def _in_scope_files(ref, root, extra_paths, log=None):
+def _in_scope_files(ref, root, extra_paths, log=None, exclude_paths=None):
     """The branch's own citation set: files added/modified vs the mainline ref."""
     diff = git("diff", "--name-only", f"{ref}...HEAD", root=root, check=False)
     files = {ln for ln in diff.splitlines() if ln}
@@ -498,6 +549,23 @@ def _in_scope_files(ref, root, extra_paths, log=None):
         for p in root.glob(pattern):
             if p.is_file():
                 files.add(p.relative_to(root).as_posix())
+    dropped = []
+    for pattern in exclude_paths or []:
+        matched = {pattern} & files
+        matched |= {p.relative_to(root).as_posix() for p in root.glob(pattern)
+                    if p.is_file()} & files
+        if not matched:
+            # A pattern that matches nothing is a typo, and a typo here silently
+            # re-widens the scope the operator meant to narrow. Say so.
+            (log or (lambda _m: None))(
+                f"R3 scope: --exclude-path {pattern!r} matched NO in-scope file "
+                f"(pattern ignored — check it)")
+        files -= matched
+        dropped.extend(sorted(matched))
+    if dropped and log:
+        log(f"R3 scope: {len(dropped)} file(s) EXCLUDED by --exclude-path "
+            f"(hand-verified as citing another record's claim on the old "
+            f"number): " + ", ".join(dropped))
     present = sorted(f for f in files if (root / f).is_file())
     text, binary = [], []
     for f in present:
@@ -548,7 +616,8 @@ def _project_index(root, rel):
     return True, (root / rel).read_text(encoding="utf-8") != before, "; ".join(lines)
 
 
-def do_renumber(old, new, ref, root, apply_changes, extra_paths, log):
+def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
+                exclude_paths=None):
     """Steps R1-R6. Returns 0 on success, non-zero on refusal or verify failure."""
     worktree = worktree_claims(root)
     _a, mainline_by_n = anchor(ref, root)
@@ -625,7 +694,7 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log):
     log(f"R1 PROCEED: ADR-{old:03d} → ADR-{new:03d} ({old_path} → {new_path})")
     log(f"    anchor({ref}) = {_a}; cause = {cause}")
 
-    in_scope = _in_scope_files(ref, root, extra_paths, log)
+    in_scope = _in_scope_files(ref, root, extra_paths, log, exclude_paths)
 
     if not apply_changes:
         hits = 0
@@ -752,8 +821,14 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log):
             continue
         # Historical-record lines name the old number ON PURPOSE — the
         # provenance note and the § Renumber log are the audit trail this move
-        # creates. Scanning them would make R5 and R4 fail R6.
-        body = "\n".join(ln for ln in p.read_text(encoding="utf-8").split("\n")
+        # creates. Scanning them would make R5 and R4 fail R6. A projected
+        # region names it on purpose too, for a different reason: it is derived
+        # from the file set, so its ADR-<old> row belongs to whichever record
+        # still holds <old> — see `_strip_projected_region`.
+        lines = p.read_text(encoding="utf-8").split("\n")
+        if rel in PROJECTED_INDEXES:
+            lines = _strip_projected_region(lines)
+        body = "\n".join(ln for ln in lines
                          if not is_historical_numbering_line(ln))
         if citation_re(old).search(body):
             dangling.append(_rel(root, p))
@@ -825,6 +900,31 @@ def self_test():
                "`release/tools/renumber-adr.py` at merge time.")
     eq("historical/renumber-log-exempt", rewrite_citations(logline, 4, 5),
        (logline, 0))
+    # A PROJECTED region is derived from the file set, so a row naming the old
+    # number belongs to whichever record still holds it — the MAINLINE's, at a
+    # duplicate. R6 must not read inside the fence. Sensitivity control: the
+    # SAME token outside the fence must survive the strip, or this would pass by
+    # deleting everything.
+    fenced = [
+        "prose cites ADR-004 outside the fence",
+        PROJECTED_REGION_BEGIN,
+        "| [ADR-004](ADR-004-mainline.md) | derived row |",
+        PROJECTED_REGION_END,
+        "tail prose cites ADR-004 too",
+    ]
+    eq("projected/strip-region", _strip_projected_region(fenced),
+       ["prose cites ADR-004 outside the fence", "tail prose cites ADR-004 too"])
+    eq("projected/derived-row-is-not-dangling",
+       bool(citation_re(4).search("\n".join(_strip_projected_region(
+           [PROJECTED_REGION_BEGIN,
+            "| [ADR-004](ADR-004-mainline.md) |",
+            PROJECTED_REGION_END])))), False)
+    eq("projected/authored-prose-still-scanned",
+       bool(citation_re(4).search("\n".join(_strip_projected_region(fenced)))), True)
+    # An unfenced file must pass through untouched — the strip is region-scoped,
+    # never a blanket filter.
+    eq("projected/no-fence-is-a-no-op",
+       _strip_projected_region(["a ADR-004", "b"]), ["a ADR-004", "b"])
     eq("resort/table",
        resort_adr_table("| ADR-005 | b |\n| ADR-002 | a |"),
        "| ADR-002 | a |\n| ADR-005 | b |")
@@ -871,6 +971,10 @@ def main(argv=None):
                         help="perform the move (default is dry-run)")
     parser.add_argument("--extra-path", action="append", default=[],
                         help="hand-verified extra glob for the R3 sweep (logged)")
+    parser.add_argument("--exclude-path", action="append", default=[],
+                        help="hand-verified glob REMOVED from the R3/R6 scope, for "
+                             "a branch-diff file whose ADR-<old> tokens cite the "
+                             "OTHER record holding that number (logged)")
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--root", type=Path, default=None)
     args = parser.parse_args(argv)
@@ -905,7 +1009,8 @@ def main(argv=None):
 
     if args.renumber:
         old, new = args.renumber
-        return do_renumber(old, new, ref, root, args.apply, args.extra_path, print)
+        return do_renumber(old, new, ref, root, args.apply, args.extra_path,
+                           print, args.exclude_path)
 
     parser.print_help()
     return 1

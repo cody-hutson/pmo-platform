@@ -176,6 +176,32 @@ echo "$DET" | grep -q "DUPLICATE" && ok "--detect reports DUPLICATE at 004" \
 echo "$DET" | grep -q "next=5" && ok "--detect computes next-free 005" \
   || bad "--detect computes next-free 005" "$DET"
 
+# --- A11 --exclude-path narrows R3 scope (dry-run; zero mutation) ------------
+# The counterpart to --extra-path. It exists because the R3 completeness
+# argument runs ONE way: "an unmerged record cannot be cited from a
+# mainline-unchanged file" is true, but its converse is false — once the
+# mainline is merged INTO the release branch, a file the branch also edited
+# carries the MAINLINE's citations to whichever record holds <old>, and R3
+# rewrites them. Sensitivity first: the un-excluded run must SEE the file, or
+# the exclusion arm proves nothing.
+EXC_BASE="$(python3 release/tools/renumber-adr.py --renumber 4 5 2>&1)"
+assert_eq "A11 SENSITIVITY — design-note.md is in R3 scope without the exclusion" \
+  "$(printf '%s\n' "$EXC_BASE" | grep -c 'would rewrite.*design-note.md')" "1"
+EXC_OUT="$(python3 release/tools/renumber-adr.py --renumber 4 5 \
+             --exclude-path design-note.md 2>&1)"
+assert_eq "A11 --exclude-path drops the file from R3 scope" \
+  "$(printf '%s\n' "$EXC_OUT" | grep -c 'would rewrite.*design-note.md')" "0"
+assert_eq "A11 the exclusion is REPORTED, not silent" \
+  "$(printf '%s\n' "$EXC_OUT" | grep -c 'EXCLUDED by --exclude-path')" "1"
+assert_eq "A11 SPECIFICITY — the other cited file is still swept" \
+  "$(printf '%s\n' "$EXC_OUT" | grep -c 'would rewrite.*plan-note.md')" "1"
+EXC_TYPO="$(python3 release/tools/renumber-adr.py --renumber 4 5 \
+              --exclude-path no-such-file.md 2>&1)"
+assert_eq "A11 a pattern matching nothing is CALLED OUT (a typo re-widens silently)" \
+  "$(printf '%s\n' "$EXC_TYPO" | grep -c 'matched NO in-scope file')" "1"
+assert_eq "A11 zero mutation across all three dry runs" \
+  "$(G status --porcelain | wc -l | tr -d ' ')" "0"
+
 APPLY="$(python3 release/tools/renumber-adr.py --renumber 4 5 --apply 2>&1)"; AP_RC=$?
 assert_eq "--renumber 4 5 --apply exits 0" "$AP_RC" "0"
 
