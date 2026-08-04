@@ -237,8 +237,10 @@ One row per in-flight sibling — the population being open PRs with a `release/
 
 | Slug | PR | Head SHA | Bump-class | Carried label | Recomputed next-free | EDITSET ∩ FCM |
 |---|---|---|---|---|---|---|
-| `<release slug>` | `#<N>` or `—` | `<short SHA>` | `<major\|minor\|patch>` | `<carried provisional-display>` | `<recomputed>` | `<paths, or —>` |
+| `<release slug>` | `#<N>` or `—` | `<short SHA>` | `<major\|minor\|patch>` or `UNRESOLVABLE` | `<carried provisional-display>` | `<recomputed>` | `<paths, or —>` |
 ```
+
+**A sibling that declares no bump-class renders `UNRESOLVABLE` in both the Bump-class and the Recomputed next-free columns — never a blank, and never a silent omission from the roster.** The allocator degrades safely at the tool boundary (it exits non-zero with empty output rather than guessing), but an empty capture makes the slot equality trivially unequal, so an omitted row reads as `CONTENTION-NONE` for that sibling when the truth is that the comparison could not be made. An unresolvable slot is an unknown, not an absence.
 
 The **carried label** and the **recomputed next-free** are recorded as separate columns on purpose: they diverge whenever a sibling's label has gone stale, and the recomputed value — never the carried one — is what Phase A6.6's slot predicate keys on. An **empty population is recorded explicitly** as `none in flight at <SHA> / <timestamp>`, never an omitted section: per audit-baseline discipline a default-to-zero over a transiently-empty population is not load-bearing unless the baseline it was measured against is pinned alongside it.
 
