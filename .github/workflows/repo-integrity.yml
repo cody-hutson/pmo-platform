@@ -304,8 +304,20 @@ jobs:
           set -euo pipefail
 
           OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-issue-ref[[:space:]]*-->'
-          # designated reference-block headers (reuse the parser-clean anchor family)
-          REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Rr]elated|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
+          # Designated reference-block headers (reuse the parser-clean anchor family).
+          # The `Source(s)` arm is explicit: `[Ss]ources?` matches `Source` and
+          # `Sources` but NOT `Source(s)`, whose parenthetical then hit the `$` anchor
+          # and failed — while this gate's own failure message, core/ADRs/README.md,
+          # and reference-durability-standard.md all NAME `### Source(s)` as
+          # recognized. That was a specification-versus-implementation defect, not a
+          # policy choice, so the implementation is corrected to the stated set.
+          #
+          # `Related ADRs` is deliberately NOT recognized. It is a cross-ADR-link
+          # section, where core/standards/adr-authoring-guide.md § Issue references in
+          # ADRs forbids a bare #N outright (zone 1) — recognizing it would move the
+          # placement cut point ABOVE that section and make this gate accept exactly
+          # the placement the authoring guide prohibits.
+          REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Rr]elated|[Pp]rovenance|[Ss]ources?|[Ss]ource\(s\))[[:space:]]*:?[[:space:]]*$'
 
           # SCOPE: every changed .md MINUS the self-doc files that necessarily
           # quote worked-example #N (they carry a file-top allow-issue-ref).
@@ -469,14 +481,17 @@ jobs:
             echo "- **different repository** — the number resolves to a TRANSFERRED issue now living in another repo."
             echo "- **pull-request number** — the number is a PR, not an issue."
             echo "- **deprecated IMP-NNN** — the legacy improvement id; use a GitHub issue \`#N\`."
-            echo "- **placed outside a reference block** — a valid \`#N\` must sit under \`### Issue References\` / \`### References\` / \`## Related\` / \`## Provenance\` / \`### Source(s)\`."
+            echo "- **placed outside a reference block** — a valid \`#N\` must sit under a recognized heading, at any level: \`Issue References\` / \`References\` / \`Related\` / \`Provenance\` / \`Source\` / \`Sources\` / \`Source(s)\`. In an ADR the designated block is \`## References\`; \`## Related ADRs\` is NOT recognized, because a bare \`#N\` is prohibited there outright."
             echo ""
-            echo "See [\`core/rules/git-workflow.md\` § Repository-Integrity Gates](../blob/main/core/rules/git-workflow.md)."
+            echo "See [\`core/rules/git-workflow.md\` § Repository-Integrity Gates](../blob/main/core/rules/git-workflow.md) and [\`core/standards/adr-authoring-guide.md\` § Issue references in ADRs](../blob/main/core/standards/adr-authoring-guide.md)."
             echo ""
-            echo "### Override (a deliberately-quoted or external reference)"
+            echo "### Override — a RARE exception, not the default remedy"
             echo ""
-            echo 'Add the marker anywhere in the file:'
-            echo '`<!-- repo-integrity: allow-issue-ref -->`'
+            echo 'Adding the marker `repo-integrity: allow-issue-ref` (wrapped in an HTML comment) anywhere in a file skips this gate for the WHOLE file — placement AND validity, so a 404, a redirect, a transferred issue and a PR number all pass unexamined.'
+            echo ""
+            echo 'It is warranted only when BOTH limbs hold: (1) the file DISPLAYS an issue-reference construct as its subject matter — self-documentation, a template, a worked example, a test fixture — or its numbers are synthetic / out-of-repo and cannot resolve by construction; AND (2) neither remedy is available — the reference cannot be relocated into a designated reference block, and it cannot be replaced by an inline summary without destroying what the file is for.'
+            echo ""
+            echo 'A marker declared under this criterion carries a trailing rationale INSIDE the comment naming which limb applies. A bare marker is a silenced warning, not a declaration. Carrying provenance is not demonstration: move the reference into a reference block with a summary noun phrase instead.'
           } | tee -a "$GITHUB_STEP_SUMMARY"
           exit 1
 
@@ -1185,6 +1200,7 @@ jobs:
             echo "- **R1** a \`status:\` value whose leading token is outside \`Proposed | Accepted | Deprecated | Superseded\`."
             echo "- **R2** a hardcoded commit SHA or a live corpus-population count in durable prose."
             echo "- **R3** the operator's literal GitHub handle (the ADR carve-out covers the literal *name* on a \`deciders:\` line — never the handle)."
+            echo "- **R4** a bare issue reference \`#N\` in an identity frontmatter field (\`title:\` / \`release:\` / \`deciders:\`)."
             echo ""
             echo "See \`core/standards/adr-authoring-guide.md\` and \`core/rules/git-workflow.md\` § Repository-Integrity Gates."
             echo ""
@@ -1193,11 +1209,13 @@ jobs:
             echo "- **R1** — use a Nygard enum token; a prose tail after it is fine."
             echo "- **R2** — state the fact so it survives: cite the deriving command instead of a count, summarize the change instead of a SHA, or anchor the number historically (\"as of authoring, ...\")."
             echo "- **R3** — write the operator's literal name, or the operator-name token, instead of the handle."
+            echo "- **R4** — name the release by its slug and the deciders by role or literal name, and move the issue reference to \`source_observations:\` or to the ADR's designated \`## References\` block with a summary noun phrase. There is no marker for this one."
             echo ""
             echo "### Exemptions (already handled)"
             echo ""
             echo "- Fenced code blocks, the \`source_observations:\` frontmatter block, historically-anchored lines, and \`Superseded\`/\`Deprecated\` records are R2-exempt by construction."
-            echo "- A file that genuinely needs a pinned anchor: add \`<!-- adr-durability: allow-anchor -->\` (R2 only — never R3)."
+            echo "- R4 exempts fenced renderings, \`source_observations:\` (not an identity field), and frozen records — and NOTHING else. Neither override marker suppresses it."
+            echo "- A file that genuinely needs a pinned anchor: add \`<!-- adr-durability: allow-anchor -->\` (R2 only — never R3, never R4)."
             echo "- Whole-file skip: \`<!-- repo-integrity: allow-adr-durability -->\`."
           } | tee -a "$GITHUB_STEP_SUMMARY"
 

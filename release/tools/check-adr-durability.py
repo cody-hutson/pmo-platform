@@ -8,8 +8,8 @@ durable prose, or carry the operator's literal GitHub handle. This checker is th
 durability sibling — same self-tested-gate shape as `check-adr-numbers.py`, wired as a
 `repo-integrity.yml` job.
 
-THREE RULES
------------
+RULES
+-----
   R1  STATUS-ENUM      the `status:` frontmatter value's LEADING token is one of
                        Proposed | Accepted | Deprecated | Superseded. A prose tail is
                        permitted (the ratification anchor / supersession pointer) —
@@ -23,10 +23,15 @@ THREE RULES
                        name on a `deciders:` frontmatter line, architect-of-record
                        attribution) — the HANDLE is never sanctioned, and R3 closes
                        the gap a line-scoped skip would otherwise open.
+  R4  IDENT-REF        a bare issue reference `#N` in an ADR IDENTITY frontmatter
+                       field (`title:` / `release:` / `deciders:`). An issue number is
+                       the durability ladder's rung 5; an identity field names WHAT
+                       THE RECORD IS, so a number that rots there corrupts identity
+                       rather than merely provenance. See R4 SCOPE + EXEMPTIONS below.
 
 SCOPE — WHAT THIS LINT DOES NOT CHECK
 -------------------------------------
-This lint governs ADR *durability* (R1/R2/R3 above). It does NOT check *structural
+This lint governs ADR *durability* (the rules above). It does NOT check *structural
 section conformance* — whether an ADR carries the required body sections at all. The
 canonical section set is DEFINED once, in `core/schemas/adr-schema.md` §3; this file
 only CITES it (see DOC_SECTION_SET below) and enforces nothing about it.
@@ -71,6 +76,35 @@ R2 EXEMPTIONS (all structural — no per-instance judgment)
   5. A per-file override marker, `<!-- adr-durability: allow-anchor -->`, mirroring
      the repo-integrity / reference-durability marker convention.
 
+R4 SCOPE + EXEMPTIONS (each decided, not defaulted)
+---------------------------------------------------
+SCOPE is the LEADING frontmatter block only, bounded by `frontmatter_bounds()`, and
+within it only the keys in IDENT_FIELDS. A wrapped/continuation value inherits the
+last key, so a multi-line `deciders:` value is covered.
+
+  1. Fenced code blocks — exempt. A worked ADR template that RENDERS a frontmatter
+     block is a rendering, not an identity claim. (Structurally redundant — the
+     leading-block bound already excludes a fenced template further down the file —
+     and kept anyway so the exemption does not depend on that coincidence.)
+  2. `source_observations:` — exempt BY CONSTRUCTION: it is not an identity field.
+     It is the SANCTIONED provenance home, so an issue number there is correct.
+  3. Frozen `Superseded` / `Deprecated` records — exempt, same ground as R2: the
+     record is frozen for the audit trail and the fix would demand a forbidden edit.
+  4. `<!-- adr-durability: allow-anchor -->` — does NOT suppress R4, mirroring R3.
+     The marker's subject is a pinned ANCHOR, not a rotting identity field.
+  5. `repo-integrity: allow-issue-ref` — does NOT suppress R4 either. That marker's
+     over-reach is the defect R4 exists to close: it is a WHOLE-FILE skip at the CI
+     surface that suppresses placement AND validity, so treating it as an R4
+     exemption would let the identity rule be silenced by the very default this
+     rule was written to retire.
+  6. Historical anchors ("as of", …) — NOT applied. An identity field is not a dated
+     claim, so anchoring it historically is not a remedy.
+
+The remedy is never a marker: name the release by its slug, the deciders by role or
+literal name, and move the issue reference to `source_observations:` or to the ADR's
+designated `## References` block with a summary noun phrase, per
+`core/standards/adr-authoring-guide.md` § Issue references in ADRs.
+
 WARN-MODE ONLY AT THE CI SURFACE — ENFORCE-FLIP IS DEFERRED
 -----------------------------------------------------------
 This lint LOCKS a clean baseline; it does not create one. The ADR corpus has not yet
@@ -90,6 +124,7 @@ OUTPUT (TSV) / EXIT CODES
   R2-SHA    <path>:<line>\t<detail>      # hardcoded commit SHA
   R2-COUNT  <path>:<line>\t<detail>      # live corpus-population count
   R3        <path>:<line>\t<detail>      # operator handle
+  R4        <path>:<line>\t<detail>      # issue ref in an identity frontmatter field
   EXEMPT    <path>\t<reason>             # whole-file exemption applied
   COUNT     <n>                          # total violations
 
@@ -172,6 +207,25 @@ HISTORICAL_ANCHORS = (
 OVERRIDE_MARKER = "adr-durability: allow-anchor"
 FROZEN_STATUSES = ("Superseded", "Deprecated")
 
+# ── R4 ───────────────────────────────────────────────────────────────────────
+# Identity fields per `adr-schema.md` §2. The schema's own split is what makes this
+# set principled rather than chosen: it defines these as the record's identity /
+# metadata, and defines `source_observations:` SEPARATELY as point-in-time grounding
+# evidence. `title:` currently carries no live violation and is kept anyway — the
+# schema requires it to match the H1, so a number leaking there is an identity
+# corruption the rule must still forbid. A deliberate zero-population limb, not dead
+# code.
+IDENT_FIELDS = ("title", "release", "deciders")
+# A `#` that opens a bare issue token: not preceded by another `#` (so a doubled hash
+# and a markdown heading are excluded) and not glued to a word character. Mirrors
+# SHA_RE's boundary idiom rather than introducing a second convention.
+IDENT_ISSUE_RE = re.compile(r"(?<![0-9A-Za-z_#])#(\d+)\b")
+# Frontmatter parsing. A line that is blank, or is nothing but a whole-line HTML
+# comment, may PRECEDE the opening `---`.
+FM_SKIP_RE = re.compile(r"^\s*(?:<!--.*?-->)?\s*$")
+FM_DELIM = "---"
+FM_KEY_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*):")
+
 # ── section-set citation (NOT a rule — see the SCOPE block in the module docstring) ──
 # The body-section set is DEFINED in the schema below and CITED here. This copy exists
 # so the docstring's scope claim names a concrete set; `--self-test` asserts the copy
@@ -211,6 +265,58 @@ def strip_fences(lines):
             out.append("")
             continue
         out.append("" if in_fence else line)
+    return out
+
+
+def frontmatter_bounds(lines):
+    """(start, end) 0-based indices of the LEADING `---` frontmatter block, or None.
+
+    TOLERATES blank lines and whole-line HTML comments before the opening delimiter.
+    That tolerance is load-bearing, not cosmetic: a majority of the shipped ADR corpus
+    opens with a durability or repo-integrity marker comment rather than with `---`, so
+    a detector that requires line 0 to be `---` silently resolves NOTHING on those
+    files — it returns "no frontmatter" instead of "frontmatter I could not parse", and
+    a caller cannot tell the two apart.
+
+    This is the SHARED bound. `source_observation_lines()` below still carries its own
+    stricter line-0 rule; repointing it here is the repair owned by the stale-anchor
+    card in this milestone, deliberately left to it so the R2 verdict does not shift
+    under this rule's change.
+    """
+    start = None
+    for i, line in enumerate(lines):
+        if FM_SKIP_RE.match(line):
+            continue
+        start = i if line.strip() == FM_DELIM else None
+        break
+    if start is None:
+        return None
+    for j in range(start + 1, len(lines)):
+        if lines[j].strip() == FM_DELIM:
+            return (start, j)
+    return None
+
+
+def identity_field_findings(raw, body):
+    """R4 — (line_no_1based, key, token) for each issue ref in an identity field.
+
+    `raw` bounds the frontmatter; `body` is the fence-stripped copy the token is read
+    from, so a fenced rendering of a frontmatter block can never yield a finding.
+    """
+    bounds = frontmatter_bounds(raw)
+    if bounds is None:
+        return []
+    start, end = bounds
+    out = []
+    key = None
+    for i in range(start + 1, end):
+        m = FM_KEY_RE.match(raw[i])
+        if m:
+            key = m.group(1)          # a continuation line inherits the last key
+        if key not in IDENT_FIELDS:
+            continue
+        for tok in IDENT_ISSUE_RE.finditer(body[i]):
+            out.append((i + 1, key, tok.group(0)))
     return out
 
 
@@ -289,6 +395,23 @@ def scan_text(path, text, handle, allowed_lines=None):
 
     body = strip_fences(raw)
     src_obs = source_observation_lines(raw)
+
+    # --- R4 (frontmatter identity fields) ---------------------------------------
+    # Keyed on `frozen` DIRECTLY, never on `exempt`: `exempt` is also set by the
+    # per-file anchor marker, and neither that marker nor the repo-integrity
+    # issue-ref marker suppresses R4 — an identity field never becomes durable-
+    # correct, exactly as R3 is never suppressed either.
+    if not frozen:
+        for lineno, key, tok in identity_field_findings(raw, body):
+            if allowed_lines is not None and lineno not in allowed_lines:
+                continue
+            findings.append((
+                "R4", lineno,
+                "issue reference %s in the identity field %r (an identity field names "
+                "what the record IS; move the reference to source_observations: or to "
+                "a designated `## References` block with a summary noun phrase, and "
+                "name the value by its slug / role / literal name)" % (tok, key),
+            ))
 
     for idx, line in enumerate(body):
         if not line.strip():
@@ -549,6 +672,64 @@ def self_test():
     check("R3 is skipped when no handle resolves (never scans nothing silently)",
           rules(CLEAN + "\nAuthored by " + FIXTURE_HANDLE + ".\n", handle=None) == [])
 
+    # R4 — issue refs in identity frontmatter fields. The #NNNNNN tokens below are
+    # SYNTHETIC fixture issue numbers, chosen above any live issue in this repo so a
+    # fixture can never be mistaken for — or collide with — a real reference. Same
+    # discipline as ADR-999 and the synthetic FIXTURE_HANDLE above.
+    # A CLEAN fixture that opens with an HTML-comment marker instead of `---`. This is
+    # the regression arm: the majority of the shipped corpus opens this way, and a
+    # line-0-must-be-`---` bound resolves NOTHING on it.
+    COMMENT_FIRST = "<!-- reference-durability: allow-link -->\n" + CLEAN
+    check("R4 yields nothing on a clean ADR", rules(CLEAN) == [])
+    check("R4 fires on an issue ref in title:",
+          rules(CLEAN.replace("title: ADR-999 — Fixture",
+                              "title: ADR-999 — Fixture for #999901")) == ["R4"])
+    check("R4 fires on an issue ref in release:",
+          rules(CLEAN.replace("status: Accepted",
+                              "release: some-slug (#999901)\nstatus: Accepted")) == ["R4"])
+    check("R4 fires on an issue ref in deciders:",
+          rules(CLEAN.replace('deciders: "operator + Stage 5 spoke"',
+                              'deciders: "operator + Stage 5 spoke (#999901)"')) == ["R4"])
+    check("R4 fires THROUGH a leading HTML comment (the comment-first corpus arm)",
+          rules(COMMENT_FIRST.replace('deciders: "operator + Stage 5 spoke"',
+                                      'deciders: "spoke (#999901)"')) == ["R4"])
+    check("R4 counts every token on one identity line",
+          len([f for f in scan_text(
+              "fixture.md",
+              CLEAN.replace('deciders: "operator + Stage 5 spoke"',
+                            'deciders: "spoke (#999901) + reviewer (#999902)"'),
+              FIXTURE_HANDLE)[0] if f[0] == "R4"]) == 2)
+    check("R4 ignores an issue ref in BODY prose (that is the positional rule's job)",
+          rules(CLEAN + "\nThe intake ticket #999901 framed the criterion.\n") == [])
+    check("R4 ignores an issue ref in source_observations: (the sanctioned home)",
+          rules(CLEAN.replace(
+              "---\n\n# ADR-999",
+              "source_observations:\n  - \"Intake #999901 framed it.\"\n---\n\n# ADR-999")) == [])
+    check("R4 ignores a fenced rendering of an identity field",
+          rules(CLEAN + "\n```markdown\ndeciders: \"spoke (#999901)\"\n```\n") == [])
+    check("R4 ignores a bare number with no '#'",
+          rules(CLEAN.replace('deciders: "operator + Stage 5 spoke"',
+                              'deciders: "operator + Stage 5 spoke 4242"')) == [])
+    check("R4 is NOT suppressed by the adr-durability override marker",
+          rules(CLEAN.replace('deciders: "operator + Stage 5 spoke"',
+                              'deciders: "spoke (#999901)"')
+                + "\n<!-- " + OVERRIDE_MARKER + " -->\n") == ["R4"])
+    check("R4 is NOT suppressed by a repo-integrity issue-ref marker",
+          rules(CLEAN.replace('deciders: "operator + Stage 5 spoke"',
+                              'deciders: "spoke (#999901)"')
+                + "\n<!-- repo-integrity: allow-issue" + "-ref -->\n") == ["R4"])
+    check("R4 is suppressed on a frozen (Superseded) record",
+          rules(CLEAN.replace("status: Accepted", "status: Superseded by ADR-045")
+                .replace('deciders: "operator + Stage 5 spoke"',
+                         'deciders: "spoke (#999901)"')) == [])
+    check("R4 covers a wrapped continuation line of an identity field",
+          rules(CLEAN.replace('deciders: "operator + Stage 5 spoke"',
+                              'deciders: "operator\n  + Stage 5 spoke (#999901)"')) == ["R4"])
+    check("frontmatter_bounds resolves through a leading HTML comment",
+          frontmatter_bounds(COMMENT_FIRST.splitlines()) == (1, 5))
+    check("frontmatter_bounds returns None when there is no frontmatter",
+          frontmatter_bounds(["# Title", "", "prose"]) is None)
+
     # Delta posture — a finding on an unchanged line is not re-flagged.
     dirty = CLEAN + "\nCommit f0a0516 did it.\n"
     f_all, _ = scan_text("fixture.md", dirty, FIXTURE_HANDLE)
@@ -592,7 +773,9 @@ def self_test():
 # ── main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    ap = argparse.ArgumentParser(description="ADR durability lint (status enum / SHAs + counts / handle).")
+    ap = argparse.ArgumentParser(
+        description="ADR durability lint (status enum / SHAs + counts / handle / "
+                    "issue refs in identity frontmatter).")
     ap.add_argument("--root", default=".", help="repo root")
     ap.add_argument("--files", nargs="*", default=None,
                     help="explicit ADR paths (default: the whole ADR corpus)")

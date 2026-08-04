@@ -279,14 +279,24 @@ red CI:
    also keeps the reference resolvable-in-repo, which the **Issue-reference
    validity** gate requires (it rejects redirects, PR numbers, and 404s). One rule —
    bare `#N` — clears both gates.
-2. **Declare the file-level marker once, near the top of the file.** Because ADRs
-   place `#N` in frontmatter and body prose — locations the issue-ref gate does NOT
-   treat as reference blocks (it recognizes only `### Issue References` /
-   `### References` / `## Related` / `## Provenance` / `### Source(s)`) — add the
-   marker as an HTML comment after the frontmatter and before the title:
-   `repo-integrity: allow-issue-ref` (wrapped in an HTML comment). Note `## Related
-   ADRs` is NOT the recognized `## Related` slug, so do not rely on heading
-   placement — the file-level marker is the reliable mechanism.
+2. **Put the reference in a sanctioned home — not behind the file-level marker.** An
+   ADR has exactly two sanctioned homes for a provenance `#N`: the
+   `source_observations:` frontmatter block, and a designated `## References` section
+   placed after `## Related ADRs`. Every line in that section pairs the number with a
+   summary noun phrase, so the meaning survives a renumber. The issue-ref gate
+   recognizes `Issue References` / `References` / `Related` / `Provenance` / `Source` /
+   `Sources` / `Source(s)` as reference-block headings, at any level; `## Related ADRs`
+   is deliberately not among them, because a bare `#N` is prohibited there outright —
+   use `ADR-NNN` form for cross-ADR links. The four placement zones and the full rule
+   are stated once, in
+   [`adr-authoring-guide.md` § Issue references in ADRs](../standards/adr-authoring-guide.md).
+   The file-level marker `repo-integrity: allow-issue-ref` (wrapped in an HTML comment)
+   is a **rare exception**, not the reliable mechanism: it is warranted only when the
+   file *displays* an issue-reference construct as its subject matter (or its numbers
+   are synthetic / out-of-repo) **and** neither relocation into a reference block nor
+   an inline summary is available. Carrying provenance is not demonstration, so an ADR
+   essentially never qualifies. A marker declared under that criterion carries a
+   trailing rationale inside the comment naming which limb applies.
 3. **This composes with reference-durability** (same file, § Reference Durability):
    lead with self-describing prose and demote a bare `#N` to a provenance footnote,
    so the ADR still reads correctly after issues renumber or the repo moves. The
@@ -303,7 +313,7 @@ positional rule (last row) — its only remedy is to rewrite the reference inlin
 
 | Marker | Family | Suppresses (what the gate would otherwise flag) |
 |---|---|---|
-| `<!-- repo-integrity: allow-issue-ref -->` | repo-integrity | A resolving `#N` placed outside a recognized reference block, or that the issue-ref validity gate would otherwise reject (a separate validity check still rejects 404s / redirects / PR numbers — the marker does not suppress that) |
+| `<!-- repo-integrity: allow-issue-ref -->` | repo-integrity | **The whole issue-ref gate, for the whole file** — placement *and* validity. The gate's override test runs at file scope before its per-line loop, so once the marker is present a 404, a redirect, a transferred issue, a pull-request number and a deprecated `IMP-NNN` all pass unexamined. There is no residual validity net behind it. That blast radius is why the marker is a rare exception under the two-limb criterion (see authoring discipline item 2), never a default remedy |
 | `<!-- repo-integrity: allow-memory-ref -->` | repo-integrity | A reference to an operator-memory name (a `feedback_*` / `reference_*` / `project_*` memory) in durable-corpus prose — used when a memory is deliberately named as provenance / a composes-with sibling |
 | `<!-- repo-integrity: allow-dead-file-ref -->` | repo-integrity | A `[text](path)` link / `![alt](path)` image whose target file or `#anchor` is missing (used for a deliberately-forward or intentionally-absent target) |
 | `<!-- repo-integrity: allow-depersonalization -->` | repo-integrity | Operator/collaborator identifying values in a `core/`/`release/`/`operations/`/`packages/` file (rare; personal data is normally kept out per the secrets policy) |

@@ -93,11 +93,11 @@ core/specs/reversibility-protocol.md.>
 <Cross-ADR composition / supersession links, in ADR-number form (ADR-005) — never issue #N.>
 ```
 
-Author ADR body/frontmatter references in **ADR-number form** (`ADR-005`), never issue `#N` — this keeps the repository-integrity issue-reference gate green (see both ADR READMEs' § Repo-integrity authoring discipline).
+The template's `never issue #N` note is scoped to **cross-ADR links** — a sibling ADR is always addressable by its own number, which outlives the issue that occasioned it. It is not a blanket prohibition on issue references anywhere in an ADR. Where an issue reference is legitimate, § Issue references in ADRs below states which zone it belongs in, the reference block that holds it, and the narrow criterion under which the repository-integrity override marker is warranted.
 
 ### Durability rules (enforced by the ADR durability lint)
 
-Three authoring rules keep an ADR readable after the events the platform actually performs — history rewrites, corpus growth, and repository moves. They are enforced by a repository-integrity lint, [`release/tools/check-adr-durability.py`](../../release/tools/check-adr-durability.py), which runs as a job on every pull request that touches an ADR and carries a `--self-test` covering each rule.
+The authoring rules below keep an ADR readable after the events the platform actually performs — history rewrites, corpus growth, and repository moves. They are enforced by a repository-integrity lint, [`release/tools/check-adr-durability.py`](../../release/tools/check-adr-durability.py), which runs as a job on every pull request that touches an ADR and carries a `--self-test` covering each rule. The same lint enforces one further rule — the identity-frontmatter rule in § Issue references in ADRs below. That rule is about *placement*, not prose durability, so it is stated there rather than in this table.
 
 | Rule | Write this | Not this |
 |---|---|---|
@@ -108,6 +108,51 @@ Three authoring rules keep an ADR readable after the events the platform actuall
 The stale-anchor rule exempts, by construction: fenced code blocks (a worked command example is not durable prose); the `source_observations:` frontmatter block (the schema defines it as point-in-time grounding evidence, so pinning it is correct); a line carrying an explicit historical anchor; and any `Superseded` or `Deprecated` record, which is frozen for the audit trail under the supersede-not-edit policy below. A file that genuinely needs a pinned anchor declares the marker `<!-- adr-durability: allow-anchor -->` once, as an HTML comment anywhere in the file — a deliberate, auditable declaration, exactly as the reference-durability markers work. The marker never suppresses the handle rule.
 
 The lint currently reports without blocking. It locks a clean baseline rather than creating one, so it graduates to blocking only after the ADR corpus has had its full structural-conformance pass and the usual warn-log shakedown has run.
+
+### Issue references in ADRs (placement, the reference block, and the marker criterion)
+
+An ADR is durable corpus and outlives the tracker it was authored beside. A bare issue number sits on **rung 5** of the durability ladder in [`reference-durability-standard.md`](reference-durability-standard.md): it breaks on renumber and on repository migration, and it resolves at all only for a reader who has the tracker in front of them. That standard therefore permits a bare `#N` in a durable file **only inside a designated reference block, and only alongside a summary noun phrase** — the summary is what still carries the meaning once the number no longer does.
+
+The template's `never issue #N` note and that rung-5 permission are the same rule read at two scopes, not a contradiction. Every issue reference in an ADR falls into exactly one of four zones, and the zone decides the rule.
+
+| # | Zone | Rule | Why this zone |
+|---|---|---|---|
+| 1 | **Cross-ADR links** — `## Related ADRs`, supersession pointers | ADR-number form (`ADR-005`). **Never `#N`.** | A sibling ADR is rung 2 and travels with this record; the issue that occasioned it does not. |
+| 2 | **Provenance** — the `source_observations:` frontmatter block, or the designated reference block below | A bare `#N` is **permitted at rung 5**, and **must** carry a summary noun phrase on the same line. | [`adr-schema.md` §2](../schemas/adr-schema.md) defines `source_observations:` as point-in-time grounding evidence, so pinning it is correct rather than rot. The summary is what survives the number. |
+| 3 | **Identity frontmatter** — `title:`, `release:`, `deciders:` | **Never `#N`.** Name the release by its slug, the deciders by role or literal name, the record by its title. **No marker suppresses this** — there is no override path, only the rewrite. | An identity field says *what this record is*. A number that rots there corrupts identity, not merely provenance. Enforced as rule **R4** by the durability lint, which exempts only fenced renderings, `source_observations:` (not an identity field), and frozen records. |
+| 4 | **Body prose** — `## Context`, `## Decision`, `## Alternatives Considered`, `## Consequences` | State the fact. A bare `#N` here is a rung-5 reference outside a designated block, so it is **prohibited** — rewrite it as a summary, or move it to the reference block. | The positional rule is the one construct in the durability standard with **no** override marker: rewriting inline is the only remedy (its removal-not-demotion rule). |
+
+**The designated reference block.** An ADR's designated reference block is a single H2 section, spelled exactly:
+
+```markdown
+## References
+```
+
+Place it **after `## Related ADRs`**, as the last section of the file. The required body sections are a minimum, not a closed set ([`adr-schema.md` §3.1](../schemas/adr-schema.md)), so a `## References` section is a conformant addition rather than an extra-schema one. Every line inside it pairs the bare number with a summary noun phrase — `#N — the intake ticket that framed the two-limb criterion`, never a bare number alone, because a line that is only a number is exactly the reference that stops carrying meaning on renumber. An ADR with no provenance issue references omits the section rather than shipping an empty heading.
+
+**Why `## References` specifically.** Two independent gates evaluate placement — the repository-integrity issue-reference gate and the reference-durability detector — and they do **not** recognize the same heading set. `Issue References`, `References`, `Provenance`, `Source` and `Sources` are recognized by **both**; `Related` and `Source(s)` are recognized by the issue-reference gate **only**. `## References` therefore sits in the intersection: an ADR that carries it satisfies both gates and needs no override marker for its provenance, whereas an ADR relying on `## Related` would pass one gate and be flagged by the other. That is the whole reason this guide names one heading rather than offering the recognized set as a menu.
+
+`## Related ADRs` is deliberately in **neither** set. Zone 1 prohibits a bare `#N` there outright, and because these gates treat the first recognized heading as a *cut point* — everything below it counts as placed — recognizing `## Related ADRs` would lift the cut above that section and make a gate accept exactly the placement this guide forbids.
+
+**When the override marker is warranted.** The file-level marker `repo-integrity: allow-issue-ref` (wrapped in an HTML comment) suppresses the issue-reference gate for the **whole file** — placement *and* validity, so a 404, a redirect, a transferred issue, and a pull-request number all pass unexamined once it is present. It is warranted only when **both** limbs hold:
+
+- **Limb 1 — demonstration or synthetic necessity.** The file must *display* an issue-reference construct as its subject matter — self-documentation, a template, a worked example, a test fixture — **or** its numbers are synthetic or out-of-repo and cannot resolve by construction. Carrying provenance is not demonstration.
+- **Limb 2 — remedy exhaustion.** Neither remedy is available: the reference cannot be relocated into a designated reference block, because it is inline subject matter rather than provenance; **and** it cannot be replaced by an inline summary without destroying what the file is for.
+
+**Declaration obligation.** A marker declared under this criterion carries a trailing rationale on the same line, inside the comment, naming which limb applies — for example, a marker followed by `— limb 1: the numbers below are synthetic fixture ids, not repo issues`. A bare marker with no rationale is not a declaration, it is a silenced warning, and a reviewer cannot tell the two apart without it. The form is already practiced in the deploy test suite; the obligation makes it the rule.
+
+**An ADR essentially never qualifies.** An ADR's legitimate issue references are *provenance*, and provenance has two sanctioned homes — `source_observations:` and `## References`. Limb 1 therefore fails for essentially every ADR, and reaching for the marker is the signal that a reference belongs in one of those homes instead. The marker is not an ADR-authoring tool.
+
+**The adoption ratchet.** Marker adoption is measured, never asserted — derive both numbers over the same population, and record the ratio rather than either figure:
+
+```bash
+ADR_TOTAL=$(ls core/ADRs/ADR-*.md release/ADRs/ADR-*.md | wc -l)
+ADR_MARKED=$(git grep -lE 'repo-integrity:[[:space:]]*allow-issue-ref' \
+               -- 'core/ADRs/ADR-*.md' 'release/ADRs/ADR-*.md' | wc -l)
+# adoption ratio = ADR_MARKED / ADR_TOTAL
+```
+
+The rule is monotonic: **the ratio must not increase across a release**, and every net-new marker must carry a rationale naming its limb. Reducing the existing population is a corpus sweep, graded on that sweep and not on any single authoring change. Taking the numerator over a directory glob rather than the `ADR-*.md` glob mixes populations — the ADR READMEs are not ADRs — so both arms use the same glob above.
 
 ## Worked example
 
