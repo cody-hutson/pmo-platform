@@ -57,7 +57,7 @@ Restructure the bypass-mode hook registry as a **drop-in directory of per-hook s
 
 - **Generator-absent fallback fails loud.** If `/usr/bin/python3` or the generator is absent, the index-freshness check flags rather than silently passing a potentially-stale index — the same fail-loud posture as the other content checks.
 
-## Alternatives rejected
+## Alternatives Considered
 
 - **D1 (per-hook split + hand-maintained thin index).** Eliminates the cascade but **not** the drift: a thin index is hand-maintained, so a hook can still be added without an index row and nothing catches it. This is the failure mode already live (the monolith's own table is a hand-maintained index that drifted to 7). Fixes the symptom the milestone names and leaves the disease the evidence exposes. Defensible only if the operator explicitly accepts ongoing manual-registry drift risk for zero new tooling — the operator chose otherwise.
 

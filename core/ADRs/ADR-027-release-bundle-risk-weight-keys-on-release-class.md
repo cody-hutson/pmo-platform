@@ -67,11 +67,11 @@ effective_pts = round_half_up( sum(member_pts) * class_weight )
 - **Seed magnitudes carry calibration debt:** the weights are MEDIUM-confidence until the 3-release recalibration; a class whose releases systematically over/under-run its band may need a weight adjustment that nobody performs. Mitigated by the `[CALIBRATE-AFTER-3]` marker + the RELEASE_LOG calibration trigger.
 - **Gate fires after composition, not during it:** the downstream enforcement gate backstops at the Stage 3→4 boundary (after the Release Class is declared at B3) rather than shaping the bundle at Phase A5. Accepted: the warn-then-enforce posture softens the rework cost; surfacing `effective_pts` at A5 as an advisory is a future enhancement, not this decision.
 
-### Reversibility
+## Reversibility
 
 **CHEAP → MODERATE.** CHEAP at ship — additive only: revert the release PR (one config inline-table, additive doctrine sub-blocks, one deploy-check allowlist entry). Every addition ships a default and no existing field/row/enum is mutated, so existing readers keep working. Trends MODERATE once a downstream size-bound enforcement gate and `release-planner` wire into `effective_pts` and the weights are recalibrated under the rule.
 
-## Options considered
+## Alternatives Considered
 
 | Option | Verdict | Why |
 |---|---|---|

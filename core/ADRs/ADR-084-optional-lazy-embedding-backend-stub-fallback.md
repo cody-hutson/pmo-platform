@@ -39,7 +39,7 @@ The Stage-5 spike confirmed there is **no existing embedding substrate to reuse*
 
 **D4 — Home in `core/ADRs/`.** The optional-heavy-dependency posture is a cross-cutting engineering/supply-chain precedent for the whole eval-scripts corpus, not a release-pipeline (SDLC) stage decision, so this record lives in `core/ADRs/`.
 
-## Alternatives rejected
+## Alternatives Considered
 
 | Option | Trade-off | Verdict |
 |---|---|---|

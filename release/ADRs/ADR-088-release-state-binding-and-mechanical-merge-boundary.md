@@ -69,7 +69,7 @@ A committed root `.gitattributes` binds `merge=union` to exactly the **pure-addi
 
 Both decisions follow from it. Gate 3 stops asserting a binding that has not happened. The merge driver stops mechanically resolving surfaces whose rows supersede one another. A future surface joins the union set only if it is genuinely append-only; a future gate criterion asserts only what is bound at the moment it fires.
 
-## Alternatives considered
+## Alternatives Considered
 
 **For D1 — make the existing criterion conditional.** Rejected on grounds of fact: there was no existing criterion in the gate spec to make conditional. The AC's verb was authored against prose in a different file.
 

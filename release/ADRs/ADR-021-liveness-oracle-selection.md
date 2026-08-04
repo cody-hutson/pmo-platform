@@ -55,7 +55,7 @@ rewrites the row in place to the live-session skip, and an oracle unavailable at
 re-check time converts residual REMOVEs fail-closed. The residual exposure is
 the seconds between the re-check and the porcelain call.
 
-## Alternatives considered and rejected
+## Alternatives Considered
 - Git lock-holder ∩ process table: refuted empirically — locks absent for live
   sessions (under-detection re-introduces the reap risk).
 - mtime recency: prohibited by the requirement itself (liveness is knowable, not

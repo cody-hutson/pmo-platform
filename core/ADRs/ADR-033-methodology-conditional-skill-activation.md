@@ -49,7 +49,7 @@ Adopt a **methodology-conditional skill-activation convention** with two coupled
 - **No high-blast-radius edit** to the shared five-model file; the archetype matrix is the single home for archetype-specific parameterization.
 - **Methodology stays config, not skill-fork** — consistent with the platform's methodology-as-config posture (the work-org-mapping framework renders the chosen view); the suite's public corpus stays methodology-neutral and the RTE projects the SAFe view from config.
 
-## Alternatives rejected
+## Alternatives Considered
 
 - **Add a 6th (SAFe) column to `_shared/five-model-variations.md`.** Rejected: ~5/265 blast radius for one role's benefit; the archetype matrix already carries per-archetype rows and is the correct home.
 - **Always-active RTE (no gate).** Rejected: cross-fires with `pmo-scrum-master` / `pmo-program-manager` under the default Scrum config and emits a methodology view the operator's config does not run.

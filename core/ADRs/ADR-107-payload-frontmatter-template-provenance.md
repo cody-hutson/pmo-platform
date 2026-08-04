@@ -65,7 +65,7 @@ A **payload-frontmatter template** is a template whose top-of-file YAML block is
 | **Deliberately not decided** | The sidecar's **filename form and field set**. Two forms are live — a `.meta.yml` suffix in use today, and a `.provenance.yml` form the template protocol declares with zero files yet written to it. Reconciling them belongs to the work that generalizes the placement convention. |
 | **Deliberately not done** | The migration. No sidecar file is created by this decision. Authoring the seven is separate, sequenced work, and this record is what lets it proceed against an answer instead of an assumption. |
 
-## Alternatives considered
+## Alternatives Considered
 
 **Declare the seven a permanently-exempt class.** This was the other disposition explicitly on the table, and it is the cheaper one — it requires no sidecar and no follow-on work. **Rejected**, because the exemption would be permanent for a *removable* cause. Nothing about these seven makes them intrinsically un-provenanced; they are ordinary canonical templates that happen to have a full frontmatter slot, and the mechanism that frees the slot already exists in the protocol that governs them. Three costs make the exemption worse than it looks: the provenance population becomes permanently un-auditable, since every future coverage check must carry a seven-file special case forever; `template_family` is stranded for the same seven by the same argument, which is the exact outcome the taxonomy work exists to prevent; and an exemption granted for a mechanical reason tends to be read later as a statement that these templates *don't need* provenance, which is not true and was never the finding.
 

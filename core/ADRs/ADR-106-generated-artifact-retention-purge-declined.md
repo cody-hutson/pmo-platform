@@ -105,7 +105,7 @@ A ledger has exactly two ways to get smaller: relocate content to an archive seg
 
 **Re-open trigger for Decision 2.** **T-E** — either (i) a consumer is introduced that must read any of the three **whole** rather than targeted, which converts the read-path obligation into a real cost the read side cannot absorb; or (ii) the sole-copy finding is retired, meaning every field in all three acquires a source outside the file, at which point `Reference` becomes the correct class, re-acquisition becomes genuinely available, and the volume question can be re-asked on different terms. Both are checkable by inspection. Deliberately no byte threshold: minting one would repeat the N=0 grounding failure recorded above, and the growth rate here is a projector emitting one entry per release, which is bounded by the release cadence rather than by anything a threshold would catch earlier.
 
-## Alternatives considered
+## Alternatives Considered
 
 **Build the terminal as the card frames it** — a retention window plus an operator sign-off gate, hard-deleting archived-past-retention generated artifacts. **Rejected as not specifiable**, on three independently sufficient grounds: the scope predicate evaluates to the empty set for the whole live population, the retention constant enumerates at zero sources, and the reclaim is 0.07% of the workspace. This is not a declined option; it is an option that cannot be written down today.
 

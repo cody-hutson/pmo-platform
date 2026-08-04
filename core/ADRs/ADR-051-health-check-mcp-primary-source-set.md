@@ -42,7 +42,7 @@ The skill projects findings onto the canonical `S0-NONE..S3-STRUCTURAL` stalenes
 - **(−)** Adds an MCP-probe step to run start — cheap (a try/fallback per connector).
 - **Reversibility: MODERATE · Confidence: MEDIUM.** The source-set and drift-direction are a documented rule (a doc edit to change — CHEAP); the degradation envelope is MODERATE but isolated to one skill. Confidence is MEDIUM on the SharePoint gap (it resolves if/when an MCP appears) and HIGH on the drift-resolution direction and the MEDIUM-cap rule.
 
-## Alternatives considered
+## Alternatives Considered
 
 | Option | Decision | Rationale |
 |---|---|---|

@@ -121,14 +121,14 @@ architectural-invariant question (cycles), not a "zero references" question.
   to its own needs; a needed change must be made in the core owner (where both consumers see it) —
   which is the intended behavior for a shared safety control, not a defect.
 
-### Reversibility
+## Reversibility
 
 **MODERATE / Confidence HIGH.** Reversal is a new superseding ADR plus, if a fork were ever chosen,
 materializing the local copy and resolving the resulting Check 13b collision. Pre-application the
 change is CHEAP (it documents the recommended posture the #256 build already follows); it crosses to
 MODERATE once additional operations skills cite this ADR for their own core-control consumption.
 
-## Options considered
+## Alternatives Considered
 
 | Option | Decision | Rationale |
 |---|---|---|

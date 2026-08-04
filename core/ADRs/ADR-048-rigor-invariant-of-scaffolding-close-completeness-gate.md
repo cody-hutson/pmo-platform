@@ -38,7 +38,7 @@ A prior release's incomplete close (a missing published GitHub Release, surfaced
 
 The gate ships warn-mode-initial and dormant-by-default (a cutover sentinel keeps it from retroactively flagging historical rows), with the cutover anchored strictly **after** the introducing release's merge — a release never gates its own close (the reflexive-pipeline-loop discipline). A regression proves the invariant: a deliberately-abbreviated scaffold (a VERIFIED row missing a Stage-13 output) is still caught before the release can be reported complete.
 
-## Alternatives considered
+## Alternatives Considered
 
 - **Full transcription of the Phase checklist into every sub-task body** — rejected: drift-prone (every stage-spec edit must re-sync every scaffold) and the copy itself becomes the new abbreviation surface. Bind-by-reference is the lower-drift default; transcription remains a permitted fallback.
 - **Extend the existing companion-presence check in place** — rejected: it conflates two distinct contracts (DEPLOYED-companion-presence vs VERIFIED-full-set-completeness, which additionally covers note-content and body-drift) and disturbs that check's in-flight warn-mode shakedown.

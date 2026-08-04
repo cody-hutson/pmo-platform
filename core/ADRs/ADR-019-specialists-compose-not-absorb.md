@@ -144,7 +144,7 @@ forward-reference: the audit cites this ADR; this ADR does **not** consume the a
 output and does not depend on it landing first. The audit is named in the References
 block below.
 
-## Options considered
+## Alternatives Considered
 
 | Option | Decision | Rationale |
 |---|---|---|

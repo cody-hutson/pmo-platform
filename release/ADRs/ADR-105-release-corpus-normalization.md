@@ -120,7 +120,7 @@ The ticket's aggregate claim is replaced by a per-contract verdict. **1 retires 
 
 **Six of the eight never read a derived surface.** The duplication's cost was the grandfathering scar, not the contract count — and that scar goes vestigial under one writer.
 
-## Alternatives considered
+## Alternatives Considered
 
 **A — One source: import headline, summary and theme into the LOG as structured fields.** This is what the ticket literally asks for, it produces a genuinely single authoritative file, and it makes `Theme` recoverable if the INDEX were ever lost. **Rejected**, and surfaced explicitly at Collective Review rather than decided silently, because it is a content migration of ~160 headlines, ~156 summaries and every theme cell; it breaks all four field-positional consumers of the LOG's schema; and it grows the exact file a sibling card in this release exists to bound. It optimizes for a file count while degrading the two properties the release actually needs — a bounded LOG and a stable field-positional schema.
 

@@ -70,7 +70,7 @@ The following candidate edits were **declined**:
 
 CHEAP / Confidence HIGH. The policy file can be relocated by moving it and updating the ≤4 cross-references. The `composes_with:` frontmatter explicitly tracks the relationships so the move is mechanical.
 
-## Related
+## Related ADRs
 
 - `core/standards/secrets-handling-policy.md` — the substrate this ADR codifies
 - `core/standards/composition-surface-spec.md` — precedent pattern for "category-owner spec" placement at `core/standards/`

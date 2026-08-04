@@ -155,9 +155,7 @@ back-compat. Disable via `.scope-segregation-mode=off`, the allowlist, or
 `CLAUDE_HOOK_BYPASS=1`; the enforce flip for the fuzzy layer is a separate operator gate.
 Removing the capability is a hook deregistration + schema revert with no data migration.
 
-## Related
-
-### Related
+## Related ADRs
 
 - ADR-031 — autonomy-ceiling unified payload-triggered hook (the payload-trigger +
   own-mode-file + warn-initial precedent this ADR follows).

@@ -137,7 +137,7 @@ catalog (CMDB). There is exactly one skill catalog; routing is a typed view of i
   yet required — manual review at backfill + each skill's definition-of-done still covers drift at this
   roster size). This is the consistency guard that keeps the single catalog and `deploy.sh` from drifting.
 
-## Alternatives rejected
+## Alternatives Considered
 
 - **(B) CMDB as a separate `core/schemas/skill-cmdb-schema.md` reference-schema** (the prior spoke's
   recommendation). Rejected by operator override: it leaves **two** skill catalogs — `registry.md` (19

@@ -96,7 +96,7 @@ The concrete realization for the operator who both builds and operates is record
 
 Net: `CLAUDE_WORKSPACE_ROOT` stays canonical for **content** (S3); XDG config for **choices** (S2); XDG state/cache for **derived internals** (a subset of S4). No mass migration.
 
-## Options Considered
+## Alternatives Considered
 
 **Decision 2 — acquisition model**
 

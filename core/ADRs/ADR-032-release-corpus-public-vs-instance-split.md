@@ -88,7 +88,7 @@ The operator-instance corpus root resolves via **`${CLAUDE_WORKSPACE_ROOT:-$HOME
 
 **Neutral / known:** Reversibility MODERATE throughout (HEAD-only); no `core/schemas/` changes; no Anthropic upstream surface. The public `CHANGELOG.md` is the sole public projection of the now-instance `notes/`; its Section-6a source is intentionally instance-side, so CHANGELOG entries are **not regenerable from a clean clone** — a documented design choice (the thin-public-surface trade of Decision 2), not an oversight.
 
-## Alternatives considered (from the Stage 5 design-exploration)
+## Alternatives Considered
 
 | Decision | Chosen | Rejected (kill-reason) |
 |---|---|---|
@@ -102,7 +102,7 @@ The operator-instance corpus root resolves via **`${CLAUDE_WORKSPACE_ROOT:-$HOME
 
 The execution issue (filed post-review per D-1412-Scope) carries: `.gitignore` block + negations; `git rm --cached` + move of LOG/DIGEST/notes/plans to `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/`; `RELEASE_INDEX.md` → empty public seed; re-point Check 32 + `generate_release_index.py` + `automated-closeout.sh` + `stage-13-close.md` §5 Phase B + `release-corpus-schema.md` (and converge the 21 `deploy.sh` `PMO_INSTANCE_PATH` fallthroughs onto `CLAUDE_WORKSPACE_ROOT`); AUDIT `check-doc-links.py`; `install.sh` bootstrap; cross-PR overlap re-audit at its Stage 9/12. AC: fresh clone shows no maintainer content; generator self-test PASS against instance; Check 32 resolves to instance; second-install produces its own corpus. Reversibility MODERATE / MEDIUM.
 
-## Related
+## Related ADRs
 
 - **ADR-017** (distribution architecture — S1/S3 surfaces + the canonical `CLAUDE_WORKSPACE_ROOT` resolver; the model this applies)
 - **ADR-012** (instance-content de-scope to operator-local)

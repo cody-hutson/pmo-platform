@@ -37,7 +37,7 @@ The forks: **(1)** what stays inline vs. becomes a link? **(2)** how does migrat
 
 4. **The consumer count is parameterized, not hardcoded.** `project-schema.md`'s "13 PROJECT.md-reading skills" hardcode is re-grounded to "the §8 consumer table" so the count stays accurate as consumers are added/removed (parameterize-over-hardcode); AC-4 back-compat reads the count from the live table, not the card's frozen "13".
 
-## Alternatives considered
+## Alternatives Considered
 
 - **Keep the inline-table monolith** — rejected: it is the per-project duplication and edit-hunt problem #362/#363 exist to eliminate; with the `_pmo/` SSOT now available, the tables are redundant copies.
 - **Move Methodology / Status to links too** — rejected: the §8 consumers parse them in place; linking them out would break every consumer's read path (a hard back-compat regression) for no dedup benefit (Methodology/Status are project-scoped, not shared entities).
