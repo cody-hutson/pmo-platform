@@ -97,7 +97,7 @@ Recorded from this record's own § Context, which tables the three candidate mec
 - **ADR-078** (security-hook dependency-resolution posture) — the nearest prior hook-scoped decision. It governs how a *gate* hook resolves its dependencies; this ADR introduces the second hook shape that decision's framing did not contemplate.
 - No superseding or superseded relationship. This is the first ADR to govern agent-loop re-entry as a class.
 
-### Issue References
+## References
 
 - #2423 — the per-session self-retrospection capability whose trigger introduced the `Stop` registration; the ship-inert activation boundary and its pre-activation conditions attach to that work item.
 - #261 — release milestone `pipeline-telemetry-tail`, under which the hook class was reviewed and this record was directed at the plan-review gate.

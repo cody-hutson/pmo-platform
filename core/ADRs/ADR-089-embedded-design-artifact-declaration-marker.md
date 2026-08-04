@@ -84,7 +84,7 @@ An earlier framing was eliminated before the matrix: identification **cannot be 
 - **ADR-015** (centralized-diagram location) — the placement layer this decision sits atop. ADR-015 decided *where* dedicated artifacts live; ADR-089 decides *how* both dedicated and embedded artifacts are made identifiable. No conflict — ADR-089 is the identification layer over ADR-015's placement layer.
 - No superseding or superseded relationship. This is the first ADR to govern design-artifact identification.
 
-### Issue References
+## References
 
 - #3725 — the Phase 0.5 identification-mechanism story this ADR is the design record for (promotes `depicts:` to required, adds the embedded-artifact marker + per-flow-type detection criteria).
 - #3614 — the enumeration spike whose partial run surfaced that identification is the missing prerequisite, and whose operator input named the index-drift failure mode this decision avoids.

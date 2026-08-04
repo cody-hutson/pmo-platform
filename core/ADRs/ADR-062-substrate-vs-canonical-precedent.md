@@ -81,5 +81,5 @@ Two things were missing:
 - **ADR-043** (staleness-confidence canonical representation) — sibling discipline on how stale-vs-current is represented; this ADR governs *where the fix lands* once a substrate citation is found stale, ADR-043 governs *how staleness is labeled*.
 - The Stage-5 procedure that carries this decision is **Phase A1.5** in `release/references/pipeline/stage-05-solutioning.md` (canonical-surface enumeration + cross-repo `originally #NNN` translation), wired into the A1 design-scope-assessment surface.
 
-### Issue References
+## References
 Originating ADR-class deliverable: #307 (milestone `67-spoke-execution-safety`, epic #1190). Composes with: #47 (substrate-drift disposition defers to this canonical-surface precedent) and #497 (issue body is directional, not authoritative). Pre-codification applied precedent: the v1.02-triage-and-related release (canonical edit on the triage spec rather than a substrate `gh issue edit`).

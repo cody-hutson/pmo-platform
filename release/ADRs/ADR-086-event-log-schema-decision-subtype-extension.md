@@ -83,7 +83,7 @@ The alternative was to leave § 3 untouched and re-point `stage-05-solutioning.m
 
 - No superseding or superseded relationship. This is the first ADR to govern the § 3 extension pattern itself; prior schema content was introduced without a dedicated architectural record, which is precisely the gap D1 elected to close before a second co-owner (#2423) touched the file.
 
-### Issue References
+## References
 
 - #3301 — event-log schema rejects the codified `cascade-sweep-block` emission (the fork-A repair recorded here).
 - #2423 — per-session self-retrospection; adds the net-new top-level `event_type=session-retro` to the same schema (the co-owned half; extends this ADR's pattern rather than superseding it).
