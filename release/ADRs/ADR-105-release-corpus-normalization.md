@@ -39,7 +39,7 @@ Four files in the release corpus record the same fact on every release — *rele
 The ticket's remedy was *"`RELEASE_LOG.md` is the single authoritative release record, and the other three are generated from it."* Three premises in that sentence are false, and one of them changes the design.
 
 1. **The four surfaces were not hand-maintained.** The close-out already wrote all four programmatically. The defect was *no single projection*, not *no automation* — which makes the work a collapse-four-writers refactor rather than a build-three-generators project.
-2. **The LOG cannot be the single source.** It carries neither a `# ` headline nor a `summary:` field. Forcing the narrative onto it would mean importing roughly 160 headlines and 156 summaries into a file that is already ~96 % prose and is the exact file a sibling card in this same release exists to bound.
+2. **The LOG cannot be the single source.** It carries neither a `# ` headline nor a `summary:` field. Forcing the narrative onto it would mean importing the roughly 160 headlines and 156 summaries counted at the time into a file that is already ~96 % prose and is the exact file a sibling card in this same release exists to bound.
 3. **"Six of seven contracts become unnecessary" is false in both terms.** There are **eight** (the census omits the close-completeness check entirely), and **exactly one** retires. Six of the eight never read a derived surface at all — one of them compares a *published GitHub Release body* to an *in-repo note*, and retiring it on the ticket's arithmetic would have removed a live, unrelated control.
 
 ## Decision

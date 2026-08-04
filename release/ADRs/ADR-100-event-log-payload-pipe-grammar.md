@@ -3,7 +3,7 @@ title: "ADR-100 — Event-log payload pipe grammar (escaped `\\|` as the canonic
 status: Proposed
 date: 2026-07-27
 release: decision-telemetry-emission (#295) (v3.100 provisional; bound at Stage 12)
-deciders: "Operator rendered D-1 (WIDEN, fork A) at the Wave-1 Decision Briefing; the Stage 5 Solutioning spoke (#4056) selected the mechanism (candidate A2) after falsifying the hub's original candidate rule against all 8 consumers; Stage 6 Engineering (#4057) authored it; operator ratifies at the Stage 9 plan-review gate"
+deciders: "Operator rendered D-1 (WIDEN, fork A) at the Wave-1 Decision Briefing; the Stage 5 Solutioning spoke (#4056) selected the mechanism (candidate A2) after falsifying the hub's original candidate rule against all event-log consumers; Stage 6 Engineering (#4057) authored it; operator ratifies at the Stage 9 plan-review gate"
 tags: [release-ops, telemetry, event-log, schema, payload-grammar, validation, guard, observability, ssot]
 source_observations:
   - "`stage-05-solutioning.md` § 11 codifies a `decision` / `cascade-sweep-block` emission whose payload carries a multi-value trigger list separated by pipes, but `append-pipeline-event.sh` rejected every payload containing a pipe — so the pipeline instructed an emission its own validator refused. Verified live: the § 11 literal payload exits 1 on unfixed main."

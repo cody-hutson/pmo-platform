@@ -71,7 +71,7 @@ the seconds between the re-check and the porcelain call.
   measured negligible cost (0.26 s).
 - All-fd liveness predicate (`lsof -Fn` without `-d cwd`, adversarial
   counter-design): a strict detection superset covering open-fd holders, but
-  measured at 6.99 s / 25,807 fd rows on this host (27× the cwd scan) and
+  measured at 6.99 s / 25,807 fd rows on this host at the time (27× the cwd scan) and
   carries a starvation risk the cwd predicate avoids (indexer/daemon fds can
   pin trees indefinitely). Documented as the re-triage target of the 30-day
   monitoring criterion below, not adopted now.

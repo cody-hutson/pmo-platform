@@ -38,7 +38,7 @@ ratification-tracking work item after the ratifying review had already closed.
 The platform decomposes its skills along two different axes, and the two axes
 collide.
 
-- The **22 function-decomposed skills** are named by *what they do* — `comms-writer`,
+- The **22 function-decomposed skills** (the roster as of authoring) are named by *what they do* — `comms-writer`,
   `tracker-manager`, `release-planner`, and the rest. Each owns one function and is
   the single source of that function.
 - The approved **role-decomposed** suite is named by *who it emulates* — Principal
@@ -149,7 +149,7 @@ block below.
 | Option | Decision | Rationale |
 |---|---|---|
 | **(A) Compose — thin Specialists invoke shared function-skills (this ADR)** | **Chosen** | Keeps each function-skill the single source of its function; resolves overlap once; routing depth stays <=2 under the existing C1 bound; the skill-boundary test bounds Specialist proliferation. |
-| **(B) Absorb — each role-skill re-implements the functions it needs** | Rejected | Forks the source of every absorbed function; two skills drift apart over time; explodes maintenance (every function lives in N places); defeats the single-source property the 22 function-skills exist to provide. |
+| **(B) Absorb — each role-skill re-implements the functions it needs** | Rejected | Forks the source of every absorbed function; two skills drift apart over time; explodes maintenance (every function lives in N places); defeats the single-source property the 22 function-skills (as of authoring) exist to provide. |
 | **(C) No ADR — leave the decomposition axis implicit** | Rejected | The role-skill build is large and cross-cutting; without a recorded rule, each role-skill author re-derives (or fails to derive) the compose-not-absorb discipline, and the overlap pairs get duplicated piecemeal with no review gate to catch it. |
 
 ## Reversibility
@@ -169,7 +169,7 @@ point a reversal re-casts that skill's composition structure.
   ADR is the decomposition-axis rule that operationalizes *how* they compose: thin
   Specialists over shared function-skills. Direct upstream.
 - [ADR-006 — Skill-to-module map](ADR-006-skill-to-module-map.md) — the 22-skill /
-  3-module partition that this ADR's "22 function-skills" Context rests on; the
+  3-module partition that this ADR's "22 function-skills" Context (as of authoring) rests on; the
   function-skills a Specialist composes are exactly that roster.
 - [ADR-016 — intake front door as a distinct architectural component](ADR-016-intake-front-door-architectural-boundary.md)
   — sibling skill-architecture boundary ADR; the same verb-disjoint-component

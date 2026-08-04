@@ -98,7 +98,7 @@ this document.
 
 ### Decision 3 — 13×3 archetype × stage variants matrix
 
-The Methodology Variants section uses a **13 stage-rows × 3 archetype-columns**
+The Methodology Variants section uses a **13-stage-row × 3-archetype-column**
 master table covering Scrum, Waterfall, and Kanban. A per-archetype 1-paragraph
 intro precedes the table. The 5 archetypes not covered here (XP, PRINCE2,
 SAFe, Hybrid, Custom) are pointed to [`methodology-archetype-matrix.md`](../../release/references/specs/methodology-archetype-matrix.md)
@@ -128,7 +128,7 @@ release-cadence variation table.
 
 - **Stable vocabulary for role-skills.** Role skills compose against
   the Primary Function name as a 1-word answer per stage. The table is
-  finite (13 rows), enumerable, and grep-stable.
+  finite (one row per pipeline stage), enumerable, and grep-stable.
 - **Operating-model.md column inline is feasible.** Because Primary is
   exactly one value per stage, [`operating-model.md`](../disciplines/operating-model.md)
   Universal Function column carries plain-text data (not a hyperlink per

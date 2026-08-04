@@ -20,7 +20,7 @@ Number **049** — next gap-free after 048; binds atomically at Stage 12.
 
 ## Context
 
-The platform's terminology contract carried a three-way contradiction about "Initiative" and "Roadmap," verified against live state at baseline `e0286d9` (2026-06-29):
+The platform's terminology contract carried a three-way contradiction about "Initiative" and "Roadmap," verified against live state as of baseline `e0286d9` (2026-06-29):
 
 1. **Glossary Appendix B** listed `Initiative` as a "Portfolio-level concept not modeled at platform layer" — directing the reader to Milestone or "cross-Milestone roadmap theme," i.e. asserting the concept is *not* modeled.
 2. **The initiative-roadmap framework** (`core/standards/initiative-roadmap-framework.md`) scoped a roadmap to **"one initiative"** in its §2.1 artifact-hierarchy diagram and its Vision-vs-Roadmap boundary clarification.

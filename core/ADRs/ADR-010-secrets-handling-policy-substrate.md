@@ -30,7 +30,7 @@ The release authoring an operational secrets-handling policy (categorization, st
 
 The existing root `SECURITY.md` is the GitHub-convention vulnerability-reporting file. It covers external vuln intake, response targets, and scope — content distinct from an internal operational policy. Conflating the two would bloat the GitHub-convention file with operational content that has nothing to do with vulnerability reporting.
 
-The existing `core/standards/` directory holds 33 specs including `subagent-security-posture.md`, `public-repo-gitignore-template.md`, and `depersonalization-spec.md` — all security-adjacent peers. The `composition-surface-spec.md` pattern (category-owner spec referenced from multiple consumers) is the closest precedent for a policy substrate of this shape.
+The existing `core/standards/` directory holds 33 specs as of authoring, including `subagent-security-posture.md`, `public-repo-gitignore-template.md`, and `depersonalization-spec.md` — all security-adjacent peers. The `composition-surface-spec.md` pattern (category-owner spec referenced from multiple consumers) is the closest precedent for a policy substrate of this shape.
 
 ## Decision
 

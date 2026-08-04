@@ -18,7 +18,7 @@ Accepted as architectural intent (this ticket commits deploy.sh byte-identical t
 
 ## Context
 
-This release transforms `pmo-platform/` flat structure to `pmo-platform-v2/{operations,release,core,docs,packages}/` modular monolith. `deploy.sh` has 9-11 functions referencing `pmo-platform/` paths (126 grep occurrences at HEAD `d849255`) and 8 distinct `${SKILL_LIST[@]}` iteration sites. The current `SKILL_LIST` is a single 21-entry array; the new structure requires partition into per-module arrays:
+This release transforms `pmo-platform/` flat structure to `pmo-platform-v2/{operations,release,core,docs,packages}/` modular monolith. `deploy.sh` has 9-11 functions referencing `pmo-platform/` paths (126 grep occurrences as of authoring, at HEAD `d849255`) and 8 distinct `${SKILL_LIST[@]}` iteration sites. The current `SKILL_LIST` is a single 21-entry array; the new structure requires partition into per-module arrays:
 
 ```bash
 declare -a OPERATIONS_SKILLS=( ... 12 skills ... )

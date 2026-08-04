@@ -26,7 +26,7 @@ This release introduces `pmo-platform-v2` as a new private modular-monolith repo
 2. **4-module decomposition** (operations / release / platform-meta / core) — advisory counter-design from the adversarial review CD-1, preserving the canonical 4-scope manifest at `operating-model.md § 1.3` (project-ops / platform-pipeline-stage-ownership / platform-pipeline-decision-briefing / platform-meta).
 3. **Per-skill containers** — rejected at Stage 5 as exploding the module boundary surface.
 
-Empirical evidence: pipeline-reference density survey at HEAD `d849255` returned 22:0 release-side-vs-operations-side citation skew for the contested boundary cases (build-reviewer, implementation-planner, pmo-skill-editor, pmo-skill-refiner). Adversarial review FM-1 flagged that aggregate density "22 cluster" conceals fine-grain variance (pmo-skill-editor pipeline-density = 6; build-reviewer pipeline-density = wider distribution).
+Empirical evidence, as of authoring: pipeline-reference density survey at HEAD `d849255` returned 22:0 release-side-vs-operations-side citation skew for the contested boundary cases (build-reviewer, implementation-planner, pmo-skill-editor, pmo-skill-refiner). Adversarial review FM-1 flagged that aggregate density "22 cluster" conceals fine-grain variance (pmo-skill-editor pipeline-density = 6; build-reviewer pipeline-density = wider distribution).
 
 Operator decision at Collective Review (APPROVE WITH OVERRIDES 2026-05-27) ratified the 3-module decomposition with the 4-module counter-design accepted as deferred residual.
 
@@ -41,7 +41,7 @@ Operator decision at Collective Review (APPROVE WITH OVERRIDES 2026-05-27) ratif
 | **core** | 3 | eval-writer, pmo-qa-auditor, prompt-builder |
 | **TOTAL** | 22 | 21 SKILL_LIST + 1 canary |
 
-**Contested-case resolutions** (per pipeline-reference density at HEAD `d849255`):
+**Contested-case resolutions** (per pipeline-reference density as of authoring, at HEAD `d849255`):
 
 - `pmo-skill-editor` → **release** (pipeline-bound at Stage 7 secondary skill per `operating-model.md`; cited from release pipeline shards)
 - `pmo-skill-refiner` → **release** (pipeline-bound; spawns at Stage 6/12 per release-executor)
@@ -50,20 +50,20 @@ Operator decision at Collective Review (APPROVE WITH OVERRIDES 2026-05-27) ratif
 
 **Canary handling:** `pmo-skill-refiner-selftest-canary` lives in release/ as canary-source-only; NOT part of release's Public API.
 
-**Agent definitions** (`.claude/agents/pmo-*.md`, 8 files) classify to **release/.claude/agents/** per Stage 5 spec Surface 1.4 — pipeline-bound spoke personas with zero operations-side consumers.
+**Agent definitions** (`.claude/agents/pmo-*.md`, 8 files as of authoring) classify to **release/.claude/agents/** per Stage 5 spec Surface 1.4 — pipeline-bound spoke personas with zero operations-side consumers.
 
 ## Consequences
 
 1. **Module migration scope locked:**
-   - operations migration absorbs 12 skills + raid-log.schema.json + project-data-architecture roadmap
-   - release migration absorbs 6 skills + 1 canary + 8 agent definitions + 11 release-standards + 9 release-specs + release-process.md rule + RELEASE_PROTOCOL.md + release-process-fitness roadmap + 9 release-tools
+   - operations migration absorbs the then-current 12 skills + raid-log.schema.json + project-data-architecture roadmap
+   - release migration absorbs the then-current 6 skills + 1 canary + 8 agent definitions + 11 release-standards + 9 release-specs + release-process.md rule + RELEASE_PROTOCOL.md + release-process-fitness roadmap + 9 release-tools
 
 2. **Core-module (this ticket) scope locked:**
-   - 3 shared skills (eval-writer, pmo-qa-auditor, prompt-builder) + hooks + disciplines + schemas + 34 standards + 12 specs + cross-cutting governance + 6 roadmaps + deploy.sh + 4 deploy-callable tools + 7 rules + CLAUDE.md.template
+   - 3 shared skills (eval-writer, pmo-qa-auditor, prompt-builder) + hooks + disciplines + schemas + the then-current 34 standards + 12 specs + cross-cutting governance + 6 roadmaps + deploy.sh + 4 deploy-callable tools + 7 rules + CLAUDE.md.template
 
 3. **Re-classification protocol:** Future re-classifications require ADR-006 amendment + per-module migration update. Per the operator standing-GO Collective Review acceptance, the 4-module counter-design (CD-1) remains a documented alternative; if extraction-readiness validation surfaces the 3-module collapse as load-bearing-defective, ADR-006 may amend to a 4-module structure (Reversibility: MODERATE — folder rename + skill-list updates).
 
-4. **Cross-module dependency contract (per module READMEs at SHA `28bb313`):**
+4. **Cross-module dependency contract (per module READMEs as of authoring, at SHA `28bb313`):**
    - operations depends ON core ONLY (PROHIBITED into release)
    - release depends ON core ONLY (PROHIBITED into operations)
    - core depends on NO module (PROHIBITED into operations and release)
