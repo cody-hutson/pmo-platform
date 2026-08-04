@@ -23,6 +23,13 @@ Parse semantics (#291 v3.20 robustification — DS-1..DS-4 of the ratified Stage
     AF heading) is measured at >=90% combined-clean; the release-planner Mode A
     pre-filter (a separate SKILL.md change, not in this tool) sets aside bodies with
     no recognized AF heading.
+  - Priority is sourced from the issue BODY field, never from a label
+    (label-taxonomy.md rule 5: priority is body-tracked; no `priority:` label exists).
+    One carrier-agnostic detector spans "Priority" (improvement) and "Severity" (bug)
+    in both heading and bold-inline form, per gate-criteria-spec.md Gate 1 Adapter
+    G1-06-Bug — the P-level DIGIT is the canonical satisfier; the qualifier word is
+    discarded. Absent / word-only / out-of-range => None, which sorts LAST in the
+    tie-breaker and NEVER contributes to parse_status.
 
 Usage:
   python3 bundle-issues-parser.py --milestone "v2.10-..." [--output-format json|tsv|github]
@@ -244,12 +251,67 @@ def parse_dependencies(body: str) -> Tuple[Set[int], str]:
     return deps, "clean"
 
 
-def parse_priority_label(labels: List[str]) -> Optional[str]:
-    for lab in labels:
-        m = re.match(r"priority:\s*p([1-4])", lab, re.IGNORECASE)
-        if m:
-            return f"P{m.group(1)}"
-    return None
+# Canonical priority/severity field detector.
+# Grammar authority: core/schemas/gate-criteria-spec.md Gate 1 Priority-Model block
+# + Adapter G1-06-Bug — "a single template-agnostic detector covers both field
+# names ... the P-level digit, not the field name or qualifier word, is the
+# canonical satisfier." Carrier-agnostic by construction: the corpus carries this
+# field under a markdown heading (improvement.yml dropdown render) AND as a bold
+# inline field (agent-authored bodies / DoR-crisp readiness blocks).
+#
+# LINE-ANCHORED on purpose. The anchor is what buys specificity: an unanchored
+# variant matches a mid-prose mention ("...markers. Priority P3 (immediate...")
+# and resolves a priority the author never set. A mid-line carrier is therefore
+# deliberately NOT resolved — that is the accepted cost of rejecting prose.
+PRIORITY_FIELD_RE = re.compile(
+    r'^[ \t]*(?:#{1,6}[ \t]*|[-*][ \t]*)?'         # optional heading hashes OR list bullet
+    r'\*{0,2}(?P<field>Priority|Severity)\*{0,2}'  # field name, optional bold
+    r'[ \t]*:?[ \t]*\*{0,2}[ \t]*'                 # optional colon / closing bold
+    r'(?:\r?\n[ \t]*){0,2}'                        # value on the next line (heading form)
+    r'(?:\[[A-Z–— -]+\][ \t]*)*'                   # optional evidence label, e.g. [RECOMMENDED]
+    r'P(?P<level>[1-4])\b',
+    re.MULTILINE | re.IGNORECASE,
+)
+
+# Rank for the priority-desc tie-breaker. Rule authority (not restated here):
+# release/skills/release-planner/references/dependency-analysis.md Tie-Breaker Rule.
+#
+# CANONICAL SIGN CONVENTION — ASCENDING, NEVER NEGATED. Lower rank = higher
+# priority; unset sorts LAST at 5. The sort key is (priority_rank(r.priority),
+# r.number) sorted ASCENDING. Do NOT negate it: `-priority_rank(p)` inverts the
+# documented rule end-to-end (unset first, P1 last) and nothing fails loudly.
+# This convention replaces the legacy `-priority_of(p)` form (which presumed the
+# INVERSE scale, larger-is-higher-priority, and was undefined for unset); the doc
+# was reconciled to this direction in the same change.
+PRIORITY_RANK = {"P1": 1, "P2": 2, "P3": 3, "P4": 4}
+PRIORITY_RANK_UNSET = 5
+
+
+def priority_rank(priority: Optional[str]) -> int:
+    """Total-order rank for the tie-breaker. P1..P4 -> 1..4; unset -> 5 (sorts last).
+
+    Deliberately NOT serialized into emit_json — an agent derives it from
+    `priority` in one line, and adding a JSON key would change a contract read by
+    release-planner Mode A for no gain.
+    """
+    return PRIORITY_RANK.get(priority or "", PRIORITY_RANK_UNSET)
+
+
+def parse_priority_body(body: str) -> Optional[str]:
+    """Extract the P-level from the body Priority/Severity field.
+
+    Returns "P1".."P4", or None when the field is absent, carries no P-level
+    (a word-only value such as "Medium"), or is out of range ("P0"/"P5").
+    Priority is optional at intake (improvement.yml `required: false`) and is
+    NOT defined at all by bug/observation/story/epic/adr templates, so absence
+    is conformance — it never contributes to parse_status.
+    First-match-wins; verified deterministic against the live corpus (no body
+    yields two different P-levels).
+    """
+    if not body:
+        return None
+    m = PRIORITY_FIELD_RE.search(body)
+    return f"P{m.group('level')}" if m else None
 
 
 # ---- API surface --------------------------------------------------------------
@@ -301,7 +363,7 @@ def build_issue_record(raw: Dict) -> IssueRecord:
         title=raw["title"],
         state=raw["state"],
         labels=labels,
-        priority=parse_priority_label(labels),
+        priority=parse_priority_body(body),
         milestone=milestone.get("title") if isinstance(milestone, dict) else None,
         parse_status=parse_status,
         affected_files=affected,
@@ -650,6 +712,77 @@ Stuff.
     )
     if derive_artifact_relationships(rec_ar_empty) != []:
         failures.append(f"#246 empty-state: got {derive_artifact_relationships(rec_ar_empty)}")
+
+    # ---- Priority body-field detector (T-1..T-11) --------------------------------
+    # Sensitivity T-1..T-8: every carrier shape observed in the live corpus must
+    # resolve. Specificity T-9..T-11: the guards that keep the detector from
+    # widening into prose. A detector scored only on sensitivity is how the label
+    # regex this replaces stayed silently dead for the whole release history.
+    priority_cases = [
+        # (leg, body, expected)
+        ("T-1 heading + dropdown value", "### Priority\n\nP3 - Medium\n", "P3"),
+        ("T-2 heading + bare P-level", "### Priority\n\nP2\n", "P2"),
+        ("T-3 H2 heading (pre-form-template)", "## Priority\n\nP4 - Low\n", "P4"),
+        ("T-4 DoR-crisp bold-inline",
+         "**Priority:** P3 - Medium · **Reversibility:** CHEAP (parser reconcile).\n", "P3"),
+        ("T-5 bold-inline + em dash",
+         "**Priority:** P2 — High [agent-estimated at intake]\n", "P2"),
+        ("T-6 bullet + bold + en dash", "- **Priority:** P3 – Medium\n", "P3"),
+        ("T-7 heading + evidence label",
+         "### Priority\n\n[RECOMMENDED] P2 - High (keystone)\n", "P2"),
+        ("T-8 Severity adapter (G1-06-Bug)", "### Severity\n\nP2 - Material\n", "P2"),
+        ("T-9 AC-quotation stays unresolved",
+         "- [ ] Confirm `IssueRecord.priority` resolves from the issue body "
+         "`### Priority` field for a body carrying `P2 - High`.\n", None),
+        ("T-10 word-only value stays unresolved",
+         "### Priority\n\nMedium — a real hole.\n", None),
+        ("T-11 out-of-range value stays unresolved", "### Priority\n\nP5 - Nope\n", None),
+    ]
+    for leg, pbody, expected in priority_cases:
+        got = parse_priority_body(pbody)
+        if got != expected:
+            failures.append(f"{leg}: expected {expected!r}, got {got!r}")
+
+    # No-carrier and empty-body arms — absence is conformance, never an error.
+    if parse_priority_body("## Description\nNo priority field anywhere.\n") is not None:
+        failures.append("priority no-carrier: expected None")
+    if parse_priority_body("") is not None:
+        failures.append("priority empty-body: expected None")
+
+    # Priority NEVER contributes to parse_status (D-2). A body with an unresolvable
+    # priority and a clean AF/Dep parse must still combine to clean.
+    body_prio_status = "### Priority\n\nMedium\n\n### Affected Files\n- `core/foo.md` (edit)\n"
+    _, af_ps = parse_affected_files(body_prio_status)
+    _, dep_ps = parse_dependencies(body_prio_status)
+    if af_ps != "clean" or dep_ps != "clean":
+        failures.append(f"priority never enters parse_status: got {af_ps} / {dep_ps}")
+
+    # ---- Tie-breaker rank + sort direction (the FMF-2 sign guard) ----------------
+    # ASSERTED EMPIRICALLY, not reasoned about. `priority_rank` is ASCENDING and is
+    # NEVER negated; the legacy `-priority_of(p)` form presumed the inverse scale.
+    # Substituting one into the other silently inverts the whole tie-breaker, so the
+    # inversion is asserted here as an executable fact rather than a comment.
+    if [priority_rank(p) for p in ("P1", "P2", "P3", "P4", None)] != [1, 2, 3, 4, 5]:
+        failures.append(
+            f"priority_rank scale: got {[priority_rank(p) for p in ('P1','P2','P3','P4',None)]}"
+        )
+    if priority_rank("P9") != 5 or priority_rank("") != 5:
+        failures.append("priority_rank unrecognized value must fall back to unset rank 5")
+
+    # Canonical key: (priority_rank, issue_number) ASCENDING. Unset sorts last.
+    tie_input = [(None, 7), ("P2", 9), ("P3", 3)]
+    tie_sorted = sorted(tie_input, key=lambda t: (priority_rank(t[0]), t[1]))
+    if tie_sorted != [("P2", 9), ("P3", 3), (None, 7)]:
+        failures.append(f"tie-breaker canonical order: got {tie_sorted}")
+    # Negated key is the FMF-2 defect — assert it really does invert, so the guard
+    # above is known to be load-bearing rather than trivially true.
+    tie_negated = sorted(tie_input, key=lambda t: (-priority_rank(t[0]), t[1]))
+    if tie_negated != [(None, 7), ("P3", 3), ("P2", 9)]:
+        failures.append(f"tie-breaker inversion control: got {tie_negated}")
+    # Full P1..P4 + unset ordering, ascending, no negation.
+    full_order = sorted(["P4", None, "P1", "P3", "P2"], key=priority_rank)
+    if full_order != ["P1", "P2", "P3", "P4", None]:
+        failures.append(f"tie-breaker full order: got {full_order}")
 
     if failures:
         print("SELF-TEST FAIL:", file=sys.stderr)

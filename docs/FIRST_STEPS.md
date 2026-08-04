@@ -86,7 +86,7 @@ typed Issue      Defer /          issues into a      fresh session. The hub read
 
 The hub-and-spoke split is the heart of the release module — worth internalizing:
 
-- **Hub** = the session *you* drive. Your command center. It reads the Milestone, scaffolds a sub-task per stage per issue, launches spokes, and at every decision point hands you a **Decision Briefing** (see [§4](#4-pointers-to-be-effective)).
+- **Hub** = the session *you* drive. Your command center. It reads the Milestone, scaffolds the release's stage sub-tasks (one per issue for Stages 5–8, one for the whole release for Stages 4 and 9–13), launches spokes, and at every decision point hands you a **Decision Briefing** (see [§4](#4-pointers-to-be-effective)).
 - **Spoke** = a subagent the hub spawns to do *one stage of one issue* (e.g., "Stage 6 Engineering for this issue"). It works in a focused context and reports back to the hub. You don't manage spokes directly — you review what they produce.
 
 The authoritative how-to is [release/references/how-to/hub-spoke-bridge.md](../release/references/how-to/hub-spoke-bridge.md); the stage-by-stage specs are under [release/references/pipeline/](../release/references/pipeline/); the concise operating procedure is [release/governance/release-process.md](../release/governance/release-process.md).

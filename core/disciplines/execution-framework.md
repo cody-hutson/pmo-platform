@@ -205,7 +205,7 @@ A [Task](../specs/terminology-glossary.md#term-task) (sub-task GitHub Issue) is 
 **Methodology:** Hybrid — the platform has Scrum-like release-bundling but Waterfall-style phase-gates at Stages 9/12.
 **Dimensions in action:**
 
-1. **Work Breakdown:** the release Milestone → 3 Issues → sub-tasks per stage per issue (Stage 4 release planning + per-issue Stages 5 / 6 / 7 / 8 / 9 / 12 / 13) → commits on the release branch.
+1. **Work Breakdown:** the release Milestone → 3 Issues → stage sub-tasks (release-scoped for Stage 4 release planning and gate Stages 9 / 10 / 11 / 12 / 13; per-issue for Stages 5 / 6 / 7 / 8) → commits on the release branch.
 2. **Assignment:** Operator (human, Role) + Hub Agent (Claude session, Role) + Spoke Agents (one per sub-task, each embodying the stage's Persona from `release-personas.md`).
 3. **Tracking:** Each Issue has Stage / Status / Decision-Date GitHub Project fields + `sub-task` label on sub-tasks + the Milestone.
 4. **Handoff:** Stage 4 output (release plan on ) → scaffolding → Stage 5 spoke prompts (Procedure 3) → Spoke sub-task comments → Collective Review (for this release, because ≥2 issues with Solutioning activated) → Stage 6 Engineering.
