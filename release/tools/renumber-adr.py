@@ -469,7 +469,28 @@ def append_renumber_log(text, old, new, slug, cause):
 # --------------------------------------------------------------------------
 
 
-def _in_scope_files(ref, root, extra_paths):
+def _is_utf8_text(path):
+    """True when the file decodes as UTF-8 — i.e. it CAN carry a text citation.
+
+    The R3 scope is the branch diff, and a real release branch carries BINARY
+    deliverables inside it: ``packages/*.skill`` is a compiled archive rebuilt at
+    release-cut, and this repository's own reconciliation hit one on the first
+    production run. ``read_text(encoding="utf-8")`` raises on it, and the raise
+    lands OUTSIDE the R4/R5/R6 ``revert()`` path — under ``--apply`` it fires
+    after R2 has already renamed the record, leaving a half-applied tree the tool
+    cannot undo and did not report. A binary cannot hold an ``ADR-NNN`` citation,
+    so it is dropped from the scope; the drop is LOGGED rather than silent,
+    because a scope that shrinks without saying so is the same
+    answer-over-the-wrong-population defect this tool exists to fix.
+    """
+    try:
+        path.read_text(encoding="utf-8")
+        return True
+    except (UnicodeDecodeError, OSError):
+        return False
+
+
+def _in_scope_files(ref, root, extra_paths, log=None):
     """The branch's own citation set: files added/modified vs the mainline ref."""
     diff = git("diff", "--name-only", f"{ref}...HEAD", root=root, check=False)
     files = {ln for ln in diff.splitlines() if ln}
@@ -477,7 +498,14 @@ def _in_scope_files(ref, root, extra_paths):
         for p in root.glob(pattern):
             if p.is_file():
                 files.add(p.relative_to(root).as_posix())
-    return sorted(f for f in files if (root / f).is_file())
+    present = sorted(f for f in files if (root / f).is_file())
+    text, binary = [], []
+    for f in present:
+        (text if _is_utf8_text(root / f) else binary).append(f)
+    if binary and log:
+        log(f"R3 scope: {len(binary)} non-UTF-8 file(s) dropped — a binary cannot "
+            f"carry a citation: " + ", ".join(binary))
+    return text
 
 
 def _index_files(root):
@@ -597,7 +625,7 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log):
     log(f"R1 PROCEED: ADR-{old:03d} → ADR-{new:03d} ({old_path} → {new_path})")
     log(f"    anchor({ref}) = {_a}; cause = {cause}")
 
-    in_scope = _in_scope_files(ref, root, extra_paths)
+    in_scope = _in_scope_files(ref, root, extra_paths, log)
 
     if not apply_changes:
         hits = 0

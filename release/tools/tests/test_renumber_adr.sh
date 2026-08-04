@@ -124,6 +124,15 @@ author_B() {
     # 4 citations across 2 files — the branch's own citation set.
     printf 'Design cites ADR-%03d twice: ADR-%03d.\n' "$n" "$n" > design-note.md
     printf 'Plan cites ADR-%03d and again ADR-%03d.\n' "$n" "$n" > plan-note.md
+    # A BINARY deliverable inside the branch diff. Not decoration: every real
+    # release branch rebuilds `packages/*.skill`, a compiled archive, and the
+    # R3 scope walk reads every in-scope file as UTF-8. Before the guard this
+    # raised UnicodeDecodeError *outside* the revert path — under --apply,
+    # after R2 had already renamed the record. Seeding it here means the whole
+    # A1-A6 block is the regression guard: a tool that crashes on it fails
+    # `--renumber 4 5 --apply exits 0` and every assertion beneath.
+    mkdir -p packages
+    printf 'PK\003\004\353\277\376binary-skill-package-fixture\n' > packages/fixture-bravo.skill
     # B registers itself the way an author now does: it RUNS THE PROJECTOR. It does
     # not hand-add a row — that is exactly what --verify fails. It still hand-edits
     # the CORE README, which remains a curated, hand-maintained document.
@@ -175,6 +184,15 @@ assert_file  "A1 ADR-005-bravo.md exists"       "release/ADRs/ADR-005-bravo.md"
 assert_nofile "A1 ADR-004-bravo.md is gone"     "release/ADRs/ADR-004-bravo.md"
 assert_eq "A1 git records a rename (R)" \
   "$(G diff --cached --name-status -M | grep -c '^R.*ADR-004-bravo.md')" "1"
+
+# --- A1b binary in the branch diff: dropped from R3 scope, and SAID SO --------
+# The A1-A6 block above is the crash guard (a raise makes AP_RC non-zero). This
+# asserts the second half of the contract: the scope shrank VISIBLY. A silent
+# drop is the answer-over-the-wrong-population defect wearing a clean exit code.
+assert_eq "A1b R3 reports the non-UTF-8 file it dropped from scope" \
+  "$(printf '%s\n' "$APPLY" | grep -c 'non-UTF-8 file(s) dropped')" "1"
+assert_eq "A1b the dropped file is named, not merely counted" \
+  "$(printf '%s\n' "$APPLY" | grep -c 'packages/fixture-bravo.skill')" "1"
 
 # --- A2 zero dangling --------------------------------------------------------
 assert_eq "A2 design-note.md: 0 stale ADR-004"  "$(cite_count design-note.md 4)" "0"
