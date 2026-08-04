@@ -30,7 +30,7 @@ set -u
 REPO_UNDER_TEST="$(cd "$(dirname "$0")/../../.." && pwd -P)"
 TOOLS="${REPO_UNDER_TEST}/release/tools"
 
-for t in check-adr-numbers.py renumber-adr.py; do
+for t in check-adr-numbers.py renumber-adr.py generate-adr-index.py; do
   [ -f "${TOOLS}/${t}" ] || { echo "FATAL: ${TOOLS}/${t} missing — the suite cannot test a tool that is not there" >&2; exit 1; }
 done
 
@@ -52,11 +52,18 @@ seed_origin() {
   local s="$ROOT/seed-$1"
   mkdir -p "$s/core/ADRs" "$s/release/ADRs" "$s/release/tools"
   ( cd "$s" && G -c init.defaultBranch=main init -q )
-  cp "${TOOLS}/check-adr-numbers.py" "${TOOLS}/renumber-adr.py" "$s/release/tools/"
+  cp "${TOOLS}/check-adr-numbers.py" "${TOOLS}/renumber-adr.py" \
+     "${TOOLS}/generate-adr-index.py" "$s/release/tools/"
+  # Records carry FRONTMATTER, because the release index is projected from it.
+  # A frontmatter-less stub would make the projector refuse and the fixture would
+  # be testing a shape the corpus does not have.
   for n in 001 002 003; do
-    printf '# fixture ADR-%s\n\n## Status\n\nAccepted.\n\n## Context\n\nseed.\n' "$n" \
-      > "$s/core/ADRs/ADR-$n-seed$n.md"
+    printf -- '---\ntitle: "ADR-%s — Seed %s"\nstatus: Accepted\ndate: 2026-01-01\nrelease: seed-release\n---\n\n# ADR-%s — Seed %s\n\n## Status\n\nAccepted.\n\n## Context\n\nseed.\n' \
+      "$n" "$n" "$n" "$n" > "$s/core/ADRs/ADR-$n-seed$n.md"
   done
+  printf -- '---\ntitle: "ADR-002 — Seed two"\nstatus: Accepted\ndate: 2026-01-02\nrelease: seed-release\n---\n\n# ADR-002 — Seed two\n\n## Status\n\nAccepted.\n' \
+    > "$s/release/ADRs/ADR-002-seed002.md"
+  rm -f "$s/core/ADRs/ADR-002-seed002.md"
   # core README — carries the § Renumber log surface the tool appends to.
   cat > "$s/core/ADRs/README.md" <<'EOF'
 # Core ADRs
@@ -73,28 +80,27 @@ seed_origin() {
 | ADR-002 | core | seeded |
 | ADR-003 | core | seeded |
 EOF
-  # release README — carries ALL THREE index surfaces in one file, the shape
-  # `409545d4`'s own commit message proved a renumber has to touch.
+  # release README — the POST-COLLAPSE shape the corpus now has: one PROJECTED
+  # index region, and no hand-maintained enumeration of the record set. The three
+  # hand-maintained surfaces this fixture used to carry were collapsed when the
+  # index became a derived surface; a fixture still asserting against them would
+  # keep passing green against a shape the corpus no longer has, which is the
+  # defect this update exists to prevent.
   cat > "$s/release/ADRs/README.md" <<'EOF'
+<!-- derived-surface: source=release/ADRs/ADR-*.md (filename + frontmatter) · projector=release/tools/generate-adr-index.py -->
 # Release ADRs
 
 ## Naming convention
 
-`ADR-NNN-kebab-case-title.md`. This module holds ADR-002, ADR-001.
+`ADR-NNN-kebab-case-title.md`, one global sequence across both directories. Which
+numbers are release-scoped is derivable from the directory, not enumerated here.
 
 ## Release-scoped ADRs
 
-| ADR | Title | Status |
-|---|---|---|
-| [ADR-002](ADR-002-seed002.md) | Seed two | Accepted |
-
-## Cross-numbering with core/ADRs/
-
-| ADR | Module | Status |
-|---|---|---|
-| ADR-001 | core | seeded |
-| ADR-002 | core | seeded |
+<!-- ADR-INDEX:BEGIN -->
+<!-- ADR-INDEX:END -->
 EOF
+  ( cd "$s" && python3 release/tools/generate-adr-index.py --write >/dev/null )
   ( cd "$s" && G add -A >/dev/null && G commit -qm "seed" && \
     G remote add origin "$o" && G push -q origin main )
   rm -rf "$s"
@@ -109,7 +115,7 @@ author_B() {
     # A realistically-sized body. A 7-line stub would drop below git's 50%
     # rename-similarity threshold once R5 adds the provenance note, so A1 would
     # measure the fixture's artificiality rather than the tool's behaviour.
-    { printf '# ADR-%03d — bravo\n\n## Status\n\nProposed.\n\n## Context\n\n' "$n"
+    { printf -- '---\ntitle: "ADR-%03d — Bravo record"\nstatus: Proposed\ndate: 2026-02-02\nrelease: bravo-release\n---\n\n# ADR-%03d — bravo\n\n## Status\n\nProposed.\n\n## Context\n\n' "$n" "$n"
       for i in 1 2 3 4 5 6 7 8 9 10; do
         printf 'Context paragraph %d for the bravo record, carrying enough prose that a rename stays detectable.\n\n' "$i"
       done
@@ -118,16 +124,13 @@ author_B() {
     # 4 citations across 2 files — the branch's own citation set.
     printf 'Design cites ADR-%03d twice: ADR-%03d.\n' "$n" "$n" > design-note.md
     printf 'Plan cites ADR-%03d and again ADR-%03d.\n' "$n" "$n" > plan-note.md
-    # B registers itself in all three release-index surfaces (branch-diff scope).
-    sed -i.bak "s|This module holds ADR-002, ADR-001.|This module holds ADR-002, ADR-001, ADR-$(printf '%03d' "$n").|" release/ADRs/README.md
-    printf '| [ADR-%03d](ADR-%03d-bravo.md) | Bravo | Proposed |\n' "$n" "$n" > /tmp/.row.$$
-    awk -v row="$(cat /tmp/.row.$$)" '
-      /^\| \[ADR-002\]\(ADR-002-seed002\.md\)/ { print; print row; next } { print }' \
-      release/ADRs/README.md > release/ADRs/README.new && mv release/ADRs/README.new release/ADRs/README.md
+    # B registers itself the way an author now does: it RUNS THE PROJECTOR. It does
+    # not hand-add a row — that is exactly what --verify fails. It still hand-edits
+    # the CORE README, which remains a curated, hand-maintained document.
+    python3 release/tools/generate-adr-index.py --write >/dev/null
     awk -v n="$(printf '%03d' "$n")" '
       /^\| ADR-002 \| core \| seeded \|$/ && !d { print; print "| ADR-" n " | release | authored |"; d=1; next } { print }' \
-      release/ADRs/README.md > release/ADRs/README.new && mv release/ADRs/README.new release/ADRs/README.md
-    rm -f release/ADRs/README.md.bak /tmp/.row.$$
+      core/ADRs/README.md > core/ADRs/README.new && mv core/ADRs/README.new core/ADRs/README.md
     G add -A >/dev/null && G commit -qm "author ADR-$(printf '%03d' "$n") bravo" )
 }
 
@@ -183,15 +186,43 @@ SURV="$(grep -rl 'ADR-004' --include='*.md' . 2>/dev/null | grep -v '^./release/
 assert_eq "A2 no in-scope file still cites ADR-004" \
   "$(echo "$SURV" | grep -c -E 'design-note|plan-note|release/ADRs/README')" "0"
 
-# --- A3 index surfaces + re-sort ---------------------------------------------
-assert_eq "A3 naming-convention prose list carries ADR-005" \
-  "$(grep -c 'This module holds .*ADR-005' release/ADRs/README.md)" "1"
-assert_eq "A3 prose list re-sorted ascending" \
-  "$(grep -c 'holds ADR-001, ADR-002, ADR-005' release/ADRs/README.md)" "1"
-assert_eq "A3 file-linked table row rewritten (text + href)" \
+# --- A3 index surfaces --------------------------------------------------------
+# The release index is now a PROJECTED surface, so A3's subject changed with it.
+# The old arm asserted that R4 had hand-rewritten three enumerations in this file.
+# Two of those enumerations no longer exist, and hand-rewriting the third is now the
+# defect: a rewritten row fails the projection check the same renumber triggers. So
+# A3 asserts the *projection is faithful after the move*, which is the property that
+# actually has to hold — and A3d is the negative control proving that assertion can
+# fail. Without A3d, A3c passing would be evidence of nothing.
+assert_eq "A3a projected index row rewritten (link text + href)" \
   "$(grep -c '\[ADR-005\](ADR-005-bravo.md)' release/ADRs/README.md)" "1"
-assert_eq "A3 cross-numbering table row rewritten" \
-  "$(grep -cE '^\| ADR-005 \| release \|' release/ADRs/README.md)" "1"
+assert_eq "A3a the moved number leaves NO row behind" \
+  "$(grep -c '\[ADR-004\]' release/ADRs/README.md)" "0"
+assert_eq "A3b projected row carries the DERIVED columns, not hand-typed ones" \
+  "$(grep -cE '^\| \[ADR-005\]\(ADR-005-bravo\.md\) \| Bravo record \| Proposed \| 2026-02-02 \| bravo-release \|$' release/ADRs/README.md)" "1"
+assert_eq "A3b the collapsed prose roster is GONE (not merely stale)" \
+  "$(grep -c 'This module holds' release/ADRs/README.md)" "0"
+python3 release/tools/generate-adr-index.py --verify >/dev/null 2>&1
+assert_eq "A3c the renumbered tree PASSES the projection check" "$?" "0"
+# A3c is an OUTCOME assertion and a path-exact hand-rewrite could satisfy it by
+# coincidence, so the MECHANISM is asserted directly: R4 must report that it reached
+# this surface through the projector. This is the arm that fails if the amendment is
+# reverted, and outcome-only assertions would not have caught that.
+assert_eq "A3c MECHANISM — R4 reached the release index THROUGH the projector" \
+  "$(echo "$APPLY" | grep -c 'R4 index: release/ADRs/README.md regenerated by generate-adr-index.py')" "1"
+assert_eq "A3c the core README took the HAND-MAINTAINED path in the same run" \
+  "$(echo "$APPLY" | grep -c 'R4 index: updated core/ADRs/README.md')" "1"
+# A3d NEGATIVE CONTROL — hand-edit one derived cell; --verify must now FAIL. This is
+# what makes A3c a measurement rather than a tautology, and it is the same
+# hand-edit-a-generated-region failure R4 would have committed before the amendment.
+cp release/ADRs/README.md /tmp/.a3d.$$
+sed -i.bak 's/| Bravo record | Proposed |/| Bravo record | Accepted |/' release/ADRs/README.md
+python3 release/tools/generate-adr-index.py --verify >/dev/null 2>&1
+assert_eq "A3d NEGATIVE CONTROL — a hand-edited derived cell FAILS the projection check" \
+  "$?" "1"
+mv /tmp/.a3d.$$ release/ADRs/README.md; rm -f release/ADRs/README.md.bak
+assert_eq "A3 cross-numbering row rewritten in the HAND-MAINTAINED core README" \
+  "$(grep -cE '^\| ADR-005 \| release \|' core/ADRs/README.md)" "1"
 assert_eq "A3 § Renumber log appended" \
   "$(grep -c 'ADR-004 (`bravo`) → \*\*ADR-005\*\*' core/ADRs/README.md)" "1"
 
