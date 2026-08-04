@@ -9155,6 +9155,106 @@ cmd_check() {
   fi
 
 
+  # ─── Check 66: Cross-skill citation-anchor drift (warn-mode initial) ────────
+  #
+  # WHAT IT ASSERTS. No tracked *.md under core/skills/, release/skills/ or
+  # operations/skills/ locates a cross-skill referent by LINE NUMBER. The canonical
+  # form is a section-name anchor — a `§` segment carrying the target heading's text
+  # verbatim, over a plain link to the target file with no `#fragment`. This block is
+  # the convention's normative home: it is stated where it is enforced, so the rule and
+  # the gate cannot drift apart.
+  #
+  # WHY THE LINE-NUMBER FORM IS THE DEFECT — it fails OPEN. Every line number in a long
+  # file "resolves", so a citation that has drifted onto the wrong content is
+  # indistinguishable from a correct one by any mechanical means. Measured at the
+  # introducing pin: 5 of 6 release-planner citations in pmo-release-manager pointed at
+  # the wrong content, and 7 of 7 change-management citations in pmo-ocm-lead were off
+  # by exactly one line — a single inserted line upstream broke seven at once. A section
+  # name that no longer exists returns zero from a grep. The point is not accuracy; it
+  # is converting a silent failure mode into a detectable one.
+  #
+  # TWO LEXICAL FORMS, because narrowing to one was MEASURED to miss real carriers:
+  # F1 `SKILL.md:NNN` and F2 a backticked bare `` `:NNN` ``. An F1-only predicate misses
+  # 3 live anchors inside a file it already flags, and misses an entire third carrier
+  # whose 9 anchors are all F2.
+  #
+  # SCOPE — a TREE + FILE-TYPE predicate, not a filename glob and not the whole corpus.
+  # A filename glob (SKILL.md + composition-contract-*.md) is precisely what hid a
+  # composition contract that is not named composition-contract-*.md; scoping by tree
+  # covers a new one on creation rather than on someone remembering to register it. The
+  # whole corpus was measured too: it adds 38 out-of-scope lines, EVERY one a legitimate
+  # use — frozen release plans, an immutable ADR, [SOURCE]-labelled evidence pins, and
+  # upstream-reference-catalog.md's `upstream_citation` field, which DEFINES itself as
+  # an exact file:line pin into an external repo we neither control nor can add anchors
+  # to. Flagging those would require an exemption list — a second source of truth for
+  # what counts as a citation — to buy zero additional true positives. Fixture / eval /
+  # testdata trees are exempt: they carry deliberate defects as their purpose (the same
+  # exemption Checks 63 and 64 carry, for the same reason).
+  #
+  # DECLARED COVERAGE BOUNDARY — state it; do not imply more. NOT covered: whether a
+  # section-name anchor's cited heading actually EXISTS in its target (a different
+  # invariant, checked by the resolution predicate rather than here); whether a
+  # nearest-enclosing-heading citation's PROSE SUB-REFERENT still exists — those
+  # citations carry a verified enclosing heading and an UNVERIFIED sub-locator that this
+  # predicate is lexically incapable of seeing, so a renumbered step still fails open;
+  # non-.md files, where a tool legitimately prints file:line; and citations to
+  # non-SKILL.md targets.
+  #
+  # WARN-MODE INITIAL via resolve_check_mode "citation-anchor" — the Check 51-65
+  # deploy-check precedent, NOT the PreToolUse-hook .mode surface. Flip to enforce with
+  # a `citation-anchor.mode` file after the >=3-day warn-log review. The reintroduction
+  # of a line anchor is a signal to correct a citation, never a reason to block a
+  # deploy, so the first posture is a report.
+  #
+  # THE CHECK CARRIES ITS OWN RECORD (PV-6). Its denominator and BOTH control arms are
+  # fields of its own emitted output, so a reader can distinguish "zero found" from
+  # "nothing examined". A self-test regression is a hard FAIL on EVERY mode: a probe
+  # that can no longer be shown to detect AND to discriminate proves nothing by
+  # returning zero.
+  #
+  # Primitive: core/deploy/tools/check-citation-anchors.sh (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 66: Cross-skill citation-anchor drift (line-number locators in the skill self-description tree; warn-mode initial; enforce-flip deferred)"
+    local c66_script="core/deploy/tools/check-citation-anchors.sh"
+    if [[ ! -f "$c66_script" ]]; then
+      flag_warn_or_issue "citation-anchor" "primitive script missing: $c66_script (the gate cannot assert anything without it; a repo defect, not a benign absence)"
+    else
+      local c66_mode
+      c66_mode=$(resolve_check_mode "citation-anchor")
+      # ── control arms: the committed two-armed fixture set ────────────────────
+      local c66_fx_out c66_fx_rc=0
+      c66_fx_out=$(bash "$c66_script" --self-test 2>&1) || c66_fx_rc=$?
+      log "  CTRL:  citation-anchor — $(echo "$c66_fx_out" | tail -1)"
+      if [[ $c66_fx_rc -ne 0 ]]; then
+        log "  FAIL:  citation-anchor-fixtures — fixture regression (hard-fail on every mode). A probe that can no longer be shown to detect AND to discriminate proves nothing by returning zero."
+        echo "$c66_fx_out" | sed 's/^/         /'
+        ISSUES=$((ISSUES + 1))
+      else
+        # ── the scan: denominator first, then findings ─────────────────────────
+        local c66_out c66_rc=0
+        c66_out=$(bash "$c66_script" 2>&1) || c66_rc=$?
+        log "  DENOM: citation-anchor — $(echo "$c66_out" | sed -n 's/^DENOM: //p' | tail -1)"
+        if [[ $c66_rc -eq 3 ]]; then
+          flag_warn_or_issue "citation-anchor" "scan-surface error — $(echo "$c66_out" | sed -n 's/^SCAN-ERROR: //p' | tail -1). The denominator was not established, so a zero here would be untrustworthy; this is not a clean result"
+        elif [[ $c66_rc -ne 0 ]]; then
+          local _c66_hit
+          while IFS= read -r _c66_hit; do
+            [[ -z "$_c66_hit" ]] && continue
+            if [[ "$c66_mode" == "enforce" ]]; then
+              log "  FAIL:  citation-anchor — ${_c66_hit#FAIL: } — cite the composed section by name (a \`§ <verbatim heading>\` segment over a plain link), not by line number"
+              ISSUES=$((ISSUES + 1))
+            else
+              flag_warn_or_issue "citation-anchor" "${_c66_hit#FAIL: } — cite the composed section by name (a \`§ <verbatim heading>\` segment over a plain link), not by line number: a line anchor still resolves after the target is edited while pointing at the wrong content, so the drift is undetectable"
+            fi
+          done < <(echo "$c66_out" | grep '^FAIL: ' || true)
+        else
+          log "  OK:    citation-anchor — no line-number locator in any examined skill self-description file"
+        fi
+      fi
+    fi
+  fi
+
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
