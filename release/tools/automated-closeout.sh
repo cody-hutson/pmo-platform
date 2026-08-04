@@ -13,6 +13,8 @@
 #   5  create_chore_branch chore/v<X.Y>-stage-13-corpus-update
 #   6  transition_release_log  DEPLOYED → VERIFIED
 #   6.5 inject_outcome_field  **Outcome:** field on the visible-H4 Deployment Log block (#37; default SUCCESS, --outcome overrides)
+#   6.6 inject_velocity_field **Velocity:** field after **Cycle-Time:** in that block (stage-13-close.md Phase B-velocity; surface-resolved)
+#   6.7 append_release_learnings  sibling H4 `#### Release Learnings v<X.Y>` after the Deployment Log block (stage-13-close.md Phase A7; hot ledger only)
 #   7  append_release_index    new row in RELEASE_INDEX.md
 #   8  append_release_digest   new entry under v<MAJOR>.* H2 in RELEASE_DIGEST.md
 #   8.5 append_reversions   append re-version row(s) to RELEASE_REVERSIONS.md (#1679; N/A on the common no-collision path)
@@ -193,6 +195,13 @@ RELEASE_PLANS_DIR="$REPO_ROOT/release/releases/plans"
 CLEANUP_TOOL="$SCRIPT_DIR/cleanup-orphan-state.sh"
 COMPUTE_CYCLE_TIME="$SCRIPT_DIR/compute-cycle-time.sh"
 SYNTHESIZE_LEARNINGS="$SCRIPT_DIR/synthesize-release-learnings.sh"
+# Velocity producer for the Phase 6.6 `**Velocity:**` field. Sibling of
+# COMPUTE_CYCLE_TIME above, same form factor and same exit-code contract.
+# Deliberately NOT registered in check_paths(): that probe enumerates the four
+# CORPUS paths, and a TOOL dependency is guarded inline by its consuming phase —
+# the precedent PROJECTOR below already sets (an `[[ ! -f ]]` guard inside
+# emit_derived_entry rather than a fifth check_paths row).
+COMPUTE_VELOCITY="$SCRIPT_DIR/compute-release-velocity.sh"
 # Scaffold-residue token source (AC1 single-source seam). The token set has exactly
 # ONE definition — SCAFFOLD_RESIDUE_TOKENS in lint_release_corpus.py — and the shell
 # anchors read it from there via --print-scaffold-tokens. Retyping the literals in
@@ -1265,6 +1274,81 @@ _resolve_deployment_log_target() {
   return 1
 }
 
+# ─── Shared block-insert primitive ────────────────────────────────────────────
+#
+#   _insert_field_after_in_block <target-log> <version> <anchor-prefix> <line…>
+#
+# Inserts one or more field lines inside a version's `#### Deployment Log`
+# block, immediately after the first line whose raw text starts with
+# <anchor-prefix>. Bounded to the block (next `#### ` heading or EOF), so a
+# later release's identically-named field is never the anchor.
+#
+# <target-log> is the RESOLVED surface (see _resolve_deployment_log_target),
+# never `$RELEASE_LOG` unconditionally. Post-sweep an aged-out block's body
+# lives in an archive segment, and a hot-ledger-hardcoded target writes the
+# field into the STUB while the rest of the record sits one file over. That
+# split record still passes a presence check and still parses under the
+# consumer grammar — it fails silently, which is why the target is an argument
+# rather than a constant read inside this function.
+#
+# Passing the block heading itself (`#### Deployment Log <version>`) as the
+# anchor inserts immediately AFTER the heading — the documented fallback for a
+# block that carries no instrument field to anchor on yet.
+#
+# Exit: 0 inserted · 3 block heading absent · 4 block present, anchor absent.
+# The two failure modes are DISTINGUISHED so a caller can fall back to the
+# heading on 4 while still failing loudly on 3 — collapsing them would make a
+# missing block indistinguishable from a missing field.
+_insert_field_after_in_block() {
+  local _log="$1" _ver="$2" _anchor="$3"; shift 3
+  /usr/bin/python3 - "$_log" "$_ver" "$_anchor" "$@" <<'PY'
+import os
+import sys
+log_path, version, anchor = sys.argv[1:4]
+inject = list(sys.argv[4:])
+log_name = os.path.basename(log_path)
+with open(log_path, "r", encoding="utf-8") as f:
+    lines = f.read().splitlines()
+
+block_hdr = f"#### Deployment Log {version}"
+start = None
+for i, line in enumerate(lines):
+    if line.strip() == block_hdr:
+        start = i
+        break
+if start is None:
+    print(f"ERROR: Deployment Log block for {version} not found in {log_name}", file=sys.stderr)
+    sys.exit(3)
+
+# Block end = next `#### ` heading after start, or EOF.
+end = len(lines)
+for j in range(start + 1, len(lines)):
+    if lines[j].startswith("#### "):
+        end = j
+        break
+
+# Anchor resolution. The block heading is matched on its STRIPPED form because
+# that is how the block itself was located; every OTHER anchor keeps the
+# original raw-prefix semantics, so an indented look-alike inside a fenced
+# example is not mistaken for the field.
+anchor_idx = None
+if anchor.strip() == block_hdr:
+    anchor_idx = start
+else:
+    for j in range(start, end):
+        if lines[j].startswith(anchor):
+            anchor_idx = j
+            break
+if anchor_idx is None:
+    print(f"ERROR: {anchor} line not found in the {version} Deployment Log block in {log_name}", file=sys.stderr)
+    sys.exit(4)
+
+out = lines[:anchor_idx + 1] + inject + lines[anchor_idx + 1:]
+with open(log_path, "w", encoding="utf-8") as f:
+    f.write("\n".join(out) + "\n")
+PY
+}
+
 phase_inject_outcome_field() {
   # Resolve + validate the outcome value (default SUCCESS per §4).
   local outcome="${OUTCOME:-SUCCESS}"
@@ -1327,10 +1411,348 @@ phase_inject_outcome_field() {
   # In-place edit: within the v<X.Y> Deployment-Log block, insert the Outcome
   # line(s) immediately after the first `**Result:**` line. Bounded to the block
   # (next `#### ` heading or EOF) so a later release's `**Result:**` is untouched.
-  /usr/bin/python3 - "$target_log" "$VERSION" "$outcome" "$OUTCOME_RATIONALE" <<'PY'
+  # The mechanics live in the shared _insert_field_after_in_block primitive —
+  # phase 6.6 writes into the same block against a different anchor, and two
+  # copies of a block-bounded insert would be two chances to drift.
+  local _inject=( "**Outcome:** $outcome" )
+  [[ -n "$OUTCOME_RATIONALE" ]] && _inject+=( "**Outcome rationale:** $OUTCOME_RATIONALE" )
+  local _irc=0
+  _insert_field_after_in_block "$target_log" "$VERSION" '**Result:**' "${_inject[@]}" || _irc=$?
+  if [[ $_irc -ne 0 ]]; then
+    mark_phase "inject_outcome_field" "FAIL" "could not inject **Outcome:** into the $VERSION Deployment Log block (block or **Result:** line not found in $target_name; searched: $_surfaces)"
+    return 3
+  fi
+
+  local _detail="injected **Outcome:** $outcome after **Result:** in the $VERSION Deployment Log block ($target_name)"
+  [[ -n "$OUTCOME_RATIONALE" ]] && _detail="$_detail (+ **Outcome rationale:**)"
+  mark_phase "inject_outcome_field" "PASS" "$_detail"
+  return 0
+}
+
+# ─── Phase 6.6: inject_velocity_field (stage-13-close.md § Phase B-velocity) ──
+#
+# Emits the `**Velocity:**` field into the version's Deployment Log block,
+# immediately after `**Cycle-Time:**` — the field order
+# `Timestamp -> Cycle-Time -> Velocity -> Result -> Outcome` that
+# release-velocity-tracking.md § 3.3 fixes. Both are machine-computed instrument
+# fields; keeping them adjacent and ahead of the prose-and-verdict fields is the
+# "instruments first, narrative last" reading order.
+#
+# WHY THIS PHASE EXISTS. stage-13-close.md has mandated this field since the
+# velocity instrument shipped, and until now the mandate had no mechanism: the
+# field was a human's memory, hand-added in a follow-up commit AFTER this
+# script's own chore commit. It landed on some releases and not others, and a
+# miss is invisible until somebody reads the ledger.
+#
+# THREE PROPERTIES THIS PHASE OWES. Each has a naive implementation that still
+# exits 0, which is why each is stated rather than assumed:
+#
+#  (1) THE RIGHT SURFACE. The write target is resolved through
+#      _resolve_deployment_log_target, exactly as phase 6.5 resolves its own. A
+#      `$RELEASE_LOG`-hardcoded write on an ARCHIVED release puts the field in
+#      the hot STUB while `**Result:**` and `**Outcome:**` sit in the segment.
+#      That split record exits 0 AND parses under the shipped consumer grammar
+#      — presence and grammar checks both pass on a broken record, so neither
+#      is a sufficient observable. The idempotency probe reads the SAME resolved
+#      surface: a hot-scoped probe paired with a resolved write reads zero on an
+#      archived release and injects a SECOND copy into the segment, trading a
+#      loud failure for a silent duplication inside an archived record.
+#
+#  (2) A REAL VALUE OR AN HONEST N/A — NEVER A PLAUSIBLE ONE. The value comes
+#      from compute-release-velocity.sh, captured with the sentinel idiom. A
+#      `$( )` capture can return EMPTY at exit 0 where an inline computation
+#      could not, and an unguarded capture then writes `**Velocity:** ` with
+#      nothing after it and returns 0. Emptiness is therefore tested on the
+#      WHITESPACE-STRIPPED capture — a producer that emitted only a newline
+#      otherwise reads as non-empty. Same rule emit_derived_entry owns for the
+#      projector, created for the same shape of failure.
+#
+#  (3) A FIELD THE SHIPPED CONSUMER CAN ACTUALLY READ. The velocity accessor in
+#      core/skills/finops-usage-extractor/scripts/estimate-usage.sh requires
+#      UNBOLDED `planned <N> pts` AND `class <release-class>`; a row that bolds
+#      its numerals (`planned **28** pts`) is dropped as `unkeyable` with no
+#      diagnostic anywhere. Two such rows exist in the corpus today, both
+#      hand-authored, and nothing told their authors. The conformance
+#      self-assert rejects a non-conformant line AT EMIT TIME rather than
+#      shipping a field that reads fine to a human and parses to nothing.
+#      Prevention only — this phase never rewrites a field it did not author.
+
+# Conformance predicate for a composed `**Velocity:**` line, expressed against
+# the SHIPPED consumer grammar rather than a second one written here. The two
+# regexes below are byte-identical to the accessor's own
+# `match(line, /planned [0-9]+ pts/)` and `match(line, /class [a-z][a-z-]*/)`;
+# a producer and its consumer encoding the same token shape twice is the drift
+# seam this predicate exists to close.
+# Returns 0 conformant, 1 non-conformant.
+_velocity_line_conformant() {
+  local _l="$1"
+  # The sanctioned "cannot derive" emit. Anchored, so a narrative line that
+  # merely mentions N/A later does not qualify.
+  if /usr/bin/printf '%s\n' "$_l" | /usr/bin/grep -qE '^\*\*Velocity:\*\* N/A([^A-Za-z0-9]|$)'; then
+    return 0
+  fi
+  /usr/bin/printf '%s\n' "$_l" | /usr/bin/grep -qE 'planned [0-9]+ pts' || return 1
+  /usr/bin/printf '%s\n' "$_l" | /usr/bin/grep -qE 'class [a-z][a-z-]*'  || return 1
+  return 0
+}
+
+phase_inject_velocity_field() {
+  # LOOKUP SITE 1 of 2 — resolve which surface holds this version's block body,
+  # before anything else. Both the idempotency probe and the write consume this
+  # ONE answer, so they can never disagree about which file they mean.
+  local target_log _surfaces
+  target_log="$(_resolve_deployment_log_target "$VERSION" || true)"
+  _surfaces="$(_deployment_log_surfaces_desc)"
+
+  if [[ -z "$target_log" ]]; then
+    # Near-unreachable in the sequenced runner: phase 6.5 hard-FAILs on this
+    # exact condition immediately before. Implemented anyway — the phase has to
+    # be correct when driven standalone (the self-test does precisely that), and
+    # a guard whose correctness depends on its caller is not a guard.
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "inject_velocity_field" "DRY-RUN" "would FAIL: no **Result:** line in the $VERSION Deployment Log block on any surface, so the write target is unresolvable (searched: $_surfaces)"
+      return 0
+    fi
+    mark_phase "inject_velocity_field" "FAIL" "write target unresolvable — no **Result:** line in the $VERSION Deployment Log block on any surface (searched: $_surfaces)"
+    return 3
+  fi
+  local target_name; target_name="$(/usr/bin/basename "$target_log")"
+
+  # LOOKUP SITE 2 of 2 — idempotent, block-scoped, ON THE RESOLVED SURFACE.
+  if /usr/bin/awk -v ver="$VERSION" '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { inblk = 1; next }
+      inblk && line ~ /^#### / { inblk = 0 }
+      inblk && line ~ /^\*\*Velocity:\*\*/ { found = 1 }
+      END { exit(found ? 0 : 1) }
+    ' "$target_log" 2>/dev/null; then
+    # Present is present — this phase does not overwrite a field it did not
+    # author, and a historical backfill is a separate, operator-gated concern.
+    # But a SILENT skip over a non-conformant field is how the two unparseable
+    # rows in the corpus stayed invisible, so the skip carries the diagnostic.
+    local _existing
+    _existing="$(/usr/bin/awk -v ver="$VERSION" '
+        { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+        line == "#### Deployment Log " ver { inblk = 1; next }
+        inblk && line ~ /^#### / { inblk = 0 }
+        inblk && line ~ /^\*\*Velocity:\*\*/ && !done { print line; done = 1 }
+      ' "$target_log" 2>/dev/null || true)"
+    local _skip="**Velocity:** already present in the $VERSION Deployment Log block ($target_name)"
+    if ! _velocity_line_conformant "$_existing"; then
+      _skip="$_skip — WARNING: the existing field is NOT readable by the shipped velocity consumer (it needs unbolded 'planned <N> pts' AND 'class <release-class>', or an 'N/A' field): '$_existing'. Left exactly as authored; correcting a historical row is a separate, operator-gated change."
+    fi
+    mark_phase "inject_velocity_field" "SKIPPED" "$_skip"
+    return 0
+  fi
+
+  # ── Value. Resolved BEFORE the dry-run branch, so a dry run prints the exact
+  # bytes --apply will write — including an N/A degrade or a conformance
+  # failure. A dry run that renders a PREDICTED string is a green rehearsal for
+  # a red run.
+  local _line
+  if [[ ! -x "$COMPUTE_VELOCITY" ]]; then
+    _line="**Velocity:** N/A — compute-release-velocity.sh unavailable or returned no value"
+  else
+    local _cv_args=( "$VERSION" --milestone "$MILESTONE" )
+    [[ -n "$MERGE_SHA" ]] && _cv_args+=( --merge-sha "$MERGE_SHA" )
+    # Sentinel-preserved capture with explicit status propagation — the
+    # emit_derived_entry idiom, for the same two reasons: `$( )` strips trailing
+    # newlines, and `$?` after a pipeline reports the wrong command's status.
+    local _out _rc=0
+    _out="$("$COMPUTE_VELOCITY" "${_cv_args[@]}" 2>/dev/null; _prc=$?; /usr/bin/printf 'X'; exit "$_prc")" || _rc=$?
+    _out="${_out%X}"
+    local _stripped
+    _stripped="$(/usr/bin/printf '%s' "$_out" | /usr/bin/tr -d '[:space:]')"
+    if [[ "$_rc" -ne 0 || -z "$_stripped" ]]; then
+      # Exit-0-with-empty-stdout is a real failure mode of a captured producer
+      # and is NOT covered by an exit-code check. Degrade to an explicit,
+      # readable N/A. Never invent a value.
+      _line="**Velocity:** N/A — compute-release-velocity.sh unavailable or returned no value"
+    else
+      # The field is ONE line by contract (release-velocity-tracking.md § 3.3).
+      # Take the first; a producer that emitted more is caught by the
+      # conformance assert below rather than smuggled into the ledger.
+      _line="**Velocity:** ${_out%%$'\n'*}"
+    fi
+  fi
+
+  # ── Conformance self-assert, BEFORE any write.
+  if ! _velocity_line_conformant "$_line"; then
+    local _why="carries neither an unbolded 'planned <N> pts' with a 'class <release-class>' nor an 'N/A' field"
+    if /usr/bin/printf '%s\n' "$_line" | /usr/bin/grep -qE 'planned \*\*[0-9]+\*\* pts'; then
+      _why="bolds its numerals ('planned **<N>** pts') — emphasis inside the numeral makes the field unreadable to the shipped velocity consumer, which matches an UNBOLDED 'planned <N> pts'"
+    fi
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "inject_velocity_field" "DRY-RUN" "would FAIL: the composed **Velocity:** field is not consumer-parseable — it $_why: '$_line'"
+      return 0
+    fi
+    mark_phase "inject_velocity_field" "FAIL" "the composed **Velocity:** field is not consumer-parseable — it $_why: '$_line'"
+    return 3
+  fi
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "inject_velocity_field" "DRY-RUN" "would insert '$_line' after **Cycle-Time:** in the $VERSION Deployment Log block ($target_name)"
+    return 0
+  fi
+
+  # ── Insert after `**Cycle-Time:**`, falling back to the block heading when
+  # the block carries no Cycle-Time field yet (exit 4 = block present, anchor
+  # absent — distinguishable from exit 3 = block absent, which stays fatal).
+  local _irc=0 _anchor_desc="after **Cycle-Time:**"
+  _insert_field_after_in_block "$target_log" "$VERSION" '**Cycle-Time:**' "$_line" || _irc=$?
+  if [[ "$_irc" -eq 4 ]]; then
+    _irc=0
+    _anchor_desc="after the block heading (the block carries no **Cycle-Time:** field)"
+    _insert_field_after_in_block "$target_log" "$VERSION" "#### Deployment Log $VERSION" "$_line" || _irc=$?
+  fi
+  if [[ "$_irc" -ne 0 ]]; then
+    mark_phase "inject_velocity_field" "FAIL" "could not insert **Velocity:** into the $VERSION Deployment Log block (block not found in $target_name; searched: $_surfaces)"
+    return 3
+  fi
+
+  mark_phase "inject_velocity_field" "PASS" "injected '$_line' $_anchor_desc in the $VERSION Deployment Log block ($target_name)"
+  return 0
+}
+
+# ─── Phase 6.7: append_release_learnings (stage-13-close.md § Phase A7) ───────
+#
+# Appends the sibling H4 `#### Release Learnings v<X.Y>` block immediately after
+# the version's `#### Deployment Log v<X.Y>` block.
+#
+# THE TARGET IS `$RELEASE_LOG`, UNCONDITIONALLY. It does NOT go through
+# _resolve_deployment_log_target, and that asymmetry with phase 6.6 is the whole
+# point rather than an oversight: the two block artifacts sit in DIFFERENT
+# records classes. release/tools/sweep-release-corpus.py declares
+# SWEEP_CLASS = "Deployment Log" and KEEP_CLASS = "Release Learnings", and
+# core/governance/RECORDS_POLICY.md ratifies the split. A Release Learnings
+# block is NEVER relocated — heading and body stay in the hot ledger at every
+# archival window — because its named consumer degrades to a legitimate "no
+# novel learning this release" sentinel at exit zero when the body is absent. A
+# register reading a swept learnings block would assert there WERE no learnings
+# rather than that the learnings moved.
+#
+# Resolving this write would therefore be a records-policy VIOLATION, not a
+# style difference: on an archived release it would place the learnings block
+# inside a segment the policy forbids it to enter. A single uniform strategy for
+# both artifacts is wrong in one direction or the other, and it is wrong
+# precisely on archived releases.
+#
+# The anchor is the `#### Deployment Log <V>` HEADING in the hot ledger, which
+# is always present: the sweep retains every heading plus an `_Archived:_`
+# pointer, so no archived block lacks a hot counterpart to anchor on.
+phase_append_release_learnings() {
+  local _log_name; _log_name="$(/usr/bin/basename "$RELEASE_LOG")"
+
+  # ── Anchor presence in the HOT ledger.
+  if ! /usr/bin/awk -v ver="$VERSION" '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { found = 1 }
+      END { exit(found ? 0 : 1) }
+    ' "$RELEASE_LOG" 2>/dev/null; then
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "append_release_learnings" "DRY-RUN" "would FAIL: no '#### Deployment Log $VERSION' heading in $_log_name to anchor the sibling block on"
+      return 0
+    fi
+    mark_phase "append_release_learnings" "FAIL" "no '#### Deployment Log $VERSION' heading in $_log_name — the Release Learnings block is a SIBLING of that heading and has nothing to anchor on"
+    return 3
+  fi
+
+  # ── Idempotency, expressed as PLACEMENT rather than presence. A bare presence
+  # grep would also be satisfied by a learnings block sitting somewhere else in
+  # the ledger entirely, and would then skip a genuine placement defect.
+  local _next_h4
+  _next_h4="$(/usr/bin/awk -v ver="$VERSION" '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      seen && line ~ /^#### / { print line; exit }
+      line == "#### Deployment Log " ver { seen = 1 }
+    ' "$RELEASE_LOG" 2>/dev/null || true)"
+  if [[ "$_next_h4" == "#### Release Learnings $VERSION" ]]; then
+    mark_phase "append_release_learnings" "SKIPPED" "'#### Release Learnings $VERSION' is already the sibling H4 after the $VERSION Deployment Log block ($_log_name)"
+    return 0
+  fi
+
+  # ── Render. Never hand-composed: synthesize-release-learnings.sh owns the
+  # block's shape AND its source-events accounting, and a second composer here
+  # would be a second writer of a fact that already has one.
+  if [[ ! -x "$SYNTHESIZE_LEARNINGS" ]]; then
+    mark_phase "append_release_learnings" "SKIPPED" "synthesize-release-learnings.sh not executable — cannot render the $VERSION learnings block"
+    return 0
+  fi
+
+  local _render _rc=0
+  _render="$("$SYNTHESIZE_LEARNINGS" --mode per-release --version "$VERSION" 2>/dev/null; _prc=$?; /usr/bin/printf 'X'; exit "$_prc")" || _rc=$?
+  # Sentinel-preserved capture, and the explicit `exit "$_prc"` propagates the
+  # PRODUCER's status rather than printf's. The sentinel keeps the render's own
+  # trailing newlines rather than letting `$( )` eat them, so the structural
+  # assert below and the dry-run preview both see the producer's exact bytes.
+  # NOTE on why the block's separation does NOT depend on this: the insert below
+  # normalises separation itself (rstrip + one explicit blank line either side),
+  # so a producer that forgot its trailing newline still lands correctly. That
+  # is deliberate — trusting a producer to terminate its own block is a weaker
+  # guarantee than establishing the separation at the insert site.
+  _render="${_render%X}"
+  local _rstripped
+  _rstripped="$(/usr/bin/printf '%s' "$_render" | /usr/bin/tr -d '[:space:]')"
+  if [[ "$_rc" -ne 0 ]] || [[ -z "$_rstripped" ]]; then
+    local _rwhy="exited $_rc"
+    [[ "$_rc" -eq 0 ]] && _rwhy="exited 0 with an EMPTY render (whitespace-only stdout) — refusing to append a blank block"
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "append_release_learnings" "DRY-RUN" "would FAIL: synthesize-release-learnings.sh --mode per-release --version $VERSION $_rwhy"
+      return 0
+    fi
+    mark_phase "append_release_learnings" "FAIL" "synthesize-release-learnings.sh --mode per-release --version $VERSION $_rwhy"
+    return 3
+  fi
+
+  # ── Structural self-assert on the render, before it becomes corpus bytes.
+  local _missing="" _f
+  /usr/bin/printf '%s\n' "$_render" | /usr/bin/grep -qxF "#### Release Learnings $VERSION" || _missing="the '#### Release Learnings $VERSION' heading; "
+  for _f in 'Synthesized at' 'Source events' 'Source-row anchors' 'Surprise' 'Would-change' 'Watch-for'; do
+    /usr/bin/printf '%s\n' "$_render" | /usr/bin/grep -qE "^\*\*${_f}:\*\*" || _missing="${_missing}**${_f}:** ; "
+  done
+  if [[ -n "$_missing" ]]; then
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "append_release_learnings" "DRY-RUN" "would FAIL: the rendered $VERSION learnings block is missing ${_missing%; }"
+      return 0
+    fi
+    mark_phase "append_release_learnings" "FAIL" "the rendered $VERSION learnings block is missing ${_missing%; } — refusing to append a structurally incomplete block"
+    return 3
+  fi
+
+  # ── D-1 = BLOCK (operator-decided). A render whose source-event count is ZERO
+  # is the synthesizer's honest "nothing was captured" sentinel, not a learning.
+  # Appending it writes "no novel learning this release" into a permanent record
+  # when the truth is that the `release-synthesis/learnings-triple` row was never
+  # captured — an assertion about the release the evidence does not support, and
+  # one that reads identically to a release that genuinely had no learning.
+  #
+  # stage-13-close.md already ratifies the shape of this call one layer down:
+  # "a projected entry that never reaches its file is a close-out FAILURE." The
+  # same proposition applies to an entry produced empty rather than dropped.
+  # The remedy is mechanical and belongs BEFORE the close, not during it.
+  if /usr/bin/printf '%s\n' "$_render" | /usr/bin/grep -qE '^\*\*Source events:\*\* 0([^0-9]|$)'; then
+    local _remedy="capture the release's learnings triple FIRST, then re-run close-out: release/tools/append-pipeline-event.sh --version $VERSION --stage 13 --event-type release-synthesis --event-subtype learnings-triple --actor <actor> --subject <subject> --payload '<surprise/would-change/watch-for>' (run it with --help for the required flag set, and --dry-run to validate the row before appending)"
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "append_release_learnings" "DRY-RUN" "would FAIL: the $VERSION learnings render reports 0 source events — the release-synthesis/learnings-triple row was never captured, so the block would record 'no novel learning this release' as a fact rather than as an absence of evidence. Remedy: $_remedy"
+      return 0
+    fi
+    mark_phase "append_release_learnings" "FAIL" "the $VERSION learnings render reports 0 source events — the release-synthesis/learnings-triple row was never captured, so appending would record 'no novel learning this release' as a fact rather than as an absence of evidence. Remedy: $_remedy"
+    return 3
+  fi
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "append_release_learnings" "DRY-RUN" "would append the '#### Release Learnings $VERSION' sibling H4 immediately after the $VERSION Deployment Log block ($_log_name)"
+    return 0
+  fi
+
+  # ── Insert: sibling H4 immediately after the Deployment Log block, one blank
+  # line either side. Trailing blank lines already inside the block are absorbed
+  # rather than doubled.
+  local _arc=0
+  /usr/bin/python3 - "$RELEASE_LOG" "$VERSION" "$_render" <<'PY' || _arc=$?
 import os
 import sys
-log_path, version, outcome, rationale = sys.argv[1:5]
+log_path, version, render = sys.argv[1:4]
 log_name = os.path.basename(log_path)
 with open(log_path, "r", encoding="utf-8") as f:
     lines = f.read().splitlines()
@@ -1352,31 +1774,29 @@ for j in range(start + 1, len(lines)):
         end = j
         break
 
-# Find the `**Result:**` line within the block; insert after it.
-result_idx = None
-for j in range(start, end):
-    if lines[j].startswith("**Result:**"):
-        result_idx = j
-        break
-if result_idx is None:
-    print(f"ERROR: **Result:** line not found in the {version} Deployment Log block in {log_name}", file=sys.stderr)
-    sys.exit(3)
+# Separation is established HERE, not inherited from the producer. Blank lines
+# already trailing inside the block are ABSORBED (ins walks back past them) and
+# the tail resumes at the original block end, so those absorbed blanks are not
+# re-emitted after the insert. Getting this wrong yields a doubled blank line
+# after the block — which renders identically in most viewers and is invisible
+# to every presence check, so the self-test asserts the exact count on both
+# sides rather than the block's mere existence.
+ins = end
+while ins > start + 1 and lines[ins - 1].strip() == "":
+    ins -= 1
 
-inject = [f"**Outcome:** {outcome}"]
-if rationale:
-    inject.append(f"**Outcome rationale:** {rationale}")
-out = lines[:result_idx + 1] + inject + lines[result_idx + 1:]
+render_lines = render.rstrip("\n").split("\n")
+tail = lines[end:]
+out = lines[:ins] + [""] + render_lines + ([""] + tail if tail else [])
 with open(log_path, "w", encoding="utf-8") as f:
     f.write("\n".join(out) + "\n")
 PY
-  if [[ $? -ne 0 ]]; then
-    mark_phase "inject_outcome_field" "FAIL" "could not inject **Outcome:** into the $VERSION Deployment Log block (block or **Result:** line not found in $target_name; searched: $_surfaces)"
+  if [[ "$_arc" -ne 0 ]]; then
+    mark_phase "append_release_learnings" "FAIL" "could not append the '#### Release Learnings $VERSION' block after the $VERSION Deployment Log block in $_log_name"
     return 3
   fi
 
-  local _detail="injected **Outcome:** $outcome after **Result:** in the $VERSION Deployment Log block ($target_name)"
-  [[ -n "$OUTCOME_RATIONALE" ]] && _detail="$_detail (+ **Outcome rationale:**)"
-  mark_phase "inject_outcome_field" "PASS" "$_detail"
+  mark_phase "append_release_learnings" "PASS" "appended the '#### Release Learnings $VERSION' sibling H4 immediately after the $VERSION Deployment Log block ($_log_name)"
   return 0
 }
 
@@ -4332,6 +4752,356 @@ EOF
   RELEASE_LOG="$_oc_saved_log"; OUTCOME="$_oc_saved_outcome"; OUTCOME_RATIONALE="$_oc_saved_rat"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # ── Test 4c.5: phase_inject_velocity_field (6.6) + phase_append_release_learnings (6.7)
+  #
+  # Offline, hermetic. Both producers are STUBBED (the real ones reach `gh` and
+  # the operator-instance event log) but every stub emits the REAL shape, so the
+  # conformance and structural asserts run against realistic bytes.
+  #
+  # ASSERT ON CONTENT AND ON TARGET FILE — NOT ON EXIT CODE. Three observables
+  # that look sufficient are all vacuous for this pair, and each was measured
+  # rather than assumed:
+  #   * exit code — a wrong-SURFACE write exits 0;
+  #   * "did RELEASE_LOG change?" — phases 6 and 6.5 already mutate it every
+  #     run, so a bare file-diff passes with these phases entirely absent;
+  #   * the shipped consumer grammar alone — a field written into the hot stub
+  #     while the rest of its block sits in a segment still parses cleanly.
+  # Hence the CO-LOCATION limbs (f)/(i): the field and its block must be in the
+  # same file, not merely both present somewhere.
+  local _vl_saved_log="$RELEASE_LOG" _vl_saved_ver="$VERSION" _vl_saved_mode="$MODE"
+  local _vl_saved_cv="$COMPUTE_VELOCITY" _vl_saved_sl="$SYNTHESIZE_LEARNINGS"
+  local _vl_saved_ms="$MILESTONE" _vl_saved_sha="$MERGE_SHA"
+  local _vl_tmp; _vl_tmp="$(/usr/bin/mktemp -d -t velocity-selftest.XXXXXX)"
+  MODE="apply"; MILESTONE="999"; MERGE_SHA=""
+
+  local _vl_cv="$_vl_tmp/cv-ok.sh" _vl_cv_bold="$_vl_tmp/cv-bold.sh" _vl_cv_empty="$_vl_tmp/cv-empty.sh"
+  local _vl_sl="$_vl_tmp/sl-ok.sh" _vl_sl_zero="$_vl_tmp/sl-zero.sh" _vl_sl_empty="$_vl_tmp/sl-empty.sh"
+  /bin/cat > "$_vl_cv" <<'EOF'
+#!/bin/sh
+echo "planned 12 pts / delivered 12 pts (1.00); files-changed 9; allocation 0/12/0 pts (feature/debt/protocol-slack); class routine; mechanism: compute-release-velocity.sh"
+EOF
+  /bin/cat > "$_vl_cv_bold" <<'EOF'
+#!/bin/sh
+echo "planned **12** pts / delivered **12** pts (1.00); class routine; mechanism: compute-release-velocity.sh"
+EOF
+  /bin/cat > "$_vl_cv_empty" <<'EOF'
+#!/bin/sh
+printf '   \n'
+exit 0
+EOF
+  /bin/cat > "$_vl_sl" <<'EOF'
+#!/bin/sh
+V=""
+while [ $# -gt 0 ]; do case "$1" in --version) V="$2"; shift 2 ;; *) shift ;; esac; done
+cat <<INNER
+#### Release Learnings $V
+
+**Synthesized at:** 2026-06-28T00:00:00Z
+**Source events:** 2 \`release-synthesis/learnings-triple\` row(s) from \`pipeline-event-log.md\` (filter: version=\`$V\`)
+**Source-row anchors:** row 41; row 42
+
+**Surprise:** the archival sweep moved which file the record lives in.
+**Would-change:** resolve the surface before writing, not after.
+**Watch-for:** a split record that still parses.
+
+INNER
+EOF
+  /bin/cat > "$_vl_sl_zero" <<'EOF'
+#!/bin/sh
+V=""
+while [ $# -gt 0 ]; do case "$1" in --version) V="$2"; shift 2 ;; *) shift ;; esac; done
+cat <<INNER
+#### Release Learnings $V
+
+**Synthesized at:** 2026-06-28T00:00:00Z
+**Source events:** 0 \`release-synthesis/learnings-triple\` row(s) from \`pipeline-event-log.md\` (filter: version=\`$V\`)
+**Source-row anchors:** N/A
+
+**Surprise:** N/A — no novel learning this release
+**Would-change:** N/A — no novel learning this release
+**Watch-for:** N/A — no novel learning this release
+
+INNER
+EOF
+  /bin/cat > "$_vl_sl_empty" <<'EOF'
+#!/bin/sh
+printf '  \n \n'
+exit 0
+EOF
+  /bin/chmod +x "$_vl_cv" "$_vl_cv_bold" "$_vl_cv_empty" "$_vl_sl" "$_vl_sl_zero" "$_vl_sl_empty"
+
+  # HOT fixture. v9.95 is the clean target; v9.94 is an untouched sibling; v9.93
+  # carries the DECOY — a hand-authored `**Velocity:** 3 issues.` that satisfies
+  # a presence probe and satisfies NO part of the consumer grammar. It is the
+  # shape two live corpus rows already have.
+  RELEASE_LOG="$_vl_tmp/RELEASE_LOG.md"
+  local _vl_write
+  _vl_write() {
+    /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+
+#### Deployment Log v9.95
+**Mechanism:** git merge.
+**Timestamp:** 2026-06-28.
+**Cycle-Time:** 3d 4h; mechanism: compute-cycle-time.sh
+**Result:** SUCCESS — green CI.
+
+#### Deployment Log v9.94
+**Cycle-Time:** 1d 0h.
+**Result:** SUCCESS — prior release.
+
+#### Deployment Log v9.93
+**Cycle-Time:** 2d 0h.
+**Velocity:** 3 issues.
+**Result:** SUCCESS — decoy row: reads fine, parses to nothing.
+EOF
+  }
+
+  # Field order inside a block, as a space-joined sequence of field NAMES. A
+  # sequence is falsifiable in a way a pair of greps is not: it proves position,
+  # not merely presence.
+  local _vl_seq
+  _vl_seq() {
+    /usr/bin/awk -v ver="$2" '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { inblk = 1; next }
+      inblk && line ~ /^#### / { inblk = 0 }
+      inblk && line ~ /^\*\*[A-Za-z][A-Za-z-]*:\*\*/ {
+        n = line; sub(/:\*\*.*$/, "", n); sub(/^\*\*/, "", n); printf "%s ", n
+      }
+    ' "$1" 2>/dev/null || true
+  }
+  # Count `**Velocity:**` lines inside ONE version's block on ONE file.
+  local _vl_count
+  _vl_count() {
+    /usr/bin/awk -v ver="$2" '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { inblk = 1; next }
+      inblk && line ~ /^#### / { inblk = 0 }
+      inblk && line ~ /^\*\*Velocity:\*\*/ { n++ }
+      END { print n + 0 }
+    ' "$1" 2>/dev/null || echo 0
+  }
+  # The H4 heading immediately following a version's Deployment Log block.
+  local _vl_next_h4
+  _vl_next_h4() {
+    /usr/bin/awk -v ver="$2" '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      seen && line ~ /^#### / { print line; exit }
+      line == "#### Deployment Log " ver { seen = 1 }
+    ' "$1" 2>/dev/null || true
+  }
+
+  COMPUTE_VELOCITY="$_vl_cv"; SYNTHESIZE_LEARNINGS="$_vl_sl"
+
+  # (a) velocity lands BETWEEN **Cycle-Time:** and **Result:** on a clean block.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vl_write; VERSION="v9.95"
+  phase_inject_velocity_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_velocity_field)" == PASS\|* ]] || { echo "FAIL: phase_inject_velocity_field on a clean block should PASS, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  local _vl_got; _vl_got="$(_vl_seq "$RELEASE_LOG" v9.95)"
+  [[ "$_vl_got" == "Mechanism Timestamp Cycle-Time Velocity Result " ]] || { echo "FAIL: v9.95 field order must be 'Mechanism Timestamp Cycle-Time Velocity Result ', got '$_vl_got'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF '**Velocity:** planned 12 pts / delivered 12 pts (1.00)' "$RELEASE_LOG" || { echo "FAIL: the producer's value must reach the ledger verbatim"; failures=$((failures+1)); }
+
+  # (b) the sibling blocks are untouched — v9.94 gains nothing, and the v9.93
+  # decoy is neither rewritten nor duplicated.
+  [[ "$(_vl_count "$RELEASE_LOG" v9.94)" -eq 0 ]] || { echo "FAIL: velocity leaked into the sibling v9.94 block"; failures=$((failures+1)); }
+  [[ "$(_vl_count "$RELEASE_LOG" v9.93)" -eq 1 ]] || { echo "FAIL: the v9.93 decoy block must still carry exactly 1 **Velocity:** line"; failures=$((failures+1)); }
+  /usr/bin/grep -qFx '**Velocity:** 3 issues.' "$RELEASE_LOG" || { echo "FAIL: the v9.93 decoy line must be left exactly as authored"; failures=$((failures+1)); }
+
+  # (e) the learnings block is the H4 IMMEDIATELY following its Deployment Log
+  # block — placement, not mere presence.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_release_learnings >/dev/null 2>&1 || true
+  [[ "$(get_phase append_release_learnings)" == PASS\|* ]] || { echo "FAIL: phase_append_release_learnings should PASS, got '$(get_phase append_release_learnings)'"; failures=$((failures+1)); }
+  local _vl_nh; _vl_nh="$(_vl_next_h4 "$RELEASE_LOG" v9.95)"
+  [[ "$_vl_nh" == "#### Release Learnings v9.95" ]] || { echo "FAIL: the H4 immediately after the v9.95 Deployment Log block must be '#### Release Learnings v9.95', got '$_vl_nh'"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\*\*Watch-for:\*\* a split record that still parses\.$' "$RELEASE_LOG" || { echo "FAIL: the rendered learnings body must reach the ledger intact (last field lost => capture truncated)"; failures=$((failures+1)); }
+  # the v9.94 block must not have been displaced or absorbed
+  /usr/bin/grep -qFx '#### Deployment Log v9.94' "$RELEASE_LOG" || { echo "FAIL: the sibling v9.94 heading was destroyed by the learnings insert"; failures=$((failures+1)); }
+  # EXACT separation — one blank line either side of the inserted block. Neither
+  # zero (the H4 fuses to the preceding field line) nor two (the producer's own
+  # trailing newline doubled onto the insert's). The insert site owns this, so
+  # it is asserted at the insert site rather than trusted to the producer.
+  local _vl_sep
+  _vl_sep="$(/usr/bin/awk '
+    { l[NR] = $0 }
+    END {
+      for (i = 1; i <= NR; i++) if (l[i] == "#### Release Learnings v9.95") h = i
+      if (!h) { print "NOHEADING"; exit }
+      b = 0; i = h - 1; while (i >= 1 && l[i] == "") { b++; i-- }
+      n = 0; for (j = h + 1; j <= NR; j++) if (l[j] ~ /^#### /) { n = j; break }
+      if (n) { a = 0; i = n - 1; while (i > h && l[i] == "") { a++; i-- } } else a = -1
+      printf "before=%d after=%d", b, a
+    }' "$RELEASE_LOG" 2>/dev/null || true)"
+  [[ "$_vl_sep" == "before=1 after=1" ]] || { echo "FAIL: the learnings block must sit with exactly one blank line either side, got '$_vl_sep'"; failures=$((failures+1)); }
+
+  # (c) idempotent re-run — both phases SKIP and neither duplicates.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_velocity_field >/dev/null 2>&1 || true
+  phase_append_release_learnings >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_velocity_field)" == SKIPPED\|* ]] || { echo "FAIL: velocity re-run must SKIP, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  [[ "$(get_phase append_release_learnings)" == SKIPPED\|* ]] || { echo "FAIL: learnings re-run must SKIP, got '$(get_phase append_release_learnings)'"; failures=$((failures+1)); }
+  [[ "$(_vl_count "$RELEASE_LOG" v9.95)" -eq 1 ]] || { echo "FAIL: velocity re-run duplicated the field"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/grep -c '^#### Release Learnings v9\.95$' "$RELEASE_LOG")" -eq 1 ]] || { echo "FAIL: learnings re-run duplicated the block"; failures=$((failures+1)); }
+
+  # (h) the DECOY arm — a non-conformant existing field SKIPs (this phase never
+  # rewrites a field it did not author) but the skip is NOT silent: the detail
+  # must name the surface AND flag that the field is unreadable to the consumer.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vl_write; VERSION="v9.93"
+  phase_inject_velocity_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_velocity_field)" == SKIPPED\|* ]] || { echo "FAIL: a block already carrying a **Velocity:** line must SKIP, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'RELEASE_LOG.md' <<<"$(get_phase inject_velocity_field)" || { echo "FAIL: the SKIPPED detail must name the surface it read"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'NOT readable by the shipped velocity consumer' <<<"$(get_phase inject_velocity_field)" || { echo "FAIL: a SKIP over a NON-CONFORMANT field must say so — a silent skip is how the two unparseable corpus rows stayed invisible; got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  [[ "$(_vl_count "$RELEASE_LOG" v9.93)" -eq 1 ]] || { echo "FAIL: the decoy block must not gain a second **Velocity:** line"; failures=$((failures+1)); }
+  # control: the same detail string over a CONFORMANT existing field must NOT
+  # carry the warning — otherwise the needle above fires on every skip and
+  # proves nothing.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vl_write; VERSION="v9.95"
+  phase_inject_velocity_field >/dev/null 2>&1 || true   # inject a conformant field
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_velocity_field >/dev/null 2>&1 || true   # re-run over it
+  /usr/bin/grep -qF 'NOT readable by the shipped velocity consumer' <<<"$(get_phase inject_velocity_field)" && { echo "FAIL: control — a SKIP over a CONFORMANT field must NOT carry the non-conformance warning"; failures=$((failures+1)); }
+
+  # (d) a BOLDED-NUMERAL value is REJECTED by the conformance self-assert, and
+  # nothing is written. This is the guard that would have caught the two live
+  # `planned **N** pts` rows at emit time.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vl_write; VERSION="v9.95"; COMPUTE_VELOCITY="$_vl_cv_bold"
+  phase_inject_velocity_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: a bolded-numeral velocity value must FAIL the conformance self-assert, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'bolds its numerals' <<<"$(get_phase inject_velocity_field)" || { echo "FAIL: the conformance failure must name the bolded-numeral cause, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  [[ "$(_vl_count "$RELEASE_LOG" v9.95)" -eq 0 ]] || { echo "FAIL: a rejected value must write NOTHING"; failures=$((failures+1)); }
+
+  # (j-velocity) empty capture at exit 0 degrades to an explicit N/A field —
+  # never `**Velocity:** ` with nothing after it, and never an invented number.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vl_write; VERSION="v9.95"; COMPUTE_VELOCITY="$_vl_cv_empty"
+  phase_inject_velocity_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_velocity_field)" == PASS\|* ]] || { echo "FAIL: an empty producer capture must degrade to an N/A field, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF '**Velocity:** N/A — compute-release-velocity.sh unavailable or returned no value' "$RELEASE_LOG" || { echo "FAIL: the N/A degrade line is missing from the ledger"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\*\*Velocity:\*\*[[:space:]]*$' "$RELEASE_LOG" && { echo "FAIL: an empty capture must never write a bare '**Velocity:**' with no value"; failures=$((failures+1)); }
+  COMPUTE_VELOCITY="$_vl_cv"
+
+  # (j) the LEARNINGS producer emitting only whitespace at exit 0 FAILs and
+  # writes nothing. An exit-code check alone does not cover this: the stub
+  # exits 0. The DIAGNOSTIC is asserted, not merely the verdict — the structural
+  # assert downstream would also reject a whitespace render, so a bare
+  # FAIL-and-wrote-nothing check cannot tell which guard fired, and the
+  # empty-capture guard could be deleted with the limb still green.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vl_write; VERSION="v9.95"; SYNTHESIZE_LEARNINGS="$_vl_sl_empty"
+  phase_append_release_learnings >/dev/null 2>&1 || true
+  [[ "$(get_phase append_release_learnings | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: a whitespace-only render at exit 0 must FAIL, got '$(get_phase append_release_learnings)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'exited 0 with an EMPTY render' <<<"$(get_phase append_release_learnings)" || { echo "FAIL: the whitespace-only render must be caught by the EMPTY-CAPTURE guard and say so, got '$(get_phase append_release_learnings)'"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/grep -c '^#### Release Learnings' "$RELEASE_LOG")" -eq 0 ]] || { echo "FAIL: an empty render must append nothing"; failures=$((failures+1)); }
+
+  # (k) D-1 = BLOCK. A zero-source-event render is the synthesizer's "nothing was
+  # captured" sentinel; appending it would record an absence of EVIDENCE as a
+  # statement of FACT. The close blocks instead, and the remedy is printed.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vl_write; VERSION="v9.95"; SYNTHESIZE_LEARNINGS="$_vl_sl_zero"
+  phase_append_release_learnings >/dev/null 2>&1 || true
+  [[ "$(get_phase append_release_learnings | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: D-1 — a 0-source-event learnings render must BLOCK the close, got '$(get_phase append_release_learnings)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'append-pipeline-event.sh' <<<"$(get_phase append_release_learnings)" || { echo "FAIL: the D-1 block must print the capture remedy, got '$(get_phase append_release_learnings)'"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/grep -c '^#### Release Learnings' "$RELEASE_LOG")" -eq 0 ]] || { echo "FAIL: a D-1 block must append nothing"; failures=$((failures+1)); }
+  # control: the SAME phase over a >0-source-event render PASSes and appends —
+  # otherwise the FAIL above could be any failure at all, not the D-1 branch.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  SYNTHESIZE_LEARNINGS="$_vl_sl"
+  phase_append_release_learnings >/dev/null 2>&1 || true
+  [[ "$(get_phase append_release_learnings)" == PASS\|* ]] || { echo "FAIL: D-1 control — a >0-source-event render must PASS, got '$(get_phase append_release_learnings)'"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/grep -c '^#### Release Learnings v9\.95$' "$RELEASE_LOG")" -eq 1 ]] || { echo "FAIL: D-1 control — the block must be appended exactly once"; failures=$((failures+1)); }
+
+  # ── (f)(g)(i) POST-ARCHIVAL. Separate tmp dir so the segment glob cannot see,
+  # or be seen by, the hot-only cases above.
+  local _vl_atmp; _vl_atmp="$(/usr/bin/mktemp -d -t velocity-archived.XXXXXX)"
+  local _vl_aseg="$_vl_atmp/RELEASE_LOG_ARCHIVE-v9.md"
+  local _vl_write_archived
+  _vl_write_archived() {
+    /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+
+#### Deployment Log v9.93
+_Archived: [segment](RELEASE_LOG_ARCHIVE-v9.md)_
+
+#### Deployment Log v9.92
+_Archived: [segment](RELEASE_LOG_ARCHIVE-v9.md)_
+EOF
+    /bin/cat > "$_vl_aseg" <<'EOF'
+# RELEASE_LOG_ARCHIVE-v9
+
+#### Deployment Log v9.93
+**Mechanism:** git merge.
+**Cycle-Time:** 5d 0h.
+**Result:** SUCCESS — archived body.
+
+#### Deployment Log v9.92
+**Mechanism:** git merge.
+**Cycle-Time:** 4d 0h.
+**Result:** SUCCESS — archived sibling.
+EOF
+  }
+  RELEASE_LOG="$_vl_atmp/RELEASE_LOG.md"
+  COMPUTE_VELOCITY="$_vl_cv"; SYNTHESIZE_LEARNINGS="$_vl_sl"
+
+  # (f) CO-LOCATION. The velocity field must land in the SEGMENT — the same file
+  # and the same block as this version's **Result:** line — with the hot stub
+  # left at zero. A hot-ledger write here exits 0 and still parses under the
+  # consumer grammar, so co-location is the only observable that separates the
+  # two.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vl_write_archived; VERSION="v9.93"
+  phase_inject_velocity_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_velocity_field)" == PASS\|* ]] || { echo "FAIL: archived-block velocity inject should PASS, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  [[ "$(_vl_count "$_vl_aseg" v9.93)" -eq 1 ]] || { echo "FAIL: the velocity field must land in the ARCHIVE SEGMENT for an archived block"; failures=$((failures+1)); }
+  [[ "$(_vl_count "$RELEASE_LOG" v9.93)" -eq 0 ]] || { echo "FAIL: nothing may be written into the hot stub when the body is archived (split record: parses fine, still broken)"; failures=$((failures+1)); }
+  local _vl_aseq; _vl_aseq="$(_vl_seq "$_vl_aseg" v9.93)"
+  [[ "$_vl_aseq" == "Mechanism Cycle-Time Velocity Result " ]] || { echo "FAIL: segment field order must be 'Mechanism Cycle-Time Velocity Result ', got '$_vl_aseq'"; failures=$((failures+1)); }
+  [[ "$(_vl_count "$_vl_aseg" v9.92)" -eq 0 ]] || { echo "FAIL: velocity leaked into the sibling v9.92 block inside the segment"; failures=$((failures+1)); }
+
+  # (g) cross-surface idempotency — the probe must read the SEGMENT, not the hot
+  # stub, or the re-run silently injects a SECOND copy into an archived record.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_velocity_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_velocity_field)" == SKIPPED\|* ]] || { echo "FAIL: archived-block velocity re-run must SKIP (cross-surface idempotency), got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  [[ "$(_vl_count "$_vl_aseg" v9.93)" -eq 1 ]] || { echo "FAIL: archived-block re-run must not duplicate the **Velocity:** line in the segment"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'RELEASE_LOG_ARCHIVE-v9.md' <<<"$(get_phase inject_velocity_field)" || { echo "FAIL: the archived SKIP detail must name the SEGMENT it read, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+
+  # (i) LEARNINGS NEVER RESOLVES TO A SEGMENT. Over the same archived fixture the
+  # learnings block must land in the HOT ledger — RECORDS_POLICY KEEP_CLASS — and
+  # every segment's Release Learnings count must stay 0. This is the limb that
+  # would red if 6.7 were "simplified" to share 6.6's resolver.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_release_learnings >/dev/null 2>&1 || true
+  [[ "$(get_phase append_release_learnings)" == PASS\|* ]] || { echo "FAIL: archived-block learnings append should PASS, got '$(get_phase append_release_learnings)'"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/grep -c '^#### Release Learnings v9\.93$' "$RELEASE_LOG")" -eq 1 ]] || { echo "FAIL: the learnings block must land in the HOT ledger even when the Deployment Log body is archived (RECORDS_POLICY KEEP_CLASS)"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/grep -c '^#### Release Learnings' "$_vl_aseg")" -eq 0 ]] || { echo "FAIL: a Release Learnings block must NEVER be written into an archive segment"; failures=$((failures+1)); }
+  local _vl_anh; _vl_anh="$(_vl_next_h4 "$RELEASE_LOG" v9.93)"
+  [[ "$_vl_anh" == "#### Release Learnings v9.93" ]] || { echo "FAIL: the learnings block must be the H4 immediately after the hot v9.93 stub, got '$_vl_anh'"; failures=$((failures+1)); }
+
+  # dry-run parity: over the SAME archived fixture, dry-run names the real target
+  # surface and writes nothing. A dry run that renders a predicted string rather
+  # than the resolved one is a green rehearsal for a red run.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vl_write_archived; VERSION="v9.93"; MODE="dry-run"
+  phase_inject_velocity_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: dry-run velocity must mark DRY-RUN, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'RELEASE_LOG_ARCHIVE-v9.md' <<<"$(get_phase inject_velocity_field)" || { echo "FAIL: dry-run must name the segment it would write to, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'planned 12 pts' <<<"$(get_phase inject_velocity_field)" || { echo "FAIL: dry-run must print the RESOLVED bytes, not a predicted string, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  [[ "$(_vl_count "$_vl_aseg" v9.93)" -eq 0 ]] || { echo "FAIL: dry-run must not write"; failures=$((failures+1)); }
+  MODE="apply"
+
+  /bin/rm -rf "$_vl_atmp" 2>/dev/null || true
+  /bin/rm -rf "$_vl_tmp" 2>/dev/null || true
+  unset -f _vl_write _vl_write_archived _vl_seq _vl_count _vl_next_h4
+  RELEASE_LOG="$_vl_saved_log"; VERSION="$_vl_saved_ver"; MODE="$_vl_saved_mode"
+  COMPUTE_VELOCITY="$_vl_saved_cv"; SYNTHESIZE_LEARNINGS="$_vl_saved_sl"
+  MILESTONE="$_vl_saved_ms"; MERGE_SHA="$_vl_saved_sha"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # Test 4d: phase_detect_open_issues exclude filter (#38, #3665) — offline, hermetic.
   # Stubs $GH so `gh issue list … --json number,title,labels --jq …` returns a fixed
   # `<number>\t<labels-csv>\t<title>` fixture (gh applies --jq server-side, so the
@@ -5854,6 +6624,7 @@ FOLOG
   echo "  extract_row_state + extract_milestone_slug validated (3 shapes: vX.Y- / NN- / pure-alpha incl. hyphen-less #2539 a4 branch; version-less end-anchor; #667 F2 bare theme-named slug → title)" >&2
   echo "  phase_append_release_digest + phase_append_release_index + phase_append_changelog validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency; #2048 — version-less marker + _unversioned notes link + marker-aware idempotency + CHANGELOG SKIP; #4455 — all three entries PROJECTED by generate_release_index.py, versioned CHANGELOG block lands above the prior entry WITH its separating blank line intact, re-run SKIPs, and a non-owner/repo-shaped REPO_SLUG FAILs before writing a broken Release URL)" >&2
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped; #3715 two-surface — archived body resolves to its segment and the hot ledger is left untouched / cross-surface idempotency re-run SKIPs without duplicating / a genuine **Result:** absence still hard-FAILs naming every surface searched / no sibling leak within a segment)" >&2
+  echo "  phase_inject_velocity_field + phase_append_release_learnings validated (velocity — field ORDER 'Cycle-Time Velocity Result' on a clean block / no sibling leak / idempotent re-run / bolded-numeral value REJECTED writing nothing / empty capture at exit 0 degrades to an explicit N/A never a bare field / non-conformant existing field SKIPs WITH the warning, conformant control WITHOUT it; CO-LOCATION — an archived block's field lands in the SEGMENT beside its own **Result:** and the hot stub stays at 0, cross-surface re-run SKIPs, dry-run names the segment and prints the RESOLVED bytes. learnings — sibling H4 placed IMMEDIATELY after its Deployment Log block / body intact through the sentinel capture / idempotent re-run / whitespace-only render at exit 0 FAILs writing nothing / D-1 zero-source-events BLOCKS the close and prints the capture remedy, >0-events control PASSes / over an ARCHIVED block the block still lands in the HOT ledger and every segment stays at 0 Release Learnings — RECORDS_POLICY KEEP_CLASS)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache)" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
@@ -5989,6 +6760,8 @@ phase_detect_open_issues || { generate_report; exit 2; }
 phase_create_chore_branch || { generate_report; exit 3; }
 phase_transition_release_log || { generate_report; exit 3; }
 phase_inject_outcome_field || { generate_report; exit 3; }            # Phase 6.5 — **Outcome:** field on the visible-H4 Deployment Log block (#37)
+phase_inject_velocity_field || { generate_report; exit 3; }           # Phase 6.6 — **Velocity:** field after **Cycle-Time:** (stage-13-close.md Phase B-velocity); ordered AFTER 6.5 so the write surface is already proven to resolve
+phase_append_release_learnings || { generate_report; exit 3; }        # Phase 6.7 — `#### Release Learnings v<X.Y>` sibling H4 (stage-13-close.md Phase A7); hot ledger only per RECORDS_POLICY KEEP_CLASS
 phase_append_release_index || { generate_report; exit 3; }
 phase_append_release_digest || { generate_report; exit 3; }
 phase_append_reversions || { generate_report; exit 3; }                # Phase 8.5 — re-version ledger (#1679; N/A on the common no-collision path)
