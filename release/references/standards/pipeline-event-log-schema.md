@@ -110,7 +110,7 @@ no reader can undo that without mutating an append-only log (§ 4.1). Legacy row
 best-effort-with-declared-ambiguity by design, not by defect.
 
 **Legacy scope, quantified — and why it is not backfilled.** Measured on the operator
-instance at the enforcement boundary (2026-08-04, 338 data rows):
+instance at the enforcement boundary, 2026-08-04:
 
 | Population | Count |
 |---|---|
