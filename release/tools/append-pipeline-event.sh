@@ -9,7 +9,7 @@
 #
 # Usage:
 #   ./append-pipeline-event.sh \
-#       --version v2.07a \
+#       --version version-binding-lifecycle \   # milestone slug — NEVER a version
 #       --stage 5 \
 #       --event-type decision \
 #       --event-subtype scope-lock \
