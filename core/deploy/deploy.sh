@@ -738,7 +738,7 @@ _vf_compute_verdict() {
 # driven — a close that never wrote its `RELEASE_LOG` row is invisible to it. LOG-row
 # presence is the close-time Step 4 table's responsibility, not this gate's.
 
-# _cc_row_findings <surface> <version> <milestone> <tag>
+# _cc_row_findings <surface> <version> <milestone> <tag> <net-in-scope>
 #   THE PER-ROW ASSERTION. Pure-ish: takes the row fields + the surface; reads
 #   in-repo corpus files (and, for the network sub-checks, the repo's own published
 #   Release via the delegated tools). Echoes ZERO or more finding lines on stdout
@@ -749,16 +749,17 @@ _vf_compute_verdict() {
 #   (fail-closed). Corpus paths are read from CC_* (set by the orchestrator).
 _cc_row_findings() {
   local surface="$1" _ver="$2" _ms="$3" _tag="$4"
+  # $5 — whether this row is at/after the SEPARATE network cutover. Computed by
+  # the CALLER as an in-loop file-order latch (see _cc_compute_verdict), because
+  # LOG file order is the only ordering this corpus has. It is NOT re-derived here
+  # by comparing version strings: see the note at the network sub-check below.
+  local _net_in_scope="${5:-0}"
   local _index="${CC_INDEX:-release/releases/RELEASE_INDEX.md}"
   local _digest="${CC_DIGEST:-release/releases/RELEASE_DIGEST.md}"
   local _changelog="${CC_CHANGELOG:-CHANGELOG.md}"
   local _notes_dir="${CC_NOTES_DIR:-release/releases/notes}"
   local _lint="${CC_LINT:-core/deploy/tools/lint_release_corpus.py}"
   local _drift="${CC_DRIFT:-release/tools/check-release-body-drift.sh}"
-  # The published-Release sub-check is itself cutover-gated + dormant-by-default,
-  # exactly like Check 32's $c32_release_cutoff. __none__ ⇒ the network surface
-  # sub-checks (Release existence + body-drift) are skipped (N/A) regardless of gh.
-  local _release_cutoff="${CLOSE_COMPLETENESS_RELEASE_CUTOFF:-__none__}"
 
   # (a) NOTES file present (version stem OR milestone slug — Check 32's resolution)
   local _notes_ok=0
@@ -815,10 +816,25 @@ _cc_row_findings() {
     printf '%s: §3.2 note-content lint tooling unavailable (cannot verify note-content)\n' "$_ver"
   fi
 
-  # Network sub-checks (h Surface-1 Release + i §5.1 body-drift) — cutover-gated +
-  # dormant by default (__none__). Run only for rows at/after the SEPARATE network
-  # cutover, and only when this row reached it.
-  if [[ "$_release_cutoff" != "__none__" && ( "$_ver" == "$_release_cutoff" || "$_ver" > "$_release_cutoff" ) ]]; then
+  # Network sub-checks (h Surface-1 Release + i §5.1 body-drift) — cutover-gated.
+  # Run only for rows at/after the SEPARATE network cutover.
+  #
+  # WHY THIS IS A CALLER-COMPUTED LATCH AND NOT A COMPARISON HERE. This test used
+  # to read:
+  #     [[ "$_ver" == "$_release_cutoff" || "$_ver" > "$_release_cutoff" ]]
+  # `>` inside [[ ]] is a LEXICOGRAPHIC string compare, not a version compare, so
+  # it breaks at the digit-width boundary: [[ "v3.100" > "v3.89" ]] is FALSE, and
+  # v3.100 silently fell OUT of scope while v3.90 (one row earlier) stayed in. A
+  # scope hole that opens only at v*.100 is one no one would notice until it had
+  # been swallowing rows for a while.
+  #
+  # The fix is not a better comparison — it is to stop comparing. The corpus's
+  # only real ordering is RELEASE_LOG FILE ORDER (date-ascending, NOT version-
+  # ordered), which is exactly what the sibling row cutover and
+  # automated-closeout.sh's _drift_block_in_scope both already latch on. The
+  # caller walks the LOG once and latches this flag in the same pass, so there is
+  # one ordering idiom in this file rather than two that disagree.
+  if [[ "$_net_in_scope" == "1" ]]; then
     local _gh_ok=0
     if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then _gh_ok=1; fi
     if [[ $_gh_ok -eq 0 ]]; then
@@ -888,6 +904,31 @@ _cc_compute_verdict() {
   # Setting CLOSE_COMPLETENESS_CHECK_CUTOFF=__none__ still re-dormants the gate.
   local cc_cutoff="${CLOSE_COMPLETENESS_CHECK_CUTOFF:-v3.89}"
 
+  # ─── SEPARATE network cutover (sub-checks h + i) — ARMED (#3699) ──────────────
+  # Governs ONLY the two sub-checks that need a network read: (h) a published
+  # GitHub Release exists, and (i) its body equals the frontmatter-stripped note
+  # (release-notes-standard.md §5.1, delegated to check-release-body-drift.sh).
+  # This is the CI path for the §5.1 invariant: Check 47 asserts it too, but Check
+  # 47 has no automatic invocation anywhere — it runs only when a human remembers
+  # a local `deploy.sh --check`. This workflow already carries GH_TOKEN and
+  # fetch-depth: 0 and already delegates to the same engine, so arming this value
+  # gives the invariant a CI home without a new workflow, a new sentinel, or a
+  # carve-out to the network-free --check-required-subset predicate.
+  #
+  #   Why v3.96: the OLDEST value that arms against a CLEAN baseline. Eleven
+  #   published bodies are drifted (v3.67, v3.69.1, v3.72, v3.73, v3.73.1, v3.77,
+  #   v3.84, v3.87, v3.88, v3.91, v3.95); v3.96 is the first LOG row after the last
+  #   of them. Arming lower would red the gate on rows whose repair is a separate,
+  #   IRREVERSIBLE public mutation, and a warn log pre-poisoned with known debt can
+  #   never evidence the "≥3-day review with zero false positives" flip threshold
+  #   in .github/close-completeness.enforce — which would make that flip
+  #   permanently unevaluable. Same selection rule as the row cutover above.
+  #   This is a PREVENTION anchor: every future close is covered from day one.
+  #   Historical coverage belongs to Check 47's own (standing, local) cutoff.
+  #
+  # __none__ remains the explicit re-dormant escape hatch.
+  local cc_release_cutoff="${CLOSE_COMPLETENESS_RELEASE_CUTOFF:-v3.96}"
+
   # Dormancy is now an EXPLICIT opt-out, not the default: the __none__ sentinel is the
   # escape hatch by which an operator or a CI job can re-dormant the gate (e.g. to honor
   # a reflexive-pipeline-loop exemption), and the cutoff VALUE — not the dormancy — is
@@ -933,7 +974,8 @@ _cc_compute_verdict() {
       }') || cc_rows=""
 
   local cc_past_cutoff=false cc_targets=0 cc_findings=0 cc_detail="" _last_verified="" _cc_arm_row=""
-  local _row _ver _ms _tag _state _rf
+  local cc_past_release_cutoff=false _cc_net_arm_row="" _cc_net_targets=0
+  local _row _ver _ms _tag _state _rf _net
   while IFS= read -r _row; do
     [[ -n "$_row" ]] || continue
     _ver="${_row%%|*}"
@@ -946,6 +988,20 @@ _cc_compute_verdict() {
       cc_past_cutoff=true
       _cc_arm_row="$_ver"          # #4176: record WHICH row armed, for the R8 assertion
     fi
+
+    # SECOND, INDEPENDENT latch on the SAME walk — the network cutover (#3699).
+    # Identical file-order semantics to the row cutover above and to
+    # automated-closeout.sh's _drift_block_in_scope: latch on the first
+    # cutoff-prefix match, then take the contiguous file-order suffix. Latched
+    # BEFORE the row-cutover `continue` so the two cutoffs stay independent — a
+    # network cutoff set EARLIER than the row cutoff must still resolve correctly
+    # rather than silently never arming.
+    if [[ "$cc_release_cutoff" != "__none__" && "$cc_past_release_cutoff" == "false" \
+          && "$_ver" == "$cc_release_cutoff"* ]]; then
+      cc_past_release_cutoff=true
+      _cc_net_arm_row="$_ver"
+    fi
+
     [[ "$cc_past_cutoff" == "true" ]] || continue
 
     # VERIFIED-only (the completeness contract is VERIFIED-scoped; a DEPLOYED-not-
@@ -955,7 +1011,10 @@ _cc_compute_verdict() {
     cc_targets=$((cc_targets + 1))
     _last_verified="$_ver"   # LOG file order is chronological ⇒ last wins
 
-    _rf="$(_cc_row_findings "$surface" "$_ver" "$_ms" "$_tag")"
+    _net=0
+    if [[ "$cc_past_release_cutoff" == "true" ]]; then _net=1; _cc_net_targets=$((_cc_net_targets + 1)); fi
+
+    _rf="$(_cc_row_findings "$surface" "$_ver" "$_ms" "$_tag" "$_net")"
     if [[ -n "$_rf" ]]; then
       cc_detail+="$_rf"$'\n'
       cc_findings=$((cc_findings + $(printf '%s\n' "$_rf" | /usr/bin/grep -c . )))
@@ -971,6 +1030,24 @@ _cc_compute_verdict() {
   # (that would block a PR on a configuration error rather than a completeness defect).
   # STDERR ONLY: the stdout protocol line (CLEAN/INCOMPLETE/SKIP) is parsed by string
   # surgery at all three call sites (Check 48, the probe, the self-test) — do not touch it.
+  # Same assertion for the SEPARATE network cutover (#3699). Reported unconditionally
+  # on every armed run so the network scope is never invisible: a network cutoff that
+  # matches NO row would otherwise silently disable sub-checks (h)+(i) while the gate
+  # still verdicts CLEAN — the vacuous-pass shape this block exists to prevent.
+  # STDERR ONLY (the stdout protocol line is parsed by string surgery downstream).
+  if [[ "$cc_release_cutoff" == "__none__" ]]; then
+    printf 'close-completeness: network sub-checks (Surface-1 Release + §5.1 body-drift) explicitly re-dormanted (CLOSE_COMPLETENESS_RELEASE_CUTOFF=__none__)\n' >&2
+  elif [[ -z "$_cc_net_arm_row" ]]; then
+    printf 'close-completeness: WARNING — network cutoff %s matched NO LOG row; the Surface-1 + §5.1 body-drift sub-checks asserted NOTHING on this run.\n' \
+      "$cc_release_cutoff" >&2
+  elif [[ "$_cc_net_arm_row" != "$cc_release_cutoff" ]]; then
+    printf 'close-completeness: WARNING — network cutoff %s armed at LOG row %s (prefix match, not an exact row). %s VERIFIED row(s) network-checked; verify this is intended.\n' \
+      "$cc_release_cutoff" "$_cc_net_arm_row" "$_cc_net_targets" >&2
+  else
+    printf 'close-completeness: network sub-checks armed at LOG row %s; %s VERIFIED row(s) network-checked\n' \
+      "$_cc_net_arm_row" "$_cc_net_targets" >&2
+  fi
+
   if [[ -n "$_cc_arm_row" ]]; then
     if [[ "$_cc_arm_row" != "$cc_cutoff" ]]; then
       printf 'close-completeness: WARNING — cutoff %s armed at LOG row %s (prefix match, not an exact row). Scope is %s VERIFIED row(s); verify this is intended.\n' \
@@ -6462,6 +6539,52 @@ cmd_check() {
   # consequence to state plainly: this gate's coverage of history is nil and grows
   # only as releases accrue.
   #
+  # ─── PENDING CUTOFF LOWERING: v3.78 -> v3.56, AFTER the re-emit (#3699) ────────
+  # DECIDED but NOT YET APPLIED, and the ordering is the whole point. Eleven
+  # published bodies are drifted (v3.67, v3.69.1, v3.72, v3.73, v3.73.1, v3.77,
+  # v3.84, v3.87, v3.88, v3.91, v3.95). This check ships ENFORCE by default, so
+  # lowering the cutoff BEFORE those bodies are repaired would arm a wider gate
+  # against rows whose repair is a separate, IRREVERSIBLE public mutation — a
+  # standing local FAIL over 54 rows instead of the 29 it covers now.
+  #
+  #   Target value:  v3.56   (in-scope cardinality 54; expected findings 0)
+  #   Why v3.56:     it is the exact evaluability boundary, not merely "lower".
+  #                  Of 154 LOG rows, 101 return tool exit 3 (no flat note
+  #                  resolvable) and are structurally invisible to this check.
+  #                  Exactly one unevaluable row (v3.65.1, no published Release —
+  #                  Check 32 owns that) sits inside the suffix, giving 53 readable
+  #                  of 54 in-scope. Any lower value adds only exit-3 rows:
+  #                  coverage theater. This applies the selection rule already
+  #                  stated above to the REPAIRED corpus — it is not a new rule.
+  #   Apply WHEN:    after release/tools/reemit-release-bodies.sh --execute has run
+  #                  and all eleven verify MATCH. Not before.
+  #   Apply WHAT:    this literal AND the shared default in
+  #                  release/tools/automated-closeout.sh (DRIFT_CHECK_CUTOFF) in the
+  #                  same change — the standard guarantees the two surfaces never
+  #                  disagree, so lowering one alone breaks that guarantee.
+  #   Cost, stated:  29 -> 54 network-checked rows on every local `deploy.sh
+  #                  --check`, roughly +2 minutes.
+  #
+  # This is recorded HERE, at the literal, precisely because the SELF-ARMING CUTOVER
+  # note elsewhere in this file warns that "a version literal would have needed
+  # stamping by a later spoke — a step that can be forgotten, leaving the gate
+  # permanently dormant." A reader who changes this value finds the ordering
+  # constraint at the point of change rather than in a release plan they may not
+  # have open.
+  #
+  # ─── CI PATH (#3699) ──────────────────────────────────────────────────────────
+  # This check has NO automatic invocation of its own: it is not in the
+  # --check-required-subset allowlist (that subset's selection predicate is
+  # network-free, and this check needs `gh release view`) and it has no dedicated
+  # mirror. It runs only on a local `deploy.sh --check` that a human remembers.
+  # Eleven bodies drifted undetected for exactly that reason.
+  # The §5.1 INVARIANT — as distinct from this check — is now asserted in CI by
+  # .github/workflows/close-completeness.yml, via Check 48's per-row sub-check (i),
+  # which delegates to the SAME engine (check-release-body-drift.sh) and is armed by
+  # CLOSE_COMPLETENESS_RELEASE_CUTOFF. The invariant therefore survives even if this
+  # check is later retired; the two are not redundant, they are differently scoped
+  # (this one reaches back over history; the CI one is a forward prevention anchor).
+  #
   # SHIPPED ENFORCE (not warn-mode-initial): findings route through
   # flag_release_body_drift, which switches on $RELEASE_BODY_DRIFT_MODE — resolved
   # via resolve_check_mode "release-body-drift" with an ENFORCE default. A mode file
@@ -6481,8 +6604,18 @@ cmd_check() {
   # the mid-close states (Surface 1 not yet published; note not yet on origin/main)
   # both return tool exit 3, which maps to N/A and NEVER to a finding. A release can
   # fail its own close here only by publishing a genuinely drifted body — which is
-  # the gate working, not a loop. Both shipped emit paths derive the body from the
-  # note by the same §5.1 transform, so that path is closed by construction.
+  # the gate working, not a loop.
+  # CORRECTED (#3699): this block previously asserted that "both shipped emit paths
+  # derive the body from the note by the same §5.1 transform, so that path is closed
+  # by construction." That was FALSE and is the root cause this card fixed. Only
+  # automated-closeout.sh stripped correctly; release-executor Mode F and the
+  # Stage-12 chip pattern in hub-spoke-bridge.md both passed `--notes-file <raw
+  # note>`, publishing the YAML frontmatter as raw text. Two of the eleven drifted
+  # bodies are byte-identical to their raw note. The eleven-release clean streak that
+  # made the claim look true was PATH SELECTION, not repair — closes that happened to
+  # route through automated-closeout.sh came out clean. All three emit surfaces are
+  # now on the `--notes "$BODY"` form; the claim is true as of that fix, and it is
+  # recorded as a fix rather than restated as an assumption.
   # Recorded here because this is where a future maintainer looks; do not re-derive.
   #
   # FRESHNESS PRESUMPTION (accepted residual, sharper under enforce): the tool reads
