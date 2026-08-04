@@ -147,9 +147,19 @@ TYPE_VALUES = {"plan", "note", "abandoned-plan", "phase-plan", "audit-plan"}
 # VERSIONLESS_KEY is what version_tuple() returns for any name VERSION_KEY_RE
 # does not match — i.e. a slug-keyed (version-less) note. It is a MARKER, not a
 # version: it must not be compared against the forward-only floors, because
-# "no version" is not "older than v1.0". Naming it also keeps the distinction
-# between "version-less" and "unparseable name" legible at the branch site;
-# lowering a floor to the sentinel would collapse the two.
+# "no version" is not "older than v1.0". Naming it keeps the branch site
+# self-documenting.
+#
+# WHAT THE BRANCH DOES *NOT* DO. It does not separate "version-less" from
+# "unparseable name": version_tuple() returns this same sentinel for BOTH, so
+# both are in scope under the branch AND under a lowered floor alike. There is
+# no malformed-vs-version-less call here to collapse. Filename well-formedness
+# is CANONICAL_FILENAME_RE's judgment, made by a separate check.
+#
+# WHAT IT DOES PRESERVE — the floor itself. Lowering NOTE_CONTENT_CUTOVER to
+# this sentinel would additionally admit every name that parses to a REAL
+# version sorting below the floor: "v0.5_RELEASE_NOTES.md" is (0, 5, "", 0),
+# correctly dropped today and admitted by a lowered floor.
 VERSIONLESS_KEY = (0, 0, "", 0)
 NOTE_CONTENT_CUTOVER = (1, 0, "", 0)
 PRE_CUTOVER_EXEMPT_VERSIONS: set[str] = set()
