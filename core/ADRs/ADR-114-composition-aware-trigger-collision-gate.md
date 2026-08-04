@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-114 — Composition-aware trigger-collision gate — linkage suppresses WATCH, never ESCALATE
-status: Proposed
+status: Accepted — ratified by the operator at the Stage 9 plan-review gate for the `skill-suite-conformance-and-usability-ac` release, 2026-08-04. The flip is verified against this file's `status:` field, never inferred from milestone closure.
 date: 2026-08-04
 release: skill-suite-conformance-and-usability-ac
 deciders: "Workspace owner (Collective Review scope-lock, Q1 — CR-1 full package accepted); design authored at Stage 5 Solutioning, adversarially reviewed at Phase A6.5, implemented and re-measured at Stage 6 Engineering"
@@ -18,7 +18,9 @@ source_observations:
 
 ## Status
 
-Proposed.
+**Accepted** — ratified by the operator at the Stage 9 plan-review gate for the `skill-suite-conformance-and-usability-ac` release, 2026-08-04. The decision ratified is the whole of `## Decision`: the `DEPENDS_ON` WATCH-band exemption together with its four load-bearing properties (ESCALATE never suppressed, no new numeric constant, `RELATES_TO` confers nothing, every exemption emitted).
+
+The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure. This ADR states no version claim; the release's version binding is resolved at Stage 12 and is not a property of the decision.
 
 ## Context
 

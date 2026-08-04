@@ -328,7 +328,12 @@ Target skill's .skill file (or SKILL.md + reference docs if unpacked).
 
 Read `references/quality-standard.md` and evaluate the skill across all 9 dimensions:
 
-1. **D1: Gate consistency** — Does the skill's structure support passing G1–G6?
+1. **D1: Gate consistency** — Does the skill's structure support passing the
+   auditor's gates? Read the set from `pmo-qa-auditor`'s own SKILL.md,
+   § 2. Gate Results Table, which is the sole
+   authority on which gates it ships; never restate that set here as a literal
+   or a letter range, because a frozen gate-set claim goes stale the release
+   after it is written and then misgrades every skill audited against it.
    Check output contract completeness, evidence labeling instructions, push-to-resolve
    instructions, anti-pattern avoidance instructions.
 
@@ -660,7 +665,9 @@ structural conformance and content quality.
   ("meets baseline") is reported as if it cleared the artifact.
 - **Conditional:** do NOT run a Mode D quality audit when the thing to be audited
   is a skill's output rather than its definition, because output auditing
-  belongs to pmo-qa-auditor (G1–G7 gates against the principal-contributor
+  belongs to pmo-qa-auditor (its gate set — per that skill's own SKILL.md,
+  § 2. Gate Results Table, the authority on
+  which gates it ships — run against the principal-contributor
   standard) — Mode D inspects the SKILL.md's structure and instructions, so its
   verdict says nothing about whether THIS artifact is ready to act on, and
   reporting it as such gives the operator false clearance.

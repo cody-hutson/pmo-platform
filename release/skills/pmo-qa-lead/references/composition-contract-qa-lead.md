@@ -20,7 +20,7 @@ Every quality/verdict claim in a QA-Lead output is sourced to one of these invok
 
 The auditor's **acceptance review** mode and **dev testing** mode are **live**, and Mode 2 / Mode 4 compose them directly — by name — through the invocation mechanism in §1.
 
-**The auditor's mode set is read from its source, never restated here.** The `## Modes` table in [`core/skills/pmo-qa-auditor/SKILL.md`](../../../../core/skills/pmo-qa-auditor/SKILL.md) is the sole authority on which modes the auditor ships; this contract deliberately reproduces neither its membership nor its letter range. Cite an *individual* mode by name — with its letter as a convenience, as §1 does — but never restate the **set** as a literal or a letter range: a frozen mode-set claim goes stale a release after it is written and then misinforms every caller reading this contract to decide what it can compose against.
+**The auditor's mode set is read from its source, never restated here.** The `## Modes` section in [`core/skills/pmo-qa-auditor/SKILL.md`](../../../../core/skills/pmo-qa-auditor/SKILL.md) is the sole authority on which modes the auditor ships; this contract deliberately reproduces neither its membership nor its letter range. Cite an *individual* mode by name — with its letter as a convenience, as §1 does — but never restate the **set** as a literal or a letter range: a frozen mode-set claim goes stale a release after it is written and then misinforms every caller reading this contract to decide what it can compose against.
 
 The **canonical spec-surfaces those auditor modes implement** remain the authority on the machinery itself, and Mode 2 / Mode 4 read them for the mechanics they consume:
 

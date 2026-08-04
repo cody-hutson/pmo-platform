@@ -138,7 +138,7 @@ One 4-field entry per skill (22 entries, alphabetical). Each entry states the sk
 
 - **Stages owned (primary):** none. Its former Stage 5 Mode C bridging fit is **discharged** — `pmo-principal-engineer` shipped and owns the stage. Per [`stage-to-skill-mode-mapping.md` G3](../../release/references/specs/stage-to-skill-mode-mapping.md).
 - **Stages co-owned (secondary):** none
-- **Out-of-scope:** Its modes — per the skill's own `## Modes` table, which is the authority on its shipped set — target the project-ops domain (vendor FDDs, IDDs, ERP architectures), which is why it was only ever a partial fit for platform-internal design. Never authors source-file changes; review-only.
+- **Out-of-scope:** Its modes — per the skill's own `## Modes` section, which is the authority on its shipped set — target the project-ops domain (vendor FDDs, IDDs, ERP architectures), which is why it was only ever a partial fit for platform-internal design. Never authors source-file changes; review-only.
 
 **`ppm-agent`** *(platform-pipeline scoped; decision-briefing scaffold at Stages 1, 9)*
 

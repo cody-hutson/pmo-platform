@@ -948,7 +948,7 @@ For each finding:
 ```
 ### Finding [N]: [Short title]
 
-**Gate**: [G1–G11]
+**Gate**: [the gate ID, taken from the § 2. Gate Results Table roster above — never a range restated here, which is what went stale the last time this template froze one]
 **Location**: [Exact section, field, or line in the reviewed output]
 **What's wrong**: [Specific description of the issue]
 **Why it matters**: [Operational impact — what goes wrong if this isn't fixed]
