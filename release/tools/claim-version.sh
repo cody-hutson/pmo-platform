@@ -981,7 +981,13 @@ _main() {
       --message)      message="$2"; shift 2;;
       --max-attempts) MAX_ATTEMPTS="$2"; shift 2;;
       --stamp-slug)   STAMP_SLUG="$2"; shift 2;;
-      --stamp-file)   STAMP_FILES+=("$2"); shift 2;;
+      # Normalise the operator-supplied path at the single intake point. A leading
+      # "./", an embedded "/./", or a doubled "//" all name the same file, but the
+      # pre-flight guard (permissive glob) and the affected-skill resolver (anchored
+      # prefix) disagree about them: the guard fires, the resolver misses, and the
+      # run stamps the source, rebuilds nothing, and exits 0 — neither rebuilding nor
+      # failing loudly. Normalising here fixes every downstream consumer at once.
+      --stamp-file)   STAMP_FILES+=("$(printf '%s' "$2" | sed -e 's|//*|/|g' -e 's|/\./|/|g' -e 's|^\./||')"); shift 2;;
       --dry-run)      dry_run=1; shift;;
       -h|--help)      _usage; exit 0;;
       *) printf 'claim-version: unknown arg %q\n' "$1" >&2; _usage; exit 2;;
