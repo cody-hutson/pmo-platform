@@ -619,22 +619,27 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 | Section | Content | Format | Notes |
 |---------|---------|--------|-------|
 | 1. QA Audit Report Header | Mode, timestamp, artifact(s) audited, auditor | Metadata | Clear identification of what was audited |
-| 2. Gate Results Table | PASS / FAIL per gate with evidence | Table | See 6 gates below; one result per gate |
+| 2. Gate Results Table | PASS / FAIL per gate with evidence | Table | One row per gate in the roster cited in § Quality Gates below |
 | 3. Findings | Location, what's wrong, why it matters, exact remediation text | Structured blocks | If any FAIL, remediation text is mandatory |
 | 4. Summary Assessment | Overall quality (PASS / CONDITIONAL PASS / FAIL), confidence, rework estimate | Prose | Decision-grade conclusion |
 
-### 6 Quality Gates (G1–G6)
+### Quality Gates
 
-All gates apply to all skills unless marked otherwise.
+**Roster authority — cited, not restated.** The gate roster this contract is evaluated against is
+defined in [`../skills/pmo-qa-auditor/SKILL.md`](../skills/pmo-qa-auditor/SKILL.md) § 2. Gate
+Results Table — the sole authority on which gates the auditor ships, what each gate's criterion is,
+when each gate fires, and which gates may render `CONDITIONAL PASS` rather than a binary verdict.
+This registry does **not** restate that roster — not as a count, not as a letter range, not as a
+definition table — because a frozen gate-set claim goes stale the release after it is written, and
+a second roster held here is what let the two surfaces diverge in the first place.
 
-| Gate | Definition | Applies To | Failure Criteria |
-|------|-----------|-----------|-----------------|
-| **G1: Structural Completeness** | All required sections present per skill contract | All skills | Missing section; incomplete section |
-| **G2: Evidence Quality** | All claims tagged [EVIDENCE] or [ASSUMPTION]; [ASSUMPTION] tags only in NOT READY items | All skills | Untagged claim; [ASSUMPTION] in READY item; untraced evidence source |
-| **G3: Decision Clarity** | Output includes clear recommendation or decision gate (READY/NOT READY, PASS/FAIL, etc.) | All skills | Ambiguous recommendation; missing gate result; contradictory gates |
-| **G4: Artifact Readiness** | All paste-ready artifacts are truly paste-ready (no placeholders, no TODOs) | All skills except QA Auditor | Placeholder text; [TODO] markers; incomplete sections in paste-ready blocks |
-| **G5: Follow-up Routing** | Follow-up tags properly formatted and within max depth 2 | All skills | Malformed tag; depth > 2; tag to self (e.g., [TECHNICAL] from Technical Analyst) |
-| **G6: Dual Output** | Artifacts and metadata both present; RAID entries include both entry and next-action metadata | Delivery Engine, Change Mgmt, Technical, Process Designer | Missing metadata; RAID entry without next-action link; artifact shown without target location |
+Read the roster live from that table. Its gates fall into two firing classes: those evaluated
+against every audited output, and **conditional** gates that fire only when the output under audit
+carries the property the gate tests (a SKILL.md file, a Stage 5 spec carrying a `### Cascade-Sweep`
+block, an output that asserts ownership, an output that names a generated artifact, an
+ask-when-ambiguous-tier transcript). Applicability is therefore a property of **the output under
+audit**, not of the emitting skill — which is why this registry holds no per-skill
+gate-applicability matrix.
 
 ### Reversibility Tier + Confidence
 
@@ -659,7 +664,7 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 ### Validation Checklist (QA Auditor Self-Check)
 
 - [ ] Mode identified and artifact(s) listed
-- [ ] All 6 gates evaluated (G1–G6)
+- [ ] Every gate in the auditor's shipped roster evaluated (roster read live per § Quality Gates above — never a count or a letter range restated here)
 - [ ] Gate results (PASS / FAIL) with evidence
 - [ ] Findings include exact remediation text
 - [ ] Summary assessment is decision-grade (PASS / CONDITIONAL / FAIL)
@@ -808,7 +813,7 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 - [ ] Summary (e) Complexity assessment delivered
 - [ ] Summary (f) Remediation priority ordered with justification
 - [ ] Reversibility tier + confidence on every decision-class item (G4 check)
-- [ ] Evidence labels on every factual claim (G2 check)
+- [ ] Evidence labels on every factual claim (G4 check)
 - [ ] Root-cause chain present for every finding per Section 2 format
 - [ ] Findings register covers every dimension in the loaded pack + 3 Principal Dimensions
 - [ ] Fallback banner present when Mode C fires by fallback (not by `--pack=generic` override)
@@ -851,12 +856,12 @@ No Mode D cross-cutting — planning is pack-scoped by definition (findings regi
 
 ### Structural Checks (for QA Auditor reference — add to Validation Rules table)
 
-- **G1 (Structural Completeness):** 6 sections (Plan Metadata / Summary / Register / Records / Batch Plan / Residuals+Stats+Audit).
-- **G2 (Evidence Quality):** ✓ on all factual claims in every RI Metadata block.
-- **G3 (Decision Clarity):** Severity normalization table applied; every RI carries both tokens; RT classification rationale inline; finding validation outcome (CONFIRMED / CONFIRMED_WITH_ADJUSTMENT / NOT_CONFIRMED) explicit.
-- **G4 (Artifact Readiness):** ✓ — Edit-ready `edit`/`bash` blocks directly consumable; no prose-style "current text" / "replacement text" specifications.
-- **G5 (Follow-up Routing):** N/A — planner role.
-- **G6 (Dual Output):** ✓ (Plan artifact + Execution-pattern handoff per D13).
+- **Structural Completeness:** 6 sections (Plan Metadata / Summary / Register / Records / Batch Plan / Residuals+Stats+Audit).
+- **Evidence Quality:** ✓ on all factual claims in every RI Metadata block.
+- **Decision Clarity:** Severity normalization table applied; every RI carries both tokens; RT classification rationale inline; finding validation outcome (CONFIRMED / CONFIRMED_WITH_ADJUSTMENT / NOT_CONFIRMED) explicit.
+- **Artifact Readiness:** ✓ — Edit-ready `edit`/`bash` blocks directly consumable; no prose-style "current text" / "replacement text" specifications.
+- **Follow-up Routing:** N/A — planner role.
+- **Dual Output:** ✓ (Plan artifact + Execution-pattern handoff per D13).
 - **Reversibility:** ✓ (tier + confidence on every decision-class item per Anti-Laziness Rule #8).
 - **Mode Identification:** ✓ (3 modes — one per pack).
 - **Risk Matrix:** N/A — risks surface in RT-8 accepted-residuals rather than a standalone matrix.
@@ -931,12 +936,12 @@ Reversibility tier defaults (per `../specs/reversibility-protocol.md`):
 
 ### Structural Checks (for QA Auditor reference — applies to refiner's own outputs)
 
-- **G1 (Structural Completeness):** 7 sections per Output Contract.
-- **G2 (Evidence Quality):** ✓ on all factual claims (Interview transcript source-cited; benchmark numbers sourced to workspace artifact).
-- **G3 (Decision Clarity):** ✓ — every decision-class item (Refined SKILL.md, best_description selection, handoff routing) carries reversibility tier + confidence.
-- **G4 (Artifact Readiness):** ✓ — Refined SKILL.md is git-commit-ready; handoff deploy command is paste-ready with canonical-session pre-check.
-- **G5 (Follow-up Routing):** N/A — refiner role (no emitted tags).
-- **G6 (Dual Output):** ✓ — Refined SKILL.md artifact + pre-handoff-gate evidence metadata.
+- **Structural Completeness:** 7 sections per Output Contract.
+- **Evidence Quality:** ✓ on all factual claims (Interview transcript source-cited; benchmark numbers sourced to workspace artifact).
+- **Decision Clarity:** ✓ — every decision-class item (Refined SKILL.md, best_description selection, handoff routing) carries reversibility tier + confidence.
+- **Artifact Readiness:** ✓ — Refined SKILL.md is git-commit-ready; handoff deploy command is paste-ready with canonical-session pre-check.
+- **Follow-up Routing:** N/A — refiner role (no emitted tags).
+- **Dual Output:** ✓ — Refined SKILL.md artifact + pre-handoff-gate evidence metadata.
 - **G7 (Domain-Specific Failure Modes):** ✓ on pmo-skill-refiner's own SKILL.md (≥ 3 conditional clauses, category-tagged).
 - **Reversibility:** ✓ (tier + confidence on every decision-class item).
 - **Mode Identification:** ✓ (3 modes — Interview, Create-New, Refine-Existing).
@@ -991,12 +996,12 @@ Single-mode skill — no Interview, no Refine. Invocation is the mode.
 
 ### Structural Checks (for QA Auditor reference)
 
-- **G1 (Structural Completeness):** 2 sections (Summary paragraph + Drift table).
-- **G2 (Evidence Quality):** ✓ ([SOURCE] labels on all counts and flags).
-- **G3 (Decision Clarity):** N/A (report-only; no decision or recommendation surface).
-- **G4 (Artifact Readiness):** ✓ (output is the artifact; directly readable by operator).
-- **G5 (Follow-up Routing):** N/A (no emitted tags).
-- **G6 (Dual Output):** N/A (report-only; no metadata-vs-artifact split).
+- **Structural Completeness:** 2 sections (Summary paragraph + Drift table).
+- **Evidence Quality:** ✓ ([SOURCE] labels on all counts and flags).
+- **Decision Clarity:** N/A (report-only; no decision or recommendation surface).
+- **Artifact Readiness:** ✓ (output is the artifact; directly readable by operator).
+- **Follow-up Routing:** N/A (no emitted tags).
+- **Dual Output:** N/A (report-only; no metadata-vs-artifact split).
 - **G7 (Domain-Specific Failure Modes):** ✓ (≥3 domain-specific failure modes per `../standards/failure-mode-standard.md`, 5-field template + category tag TRIG / INPUT / PROC / OUT / HAND — the regression-safe floor form used by every other skill's G7 row; the canary currently carries 5 entries spanning all 5 categories per the ADR-04 fixture-scope decision, but this row states the floor, not a by-name enumeration, so it does not go stale when a canary entry is added).
 - **Reversibility:** N/A (report-only opt-out declared).
 - **Mode Identification:** Single-mode skill; invocation = mode.
@@ -1013,14 +1018,19 @@ No prefix — report-only skill.
 
 This table shows which structural checks apply per skill. Use this to conduct systematic QA validation.
 
+These are **this registry's own per-skill structural checks** — they are not the `pmo-qa-auditor`
+gate roster and must not be re-labelled with its `Gn` gate IDs. Borrowing that namespace here is
+what previously made one roster read as two. The auditor's roster is cited, never copied — see
+§ Quality Gates under Skill 7.
+
 | Check | PPM Agent | Delivery Engine | Comms Writer | Change Mgmt | Technical | Process Designer | QA Auditor | Skill Editor | Build Reviewer |
 |-------|-----------|-----------------|--------------|-------------|-----------|------------------|------------|--------------|----------------|
-| **G1: Structural Completeness** | 7 sections | 8 sections + CS | 6 sections | 8 sections + CS | 8 sections + CS | 8 sections + CS | 4 sections | 5 sections | 4 sections (metadata, summary, findings register, 6 deliverables) |
-| **G2: Evidence Quality** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (on inputs) | ✓ (on changes) | ✓ (on findings) |
-| **G3: Decision Clarity** | ✓ | Gate results (C,D,F,G) | READY/NOT READY | ✓ (implicit in plan) | ✓ (risk matrix) | ✓ (gap analysis) | PASS/FAIL gate | ✓ (on edits) | PASS/CONDITIONAL/FAIL verdict |
-| **G4: Artifact Readiness** | ✓ (paste-ready blocks) | ✓ (paste-ready) | ✓ (draft) | ✓ (paste-ready) | ✓ (paste-ready) | ✓ (paste-ready) | N/A (auditor role) | ✓ (.skill file) | ✓ (paste-ready findings register) |
-| **G5: Follow-up Routing** | ✓ (max depth 2) | ✓ (max depth 2) | N/A (no routing) | ✓ ([COMMS] only) | ✓ ([DELIVERY], [CHANGE]) | N/A (no routing) | N/A (auditor role) | N/A (editor role) | N/A (review findings routed via register) |
-| **G6: Dual Output** | ✓ (artifacts + metadata) | ✓ (RAID + metadata) | Email/Teams exempt | ✓ (RAID + metadata) | ✓ (RAID + metadata) | ✓ (RAID + metadata) | N/A (auditor role) | ✓ (change log + .skill) | N/A (no RAID dual-output; findings are the artifact) |
+| **Structural Completeness** | 7 sections | 8 sections + CS | 6 sections | 8 sections + CS | 8 sections + CS | 8 sections + CS | 4 sections | 5 sections | 4 sections (metadata, summary, findings register, 6 deliverables) |
+| **Evidence Quality** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (on inputs) | ✓ (on changes) | ✓ (on findings) |
+| **Decision Clarity** | ✓ | Gate results (C,D,F,G) | READY/NOT READY | ✓ (implicit in plan) | ✓ (risk matrix) | ✓ (gap analysis) | PASS/FAIL gate | ✓ (on edits) | PASS/CONDITIONAL/FAIL verdict |
+| **Artifact Readiness** | ✓ (paste-ready blocks) | ✓ (paste-ready) | ✓ (draft) | ✓ (paste-ready) | ✓ (paste-ready) | ✓ (paste-ready) | N/A (auditor role) | ✓ (.skill file) | ✓ (paste-ready findings register) |
+| **Follow-up Routing** | ✓ (max depth 2) | ✓ (max depth 2) | N/A (no routing) | ✓ ([COMMS] only) | ✓ ([DELIVERY], [CHANGE]) | N/A (no routing) | N/A (auditor role) | N/A (editor role) | N/A (review findings routed via register) |
+| **Dual Output** | ✓ (artifacts + metadata) | ✓ (RAID + metadata) | Email/Teams exempt | ✓ (RAID + metadata) | ✓ (RAID + metadata) | ✓ (RAID + metadata) | N/A (auditor role) | ✓ (change log + .skill) | N/A (no RAID dual-output; findings are the artifact) |
 | **Dual-Framing Bridge** | N/A | ✓ (if milestone context) | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
 | **Mode Identification** | N/A | ✓ (7 modes) | ✓ (8 types) | ✓ (6 modes) | ✓ (5 modes) | ✓ (5 modes) | ✓ (10 modes — A–J) | ✓ (4 modes) | ✓ (4 modes — per pack + cross-cutting) |
 | **Risk Matrix** | ✓ (top risks) | N/A | N/A | N/A | ✓ (6 dimensions) | N/A | N/A | N/A | N/A (findings register serves the function) |

@@ -172,7 +172,7 @@ or any request to evaluate one skill's output.
 **Process**:
 1. Identify which skill produced the output.
 2. Load that skill's output contract from `../../schemas/per-skill-output-contracts.md`.
-3. Evaluate against 6 gate categories:
+3. Evaluate against every gate category defined below (the same roster rendered at § 2. Gate Results Table) — never a count or a letter range restated here, which is what went stale when this line last froze one:
    - **G1: Output contract compliance** — All required sections present with correct structure. **For ppm-agent outputs:** verify Section 10 Handoff Manifest is present (or explicit `HANDOFF_MANIFEST: None — no downstream work identified`); each `next_actions` entry has the required 5 fields (Tag, Context, Source, Scope, Inputs) plus cascade metadata (`target_skill`, `dependencies`, `dependency_satisfied`, `evidence_quality`, `cascade_scope`, `auto_invoke`) per the schema in `operations/skills/ppm-agent/SKILL.md` Section 10. Manifest absence or incomplete entries → G1 FAIL with specific missing-field finding.
    - **G2: Principal standard adherence** — Systems thinking, ruthless clarity, judgment under
      uncertainty, evidence quality. See `../../standards/principal-standard-checklist.md`.
