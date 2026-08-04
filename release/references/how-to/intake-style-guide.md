@@ -257,7 +257,7 @@ Rewrite using the formula: **state the observable outcome the system must produc
 | **E4** | **Tracking / bookkeeping** — an issue-body edit, label / milestone / epic hygiene, backlog restructuring, corpus-metadata reconciliation | C1 + C2 | The mutation is to the tracker, not to the platform |
 | **E5** | **Spike / analysis / decision record** — research, audit, gap analysis, or a decision whose deliverable is the finding or the record itself | C3 | The output is knowledge, not behavior |
 
-The list is closed — extending it is a governed change, not an authoring choice. Four rules keep it from reading as a general escape hatch:
+The list is closed — extending it is a governed change, not an authoring choice. Five rules keep it from reading as a general escape hatch:
 
 - **A mixed item is capability-class.** An item that is mostly documentation and partly a new hook is capability-class **for the hook**. The test is whether the triple holds anywhere in the item, not whether it holds for the majority of the diff.
 - **"It only changes a default or a config value" is not an exemption** when a runtime actor reads that value — all three limbs hold.
