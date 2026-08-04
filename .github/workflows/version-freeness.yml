@@ -13,8 +13,13 @@ name: Version freeness (pre-merge collision gate)
 #              NOT set PMO_VERSION_FREENESS_CANDIDATE, so the candidate is DERIVED
 #              by running the allocator's dry-run — which returns next-free, i.e.
 #              the lowest version NOT in claimed_set — and is then compared against
-#              the same claimed_set that produced it. That comparison is a
-#              tautology: it cannot return NOT_FREE. What the job DOES assert on
+#              a claimed_set built HERE. Those two sets are NOT identical: the
+#              allocator's claimed_set is orphan-filtered (lineage()==MAINLINE)
+#              and this gate's is not, so when the derived candidate is itself
+#              orphan-classified the verdict IS NOT_FREE. Measured 2026-08-04 by
+#              executed differential, not by reading the call graph — three prior
+#              reviews read it as a tautology and were wrong. What the job also
+#              asserts on
 #              every real run is CLAIM-ORACLE HEALTH — that the anchor is
 #              reachable, that claimed_set assembles without partial failure, and
 #              that no existing tag is non-canonical (the fail-closed UNDECIDABLE
@@ -33,8 +38,10 @@ name: Version freeness (pre-merge collision gate)
 # block. This gate is ADVISORY BY DESIGN — ratified 2026-08-04, not warn-mode-initial
 # awaiting a graduation. The enforce sentinel (.github/version-freeness.enforce) is
 # deliberately NOT committed, and its absence IS the recorded decision, not an unfinished
-# step: because the predicate above cannot return NOT_FREE, flipping would add zero
-# detection and would only turn the fail-closed UNDECIDABLE arms merge-blocking-red on a
+# step: the flip is declined on the binding-moment argument — a version binds only at the
+# Stage-12 atomic claim, so a pre-claim gate cannot be authoritative over an identifier that
+# is not yet bound. It is NOT declined on the ground that detection is impossible; that
+# ground was measured false. Flipping would turn the fail-closed UNDECIDABLE arms merge-blocking-red on a
 # transient network or auth failure — i.e. it would declare an enforcement this surface
 # cannot deliver. The flip mechanism remains one committed token away and is
 # reconsiderable only after the carried-version comparison lands AND a drain window
