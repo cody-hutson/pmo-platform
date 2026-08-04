@@ -44,7 +44,7 @@ across 115 refs was uniformly prose-form using §N notation (e.g., `§5`, `§6 O
 ## Decision
 
 **Split `release/references/pipeline-stages.md` into a
-`release/references/pipeline/` directory containing 14 files:**
+`release/references/pipeline/` directory containing one file per stage plus a README:**
 
 1. **One per-stage file for each of the 13 stages**: `stage-NN-<name>.md` (zero-padded NN, kebab-case name)
    - `stage-01-intake.md` ... `stage-13-close.md`
@@ -124,7 +124,7 @@ deleted in the same PR. Historical references in archive classes (release plans,
 
 - **(B) Forwarding stub: keep `pipeline-stages.md` as a 13-bullet index pointing
   to the new modular files** — REJECTED. Creates two sources of truth for stage
-  content ("which file should I read?"). Existing 115 refs would point to the
+  content ("which file should I read?"). The then-current 115 refs would point to the
   index, not the canonical per-stage files; new readers would need to follow
   one extra hop. The index would inevitably drift over time. AV-1 grep test
   would become ambiguous (correct refs to a stub vs. canonical refs both look
