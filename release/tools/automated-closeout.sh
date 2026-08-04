@@ -332,6 +332,14 @@ MERGE_SHA=""              # release-PR merge commit (#1682). Captured ONCE at
 # staging-completeness assertion. Empty on a release that touches no skill source.
 REBUILT_PACKAGES=()
 
+# Archive segments this run WROTE INTO (#4710): repo-relative
+# "release/releases/RELEASE_LOG_ARCHIVE-<family>.md" paths, populated by
+# _record_touched_archive_segment at the phase 6.5 / 6.6 write sites and
+# consumed by phase_commit_chore_pr's files=() staging array. Empty on a release
+# whose Deployment Log block is still in the hot ledger — i.e. every release
+# until its block ages out of the archival sweep window.
+TOUCHED_ARCHIVE_SEGMENTS=()
+
 # Phase outcomes (PASS / FAIL / SKIPPED / N/A / DRY-RUN / MANUAL)
 # Bash 3.2 (macOS default) lacks associative arrays — use parallel indexed arrays
 # keyed by phase name. Lookup is O(n) but phase count is small (<20).
@@ -1285,6 +1293,39 @@ _resolve_deployment_log_target() {
   return 1
 }
 
+# Record an archive segment this run actually WROTE INTO, so
+# phase_commit_chore_pr can stage it (#4710). Call AFTER a successful write,
+# with the resolved target.
+#
+# WHY THIS EXISTS. The resolver above can route a write to an archive segment,
+# but the chore-PR staging array is a fixed enumeration that names only the hot
+# ledger. A resolver-routed write therefore landed on disk and was DROPPED at
+# commit — exit 0, no diagnostic, the phase reporting PASS while a mandated
+# output never reached the PR. Silence was the worse half of that defect.
+#
+# TOUCHED-ONLY, NOT A GLOB. Staging `RELEASE_LOG_ARCHIVE-*.md` blanket would
+# sweep unrelated local modifications to sibling segments into a chore PR, which
+# trades a dropped output for an unreviewed one. Only a segment this run wrote
+# into is recorded.
+#
+# The hot ledger is skipped — files=() already names it. Paths are stored
+# repo-relative because that is what the staging loop resolves against
+# ("$REPO_ROOT/$f"); a target outside REPO_ROOT keeps its absolute form and is
+# then simply not matched by that loop's `[[ -f ]]` guard, which is the same
+# benign no-op every other non-existent entry gets. Deduped: phases 6.5 and 6.6
+# resolve to the SAME segment for a given version.
+_record_touched_archive_segment() {
+  local _abs="$1" _rel _e
+  [[ -z "$_abs" ]] && return 0
+  [[ "$_abs" == "$RELEASE_LOG" ]] && return 0
+  _rel="${_abs#"$REPO_ROOT"/}"
+  for _e in "${TOUCHED_ARCHIVE_SEGMENTS[@]:-}"; do
+    [[ "$_e" == "$_rel" ]] && return 0
+  done
+  TOUCHED_ARCHIVE_SEGMENTS+=( "$_rel" )
+  return 0
+}
+
 # ─── Shared block-insert primitive ────────────────────────────────────────────
 #
 #   _insert_field_after_in_block <target-log> <version> <anchor-prefix> <line…>
@@ -1433,6 +1474,10 @@ phase_inject_outcome_field() {
     mark_phase "inject_outcome_field" "FAIL" "could not inject **Outcome:** into the $VERSION Deployment Log block (block or **Result:** line not found in $target_name; searched: $_surfaces)"
     return 3
   fi
+
+  # The write landed. If it landed in an archive segment rather than the hot
+  # ledger, register it for staging (#4710) — files=() names only the ledger.
+  _record_touched_archive_segment "$target_log"
 
   local _detail="injected **Outcome:** $outcome after **Result:** in the $VERSION Deployment Log block ($target_name)"
   [[ -n "$OUTCOME_RATIONALE" ]] && _detail="$_detail (+ **Outcome rationale:**)"
@@ -1620,6 +1665,10 @@ phase_inject_velocity_field() {
     mark_phase "inject_velocity_field" "FAIL" "could not insert **Velocity:** into the $VERSION Deployment Log block (block not found in $target_name; searched: $_surfaces)"
     return 3
   fi
+
+  # Same registration as phase 6.5 — this phase resolves the same target and is
+  # subject to the same staging omission (#4710).
+  _record_touched_archive_segment "$target_log"
 
   mark_phase "inject_velocity_field" "PASS" "injected '$_line' $_anchor_desc in the $VERSION Deployment Log block ($target_name)"
   return 0
@@ -2956,8 +3005,14 @@ phase_commit_chore_pr() {
     "CHANGELOG.md"
     ".version"
     "${REBUILT_PACKAGES[@]:-}"      # .skill packages + .sha256 sidecars staged by
-  )                                 # phase_rebuild_skill_packages (Phase 9.95); empty
+                                    # phase_rebuild_skill_packages (Phase 9.95); empty
                                     # on a release that touches no skill source.
+    "${TOUCHED_ARCHIVE_SEGMENTS[@]:-}"  # RELEASE_LOG_ARCHIVE-<family>.md segments the
+  )                                     # 6.5/6.6 resolver actually WROTE INTO (#4710);
+                                        # empty until a block ages out of the sweep
+                                        # window. Touched-only by design — a blanket
+                                        # RELEASE_LOG_ARCHIVE-*.md glob would sweep
+                                        # unrelated local edits into the chore PR.
 
   # Stage only files that actually exist + have changes
   local staged=0
