@@ -47,7 +47,7 @@ The design question was therefore not "what rule is missing" but "what layer is 
 
 **Narrow the two exemptions in the files that own them.** The protocol's omission bullet now distinguishes an observation reported *as* an observation (exempt) from an observation *promoted into a load-bearing claim* (decision-class, carries a checkpoint). The decision-discipline triage table gains one sentence stating the boundary: that table governs the **briefing**; the new rule binds the **claim**. No triage row is added, changed, or renumbered.
 
-**Carry the deployed obligation as a new rule** — `core/rules/decision-time-adherence.md` — holding a bounded **Adherence Checkpoint Index** of five checkpoints keyed on observable claim signatures. Each row binds a governing rule, a required ground-truth read stated as a method rather than a host command, and a locus. The rule lands in the rules directory because that is the only tracked corpus surface with a governed mirror contract to the running agent; the mechanism stays in the spec, so neither file restates the other.
+**Carry the deployed obligation as a new rule** — `core/rules/decision-time-adherence.md` — holding a bounded **Adherence Checkpoint Index** keyed on observable claim signatures. Each row binds a governing rule, a required ground-truth read stated as a method rather than a host command, and a locus. The rule lands in the rules directory because that is the only tracked corpus surface with a governed mirror contract to the running agent; the mechanism stays in the spec, so neither file restates the other.
 
 **Emit a one-line token when a checkpoint fires**, extending the shipped evidence-trailer shape rather than introducing a second trailer family. Where a governing rule already defines its own trailer, that trailer **satisfies** the checkpoint — no double emission.
 
@@ -71,7 +71,7 @@ The design question was therefore not "what rule is missing" but "what layer is 
 
 **A second negative, which is easy to misread as green.** The deploy check **detects** mirror drift; it does not **push** the mirror. Provisioning the rule into the workspace rules directory is an operator-side manual step, and until it is done the check emits a clean `SKIP` for the new pair. That `SKIP` is the correct signal for a fresh checkout or a continuous-integration run, and it is **not** evidence that the rule reached the running agent. Reporting the discipline "live" on the strength of a repo-level read alone would be exactly the intermediate-signal promotion this ADR exists to catch.
 
-**Scope discipline.** Two checkpoints cite the charter as the definitional home of the discipline they bind. The index **cites and never restates**, so no shadow source of truth is created: a governing rule's content changes at its own home with zero index edit.
+**Scope discipline.** Where a checkpoint cites the charter as the definitional home of the discipline it binds, the index **cites and never restates**, so no shadow source of truth is created: a governing rule's content changes at its own home with zero index edit.
 
 ## Reversibility
 
