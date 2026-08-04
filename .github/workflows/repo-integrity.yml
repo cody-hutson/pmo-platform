@@ -654,6 +654,46 @@ jobs:
 
           echo ":white_check_mark: ADR-number integrity — numbers are unique and contiguous" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: Merge-time ADR renumber — tool self-test + two-branch behavioural fixture
+        run: |
+          set -euo pipefail
+
+          # Two complementary layers, and BOTH are required. The pure-function
+          # self-test owns the citation-boundary property (renumbering ADR-010
+          # must not corrupt ADR-100..109) — the fixture's small number range
+          # cannot exercise it. The fixture owns the behavioural property the
+          # card's AC-1 actually asserts: two branches author concurrently and
+          # both merge, with T0 asserting the root cause directly (both
+          # claimants PASS locally before the race resolves) and A7 proving the
+          # suite fails when the renumber is done by hand.
+          python3 release/tools/renumber-adr.py --self-test
+
+          set +e
+          bash release/tools/tests/test_renumber_adr.sh | tee /tmp/renumber-adr.out
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "### Merge-time ADR renumber fixture"
+            echo '```'
+            tail -20 /tmp/renumber-adr.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$RC" -ne 0 ]; then
+            {
+              echo "## :x: ADR renumber fixture FAILED"
+              echo ""
+              echo "\`release/tools/renumber-adr.py\` is the sanctioned merge-time renumber"
+              echo "(Stage 12 Phase A.5.7 / gate \`G-EX9\`). A failing assertion means a"
+              echo "renumber would leave dangling citations, a stale index surface, or a"
+              echo "missing \`## Status\` numbering-provenance note."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo ":white_check_mark: ADR renumber — six-step move verified end-to-end" | tee -a "$GITHUB_STEP_SUMMARY"
+
   draft-file:
     name: Draft-file gate
     runs-on: ubuntu-latest

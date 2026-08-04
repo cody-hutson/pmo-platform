@@ -30,21 +30,22 @@ The ADR number space is a single global, gap-free, append-only sequence across `
 
 Allocation algorithm:
 
-1. Enumerate every `ADR-NNN-*.md` filename across BOTH resolved directories.
-2. Parse each `NNN` (the `ADR-(\d+)-` prefix).
-3. Take the maximum across the **union** of both directories.
+1. **Resolve the binding anchor: the mainline tree, not the working tree** (§ 2.1 states why, and is the authority for it — do not re-derive its argument here).
+2. Enumerate every `ADR-NNN-*.md` filename across BOTH resolved directories **as they exist at that anchor**.
+3. Parse each `NNN` (the `ADR-(\d+)-` prefix) and take the maximum across the **union** of both directories.
 4. Add one; zero-pad to three digits (e.g. `071`).
 
-```
-core/ADRs   max = ADR-070
-release/ADRs max = ADR-066
-global max  = max(070, 066) = 070
-next        = 071  →  ADR-071
+**Invoke the shipped oracle rather than hand-rolling steps 1–4:**
+
+```bash
+python3 release/tools/renumber-adr.py --next-free      # anchor(origin/main) + 1
 ```
 
-**Why the union matters (the latent-defect the parent-issue AC method hides).** The AC's convenience phrasing — "list `core/ADRs/ADR-*.md`, sort, take tail" — computes the max from ONE directory. It passes by luck only while the two directories' maxima coincide (today core's 070 ≥ release's 066). The first time a release-side ADR is the global max, a single-directory tail allocates a number that already exists in the sibling directory → `check-adr-numbers.py` hard-fails `DUPLICATE`. Always allocate across the union.
+`--next-free` implements exactly this algorithm against the mainline anchor, and it reads the home set and the filename pattern from `check-adr-numbers.py` — the same constants § 1 resolves — so there is never a second parser to drift from the gate. Hand-rolling the enumeration is the fallback when the tool is unavailable, not the default; if you run it by hand, run it against the anchor (§ 2.1's fenced derivation), never against a bare working-tree listing.
 
-Re-check the live global max at scaffold time — the ADR sequence is active and may advance between sessions.
+**Why the union matters.** A convenience phrasing that reads "list `core/ADRs/ADR-*.md`, sort, take tail" computes the max from ONE directory. It passes by luck for exactly as long as the two directories' maxima coincide. The first time a release-side ADR is the global max, a single-directory tail allocates a number that already exists in the sibling directory → `check-adr-numbers.py` hard-fails `DUPLICATE`. Always allocate across the union.
+
+Re-check the live anchor at scaffold time — the ADR sequence is active and may advance between sessions.
 
 ### 2.1 The binding anchor is the mainline — an unmerged claim does not bind the sequence
 
@@ -139,7 +140,7 @@ Every section BODY stays an author-fill placeholder. Never draft decision-prose 
   1. Allocate `max(global)+1` for the NEW (superseding) ADR.
   2. Scaffold the new ADR; in its `## Status` note it supersedes ADR-MMM; in `## Related ADRs` link ADR-MMM.
   3. Emit a one-line reminder for the operator to stamp the OLD ADR's `## Status` with `Superseded by ADR-NNN`. **Do NOT auto-edit the superseded ADR** — that crosses into governed-change territory on an immutable `core/` record; the operator makes that edit.
-- **Collision resolution at merge is the one mechanical exception** — if two branches claim the same `NNN`, the later claimant is renumbered to the next free slot with a `## Status` "Numbering provenance" note. The skill does not perform this; it allocates against the live tree and the merge-time checker catches the race.
+- **Collision resolution at merge is the one mechanical exception** — if two branches claim the same `NNN`, the later claimant is renumbered to the next free slot with a `## Status` "Numbering provenance" note. **The skill does not perform this, and neither does the merge-time checker: the checker DETECTS a duplicate or a gap, it has never renumbered anything.** The move is performed by `release/tools/renumber-adr.py` at Stage-12 Phase A.5.7, which writes the provenance note as part of the move rather than leaving it to discipline. The skill's job is upstream of that: allocate against the mainline anchor (§ 2.1) so the number is correct under every merge order, and name any visible unmerged sibling claims in the hand-off so the operator can expect the renumber.
 
 ## 7. Hand-off summary (what to report)
 

@@ -79,6 +79,22 @@ def evaluate(by_number, malformed):
     return problems
 
 
+def next_free(by_number):
+    """Return the next free ADR number for a ``collect()`` result: ``max + 1``.
+
+    THE BINDING ORACLE. Callers MUST pass a ``by_number`` collected over the
+    MAINLINE tree (``origin/main``) and never over a working tree carrying
+    unmerged branch claims. A number is *allocated at authorship* but *claimed
+    at merge*, so an unmerged claim does not bind the sequence: allocating above
+    a branch-only claim lands a GAP on the mainline, which ``evaluate()`` fails
+    as readily as a DUPLICATE — and then fails every subsequent PR until the
+    hole is filled. A duplicate is the cheap failure and is resolved by the
+    merge-time renumber (``release/tools/renumber-adr.py``); a gap is the
+    expensive one. See ``core/ADRs/README.md`` § Renumber log.
+    """
+    return max(by_number) + 1 if by_number else 1
+
+
 def check(root):
     """Evaluate the real ADR directories under ``root``."""
     dirs = [root / d for d in ADR_DIRS]
@@ -151,12 +167,27 @@ def self_test():
         "MALFORMED",
     )
 
+    # next_free (the binding oracle) — pure-function fixtures, no I/O. The
+    # duplicate fixture pins the property that matters at a collision: the
+    # oracle keys on the HIGHEST number present, not on how many files claim
+    # it, so a duplicated slot does not shift the next-free answer.
+    for label, by_number, expect in (
+        ("next_free/contiguous", {1: ["a"], 2: ["b"], 3: ["c"]}, 4),
+        ("next_free/duplicate", {1: ["a"], 2: ["b", "c"]}, 3),
+    ):
+        got = next_free(by_number)
+        if got != expect:
+            failures.append(f"[{label}] expected {expect}, got {got}")
+
     if failures:
         print("check-adr-numbers self-test: FAIL")
         for f in failures:
             print("  - " + f)
         return 1
-    print("check-adr-numbers self-test: PASS (clean / duplicate / gap / malformed)")
+    print(
+        "check-adr-numbers self-test: PASS "
+        "(clean / duplicate / gap / malformed / next_free x2)"
+    )
     return 0
 
 

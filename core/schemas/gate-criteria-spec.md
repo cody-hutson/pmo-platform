@@ -602,6 +602,7 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 | G-EX6 | All Phase C verification PASS (C1-C5 results documented per [pipeline/stage-12-execute.md](../../release/references/pipeline/stage-12-execute.md) §5 Phase C) | validation | structural | auto | — |
 | G-EX7 | No Layer 2 leakage — no projects/ files committed | validation | structural | auto | `git status` clean (no projects/ files staged/committed) |
 | G-EX8 | Deferred items documented (release plan Deferred Items section populated) | field | structural | auto | — |
+| G-EX9 | ADR-number reconciliation tooled and complete. **Conditional — fires only when the release renumbered ≥1 ADR at Phase A.5.7.** The renumber was performed by `release/tools/renumber-adr.py` and is complete on all six steps: the record renamed (git records a rename), branch-scoped citations rewritten with zero dangling, every applicable index surface updated, the `core/ADRs/README.md` § Renumber log appended, and a `## Status` **Numbering provenance** note present on the renumbered record. The provenance note is the criterion's load-bearing half — it is the one step the hand-performed recovery reliably skipped, which is why the gate asserts the artifact rather than the intent. A release that authored no ADR, or whose ADR number bound unchanged at A.5.7b, **passes trivially**. Canonical authority: [`ADR-111`](../../release/ADRs/ADR-111-adr-number-claim-binds-at-merge.md). **Cutover discipline:** applies to releases entering Stage 12 going forward; the introducing release itself is exempt (reflexive-pipeline-loop discipline). | validation | structural | auto | `python3 release/tools/renumber-adr.py --detect` reports `BINDS` for every claim AND `python3 release/tools/check-adr-numbers.py` exits 0 AND each renumbered record matches `\*\*Numbering provenance — .\d{3} → \d{3}.\.\*\*`. Fail-closed: an indeterminate read is non-satisfaction |
 
 ### Self-Repair Actions
 
@@ -615,6 +616,7 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 | G-EX6 | Phase C verification incomplete | Re-run failing verification (C1 merge / C2 deployed-copy / C3 functional / C4 layer-boundary / C5 rollback) per Phase C protocol. |
 | G-EX7 | Layer 2 leakage | `git restore --staged projects/*` and `git checkout -- projects/*` to clean working tree. Escalate per Inter-Stage Feedback Protocol Tier 1 `[ADJUST]`. |
 | G-EX8 | Deferred items missing | Populate release plan Deferred Items section before Stage 13 entry. |
+| G-EX9 | ADR renumber incomplete | Re-run `python3 release/tools/renumber-adr.py --renumber <old> <new> --apply`. It is idempotent, and when the rename is already in place it enters **completion mode** and performs only the steps still outstanding — so a hand-performed renumber that skipped the `## Status` provenance note is repaired by re-running the tool, never by hand-patching the note. Do not hand-write the note: a checklist step that was already documented twice and still missed is not repaired by a third restatement. If the tool exits non-zero it has reverted its whole staged set (zero partial application); read its R1/R6 message and escalate Tier 2 per Inter-Stage Feedback Protocol. |
 
 ---
 
@@ -655,7 +657,14 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 
 ## Versioning
 
-**Schema version:** 2.5
+**Schema version:** 2.6
+
+**v2.6 changes (non-breaking — minor; additive — G-EX9; no criterion ID renumber; existing IDs stable):**
+
+- Added **G-EX9** (ADR-number reconciliation tooled and complete) to Gate 12 (Execute Readiness) — 1 criterion row + 1 self-repair row, section-local to § Gate 12. Registers a **conditional** criterion asserting that when a release renumbered an ADR at the new Stage-12 Phase A.5.7, the move was performed by `release/tools/renumber-adr.py` and is complete on all six steps — including the `## Status` **Numbering provenance** note, the one step the hand-performed recovery reliably skipped. A release that authored no ADR, or whose number bound unchanged, passes trivially. Row is `validation` / `structural` / `auto`; the stage-gate evaluator routes by the `Check` column and an `auto` structural row uses the existing structural checker, so **no evaluator change and no field-lifecycle-matrix entry change**. Decision recorded in [`ADR-111`](../../release/ADRs/ADR-111-adr-number-claim-binds-at-merge.md).
+- Schema bump v2.5 → v2.6 (non-breaking minor; additive — G-EX9). Existing G1-01..G1-09 / G2-01..G2-13 / G3-01..G3-19 + G4-01..G4-05 + G6-01..G6-06 + G-BR1..G-BR4 + G-PR1..G-PR10 + G-EX1..G-EX9 + G-CL1..G-CL9 IDs unchanged (G-EX9 is the v2.6 addition; the prior max in the G-EX range was G-EX8); no ID renumber, no column/type change.
+- **Version-derivation note (this bump is an instance of the defect G-EX9 governs).** `**Schema version:** N` is a globally-sequenced identifier bound at authoring against a moving population, structurally identical to an ADR number with a one-line blast radius. This value was **re-derived against the mainline at Commit 0** (mainline held 2.5), not pre-allocated. Concurrent branches were observed holding their own 2.6 claims at the same instant; per the same binding rule those claims are **detection, not binding**. On a merge conflict at this line the resolution is to **re-derive from the mainline and restate the ID enumeration to include every landed addition** — never to take either side's value.
+- **Cutover discipline (v2.6 additions):** G-EX9 applies to releases entering Stage 12 strictly AFTER its introducing-release merge SHA recorded in the release log; the introducing release itself is exempt (reflexive-pipeline-loop discipline — it cannot fire its own new gate). The **tool** is not gated by this cutover: a tool is not a gate, and the introducing release uses it at Engineering Commit 0 and, if needed, pre-merge.
 
 **v2.5 changes (non-breaking — minor; additive — G2-13; no criterion ID renumber; existing IDs stable):**
 
