@@ -654,6 +654,56 @@ jobs:
 
           echo ":white_check_mark: ADR-number integrity — numbers are unique and contiguous" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: Release ADR index is a faithful projection of the ADR file set
+        run: |
+          set -euo pipefail
+
+          # Same two-layer posture as the numbering gate above: self-test FIRST, so a
+          # projector that has stopped discriminating cannot certify the index. The
+          # self-test carries three control arms (delete a row / hand-edit a derived
+          # cell / orphan a row) plus three structural-failure arms.
+          python3 release/tools/generate-adr-index.py --self-test
+
+          # `release/ADRs/README.md`'s table is a DERIVED surface: every column is
+          # projected from the ADR file set and each record's own frontmatter. This
+          # step is the gate that makes a missing row or a stale Status structurally
+          # impossible rather than merely currently-absent. Contract:
+          # release/references/standards/release-corpus-schema.md § Derived-Surface
+          # Contract. Founding record: ADR-113.
+          set +e
+          python3 release/tools/generate-adr-index.py --verify | tee /tmp/adr-index.out
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "### Release ADR index projection"
+            echo '```'
+            cat /tmp/adr-index.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # exit 3 = structural failure (markers gone, unparseable frontmatter) — the
+          # projector could not compute an answer, which must never read as a clean one.
+          if [ "$RC" -eq 3 ]; then
+            echo "::error::The ADR index projector could not resolve its inputs — it verified nothing." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if [ "$RC" -ne 0 ]; then
+            {
+              echo "## :x: Release ADR index is out of date"
+              echo ""
+              echo "The table in \`release/ADRs/README.md\` is GENERATED. \`MISSING\` = a record with no row;"
+              echo "\`ORPHAN\` = a row with no record; \`DRIFT\` = a hand-edited cell that contradicts the"
+              echo "record's own frontmatter."
+              echo ""
+              echo "Fix: \`python3 release/tools/generate-adr-index.py --write\` and commit. Do NOT hand-edit a row."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo ":white_check_mark: Release ADR index — every column matches its record" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Merge-time ADR renumber — tool self-test + two-branch behavioural fixture
         run: |
           set -euo pipefail
@@ -1276,6 +1326,11 @@ jobs:
             echo "- **R3** the operator's literal GitHub handle (the ADR carve-out covers the literal *name* on a \`deciders:\` line — never the handle)."
             echo "- **R4** a bare issue reference \`#N\` in an identity frontmatter field (\`title:\` / \`release:\` / \`deciders:\`)."
             echo ""
+            echo "…or, on the structural dimension (delta-scoped, WARN-MODE):"
+            echo ""
+            echo "- **R5-NEW** a NET-NEW ADR that does not carry the \`adr-schema.md\` §3 body-section set."
+            echo "- **R5-LOST** a CHANGED ADR that has LOST a §3 section it carried at the base."
+            echo ""
             echo "See \`core/standards/adr-authoring-guide.md\` and \`core/rules/git-workflow.md\` § Repository-Integrity Gates."
             echo ""
             echo "### Fixes"
@@ -1284,6 +1339,7 @@ jobs:
             echo "- **R2** — state the fact so it survives: cite the deriving command instead of a count, summarize the change instead of a SHA, or anchor the number historically (\"as of authoring, ...\")."
             echo "- **R3** — write the operator's literal name, or the operator-name token, instead of the handle."
             echo "- **R4** — name the release by its slug and the deciders by role or literal name, and move the issue reference to \`source_observations:\` or to the ADR's designated \`## References\` block with a summary noun phrase. There is no marker for this one."
+            echo "- **R5** — add the exact H2 string the finding names. A section declaring a single forced approach is conformant CONTENT; an ABSENT section is the defect. Position does not matter and neither does heading count — R5 asserts presence only."
             echo ""
             echo "### Exemptions (already handled)"
             echo ""
@@ -1291,6 +1347,7 @@ jobs:
             echo "- R4 exempts fenced renderings, \`source_observations:\` (not an identity field), and frozen records — and NOTHING else. Neither override marker suppresses it."
             echo "- A file that genuinely needs a pinned anchor: add \`<!-- adr-durability: allow-anchor -->\` (R2 only — never R3, never R4)."
             echo "- Whole-file skip: \`<!-- repo-integrity: allow-adr-durability -->\`."
+            echo "- **R5 is delta-only and has an empty population on the existing corpus by construction.** It never fires on a section a record was already missing before this PR — 29 of 111 sweepable records carry a §3 gap the conformance sweep scoped OUT with a named blocking authority, and warning on those would be guarding before cleaning. \`Superseded\`/\`Deprecated\` records are exempt (they can never conform, by policy), and neither override marker suppresses R5 — structure is not durability."
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
           if [ "$WARN_MODE" = "true" ]; then
