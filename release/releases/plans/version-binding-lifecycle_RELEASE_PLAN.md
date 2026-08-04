@@ -3,7 +3,7 @@
 # Release Plan — `version-binding-lifecycle`
 
 **Milestone:** `version-binding-lifecycle` · **Repo:** `cody-hutson/pmo-platform`
-domain_practice: { source: N/A — pipeline-internal, date: 2026-08-04, domain: governance }
+domain_practice: { source: N/A — pipeline-internal release, date: 2026-08-04, domain: governance }
 **Version:** `{{RELEASE_VERSION}}` *provisional-display* · **Bump-class:** `minor`
 **Release identity mode:** `versioned` · **Release Class:** `novel`
 **Planned:** 2026-08-03 (Mon) · **Engineering Commit 0:** 2026-08-04 (Tue)
