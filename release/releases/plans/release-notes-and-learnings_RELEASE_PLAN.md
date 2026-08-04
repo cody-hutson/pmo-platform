@@ -158,6 +158,18 @@ release/releases/_captures/2026-08-04-release-body-precapture/**
 | #3121 | `release/tools/synthesize-release-learnings.sh` | MODIFY — near-threshold band + out-of-window render | CHEAP |
 | #3121 | `release/tools/automated-closeout.sh` | MODIFY — `phase_pattern_scan` wiring | CHEAP |
 
+### Deliverable-domain classification
+
+domain_practice: { source: N/A — pipeline-internal release, date: 2026-08-04, domain: governance }
+
+Every path in the matrix is an internal pmo-platform artifact — pipeline and standards documents, the release-corpus ledgers and notes, the close-out and lint tooling, a skill definition and its compiled package, this plan. No external product surface is touched, so Stage 4 Phase A1.5 external sourcing is **exempt**; the deliverable is still domain-**classified**, per §5.7's "sourcing-exempt, not classification-exempt" rule.
+
+**Primary `governance`.** The twenty-five paths split 9 governance/reference · 9 tooling · 7 corpus content, and the tooling is downstream of the governance rather than beside it: every script change here **mechanizes a rule that already existed**. `release-notes-standard.md` §3.2 is the source of truth `lint_release_corpus.py` enforces; `stage-13-close.md` Phase A7 is the mandate `automated-closeout.sh` and `synthesize-release-learnings.sh` execute; `release-velocity-tracking.md` §3.3 is the field grammar `deploy.sh` Check 48 asserts. The release's outcome statement is about surfaces that "stop reporting coverage they do not have" — a governance-conformance claim, not a product-behaviour one.
+
+**Secondary `software`, named rather than incidental.** Nine of the twenty-five paths are tooling — seven executables (`deploy.sh`, `lint_release_corpus.py`, `automated-closeout.sh`, `synthesize-release-learnings.sh`, plus the NEW `capture-release-bodies.sh`, `reemit-release-bodies.sh`, and `test_lint_release_corpus_versionless.sh`), a committed test-fixture set, and a CI workflow — and a tenth ships the rebuilt `release-executor.skill` package. This is a larger executable surface than the governance-primary precedent it follows, which is why the secondary is declared explicitly.
+
+The label is authored in the **key form** (`^domain_practice:`) that the Stage-7 Phase-A provenance grep reads, not the prose form. Authored at Stage 6 rather than carried forward from Stage 4 — see DEV-6.
+
 ## Contention Map
 
 | ID | Surface | Members | Resolution |
@@ -259,6 +271,8 @@ Every verification method above therefore names an observable that survives all 
 **DEV-4 — #4451's Stage 5 was re-run against current main.** `automated-closeout.sh` was rewritten `+563 / −168` under #290's "one projector over typed sources". Finding and function anchors survived; line-level placements did not. The re-run (sub-task #4578) found **3 INVALIDATED** placements the pre-sweep design would otherwise have carried into Engineering.
 
 **DEV-5 — event-log retag (operator-authorized).** 16 rows emitted pre-claim under `v4.06` were retagged to `v4.07`. They belonged to this release and would otherwise have polluted every query against `governance-hardening`'s genuine `v4.06` history. Backup retained. Root cause is hub error — applying a version to pre-claim events instead of honouring slug-primary.
+
+**DEV-6 — the Stage-4 plan carried no `domain_practice` provenance label.** Stage 4 Phase A1.5 owes every release plan the label; this plan reached Engineering Commit 0 without one, so the Stage-7 Phase-A provenance check had nothing to read. Remediated at Stage 6 by authoring it against the matrix as it stands (§ File Change Matrix → Deliverable-domain classification). The `date:` field is the date of that determination — **2026-08-04 (Tuesday)** — not a back-dated Stage-4 date, because the classification was genuinely made here. Recorded rather than silently applied, per this plan's own preamble.
 
 ## Out of Scope — Logged, Not Acted On
 
