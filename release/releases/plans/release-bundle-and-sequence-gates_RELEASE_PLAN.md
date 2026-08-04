@@ -362,6 +362,14 @@ Rendered and recorded at the Procedure 0 gate (2026-08-02) unless noted.
 | **R-1 (Stage 5)** | `release-planner/SKILL.md` cascade (`G-BR1..G-BR4` → `..G-BR5` + stale `T1/T2/T3/T4` → `T1–T6`) | **Routed to #3822's slice**, which already owns that file and whose package is already scheduled for rebuild. Marginal cost ≈ 0. | CHEAP / HIGH |
 | **R-2 (Stage 5)** | `gate-criteria-spec.md` § Gate G-BR malformed table delimiter (5 cells under a 6-column header) | **OPEN — operator judgment.** 6 such tables exist in the file; only 1 well-formed delimiter. Reconcile-don't-annotate argues for fixing the one being touched (1 line). **Not applied in slice 1** — the Stage-5 spec marked it conditional on approval that has not been recorded. See § Deviation Log DEV-7. | CHEAP / HIGH |
 
+## Domain Practice Provenance
+
+```
+domain_practice: { source: N/A — pipeline-internal release, date: 2026-08-02, domain: governance }
+```
+
+**Basis.** Every path in the File Change Matrix is an internal pmo-platform artifact — governance prose, pipeline specs, a gate schema, skill sources, and release tooling with its tests — so the Stage-4 § 5.7 pipeline-internal exemption applies: no *external* sourcing step is triggered, while the `domain:` class field stays mandatory and still resolves a guide. `governance` resolves `core/standards/domain-best-practices/governance.md`, whose `APPLIES-WHEN` holds for this deliverable and which is the guide the Stage-7 Phase C conformance dimension scores against. `date` records the Stage-5 determination, not the date the label reached this file.
+
 ## Deviation Log
 
 Deltas between the Stage-4 approved plan and this Commit-0 rendering. **The Stage-5 outcome wins where the two disagree.**
