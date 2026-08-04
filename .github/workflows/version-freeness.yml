@@ -1,21 +1,47 @@
 name: Version freeness (pre-merge collision gate)
 
-# gate-efficacy: posture=advisory(warn-mode-initial)  enforcement=path-filtered  skip-semantics=absent-is-pass
+# gate-efficacy: posture=advisory(ratified 2026-08-04)  enforcement=path-filtered  skip-semantics=absent-is-pass
 #   invariant: the version the merge will claim (computed from the release plan's
 #              bump-class, or an explicit candidate) is not already in the
 #              claimed_set (published Release tags U signed origin tags U in-flight
 #              DEPLOYED-not-VERIFIED RELEASE_LOG rows) — asserted BEFORE merge so a
 #              collision never lands with stale labels, pre-empting the Stage-12
 #              Phase B3 reactive tag-push rejection.
+#   predicate actually asserted ON A REAL RUN (stated honestly, because the
+#              invariant above is the general contract and this workflow exercises
+#              only part of it): this job sets PMO_VERSION_FREENESS_BUMP and does
+#              NOT set PMO_VERSION_FREENESS_CANDIDATE, so the candidate is DERIVED
+#              by running the allocator's dry-run — which returns next-free, i.e.
+#              the lowest version NOT in claimed_set — and is then compared against
+#              the same claimed_set that produced it. That comparison is a
+#              tautology: it cannot return NOT_FREE. What the job DOES assert on
+#              every real run is CLAIM-ORACLE HEALTH — that the anchor is
+#              reachable, that claimed_set assembles without partial failure, and
+#              that no existing tag is non-canonical (the fail-closed UNDECIDABLE
+#              arms). It does NOT compare the PR's carried provisional-display
+#              version against next-free; that comparison is the manual rungs' job
+#              (Stage-9 Phase A6.5 and Stage-12 Phase A.5.6a). Closing this gap —
+#              by passing the plan's provisional-display version as
+#              PMO_VERSION_FREENESS_CANDIDATE, which is resolution branch (1)
+#              below — is tracked as an open bug and is a PRECONDITION on any
+#              future reconsideration of the enforce flip.
 #   falsification: on a PR whose candidate equals a published Release tag (inject
 #                  PMO_VERSION_FREENESS_CANDIDATE=<a published tag>) -> this gate
 #                  reports the collision (warn-mode: summary + exit 0; enforce:
 #                  red + exit 1). A free candidate, or no claim context -> green.
 # Path-filtered, so ADVISORY by skip-semantics: absence on an unrelated PR MUST NOT
-# block. Ships warn-mode-initial (reports, does not block) until the operator flips
-# to enforce by committing the enforce sentinel (.github/version-freeness.enforce).
-# (Per core/standards/gate-efficacy-standard.md (b); warn-mode-initial per
-# core/rules/git-workflow.md § Repository-Integrity Gates.)
+# block. This gate is ADVISORY BY DESIGN — ratified 2026-08-04, not warn-mode-initial
+# awaiting a graduation. The enforce sentinel (.github/version-freeness.enforce) is
+# deliberately NOT committed, and its absence IS the recorded decision, not an unfinished
+# step: because the predicate above cannot return NOT_FREE, flipping would add zero
+# detection and would only turn the fail-closed UNDECIDABLE arms merge-blocking-red on a
+# transient network or auth failure — i.e. it would declare an enforcement this surface
+# cannot deliver. The flip mechanism remains one committed token away and is
+# reconsiderable only after the carried-version comparison lands AND a drain window
+# accrues; it is never auto-promoted by hit count.
+# (Per core/standards/gate-efficacy-standard.md (b); the ratification and its
+# reconsideration conditions are recorded in that file's § Flip-decision status
+# register — the durable decision record for this gate.)
 #
 # This is the AUTOMATED/CI sibling of the manual Stage-9-A6.5 / Stage-12-Phase-A.5
 # pre-merge freeness check. PREVENTION is the claim mechanism (claim-version.sh);
