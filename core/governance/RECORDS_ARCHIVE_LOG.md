@@ -24,4 +24,4 @@ One row per archival move. `trigger` is one of `{project-CLOSED, age-out}`.
 
 | date | record (path / id) | class | trigger | from → to | actor |
 |---|---|---|---|---|---|
-| 2026-08-03 | `release/releases/RELEASE_LOG.md` — 147 aged-out `#### Deployment Log` block bodies (the 8-column release table, all 9 newer Deployment-Log blocks, and all 8 `#### Release Learnings` blocks were NOT moved) | Vital (segments inherit the parent's class) | age-out | `release/releases/RELEASE_LOG.md` → `release/releases/RELEASE_LOG_ARCHIVE-{v1,v2,v3,version-less}.md` (4 segments, same directory) | `release/tools/sweep-release-corpus.py --apply`, release `{{RELEASE_VERSION}}` |
+| 2026-08-03 | `release/releases/RELEASE_LOG.md` — 147 aged-out `#### Deployment Log` block bodies (the 8-column release table, all 9 newer Deployment-Log blocks, and all 8 `#### Release Learnings` blocks were NOT moved) | Vital (segments inherit the parent's class) | age-out | `release/releases/RELEASE_LOG.md` → `release/releases/RELEASE_LOG_ARCHIVE-{v1,v2,v3,version-less}.md` (4 segments, same directory) | `release/tools/sweep-release-corpus.py --apply`, release `v4.06` |
