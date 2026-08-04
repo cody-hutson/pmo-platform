@@ -463,6 +463,7 @@ detect_mirror_pairs() {
     "core/rules/governance-files.md	.claude/rules/governance-files.md"
     "core/rules/decision-time-adherence.md	.claude/rules/decision-time-adherence.md"
     "core/rules/rename-reference-cascade.md	.claude/rules/rename-reference-cascade.md"
+    "core/rules/analysis-mandate.md	.claude/rules/analysis-mandate.md"
     "release/governance/release-process.md	.claude/rules/release-process.md"
   )
 
