@@ -108,7 +108,8 @@ OUTPUT (TSV) / EXIT CODES
   EXEMPT     <leg> <detail>
   COUNT_M1   <n>                              FAIL-capable findings
   COUNT_M2   <n>                              warn-only findings
-  SKIP_MS    <ms>  not-yet-scaffolded         M3: 0 attached AND 0 orphans
+  SKIP_MS    <ms>  not-yet-scaffolded         M3: 0 attached AND 0 orphans AND
+                                              0 narrowed-unlabelled stage titles
   M3         <ms>  MISSING <stage> | ORPHAN-STAGE-TITLE #<n> | UNLABELLED #<n>
   M3-ADV     <ms>  MISSING <stage>:#<issue> | DUPLICATE-PER-ISSUE <stage>:#<issue>
   M3-POLICY  <ms>  MISSING <stage>
@@ -548,6 +549,30 @@ def legacy_parent_from_title(title):
     return []
 
 
+def unlabelled_stage_titled(work_items, slug):
+    """The NARROWED unlabelled-stage-sub-task predicate. Single definition.
+
+    Returns the work items (i.e. members carrying no sub-task-family label) whose
+    title claims a stage AND is narrowed by the milestone slug or an issue
+    reference. A bare `^Stage \\d+` predicate false-positives on a real work item
+    whose title merely begins with a stage word, so the narrowing is load-bearing.
+
+    ONE definition, TWO call sites — M3's fire predicate and M3's `UNLABELLED`
+    emission loop. They must never drift: a fire limb narrower than the emission
+    loop silences rows; a fire limb wider than it over-flags. Do not inline either.
+    """
+    out = []
+    for wi in work_items:
+        title = wi.get("title") or ""
+        if not stage_tokens(title)[0]:
+            continue
+        if slug and slug.lower() in title.lower():
+            out.append(wi)
+        elif ISSUE_REF.search(title):
+            out.append(wi)
+    return out
+
+
 def analyse_m3(milestones):
     """Pure join — scaffold completeness per milestone. No I/O.
 
@@ -557,13 +582,34 @@ def analyse_m3(milestones):
 
     Returns (load_bearing, advisory, policy, info, denom, marker, skipped).
 
-    FIRE PREDICATE (evaluation order matters — the orphan search runs FIRST and
-    unconditionally). The defect this leg detects can NULL the milestone field on
-    every sub-task it creates, so an attachment-gated predicate reads the very
-    population the defect destroys and skips the founding case. Milestone #264 has
-    `attached = 0` and 21 stage-titled issues naming its slug with `milestone: NULL`;
-    a predicate gated on attachment calls that "not yet scaffolded" and says nothing.
-    Fire iff (attached >= 1) OR (orphans >= 1); SKIP only when BOTH are zero.
+    FIRE PREDICATE — three limbs, one per load-bearing class, because each class
+    is defined by the destruction of a DIFFERENT attribute, and a limb gated on
+    the attribute its own class destroys can never fire.
+
+      (attached >= 1)     the milestone is scaffolded and labelled
+      OR (orphans >= 1)   `ORPHAN-STAGE-TITLE`'s attribute is the MILESTONE field
+      OR (unlabelled >= 1) `UNLABELLED`'s attribute is the sub-task LABEL
+
+    SKIP only when all three are zero.
+
+    Limb 2 exists because the founding defect NULLs the milestone field on every
+    sub-task it creates: milestone #264 has `attached = 0` and 21 stage-titled
+    issues naming its slug with `milestone: NULL`, and an attachment-gated
+    predicate calls that "not yet scaffolded" and says nothing.
+
+    Limb 3 exists because that same blind spot recurs one level down for a
+    different class. `attached` is computed from the sub-task LABEL — the exact
+    attribute `UNLABELLED` exists to detect — and `orphans_for()` excludes any
+    issue whose milestone IS this one. So a milestone whose only stage-titled
+    artifact is unlabelled AND correctly milestoned satisfies neither of the first
+    two limbs and reports `SKIP_MS … not-yet-scaffolded`, silencing the one class
+    that is its only available signal. Live instance: milestone #275
+    `template-system-governance-wave-1`, whose sole stage-titled issue #3848 is
+    unlabelled and correctly milestoned. Limb 3 reuses the narrowed predicate the
+    `UNLABELLED` loop itself applies (`unlabelled_stage_titled`), so the limb and
+    the emission can never disagree, and the narrowing is inherited rather than
+    re-stated: a milestone whose only stage-titled member fails the narrowing
+    (the #3826 prose shape) still correctly SKIPs.
     """
     load_bearing, advisory, policy, info = [], [], [], []
     denom, marker, skipped = [], [], []
@@ -578,7 +624,8 @@ def analyse_m3(milestones):
         work_items = [n for n in members if not is_sub_task_family(n)]
 
         attached = [n for n in subtasks if stage_tokens(n.get("title"))[0]]
-        if not attached and not orphans:
+        unlabelled = unlabelled_stage_titled(work_items, slug)
+        if not attached and not orphans and not unlabelled:
             skipped.append(ms_num)
             continue
 
@@ -651,20 +698,17 @@ def analyse_m3(milestones):
                                  "#" + str(node.get("number"))))
 
         # ── unlabelled stage sub-tasks (load-bearing, NARROWED) ──────────
-        # A bare `^Stage \\d+` predicate false-positives on real work items whose
-        # title merely begins with a stage word. Require the milestone slug in the
-        # title OR an issue reference — the five live unlabelled Stage-4 sub-tasks
-        # all carry the slug; the known false positive carries neither.
-        for wi in work_items:
-            title = wi.get("title") or ""
-            if not stage_tokens(title)[0]:
-                continue
-            if slug and slug.lower() in title.lower():
-                pass
-            elif ISSUE_REF.search(title):
-                pass
-            else:
-                continue
+        # `unlabelled` was computed ABOVE, by the same helper the fire predicate's
+        # third limb uses. Reusing the one binding is what makes limb 3 and this
+        # emission structurally incapable of disagreeing — the narrowing lives in
+        # `unlabelled_stage_titled` and nowhere else. Do not re-derive it here.
+        #
+        # Carrying the slug is what makes such a title RECOGNISABLE; it was never
+        # what made it REPORTABLE. Until limb 3 was added, a slug-bearing
+        # unlabelled title on a milestone with no labelled sub-task and no orphan
+        # was recognised here and never reached, because the milestone had already
+        # been skipped upstream (live: #3848 on milestone #275).
+        for wi in unlabelled:
             load_bearing.append((ms_num, "UNLABELLED", "#" + str(wi.get("number"))))
 
         expected = len(RELEASE_SCOPED_STAGES) + len(work_items) * len(PER_ISSUE_STAGES)
@@ -945,12 +989,56 @@ def self_test():
     check("M3 fx_264_closed: closed-milestone path still fires on orphans",
           sk264c == [] and len(lb264c) > 0)
 
-    # fx_notstarted — OPEN, 0 attached, 0 orphans ⇒ SKIP. Discriminated from
-    # fx_264 by the variable the defect CREATES (orphan count), not by one it
-    # destroys (milestone attachment).
+    # fx_notstarted — OPEN, 0 attached, 0 orphans, 0 unlabelled ⇒ SKIP.
+    # Discriminated from fx_264 by the variable the defect CREATES (orphan count),
+    # not by one it destroys (milestone attachment). RETAINED as the anti-over-flag
+    # control for all three fire limbs: a genuinely un-scaffolded milestone must
+    # still SKIP after limb 3 was added.
     _, _, _, _, _, _, sk_ns = analyse_m3([_ms(999, "not-started-yet", [], [])])
-    check("M3 fx_notstarted: 0 attached AND 0 orphans ⇒ SKIP, not a finding",
+    check("M3 fx_notstarted: 0 attached AND 0 orphans AND 0 unlabelled ⇒ SKIP",
           sk_ns == ["999"])
+
+    # fx_275 — the third fire limb. Milestone #275 `template-system-governance-
+    # wave-1` holds exactly one stage-titled artifact, #3848, which is UNLABELLED
+    # and CORRECTLY MILESTONED. `attached` is label-gated and `orphans_for()`
+    # excludes issues whose milestone IS this one, so limbs 1 and 2 both read zero
+    # and the milestone reported `SKIP_MS … not-yet-scaffolded` — silencing the one
+    # class that was its only available signal.
+    #
+    # THIS IS THE FOUNDING BLIND SPOT REPRODUCED ONE LEVEL DOWN. fx_264 covers the
+    # class whose destroyed attribute is the MILESTONE field; this covers the class
+    # whose destroyed attribute is the sub-task LABEL. Neither fixture substitutes
+    # for the other, and fx_notstarted (0 members) could never have caught it —
+    # there was no fixture in this shape (members present, stage-titled, unlabelled,
+    # no orphans) until this one.
+    fx_275 = _ms(275, "template-system-governance-wave-1", [
+        _st(3848, "Stage 4 Release Planning — template-system-governance-wave-1 "
+                  "(#275)", labels=("bug",)),
+        _st(3849, "Template inventory and gap analysis", labels=("bug",)),
+        _st(3850, "Author the governance template standard", labels=("bug",)),
+    ])
+    lb275, _, _, _, _, _, sk275 = analyse_m3([fx_275])
+    check("M3 fx_275: an unlabelled, correctly-milestoned stage title fires "
+          "(limb 3) rather than reading as not-yet-scaffolded",
+          sk275 == [] and ("275", "UNLABELLED", "#3848") in lb275)
+    check("M3 fx_275: the UNLABELLED row is the ONLY load-bearing class it "
+          "raises (no spurious release-scoped MISSING on an unmarkered milestone)",
+          [r for r in lb275 if r[1] != "UNLABELLED"] == [])
+
+    # fx_275_narrowing — the anti-over-flag control PAIRED to fx_275, and the one
+    # that proves limb 3 INHERITED the narrowing rather than degrading to a bare
+    # `^Stage \d+` fire. Same shape as fx_275, but its only stage-titled member is
+    # the #3826 prose shape: no slug, no issue reference. It must still SKIP.
+    # Without this, "limb 3 fires" is satisfied by a limb that fires on everything.
+    fx_275_narrow = _ms(276, "template-system-governance-wave-1", [
+        _st(3826, "Stage 5-9 review and the Stage-9 readiness scan miss the "
+                  "required issue-reference", labels=("bug",)),
+        _st(3851, "Template inventory and gap analysis", labels=("bug",)),
+    ])
+    lb276, _, _, _, _, _, sk276 = analyse_m3([fx_275_narrow])
+    check("M3 fx_275_narrowing: limb 3 inherits the narrowing — a stage-titled "
+          "member with neither slug nor issue ref still SKIPs",
+          sk276 == ["276"] and lb276 == [])
 
     # fx_titleforms (T-10) — controls drawn from the population the parser was
     # NOT written from: the dot form, the bare form, multi-parent, the
