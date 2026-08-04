@@ -32,9 +32,8 @@
 #                                            issue's card, not here.
 #
 # REGENERATE: core/deploy/tools/check-count-structure.py --no-baseline --emit-baseline
-# ENTRIES: 73
+# ENTRIES: 72
 core/ADRs/ADR-007-core-module-boundary.md	bd98e343435b2a93	pre-existing:list
-core/ADRs/ADR-012-roadmap-instance-descope.md	ae635bdcd85d9651	pre-existing:list
 core/ADRs/ADR-019-specialists-compose-not-absorb.md	325abb18917758b1	pre-existing:list
 core/ADRs/ADR-033-methodology-conditional-skill-activation.md	7987600fda105ed3	pre-existing:table
 core/ADRs/ADR-068-domain-fan-out-sibling-vs-extend.md	2514ed6369146885	pre-existing:list

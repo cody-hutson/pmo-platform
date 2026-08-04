@@ -21,7 +21,7 @@ Accepted per operator directive (roadmap-instance-descope enhancement). **Amends
 
 The platform repo is a reusable, publicly-shareable PMO template. Initiative-roadmap *instances* (`core/governance/roadmaps/*.md`) are operator-instance planning artifacts: specific Now / Next / Later content, internal milestone and issue numbering, capacity-audit dates, open-vs-shipped status. They describe one operator's program, not reusable platform structure.
 
-ADR-006 / ADR-007 (module-restructure, 2026-05-27) placed the then-current 6 instances in `core/governance/roadmaps/` as part of the core kernel. Since then the instances became load-bearing for:
+ADR-006 / ADR-007 (module-restructure, 2026-05-27) placed the roadmap instances in `core/governance/roadmaps/` as part of the core kernel. Since then the instances became load-bearing for:
 
 - **1 framework standard** — `initiative-roadmap-framework.md`, the reusable convention defining when and how a roadmap is authored.
 - **4 enforcement surfaces** — `deploy.sh` Check 24 (frontmatter lint + 90-day staleness), `gate-criteria-spec.md` G3-13 Roadmap-Cascade Validation, the Stage 13 Close forcing-function checklist, and the Stage 5 Collective Review cohesion-check.
