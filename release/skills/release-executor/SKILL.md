@@ -415,16 +415,25 @@ Mode F publishes the canonical public release-notes surface (Surface 1 of the La
 3. **View-then-create-or-edit state machine (idempotency guard per `release-notes-standard.md § 5.5`):**
 
    ```bash
+   # The §5.1 frontmatter-stripped BODY is computed ONCE, before the state branch,
+   # because BOTH the edit and the create path emit it. Emitting the raw file via
+   # `--notes-file "$NOTES_PATH"` would publish the YAML frontmatter as raw text —
+   # forbidden by release-notes-standard.md §5.1/§5.5/§5.6 — and would ALSO make
+   # this state machine non-convergent: the equality test below compares against
+   # the STRIPPED body, so a raw-file write can never satisfy the test that
+   # triggered it, and Mode F would re-edit the same Release on every invocation
+   # without ever reaching State 2.
+   CANONICAL_BODY=$(sed '1,/^---$/d; 1,/^---$/d' "$NOTES_PATH" 2>/dev/null)
+
    # Read current state via gh release view
    if gh release view "v<X.Y>" --repo {REPO} >/dev/null 2>&1; then
      # State 1 or 2 — release exists; compare body
      EXISTING_BODY=$(gh release view "v<X.Y>" --repo {REPO} --json body --jq .body)
-     CANONICAL_BODY=$(sed '1,/^---$/d; 1,/^---$/d' "$NOTES_PATH" 2>/dev/null)
      if [[ "$EXISTING_BODY" == "$CANONICAL_BODY" ]]; then
        echo "PASS — release v<X.Y> already at canonical state (State 2 no-op)"
      else
        # State 1 → State 2 transition via idempotent gh release edit
-       gh release edit "v<X.Y>" --repo {REPO} --notes-file "$NOTES_PATH"
+       gh release edit "v<X.Y>" --repo {REPO} --notes "$CANONICAL_BODY"
        echo "EDITED — release v<X.Y> body refreshed from canonical notes"
      fi
    else
@@ -439,7 +448,7 @@ Mode F publishes the canonical public release-notes surface (Surface 1 of the La
      gh release create "v<X.Y>" \
        --repo {REPO} \
        --title "v<X.Y> — $HEADLINE" \
-       --notes-file "$NOTES_PATH" \
+       --notes "$CANONICAL_BODY" \
        --target "$MERGE_SHA"
      echo "CREATED — release v<X.Y> published"
    fi
@@ -879,7 +888,7 @@ structural conformance and content quality.
   notes file exists in the worktree via `[[ -f "$NOTES_PATH" ]]` but does NOT verify
   the file is committed to `origin/main` (i.e., the file may exist on a feature
   branch or chore-PR branch that has NOT yet merged). Mode F proceeds to `gh release
-  create v<X.Y> --notes-file "$NOTES_PATH"`, publishing a GitHub Release with content
+  create v<X.Y> --notes "$CANONICAL_BODY"`, publishing a GitHub Release with content
   from a pre-merge branch. Two failure consequences: (1) the notes file's eventual
   on-main content (after operator edit during chore PR review) differs from the
   published Surface 1 — observable as content drift between `gh release view v<X.Y>

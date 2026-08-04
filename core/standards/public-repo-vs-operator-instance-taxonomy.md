@@ -100,7 +100,7 @@ The classification is intentionally redundant with the `.gitignore` patterns and
 
 ### §4.2 UNIVERSAL-PUBLIC — `release/releases/notes/vX.Y_RELEASE_NOTES.md`
 
-- **Apply test:** The canonical artifact is read by `gh release create --notes-file` at Stage 12 Phase B5.5 (Surface 1 of the Layer-1 dual-write per [`../../release/references/standards/release-notes-standard.md`](../../release/references/standards/release-notes-standard.md)) and transformed into the `CHANGELOG.md` entry at Stage 13 (Surface 2). Both surfaces run in spoke worktrees that need the file on the branch.
+- **Apply test:** The canonical artifact is read by `gh release create --notes "$BODY"` — the §5.1 frontmatter-stripped body, never `--notes-file` — at Stage 12 Phase B5.5 (Surface 1 of the Layer-1 dual-write per [`../../release/references/standards/release-notes-standard.md`](../../release/references/standards/release-notes-standard.md)) and transformed into the `CHANGELOG.md` entry at Stage 13 (Surface 2). Both surfaces run in spoke worktrees that need the file on the branch.
 - **Verdict:** UNIVERSAL-PUBLIC — git-tracked; upstream of two downstream public surfaces.
 
 ### §4.3 CUSTOMIZABLE-PUBLIC — hub-state schema templates + operator-local runtime instance
