@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-110 — The alternatives section is required with conditional content, and Accepted ADRs admit durability-hygiene edits
+title: ADR-114 — The alternatives section is required with conditional content, and Accepted ADRs admit durability-hygiene edits
 status: Proposed (flips to Accepted at this release's Stage 9 plan-review gate)
 date: 2026-08-03
 release: adr-corpus-conformance
@@ -16,13 +16,15 @@ source_observations:
   - "`core/standards/evidence-grounding-standard.md` already applies the required-section / conditional-content construction to its own drift section: 'the section must always be present; its contents may be empty… The omission test is structural, not content-based.'"
 ---
 
-# ADR-110 — The alternatives section is required with conditional content, and Accepted ADRs admit durability-hygiene edits
+# ADR-114 — The alternatives section is required with conditional content, and Accepted ADRs admit durability-hygiene edits
 
 ## Status
 
 **Proposed.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent. It flips to **Accepted** at this release's Stage-9 plan-review gate; per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure.
 
 This record is the first ADR authored under the section set it defines, and it carries that set in full.
+
+**Numbering provenance — `110 → 114`.** Authored branch-local as **ADR-110**; renumbered to **ADR-114** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 110. In-release citations that read "ADR-110" denote this record.
 
 ## Context
 
