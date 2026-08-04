@@ -242,7 +242,7 @@ One row per in-flight sibling — the population being open PRs with a `release/
 
 The **carried label** and the **recomputed next-free** are recorded as separate columns on purpose: they diverge whenever a sibling's label has gone stale, and the recomputed value — never the carried one — is what Phase A6.6's slot predicate keys on. An **empty population is recorded explicitly** as `none in flight at <SHA> / <timestamp>`, never an omitted section: per audit-baseline discipline a default-to-zero over a transiently-empty population is not load-bearing unless the baseline it was measured against is pinned alongside it.
 
-**Cutover discipline:** applies to releases entering Stage 4 strictly AFTER this section's introducing-release merge SHA recorded in the release log; the introducing release itself is exempt (reflexive-pipeline-loop discipline — the section shipping in a release cannot fire on its own Stage 4).
+**Cutover discipline:** applies to releases entering Stage 4 strictly AFTER this section's introducing-release merge SHA recorded in the release log; the introducing release itself is exempt (the section shipping in this release cannot run on its own Stage 4).
 
 ## 7. Stage-Transition Gate
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.
