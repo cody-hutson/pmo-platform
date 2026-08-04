@@ -3644,15 +3644,21 @@ cmd_check() {
   #   posture: required   enforcement-surface: always-enforce (deploy-time) +
   #            branch-protection CI mirror (skill-canonical-structure-check.yml)
   #   invariant: every rostered SKILL.md is canonical-structure compliant (required
-  #              frontmatter fields present; references/ subdir present once the
-  #              D-Refs threshold is crossed; ≥3 domain-specific failure modes).
-  #   falsification: remove a required frontmatter field, or drop a skill below the
-  #                  3-failure-mode floor -> this check FAILS for that skill.
+  #              frontmatter fields present AND the version: value matching the
+  #              canonical format regex ^v[0-9]+\.[0-9]+(-[a-z]+)?$ per
+  #              core/standards/version-field-semantics.md § Format; references/
+  #              subdir present once the D-Refs threshold is crossed; ≥3
+  #              domain-specific failure modes).
+  #   falsification: remove a required frontmatter field, malform a version: value
+  #                  (3.99 / latest / v3.9.9.9 / empty-after-the-colon), or drop a
+  #                  skill below the 3-failure-mode floor -> this check FAILS for
+  #                  that skill.
   #
   # SINGLE SOURCE (per gate-efficacy-standard.md Req (b′) + the #1101 "assert
   # content, not a re-implemented proxy" doctrine): the predicate — required
-  # frontmatter fields (name/description/version), the D-Refs threshold (>400
-  # lines OR >25600 bytes -> references/ required), and the failure-mode floor
+  # frontmatter fields (name/description/version) and the version-field format
+  # regex, the D-Refs threshold (>400 lines OR >25600 bytes -> references/
+  # required), and the failure-mode floor
   # (≥3) — lives ONCE in core/deploy/tools/check-canonical-structure.sh. Both this
   # deploy-time check AND the PR-time CI mirror invoke that one script, so the two
   # surfaces cannot drift. The script extracts the same per-module roster arrays
