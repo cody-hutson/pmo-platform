@@ -40,7 +40,7 @@ Do **not** write an ADR in the following cases — the record would be ceremony 
 
 Copy the block below into `core/ADRs/ADR-NNN-<kebab-title>.md` (cross-cutting, platform-wide decisions) or `release/ADRs/ADR-NNN-<kebab-title>.md` (release-pipeline-scoped decisions). `NNN` is the next free number in the platform-wide monotonic sequence (enforced by `release/tools/check-adr-numbers.py`; the number is claimed at merge, and a collision is resolved by renumbering with a provenance note — see § Supersession + immutability).
 
-The **frontmatter fields and their allowed values are defined once** in [`adr-schema.md` §2](../schemas/adr-schema.md) — fill each field per that contract; the template does not restate the field rules. The **body sections** are the six required sections from [`adr-schema.md` §3](../schemas/adr-schema.md) with `## Alternatives Considered` inserted before `## Consequences` (the Nygard-classic section, present in the ADR-005 exemplar and required by the ADR issue template's Considered-Options field).
+The **frontmatter fields and their allowed values are defined once** in [`adr-schema.md` §2](../schemas/adr-schema.md) — fill each field per that contract; the template does not restate the field rules. The **body sections are the seven required sections defined once** in [`adr-schema.md` §3](../schemas/adr-schema.md), in the order given there. The block below renders that set as a copy-paste template; the schema states each section's **requirement level** and this guide does not restate it — read the level there, author it here. The set is a **minimum**: an ADR may carry additional H2 sections beyond the seven (§3.1).
 
 ```markdown
 ---
@@ -71,8 +71,13 @@ source_observations:
 
 ## Alternatives Considered
 
-<Each option evaluated, with why it was rejected. This is the load-bearing section — it is why
-the ADR exists (the rejected options survive here so future readers do not re-litigate them).>
+<Every ADR carries this section; its CONTENT is what varies (adr-schema.md §3.1).
+Where >=2 viable options were weighed: each option evaluated, with why it was rejected. This is
+the load-bearing case — it is why the ADR exists, and the rejected options survive here so future
+readers do not re-litigate them.
+Where a single forced approach existed — an ADR written under T-ADR-2 or T-ADR-3 rather than
+T-ADR-1 — say so: "Single forced approach; no viable alternative was weighed." That is a
+conformant section. An ABSENT section is not.>
 
 ## Consequences
 
@@ -166,9 +171,51 @@ baseline, ADR-005 as the 10-column enrichment.
 
 ## Supersession + immutability
 
-**ADRs are immutable once Accepted.** A ratified ADR is an append-only record. To change a decision, **do not edit the Accepted ADR** — author a **new** ADR that supersedes it, and update only the superseded ADR's `## Status` block to point forward (`Superseded by ADR-NNN`) per [`adr-schema.md` §5](../schemas/adr-schema.md). The body below `## Status` stays byte-frozen for the audit trail. The Nygard `Deprecated` / `Superseded` statuses (see both READMEs' Status-enum table) are the *only* mutations a live ADR receives after acceptance. Renumbering at merge (collision resolution) is the one mechanical exception, and it is recorded in a `## Status` "Numbering provenance" note (specimens: ADR-005, ADR-028/029, ADR-032, ADR-033).
+**ADRs are immutable once Accepted.** A ratified ADR is an append-only record. To change a decision, **do not edit the Accepted ADR** — author a **new** ADR that supersedes it, and update only the superseded ADR's `## Status` block to point forward (`Superseded by ADR-NNN`) per [`adr-schema.md` §5](../schemas/adr-schema.md). The body below `## Status` is frozen **against decision revision** — the narrow class of durability-hygiene edits that an Accepted record may still receive, and the closed list of edits it may not, are defined in the carve-out at the end of this section. The Nygard `Deprecated` / `Superseded` statuses (see both READMEs' Status-enum table) are the *only* status mutations a live ADR receives after acceptance. Renumbering at merge (collision resolution) is a mechanical exception, and it is recorded in a `## Status` "Numbering provenance" note (specimens: ADR-005, ADR-028/029, ADR-032, ADR-033).
 
 This composes with [`adr-schema.md` §5](../schemas/adr-schema.md), which owns the *representation* — how supersession is expressed in frontmatter and prose: (a) `status:` begins with `Superseded` (optionally `Superseded by ADR-NNN`); (b) the `## Status` block cites the superseding ADR; (c) `## Related ADRs` carries the link. This guide owns the *policy* (supersede-not-edit); the schema owns the representation. Live specimen: ADR-029 (`status: Superseded by ADR-045`), whose `## Status` records that the record remains unchanged for audit trail — the policy is already practiced; this guide codifies it.
+
+### Durability-hygiene edits on an Accepted ADR (the immutability carve-out)
+
+Immutability protects the **decision**, not the bytes. Editability has three states, keyed on the existing `status:` field — no new field, no new vocabulary:
+
+| `status:` leading token | Editability |
+|---|---|
+| `Proposed` | **Freely editable.** Not yet ratified, so there is no audit trail to protect. |
+| `Accepted` | **Durability-hygiene only** — the carve-out below. |
+| `Superseded` / `Deprecated` | **Frozen.** No edits at all. The record exists to preserve what was decided and why it stopped applying. |
+
+This is the partition the durability lint already implements: its whole-file exemption covers `Superseded` / `Deprecated` records only, and it scans every `Accepted` one — so **every finding it reports asks for an edit to an Accepted ADR**. The carve-out grants no new permission. It states the reading the shipped tooling already operates under, and that this guide's own enforce-flip clause already assumes when it gates the flip on a full structural-conformance pass.
+
+**The boundary is RECORD vs. REVISE.**
+
+- An edit that **records** something the decision already contained — or removes an anchor that has since rotted — is hygiene. It leaves the decision exactly where it was.
+- An edit that **revises** what the decision *was* requires a new ADR that supersedes the old one. Always. There is no in-place path.
+
+**Permitted on an `Accepted` ADR.** An **open** list: each entry is an instance of the invariant, not a special case, so a new hygiene class is admissible if and only if it passes the record-vs-revise test.
+
+| Permitted | Why it is hygiene |
+|---|---|
+| Removing a stale anchor — a hardcoded commit SHA, a live corpus-population count — or anchoring it historically | What is repaired is the *citation*, not the decision. |
+| Adding a required body section that is missing | The section records what the decision already weighed; it does not change what was decided. |
+| Normalizing a section heading to its canonical string, or promoting recall content from H3 to its H2 position | Pure relocation of content that is already in the record. |
+| Depersonalization — replacing an operator handle with the sanctioned literal name | The `deciders:` fact is unchanged; only its rendering is. |
+| Repointing a link or path after a corpus move | The referent is unchanged. |
+
+**Forbidden on an `Accepted` ADR.** A **closed** list. Anything here requires supersession, never an in-place edit:
+
+1. The **decision** itself — what was chosen.
+2. The **alternatives** that were weighed, or their verdicts. Adding a *missing* `## Alternatives Considered` section is permitted above; rewriting one that is already there is not.
+3. The **consequences** — including softening a negative one.
+4. The **status** value, other than the Nygard `Deprecated` / `Superseded` transitions.
+
+The asymmetry is deliberate. The permitted list is open so that a new hygiene class does not need a governance change; the forbidden list is closed so that the hard edge sits on the side that protects the audit trail.
+
+**No fabrication.** Where an Accepted ADR is missing its `## Alternatives Considered` section, record **only** alternatives evidenced by that ADR's own artifacts — its `## Context` / `## Decision` prose, its `source_observations:`, or the release named in `release:`. Where the artifacts do not evidence what was weighed, **do not reconstruct it**: write the single-forced-approach declaration, or record the alternatives with an explicit provenance note naming the evidence used. Inventing alternatives for a ratified architecture record is fabrication, not hygiene — and a backfill sweep that reconstructs plausible options across a corpus of Accepted records is a fabrication engine, not a conformance pass. This is a hard rule, not guidance.
+
+**Reconcile; do not annotate.** A hygiene edit repairs the text in place. It does not add an edit-history note, a changelog block, or a `corrected on YYYY-MM-DD` marker to the record — that would put mutable content inside the immutable artifact, and git already carries the edit history.
+
+**Frozen stays frozen.** A `Superseded` or `Deprecated` record receives no hygiene edits at all, not even the permitted ones. Its stale anchors are part of what it preserves.
 
 ## Related
 

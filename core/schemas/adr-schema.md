@@ -26,16 +26,40 @@ Canonical data contract for ADR files under `core/ADRs/` and `release/ADRs/`. Ow
 | `tags` | list[string] | Yes | free tags | Discovery tags. |
 | `source_observations` | list[string] | Recommended | free prose entries | The grounding observations/evidence the decision rests on; may be long-form. |
 
-## 3. Body sections (6, in order)
+## 3. Body sections (7, in order)
 
 | # | Section | Required | Contract |
 |---|---|---|---|
 | 1 | `## Status` | Yes | Restates `status`; when Superseded, **cites the superseding ADR here** (supersession *representation* — see §5). |
 | 2 | `## Context` | Yes | The forces/problem the decision addresses. |
 | 3 | `## Decision` | Yes | The decision, stated actively. |
-| 4 | `## Consequences` | Yes | Resulting trade-offs, positive + negative. |
-| 5 | `## Reversibility` | Yes | One of CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE (+ optional rationale) per [`reversibility-protocol.md`](../specs/reversibility-protocol.md). |
-| 6 | `## Related ADRs` | Yes | Cross-ADR composition/supersession links (ADR-number form). |
+| 4 | `## Alternatives Considered` | Yes | **Required — content conditional** (see §3.1). Records the options weighed and why each was rejected; where a single forced approach existed, declares that explicitly. |
+| 5 | `## Consequences` | Yes | Resulting trade-offs, positive + negative. |
+| 6 | `## Reversibility` | Yes | One of CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE (+ optional rationale) per [`reversibility-protocol.md`](../specs/reversibility-protocol.md). |
+| 7 | `## Related ADRs` | Yes | Cross-ADR composition/supersession links (ADR-number form). |
+
+### 3.1 `## Alternatives Considered` — required section, conditional content
+
+**Required — content conditional.** Every ADR carries this section. Where ≥2 viable options were weighed, it records each option and why it was rejected. Where a **single forced approach** existed — an ADR written because it binds a cross-artifact contract or supersedes a prior record, rather than because options were weighed — it says so explicitly. An **absent** section is a conformance defect; a section reading *"single forced approach; no viable alternative was weighed"* is **conformant**.
+
+The canonical heading is the exact string `## Alternatives Considered` — H2, Title Case, at position 4.
+
+The conditionality attaches to the section's **content**, never to its presence. The omission test is therefore **structural, not content-based**: presence is mechanically checkable, while the judgment about what the section says stays with the author. A presence rule closes the silent-omission failure mode that a presence-conditional rule leaves open — "only one option existed" stops being an unstated opt-out and becomes a reviewable claim on the record. This is the same construction [`evidence-grounding-standard.md`](../standards/evidence-grounding-standard.md) already applies to its own drift section, reused rather than re-invented.
+
+**The set above is a MINIMUM, not a closed vocabulary.** An ADR may carry additional H2 sections beyond the seven — `## References`, `## Provenance`, `## Subordinate to` and similar are common and correct. A conformance check asserts that each of the seven **is present**; it never asserts that nothing else is.
+
+### 3.2 Section-set authority chain
+
+The section set and each section's requirement level are **defined here, once**. Every other surface **cites** this section; none restates the level. A surface added later joins this table and inherits the CITES obligation — that is what keeps a sixth surface from becoming a sixth divergent statement.
+
+| Surface | Role | Obligation |
+|---|---|---|
+| `core/schemas/adr-schema.md` §3 (this section) | **DEFINES** | The single authority for the section set and each section's requirement level. |
+| [`core/standards/adr-authoring-guide.md`](../standards/adr-authoring-guide.md) § ADR template | CITES | Renders the set as a copy-paste template; states no independent requirement level. |
+| [`operations/templates/adr-template.md`](../../operations/templates/adr-template.md) | CITES (project-ADR population) | Adopts the same requirement level for its own **disjoint** population; keeps its §5 scope boundary intact. |
+| [`core/skills/adr-helper/references/scaffolding-procedure.md`](../skills/adr-helper/references/scaffolding-procedure.md) | CITES | Scaffolds the set; emits every section as an author-fill placeholder. |
+| `.github/ISSUE_TEMPLATE/adr.yml` | CITES | Intake fields mirror the set. |
+| [`release/tools/check-adr-durability.py`](../../release/tools/check-adr-durability.py) | CITES (scope-declaring) | Declares it does **not** enforce the set, and its self-test asserts its cited copy matches this section. |
 
 ## 4. Value conventions
 

@@ -24,6 +24,28 @@ THREE RULES
                        attribution) — the HANDLE is never sanctioned, and R3 closes
                        the gap a line-scoped skip would otherwise open.
 
+SCOPE — WHAT THIS LINT DOES NOT CHECK
+-------------------------------------
+This lint governs ADR *durability* (R1/R2/R3 above). It does NOT check *structural
+section conformance* — whether an ADR carries the required body sections at all. The
+canonical section set is DEFINED once, in `core/schemas/adr-schema.md` §3; this file
+only CITES it (see DOC_SECTION_SET below) and enforces nothing about it.
+
+Structural conformance is unenforced BY DESIGN, pending the ADR corpus's full
+structural-conformance pass. An enforcing structural rule over a corpus that is still
+mid-remediation is the same guarding-before-cleaning hazard the WARN-MODE note below
+describes, wearing a different hat.
+
+The consequence, stated so that no reader has to infer it: a GREEN run of this lint
+does NOT mean the scanned ADRs are structurally conformant. It means they carry no
+durability violation. Those are different claims.
+
+`--self-test` asserts that DOC_SECTION_SET still equals the schema's §3 table, so the
+citation cannot drift from the standard without a test failing. When the schema does
+not resolve (running outside a clone), that case reports a visible SKIP rather than
+passing silently — the same "never read green on a scan that examined nothing"
+discipline R3 applies to an unresolved handle.
+
 NEVER HARDCODE THE HANDLE
 -------------------------
 R3's subject is RESOLVED, never embedded: `--handle`, else the owner segment of
@@ -149,6 +171,26 @@ HISTORICAL_ANCHORS = (
 
 OVERRIDE_MARKER = "adr-durability: allow-anchor"
 FROZEN_STATUSES = ("Superseded", "Deprecated")
+
+# ── section-set citation (NOT a rule — see the SCOPE block in the module docstring) ──
+# The body-section set is DEFINED in the schema below and CITED here. This copy exists
+# so the docstring's scope claim names a concrete set; `--self-test` asserts the copy
+# still equals the schema's §3 table, which is what makes "no drift between the
+# standard and its linter" a mechanical assertion rather than a promise in prose.
+SECTION_SET_SOURCE = os.path.join("core", "schemas", "adr-schema.md")
+DOC_SECTION_SET = (
+    "## Status",
+    "## Context",
+    "## Decision",
+    "## Alternatives Considered",
+    "## Consequences",
+    "## Reversibility",
+    "## Related ADRs",
+)
+# §3's heading, any heading that ends §3's table, and a numbered §3 table row.
+SCHEMA_S3_HEADING_RE = re.compile(r"^##\s*3\.\s")
+SCHEMA_ANY_HEADING_RE = re.compile(r"^#{2,3}\s")
+SCHEMA_S3_ROW_RE = re.compile(r"^\|\s*\d+\s*\|\s*`(##\s[^`]+)`\s*\|")
 
 
 def _leading_status_token(value):
@@ -318,6 +360,40 @@ def derive_handle(explicit):
     return None
 
 
+def repo_root_from_file():
+    """Repo root inferred from this file's own location (`release/tools/<this>`)."""
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def parse_schema_section_set(root):
+    """The body-section set as the SCHEMA declares it, in table order.
+
+    Reads the §3 table of the schema named by SECTION_SET_SOURCE — the defining
+    authority for the set. Returns None (never a silent empty tuple) when the schema
+    does not resolve or its table does not parse, so the caller reports a visible SKIP
+    rather than asserting equality against nothing.
+    """
+    try:
+        with open(os.path.join(root, SECTION_SET_SOURCE),
+                  "r", encoding="utf-8", errors="replace") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        return None
+    out = []
+    inside = False
+    for line in lines:
+        if SCHEMA_S3_HEADING_RE.match(line):
+            inside = True
+            continue
+        if inside:
+            if SCHEMA_ANY_HEADING_RE.match(line):
+                break           # §3's own table ends at the next heading (e.g. §3.1)
+            m = SCHEMA_S3_ROW_RE.match(line)
+            if m:
+                out.append(" ".join(m.group(1).split()))
+    return tuple(out) or None
+
+
 def collect_adrs(root, explicit_files):
     """Absolute ADR paths to scan (explicit list, else both ADR dirs)."""
     if explicit_files:
@@ -380,6 +456,7 @@ def self_test():
     results = []
 
     def check(name, ok):
+        """ok True = PASS, False = FAIL, None = SKIP (visible, never a silent pass)."""
         results.append((name, ok))
 
     def rules(text, handle=FIXTURE_HANDLE):
@@ -489,11 +566,26 @@ def self_test():
         check("collect_adrs ignores non-ADR filenames",
               collect_adrs(tmp, ["core/ADRs/README.md"]) == [])
 
-    failed = [n for n, ok in results if not ok]
+    # Section-set citation drift — the standard vs. this lint's cited copy. This is the
+    # assertion that makes "no drift between the standard and its linter" mechanical:
+    # edit §3 without updating DOC_SECTION_SET (or the reverse) and this case fails.
+    schema_set = parse_schema_section_set(repo_root_from_file())
+    check("DOC_SECTION_SET still equals adr-schema.md §3 (membership AND order)"
+          + ("" if schema_set is not None
+             else " — SCHEMA DID NOT RESOLVE, citation NOT verified"),
+          None if schema_set is None else schema_set == DOC_SECTION_SET)
+
+    failed = [n for n, ok in results if ok is False]
+    skipped = [n for n, ok in results if ok is None]
     for name, ok in results:
-        print(("  PASS  " if ok else "  FAIL  ") + name)
-    print("check-adr-durability self-test: %d/%d passed"
-          % (len(results) - len(failed), len(results)))
+        print(("  PASS  " if ok is True
+               else "  SKIP  " if ok is None
+               else "  FAIL  ") + name)
+    summary = ("check-adr-durability self-test: %d/%d passed"
+               % (len(results) - len(failed) - len(skipped), len(results)))
+    if skipped:
+        summary += " (%d SKIPPED — visible, not silently green)" % len(skipped)
+    print(summary)
     return 1 if failed else 0
 
 
