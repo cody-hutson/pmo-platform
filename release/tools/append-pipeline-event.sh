@@ -240,6 +240,42 @@ FORBIDDEN_LABELS_session_retro_no_learning="theme"
 REVERSIBILITY_VALUES="CHEAP MODERATE EXPENSIVE IRREVERSIBLE"
 OUTCOME_VALUES="resolved pending escalated superseded"
 
+# ─── Release join key: the version grammar, SOURCED not copied ───────────────
+# The `version` column is the release JOIN KEY and carries the milestone SLUG
+# (§ 2a). The shipped `vX.Y` is NOT a key — it binds only at the Stage-12
+# ref-CAS, after emission has begun, so a pre-claim row keyed by it is neither
+# unique across releases nor stable within one.
+#
+# Deciding "is this value version-shaped" requires the canonical version
+# grammar. That grammar has exactly ONE home — version-grammar.sh — whose
+# consumer contract is binding: "SOURCE, do not copy. A copied-inline regex is
+# a divergence defect." So this guard sources the library and calls
+# `version_canonical`; it does not restate the regex. The empty positional is
+# load-bearing: sourcing inherits the caller's "$@", and the library runs its
+# own --self-test and exits when it sees `--self-test` as $1 (the same idiom is
+# used by automated-closeout.sh and deploy.sh for this exact reason).
+#
+# Fail-closed on an absent library. The two files are siblings shipped in the
+# same directory at the same commit, so absence means a broken checkout — and a
+# guard that silently skips is the silent-failure class this guard exists to
+# remove.
+VERSION_GRAMMAR_LIB="$SCRIPT_DIR/version-grammar.sh"
+if [[ -f "$VERSION_GRAMMAR_LIB" ]]; then
+  # shellcheck source=/dev/null
+  source "$VERSION_GRAMMAR_LIB" ""
+  _APE_HAVE_GRAMMAR=1
+else
+  _APE_HAVE_GRAMMAR=0
+fi
+
+# Reserved key for an emission with NO release context at all. Adopted from
+# RELEASE_PROTOCOL.md § Versioning, which already uses `(none)` where a version
+# key would sit and explicitly forbids synthesizing a placeholder version. It
+# carries a parenthesis and no digits, so it can collide with neither the
+# version grammar nor a milestone slug. A version-LESS release is a different
+# case: it still keys by its own slug.
+VERSION_KEY_NONE='(none)'
+
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
@@ -385,6 +421,33 @@ validate_ts_iso() {
   [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
 }
 
+# validate_version_key <value> — exit 0 if admissible as the release join key.
+#
+# The predicate is NEGATIVE (reject the version grammar) rather than POSITIVE
+# (assert a slug grammar), and that shape is forced by the corpus: milestone
+# slugs have no enforced grammar — the shipped set contains uppercase segments
+# and a parenthetical — so asserting one would reject real slugs. The version
+# grammar, by contrast, is canonicalized exactly once and matches no real slug.
+#
+# Rejected:
+#   (i)  a canonical release version (delegated to version_canonical)
+#   (ii) an unresolved `{{...}}` substitution token — the caller did not expand it
+# Admitted: the reserved `(none)` sentinel, and everything else (i.e. slugs).
+validate_version_key() {
+  local v="$1"
+  # Trim surrounding whitespace and CR. No live value carries either, so this
+  # changes no current verdict — but without it a CRLF caller slips `v4.07\r`
+  # past an anchored match and re-opens the hole invisibly.
+  v="${v#"${v%%[![:space:]]*}"}"
+  v="${v%"${v##*[![:space:]]}"}"
+  v="${v//$'\r'/}"
+
+  [[ "$v" == "$VERSION_KEY_NONE" ]] && return 0
+  case "$v" in *'{{'*|*'}}'*) return 2 ;; esac
+  version_canonical "$v" && return 1
+  return 0
+}
+
 # ─── Argument parsing ────────────────────────────────────────────────────────
 
 VERSION=""
@@ -471,6 +534,14 @@ if [[ "$SELF_TEST" == "true" ]]; then
     /bin/mkdir -p "$_ft_tmp/release/tools" || die "self-test: cannot populate forced-fallback temp tree" 2
     /bin/cp "${BASH_SOURCE[0]}" "$_ft_tmp/release/tools/append-pipeline-event.sh" \
       || die "self-test: cannot copy script into forced-fallback temp tree" 2
+    # The grammar SSOT travels with the script. This probe forces the SCHEMA to
+    # be unfindable (REPO_ROOT resolves into the temp tree) — it is not a probe
+    # of a missing grammar library, and the child's join-key guard fails closed
+    # without it. Copying it keeps the forced-fallback run exercising the real
+    # emit path; the `enum source=static-fallback` liveness assertion below is
+    # unaffected, since that branch keys on the schema, not on this library.
+    /bin/cp "$VERSION_GRAMMAR_LIB" "$_ft_tmp/release/tools/version-grammar.sh" \
+      || die "self-test: cannot copy version-grammar.sh into forced-fallback temp tree" 2
     if ! _ft_out="$(_APE_SELFTEST_FALLBACK_CHILD=1 EVALS_RESULTS_PATH="$_ft_tmp/evals" \
                     "$_ft_tmp/release/tools/append-pipeline-event.sh" --self-test 2>&1)"; then
       echo "ERROR: self-test: forced-fallback run FAILED" >&2
@@ -594,6 +665,49 @@ if [[ "$SELF_TEST" == "true" ]]; then
     die "self-test: actor rejection check failed (bogus accepted)"
   fi
 
+  # ─── Release join key (§ 2a) — a DISCRIMINATING control, not a smoke test ──
+  # Two sensitivity arms (a value that MUST be rejected) and two specificity
+  # arms (a value that MUST be accepted). A guard asserted only on its
+  # rejections would still pass while false-rejecting every real slug; the
+  # acceptance arms are what make this a control rather than a demonstration.
+  [[ "$_APE_HAVE_GRAMMAR" -eq 1 ]] \
+    || die "self-test: version-grammar.sh not sourced — the join-key guard would fail closed at emit; every assertion below would be vacuous"
+  # Liveness: the guard must delegate to the SSOT, not to a local copy.
+  declare -F version_canonical >/dev/null \
+    || die "self-test: version_canonical is not in scope — the join-key guard is not sourcing the grammar SSOT"
+  # Capture the guard's status without tripping `set -e` on its rejection path
+  # (a bare non-zero statement would abort the run silently).
+  _vk_rc() { local rc=0; validate_version_key "$1" || rc=$?; printf '%s' "$rc"; }
+  # (A) sensitivity — a canonical release version is rejected.
+  [[ "$(_vk_rc "v4.07")" -eq 1 ]] \
+    || die "self-test: 'v4.07' (a release version) must be rejected as a join key"
+  [[ "$(_vk_rc "v1.07.3")" -eq 1 ]] \
+    || die "self-test: 'v1.07.3' (a three-component version) must be rejected as a join key"
+  # (B) sensitivity — an unresolved substitution token is rejected.
+  [[ "$(_vk_rc '{{RELEASE_VERSION}}')" -eq 2 ]] \
+    || die "self-test: an unresolved '{{...}}' token must be rejected as a join key"
+  # (C) specificity — a real milestone slug is accepted.
+  validate_version_key "version-binding-lifecycle" \
+    || die "self-test: a milestone slug must be ACCEPTED as the join key"
+  # (D) specificity, near-miss — a LEADING-DIGIT slug is accepted. A sloppier
+  # predicate (unanchored, or a positive lowercase-kebab grammar) catches this
+  # one; the shipped slug set contains it, so a false rejection here is a
+  # production outage rather than a test failure.
+  validate_version_key "103-skill-suite-conformance-and-usability-ac" \
+    || die "self-test: a leading-digit milestone slug must be ACCEPTED as the join key"
+  validate_version_key "01-FNH-qa-change-release-hardening" \
+    || die "self-test: an uppercase-segment milestone slug must be ACCEPTED as the join key"
+  # (E) the reserved release-less sentinel is accepted; a synthesized
+  # version-shaped placeholder is not — that distinction is the whole point.
+  validate_version_key "$VERSION_KEY_NONE" \
+    || die "self-test: the reserved '$VERSION_KEY_NONE' sentinel must be ACCEPTED"
+  [[ "$(_vk_rc "v0.0.0")" -eq 1 ]] \
+    || die "self-test: 'v0.0.0' (a synthesized version-shaped placeholder) must be rejected"
+  # (F) CR/whitespace-carrying value must not slip past the anchored match.
+  [[ "$(_vk_rc "$(printf 'v4.07\r')")" -eq 1 ]] \
+    || die "self-test: a CR-carrying version value must still be rejected (trim before match)"
+  echo "self-test: § 2a release join-key guard OK (2 reject arms + 5 accept arms + CR-trim; grammar SOURCED from version-grammar.sh)"
+
   # ─── Payload row-integrity: positive (multi-value) ───
   _pi_ok() { case "$1" in *$'\n'*|*$'\r'*) return 1;; esac
              case "$1 |" in *" | "*) return 1;; esac
@@ -621,8 +735,10 @@ if [[ "$SELF_TEST" == "true" ]]; then
   [[ "$(_arity 'triggers:[T1\|T2\|T3]')" -eq 10 ]] || die "self-test: escaped payload broke row arity"
   [[ "$(_arity 'triggers:[T1 | T2]')"    -eq 11 ]] || die "self-test: arity oracle miscalibrated"
 
-  # Append a sentinel row, then revert
-  TEST_ROW="| ${TS_TEST} | v2.07a-selftest | 5 | decision | scope-lock | hub | sub-task:#1 | CHEAP | resolved | selftest-row;will-be-reverted |"
+  # Append a sentinel row, then revert. The key is SLUG-shaped: the fixture must
+  # not model the version-shaped form § 2a forbids, or the tool's own test data
+  # teaches the defect the tool now rejects.
+  TEST_ROW="| ${TS_TEST} | selftest-sentinel-release | 5 | decision | scope-lock | hub | sub-task:#1 | CHEAP | resolved | selftest-row;will-be-reverted |"
   TEST_WRITE_LINE="${TS_TEST}	selftest-sha	hub	decision:scope-lock"
 
   printf '%s\n' "$TEST_ROW" >> "$LOG_FILE"
@@ -650,6 +766,7 @@ if [[ "$SELF_TEST" == "true" ]]; then
   echo "  schema enums validated (event_type, event_subtype, actor, reversibility, outcome)"
   echo "  § 11.8 payload labels validated (schema<->fallback lockstep; unrecognized label rejected)"
   echo "  no-learning rows reject 'theme:' by enforcement; undeclared-label-set types stay free-form"
+  echo "  § 2a release join key enforced: version-grammar values + unresolved tokens rejected, slugs accepted"
   echo "  positive + negative tests passed"
   echo "  append + revert cycle confirmed (log + write-log)"
   exit 0
@@ -658,6 +775,26 @@ fi
 # ─── Required-field validation ───────────────────────────────────────────────
 
 [[ -z "$VERSION" ]] && die "Required: --version"
+
+# ─── Release join-key admissibility (§ 2a) ───────────────────────────────────
+# Placed on the same rung as the missing-field checks: an inadmissible key is a
+# malformed call, not a content problem. The log is append-only and Vital
+# retention (§ 4.1, § 7) — a bad row can never be deleted, only redacted — so
+# this is a write-side gate by design, the same rationale § 11.8 states for the
+# payload-label gate.
+if [[ "$_APE_HAVE_GRAMMAR" -ne 1 ]]; then
+  die "cannot validate --version: the canonical version grammar is missing at $VERSION_GRAMMAR_LIB. The release join key cannot be certified, and this gate fails closed rather than admitting an unvalidated key to an append-only log. Restore release/tools/version-grammar.sh." 2
+fi
+# `|| _vk_rc=$?` is load-bearing: under `set -e` a bare non-zero call would abort
+# the run with a naked exit status and NONE of the messages below — a silent
+# rejection, which is the exact failure shape this guard exists to remove.
+_vk_rc=0
+validate_version_key "$VERSION" || _vk_rc=$?
+case "$_vk_rc" in
+  1) die "--version '$VERSION' is a release VERSION, not a release join key. The key is the milestone SLUG (pipeline-event-log-schema.md § 2a; orchestration-playbook.md § 4a.2) — the shipped version binds only at the Stage-12 ref-CAS (ADR-092) and is neither unique across releases nor stable within one. Pass the milestone slug, or '$VERSION_KEY_NONE' for an emission with no release context." ;;
+  2) die "--version '$VERSION' contains an unresolved substitution token; the caller did not expand it. Pass the resolved milestone slug (pipeline-event-log-schema.md § 2a)." ;;
+esac
+
 [[ -z "$STAGE" ]] && die "Required: --stage"
 [[ -z "$EVENT_TYPE" ]] && die "Required: --event-type"
 [[ -z "$EVENT_SUBTYPE" ]] && die "Required: --event-subtype"

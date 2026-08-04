@@ -579,11 +579,40 @@ handle_deploy_check() {
   return 0
 }
 
+# resolve_plan_release_key <plan-file> — the release JOIN KEY for this plan.
+#
+# The key is the milestone SLUG (pipeline-event-log-schema.md § 2a); the shipped
+# vX.Y is NOT a key and the event writer rejects it. Resolution order:
+#   1. the plan's `**Milestone:** \`<slug>\`` line — authoritative when present
+#   2. the plan FILENAME stem, when the plan is still slug-named (pre-claim,
+#      `<slug>_RELEASE_PLAN.md`); a claim-time-renamed `vX.Y_RELEASE_PLAN.md`
+#      stem is a version, so it is rejected here rather than passed through
+#   3. the reserved `(none)` sentinel — never a synthesized placeholder version
+resolve_plan_release_key() {
+  local plan="$1" key=""
+  key="$(grep -m1 -E '^\*\*Milestone:\*\*' "$plan" 2>/dev/null \
+         | sed -n 's/^\*\*Milestone:\*\*[[:space:]]*`\([^`]*\)`.*/\1/p')"
+  if [ -z "$key" ]; then
+    key="$(basename "$plan" | sed -n 's/^\(.*\)_RELEASE_PLAN\.md$/\1/p')"
+    # A version-shaped stem is not a key. Match the canonical grammar shape
+    # (version-grammar.sh); anything matching it is discarded, not emitted.
+    case "$key" in
+      v[0-9]*.[0-9]*) printf '%s' "(none)"; return 0 ;;
+    esac
+  fi
+  # A `{{...}}` token means the plan is still holding an unresolved provisional
+  # display version — not a key either.
+  case "$key" in
+    ''|*'{{'*|*'}}'*) printf '%s' "(none)"; return 0 ;;
+  esac
+  printf '%s' "$key"
+}
+
 # runtime-suite: emit a test-run event through the pipeline-event writer.
 # Under the map, a check whose deliverable path is unmapped is an honest
 # suite-skip. We do not run suites in a novel way; we invoke the same event
 # path Engineering self-verification + Dev Testing already use.
-# $1 = method string, $2 = plan version (for the event --version).
+# $1 = method string, $2 = release join key (slug, for the event --version).
 handle_runtime_suite() {
   local method="$1" version="$2" subtype outcome
   # An unmapped / no-match method → suite-skip (honest no-op).
@@ -598,7 +627,7 @@ handle_runtime_suite() {
     fi
     set +e
     ( cd "$REPO_ROOT" && bash "$EVENT_WRITER" \
-        --version "${version:-v0.0.0}" --stage 6 \
+        --version "${version:-(none)}" --stage 6 \
         --event-type test-run --event-subtype "$subtype" \
         --actor "skill:verify-release-plan" --subject "release-plan:verification" \
         --reversibility CHEAP --outcome "$outcome" \
@@ -821,11 +850,14 @@ main() {
   # shellcheck disable=SC2064
   trap "rm -f '$DEPLOY_CHECK_CACHE'" EXIT
 
-  # Plan version (for runtime-suite event --version): parse `v<maj>.<min>` from
-  # the plan filename, else from the first heading.
+  # Release join key for the runtime-suite event: the MILESTONE SLUG, per
+  # pipeline-event-log-schema.md § 2a. This used to parse `v<maj>.<min>` out of
+  # the plan filename and fall back to the literal `v0.0.0` — a synthesized,
+  # version-shaped placeholder that sorts into the version space and is
+  # indistinguishable from a real release to every consumer. The writer now
+  # rejects both forms, so this resolves a slug or the reserved `(none)`.
   local plan_version
-  plan_version="$(basename "$PLAN_ABS" | sed -n 's/^\(v[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')"
-  [ -z "$plan_version" ] && plan_version="$(grep -m1 -oE 'v[0-9]+\.[0-9]+' "$PLAN_ABS" 2>/dev/null || true)"
+  plan_version="$(resolve_plan_release_key "$PLAN_ABS")"
 
   # 1) Parse per-issue verification-plan check records + CIAC integration records.
   local per_issue_records ciac_records
