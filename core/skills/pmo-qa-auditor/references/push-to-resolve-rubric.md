@@ -216,7 +216,7 @@ coordination from the PMO competency model.
 | Surface | How the markers above read |
 |---------|----------------------------|
 | **Deliverable** | As written — the five meta-behaviors are read against a single artifact serving one or more audiences. |
-| **Conversational** | Three of the five read unchanged: Tension Holding, Narrative Control, Graceful Degradation. Two take a per-surface reading. **Altitude Switching:** the turn pitches at the operator's altitude and says explicitly when it is dropping into detail, rather than serving multiple audiences inside one artifact. **Invisible Orchestration:** the turn hands the operator a decision they can make without routing back through the agent, rather than designing for external parties to coordinate directly. |
+| **Conversational** | Three of the five read unchanged: Tension Holding, Narrative Control, Graceful Degradation. Two take a per-surface reading. **Altitude Switching:** substitute the multi-audience anchor with a **named level transition** — a sentence naming the level the turn is speaking at, plus one at each move between levels (a stated summary-then-detail marker, or a detail span delimited and introduced as such). The marker is satisfied by pointing at those sentences; a turn carrying none is single-altitude. **Invisible Orchestration:** the turn hands the operator a decision they can make without routing back through the agent, rather than designing for external parties to coordinate directly. |
 
 **Principal vs. junior behavioral markers:**
 
