@@ -194,6 +194,8 @@ When an existing file or folder is non-conforming and is renamed to conform:
 4. **Reversibility: MODERATE once files exist.** Renaming after a file is referenced forces updating every inbound reference; renaming a brand-new file before it is referenced is CHEAP. Stage the rename + the reference updates as one change so the corpus is never half-renamed.
 5. **Operational-space (`projects/`) migration is operator-side.** The `projects/` tree is Layer-2 (git-ignored); its syntax migration (`find projects -name '* *' -type f` → 0) runs operator-side via `git mv` + link-grep, not in a platform PR.
 
+This protocol is the artifact-file instance of the general rule that a rename, move, or delete of any referenced entity is a graph operation — see [`rename-reference-cascade.md`](../rules/rename-reference-cascade.md) for the reference forms and surfaces beyond markdown links, and for the edit-time sweep obligation.
+
 ## Cross-References
 
 This standard **composes by reference** — it does not duplicate the lifecycle, provenance, or vocabulary concepts owned elsewhere.

@@ -461,6 +461,8 @@ detect_mirror_pairs() {
     "core/rules/operations-bridge.md	.claude/rules/operations-bridge.md"
     "core/rules/git-workflow.md	.claude/rules/git-workflow.md"
     "core/rules/governance-files.md	.claude/rules/governance-files.md"
+    "core/rules/decision-time-adherence.md	.claude/rules/decision-time-adherence.md"
+    "core/rules/rename-reference-cascade.md	.claude/rules/rename-reference-cascade.md"
     "release/governance/release-process.md	.claude/rules/release-process.md"
   )
 
