@@ -359,7 +359,7 @@ The synthesizer is invoked at three surfaces:
 | Mode flag | Trigger | Output | Invoker |
 |---|---|---|---|
 | `--mode per-release --version vX.Y` | At every Stage 13 close (post-learnings-triple-emit) | Renders the `#### Release Learnings vX.Y` sibling H4 block on stdout | Stage 13 spoke OR closeout-automation |
-| `--mode pattern-detect --window N` | Release-count interval N (default 5) OR on-demand OR quarterly cron | Renders cross-release pattern report (markdown) on stdout; with `--apply`, files Issues via `gh issue create` | Operator (ad-hoc), quarterly audit, OR closeout-automation when `--with-pattern-scan` is set |
+| `--mode pattern-detect --window N` | Release-count interval N (default 5) OR on-demand OR quarterly cron | Renders cross-release pattern report (markdown) on stdout; with `--apply`, files Issues via `gh issue create` | Operator (ad-hoc), quarterly audit, OR closeout-automation (runs by default; `--no-pattern-scan` suppresses) |
 | `--self-test` | Stage 7 DT verification + post-deploy verification | Validates parsing, sentinel detection, per-release-block emit, pattern-detect emit; no side effects | Stage 7 spoke, `deploy.sh --check` (future Check) |
 
 Per [`compute-cycle-time.sh`](../../tools/compute-cycle-time.sh) sibling pattern, the synthesizer:
@@ -401,7 +401,7 @@ All three modes. The synthesizer is mode-agnostic; trigger surfaces vary:
 
 | Mode | Trigger surface | Cadence | Default threshold | Operator override? |
 |---|---|---|---|---|
-| **Release-count interval** | Stage 13 spoke OR closeout-automation when `--with-pattern-scan` is set; fires when `(release_count % N) == 0` | Every Nth release | **N=5** (CALIBRATE-AFTER-3 — operator tunes at any Stage 9 Plan Review) | YES — per-invocation `--window N` flag |
+| **Release-count interval** | Stage 13 spoke OR closeout-automation (runs by default; `--no-pattern-scan` suppresses); fires when `(release_count % N) == 0` | Every Nth release | **N=5** (CALIBRATE-AFTER-3 — operator tunes at any Stage 9 Plan Review) | YES — per-invocation `--window N` flag |
 | **On-demand** | Operator invocation: `./synthesize-release-learnings.sh --mode pattern-detect --window 5` | Ad-hoc | N/A — operator specifies | YES — operator chooses window |
 | **Quarterly audit** | Cron or scheduled task on the 1st calendar day of each quarter (Jan 1 / Apr 1 / Jul 1 / Oct 1) — aligned with § 7 quarterly archive trigger | 4×/year | Trailing 1 quarter (matches § 7) | YES — operator runs additional ad-hoc passes |
 

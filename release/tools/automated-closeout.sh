@@ -37,11 +37,13 @@
 #   15.55 assert_anchor_hygiene  SET-based annotated-tag <-> published-Release parity + tagger identity (dated exemption sets)
 #   15.6 check_release_body_drift  post-emit §5.1 published-body drift assert (gated genuine drift BLOCKS; #2919: DEFERS under --no-merge)
 #   16 invoke_orphan_cleanup cleanup-orphan-state.sh --release-close <slug> --dry-run
-#   16.5 pattern_scan      optional synthesize-release-learnings.sh --mode pattern-detect (only with --with-pattern-scan)
+#   16.5 pattern_scan      synthesize-release-learnings.sh --mode pattern-detect (ON by default;
+#                          --no-pattern-scan suppresses). Report body is surfaced in the close-out
+#                          report, incl. the near-threshold band (sub-threshold disposition). Signal-only.
 #   17 generate_report     structured markdown or JSON close-out report
 #
 # Usage:
-#   ./automated-closeout.sh --pr <N> --version v<X.Y> --milestone <N> [--dry-run|--apply] [--markdown|--json] [--with-pattern-scan]
+#   ./automated-closeout.sh --pr <N> --version v<X.Y> --milestone <N> [--dry-run|--apply] [--markdown|--json] [--no-pattern-scan]
 #   ./automated-closeout.sh --self-test
 #   ./automated-closeout.sh --check-paths
 #   ./automated-closeout.sh --help
@@ -58,7 +60,9 @@
 #     --markdown               Human-readable close-out report (default)
 #     --json                   Machine-readable
 #   OPTIONAL:
-#     --with-pattern-scan      Invoke synthesize-release-learnings.sh --mode pattern-detect post-close
+#     --no-pattern-scan        Suppress the post-close synthesize-release-learnings.sh
+#                              --mode pattern-detect scan (it runs by default)
+#     --with-pattern-scan      Accepted, no-op — the scan is now the default
 #     --outcome <ENUM>         **Outcome:** value on the Deployment Log block (#37):
 #                              SUCCESS (default) / PARTIAL / ROLLBACK / DEFERRED
 #     --outcome-rationale <t>  One-line rationale; REQUIRED when --outcome != SUCCESS
@@ -242,7 +246,14 @@ VERSION=""
 MILESTONE=""
 MODE="dry-run"           # dry-run | apply
 OUTPUT="markdown"        # markdown | json
-WITH_PATTERN_SCAN=0
+# Pattern scan runs BY DEFAULT. It was previously opt-in behind --with-pattern-scan,
+# and no executable caller anywhere ever passed that flag — so the phase always
+# short-circuited to N/A and the sub-threshold disposition never reached the
+# operator on the mandated close path. A disposition that depends on remembering a
+# flag is not a disposition. --no-pattern-scan is the escape hatch; the old
+# --with-pattern-scan is still accepted as a compatible no-op.
+WITH_PATTERN_SCAN=1
+PATTERN_SCAN_REPORT=""   # captured pattern-detect report body, surfaced in the close-out report
 SELF_TEST=0
 CHECK_PATHS=0            # offline corpus-path resolution probe (CI smoke gate)
 REVERSION_SPEC=""        # --reversion "<final>|<claimed-seq>|<merge_sha>|<collided>|<stage>|<residual>"
@@ -331,7 +342,7 @@ PHASE_DETAILS=()
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
-  /usr/bin/sed -n '2,83p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '2,87p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -3913,7 +3924,7 @@ phase_invoke_orphan_cleanup() {
 
 phase_pattern_scan() {
   if [[ "$WITH_PATTERN_SCAN" -eq 0 ]]; then
-    mark_phase "pattern_scan" "N/A" "not requested (use --with-pattern-scan to enable)"
+    mark_phase "pattern_scan" "N/A" "suppressed by --no-pattern-scan"
     return 0
   fi
 
@@ -3927,11 +3938,24 @@ phase_pattern_scan() {
     return 0
   fi
 
-  if "$SYNTHESIZE_LEARNINGS" --mode pattern-detect --window 5 >/dev/null 2>&1; then
-    mark_phase "pattern_scan" "PASS" "pattern-detect scan emitted (dry-run default; no Issues created)"
+  # CAPTURE the report; do not discard it. The previous `>/dev/null` meant the
+  # phase could only ever report an exit status — and the exit status is 0 whether
+  # the scan finds 0 clusters or N, so "PASS" asserted nothing. The phase note now
+  # carries the two COUNTS parsed out of the report body, and the body itself is
+  # surfaced in the close-out report so the operator reads it at the same beat they
+  # author the Phase-A7.2 register. Signal-only: this phase still gates nothing.
+  local _scan_out _scan_rc _qual _near
+  _scan_out="$("$SYNTHESIZE_LEARNINGS" --mode pattern-detect --window 5 2>&1)"
+  _scan_rc=$?
+  if [[ "$_scan_rc" -eq 0 ]]; then
+    PATTERN_SCAN_REPORT="$_scan_out"
+    _qual="$(/usr/bin/printf '%s\n' "$_scan_out" | /usr/bin/awk -F ':\\*\\* ' '/^\*\*Qualifying clusters/ { print $2; exit }')"
+    _near="$(/usr/bin/printf '%s\n' "$_scan_out" | /usr/bin/awk -F ':\\*\\* ' '/^\*\*Near-threshold clusters/ { print $2; exit }')"
+    mark_phase "pattern_scan" "PASS" \
+      "qualifying=${_qual:-unparsed}, near-threshold=${_near:-unparsed} (dry-run default; no Issues created)"
     return 0
   fi
-  mark_phase "pattern_scan" "FAIL" "synthesizer pattern-detect failed"
+  mark_phase "pattern_scan" "FAIL" "synthesizer pattern-detect failed (rc=${_scan_rc})"
   return 3
 }
 
@@ -4011,6 +4035,20 @@ EOF
     echo '```'
     echo
     echo "Re-run WITHOUT \`--no-merge\` (preserve any \`--outcome\` / \`--close-comment\` flags from this run). Idempotent: the already-landed corpus SKIPs, then milestone close + Release publish run."
+    echo
+  fi
+  # Cross-release pattern scan (phase 16.5). The body is emitted here rather than
+  # discarded, so the sub-threshold disposition is visible at the close beat: the
+  # near-threshold band names the learnings that are one release short of the
+  # unchanged auto-promotion threshold, and they are the input to the operator's
+  # `Type (one-off / pattern)` + `Disposition` calls in the Phase-A7.2 register.
+  # Signal-only — it gates nothing and files nothing.
+  if [[ -n "$PATTERN_SCAN_REPORT" ]]; then
+    echo "## Cross-Release Pattern Scan"
+    echo
+    echo "Signal-only (gates nothing, files nothing). Near-threshold rows are captured learnings that span >= 2 versions but sit below the auto-promotion threshold — record each one's disposition in the Phase-A7.2 learnings register (\`Type\` = one-off / pattern; \`Disposition\` = backlog issue # / carry-forward / accepted-residual)."
+    echo
+    /usr/bin/printf '%s\n' "$PATTERN_SCAN_REPORT"
     echo
   fi
   if [[ "$MODE" == "dry-run" ]]; then
@@ -5894,7 +5932,7 @@ STUB
   fi
 
   # Test 7: usage block extractable
-  if ! /usr/bin/sed -n '2,83p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
+  if ! /usr/bin/sed -n '2,87p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
     echo "FAIL: usage block extraction"; failures=$((failures+1))
   fi
 
@@ -6611,6 +6649,91 @@ FOLOG
   /bin/rm -rf "$_ah_tmp" 2>/dev/null || true
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # ── #3121: pattern_scan default + report capture ───────────────────────────
+  # The phase was previously opt-in behind a flag NO executable caller passed, so
+  # it always resolved N/A; and it piped its report to /dev/null and marked PASS on
+  # an exit code that is 0 in every arm. These assertions are on the phase's
+  # RECORDED DETAIL and the emitted report SECTION, never on exit status.
+  local _ps_saved_wps="$WITH_PATTERN_SCAN" _ps_saved_mode="$MODE"
+  local _ps_saved_syn="$SYNTHESIZE_LEARNINGS" _ps_saved_rep="$PATTERN_SCAN_REPORT"
+  local _ps_tmp; _ps_tmp="$(/usr/bin/mktemp -d)"
+
+  # a) DEFAULT IS ON. Parse the initializer from source rather than reading the
+  # live global, so a later re-assignment cannot make this pass vacuously.
+  if ! /usr/bin/grep -qE '^WITH_PATTERN_SCAN=1$' "${BASH_SOURCE[0]}"; then
+    echo "FAIL: #3121 — WITH_PATTERN_SCAN must default to 1; a flag-gated disposition never fires"; failures=$((failures+1))
+  fi
+  # b) --no-pattern-scan is parsed (the escape hatch exists), and the retired
+  #    --with-pattern-scan is still accepted so no existing invocation breaks.
+  #    Needles are ASSEMBLED at runtime: written literally, each would match its
+  #    OWN source line here and pass even after the parser arm was deleted. That
+  #    is not hypothetical — the literal form of this probe SURVIVED the
+  #    escape-hatch-removal mutant, which is how the self-match was caught.
+  local _ps_no _ps_with
+  _ps_no="$(/usr/bin/printf -- '\\-\\-no\\-pattern\\-sca%s) WITH_PATTERN_SCAN=0; shift' 'n')"
+  _ps_with="$(/usr/bin/printf -- '\\-\\-with\\-pattern\\-sca%s) WITH_PATTERN_SCAN=1; shift' 'n')"
+  [[ "$(grep_count -E -- "$_ps_no" "${BASH_SOURCE[0]}")" == "1" ]] \
+    || { echo "FAIL: #3121 — --no-pattern-scan escape hatch missing from the flag parser"; failures=$((failures+1)); }
+  [[ "$(grep_count -E -- "$_ps_with" "${BASH_SOURCE[0]}")" == "1" ]] \
+    || { echo "FAIL: #3121 — --with-pattern-scan must remain accepted as a compatible no-op"; failures=$((failures+1)); }
+  # c) The report must NOT be discarded. A `/dev/null` redirect on the synthesizer
+  #    invocation is the exact defect this closed; assert it cannot come back.
+  if declare -f phase_pattern_scan | /usr/bin/grep -q '/dev/null'; then
+    echo "FAIL: #3121 — phase_pattern_scan discards its report to /dev/null again"; failures=$((failures+1))
+  fi
+  # d) Suppression path records the honest reason.
+  WITH_PATTERN_SCAN=0; MODE="apply"; PATTERN_SCAN_REPORT=""
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_pattern_scan >/dev/null 2>&1
+  [[ "$(get_phase pattern_scan)" == "N/A|suppressed by --no-pattern-scan" ]] \
+    || { echo "FAIL: #3121 — suppressed run should record N/A with the --no-pattern-scan reason, got '$(get_phase pattern_scan)'"; failures=$((failures+1)); }
+  # e) CONTENT SIGNAL, not a status token: with the scan on, the phase detail must
+  #    carry the two parsed COUNTS, and the captured body must reach the report.
+  #    A stub synthesizer keeps this hermetic (no live event log, no network).
+  {
+    echo '#!/bin/bash'
+    echo 'echo "## Pattern-Detect Report (window=5; cluster-min=3)"'
+    echo 'echo ""'
+    echo 'echo "**Qualifying clusters (size >= 3, spans >= 2 versions):** 0"'
+    echo 'echo "**Near-threshold clusters (2 <= size < 3, spans >= 2 versions):** 2"'
+    echo 'echo "### Near-threshold (no promotion)"'
+    echo 'echo "| \`widget\` | surprise | 2 | v9.01, v9.02 |"'
+    echo 'exit 0'
+  } > "$_ps_tmp/synth.sh"
+  /bin/chmod +x "$_ps_tmp/synth.sh"
+  SYNTHESIZE_LEARNINGS="$_ps_tmp/synth.sh"
+  WITH_PATTERN_SCAN=1; MODE="apply"; PATTERN_SCAN_REPORT=""
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_pattern_scan >/dev/null 2>&1
+  local _ps_rd; _ps_rd="$(get_phase pattern_scan)"
+  [[ "$_ps_rd" == "PASS|qualifying=0, near-threshold=2 (dry-run default; no Issues created)" ]] \
+    || { echo "FAIL: #3121 — phase detail must carry the parsed counts, got '$_ps_rd'"; failures=$((failures+1)); }
+  # Anti-vacuity control: a report with DIFFERENT counts must produce a DIFFERENT
+  # detail. Without this, a hardcoded string would satisfy the assertion above.
+  /usr/bin/sed -i '' 's/\*\*} 0"/**} 0"/' "$_ps_tmp/synth.sh" 2>/dev/null || true
+  /usr/bin/sed -i '' 's/versions):\*\* 0"/versions):** 7"/' "$_ps_tmp/synth.sh"
+  PATTERN_SCAN_REPORT=""; PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_pattern_scan >/dev/null 2>&1
+  [[ "$(get_phase pattern_scan)" == *"qualifying=7"* ]] \
+    || { echo "FAIL: #3121 — the count in the phase detail is not actually parsed from the report (control arm did not move), got '$(get_phase pattern_scan)'"; failures=$((failures+1)); }
+  # f) The captured body reaches the operator-facing markdown report.
+  local _ps_saved_out="$OUTPUT"; OUTPUT="markdown"
+  local _ps_report; _ps_report="$(generate_markdown_report 2>/dev/null)"
+  echo "$_ps_report" | /usr/bin/grep -q '^## Cross-Release Pattern Scan$' \
+    || { echo "FAIL: #3121 — the close-out report must carry the Cross-Release Pattern Scan section"; failures=$((failures+1)); }
+  echo "$_ps_report" | /usr/bin/grep -q 'Near-threshold (no promotion)' \
+    || { echo "FAIL: #3121 — the captured pattern-scan body did not reach the close-out report"; failures=$((failures+1)); }
+  # Specificity: with NO captured report the section must be ABSENT, not empty.
+  PATTERN_SCAN_REPORT=""
+  if generate_markdown_report 2>/dev/null | /usr/bin/grep -q '^## Cross-Release Pattern Scan$'; then
+    echo "FAIL: #3121 — the pattern-scan section must be omitted when nothing was captured"; failures=$((failures+1))
+  fi
+  OUTPUT="$_ps_saved_out"
+  WITH_PATTERN_SCAN="$_ps_saved_wps"; MODE="$_ps_saved_mode"
+  SYNTHESIZE_LEARNINGS="$_ps_saved_syn"; PATTERN_SCAN_REPORT="$_ps_saved_rep"
+  /bin/rm -rf "$_ps_tmp" 2>/dev/null || true
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failures)" >&2
     exit 1
@@ -6643,6 +6766,7 @@ FOLOG
   echo "  usage block extractable" >&2
   echo "  corpus paths resolve (RELEASE_LOG/INDEX/DIGEST + notes dir)" >&2
   echo "  corpus append-ledger merge-immunity validated (#3108 AC1 — union two-branch append CLEAN + both rows kept / non-union control CONFLICTS / state-column union CORRUPTS → LOG+REVERSIONS exclusion)" >&2
+  echo "  phase_pattern_scan wiring validated (#3121 — default ON (source-parsed, not live-global) / --no-pattern-scan suppresses with the honest reason / --with-pattern-scan still accepted / NO /dev/null discard / phase detail carries the PARSED counts with a moved-control anti-vacuity arm / captured body reaches the close-out report, and the section is ABSENT when nothing was captured)" >&2
   exit 0
 }
 
@@ -6725,7 +6849,8 @@ while [[ $# -gt 0 ]]; do
     --apply) MODE="apply"; shift ;;
     --markdown) OUTPUT="markdown"; shift ;;
     --json) OUTPUT="json"; shift ;;
-    --with-pattern-scan) WITH_PATTERN_SCAN=1; shift ;;
+    --with-pattern-scan) WITH_PATTERN_SCAN=1; shift ;;   # compatible no-op: now the default
+    --no-pattern-scan) WITH_PATTERN_SCAN=0; shift ;;
     --reversion) REVERSION_SPEC="$2"; shift 2 ;;
     --outcome) OUTCOME="$2"; shift 2 ;;
     --outcome-rationale) OUTCOME_RATIONALE="$2"; shift 2 ;;
