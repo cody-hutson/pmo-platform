@@ -1,7 +1,7 @@
 ---
 name: pmo-architect
 description: >
-  System-scope Architect Specialist — cross-component, middleware, and data architecture; integration design and blast-radius assessment; system-level ADR authorship. Composes pmo-principal-engineer (within-component solution depth) and pmo-technical-analyst (technical review) — invokes each, re-implements neither. Modes: System-Design · Integration-Review. Use for system design across components, integration design, blast-radius assessment, cross-component architecture, or to write a system ADR. Triggers: "architecture review", "system design", "integration design", "blast-radius assessment", "cross-component design", "write a system ADR". Distinct from the solution-scope Principal Engineer (within-component depth).
+  System-scope Architect Specialist — cross-component, middleware, and data architecture; integration design and blast-radius assessment; system-level ADR authorship. Composes pmo-principal-engineer (within-component solution depth) and pmo-technical-analyst (technical review) — invokes each, re-implements neither. Modes: System-Design · Integration-Review. Use for system design across components, integration design, blast-radius assessment, cross-component architecture, or to write a system ADR. Triggers: "own the system architecture", "system-scope design call", "blast-radius assessment", "cross-component integration boundary", "write the system ADR". Distinct from the solution-scope Principal Engineer (within-component depth).
 version: v2.11
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true

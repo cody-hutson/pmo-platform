@@ -9254,6 +9254,99 @@ cmd_check() {
     fi
   fi
 
+  # ─── Check 67: Composition-aware cross-skill trigger collision (warn-mode initial) ───
+  #
+  # WHAT IT ASSERTS. No two skills in the audit population compete for the same request.
+  # The harness scores each pair's `Triggers:` vocabulary (content-token Jaccard) and
+  # bands the result: at or above threshold = ESCALATE, two-thirds of threshold = WATCH.
+  #
+  # THE COMPOSITION RULE (CR-1, ADR-112) — WHY A PLAIN SKIP WOULD BE WRONG. A
+  # role-Specialist COMPOSES the function-skill it invokes (ADR-019), so the two
+  # legitimately share subject-matter vocabulary and a naive gate re-flags them forever.
+  # But the composition edge CO-VARIES WITH THE DEFECT on this corpus: when the audit was
+  # first run suite-wide, all 4 ESCALATE pairs carried a DEPENDS_ON edge. A gate that
+  # skipped composition-linked pairs would therefore have suppressed 100% of its own
+  # findings and printed PASS over a corpus carrying a 0.733 collision — a dormant
+  # capability wearing a verdict line. So linkage suppresses the WATCH band ONLY; the
+  # ESCALATE band applies to every pair unchanged. Do NOT "simplify" this to a skip.
+  #
+  # WHY THE EXEMPT LINE IS MANDATORY, NOT DECORATION. The rule opens a blind interval
+  # between the WATCH floor and the ESCALATE threshold for exactly the pair class the
+  # trigger convention reshapes. The entire argument for exempting is that the suppressed
+  # set is benign — a claim nobody can re-check if it is never printed. The EXEMPT line is
+  # emitted on every run, pass or fail, for the same reason DENOM is.
+  #
+  # POPULATION — AUDIT_POPULATION, NOT CI_ROSTER. This unions CANARY_SKILLS in (55),
+  # whereas Check 5(d) / check-registry-currency.sh deliberately exclude it (54): a
+  # canary's description is still loaded by the harness, so it can still mis-route a live
+  # request. Trigger collision is a property of the description surface, not of packaging.
+  # The two populations are documented in canonical-skill-structure.md § 2. Do NOT
+  # "reconcile" them to a single number.
+  #
+  # WARN-MODE INITIAL via resolve_check_mode "trigger-collision", per the Check 51-66
+  # precedent; enforce-flip deferred to bypass-mode-readiness.md § Warn-Mode Initial.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 67: Composition-aware cross-skill trigger collision (registry-linked pairs exempt from WATCH, never from ESCALATE; warn-mode initial; enforce-flip deferred)"
+    local c67_script="release/skills/pmo-skill-refiner/scripts/run_eval_audit.py"
+    local c67_registry="core/skills/registry.md"
+    if [[ ! -f "$c67_script" ]]; then
+      flag_warn_or_issue "trigger-collision" "primitive script missing: $c67_script (the gate cannot assert anything without it; a repo defect, not a benign absence)"
+    elif [[ ! -f "$c67_registry" ]]; then
+      flag_warn_or_issue "trigger-collision" "composition source missing: $c67_registry — without it the gate would silently degrade to a non-composition-aware run"
+    else
+      local c67_mode c67_names
+      c67_mode=$(resolve_check_mode "trigger-collision")
+      c67_names=$(printf '%s\n' "${OPERATIONS_SKILLS[@]}" "${RELEASE_SKILLS[@]}" \
+                                "${CORE_SKILLS[@]}" "${CANARY_SKILLS[@]}" | paste -sd, -)
+      # PYTHONPATH here is belt-and-braces BY DESIGN, not by confusion: run_eval_audit.py
+      # self-bootstraps sys.path (so it runs from any cwd), and this prefix — the qa.sh
+      # idiom — guarantees the gate survives a future refactor of that bootstrap.
+      # Removing either one alone is safe; removing both is not.
+      # ── control arms FIRST: a probe that cannot be shown to detect proves nothing ──
+      local c67_fx_out c67_fx_rc=0
+      c67_fx_out=$(PYTHONPATH="release/skills/pmo-skill-refiner${PYTHONPATH:+:${PYTHONPATH}}" \
+                   /usr/bin/python3 "$c67_script" --self-test 2>&1) || c67_fx_rc=$?
+      log "  CTRL:  trigger-collision — $(echo "$c67_fx_out" | tail -1)"
+      if [[ $c67_fx_rc -ne 0 ]]; then
+        log "  FAIL:  trigger-collision-fixtures — fixture regression (hard-fail on every mode). A probe that can no longer be shown to detect AND to discriminate proves nothing by returning zero."
+        echo "$c67_fx_out" | sed 's/^/         /'
+        ISSUES=$((ISSUES + 1))
+      else
+        # ── the scan: denominator first, then the exemption ledger, then findings ──
+        local c67_out c67_rc=0
+        c67_out=$(PYTHONPATH="release/skills/pmo-skill-refiner${PYTHONPATH:+:${PYTHONPATH}}" \
+                  /usr/bin/python3 "$c67_script" \
+                    --skills-dir core/skills --skills-dir operations/skills --skills-dir release/skills \
+                    --skills "$c67_names" --registry "$c67_registry" --composition-aware \
+                    --verbose 2>&1) || c67_rc=$?
+        # The denominator AND the auditable population are logged on EVERY run, pass or
+        # fail. "Skills audited" alone would let "nothing found" read identically to
+        # "nothing examined": a skill whose description yields no trigger phrases scores
+        # zero against everything, so its pairs cannot return non-zero.
+        log "  DENOM: trigger-collision — $(echo "$c67_out" | sed -n 's/^Skills audited: \([0-9]*\).*Pairs: \([0-9]*\).*/\1 skill(s), \2 pair(s) examined/p' | tail -1); auditable: $(echo "$c67_out" | sed -n 's/^Auditable: //p' | tr -s ' ' | tail -1)"
+        log "  EXEMPT: trigger-collision — $(echo "$c67_out" | sed -n 's/^Exempt (composition-linked, WATCH band suppressed; ESCALATE never suppressed): //p' | tail -1)"
+        if [[ $c67_rc -eq 3 ]]; then
+          flag_warn_or_issue "trigger-collision" "resolution failure — $(echo "$c67_out" | sed -n 's/^Error: //p' | tail -1). The population was not established, so a zero here would be untrustworthy; this is not a clean result"
+        elif [[ $c67_rc -eq 1 ]]; then
+          local _c67_hit
+          while IFS= read -r _c67_hit; do
+            [[ -z "$_c67_hit" ]] && continue
+            if [[ "$c67_mode" == "enforce" ]]; then
+              log "  FAIL:  trigger-collision — ${_c67_hit# } — narrow the triggers (function-skills take mechanic phrasing, role-Specialists take domain-anchored ownership phrasing per canonical-skill-structure.md § 3); do NOT widen the exemption to hide it"
+              ISSUES=$((ISSUES + 1))
+            else
+              flag_warn_or_issue "trigger-collision" "${_c67_hit# } — narrow the triggers (function-skills take mechanic phrasing, role-Specialists take domain-anchored ownership phrasing per canonical-skill-structure.md § 3); do NOT widen the exemption to hide it: two skills competing for one request means the operator gets whichever the harness happens to pick"
+            fi
+          done < <(echo "$c67_out" | grep -E '^\s+\[(ESCALATE|WATCH)\]' || true)
+        elif [[ $c67_rc -ne 0 ]]; then
+          flag_warn_or_issue "trigger-collision" "check errored (exit $c67_rc): $(echo "$c67_out" | tail -1)"
+        else
+          log "  OK:    trigger-collision — no pair at or above threshold after the composition-aware WATCH exemption"
+        fi
+      fi
+    fi
+  fi
+
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then

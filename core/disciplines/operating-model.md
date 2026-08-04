@@ -128,11 +128,17 @@ One 4-field entry per skill (22 entries, alphabetical). Each entry states the sk
 - **Stages co-owned (secondary):** none
 - **Out-of-scope:** Canary surface for self-test drills; never invoked in production; never modifies any file.
 
-**`pmo-technical-analyst`** *(platform-pipeline scoped; primary at Stage 5 as bridging fit)*
+**`pmo-principal-engineer`** *(platform-pipeline scoped; primary at Stage 5)*
 
-- **Stages owned (primary):** Stage 5 Solutioning (Mode C — Architecture / Infrastructure Review, **PARTIAL FIT** bridging until the Principal Engineer skill ships). Per [`stage-to-skill-mode-mapping.md` G3](../../release/references/specs/stage-to-skill-mode-mapping.md).
+- **Stages owned (primary):** Stage 5 Solutioning (Mode A — Architecture & NFR Governance; Mode B — Build-vs-Buy & Design Review). Matches the [`release-personas.md`](../../release/references/specs/release-personas.md) Stage 5 persona (Principal Engineer — Architecture Assessment) directly. Per [`stage-to-skill-mode-mapping.md` G3](../../release/references/specs/stage-to-skill-mode-mapping.md).
 - **Stages co-owned (secondary):** none
-- **Out-of-scope:** Modes A/B/D/E target project-ops domain (vendor FDDs, IDDs, ERP architectures); Mode C bridges to platform-internal Stage 5 work but is explicitly a partial fit per per-row gap note. Never authors source-file changes; review-only at Stage 5.
+- **Out-of-scope:** Solution-scope (within-component) depth only — system-scope cross-component design routes to `pmo-architect`. Never authors source-file changes; review-and-design only at Stage 5.
+
+**`pmo-technical-analyst`** *(platform-pipeline scoped; composed technical-review input)*
+
+- **Stages owned (primary):** none. Its former Stage 5 Mode C bridging fit is **discharged** — `pmo-principal-engineer` shipped and owns the stage. Per [`stage-to-skill-mode-mapping.md` G3](../../release/references/specs/stage-to-skill-mode-mapping.md).
+- **Stages co-owned (secondary):** none
+- **Out-of-scope:** Modes A–E target the project-ops domain (vendor FDDs, IDDs, ERP architectures), which is why it was only ever a partial fit for platform-internal design. Never authors source-file changes; review-only.
 
 **`ppm-agent`** *(platform-pipeline scoped; decision-briefing scaffold at Stages 1, 9)*
 
@@ -274,7 +280,7 @@ Write boundaries protect the integrity of the governance surface — if any skil
 | [2 Triage](#stage-02-triage) | GAP — see [`stage-to-skill-mode-mapping.md` G2](../../release/references/specs/stage-to-skill-mode-mapping.md) | Gate 2 Workflow Readiness (`schemas/gate-criteria-spec.md` Gate 2) | Triage decision → Bundle |
 | [3 Bundle](#stage-03-bundle) | `release-planner` Mode A | Gate 3 Release Readiness (`schemas/gate-criteria-spec.md` Gate 3) | Milestone + bundle → Planning (`schemas/stage-io-contracts.md` Boundary Stage 3 → Stage 4) |
 | [4 Planning](#stage-04-planning) | `release-planner` Mode B | Stage 4 acceptance (`pipeline/stage-04-planning.md`) | Release plan → Solutioning (`schemas/stage-io-contracts.md` Boundary Stage 4 → Stage 5) |
-| [5 Solutioning](#stage-05-solutioning) | `pmo-technical-analyst` Mode C (PARTIAL FIT, bridging to Principal Engineer skill) | Stage 5 acceptance + QC2 dependency validation (`pipeline/stage-05-solutioning.md`) | Design specs + ADRs → Engineering (`schemas/stage-io-contracts.md` Boundary Stage 5 → Stage 6) |
+| [5 Solutioning](#stage-05-solutioning) | `pmo-principal-engineer` Modes A + B | Stage 5 acceptance + QC2 dependency validation (`pipeline/stage-05-solutioning.md`) | Design specs + ADRs → Engineering (`schemas/stage-io-contracts.md` Boundary Stage 5 → Stage 6) |
 | [6 Engineering](#stage-06-engineering) | GAP — [`implementation-execution-pattern.md`](../../release/references/how-to/implementation-execution-pattern.md) procedure; see [`stage-to-skill-mode-mapping.md` G4](../../release/references/specs/stage-to-skill-mode-mapping.md) | PR creation + self-verification (`pipeline/stage-06-engineering.md`) | PR with verification → Dev Testing |
 | [7 Dev Testing](#stage-07-dev-testing) | `pmo-qa-auditor` Modes A+D + `pmo-skill-editor` Mode C | Gate 7 quality review (`schemas/gate-criteria-spec.md` Gate 7 planned) | DT Handoff Payload → QA Testing |
 | [8 QA Testing](#stage-08-qa-testing) | `pmo-qa-auditor` Modes A+B | Gate 8 acceptance (`schemas/gate-criteria-spec.md` Gate 8 planned) | QA verdict → Plan Review |
@@ -364,7 +370,7 @@ Each block below is the composition view of one stage — Skill + Governance + T
 
 | Field | Value |
 |---|---|
-| Owning Skill(s) | `pmo-technical-analyst` **Mode C — Architecture / Infrastructure Review** (PARTIAL FIT, bridging until **Principal Engineer skill** ships per [`release-personas.md`](../../release/references/specs/release-personas.md) Stage 5). See [`stage-to-skill-mode-mapping.md` G3](../../release/references/specs/stage-to-skill-mode-mapping.md) for the partial-fit gap definition. |
+| Owning Skill(s) | `pmo-principal-engineer` **Mode A — Architecture & NFR Governance** and **Mode B — Build-vs-Buy & Design Review**, matching the [`release-personas.md`](../../release/references/specs/release-personas.md) Stage 5 persona (Principal Engineer — Architecture Assessment). The prior `pmo-technical-analyst` Mode C bridging fit is discharged — see [`stage-to-skill-mode-mapping.md` G3](../../release/references/specs/stage-to-skill-mode-mapping.md). |
 | Governance Inputs | [`CLAUDE.md`](<OPERATOR_INSTANCE_CLAUDE_MD>), [`decision-discipline.md` § 3](../disciplines/decision-discipline.md) (M1 Localization, M2 Opposing View, M3 Pattern Cache Scan), [`pipeline/stage-05-solutioning.md`](../../release/references/pipeline/stage-05-solutioning.md), [`architecture-overview.md`](../disciplines/architecture-overview.md), [`hub-spoke-bridge.md`](../../release/references/how-to/hub-spoke-bridge.md) Procedure 0 D-Gate Template, [`schemas/stage-io-contracts.md` Boundary Stage 4 → Stage 5](../schemas/stage-io-contracts.md). Release plan from Stage 4 as the input contract; platform architecture context for blast-radius analysis. |
 | Governance Writes | NEW ADR Issue (`adr` label) and/or ADR file in [`core/ADRs/`](../ADRs/) (cross-cutting) or [`release/ADRs/`](../../release/ADRs/) (release-scope) (per Stage 5 spec § 6 ADR Recommendation), Stage 5 sub-task comment with D-decisions and rationale, refined change-specs in the release plan deviation log. |
 | Tracking Actions | Stage → 5-Solutioning, Status remains In Progress; on close: sub-task closed; ADR Issue opened with operator as decider. |
