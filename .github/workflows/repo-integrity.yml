@@ -73,6 +73,14 @@ jobs:
 
           OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-depersonalization[[:space:]]*-->'
 
+          # The literal-escaper and the ADR `deciders:` carve-out decision are
+          # defined ONCE, in a sourced library that the committed fixture suite
+          # (release/tools/tests/test_deciders_carveout.sh) exercises through the
+          # same entry point. An inline copy here would pass its own tests while
+          # this gate diverged — the shadow-source failure the carve-out
+          # reconciliation exists to end.
+          . "${GITHUB_WORKSPACE:-.}/release/tools/lib/deciders-carveout.sh"
+
           # --- 0. FAIL-LOUD-ON-CANONICAL (OPERATOR_IDENTITY required; ----------
           #        COLLABORATOR_NAMES optional — solo-operator). -----------------
           # A PII control that silently scans nothing is indistinguishable from a
@@ -145,10 +153,18 @@ jobs:
 
           # Build the operator-literal pattern list (one literal per line). The
           # handle comes from the actor; name/email lines come from the input.
+          # HANDLE_LITERAL is tracked separately from OP_LITERALS because the ADR
+          # `deciders:` carve-out partitions them: §1.2 sanctions the NAME there and
+          # never the handle, so the handle must stay matchable inside the carve-out
+          # branch. Same source, same resolution conditions — one variable, two uses.
           OP_LITERALS=""
+          HANDLE_LITERAL=""
           if [ "$BOT" -eq 0 ]; then
             if [ "$IS_CANONICAL" -eq 1 ] || [ "$FORK_OPTED_OUT" -eq 0 ]; then
-              [ -n "${ACTOR:-}" ] && OP_LITERALS="$ACTOR"
+              if [ -n "${ACTOR:-}" ]; then
+                OP_LITERALS="$ACTOR"
+                HANDLE_LITERAL="$ACTOR"
+              fi
               if [ -n "${OPERATOR_IDENTITY:-}" ]; then
                 OP_LITERALS="$(printf '%s\n%s\n' "$OP_LITERALS" "$OPERATOR_IDENTITY")"
               fi
@@ -166,18 +182,20 @@ jobs:
 
           # Compose the case-sensitive, word-boundary pattern set. Each non-empty
           # line is matched as a literal (regex-escaped) with \b boundaries.
+          # esc_lines comes from the sourced carve-out library above, so this gate and
+          # its fixture suite build their pattern sets with identical escaping.
           PATTERN_FILE="$(mktemp)"
-          esc_lines() {
-            # read literal lines, drop blanks, regex-escape, wrap in \b...\b
-            printf '%s\n' "$1" | while IFS= read -r ln || [ -n "$ln" ]; do
-              ln="$(printf '%s' "$ln" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-              [ -z "$ln" ] && continue
-              esc="$(printf '%s' "$ln" | sed 's/[][\\.^$*+?(){}|/]/\\&/g')"
-              printf '\\b%s\\b\n' "$esc"
-            done
-          }
           esc_lines "$OP_LITERALS" >> "$PATTERN_FILE"
           esc_lines "$COLLAB_LITERALS" >> "$PATTERN_FILE"
+
+          # NOT-CARVED partition — the literals the ADR `deciders:` carve-out does
+          # NOT cover. Built through the SAME esc_lines helper as PATTERN_FILE, so
+          # the two sets cannot drift into different escaping. Empty when no handle
+          # resolves (bot actor / opted-out fork), which the carve-out predicate
+          # treats as "fall back to the shipped whole-line behaviour" rather than
+          # inventing a verdict for a dimension that is already dark.
+          NOT_CARVED_FILE="$(mktemp)"
+          esc_lines "$HANDLE_LITERAL" >> "$NOT_CARVED_FILE"
 
           if [ ! -s "$PATTERN_FILE" ]; then
             echo ":white_check_mark: Depersonalization — no operator/collaborator literals resolved for this run (bot actor and/or no inputs); nothing to match" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -211,29 +229,35 @@ jobs:
               [ -z "$hit" ] && continue
               LN="${hit%%:*}"
               CONTENT="${hit#*:}"
-              # line-scoped override
-              if printf '%s' "$CONTENT" | grep -qE "$OVERRIDE"; then
-                SUPPRESSED="${SUPPRESSED}${f}:${LN} (override-suppressed)"$'\n'
-                continue
-              fi
-              # ADR deciders carve-out (#1487): the operator LITERAL NAME is a
-              # sanctioned architect-of-record authorship attribution ONLY on a
-              # frontmatter `deciders:` line inside an ADR file. Field-scoped: the
-              # skip fires iff BOTH the file is an ADR (core/ADRs/*.md or
-              # release/ADRs/*.md) AND the added line matches ^deciders:. Every
-              # other identity surface stays blocked — emails, paths, the handle on
-              # any non-deciders line or non-ADR file, the operator name in an ADR
-              # BODY line, any non-ADR file, and the whole collaborator dimension.
-              # Reuses the SUPPRESSED channel so exempted lines are reported, not
-              # silent. Sits AFTER the override block and BEFORE FOUND=1 so it can
-              # never short-circuit the email/handle-elsewhere/collaborator matches.
-              case "$f" in
-                core/ADRs/*.md|release/ADRs/*.md)
-                  if printf '%s' "$CONTENT" | grep -qE '^deciders:'; then
-                    SUPPRESSED="${SUPPRESSED}${f}:${LN} (deciders carve-out — #1487)"$'\n'
-                    continue
-                  fi
-                  ;;
+              # Per-line verdict — the line-scoped override AND the ADR `deciders:`
+              # carve-out, decided in the sourced library so the committed fixture
+              # suite asserts against this code path rather than a look-alike.
+              #
+              # The carve-out is NAME-SCOPED. depersonalization-spec.md §1.2 sanctions
+              # the operator's literal NAME on a frontmatter `deciders:` line inside
+              # an ADR and nothing more; the GitHub handle is never sanctioned, on any
+              # line, `deciders:` included. The skip therefore fires iff the file is
+              # an ADR (core/ADRs/*.md or release/ADRs/*.md) AND the added line
+              # matches ^deciders: AND the line carries no un-carved literal.
+              # Suppressions reuse the SUPPRESSED channel so exempted lines are
+              # reported, not silent, and the whole decision sits BEFORE FOUND=1 so it
+              # can never short-circuit a match outside the carve-out.
+              #
+              # KNOWN RESIDUAL, recorded rather than silently carried: the not-carved
+              # set holds the handle only, so the operator email and the collaborator
+              # dimension are still suppressed whole-line on a `deciders:` line. §1.2
+              # declares both blocked. Closing that half was scoped out of this change
+              # deliberately, not overlooked.
+              case "$(depersonalization_line_verdict \
+                        "$f" "$CONTENT" "$PATTERN_FILE" "$NOT_CARVED_FILE" "$OVERRIDE")" in
+                CLEAN)
+                  continue ;;
+                SUPPRESSED-OVERRIDE)
+                  SUPPRESSED="${SUPPRESSED}${f}:${LN} (override-suppressed)"$'\n'
+                  continue ;;
+                SUPPRESSED-CARVEOUT)
+                  SUPPRESSED="${SUPPRESSED}${f}:${LN} (deciders carve-out — name-scoped)"$'\n'
+                  continue ;;
               esac
               # redact: echo only the line number + a short redacted marker, never
               # the full PII value (mirror gitleaks --redact).
@@ -241,7 +265,7 @@ jobs:
               REPORT="${REPORT}${f}:${LN}: <redacted — operator/collaborator personal data match>"$'\n'
             done <<< "$HITS"
           done
-          rm -f "$PATTERN_FILE"
+          rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE"
 
           if [ -n "$SUPPRESSED" ]; then
             {

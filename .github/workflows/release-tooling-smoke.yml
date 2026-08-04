@@ -34,7 +34,14 @@ name: Release tooling smoke
 #              channels the fixture seeds), AND the
 #              blast-radius tool
 #              family (doc-tracer default-path regression under a normalized diff + the
-#              domain-fan-out software import-graph scanner) in the closeout-smoke job;
+#              domain-fan-out software import-graph scanner), AND the ADR `deciders:`
+#              carve-out two-gate agreement suite (test_deciders_carveout.sh — asserts
+#              that the depersonalization gate and the ADR durability lint return the
+#              SAME verdict on their shared subject, the operator handle, over seven
+#              committed synthetic fixtures; it drives the gate's OWN decision through
+#              the sourced release/tools/lib/deciders-carveout.sh rather than a
+#              re-implementation, and asserts structurally that repo-integrity.yml
+#              still sources it), in the closeout-smoke job;
 #              (2) each of the three core/deploy/tools node-graph tools runs its
 #              committed --self-test when any core/deploy/tools file changes, in the
 #              node-graph-tools-selftest job; (3) the CIAC-3 relation holds — the
@@ -70,7 +77,14 @@ name: Release tooling smoke
 #                  path -> its R1 / R2 rules fail today, with no seam required;
 #                  break the schema-v1 emit so the doc
 #                  tracer's normalized output changes -> the blast-radius tool-family
-#                  test fails; regress a node-graph tool's --self-test -> the
+#                  test fails; revert the carve-out's un-carved re-test so the handle is
+#                  suppressed again on a deciders: line -> the carve-out suite's FX-1 /
+#                  FX-7 / AC-2' arms fail; "fix" the disagreement by deleting the
+#                  carve-out so both gates go strict -> its FX-2 / AC-3' arms and its
+#                  negative control fail; let repo-integrity.yml stop sourcing the
+#                  shared library and grow a private copy again -> its structural
+#                  binding assertion fails (all three falsifiable TODAY, and each was
+#                  run as a mutation before the suite was committed); regress a node-graph tool's --self-test -> the
 #                  node-graph-tools-selftest job fails; add a class to
 #                  core/deploy/allowlists/decision-emission-asserted-set.txt that is not
 #                  a MUST row of the playbook's EMISSION-CONTRACT block -> the CIAC-3
@@ -151,6 +165,11 @@ on:
       # finops-selftest inputs: the four scripts and the store schema they encode.
       - 'core/skills/finops-usage-extractor/**'
       - 'core/schemas/finops-usage-store-schema.md'
+      # deciders carve-out input: the suite asserts STRUCTURALLY that this workflow
+      # still sources the shared decision library. Without this entry, a change that
+      # dropped the sourcing (or the verdict call) would never re-run the assertion
+      # that catches it — the library itself is already covered by 'release/tools/**'.
+      - '.github/workflows/repo-integrity.yml'
       - '.github/workflows/release-tooling-smoke.yml'
   push:
     branches: [main]
@@ -170,6 +189,8 @@ on:
       # finops-selftest inputs — see the pull_request block above.
       - 'core/skills/finops-usage-extractor/**'
       - 'core/schemas/finops-usage-store-schema.md'
+      # deciders carve-out input — see the pull_request block above.
+      - '.github/workflows/repo-integrity.yml'
 
 permissions:
   contents: read
@@ -229,6 +250,32 @@ jobs:
         # Without this step, ZERO CI reference blast-radius — the tool could rot
         # unexercised. Requires jq (present on the macOS runner via /usr/bin/jq).
         run: bash release/tools/tests/test_domain_blast_radius.sh
+
+      - name: ADR deciders carve-out — two-gate agreement suite
+        # The depersonalization gate and the ADR durability lint both scan an ADR
+        # `deciders:` line, and they used to return DIFFERENT verdicts on the handle:
+        # the lint blocked it, the gate's whole-line skip let it through. The gate's
+        # decision was INLINE in repo-integrity.yml, reachable only by a remote CI
+        # trigger, so the only way to exercise it locally was to re-implement it — and
+        # a re-implementation passes while the real gate diverges. The decision now
+        # lives in release/tools/lib/deciders-carveout.sh, which the gate and this
+        # suite BOTH source; the suite also asserts structurally that repo-integrity.yml
+        # has not grown a private copy again.
+        #
+        # Seven committed fixtures, both gates. The load-bearing pair: the handle on a
+        # `deciders:` line must be blocked by BOTH, and the literal NAME on the same
+        # line must PASS both — the second arm is what stops the disagreement being
+        # "resolved" by making both gates strict. Its negative control drives the
+        # predicate with an EMPTY un-carved set and asserts the pre-fix defect
+        # reproduces, so a suite that stopped discriminating fixed from broken fails
+        # rather than greening.
+        #
+        # Every literal is synthetic (RFC 2606 .invalid for the email; the same
+        # `octo-fixture` handle check-adr-durability.py drives its own self-test with) —
+        # a fixture set encoding real identity values would be the defect the rule under
+        # test exists to prevent. Hermetic: mktemp only, no network, no gh, no writes to
+        # the checkout. Bash 3.2 compatible for this macOS runner. Gates on exit code.
+        run: bash release/tools/tests/test_deciders_carveout.sh
 
       - name: Procedure 7a action-item gate predicate (escaped-pipe regression)
         # The Stage-13 HARD GATE predicate is PROSE-EMBEDDED — it lives in a bash
