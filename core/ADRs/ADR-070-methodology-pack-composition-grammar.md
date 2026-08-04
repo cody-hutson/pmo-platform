@@ -58,6 +58,16 @@ The meta-schema relaxes `kinds` from the currently-mandatory center of a type-pa
 
 **Backward-compatibility envelope.** D1–D3 are optional-ADDs (a manifest without `role`/`extends`/`[[labels]]`/work-status projection is byte-identical to a pre-widen type-pack — the same shape ADR-039 preserved for the absent `condition`). D4 is the relaxation, role-gated so the completeness rule a validator applies is selected by `role`. The meta-schema version bumps per the additive-change discipline (`work-item-type-schema.md` §6.1 minor bump = additive); the widen is additive at the grammar level (no existing key changes meaning; no existing pack becomes invalid).
 
+## Alternatives Considered
+
+The four grammar additions were largely *required* rather than selected — § Context enumerates four things the current grammar cannot express that the pack model needs — so this record weighs shape and grounding rather than a set of competing designs.
+
+- **Bend the packs to fit the existing rigid grammar** — **not taken.** § Context records the operator directive the other way round: the grammar is *designed to accommodate* the best-practice-baseline + plug-and-play + override convergence, rather than the packs being bent to fit a rigid grammar.
+- **Fold this decision into the founding sibling ADR** — **not taken.** § Provenance records the Collective Review's recommendation (PA-1) that the meta-schema `role` / composition decision is a grammar-altitude decision distinct from the composing-unit and placement decision, and therefore warrants its own record.
+- **Ground the `kinds` relaxation on the existing optional-ADD precedent** — **not taken.** § Consequences grounds it separately and states why: the precedent is an optional-ADD symmetric on both compatibility axes, whereas relaxing a required surface to optional is not forward-compatible for a pre-existing validator. The asymmetry is recorded honestly rather than claimed as clean-additive.
+
+The residual is named rather than resolved: the relaxation lands before any meta-schema validator exists to be broken by it, so the obligation transfers — when a validator is built it must be role-aware from the start rather than retrofitted onto a kinds-mandatory assumption.
+
 ## Consequences
 
 ### Positive

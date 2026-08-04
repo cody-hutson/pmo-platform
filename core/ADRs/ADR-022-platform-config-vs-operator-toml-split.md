@@ -49,6 +49,18 @@ Adopt **Option C-refined**: a two-file split along the security/access-control b
 
 This decision **refines and extends ADR-017 §S2** (it sharpens the operator.toml "adapters/methodology" enumeration into named tables and adds a sibling behavior-config surface). It **relocates nothing** and is therefore **not** an ADR-017 deviation.
 
+## Alternatives Considered
+
+Recorded from this record's own § Context, which tables the three structural options, and § Status, which records that the Stage 5 spoke's proposal was not the option Collective Review locked.
+
+| Option | Verdict | Why |
+|---|---|---|
+| **(A) One file** — extend `operator.toml` with all new categories | Rejected | Simplest and one reader idiom, but it forces every frequently-calibrated behavior tweak through the identity file's change surface (`chmod 600`, depersonalization token vocabulary, security-sensitive) — conflating two change cadences and two audiences. |
+| **(B) Two files, relocating adapters out of `operator.toml`** — the Stage 5 spec's own proposal | Rejected | Clean separation, but it relocates adapter selection out of `operator.toml`, deviating from ADR-017 §S2, which names adapters as an `operator.toml` concern. That §S2 deviation is the disqualifying problem; it also breaks the convention that the `[platform]` selectors ship in the template and are generated into operator configs by `setup-workspace.sh`. |
+| **(C-refined) Two files, principled split, non-breaking, ADR-017-faithful** | **SELECTED** | Adapters stay in `operator.toml`; a new `platform-config.toml` holds only the new platform-behavior categories ADR-017 did not enumerate. Nothing is relocated, so the decision refines and extends §S2 rather than deviating from it. |
+
+A fourth choice was weighed inside the selected option: the legacy `[platform].work_board` / `comms_platform` fields are reconciled by **alias/deprecation, not removal** — they have no current internal reader but ship in the template and are generated into operator configs, so removal would break any operator or external config that references them.
+
 ## Consequences
 
 **Positive:**

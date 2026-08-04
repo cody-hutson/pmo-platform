@@ -55,6 +55,18 @@ The marker bounds the **declared region** — from the marker line to the next h
 
 **Why A over C.** C pollutes the human reading surface and fails the audience-separation constraint; its heading-text parse is also the least reliable query. §4 already declines to force a heading form, so C would contradict a live section of the standard.
 
+## Alternatives Considered
+
+This record carries its own eight-dimension trade-off matrix inside § Decision ("Options considered + trade-off matrix"), together with its explicit *Why A over B* and *Why A over C* rationales. That matrix is the authority; it is cited here rather than restated, so the record keeps one home for the comparison.
+
+| Option | Verdict | Why (decisive dimension) |
+|---|---|---|
+| **A — section-level HTML-comment marker** | **SELECTED** | Declaration stays welded to the artifact and visible in the same diff; one `grep` enumerates the set; reuses the corpus's dominant directive-marker idiom, so the parsing-tooling pattern already exists. |
+| **B — parent-frontmatter `design_artifacts:` index** | Rejected | Decouples the declaration from the artifact, reintroducing the exact "index over an unqueryable set is a drift surface" failure the spike named — add a section, forget the entry, silent miss. |
+| **C — §9 canonical-heading convention** | Rejected | Pollutes the human reading surface and fails the audience-separation constraint; its heading-text parse is the least reliable query, and §4 already declines to force a heading form, so it would contradict a live section of the standard. |
+
+An earlier framing was eliminated before the matrix: identification **cannot be rendering-based**. At the current-state survey § Context cites, several of the flow types rendered as markdown tables and several of the cited artifact-bearing files carried no fenced blocks and no Mermaid at all — so any fence-count or Mermaid-count mechanism is structurally blind to the heaviest artifact-bearing files.
+
 ## Consequences
 
 - (+) One idiomatic query enumerates all embedded artifacts; combined with `grep -rl '^depicts:'` for dedicated files, the full artifact set is machine-queryable — unblocking the six backfill children's completion tests, staleness detection, and a generated reader index.

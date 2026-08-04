@@ -41,6 +41,17 @@ The instances cannot simply be deleted: doing so orphans immutable ADRs, dangles
 
 **Removal depth:** "keep framework, drop enforcement" — operator-selected over "remove the whole apparatus" and "keep checks dormant."
 
+## Alternatives Considered
+
+The decision's *depth* was the weighed question, and § Decision records the selection verbatim: **"keep framework, drop enforcement" — operator-selected over "remove the whole apparatus" and "keep checks dormant."**
+
+- **Remove the whole apparatus** — **not taken.** The framework is the reusable convention a downloader receives; deleting it with the instances would ship the platform without the roadmap convention at all.
+- **Keep the enforcement checks dormant** — **not taken.** Each of the enforcement surfaces skips cleanly on an absent directory, which reads as passing when it is in fact unenforced; § Consequences names dropping rather than dormant-skipping as a positive precisely because it removes silently-passing checks.
+- **Delete the instances outright** — foreclosed in § Context: doing so orphans immutable ADRs, dangles the references counted at the time, and silently no-ops the enforcement surfaces.
+- **Rewrite history to remove the instances** — **not taken.** § Decision item 1 chooses forward-only untrack-in-place; § Consequences records the residual honestly (the instances remain reachable in prior commits, and a separate history rewrite would be required if true removal is later needed).
+
+§ Decision item 5 records a fifth path deliberately not taken: baselined release plans and a release-scoped ADR that reference roadmaps as point-in-time audit evidence are left unedited, because editing a baselined record would falsify the audit trail.
+
 ## Consequences
 
 ### Positive

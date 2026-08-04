@@ -68,6 +68,16 @@ Which pack(s) a deployment runs is chosen by `delivery_approach` in `operator.to
 
 The pack manifest is `pack.toml` — TOML is the platform's already-canonicalized operator-selectable config-manifest format (`operator.toml`, `platform-config.toml`; ADR-022), so packs (operator-selectable config *instances*) belong on the config surface, not the `.md` grammar/spec surface. The *grammar* those manifests conform to — the widened type-pack meta-schema carrying the pack-level `[[labels]]` facet, work-status projection, optional `kinds`, and the `role`/composition altitude — is decided in [ADR-070](ADR-070-methodology-pack-composition-grammar.md) and lives in `work-item-type-schema.md`. This ADR fixes the composing-unit + placement + selection; ADR-070 fixes the grammar; the #1968 slice widens the meta-schema and scaffolds the manifests; the #1970 slice restructures `label-taxonomy.md` into grammar-only + populates the packs' label facets.
 
+## Alternatives Considered
+
+Recorded from this record's own § Provenance, which names the three options weighed on the originating slice, and § Context, which states the defect each rejected option leaves in place.
+
+| Option | Verdict | Why |
+|---|---|---|
+| **Option 1 — widen the type-pack into a methodology pack** (the composing unit) | **SELECTED** | Gives a methodology's full six-facet surface one selectable unit; reuses ADR-018's type-pack grammar and delta-inheritance precedent rather than replacing them; no major repo restructure. |
+| **Keep the surfaces separate and bind per-methodology in each consumer** | Rejected | Leaves the facets spread across `label-taxonomy.md` / `ticket-information-architecture.md` / `field-lifecycle-matrix.md` with no single plug-and-play unit a deployment selects, and no clean K1 → Layer-3 → K4 seam for the non-kind facets. |
+| **Monolithic per-methodology config files** | Rejected | Re-authors the archetype-invariant ~80% (the generic work-status base, the universal label groups, the priority scale) per archetype — the `duplicate-source-discipline` violation the `_common` root plus `extends` delta-inheritance exists to prevent. |
+
 ## Consequences
 
 ### Positive

@@ -87,6 +87,17 @@ Adversarial review surfaced 4 Blocker findings, with figures as of that review (
 ### Workspace-root template
 - `core/CLAUDE.md.template` (depersonalized) — operator-instance setup script writes `~/Claude/CLAUDE.md` with substitutions applied
 
+## Alternatives Considered
+
+The alternatives on this decision arrived as adversarial-review **counter-designs** rather than as a pre-generated option set. § Context names them and the § Composition with adversarial review findings table below records each one's disposition; this section recalls the load-bearing rejections rather than restating that table.
+
+- **CD-2 — `RELEASE_LOG.md` as a templated artifact at `core/`** — **NOT ADOPTED.** Operator-instance separation per the harness plan § 2.4 is preserved; the incoming citations counted at the time are accepted as residual instead, with cross-citation rewrite deferred to follow-on tickets.
+- **CD-5 — a pre-commit grep in Surface 13** — **NOT ADOPTED.** Per-batch commit verification is used instead.
+- **CD-1 — authoring the rewrite map at Stage 5 rather than Stage 6** — **DEFERRED** under the operator standing-GO; the map is authored at Stage 6.
+- **CD-4 — a rewrite-strategy enum carried by this ADR** — **DEFERRED**; the enum lives in the migration spec, not in this boundary lock.
+
+The selected path is § Decision: per-class placement locks decided by **per-file audience analysis** rather than whole-directory migration, which is what the six non-obvious categories in § Context required.
+
 ## Consequences
 
 1. **Module-migration scope locked — populations as of authoring: operations migration absorbs raid-log.schema.json + 1 operations roadmap; release migration absorbs 11 release-standards + 9 release-specs + 9 release-tools + 1 release-roadmap + release-process.md + RELEASE_PROTOCOL.md + 8 agent definitions.**

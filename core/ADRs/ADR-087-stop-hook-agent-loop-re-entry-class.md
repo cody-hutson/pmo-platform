@@ -51,6 +51,16 @@ Three candidate mechanisms were available, and the constraint that decided among
 
 **Scope bound.** This ADR governs the **hook class** — the re-entry mechanism and the conditions under which the platform will register one. It does **not** govern what any particular re-entrant hook does with the turn it takes, nor the sampling policy of the capability that motivated it (that is the skill's own contract), nor the activation decision for any specific instance.
 
+## Alternatives Considered
+
+Recorded from this record's own § Context, which tables the three candidate mechanisms and names the constraint that decided among them — a shell hook cannot make the agent reason.
+
+| Option | Verdict | Why |
+|---|---|---|
+| **`Stop` + `decision:block`** | **SELECTED** | The only supported way to obtain a reflection at a session boundary: a `Stop` hook may return `{"decision":"block","reason":…}`, which re-enters the agent. It also receives the session identifier and transcript pointer on stdin, so a cheap triviality predicate is computable without a model call. |
+| **`SessionEnd`** | Rejected | Session-terminal and correct in principle, but a cleanup hook: it can run a script, not a reflection, and cannot re-enter the agent loop. Using it would force deferred reflection at the next session start, needing catch-up machinery and reflecting on a session whose context is already gone. |
+| **No hook (skill only)** | Kept as the floor, not the answer | The skill is fully usable with no hook installed; the hook only automates the timing. That is what makes the ship-inert posture honest rather than a stub. |
+
 ## Consequences
 
 - **The platform now has two hook shapes, and they are not interchangeable.** A *gate* hook constrains a pending action and is reasoned about in terms of blast radius. A *re-entrant* hook consumes agent turns and is reasoned about in terms of loop safety and interruption cost. A reviewer assessing a new hook must first decide which shape it is; the four obligations above apply only to the second.

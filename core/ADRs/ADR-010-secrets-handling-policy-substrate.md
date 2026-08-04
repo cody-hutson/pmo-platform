@@ -48,6 +48,19 @@ The following candidate edits were **declined**:
 | `core/governance/OPERATIONS.md` "policy catalog" entry | The file is a PMO project-management operations manual, not a policy catalog. Adding a Policy Catalog section would be a structural addition outside the file's scope. Discoverability via L1+L2 cross-references is sufficient. |
 | `core/standards/README.md` index entry | The README explicitly states "Standards are referenced by governing docs and skills — not enumerated here, to avoid duplicate-source drift." Adding an entry would violate the file's stated convention. |
 
+## Alternatives Considered
+
+Recorded from this record's own § Context, which tables the four candidate locations, and § Decision, which tables the two candidate edits declined alongside the placement itself.
+
+| Option | Verdict | Why |
+|---|---|---|
+| **A — `core/standards/secrets-handling-policy.md` (new, single file)** | **SELECTED** | Peers with the existing security-adjacent specs; follows the category-owner-spec pattern `composition-surface-spec.md` establishes; keeps the policy-substrate framing explicit. |
+| **B — extend root `SECURITY.md`** | Rejected | Root `SECURITY.md` is the GitHub-convention vulnerability-reporting file. Conflating the two would bloat it with operational content unrelated to vulnerability reporting, and the file external researchers look for should stay small and actionable. |
+| **C — split into policy + a separate categories file** | Rejected | Fragments one substrate across two files; § Consequences records single-source-of-truth (one file, eight sections) as a positive of the selected option. |
+| **D — `docs/SECURITY-OPERATIONS.md`** | Rejected | A user-facing `docs/` surface is the wrong home for an internal operational policy that its security-adjacent peers compose with. |
+
+Two candidate cross-reference edits were also weighed and **declined**: an `OPERATIONS.md` policy-catalog entry (the file is a project-management operations manual, not a policy catalog) and a `core/standards/README.md` index entry (the README states it does not enumerate standards, to avoid duplicate-source drift).
+
 ## Consequences
 
 ### Positive

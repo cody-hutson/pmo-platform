@@ -90,6 +90,18 @@ property no in-process logic test can observe. The honest split (CI for the
 deterministic logic; an operator probe for live delivery + worktree wiring) is the
 only model that neither over-claims nor omits the #1472 gap.
 
+## Alternatives Considered
+
+This record already carries an explicit **Rejected alternative** paragraph at the end of § Decision. Recorded here in the canonical section:
+
+| Option | Verdict | Why |
+|---|---|---|
+| **Two-layer probe** — deterministic CI logic-regression (Layer A) plus a manual operator-run live-delivery procedure (Layer B) | **SELECTED** | The two halves have different testability, so they get different instruments. Layer A owns the deterministic-and-regressable half; Layer B owns the harness-delivery and worktree-wiring half no CI job can assert. |
+| **A single all-in-CI empirical suite** (the prescription this record supersedes) | Rejected | It cannot discharge the live-delivery claim — a subagent cannot observe its own interception, and CI has no subagent-spawning harness — so it would either over-claim coverage it does not have or be impossible to write. |
+| **Fold the worktree-wiring question into CI** | Rejected | The same trap: worktree hook-wiring is a harness property no in-process logic test can observe. |
+
+The record is explicit that the rejection is about honesty rather than effort: an all-in-CI suite would assert "subagent calls are blocked" while proving only the payload logic, masking both the unverified delivery and the named worktree gap — and both failure modes are worse than an honest split.
+
 ## Consequences
 
 - **The deterministic half is regression-guarded forever.** Any future change that

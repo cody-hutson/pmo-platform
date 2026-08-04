@@ -122,6 +122,16 @@ resolve_skill_module() {
 
 The `die` function provides operator-actionable diagnostic; `return 1` would silently abort under `set -e`.
 
+## Alternatives Considered
+
+The headline decision was **forced rather than weighed**: § Context records that the new structure *requires* partition into per-module arrays, so the split itself had no competing shape. The alternatives this record does evidence sit at the mechanism level, one per Decision rule.
+
+- **Rule 2 — empty-array guard.** `${ARR[@]:+...}` parameter substitution was available and **not taken**: § Consequences item 4 records that it is bash 4.2+ while macOS ships bash 3.2 by default, so the explicit `${#ARR[@]} -gt 0` gate was chosen for portability.
+- **Rule 3 — miss handling in `resolve_skill_module()`.** A bare `return 1` was **not taken**: a helper called via command substitution under `set -e` aborts the script with no diagnostic on non-zero return, so the helper dies explicitly with an operator-actionable message instead.
+- **Check 9 — mirror-pair semantics.** Retaining the bi-directional *two-sources-must-agree* assertion was **not taken**; per the adversarial review the adapted check is uni-directional source-to-workspace, so drift has one unambiguous reading and one remedy.
+
+A prior verification was also rejected rather than trusted: the Stage 5 spec claimed empty-array iteration "skips cleanly", but that check had been run without `set -u`; the adversarial review reproduced the crash, and the empirical result superseded the claim.
+
 ## Consequences
 
 1. **Implementation contract:** The implementation spoke implements per-module arrays + empty-array gates + `resolve_skill_module()` helper + Check 9 mirror-pair adaptation (semantic change: bi-directional source-of-truth → uni-directional source-to-workspace mirror, per adversarial PR-4).

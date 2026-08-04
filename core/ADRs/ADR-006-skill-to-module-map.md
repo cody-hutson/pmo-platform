@@ -52,6 +52,16 @@ Operator decision at Collective Review (APPROVE WITH OVERRIDES 2026-05-27) ratif
 
 **Agent definitions** (`.claude/agents/pmo-*.md`, 8 files as of authoring) classify to **release/.claude/agents/** per Stage 5 spec Surface 1.4 — pipeline-bound spoke personas with zero operations-side consumers.
 
+## Alternatives Considered
+
+Recorded from this record's own § Context, which enumerates the three classification axes weighed at Stage 5, and § Consequences item 3, which carries the runner-up forward as a documented alternative.
+
+| Option | Verdict | Why |
+|---|---|---|
+| **3-module decomposition** (operations / release / core) | **SELECTED** | Adopted by the Stage 5 spec and ratified by the operator at Collective Review (APPROVE WITH OVERRIDES, 2026-05-27). |
+| **4-module decomposition** (operations / release / platform-meta / core) | Rejected — carried as documented residual | The adversarial review's CD-1 counter-design, preserving the canonical 4-scope manifest. Operator-accepted at scope-lock as a deferred residual: § Consequences item 3 keeps the path available should extraction-readiness validation surface the 3-module collapse as load-bearing-defective. |
+| **Per-skill containers** | Rejected | Explodes the module-boundary surface; rejected at Stage 5 before reaching the trade-off matrix. |
+
 ## Consequences
 
 1. **Module migration scope locked:**

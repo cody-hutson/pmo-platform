@@ -36,6 +36,16 @@ The real gaps are narrower: (1) some produced outputs have no entity, so the §6
 3. **Ownership is enforced by four invariants** over the data model: **I1** every entity has exactly one Maintainer; **I2** a non-maintainer writer routes through the maintainer's channel (creator → reader post-create); **I3** any skill declaring maintainer-write to an entity must be that entity's §6 Maintainer; **I4** a rendering declares no ownership and only reads owned entities.
 4. **Enforcement is a build-time reconciliation, not a new artifact.** The cross-skill audit reconciles each skill's declared outputs (per-skill-output-contracts) against the §6 owning-agent matrix and escalates a would-be second maintainer (I1 + I3). The ownership model is a discipline plus a check over existing sources of truth — no new ownership store.
 
+## Alternatives Considered
+
+§ Context weighs the obvious candidate and rejects it on inspection rather than on preference, and § Decision plus § Related ADRs record two further paths declined.
+
+- **Record output ownership on the skill registry** — **not taken.** § Context: the registry is keyed on the *skill*, but a shared output — a go/no-go or a RAID entry re-produced by many skills, at the counts the behavior-level review recorded at the time — has an identity that spans skills, so there is no single skill row to host it; an ownership plane on the registry would also duplicate a concern the platform already owns elsewhere. § Related ADRs states the same conclusion as a boundary affirmation: this decision *declines* to extend the registry with output ownership.
+- **Stand up a new ownership store** — **not taken.** § Decision item 4 makes enforcement a build-time reconciliation over existing sources of truth, explicitly with *no new ownership store*.
+- **Treat the many-producers shape as a collision to be deconflicted per skill** — **not taken.** For data-backed entities that shape is the *governed* pattern already in production, so the real gaps narrow to outputs with no entity and the absence of an authoring-time check.
+
+The selected path is therefore ownership keyed on the data **entity** — the only key under which a cross-skill output has a single home — with produced outputs classified into data-backed, rendering (ownerless by design), and missing-entity (promoted to a first-class entity).
+
 ## Consequences
 
 - The registry is untouched; its single responsibility (skill identity + routing) and its consumers (the router) are insulated.

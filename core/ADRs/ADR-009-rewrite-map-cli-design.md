@@ -121,6 +121,17 @@ $ check-doc-links.py --from-path "pmo-platform/reference/explanation/" \
 # which may not match the actual v2 layout. Verify cascade manually.
 ```
 
+## Alternatives Considered
+
+Each structural rule in § Decision states the shape it was chosen over; the alternatives are recorded per rule rather than as one option set.
+
+- **Rule 1 — the CLI shape.** The `--rewrite-map` JSON single-flag interface (adversarial CD-1) was **not taken**; Rule 1 states its own rationale for the two-flag `--from-path` / `--to-path` form: composable with shell loops at the invocation pattern, argparse-natural with no JSON parser overhead at the consumer, and a test fixture that is two strings rather than a JSON document.
+- **Rule 2 — the prefix table.** A single collapsed prefix tuple was **not taken**; per the adversarial review the collapsed abstraction works but obscures the repo boundary in failure messages, so the table is split into named V1/V2 constants.
+- **The EMIT-ONLY contract.** Relying on Stage-6 code review to hold it was **not taken**; the adversarial review classified that mitigation as non-structural for a failure the spec itself names catastrophic, so an executable fixture asserting mtime and content-hash unchanged replaces it.
+- **Asymmetric restructuring renames.** Silent prefix-substitution was **not taken**; because string concatenation preserves a segment a restructuring rename drops, the design adds a default-enabled asymmetry warning rather than guessing the correct cascade.
+
+One adjacent disposition was operator-ratified rather than designed here: Check 15 is **retired** from the v2 deploy surface, with release-corpus integrity moving to an external tool or an operator-instance fallback wrapper, and the integrity-gap window accepted at Collective Review.
+
 ## Consequences
 
 1. **Implementation contract:** Wave E spoke implements two-flag CLI + V1/V2 prefix split + Fixture 6 EMIT-ONLY assertion + dual-emission asymmetry error + asymmetry-warning flag. NOT in Wave C scope.

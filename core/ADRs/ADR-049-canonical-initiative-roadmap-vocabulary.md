@@ -36,6 +36,16 @@ A prior release had already reframed the `§ Initiative Labels` *prose* ("an ini
 4. **Label mapping.** The retired `initiative:*` namespace maps to the two live grouping namespaces by role: **`epic:*`** for the skill-suite thrusts, **`project:*`** for cross-cutting initiatives. Initiative-the-concept maps to the grouping-label *namespaces*, NOT to a dedicated Projects single-select field — a Projects "Initiative" field is an OPTIONAL future add, not a dependency of this decision (the grouping signal already rides labels today, and standing up Projects board structure on the public repo is constrained by operator policy). The ADR cites the namespaces by role; the enumerated live-label list lives in `label-taxonomy.md` (the labels SSOT), which tracks label churn.
 5. **SSOT discipline.** The glossary is the single source of truth for the term wording; `initiative-roadmap-framework.md` and `label-taxonomy.md` **cite** the canonical terms, never re-define them (parameterize / cite-not-duplicate).
 
+## Alternatives Considered
+
+The canonical wording itself was constrained rather than chosen — § Context records that the work-hierarchy SSOT already fixes the levels and excludes Initiative as one, so this record *adopts that established corpus position rather than inventing a new one*. Three genuine alternatives are named in § Decision.
+
+- **Map Initiative to a dedicated Projects single-select field** — **not taken.** § Decision item 4 maps Initiative-the-concept to the grouping-label *namespaces* instead: the grouping signal already rides labels today, and standing up Projects board structure on the public repo is constrained by operator policy. A Projects field remains an optional future add, not a dependency of this decision.
+- **Enforce the framework's "one initiative" scoping as a hard limit** — **not taken.** § Decision item 2 reframes it as the *default* case, which preserves the existing one-initiative pilot roadmaps as conformant; a hard limit would have made them non-conformant.
+- **Enumerate the live grouping labels in this record** — **not taken.** § Decision item 4 cites the namespaces by role and leaves the enumerated live-label list in the labels SSOT, which tracks label churn.
+
+§ Decision item 3 records the corresponding non-change: the already-canonical `Milestone` term is affirmed rather than re-litigated.
+
 ## Consequences
 
 - The glossary gains two canonical terms (`Initiative`, `Roadmap`) in Category 6 and its Appendix B Initiative row no longer asserts "not modeled" — it redirects to the canonical term.

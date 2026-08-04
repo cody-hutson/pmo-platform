@@ -34,6 +34,16 @@ The platform holds memory across several surfaces — the codified corpus, the o
 
 5. **The contract is the index, not the union of every surface spec.** It holds one row per surface and cites each surface's normative home (the People graph view, the operational-tracker inventory, the Knowledge↔corpus boundary) rather than copying it — copying a home's fields into the contract would itself be a shadow SSOT. The enforcement gate (a `deploy.sh --check` analog) is **deferred** to a follow-up, matching ADR-029's warn-mode-initial posture for Check 36.
 
+## Alternatives Considered
+
+This record exists because the ADR it supersedes named this reconciliation as its own revisit trigger, so the *decision to write it* was forced rather than chosen among options. Two shaping alternatives are nonetheless evidenced in the record's own text.
+
+- **Make the contract the union of every surface spec** — **not taken.** § Decision item 5: the contract holds one row per surface and *cites* each surface's normative home rather than copying it, because copying a home's fields into the contract would itself be a shadow SSOT — the exact defect the contract's central invariant forbids.
+- **Rewrite the superseded record in place** rather than supersede it — **not taken.** § Consequences: the prior ADR is preserved as a historical record under the immutable-ADR posture, carrying a supersession pointer, with its cut and its invariant moving into this contract verbatim. This ADR generalizes; it does not retract.
+- **Ship the enforcement gate with the contract** — **not taken.** § Decision item 5 defers it to a follow-up, matching the warn-mode-initial posture the superseded record set for its own check.
+
+The per-type SSOT homes were assigned rather than relocated — § Decision item 3 states each is unchanged from where it already lives — so no competing placement was on the table for them.
+
 ## Consequences
 
 - **One home for the read/write decision.** An agent no longer reasons per-surface from scattered rules; the contract table is the single lookup. The shadow-SSOT drift vector ADR-029 closed for the Knowledge cut is now closed for all four types under one invariant.
