@@ -39,7 +39,7 @@ The `pipeline-event-log.md` body is a markdown table. Header:
 | # | Field | Type | Domain | Example |
 |---|---|---|---|---|
 | 1 | `ts_iso` | ISO8601 UTC timestamp | event time | `2026-05-15T14:22:01Z` |
-| 2 | `version` | string | active Milestone tag | `v1.07a` |
+| 2 | `version` | string | release join key — the Milestone SLUG (§ 2a) | `version-binding-lifecycle` |
 | 3 | `stage` | int 1..13 | pipeline stage number | `5` |
 | 4 | `event_type` | enum (see § 3) | top-level event category | `decision` |
 | 5 | `event_subtype` | enum scoped to event_type (see § 3) | refinement of event_type | `scope-lock` |
@@ -80,10 +80,61 @@ must treat a multi-match as INDETERMINATE. Rung 3 is deliberately EXCLUDED from 
 gate that asserts an emission obligation — an ambiguous legacy match must never
 count as satisfying an obligation.
 
+**Enforced at the writer, not by convention.** `append-pipeline-event.sh` REJECTS a
+`--version` value that matches the canonical release-version grammar, and rejects an
+unresolved `{{…}}` substitution token. The rejection is loud and immediate: the emit
+exits non-zero naming the observed value, and no row is written. The grammar is not
+restated in the writer — it is SOURCED from `release/tools/version-grammar.sh`, the
+platform's sole canonical version grammar, whose consumer contract forbids copying it
+inline. The predicate is deliberately NEGATIVE (reject the version form) rather than
+POSITIVE (assert a slug form): milestone slugs carry no enforced grammar — the shipped
+set contains uppercase segments, leading digits, and a parenthetical — so asserting one
+would reject real slugs, while the version grammar has exactly one definition and
+matches no real slug.
+
+Why a write-side gate rather than a warning: this log is append-only and Vital
+retention (§ 4.1, § 7), so a bad row can never be deleted, only redacted. That is the
+same rationale § 11.8 already states for the payload-label gate — *only a write-side
+gate stops the bad row existing.*
+
+The reserved literal **`(none)`** is admitted for an emission with **no release context
+at all**, per `RELEASE_PROTOCOL.md` § Versioning, which already uses `(none)` where a
+version key would sit and explicitly forbids synthesizing a placeholder version. A
+`version-less` RELEASE is a different case — it still keys by its own slug. Do not pass
+`v0.0.0` or any other version-shaped placeholder: it sorts into the version space and is
+indistinguishable from a real release to every consumer.
+
 **Scope truth.** 1:1 resolution is achievable only forward. Rows written before the
 write-slug cutover carry a `vX.Y` value that genuinely spans multiple releases, and
 no reader can undo that without mutating an append-only log (§ 4.1). Legacy rows are
 best-effort-with-declared-ambiguity by design, not by defect.
+
+**Legacy scope, quantified — and why it is not backfilled.** Measured on the operator
+instance at the enforcement boundary, 2026-08-04:
+
+| Population | Count |
+|---|---|
+| data rows total | 338 |
+| version-keyed (legacy, non-key form) | 207 |
+| unresolved `{{…}}` token accepted as a key before enforcement | 1 |
+| slug-keyed (compliant) | 130 |
+| attributable to an owning milestone | 317 |
+| **provably unattributable** | **21** |
+
+Five legacy values resolve to more than one milestone and are therefore permanently
+INDETERMINATE: `v3.97` (3 milestones), `v3.98`, `v3.93`, `v3.78`, `v3.75` (2 each).
+The 21 unattributable rows sit under one of those values AND carry neither a
+`milestone:#N` subject nor an `ms:#N` payload token — nothing in the record identifies
+their release.
+
+Historical rows are **NOT** rewritten, for two independently sufficient reasons.
+**Prohibited:** § 4.1 forbids direct edits and § 7 makes the log Vital / append-only
+forever; the row-count parity control that guards the invariant would not move for an
+in-place cell rewrite, so a backfill would be structurally invisible to its own check.
+**Impossible:** attributing those 21 rows would mean inventing attribution the record
+does not contain, which No-invention forbids. Readers date the boundary from the
+enforcement date above: rows after it are slug-keyed by enforcement, rows before it are
+best-effort by construction.
 
 **Mixed-arity note for windowed reads.** `query-pipeline-event.sh --window N`
 restricts to the trailing N DISTINCT `version` values. Post-cutover the column holds
@@ -114,19 +165,19 @@ Subtypes outside the lists above are **invalid** — `append-pipeline-event.sh` 
 **`recommendation-choice-delta` payload convention.** A `recommendation-choice-delta` row reuses the standard 10 columns (no new fields); the `version` + `stage` columns are the release/stage anchor, and the delta-tuple lives in `payload`, keyed `rec:` (the agent's prior recommendation) / `chose:` (the rendered operator choice; pair with the row's `outcome`) / `delta:` (one of `aligned` / `diverged` / `partial` / `operator-deferred` — `aligned` records the zero-delta state EXPLICITLY, never silently omitted) / `why:` (divergence rationale) / `via:` (provenance — one of `hub-d-gate` / `pause-to-learn-e3` / `stage4-bundle` / `stage5-design` / `routing` / `session-retro`). `actor` is `spoke:#N`, `hub`, or `operator` per the decision moment. The `session-retro` provenance value marks a delta the per-session retro surfaced retrospectively rather than one captured live at the decision moment; the row is otherwise identical, so the existing look-back read-model needs no change to see it. **Signal-only surface:** this subtype NEVER auto-mutates the toolkit; the look-back read-model (§ 11 `--event-subtype recommendation-choice-delta`) is detective-only, and an auto-promote of ≥3 same-pattern `diverged` rows yields an `improvement.yml` CANDIDATE via the governance gate (issue → plan → PR per "No ungoverned changes"), never an auto-change. PII per § 4.2; redaction reuses `event_type=scope-change, event_subtype=redaction`. Examples (≤ 300 chars, escaped-pipe per § 4.3a):
 
 ```markdown
-| 2026-06-29T14:00:00Z | v2.39 | 4 | decision | recommendation-choice-delta | hub | milestone:#N | CHEAP | resolved | rec:bundle-A+B; chose:bundle-A-only; delta:diverged; why:B-blocked-on-dep; via:stage4-bundle |
-| 2026-06-29T14:00:01Z | v2.39 | 5 | decision | recommendation-choice-delta | spoke:#N | #N | CHEAP | resolved | rec:new-subtype; chose:new-subtype; delta:aligned; via:stage5-design |
+| 2026-06-29T14:00:00Z | 60-audit-cadence-and-learning | 4 | decision | recommendation-choice-delta | hub | milestone:#N | CHEAP | resolved | rec:bundle-A+B; chose:bundle-A-only; delta:diverged; why:B-blocked-on-dep; via:stage4-bundle |
+| 2026-06-29T14:00:01Z | 60-audit-cadence-and-learning | 5 | decision | recommendation-choice-delta | spoke:#N | #N | CHEAP | resolved | rec:new-subtype; chose:new-subtype; delta:aligned; via:stage5-design |
 ```
 
 **`test-run` payload convention.** A `test-run` row reuses the standard 10 columns (no new fields); the suite specifics live in `payload`, keyed `suite:` / `selected-by:` (the [`runtime-suite-selection-map.md`](runtime-suite-selection-map.md) row that matched) / `pass:` / `fail:` / `env:` / `sha:`. `stage` is `6` (author self-verification) or `7` (DT gate); `outcome` is `resolved` for pass/skip and `escalated` for a fail routed to Engineering. Examples (≤ 300 chars, escaped-pipe per § 4.3a):
 
 ```markdown
-| 2026-06-13T14:00:00Z | v1.12 | 7 | test-run | suite-pass | spoke:#N | #N | CHEAP | resolved | suite:hook-suite; selected-by:glob-3; pass:268; fail:0; env:sandbox-home-tmp; sha:abc1234 |
-| 2026-06-13T14:00:01Z | v1.12 | 7 | test-run | suite-fail | spoke:#N | #N | CHEAP | escalated | suite:deploy-suite; selected-by:glob-2; pass:24; fail:1; env:sandbox-home-tmp; sha:def5678 |
-| 2026-06-13T14:00:02Z | v1.12 | 6 | test-run | suite-skip | spoke:#N | #N | CHEAP | resolved | suite:NONE; selected-by:no-match; reason:doc-only-change; sha:9abcdef |
+| 2026-06-13T14:00:00Z | corpus-durability-enforcement | 7 | test-run | suite-pass | spoke:#N | #N | CHEAP | resolved | suite:hook-suite; selected-by:glob-3; pass:268; fail:0; env:sandbox-home-tmp; sha:abc1234 |
+| 2026-06-13T14:00:01Z | corpus-durability-enforcement | 7 | test-run | suite-fail | spoke:#N | #N | CHEAP | escalated | suite:deploy-suite; selected-by:glob-2; pass:24; fail:1; env:sandbox-home-tmp; sha:def5678 |
+| 2026-06-13T14:00:02Z | corpus-durability-enforcement | 6 | test-run | suite-skip | spoke:#N | #N | CHEAP | resolved | suite:NONE; selected-by:no-match; reason:doc-only-change; sha:9abcdef |
 ```
 
-**`session-retro` payload convention.** A `session-retro` row reuses the standard 10 columns (no new fields); the session-grained learning lives in `payload`, keyed `session:` (an opaque session handle — never a transcript path, never operator content) / `source:` (what produced the signal — one of `correction` / `preference` / `redirection` / `friction` / `delta`) / `theme:` (a short kebab-case clusterable key — **the only field the cross-session cluster read-model tokenizes**, so it carries the pattern identity) / `domain:` (the surface the learning touches) / `learning:` (one abstracted sentence). `actor` is `skill:session-retro`; `subject` is `session:<handle>`; `stage` is the pipeline stage the session was working in, or `13` for a non-pipeline conversational session (the retro is session-grained, not stage-grained — the column is an anchor, not a claim). `version` is the active release tag.
+**`session-retro` payload convention.** A `session-retro` row reuses the standard 10 columns (no new fields); the session-grained learning lives in `payload`, keyed `session:` (an opaque session handle — never a transcript path, never operator content) / `source:` (what produced the signal — one of `correction` / `preference` / `redirection` / `friction` / `delta`) / `theme:` (a short kebab-case clusterable key — **the only field the cross-session cluster read-model tokenizes**, so it carries the pattern identity) / `domain:` (the surface the learning touches) / `learning:` (one abstracted sentence). `actor` is `skill:session-retro`; `subject` is `session:<handle>`; `stage` is the pipeline stage the session was working in, or `13` for a non-pipeline conversational session (the retro is session-grained, not stage-grained — the column is an anchor, not a claim). `version` carries the milestone slug, not a release tag — the join key is the slug always, and the concrete version is a late-bound attribute recorded by the Stage-12 binding row once the atomic claim resolves it. A row emitted before that claim has no tag to carry.
 
 **Signal-only surface, and the boundary that makes it one.** A `session-retro` row is a SENSOR reading, never an actuator: emitting one creates zero toolkit changes, and a cross-session cluster (§ 11.5, `cluster_min` ≥ 3 spanning ≥ 2 versions) yields an `improvement.yml` CANDIDATE through the governance gate (issue → plan → PR per "No ungoverned changes"), never a direct edit. The retro NEVER writes the operator's auto-memory store (operator-write-only per § 5.3) — the memory corpus is a promotion TARGET reachable only through that gate, never a write target of the retro itself.
 
@@ -135,9 +186,9 @@ Subtypes outside the lists above are **invalid** — `append-pipeline-event.sh` 
 **PII (§ 4.2 applies unchanged, and bites hardest here).** The retro reflects over session content, so every payload field is an ABSTRACTION, never a quotation: no verbatim operator text, no external-stakeholder names, no Cowork-owned Layer 2 content, no transcript excerpt. `learning:` states the pattern, not the utterance that revealed it. Examples (≤ 300 chars, escaped-pipe per § 4.3a):
 
 ```markdown
-| 2026-07-22T22:10:00Z | v3.80 | 6 | session-retro | operator-feedback | skill:session-retro | session:a1b2c3 | CHEAP | resolved | session:a1b2c3; source:correction; theme:read-before-edit; domain:corpus-edit; learning:operator redirected a pattern-sweep toward per-file reading |
-| 2026-07-22T22:10:01Z | v3.80 | 6 | session-retro | learning | skill:session-retro | session:a1b2c3 | CHEAP | resolved | session:a1b2c3; source:friction; theme:worktree-cwd-guard; domain:release-ops; learning:git writes needed an explicit cwd guard to stay in the worktree |
-| 2026-07-22T22:10:02Z | v3.80 | 13 | session-retro | no-learning | skill:session-retro | session:d4e5f6 | CHEAP | resolved | session:d4e5f6; reason:below-sampling-threshold-no-novel-signal |
+| 2026-07-22T22:10:00Z | close-out-reliability-hardening | 6 | session-retro | operator-feedback | skill:session-retro | session:a1b2c3 | CHEAP | resolved | session:a1b2c3; source:correction; theme:read-before-edit; domain:corpus-edit; learning:operator redirected a pattern-sweep toward per-file reading |
+| 2026-07-22T22:10:01Z | close-out-reliability-hardening | 6 | session-retro | learning | skill:session-retro | session:a1b2c3 | CHEAP | resolved | session:a1b2c3; source:friction; theme:worktree-cwd-guard; domain:release-ops; learning:git writes needed an explicit cwd guard to stay in the worktree |
+| 2026-07-22T22:10:02Z | close-out-reliability-hardening | 13 | session-retro | no-learning | skill:session-retro | session:d4e5f6 | CHEAP | resolved | session:d4e5f6; reason:below-sampling-threshold-no-novel-signal |
 ```
 
 **`delegation` payload convention.** A `delegation` row reuses the standard 10 columns (no new fields); the fork lives in `payload`, keyed `chose:` (the elected execution path — one of `spoke` / `hub-direct`) / `unit:` (what was delegated — `stage-<N>` or `procedure-<N>`) / `merit:` (which merit condition fired — one of `context-boundary` / `budget-forced` / `recovery`, per `decision-discipline.md` § 3.1) / `quota:` (the Checkpoint-B verdict in force, per `quota-budget-protocol.md` § 4 — that enum is **cited, never restated here**; present only when `merit:budget-forced` fired, omitted rather than written as a noise value) / `why:` (a one-line kebab rationale). `actor` is always `hub` — the hub is the only spawner, per the recursion prohibition. `reversibility` is `CHEAP`: a delegation choice is undone by re-running the unit on the other path. `outcome` is `resolved`. Every row opens `payload` with the release-stable `ms:#<milestone-number>;` token per the orchestration playbook § 4a.2. PII per § 4.2 — `why:` states the structural reason, never operator text.
@@ -236,7 +287,7 @@ Event types `gate-outcome` carry `projects_to: calibration-data.md:<row-anchor>`
 Example:
 
 ```markdown
-| 2026-05-15T14:22:01Z | v1.07a | 2 | gate-outcome | g1-g2 | spoke:#N | #N | CHEAP | resolved | projects_to:calibration-data.md; verdict:Approved; structural_pass:1.0 |
+| 2026-05-15T14:22:01Z | declarative-workitem-type-model | 2 | gate-outcome | g1-g2 | spoke:#N | #N | CHEAP | resolved | projects_to:calibration-data.md; verdict:Approved; structural_pass:1.0 |
 ```
 
 calibration-data continues to be authored by the gate-evaluation-spec.md path. Pipeline-event-log adds a STREAM row referencing it.
@@ -257,7 +308,7 @@ Pipeline-event-log MAY carry a `cited: <date>/<domain>/<theme>` pointer in paylo
 Example:
 
 ```markdown
-| 2026-05-15T16:00:00Z | v1.07a | 5 | escalation | tier-0 | spoke:#N | #N | EXPENSIVE | resolved | pt:none-c3-found; decision:proceed; cited:2026-05-11/release-ops/cutover-date-discipline |
+| 2026-05-15T16:00:00Z | declarative-workitem-type-model | 5 | escalation | tier-0 | spoke:#N | #N | EXPENSIVE | resolved | pt:none-c3-found; decision:proceed; cited:2026-05-11/release-ops/cutover-date-discipline |
 ```
 
 ### 5.4 Release-synthesizer Stage 13 self-learning (see § 11)
@@ -269,15 +320,19 @@ Coordinate (NOT fold) — different milestone, different temporal anchor. Pipeli
 Example:
 
 ```markdown
-| 2026-05-16T15:00:00Z | v1.07a | 13 | release-synthesis | learnings-triple | hub | release-level | CHEAP | resolved | surprise:retro-X; would-change:retro-Y; watch-for:retro-Z; feeds:release-synthesizer-when-shipped |
+| 2026-05-16T15:00:00Z | declarative-workitem-type-model | 13 | release-synthesis | learnings-triple | hub | release-level | CHEAP | resolved | surprise:retro-X; would-change:retro-Y; watch-for:retro-Z; feeds:release-synthesizer-when-shipped |
 ```
 
 ## 6. Worked Example: Cross-Surface JOIN for an Issue
 
-> "To retrieve all events for issue #N in release v1.07a — including the rows in projected surfaces — run:
+> "To retrieve all events for issue #N in the release whose milestone slug is
+> `declarative-workitem-type-model` — including the rows in projected surfaces — run:
 >
 > ```bash
-> ./release/tools/query-pipeline-event.sh --subject "#N" --version v1.07a
+> # --release resolves through the § 2a ladder and is the right filter when the
+> # question is "which rows belong to release X". --version is the RAW column
+> # filter, so it matches only rows literally keyed by that string.
+> ./release/tools/query-pipeline-event.sh --subject "#N" --release declarative-workitem-type-model
 > grep -h '#N' <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/calibration-data.md \
 >                <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/iteration-log.md
 > ```

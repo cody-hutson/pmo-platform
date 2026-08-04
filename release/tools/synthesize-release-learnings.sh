@@ -32,7 +32,18 @@
 #
 # Flags:
 #   --mode {per-release|pattern-detect}   required for non-self-test runs
-#   --version vX.Y                        required for --mode per-release
+#   --version <release>                   required for --mode per-release. Accepts the
+#                                         shipped vX.Y OR the milestone slug: row
+#                                         selection routes through the query tool's
+#                                         --release, i.e. the § 2a READ ladder, so a
+#                                         vX.Y resolves to its slug-keyed rows rather
+#                                         than matching the raw column. The value is
+#                                         ALSO rendered verbatim into the H4 heading
+#                                         `#### Release Learnings <value>`, so at
+#                                         Stage 13 pass the shipped vX.Y — that is the
+#                                         form § 11.3 specifies and the form the
+#                                         RELEASE_LOG placement convention expects.
+#                                         Pre-claim (no version yet), pass the slug.
 #   --window N                            trailing N distinct VERSIONS (default 5);
 #                                         pattern-detect mode only
 #   --window-by-row                       trailing N rows instead of N versions
@@ -100,7 +111,7 @@ export PMO_REPO_SLUG="$REPO_SLUG"
 die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
 
 usage() {
-  /usr/bin/sed -n '4,55p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '4,66p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -193,8 +204,14 @@ emit_per_release_block() {
   local now_iso
   now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+  # --release, NOT --version: the release join key is the milestone SLUG
+  # (pipeline-event-log-schema.md § 2a), so a raw --version filter carrying a
+  # vX.Y matches ZERO slug-keyed rows and this function would emit a structured
+  # "N/A — no novel learning this release" block for a release that in fact
+  # emitted rows. --release resolves through the § 2a ladder and accepts either
+  # form, so legacy callers passing vX.Y keep working.
   local rows
-  rows="$("$QUERY_TOOL" --event-type release-synthesis --event-subtype learnings-triple --version "$version" 2>/dev/null \
+  rows="$("$QUERY_TOOL" --event-type release-synthesis --event-subtype learnings-triple --release "$version" 2>/dev/null \
     | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
 
   local n=0
@@ -210,7 +227,7 @@ emit_per_release_block() {
     # Per § 11.3: forward-compatible — emit an N/A block when no events exist,
     # so consumers (release-planner Mode B; Stage 9 Empirical Verification) see
     # a structured "no data" rather than a missing block.
-    echo "**Source events:** 0 \`release-synthesis/learnings-triple\` row(s) from \`pipeline-event-log.md\` (filter: version=\`$version\`)"
+    echo "**Source events:** 0 \`release-synthesis/learnings-triple\` row(s) from \`pipeline-event-log.md\` (filter: release=\`$version\`)"
     echo "**Source-row anchors:** N/A"
     echo ""
     echo "**Surprise:** N/A — no novel learning this release"
@@ -250,7 +267,7 @@ emit_per_release_block() {
   done <<< "$rows"
 
   # Source-event header
-  echo "**Source events:** $n \`release-synthesis/learnings-triple\` row(s) from \`pipeline-event-log.md\` (filter: version=\`$version\`)"
+  echo "**Source events:** $n \`release-synthesis/learnings-triple\` row(s) from \`pipeline-event-log.md\` (filter: release=\`$version\`)"
   # Source-row anchors: list of timestamps
   local anchor_str=""
   for ts in "${anchors[@]}"; do

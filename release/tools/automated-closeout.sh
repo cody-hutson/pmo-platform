@@ -1013,6 +1013,38 @@ phase_read_state() {
 #         1 = `gh issue list` failed — output undefined. The caller MUST NOT read
 #             empty as zero: Phase 4 deliberately keeps today's tolerant behaviour
 #             (pre-existing fail-open, routed separately), check 5 fails closed.
+#
+# ─── Shared predicate: _is_stage13_close_subtask (#3819) ─────────────────────
+#
+# "Is this issue the Stage-13 Close ORCHESTRATION SUB-TASK?" — the label test
+# (`sub-task` canonical ∪ `type:subtask` tolerated legacy alias, EXACT
+# comma-wrapped membership) AND the stage-13-close title regex. Both conjuncts
+# required, semantics byte-identical to the inline arm this replaces.
+#
+# TWO callers, and the boundary between them matters: `collect_open_release_issues`
+# uses it to EXCLUDE the sub-task from auto-close (a `--state open` query is
+# correct there — a closed sub-task cannot self-close), and `resolve_stage13_subtask`
+# uses it to FIND the sub-task as a comment target (a `--state open` query is WRONG
+# there — on an idempotent re-run or a `--no-merge` re-entry the sub-task may already
+# be closed, and a closed sub-task is still the correct durable home for the proof).
+# THE SHARED INVARIANT IS THE PREDICATE, NOT THE QUERY. Do not "unify" the two
+# callers onto one query state: that would either resurrect a closed sub-task into
+# the auto-close set or make the proof target unresolvable on every re-run.
+#
+# Args: $1 = labels CSV (as projected by --json labels)  ·  $2 = title
+# Returns 0 = is the Stage-13 close sub-task · 1 = is not
+_is_stage13_close_subtask() {
+  local _labels="$1" _title="$2" _is_subtask
+  # Set unconditionally — never `[[ … ]] && _is_subtask=1` alone: bash 3.2 does not
+  # scope loop-body assignments, and a leaked value would make the test STICKY.
+  case ",${_labels}," in
+    *",sub-task,"*|*",type:subtask,"*) _is_subtask=1 ;;
+    *)                                 _is_subtask=0 ;;
+  esac
+  [[ "$_is_subtask" -eq 1 ]] \
+    && /usr/bin/printf '%s' "$_title" | /usr/bin/grep -qiE 'stage.?13.*close'
+}
+
 collect_open_release_issues() {
   local slug="$1"
   local raw _rc=0
@@ -1032,8 +1064,9 @@ collect_open_release_issues() {
   COLLECTED_OPEN_ISSUES=""
   EXCLUDED_DETAIL=""
   # Declared here, not in the loop body: bash 3.2 does not scope loop-body
-  # assignments, and a leaked _is_subtask would make exclusion STICKY.
-  local _n _title _labels _rest _line _is_subtask
+  # assignments. The `_is_subtask` scoping hazard now lives inside
+  # `_is_stage13_close_subtask`, which sets it unconditionally per iteration.
+  local _n _title _labels _rest _line
   while IFS= read -r _line; do
     [[ -z "$_line" ]] && continue
     _n="${_line%%$'\t'*}"
@@ -1045,25 +1078,15 @@ collect_open_release_issues() {
       EXCLUDED_DETAIL="${EXCLUDED_DETAIL}#${_n} (explicit --exclude-issue) "
       continue
     fi
-    # Structural discriminator (#3665): is this an ORCHESTRATION SUB-TASK, per its
-    # LABEL? `sub-task` is canonical (label-taxonomy.md § Concrete rows, stamped by
-    # the Stage-6 scaffolding at creation); `type:subtask` is a tolerated legacy
-    # alias. EXACT comma-wrapped membership, never a substring test, so a
-    # hypothetical `not-a-sub-task` label cannot satisfy it. Set unconditionally
-    # each iteration — never `[[ … ]] && _is_subtask=1` alone.
-    case ",${_labels}," in
-      *",sub-task,"*|*",type:subtask,"*) _is_subtask=1 ;;
-      *)                                 _is_subtask=0 ;;
-    esac
     # (2) label+title fallback: a Stage-13 close ORCHESTRATION SUB-TASK that the hub
     # did NOT pass by number is still excluded so it cannot self-close (R5). BOTH
-    # conjuncts are required. The label answers the structural question (orchestration
-    # artifact vs delivered work item); the title tokens narrow it to the STAGE-13
-    # sub-task — the label alone matches every stage sub-task in the milestone. Title
-    # text alone was the defect: it false-excluded 13 delivered work items across the
-    # repo's history whose SUBJECT MATTER is Stage-13 close-out (#3665).
-    if [[ "$_is_subtask" -eq 1 ]] \
-       && /usr/bin/printf '%s' "$_title" | /usr/bin/grep -qiE 'stage.?13.*close'; then
+    # conjuncts are required — see `_is_stage13_close_subtask` above, which is the
+    # single home of the predicate. The label answers the structural question
+    # (orchestration artifact vs delivered work item); the title tokens narrow it to
+    # the STAGE-13 sub-task — the label alone matches every stage sub-task in the
+    # milestone. Title text alone was the defect: it false-excluded 13 delivered work
+    # items across the repo's history whose SUBJECT MATTER is Stage-13 close-out (#3665).
+    if _is_stage13_close_subtask "$_labels" "$_title"; then
       EXCLUDED_DETAIL="${EXCLUDED_DETAIL}#${_n} (sub-task label + title-regex stage-13-close) "
       continue
     fi
@@ -1072,6 +1095,61 @@ collect_open_release_issues() {
   # Trim a trailing newline so grep -c counts correctly.
   COLLECTED_OPEN_ISSUES="$(/usr/bin/printf '%s' "$COLLECTED_OPEN_ISSUES" | /usr/bin/sed '/^$/d')"
   return "$_rc"
+}
+
+# ─── Shared: resolve_stage13_subtask (#3819 — gate-passage-proof rung 1) ─────
+#
+# Resolve the milestone's Stage-13 Close sub-task as a COMMENT TARGET. Unlike
+# `collect_open_release_issues` this queries `--state all` — see the boundary note
+# on `_is_stage13_close_subtask`: the shared invariant is the predicate, not the
+# query. `--state open` is load-bearing for the collector's auto-close purpose and
+# WRONG here, because a Stage-13 sub-task closed by an earlier pass of an idempotent
+# run is still the correct durable home for the proof.
+#
+# STDOUT (always exactly one TAB-separated line, so the caller needs no global and
+# there is no cross-phase lifetime to reset — the Bash-3.2 sticky-scope hazard
+# cannot arise):
+#   "<number>\t<state>\t"            — resolved; state is OPEN or CLOSED
+#   "\t\t<observed reason>"          — unresolved; reason is what was OBSERVED,
+#                                      never a generic "unresolved"
+# Return code is always 0: a resolution miss is a routing fact for the rung ladder,
+# not a script failure.
+resolve_stage13_subtask() {
+  local slug="$1"
+  local raw _rc=0 _line _n _rest _labels _title _state
+
+  if [[ -z "$slug" ]]; then
+    /usr/bin/printf '\t\t%s\n' "milestone slug unresolved at read-state"
+    return 0
+  fi
+
+  raw="$($GH issue list --repo "$REPO_SLUG" --milestone "$slug" --state all \
+          --json number,title,labels,state \
+          --jq '.[] | "\(.number)\t\(.labels|map(.name)|join(","))\t\(.state)\t\(.title)"' 2>&1)" || _rc=1
+  if [[ "$_rc" -ne 0 ]]; then
+    # First line only, and strip tabs/pipes: this string reaches a mark_phase detail
+    # (pipe-delimited) and a Markdown table cell.
+    /usr/bin/printf '\t\t%s\n' "gh query failed: $(/usr/bin/printf '%s' "$raw" | /usr/bin/head -1 | /usr/bin/tr '\t|' '  ')"
+    return 0
+  fi
+
+  while IFS= read -r _line; do
+    [[ -z "$_line" ]] && continue
+    _n="${_line%%$'\t'*}"
+    _rest="${_line#*$'\t'}"
+    _labels="${_rest%%$'\t'*}"
+    _rest="${_rest#*$'\t'}"
+    _state="${_rest%%$'\t'*}"
+    # Title last so a title containing a literal tab still parses intact.
+    _title="${_rest#*$'\t'}"
+    if _is_stage13_close_subtask "$_labels" "$_title"; then
+      /usr/bin/printf '%s\t%s\t\n' "$_n" "$_state"
+      return 0
+    fi
+  done <<< "$raw"
+
+  /usr/bin/printf '\t\t%s\n' "not found in milestone ${slug} (all states)"
+  return 0
 }
 
 # ─── Phase 4: detect_open_release_issues (D6 — auto-close anomaly) ───────────
@@ -3541,15 +3619,75 @@ EOF
 
   mark_phase "run_verification" "PASS" "5 universal checks evaluated"
 
+  # ── Gate-passage proof: three-rung target ladder (#3819) ───────────────────
+  #
+  # This phase used to be an unconditional `mark_phase … MANUAL`: it did not FAIL
+  # to find a Stage-13 sub-task, it never LOOKED. A MANUAL that never attempted a
+  # target is indistinguishable from one where both targets were genuinely
+  # unavailable, which is why milestone #264's close-out reported MANUAL with no
+  # signal that its gate sub-tasks were detached from the milestone.
+  #
+  #   rung 1  Stage-13 Close sub-task in the milestone, ANY state  (primary)
+  #   rung 2  the release PR                                       (fallback)
+  #   rung 3  MANUAL — names BOTH attempted targets and EACH observed failure,
+  #           with the full proof text still carried in the report (non-fatal)
+  local _r1 _s13_num _s13_state _s13_reason _rest _closed_note _body _post_err
+  _r1="$(resolve_stage13_subtask "$slug")"
+  _s13_num="${_r1%%$'\t'*}"
+  _rest="${_r1#*$'\t'}"
+  _s13_state="${_rest%%$'\t'*}"
+  _s13_reason="${_rest#*$'\t'}"
+  _closed_note=""
+  [[ "$_s13_state" == "CLOSED" ]] && _closed_note=" (closed)"
+
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "post_gate_passage_proof" "DRY-RUN" "would post gate-passage proof comment to Stage 13 sub-task per the gate-passage-proof template"
+    if [[ -n "$_s13_num" ]]; then
+      mark_phase "post_gate_passage_proof" "DRY-RUN" "would post gate-passage proof to Stage 13 sub-task #${_s13_num}${_closed_note} (rung 1)"
+    elif [[ -n "$PR_NUMBER" ]]; then
+      mark_phase "post_gate_passage_proof" "DRY-RUN" "would post gate-passage proof to release PR #${PR_NUMBER} (fallback rung 2); Stage-13 sub-task ${_s13_reason}"
+    else
+      mark_phase "post_gate_passage_proof" "DRY-RUN" "no target resolvable — Stage-13 sub-task ${_s13_reason}; release PR number empty; would emit comment text in the report (rung 3)"
+    fi
     return 0
   fi
 
-  # Posting the comment requires the Stage 13 sub-task number, which the hub
-  # supplies via the chip prompt. Defer the comment-post to the hub at apply
-  # time; here we emit the comment text for the operator to copy/paste.
-  mark_phase "post_gate_passage_proof" "MANUAL" "comment text emitted in final report; hub posts to Stage 13 sub-task per the gate-passage-proof template"
+  _body="$(/bin/cat <<EOF
+## Gate-Passage Proof — ${VERSION} Stage 13 Close
+
+**Recorded at:** $(ts_now)
+**Milestone:** ${slug}
+**Release-PR merge SHA:** ${MERGE_SHA:-<unresolved>}
+
+### Verification
+
+${VERIFICATION_RESULTS}
+EOF
+)"
+
+  # Rung 1 — the Stage-13 sub-task, any state.
+  if [[ -n "$_s13_num" ]]; then
+    if _post_err="$($GH issue comment "$_s13_num" --repo "$REPO_SLUG" --body "$_body" 2>&1)"; then
+      mark_phase "post_gate_passage_proof" "PASS" "posted to Stage 13 sub-task #${_s13_num}${_closed_note}"
+      return 0
+    fi
+    _s13_reason="post to #${_s13_num} failed: $(/usr/bin/printf '%s' "$_post_err" | /usr/bin/head -1 | /usr/bin/tr '\t|' '  ')"
+  fi
+
+  # Rung 2 — the release PR, with the OBSERVED rung-1 reason recorded in the body.
+  if [[ -n "$PR_NUMBER" ]]; then
+    if _post_err="$($GH pr comment "$PR_NUMBER" --repo "$REPO_SLUG" \
+        --body "_Fallback target (rung 2): the Stage-13 sub-task ${_s13_reason}._
+
+${_body}" 2>&1)"; then
+      mark_phase "post_gate_passage_proof" "PASS" "Stage-13 sub-task ${_s13_reason}; posted to release PR #${PR_NUMBER} (fallback rung 2)"
+      return 0
+    fi
+    mark_phase "post_gate_passage_proof" "MANUAL" "both targets attempted and failed — Stage-13 sub-task: ${_s13_reason}; release PR #${PR_NUMBER}: $(/usr/bin/printf '%s' "$_post_err" | /usr/bin/head -1 | /usr/bin/tr '\t|' '  '); comment text emitted in final report"
+    return 0
+  fi
+
+  # Rung 3 — terminal, reasoned: name both attempted targets and each observation.
+  mark_phase "post_gate_passage_proof" "MANUAL" "both targets attempted — Stage-13 sub-task: ${_s13_reason}; release PR: number unresolved at read-state; comment text emitted in final report"
   return 0
 }
 
@@ -5473,6 +5611,130 @@ STUB
   EXCLUDE_ISSUES=(); CLOSE_COMMENTS=()
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # Test 4i: post_gate_passage_proof three-rung target ladder (#3819) — offline,
+  # hermetic, credential-free. REFLEXIVITY NOTE: this is the phase that runs at the
+  # close-out of the very release that introduced it, so the ladder is tested against
+  # the shape that actually broke (#264: gate sub-task absent from the milestone) and
+  # against the shape an idempotent re-run produces (sub-task already CLOSED).
+  #
+  #   T-13  rung 1 resolves a CLOSED Stage-13 sub-task — the arm that fails if the
+  #         resolver inherits the collector's `--state open` query. Asserts the phase
+  #         PASSes, names #N and "(closed)", posts a body containing "### Verification",
+  #         and does NOT touch `pr comment`.
+  #   (b)   rung 2 — no Stage-13 sub-task in the milestone (the #264 shape): must post
+  #         to the release PR and record the OBSERVED reason, not a generic string.
+  #   (c)   rung 3 — no sub-task AND no PR number: MANUAL that names BOTH attempted
+  #         targets. A bare MANUAL is the defect this card exists to remove.
+  local _gp_saved_gh="$GH" _gp_saved_mode="$MODE" _gp_saved_slug="$STATE_MILESTONE_SLUG"
+  local _gp_saved_pr="$PR_NUMBER" _gp_saved_ver="$VERSION" _gp_saved_res="$VERIFICATION_RESULTS"
+  local _gp_saved_sha="$MERGE_SHA" _gp_saved_state="$STATE_MILESTONE_STATE"
+  local _gp_tmp; _gp_tmp="$(/usr/bin/mktemp -d -t gateproof-selftest.XXXXXX)"
+  local _gp_stub="$_gp_tmp/gh-stub.sh"
+  # Stub records every invocation to $GH_CALLS and every posted body to $GH_BODY.
+  # `issue list --state all` returns the CLOSED Stage-13 sub-task ONLY when the
+  # caller actually asked for all states — an open-only query returns nothing, so a
+  # regression to `--state open` turns T-13 red rather than silently green.
+  /bin/cat > "$_gp_stub" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$GH_CALLS"
+case "$1 $2" in
+  "issue list")
+    [[ "$*" == *"--state all"* ]] || exit 0
+    [[ "$GP_NO_SUBTASK" == "1" ]] && exit 0
+    printf '%s\t%s\t%s\t%s\n' 4700 "sub-task,status: bundled" "CLOSED" "Stage 13 Close — release-bundle-and-sequence-gates (release-scoped)"
+    printf '%s\t%s\t%s\t%s\n' 4701 "sub-task" "OPEN" "Stage 6 Engineering — #3819 (release-bundle-and-sequence-gates)"
+    exit 0 ;;
+  "issue comment"|"pr comment")
+    # --body is the last argument in both call sites.
+    printf '%s\n' "${@: -1}" >> "$GH_BODY"
+    exit 0 ;;
+esac
+exit 0
+STUB
+  /bin/chmod +x "$_gp_stub"
+  GH="$_gp_stub"; MODE="apply"; STATE_MILESTONE_SLUG="release-bundle-and-sequence-gates"
+  VERSION="v9.99"; MERGE_SHA="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  export GH_CALLS="$_gp_tmp/calls.log" GH_BODY="$_gp_tmp/body.log" GP_NO_SUBTASK=0
+  : > "$GH_CALLS"; : > "$GH_BODY"
+  VERIFICATION_RESULTS="| 1 | RELEASE_NOTES.md present | test -f | PASS |"
+
+  # (T-13) rung 1 — CLOSED sub-task is still the correct durable home.
+  PR_NUMBER="8888"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  local _gp_r1; _gp_r1="$(resolve_stage13_subtask "$STATE_MILESTONE_SLUG")"
+  [[ "${_gp_r1%%$'\t'*}" == "4700" ]] || { echo "FAIL: T-13 resolve_stage13_subtask must find the CLOSED Stage-13 sub-task #4700 via --state all, got '$_gp_r1'"; failures=$((failures+1)); }
+  phase_run_verification >/dev/null 2>&1
+  [[ "$(get_phase post_gate_passage_proof)" == PASS\|* ]] || { echo "FAIL: T-13 rung 1 must PASS against a CLOSED Stage-13 sub-task, got '$(get_phase post_gate_passage_proof)'"; failures=$((failures+1)); }
+  [[ "$(get_phase post_gate_passage_proof)" == *"#4700"* ]] || { echo "FAIL: T-13 rung-1 detail must name the resolved sub-task #4700, got '$(get_phase post_gate_passage_proof)'"; failures=$((failures+1)); }
+  [[ "$(get_phase post_gate_passage_proof)" == *"(closed)"* ]] || { echo "FAIL: T-13 rung-1 detail must record that the target was closed, got '$(get_phase post_gate_passage_proof)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF '### Verification' "$GH_BODY" || { echo "FAIL: T-13 the posted gate-passage proof body must carry the Verification table section"; failures=$((failures+1)); }
+  /usr/bin/grep -q '^pr comment' "$GH_CALLS" && { echo "FAIL: T-13 rung 1 succeeded, so the rung-2 release-PR fallback must NOT be invoked"; failures=$((failures+1)); }
+  /usr/bin/grep -q '^issue comment 4700' "$GH_CALLS" || { echo "FAIL: T-13 must post to sub-task #4700 via issue comment"; failures=$((failures+1)); }
+
+  # (b) rung 2 — the #264 shape: no Stage-13 sub-task resolvable in the milestone.
+  GP_NO_SUBTASK=1; : > "$GH_CALLS"; : > "$GH_BODY"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_run_verification >/dev/null 2>&1
+  [[ "$(get_phase post_gate_passage_proof)" == PASS\|* ]] || { echo "FAIL: rung 2 must PASS by posting to the release PR when no Stage-13 sub-task exists, got '$(get_phase post_gate_passage_proof)'"; failures=$((failures+1)); }
+  [[ "$(get_phase post_gate_passage_proof)" == *"not found in milestone"* ]] || { echo "FAIL: rung 2 must record the OBSERVED rung-1 reason, not a generic 'unresolved', got '$(get_phase post_gate_passage_proof)'"; failures=$((failures+1)); }
+  [[ "$(get_phase post_gate_passage_proof)" == *"release PR #8888"* ]] || { echo "FAIL: rung 2 must name the fallback target it posted to, got '$(get_phase post_gate_passage_proof)'"; failures=$((failures+1)); }
+  /usr/bin/grep -q '^pr comment 8888' "$GH_CALLS" || { echo "FAIL: rung 2 must actually invoke pr comment on the release PR — never PASS without an observed post"; failures=$((failures+1)); }
+  /usr/bin/grep -qF '### Verification' "$GH_BODY" || { echo "FAIL: rung 2's fallback post must still carry the Verification table"; failures=$((failures+1)); }
+
+  # (c) rung 3 — terminal, reasoned. MANUAL must name BOTH attempted targets.
+  PR_NUMBER=""; : > "$GH_CALLS"; : > "$GH_BODY"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_run_verification >/dev/null 2>&1
+  [[ "$(get_phase post_gate_passage_proof)" == MANUAL\|* ]] || { echo "FAIL: rung 3 must be MANUAL when neither target resolves, got '$(get_phase post_gate_passage_proof)'"; failures=$((failures+1)); }
+  [[ "$(get_phase post_gate_passage_proof)" == *"Stage-13 sub-task"* && "$(get_phase post_gate_passage_proof)" == *"release PR"* ]] || { echo "FAIL: rung 3's MANUAL must name BOTH attempted targets — a bare MANUAL is indistinguishable from never having looked (#3819), got '$(get_phase post_gate_passage_proof)'"; failures=$((failures+1)); }
+  [[ "$(get_phase post_gate_passage_proof)" == *"comment text emitted in final report"* ]] || { echo "FAIL: rung 3 must state that the proof text survives in the report, got '$(get_phase post_gate_passage_proof)'"; failures=$((failures+1)); }
+
+  # Test 4j (T-14): two collect_open_release_issues calls in one run — the Phase-15
+  # check-5 replication-lag retry. This is the leg where a Bash-3.2 sticky-scope
+  # hazard would surface: if the extracted predicate leaked `_is_subtask` across
+  # iterations or across calls, the second call's exclusion set would differ from the
+  # first's. Asserts EXCLUDED_DETAIL is not doubled, COLLECTED_OPEN_ISSUES is
+  # identical, and resolve_stage13_subtask is stable across repeated invocation.
+  GP_NO_SUBTASK=0
+  /bin/cat > "$_gp_stub" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$GH_CALLS"
+case "$1 $2" in
+  "issue list")
+    if [[ "$*" == *"--state all"* ]]; then
+      printf '%s\t%s\t%s\t%s\n' 4700 "sub-task" "CLOSED" "Stage 13 Close — slug (release-scoped)"
+      exit 0
+    fi
+    printf '%s\t%s\t%s\n' 401 "bug" "Normal anomaly issue"
+    printf '%s\t%s\t%s\n' 4700 "sub-task" "Stage 13 Close — slug (release-scoped)"
+    printf '%s\t%s\t%s\n' 402 "sub-task" "Stage 6 Engineering — #3819 (slug)"
+    exit 0 ;;
+esac
+exit 0
+STUB
+  /bin/chmod +x "$_gp_stub"
+  collect_open_release_issues "slug" || true
+  local _t14_list1="$COLLECTED_OPEN_ISSUES" _t14_excl1="$EXCLUDED_DETAIL"
+  local _t14_r1; _t14_r1="$(resolve_stage13_subtask "slug")"
+  collect_open_release_issues "slug" || true
+  local _t14_list2="$COLLECTED_OPEN_ISSUES" _t14_excl2="$EXCLUDED_DETAIL"
+  local _t14_r2; _t14_r2="$(resolve_stage13_subtask "slug")"
+  [[ "$_t14_list1" == "$_t14_list2" ]] || { echo "FAIL: T-14 COLLECTED_OPEN_ISSUES must be identical across two calls in one run, got '$_t14_list1' then '$_t14_list2'"; failures=$((failures+1)); }
+  [[ "$_t14_excl1" == "$_t14_excl2" ]] || { echo "FAIL: T-14 EXCLUDED_DETAIL must not accumulate across calls (Bash-3.2 sticky-scope hazard), got '$_t14_excl1' then '$_t14_excl2'"; failures=$((failures+1)); }
+  [[ "$_t14_r1" == "$_t14_r2" ]] || { echo "FAIL: T-14 resolve_stage13_subtask must return the same value on both calls, got '$_t14_r1' then '$_t14_r2'"; failures=$((failures+1)); }
+  # Anti-vacuity: the fixture must actually exercise an exclusion and a survivor,
+  # otherwise "identical across calls" is satisfied by two empty results.
+  [[ "$_t14_excl1" == *"#4700 (sub-task label + title-regex stage-13-close)"* ]] || { echo "FAIL: T-14 fixture must exclude the Stage-13 sub-task #4700 — an empty exclusion set makes the idempotence assertion vacuous, got '$_t14_excl1'"; failures=$((failures+1)); }
+  /usr/bin/printf '%s\n' "$_t14_list1" | /usr/bin/grep -qx '402' || { echo "FAIL: T-14 control — a sub-task-labelled NON-Stage-13 issue must survive; the conjunct has degraded to a label-only test"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_gp_tmp" 2>/dev/null || true
+  unset GH_CALLS GH_BODY GP_NO_SUBTASK
+  GH="$_gp_saved_gh"; MODE="$_gp_saved_mode"; STATE_MILESTONE_SLUG="$_gp_saved_slug"
+  PR_NUMBER="$_gp_saved_pr"; VERSION="$_gp_saved_ver"; VERIFICATION_RESULTS="$_gp_saved_res"
+  MERGE_SHA="$_gp_saved_sha"; STATE_MILESTONE_STATE="$_gp_saved_state"
+  COLLECTED_OPEN_ISSUES=""; EXCLUDED_DETAIL=""
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # Test 4e: phase_await_merge_chore_pr budget + escape modes (#1705) — offline,
   # hermetic. Asserts: the zero-commit SKIP propagation (CHORE_PR_SKIPPED=1 →
   # await SKIPPED, un-stranding terminal phases); --no-merge → await SKIPPED;
@@ -6804,6 +7066,7 @@ FOLOG
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped; #3715 two-surface — archived body resolves to its segment and the hot ledger is left untouched / cross-surface idempotency re-run SKIPs without duplicating / a genuine **Result:** absence still hard-FAILs naming every surface searched / no sibling leak within a segment)" >&2
   echo "  phase_inject_velocity_field + phase_append_release_learnings validated (velocity — field ORDER 'Cycle-Time Velocity Result' on a clean block / no sibling leak / idempotent re-run / bolded-numeral value REJECTED writing nothing / empty capture at exit 0 degrades to an explicit N/A never a bare field / non-conformant existing field SKIPs WITH the warning, conformant control WITHOUT it; CO-LOCATION — an archived block's field lands in the SEGMENT beside its own **Result:** and the hot stub stays at 0, cross-surface re-run SKIPs, dry-run names the segment and prints the RESOLVED bytes. learnings — sibling H4 placed IMMEDIATELY after its Deployment Log block / body intact through the sentinel capture / idempotent re-run / whitespace-only render at exit 0 FAILs writing nothing / D-1 zero-source-events BLOCKS the close and prints the capture remedy, >0-events control PASSes / over an ARCHIVED block the block still lands in the HOT ledger and every segment stays at 0 Release Learnings — RECORDS_POLICY KEEP_CLASS)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache)" >&2
+  echo "  post_gate_passage_proof three-rung target ladder validated (#3819 — T-13 rung 1 resolves a CLOSED Stage-13 sub-task via --state all and does NOT fall through to the PR / rung 2 posts to the release PR naming the OBSERVED rung-1 reason / rung 3 MANUAL names BOTH attempted targets; T-14 two collect_open_release_issues calls in one run keep EXCLUDED_DETAIL undoubled, COLLECTED_OPEN_ISSUES identical and resolve_stage13_subtask stable, with a non-empty-exclusion anti-vacuity control)" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2

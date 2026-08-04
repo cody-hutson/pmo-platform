@@ -15,8 +15,14 @@
 # Both anchors source the ts_iso field per pipeline-event-log-schema.md § 2.
 #
 # Usage:
-#   ./compute-cycle-time.sh <version>           # human-readable: "47m" or "2h17m" or "N/A"
-#   ./compute-cycle-time.sh --version <version> # same as positional form
+#   ./compute-cycle-time.sh <release>           # human-readable: "47m" or "2h17m" or "N/A"
+#   ./compute-cycle-time.sh --version <release> # same as positional form
+#
+# <release> is the MILESTONE SLUG — the release join key per
+# pipeline-event-log-schema.md § 2a. Row selection routes through the query
+# tool's --release (the § 2a ladder), so a legacy vX.Y still resolves; the slug
+# is the canonical form. The flag keeps its --version spelling for caller
+# compatibility.
 #   ./compute-cycle-time.sh <version> --seconds # integer seconds: "2820" or "N/A"
 #   ./compute-cycle-time.sh <version> --iso     # detail: "T_GO=<iso>; T_DEPLOY=<iso>; delta=2820s"
 #   ./compute-cycle-time.sh --self-test         # validate logic against synthetic input
@@ -51,7 +57,7 @@ QUERY_TOOL="$SCRIPT_DIR/query-pipeline-event.sh"
 die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
 
 usage() {
-  /usr/bin/sed -n '4,28p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '4,29p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -174,26 +180,37 @@ fi
 # query-pipeline-event.sh filters event_type but not event_subtype; grep refines.
 # Output schema (from query-pipeline-event.sh): header rows then data rows.
 # Data row: "| ts_iso | version | stage | event_type | event_subtype | ..."
-GATE_ROWS="$("$QUERY_TOOL" --version "$VERSION" --event-type gate-outcome 2>/dev/null | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
+# --release, NOT --version. The release join key is the milestone SLUG
+# (pipeline-event-log-schema.md § 2a); a raw --version filter carrying a vX.Y
+# matches ZERO slug-keyed rows, and this tool's `|| true` + empty-guard would
+# then report N/A rather than erroring — a silent zero on the very metric the
+# tool exists to produce. --release resolves through the § 2a ladder and
+# accepts either form, so a legacy vX.Y argument still resolves.
+GATE_ROWS="$("$QUERY_TOOL" --release "$VERSION" --event-type gate-outcome 2>/dev/null | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
 T_GO=""
 if [[ -n "$GATE_ROWS" ]]; then
   # Filter to plan-review-go subtype (field 5 in pipe-delimited row); take MIN(ts_iso)
   PLAN_REVIEW_GO_ROWS="$(echo "$GATE_ROWS" | /usr/bin/awk -F ' \\| ' '$5 == "plan-review-go" { print }')"
   if [[ -n "$PLAN_REVIEW_GO_ROWS" ]]; then
-    # Sort by ts_iso (field 2 after the leading '|'); take first (earliest)
-    T_GO="$(echo "$PLAN_REVIEW_GO_ROWS" | /usr/bin/awk -F ' \\| ' '{ print $2 }' | /usr/bin/sort | /usr/bin/head -1)"
+    # ts_iso is $1, NOT $2. FS is " | " (space-pipe-space) and the row's leading
+    # "| " has no preceding space, so it is not a delimiter: $1 retains it and
+    # reads "| <ts_iso>", $2 is the VERSION column. Strip the leading "| " and
+    # take $1. (The $5 == subtype test above is already correct under this map.)
+    # Sort by ts_iso; take first (earliest).
+    T_GO="$(echo "$PLAN_REVIEW_GO_ROWS" | /usr/bin/awk -F ' \\| ' '{ t = $1; sub(/^\| /, "", t); print t }' | /usr/bin/sort | /usr/bin/head -1)"
   fi
 fi
 
 # ─── Extract T_DEPLOY (latest deploy-skill OR deploy-harness event) ──────────
 
-DEPLOY_ROWS="$("$QUERY_TOOL" --version "$VERSION" --event-type deployment-status 2>/dev/null | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
+DEPLOY_ROWS="$("$QUERY_TOOL" --release "$VERSION" --event-type deployment-status 2>/dev/null | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
 T_DEPLOY=""
 if [[ -n "$DEPLOY_ROWS" ]]; then
   # Filter to deploy-skill OR deploy-harness subtype; take MAX(ts_iso)
   DEPLOY_TARGET_ROWS="$(echo "$DEPLOY_ROWS" | /usr/bin/awk -F ' \\| ' '$5 == "deploy-skill" || $5 == "deploy-harness" { print }')"
   if [[ -n "$DEPLOY_TARGET_ROWS" ]]; then
-    T_DEPLOY="$(echo "$DEPLOY_TARGET_ROWS" | /usr/bin/awk -F ' \\| ' '{ print $2 }' | /usr/bin/sort | /usr/bin/tail -1)"
+    # ts_iso is $1 minus the leading "| " — see the T_GO note above.
+    T_DEPLOY="$(echo "$DEPLOY_TARGET_ROWS" | /usr/bin/awk -F ' \\| ' '{ t = $1; sub(/^\| /, "", t); print t }' | /usr/bin/sort | /usr/bin/tail -1)"
   fi
 fi
 

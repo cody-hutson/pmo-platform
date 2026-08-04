@@ -14,9 +14,13 @@
 # Usage:
 #   bash core/deploy/tools/build-skill-packages.sh                 # all skills
 #   bash core/deploy/tools/build-skill-packages.sh <skill> [<skill> …]
+#   … | bash core/deploy/tools/build-skill-packages.sh --skills-for-paths
+#                                                      # QUERY: paths -> skills
+#   any of the above, plus --root <path> to operate on a tree other than the
+#   one derived from this script's own location.
 #
 # Exit codes:
-#   0 — all requested packages built
+#   0 — all requested packages built (or, in query mode, the set was emitted)
 #   1 — canonical missing, source skill missing, or packager failure
 
 set -euo pipefail
@@ -24,6 +28,47 @@ set -euo pipefail
 # Run from repo root regardless of cwd
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+# ─── CLI pre-parse ────────────────────────────────────────────────────────────
+# Runs BEFORE the cd so --root can redirect every downstream read at another
+# tree. Both flags are additive; with neither present the remaining argument
+# vector, the derived REPO_ROOT, and every code path below are byte-identical to
+# the pre-existing behaviour, so no existing caller is affected.
+#
+#   --skills-for-paths  QUERY mode. Reads newline-separated repo-relative paths
+#                       on stdin and prints the deduped set of skills whose
+#                       .skill packages those paths feed. Reads only: it never
+#                       builds and never writes packages/.
+#   --root <path>       Override the location-derived REPO_ROOT. This script
+#                       otherwise hardcodes its root from its own path, so a
+#                       caller operating on a different checkout (notably
+#                       claim-version.sh, whose CLAIM_REPO_ROOT is a temp
+#                       sandbox under --self-test) would silently resolve back
+#                       to the real tree and write into the real packages/.
+#                       Precedent: check-canonical-structure.sh's run_check
+#                       takes its repo root as an explicit argument for exactly
+#                       this reason.
+QUERY_SKILLS_FOR_PATHS=0
+_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --skills-for-paths)
+      QUERY_SKILLS_FOR_PATHS=1; shift
+      ;;
+    --root)
+      if [[ -z "${2:-}" || ! -d "${2:-}" ]]; then
+        echo "ERROR: --root requires an existing directory (got: ${2:-<missing>})" >&2
+        exit 1
+      fi
+      REPO_ROOT="$(cd "$2" && pwd)"; shift 2
+      ;;
+    *)
+      _ARGS+=("$1"); shift
+      ;;
+  esac
+done
+set -- "${_ARGS[@]+"${_ARGS[@]}"}"
+
 cd "$REPO_ROOT"
 
 # Extract TEMPLATE_SYNC_MAP from deploy.sh at runtime — single source of
@@ -91,6 +136,56 @@ if [[ ! -f "$LIB_TEMPLATE_SYNC_SOURCE" ]]; then
 fi
 # shellcheck source=../lib-template-sync-source.sh disable=SC1091
 source "$LIB_TEMPLATE_SYNC_SOURCE"
+
+# ─── QUERY MODE: --skills-for-paths ──────────────────────────────────────────
+# Reverse-resolve changed repo-relative paths (stdin) to the set of skills whose
+# .skill packages those paths feed. Two rules:
+#
+#   (a) direct source      — ^(core|operations|release)/skills/<skill>/…  ->  <skill>
+#   (b) injected canonical — the path IS the canonical source that some
+#                            TEMPLATE_SYNC_MAP entry injects  ->  every skill
+#                            named in field 1 of each matching entry.
+#
+# Rule (b) is the load-bearing half and the reason this query lives HERE rather
+# than in the caller. A TEMPLATE_SYNC_MAP canonical has no skills/ path of its
+# own, so editing one stales a package while touching zero skill paths — the
+# vector that staled three packages at v4.06. Any resolver keyed only on skills/
+# paths misses it entirely.
+#
+# Rule (b) is decided by resolve_template_sync_source() — the SAME resolver the
+# injection loop below calls to find the file it copies — rather than by a
+# hardcoded list of canonical directories. That is deliberate and load-bearing:
+# canonicals do NOT all live under one or two prefixes. tracker-schemas.md homes
+# to core/schemas/ (its own resolver arm), not core/standards/ or
+# operations/templates/, so any prefix-enumerated form of this rule returns EMPTY
+# for a genuine map canonical and silently fails to flag the package it stales.
+# Deciding via the resolver makes the query and the injection agree by
+# construction and keeps the prefix knowledge in one place, where a future arm is
+# picked up here for free.
+#
+# Dispatched at THIS point deliberately: the query needs the map, the roster, and
+# the resolver — all established above. The complementary-pair registry below is
+# a build-time post-condition input whose (correct) fail-closed absence check
+# would otherwise make a read-only query fail on a tree carrying no build surface.
+if [[ $QUERY_SKILLS_FOR_PATHS -eq 1 ]]; then
+  _q_path=""; _q_entry=""; _q_m_skill=""; _q_m_canonical=""
+  while IFS= read -r _q_path; do
+    if [[ -z "$_q_path" ]]; then continue; fi
+    # (a) direct source
+    if [[ "$_q_path" =~ ^(core|operations|release)/skills/([^/]+)/ ]]; then
+      printf '%s\n' "${BASH_REMATCH[2]}"
+    fi
+    # (b) injected canonical
+    for _q_entry in "${TEMPLATE_SYNC_MAP[@]}"; do
+      _q_m_skill="${_q_entry%%:*}"
+      _q_m_canonical="${_q_entry#*:}"; _q_m_canonical="${_q_m_canonical%%:*}"
+      if [[ "$(resolve_template_sync_source "$_q_m_canonical")" == "$_q_path" ]]; then
+        printf '%s\n' "$_q_m_skill"
+      fi
+    done
+  done | sort -u | grep -vE '^$' || true
+  exit 0
+fi
 
 # Registered complementary reference pairs (#4178) — read DIRECTLY from the shared
 # registry, the SAME file deploy.sh Check 13b reads. Not awk-extracted out of

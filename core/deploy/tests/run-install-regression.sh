@@ -195,8 +195,15 @@ if [ "${PMO_REGRESSION_EMIT:-1}" != "0" ] && [ -f "${APPEND_EVENT}" ]; then
   else
     _subtype="suite-fail"; _outcome="escalated"
   fi
-  _version="$(cat "${REPO_ROOT}/.version" 2>/dev/null | head -1 | tr -d ' \n')"
-  _version="${_version:-v0.0}"
+  # The release JOIN KEY is the milestone slug, not a version
+  # (pipeline-event-log-schema.md § 2a), and the writer REJECTS a version-shaped
+  # value. This previously emitted the contents of .version — the repo's shipped
+  # version — with a `v0.0` fallback; both are version-shaped, so both would now
+  # be rejected, and because this emission is best-effort the rejection would be
+  # swallowed into "emission skipped" and the suite would silently stop emitting
+  # forever. This is a regression suite with no release context of its own, which
+  # is exactly what the reserved `(none)` sentinel is for.
+  _version="(none)"
   # Payload kept < 300 chars and pipe-free (the writer rejects '|').
   _payload="suite:install-onboarding-update; passed:${SUITE_PASS}; failed:${SUITE_FAIL}; runner:run-install-regression.sh"
   bash "${APPEND_EVENT}" \

@@ -34,10 +34,18 @@ name: Release tooling smoke
 #              channels the fixture seeds), AND the
 #              blast-radius tool
 #              family (doc-tracer default-path regression under a normalized diff + the
-#              domain-fan-out software import-graph scanner) in the closeout-smoke job;
-#              (2) each of the three core/deploy/tools node-graph tools runs its
+#              domain-fan-out software import-graph scanner), AND the
+#              bundle-issues-parser regression suite
+#              (test_bundle_issues_parser.py — 13 legs + 5 rank/sort assertions over
+#              the committed frozen sample, paired with a precision probe that
+#              narrows the priority detector's level class in a throwaway copy and
+#              requires the T-13 liveness guard to fire; the suite previously had
+#              ZERO executors, so ADR-111's "protected against regressing to
+#              silence" claim rested on a guard nothing ran) in the closeout-smoke job;
+#              (2) each ROSTERED core/deploy/tools corpus tool runs its
 #              committed --self-test when any core/deploy/tools file changes, in the
-#              node-graph-tools-selftest job; (3) the CIAC-3 relation holds — the
+#              node-graph-tools-selftest job (the roster and its per-entry rationale
+#              live at that job — not restated here, so the count cannot drift); (3) the CIAC-3 relation holds — the
 #              class set a downstream gate ASSERTS on is a subset of the MUST rows the
 #              orchestration playbook INSTRUCTS (check-emission-contract-subset.sh over
 #              the committed asserted set), with the lint's own --self-test run in the
@@ -48,7 +56,13 @@ name: Release tooling smoke
 #              the finops-selftest job — all asserted behaviorally by executing
 #              the scripts' checks and gating on exit code.
 #   falsification: on a PR touching the close-out tooling, break a corpus path the
-#                  script asserts -> the closeout-smoke job fails; regress a
+#                  script asserts -> the closeout-smoke job fails; narrow
+#                  bundle-issues-parser.py's PRIORITY_FIELD_RE level class to a range
+#                  no fixture carries -> the parser suite's T-13 liveness guard fires
+#                  (priority resolved 22/40 -> 0/40) and the closeout-smoke job fails;
+#                  conversely, if that suite ever degraded to zero effective
+#                  assertions the paired precision probe fails the job instead;
+#                  regress a
 #                  claim-version.sh or check-release-body-drift.sh self-test fixture ->
 #                  the closeout-smoke job fails; make produce-learnings-register.sh seed
 #                  a triple value into the register's L<n>/A<n> reflection rows (or drop
@@ -112,9 +126,9 @@ name: Release tooling smoke
 # fixtures, so no synthesizer / event-log / gh / network call is reachable at all.
 # Their fixtures previously ran only when invoked manually.
 #
-# A second job — node-graph-tools-selftest — runs the committed --self-test of the
-# three v3.55 node-graph stdlib tools (stamp-node-frontmatter / backfill-relationship-
-# edges / build-doc-index) whenever a core/deploy/tools file changes. They are
+# A second job — node-graph-tools-selftest — runs the committed --self-test of its
+# rostered core/deploy/tools corpus tools (roster + per-entry rationale at the job,
+# so the count is stated once) whenever a core/deploy/tools file changes. They are
 # pure-stdlib and OS-agnostic, so that job runs on ubuntu-latest, offline and
 # credential-free, gating on exit code — without it those self-tests could rot
 # unexercised until the next live backfill (Stage-8 QA finding F2). NOTE: path
@@ -247,6 +261,72 @@ jobs:
         # to any operator-instance path). Gates on exit code.
         run: bash release/tools/tests/test_action_item_gate_predicate.sh
 
+      - name: bundle-issues-parser regression suite (13 legs + 5 rank/sort assertions)
+        # Wires a suite that shipped with ZERO executors. The release plan names
+        # `test_bundle_issues_parser.py` as this card's "Executable regression" and
+        # ADR-111 claims the T-13 guard "protects against regressing to silence" —
+        # but no workflow, no shell script and no deploy.sh check invoked it, so it
+        # fired only when a human typed the command. That is the SAME class of defect
+        # the parser repair itself closed: the replaced label regex returned None on
+        # every issue on every run and no test noticed, because no test asserted the
+        # extraction was non-empty. A guard nothing executes cannot fire, so it cannot
+        # fail — see the identical reasoning on the finops-selftest job below.
+        # Offline and stdlib-only: reads the committed frozen sample
+        # (conformant_bundleable_sample.json), no network, no gh, no writes outside
+        # the checkout. Gates on exit code like its peers.
+        run: python3 release/tools/tests/test_bundle_issues_parser.py
+
+      - name: Precision probe — the parser suite actually FAILS on a dead detector
+        # Without this, a suite that degraded to zero effective assertions would green
+        # forever and this wiring would be decoration rather than a gate. Breaks the
+        # exact property ADR-111 names — the T-13 liveness guard, which asserts the
+        # priority detector resolves at least one P-level over the frozen sample — by
+        # narrowing the detector's level class to a range no fixture carries. The
+        # regex stays VALID, so the module still imports and the domain half of T-13
+        # still passes; only liveness breaks. Mutation lands in a THROWAWAY temp copy,
+        # never the checkout. A pass here would mean the gate is blind.
+        run: |
+          # -e is ON for every setup step: a failed mktemp / cp / injection must ABORT,
+          # never fall through to a probe that silently tests nothing. It is relaxed
+          # only around the one invocation that is EXPECTED to fail.
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          cp -R release/tools "$probe/tools"
+          target="$probe/tools/bundle-issues-parser.py"
+
+          # The anchor must match exactly once. If the implementation moves, this
+          # exits non-zero and -e aborts the job — a probe that can no longer find
+          # what it breaks reports that, rather than quietly passing.
+          python3 - "$target" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
+          old = r"    r'P(?P<level>[1-4])\b',"
+          new = r"    r'P(?P<level>[7-9])\b',"
+          if s.count(old) != 1:
+              sys.exit("probe anchor not found exactly once in bundle-issues-parser.py "
+                       "(count=%d) — the probe would silently stop testing anything" % s.count(old))
+          p.write_text(s.replace(old, new), encoding="utf-8")
+          PY
+
+          set +e
+          python3 "$probe/tools/tests/test_bundle_issues_parser.py" > "$probe/probe.out" 2>&1
+          probe_rc=$?
+          set -e
+
+          if [ "$probe_rc" -eq 0 ]; then
+            echo "::error::Precision probe FAILED — test_bundle_issues_parser.py returned 0 with the priority detector narrowed to a level class no fixture carries. The T-13 liveness guard is not detecting a dead detector; this gate is blind."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+
+          if ! grep -q 'T-13 liveness' "$probe/probe.out"; then
+            echo "::error::Precision probe returned non-zero (exit $probe_rc) but NOT via the T-13 liveness assertion — the suite may be failing for an unrelated reason, which would mask a real detector regression."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+
+          echo "Precision probe OK — a dead priority detector correctly failed the T-13 liveness guard (exit $probe_rc)."
+
       - name: CIAC-3 — emission-contract subset (asserted ⊆ instructed)
         # Wires the CIAC-3 lint that shipped with ZERO call sites. Without this step the
         # script is decorative: with no asserted-set file it takes a `SKIP: … return 0`
@@ -342,7 +422,8 @@ jobs:
     # OS-agnostic, so ubuntu-latest — no pip install, no network, no gh/credentials.
     # Roster: the three v3.55 node-graph tools + compose-portfolio (the
     # pda-rollup-and-portfolio PORTFOLIO.md composer, same doc-warehouse FK-chain
-    # family) + generate_release_index (the release-corpus projector).
+    # family) + generate_release_index (the release-corpus projector) +
+    # check-milestone-epic-membership (the M1/M2/M3 milestone-membership checker).
     #
     # generate_release_index was added because its self-test carries REGRESSION
     # GUARDS that are TRUE TODAY — the projector is clock-free and config-free by
@@ -353,6 +434,21 @@ jobs:
     # already triggers on every edit to the module, and the
     # `release/releases/RELEASE_LOG.md` filter triggers on the corpus the
     # grandfathering-closure limb reads.
+    #
+    # check-milestone-epic-membership was added because its 48-assertion --self-test
+    # had ZERO executors: no workflow referenced it and no deploy.sh check runs it,
+    # so the M3 leg's R1 remediation — the narrowed unlabelled-stage-titled predicate
+    # and the three fixture legs added with it — shipped gated by nothing. A
+    # self-test nothing executes cannot fire, so it cannot fail: the identical
+    # fail-open class the finops-selftest job below exists to close, and the one this
+    # release is about. Verified falsifiable rather than assumed: removing the
+    # narrowing from unlabelled_stage_titled() in a throwaway copy fails exactly
+    # those three legs (48/48 -> 45/48) and exits 1, which this loop turns into a red
+    # job. Roster-safe on ubuntu-latest because --self-test returns before any
+    # gh/git call is reachable — instrumenting subprocess.run as a landmine and
+    # invoking self_test() reaches it zero times — so the entry is stdlib-only,
+    # offline and credential-free exactly like its siblings. The
+    # `core/deploy/tools/**` path filter above already triggers on every edit to it.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -369,7 +465,7 @@ jobs:
         run: |
           set -uo pipefail
           rc=0
-          for t in stamp-node-frontmatter backfill-relationship-edges build-doc-index compose-portfolio generate_release_index; do
+          for t in stamp-node-frontmatter backfill-relationship-edges build-doc-index compose-portfolio generate_release_index check-milestone-epic-membership; do
             echo "::group::${t}.py --self-test"
             if python3 "core/deploy/tools/${t}.py" --self-test; then
               echo "OK: ${t}"

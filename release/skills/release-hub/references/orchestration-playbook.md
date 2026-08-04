@@ -32,8 +32,9 @@ Runs once per milestone at release scope. The hub:
 
 ## Procedure 1 — Scaffolding
 
-After plan approval the hub creates one **sub-task per stage per issue** via `gh issue create` (hub mechanical work, NOT a spoke launch), reads the Release Class, immediately closes skipped sub-tasks with the **Skip Closure Format**, and sequences the rest.
-- **GATE (operator):** review the scaffold (incl. the skipped list) before routing.
+After plan approval the hub creates the release's **stage sub-tasks** via `gh issue create` (hub mechanical work, NOT a spoke launch) — **per-issue for Stages 5–8, one release-scoped sub-task for each of Stages 9–13**, Stage 4's having been created at Procedure 0 Step 5. Scope follows the **stage number**, never the title grammar. Every creating call carries `--milestone`, `--label sub-task` and the body's `<!-- subtask-scope: issue:#N -->` / `<!-- subtask-scope: release -->` marker; a sub-task created without its milestone is invisible to every milestone-scoped query the pipeline runs. The hub then reads the Release Class, immediately closes skipped sub-tasks with the **Skip Closure Format**, and sequences the rest.
+- **Step 6.5 — completeness verification:** run `check-milestone-epic-membership.py --milestone "{MILESTONE}" --leg M3` before presenting; a non-empty load-bearing finding set blocks the presentation.
+- **GATE (operator):** review the scaffold (incl. the skipped list, `M3_DENOM` and `SCAFFOLD_MARKER`) before routing.
 
 (Verbatim Sub-Task Template + Skip Closure Format: `hub-spoke-bridge.md` § Procedure 1.)
 
