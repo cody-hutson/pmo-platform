@@ -11,7 +11,7 @@ ADRs follow the canonical **[ADR schema](../../core/schemas/adr-schema.md)** —
 
 `ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing **across the platform, not per module**. `core/ADRs/` and `release/ADRs/` share ONE global sequence, so the two directories interleave: which numbers are release-scoped is not a fact to be enumerated, it is a fact **derivable from which directory the file sits in**. The generated index below is that derivation for this module; the core module's records live in [`../../core/ADRs/`](../../core/ADRs/).
 
-A number is **allocated at authorship and bound at merge** — an unmerged claim on a sibling branch does not bind the sequence, and stepping past one lands a gap that the contiguity gate fails as readily as a duplicate. The binding oracle and the merge-time reconciliation are tooled: `release/tools/renumber-adr.py --next-free` / `--renumber`. See [ADR-111](ADR-111-adr-number-claim-binds-at-merge.md) for the decision and [`../../core/ADRs/README.md`](../../core/ADRs/README.md) § Renumber log for the worked precedents.
+A number is **allocated at authorship and bound at merge** — an unmerged claim on a sibling branch does not bind the sequence, and stepping past one lands a gap that the contiguity gate fails as readily as a duplicate. The binding oracle and the merge-time reconciliation are tooled: `release/tools/renumber-adr.py --next-free` / `--renumber`. See [ADR-115](ADR-115-adr-number-claim-binds-at-merge.md) for the decision and [`../../core/ADRs/README.md`](../../core/ADRs/README.md) § Renumber log for the worked precedents.
 
 **Enforcement.** The platform-wide-unique + gap-free numbering rule is enforced in CI by `release/tools/check-adr-numbers.py`, and the completeness of the index below by `release/tools/generate-adr-index.py --verify` — both in the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml`.
 
@@ -53,8 +53,10 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-100](ADR-100-event-log-payload-pipe-grammar.md) | Event-log payload pipe grammar (escaped `\|` as the canonical multi-value separator) | Proposed | 2026-07-27 | decision-telemetry-emission |
 | [ADR-102](ADR-102-quota-budget-successor-substrate-finops-cumulative-draw.md) | The quota-budget gate's per-spoke cost successor is the FinOps store's cumulative per-spoke draw, not ADR-026's `spoke-launch` startup reservation | Proposed | 2026-07-28 | agent-finops-intelligence |
 | [ADR-105](ADR-105-release-corpus-normalization.md) | The release corpus has two typed file sources and two run-scoped inputs, one projector, and per-field provenance — not one authoritative ledger | Accepted | 2026-08-02 | governance-hardening |
-| [ADR-111](ADR-111-adr-number-claim-binds-at-merge.md) | An ADR number is allocated at authorship and bound at merge; only the mainline binds, and the reconciliation is tooled | Proposed | 2026-08-04 | adr-corpus-conformance |
+| [ADR-110](ADR-110-composition-lock-at-stage-4-entry.md) | A Milestone's composition is locked to additions at Stage-4 Planning entry; the lock binds the act, not the disposition, and its unmarked state is not eligibility | Proposed | 2026-08-03 | release-bundle-and-sequence-gates |
+| [ADR-111](ADR-111-priority-carrier-agnostic-p-level-detection.md) | The P-level digit is the canonical priority satisfier; the carrier is not part of the contract | Proposed | 2026-08-03 | release-bundle-and-sequence-gates |
 | [ADR-113](ADR-113-adr-index-derived-surface-and-scoped-conformance-claim.md) | The ADR index is a derived surface and cannot drift; the conformance claim is scoped to a named baseline and its residual is stated | Proposed | 2026-08-04 | adr-corpus-conformance |
+| [ADR-115](ADR-115-adr-number-claim-binds-at-merge.md) | An ADR number is allocated at authorship and bound at merge; only the mainline binds, and the reconciliation is tooled | Proposed | 2026-08-04 | adr-corpus-conformance |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.

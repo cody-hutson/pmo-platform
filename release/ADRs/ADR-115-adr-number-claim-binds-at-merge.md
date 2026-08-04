@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-111 — An ADR number is allocated at authorship and bound at merge; only the mainline binds, and the reconciliation is tooled
+title: ADR-115 — An ADR number is allocated at authorship and bound at merge; only the mainline binds, and the reconciliation is tooled
 status: Proposed (flips to Accepted at this release's Stage 9 plan-review gate)
 date: 2026-08-04
 release: adr-corpus-conformance
@@ -16,13 +16,15 @@ source_observations:
   - "A token form was independently found infeasible: an ADR-{{TOKEN}}-*.md filename is MALFORMED under the contiguity checker, so deferring the literal number weakens the very invariant the fix must preserve."
 ---
 
-# ADR-111 — An ADR number is allocated at authorship and bound at merge; only the mainline binds, and the reconciliation is tooled
+# ADR-115 — An ADR number is allocated at authorship and bound at merge; only the mainline binds, and the reconciliation is tooled
 
 ## Status
 
 **Proposed.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent. It flips to **Accepted** at this release's Stage-9 plan-review gate; per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure.
 
 **Numbering.** This record's number was derived at Engineering Commit 0 against the mainline anchor, per the rule the record itself ratifies — the mainline held 109 and this release's earlier record took 110, so this one takes 111. At that instant four sibling branches held unmerged claims on 110 through 114. Under the rejected `max(claimed_set) + 1` reading this record would have taken 115 and landed a four-number hole on the mainline. The record dogfoods its own decision, and the alternative it rejects was not hypothetical at the moment of authoring.
+
+**Numbering provenance — `111 → 115`.** Authored branch-local as **ADR-111**; renumbered to **ADR-115** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 111. In-release citations that read "ADR-111" denote this record.
 
 ## Context
 

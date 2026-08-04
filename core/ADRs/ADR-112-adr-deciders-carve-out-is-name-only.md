@@ -21,7 +21,7 @@ source_observations:
 
 **Proposed.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent. It flips to **Accepted** at this release's Stage-9 plan-review gate; per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure.
 
-**Numbering.** Derived at Engineering Commit 0 against the mainline anchor per the rule recorded in [ADR-111](../../release/ADRs/ADR-111-adr-number-claim-binds-at-merge.md): the mainline held 109, this release's earlier records took 110 and 111, so this one takes 112.
+**Numbering.** Derived at Engineering Commit 0 against the mainline anchor per the rule recorded in [ADR-115](../../release/ADRs/ADR-115-adr-number-claim-binds-at-merge.md): the mainline held 109, this release's earlier records took 110 and 111, so this one takes 112.
 
 **Why this record exists at all.** The decision it states was rendered, implemented, and gated in this release — but it had **no durable home**. Its rationale lived only in stage commentary, which is not a corpus surface. This record is the one thing in the bundle that was decided and not written down.
 
@@ -105,6 +105,6 @@ This is an **enforcement residual, not an oversight**, and the distinction is lo
 ## Related ADRs
 
 - [ADR-110](ADR-110-adr-section-set-and-durability-hygiene-carve-out.md) — the ADR section set and the durability-hygiene carve-out, authored in this same release. Its permitted-hygiene list contains the row that makes the 2026-07-25 precedent commit legal on ratified records: replacing an operator handle with the sanctioned literal name changes the *rendering* of the `deciders:` fact and not the fact. This record supplies the public-surface rationale that record does not carry, and the two compose without overlap — ADR-110 governs what may be edited, this one governs what may be written.
-- [ADR-111](../../release/ADRs/ADR-111-adr-number-claim-binds-at-merge.md) — the merge-time numbering decision, also authored in this release. Cited for its reversibility contrast rather than its subject: that decision is textually reversible, this one is not, and the two together are why this bundle's reversibility posture is not uniform.
+- [ADR-115](../../release/ADRs/ADR-115-adr-number-claim-binds-at-merge.md) — the merge-time numbering decision, also authored in this release. Cited for its reversibility contrast rather than its subject: that decision is textually reversible, this one is not, and the two together are why this bundle's reversibility posture is not uniform.
 - [ADR-032](ADR-032-release-corpus-public-vs-instance-split.md) — the public-versus-instance corpus split. This record is that boundary applied to one field: the `deciders:` value is corpus content that ships, so what it may contain is a public-surface question rather than a local formatting preference.
 - [ADR-062](ADR-062-substrate-vs-canonical-precedent.md) — canonical-spec-edit-wins. Applied here: the originating ticket framed the work as a gate-agreement reconciliation, and the public-surface policy question it did not name was decided against live state at the consolidated design gate rather than by amending the ticket body.
