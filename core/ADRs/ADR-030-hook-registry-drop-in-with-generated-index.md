@@ -5,7 +5,7 @@ title: ADR-030 — Hook registry — per-hook drop-in sources + generated canoni
 status: Accepted
 date: 2026-06-19
 release: 36-ci-gate-trustworthiness-and-parallel-pr-safety
-deciders: "Workspace owner (rendered at the #18 Collective Review); design authored at Stage 5 Solutioning (deep architecture pass)"
+deciders: "Workspace owner (rendered at the 36-ci-gate-trustworthiness-and-parallel-pr-safety Collective Review); design authored at Stage 5 Solutioning (deep architecture pass)"
 tags: [architecture, hooks, security, registry, drop-in, generated-index, deploy-check, parallel-pr, cascade-conflict, drift-resistance, reversibility]
 source_observations:
   - "Parallel-PR cascade-conflict class observed N=2 within one release (#18): the fs-boundary hook PR blocked behind the shell-injection hook PR, then the subagent-security PR blocked behind the fs-boundary restructure that bumped the 'The N Hooks' summary count. Every hook-adding PR edits multiple shared sections of the single ~32KB bypass-mode-readiness.md monolith (summary table row + a Rule Registry sub-table + an allowlist row + warn-mode wiring + a recovery note), so two concurrent hook PRs collide on the same file at merge."

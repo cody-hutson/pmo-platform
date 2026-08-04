@@ -2,8 +2,8 @@
 title: "ADR-086 — Event-log schema decision-subtype extension (cascade-sweep-block + session-retro)"
 status: Accepted
 date: 2026-07-19
-release: pipeline-telemetry-tail (#261) (v3.80 provisional; bound at Stage 12)
-deciders: "Stage 5 Solutioning spoke (#3301 design D-3301-A) chose the schema-side fork; operator elected D1 (author an ADR) at the Collective Review scope-lock 2026-07-19; Stage 6 Engineering authored it; operator ratifies at the Stage 9 plan-review gate"
+release: pipeline-telemetry-tail (v3.80 provisional; bound at Stage 12)
+deciders: "Stage 5 Solutioning spoke (design D-3301-A) chose the schema-side fork; operator elected D1 (author an ADR) at the Collective Review scope-lock 2026-07-19; Stage 6 Engineering authored it; operator ratifies at the Stage 9 plan-review gate"
 tags: [release-ops, telemetry, event-log, schema-extension, enum, observability, co-owned-surface, ssot, ciac]
 source_observations:
   - "The Stage-5 shard codifies a `decision` / `cascade-sweep-block` emission (stage-05-solutioning.md § 11), but the event-log schema's § 3 enum never mirrored the subtype, so append-pipeline-event.sh rejects the exact row the pipeline instructs its agents to emit. Live A/B at Stage 6: unfixed main exits 1 with `Invalid event_subtype`; the fixed branch validates and exits 0."

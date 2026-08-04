@@ -5,7 +5,7 @@ title: "ADR-025 — SIOR escalation canonicalization: single-source protocol doc
 status: Accepted
 date: 2026-06-13
 release: sior-escalation-discipline-across-the-comms-triage-technical
-deciders: "operator at Collective Review scope-lock + Stage 5 Solutioning spoke (#913)"
+deciders: "operator at Collective Review scope-lock + Stage 5 Solutioning spoke"
 tags: [skill-suite, escalation, single-source, reference-doc, consumption-mechanism]
 source_observations:
   - "SIOR (Situation/Impact/Options/Recommendation) escalation format existed inline in 8 locations at survey baseline main @ d7b6a59 (2026-06-13) with divergent structure: delivery-engine/references/dependency-rules.md §4.2 (4-column S/I/O/R table), delivery-engine/references/raid-templates.md §7 (full fenced template with 5-axis Impact + pro/con/cost Options), ppm-agent/references/proactive-follow-up-tracking.md (4-bullet S/I/O/R list), ppm-agent/references/push-to-resolve.md (inline prose + 'Escalation Without SIOR' anti-pattern), and comms-writer/SKILL.md Escalation type (S/I/Ask/Options — conflating Ask with the decision and omitting Recommendation entirely), plus narrative references in core/specs/engagement-charter.md, core/standards/output-format.md, and release/skills/pmo-skill-editor/references/suite-contracts.md. The 2026-04-18 skill review flagged 'Type 5 escalation missing SIOR Recommendation component (P1 gap).' No single canonical SIOR source or severity-threshold policy existed; each consumer implied its own."
@@ -98,3 +98,7 @@ Re-selecting injection later is a CHEAP follow-up (add `TEMPLATE_SYNC_MAP` entri
 - [ADR-007](../../core/ADRs/ADR-007-core-module-boundary.md) — core-module boundary placing cross-skill standards in `core/standards/`.
 - [ADR-023](../../core/ADRs/ADR-023-skill-sourcing-coupling-posture.md) — own-with-harvest posture (comms-writer owns its escalation generation first-party; this ADR governs the shared *format*, orthogonal to sourcing).
 - Composition: `duplicate-source-discipline.md` §1 (single-source rule this ADR applies).
+
+## References
+
+- #913 — the Stage 5 Solutioning spoke named alongside the operator's Collective Review scope-lock as a decider on this record.

@@ -2,7 +2,7 @@
 title: "ADR-087 — `Stop`-hook agent-loop re-entry as a hook class (ship-inert activation boundary)"
 status: Proposed
 date: 2026-07-22
-release: pipeline-telemetry-tail (#261) (v3.83; bound at the Stage-12 tag-claim, forward-renumbered from provisional v3.80)
+release: pipeline-telemetry-tail (v3.83; bound at the Stage-12 tag-claim, forward-renumbered from provisional v3.80)
 deciders: "Stage 8 QA spoke surfaced the gap (the rationale lived only in a skill references/ file); the operator elected 'companion ADR, not a widening of ADR-086' at the Stage 9 plan-review gate 2026-07-22; the Stage-9 remediation spoke authored it; operator ratifies at the Stage 9 / activation gate"
 tags: [core, runtime-control, hooks, agent-loop, activation-boundary, session-retro, precedent, autonomy]
 source_observations:

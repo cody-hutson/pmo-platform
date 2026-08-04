@@ -2,7 +2,7 @@
 title: ADR-032 — Release-corpus public-vs-instance split: ship the capability, keep per-release content operator-instance
 status: Accepted
 date: 2026-06-20
-deciders: "operator (D-1412-Scope at the 62-close-out-registers Stage 4 plan-approval gate, 2026-06-19) + Stage 5 Solutioning design (#1412 / sub-task #1414)"
+deciders: "operator (D-1412-Scope at the 62-close-out-registers Stage 4 plan-approval gate, 2026-06-19) + the 62-close-out-registers Stage 5 Solutioning design and its design sub-task"
 tags: [architecture, distribution, release-corpus, operator-instance, public-repo-boundary, gitignore, deploy-checks]
 source_observations:
   - "#1412 — the release-corpus audit trail (RELEASE_LOG, INDEX, DIGEST, notes/, plans/) is tracked in the public install-oriented repo and ships in every clone; this is maintainer content (operational detail, not PII), not install capability."
@@ -108,3 +108,7 @@ The execution issue (filed post-review per D-1412-Scope) carries: `.gitignore` b
 - **ADR-012** (instance-content de-scope to operator-local)
 - **ADR-013** (install-path resolution via operator.toml)
 - **#1412** (parent design issue; closed design-only) · **#48** (abandoned archive-split, superseded) · **#360 / #361** (registers — template public, content instance per Decision 5)
+
+## References
+
+- #1414 — the Stage 5 Solutioning sub-task under which this record's design was rendered.

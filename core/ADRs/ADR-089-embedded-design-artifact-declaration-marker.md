@@ -2,7 +2,7 @@
 title: "ADR-089 — Embedded design-artifact declaration via a section-level HTML-comment marker"
 status: Accepted
 date: 2026-07-24
-release: design-artifact-backfill (#291) (v3.87; bound at the Stage-12 tag-claim, re-rendered from provisional v3.86 after a concurrent claim)
+release: design-artifact-backfill (v3.87; bound at the Stage-12 tag-claim, re-rendered from provisional v3.86 after a concurrent claim)
 deciders: "Stage 5 Solutioning spoke drafted the options analysis + trade-off matrix inline per the read-only Solutioning discipline; the Stage 6 Engineering spoke committed it; the operator ratifies at the design-artifact-backfill Collective Review scope-lock / Stage 9"
 tags: [core, design-artifact, identification, embedded-marker, knowledge-corpus, standard-amendment, declaration-over-inference]
 source_observations:

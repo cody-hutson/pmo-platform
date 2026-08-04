@@ -2,7 +2,7 @@
 title: ADR-017 — Distribution architecture: four lifecycle surfaces, version-posture acquisition, and package multiplicity over shared config/state
 status: Accepted
 date: 2026-06-07
-deciders: "operator (distribution-perspective directive 2026-06-07) + distribution-architecture analysis (post #504/#528/#529)"
+deciders: "operator (distribution-perspective directive 2026-06-07) + distribution-architecture analysis (post the path-portability trigger recorded below)"
 tags: [architecture, distribution, install, deploy, config, xdg, operator-instance, dev-workflow, public-repo-boundary]
 source_observations:
   - "Operator directive 2026-06-07 — think about the platform from a distribution perspective: an install package puts the toolkit in place for a Claude-Code user; ties into version-durability and user-config; creates an install-path (users) vs a clone-path (builders), and the operator is in the small set that does BOTH on one device and must manage it properly."

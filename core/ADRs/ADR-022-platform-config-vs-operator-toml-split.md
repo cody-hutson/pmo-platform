@@ -3,7 +3,7 @@ title: "ADR-022 — platform-config.toml vs operator.toml split: environment/ide
 status: Accepted
 date: 2026-06-13
 release: adapter-config-foundation
-deciders: "Collective Review scope-lock (Option C-refined) 2026-06-13 + the adapter-config-foundation Stage 5 Solutioning spokes (#734/#738) + operator at the Stage 4 plan-approval gate"
+deciders: "Collective Review scope-lock (Option C-refined) 2026-06-13 + the adapter-config-foundation Stage 5 Solutioning spokes + operator at the Stage 4 plan-approval gate"
 tags: [architecture, config, governance, adapters, composition-surface]
 source_observations:
   - "ADR-017 §S2 names operator.toml as the home for 'identity, paths, methodology, adapters' (line 62). The adapter selectors (repo_host/ticketing/kb/ai_tool — the #703 onboarding seam) are therefore ADR-017-faithful when added to operator.toml [adapters]."
@@ -72,3 +72,8 @@ This decision **refines and extends ADR-017 §S2** (it sharpens the operator.tom
 - [ADR-014 — Two-hash managed-section tamper detection](ADR-014-managed-section-two-hash-tamper-detection.md) — the composition-surface durability contract platform-config.toml inherits as a composition-surface file.
 - [ADR-010 — Secrets / public-safety substrate](ADR-010-secrets-handling-policy-substrate.md) — the reason operator.toml's security posture (the PII-adjacent boundary) is the justified split line.
 - [ADR-013 — detect_install_path session-resolution](ADR-013-detect-install-path-session-resolution.md) — the `operator.toml` rung-reader idiom the `resolve_platform_config` reader mirrors.
+
+## References
+
+- #734 — the adapter-config-foundation Stage 5 Solutioning spoke that proposed the config seam at a new `platform-config.toml` and rejected extending `operator.toml`.
+- #738 — the sibling adapter-config-foundation Stage 5 Solutioning spoke, named alongside #734 as a decider on this record.

@@ -5,7 +5,7 @@ title: ADR-091 — Scope-segregation PreToolUse hook — destination-sensitivity
 status: Accepted
 date: 2026-07-25
 release: 46-cross-platform-install-experience (v3.91)
-deciders: "Workspace owner (to ratify at the v3.91 Collective Review scope-lock); design resolved at #384 Stage-5 Solutioning + its A6.5 adversarial review"
+deciders: "Workspace owner (to ratify at the v3.91 Collective Review scope-lock); design resolved at the multi-destination work-tracker Stage-5 Solutioning + its A6.5 adversarial review"
 tags: [architecture, security, hooks, pretooluse, scope-segregation, trackers, fail-closed, pii, reversibility]
 source_observations:
   - "#384 Stage-5 Solutioning (#3877): the operator tracks work across heterogeneous destinations that must stay segregated (public GitHub vs private Jira/Linear); no hook refuses content by DESTINATION sensitivity today. git-pre-commit-pii guards commits; block-gh-path-leak guards gh bodies (public-assumed, path-only, Bash-only). A filing-time gate is the open surface."

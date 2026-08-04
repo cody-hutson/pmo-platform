@@ -4,8 +4,8 @@
 title: ADR-092 — Plan-file identity binds at claim-time stamping (post-CAS), extending ADR-088
 status: Proposed
 date: 2026-07-25
-release: release-identity-and-plan-naming (#279; version binds at the Stage-12 claim)
-deciders: "Workspace owner (to ratify at the #279 Collective Review scope-lock); design resolved at #2548 Stage-5 Solutioning (#3994) + its adversarial review"
+release: release-identity-and-plan-naming (version binds at the Stage-12 claim)
+deciders: "Workspace owner (to ratify at the release-identity-and-plan-naming Collective Review scope-lock); design resolved at the plan-file-naming Stage-5 Solutioning + its adversarial review"
 tags: [architecture, release-pipeline, versioning, claim-time-binding, slug-primary, reversibility, adr-036, adr-088]
 source_observations:
   - "#2548 Stage-5 Solutioning (#3994): ADR-036 killed the early-binding collision for the git TAG (defer-to-claim + atomic CAS), but the versioned plan-file name and branch name still bind a concrete vX.Y at plan time — re-creating, for those identifiers, the exact HALT+re-version churn ADR-036 eliminated for the tag."
@@ -119,3 +119,7 @@ git-tracked and revertible.
   atomic-CAS rule, projected onto the plan-file and branch identifiers.
 - **Composes #3016** (the `{versioned, version-less}` identity-mode enum) — mode governs
   whether the rename ever fires; this ADR governs *when* it fires for a `versioned` release.
+
+## References
+
+- #279 — the release milestone `release-identity-and-plan-naming`, at whose Collective Review scope-lock this record is ratified.
