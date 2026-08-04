@@ -114,11 +114,15 @@ release/releases/notes/_unversioned/public-flip-depersonalization-enforcement_RE
 release/releases/notes/_unversioned/public-flip-install-blockers_RELEASE_NOTES.md
 release/releases/plans/release-notes-and-learnings_RELEASE_PLAN.md
 release/skills/release-executor/SKILL.md
+packages/release-executor.skill
+packages/release-executor.skill.sha256
 release/tools/automated-closeout.sh
+release/tools/capture-release-bodies.sh
+release/tools/reemit-release-bodies.sh
 release/tools/synthesize-release-learnings.sh
 release/tools/tests/fixtures/versionless-notes/**
 release/tools/tests/test_lint_release_corpus_versionless.sh
-release/releases/_captures/2026-08-03-release-body-precapture/**
+release/releases/_captures/2026-08-04-release-body-precapture/**
 .github/workflows/close-completeness.yml
 ```
 
@@ -141,7 +145,10 @@ release/releases/_captures/2026-08-03-release-body-precapture/**
 | #3699 | `core/deploy/deploy.sh` | MODIFY — lexicographic compare → shared file-order latch; two cutoff constants | CHEAP |
 | #3699 | `release/tools/automated-closeout.sh` | MODIFY — shared cutoff default cascade | CHEAP |
 | #3699 | `.github/workflows/close-completeness.yml` | MODIFY — add the notes path filter; reconcile the prerequisite warning text | CHEAP |
-| #3699 | `release/releases/_captures/2026-08-03-release-body-precapture/**` | NEW — 11 published-body captures + `MANIFEST.md` | CHEAP (additive) |
+| #3699 | `release/releases/_captures/2026-08-04-release-body-precapture/**` | NEW — 11 published-body captures + `MANIFEST.md` + `SHA256SUMS` | CHEAP (additive) |
+| #3699 | `release/tools/capture-release-bodies.sh` | NEW — pre-overwrite capture tool; REFUSES to overwrite an existing capture (directory- and file-level guards, no `--force`) | CHEAP (additive) |
+| #3699 | `release/tools/reemit-release-bodies.sh` | NEW — §5.6 re-emit tool; dry-run by default, capture is a hard precondition, per-version atomic, drift check is the resume ledger. **Authored at Stage 6; EXECUTED at Stage 12** | CHEAP (additive; its `--execute` run is IRREVERSIBLE) |
+| #3699 | `packages/release-executor.skill` · `.sha256` | MODIFY — package rebuild for the Mode F SKILL.md edit (CI-gated package-freshness beat) | CHEAP |
 | #4451 | `release/tools/automated-closeout.sh` | MODIFY — emit the Phase-B velocity field + the Phase-A7 learnings triple | CHEAP |
 | #4451 | `release/references/standards/release-velocity-tracking.md` | MODIFY — §3.3 grammar stated normatively | CHEAP |
 | #4451 | `release/references/how-to/hub-spoke-bridge.md` | MODIFY — Stage-13 chip gains the A7 emit step | CHEAP |
