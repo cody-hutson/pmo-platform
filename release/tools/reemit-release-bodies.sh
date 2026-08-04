@@ -11,7 +11,7 @@
 #     READ, and prints exactly what it would do. An accidental invocation cannot
 #     mutate anything.
 #   * A CAPTURE IS A HARD PRECONDITION. Each version is refused unless
-#     <capture-dir>/<version>.published.md exists and is non-empty. The capture is
+#     <capture-dir>/<version>.published.txt exists and is non-empty. The capture is
 #     produced by release/tools/capture-release-bodies.sh and must already be
 #     committed and merged to main — a capture living only in a working tree is
 #     not durable, and the whole point is durability.
@@ -82,7 +82,7 @@ for V in "$@"; do
   echo "=== $V ==="
 
   # ── PRECONDITION 1: the pre-overwrite capture must exist and be non-empty.
-  CAP="$CAPTURE_DIR/${V}.published.md"
+  CAP="$CAPTURE_DIR/${V}.published.txt"
   if [[ ! -s "$CAP" ]]; then
     echo "  REFUSED: no non-empty capture at $CAP — refusing to overwrite a public"
     echo "           body whose prior text is not recorded anywhere."

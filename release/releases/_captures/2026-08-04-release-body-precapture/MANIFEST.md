@@ -6,7 +6,7 @@ Raw published GitHub Release bodies, captured **before** the § 5.6 re-emit.
 GitHub keeps no version history for a Release body, so after a re-emit these
 files are the only record of what each public page said beforehand.
 
-`<version>.published.md` is the body **byte-for-byte as GitHub returned it**
+`<version>.published.txt` is the body **byte-for-byte as GitHub returned it**
 (`gh release view <v> --json body --jq .body`) — no transform, no trimming.
 Integrity is verified against the companion `SHA256SUMS` (see § Verification).
 

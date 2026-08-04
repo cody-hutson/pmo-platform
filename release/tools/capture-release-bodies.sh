@@ -17,7 +17,7 @@
 # refuses to write over an existing capture at two levels:
 #
 #   (1) DIRECTORY level — if the destination directory already contains any
-#       *.published.md, the run aborts before contacting GitHub at all.
+#       *.published.txt, the run aborts before contacting GitHub at all.
 #   (2) FILE level — each per-version write is guarded by its own existence test,
 #       so a partially-populated directory cannot be silently topped up with
 #       post-repair content for the versions that are missing.
@@ -32,7 +32,7 @@
 #   ./capture-release-bodies.sh --self-test
 #
 # Outputs, in <dest-dir>:
-#   <version>.published.md   raw published body, byte-for-byte as GitHub returns it
+#   <version>.published.txt   raw published body, byte-for-byte as GitHub returns it
 #   MANIFEST.md              one row per version: SHA-256, byte + line counts, the
 #                            drift verdict at capture time, and the Release metadata
 #                            (title / createdAt / publishedAt / targetCommitish)
@@ -61,7 +61,7 @@ _sha256() {
 _dest_has_capture() {
   local d="$1"
   [[ -d "$d" ]] || return 1
-  compgen -G "$d"/*.published.md >/dev/null 2>&1
+  compgen -G "$d"/*.published.txt >/dev/null 2>&1
 }
 
 # ─── self-test: proves the refusal actually refuses ─────────────────────────────
@@ -74,7 +74,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
   if _dest_has_capture "$t"; then echo "FAIL: guard fired on an empty directory"; rc_all=1
   else echo "PASS: empty destination accepted (guard does not refuse everything)"; fi
   # Arm 2 (sensitivity): a destination already holding a capture must be REFUSED.
-  printf 'x' >"$t/v1.00.published.md"
+  printf 'x' >"$t/v1.00.published.txt"
   if _dest_has_capture "$t"; then echo "PASS: populated destination refused"
   else echo "FAIL: populated destination NOT refused"; rc_all=1; fi
   # Arm 3: end-to-end — the real entry point must exit 1 and write nothing.
@@ -99,7 +99,7 @@ fi
 #    is inert in every respect.
 if _dest_has_capture "$DEST"; then
   {
-    echo "REFUSED: $DEST already contains a capture (*.published.md)."
+    echo "REFUSED: $DEST already contains a capture (*.published.txt)."
     echo ""
     echo "Overwriting it would replace the PRE-repair public body with whatever is"
     echo "published now — destroying the only record of the prior public text."
@@ -128,7 +128,7 @@ MAN="$DEST/MANIFEST.md"
   echo "GitHub keeps no version history for a Release body, so after a re-emit these"
   echo "files are the only record of what each public page said beforehand."
   echo ""
-  echo "\`<version>.published.md\` is the body **byte-for-byte as GitHub returned it**"
+  echo "\`<version>.published.txt\` is the body **byte-for-byte as GitHub returned it**"
   echo "(\`gh release view <v> --json body --jq .body\`) — no transform, no trimming."
   echo "Integrity is verified against the companion \`SHA256SUMS\` (see § Verification)."
   echo ""
@@ -141,7 +141,7 @@ MAN="$DEST/MANIFEST.md"
 
 rc_final=0
 for V in "$@"; do
-  OUT="$DEST/${V}.published.md"
+  OUT="$DEST/${V}.published.txt"
 
   # ── GUARD (2): file level.
   if [[ -e "$OUT" ]]; then
@@ -193,7 +193,7 @@ for V in "$@"; do
   printf '| `%s` | %s | %s | `%s` | %s | %s | %s | %s | `%s` |\n' \
     "$V" "$BYTES" "$LINES" "$SHA" "$DRIFT" "$NAME" "$CREATED" "$PUBLISHED" "$TARGET" >>"$MAN"
   # Canonical `<sha>  <filename>` line — consumed directly by `shasum -a 256 -c`.
-  printf '%s  %s\n' "$SHA" "${V}.published.md" >>"$DEST/SHA256SUMS"
+  printf '%s  %s\n' "$SHA" "${V}.published.txt" >>"$DEST/SHA256SUMS"
   echo "captured $V — $BYTES bytes, $DRIFT"
 done
 
