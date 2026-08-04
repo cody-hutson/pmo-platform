@@ -668,7 +668,101 @@ _preflight_stamp() {
     printf 'claim-version: stamp pre-flight — plans dir %s missing or not writable\n' "$plans_dir" >&2
     return 1
   }
+
+  # A plan-only manifest cannot stale a package and cannot cross a version
+  # grammar: the plan lives under release/releases/plans/, which is neither a
+  # skills/ source path nor a TEMPLATE_SYNC_MAP canonical, and its own frontmatter
+  # version IS the release version. Returning here keeps every existing plan-only
+  # caller byte-unaffected by the checks below — which is the whole invocation
+  # population in the release log to date.
+  [[ ${#STAMP_FILES[@]} -eq 0 ]] && return 0
+
+  # --- Everything below extends this function's stated doctrine from "can I
+  #     substitute?" to "can I complete the stamp INCLUDING its package
+  #     consequence?". All of it is decidable BEFORE the CAS, which is exactly
+  #     where it must run: post-CAS, _stamp_release_identity NEVER un-claims the
+  #     tag, so the same failure discovered late strands a half-applied stamp AND
+  #     a stale package instead of simply declining to claim.
+  local f abs
+  for f in "${STAMP_FILES[@]}"; do
+    abs="${CLAIM_REPO_ROOT}/${f}"
+    [[ -f "$abs" ]] || {
+      printf 'claim-version: stamp pre-flight — --stamp-file %s not found under repo root %s\n' "$f" "$CLAIM_REPO_ROOT" >&2
+      return 1
+    }
+
+    # CROSS-GRAMMAR GUARD. {{RELEASE_VERSION}} resolves to the WON RELEASE TAG
+    # verbatim, and the release-tag grammar and the skill version:-field grammar
+    # are deliberately different objects governing different things. A release tag
+    # may carry a three-component patch form (v2.06.1 — five such tags have
+    # shipped); the skill grammar forbids a patch level outright, because skills
+    # sync to platform MINOR versions. So a token sitting on a SKILL.md version:
+    # line stamps a value that fails deploy.sh Check 6 on any patch release — and
+    # even on a minor release it overwrites the pmo-skill-editor-managed skill
+    # version with a release tag, which is not what that field means
+    # (core/standards/version-field-semantics.md § Definition).
+    #
+    # Rejected here, pre-CAS, rather than discovered as a red Check 6 after the
+    # tag is irreversibly claimed. Scoped to the version: line of a SKILL.md
+    # specifically: a token anywhere else in that file (release-note prose, a
+    # "shipped in" line) is a legitimate stamp target and is left alone.
+    case "$f" in
+      SKILL.md|*/SKILL.md)
+        if grep -qE '^version:[[:space:]]*\{\{RELEASE_VERSION\}\}[[:space:]]*$' "$abs"; then
+          printf 'claim-version: stamp pre-flight — %s carries {{RELEASE_VERSION}} on its version: frontmatter line. That field is the skill version (vMAJOR.MINOR, editor-managed per core/standards/version-field-semantics.md), not the release tag; a patch-form tag would also fail deploy.sh Check 6. Remove the token from the version: line (elsewhere in the file is fine).\n' "$f" >&2
+          return 1
+        fi
+        ;;
+    esac
+  done
+
+  # Package consequence: which .skill packages would this stamp stale? Resolved
+  # through the builder's query mode so the answer comes from the same rules that
+  # decide what a package contains.
+  local plan_rel="${plan#"${CLAIM_REPO_ROOT}/"}"
+  local affected rc_aff=0
+  affected="$(_resolve_affected_skills "$plan_rel" "${STAMP_FILES[@]}")" || rc_aff=$?
+  if [[ $rc_aff -ne 0 ]]; then
+    printf 'claim-version: stamp pre-flight — cannot determine the package consequence of this manifest: core/deploy/tools/build-skill-packages.sh is missing or failed under %s. Not claiming a number whose stamp could silently stale a package.\n' "$CLAIM_REPO_ROOT" >&2
+    return 1
+  fi
+  if [[ -n "$affected" ]]; then
+    printf 'claim-version: stamp pre-flight — manifest stales %s package(s): %s (they will be rebuilt into the stamp commit)\n' \
+      "$(grep -c . <<<"$affected")" "$(tr '\n' ' ' <<<"$affected")" >&2
+  fi
   return 0
+}
+
+# _resolve_affected_skills <repo-rel-path>...  — echo the deduped set of skills
+#   whose .skill package the given paths feed (one per line; empty output = the
+#   manifest stales no package). PURE QUERY: reads only, never builds, never
+#   writes. Returns 2 when the package builder is not resolvable under
+#   CLAIM_REPO_ROOT, so a caller can tell "no packages affected" apart from
+#   "could not determine".
+#
+#   The resolution RULES live ONCE, in the builder's --skills-for-paths mode. A
+#   second copy here would be a shadow SSOT: the rules depend on TEMPLATE_SYNC_MAP
+#   and on the canonical-source resolver, both of which this file has no other
+#   reason to know about, and a copy would drift the moment either changes.
+_resolve_affected_skills() {
+  local builder="${CLAIM_REPO_ROOT}/core/deploy/tools/build-skill-packages.sh"
+  [[ -f "$builder" ]] || return 2
+  printf '%s\n' "$@" | bash "$builder" --root "$CLAIM_REPO_ROOT" --skills-for-paths
+}
+
+# _host_rebuild_packages <skill>...  — HOST SEAM. The sole package-mutating call
+#   in this file: rebuilds each named skill's .skill package and its .sha256
+#   content-baseline sidecar in place under CLAIM_REPO_ROOT.
+#
+#   It is a _host_* seam for the same reason every other host operation here is
+#   one: the self-test OVERRIDES it, so no fixture run can reach a real packages/
+#   directory. That matters more than usual here — build-skill-packages.sh derives
+#   its own repo root from its own location, so a sandboxed invocation of the real
+#   builder would otherwise resolve back to the live tree and write real packages.
+#   --root pins it to the same tree the stamp is mutating.
+_host_rebuild_packages() {
+  bash "${CLAIM_REPO_ROOT}/core/deploy/tools/build-skill-packages.sh" \
+    --root "$CLAIM_REPO_ROOT" "$@"
 }
 
 # _stamp_release_identity <tag> <slug> <merge_sha>  — POST-CAS claim-time stamp.
@@ -713,6 +807,52 @@ _stamp_release_identity() {
   # Follow-on stamp commit (+push) of the renamed plan and any stamped extras.
   local commit_paths=("release/releases/plans/v${vM}/${tag}_RELEASE_PLAN.md")
   commit_paths+=("${extra_rel[@]+"${extra_rel[@]}"}")
+
+  # --- PACKAGE CONSEQUENCE, riding the SAME commit ---------------------------
+  # A skill's version: line and every canonical injected into its package sit
+  # INSIDE the .skill content hash, so a stamp that rewrote packaged source has
+  # ALREADY staled that package by the time we get here. Rebuilding in a follow-on
+  # commit would leave one revision on the mainline carrying stamped source with a
+  # stale package — stale by construction for Check 7, which evaluates content
+  # freshness per revision. So the rebuilt package and its .sha256 sidecar are
+  # appended to THIS commit's path list.
+  #
+  # Resolved from the paths ACTUALLY stamped, not from the pre-flight's earlier
+  # guess: the pre-flight decides whether to claim at all, this decides what to
+  # commit, and only the second is allowed to be authoritative about what changed.
+  #
+  # Fail-loud is RETAINED as the error path, not discarded: a rebuild failure
+  # returns 1 and the caller's existing HALT surfaces "tag claimed, stamp
+  # manually" with the builder command and the affected skills named. Fail-loud as
+  # the PRIMARY behaviour was rejected because this function never un-claims the
+  # tag, so aborting here leaves a claimed tag, a half-applied stamp AND a stale
+  # package — strictly worse than the status quo it was meant to improve on.
+  #
+  # Skipped entirely when no --stamp-file artifacts were stamped: the renamed plan
+  # alone can never stale a package (release/releases/plans/ is neither a skills/
+  # source path nor a TEMPLATE_SYNC_MAP canonical), so the existing plan-only
+  # stamp path runs byte-identically to before.
+  if [[ ${#extra_rel[@]} -gt 0 ]]; then
+    local affected_out rc_aff=0 sk
+    affected_out="$(_resolve_affected_skills "${extra_rel[@]}")" || rc_aff=$?
+    if [[ $rc_aff -ne 0 ]]; then
+      printf 'claim-version: stamp — cannot resolve the package consequence of the stamped files (core/deploy/tools/build-skill-packages.sh missing or failed). Rebuild affected packages manually and commit packages/<skill>.skill + packages/<skill>.skill.sha256 (tag %s claimed; stamp half-applied)\n' "$tag" >&2
+      return 1
+    fi
+    if [[ -n "$affected_out" ]]; then
+      local affected_arr=()
+      while IFS= read -r sk; do [[ -n "$sk" ]] && affected_arr+=("$sk"); done <<<"$affected_out"
+      _host_rebuild_packages "${affected_arr[@]}" || {
+        printf 'claim-version: stamp — package rebuild FAILED for: %s. Run: bash core/deploy/tools/build-skill-packages.sh %s — then commit packages/<skill>.skill and packages/<skill>.skill.sha256 for each (tag %s claimed; stamp half-applied)\n' \
+          "${affected_arr[*]}" "${affected_arr[*]}" "$tag" >&2
+        return 1
+      }
+      for sk in "${affected_arr[@]}"; do
+        commit_paths+=("packages/${sk}.skill" "packages/${sk}.skill.sha256")
+      done
+    fi
+  fi
+
   _host_commit_push "stamp: bind ${tag} release identity (plan rename + {{RELEASE_VERSION}} resolve) [SHA ${merge_sha:0:12}]" "${commit_paths[@]}" || return 1
 }
 
@@ -841,7 +981,13 @@ _main() {
       --message)      message="$2"; shift 2;;
       --max-attempts) MAX_ATTEMPTS="$2"; shift 2;;
       --stamp-slug)   STAMP_SLUG="$2"; shift 2;;
-      --stamp-file)   STAMP_FILES+=("$2"); shift 2;;
+      # Normalise the operator-supplied path at the single intake point. A leading
+      # "./", an embedded "/./", or a doubled "//" all name the same file, but the
+      # pre-flight guard (permissive glob) and the affected-skill resolver (anchored
+      # prefix) disagree about them: the guard fires, the resolver misses, and the
+      # run stamps the source, rebuilds nothing, and exits 0 — neither rebuilding nor
+      # failing loudly. Normalising here fixes every downstream consumer at once.
+      --stamp-file)   STAMP_FILES+=("$(printf '%s' "$2" | sed -e 's|//*|/|g' -e 's|/\./|/|g' -e 's|^\./||')"); shift 2;;
       --dry-run)      dry_run=1; shift;;
       -h|--help)      _usage; exit 0;;
       *) printf 'claim-version: unknown arg %q\n' "$1" >&2; _usage; exit 2;;
@@ -907,6 +1053,10 @@ _main() {
 _claim_self_test() {
   local failures=0
   local _t_label
+  # The REAL repo root, captured before any fixture reassigns CLAIM_REPO_ROOT.
+  # The package fixtures copy the actual builder + resolver out of it so they
+  # exercise the REAL --skills-for-paths query rather than a restatement of it.
+  local _ST_REAL_ROOT="$CLAIM_REPO_ROOT"
 
   # Assertion helpers are defined FIRST (ahead of the fixture seams) because the
   # pre-stub fixtures — U-0 and U-14a, which must run against the REAL host seams
@@ -1198,7 +1348,17 @@ _claim_self_test() {
   # stamp seam: record the follow-on stamp commit message; never a real add/commit/
   # push. The REAL _stamp_release_identity still runs (git mv + sed on a sandbox
   # tree), so U-11/U-13 exercise the substitution + rename hermetically.
-  _host_commit_push()          { printf '%s\n' "$1" >> "$(_st_f stamp_commits)"; return 0; }
+  # Records the commit MESSAGE (as before) and now also the committed PATH list,
+  # so a fixture can assert that a rebuilt package + its .sha256 sidecar ride the
+  # SAME stamp commit rather than a follow-on one — the atomicity property.
+  _host_commit_push()          { printf '%s\n' "$1" >> "$(_st_f stamp_commits)"; shift
+                                 [[ $# -gt 0 ]] && printf '%s\n' "$@" >> "$(_st_f commit_paths)"
+                                 return 0; }
+  # package-rebuild seam: record the skills it was asked to rebuild and return the
+  # configured rc. NEVER invokes the real builder, so no fixture run can write into
+  # any packages/ directory. rebuild_rc drives the fail-loud error-path fixture.
+  _host_rebuild_packages()     { printf '%s\n' "$@" >> "$(_st_f rebuild_calls)"
+                                 return "$(cat "$(_st_f rebuild_rc)" 2>/dev/null || echo 0)"; }
 
   # fetch stub: returns the configured rc; ALSO applies a programmed "tip advance"
   # the first time the attempt-count crosses the advance threshold (simulates a
@@ -1334,6 +1494,52 @@ _claim_self_test() {
   }
   # _st_stamp_n  — count of recorded stamp commits.
   _st_stamp_n() { awk 'NF{n++} END{print n+0}' "$(_st_f stamp_commits)" 2>/dev/null || echo 0; }
+
+  # _st_pkg_sandbox <slug>  — a stamp sandbox that ALSO carries a packaged-skill
+  #   surface, for the U-18 family. On top of _st_stamp_sandbox it installs:
+  #     - a REAL copy of core/deploy/tools/build-skill-packages.sh and the REAL
+  #       core/deploy/lib-template-sync-source.sh resolver, so the fixtures
+  #       exercise the ACTUAL --skills-for-paths rules rather than a restatement
+  #       of them (a restated resolver would pass while the shipped one is broken);
+  #     - a stub core/deploy/deploy.sh exposing a TEMPLATE_SYNC_MAP and the three
+  #       per-module roster arrays the query needs — the same stub-roster idiom
+  #       check-canonical-structure.sh's own self-test uses;
+  #     - one skill whose SKILL.md carries {{RELEASE_VERSION}} in its BODY and a
+  #       conforming literal on its version: line. That pairing is deliberate and
+  #       is the correct one: a token ON the version: line is the cross-grammar
+  #       hazard the pre-flight rejects, and U-18c asserts that rejection.
+  #   Only the build + commit seams are stubbed; the query runs for real.
+  _st_pkg_sandbox() {
+    local slug="$1" root
+    root="$(_st_stamp_sandbox "$slug")"
+    mkdir -p "$root/core/deploy/tools" "$root/core/standards" "$root/packages" \
+             "$root/operations/skills/fixtureops" "$root/release/skills/fixturerel" \
+             "$root/core/skills/fixturecore"
+    cp "$_ST_REAL_ROOT/core/deploy/tools/build-skill-packages.sh" "$root/core/deploy/tools/"
+    cp "$_ST_REAL_ROOT/core/deploy/lib-template-sync-source.sh"   "$root/core/deploy/"
+    cat > "$root/core/deploy/deploy.sh" <<'PKGSTUB'
+TEMPLATE_SYNC_MAP=(
+  "fixtureops:output-format.md:references/output-format.md"
+  "fixturerel:output-format.md:references/output-format.md"
+)
+OPERATIONS_SKILLS=(
+  fixtureops
+)
+RELEASE_SKILLS=(
+  fixturerel
+)
+CORE_SKILLS=(
+  fixturecore
+)
+PKGSTUB
+    printf '%s\n' '# Fixture canonical' > "$root/core/standards/output-format.md"
+    printf '%s\n' '---' 'name: fixtureops' 'description: fixture' 'version: v1.00' '---' \
+      '# Fixtureops' 'Shipped in {{RELEASE_VERSION}}.' \
+      > "$root/operations/skills/fixtureops/SKILL.md"
+    git -C "$root" add -A
+    git -C "$root" commit -qm "pkg fixture" >/dev/null 2>&1
+    printf '%s\n' "$root"
+  }
 
   local out rc err
 
@@ -1780,8 +1986,140 @@ _claim_self_test() {
   _ct_run claim_version "deadbeefcafe" "minor" "" ""; out="$REPLY"; rc="$REPLY_RC"
   _ct_eq "$out" "v2.40" "U-17(d) control: next-free must clear the origin-only claim v2.39 (this is the collision the fail-open would have caused)"
 
+  # ---- U-18: a stamp that rewrites packaged source rebuilds that package, in the
+  #      SAME commit. The gap this closes: the stamp resolves file CONTENT and had
+  #      no package-rebuild step at all, so a stamped SKILL.md left Check 7 red on
+  #      the mainline until someone remembered a hand-written per-release chore.
+  _t_label="U-18 stamp rebuilds the package it staled (direct SKILL.md source)"
+  {
+    local _sb18; _sb18="$(_st_pkg_sandbox "widget-pkg")"
+    local _save18="$CLAIM_REPO_ROOT"
+    : > "$(_st_f stamp_commits)"; : > "$(_st_f rebuild_calls)"; : > "$(_st_f commit_paths)"
+    printf '0\n' > "$(_st_f rebuild_rc)"
+    CLAIM_REPO_ROOT="$_sb18"; STAMP_FILES=("operations/skills/fixtureops/SKILL.md")
+    _ct_run _stamp_release_identity "v3.99" "widget-pkg" "deadbeefcafe1234"
+    CLAIM_REPO_ROOT="$_save18"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "0" "U-18 stamp returns 0"
+    _ct_eq "$(tr '\n' ' ' < "$(_st_f rebuild_calls)" | sed 's/ *$//')" "fixtureops" \
+           "U-18 the rebuild seam is invoked with exactly the staled skill"
+    grep -qx 'packages/fixtureops.skill' "$(_st_f commit_paths)" \
+      || _ct_fail "U-18 the stamp commit must carry packages/fixtureops.skill"
+    grep -qx 'packages/fixtureops.skill.sha256' "$(_st_f commit_paths)" \
+      || _ct_fail "U-18 the stamp commit must carry the .sha256 content-baseline sidecar"
+    _ct_eq "$(_st_stamp_n)" "1" "U-18 exactly ONE stamp commit — the rebuild rides it, never a follow-on"
+    grep -q '{{RELEASE_VERSION}}' "$_sb18/operations/skills/fixtureops/SKILL.md" 2>/dev/null \
+      && _ct_fail "U-18 the SKILL.md body token must be resolved by the stamp"
+    rm -rf "$_sb18"
+  }
+
+  # ---- U-18b: THE v4.06 VECTOR. A TEMPLATE_SYNC_MAP canonical has no skills/
+  #      path of its own, so stamping one stales every package it is injected into
+  #      while touching zero skill paths. A resolver keyed only on skills/ paths
+  #      returns empty here and the packages go stale silently — which is exactly
+  #      what happened at v4.06, where the identity stamp staled three packages via
+  #      canonicals. This fixture fails if rule (b) is missing or narrowed.
+  _t_label="U-18b injected canonical stales EVERY mapped skill (the v4.06 vector)"
+  {
+    local _sb18b; _sb18b="$(_st_pkg_sandbox "widget-canon")"
+    local _save18b="$CLAIM_REPO_ROOT"
+    : > "$(_st_f stamp_commits)"; : > "$(_st_f rebuild_calls)"; : > "$(_st_f commit_paths)"
+    printf '0\n' > "$(_st_f rebuild_rc)"
+    CLAIM_REPO_ROOT="$_sb18b"; STAMP_FILES=("core/standards/output-format.md")
+    _ct_run _stamp_release_identity "v3.99" "widget-canon" "deadbeefcafe1234"
+    CLAIM_REPO_ROOT="$_save18b"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "0" "U-18b stamp returns 0"
+    _ct_eq "$(tr '\n' ' ' < "$(_st_f rebuild_calls)" | sed 's/ *$//')" "fixtureops fixturerel" \
+           "U-18b BOTH skills the canonical injects into must be rebuilt (a skills/-path-only resolver returns none)"
+    grep -qx 'packages/fixturerel.skill.sha256' "$(_st_f commit_paths)" \
+      || _ct_fail "U-18b the second injected skill's sidecar must also ride the stamp commit"
+    _ct_eq "$(_st_stamp_n)" "1" "U-18b exactly ONE stamp commit"
+    rm -rf "$_sb18b"
+  }
+
+  # ---- U-18c: CROSS-GRAMMAR GUARD + its discriminating control. {{RELEASE_VERSION}}
+  #      resolves to the won RELEASE TAG, which may be three-component on a patch
+  #      release; the skill version: grammar forbids a patch level. A token on a
+  #      SKILL.md version: line is therefore rejected PRE-CAS — before the tag is
+  #      irreversibly claimed — rather than surfacing as a red Check 6 afterwards.
+  #      The control leg is what makes this a real test: a token elsewhere in the
+  #      same file is a legitimate stamp target and must still pass.
+  _t_label="U-18c cross-grammar guard rejects {{RELEASE_VERSION}} on a SKILL.md version: line"
+  {
+    local _sb18c; _sb18c="$(_st_pkg_sandbox "widget-grammar")"
+    local _save18c="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb18c"; STAMP_FILES=("operations/skills/fixtureops/SKILL.md")
+
+    # CONTROL leg first: the shipped pairing (literal version:, token in the body)
+    # must PASS. Without this leg the guard could reject every SKILL.md and still
+    # look correct.
+    _ct_run _preflight_stamp "widget-grammar"
+    _ct_eq "$REPLY_RC" "0" "U-18c control: token in the BODY with a conforming version: line passes pre-flight"
+
+    # Guard leg: move the token onto the version: line.
+    printf '%s\n' '---' 'name: fixtureops' 'description: fixture' \
+      'version: {{RELEASE_VERSION}}' '---' '# Fixtureops' \
+      > "$_sb18c/operations/skills/fixtureops/SKILL.md"
+    _ct_run_err _preflight_stamp "widget-grammar"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save18c"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "1" "U-18c a token on the version: line HALTs pre-flight (before the CAS)"
+    grep -q 'version:' <<< "$err" \
+      || _ct_fail "U-18c the pre-flight message must name the version: field so the operator can act on it"
+    rm -rf "$_sb18c"
+  }
+
+  # ---- U-18e: a --stamp-file that does not exist HALTs PRE-CAS. The existence of
+  #      every stamp target was previously checked only inside the post-CAS stamp,
+  #      so a typo'd path HALTed AFTER the tag was irreversibly claimed despite
+  #      being trivially checkable beforehand — the same "checkable early, enforced
+  #      late" defect class as the missing rebuild. Both halves now run pre-flight.
+  _t_label="U-18e a missing --stamp-file HALTs pre-flight, before the CAS"
+  {
+    local _sb18e; _sb18e="$(_st_pkg_sandbox "widget-missing")"
+    local _save18e="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb18e"
+
+    # Control leg: an existing stamp target passes, so the guard below is
+    # discriminating rather than a blanket rejection of every manifest.
+    STAMP_FILES=("operations/skills/fixtureops/SKILL.md")
+    _ct_run _preflight_stamp "widget-missing"
+    _ct_eq "$REPLY_RC" "0" "U-18e control: an existing --stamp-file passes pre-flight"
+
+    STAMP_FILES=("operations/skills/fixtureops/NOPE.md")
+    _ct_run_err _preflight_stamp "widget-missing"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save18e"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "1" "U-18e a nonexistent --stamp-file HALTs pre-flight (never post-CAS)"
+    grep -q 'NOPE.md' <<< "$err" \
+      || _ct_fail "U-18e the pre-flight message must name the missing path"
+    rm -rf "$_sb18e"
+  }
+
+  # ---- U-18d: the FAIL-LOUD error path. Auto-rebuild is the primary behaviour,
+  #      but fail-loud is retained rather than discarded: when the rebuild itself
+  #      fails there is nothing to commit, so the stamp HALTs and the message must
+  #      name the builder command AND the affected skill. Asserting the message
+  #      content matters — a bare non-zero exit here leaves the operator with a
+  #      claimed tag and no instruction.
+  _t_label="U-18d rebuild failure HALTs the stamp and names the builder + skill"
+  {
+    local _sb18d; _sb18d="$(_st_pkg_sandbox "widget-fail")"
+    local _save18d="$CLAIM_REPO_ROOT"
+    : > "$(_st_f stamp_commits)"; : > "$(_st_f rebuild_calls)"; : > "$(_st_f commit_paths)"
+    printf '1\n' > "$(_st_f rebuild_rc)"          # force the rebuild seam to fail
+    CLAIM_REPO_ROOT="$_sb18d"; STAMP_FILES=("operations/skills/fixtureops/SKILL.md")
+    _ct_run_err _stamp_release_identity "v3.99" "widget-fail" "deadbeefcafe1234"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save18d"; STAMP_FILES=()
+    printf '0\n' > "$(_st_f rebuild_rc)"
+    _ct_eq "$REPLY_RC" "1" "U-18d a failed rebuild makes the stamp return non-zero"
+    grep -q 'build-skill-packages.sh' <<< "$err" \
+      || _ct_fail "U-18d the HALT message must name build-skill-packages.sh (the command to run)"
+    grep -q 'fixtureops' <<< "$err" \
+      || _ct_fail "U-18d the HALT message must name the affected skill"
+    _ct_eq "$(_st_stamp_n)" "0" "U-18d no stamp commit is recorded when the rebuild fails"
+    rm -rf "$_sb18d"
+  }
+
   if [[ $failures -eq 0 ]]; then
-    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-17 incl. real-RELEASE_LOG-parser(header-name-pinned + shifted-column control), real-origin-tags-rc-contract(U-0b: failed-read vs tagless-repo + probe/healthy controls), real-seam-rc-contract-on-unresolvable-identity(U-14a), all-three-claimed_set-arms-fail-closed + their controls(U-17), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, never-bypass-signing + its detector-negative-control(U-6/U-6b), fail-closed-on-unresolvable-repo-identity + its detector-negative-control(U-14/U-14b), arm-unavailable-is-not-arm-empty(U-15), anchor-rc-checks-claimed-set-and-greenfield-fallback + their controls(U-16), claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once)"
+    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-18d incl. real-RELEASE_LOG-parser(header-name-pinned + shifted-column control), real-origin-tags-rc-contract(U-0b: failed-read vs tagless-repo + probe/healthy controls), real-seam-rc-contract-on-unresolvable-identity(U-14a), all-three-claimed_set-arms-fail-closed + their controls(U-17), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, never-bypass-signing + its detector-negative-control(U-6/U-6b), fail-closed-on-unresolvable-repo-identity + its detector-negative-control(U-14/U-14b), arm-unavailable-is-not-arm-empty(U-15), anchor-rc-checks-claimed-set-and-greenfield-fallback + their controls(U-16), claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once, post-CAS-package-rebuild-rides-the-same-commit(U-18) + injected-canonical-vector(U-18b) + cross-grammar-guard-with-control(U-18c) + missing-stamp-file-halts-pre-CAS-with-control(U-18e) + fail-loud-rebuild-error-path(U-18d))"
     return 0
   else
     echo "claim-version.sh --self-test: FAIL ($failures failing fixture(s))"

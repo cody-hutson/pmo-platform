@@ -109,10 +109,14 @@ If the dependency graph contains a cycle (e.g., #A depends on #B, #B depends on 
 
 ### Step 4: Topological Sort
 
-Apply topological sort to the DAG to produce a valid implementation sequence. When multiple valid orderings exist, prefer:
-1. Issues with highest leverage (unblock the most downstream work) first
-2. Lower-risk issues first (validate approach before high-risk changes)
-3. Smaller issues first (faster feedback)
+Apply topological sort to the DAG to produce a valid implementation sequence. When multiple valid orderings exist, the ordering key is **selected by dependency density, not fixed**: apply the sequencing-mode selector in `core/disciplines/discovery-discipline.md` § 2.4, which reads the same internal-edge count against the same `N-1` threshold `review-discipline-principles.md` § 1 rule 14 already defines. The selector is cited here, not restated.
+
+| Selector verdict | Ordering key for the ready set | Defined at |
+|---|---|---|
+| **dense** (`E ≥ N-1`) → **topology-first** | leverage descending, then the tie-breaker | § Leverage Analysis |
+| **flat** (`E < N-1`) → **value/WIP-first** | the tie-breaker key `tie_breaker_key`; concurrent batch size capped by the capacity check | § Tie-Breaker Rule + § Capacity Assessment |
+
+Both keys are defined elsewhere in this document and are not duplicated here. § Tie-Breaker Rule's rejection of leverage as a *tie-breaker* stands unchanged: under topology-first the graph is already built — a dense graph is the mode's precondition — so the circularity objection does not apply, leverage is the *primary* key, and `tie_breaker_key` still resolves ties within equal leverage. Risk-ordering and size-ordering remain rejected in **both** modes, for the reasons § Tie-Breaker Rule gives. This count admits only precedence-bearing edges — soft and file-contention edges do not enter it (§ Hard-vs-Soft Edge Classifier); they constrain adjacency in the technical layer (§ Two Dependency Layers) and never select a mode.
 
 ## Dependency Graph Construction Algorithm: Kahn's Implementation
 
@@ -156,8 +160,12 @@ FUNCTION topological_sort(nodes, edges) -> List[int]:
 
 When multiple nodes have indegree 0 simultaneously, sort by:
 
-1. **Priority descending** — P1 before P2 before P3 before P4 before unlabeled
+1. **Priority descending** — P1 before P2 before P3 before P4 before **unset**
 2. **Issue number ascending** — lower numbers first (older = generally more foundational)
+
+**Priority source + total order.** Priority is read from the issue **body** `### Priority` field (`### Severity` for bug-typed issues; the P-level digit is canonical per `gate-criteria-spec.md` § Gate 1 Adapter G1-06-Bug). There is **no** `priority:` label — `label-taxonomy.md` rule 5 tracks priority in the body. An issue with no P-level resolves **unset** and sorts **after** every P-levelled issue: the total order is `(priority_rank, issue_number)` ascending, where `priority_rank` is 1–4 for P1–P4 and **5** for unset. `release/tools/bundle-issues-parser.py` (`parse_priority_body` / `priority_rank`) is the reference implementation of this rule.
+
+**`tie_breaker_key` — the single name for this key.** `tie_breaker_key(n) = (priority_rank(n), issue_number(n))`, sorted **ascending**. This is the one sort key used everywhere in this document: Kahn's `ready.sort(key=tie_breaker_key)` above, and § Step 5's predecessor sort and sink selection. **Sign convention: ascending, never negated.** `priority_rank` is a *rank* — lower means higher priority — so plain ascending order already yields P1 first and unset last. Negating it (`-priority_rank`) inverts the rule end to end (unset first, P1 last) and nothing fails loudly, so the negated form must never appear. An earlier revision of § Step 5 expressed the same intent as `-priority_of(p)`, which presumed the **inverse** scale (larger number = higher priority) and was undefined for unset; that form is retired so one direction holds throughout this document and in the reference implementation.
 
 Both keys are pure functions of issue data; produces deterministic, reproducible ordering. Per AC4 (reproducibility), the same input produces the same output across runs.
 
@@ -313,15 +321,16 @@ FUNCTION longest_dependency_chain(topo_sorted_nodes, edges, edge_weights, bundle
     # this sort, set iteration order varies with Python hash seed, producing
     # non-reproducible chain identities on ties. Per AC4 + Stage 7 DT
     # F1 [ADJUST].
-    for parent in sorted(nodes_with_edge_to(n, edges),
-                         key=lambda p: (-priority_of(p), p)):
+    # tie_breaker_key is ASCENDING and is NEVER negated — see § Tie-Breaker Rule.
+    for parent in sorted(nodes_with_edge_to(n, edges), key=tie_breaker_key):
       candidate = dist[parent] + edge_weights[(parent, n)]
       if candidate > dist[n]:
         dist[n] = candidate
         pred[n] = parent
 
-  # Find sink with maximum distance (apply tie-breaker: priority-desc → issue-asc)
-  sink = argmax_with_tiebreaker(dist, priority_desc_issue_asc)
+  # Find sink with maximum distance; among equal-distance candidates select the
+  # SMALLEST tie_breaker_key (priority-desc → issue-asc, ascending, never negated).
+  sink = argmax_with_tiebreaker(dist, tie_breaker_key)
 
   # Reconstruct chain backwards
   chain = []
@@ -427,7 +436,7 @@ Leverage measures how much downstream work an issue unblocks:
 | #M | 0 | 0 | None (independent) |
 | #P | 1 | 1 | Low |
 
-**Leverage-based sequencing rule:** Issues with highest leverage score should be implemented earliest, even if they are more complex. Blocking the highest-leverage issue blocks the most work.
+**Leverage-based sequencing rule:** Issues with highest leverage score should be implemented earliest **when the density selector at § Step 4 reads dense** (`E ≥ N-1` → topology-first), even if they are more complex. Blocking the highest-leverage issue blocks the most work. Under a flat verdict this rule does not govern the ready set — § Tie-Breaker Rule does — and leverage remains a reported quantity rather than the ordering key.
 
 ## Blast Radius Analysis
 

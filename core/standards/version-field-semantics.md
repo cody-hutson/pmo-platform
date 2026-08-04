@@ -33,6 +33,8 @@ It IS:
 
 Regex: `^v[0-9]+\.[0-9]+(-[a-z]+)?$`
 
+**Enforcing surface.** This regex is asserted in code as `C6_VERSION_RE` in `core/deploy/tools/check-canonical-structure.sh` — the single predicate behind BOTH `deploy.sh --check` Check 6 and its PR-time CI mirror, so the two surfaces cannot drift from each other. That literal mirrors this section and is not an independent grammar: a change here must land there in the same commit, and vice versa. This regex governs the skill `version:` field only; the release-tag grammar is a different object that additionally admits a three-component patch form, and the two are deliberately not reconciled.
+
 Examples: `v1.2`, `v1.3`, `v2.0`, `v1.2-canary`
 
 Disallowed: `v1.2.1` (no patch level — skills sync with platform minor versions, not patches), `1.2` (missing v-prefix), `v1.2-beta-1` (multi-part suffix), `v1.2-20260421` (no date-stamped values).

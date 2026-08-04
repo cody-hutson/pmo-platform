@@ -30,6 +30,23 @@ Issue references in this file (#291, and the frozen sample issue numbers) are th
 live open-issue corpus the parser is measured against; numbers are a point-in-time
 survey snapshot, not a durable contract — the test re-measures from the frozen
 fixtures, which are self-contained.
+
+### Priority-detector coverage (added with the body-priority repair)
+Two additive assertions guard the body-priority detector against the exact failure
+mode that hid the defect it replaces — a detector that resolves NOTHING while every
+test still passes, because nothing ever asserted that extraction was non-empty:
+
+  T-12 (regression, no fixture change) — the >=90% combined-clean AC above must be
+       UNCHANGED by the priority work, proving priority never entered parse_status.
+  T-13 (non-empty extraction) — every frozen body must resolve to a value in
+       {"P1".."P4", None} (domain guard), AND at least one must resolve non-None
+       (liveness guard). Without the second half the suite passes on a dead detector.
+
+Audit baseline for the liveness guard: measured over the frozen fixture set
+(conformant_bundleable_sample.json, frozen 2026-06-07, N=40) — 22 of 40 resolve a
+P-level. The assertion is >=1, not ==22, so it constrains liveness without pinning a
+count that a future fixture refresh would rot; the observed count is printed so a
+silent collapse from 22 toward 1 is visible in the run output.
 """
 
 import importlib.util
@@ -127,11 +144,38 @@ def main() -> int:
             f"AC FAIL: combined-clean {clean}/{n} = {rate:.1%} < {AC_THRESHOLD:.0%}"
         )
 
+    # 4. T-13 priority-detector guards over the same frozen sample.
+    #    (a) domain: every body resolves inside {"P1".."P4", None} — no other value.
+    #    (b) liveness: at least one body resolves non-None. This is the guard the
+    #        replaced label regex never had: it returned None for every issue on
+    #        every run, and no test noticed, because no test asserted extraction was
+    #        non-empty. A suite that cannot fail on a dead detector is not a suite.
+    valid_domain = {"P1", "P2", "P3", "P4", None}
+    resolved = 0
+    for num, rec in fixtures.items():
+        got = bip.parse_priority_body(rec["body"])
+        if got not in valid_domain:
+            failures.append(
+                f"#{num}: parse_priority_body returned {got!r}, outside "
+                f"{{'P1'..'P4', None}}"
+            )
+        if got is not None:
+            resolved += 1
+            if bip.priority_rank(got) not in (1, 2, 3, 4):
+                failures.append(f"#{num}: priority_rank({got!r}) outside 1..4")
+    if resolved < 1:
+        failures.append(
+            f"T-13 liveness: 0 of {n} frozen bodies resolved a P-level — the "
+            f"detector is silently dead (this is the failure mode the priority "
+            f"repair exists to prevent recurring)"
+        )
+
     # Report
     print(f"conformant-bundleable frozen sample: N={n}")
     print(f"  combined-clean    = {clean}/{n} = {rate:.1%}  (AC: >= {AC_THRESHOLD:.0%})")
     print(f"  clean-or-deferred = {clean + deferred}/{n} = {(clean + deferred) / n:.1%}")
     print(f"  per-class recovery cases: {len(CLASS_RECOVERY)}  residual set-aside: {len(RESIDUAL_FAILED)}")
+    print(f"  priority resolved = {resolved}/{n}  (T-13 liveness guard: >= 1)")
 
     if failures:
         print("\nTEST FAIL:", file=sys.stderr)
