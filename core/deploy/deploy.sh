@@ -3773,10 +3773,50 @@ cmd_check() {
   # flag_warn_or_issue — Checks 8-10 helper. In enforce-mode, acts like a normal
   # FAIL (increments ISSUES). In warn-mode, logs a WARN + appends to jsonl but
   # does NOT increment ISSUES (enabling shakedown without false-positive breaks).
+  #
+  # MODE PRECEDENCE — MOST-SPECIFIC-WINS. The mode this helper switches on is
+  # RESOLVED PER CHECK (resolve_check_mode "$check_id"), NOT read from the shared
+  # cohort variable. A per-check `<check_id>.mode` file, when present and carrying a
+  # valid value, WINS OUTRIGHT over the shared deploy-check.mode — IN BOTH DIRECTIONS:
+  #
+  #   per-check `warn`    under shared `enforce`  ->  WARN  (hold a newly-landed gate
+  #                                                          at warn while the rest of
+  #                                                          the suite enforces)
+  #   per-check `enforce` under shared `warn`     ->  FAIL  (graduate ONE gate ahead of
+  #                                                          the cohort after its
+  #                                                          shakedown window)
+  #
+  # No per-check file (or an invalid value) -> the shared $DEPLOY_CHECK_MODE, exactly
+  # as before. Mode files are operator-instance runtime state and are NEVER committed
+  # (see resolve_check_mode's contract), so a clean clone resolves every check to the
+  # shared mode and this helper behaves byte-identically to its pre-resolution form.
+  #
+  # WHY THE RESOLUTION LIVES HERE AND NOT AT THE CALL SITES. This helper is the SINGLE
+  # WARN-vs-FAIL decision point for every check that routes through it. Switching on
+  # the shared variable here silently DEFEATED every per-check override: a check could
+  # resolve its own mode into a local, take the `else` leg on a resolved `warn`, and
+  # still emit FAIL because this helper re-decided on the shared mode. That defeated
+  # the advertised independent-graduation mechanism for the checks that already call
+  # resolve_check_mode and then emit through here, and it broke the ordinary
+  # enforce-flip rollout (flip the suite to enforce; hold the new gates at warn).
+  # Resolving here makes this helper and resolve_check_mode agree on ONE precedence
+  # model, so a future check inherits working per-check gating instead of re-deriving a
+  # per-site workaround. Do NOT "simplify" this back to the shared variable.
+  #
+  # ORDERING: resolve_check_mode is defined BELOW this function. That is safe and
+  # deliberate — bash resolves a function body at CALL time, and every call site of
+  # this helper is below both definitions. Keep it that way.
+  #
+  # NOT CHANGED BY THIS RESOLUTION: what each check FINDS. The per-check mode governs
+  # only the WARN-vs-FAIL escalation of an already-made finding. The `off` kill-switch
+  # on the outer per-check block guards (`[[ "$DEPLOY_CHECK_MODE" != "off" ]]`) is a
+  # DETECTION gate and is deliberately left reading the shared mode.
   flag_warn_or_issue() {
     local check_id="$1"
     local detail="$2"
-    case "$DEPLOY_CHECK_MODE" in
+    local _check_mode
+    _check_mode="$(resolve_check_mode "$check_id")"
+    case "$_check_mode" in
       enforce)
         log "  FAIL:  $check_id — $detail"
         ISSUES=$((ISSUES + 1))
@@ -3828,9 +3868,15 @@ cmd_check() {
   # carries an invalid value, FALLS BACK to the caller-supplied default (2nd arg,
   # itself defaulting to the shared $DEPLOY_CHECK_MODE). Echoes the resolved mode
   # (enforce|warn|off). This lets one check graduate warn→enforce independently
-  # of the ~12-check shared-mode cohort without touching any other check's
-  # behavior — every other check keeps reading $DEPLOY_CHECK_MODE directly and is
+  # of the shared-mode cohort without touching any other check's behavior: a check
+  # with no mode file resolves to the caller default (the shared mode) and is
   # byte-for-byte unchanged.
+  #
+  # THIS IS THE ONE PRECEDENCE MODEL. flag_warn_or_issue — the shared WARN-vs-FAIL
+  # emitter — calls this resolver with its own check_id, so a per-check override is
+  # honored for EVERY check that routes through it, not only for the checks that
+  # resolve a mode into a local first. Whatever this resolver returns is what the
+  # emitter escalates on; there is no second, contradicting rule anywhere.
   #
   #   resolve_check_mode "<check_id>"              # fallback = shared mode
   #   resolve_check_mode "<check_id>" "<default>"  # fallback = caller's default
@@ -7534,28 +7580,30 @@ cmd_check() {
         # "NOT_FREE <candidate> <colliding-tag>"
         c41_detail="${c41_verdict#NOT_FREE }"
         # version-freeness.mode is its OWN per-check mode file (resolve_check_mode),
-        # decoupled from the shared cohort; but flag_warn_or_issue switches on the
-        # shared $DEPLOY_CHECK_MODE. Honor the per-check resolution: only FAIL (++ISSUES)
-        # when THIS check's resolved mode is enforce; otherwise WARN regardless of the
-        # shared mode, so version-freeness graduates independently.
-        if [[ "$VERSION_FREENESS_MODE" == "enforce" ]]; then
-          flag_warn_or_issue "version-freeness" \
-            "candidate $c41_detail already claimed — re-version BEFORE merge; a Stage-12 Phase B3 tag push would be rejected after the merge lands with stale labels"
-          [[ "$DEPLOY_CHECK_MODE" == "enforce" ]] || { ISSUES=$((ISSUES + 1)); log "  FAIL:  version-freeness — candidate $c41_detail already claimed (per-check enforce)"; }
-        else
-          flag_warn_or_issue "version-freeness" \
-            "candidate $c41_detail already claimed — re-version BEFORE merge; a Stage-12 Phase B3 tag push would be rejected after the merge lands with stale labels"
-        fi
+        # decoupled from the shared cohort. flag_warn_or_issue now resolves that SAME
+        # per-check mode itself (most-specific-wins), so the escalation is already
+        # correct here and needs no per-site compensation: a resolved `enforce` FAILs
+        # even when the shared mode is warn, and a resolved `warn` WARNs even when the
+        # shared mode is enforce. The hand-rolled
+        # `[[ $DEPLOY_CHECK_MODE == enforce ]] || ISSUES=$((ISSUES + 1))` compensation
+        # that used to sit here predates that resolution; keeping it would now
+        # DOUBLE-COUNT against the helper's own increment. Its two arms emitted an
+        # identical detail string, so collapsing them changes no emitted byte.
+        flag_warn_or_issue "version-freeness" \
+          "candidate $c41_detail already claimed — re-version BEFORE merge; a Stage-12 Phase B3 tag push would be rejected after the merge lands with stale labels"
         ;;
       UNDECIDABLE)
         # "UNDECIDABLE <candidate> <reason>" — fail-closed semantics bind the merge
         # gate (the probe); on the lifecycle surface this is reported (WARN/enforce
         # per the per-check mode) so the operator sees the untaggable state early.
         c41_detail="${c41_verdict#UNDECIDABLE }"
+        # Same removal as the NOT_FREE arm above: flag_warn_or_issue resolves
+        # version-freeness.mode itself, so the compensation line would double-count.
+        # Unlike NOT_FREE, the two arms carry DIFFERENT detail strings, so the branch is
+        # retained to keep both messages byte-identical to their pre-fix form.
         if [[ "$VERSION_FREENESS_MODE" == "enforce" ]]; then
           flag_warn_or_issue "version-freeness" \
             "freeness undecidable ($c41_detail) — fail-closed; operator must resolve the untaggable state before merge"
-          [[ "$DEPLOY_CHECK_MODE" == "enforce" ]] || { ISSUES=$((ISSUES + 1)); log "  FAIL:  version-freeness — undecidable ($c41_detail) (per-check enforce)"; }
         else
           flag_warn_or_issue "version-freeness" \
             "freeness undecidable ($c41_detail) — fail-closed at the merge gate; operator must resolve the untaggable state before merge"
