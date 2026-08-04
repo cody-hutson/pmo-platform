@@ -356,12 +356,17 @@ Everything that defines how the PMO works as software:
 - Compiled packages (`packages/`)
 
 ### core/rules/ (Claude Code's operating manual)
-How Claude Code operates when working on the platform:
+How Claude Code operates when working on the platform — 8 files:
+- bypass-mode-readiness.md — generated readiness index for bypass-mode operation
+- decision-time-adherence.md — the adherence-checkpoint index that surfaces a held rule at the decision moment
+- doc-link-maintenance.md — stale cross-reference detection and remediation
 - git-workflow.md — branching, commits, PR process
-- release-process.md — 13-stage pipeline rules
-- skill-deployment.md — deployment paths and procedures
-- operations-bridge.md — cross-domain interaction rules
 - governance-files.md — contextual loading for governance edits
+- harness-deployment.md — runtime-harness deployment procedures
+- operations-bridge.md — cross-domain interaction rules
+- skill-deployment.md — deployment paths and procedures
+
+`release-process.md` (the 13-stage pipeline rules) is **not** a `core/rules/` file — it is sourced from `release/governance/release-process.md` and mirrored into the deployed `.claude/rules/` set, which is therefore 9 files rather than 8.
 
 ### projects/ (runtime data)
 The actual work being managed by the platform:

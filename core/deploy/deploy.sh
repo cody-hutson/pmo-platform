@@ -3987,7 +3987,7 @@ cmd_check() {
   #
   # The engineering/rules mirror was DROPPED per the layout §8.3. Drift means
   # "workspace mirror diverged from v2 source; re-run ./deploy.sh --deploy to
-  # restore". The pair set covers all 8 files under .claude/rules/ (including
+  # restore". The pair set covers all 9 files under .claude/rules/ (including
   # git-workflow.md and governance-files.md surfaced by the Stage 5 spec).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 9: Mirror-pair sync (source-to-workspace)"
@@ -3999,6 +3999,7 @@ cmd_check() {
       "core/rules/operations-bridge.md:$DEPLOY_ROOT/.claude/rules/operations-bridge.md"
       "core/rules/git-workflow.md:$DEPLOY_ROOT/.claude/rules/git-workflow.md"
       "core/rules/governance-files.md:$DEPLOY_ROOT/.claude/rules/governance-files.md"
+      "core/rules/decision-time-adherence.md:$DEPLOY_ROOT/.claude/rules/decision-time-adherence.md"
       "release/governance/release-process.md:$DEPLOY_ROOT/.claude/rules/release-process.md"
     )
     for pair in "${MIRROR_PAIRS[@]}"; do
