@@ -11,8 +11,8 @@
 # Usage:
 #   ./query-pipeline-event.sh --release <milestone-slug>                       # all events in a release (join-key aware)
 #   ./query-pipeline-event.sh --release v2.07a                                 # same, resolved vX.Y -> slug via RELEASE_LOG
-#   ./query-pipeline-event.sh --version v2.07a                                 # RAW version-column filter (no resolution)
-#   ./query-pipeline-event.sh --version v2.07a --stage 12                      # release + stage filter
+#   ./query-pipeline-event.sh --version v2.07a                                 # RAW version-column filter: matches ONLY rows literally keyed 'v2.07a' (legacy rows)
+#   ./query-pipeline-event.sh --release <milestone-slug> --stage 12            # release + stage filter
 #   ./query-pipeline-event.sh --subject "<id>"                                  # all events for a given subject
 #   ./query-pipeline-event.sh --event-type self-repair                         # all retries/escalates/rollbacks
 #   ./query-pipeline-event.sh --event-type release-synthesis --event-subtype learnings-triple  # subtype filter
@@ -23,7 +23,7 @@
 #   ./query-pipeline-event.sh --count                                          # row count summary
 #
 # Flags can compose:
-#   ./query-pipeline-event.sh --version v2.07a --event-type decision --r-class
+#   ./query-pipeline-event.sh --release <milestone-slug> --event-type decision --r-class
 #
 # --release vs --version (pipeline-event-log-schema.md § 2a):
 #   --version is the RAW version-column filter and is unchanged.

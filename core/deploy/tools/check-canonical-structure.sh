@@ -69,6 +69,18 @@ C6_BYTE_THRESHOLD=25600
 C6_FM_FLOOR=3
 # Failure-mode heading pattern (BYTE-ALIGNED with deploy.sh Check 6).
 C6_FM_RE='^### .+ — (TRIG|INPUT|PROC|OUT|HAND)[[:space:]]*$'
+# Skill version-field format. SINGLE SOURCE: core/standards/version-field-semantics.md
+# § Format — this literal MIRRORS that section rather than inventing a grammar;
+# keep the two in lockstep and change neither alone. vMAJOR.MINOR with an optional
+# single lowercase sentinel suffix (the -canary sentinel per ADR-04, which this
+# grammar admits by construction — the canary is exempt from the D-Refs threshold
+# only, never from the version-field requirement).
+#
+# NOT the release-tag grammar. Release tags admit a 3-component patch form
+# (release/tools/version-grammar.sh) that a skill version: field forbids outright,
+# because skills sync to platform MINOR versions, not to patches. The two grammars
+# govern different objects and their divergence is deliberate.
+C6_VERSION_RE='^v[0-9]+\.[0-9]+(-[a-z]+)?$'
 
 # Per-module skill arrays — populated at runtime by run_check() from deploy.sh
 # (the same extract_roster_array helper that builds the scan roster). Declared
@@ -155,8 +167,29 @@ check_one_skill() {
     fi
   done
 
+  # (a.2) Frontmatter version FORMAT. Runs immediately after the presence loop and
+  # BEFORE the exemption pass-through, for the same reason (a) does: the exemption
+  # is D-Refs-only, and version-field-semantics.md § Scope of Enforcement states
+  # explicitly that the canary is NOT exempt from the version-field requirement.
+  # Guarded on presence so a missing field yields exactly ONE FAIL, not two.
+  # Extraction: first ^version: line, key stripped, CR stripped (a CRLF checkout
+  # would otherwise produce an invisible, unactionable FAIL), leading and trailing
+  # whitespace trimmed. An empty value survives as the empty string and correctly
+  # fails — `grep -qE "^version:"` alone matches a bare `version:` with nothing
+  # after the colon, which is one of the malformations this branch exists to catch.
+  if grep -qE "^version:" "$src"; then
+    local version_value
+    version_value="$(grep -m1 -E "^version:" "$src" | tr -d '\r' \
+                     | sed -e 's/^version:[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    if ! printf '%s' "$version_value" | grep -qE "$C6_VERSION_RE"; then
+      echo "FAIL:  $skill — version: '$version_value' does not match the required format vMAJOR.MINOR[-suffix] (regex $C6_VERSION_RE per core/standards/version-field-semantics.md § Format)"
+      skill_ok=false
+      had_fail=1
+    fi
+  fi
+
   # Exemption pass-through (canary-by-design): exempt from the D-Refs threshold
-  # only. The frontmatter check above already ran.
+  # only. The frontmatter checks above already ran.
   if [[ -n "$exemption_list" && -f "$exemption_list" ]] && grep -Fxq "$skill" "$exemption_list" 2>/dev/null; then
     [[ "$skill_ok" == "true" ]] && echo "OK:    $skill (exempted from threshold)"
     [[ "$had_fail" -eq 1 ]] && return 1
@@ -436,6 +469,41 @@ STUB
     pass=$((pass + 1))
   else
     echo "self-test FAIL: CANARY_SKILLS member did not resolve to release/ (expected 'release')" >&2
+    return 1
+  fi
+
+  # Assertion 9 — version-format SENSITIVITY arm. A malformed value turns the
+  # check red AND the FAIL text names the observed value (deploy.sh Check 6
+  # specifies that it surfaces the current value). This is the arm that proves the
+  # format branch is live: the live population conforms 56/56, so a green scan is
+  # NOT evidence the predicate exists — which is precisely how the documented gate
+  # went missing for as long as it did. '3.99' is one of the exact malformations
+  # the defect report names (missing v-prefix).
+  _write_compliant
+  sed 's/^version: v1\.00$/version: 3.99/' "$fx" > "$fx.tmp" && mv "$fx.tmp" "$fx"
+  local a9_out a9_rc
+  a9_out="$(run_check "$tmp" "$tmp/deploy.sh" "" 2>&1)"; a9_rc=$?
+  if [[ $a9_rc -eq 1 ]] \
+     && grep -q 'does not match the required format' <<< "$a9_out" \
+     && grep -q "3\.99" <<< "$a9_out"; then
+    pass=$((pass + 1))
+  else
+    echo "self-test FAIL: malformed 'version: 3.99' did not produce a format FAIL naming the observed value (expected exit 1, got $a9_rc)" >&2
+    return 1
+  fi
+
+  # Assertion 10 — version-format SPECIFICITY arm. The sanctioned '-canary'
+  # sentinel is ACCEPTED. Assertion 9 on its own is a sensitivity-only probe; this
+  # arm is what makes the pair discriminating, and it pins the sentinel against a
+  # future over-tightening of C6_VERSION_RE. The canary must clear this gate by
+  # GRAMMAR — never by an exemption entry, which would disarm assertion 9's own
+  # control by routing the fixture around the predicate it exists to exercise.
+  _write_compliant
+  sed 's/^version: v1\.00$/version: v1.11-canary/' "$fx" > "$fx.tmp" && mv "$fx.tmp" "$fx"
+  if run_check "$tmp" "$tmp/deploy.sh" "" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+  else
+    echo "self-test FAIL: sanctioned '-canary' sentinel version was rejected (expected exit 0) — C6_VERSION_RE has drifted from version-field-semantics.md § Format" >&2
     return 1
   fi
 
