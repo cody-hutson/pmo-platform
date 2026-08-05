@@ -55,8 +55,8 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-105](ADR-105-release-corpus-normalization.md) | The release corpus has two typed file sources and two run-scoped inputs, one projector, and per-field provenance — not one authoritative ledger | Accepted | 2026-08-02 | governance-hardening |
 | [ADR-110](ADR-110-composition-lock-at-stage-4-entry.md) | A Milestone's composition is locked to additions at Stage-4 Planning entry; the lock binds the act, not the disposition, and its unmarked state is not eligibility | Proposed | 2026-08-03 | release-bundle-and-sequence-gates |
 | [ADR-111](ADR-111-priority-carrier-agnostic-p-level-detection.md) | The P-level digit is the canonical priority satisfier; the carrier is not part of the contract | Proposed | 2026-08-03 | release-bundle-and-sequence-gates |
-| [ADR-115](ADR-115-adr-number-claim-binds-at-merge.md) | An ADR number is allocated at authorship and bound at merge; only the mainline binds, and the reconciliation is tooled | Proposed | 2026-08-04 | adr-corpus-conformance |
-| [ADR-117](ADR-117-adr-index-derived-surface-and-scoped-conformance-claim.md) | The ADR index is a derived surface and cannot drift; the conformance claim is scoped to a named baseline and its residual is stated | Proposed | 2026-08-04 | adr-corpus-conformance |
+| [ADR-115](ADR-115-adr-number-claim-binds-at-merge.md) | An ADR number is allocated at authorship and bound at merge; only the mainline binds, and the reconciliation is tooled | Accepted | 2026-08-04 | adr-corpus-conformance |
+| [ADR-117](ADR-117-adr-index-derived-surface-and-scoped-conformance-claim.md) | The ADR index is a derived surface and cannot drift; the conformance claim is scoped to a named baseline and its residual is stated | Accepted | 2026-08-04 | adr-corpus-conformance |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.

@@ -1,10 +1,10 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-116 — The ADR deciders carve-out is name-only; the account handle is never sanctioned
-status: Proposed (flips to Accepted at this release's Stage 9 plan-review gate)
+status: Accepted — ratified by the operator at the Stage 13 close gate for the `adr-corpus-conformance` release, 2026-08-05, shipped as v4.11. The flip is verified against this file's `status:` field, never inferred from milestone closure.
 date: 2026-08-04
 release: adr-corpus-conformance
-deciders: "Workspace owner (ratified at the consolidated Wave-1 gate and re-ratified at this release's Stage 9 plan-review gate); reconciliation designed at Stage 5 Solutioning, authored at Stage 6"
+deciders: "Workspace owner (ratified at the consolidated Wave-1 gate and re-ratified at this release's Stage 13 close gate); reconciliation designed at Stage 5 Solutioning, authored at Stage 6"
 tags: [architecture, adr, governance, depersonalization, public-surface, security, immutability, reversibility-moderate]
 source_observations:
   - "Two shipped gates read the same carve-out incompatibly. The depersonalization gate suppressed the WHOLE deciders line on an ADR path, so an account handle written there passed; the ADR durability lint's handle rule fired on that same line. One line, two opposite verdicts, both defensible readings of the text as written."
@@ -19,7 +19,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent. It flips to **Accepted** at this release's Stage-9 plan-review gate; per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure.
+**Accepted** — ratified by the operator at the Stage 13 close gate for the `adr-corpus-conformance` release, 2026-08-05, shipped as **v4.11**. Authored at Stage 6 per the Stage-6 ADR-authoring precedent. The ratification was rendered at Stage 13, not at Stage 9 as this record originally promised: no pipeline stage performs that flip, and the promise is a spec gap tracked outside this record rather than a property of this decision. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
 
 **Numbering.** Derived at Engineering Commit 0 against the mainline anchor per the rule recorded in [ADR-115](../../release/ADRs/ADR-115-adr-number-claim-binds-at-merge.md): the mainline held 109, this release's earlier records took 110 and 111, so this one takes 112.
 

@@ -1,10 +1,10 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-115 — An ADR number is allocated at authorship and bound at merge; only the mainline binds, and the reconciliation is tooled
-status: Proposed (flips to Accepted at this release's Stage 9 plan-review gate)
+status: Accepted — ratified by the operator at the Stage 13 close gate for the `adr-corpus-conformance` release, 2026-08-05, shipped as v4.11. The flip is verified against this file's `status:` field, never inferred from milestone closure.
 date: 2026-08-04
 release: adr-corpus-conformance
-deciders: "Workspace owner (ratifies at this release's Stage 9 plan-review gate); direction chosen at the Stage-4 gate, mechanism designed at Stage 5 Solutioning, authored at Stage 6"
+deciders: "Workspace owner (ratified at this release's Stage 13 close gate); direction chosen at the Stage-4 gate, mechanism designed at Stage 5 Solutioning, authored at Stage 6"
 tags: [architecture, adr, governance, concurrency, release-mechanics, tooling, portability, reversibility-moderate]
 source_observations:
   - "Three collisions observed in the live corpus. v3.80: two releases each authored ADR-087; the later claimant renumbered by hand to ADR-088. v3.98: ADR-098 was authored independently by two releases while a third held 099 and a fourth took 100. A third release renumbered its ADR block twice inside a single Stage 5 as sibling branches merged ahead of it."
@@ -20,7 +20,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent. It flips to **Accepted** at this release's Stage-9 plan-review gate; per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure.
+**Accepted** — ratified by the operator at the Stage 13 close gate for the `adr-corpus-conformance` release, 2026-08-05, shipped as **v4.11**. Authored at Stage 6 per the Stage-6 ADR-authoring precedent. The ratification was rendered at Stage 13, not at Stage 9 as this record originally promised: no pipeline stage performs that flip, and the promise is a spec gap tracked outside this record rather than a property of this decision. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
 
 **Numbering.** This record's number was derived at Engineering Commit 0 against the mainline anchor, per the rule the record itself ratifies — the mainline held 109 and this release's earlier record took 110, so this one takes 111. At that instant four sibling branches held unmerged claims on 110 through 114. Under the rejected `max(claimed_set) + 1` reading this record would have taken 115 and landed a four-number hole on the mainline. The record dogfoods its own decision, and the alternative it rejects was not hypothetical at the moment of authoring.
 

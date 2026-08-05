@@ -1,10 +1,10 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-117 — The ADR index is a derived surface and cannot drift; the conformance claim is scoped to a named baseline and its residual is stated"
-status: Proposed (flips to Accepted at this release's Stage 9 plan-review gate)
+status: Accepted — ratified by the operator at the Stage 13 close gate for the `adr-corpus-conformance` release, 2026-08-05, shipped as v4.11. The flip is verified against this file's `status:` field, never inferred from milestone closure.
 date: 2026-08-04
 release: adr-corpus-conformance
-deciders: "Workspace owner (ratifies at this release's Stage 9 plan-review gate); the index-as-derived-surface direction and the conformance-claim scoping were both rendered at the Collective Review scope-lock, designed at Stage 5 Solutioning, authored at Stage 6"
+deciders: "Workspace owner (ratified at this release's Stage 13 close gate); the index-as-derived-surface direction and the conformance-claim scoping were both rendered at the Collective Review scope-lock, designed at Stage 5 Solutioning, authored at Stage 6"
 tags: [architecture, adr, governance, derived-surface, duplicate-source-discipline, projection, conformance, audit-baseline, reversibility-cheap]
 source_observations:
   - "The release ADR README carried FOUR independent hand-maintained enumerations of ONE file set — an index table, a prose roster inside the naming-convention paragraph, a cross-numbering table, and a scope-narrative paragraph — and at the release baseline they topped out at four DIFFERENT numbers. Four maxima over one population is not four stale copies of one fact; it is the proof that the copies drift independently, at independent rates, with nothing reconciling them."
@@ -21,7 +21,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent. It flips to **Accepted** at this release's Stage-9 plan-review gate; per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure.
+**Accepted** — ratified by the operator at the Stage 13 close gate for the `adr-corpus-conformance` release, 2026-08-05, shipped as **v4.11**. Authored at Stage 6 per the Stage-6 ADR-authoring precedent. The ratification was rendered at Stage 13, not at Stage 9 as this record originally promised: no pipeline stage performs that flip, and the promise is a spec gap tracked outside this record rather than a property of this decision. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
 
 **Numbering.** The number was bound against the mainline only, per the binding rule this release's own sibling record establishes. It is the next free slot over the union of the mainline and this branch's tree, and it was chosen by measurement rather than by increment: the two adjacent candidates were each simulated against the merge union, and both introduced a defect this one does not — the lower added a third duplicate, the higher landed a gap. As with every ADR, the number is allocated at authorship and bound at merge; if a sibling merges ahead of this record, the reconciliation is tooled and the record's own Status block will carry the provenance note.
 
