@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.07] - 2026-08-04
+
+A release bundle closes to new work once planning starts, and four bundling checks that silently did nothing now actually run.
+
+[Full notes](release/releases/notes/v4.07_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.07)
+
 ## [v4.06] - 2026-08-03
 
 The release history stops being four hand-kept copies of one fact, and the file that holds it is 81% smaller without losing a byte.

@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.07 | release-bundle-and-sequence-gates | 2026-08-04 | — | #4568 | [notes/v4.07_RELEASE_NOTES.md](notes/v4.07_RELEASE_NOTES.md) |
 | v4.06 | governance-hardening | 2026-08-03 | — | #4564 | [notes/v4.06_RELEASE_NOTES.md](notes/v4.06_RELEASE_NOTES.md) |
 | v4.05 | corpus-integrity-lints-and-refs | 2026-08-02 | — | #4453 | [notes/v4.05_RELEASE_NOTES.md](notes/v4.05_RELEASE_NOTES.md) |
 | v4.04 | check-enforcement-fidelity | 2026-08-01 | — | #4334 | [notes/v4.04_RELEASE_NOTES.md](notes/v4.04_RELEASE_NOTES.md) |
