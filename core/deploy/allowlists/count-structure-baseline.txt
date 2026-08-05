@@ -55,7 +55,6 @@ core/schemas/stage-io-contracts.md	7a44b9c9f125abd1	pre-existing:list
 core/schemas/touchpoint-phaseout-schema.md	263f7aea12c70a91	pre-existing:table
 core/skills/eval-writer/references/acceptance-assertion-type.md	9699e699de6e57f2	pre-existing:table
 core/skills/eval-writer/references/acceptance-assertion-type.md	a31b661ac63dcb3b	pre-existing:table
-core/skills/pmo-qa-auditor/SKILL.md	20c869e085281b0d	pre-existing:list
 core/skills/pmo-qa-auditor/references/failure-mode-detectors.md	ba6e91c6c7a76558	pre-existing:table
 core/skills/skill-compliance-auditor/SKILL.md	164b392d407bbf3d	pre-existing:list
 core/specs/engagement-charter.md	e3e306fcf2b0b7a0	pre-existing:list
