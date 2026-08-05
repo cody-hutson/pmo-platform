@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.11] - 2026-08-05
+
+Every decision record now meets one standard, the list of them is generated rather than typed, and two changes can add records at once.
+
+[Full notes](release/releases/notes/v4.11_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.11)
+
 ## [v4.10] - 2026-08-05
 
 Overlapping skill triggers are separated and held apart by a standing check, and skills stop asserting things about themselves that are no longer true.
