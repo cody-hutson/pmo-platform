@@ -8,6 +8,14 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.10 (2026-08-05) — Skills with overlapping triggers now route cleanly, and stay that way
+
+### v4.09 (2026-08-05) — A held rule now fires at the moment it is needed
+
+### v4.08 (2026-08-05) — Release records stop naming a version before it exists
+
+### v4.07 (2026-08-04) — Once planning starts, a release stops changing underneath it
+
 ### v4.06 (2026-08-03) — One release record, three generated views, and a file you can actually read
 
 ### v4.05 (2026-08-02) — Claims the documentation makes about itself are now checked

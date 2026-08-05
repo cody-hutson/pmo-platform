@@ -1,7 +1,7 @@
 ---
 name: pmo-process-designer
 description: >
-  Converts business context into structured, traceable requirements and process documentation. Modes: Requirements definition · Workflow documentation · Gap analysis · Traceability matrix · Compliance mapping. Use when uploading business requirements, FDDs, or Jira exports. Triggers: "document this process", "build the requirements", "build the traceability matrix", "write the FRD", "trace from requirement to Jira", "what's the gap."
+  Converts business context into structured, traceable requirements and process documentation. Modes: Requirements definition · Workflow documentation · Gap analysis · Traceability matrix · Requirements review (cross-artifact). Use when uploading business requirements, FDDs, or Jira exports. Triggers: "build the requirements", "build the traceability matrix", "write the FRD", "document this process", "trace requirement to Jira", "gap analysis on these requirements", "are the requirements covered in the design".
 version: v2.01
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true

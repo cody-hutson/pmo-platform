@@ -144,7 +144,7 @@ last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 
 | # | Read source | Purpose | Required? |
 |---|---|---|---|
-| 1 | `CLAUDE.md` + `.claude/rules/` (all 7 files) | Workspace governance baseline | YES |
+| 1 | `CLAUDE.md` + `.claude/rules/` (every file in the deployed rules set — the cardinality is owned by `core/deploy/deploy.sh` Check 9 `MIRROR_PAIRS`, not restated here) | Workspace governance baseline | YES |
 | 2 | `projects/_config/SESSION_STATE.md` (Layer 2) | Workspace-level session handoff (cross-release context) | YES — if exists |
 | 3 | `gh api repos/[OPERATOR_GITHUB]/pmo-platform/milestones?state=open --paginate` | Identify active milestone(s) | YES |
 | 4 | `release/releases/plans/<slug>_RELEASE_PLAN.md` from release branch OR main | Stage 4 release plan (scope, sequence, D-Gate verdicts) | YES — if file exists; fallback: Stage 4 sub-task comment per [`hub-spoke-bridge.md` Procedure 0 § Canonical location](../../release/references/how-to/hub-spoke-bridge.md) |

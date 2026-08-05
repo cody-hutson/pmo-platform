@@ -108,13 +108,13 @@ This file complements pmo-qa-auditor's G-series gates: G-gates audit skill outpu
 
 | Layer | Gate | Audits |
 |---|---|---|
-| Platform contracts | pmo-qa-auditor G1–G8 | Skill outputs against documented contracts (per-skill-output-contracts.md), evidence labels, reversibility tiers, failure-mode structure, etc. |
+| Platform contracts | the `pmo-qa-auditor` gate set — read from that skill's own SKILL.md, § 2. Gate Results Table, the sole authority on which gates it ships; never restated here as a literal or a letter range, because a frozen gate-set claim goes stale the release after it is written | Skill outputs against documented contracts (per-skill-output-contracts.md), evidence labels, reversibility tiers, failure-mode structure, etc. |
 | Behavioral baseline | regression-checks.md (this file) | Skill behavior against its own prior-version baseline |
 
 Complementary, not redundant. G-gates catch contract drift (output missing required section); regression-checks.md catches behavioral drift (skill stops triggering on what it used to trigger on, or starts triggering on what it shouldn't).
 
 The refiner populates both in coordination:
-- Workflow step 8 → registers per-skill-output-contracts.md (G1–G8 surface)
+- Workflow step 8 → registers per-skill-output-contracts.md (the gate-audited contract surface)
 - Workflow step 7 → registers regression-checks.md (behavioral surface)
 
 ## Relationship to the mirror-sync check in deploy.sh --check

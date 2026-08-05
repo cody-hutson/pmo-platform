@@ -227,6 +227,94 @@ Rewrite using the formula: **state the observable outcome the system must produc
 
 ---
 
+## 4b. Usability ACs for Capability-Class Items
+
+§4 governs **over**-definition — a HOW committed too early. This section governs the opposite failure: an AC set that is fully well-formed and still cannot tell whether the thing works.
+
+**The failure.** A capability can pass every acceptance criterion and all of CI while shipping **dormant** — verified structurally present, but not actually usable. An AC set that asserts only NOUNS ("a roster template ships", "the four consuming skills reference the graph view", "the schema changed") is structurally incapable of catching a missing activation or wiring path: every assertion is true, and on a fresh install the capability does nothing, because the file the skills are instructed to read is never seeded. Presence ACs are necessary; they are not sufficient.
+
+**The rule.** A **capability-class** work item carries at least one **usability AC** — an observable end-to-end behavior the capability performs AFTER install/deploy, stated as a VERB exercised against a named, populated fixture — in addition to its presence ACs. The usability AC is additive: nothing about the presence ACs changes. An item that is not capability-class names its exempt class instead. The enforcement surface is the Triage readiness gate criterion **G1-05b branch (ii)** in [`gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md) § Gate 1 and its § Capability-Class Usability-AC Requirement block, re-run at Stage 4 pre-plan crisping.
+
+**The doctrine below is duplicated from the enforcement surface on purpose, and that duplication is registered.** The C1–C3 limb rows, the E1–E5 exempt-class rows, the anti-patterns, the required AC shape, and the U1–U4 conformance tests are also carried, stated rather than cited, by `gate-criteria-spec.md` § Capability-Class Usability-AC Requirement (referenced from G1-05b branch (ii)). The pair is registered as a per-domain **prose exemption** under [`duplicate-source-discipline.md`](../../../core/standards/duplicate-source-discipline.md) §1 condition 3; the exemption itself — its rationale, the reason conditions 1, 2 and 4 are unavailable, and the co-edit obligation it imposes — is documented once, in the owning principle at [`gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md) § Capability-Class Usability-AC Requirement (referenced from G1-05b branch (ii)), and is not restated here. In short: that schema **enforces** the rule and this guide **instructs** an author how to satisfy it, so each file has to read standalone. Two consequences bind an editor of this section. **An edit to any doctrine line below must land on both surfaces in the same change** — nothing mechanically detects a one-sided edit. And the **verdict language is not this file's to carry**: the set-level rejection rule, the Layer-B coverage note, and the G1-05b self-repair branches live on the enforcement surface only, exactly as the worked pair at the end of this section lives here only.
+
+### Is it capability-class? Three limbs, all must hold
+
+| Limb | Question | Not satisfied when |
+|---|---|---|
+| **C1 — actor** | Is there a named actor — an agent following the platform's own instructions, a script / check / hook, a CI job, or an operator executing a documented procedure — that will *do* something because of this change? | Only a **reader** is affected |
+| **C2 — trigger** | Is there a named runtime moment that fires it — a session start, a deploy run, a gate evaluation, a PR event, a stage entry, a command invocation? | Nothing reads it at runtime; adoption depends on someone remembering |
+| **C3 — observable** | Is there something a third party could witness after install — output, a state change, an emitted artifact, a verdict, a blocked action — that is **not** the presence or content of the edited file itself? | The deliverable **is** the artifact |
+
+**capability-class = C1 ∧ C2 ∧ C3.** Read the limbs ***ex ante*, against the item's design** — does the design *name* an actor, a runtime trigger, and a witnessable observable? — never against observed runtime. Whether the trigger actually fired is precisely what the usability AC exists to test, so folding that observation back into the limbs makes the test circular.
+
+Read that way, the motivating failure satisfied **all three**: C1 (four skills instructed to read the roster), C2 (each reads it at its own named runtime moment), C3 (a name resolves to a person record). It *was* capability-class and owed a usability AC — and what went wrong was not a limb but the **delivery of C2's precondition**: nothing seeded the roster on install, so the named trigger never fired. The reading to avoid is the *ex post* one — "nothing fired, therefore no C2" — which routes this very case to the E3 exempt class below (keyed to C2) and exempts it. Nor does the conjunction earn its place by being the only predicate that would have caught this item: a looser, **disjunctive** predicate would have caught it too, since C1 and C3 hold on either reading. It earns its place by keeping genuine reference-content, refactor, bookkeeping, and spike work out.
+
+**On the word `capability-class` here:** it classifies a **work item at intake**. It is not the *Release Class* of a whole release, and it is not the generic "class of capability a solution targets" used by the Stage-5 extend-before-create criterion.
+
+### Exempt classes — a closed list, each named by the limb it does not satisfy
+
+| # | Exempt class | Limb | One-line test |
+|---|---|---|---|
+| **E1** | **Reference-content change** — doc, standard, discipline, ADR, release note, comment, prose or naming edit whose whole effect is what a **human** reader reads. **An agent-loaded instruction file is not exempt under E1 merely because its effect is textual** — if a named agent loads it at a named runtime moment and behaves differently, test it against C1 ∧ C2 ∧ C3 rather than claiming E1. | C1 | Nothing **runs** differently after install |
+| **E2** | **Behavior-preserving refactor / relocation** — move, rename, extraction, dedup, reflow, reference repair, carrying a declared no-behavior-change invariant | C3 | The correct AC is a **must-NOT-change** assertion |
+| **E3** | **Governance-internal rule with no runtime trigger** — doctrine or protocol prose consumed at human or agent judgment time, with no gate, check, hook, or command reading it | C2 | No executor reads it |
+| **E4** | **Tracking / bookkeeping** — an issue-body edit, label / milestone / epic hygiene, backlog restructuring, corpus-metadata reconciliation | C1 + C2 | The mutation is to the tracker, not to the platform |
+| **E5** | **Spike / analysis / decision record** — research, audit, gap analysis, or a decision whose deliverable is the finding or the record itself | C3 | The output is knowledge, not behavior |
+
+The list is closed — extending it is a governed change, not an authoring choice. Five rules keep it from reading as a general escape hatch:
+
+- **A mixed item is capability-class.** An item that is mostly documentation and partly a new hook is capability-class **for the hook**. The test is whether the triple holds anywhere in the item, not whether it holds for the majority of the diff.
+- **"It only changes a default or a config value" is not an exemption** when a runtime actor reads that value — all three limbs hold.
+- **"It ships warn-mode" is not an exemption.** A warn-mode check still runs and still emits; only the authority of its verdict is reduced.
+- **E3 is an exemption from the usability AC — never a finding that the rule will be adopted.** A rule expected to change behavior should acquire a trigger (a gate, check, hook, or named stage step) rather than claim E3. E3 exempts on the absence of a runtime trigger — the same limb (C2) whose *ex ante* satisfaction made the motivating failure capability-class — so claiming it without justifying the absence hands that failure the exemption it must never get, reproducing it one layer up.
+- **Silence is not an exemption.** An AC set with neither a conforming usability AC nor a named exempt class is what Triage returns to the author, per the G1-05b (usability-AC coverage) self-repair.
+
+### The shape of a usability AC
+
+A usability AC rides the behavioral/domain AC pattern the Triage gate already admits — an outcome declaration paired with a `method:` declaration — with the outcome anchored after install:
+
+```
+- [ ] predicate: after a fresh install/deploy, <actor> <verb-phrase> against <named, populated fixture>,
+      producing <stated observable>; method: <the exact invocation or procedure that exercises it,
+      and the observable that must be seen>
+```
+
+Four conformance tests. A bullet is a usability AC only when all four hold:
+
+| # | Test | Rejects |
+|---|---|---|
+| **U1** | **Post-install anchor.** The predicate names the post-install / post-deploy / fresh-session / first-run moment. | An assertion true only in the author's working tree |
+| **U2** | **Actor + action verb.** The predicate names an actor and an action it performs. Verbs of existence — `exists`, `ships`, `is present`, `contains`, `includes`, `has`, `references`, `is defined`, `is documented` — do not satisfy U2 in the predicate position. | "a roster template ships" |
+| **U3** | **Named, populated fixture.** The predicate names the concrete input or state the behavior runs against. A behavior asserted against no fixture, or an empty one, does not satisfy U3. | "an agent can resolve a name" — against which roster? |
+| **U4** | **Observable is not the artifact.** The stated observable is something other than the presence or content of the file(s) the change edits. | "the file contains the rule" |
+
+**U2 does not change what a presence AC may say.** The Triage gate's file-path + state-verb AC pattern (`contains` / `includes` / `has`) stays valid and unchanged. U2 constrains only the additional usability bullet.
+
+### Worked pair
+
+**Presence-only — the dormant-capability shape:**
+
+> - [ ] Verify that the people-roster template ships in the templates directory
+> - [ ] Verify that the four consuming skills reference the graph view
+> - [ ] Verify that the schema carries the new person entity
+
+Every bullet is true, and nothing exercises the capability. It shipped inert.
+
+**Rewritten — presence ACs retained, one usability AC added:**
+
+> - [ ] Verify that the people-roster template ships in the templates directory
+> - [ ] Verify that the four consuming skills reference the graph view
+> - [ ] Verify that the schema carries the new person entity
+> - [ ] predicate: after a fresh install into an empty workspace, an agent resolves an owner name to its person record from the seeded roster and returns that record's tier; method: run a fresh install, then invoke the resolution path against a roster seeded with two named people and one unknown name — the two resolve with their tier and the unknown returns not-found.
+
+The fourth bullet is the one that catches a missing seed step. U1: after a fresh install. U2: an agent *resolves*. U3: a roster seeded with two named people. U4: the returned record and its tier, not the template file.
+
+**An exempt example.** A ticket that corrects an over-broad leading sentence in four reference files does not satisfy C1 — only a reader is affected. Its AC set carries no usability AC and names its class instead: `Exempt: E1 — reference-content change.` The one caution: if those files are loaded by an agent at a named runtime moment, E1 does not apply on the strength of the change being textual — test the triple first.
+
+`[SOURCE: a shipped people-graph release whose acceptance criteria and CI all passed while the capability was dormant on a fresh install — the systemic root of that release's remediation epic. This section is the rule that prevents recurrence.]`
+
+---
+
 ## 5. What Goes at Stage 5 vs. Intake
 
 The decision table below operationalizes the WHAT/HOW boundary. Items in the **Stage 5 Solutioning** column are design decisions; items in the **Intake** column are problem-statement decisions. A well-formed intake ticket populates only the right column (or marks left-column items as `[ASSUMPTION – CONFIRM]` deferred to Stage 5).
@@ -341,7 +429,7 @@ This guide is the doctrine. The following docs are the enforcement surfaces:
 | `release/references/pipeline/stage-02-triage.md` | §6 (Outputs), §7 (Stage-Transition Gate) | Triage validates closure ownership before bundling — every `[ASSUMPTION – CONFIRM]` must carry a resolvable `owner:` / `to close:` per §5c; an unowned assumption is a Triage self-repair finding. |
 | `core/disciplines/root-cause-analysis.md` | §2 (trigger), §4 (invocation points) | The proven `owner:` / `to close:` form (for the bug/unknown-cause class) that §5c generalizes to every intake assumption. |
 | `release/references/standards/solutioning-output-template.md` | § 3.5 (The Solutioning Pre-Read) | Intake-authority mirror pair: this guide's §5c governs intake-*emitted* `[ASSUMPTION – CONFIRM]` assumptions (directional, owned downstream); § 3.5 governs Stage-5-*emitted* advisory pre-reads (non-binding, the issue body stays the contract). Same theme, different emitting stage — the two complete the WHAT-vs-HOW-vs-advisory authority boundary. |
-| `core/schemas/gate-criteria-spec.md` | G1-04 (Proposed Change specificity), G1-05 (AC verifiability) | Triage gates that operationalize T2 (G1-04) and T3 (G1-05). |
+| `core/schemas/gate-criteria-spec.md` | G1-04 (Proposed Change specificity), G1-05 (AC verifiability — branch (i) per-bullet quality, branch (ii) capability-class usability-AC coverage per §4b) | Triage gates that operationalize T2 (G1-04) and T3 (G1-05); G1-05b branch (ii) is the enforcement surface for §4b, whose § Capability-Class Usability-AC Requirement block carries the predicate, the exempt classes, and the conformance tests. |
 | `core/schemas/gate-criteria-spec.md` + `core/deploy/deploy.sh` Check 22 | G1-01 (title informativeness floor) | Enforcement surfaces for the §7 title rubric. The gate enforces the **syntactic floor only** (no bracket prefix + substance floor); the §7 rubric carries the semantic informativeness bar (judgment, not gate-enforced). |
 | `<OPERATOR_INSTANCE_ANALYSIS_PATH>/intake-quality-review-2026-04-19/best-practices-rubric.md` | D4 (Intake/Design Boundary) | Rubric dimension that scores intake/design boundary respect; T2 maps to D4. |
 | `.github/ISSUE_TEMPLATE/improvement.yml` | Description, Proposed Change fields | Field descriptions point authors to this guide for the 5-test rule. |

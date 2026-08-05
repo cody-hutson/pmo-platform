@@ -20,6 +20,30 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.10] - 2026-08-05
+
+Overlapping skill triggers are separated and held apart by a standing check, and skills stop asserting things about themselves that are no longer true.
+
+[Full notes](release/releases/notes/v4.10_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.10)
+
+## [v4.09] - 2026-08-05
+
+Four agent-behavior disciplines become checkable rules, and a checkpoint index makes an already-held rule fire at the moment it is needed.
+
+[Full notes](release/releases/notes/v4.09_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.09)
+
+## [v4.08] - 2026-08-05
+
+Release records, telemetry and planning now wait for the one moment a version is claimed — and the cycle-time measurement finally produces a number.
+
+[Full notes](release/releases/notes/v4.08_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.08)
+
+## [v4.07] - 2026-08-04
+
+A release bundle closes to new work once planning starts, and four bundling checks that silently did nothing now actually run.
+
+[Full notes](release/releases/notes/v4.07_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.07)
+
 ## [v4.06] - 2026-08-03
 
 The release history stops being four hand-kept copies of one fact, and the file that holds it is 81% smaller without losing a byte.

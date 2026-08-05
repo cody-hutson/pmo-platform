@@ -1,7 +1,7 @@
 ---
 name: release-planner
 description: >
-  Plans the PMO platform release lifecycle. Modes: Backlog analysis · Release planning · Dry run. Analyzes the improvement backlog, maps dependencies, suggests release bundles, generates release plans, and produces dry-run diffs. Read-only — never modifies governance files. Triggers: "review the backlog", "plan the release", "bundle the release", "dry run", "show me the diffs", "what's in v[X.Y]."
+  Plans the PMO platform release lifecycle. Modes: Backlog analysis · Release planning · Dry run · Pattern review (draft). Analyzes the improvement backlog, maps dependencies, suggests release bundles, generates release plans, and produces dry-run diffs. Read-only — never modifies governance files. Triggers: "analyze the improvement backlog", "bundle the milestone", "generate the release plan", "produce the dry-run diff", "what's in v[X.Y]".
 version: v3.98
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
