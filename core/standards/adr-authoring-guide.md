@@ -232,7 +232,7 @@ Immutability protects the **decision**, not the bytes. Editability has three sta
 | `Accepted` | **Durability-hygiene only** — the carve-out below. |
 | `Superseded` / `Deprecated` | **Frozen.** No edits at all. The record exists to preserve what was decided and why it stopped applying. |
 
-This is the partition the durability lint already implements: its whole-file exemption covers `Superseded` / `Deprecated` records only, and it scans every `Accepted` one — so **every finding it reports asks for an edit to an Accepted ADR**. The carve-out grants no new permission. It states the reading the shipped tooling already operates under, and that this guide's own enforce-flip clause already assumes when it gates the flip on a full structural-conformance pass.
+The **frozen edge** of this partition is the one the durability lint already implements: its whole-file exemption covers `Superseded` / `Deprecated` records only, and it scans every `Accepted` one — so **every finding it reports asks for an edit to an Accepted ADR**. It does not implement the `Proposed`/`Accepted` edge at all; a `Proposed` record is scanned exactly as an `Accepted` one, because that edge governs who may edit, not what the lint reports. The carve-out grants no new permission. It states the reading the shipped tooling already operates under, and that this guide's own enforce-flip clause already assumes when it gates the flip on a full structural-conformance pass.
 
 **The boundary is RECORD vs. REVISE.**
 

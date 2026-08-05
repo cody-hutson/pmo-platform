@@ -203,15 +203,26 @@ check "esc_lines drops blank/whitespace-only lines" "$blank" "0"
 
 echo
 echo "--- Structural binding: the workflow uses this library, not a private copy ---"
-if grep -q 'release/tools/lib/deciders-carveout\.sh' "$WORKFLOW"; then
-  ok "repo-integrity.yml sources the shared library"
+# ALL THREE binding patterns below are ANCHORED at `^[[:space:]]*` and reject a
+# leading `#`. The unanchored forms they replace asked "does this string APPEAR in
+# the workflow?", which a COMMENTED-OUT line answers yes — so the suite read 28/28
+# green over a gate whose construction line never executed. Presence of a string is
+# not execution of a statement, and these assertions are read as evidence of the
+# latter. What the anchor does NOT close, stated rather than implied: a live line
+# wrapped in `if false; then ... fi`, or one inside an unreached branch, still
+# matches. Closing that needs the construction moved into the shared library so the
+# suite can exercise it as EFFECT rather than assert it as text — a design change,
+# named here rather than smuggled in. The anchor closes the shape that actually
+# shipped; the residual is the honest remainder.
+if grep -qE '^[[:space:]]*(\.|source)[[:space:]]+"[^"]*release/tools/lib/deciders-carveout\.sh"' "$WORKFLOW"; then
+  ok "repo-integrity.yml sources the shared library (executable source statement, not a mention)"
 else
-  bad "repo-integrity.yml no longer sources release/tools/lib/deciders-carveout.sh"
+  bad "repo-integrity.yml no longer sources release/tools/lib/deciders-carveout.sh on an executable line"
 fi
-if grep -q 'depersonalization_line_verdict' "$WORKFLOW"; then
-  ok "repo-integrity.yml calls depersonalization_line_verdict"
+if grep -qE '^[[:space:]]*[^#[:space:]][^#]*depersonalization_line_verdict' "$WORKFLOW"; then
+  ok "repo-integrity.yml calls depersonalization_line_verdict (executable line, token not in a comment)"
 else
-  bad "repo-integrity.yml no longer calls depersonalization_line_verdict"
+  bad "repo-integrity.yml no longer calls depersonalization_line_verdict on an executable line"
 fi
 # CONSTRUCTION, not just the call. Sourcing the library and calling the verdict
 # function are necessary and NOT sufficient: the whole delta between this fix
@@ -224,14 +235,16 @@ fi
 # exactly why a construction regression is indistinguishable from a legitimately dark
 # run. The suite built its own NOT_CARVED above, so every arm before this one grades
 # the PREDICATE given a correctly-constructed set. This grades the construction.
-if grep -qE 'esc_lines[[:space:]]+"\$HANDLE_LITERAL"[[:space:]]*>>[[:space:]]*"\$NOT_CARVED_FILE"' "$WORKFLOW"; then
-  ok "repo-integrity.yml POPULATES the un-carved set (esc_lines \$HANDLE_LITERAL >> \$NOT_CARVED_FILE)"
+if grep -qE '^[[:space:]]*esc_lines[[:space:]]+"\$HANDLE_LITERAL"[[:space:]]*>>[[:space:]]*"\$NOT_CARVED_FILE"' "$WORKFLOW"; then
+  ok "repo-integrity.yml POPULATES the un-carved set (esc_lines \$HANDLE_LITERAL >> \$NOT_CARVED_FILE, on an executable line)"
 else
   bad "repo-integrity.yml no longer writes \$HANDLE_LITERAL into \$NOT_CARVED_FILE — the un-carved set is empty, so the gate silently reverts to whole-line suppression on deciders: lines"
 fi
 # Non-vacuity control for the three greps above: a token that must NOT be present. If
 # this arm ever passes, the grep-based binding assertions are matching nothing real.
-if grep -q 'depersonalization_line_verdict_THAT_DOES_NOT_EXIST' "$WORKFLOW"; then
+# Carries the SAME anchor as the assertion it controls — a control that exercises a
+# pattern nobody ships is not a control of anything.
+if grep -qE '^[[:space:]]*[^#[:space:]][^#]*depersonalization_line_verdict_THAT_DOES_NOT_EXIST' "$WORKFLOW"; then
   bad "binding-assertion control matched a nonexistent token — the greps prove nothing"
 else
   ok "binding-assertion control — a nonexistent token is absent (greps are discriminating)"
@@ -239,11 +252,36 @@ fi
 # ... and a construction-shaped control, because the arm above is a NEW pattern and a
 # typo in it would pass silently as a nonexistent-token miss. A redirect into a file
 # the workflow does not have must NOT match.
-if grep -qE 'esc_lines[[:space:]]+"\$HANDLE_LITERAL"[[:space:]]*>>[[:space:]]*"\$NO_SUCH_CARVED_FILE"' "$WORKFLOW"; then
+if grep -qE '^[[:space:]]*esc_lines[[:space:]]+"\$HANDLE_LITERAL"[[:space:]]*>>[[:space:]]*"\$NO_SUCH_CARVED_FILE"' "$WORKFLOW"; then
   bad "construction-assertion control matched a nonexistent redirect — the construction grep proves nothing"
 else
   ok "construction-assertion control — a nonexistent redirect target is absent (the construction grep is shaped, not loose)"
 fi
+
+# THE ANCHOR'S OWN REGRESSION ARM. Everything above measures the three patterns
+# against the LIVE workflow, where anchored and unanchored forms agree — so nothing
+# above would notice an anchor being dropped. This arm measures them against a
+# synthetic file holding the exact shape that shipped green over a broken gate:
+# each binding line, commented out. The anchored forms must find NOTHING; the
+# unanchored forms must find all three, which is simultaneously the proof that the
+# fixture is non-empty and the reproduction of the defect being closed.
+ANCHOR_FIXTURE="$(mktemp)"
+{
+  printf '          # . "${GITHUB_WORKSPACE:-.}/release/tools/lib/deciders-carveout.sh"\n'
+  printf '              # case "$(depersonalization_line_verdict \\\n'
+  printf '          # esc_lines "$HANDLE_LITERAL" >> "$NOT_CARVED_FILE"\n'
+} > "$ANCHOR_FIXTURE"
+anchored_hits="$( { grep -cE '^[[:space:]]*(\.|source)[[:space:]]+"[^"]*release/tools/lib/deciders-carveout\.sh"' "$ANCHOR_FIXTURE" || true
+                    grep -cE '^[[:space:]]*[^#[:space:]][^#]*depersonalization_line_verdict' "$ANCHOR_FIXTURE" || true
+                    grep -cE '^[[:space:]]*esc_lines[[:space:]]+"\$HANDLE_LITERAL"[[:space:]]*>>[[:space:]]*"\$NOT_CARVED_FILE"' "$ANCHOR_FIXTURE" || true
+                  } | paste -sd+ - | bc)"
+unanchored_hits="$( { grep -c 'release/tools/lib/deciders-carveout\.sh' "$ANCHOR_FIXTURE" || true
+                      grep -c 'depersonalization_line_verdict' "$ANCHOR_FIXTURE" || true
+                      grep -cE 'esc_lines[[:space:]]+"\$HANDLE_LITERAL"[[:space:]]*>>[[:space:]]*"\$NOT_CARVED_FILE"' "$ANCHOR_FIXTURE" || true
+                    } | paste -sd+ - | bc)"
+rm -f "$ANCHOR_FIXTURE"
+check "anchor rejects a commented-out binding line (all 3 patterns)" "$anchored_hits" "0"
+check "…and the fixture is non-empty — the UNANCHORED forms still match it (the shipped defect)" "$unanchored_hits" "3"
 
 echo
 echo "=== Result ==="

@@ -50,7 +50,7 @@ The conditionality attaches to the section's **content**, never to its presence.
 
 ### 3.2 Section-set authority chain
 
-The section set and each section's requirement level are **defined here, once**. Every other surface **cites** this section; none restates the level. A surface added later joins this table and inherits the CITES obligation — that is what keeps a sixth surface from becoming a sixth divergent statement.
+The section set and each section's requirement level are **defined here, once**. Every other **platform** surface **cites** this section and restates no level; the single exception is the project-ADR template, which governs a **disjoint** population behind its own §5 scope boundary and therefore **adopts** the same level in its own text rather than pointing at this section — the obligation its row below records verbatim. A surface added later joins this table and inherits the CITES obligation — that is what keeps a sixth surface from becoming a sixth divergent statement.
 
 | Surface | Role | Obligation |
 |---|---|---|

@@ -204,21 +204,59 @@ PROJECTED_REGION_END = "<!-- ADR-INDEX:END -->"
 # The § Status provenance note. `at merge time` is MANDATORY, not decorative:
 # it is a member of HISTORICAL_ANCHORS in check-adr-durability.py, so the note
 # may name a merge SHA without tripping the R2-SHA durability rule.
+#
+# `Held ADR-<old> branch-local` — NOT `Authored branch-local as ADR-<old>`. A record
+# may move TWICE in one release (see `provenance_head`), and on the second hop the
+# `<old>` number is one the tool assigned, not one the author chose. "Held" is true
+# on every hop; "authored as" is true only on the first.
 PROVENANCE_TEMPLATE = (
-    "**Numbering provenance — `{old:03d} → {new:03d}`.** Authored branch-local as "
-    "**ADR-{old:03d}**; renumbered to **ADR-{new:03d}** at merge time by "
-    "`release/tools/renumber-adr.py`, because {cause}. In-release citations that "
-    'read "ADR-{old:03d}" denote this record.'
+    "{head} Held **ADR-{old:03d}** branch-local; renumbered to **ADR-{new:03d}** "
+    "at merge time by `release/tools/renumber-adr.py`, because {cause}. "
+    'In-release citations that read "ADR-{old:03d}" denote this record.'
 )
 CAUSE_DUPLICATE = "the mainline already claimed {old:03d}"
 CAUSE_GAP = "the claim would have landed a gap beneath it on the mainline"
 
+# SHAPE detector — matches a provenance note for ANY move. Its ONE legitimate use is
+# the citation-sweep exemption (`is_historical_numbering_line`): every provenance
+# note records an old number on purpose, whichever move it describes, so the sweep
+# must leave all of them alone. It is NOT a valid idempotence guard and NOT a valid
+# verify — see `provenance_head`.
 PROVENANCE_RE = re.compile(r"\*\*Numbering provenance — `\d{3} → \d{3}`\.\*\*")
 
 RENUMBER_LOG_HEADING_RE = re.compile(r"^\*\*Renumber log\.\*\*", re.MULTILINE)
 RENUMBER_LOG_SENTENCE_RE = re.compile(
     r"ADR-\d{3} \(`[^`]+`\) → \*\*ADR-\d{3}\*\* by `release/tools/renumber-adr\.py`"
 )
+
+
+def provenance_head(old, new):
+    """The note's identifying head — the one substring that names THIS move.
+
+    ``PROVENANCE_RE`` matches a provenance note by SHAPE: any ``NNN → NNN`` pair.
+    That is correct for the sweep exemption and WRONG everywhere else, and the
+    difference is not academic — it shipped a defect. A record that has already
+    moved once this release carries a shape-matching note describing a DIFFERENT
+    move, so a shape-keyed idempotence guard reports "already present" and writes
+    nothing, and a shape-keyed verify then passes over its own gap. Observed in
+    production on this tool's first release: ADR-110 → 114 → 118 wrote only the
+    `110 → 114` note, the record never mentioned 118, and the § Renumber log
+    asserted a note that was not there.
+
+    So the two predicates are deliberately different and each has one job:
+
+    ==========================  ==========================================
+    ``PROVENANCE_RE`` (shape)   sweep exemption only — every provenance note
+                                records an old number, whichever move it is
+    ``provenance_head(o, n)``   idempotence guard + R6 verify — asks "is the
+                                note for THIS move present?", the only
+                                question either of them is actually asking
+    ==========================  ==========================================
+
+    Built from the same string the template interpolates, so the guard and the
+    note it guards cannot disagree; ``self_test`` pins that with a prefix arm.
+    """
+    return f"**Numbering provenance — `{old:03d} → {new:03d}`.**"
 
 
 # --------------------------------------------------------------------------
@@ -550,16 +588,23 @@ def resort_inline_list(text):
 
 
 def provenance_note(old, new, cause):
-    return PROVENANCE_TEMPLATE.format(old=old, new=new, cause=cause)
+    return PROVENANCE_TEMPLATE.format(
+        head=provenance_head(old, new), old=old, new=new, cause=cause
+    )
 
 
-def insert_provenance(text, note):
+def insert_provenance(text, note, old, new):
     """Append the note as the last paragraph of the ``## Status`` section.
 
-    Idempotent: a record that already carries a provenance note of this shape is
-    left alone, so re-running --apply on an already-renumbered tree is a no-op.
+    Idempotent **on this move**: a record already carrying the note for THIS
+    ``old → new`` pair is left alone, so re-running --apply on an already-
+    renumbered tree is still a no-op. A record carrying a note for a DIFFERENT
+    move — one that has already moved once this release — gets this hop appended
+    beneath the earlier one, so the ``## Status`` section reads as a lineage.
+    Keyed on ``provenance_head``, never on ``PROVENANCE_RE``: read that
+    docstring for why the distinction is load-bearing rather than pedantic.
     """
-    if PROVENANCE_RE.search(text):
+    if provenance_head(old, new) in text:
         return text, "already-present"
     lines = text.split("\n")
     start = None
@@ -950,12 +995,14 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
 
     # ---- R5 provenance note ---------------------------------------------
     body = new_path.read_text(encoding="utf-8")
-    body, state = insert_provenance(body, provenance_note(old, new, cause))
+    body, state = insert_provenance(
+        body, provenance_note(old, new, cause), old, new)
     if state == "written":
         new_path.write_text(body, encoding="utf-8")
-        log("R5 provenance: ## Status note written")
+        log(f"R5 provenance: ## Status note written ({old:03d} → {new:03d})")
     elif state == "already-present":
-        log("R5 provenance: note already present (idempotent re-run)")
+        log(f"R5 provenance: the note for THIS move ({old:03d} → {new:03d}) is "
+            "already present (idempotent re-run)")
     else:
         return revert(f"{new_rel} has no '## Status' section to carry the "
                       "numbering-provenance note")
@@ -982,8 +1029,14 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
     if dangling:
         return revert(f"{len(dangling)} in-scope file(s) still cite ADR-{old:03d}: "
                       + ", ".join(dangling))
-    if not PROVENANCE_RE.search(new_path.read_text(encoding="utf-8")):
-        return revert("the ## Status numbering-provenance note is absent")
+    # Assert the note for THIS move, not the SHAPE of a note. A shape assertion
+    # here verifies on the same predicate that decides whether to write, so R5's
+    # suppression and R6's confirmation are the same mistake made twice — which
+    # is exactly how the `114 → 118` hop shipped a record that never mentioned
+    # its own number under a § Renumber log claiming otherwise.
+    if provenance_head(old, new) not in new_path.read_text(encoding="utf-8"):
+        return revert(f"the ## Status numbering-provenance note for this move "
+                      f"(`{old:03d} → {new:03d}`) is absent")
     # Evaluate the SIMULATED MERGE RESULT, not the bare working tree. A branch
     # that has not merged the mainline is legitimately missing the numbers the
     # mainline claimed while it was away, so a working-tree evaluation reports a
@@ -1098,12 +1151,59 @@ def self_test():
         failures.append("[provenance] the mandatory `at merge time` anchor is absent")
     if not PROVENANCE_RE.search(note):
         failures.append("[provenance] the note does not match its own detector")
-    body, wrote = insert_provenance("## Status\n\nProposed.\n\n## Context\n\nx\n", note)
+    # The guard is built from the string the template interpolates, so the two
+    # cannot disagree. Pinned rather than assumed.
+    eq("provenance/head-is-the-notes-prefix",
+       note.startswith(provenance_head(4, 5)), True)
+    body, wrote = insert_provenance(
+        "## Status\n\nProposed.\n\n## Context\n\nx\n", note, 4, 5)
     eq("provenance/insert-once", wrote, "written")
-    eq("provenance/idempotent", insert_provenance(body, note)[1], "already-present")
+    eq("provenance/idempotent-on-this-move",
+       insert_provenance(body, note, 4, 5)[1], "already-present")
     eq("provenance/no-status-section",
-       insert_provenance("# ADR\n\n## Context\n\nx\n", note)[1], "no-status-section")
+       insert_provenance("# ADR\n\n## Context\n\nx\n", note, 4, 5)[1],
+       "no-status-section")
     eq("provenance/section", body.index(note) < body.index("## Context"), True)
+
+    # ---- THE DOUBLE MOVE (the case that shipped a defect) ------------------
+    # A record may move twice inside one release: it is renumbered, a further
+    # sibling merges, and the number it was just given is taken too. This arm
+    # exists because that case had NO fixture, which is why nothing caught a
+    # guard keyed on the note's shape instead of on the move.
+    hop2 = provenance_note(5, 9, CAUSE_DUPLICATE.format(old=5))
+    # SPECIFICITY / regression arm — the defect, pinned as a property rather than
+    # as prose. The old shape predicate DOES match the first hop's note, so a
+    # shape-keyed guard would report "already present" and write nothing; the
+    # move-keyed guard correctly reports the second hop absent. If these two ever
+    # agree again, the guard has silently reverted to matching shape.
+    eq("provenance/shape-predicate-matches-the-WRONG-move",
+       bool(PROVENANCE_RE.search(body)), True)
+    eq("provenance/move-predicate-does-not",
+       provenance_head(5, 9) in body, False)
+    body2, wrote2 = insert_provenance(body, hop2, 5, 9)
+    eq("provenance/second-hop-is-written", wrote2, "written")
+    eq("provenance/both-hops-survive",
+       (provenance_head(4, 5) in body2, provenance_head(5, 9) in body2), (True, True))
+    # `find`, not `index`: a suppressed hop must fail this arm BY NAME, not by
+    # raising out of the suite. A regression that crashes the self-test reports
+    # "the tool is broken" where the truth is "this specific arm caught it".
+    eq("provenance/lineage-is-chronological",
+       0 <= body2.find(provenance_head(4, 5)) < body2.find(provenance_head(5, 9)),
+       True)
+    eq("provenance/second-hop-is-idempotent-too",
+       insert_provenance(body2, hop2, 5, 9)[1], "already-present")
+    # R6's verify predicate, both arms. The whole point of R6 is to catch a hop
+    # R5 failed to write; on the shape predicate it could not, because the arm
+    # below that must be False was True.
+    eq("provenance/r6-fails-a-record-missing-this-hop",
+       provenance_head(5, 9) in body, False)
+    eq("provenance/r6-passes-the-complete-record",
+       provenance_head(5, 9) in body2, True)
+    # ...and the SWEEP still exempts BOTH hops — that arm is shape-keyed on
+    # purpose, and narrowing it would erase the audit trail the move creates.
+    eq("provenance/sweep-exempts-every-hop",
+       [is_historical_numbering_line(ln) for ln in body2.split("\n")
+        if "Numbering provenance" in ln], [True, True])
 
     # ---- R1's delta predicate (the N>=2 deadlock) --------------------------
     # The union at a three-duplicate reconciliation, in the shape the live

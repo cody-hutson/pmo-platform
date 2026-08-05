@@ -24,7 +24,9 @@ source_observations:
 
 This record is the first ADR authored under the section set it defines, and it carries that set in full.
 
-**Numbering provenance — `110 → 114`.** Authored branch-local as **ADR-110**; renumbered to **ADR-114** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 110. In-release citations that read "ADR-110" denote this record.
+**Numbering provenance — `110 → 114`.** Held **ADR-110** branch-local; renumbered to **ADR-114** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 110. In-release citations that read "ADR-110" denote this record.
+
+**Numbering provenance — `114 → 118`.** Held **ADR-114** branch-local; renumbered to **ADR-118** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 114. In-release citations that read "ADR-114" denote this record.
 
 ## Context
 
