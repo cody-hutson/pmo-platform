@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.10 | 103-skill-suite-conformance-and-usability-ac | 2026-08-04 | — | #4712 | [notes/v4.10_RELEASE_NOTES.md](notes/v4.10_RELEASE_NOTES.md) |
 | v4.09 | agent-edit-discipline-codification | 2026-08-04 | — | #4709 | [notes/v4.09_RELEASE_NOTES.md](notes/v4.09_RELEASE_NOTES.md) |
 | v4.08 | version-binding-lifecycle | 2026-08-04 | — | #4715 | [notes/v4.08_RELEASE_NOTES.md](notes/v4.08_RELEASE_NOTES.md) |
 | v4.07 | release-bundle-and-sequence-gates | 2026-08-04 | — | #4568 | [notes/v4.07_RELEASE_NOTES.md](notes/v4.07_RELEASE_NOTES.md) |

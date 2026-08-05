@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.10] - 2026-08-05
+
+Overlapping skill triggers are separated and held apart by a standing check, and skills stop asserting things about themselves that are no longer true.
+
+[Full notes](release/releases/notes/v4.10_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.10)
+
 ## [v4.09] - 2026-08-05
 
 Four agent-behavior disciplines become checkable rules, and a checkpoint index makes an already-held rule fire at the moment it is needed.
