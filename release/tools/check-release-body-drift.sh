@@ -40,9 +40,9 @@
 #   ./check-release-body-drift.sh --help               # this help text
 #
 # Inputs:
-#   <version>   release version key (e.g. v2.37) — resolves the note at
-#               release/releases/notes/<version>_RELEASE_NOTES.md and the
-#               published Release of the same tag.
+#   <version>   release version key (e.g. v2.37) — resolves the note by NAME
+#               (<version>_RELEASE_NOTES.md) anywhere under release/releases/notes/
+#               (flat path first, then any subfolder) + the Release of that tag.
 #   REPO        optional owner/repo override (else resolved via gh repo view).
 #   GH          optional gh path override (else resolved off the pinned PATH).
 #
@@ -62,6 +62,24 @@
 #                   distinguishes "not on origin/main but present in the working
 #                   tree (Stage 13 chore PR has not landed)" from "not found
 #                   anywhere".
+#
+# NOTE RESOLUTION IS LAYOUT-INDEPENDENT. The note is resolved by FILENAME
+# (<version>_RELEASE_NOTES.md) anywhere under release/releases/notes/ — the flat
+# path first, then RECURSIVELY through any subfolder. The corpus foldered its notes
+# into major-version buckets (notes/v1|v2|v3/… plus the _unversioned/ bucket) per
+# plans/README.md (#230, v3.54): 60 of 170 notes are flat, 110 are foldered. A
+# flat-path-only resolve reported a FABRICATED ABSENCE (exit 3, "note not found")
+# for all 110 foldered notes — the check was structurally unable to read the
+# majority of the corpus, and every consumer read that as a missing artifact rather
+# than as a resolution failure. This mirrors, in shape, how lint_release_corpus.py
+# solved the same problem for its §3.2 note lint (`NOTES_DIR.rglob(
+# "*_RELEASE_NOTES.md")`): discovery keys on the _RELEASE_NOTES.md suffix — the
+# corpus's own type discriminator — and NO bucket literal ("v1"/"v2"/"v3"/
+# "_unversioned") appears in the pattern, so it holds under any layout and needs no
+# edit as the corpus folds further. Resolution is deterministic: the flat path wins,
+# else the lexicographically-first recursive hit (the corpus holds 170 note files
+# under 170 DISTINCT basenames, so the tie-break is currently unreachable; an
+# ambiguity is announced on stderr rather than silently resolved).
 #
 # Canonical source of the note: origin/main. The compare reads the canonical note
 # from origin/main (not the working tree) via
@@ -149,6 +167,72 @@ REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || printf '.
 NOTES_DIR="${REPO_ROOT}/release/releases/notes"
 NOTES_REL="release/releases/notes"   # repo-root-relative form, for `git show <ref>:<path>`
 CANONICAL_REF="origin/main"          # the committed canonical note lives here (AC)
+
+# ─── Note resolution: flat path first, then ANY subfolder ────────────────────
+# The SINGLE source of note-path resolution, one resolver per surface (filesystem
+# / git ref). Both key on the exact BASENAME "<version>_RELEASE_NOTES.md" and
+# recurse — no bucket literal appears in either, so both hold under any layout
+# (see NOTE RESOLUTION IS LAYOUT-INDEPENDENT in the header).
+#
+# Both print the resolved path on stdout and return 0; they print nothing and
+# return 1 when the note exists nowhere — the caller turns THAT into exit 3, so a
+# foldered note can no longer masquerade as an absent one.
+
+# Escape the dots in a version key so it cannot regex-match a neighbour
+# ("v2.10" must not match "v2X10"). find(1) -name is glob, where "." is already
+# literal, so only the grep(1) arm needs this.
+_re_escape_version() { printf '%s' "${1//./\\.}"; }
+
+# _warn_ambiguous <version> <chosen> <count> — an ambiguity is ANNOUNCED, never
+# silently resolved. Unreachable on today's corpus (170 files / 170 basenames);
+# present so a future duplicate surfaces instead of hiding behind the tie-break.
+_warn_ambiguous() {
+  [[ "$3" -gt 1 ]] || return 0
+  printf 'check-release-body-drift: %s — %s note files match this version; using %s (resolution is lexicographic; the corpus should hold one note per version)\n' \
+    "$1" "$3" "$2" >&2
+}
+
+# resolve_note_worktree <dir> <version> — filesystem surface. Serves fixture mode
+# (NOTES_DIR_OVERRIDE) and the N2 "present in the working tree" probe; the latter
+# MUST recurse too, or a foldered working-tree-only note reports N1 ("not found
+# anywhere") when N2 ("chore PR has not landed") is the true diagnosis.
+resolve_note_worktree() {
+  local dir="$1" version="$2" flat hits count
+  flat="${dir}/${version}_RELEASE_NOTES.md"
+  if [[ -f "$flat" ]]; then printf '%s' "$flat"; return 0; fi
+  [[ -d "$dir" ]] || return 1
+  # rc-guarded: find exits non-zero on an unreadable subtree; `|| true` keeps that
+  # from aborting the script under `set -euo pipefail`.
+  hits="$(/usr/bin/find "$dir" -type f -name "${version}_RELEASE_NOTES.md" 2>/dev/null | LC_ALL=C sort || true)"
+  [[ -n "$hits" ]] || return 1
+  count="$(printf '%s\n' "$hits" | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+  _warn_ambiguous "$version" "$(printf '%s' "$hits" | /usr/bin/head -1)" "$count"
+  printf '%s' "$hits" | /usr/bin/head -1
+}
+
+# resolve_note_ref <ref> <version> — git-ref surface (canonical mode). Prints the
+# repo-root-relative path AT <ref>. REQUIRES a resolvable <ref>: call only AFTER
+# the git-guard, or an unresolvable ref would read as an absent note (the exact
+# N3-masquerades-as-N2 confusion the guard exists to prevent).
+resolve_note_ref() {
+  local ref="$1" version="$2" flat hits count vesc
+  flat="${NOTES_REL}/${version}_RELEASE_NOTES.md"
+  # Brace the ref:path form — an unbraced "$ref:$path" is eaten as a colon
+  # modifier by some shells; the rest of this script braces it for the same reason.
+  if git -C "$REPO_ROOT" cat-file -e "${ref}:${flat}" 2>/dev/null; then
+    printf '%s' "$flat"; return 0
+  fi
+  vesc="$(_re_escape_version "$version")"
+  # `ls-tree -r` walks the notes subtree at the REF (not the working tree). The
+  # trailing `|| true` covers grep's rc=1 on no-match, which pipefail would
+  # otherwise propagate out of the $() and abort the script.
+  hits="$(git -C "$REPO_ROOT" ls-tree -r --name-only "$ref" -- "$NOTES_REL" 2>/dev/null \
+          | /usr/bin/grep -E "/${vesc}_RELEASE_NOTES\.md$" | LC_ALL=C sort || true)"
+  [[ -n "$hits" ]] || return 1
+  count="$(printf '%s\n' "$hits" | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+  _warn_ambiguous "$version" "$(printf '%s' "$hits" | /usr/bin/head -1)" "$count"
+  printf '%s' "$hits" | /usr/bin/head -1
+}
 
 # ─── Self-test (network-free; stubs gh on PATH) ──────────────────────────────
 
@@ -249,6 +333,32 @@ STUB
     exec "$0" v0.00 --quiet ) && { printf '  FAIL  %-28s exit 0 (expected 3)\n' "F missing (no note)" >&2; failures=$((failures+1)); } || {
       rc=$?; if [[ "$rc" -eq 3 ]]; then printf '  PASS  %-28s exit 3\n' "F missing (no note)" >&2; else printf '  FAIL  %-28s exit %s (expected 3)\n' "F missing (no note)" "$rc" >&2; failures=$((failures+1)); fi; }
 
+  # Case J — FOLDERED note in fixture mode. The note lives ONLY in a subfolder of
+  # the search root, exactly the corpus's notes/v1|v2|v3/… layout.
+  #   • FIXED  (recursive resolve): note found → body compares → MATCH (0). PASS.
+  #   • BROKEN (flat-path only):    note "not found" → MISSING (3). FAIL.
+  # A falsification case for the bucket fallback: it FAILS against the pre-fix
+  # flat-only code and PASSES against this one.
+  #
+  # Deliberately keyed to v0.01, NOT the v0.00 every other case uses, and run in its
+  # own subshell rather than through run_case (which pins v0.00 and pre-sets
+  # NOTES_DIR_OVERRIDE). Both choices make the case NON-VACUOUS: v0.01 exists at the
+  # foldered fixture and NOWHERE else, so if the search root failed to take effect
+  # the tool would find no note and exit 3 — the case cannot pass by accidentally
+  # resolving the flat v0.00 fixture.
+  /bin/mkdir -p "$tmp/foldered/v0"
+  /usr/bin/sed 's/v0\.00/v0.01/g' "$note" > "$tmp/foldered/v0/v0.01_RELEASE_NOTES.md"
+  strip_frontmatter "$tmp/foldered/v0/v0.01_RELEASE_NOTES.md" > "$tmp/foldered_body.txt"
+  ( export PATH="$stubdir:$PATH" GH="$stubdir/gh" REPO="acme/widget" \
+           NOTES_DIR_OVERRIDE="$tmp/foldered" STUB_BODY_FILE="$tmp/foldered_body.txt"
+    exec "$0" v0.01 --quiet ) && rc=0 || rc=$?
+  if [[ "$rc" -eq 0 ]]; then
+    printf '  PASS  %-28s exit 0\n' "J foldered (fixture bucket)" >&2
+  else
+    printf '  FAIL  %-28s exit %s (expected 0)\n' "J foldered (fixture bucket)" "$rc" >&2
+    failures=$((failures + 1))
+  fi
+
   # ── Canonical-mode cases (G/H/I + N1/N2 + git-guard) — the compare reads the note
   #    from origin/main, NOT the working tree. Hermetic via a bare-origin sandbox
   #    (the automated-closeout.sh Test 4g precedent). Cases A–F above stay fixture-
@@ -305,6 +415,38 @@ STUB
 
     # Case I — canonical DRIFT: published != origin/main note (working tree clean).
     run_canon "I canon drift (vs origin/main)" 1 "REPO_ROOT=$work" "STUB_BODY_FILE=$tmp/drift.txt"
+
+    # Case L — THE CANONICAL FOLDERED CASE. Direct analogue of the live defect: the
+    # note is committed to origin/main ONLY inside a major-version bucket
+    # (notes/v0/v0.02_…), never at the flat path — the shape of all 110 foldered
+    # corpus notes (v2.10 at notes/v2/, v3.50 at notes/v3/, …).
+    #   • FIXED  (recursive ls-tree resolve): committed note found → MATCH (0). PASS.
+    #   • BROKEN (flat-path only): cat-file -e misses → "note not found on
+    #     origin/main or in the working tree" → MISSING (3). FAIL.
+    # Keyed to v0.02, present at NO other fixture, so the case cannot pass by
+    # accidentally resolving a flat note — it is non-vacuous by construction.
+    local fnote fbody
+    /bin/mkdir -p "$work/release/releases/notes/v0"
+    fnote="$work/release/releases/notes/v0/v0.02_RELEASE_NOTES.md"
+    /usr/bin/sed 's/v0\.00/v0.02/g' "$note" > "$fnote"
+    fbody="$tmp/foldered_canon_body.txt"
+    strip_frontmatter "$fnote" > "$fbody"
+    ( cd "$work" \
+      && $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1 \
+      && $GIT -c user.email=t@t -c user.name=t commit -qm "foldered note" >/dev/null 2>&1 \
+      && $GIT push -q origin main >/dev/null 2>&1 \
+      && $GIT fetch -q origin >/dev/null 2>&1 ) || true
+    local _l_rc=0
+    ( unset NOTES_DIR_OVERRIDE
+      export PATH="$stubdir:$PATH" GH="$stubdir/gh" REPO="acme/widget" \
+             REPO_ROOT="$work" STUB_BODY_FILE="$fbody"
+      exec "$0" v0.02 --quiet ) || _l_rc=$?
+    if [[ "$_l_rc" -eq 0 ]]; then
+      printf '  PASS  %-28s exit 0\n' "L canon foldered bucket" >&2
+    else
+      printf '  FAIL  %-28s exit %s (expected 0)\n' "L canon foldered bucket" "$_l_rc" >&2
+      failures=$((failures + 1))
+    fi
 
     # ── N1/N2: note absent from origin/main. Second sandbox — origin/main holds a
     #    placeholder but NO v0.00 note. ──
@@ -384,7 +526,14 @@ done
 # dir; setting it bypasses the origin/main canonical read). NO production caller
 # sets it. NOTE_PATH is the working-tree path (fixture read + the N2 "present in
 # working tree" probe); NOTE_REL is the repo-root-relative path for `git show`.
-NOTE_PATH="${NOTES_DIR_OVERRIDE:-$NOTES_DIR}/${VERSION}_RELEASE_NOTES.md"
+#
+# These are the FLAT-path defaults, kept so the exit-3 diagnostics name a canonical
+# location even when nothing resolved. The live paths are resolved below via
+# resolve_note_worktree / resolve_note_ref, which fall back through the subfolder
+# buckets; the override dir flows into the resolver as its search root, so the
+# self-test seam keeps working unchanged.
+NOTE_SEARCH_DIR="${NOTES_DIR_OVERRIDE:-$NOTES_DIR}"
+NOTE_PATH="${NOTE_SEARCH_DIR}/${VERSION}_RELEASE_NOTES.md"
 NOTE_REL="${NOTES_REL}/${VERSION}_RELEASE_NOTES.md"
 
 # ─── Resolve gh; N/A (exit 2) when absent ────────────────────────────────────
@@ -403,10 +552,14 @@ fi
 # Ordering is load-bearing: fixture-mode → git-guard → note-existence → content.
 
 if [[ -n "${NOTES_DIR_OVERRIDE:-}" ]]; then
-  # ── Fixture mode (TEST ONLY): filesystem read — byte-identical to pre-change. ──
-  if [[ ! -f "$NOTE_PATH" ]]; then
-    die "${VERSION} — in-repo note not found at ${NOTE_PATH} (Stage 13 chore PR may not have landed)"
+  # ── Fixture mode (TEST ONLY): filesystem read. Flat-first, so a flat fixture
+  #    resolves byte-identically to pre-change; foldered fixtures now resolve too. ──
+  _fx_note=""
+  _fx_note="$(resolve_note_worktree "$NOTE_SEARCH_DIR" "$VERSION")" || _fx_note=""
+  if [[ -z "$_fx_note" ]]; then
+    die "${VERSION} — in-repo note not found at ${NOTE_PATH} or any subfolder of ${NOTE_SEARCH_DIR} (Stage 13 chore PR may not have landed)"
   fi
+  NOTE_PATH="$_fx_note"
   CANONICAL_BODY="$(strip_frontmatter "$NOTE_PATH")"
 else
   # ── Canonical mode: read the committed note from origin/main (AC; §5.1). ──
@@ -420,15 +573,22 @@ else
     na "${VERSION} — ${CANONICAL_REF} unresolvable (no git / no remote-tracking ref); canonical note unreadable at tool layer — N/A (never FAIL; a git capability absence, NOT gh)"
   fi
 
-  # MISSING (exit 3): note absent AT origin/main. The ref resolved just above, so a
-  # non-zero cat-file -e here is a genuinely-absent note (not an absent ref).
-  # Distinguish N2 (present in the working tree — chore PR not landed) from N1.
-  if ! git -C "$REPO_ROOT" cat-file -e "${CANONICAL_REF}:${NOTE_REL}" 2>/dev/null; then
-    if [[ -f "$NOTE_PATH" ]]; then
-      die "${VERSION} — note not on ${CANONICAL_REF} at ${NOTE_REL} (present in the working tree; the Stage 13 chore PR has not landed). Canonical source is ${CANONICAL_REF}."
+  # MISSING (exit 3): note absent AT origin/main — anywhere under the notes dir,
+  # flat or foldered. The ref resolved just above, so an empty resolve here is a
+  # genuinely-absent note (not an absent ref, and no longer a foldered one).
+  # Distinguish N2 (present in the working tree — chore PR not landed) from N1;
+  # the N2 probe recurses too, so a foldered WT-only note is diagnosed as N2.
+  _resolved_rel=""
+  _resolved_rel="$(resolve_note_ref "$CANONICAL_REF" "$VERSION")" || _resolved_rel=""
+  if [[ -z "$_resolved_rel" ]]; then
+    _wt_note=""
+    _wt_note="$(resolve_note_worktree "$NOTE_SEARCH_DIR" "$VERSION")" || _wt_note=""
+    if [[ -n "$_wt_note" ]]; then
+      die "${VERSION} — note not on ${CANONICAL_REF} under ${NOTES_REL}/ (present in the working tree at ${_wt_note}; the Stage 13 chore PR has not landed). Canonical source is ${CANONICAL_REF}."
     fi
-    die "${VERSION} — note not found on ${CANONICAL_REF} or in the working tree at ${NOTE_REL}"
+    die "${VERSION} — note not found on ${CANONICAL_REF} or in the working tree, under ${NOTES_REL}/ or any of its subfolders"
   fi
+  NOTE_REL="$_resolved_rel"
 
   # Content read — rc-GUARDED. An unguarded `git show` in $() aborts the whole
   # script under `set -euo pipefail` (rc=128 propagates through the pipe via
