@@ -349,6 +349,15 @@ resolve", or any request to evaluate the ratio of resolved vs. surfaced items.
 **Input**: One or more PPM triage reports (the primary push-to-resolve surface).
 
 **Process**:
+0. **Select the output surface** — before any classification or scoring. Apply the next-actor
+   test in `references/push-to-resolve-rubric.md` § Output Surfaces: an output whose next
+   actor is a party outside this session, receiving the output as the thing they act on, is
+   **Deliverable**; an output whose next actor is the invoking operator or a dispatched agent,
+   deciding on the output, is **Conversational**. A response carrying both a conversational
+   span and a self-contained deliverable artifact is **decomposed** into two outputs and
+   scored twice — never blended into one. Record the selected surface and its one-line basis
+   in the scorecard before proceeding: the per-dimension behavioral markers are read through
+   that surface's lens, and a scorecard with no recorded surface is incomplete.
 1. Parse the triage report into discrete action items.
 2. Classify each item:
    - **RESOLVED**: The agent produced a complete artifact (draft email, RAID entry,
@@ -369,7 +378,10 @@ resolve", or any request to evaluate the ratio of resolved vs. surfaced items.
    produced and why it qualifies as resolvable.
 5. Produce the push-to-resolve audit report.
 
-See `references/push-to-resolve-rubric.md` for classification rules and examples.
+See `references/push-to-resolve-rubric.md` for the item-classification rules and examples, for
+the surface taxonomy and selection rules this mode's step 0 applies, for the five-dimension
+behavioral-marker scoring instrument and its per-surface lenses, and for the marker
+reproducibility calibration protocol.
 
 ### Mode D — Document Management Compliance
 
@@ -970,6 +982,8 @@ Replace the gate table (Section 2) with:
 
 ```
 ## Push-to-Resolve Scorecard
+
+**Output surface**: Deliverable / Conversational   (basis: [one line — the next-actor answer])
 
 **Total items**: [N]
 **Resolved**: [N] ([%])
