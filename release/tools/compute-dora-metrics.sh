@@ -47,12 +47,17 @@
 #                          lead_time_for_changes | change_failure_rate |
 #                          mean_time_to_restore). Default: all four.
 #   --json                 machine detail (JSON of all four metrics + N/A reasons).
-#   --commit-anchor-map <file>  OPTIONAL. A "version<TAB>commit_iso" map supplying the
-#                          first-commit committer-date per release version, for
-#                          lead-time. When absent, lead-time falls back to a `git log`
-#                          read against the resolved repo (best-effort); when neither
-#                          resolves a commit anchor, lead-time is N/A. A map keeps the
-#                          tool deterministic + testable without a live git history.
+#   --commit-anchor-map <file>  OPTIONAL. A "<release-key><TAB>commit_iso" map supplying
+#                          the first-commit committer-date per release, for lead-time.
+#                          The release key is the MILESTONE SLUG — the join key the
+#                          event log's version column carries per
+#                          pipeline-event-log-schema.md § 2a — so map keys must match
+#                          the deploy rows' key, not the shipped vX.Y tag. When absent,
+#                          lead-time falls back to a `git log` read against the resolved
+#                          repo (best-effort; it translates slug -> tag via RELEASE_LOG);
+#                          when neither resolves a commit anchor, lead-time is N/A. A map
+#                          keeps the tool deterministic + testable without a live git
+#                          history.
 #
 # Cutover: applies to windows over events emitted post-cutover; pre-cutover windows
 # yield N/A for the affected metrics (no backfill). This tool does not gate by date —
@@ -86,7 +91,7 @@ PY=/usr/bin/python3
 die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
 
 usage() {
-  /usr/bin/sed -n '4,63p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '4,68p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -363,10 +368,33 @@ else
   # are unavailable — never an error.
   GIT="$(find_git)"
   if [[ -n "$GIT" ]] && "$GIT" -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
-    # Collect distinct versions from deploy rows (field 2).
+    # Collect distinct occasion keys from deploy rows (field 2).
     VERSIONS="$(printf '%s\n' "$DEPLOY_ROWS" | /usr/bin/awk -F ' \\| ' 'NF>2 {print $2}' | /usr/bin/sort -u)"
-    while IFS= read -r ver; do
-      [[ -z "$ver" ]] && continue
+    # The occasion key is the release join key — the milestone SLUG per
+    # pipeline-event-log-schema.md § 2a — but the anchor below is resolved as a
+    # GIT TAG, and no tag is named after a milestone. Without this translation
+    # the lookup misses every slug-keyed occasion and lead-time degrades to a
+    # permanent N/A: silent, because the git read is best-effort by design.
+    # Translate slug -> shipped tag via the § 2a WRITE-side inverse (RELEASE_LOG
+    # 8-col schema: Version(1) Milestone(2) ... Tag(6)). A key that is already a
+    # version resolves directly and is left alone.
+    RELEASE_LOG_FILE="${RELEASE_LOG_FILE:-$REPO_ROOT/release/releases/RELEASE_LOG.md}"
+    _dora_slug_to_tag() {  # <key> -> git-resolvable ref, or the key unchanged
+      local key="$1"
+      [[ -r "$RELEASE_LOG_FILE" ]] || { printf '%s' "$key"; return; }
+      /usr/bin/awk -F ' \\| ' -v k="$key" '
+        /^\|[[:space:]]*v[0-9]+\.[0-9]+/ {
+          v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v)
+          ms=$2; gsub(/`/,"",ms); sub(/^[[:space:]]*/,"",ms); sub(/[[:space:]]*$/,"",ms)
+          tg=$6; gsub(/`/,"",tg); sub(/^[[:space:]]*/,"",tg); sub(/[[:space:]]*$/,"",tg)
+          if (ms == k) { print (tg != "" ? tg : v); found=1; exit }
+        }
+        END { if (!found) print k }
+      ' "$RELEASE_LOG_FILE"
+    }
+    while IFS= read -r occ_key; do
+      [[ -z "$occ_key" ]] && continue
+      ver="$(_dora_slug_to_tag "$occ_key")"
       # Resolve the tag's earliest-carried commit committer-date: the first commit
       # reachable from <ver> but not from its immediate predecessor. Best-effort:
       # if the tag is absent, skip (no anchor for this occasion).
@@ -375,7 +403,9 @@ else
         # the tag's history is over-broad, so prefer the tag's own commit date as a
         # stable proxy when range resolution is unavailable.
         CISO="$("$GIT" -C "$REPO_ROOT" log -1 --format=%cI "$ver" 2>/dev/null || true)"
-        [[ -n "$CISO" ]] && COMMIT_MAP_DATA="${COMMIT_MAP_DATA}${ver}	${CISO}
+        # Key the map by the OCCASION key (what the deploy rows carry), not by
+        # the tag we resolved it through — the aggregator joins on the former.
+        [[ -n "$CISO" ]] && COMMIT_MAP_DATA="${COMMIT_MAP_DATA}${occ_key}	${CISO}
 "
       fi
     done <<< "$VERSIONS"

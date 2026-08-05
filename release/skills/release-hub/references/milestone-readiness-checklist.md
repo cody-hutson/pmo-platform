@@ -45,8 +45,18 @@ one disposition (per the precedence ladder below).
 
 ## Output schema (per requirement)
 
-Mode R emits, per release-scoped requirement (AC / proposed-change / risk), a row in the
-`triage-design-rereview` schema so Stage-4 Phase A0 can consume it as a cache-read:
+Mode R emits, **per card**, a [`triage-design-rereview`](../../../references/standards/triage-design-rereview.md)
+**§ 1 re-review artifact** — the **8 header-metadata fields** plus the **six-column per-requirement table**
+(`Requirement · D1 finding · D2 finding · D3 finding · Classification · Delta or Premise-Problem Type`), one
+row per release-scoped requirement (AC / proposed-change / risk). The row shape is **cited to § 1, never
+restated here**, and § 2 Rule 3 binds it — every dimension produces a finding line, so a row carrying an
+empty `D1` / `D2` / `D3` cell is non-conformant. **Machine consumer:** Stage-4 Phase A0's **G-PL5**
+cache-read (`stage-04-planning.md`) adopts these rows instead of re-running PT-1..4; a table that is not the
+six-column form, or that carries an empty dimension cell, is a cache MISS there.
+
+The table below is **not the row schema** — it is the **value legend** for that table's `Classification` and
+`Delta or Premise-Problem Type` columns. Three classification values, with the premise-problem types that
+apply to C3 only:
 
 | Class | Meaning | PT type (C3 only) |
 |---|---|---|
@@ -96,7 +106,14 @@ recommend dispositions, mutate nothing).
 Mode R is a strict superset of the per-issue Stage-4 Phase A0 re-review: it runs the same PT-1..4 at
 milestone scope **and** adds the milestone-level checks Phase A0 never did (`2c` cross-milestone leaks,
 `3b` bundle currency, `6` coherence, `7` methodology-neutrality + structural-cascade, `8` backlog-altitude ownership,
-`9` problem-validity + abstraction-altitude). Because the output uses the C1/C2/C3 + PT schema, Phase A0 becomes a
-**cache-read** of Mode R's findings rather than re-running them. The cache-read wiring in
-`stage-04-planning.md` is a separate governed step; until it ships, Mode R runs standalone and emits the
-briefing.
+`9` problem-validity + abstraction-altitude). Because the output **is** the § 1 re-review artifact itself,
+Phase A0 **is** a cache-read of Mode R's findings rather than a re-run of them. The hub relays the briefing
+into the release's Stage-4 sub-task at `hub-spoke-bridge.md` Procedure 0 Step 5, carrying the currency
+operands — a card-set fingerprint over the milestone's non-`sub-task` members, the milestone's `updated_at`
+and description digest, the `main` head SHA, and `emitted_at`; Stage-4 Phase A0's **G-PL5** cache-read
+(`stage-04-planning.md`) recomputes them and, on equality, adopts these rows instead of re-running PT-1..4.
+**Mode R itself persists nothing — its read-only contract is unchanged.** Any operand mismatch, an absent
+briefing, or a non-conformant table is a cache MISS and Phase A0 re-runs the re-review — the fallback, not a
+failure. G-PL5 skips only the PT-1..4 re-review: the A0.5 reference-currency gate and the A0.8
+empirical-repro gate always run, and an A0.8 `close-resolved` / `re-scope-changed` verdict supersedes that
+card's rows.

@@ -3644,15 +3644,21 @@ cmd_check() {
   #   posture: required   enforcement-surface: always-enforce (deploy-time) +
   #            branch-protection CI mirror (skill-canonical-structure-check.yml)
   #   invariant: every rostered SKILL.md is canonical-structure compliant (required
-  #              frontmatter fields present; references/ subdir present once the
-  #              D-Refs threshold is crossed; ≥3 domain-specific failure modes).
-  #   falsification: remove a required frontmatter field, or drop a skill below the
-  #                  3-failure-mode floor -> this check FAILS for that skill.
+  #              frontmatter fields present AND the version: value matching the
+  #              canonical format regex ^v[0-9]+\.[0-9]+(-[a-z]+)?$ per
+  #              core/standards/version-field-semantics.md § Format; references/
+  #              subdir present once the D-Refs threshold is crossed; ≥3
+  #              domain-specific failure modes).
+  #   falsification: remove a required frontmatter field, malform a version: value
+  #                  (3.99 / latest / v3.9.9.9 / empty-after-the-colon), or drop a
+  #                  skill below the 3-failure-mode floor -> this check FAILS for
+  #                  that skill.
   #
   # SINGLE SOURCE (per gate-efficacy-standard.md Req (b′) + the #1101 "assert
   # content, not a re-implemented proxy" doctrine): the predicate — required
-  # frontmatter fields (name/description/version), the D-Refs threshold (>400
-  # lines OR >25600 bytes -> references/ required), and the failure-mode floor
+  # frontmatter fields (name/description/version) and the version-field format
+  # regex, the D-Refs threshold (>400 lines OR >25600 bytes -> references/
+  # required), and the failure-mode floor
   # (≥3) — lives ONCE in core/deploy/tools/check-canonical-structure.sh. Both this
   # deploy-time check AND the PR-time CI mirror invoke that one script, so the two
   # surfaces cannot drift. The script extracts the same per-module roster arrays
@@ -7457,12 +7463,22 @@ cmd_check() {
     fi
   fi
 
-  # Check 41 — Pre-merge version-freeness (advisory; warn-mode initial; #1677)
+  # Check 41 — Pre-merge version-freeness (advisory; ratified 2026-08-04; #1677)
   #
   # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (a)+(b)):
-  #   posture: advisory   enforcement-surface: version-freeness.mode warn-window
-  #            (becomes required when the operator flips version-freeness.mode -> enforce;
-  #             the Stage-12 CI gate version-freeness.yml is the merge-blocking surface)
+  #   posture: advisory (RATIFIED ADVISORY, 2026-08-04 — by design, not warn-mode-initial
+  #            awaiting graduation; the durable decision record is the version-freeness row
+  #            in gate-efficacy-standard.md § Flip-decision status). The detection posture
+  #            was evaluated for enforce-graduation and DECLINED on architectural grounds:
+  #            a release's version binds only at the Stage-12 Phase B3 atomic ref-CAS, so a
+  #            pre-claim layer cannot be authoritative over it, and no volume of drain
+  #            evidence changes that.
+  #   enforcement-surface: version-freeness.mode warn-window
+  #            (this per-check lifecycle mode is a SEPARATE, still-independently-flippable
+  #             knob — the ratification above governs the DETECTION POSTURE and the CI
+  #             sentinel, NOT this mode file, and the two are decoupled by design;
+  #             the Stage-12 CI gate version-freeness.yml is the merge-blocking surface,
+  #             and its .github/version-freeness.enforce sentinel is deliberately absent)
   #   invariant: the claim-time candidate version (computed from the release plan's
   #              bump-class) is NOT already present in the claimed_set (published
   #              Release tags U signed origin tags U in-flight DEPLOYED-not-VERIFIED
@@ -7489,9 +7505,13 @@ cmd_check() {
   # here). The verdict is computed by the shared _vf_compute_verdict body (DD1) so
   # the CI probe (--check-version-freeness) and this lifecycle check cannot diverge.
   #
-  # Candidate-derivation INPUT (slug-primary, founding ADR #1697): absent a resolvable
-  # release-claim context (no PMO_VERSION_FREENESS_* and no plan), SKIP cleanly
-  # (absence is not drift) — same posture as Check 40's operator-local SKIP.
+  # Candidate-derivation INPUT (slug-primary, founding ADR #1697): _vf_resolve_candidate()
+  # reads the ENVIRONMENT ONLY — PMO_VERSION_FREENESS_CANDIDATE (branch 1, the exact
+  # always-correct surface), else PMO_VERSION_FREENESS_BUMP routed through the
+  # claim-version.sh allocator (branch 2). There is NO plan-file branch: the resolver does
+  # not read a release plan, so a carried provisional-display version never reaches this
+  # predicate unless it is passed in explicitly via branch 1. Absent BOTH env inputs,
+  # SKIP cleanly (absence is not drift) — same posture as Check 40's operator-local SKIP.
   local VERSION_FREENESS_MODE; VERSION_FREENESS_MODE="$(resolve_check_mode "version-freeness")"
   if [[ "$VERSION_FREENESS_MODE" != "off" ]]; then
     log "Check 41: Pre-merge version-freeness (claim-time candidate vs claimed_set) (#1677)"
@@ -8412,7 +8432,7 @@ cmd_check() {
   # reversibility CHEAP. Primitive: core/deploy/tools/check-milestone-epic-membership.py
   # (carries --self-test).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 56: Milestone↔epic membership (M1 membership + M2 reconciliation; warn-mode initial; enforce-flip deferred)"
+    log "Check 56: Milestone↔issue-population invariants (M1 membership + M2 reconciliation + M3 scaffold-completeness (advisory); warn-mode initial; enforce-flip deferred)"
     local c56_script="core/deploy/tools/check-milestone-epic-membership.py"
     if [[ ! -f "$c56_script" ]]; then
       flag_warn_or_issue "milestone-epic-membership" "primitive script missing: $c56_script"
@@ -8445,6 +8465,23 @@ cmd_check() {
           if [[ -n "$c56_m2" ]]; then
             flag_warn_or_issue "milestone-epic-membership" "M2 reconciliation (warn-only; advisory) — description↔membership divergence on: $c56_m2"
           fi
+        fi
+        # M3 — scaffold completeness. Routed through flag_advisory_only, NOT
+        # flag_warn_or_issue: this leg's predicate cannot distinguish a genuine
+        # scaffold gap from a milestone that legitimately gained a card after
+        # scaffolding, so it belongs to the class that reports and never gates.
+        # flag_advisory_only has no mode case and no ISSUES increment, so M3
+        # cannot be flipped to FAIL when the shared cohort graduates — the
+        # constraint is a property of the emitter, not a default someone can flip.
+        # No new check number and no new mode dial: M3 is a leg of Check 56.
+        local c56_m3 c56_m3_adv c56_marker
+        c56_m3=$(echo "$c56_out" | awk -F'\t' '$1=="M3"{print "ms#"$2":"$3" "$4}' | paste -sd'; ' -)
+        c56_m3_adv=$(echo "$c56_out" | awk -F'\t' '$1=="COUNT_M3_ADV"{print $2}')
+        c56_marker=$(echo "$c56_out" | awk -F'\t' '$1=="SCAFFOLD_MARKER"{print "ms#"$2" "$3}' | paste -sd', ' -)
+        if [[ -n "$c56_m3" ]]; then
+          flag_advisory_only "milestone-scaffold-completeness" "M3 scaffold completeness — load-bearing finding(s): $c56_m3 [advisory ${c56_m3_adv:-0}; marker adoption ${c56_marker:-none}]"
+        else
+          log "  OK:    milestone scaffold completeness (M3) — 0 load-bearing finding(s) (${c56_m3_adv:-0} advisory; marker adoption ${c56_marker:-none})"
         fi
       else
         flag_warn_or_issue "milestone-epic-membership" "check errored (exit $c56_exit): $(echo "$c56_out" | head -1)"

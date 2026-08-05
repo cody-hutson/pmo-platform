@@ -33,7 +33,9 @@ The `operator-feedback` / `learning` split is not a severity ranking. It exists 
 | `learning:` | YES on `learning` / `operator-feedback` | ONE abstracted sentence | No quotation marks, no names, no verbatim text |
 | `reason:` | YES on `no-learning` | Why nothing was emitted | Short, mechanical |
 
-Column values outside `payload` are fixed by the schema: `actor` = `skill:session-retro`; `subject` = `session:<handle>`; `reversibility` = `CHEAP`; `outcome` = `resolved`; `version` = the active release tag; `stage` = the stage the session was working in, or `13` for a non-pipeline conversational session.
+Column values outside `payload` are fixed by the schema: `actor` = `skill:session-retro`; `subject` = `session:<handle>`; `reversibility` = `CHEAP`; `outcome` = `resolved`; `stage` = the stage the session was working in, or `13` for a non-pipeline conversational session.
+
+**`version` = the active release's MILESTONE SLUG — never a `vX.Y`.** It is the release join key per `pipeline-event-log-schema.md` § 2a, and the writer **rejects** a version-shaped value: the shipped version binds only at the Stage-12 claim, after emission has begun, so it is neither unique across releases nor stable within one. The worked invocations below use `pipeline-telemetry-tail` as a concrete slug — substitute the slug of the release the session is actually working in. A session with **no release context at all** passes the reserved literal `(none)`.
 
 **Payload limits (§ 4.3, enforced by the tool):** ≤ 300 characters, no `|` character. A learning that will not fit in 300 characters is not abstracted enough — compress it, do not add a pointer.
 
@@ -52,7 +54,7 @@ A session that produced no novel learning emits **exactly one** `no-learning` ro
 
 ```bash
 ./release/tools/append-pipeline-event.sh \
-  --version v3.83 --stage 13 \
+  --version pipeline-telemetry-tail --stage 13 \
   --event-type session-retro --event-subtype no-learning \
   --actor skill:session-retro --subject "session:d4e5f6" \
   --reversibility CHEAP --outcome resolved \
@@ -79,7 +81,7 @@ Operator feedback with no preceding recommendation (the AC6 class — the row th
 
 ```bash
 ./release/tools/append-pipeline-event.sh \
-  --version v3.83 --stage 6 \
+  --version pipeline-telemetry-tail --stage 6 \
   --event-type session-retro --event-subtype operator-feedback \
   --actor skill:session-retro --subject "session:a1b2c3" \
   --reversibility CHEAP --outcome resolved \
@@ -90,7 +92,7 @@ Session friction:
 
 ```bash
 ./release/tools/append-pipeline-event.sh \
-  --version v3.83 --stage 6 \
+  --version pipeline-telemetry-tail --stage 6 \
   --event-type session-retro --event-subtype learning \
   --actor skill:session-retro --subject "session:a1b2c3" \
   --reversibility CHEAP --outcome resolved \
@@ -100,10 +102,10 @@ Session friction:
 A hindsight recommendation↔choice delta — **only** when the live path emitted none for that decision (verify first; see the PROC failure mode in SKILL.md). This is a `decision` row, not a `session-retro` row; the retro's contribution is the `via:` provenance:
 
 ```bash
-./release/tools/query-pipeline-event.sh --version v3.83 --event-subtype recommendation-choice-delta   # verify absence FIRST
+./release/tools/query-pipeline-event.sh --release pipeline-telemetry-tail --event-subtype recommendation-choice-delta   # verify absence FIRST
 
 ./release/tools/append-pipeline-event.sh \
-  --version v3.83 --stage 5 \
+  --version pipeline-telemetry-tail --stage 5 \
   --event-type decision --event-subtype recommendation-choice-delta \
   --actor skill:session-retro --subject "#N" \
   --reversibility CHEAP --outcome resolved \
