@@ -1,10 +1,10 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-118 — The alternatives section is required with conditional content, and Accepted ADRs admit durability-hygiene edits
-status: Proposed (flips to Accepted at this release's Stage 9 plan-review gate)
+status: Accepted — ratified by the operator at the Stage 13 close gate for the `adr-corpus-conformance` release, 2026-08-05, shipped as v4.11. The flip is verified against this file's `status:` field, never inferred from milestone closure.
 date: 2026-08-03
 release: adr-corpus-conformance
-deciders: "Workspace owner (ratifies at this release's Stage 9 plan-review gate); requirement level and carve-out shape designed at Stage 5 Solutioning, the heading-equivalence and public-surface calls rendered at the Stage-4 and consolidated Wave-1 gates, authored at Stage 6"
+deciders: "Workspace owner (ratified at this release's Stage 13 close gate); requirement level and carve-out shape designed at Stage 5 Solutioning, the heading-equivalence and public-surface calls rendered at the Stage-4 and consolidated Wave-1 gates, authored at Stage 6"
 tags: [architecture, adr, governance, schema, immutability, conformance, single-source-of-truth, reversibility-cheap]
 source_observations:
   - "The requirement level for the ADR alternatives section was stated on five surfaces at four mutually incompatible levels: the schema omitted the section from its required set entirely; the authoring guide called it 'the load-bearing section — it is why the ADR exists' without stating a formal level; the operations template marked it '(optional — recommended whenever >=2 viable options existed)'; the intake issue template marked its Considered-Options field `required: true`; and the scaffolding procedure emitted it by construction as one of seven sections. The originating ticket named only the first three."
@@ -20,7 +20,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent. It flips to **Accepted** at this release's Stage-9 plan-review gate; per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure.
+**Accepted** — ratified by the operator at the Stage 13 close gate for the `adr-corpus-conformance` release, 2026-08-05, shipped as **v4.11**. Authored at Stage 6 per the Stage-6 ADR-authoring precedent. The ratification was rendered at Stage 13, not at Stage 9 as this record originally promised: no pipeline stage performs that flip, and the promise is a spec gap tracked outside this record rather than a property of this decision. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
 
 This record is the first ADR authored under the section set it defines, and it carries that set in full.
 

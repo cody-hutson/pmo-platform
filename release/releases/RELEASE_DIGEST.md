@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.11 (2026-08-05) — Decision records follow one standard, and the index can no longer go stale
+
 ### v4.10 (2026-08-05) — Skills with overlapping triggers now route cleanly, and stay that way
 
 ### v4.09 (2026-08-05) — A held rule now fires at the moment it is needed
