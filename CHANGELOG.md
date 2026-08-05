@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.08] - 2026-08-05
+
+Release records, telemetry and planning now wait for the one moment a version is claimed — and the cycle-time measurement finally produces a number.
+
+[Full notes](release/releases/notes/v4.08_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.08)
+
 ## [v4.07] - 2026-08-04
 
 A release bundle closes to new work once planning starts, and four bundling checks that silently did nothing now actually run.
