@@ -1,7 +1,7 @@
 ---
 name: weekly-status-rollup
 description: >
-  Generates a weekly executive status roll-up across all active projects. Covers project health, key risks, decisions made/pending, and upcoming milestones. Writes back updated health indicators to PORTFOLIO.md. Triggers: "weekly roll-up", "weekly status", "SteerCo prep", "SteerCo update", "executive status", "portfolio summary", "portfolio health", "cross-project status."
+  Generates a weekly executive status roll-up across all active projects. Covers project health, key risks, decisions made/pending, and upcoming milestones. Writes back updated health indicators to PORTFOLIO.md. Triggers: "generate the weekly roll-up", "weekly status", "SteerCo prep deck", "executive status", "cross-project health summary", "refresh the health indicators".
 version: v2.24
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
@@ -562,9 +562,13 @@ watermelon flag.
 **Section 7 ↔ Section 1 feedback (worst-component dominance).** The watermelon scan's W2 signal
 (green project-RAG over a worse component) requires the **worst-component dominance rule** to
 detect a violation of. Section 1's project color is therefore composed by the transparent-roll-up
-rule — **the project color is driven by its worst component** (per `channel-formats.md:245-246`,
-the watermelon-prevention dominance rule the registry's `metric-registry.md` § Project-Level RAG
-Composition already names). When the Section 7 scan returns a WATERMELON-FLAG whose evidence shows
+rule — **the project color is driven by its worst component** (the dominance reading of the
+**Watermelon detection rule** under [`channel-formats.md` § RAG Threshold
+Standards](../comms-writer/references/channel-formats.md), which requires component-level RAGs to
+roll up transparently to the project-level RAG; "worst component" is this platform's name for that
+requirement, not the source's own wording — the same watermelon-prevention rule the registry's
+[`metric-registry.md` § Project-Level RAG Composition](references/metric-registry.md) already
+names). When the Section 7 scan returns a WATERMELON-FLAG whose evidence shows
 a component worse than the reported project color, the Section 1 color is corrected to the worst
 component (and the correction reasoning is cited per the § Reversibility Discipline — a
 health-color transition shared with leadership is decision-class and carries its tier).

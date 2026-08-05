@@ -1,6 +1,6 @@
 # Deployment Strategies — Shared Role-Skill Reference
 
-> **Shared surface.** Consumed by every PMO role-Specialist skill whose scope touches releases, cutovers, or operational readiness. Authored for longevity — a change here ripples to all consumers. The structure is the contract: **named strategies** (each with when-to-use + rollback mechanism), **rollback types**, and an **RTO/RPO tier table**. Cells are decision-grade. The role-skill factory (`pmo-skill-refiner` → `## Workflow — Consume Feeding Document`) draws on this file as the **deployment-strategies** substrate; a role whose modes reason about go-lives references these strategies and tiers.
+> **Shared surface.** Build-time substrate for the `pmo-skill-refiner` role-skill factory — materialized, when a role is built, into the body of any PMO role-Specialist whose scope touches releases, cutovers, or operational readiness; not loaded by those skills at runtime. Authored for longevity — a change here ripples to all consumers. The structure is the contract: **named strategies** (each with when-to-use + rollback mechanism), **rollback types**, and an **RTO/RPO tier table**. Cells are decision-grade. The role-skill factory (`pmo-skill-refiner` → `## Workflow — Consume Feeding Document`) draws on this file as the **deployment-strategies** substrate; a role whose modes reason about go-lives references these strategies and tiers.
 
 This file is **reference content, not a skill** (no `SKILL.md`; not in any `deploy.sh` roster array; `_`-prefixed sibling of the skill directories).
 

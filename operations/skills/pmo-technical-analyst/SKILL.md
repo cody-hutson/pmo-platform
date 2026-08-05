@@ -1,7 +1,7 @@
 ---
 name: pmo-technical-analyst
 description: >
-  Reviews technical artifacts with senior TPM judgment — surfaces risks not obvious from the document alone. Modes: FDD review · Integration risk · Architecture assessment · Dependency identification · Feasibility feedback. Use when uploading FDDs, integration specs, or architecture documents. Triggers: "review this FDD", "what are the technical risks", "check this integration design", "architecture review", "feasibility check", "what's missing from this spec."
+  Reviews technical artifacts with senior TPM judgment — surfaces risks not obvious from the document alone. Modes: FDD review · Integration risk · Architecture assessment · SOP / operational readiness review · Cross-artifact technical risk assessment. Use when uploading FDDs, integration specs, or architecture documents. Triggers: "review this FDD", "what are the technical risks", "check this integration design", "architecture review", "feasibility check", "what's missing from this spec", "review this SOP".
 version: v2.01
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true

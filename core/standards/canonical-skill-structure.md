@@ -47,6 +47,17 @@ PMO tooling does NOT gate the NEW-skill authoring path. **Rationale:** per D-Cre
 
 `docx`, `pdf`, `pptx`, `xlsx`, `schedule` — Cowork-provided proprietary skills managed by Anthropic. They are outside PMO governance surface and are explicitly not registered in `deploy.sh` per-module arrays (`OPERATIONS_SKILLS`/`RELEASE_SKILLS`/`CORE_SKILLS`). Enforcement gates skip these by exclusion.
 
+**Templates and shared substrate are not skills.** A `SKILL.md` living under a `_`-prefixed directory — `_templates/`, `_shared/` — is a template or a shared substrate file, not a deployed skill. It is excluded from every skill population **structurally**, by non-membership in the `deploy.sh` per-module arrays, which are the single roster source of truth (ADR-008) and the existence proof for a registry CI row (ADR-038 §Decision 1). Nothing needs to name such a file to exclude it; a filesystem-derived roster is what would wrongly include it. This is why the roster is never derived by globbing the skill tree: today that glob returns one more `SKILL.md` than there are skills, and the extra one is `operations/skills/_templates/system-specialist/SKILL.md`.
+
+**Two skill populations exist, and they are deliberately different sizes.** Both are built from the same `deploy.sh` arrays, and a future reader must not "reconcile" them:
+
+| Population | Members | Canary included? | Read by | Why |
+|---|---|---|---|---|
+| `CI_ROSTER` | `OPERATIONS_SKILLS` + `RELEASE_SKILLS` + `CORE_SKILLS` | **No** | Check 5(d) / `check-registry-currency.sh`; `core/skills/registry.md` | The source-only selftest canary ships no package and is not a configuration item (ADR-04). |
+| `AUDIT_POPULATION` | the same three arrays **+** `CANARY_SKILLS` | **Yes** | Check 67 (cross-skill trigger collision) | A canary's `description:` is still loaded by the harness, so it can still mis-route a live request. Trigger collision is a property of the description surface, not of packaging. |
+
+A third denominator exists nearby and is also correct for its own purpose: Check 66 (cross-skill citation-anchor drift) scans every tracked `*.md` under the three skill roots, not a skill roster at all, because a drifted line-number citation can live in any reference file. Three checks, three populations, one array source.
+
 ## §3 Required Frontmatter Fields
 
 Every `{operations,release,core}/skills/<skill>/SKILL.md` MUST include YAML frontmatter at the file head with the following fields:
@@ -64,6 +75,23 @@ Every `{operations,release,core}/skills/<skill>/SKILL.md` MUST include YAML fron
 Additional frontmatter fields are allowed; unknown fields are ignored by enforcement.
 
 **Migration marker semantics.** The `skill_discipline_migrated_v10_2: true` field is the activation signal for per-skill gate enforcement. Skills WITHOUT the marker pass through the hook (exit 0) and through Check 10 (skipped). This is non-breaking-on-legacy by design: the gate activates per skill as per-skill migration commits land.
+
+### `description` — the function-vs-role trigger convention
+
+The `Triggers:` phrase list inside `description` is the routing surface. Two skills whose trigger vocabularies overlap compete for the same request, and the operator gets whichever one the harness happens to pick. The convention that keeps a role and the function-skill it composes from competing:
+
+| The skill's `kind` | Its triggers name | Test |
+|---|---|---|
+| `function-skill` (and `core`) | the **mechanic** — the operation the skill performs | Could a caller who already decided what machinery to run say this? |
+| `role-Specialist` | the **ownership** — the accountability the skill holds or the decision it renders | Could only someone asking *who owns this* or *what is the call* say this? |
+
+Read `kind` from the row in [`core/skills/registry.md`](../skills/registry.md) `## Configuration Items`. Never infer it from the skill's name: `pmo-process-designer` and `pmo-technical-analyst` are `pmo-`-prefixed function-skills.
+
+This convention renders no new decision — it operationalizes two existing ones at the `description` surface. **ADR-019** establishes that a role-Specialist *composes* a function-skill rather than absorbing it, which is precisely why the two legitimately share subject-matter vocabulary and why the split must therefore live in the *phrasing* rather than in the topic. **ADR-038** stores the discriminator as the registry's `kind` field, so the convention reads existing structure instead of introducing any.
+
+**The one rule that is easy to violate while appearing to comply: ownership phrasing must be domain-anchored.** Each role's triggers use that role's own scope-noun and decision-verb. A *uniform* ownership scaffold applied across roles — `"act as the X manager"`, `"own this X"`, `"who owns this X"` — does not de-collide anything; it makes the scaffold itself the new shared vocabulary and re-collides the role peers against each other. This is measured, not hypothetical: a uniform-scaffold pass over this corpus cleared every role↔function collision and simultaneously created five new role↔role collisions. Write `"program capacity trade-off"`, not `"own this program"`.
+
+**Standing enforcement:** `deploy.sh --check` **Check 67**, which scores every pair in the audit population and flags collisions. Because a role and its composed function-skill are *expected* to overlap somewhat, a pair carrying a `DEPENDS_ON` edge in the registry is exempt from the check's WATCH band — but never from its ESCALATE band, and every exemption is printed. See [ADR-114](../ADRs/ADR-114-composition-aware-trigger-collision-gate.md).
 
 ## §4 File Layout Requirements
 

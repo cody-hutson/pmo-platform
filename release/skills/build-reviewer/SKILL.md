@@ -360,7 +360,11 @@ that already governs review behavior.
   because the platform routes single-output review to pmo-qa-auditor and
   skill-definition audit to pmo-skill-editor Mode D — the pack-level dimension
   machinery produces dimension verdicts with no pack to exercise them on, while
-  the right gate set (G1–G7, the Phase 8 baseline dimensions) never runs.
+  the right gate set never runs — the auditor's own, read from
+  [`pmo-qa-auditor` § 2. Gate Results
+  Table](../../../core/skills/pmo-qa-auditor/SKILL.md) (the sole authority on
+  which gates it ships, never a letter range restated here), or Mode D's
+  Phase 8 baseline dimensions.
 - **Root cause:** "Review" and "audit" are the highest-collision trigger words in
   the platform — build-reviewer, pmo-qa-auditor, eval-writer Review, and
   pmo-skill-editor Mode D all answer them; this skill's description matches first
@@ -374,8 +378,8 @@ that already governs review behavior.
 - **Principal response vs. junior response:** Principal checks the target shape,
   routes with a one-line rationale, and the right audit gates run. Junior loads
   the generic pack against a single output, produces a seven-dimension register
-  where a G1–G7 audit was wanted, and the operator re-runs the work through the
-  right skill.
+  where the auditor's gate-table audit was wanted, and the operator re-runs the
+  work through the right skill.
 
 ## Context for Calibration
 

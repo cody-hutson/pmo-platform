@@ -2,7 +2,7 @@
 name: pmo-qa-auditor
 description: >
   Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit · Release-process fitness audit · Dev testing (Stage-7 quality report as PR comment) · Acceptance review (Stage-8 per-criterion AC verdicts) · As-built architecture-conformance audit (delivered-work drift + cross-release fragmentation) · Decision-health audit (hub and spoke decision conduct vs corpus oracles). Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality", "dev-test this PR", "run the DT ladder", "acceptance review this PR", "grade this against the issue AC", "run the release-process fitness audit", "as-built architecture-conformance audit", "decision-health audit", "audit how we decided."
-version: v4.01
+version: v4.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -172,7 +172,7 @@ or any request to evaluate one skill's output.
 **Process**:
 1. Identify which skill produced the output.
 2. Load that skill's output contract from `../../schemas/per-skill-output-contracts.md`.
-3. Evaluate against 6 gate categories:
+3. Evaluate against every gate category defined below (the same roster rendered at § 2. Gate Results Table) — never a count or a letter range restated here, which is what went stale when this line last froze one:
    - **G1: Output contract compliance** — All required sections present with correct structure. **For ppm-agent outputs:** verify Section 10 Handoff Manifest is present (or explicit `HANDOFF_MANIFEST: None — no downstream work identified`); each `next_actions` entry has the required 5 fields (Tag, Context, Source, Scope, Inputs) plus cascade metadata (`target_skill`, `dependencies`, `dependency_satisfied`, `evidence_quality`, `cascade_scope`, `auto_invoke`) per the schema in `operations/skills/ppm-agent/SKILL.md` Section 10. Manifest absence or incomplete entries → G1 FAIL with specific missing-field finding.
    - **G2: Principal standard adherence** — Systems thinking, ruthless clarity, judgment under
      uncertainty, evidence quality. See `../../standards/principal-standard-checklist.md`.
@@ -897,10 +897,24 @@ Every QA auditor response follows this structure:
 **Auditor**: PMO QA Auditor (automated)
 ```
 
-This header frames the gate-table report modes only (Modes A–D today — the
-consumer/reviewer modes that emit a gate table, scorecard, or checklist). Producer
-and stage-formatted modes do not emit this frame — each has its own entry under
-Mode-specific output variations.
+This header frames the gate-table report modes only — the consumer/reviewer modes that
+emit a gate table, scorecard, or checklist. **Membership is set by that predicate, not by
+a count or a letter range**: a mode is in the frame iff § 2 below assigns it a gate table,
+a scorecard, or a checklist. Producer and stage-formatted modes do not emit this frame —
+each has its own entry under Mode-specific output variations, where it states its own
+non-membership.
+
+> **Scoping note — this is the report-frame axis, not the mode-set count. Do not re-open
+> as mode-set drift.** The report frame and the auditor's invocation-mode set (the
+> `## Modes` set above, which is larger and grows as modes are added) are **independent
+> axes**, and neither bounds the other — a frame reading is never a mode-set claim.
+> Frame membership is therefore stated nowhere below as a letter range or a count: each
+> Mode-specific output-variations entry states its own membership against the § 2
+> predicate instead, so the two axes cannot be conflated and a frozen frame literal
+> cannot be reintroduced and then re-read as stale mode-set drift. The partition is
+> closed and self-checking: every invocation mode outside the frame disclaims it
+> explicitly at its own entry below, so a mode added without being placed on one side of
+> the line surfaces as a missing disclaimer rather than as silent drift.
 
 ### 2. Gate Results Table
 
@@ -934,7 +948,7 @@ For each finding:
 ```
 ### Finding [N]: [Short title]
 
-**Gate**: [G1–G11]
+**Gate**: [the gate ID, taken from the § 2. Gate Results Table roster above — never a range restated here, which is what went stale the last time this template froze one]
 **Location**: [Exact section, field, or line in the reviewed output]
 **What's wrong**: [Specific description of the issue]
 **Why it matters**: [Operational impact — what goes wrong if this isn't fixed]
@@ -1051,7 +1065,9 @@ the **in-chat SUMMARY echo**.
 
 ### Mode G — Dev Testing Output
 
-Mode G does NOT emit the Mode A–D gate table. It produces the **Stage 7 Quality
+Mode G is **not a member of the § 1 gate-table report frame** — § 2 assigns it no gate
+table, no scorecard, and no checklist — so it emits neither that frame's header nor a
+gate table. It produces the **Stage 7 Quality
 Review Report** (stage-07-dev-testing.md §6): Summary / Detail / Evidence sections
 with per-dimension scores and the F-ID findings table (5-bucket severity + routing
 tier + origin), escape summary, and overall verdict — terminating in the
@@ -1060,8 +1076,9 @@ required-fields table. Posted as a PR comment per the mode's write surface.
 
 ### Mode H — Acceptance Report
 
-Mode H does NOT emit the Mode A–D gate table and is not a member of that report
-frame (its header included). It produces the **Acceptance Report** rendered
+Mode H is **not a member of the § 1 gate-table report frame** — § 2 assigns it no gate
+table, no scorecard, and no checklist — so it emits neither that frame's header nor a
+gate table. It produces the **Acceptance Report** rendered
 from `operations/templates/qa-acceptance-report-template.md` — three reader
 tiers (verdict / detail / evidence) carrying the six stage-08 §6 sections:
 acceptance matrix (columns per the acceptance-assertion contract §5,

@@ -79,17 +79,19 @@ A flow **PASSes iff every seam PASSes.** 3 flows × clean = AC met. The flows ar
 
 ### Scope
 
-The 5 shared files (the `_shared/*` files) and their consumers among the 19 role-Specialists. **Not every role consumes every file** — each file's own header declares its consumer scope:
+The 5 shared files (the `_shared/*` files) and their consumers among the 19 role-Specialists. **Not every role consumes every file, and the five files are not all consumed the same way** — each file's own header declares both *when* it is consumed and *by which* roles, and the cells below restate that header rather than paraphrasing it:
 
 | Shared file | Contract shape to check | Consumer scope (per the file's own header) |
 |---|---|---|
-| [`behavioral-markers.md`](../../../../operations/skills/_shared/behavioral-markers.md) | 12 competency areas + 5 meta-behaviors + 10 standards | All role-Specialists |
-| [`anti-pattern-catalog.md`](../../../../operations/skills/_shared/anti-pattern-catalog.md) | 8 domains × 5-field shape + TRIG/INPUT/PROC/OUT/HAND tags | All role-Specialists |
-| [`five-model-variations.md`](../../../../operations/skills/_shared/five-model-variations.md) | 5-model decision-grade columns | Roles whose output is methodology-sensitive |
-| [`deployment-strategies.md`](../../../../operations/skills/_shared/deployment-strategies.md) | 6 strategies + rollback types + RTO/RPO tiers | **Release / cutover-scoped roles only** |
-| [`lifecycle-gates.md`](../../../../operations/skills/_shared/lifecycle-gates.md) | 15-stage lifecycle + H1–H4 handoff checklists | **Lifecycle-spanning roles only** |
+| [`behavioral-markers.md`](../../../../operations/skills/_shared/behavioral-markers.md) | 12 competency areas + 5 meta-behaviors + 10 standards | **Build-time substrate** for the `pmo-skill-refiner` role-skill factory — materialized, when a role is built, into every role-Specialist body; **not loaded at runtime** |
+| [`anti-pattern-catalog.md`](../../../../operations/skills/_shared/anti-pattern-catalog.md) | 8 domains × 5-field shape + TRIG/INPUT/PROC/OUT/HAND tags | **Build-time substrate** for the factory — materialized, when a role is built, into every role-Specialist body; **not loaded at runtime** |
+| [`five-model-variations.md`](../../../../operations/skills/_shared/five-model-variations.md) | 5-model decision-grade columns | **Runtime** — consumed by every PMO role-Specialist skill |
+| [`deployment-strategies.md`](../../../../operations/skills/_shared/deployment-strategies.md) | 6 strategies + rollback types + RTO/RPO tiers | **Build-time substrate** for the factory — materialized into the body of any role-Specialist **whose scope touches releases, cutovers, or operational readiness**; **not loaded at runtime** |
+| [`lifecycle-gates.md`](../../../../operations/skills/_shared/lifecycle-gates.md) | 15-stage lifecycle + H1–H4 handoff checklists | **Build-time substrate** for the factory — materialized into the body of any role-Specialist **whose scope spans the delivery lifecycle**; **not loaded at runtime** |
 
-The audit **first builds the consumer × file matrix** (which roles reference which shared file), then checks interpretation consistency **only over actual consumer pairs** — never auditing a non-consumer against a file it does not use.
+The audit **first builds the consumer × file matrix**, then checks interpretation consistency **only over actual consumer pairs** — never auditing a non-consumer against a file it does not use. **How a file's consumer set is resolved depends on its consumption mode, and reading it the wrong way yields a vacuous pass.** For the runtime-consumed file the consumer set is *which role-Specialist SKILL.md reference it*. For the four build-time substrate files that set is **empty by construction** — no role SKILL.md references them, and a matrix built by searching for such references would return an empty consumer set and then "pass" over a population it never examined. Their consumer set is instead the factory plus the role bodies the substrate was **materialized into**, so the comparison runs against those bodies' realized structures. A file whose consumer set resolves to zero is an **inconclusive** result to be reported as such, never a CONSISTENT verdict.
+
+**Read each cell from the file, not from this table.** Every cell above is a restatement of a leading claim that lives in the shared file itself, so a header edit there makes this column wrong while it still reads plausibly — the same fail-open shape a line-number citation has. Re-read the five headers before running the audit and reconcile any divergence here first.
 
 ### Comparison method (per shared file, over its consumer set)
 

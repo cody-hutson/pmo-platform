@@ -3773,10 +3773,50 @@ cmd_check() {
   # flag_warn_or_issue — Checks 8-10 helper. In enforce-mode, acts like a normal
   # FAIL (increments ISSUES). In warn-mode, logs a WARN + appends to jsonl but
   # does NOT increment ISSUES (enabling shakedown without false-positive breaks).
+  #
+  # MODE PRECEDENCE — MOST-SPECIFIC-WINS. The mode this helper switches on is
+  # RESOLVED PER CHECK (resolve_check_mode "$check_id"), NOT read from the shared
+  # cohort variable. A per-check `<check_id>.mode` file, when present and carrying a
+  # valid value, WINS OUTRIGHT over the shared deploy-check.mode — IN BOTH DIRECTIONS:
+  #
+  #   per-check `warn`    under shared `enforce`  ->  WARN  (hold a newly-landed gate
+  #                                                          at warn while the rest of
+  #                                                          the suite enforces)
+  #   per-check `enforce` under shared `warn`     ->  FAIL  (graduate ONE gate ahead of
+  #                                                          the cohort after its
+  #                                                          shakedown window)
+  #
+  # No per-check file (or an invalid value) -> the shared $DEPLOY_CHECK_MODE, exactly
+  # as before. Mode files are operator-instance runtime state and are NEVER committed
+  # (see resolve_check_mode's contract), so a clean clone resolves every check to the
+  # shared mode and this helper behaves byte-identically to its pre-resolution form.
+  #
+  # WHY THE RESOLUTION LIVES HERE AND NOT AT THE CALL SITES. This helper is the SINGLE
+  # WARN-vs-FAIL decision point for every check that routes through it. Switching on
+  # the shared variable here silently DEFEATED every per-check override: a check could
+  # resolve its own mode into a local, take the `else` leg on a resolved `warn`, and
+  # still emit FAIL because this helper re-decided on the shared mode. That defeated
+  # the advertised independent-graduation mechanism for the checks that already call
+  # resolve_check_mode and then emit through here, and it broke the ordinary
+  # enforce-flip rollout (flip the suite to enforce; hold the new gates at warn).
+  # Resolving here makes this helper and resolve_check_mode agree on ONE precedence
+  # model, so a future check inherits working per-check gating instead of re-deriving a
+  # per-site workaround. Do NOT "simplify" this back to the shared variable.
+  #
+  # ORDERING: resolve_check_mode is defined BELOW this function. That is safe and
+  # deliberate — bash resolves a function body at CALL time, and every call site of
+  # this helper is below both definitions. Keep it that way.
+  #
+  # NOT CHANGED BY THIS RESOLUTION: what each check FINDS. The per-check mode governs
+  # only the WARN-vs-FAIL escalation of an already-made finding. The `off` kill-switch
+  # on the outer per-check block guards (`[[ "$DEPLOY_CHECK_MODE" != "off" ]]`) is a
+  # DETECTION gate and is deliberately left reading the shared mode.
   flag_warn_or_issue() {
     local check_id="$1"
     local detail="$2"
-    case "$DEPLOY_CHECK_MODE" in
+    local _check_mode
+    _check_mode="$(resolve_check_mode "$check_id")"
+    case "$_check_mode" in
       enforce)
         log "  FAIL:  $check_id — $detail"
         ISSUES=$((ISSUES + 1))
@@ -3828,9 +3868,15 @@ cmd_check() {
   # carries an invalid value, FALLS BACK to the caller-supplied default (2nd arg,
   # itself defaulting to the shared $DEPLOY_CHECK_MODE). Echoes the resolved mode
   # (enforce|warn|off). This lets one check graduate warn→enforce independently
-  # of the ~12-check shared-mode cohort without touching any other check's
-  # behavior — every other check keeps reading $DEPLOY_CHECK_MODE directly and is
+  # of the shared-mode cohort without touching any other check's behavior: a check
+  # with no mode file resolves to the caller default (the shared mode) and is
   # byte-for-byte unchanged.
+  #
+  # THIS IS THE ONE PRECEDENCE MODEL. flag_warn_or_issue — the shared WARN-vs-FAIL
+  # emitter — calls this resolver with its own check_id, so a per-check override is
+  # honored for EVERY check that routes through it, not only for the checks that
+  # resolve a mode into a local first. Whatever this resolver returns is what the
+  # emitter escalates on; there is no second, contradicting rule anywhere.
   #
   #   resolve_check_mode "<check_id>"              # fallback = shared mode
   #   resolve_check_mode "<check_id>" "<default>"  # fallback = caller's default
@@ -7534,28 +7580,30 @@ cmd_check() {
         # "NOT_FREE <candidate> <colliding-tag>"
         c41_detail="${c41_verdict#NOT_FREE }"
         # version-freeness.mode is its OWN per-check mode file (resolve_check_mode),
-        # decoupled from the shared cohort; but flag_warn_or_issue switches on the
-        # shared $DEPLOY_CHECK_MODE. Honor the per-check resolution: only FAIL (++ISSUES)
-        # when THIS check's resolved mode is enforce; otherwise WARN regardless of the
-        # shared mode, so version-freeness graduates independently.
-        if [[ "$VERSION_FREENESS_MODE" == "enforce" ]]; then
-          flag_warn_or_issue "version-freeness" \
-            "candidate $c41_detail already claimed — re-version BEFORE merge; a Stage-12 Phase B3 tag push would be rejected after the merge lands with stale labels"
-          [[ "$DEPLOY_CHECK_MODE" == "enforce" ]] || { ISSUES=$((ISSUES + 1)); log "  FAIL:  version-freeness — candidate $c41_detail already claimed (per-check enforce)"; }
-        else
-          flag_warn_or_issue "version-freeness" \
-            "candidate $c41_detail already claimed — re-version BEFORE merge; a Stage-12 Phase B3 tag push would be rejected after the merge lands with stale labels"
-        fi
+        # decoupled from the shared cohort. flag_warn_or_issue now resolves that SAME
+        # per-check mode itself (most-specific-wins), so the escalation is already
+        # correct here and needs no per-site compensation: a resolved `enforce` FAILs
+        # even when the shared mode is warn, and a resolved `warn` WARNs even when the
+        # shared mode is enforce. The hand-rolled
+        # `[[ $DEPLOY_CHECK_MODE == enforce ]] || ISSUES=$((ISSUES + 1))` compensation
+        # that used to sit here predates that resolution; keeping it would now
+        # DOUBLE-COUNT against the helper's own increment. Its two arms emitted an
+        # identical detail string, so collapsing them changes no emitted byte.
+        flag_warn_or_issue "version-freeness" \
+          "candidate $c41_detail already claimed — re-version BEFORE merge; a Stage-12 Phase B3 tag push would be rejected after the merge lands with stale labels"
         ;;
       UNDECIDABLE)
         # "UNDECIDABLE <candidate> <reason>" — fail-closed semantics bind the merge
         # gate (the probe); on the lifecycle surface this is reported (WARN/enforce
         # per the per-check mode) so the operator sees the untaggable state early.
         c41_detail="${c41_verdict#UNDECIDABLE }"
+        # Same removal as the NOT_FREE arm above: flag_warn_or_issue resolves
+        # version-freeness.mode itself, so the compensation line would double-count.
+        # Unlike NOT_FREE, the two arms carry DIFFERENT detail strings, so the branch is
+        # retained to keep both messages byte-identical to their pre-fix form.
         if [[ "$VERSION_FREENESS_MODE" == "enforce" ]]; then
           flag_warn_or_issue "version-freeness" \
             "freeness undecidable ($c41_detail) — fail-closed; operator must resolve the untaggable state before merge"
-          [[ "$DEPLOY_CHECK_MODE" == "enforce" ]] || { ISSUES=$((ISSUES + 1)); log "  FAIL:  version-freeness — undecidable ($c41_detail) (per-check enforce)"; }
         else
           flag_warn_or_issue "version-freeness" \
             "freeness undecidable ($c41_detail) — fail-closed at the merge gate; operator must resolve the untaggable state before merge"
@@ -9149,6 +9197,199 @@ cmd_check() {
           flag_warn_or_issue "release-log-budget" "the hot release log is ${c65_bytes} B, over its ${c65_budget} B budget. Run 'python3 ${c65_tool} --plan' to see what would move, then '--apply' and '--verify' in a separate commit. This is a MOVE: every relocated byte lands in a same-directory archive segment and every heading stays put"
         else
           log "  OK:    release-log-budget — $(( c65_budget - c65_bytes )) B of headroom; no archival chore due"
+        fi
+      fi
+    fi
+  fi
+
+
+  # ─── Check 66: Cross-skill citation-anchor drift (warn-mode initial) ────────
+  #
+  # WHAT IT ASSERTS. No tracked *.md under core/skills/, release/skills/ or
+  # operations/skills/ locates a cross-skill referent by LINE NUMBER. The canonical
+  # form is a section-name anchor — a `§` segment carrying the target heading's text
+  # verbatim, over a plain link to the target file with no `#fragment`. This block is
+  # the convention's normative home: it is stated where it is enforced, so the rule and
+  # the gate cannot drift apart.
+  #
+  # WHY THE LINE-NUMBER FORM IS THE DEFECT — it fails OPEN. Every line number in a long
+  # file "resolves", so a citation that has drifted onto the wrong content is
+  # indistinguishable from a correct one by any mechanical means. Measured at the
+  # introducing pin: 5 of 6 release-planner citations in pmo-release-manager pointed at
+  # the wrong content, and 7 of 7 change-management citations in pmo-ocm-lead were off
+  # by exactly one line — a single inserted line upstream broke seven at once. A section
+  # name that no longer exists returns zero from a grep. The point is not accuracy; it
+  # is converting a silent failure mode into a detectable one.
+  #
+  # TWO LEXICAL FORMS, because narrowing to one was MEASURED to miss real carriers:
+  # F1 `SKILL.md:NNN` and F2 a backticked bare `` `:NNN` ``. An F1-only predicate misses
+  # 3 live anchors inside a file it already flags, and misses an entire third carrier
+  # whose 9 anchors are all F2.
+  #
+  # SCOPE — a TREE + FILE-TYPE predicate, not a filename glob and not the whole corpus.
+  # A filename glob (SKILL.md + composition-contract-*.md) is precisely what hid a
+  # composition contract that is not named composition-contract-*.md; scoping by tree
+  # covers a new one on creation rather than on someone remembering to register it. The
+  # whole corpus was measured too: it adds 38 out-of-scope lines, EVERY one a legitimate
+  # use — frozen release plans, an immutable ADR, [SOURCE]-labelled evidence pins, and
+  # upstream-reference-catalog.md's `upstream_citation` field, which DEFINES itself as
+  # an exact file:line pin into an external repo we neither control nor can add anchors
+  # to. Flagging those would require an exemption list — a second source of truth for
+  # what counts as a citation — to buy zero additional true positives. Fixture / eval /
+  # testdata trees are exempt: they carry deliberate defects as their purpose (the same
+  # exemption Checks 63 and 64 carry, for the same reason).
+  #
+  # DECLARED COVERAGE BOUNDARY — state it; do not imply more. NOT covered: whether a
+  # section-name anchor's cited heading actually EXISTS in its target (a different
+  # invariant, checked by the resolution predicate rather than here); whether a
+  # nearest-enclosing-heading citation's PROSE SUB-REFERENT still exists — those
+  # citations carry a verified enclosing heading and an UNVERIFIED sub-locator that this
+  # predicate is lexically incapable of seeing, so a renumbered step still fails open;
+  # non-.md files, where a tool legitimately prints file:line; and citations to
+  # non-SKILL.md targets.
+  #
+  # WARN-MODE INITIAL via resolve_check_mode "citation-anchor" — the Check 51-65
+  # deploy-check precedent, NOT the PreToolUse-hook .mode surface. Flip to enforce with
+  # a `citation-anchor.mode` file after the >=3-day warn-log review. The reintroduction
+  # of a line anchor is a signal to correct a citation, never a reason to block a
+  # deploy, so the first posture is a report.
+  #
+  # THE CHECK CARRIES ITS OWN RECORD (PV-6). Its denominator and BOTH control arms are
+  # fields of its own emitted output, so a reader can distinguish "zero found" from
+  # "nothing examined". A self-test regression is a hard FAIL on EVERY mode: a probe
+  # that can no longer be shown to detect AND to discriminate proves nothing by
+  # returning zero.
+  #
+  # Primitive: core/deploy/tools/check-citation-anchors.sh (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 66: Cross-skill citation-anchor drift (line-number locators in the skill self-description tree; warn-mode initial; enforce-flip deferred)"
+    local c66_script="core/deploy/tools/check-citation-anchors.sh"
+    if [[ ! -f "$c66_script" ]]; then
+      flag_warn_or_issue "citation-anchor" "primitive script missing: $c66_script (the gate cannot assert anything without it; a repo defect, not a benign absence)"
+    else
+      local c66_mode
+      c66_mode=$(resolve_check_mode "citation-anchor")
+      # ── control arms: the committed two-armed fixture set ────────────────────
+      local c66_fx_out c66_fx_rc=0
+      c66_fx_out=$(bash "$c66_script" --self-test 2>&1) || c66_fx_rc=$?
+      log "  CTRL:  citation-anchor — $(echo "$c66_fx_out" | tail -1)"
+      if [[ $c66_fx_rc -ne 0 ]]; then
+        log "  FAIL:  citation-anchor-fixtures — fixture regression (hard-fail on every mode). A probe that can no longer be shown to detect AND to discriminate proves nothing by returning zero."
+        echo "$c66_fx_out" | sed 's/^/         /'
+        ISSUES=$((ISSUES + 1))
+      else
+        # ── the scan: denominator first, then findings ─────────────────────────
+        local c66_out c66_rc=0
+        c66_out=$(bash "$c66_script" 2>&1) || c66_rc=$?
+        log "  DENOM: citation-anchor — $(echo "$c66_out" | sed -n 's/^DENOM: //p' | tail -1)"
+        if [[ $c66_rc -eq 3 ]]; then
+          flag_warn_or_issue "citation-anchor" "scan-surface error — $(echo "$c66_out" | sed -n 's/^SCAN-ERROR: //p' | tail -1). The denominator was not established, so a zero here would be untrustworthy; this is not a clean result"
+        elif [[ $c66_rc -ne 0 ]]; then
+          local _c66_hit
+          while IFS= read -r _c66_hit; do
+            [[ -z "$_c66_hit" ]] && continue
+            if [[ "$c66_mode" == "enforce" ]]; then
+              log "  FAIL:  citation-anchor — ${_c66_hit#FAIL: } — cite the composed section by name (a \`§ <verbatim heading>\` segment over a plain link), not by line number"
+              ISSUES=$((ISSUES + 1))
+            else
+              flag_warn_or_issue "citation-anchor" "${_c66_hit#FAIL: } — cite the composed section by name (a \`§ <verbatim heading>\` segment over a plain link), not by line number: a line anchor still resolves after the target is edited while pointing at the wrong content, so the drift is undetectable"
+            fi
+          done < <(echo "$c66_out" | grep '^FAIL: ' || true)
+        else
+          log "  OK:    citation-anchor — no line-number locator in any examined skill self-description file"
+        fi
+      fi
+    fi
+  fi
+
+  # ─── Check 67: Composition-aware cross-skill trigger collision (warn-mode initial) ───
+  #
+  # WHAT IT ASSERTS. No two skills in the audit population compete for the same request.
+  # The harness scores each pair's `Triggers:` vocabulary (content-token Jaccard) and
+  # bands the result: at or above threshold = ESCALATE, two-thirds of threshold = WATCH.
+  #
+  # THE COMPOSITION RULE (CR-1, ADR-114) — WHY A PLAIN SKIP WOULD BE WRONG. A
+  # role-Specialist COMPOSES the function-skill it invokes (ADR-019), so the two
+  # legitimately share subject-matter vocabulary and a naive gate re-flags them forever.
+  # But the composition edge CO-VARIES WITH THE DEFECT on this corpus: when the audit was
+  # first run suite-wide, all 4 ESCALATE pairs carried a DEPENDS_ON edge. A gate that
+  # skipped composition-linked pairs would therefore have suppressed 100% of its own
+  # findings and printed PASS over a corpus carrying a 0.733 collision — a dormant
+  # capability wearing a verdict line. So linkage suppresses the WATCH band ONLY; the
+  # ESCALATE band applies to every pair unchanged. Do NOT "simplify" this to a skip.
+  #
+  # WHY THE EXEMPT LINE IS MANDATORY, NOT DECORATION. The rule opens a blind interval
+  # between the WATCH floor and the ESCALATE threshold for exactly the pair class the
+  # trigger convention reshapes. The entire argument for exempting is that the suppressed
+  # set is benign — a claim nobody can re-check if it is never printed. The EXEMPT line is
+  # emitted on every run, pass or fail, for the same reason DENOM is.
+  #
+  # POPULATION — AUDIT_POPULATION, NOT CI_ROSTER. This unions CANARY_SKILLS in (55),
+  # whereas Check 5(d) / check-registry-currency.sh deliberately exclude it (54): a
+  # canary's description is still loaded by the harness, so it can still mis-route a live
+  # request. Trigger collision is a property of the description surface, not of packaging.
+  # The two populations are documented in canonical-skill-structure.md § 2. Do NOT
+  # "reconcile" them to a single number.
+  #
+  # WARN-MODE INITIAL via resolve_check_mode "trigger-collision", per the Check 51-66
+  # precedent; enforce-flip deferred to bypass-mode-readiness.md § Warn-Mode Initial.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 67: Composition-aware cross-skill trigger collision (registry-linked pairs exempt from WATCH, never from ESCALATE; warn-mode initial; enforce-flip deferred)"
+    local c67_script="release/skills/pmo-skill-refiner/scripts/run_eval_audit.py"
+    local c67_registry="core/skills/registry.md"
+    if [[ ! -f "$c67_script" ]]; then
+      flag_warn_or_issue "trigger-collision" "primitive script missing: $c67_script (the gate cannot assert anything without it; a repo defect, not a benign absence)"
+    elif [[ ! -f "$c67_registry" ]]; then
+      flag_warn_or_issue "trigger-collision" "composition source missing: $c67_registry — without it the gate would silently degrade to a non-composition-aware run"
+    else
+      local c67_mode c67_names
+      c67_mode=$(resolve_check_mode "trigger-collision")
+      c67_names=$(printf '%s\n' "${OPERATIONS_SKILLS[@]}" "${RELEASE_SKILLS[@]}" \
+                                "${CORE_SKILLS[@]}" "${CANARY_SKILLS[@]}" | paste -sd, -)
+      # PYTHONPATH here is belt-and-braces BY DESIGN, not by confusion: run_eval_audit.py
+      # self-bootstraps sys.path (so it runs from any cwd), and this prefix — the qa.sh
+      # idiom — guarantees the gate survives a future refactor of that bootstrap.
+      # Removing either one alone is safe; removing both is not.
+      # ── control arms FIRST: a probe that cannot be shown to detect proves nothing ──
+      local c67_fx_out c67_fx_rc=0
+      c67_fx_out=$(PYTHONPATH="release/skills/pmo-skill-refiner${PYTHONPATH:+:${PYTHONPATH}}" \
+                   /usr/bin/python3 "$c67_script" --self-test 2>&1) || c67_fx_rc=$?
+      log "  CTRL:  trigger-collision — $(echo "$c67_fx_out" | tail -1)"
+      if [[ $c67_fx_rc -ne 0 ]]; then
+        log "  FAIL:  trigger-collision-fixtures — fixture regression (hard-fail on every mode). A probe that can no longer be shown to detect AND to discriminate proves nothing by returning zero."
+        echo "$c67_fx_out" | sed 's/^/         /'
+        ISSUES=$((ISSUES + 1))
+      else
+        # ── the scan: denominator first, then the exemption ledger, then findings ──
+        local c67_out c67_rc=0
+        c67_out=$(PYTHONPATH="release/skills/pmo-skill-refiner${PYTHONPATH:+:${PYTHONPATH}}" \
+                  /usr/bin/python3 "$c67_script" \
+                    --skills-dir core/skills --skills-dir operations/skills --skills-dir release/skills \
+                    --skills "$c67_names" --registry "$c67_registry" --composition-aware \
+                    --verbose 2>&1) || c67_rc=$?
+        # The denominator AND the auditable population are logged on EVERY run, pass or
+        # fail. "Skills audited" alone would let "nothing found" read identically to
+        # "nothing examined": a skill whose description yields no trigger phrases scores
+        # zero against everything, so its pairs cannot return non-zero.
+        log "  DENOM: trigger-collision — $(echo "$c67_out" | sed -n 's/^Skills audited: \([0-9]*\).*Pairs: \([0-9]*\).*/\1 skill(s), \2 pair(s) examined/p' | tail -1); auditable: $(echo "$c67_out" | sed -n 's/^Auditable: //p' | tr -s ' ' | tail -1)"
+        log "  EXEMPT: trigger-collision — $(echo "$c67_out" | sed -n 's/^Exempt (composition-linked, WATCH band suppressed; ESCALATE never suppressed): //p' | tail -1)"
+        if [[ $c67_rc -eq 3 ]]; then
+          flag_warn_or_issue "trigger-collision" "resolution failure — $(echo "$c67_out" | sed -n 's/^Error: //p' | tail -1). The population was not established, so a zero here would be untrustworthy; this is not a clean result"
+        elif [[ $c67_rc -eq 1 ]]; then
+          local _c67_hit
+          while IFS= read -r _c67_hit; do
+            [[ -z "$_c67_hit" ]] && continue
+            if [[ "$c67_mode" == "enforce" ]]; then
+              log "  FAIL:  trigger-collision — ${_c67_hit# } — narrow the triggers (function-skills take mechanic phrasing, role-Specialists take domain-anchored ownership phrasing per canonical-skill-structure.md § 3); do NOT widen the exemption to hide it"
+              ISSUES=$((ISSUES + 1))
+            else
+              flag_warn_or_issue "trigger-collision" "${_c67_hit# } — narrow the triggers (function-skills take mechanic phrasing, role-Specialists take domain-anchored ownership phrasing per canonical-skill-structure.md § 3); do NOT widen the exemption to hide it: two skills competing for one request means the operator gets whichever the harness happens to pick"
+            fi
+          done < <(echo "$c67_out" | grep -E '^\s+\[(ESCALATE|WATCH)\]' || true)
+        elif [[ $c67_rc -ne 0 ]]; then
+          flag_warn_or_issue "trigger-collision" "check errored (exit $c67_rc): $(echo "$c67_out" | tail -1)"
+        else
+          log "  OK:    trigger-collision — no pair at or above threshold after the composition-aware WATCH exemption"
         fi
       fi
     fi

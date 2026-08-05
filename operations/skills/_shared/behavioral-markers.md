@@ -1,6 +1,6 @@
 # Behavioral Markers — Shared Role-Skill Reference
 
-> **Shared surface.** This file is consumed by every PMO role-Specialist skill (TPM, Program Coordinator, and the Wave-2/3/4 role builds). It is authored for longevity — a change here ripples to all consumers. Extend the buckets; do not narrow them to one role's needs. The role-skill factory (`pmo-skill-refiner` → `## Workflow — Consume Feeding Document`) draws on this file as the **behavioral-markers** extraction substrate; a feeding document's §3/§4 reference the competency areas and standards below.
+> **Shared surface.** Build-time substrate for the `pmo-skill-refiner` role-skill factory — materialized, when a role is built, into every PMO role-Specialist body (TPM, Program Coordinator, and the Wave-2/3/4 role builds); not loaded by those skills at runtime. It is authored for longevity — a change here ripples to all consumers. Extend the buckets; do not narrow them to one role's needs. The role-skill factory (`pmo-skill-refiner` → `## Workflow — Consume Feeding Document`) draws on this file as the **behavioral-markers** extraction substrate; a feeding document's §3/§4 reference the competency areas and standards below.
 
 This file is **reference content, not a skill** — it carries no `SKILL.md` and is not in any `deploy.sh` roster array. It is a sibling of the skill directories under `operations/skills/`, prefixed `_` to mark it as a non-skill shared resource.
 
