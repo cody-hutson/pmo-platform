@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.12] - 2026-08-05
+
+Published release pages now match the notes they came from, and every release records its own delivery rate and learnings.
+
+[Full notes](release/releases/notes/v4.12_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.12)
+
 ## [v4.11] - 2026-08-05
 
 Every decision record now meets one standard, the list of them is generated rather than typed, and two changes can add records at once.
