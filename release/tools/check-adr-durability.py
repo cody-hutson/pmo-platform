@@ -130,7 +130,8 @@ present. What it admits, and what it deliberately does not:
              `occurrences`, `13 per-stage files` -> `files`); plus the
              `<n> <singular> files` exemplar shape. Floor >= COUNT_FLOOR.
 
-  NOT ADMITTED — three named classes, each a deliberate choice, not an oversight:
+  NOT ADMITTED — four named classes. Three are deliberate choices; the fourth was
+  found by dev testing and is a MEASURED GAP, named here rather than papered over:
    1. FIXED-CARDINALITY CONSTANTS. `13 stages`, `8 columns`, `15 fields`, `104 cells`,
       `180 days` are excluded BY VOCABULARY. They share the `<n> <plural>` shape with
       a true positive and differ only in whether the noun names a GROWING population
@@ -148,6 +149,35 @@ present. What it admits, and what it deliberately does not:
    3. SPELLED-OUT NUMBERS ("forty-four skills"). Probed corpus-wide: zero occurrences
       at the time of writing (the probe's sensitivity control, a fixture carrying the
       shape, returned one). Cheap to add should one ever appear.
+   4. A NUMBER CLOSED BY MARKUP OR PUNCTUATION BEFORE THE POPULATION NOUN — emphasis
+      (``**10** lines``), a parenthetical (`45 (core) files`), a bracket, a quote.
+      `COUNT_RE` requires whitespace immediately after the number, so the intervening
+      token defeats the match. This class is NOT one of the three above: the noun is
+      IN the vocabulary, the number clears the floor, and the record carries no
+      exemption of any kind. It has a live instance —
+      `core/ADRs/ADR-106-generated-artifact-retention-purge-declined.md:66` carries
+      ``**10** lines``, a genuine count over a growing population on an `Accepted`
+      record with no override marker, no historical anchor, and not inside
+      `source_observations:`.
+
+      THIS CLASS IS OUTSIDE THE DENOMINATOR, NOT MERELY OUTSIDE THE NUMERATOR, and
+      that is the sharp part. The vocabulary-lifted arm in RE-DERIVE below — the arm
+      that DEFINES the measured recall floor — replaces the noun alternation and
+      holds every other guard constant, so it inherits the same separator requirement
+      and misses this shape too. **The measured recall figure is therefore an
+      UNDERSTATEMENT of the miss set, not a bound on it.** Read the floor as "at
+      least this much of what the lifted arm can see", never as "at most this much is
+      missed".
+
+      DO NOT WIDEN THE PREDICATE TO CLOSE THIS WITHOUT RE-MEASURING PRECISION.
+      Admitting markup or punctuation before the separator changes the match set, and
+      every other guard in this file was admitted on MEASUREMENT rather than on
+      plausibility. Widening also moves the denominator every recall figure taken
+      against this rule rests on, so a widened predicate and an old recall figure
+      cannot be reported together. Reproduce the class first, on the live instance,
+      with a one-variable pair: remove the emphasis and change nothing else ->
+      `['R2-COUNT']`; keep the emphasis and drop the number below the floor ->
+      silent; as-is -> silent.
 
   WHY A VOCABULARY AT ALL. Dropping it entirely was built and measured, not argued
   about: with every guard in this file retained and only the noun set lifted, the

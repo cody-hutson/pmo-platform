@@ -213,12 +213,36 @@ if grep -q 'depersonalization_line_verdict' "$WORKFLOW"; then
 else
   bad "repo-integrity.yml no longer calls depersonalization_line_verdict"
 fi
-# Non-vacuity control for the two greps above: a token that must NOT be present. If
+# CONSTRUCTION, not just the call. Sourcing the library and calling the verdict
+# function are necessary and NOT sufficient: the whole delta between this fix
+# working and this fix being decorative is one line in the workflow that puts the
+# handle literal into the un-carved set. Delete it and `depersonalization_line_verdict`
+# still runs, still sources, still returns — and returns SUPPRESSED-CARVEOUT on a
+# handle-bearing `deciders:` line, which is the PRE-FIX DEFECT. The failure is silent
+# by design: the library's documented empty-set fallback reproduces the shipped
+# whole-line behaviour, which is the right call for a genuinely dark dimension and is
+# exactly why a construction regression is indistinguishable from a legitimately dark
+# run. The suite built its own NOT_CARVED above, so every arm before this one grades
+# the PREDICATE given a correctly-constructed set. This grades the construction.
+if grep -qE 'esc_lines[[:space:]]+"\$HANDLE_LITERAL"[[:space:]]*>>[[:space:]]*"\$NOT_CARVED_FILE"' "$WORKFLOW"; then
+  ok "repo-integrity.yml POPULATES the un-carved set (esc_lines \$HANDLE_LITERAL >> \$NOT_CARVED_FILE)"
+else
+  bad "repo-integrity.yml no longer writes \$HANDLE_LITERAL into \$NOT_CARVED_FILE — the un-carved set is empty, so the gate silently reverts to whole-line suppression on deciders: lines"
+fi
+# Non-vacuity control for the three greps above: a token that must NOT be present. If
 # this arm ever passes, the grep-based binding assertions are matching nothing real.
 if grep -q 'depersonalization_line_verdict_THAT_DOES_NOT_EXIST' "$WORKFLOW"; then
   bad "binding-assertion control matched a nonexistent token — the greps prove nothing"
 else
   ok "binding-assertion control — a nonexistent token is absent (greps are discriminating)"
+fi
+# ... and a construction-shaped control, because the arm above is a NEW pattern and a
+# typo in it would pass silently as a nonexistent-token miss. A redirect into a file
+# the workflow does not have must NOT match.
+if grep -qE 'esc_lines[[:space:]]+"\$HANDLE_LITERAL"[[:space:]]*>>[[:space:]]*"\$NO_SUCH_CARVED_FILE"' "$WORKFLOW"; then
+  bad "construction-assertion control matched a nonexistent redirect — the construction grep proves nothing"
+else
+  ok "construction-assertion control — a nonexistent redirect target is absent (the construction grep is shaped, not loose)"
 fi
 
 echo
