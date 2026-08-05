@@ -45,6 +45,16 @@ Concretely:
 
 No enforcement posture changes: the required gates (`link-check.yml`, Dead-file-reference gate) and the advisory `release-link-check.yml` keep their tiers. This ADR changes the **rule**, not the enforcement tier.
 
+## Alternatives Considered
+
+§ Status records that the operator elected a lettered option at Collective Review scope-lock: **Option (b) — retire the fallback**, escalating the originating issue beyond its named files to supersede the fallback-establishing ADR and rewrite the template. The sibling option's verbatim text is not carried in this record; what the record does evidence is why the retention direction fails.
+
+- **Retain the bare module-prefix workspace-root fallback** (and reconcile the two checkers onto it) — **not taken.** § Context carries the load-bearing correction: the protocol claimed the fallback matched GitHub web rendering, but it does the opposite. GitHub renders a bare, no-leading-slash link relative to the current file's directory; the fallback re-anchored such links to the repo root and so *passed links GitHub renders as 404s from non-root files* — the masking failure mode the originating issue cites.
+- **Leave the two resolvers divergent** — foreclosed by the problem statement: both feed required branch-protection gates, so one link form could pass one gate and fail the other.
+- **Change the enforcement tier rather than the rule** — **not taken.** § Decision states explicitly that the required and advisory gates keep their tiers; this record changes the rule, not the enforcement posture.
+
+GitHub-faithful workspace-root anchoring survives as a separate mechanism — the leading-`/` form — which is why retiring the bare-prefix fallback removes the masking without removing the ability to anchor a link at the repo root.
+
 ## Consequences
 
 - **Positive — gate trustworthiness.** The two required gates can no longer return opposite verdicts on a link form; the strict rule preserves the dead-file-reference gate's ability to catch a workspace-rooted `.md` link that masks a real 404, and makes the deploy-time and PR-time checkers agree.

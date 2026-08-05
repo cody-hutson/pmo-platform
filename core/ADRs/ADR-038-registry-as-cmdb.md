@@ -48,7 +48,7 @@ operational `lifecycle-state`, `CI-to-CI dependency edges`, and an `owner`. No C
 no per-skill `lifecycle_state` exists.
 
 `core/skills/registry.md` today is, per ADR-035, a role-Specialist-**only**, routing-**only**
-central index (19 rows, four routing fields). ADR-035 §Decision part 4 **explicitly excluded
+central index (as of authoring, 19 rows and four routing fields). ADR-035 §Decision part 4 **explicitly excluded
 registering all skills**, on the reasoning that doing so "would make the registry a deploy-roster
 duplicate and blur what the router classifies against." Option A must therefore supersede that one
 clause **and rebut both concerns directly** — which it does (see Decision parts 2 and 4). The
@@ -124,24 +124,24 @@ catalog (CMDB). There is exactly one skill catalog; routing is a typed view of i
 - **Duplicate-source-discipline is satisfied by the cite-don't-store split.** Version + roster + contract
   are cited (not stored); only the net-new axes + the pre-existing condensed routing fields are stored.
   The "Sources of truth (do not duplicate)" section is the register-or-remove enforcement surface.
-- **Blast radius is bounded.** The registry.md population expands (43 CIs) and gains columns; the
+- **Blast radius is bounded.** The registry.md population expands (43 CIs as of authoring) and gains columns; the
   `pmo-skill-router` body gets one surgical view-read edit; ADR-035 gets a status note. Every
   role-Specialist body's "through the core/-registry skill-chain" phrasing still resolves (the registry
   is still at `core/skills/registry.md`, still a central index) — no role-Specialist body is edited.
   This is heavier than Option B (which touched no skill body) by exactly one surgical router edit + the
   catalog expansion — the cost of one catalog instead of two.
 - **A CI↔deploy.sh reconciliation check moves from reserved toward recommended.** ADR-035 reserved an
-  optional registry-to-roster check as enforcement-theater at 19 rows; at 43 CIs the consistency between
+  optional registry-to-roster check as enforcement-theater at 19 rows; at the then-current 43 CIs the consistency between
   CI rows and `deploy.sh` members is more load-bearing, so a check asserting "every CI row ↔ a `deploy.sh`
   member and vice versa, and every CI row's `name` resolves to a live `SKILL.md`" is **recommended** (not
   yet required — manual review at backfill + each skill's definition-of-done still covers drift at this
   roster size). This is the consistency guard that keeps the single catalog and `deploy.sh` from drifting.
 
-## Alternatives rejected
+## Alternatives Considered
 
 - **(B) CMDB as a separate `core/schemas/skill-cmdb-schema.md` reference-schema** (the prior spoke's
   recommendation). Rejected by operator override: it leaves **two** skill catalogs — `registry.md` (19
-  role-Specialists) plus the new schema (43 CIs) — which is the "second registry" the single-catalog
+  role-Specialists) plus the new schema (43 CIs as of authoring) — which is the "second registry" the single-catalog
   constraint forbids under the operator's reading. Its lower blast radius (no skill-body edit) does not
   outweigh the constraint: the operator chose one catalog over the smaller diff.
 - **A new hand-maintained all-43 table that re-lists the `deploy.sh` roster** (the prior spec's "Option
@@ -195,7 +195,7 @@ two catalogs; the operator accepted the higher reversibility tier for the single
 - The skill-CMDB work item and its approved Stage 4 plan — the operator ruling that restored full scope
   under the single-catalog hard constraint; and the operator override selecting Option A over the prior
   spoke's Option B recommendation, on the "one catalog" rationale.
-- The live survey: `deploy.sh` arrays (43 deployed skills), `registry.md` (19 rows, 4 fields, no CI
+- The live survey, as of authoring: `deploy.sh` arrays (43 deployed skills), `registry.md` (19 rows, 4 fields, no CI
   columns), `SKILL.md version:` (44), the 3 contract indexes, the System `active→deprecated→retired`
   machine (V-SYS-04), and the zero-CMDB / zero-skill-lifecycle finding.
 - The reuse sources: `project-entity-model.md` §4 entity 11 (System Axis-1 machine) and `frontmatter-schema.md`

@@ -2,7 +2,7 @@
 title: ADR-032 — Release-corpus public-vs-instance split: ship the capability, keep per-release content operator-instance
 status: Accepted
 date: 2026-06-20
-deciders: "operator (D-1412-Scope at the 62-close-out-registers Stage 4 plan-approval gate, 2026-06-19) + Stage 5 Solutioning design (#1412 / sub-task #1414)"
+deciders: "operator (D-1412-Scope at the 62-close-out-registers Stage 4 plan-approval gate, 2026-06-19) + the 62-close-out-registers Stage 5 Solutioning design and its design sub-task"
 tags: [architecture, distribution, release-corpus, operator-instance, public-repo-boundary, gitignore, deploy-checks]
 source_observations:
   - "#1412 — the release-corpus audit trail (RELEASE_LOG, INDEX, DIGEST, notes/, plans/) is tracked in the public install-oriented repo and ships in every clone; this is maintainer content (operational detail, not PII), not install capability."
@@ -88,7 +88,7 @@ The operator-instance corpus root resolves via **`${CLAUDE_WORKSPACE_ROOT:-$HOME
 
 **Neutral / known:** Reversibility MODERATE throughout (HEAD-only); no `core/schemas/` changes; no Anthropic upstream surface. The public `CHANGELOG.md` is the sole public projection of the now-instance `notes/`; its Section-6a source is intentionally instance-side, so CHANGELOG entries are **not regenerable from a clean clone** — a documented design choice (the thin-public-surface trade of Decision 2), not an oversight.
 
-## Alternatives considered (from the Stage 5 design-exploration)
+## Alternatives Considered
 
 | Decision | Chosen | Rejected (kill-reason) |
 |---|---|---|
@@ -102,9 +102,13 @@ The operator-instance corpus root resolves via **`${CLAUDE_WORKSPACE_ROOT:-$HOME
 
 The execution issue (filed post-review per D-1412-Scope) carries: `.gitignore` block + negations; `git rm --cached` + move of LOG/DIGEST/notes/plans to `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/`; `RELEASE_INDEX.md` → empty public seed; re-point Check 32 + `generate_release_index.py` + `automated-closeout.sh` + `stage-13-close.md` §5 Phase B + `release-corpus-schema.md` (and converge the 21 `deploy.sh` `PMO_INSTANCE_PATH` fallthroughs onto `CLAUDE_WORKSPACE_ROOT`); AUDIT `check-doc-links.py`; `install.sh` bootstrap; cross-PR overlap re-audit at its Stage 9/12. AC: fresh clone shows no maintainer content; generator self-test PASS against instance; Check 32 resolves to instance; second-install produces its own corpus. Reversibility MODERATE / MEDIUM.
 
-## Related
+## Related ADRs
 
 - **ADR-017** (distribution architecture — S1/S3 surfaces + the canonical `CLAUDE_WORKSPACE_ROOT` resolver; the model this applies)
 - **ADR-012** (instance-content de-scope to operator-local)
 - **ADR-013** (install-path resolution via operator.toml)
 - **#1412** (parent design issue; closed design-only) · **#48** (abandoned archive-split, superseded) · **#360 / #361** (registers — template public, content instance per Decision 5)
+
+## References
+
+- #1414 — the Stage 5 Solutioning sub-task under which this record's design was rendered.

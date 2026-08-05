@@ -33,6 +33,16 @@ ADR-012 corrected an over-coupling (roadmap instances should not be tracked plat
 
 Existing roadmap instances at the prior operator-local home (the `<OPERATOR_INSTANCE_ROADMAPS_PATH>` default, or a deployment's override) are **copied** into `/roadmaps/` on adoption; originals are retained until the operator confirms. Instances remain git-ignored throughout, so the migration is an operator-local file move with **no repo-history effect**. A deployment that had *set* an explicit `operator_instance_roadmaps_path` keeps that override — the default change does not disturb a configured value.
 
+## Alternatives Considered
+
+§ Context frames the problem as a shape the platform had already solved once (the read-once analysis workspace, which ships a tracked folder plus README while git-ignoring all content), so the selected design is that precedent applied rather than a new mechanism. The paths not taken are named in § Decision.
+
+- **Eliminate the `<OPERATOR_INSTANCE_ROADMAPS_PATH>` token and hardcode the new home** — **not taken.** § Decision item 2 redefines the token as the *override indirection* rather than removing it: its default resolution becomes the shipped folder, existing references continue to resolve, and a deployment may still repoint it. The token is the seam; the folder is the default value.
+- **Keep roadmaps in the operator-instance path family** (the status quo the record supersedes in part) — **not taken.** § Decision item 4 gives the criterion: that family holds operator *runtime state* and append-only audit trails, which are machine-written and never authored-then-referenced, whereas roadmaps are *authored planning content*. Roadmaps are the only family member that moves; the rest stay operator-local.
+- **Track the instances** — **not taken, and not re-opened.** The superseded record's "instances are not tracked" decision is preserved unchanged; this decision moves the *location* only.
+
+§ Migration records the corresponding operational choice: existing instances are **copied** and the originals retained until the operator confirms, rather than moved destructively.
+
 ## Consequences
 
 - **Plug-and-play home ships out of the box.** Agents and operators have a known default location without per-user configuration, while users who need bespoke storage repoint one token. The `analysis/`-pattern precedent means one mechanism governs both operator-working-material folders.

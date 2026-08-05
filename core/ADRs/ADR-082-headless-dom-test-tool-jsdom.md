@@ -36,7 +36,7 @@ The detector does **not** need real-browser fidelity. The XSS-regression discrim
 
 **D4 — Home in `core/ADRs/`.** Headless-DOM test tooling is a cross-cutting engineering/test-infrastructure choice that sets platform-wide precedent, not a release-pipeline (SDLC) stage decision, so this record lives in `core/ADRs/` (consistent with the sibling charter ADR in the same release).
 
-## Alternatives rejected
+## Alternatives Considered
 
 | Option | Trade-off | Verdict |
 |---|---|---|

@@ -58,7 +58,7 @@ A cross-methodology gate survey established that one declarative model with a ty
 - The gating-graph cycle-detector is a new pack-validation pass.
 - The `x-pmo-aggregate` class is the first declarative gate that reduces over a population — a precedent any future aggregate gate inherits.
 
-## Alternatives rejected
+## Alternatives Considered
 
 | Option | Decision | Rationale |
 |---|---|---|

@@ -39,7 +39,7 @@ Three design questions had to be settled: **(1)** what *carries* a record's clas
 
 5. **The archive log is the disposition base case.** `RECORDS_ARCHIVE_LOG.md` is permanent and append-only by axiom — Vital by definition, never itself disposed, and no self-referential row is ever written for it. This terminates the otherwise-unbounded recursion ("what logs the disposition of the archive log?").
 
-## Alternatives considered
+## Alternatives Considered
 
 - **Mint a `records_class:` frontmatter field stamped per record** — rejected: duplicates existing carriers (`trust_category` + home + `lifecycle_state` already determine class) and forces a corpus-wide backfill, violating duplicate-source-discipline §1. Derivation over existing fields is the lower-regret choice.
 - **Partial classification (map only the source-named record types)** — rejected: leaves `02-Design`/`03-Testing`/`04-PMO-Operations` with no derivable class; the scheme would *look* complete because every example classifies, while failing silently the first time someone classified an FDD or a test plan. The total function + named default closes this at trivial cost.

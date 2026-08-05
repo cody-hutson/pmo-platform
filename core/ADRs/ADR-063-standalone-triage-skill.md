@@ -37,7 +37,7 @@ The design axis is a pair-by-pair EXTEND-vs-build-new reconciliation that ADR-01
 
 The skill is registered as a `function-skill` CI in `core/skills/registry.md`, added to the `RELEASE_SKILLS` array in `core/deploy/deploy.sh`, contract-registered in `core/schemas/per-skill-output-contracts.md` (Skill 15), and packaged as `packages/pipeline-triage.skill`.
 
-## Alternatives considered
+## Alternatives Considered
 
 | Option | Decision | Rationale |
 |---|---|---|

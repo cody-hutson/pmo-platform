@@ -39,7 +39,7 @@ Four files in the release corpus record the same fact on every release — *rele
 The ticket's remedy was *"`RELEASE_LOG.md` is the single authoritative release record, and the other three are generated from it."* Three premises in that sentence are false, and one of them changes the design.
 
 1. **The four surfaces were not hand-maintained.** The close-out already wrote all four programmatically. The defect was *no single projection*, not *no automation* — which makes the work a collapse-four-writers refactor rather than a build-three-generators project.
-2. **The LOG cannot be the single source.** It carries neither a `# ` headline nor a `summary:` field. Forcing the narrative onto it would mean importing roughly 160 headlines and 156 summaries into a file that is already ~96 % prose and is the exact file a sibling card in this same release exists to bound.
+2. **The LOG cannot be the single source.** It carries neither a `# ` headline nor a `summary:` field. Forcing the narrative onto it would mean importing the roughly 160 headlines and 156 summaries counted at the time into a file that is already ~96 % prose and is the exact file a sibling card in this same release exists to bound.
 3. **"Six of seven contracts become unnecessary" is false in both terms.** There are **eight** (the census omits the close-completeness check entirely), and **exactly one** retires. Six of the eight never read a derived surface at all — one of them compares a *published GitHub Release body* to an *in-repo note*, and retiring it on the ticket's arithmetic would have removed a live, unrelated control.
 
 ## Decision
@@ -120,7 +120,7 @@ The ticket's aggregate claim is replaced by a per-contract verdict. **1 retires 
 
 **Six of the eight never read a derived surface.** The duplication's cost was the grandfathering scar, not the contract count — and that scar goes vestigial under one writer.
 
-## Alternatives considered
+## Alternatives Considered
 
 **A — One source: import headline, summary and theme into the LOG as structured fields.** This is what the ticket literally asks for, it produces a genuinely single authoritative file, and it makes `Theme` recoverable if the INDEX were ever lost. **Rejected**, and surfaced explicitly at Collective Review rather than decided silently, because it is a content migration of ~160 headlines, ~156 summaries and every theme cell; it breaks all four field-positional consumers of the LOG's schema; and it grows the exact file a sibling card in this release exists to bound. It optimizes for a file count while degrading the two properties the release actually needs — a bounded LOG and a stable field-positional schema.
 

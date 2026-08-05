@@ -5,7 +5,7 @@ title: ADR-091 — Scope-segregation PreToolUse hook — destination-sensitivity
 status: Accepted
 date: 2026-07-25
 release: 46-cross-platform-install-experience (v3.91)
-deciders: "Workspace owner (to ratify at the v3.91 Collective Review scope-lock); design resolved at #384 Stage-5 Solutioning + its A6.5 adversarial review"
+deciders: "Workspace owner (to ratify at the v3.91 Collective Review scope-lock); design resolved at the multi-destination work-tracker Stage-5 Solutioning + its A6.5 adversarial review"
 tags: [architecture, security, hooks, pretooluse, scope-segregation, trackers, fail-closed, pii, reversibility]
 source_observations:
   - "#384 Stage-5 Solutioning (#3877): the operator tracks work across heterogeneous destinations that must stay segregated (public GitHub vs private Jira/Linear); no hook refuses content by DESTINATION sensitivity today. git-pre-commit-pii guards commits; block-gh-path-leak guards gh bodies (public-assumed, path-only, Bash-only). A filing-time gate is the open surface."
@@ -155,9 +155,7 @@ back-compat. Disable via `.scope-segregation-mode=off`, the allowlist, or
 `CLAUDE_HOOK_BYPASS=1`; the enforce flip for the fuzzy layer is a separate operator gate.
 Removing the capability is a hook deregistration + schema revert with no data migration.
 
-## Related
-
-### Related
+## Related ADRs
 
 - ADR-031 — autonomy-ceiling unified payload-triggered hook (the payload-trigger +
   own-mode-file + warn-initial precedent this ADR follows).

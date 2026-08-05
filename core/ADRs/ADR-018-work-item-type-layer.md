@@ -193,7 +193,7 @@ this ADR + the Stage 9 GO are the sign-off gate. Pre-consumption — before the 
 layer's implementation lands — the change is MODERATE (a new file + an additive §4
 block); it crosses to EXPENSIVE at the first consumer.
 
-## Alternatives considered
+## Alternatives Considered
 
 | Option | Decision | Rationale |
 |---|---|---|

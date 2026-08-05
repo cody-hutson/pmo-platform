@@ -44,7 +44,7 @@ The convention records the existing usages in an audit table graded per-phase (�
 - **A reusable rollout vocabulary** exists for any future mechanism that graduates observe → warn → block → decommission; it cites this convention rather than re-deciding the phases.
 - **A future ticket may** retrofit the hook layer to `shadow` and/or migrate touchpoints to `removed`; both are out of this milestone's scope.
 
-## Alternatives rejected
+## Alternatives Considered
 
 - **`dark / canary / GA` vocabulary.** Rejected: traffic-percentage rollout semantics misfit governance-rule rollout (a rule observes / warns / blocks; there is no "5% of releases" dimension); zero corpus occurrences; adopting it would orphan two LIVE usages and force a corpus-wide rename.
 - **Author a parallel pipeline-wide file alongside the executor model.** Rejected: it would duplicate the phase enum across two homes — a duplicate-source violation. The lift-and-extend keeps exactly one canonical definition.

@@ -40,7 +40,9 @@ We will {{DECISION — active voice, full sentences: the chosen response to the 
 
 {{STATUS — one of: Proposed | Accepted | Deprecated | Superseded by ADR-{{MMM}}}}
 
-## Alternatives Considered *(optional — recommended whenever ≥2 viable options existed)*
+## Alternatives Considered *(required — content conditional)*
+
+*Keep this section in every rendered instance. Where ≥2 viable options were weighed, fill the table. Where a single forced approach existed, replace the table with that statement — "Single forced approach; no viable alternative was weighed." An absent section is a defect; a declared single-forced-approach is conformant.*
 
 | Option | Summary | Why rejected |
 |---|---|---|
@@ -59,4 +61,4 @@ We will {{DECISION — active voice, full sentences: the chosen response to the 
 2. **Numbering is project-local and monotonic.** {{NNN}} is the next free number in the consuming project's own ADR sequence (e.g., `docs/adr/` in the project repo, or the project's `08-Generated/` staging area). Numbers are never reused or renumbered.
 3. **ADRs are immutable once Accepted.** To change an Accepted decision, author a NEW ADR that supersedes it and update only the old record's Status to `Superseded by ADR-{{MMM}}` — never rewrite the accepted body (Nygard convention).
 4. **Keep it short.** One to two pages, written as if explaining the decision to a future teammate.
-5. **Scope boundary — platform-internal ADRs are a different population.** This template governs software-domain ADR *instances produced in a consuming project*. The PMO platform's own ADR corpus (`core/ADRs/`, `release/ADRs/`) is governed by a distinct contract — [`adr-schema.md`](../../core/schemas/adr-schema.md) + [`adr-authoring-guide.md`](../../core/standards/adr-authoring-guide.md) (7-field frontmatter, six body sections with Status first, platform-global numbering). Do not use this template for platform-internal ADRs, and do not impose the platform contract on project ADRs.
+5. **Scope boundary — platform-internal ADRs are a different population.** This template governs software-domain ADR *instances produced in a consuming project*. The PMO platform's own ADR corpus (`core/ADRs/`, `release/ADRs/`) is governed by a distinct contract — [`adr-schema.md`](../../core/schemas/adr-schema.md) + [`adr-authoring-guide.md`](../../core/standards/adr-authoring-guide.md) (7-field frontmatter; its own body-section set, defined once in that schema's §3 and led by Status; platform-global numbering). Do not use this template for platform-internal ADRs, and do not impose the platform contract on project ADRs. The one predicate the two populations share is the `## Alternatives Considered` **requirement level** — required section, conditional content — because a rendered project ADR that silently omits its alternatives has the same defect regardless of which corpus it lands in. Section order, section count, and numbering scope stay population-local.

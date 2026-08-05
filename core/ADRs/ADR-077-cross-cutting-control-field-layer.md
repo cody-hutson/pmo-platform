@@ -46,7 +46,7 @@ The first proving instance is a **design & architecture control set** (design-re
 
 **D5 — Meta-schema stays v1.** By the same two-axis analysis as the pack-composition widen (§6.2a → §6.2b): `[[controls]]` is an optional ADD (a pack declaring none is byte-identical), and specifying the Arm-3 body converts a fail-loud reserved value into a defined one (no existing valid pack changes meaning — a pack using `kind: control-field` before this specification failed pack-validation by design; reserve-then-specify is the slot's registered lifecycle). Validator-forward: the widen ships ahead of any meta-schema validator. A pack that adopts controls takes a `pack_version` minor bump per §6.1.
 
-## Alternatives rejected
+## Alternatives Considered
 
 1. **Pack-level `shared_criteria[]` reference** (share check definitions, kinds reference them into `criteria`) — shares *checks*, not *values*: declares no filterable value domain, no field a gate can read, and no id `limit_ref` can resolve; a pack-level criteria mirror IS the parallel-criteria path the release plan named as a rejection trigger.
 2. **Per-kind FieldDecl annotation** (annotate a `fields.kind_specific[]` entry as a control) — per-kind re-declaration forks the value domain N ways (drift), kills cross-kind filterability, and a kind-scoped id can host neither container-level values (≥2 hierarchy levels) nor `limit_ref` (a board-scoped cap); it formalizes the status quo the change exists to fix.

@@ -20,7 +20,7 @@ CONFLICT-1 resolution 2026-05-10 — three sequential ADRs across related issues
 
 ## Context
 
-The monolithic `release/references/pipeline-stages.md` grew to 1,317 lines
+The monolithic `release/references/pipeline-stages.md` grew, as of authoring, to 1,317 lines
 covering 13 stages plus 3 nested protocols (Collective Review, DT↔Engineering
 Iteration Loop, DT↔QA Handoff). At that size:
 
@@ -32,7 +32,7 @@ Iteration Loop, DT↔QA Handoff). At that size:
 - The file violated the parent initiative's AC1 "modularity approach for pipeline documentation."
 
 Fresh grep at Stage 5 entry (SHA `8531611`, 2026-05-06) counted **115 substantive
-cross-references across 33 files** pointing to the monolithic path. The cascade
+cross-references across 33 files** pointing to the monolithic path, as of that grep. The cascade
 fan-out was deep enough that any split needed a one-shot cascade plan, not a
 piecemeal migration.
 
@@ -44,9 +44,9 @@ across 115 refs was uniformly prose-form using §N notation (e.g., `§5`, `§6 O
 ## Decision
 
 **Split `release/references/pipeline-stages.md` into a
-`release/references/pipeline/` directory containing 14 files:**
+`release/references/pipeline/` directory containing one file per stage plus a README:**
 
-1. **13 per-stage files**: `stage-NN-<name>.md` (zero-padded NN, kebab-case name)
+1. **One per-stage file for each of the 13 stages**: `stage-NN-<name>.md` (zero-padded NN, kebab-case name)
    - `stage-01-intake.md` ... `stage-13-close.md`
    - Per-file schema: H1 file title + numbered H2 headings (`## 1. Purpose` ...
      `## 10. Retro`) preserving the 10-point framework
@@ -71,7 +71,7 @@ aligned with index order). Names match milestone AC example (`stage-05-solutioni
 (e.g., `## 5. Process` → `#5-process`). Prose refs using `§N` notation map
 mechanically to the new anchors via the 6-rule cascade matrix.
 
-**Cascade scope:** All 115 substantive cross-references across 33 files are
+**Cascade scope:** All 115 substantive cross-references across 33 files, as of that grep, are
 rewritten via the 6-rule R1-R6 matrix in PR-1. The monolithic source file is
 deleted in the same PR. Historical references in archive classes (release plans,
 `pmo-platform/governance/RELEASE_LOG.md`, `pmo-platform/analysis/`,
@@ -81,9 +81,9 @@ deleted in the same PR. Historical references in archive classes (release plans,
 
 **Positive:**
 
-- Per-stage edits operate on ~50-360 line files (vs. 1,317 lines previously).
+- Per-stage edits operate on ~50-360 line files (vs. the 1,317 lines the monolith carried at the time).
   Average stage file is ~70-90 lines; only `stage-07-dev-testing.md` is large
-  (~360 lines due to two nested protocols) — acceptable cohesion vs. fragmentation.
+  (~360 lines at the time, due to two nested protocols) — acceptable cohesion vs. fragmentation.
 - Cross-stage queries continue to work via `grep -r pipeline/` (or
   `release/references/pipeline/`).
 - Stage-specific PRs and audits target a single stage file; reviewers see only
@@ -100,9 +100,9 @@ deleted in the same PR. Historical references in archive classes (release plans,
 - Cross-stage queries that previously used single-file scrolling now require
   multi-file grep. Acceptable per current consumer-skill access patterns (which
   are already grep-driven).
-- The cascade rewrite is EXPENSIVE to revert (115 refs across 33 files would
+- The cascade rewrite is EXPENSIVE to revert (the then-current 115 refs across 33 files would
   need to revert). Mitigated by single-PR atomicity — `git revert` on the merge
-  commit restores all 115 refs in one operation.
+  commit restores all 115 refs, as counted at the time, in one operation.
 - One additional indirection for newcomers: "Where is Stage 7 defined?" requires
   pointing to `pipeline/stage-07-dev-testing.md` rather than `pipeline-stages.md`
   Stage 7 section. README Stage Index mitigates by serving as the entry point.
@@ -119,12 +119,12 @@ deleted in the same PR. Historical references in archive classes (release plans,
 ## Alternatives Considered
 
 - **(A) Modular split with cascade (selected)** — clean cut: split file, cascade
-  rewrite 115 refs, delete monolithic source. One PR, one revert path. Auditable
+  rewrite the then-current 115 refs, delete monolithic source. One PR, one revert path. Auditable
   via AV-1 grep test (zero substantive matches post-PR).
 
 - **(B) Forwarding stub: keep `pipeline-stages.md` as a 13-bullet index pointing
   to the new modular files** — REJECTED. Creates two sources of truth for stage
-  content ("which file should I read?"). Existing 115 refs would point to the
+  content ("which file should I read?"). The then-current 115 refs would point to the
   index, not the canonical per-stage files; new readers would need to follow
   one extra hop. The index would inevitably drift over time. AV-1 grep test
   would become ambiguous (correct refs to a stub vs. canonical refs both look
@@ -145,7 +145,7 @@ deleted in the same PR. Historical references in archive classes (release plans,
 EXPENSIVE — reverting requires:
 
 1. `git revert` on the PR-1 merge commit (restores the monolithic file and all
-   115 cascade refs).
+   115 cascade refs, as of that grep).
 2. Removal of the new `pipeline/` directory (handled by the same revert).
 3. Removal of ADR-002 (this file) or supersede with ADR-NNN if the policy
    changes again.

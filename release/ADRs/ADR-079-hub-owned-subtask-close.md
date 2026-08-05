@@ -3,7 +3,7 @@ title: "ADR-079 — Hub-owned sub-task close (spoke posts output; hub closes)"
 status: Accepted
 date: 2026-07-11
 release: 98-pipeline-freshness-and-spoke-safety (v3.70 provisional; bound at Stage 12)
-deciders: "Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment; #3368 design) flagged the ADR; Stage 6 Engineering authored it; operator ratifies at the Stage 9 plan-review gate"
+deciders: "Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment) flagged the ADR; Stage 6 Engineering authored it; operator ratifies at the Stage 9 plan-review gate"
 tags: [release-ops, hub-spoke, sub-task-lifecycle, close-ownership, security, authorized-close, guardrail-false-positive, external-write, lifecycle-ownership]
 source_observations:
   - "A hub-spawned spoke closing the hub-created tracking sub-task it was explicitly instructed to close (the prescribed Procedure-3 behavior) trips an external-write SECURITY WARNING — the harness sees only 'closed an issue I did not create'. The warning fired on every spoke completion, adding routine review overhead with no security value (the close was authorized). Live instances: milestone-35 Stage 4 #1282 / Stage 5 #1298."
@@ -66,3 +66,7 @@ CHEAP / Confidence HIGH — single-file documentation + behavior edits; `git rev
 - Parent improvement: #2215 (hub-spoke write-authorization safety — this ADR resolves the authorized-close half).
 - Source observations: #1342 (authorized sub-task close trips the guardrail) and #1888 (read-only spokes can self-act — the sibling half, resolved by the Procedure-3 read-only-write-prohibition clause, not this ADR).
 - Referenced constraint: #1472 (worktree-session hook-loading untested) — the design's rationale for why the resolution stays doc/behavior-level and does not depend on a PreToolUse hook.
+
+## References
+
+- #3368 — the Stage 5 Solutioning design (Principal Engineer — Architecture Assessment) that flagged this ADR.

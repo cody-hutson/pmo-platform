@@ -23,7 +23,7 @@ source_observations:
 The role-Specialist suite delivered by `04-ROLE-delivery-coverage` includes `pmo-release-train-engineer` (RTE) — a **SAFe-specific** role (Agile Release Train facilitation, Program-Increment planning). The platform's default `delivery_approach` is **Scrum** (`operator.toml`), and SAFe is one archetype among several defined in `release/references/specs/methodology-archetype-matrix.md`. Building a methodology-specific role surfaced two coupled questions the platform had no precedent for:
 
 1. **Activation:** How does a role that is only meaningful under a specific `delivery_approach` behave when that approach is **not** active? No existing PMO skill gates on `delivery_approach` (#1111 finding D2). An always-active RTE would cross-fire with `pmo-scrum-master` and `pmo-program-manager` under the default Scrum config and emit a SAFe view the operator does not run.
-2. **Parameterization placement:** Where does the SAFe parameterization the active RTE consumes live? The shared `operations/skills/_shared/five-model-variations.md` has no SAFe column and a high blast radius (~5 first-order / ~265 second-order consumers, #1111 finding D1) — adding a 6th column there ripples across every consumer for one role.
+2. **Parameterization placement:** Where does the SAFe parameterization the active RTE consumes live? The shared `operations/skills/_shared/five-model-variations.md` has no SAFe column and a high blast radius (~5 first-order / ~265 second-order consumers as of that finding, #1111 finding D1) — adding a 6th column there ripples across every consumer for one role.
 
 These are facets of one decision: **how a methodology-conditional role activates, and where its active-state config comes from.**
 
@@ -49,7 +49,7 @@ Adopt a **methodology-conditional skill-activation convention** with two coupled
 - **No high-blast-radius edit** to the shared five-model file; the archetype matrix is the single home for archetype-specific parameterization.
 - **Methodology stays config, not skill-fork** — consistent with the platform's methodology-as-config posture (the work-org-mapping framework renders the chosen view); the suite's public corpus stays methodology-neutral and the RTE projects the SAFe view from config.
 
-## Alternatives rejected
+## Alternatives Considered
 
 - **Add a 6th (SAFe) column to `_shared/five-model-variations.md`.** Rejected: ~5/265 blast radius for one role's benefit; the archetype matrix already carries per-archetype rows and is the correct home.
 - **Always-active RTE (no gate).** Rejected: cross-fires with `pmo-scrum-master` / `pmo-program-manager` under the default Scrum config and emits a methodology view the operator's config does not run.

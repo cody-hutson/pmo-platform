@@ -40,7 +40,7 @@ The unified artifact-naming standard (#369) must fix the **segment order** of an
 
 4. **One canonical file regex, published identically everywhere.** A précis/short regex is **not** published alongside the load-bearing one; the original spec's two non-equivalent regexes (a narrow Summary form lacking in-segment `-`, and a full body form with it) are collapsed to exactly one — the full-expanded in-segment-`-` form — referenced character-for-character by the QA G10 gate, #232's references, and any future validator. Any human-readable gloss is an annotated breakdown of that identical string, never a second pattern.
 
-## Alternatives considered
+## Alternatives Considered
 
 - **Type-first segment order** — rejected: forces renames of every existing artifact and inverts the established convention for a benefit (scan by kind) the controlled type vocabulary + grep tooling already deliver at the second segment. The #117 *intent* (scan by kind) is preserved; the #117 *mechanism* (lead-segment lexical sort) is not.
 - **A position-pinning regex that enforces order in the charset gate itself** — deferred (not rejected on merits): a fully position-pinning regex (project code, then `_`, then the type alternation, then an optional date *last*) would be materially harder to read and maintain for a marginal gain over "emitter convention + G10-05." Flagged as a future hardening, not adopted now.

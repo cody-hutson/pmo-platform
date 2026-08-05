@@ -2,7 +2,7 @@
 title: ADR-017 — Distribution architecture: four lifecycle surfaces, version-posture acquisition, and package multiplicity over shared config/state
 status: Accepted
 date: 2026-06-07
-deciders: "operator (distribution-perspective directive 2026-06-07) + distribution-architecture analysis (post #504/#528/#529)"
+deciders: "operator (distribution-perspective directive 2026-06-07) + distribution-architecture analysis (post the path-portability trigger recorded below)"
 tags: [architecture, distribution, install, deploy, config, xdg, operator-instance, dev-workflow, public-repo-boundary]
 source_observations:
   - "Operator directive 2026-06-07 — think about the platform from a distribution perspective: an install package puts the toolkit in place for a Claude-Code user; ties into version-durability and user-config; creates an install-path (users) vs a clone-path (builders), and the operator is in the small set that does BOTH on one device and must manage it properly."
@@ -96,7 +96,7 @@ The concrete realization for the operator who both builds and operates is record
 
 Net: `CLAUDE_WORKSPACE_ROOT` stays canonical for **content** (S3); XDG config for **choices** (S2); XDG state/cache for **derived internals** (a subset of S4). No mass migration.
 
-## Options Considered
+## Alternatives Considered
 
 **Decision 2 — acquisition model**
 

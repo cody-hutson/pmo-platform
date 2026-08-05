@@ -57,7 +57,7 @@ The two judgments project to the Stage-8 §5 enum deterministically: `gradable`+
 - **Negative / residual.** The type is defined but not runner-executed (DOC-ONLY) — a consumer expecting runtime grading before the assertion-grading runner exists would find the type inert. Mitigated: the type is a grader-honored contract like its five siblings; the consumer milestone (#219-adjacent runner wiring) resolves the trigger-vs-assertion runner drift before any runtime execution. Calibration of the projection against human verdicts (α/κ) is the consumer milestone's concern (recorded-not-gated at authoring).
 - **Boundary (R-1, ratified).** #218 owns the framework — the type, the parse contract, the two-judgment rubric, the all-drift-out score, the grader clause, and the worked-example eval set. #219 (milestone #161) CONSUMES the framework as a QA acceptance-review mode and redefines nothing (no new verdict values, no new parse rules, no new score formula). The cleave line: a change to *what the acceptance verdict / parse / score IS* → #218; a change to *the QA-auditor mode that runs it* → #219.
 
-## Alternatives considered
+## Alternatives Considered
 
 - **Native six-way LLM judge** (grader directly outputs one of the six values). Rejected: a six-way call is a six-point scale — it reintroduces the verbosity / middle-cluster bias binary grading removes, inflates α/κ disagreement, and conflates "ungradable" with "not met".
 - **Ordinal 1–4 judge mapped to verdicts.** Rejected: 1–4 is not the Stage-8 enum (needs a lossy second map), has no natural drift band, and acceptance is binary-natural (not ordinal-required).

@@ -56,6 +56,18 @@ The platform needs a repeatable decision health-check: a capability that audits 
 
 **The extend-before-create determination, recorded verbatim as the gate requires:** *extend `core/skills/pmo-qa-auditor/SKILL.md` (as Mode J, sibling to Mode I) because Mode I is a structurally isomorphic capability — same input class (the release record), same emission target class (a git-ignored dated audit folder plus a committed summary handoff), same mutation posture (OBSERVE-only, auto-files nothing), same cadence-protocol pattern — differing only in which corpus oracle it scores against; and because ADR-019's skill-boundary test fails conjunct 3 (distinct primary role) for the net-new alternative, which routes the capability into the existing Specialist by rule.*
 
+## Alternatives Considered
+
+Recorded from this record's own § Context (which states the prior analysis narrowed the host question to two viable options and rejected a third), § Decision item 1 (which names both hosts not selected), and § Consequences (which names what the foreclosed option would have bought).
+
+| Option | Verdict | Why |
+|---|---|---|
+| **Host as `Mode J` in `core/skills/pmo-qa-auditor`, sibling to Mode I** | **SELECTED** | Mode I is a structurally isomorphic capability — same input class, same emission-target class, same OBSERVE-only mutation posture, same cadence-protocol pattern — differing only in which corpus oracle it scores against. One audit family, one output-report contract, one observational-discipline self-check, one evidence-validation routine. |
+| **A standalone `core/skills/decision-audit/` skill** | Rejected | ADR-019's three-conjunct skill-boundary test fails at conjunct 3 (distinct primary role), which routes the capability into the existing Specialist by rule. It would have forked all four shared surfaces. § Consequences records what is given up: a cleaner single-responsibility story and an independent trigger surface, now foreclosed. |
+| **Expand the project-scoped health-check skill** | Rejected | That skill is a downstream *consumer* of this audit family's committed summary surface, so hosting the audit there would invert an existing dependency edge. |
+
+The standing objection — that the host skill is the largest `SKILL.md` in the corpus — was weighed and **refuted on governance rather than merely outweighed**: `canonical-skill-structure.md` §5 states the size values are triggers, not caps, and a skill crossing a trigger while carrying a non-empty `references/` subtree is compliant however far it exceeds the trigger.
+
 ## Consequences
 
 **Positive.**

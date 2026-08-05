@@ -4,8 +4,8 @@
 title: ADR-092 — Plan-file identity binds at claim-time stamping (post-CAS), extending ADR-088
 status: Proposed
 date: 2026-07-25
-release: release-identity-and-plan-naming (#279; version binds at the Stage-12 claim)
-deciders: "Workspace owner (to ratify at the #279 Collective Review scope-lock); design resolved at #2548 Stage-5 Solutioning (#3994) + its adversarial review"
+release: release-identity-and-plan-naming (version binds at the Stage-12 claim)
+deciders: "Workspace owner (to ratify at the release-identity-and-plan-naming Collective Review scope-lock); design resolved at the plan-file-naming Stage-5 Solutioning + its adversarial review"
 tags: [architecture, release-pipeline, versioning, claim-time-binding, slug-primary, reversibility, adr-036, adr-088]
 source_observations:
   - "#2548 Stage-5 Solutioning (#3994): ADR-036 killed the early-binding collision for the git TAG (defer-to-claim + atomic CAS), but the versioned plan-file name and branch name still bind a concrete vX.Y at plan time — re-creating, for those identifiers, the exact HALT+re-version churn ADR-036 eliminated for the tag."
@@ -80,6 +80,17 @@ on the STEP-4 OK branch). The CAS arithmetic, the discriminated-failure classifi
 the retry loop are **untouched** — the stamp is gated on a `--stamp-slug` argument and is
 entirely absent for every existing caller.
 
+## Alternatives Considered
+
+The binding-point question is the fork this record resolves, and § Context states it directly: does the concrete number resolve **before** or **after** the compare-and-swap win?
+
+- **Substitute before the push (pre-CAS binding)** — the reading the intake suggests — **not taken.** § Context: it fights collision-safety, because a resolved-then-lost candidate is stale and forces a revert, recompute and re-substitute — the churn the fix is meant to remove, merely relocated into the claim loop. A second, independent reason is recorded alongside it: the merge SHA is an *input* to the tag, so a substitution commit cannot precede the tag without breaking the merge-SHA invariant.
+- **Keep the early `vX.Y` binding for the plan-file and branch names** (the status quo) — **not taken.** It re-creates, for those two identifiers, the exact collision the version-claim ADR already killed for the tag.
+- **Carry the placeholder in the filename or the branch ref** — **not taken.** § Decision records that the double-brace token form is filesystem- and git-ref-hazardous, so filesystem identity stays slug-keyed and only file *content* carries the placeholder.
+- **Extend the same treatment to Check and ADR numbers** — **explicitly out of scope**, and § Consequences gives the reason: their collision is cheap, they already have slug or reserved-gap indirection, they are already claim-deferred by the renumber-at-Engineering discipline, and tokenizing them would fight the gap-free ADR CI and the check-roster contract.
+
+The pre-flight / stamp split follows from the same constraint: the pre-CAS pass is read-only so the recompute-retry loop stays free, and every mutation hangs off the CAS-win path.
+
 ## Consequences
 
 - **The recompute-retry loop stays free.** Nothing is stamped until the number is won, so
@@ -119,3 +130,7 @@ git-tracked and revertible.
   atomic-CAS rule, projected onto the plan-file and branch identifiers.
 - **Composes #3016** (the `{versioned, version-less}` identity-mode enum) — mode governs
   whether the rename ever fires; this ADR governs *when* it fires for a `versioned` release.
+
+## References
+
+- #279 — the release milestone `release-identity-and-plan-naming`, at whose Collective Review scope-lock this record is ratified.

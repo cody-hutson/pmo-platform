@@ -47,7 +47,7 @@ Mid-Stage-5 cross-ticket scope detection uses the **Stage-4 Contention Map** —
 - The detection is only as good as the Stage-4 Contention Map. A path the map omits is invisible to the file-overlap heuristic (the semantic-similarity heuristic is the partial backstop).
 - The append-pattern-file judgment is a heuristic the spoke must apply, not a mechanical test — a misjudged append surface either over- or under-escalates.
 
-## Alternatives rejected
+## Alternatives Considered
 
 | Option | Decision | Rationale |
 |---|---|---|

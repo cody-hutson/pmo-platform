@@ -85,6 +85,6 @@ Additive prose only — one token-minting rule + one claim-key canonicalization 
 - **Implements the version-as-contended-axis invariant of the founding `version-claim-determinism` ADR.** That ADR (slug `version-claim-determinism`) records the host-agnostic deterministic-version-claiming capability whose fifth invariant names the version slot as a contended resource; it explicitly defers the model extension to this slice and is not edited for it. The cross-reference between the two ADRs is anchored on the **slug**, not on either ADR number (the number is an authoring-time assignment; a verified-free number can be claimed by a faster concurrent release — the exact failure mode the parent capability prevents).
 - **Predicate owner:** `release/references/pipeline/stage-03-bundle.md` §A9.6.1 (Step 2a — the executable token-minting rule). The gates that inherit the token: the Stage 4 A4 structural sub-audit (`stage-04-planning.md`), the Stage 9 G-PR9 GO-currency check, and the Stage 12 Phase A.5 semantic GO-invalidation check (`release/governance/release-process.md`).
 
-### Issue References
+## References
 
 - `#1674` — the version-as-contended-axis slice (the parent of this ADR): models the version number as a contended axis in the cross-release impact model, extending ADR-024. This ADR is the model-decision record for that slice; the executable mechanics land in §A9.6.1 Step 2a.

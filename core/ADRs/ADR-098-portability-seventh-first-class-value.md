@@ -47,7 +47,7 @@ Elevate **Portability** to the **seventh first-class engineering value** in the 
 
 The design-review **litmus phrasing is retained verbatim** — *"does the governed concept survive a substrate swap?"* In-row, adjacent to "external system" and "adapter", the word is unambiguous; the ambiguity only bites when it becomes a compound identifier cited in conformance verdicts. Only the value's *name* changed; its content did not.
 
-## Alternatives rejected
+## Alternatives Considered
 
 | Option | Trade-off | Verdict |
 |---|---|---|

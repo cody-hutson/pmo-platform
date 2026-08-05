@@ -34,7 +34,7 @@ Elevate **Security** to the **sixth first-class engineering value** in `build-ph
 
 **D3 — Home in `core/ADRs/`.** `build-philosophy.md` is core-scoped and the value system is a platform-wide charter concern, not a release/pipeline (SDLC) decision, so this record lives in `core/ADRs/`, not `release/ADRs/`.
 
-## Alternatives rejected
+## Alternatives Considered
 
 | Option | Trade-off | Verdict |
 |---|---|---|

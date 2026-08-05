@@ -37,7 +37,7 @@ Two design forks had to be settled. **(1) Placement:** does the axis land on `pr
 
 4. **Additive — wire a source into a pre-built socket.** `deliverable_type` is optional on legacy files (required forward); existing methodology-only PROJECT.md files validate unchanged (V1–V12 + V13-N/A). Where present, the field is the authoritative source the Stage-4 `domain:` label reads — the consumer chain is unchanged.
 
-## Alternatives considered
+## Alternatives Considered
 
 - **Land the axis as a `work_item_type` type-pack entry** — rejected: violates the ADR-018 `core/`-independence kernel and conflates two orthogonal axes (deliverable-kind vs. work-item-kind). A `deliverable_type: software` project still contains `work_item_type: story` items; folding one into the other destroys the orthogonality.
 - **Closed enum (exactly the recognized classes)** — rejected: every new domain would force a governed schema edit + V-rule churn, contradicting the Stage-4 "free domain name when no guide exists yet" expansion rule and breaking from the three shipped open-enum precedents. Tightening an open enum later is additive; loosening a closed one is the painful direction — open-first is the lower-regret default.

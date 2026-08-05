@@ -105,7 +105,7 @@ The front door emits a typed work item plus:
 
 This is the contract a downstream consumer (triage, `ppm-agent`, slicing) relies on.
 
-## Options considered
+## Alternatives Considered
 
 | Option | Decision | Rationale |
 |---|---|---|

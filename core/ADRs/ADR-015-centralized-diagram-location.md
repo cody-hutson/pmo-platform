@@ -40,7 +40,7 @@ Concretely:
 2. **Skill-owned diagrams → the skill's module.** A skill-specific flow diagram that is owned by the skill's behavior (not a cross-cutting concern) co-locates at `<owning-module>/skills/<skill>/diagrams/`, matching the existing `<module>/skills/<skill>/references/` co-location shape.
 3. **The standard's in-scope path occurrences are corrected in the same change.** The centralized-diagram-location path strings in the design-artifact standard are updated from the dead pre-restructure paths to these canonical paths. Non-diagram pre-restructure path drift elsewhere in the standard and the broader corpus is a separate, broader path-drift concern tracked on its own and is not folded into this decision.
 
-## Options considered
+## Alternatives Considered
 
 | Option | Decision | Rejection rationale |
 |---|---|---|

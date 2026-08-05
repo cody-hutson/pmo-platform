@@ -35,7 +35,7 @@ Three forks had to settle. **(1) One field or two:** fill `plan_type`'s deferred
 
 4. **RAID Log ≠ RAID Item.** `plan_type: raid` names the **RAID Log** (a Plan-class register). It does not alias the RAID-Item entity (`entity-field-schemas.md` §3.6), which is a *row* inside that Log. The two are distinct entities; the discriminator value is the container.
 
-## Alternatives considered
+## Alternatives Considered
 
 - **Add a parallel `plan_subtype` field** — rejected: duplicates the `plan_type` contract (two fields, one concept), violating duplicate-source-discipline; the deferred-membership socket already exists and is the correct fill point.
 - **Closed enum (exactly the six subtypes)** — rejected: the §5.5 inventory already documents four more values (`release` / `implementation` / `project` / `test`), and the OPEN-discriminator family (ADR-018) is the established precedent; a closed enum would be the lone closed sibling and would force a governed schema edit for every new plan kind. Tightening an open enum later is additive; loosening a closed one is the painful direction.

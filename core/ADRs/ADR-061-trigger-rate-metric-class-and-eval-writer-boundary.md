@@ -45,7 +45,7 @@ A build-time path caveat also had to settle: the Stage-5 spec named the results 
 
    Distinct on all three → **NEW**. A single-conjunct overlap (both touch trigger-optimization) does not collapse the boundary; the test requires distinctness on all three, and all three hold. `pmo-skill-refiner` composes the new skill as a post-creation calibration pass (it invokes the skill; it does not absorb it) — an ADR-019-clean invocation relationship.
 
-## Alternatives considered
+## Alternatives Considered
 
 - **Fork a parallel results store for trigger-rate** — rejected: duplicates the shared calibration contract (two files, one concept), violating duplicate-source-discipline, and fragments the calibration surface that `gate-evaluation-spec.md` and future measurement skills read as one. Extending under a reserved class keeps one surface.
 - **Make it a mode on `eval-writer` (EXTEND, not NEW)** — rejected: it fails the skill-boundary test on all three conjuncts (distinct trigger surface, write-scope, and primary role). Bolting a *measurement/reporting* mode onto an *authoring* skill would blur `eval-writer`'s role (author vs. measure) and its write-scope (eval files vs. calibration results); the two would be one edit away from silently merging. The proximity is exactly why the boundary must be *recorded*, not why it should be *erased*.

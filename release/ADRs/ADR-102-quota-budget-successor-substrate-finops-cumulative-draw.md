@@ -80,7 +80,7 @@ Conditions (i)–(iv) measure **precision** — that the comparables agree *with
 
 All five thresholds are `[CALIBRATE-AFTER-3]`: no usage distribution exists to calibrate them against, because data hygiene forbids reading the operator-local store from the public repo and no store is committed.
 
-## Alternatives considered
+## Alternatives Considered
 
 | Option | Verdict | Rationale |
 |---|---|---|
@@ -100,7 +100,7 @@ All five thresholds are `[CALIBRATE-AFTER-3]`: no usage distribution exists to c
 
 **Reversibility: CHEAP · Confidence: HIGH.** Reverting is a text revert in two files plus a status flip on this ADR. No data migration, no schema change, no runtime behavior change: the estimator is read-only and the gate's verdict logic is untouched.
 
-## Related
+## Related ADRs
 
 - **[ADR-026](ADR-026-spoke-launch-quota-reservation-telemetry-event.md)** — creates the `spoke-launch` / `quota-reservation` event. **Superseded in its substrate choice for § 5 only**; its writer-contract reasoning and its schema row stand.
 - **[ADR-101](../../core/ADRs/ADR-101-finops-store-frozen-kind-versioning-exemption.md)** — the FinOps store's schema-versioning exemption; the same release, the same store.

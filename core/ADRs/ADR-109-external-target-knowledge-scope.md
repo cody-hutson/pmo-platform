@@ -59,7 +59,7 @@ source_observations:
 - **The scope predicate is negative and exact.** It applies **only** to a fact whose source of truth is a repository other than this install's platform. Content whose SSOT is this corpus (`core/`, `release/`) is **definitionally outside** it and remains governed by the two-tier assignment and the no-shadow-SSOT invariant, unchanged. There is no reading under which corpus-SSOT content qualifies.
 - **Encode-then-evict is untouched and untouchable by this scope.** That lifecycle graduates tacit knowledge *into this corpus*. External-target facts are never universal-for-this-platform, so they never become K1 and are never eligible to graduate. The lifecycle, its VERIFY-CORPUS gate, its ARCHIVE-first step, and its ordering guarantee are left byte-unchanged.
 
-## Alternatives considered
+## Alternatives Considered
 
 | # | Alternative | Kill-reason |
 |---|---|---|

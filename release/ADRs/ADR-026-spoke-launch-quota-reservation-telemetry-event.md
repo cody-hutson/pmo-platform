@@ -64,7 +64,7 @@ The event fires at spoke-launch time on the parallel-safe stages (5 / 7 / 8); it
 (Checkpoint B refinement; the heuristic's eventual replacement by observed
 medians).
 
-## Alternatives considered and rejected
+## Alternatives Considered
 - **`tokens_used:` payload key on the existing `test-run` event** (the lightest
   on paper, "zero-surface"): rejected as mechanically unwritable. `--event-subtype`
   is mandatory and enum-validated; `test-run` admits only `suite-pass/fail/skip`. A

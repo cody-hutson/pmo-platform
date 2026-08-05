@@ -2,8 +2,8 @@
 title: "ADR-086 — Event-log schema decision-subtype extension (cascade-sweep-block + session-retro)"
 status: Accepted
 date: 2026-07-19
-release: pipeline-telemetry-tail (#261) (v3.80 provisional; bound at Stage 12)
-deciders: "Stage 5 Solutioning spoke (#3301 design D-3301-A) chose the schema-side fork; operator elected D1 (author an ADR) at the Collective Review scope-lock 2026-07-19; Stage 6 Engineering authored it; operator ratifies at the Stage 9 plan-review gate"
+release: pipeline-telemetry-tail (v3.80 provisional; bound at Stage 12)
+deciders: "Stage 5 Solutioning spoke (design D-3301-A) chose the schema-side fork; operator elected D1 (author an ADR) at the Collective Review scope-lock 2026-07-19; Stage 6 Engineering authored it; operator ratifies at the Stage 9 plan-review gate"
 tags: [release-ops, telemetry, event-log, schema-extension, enum, observability, co-owned-surface, ssot, ciac]
 source_observations:
   - "The Stage-5 shard codifies a `decision` / `cascade-sweep-block` emission (stage-05-solutioning.md § 11), but the event-log schema's § 3 enum never mirrored the subtype, so append-pipeline-event.sh rejects the exact row the pipeline instructs its agents to emit. Live A/B at Stage 6: unfixed main exits 1 with `Invalid event_subtype`; the fixed branch validates and exits 0."
@@ -83,7 +83,7 @@ The alternative was to leave § 3 untouched and re-point `stage-05-solutioning.m
 
 - No superseding or superseded relationship. This is the first ADR to govern the § 3 extension pattern itself; prior schema content was introduced without a dedicated architectural record, which is precisely the gap D1 elected to close before a second co-owner (#2423) touched the file.
 
-### Issue References
+## References
 
 - #3301 — event-log schema rejects the codified `cascade-sweep-block` emission (the fork-A repair recorded here).
 - #2423 — per-session self-retrospection; adds the net-new top-level `event_type=session-retro` to the same schema (the co-owned half; extends this ADR's pattern rather than superseding it).

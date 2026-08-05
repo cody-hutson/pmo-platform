@@ -360,28 +360,96 @@ parse_verification_plan() {
 # single line: verdict \t observed. Handlers shell ONLY existing primitives.
 # ===========================================================================
 
-# extract_command — pull the runnable command out of a method string. Prefers a
-# backtick-quoted span (the authored shape: *Method:* `grep …`); falls back to
-# the bare string when it already starts with an allowlisted verb (the shape the
-# CIAC parser hands over, having stripped its own backticks). Prints the command
-# or nothing.
-extract_command() {
-  local method="$1" cmd first
-  cmd="$(printf '%s' "$method" | sed -n 's/.*`\([^`]*\)`.*/\1/p' | head -1)"
-  if [ -n "$cmd" ]; then printf '%s' "$cmd"; return; fi
-  first="$(printf '%s' "$method" | sed -e 's/^[[:space:]]*//' | awk '{print $1}')"
-  case "$first" in
-    grep|test|ls|head|wc|cat) printf '%s' "$(printf '%s' "$method" | sed -e 's/^[[:space:]]*//')" ;;
-    *) : ;;   # no runnable command
+# RUNNABLE_VERBS — the read-only query set this executor is permitted to run.
+# Deliberately closed. A verification harness driven by an authored artifact must
+# not acquire a code-execution channel: "the plan names which tool to run" is not
+# a trust boundary when the same pull request can author both. A criterion whose
+# substance needs a tool invocation is therefore NOT executed here — it is
+# reported as an honest, reasoned SKIP naming the verb, and its mechanical
+# guarantee is expected to live in that tool's own CI-invoked self-test, which is
+# a gate in its own right.
+RUNNABLE_VERBS='grep test ls head wc cat'
+
+is_runnable_verb() {
+  case " $RUNNABLE_VERBS " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
+
+# looks_like_command — a span is command-shaped when its leading token is a bare
+# word (a verb), not a flag, a path fragment, a section reference or prose.
+looks_like_command() {
+  case "$1" in
+    ''|-*|/*|.*|\#*) return 1 ;;
+    *) case "$1" in *[!A-Za-z0-9_.-]*) return 1 ;; esac; return 0 ;;
   esac
 }
 
-# extract_threshold — pull an "≥ N" / ">= N" numeric threshold from a method.
+# extract_command — pull the runnable command out of a method string.
+#
+# It scans EVERY backtick-quoted span and returns the FIRST one whose leading
+# token is an allowlisted verb; if none is, it returns the first COMMAND-SHAPED
+# span so the caller can report the verb it declined to run. Taking the first
+# span unconditionally was a defect: an authored method that mentions a flag or a
+# symbol in backticks before its actual probe (*Method:* run `--self-test`; then
+# `grep …`) yielded `--self-test` as the "verb" and reported ERROR — a malformed-
+# input verdict for a well-formed method. Falls back to the bare string when it
+# already starts with an allowlisted verb (the shape the CIAC parser hands over,
+# having stripped its own backticks). Prints the command or nothing.
+extract_command() {
+  local method="$1" span first fallback="" line
+  while IFS= read -r span; do
+    [ -n "$span" ] || continue
+    first="$(printf '%s' "$span" | sed -e 's/^[[:space:]]*//' | awk '{print $1}')"
+    if is_runnable_verb "$first"; then printf '%s' "$span"; return; fi
+    if [ -z "$fallback" ] && looks_like_command "$first"; then fallback="$span"; fi
+  done <<EOF
+$(printf '%s' "$method" | tr '\`' '\n' | awk 'NR % 2 == 0')
+EOF
+  if [ -n "$fallback" ]; then printf '%s' "$fallback"; return; fi
+  first="$(printf '%s' "$method" | sed -e 's/^[[:space:]]*//' | awk '{print $1}')"
+  if is_runnable_verb "$first"; then
+    printf '%s' "$(printf '%s' "$method" | sed -e 's/^[[:space:]]*//')"
+  fi
+}
+
+# extract_threshold — pull a numeric threshold and its COMPARATOR out of a method.
+# Prints "<op>\t<n>", or nothing when the method states no threshold.
+#
+# Four comparators, because "expect zero" is the shape most verification criteria
+# actually take and a >=-only parser cannot express it: a `>= 0` assertion passes
+# unconditionally, so a criterion meaning "no findings" had to be written as prose
+# and fell through to SKIP. That expressiveness gap — not the criteria — is why
+# this roll-up read 0 PASS.
+#   >= N   "≥ N", ">= N", "at least N"
+#   <= N   "≤ N", "<= N", "at most N", "no more than N"
+#   == N   "exactly N", "= N", "expect N" (and "expect zero" / "expect 0")
+# NOTE ON THE REGEX DIALECT: every alternation below uses `sed -E` (ERE). BSD sed
+# does NOT support `\|` in a basic regular expression, so a BRE alternation here
+# silently matches nothing and every threshold reads as "absent" — which presents
+# as a rows-pass-on-exit-code roll-up rather than as an error. The original two
+# comparators avoided this by using two separate BRE calls; the comparator set is
+# wide enough now that ERE is the honest way to write it.
 extract_threshold() {
-  local method="$1" t
-  t="$(printf '%s' "$method" | sed -n 's/.*[≥][ ]*\([0-9][0-9]*\).*/\1/p' | head -1)"
-  [ -z "$t" ] && t="$(printf '%s' "$method" | sed -n 's/.*>=[ ]*\([0-9][0-9]*\).*/\1/p' | head -1)"
-  printf '%s' "$t"
+  local method="$1" n
+  n="$(printf '%s' "$method" | sed -nE 's/.*(≥|>=|at least)[ ]*([0-9]+).*/\2/p' | head -1)"
+  [ -n "$n" ] && { printf '>=\t%s' "$n"; return; }
+  n="$(printf '%s' "$method" | sed -nE 's/.*(≤|<=|at most|no more than)[ ]*([0-9]+).*/\2/p' | head -1)"
+  [ -n "$n" ] && { printf '<=\t%s' "$n"; return; }
+  n="$(printf '%s' "$method" | sed -nE 's/.*(exactly|expect)[ ]*([0-9]+).*/\2/p' | head -1)"
+  [ -n "$n" ] && { printf '==\t%s' "$n"; return; }
+  case "$method" in
+    *"expect zero"*|*"expect none"*) printf '==\t0'; return ;;
+  esac
+}
+
+# compare_threshold — apply a comparator. Prints PASS or FAIL.
+compare_threshold() {
+  local count="$1" op="$2" want="$3"
+  case "$op" in
+    '>=') [ "$count" -ge "$want" ] 2>/dev/null && printf 'PASS' || printf 'FAIL' ;;
+    '<=') [ "$count" -le "$want" ] 2>/dev/null && printf 'PASS' || printf 'FAIL' ;;
+    '==') [ "$count" -eq "$want" ] 2>/dev/null && printf 'PASS' || printf 'FAIL' ;;
+    *)    printf 'FAIL' ;;
+  esac
 }
 
 # per-issue: extract a runnable predicate from the method string and run it.
@@ -406,14 +474,19 @@ handle_per_issue() {
     printf '%s\t%s\n' "$VERDICT_SKIP" "no-executable-command-in-method"; return
   fi
 
-  # Allowlist the leading verb; refuse anything outside the read-only query set.
+  # Allowlist the leading verb. Outside the read-only query set is an honest
+  # SKIP naming the verb, not an ERROR: the executor declining to run a tool is
+  # a statement about the executor, not a defect in the method. ERROR is reserved
+  # for input this parser cannot make sense of.
   local verb; verb="$(printf '%s' "$cmd" | awk '{print $1}')"
-  case "$verb" in
-    grep|test|ls|head|wc|cat) : ;;
-    *) printf '%s\t%s\n' "$VERDICT_ERROR" "non-allowlisted-verb:$verb"; return ;;
-  esac
+  if ! is_runnable_verb "$verb"; then
+    printf '%s\t%s\n' "$VERDICT_SKIP" \
+      "tool-invocation-outside-executor-allowlist:$verb (not executed here; its mechanical guarantee belongs in that tool's own self-test)"
+    return
+  fi
 
-  local threshold; threshold="$(extract_threshold "$method")"
+  local threshold op want; threshold="$(extract_threshold "$method")"
+  op="$(printf '%s' "$threshold" | cut -f1)"; want="$(printf '%s' "$threshold" | cut -f2)"
 
   # Run the embedded command from REPO_ROOT so relative paths resolve.
   local out rc count
@@ -425,10 +498,10 @@ handle_per_issue() {
   if [ -n "$threshold" ]; then
     # Interpret output as a count (grep -c prints an integer per file; sum).
     count="$(printf '%s\n' "$out" | awk -F: '{ s += $NF } END { print s+0 }')"
-    if [ "$count" -ge "$threshold" ] 2>/dev/null; then
-      printf '%s\t%s\n' "$VERDICT_PASS" "count=$count (≥ $threshold)"
+    if [ "$(compare_threshold "$count" "$op" "$want")" = PASS ]; then
+      printf '%s\t%s\n' "$VERDICT_PASS" "count=$count ($op $want)"
     else
-      printf '%s\t%s\n' "$VERDICT_FAIL" "count=$count (< $threshold)"
+      printf '%s\t%s\n' "$VERDICT_FAIL" "count=$count (wanted $op $want)"
     fi
     return
   fi
@@ -519,22 +592,24 @@ handle_integration() {
     printf '%s\t%s\n' "$VERDICT_SKIP" "documented-decision-method (no runnable command)"; return
   fi
   local verb; verb="$(printf '%s' "$cmd" | awk '{print $1}')"
-  case "$verb" in
-    grep|test|ls|head|wc|cat) : ;;
-    *) printf '%s\t%s\n' "$VERDICT_ERROR" "non-allowlisted-verb:$verb"; return ;;
-  esac
-  local out rc count threshold
+  if ! is_runnable_verb "$verb"; then
+    printf '%s\t%s\n' "$VERDICT_SKIP" \
+      "tool-invocation-outside-executor-allowlist:$verb (not executed here; its mechanical guarantee belongs in that tool's own self-test)"
+    return
+  fi
+  local out rc count threshold op want
   set +e
   out="$( cd "$REPO_ROOT" && eval_free_run "$cmd" 2>/dev/null )"
   rc=$?
   set -e
   threshold="$(extract_threshold "$method")"
+  op="$(printf '%s' "$threshold" | cut -f1)"; want="$(printf '%s' "$threshold" | cut -f2)"
   if [ -n "$threshold" ]; then
     count="$(printf '%s\n' "$out" | awk -F: '{ s += $NF } END { print s+0 }')"
-    if [ "$count" -ge "$threshold" ] 2>/dev/null; then
-      printf '%s\t%s\n' "$VERDICT_PASS" "co-occurrence count=$count (≥ $threshold)"
+    if [ "$(compare_threshold "$count" "$op" "$want")" = PASS ]; then
+      printf '%s\t%s\n' "$VERDICT_PASS" "co-occurrence count=$count ($op $want)"
     else
-      printf '%s\t%s\n' "$VERDICT_FAIL" "co-occurrence count=$count (< $threshold)"
+      printf '%s\t%s\n' "$VERDICT_FAIL" "co-occurrence count=$count (wanted $op $want)"
     fi
     return
   fi

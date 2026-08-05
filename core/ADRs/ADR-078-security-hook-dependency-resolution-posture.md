@@ -42,7 +42,7 @@ The posture is read from the hook's own mode file (jq-free `cat`/`tr`), so a hoo
 
 **D5 — A CI guard prevents re-drift.** `core/hooks/tests/check-hook-dep-hardening.sh` (Security workflow, job `hook-dep-hardening`) fails the build if any hook hard-codes `/usr/bin/jq`, carries the legacy blanket fail-open message, or calls `resolve_jq` without sourcing the helper.
 
-## Alternatives rejected
+## Alternatives Considered
 
 1. **Per-hook inline resolution (status quo, patched hook-by-hook)** — leaves the class intact; the duplication is the maintainability root cause that produced the vulnerability and would reintroduce it.
 2. **Widen `$PATH` to include the Homebrew dirs** — the simplest way to "find jq", and the wrong one: it reopens the binary-hijack the `PATH` pin exists to close.
