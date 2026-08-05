@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-114 — The alternatives section is required with conditional content, and Accepted ADRs admit durability-hygiene edits
+title: ADR-118 — The alternatives section is required with conditional content, and Accepted ADRs admit durability-hygiene edits
 status: Proposed (flips to Accepted at this release's Stage 9 plan-review gate)
 date: 2026-08-03
 release: adr-corpus-conformance
@@ -16,7 +16,7 @@ source_observations:
   - "`core/standards/evidence-grounding-standard.md` already applies the required-section / conditional-content construction to its own drift section: 'the section must always be present; its contents may be empty… The omission test is structural, not content-based.'"
 ---
 
-# ADR-114 — The alternatives section is required with conditional content, and Accepted ADRs admit durability-hygiene edits
+# ADR-118 — The alternatives section is required with conditional content, and Accepted ADRs admit durability-hygiene edits
 
 ## Status
 
