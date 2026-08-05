@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.09] - 2026-08-05
+
+Four agent-behavior disciplines become checkable rules, and a checkpoint index makes an already-held rule fire at the moment it is needed.
+
+[Full notes](release/releases/notes/v4.09_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.09)
+
 ## [v4.08] - 2026-08-05
 
 Release records, telemetry and planning now wait for the one moment a version is claimed — and the cycle-time measurement finally produces a number.
