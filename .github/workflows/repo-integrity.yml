@@ -669,7 +669,7 @@ jobs:
           # step is the gate that makes a missing row or a stale Status structurally
           # impossible rather than merely currently-absent. Contract:
           # release/references/standards/release-corpus-schema.md § Derived-Surface
-          # Contract. Founding record: ADR-113.
+          # Contract. Founding record: ADR-117.
           set +e
           python3 release/tools/generate-adr-index.py --verify | tee /tmp/adr-index.out
           RC=${PIPESTATUS[0]}

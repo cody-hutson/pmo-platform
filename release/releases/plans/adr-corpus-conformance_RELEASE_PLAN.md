@@ -57,7 +57,7 @@ The lint's corpus verdict is unchanged at zero. One behavioural correction insid
 
 **What this release does NOT claim.** The corpus is not fully conformant to the section set afterwards, and the plan says so rather than implying otherwise. Sections whose backfill would be *authoring* a decision rather than *recording* one stay out of scope with their blocking authority named, and one superseded record can never conform because the immutability policy forbids the two edits it needs. The named residual: **an ADR merged from a sibling branch may be non-conformant and nothing in the repository will say so — the index cannot drift; the corpus can.** That residual materialized during this release, before it merged.
 
-**Cross-references.** Stage-4 plan #4576 · Stage-5 designs #4666 / #4670 / #4674 / #4678 / #4682 / #4686 (Wave 1) and #4690 (Wave 2) · Wave-2 Engineering #4691 · milestone 286. Version identity per **ADR-092**; overlap classes per **ADR-005**; canonical-spec-edit-wins per **ADR-062**. Records authored by this release: **ADR-114** (section set + hygiene carve-out, amended at Wave 2), **ADR-115** (number binds at merge), **ADR-116** (deciders carve-out is name-only), **ADR-113** (index as derived surface + scoped conformance claim).
+**Cross-references.** Stage-4 plan #4576 · Stage-5 designs #4666 / #4670 / #4674 / #4678 / #4682 / #4686 (Wave 1) and #4690 (Wave 2) · Wave-2 Engineering #4691 · milestone 286. Version identity per **ADR-092**; overlap classes per **ADR-005**; canonical-spec-edit-wins per **ADR-062**. Records authored by this release: **ADR-114** (section set + hygiene carve-out, amended at Wave 2), **ADR-115** (number binds at merge), **ADR-116** (deciders carve-out is name-only), **ADR-117** (index as derived surface + scoped conformance claim).
 
 ---
 
@@ -215,7 +215,7 @@ Same-path intersection is **one conditional, append-pattern file** (`core/schema
 | **#3914** | ADR-110 | `core/ADRs/` — cross-cutting platform decision | `anchor(origin/main)` + 1, with `anchor` = 109 | **ADR-114** |
 | **#3713** (Wave 1, order 6) | ADR-111 | its slice's determination | `anchor(origin/main)` + 2, sequenced after this allocation | **ADR-115** |
 | **#3707** (Wave 1) | ADR-116 | `core/ADRs/` — platform-wide public-surface policy | operator-ratified allocation (see `Δ-adr-count`) | ADR-116 — unchanged |
-| **#1488** (Wave 2, slice 6d) | ADR-113 | `release/ADRs/` — the surface it governs | merge-union simulation against the shipped `evaluate()` | ADR-113 — unchanged |
+| **#1488** (Wave 2, slice 6d) | ADR-117 | `release/ADRs/` — the surface it governs | merge-union simulation against the shipped `evaluate()` | ADR-117 — unchanged |
 
 Allocation command: `git ls-tree -r --name-only origin/main -- core/ADRs release/ADRs | grep -oE 'ADR-[0-9]{3}' | sort -n | tail -1`, with the contiguity gate (`release/tools/check-adr-numbers.py`) confirming the sequence is gap-free at the anchor.
 
@@ -299,7 +299,7 @@ core/ADRs/README.md                                             # edit — #3915
 release/ADRs/README.md                                          # edit — #1488 (+#3383 folded) generated index projection — LANDED (slice 6d): derived-surface marker + managed ADR-INDEX region, all five columns projected; the prose roster, cross-numbering table and scope narrative COLLAPSED to a rule statement
 release/tools/generate-adr-index.py                             # new  — #1488 / W2.6 the index projector: --verify (set-difference both ways + per-cell equality, prints its denominators) / --write / --stdout / --self-test with 3 control arms + 3 structural-failure arms
 release/references/standards/release-corpus-schema.md           # edit — #1488 / W2.6 register the ADR index in § Derived-Surface Contract (roles + per-field provenance + verification posture); the contract is declared to govern the PATTERN, not only the ledger family
-release/ADRs/ADR-113-adr-index-derived-surface-and-scoped-conformance-claim.md  # new — #1488's ADR (release-home: the surface it governs is the release module's index; number bound against origin/main and chosen by merge-union simulation)
+release/ADRs/ADR-117-adr-index-derived-surface-and-scoped-conformance-claim.md  # new — #1488's ADR (release-home: the surface it governs is the release module's index; number bound against origin/main and chosen by merge-union simulation)
 release/releases/RELEASE_LOG.md                                 # edit — Stage-13 close-out ledger row [Stage 13, not this build]
 ```
 

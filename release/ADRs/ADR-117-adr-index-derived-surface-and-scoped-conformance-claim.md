@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-113 — The ADR index is a derived surface and cannot drift; the conformance claim is scoped to a named baseline and its residual is stated"
+title: "ADR-117 — The ADR index is a derived surface and cannot drift; the conformance claim is scoped to a named baseline and its residual is stated"
 status: Proposed (flips to Accepted at this release's Stage 9 plan-review gate)
 date: 2026-08-04
 release: adr-corpus-conformance
@@ -17,13 +17,15 @@ source_observations:
   - "The merge-time renumber tool rewrote three index surfaces in this same README by hand, and its behavioural fixture synthesized a README carrying all three so the assertions would find them. Converting the index without amending both would have left a green suite asserting against a shape the corpus no longer had — the tool would then have hand-edited a generated region and failed the projection check its own run triggered."
 ---
 
-# ADR-113 — The ADR index is a derived surface and cannot drift; the conformance claim is scoped to a named baseline and its residual is stated
+# ADR-117 — The ADR index is a derived surface and cannot drift; the conformance claim is scoped to a named baseline and its residual is stated
 
 ## Status
 
 **Proposed.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent. It flips to **Accepted** at this release's Stage-9 plan-review gate; per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure.
 
 **Numbering.** The number was bound against the mainline only, per the binding rule this release's own sibling record establishes. It is the next free slot over the union of the mainline and this branch's tree, and it was chosen by measurement rather than by increment: the two adjacent candidates were each simulated against the merge union, and both introduced a defect this one does not — the lower added a third duplicate, the higher landed a gap. As with every ADR, the number is allocated at authorship and bound at merge; if a sibling merges ahead of this record, the reconciliation is tooled and the record's own Status block will carry the provenance note.
+
+**Numbering provenance — `113 → 117`.** Authored branch-local as **ADR-113**; renumbered to **ADR-117** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 113. In-release citations that read "ADR-113" denote this record.
 
 ## Context
 

@@ -103,7 +103,7 @@ THE SIX STEPS (each individually verifiable)
                            `generate-adr-index.py` instead: hand-editing a derived
                            region is what its own verification posture fails, so a
                            rewriting renumber would break the projection check it
-                           had just triggered. See `PROJECTED_INDEXES` and ADR-113.
+                           had just triggered. See `PROJECTED_INDEXES` and ADR-117.
   R5  provenance note    — the ``## Status`` note. THE OBSERVED DEFECT.
   R6  zero-dangling verify — re-scan; any surviving in-scope ``ADR-<old>`` is a
                            failure, and the whole staged set is reverted.
@@ -191,7 +191,7 @@ DEFAULT_MAINLINE_REF = "origin/main"
 # region is what the Derived-Surface Contract's verification posture fails — a
 # renumber that rewrote a row would break the projection check it had just
 # triggered. `core/ADRs/README.md` is deliberately absent: it is a curated thematic
-# document, not an index, and R4 keeps rewriting it in place. See ADR-113.
+# document, not an index, and R4 keeps rewriting it in place. See ADR-117.
 PROJECTED_INDEXES = {
     "release/ADRs/README.md": "generate-adr-index.py",
 }
@@ -904,7 +904,7 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
     #   core/ADRs/README.md     HAND-MAINTAINED — a curated thematic document, not
     #                           an index. Rewritten in place, as before, and it is
     #                           the sole carrier of the § Renumber log.
-    #   release/ADRs/README.md  DERIVED (ADR-113). Its table is projected from the
+    #   release/ADRs/README.md  DERIVED (ADR-117). Its table is projected from the
     #                           ADR file set by generate-adr-index.py. Rewriting a
     #                           row here by hand is precisely what the Derived-
     #                           Surface Contract's verification posture FAILS — a
