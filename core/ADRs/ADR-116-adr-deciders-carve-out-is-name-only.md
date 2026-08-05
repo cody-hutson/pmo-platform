@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-112 — The ADR deciders carve-out is name-only; the account handle is never sanctioned
+title: ADR-116 — The ADR deciders carve-out is name-only; the account handle is never sanctioned
 status: Proposed (flips to Accepted at this release's Stage 9 plan-review gate)
 date: 2026-08-04
 release: adr-corpus-conformance
@@ -15,7 +15,7 @@ source_observations:
   - "The recommendation to close the operator-email and collaborator dimensions of the same gate with the same guard was offered at design time and DECLINED. The un-carved set therefore holds the handle only; two fixtures pin the remaining dimensions as characterization rather than endorsement."
 ---
 
-# ADR-112 — The ADR deciders carve-out is name-only; the account handle is never sanctioned
+# ADR-116 — The ADR deciders carve-out is name-only; the account handle is never sanctioned
 
 ## Status
 
@@ -24,6 +24,8 @@ source_observations:
 **Numbering.** Derived at Engineering Commit 0 against the mainline anchor per the rule recorded in [ADR-115](../../release/ADRs/ADR-115-adr-number-claim-binds-at-merge.md): the mainline held 109, this release's earlier records took 110 and 111, so this one takes 112.
 
 **Why this record exists at all.** The decision it states was rendered, implemented, and gated in this release — but it had **no durable home**. Its rationale lived only in stage commentary, which is not a corpus surface. This record is the one thing in the bundle that was decided and not written down.
+
+**Numbering provenance — `112 → 116`.** Authored branch-local as **ADR-112**; renumbered to **ADR-116** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 112. In-release citations that read "ADR-112" denote this record.
 
 ## Context
 
