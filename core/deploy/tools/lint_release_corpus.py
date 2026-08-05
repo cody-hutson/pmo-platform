@@ -153,8 +153,12 @@ TYPE_VALUES = {"plan", "note", "abandoned-plan", "phase-plan", "audit-plan"}
 # WHAT THE BRANCH DOES *NOT* DO. It does not separate "version-less" from
 # "unparseable name": version_tuple() returns this same sentinel for BOTH, so
 # both are in scope under the branch AND under a lowered floor alike. There is
-# no malformed-vs-version-less call here to collapse. Filename well-formedness
-# is CANONICAL_FILENAME_RE's judgment, made by a separate check.
+# no malformed-vs-version-less call here to collapse. Nor does anything else
+# make that call for a NOTE: CANONICAL_FILENAME_RE has a single call site, and
+# it walks PLANS_DIR only. A malformed note filename is therefore linted for
+# CONTENT like any other in-scope note, while its SHAPE goes unchecked. That
+# gap is pre-existing and out of scope here — do not widen the lint from this
+# comment.
 #
 # WHAT IT DOES PRESERVE — the floor itself. Lowering NOTE_CONTENT_CUTOVER to
 # this sentinel would additionally admit every name that parses to a REAL
