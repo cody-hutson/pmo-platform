@@ -26,6 +26,8 @@ source_observations:
 
 **Numbering provenance — `111 → 115`.** Authored branch-local as **ADR-111**; renumbered to **ADR-115** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 111. In-release citations that read "ADR-111" denote this record.
 
+The move was one of a pair. The mainline claimed 110 and 111 together, this branch already held 112 and 113, and the two free slots were therefore 114 and 115 — so the assignment was **under-determined**: `{110 → 115, 111 → 114}` is equally legal under clauses (1) and (2), and the shipped contiguity rule returns the same verdict on both. It was *chosen*, not computed. § Decision (3) is the amendment that closes that discretion, and the record dogfoods its own tie-break in the same way it dogfoods its own binding rule.
+
 ## Context
 
 ADR numbers are a single global, gap-free, append-only sequence across two directories, enforced on every pull request. The enforcement is worth keeping: contiguity is what makes a *missing* ADR detectable, and the corpus carries a running log whose entire content is which hole was real.
@@ -58,11 +60,21 @@ The provenance note is written **by the tool, not by discipline**. This is the l
 
 **The sweep is branch-scoped, and that is a correctness property rather than an optimization.** A corpus-wide substitution would rewrite legitimate references to whichever *other* record holds the old number — and at renumber time there always is one, because that is what made it a collision. In-scope is the set of files the branch added or modified against the mainline; out-of-scope is every mainline-unchanged file, whose citations belong to the record that merged first. The set is not merely a safe subset, it is **complete**: an unmerged record cannot be cited from a mainline-unchanged file.
 
+**(3) When a reconciliation moves MORE THAN ONE record, the assignment is ORDER-PRESERVING.**
+
+Clauses (1) and (2) determine *that* a record renumbers and *how*. With a single collision they also determine *to what*; with more than one they do not, and the residue is a free choice. So: sort the colliding records ascending by the number each currently claims, sort the free slots ascending from the merge union's frontier, and pair them positionally. A record that held a lower number than a sibling before the move holds a lower number after it. Both inputs are already derived — `--detect` collects the colliding set and `next_free()` computes the frontier — so this is a zip rather than a search, and the sort is total because branch-local numbers are distinct by construction. Where only one record moves the clause is vacuous.
+
+**Why a tie-break is needed at all: the gate cannot make this choice.** Every permutation of the same slot set is contiguous and duplicate-free, so the checker returns PASS on all of them with equal confidence. An assignment the gate cannot falsify is one that must be *computed* rather than *selected* — otherwise the platform re-acquires, at the reconciliation step, the exact defect this record was written about: a confident answer nothing downstream can distinguish from the wrong one.
+
+**Why order-preservation rather than least displacement.** Least-total-displacement is the intuitive metric, and it is degenerate here for a structural reason rather than an accident of one case. The union's distinct numbers are contiguous from the base, so `k` colliding records take the `k` slots immediately above the union frontier, while every colliding number sits at or below that frontier by construction. Every target therefore lies strictly above every source, and the total `Σ targets − Σ sources` is invariant under permutation: a least-total rule selects nothing at all. Under the max norm the ascending pairing *is* the strict optimum, so the simpler rule that already yields it is adopted rather than a solver that would return the same answer.
+
+The load-bearing reason is semantic, not metric. The sequence is append-only, so a lower number reads as *decided earlier*. An inverting assignment silently falsifies that reading, and — because the gate is indifferent — nothing in the corpus would ever record that it had. Order preservation is not a new principle introduced here; it is the principle clause (1) already applies at allocation, carried through the reconciliation so that the number a record ends with means what the number it was allocated meant.
+
 **What this decision does not change.** Contiguity is retained, not relaxed. No token placeholder is introduced into ADR filenames. The checker's default verdict semantics, its command-line surface, and its continuous-integration invocation are byte-unchanged; the only addition is a pure `next_free()` function it did not previously expose, which the tool imports rather than re-deriving. There is never a second parser and never a second definition of the ADR home set.
 
 ## Alternatives Considered
 
-Four directions were weighed at the design gate; the operator selected the third. Within it, five mechanisms were generated and narrowed before the survivor was specified.
+Four directions were weighed at the design gate; the operator selected the third. Within it, five mechanisms were generated and narrowed before the survivor was specified. The tie-break in § Decision (3) was settled later — at this release's own reconciliation, which is what exposed the need for one — and its options are weighed in the last table below.
 
 **On the direction:**
 
@@ -83,6 +95,15 @@ Four directions were weighed at the design gate; the operator selected the third
 | **Folding ADR numbers into the version-claim adapter** | **Rejected** | It would break that adapter's own conformance contract. See § Portability conflict. |
 | **A pre-merge bot that auto-renumbers a colliding branch** | **Rejected** | It reserves against the same moving population that produced the defect — the number can still be claimed between the bot's write and the merge — and it mutates a contributor's branch. |
 | **A Python sibling importing the checker's contract** | **SELECTED** | Fixes the observed defect, introduces no second parser, adds no allowlist surface, leaves the gate's trust posture unchanged, and keeps the checker's hermetic self-test intact. |
+
+**On the tie-break, within (3)** — weighed at this release's own reconciliation, where the candidate assignments were observed to be indistinguishable to the gate:
+
+| Option | Verdict | Why |
+|---|---|---|
+| **Ascending pairing (order-preserving)** | **SELECTED** | Total, computed from inputs the tool already derives, and the one rule that preserves the append-only sequence's *decided-earlier* reading. It is also the strict max-norm optimum, so the metric-shaped answer and the semantic answer agree rather than having to be traded off. |
+| **Least total displacement** | **Rejected — degenerate** | Every free slot lies strictly above every colliding number, so the total is permutation-invariant and the rule selects nothing. Measured on the observed reconciliation, both candidate assignments score identically. |
+| **Least maximum displacement** | **Rejected as a restatement** | It does discriminate, and it returns the ascending pairing every time. Adopting it buys no additional determinism and expresses a one-line rule as an optimization over an assignment problem. |
+| **Leave it to the operator at reconciliation time** | **Rejected** | The status quo this clause closes. Because the gate passes either way the choice is unreviewable, and at the observed instance it was asserted as determined when it was not. |
 
 ## Portability conflict
 
@@ -109,7 +130,7 @@ A future host that *can* offer a compare-and-swap over a filename-plus-citations
 
 ## Consequences
 
-**Easier.** The gap-landing failure mode becomes structurally unreachable: the binding oracle cannot return `anchor + 2`, so no author can step past a sibling claim into a hole. The lossy step is mechanized, so a renumber is auditable by construction rather than by remembering. Mainline contiguity is preserved without forcing in-flight branches to serialize. And the allocation rule now states its concurrency contract explicitly — what a branch may assume about its number between authoring and merge — where before it stated only an algorithm.
+**Easier.** The gap-landing failure mode becomes structurally unreachable: the binding oracle cannot return `anchor + 2`, so no author can step past a sibling claim into a hole. The lossy step is mechanized, so a renumber is auditable by construction rather than by remembering. Mainline contiguity is preserved without forcing in-flight branches to serialize. And the allocation rule now states its concurrency contract explicitly — what a branch may assume about its number between authoring and merge — where before it stated only an algorithm. A reconciliation moving more than one record yields one computable assignment instead of a set the gate cannot rank.
 
 **Harder, stated plainly.** **This decision does not eliminate the renumber. It makes it cheap, complete, and auditable.** A release that authors an ADR now carries a conditional pre-merge step it did not carry before. Read against the originating requirement — that two branches merge "without a duplicate number *or a manual renumber*" — this satisfies the **"manual" qualifier only**, and that reading is stated here so it is graded as what it is rather than as a requirement nothing could meet. Eliminating the renumber outright requires an arbitration primitive that does not exist for this object, which is the finding recorded above.
 
@@ -121,7 +142,7 @@ A future host that *can* offer a compare-and-swap over a filename-plus-citations
 
 **MODERATE / Confidence HIGH.** A `git revert` on the release merge restores the prior state textually — the tool is a new file, the pipeline sub-step and the gate criterion are additive, and the checker addition is a pure function nothing else depends on.
 
-The two halves unwind at different costs, and the distinction is the honest one. The **decision** — that only the mainline binds — is CHEAP to supersede, because it is a rule and reverting it changes only what authors are told to do. The **mechanism** becomes MODERATE once a second release has entered Stage 12 depending on `G-EX9`: reverting then strands a release mid-flight with a gate criterion its tooling no longer satisfies. Reverting the mechanism while keeping the rule is coherent and returns the platform to the manual recovery path; reverting the rule while keeping the mechanism is not, because the tool's refusal logic encodes the rule.
+The two halves unwind at different costs, and the distinction is the honest one. The **decision** — that only the mainline binds — is CHEAP to supersede, because it is a rule and reverting it changes only what authors are told to do; the order-preserving tie-break in (3) sits on that same half and is CHEAP for the same reason. The **mechanism** becomes MODERATE once a second release has entered Stage 12 depending on `G-EX9`: reverting then strands a release mid-flight with a gate criterion its tooling no longer satisfies. Reverting the mechanism while keeping the rule is coherent and returns the platform to the manual recovery path; reverting the rule while keeping the mechanism is not, because the tool's refusal logic encodes the rule.
 
 ## Related ADRs
 
