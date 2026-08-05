@@ -140,9 +140,31 @@ TYPE_VALUES = {"plan", "note", "abandoned-plan", "phase-plan", "audit-plan"}
 # and Check 20 passed vacuously even with correct paths. The §3.2 content
 # discipline is forward-going; the re-versioned corpus has no pre-standard
 # legacy to grandfather, so the floor is the lowest live family (v1.x) and the
-# exempt set is empty. (Version-less notes parse to (0,0,'',0) and stay below
-# (1,0) — a known, accepted boundary: version-less notes predate the version-
-# keyed convention; linting them needs a version-less branch, not a floor change.)
+# exempt set is empty. (Version-less notes parse to (0,0,'',0). They are now
+# linted via an explicit version-less BRANCH — VERSIONLESS_KEY below — exactly as
+# this comment previously prescribed; the floor itself was NOT moved.)
+#
+# VERSIONLESS_KEY is what version_tuple() returns for any name VERSION_KEY_RE
+# does not match — i.e. a slug-keyed (version-less) note. It is a MARKER, not a
+# version: it must not be compared against the forward-only floors, because
+# "no version" is not "older than v1.0". Naming it keeps the branch site
+# self-documenting.
+#
+# WHAT THE BRANCH DOES *NOT* DO. It does not separate "version-less" from
+# "unparseable name": version_tuple() returns this same sentinel for BOTH, so
+# both are in scope under the branch AND under a lowered floor alike. There is
+# no malformed-vs-version-less call here to collapse. Nor does anything else
+# make that call for a NOTE: CANONICAL_FILENAME_RE has a single call site, and
+# it walks PLANS_DIR only. A malformed note filename is therefore linted for
+# CONTENT like any other in-scope note, while its SHAPE goes unchecked. That
+# gap is pre-existing and out of scope here — do not widen the lint from this
+# comment.
+#
+# WHAT IT DOES PRESERVE — the floor itself. Lowering NOTE_CONTENT_CUTOVER to
+# this sentinel would additionally admit every name that parses to a REAL
+# version sorting below the floor: "v0.5_RELEASE_NOTES.md" is (0, 5, "", 0),
+# correctly dropped today and admitted by a lowered floor.
+VERSIONLESS_KEY = (0, 0, "", 0)
 NOTE_CONTENT_CUTOVER = (1, 0, "", 0)
 PRE_CUTOVER_EXEMPT_VERSIONS: set[str] = set()
 SECTION_6A_HEADER_RE = re.compile(r"^##\s+What changed for everyone", re.IGNORECASE)
@@ -543,7 +565,13 @@ def parse_bullets(section_text: str) -> list[str]:
 def check_note_content() -> list[str]:
     """Lint Section 6a content per release-notes-standard.md §3.2 checks 9-12.
 
-    Floor is NOTE_CONTENT_CUTOVER; version-less notes (tuple (0,0)) stay exempt.
+    Floor is NOTE_CONTENT_CUTOVER for version-KEYED notes. Version-less
+    (slug-keyed) notes are IN SCOPE for checks 9-12: they carry no version, so
+    they bypass the content floor via the VERSIONLESS_KEY branch rather than by
+    the floor being moved. They remain EXEMPT from check 13 (whole-body link
+    purity), whose independent NOTE_LINK_CUTOVER floor exists to grandfather
+    exactly this class of historical note — the same accepted-residual rationale
+    NOTE_LINK_EXEMPT_VERSIONS encodes for the older v3.x lineage.
     """
     findings: list[str] = []
     if not NOTES_DIR.exists():
@@ -565,9 +593,23 @@ def check_note_content() -> list[str]:
     # v3.54). version_tuple keys off path.name (folder-agnostic), so the cutover
     # floor and exempt-set logic are unchanged; only discovery must recurse or the
     # §3.2 content lint silently stops scanning the foldered notes.
-    for path in sorted(NOTES_DIR.rglob("v*.md")):
+    #
+    # The pattern keys on the _RELEASE_NOTES.md suffix, NOT on a leading "v",
+    # because that suffix is the corpus's own type discriminator — the same token
+    # CANONICAL_FILENAME_RE already anchors note identity on. Keying discovery to
+    # it makes filename-authority and discovery agree by construction. A "v*"
+    # pattern instead keyed on the VERSION, which silently excluded every
+    # slug-keyed (version-less) note: the lint declared those files canonical at
+    # the filename check and was then structurally unable to read them here.
+    # The pattern is deliberately LAYOUT-INDEPENDENT — no _unversioned/ segment
+    # and no major-version segment appears in it — so it holds under any layout.
+    for path in sorted(NOTES_DIR.rglob("*_RELEASE_NOTES.md")):
         ver = version_tuple(path.name)
-        if ver < NOTE_CONTENT_CUTOVER:
+        # Version-less notes carry no version, so the forward-only floor does not
+        # apply to them at all — "no version" is not "older than the floor".
+        # Admitting them by BRANCH keeps NOTE_CONTENT_CUTOVER untouched.
+        is_versionless = ver == VERSIONLESS_KEY
+        if not is_versionless and ver < NOTE_CONTENT_CUTOVER:
             continue
         # Extract version key (e.g., "v12.09" from "v12.09_RELEASE_NOTES.md") for exempt-set lookup
         ver_match = VERSION_KEY_RE.match(path.name)
@@ -602,6 +644,17 @@ def check_note_content() -> list[str]:
         # is exempt from check 13. NOTE_LINK_EXEMPT_VERSIONS additionally exempts
         # the older v3.x lineage notes whose tuple sorts above the floor but
         # which predate v2.37 and carry the legacy 6b template link.
+        #
+        # Version-less notes are DELIBERATELY exempt from check 13 and the
+        # exemption is load-bearing, not incidental: VERSIONLESS_KEY sorts below
+        # NOTE_LINK_CUTOVER, so the comparison below already excludes them, and
+        # that is the intended scope. They are the same class of historical
+        # artifact NOTE_LINK_EXEMPT_VERSIONS grandfathers — their Section-6b links
+        # are the legacy `../../RELEASE_LOG.md#…` template form the forward-only
+        # link floor exists to protect. Do NOT add an `is_versionless or …` limb
+        # here: that would retroactively fail exactly the population the floor
+        # grandfathers. The version-less branch above admits them to checks 9-12
+        # ONLY. (release-notes-standard.md §3.2.)
         if ver >= NOTE_LINK_CUTOVER and ver_key not in NOTE_LINK_EXEMPT_VERSIONS:
             findings.extend(check_body_link_purity(rel, extract_body(text)))
 
@@ -661,11 +714,19 @@ def _find_note_for_version(version: str) -> Path | None:
     """Resolve the note whose version KEY equals `version` (folder-agnostic).
 
     Mirrors check_note_content()'s discovery idiom: rglob so the foldered
-    notes/v1|v2|v3/… layout is reached, and key off path.name via
+    notes/v1|v2|v3/… layout is reached, keyed on the _RELEASE_NOTES.md type
+    discriminator so both discovery sites agree, and matched off path.name via
     VERSION_KEY_RE so the folder never participates in the match.
+
+    NOTE — the glob widening here is a deliberate NO-OP, kept for single-idiom
+    consistency with check_note_content() (and so no version-keyed discovery
+    pattern survives in this file). It cannot change a resolution: the guard below
+    filters version-less names out regardless of the pattern, and a version-less
+    note can never be the answer to "find the note for version X". Do not go
+    looking for a behaviour delta from this line — there is none by construction.
     """
     want = version if version.startswith("v") else f"v{version}"
-    for path in sorted(NOTES_DIR.rglob("v*.md")):
+    for path in sorted(NOTES_DIR.rglob("*_RELEASE_NOTES.md")):
         m = VERSION_KEY_RE.match(path.name)
         if m and m.group(0) == want:
             return path

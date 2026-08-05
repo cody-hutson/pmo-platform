@@ -15,7 +15,11 @@
 #   pattern-detect : scan a trailing window of versions for recurring
 #                    same-domain keywords across the surprise / would-change /
 #                    watch-for fields; optionally auto-promote clusters to
-#                    GitHub Issues
+#                    GitHub Issues. The report ALSO renders the near-threshold
+#                    band (clusters spanning >=2 versions but below --cluster-min)
+#                    and the versions that have left the trailing window — both
+#                    SIGNAL-ONLY: they gate nothing and file nothing, and the
+#                    auto-promotion predicate is unaffected by either.
 #
 # Usage:
 #   ./synthesize-release-learnings.sh --mode per-release --version v2.10
@@ -575,6 +579,48 @@ print(f"**Distinct versions in window:** {len({r['version'] for r in windowed})}
 print(f"**Qualifying clusters (size >= {cluster_min}, spans >= 2 versions):** {len(qualifying)}")
 print()
 
+# ── Near-threshold band (sub-threshold disposition; stage-13-close.md Phase A7) ──
+# Signal-only, and it gates NOTHING. Renders clusters ALREADY computed above that
+# met the >=2-distinct-version filter but not cluster_min — data the tool has always
+# built and then discarded at render. The § 11.5 auto-promotion predicate, the
+# cluster_min default, and the --apply path are untouched: nothing here files.
+# PLACEMENT IS LOAD-BEARING. This block sits BEFORE the `if not qualifying` early
+# exit below, because zero-qualifying is exactly the case a sub-threshold learning
+# lands in — a block appended after that exit would never render where it is needed.
+near = []
+for (field, tok), entries in clusters.items():
+    if len(entries) >= cluster_min:
+        continue                      # the promotion path owns these
+    versions = {e["version"] for e in entries}
+    if len(versions) < 2:
+        continue                      # a single-version token is not "one release short"
+    near.append({"field": field, "token": tok,
+                 "entries": entries, "versions": sorted(versions)})
+near.sort(key=lambda c: (-len(c["entries"]), c["field"], c["token"]))
+
+print(f"**Near-threshold clusters (2 <= size < {cluster_min}, spans >= 2 versions):** {len(near)}")
+print()
+if near:
+    print("### Near-threshold (no promotion)")
+    print()
+    print("| token | field | events | versions |")
+    print("|---|---|---:|---|")
+    for c in near:
+        print(f"| `{c['token']}` | {c['field']} | {len(c['entries'])} | {', '.join(c['versions'])} |")
+    print()
+
+# ── Out of emergence window (parked; no longer counted toward emergence) ──
+# Version-grained and branch-agnostic: `windowed` is a sublist of `all_rows` in BOTH
+# the by-row and by-version branches, so deriving from version sets works either way
+# (`keep` exists only in the by-version branch and must NOT be referenced here).
+# Expiry is not deletion — the event row is append-only and the rendered
+# `#### Release Learnings <V>` block is carved out of the archival sweep at any window.
+_win_versions = {r["version"] for r in windowed}
+_out_versions = sorted({r["version"] for r in all_rows} - _win_versions)
+print(f"**Out of emergence window (parked, no longer counted):** {len(_out_versions)} version(s)"
+      + (f" — {', '.join(_out_versions)}" if _out_versions else ""))
+print()
+
 if not qualifying:
     print("No clusters meet the auto-promotion criteria.")
     sys.exit(0)
@@ -842,6 +888,95 @@ run_self_test() {
     || die "self-test: a mis-emitted no-learning row contributed cluster signal (expected 0 clusters, got '$pa5_count') — the exclusion is not enforced"
   /bin/rm -rf "$pa5_dir"
 
+  # ── Tests 14-16 (#3121 NEAR-THRESHOLD BAND): the sub-threshold disposition.
+  # ONE hermetic fixture carries all three arms, because no single arm is
+  # sufficient: Arm A alone would pass a "print every cluster" implementation,
+  # Arm B alone would pass a no-op, and Arm C alone would pass the UN-fixed tool.
+  # Every assertion is on report TEXT, never on exit status — the exit code is 0
+  # whether 0 or N clusters qualify, so it cannot discriminate.
+  #   widget   2 events / 2 versions -> near-threshold band (Arm A, sensitivity)
+  #   flange   2 events / 1 version  -> IN the size band, blocked by the version
+  #                                     limb (Arm B, specificity — this is the token
+  #                                     that actually exercises that filter)
+  #   gizmo    3 events / 1 version  -> invisible to BOTH paths (Arm B', the
+  #                                     brief's stated observable; note it is
+  #                                     excluded by the SIZE limb first, so it does
+  #                                     not on its own discriminate the version limb)
+  #   sprocket 3 events / 3 versions -> qualifying, output unchanged (Arm C, AC4 regression)
+  # Non-planted fields carry the exact N/A sentinel, which contributes no token —
+  # so the three planted tokens are the ONLY cluster signal in the fixture.
+  local nt_dir nt_report nt_na
+  # The N/A sentinel is a Python-side constant; restate it here for the fixture
+  # writer. Test 4 already asserts the emitted block carries this exact string,
+  # so a drift between the two surfaces fails there rather than silently here.
+  nt_na="N/A — no novel learning this release"
+  nt_dir="$(/usr/bin/mktemp -d)" || die "self-test: mktemp -d failed (#3121)"
+  {
+    echo "| ts_iso | version | stage | event_type | event_subtype | actor | subject | reversibility | outcome | payload |"
+    echo "|---|---|---|---|---|---|---|---|---|---|"
+    echo "| 2026-09-01T10:00:00Z | v9.01 | 13 | release-synthesis | learnings-triple | skill:synthesize-release-learnings | release:v9.01 | CHEAP | resolved | surprise: widget; would-change: sprocket; watch-for: $nt_na |"
+    echo "| 2026-09-02T10:00:00Z | v9.02 | 13 | release-synthesis | learnings-triple | skill:synthesize-release-learnings | release:v9.02 | CHEAP | resolved | surprise: widget; would-change: sprocket; watch-for: $nt_na |"
+    echo "| 2026-09-03T10:00:00Z | v9.03 | 13 | release-synthesis | learnings-triple | skill:synthesize-release-learnings | release:v9.03 | CHEAP | resolved | surprise: $nt_na; would-change: sprocket; watch-for: $nt_na |"
+    echo "| 2026-09-04T10:00:00Z | v9.04 | 13 | release-synthesis | learnings-triple | skill:synthesize-release-learnings | release:v9.04 | CHEAP | resolved | surprise: gizmo; would-change: flange; watch-for: $nt_na |"
+    echo "| 2026-09-04T10:00:01Z | v9.04 | 13 | release-synthesis | learnings-triple | skill:synthesize-release-learnings | release:v9.04 | CHEAP | resolved | surprise: gizmo; would-change: flange; watch-for: $nt_na |"
+    echo "| 2026-09-04T10:00:02Z | v9.04 | 13 | release-synthesis | learnings-triple | skill:synthesize-release-learnings | release:v9.04 | CHEAP | resolved | surprise: gizmo; would-change: $nt_na; watch-for: $nt_na |"
+  } > "$nt_dir/pipeline-event-log.md" || die "self-test: could not write #3121 fixture"
+  nt_report="$(EVALS_RESULTS_PATH="$nt_dir" emit_pattern_detect_report 5 3 false false)" \
+    || die "self-test: #3121 near-threshold pattern-detect emit failed"
+
+  # Test 14 (Arm A - sensitivity): the near-miss becomes VISIBLE.
+  echo "$nt_report" | /usr/bin/grep -q "^### Near-threshold (no promotion)$" \
+    || die "self-test: near-threshold section heading missing (#3121 Arm A)"
+  echo "$nt_report" | /usr/bin/grep -q '^| `widget` | surprise | 2 | v9.01, v9.02 |$' \
+    || die "self-test: near-threshold band must list widget as 2 events across v9.01, v9.02 (#3121 Arm A)"
+  echo "$nt_report" | /usr/bin/grep -q '^\*\*Near-threshold clusters (2 <= size < 3, spans >= 2 versions):\*\* 1$' \
+    || die "self-test: near-threshold count line wrong (#3121 Arm A)"
+
+  # Test 15 (Arm B - specificity): the band's >=2-DISTINCT-VERSION limb is enforced.
+  # `flange` sits INSIDE the size band (2 events, and 2 <= 2 < 3) and differs from a
+  # qualifying-band member ONLY in spanning one version — so it is the token that
+  # actually exercises the version filter. Dropping that filter makes this assertion
+  # red; without this arm, Test 14 also passes an implementation that prints every
+  # sub-threshold cluster regardless of version span.
+  if echo "$nt_report" | /usr/bin/grep -q 'flange'; then
+    die "self-test: a 2-event SINGLE-version token entered the near-threshold band (#3121 Arm B) — the >=2-version filter is not enforced"
+  fi
+  # Test 15' (Arm B - the stated observable): a 3-event single-version token is
+  # invisible to BOTH paths. It is excluded by the SIZE limb before the version
+  # limb is reached, so it corroborates rather than isolates — recorded as such
+  # instead of being counted as version-filter coverage it does not provide.
+  if echo "$nt_report" | /usr/bin/grep -q 'gizmo'; then
+    die "self-test: a 3-event single-version token became visible (#3121 Arm B') — it must qualify for neither path"
+  fi
+
+  # Test 16 (Arm C - AC4 regression): the QUALIFYING path is byte-unchanged.
+  echo "$nt_report" | /usr/bin/grep -q '^\*\*Qualifying clusters (size >= 3, spans >= 2 versions):\*\* 1$' \
+    || die "self-test: qualifying-cluster count changed (#3121 Arm C / AC4)"
+  echo "$nt_report" | /usr/bin/grep -q '^### Cluster: `sprocket` (would-change, 3 events across 3 versions)$' \
+    || die "self-test: qualifying cluster heading changed (#3121 Arm C / AC4)"
+  echo "$nt_report" | /usr/bin/grep -qF 'title: [Pattern]: Recurring `sprocket` across releases (would-change field, 3 events)' \
+    || die "self-test: dry-run promotion title changed (#3121 Arm C / AC4)"
+  if echo "$nt_report" | /usr/bin/grep -q '^| `sprocket` | would-change |'; then
+    die "self-test: a QUALIFYING cluster leaked into the near-threshold band (#3121 Arm C)"
+  fi
+
+  # Placement guard: the band must render even when NOTHING qualifies — that is
+  # the 100%-of-live-corpus case, and it is the case the early-exit below the
+  # insertion point would otherwise swallow. Drop v9.03 so sprocket falls to 2/2.
+  local ntz_dir ntz_report
+  ntz_dir="$(/usr/bin/mktemp -d)" || die "self-test: mktemp -d failed (#3121 zero-qualifying)"
+  /usr/bin/grep -v 'v9.03' "$nt_dir/pipeline-event-log.md" > "$ntz_dir/pipeline-event-log.md" \
+    || die "self-test: could not write #3121 zero-qualifying fixture"
+  ntz_report="$(EVALS_RESULTS_PATH="$ntz_dir" emit_pattern_detect_report 5 3 false false)" \
+    || die "self-test: #3121 zero-qualifying pattern-detect emit failed"
+  echo "$ntz_report" | /usr/bin/grep -q '^\*\*Qualifying clusters (size >= 3, spans >= 2 versions):\*\* 0$' \
+    || die "self-test: #3121 zero-qualifying fixture should qualify nothing"
+  echo "$ntz_report" | /usr/bin/grep -q "^### Near-threshold (no promotion)$" \
+    || die "self-test: the near-threshold band did NOT render in the zero-qualifying case — the insertion point regressed below the early exit (#3121)"
+  echo "$ntz_report" | /usr/bin/grep -q "No clusters meet the auto-promotion criteria" \
+    || die "self-test: the zero-cluster footer must still render after the band (#3121)"
+  /bin/rm -rf "$nt_dir" "$ntz_dir"
+
   echo "self-test: PASS"
   echo "  parse_triple validated (synthetic + real payload)"
   echo "  N/A sentinel exact-match validated"
@@ -853,6 +988,10 @@ run_self_test() {
   echo "  no-learning zero-state + unknown-source rejection validated"
   echo "  PA-4 regression: one unrecognized label does NOT inflate the cluster count (1, not 3)"
   echo "  PA-5 regression: a MIS-EMITTED no-learning row carrying theme: contributes nothing (enforced by subtype)"
+  echo "  #3121 Arm A (sensitivity): a 2-event/2-version near-miss RENDERS in the near-threshold band"
+  echo "  #3121 Arm B (specificity): a 2-event/1-version token is blocked by the band's >=2-version limb"
+  echo "  #3121 Arm C (AC4 regression): the qualifying cluster + promotion title are byte-unchanged"
+  echo "  #3121 placement guard: the band renders in the zero-qualifying case (above the early exit)"
   exit 0
 }
 

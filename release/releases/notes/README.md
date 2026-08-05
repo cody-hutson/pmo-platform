@@ -14,7 +14,7 @@ Note files are organized into per-major-version subfolders (`notes/v1/`, `notes/
 
 - **Authored by:** Stage 13 close spoke (per the Release-Notes Authoring Discipline in [`../../references/how-to/hub-spoke-bridge.md`](../../references/how-to/hub-spoke-bridge.md) § Procedure 3 §Stage 13 Chip Pattern)
 - **Committed by:** Stage 13 chore PR (`chore(vX.Y): Stage 13 — INDEX + DIGEST + RELEASE_NOTES`)
-- **Read by:** GitHub Release Surface 1 (`gh release create --notes-file release/releases/notes/vX.Y_RELEASE_NOTES.md`) at Stage 12 Phase B5.5
+- **Read by:** GitHub Release Surface 1 at Stage 12 Phase B5.5 — emitted as `gh release create --notes "$BODY"` where `BODY="$(sed '1,/^---$/d; 1,/^---$/d' release/releases/notes/vX.Y_RELEASE_NOTES.md)"`. The emit passes the frontmatter-stripped body, NEVER `--notes-file <path>`: `--notes-file` would publish the YAML frontmatter as raw text on the public Release page, violating the §5.1 enforced-transform invariant.
 
 ## Format
 
@@ -32,4 +32,4 @@ This directory holds artifact #3 of the chain.
 
 ## Classification
 
-**UNIVERSAL-PUBLIC** per [`../../../core/standards/public-repo-vs-operator-instance-taxonomy.md`](../../../core/standards/public-repo-vs-operator-instance-taxonomy.md). The canonical file is the upstream source for two downstream public surfaces — GitHub Release (Surface 1 via `--notes-file`) and `CHANGELOG.md` (Surface 2 via the §5.3 transform). Both surfaces run in spoke worktrees that need the file on the branch, so the artifact ships verbatim.
+**UNIVERSAL-PUBLIC** per [`../../../core/standards/public-repo-vs-operator-instance-taxonomy.md`](../../../core/standards/public-repo-vs-operator-instance-taxonomy.md). The canonical file is the upstream source for two downstream public surfaces — GitHub Release (Surface 1 via `--notes "$BODY"`, the §5.1 frontmatter-stripped body) and `CHANGELOG.md` (Surface 2 via the §5.3 transform). Both surfaces run in spoke worktrees that need the file on the branch, so the artifact ships verbatim.

@@ -1,0 +1,32 @@
+
+# Six deploy & tooling defects cleaned up — including an XSS sink hardened
+
+2026-07-24 · v3.88
+
+This release fixes six independent defects in the platform's own deploy, tooling, and test machinery. Nothing changes in how you run projects — it removes false drift alarms, a flaky test, and a security-scanner-opaque code pattern that were slowing platform maintainers, and it makes one documentation promise honest.
+
+## What changed for everyone using the platform
+
+No user-visible behavior changes to project work — this is platform-maintenance cleanup. For platform maintainers and contributors:
+
+- **`deploy.sh --check` no longer false-alarms on nested `references/` subdirectories** (e.g. project-initiator's injected `templates/`). *Why it matters:* the drift check now trusts its own "OK" — no more chasing phantom drift on a clean tree.
+- **The skill-count check stopped drifting** — it now derives the roster from the single source of truth (the `deploy.sh` arrays) instead of a separate filesystem walk. *Why it matters:* removes a latent flip-to-enforce landmine where the two counts silently disagreed (they had diverged to 55-vs-52; the live count is 53).
+- **A flaky install-regression test is now deterministic** — the SIGPIPE-prone `test_sandbox_roots.sh` no longer randomly fails unrelated PRs. *Why it matters:* CI red-herrings on your PR are gone.
+- **A high-severity XSS sink in the eval-review viewer was structurally eliminated** — the skill-refiner's review page now builds rows via safe DOM construction instead of an escaped-HTML string. *Why it matters:* it closes a CodeQL `js/xss-through-dom` alert and the pattern is now scanner-verifiable, with no suppressions.
+- **`CLAUDE.md`'s maintenance note is now honest** — it no longer claims `update.sh` regenerates it (it never did); it names the real install-time refresh path. *Why it matters:* no more false expectation that `update.sh` refreshes your top-level rules file.
+- **A docs-naming inconsistency is fixed** — `canonical-skill-structure.md` now consistently says `references/` (plural), matching the structure check.
+
+## Known limits
+
+- The CodeQL `js/xss-through-dom` alert closes on the **next scheduled `main` scan** after this merge — the sink is already structurally gone; only the alert-state flip is scan-timed.
+- One cosmetic follow-up is deferred: a stale remediation *message* in the skill-count CI workflow (a workflow-edit security hook correctly guards it) rides a fast-follow.
+- Follow-up work-items filed: #3805 (make the security-reminder hook context-aware so it stops false-positiving on prose), #3831 (the deferred customizable-file auto-refresh feature), #3832 (a systemic SIGPIPE-idiom sweep across the test suite), #3833 (a nondeterministic durability counter).
+
+Report issues at https://github.com/cody-hutson/pmo-platform/issues.
+
+## Reversibility
+
+**MODERATE · confidence HIGH.** The release ships as a single merge commit (PR #3794); rollback is one `git revert -m 1` of that merge, re-verified by a clean `deploy.sh --check` plus an install-regression pass. The only MODERATE surface is #2232's change to the install/update *documentation* contract (platform behavior is unchanged, but it touches install-path docs); every other fix is CHEAP.
+
+---
+

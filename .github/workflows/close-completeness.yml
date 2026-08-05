@@ -18,6 +18,24 @@ name: Close-completeness (pre-merge Stage-13 output-set gate)
 # default in deploy.sh, so _cc_compute_verdict returns a real verdict on every run;
 # setting it to __none__ re-dormants the gate explicitly (the escape hatch honoring
 # the reflexive-pipeline-loop exemption).
+#
+# THIS JOB IS ALSO THE CI HOME OF THE §5.1 PUBLISHED-BODY INVARIANT (#3699).
+# deploy.sh Check 47 asserts the same invariant but has NO automatic invocation
+# path anywhere: it is absent from the --check-required-subset allowlist (whose
+# selection predicate is network-free, and Check 47 needs `gh release view`) and
+# has no dedicated mirror, so it runs only when a human remembers a local
+# `deploy.sh --check`. Eleven published Release bodies drifted undetected as a
+# result. Rather than add a fourth workflow and a fourth .enforce sentinel, the
+# invariant is asserted here: Check 48's per-row engine already delegates the §5.1
+# compare to the SAME single engine (release/tools/check-release-body-drift.sh),
+# and this job already provisions the two capabilities that compare needs —
+# GH_TOKEN and fetch-depth: 0. It was inert only because the network cutover
+# defaulted to __none__; it is now armed at a committed default.
+# Consequence worth stating plainly: the drift tool reads the canonical note from
+# origin/main, so on a PR this compares the published body against MAIN's note,
+# not the PR's. The achievable posture is automatic detection within one CI run of
+# drift landing on main — NOT pre-merge prevention. "CI-enrolled" here must not be
+# read as "cannot happen again".
 # Ships warn-mode-initial: the committed .github/close-completeness.enforce sentinel
 # token governs blocking (warn reports, enforce blocks) and is read by the probe
 # itself; flipping it to `enforce` plus adding this job to required_status_checks
@@ -48,6 +66,13 @@ on:
     branches: [main]
     paths:
       - 'release/releases/RELEASE_LOG.md'
+      # A note CORRECTED after its LOG row landed is the single largest source of
+      # §5.1 body drift: Surface 1 publishes at Stage 12 Phase B5.5, the note is
+      # finalized at Stage 13, and any note edited after publish drifts unless a
+      # §5.6 re-emit follows. Four of the eleven bodies this card repairs are that
+      # window. Without this path the body-drift sub-check never runs on the push
+      # that actually introduces the drift.
+      - 'release/releases/notes/**'
 
 permissions:
   contents: read
@@ -69,7 +94,7 @@ jobs:
           uname -s
           command -v bash
           command -v git
-          command -v gh || echo "::warning::gh not on PATH — the published-Release and body-drift sub-checks would degrade, but they are gated behind the SEPARATE network cutover, which is still dormant, so today they are skipped regardless of gh. Arming the ROW cutover did not make this gate network-dependent (measured: gh off PATH -> still a clean verdict, exit 0). This warning becomes materially consequential only once the network cutover is armed, because the gate surface is fail-closed on an unreadable network anchor."
+          command -v gh || echo "::warning::gh not on PATH — the published-Release and body-drift sub-checks CANNOT run. The network cutover is now ARMED (CLOSE_COMPLETENESS_RELEASE_CUTOFF ships as a committed default in deploy.sh), so this gate IS network-dependent and this warning is materially consequential: the gate surface is fail-closed on an unreadable network anchor, so every in-scope VERIFIED row emits an 'unverifiable (gh offline at gate surface)' finding rather than being silently skipped. Under the current warn sentinel that is reported, not blocking; it would block under enforce."
           test -x /usr/bin/python3 || echo "::warning::/usr/bin/python3 missing — note-content lint delegation degrades"
 
       - name: Run close-completeness check (single check, via the deploy.sh engine)

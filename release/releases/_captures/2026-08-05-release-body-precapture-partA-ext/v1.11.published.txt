@@ -1,0 +1,59 @@
+<!-- reference-durability: allow-link -->
+
+# Workspace cleanup is now self-protecting and finishes in one pass
+
+2026-06-12 · v1.11
+
+The workspace cleanup sweep — the tool that removes merged release branches and leftover worktrees at every release close — can no longer delete the worktree it is running from or one a live session is using, and a single apply pass now finishes the whole job. Protection comes first: every removal is re-checked against live process state seconds before it happens.
+
+> **Skip the rest** unless you run the workspace cleanup sweep (directly or via a release close).
+
+## Who this affects
+
+- Anyone who runs the orphan-state cleanup sweep — directly, via the release-close step, or via an agent session that invokes it
+- Release operators and Stage 13 close sessions (the sweep runs at every release close)
+
+## What changed for everyone using the platform
+
+- **The sweep can no longer delete the worktree it is running from.** Its own runtime worktree is classified as protected and survives every apply, including a forced one. *Why it matters:* a cleanup launched from inside a worktree can't destroy its own session mid-run — previously the running session's directory could qualify for removal.
+- **Worktrees held by any live process are off-limits.** The sweep maps which directories live processes are actually working in (an all-process scan, not a lock-file guess) and skips them; when that scan is unavailable, the affected removals are blocked rather than guessed. *Why it matters:* a concurrent session's workspace can't be deleted out from under it, and the safety degrades toward refusal, never toward deletion.
+- **Every removal is re-checked seconds before it happens.** Liveness is verified again at apply time, not just when the report was generated. *Why it matters:* a session that starts between the report and the apply is still protected.
+- **One apply pass now finishes the job.** Branches freed by the same run's worktree removals are removed in that run, through one bounded re-evaluation. *Why it matters:* no more running the sweep twice to reach a clean workspace.
+- **The self-test now covers the destructive path end-to-end.** Three new fixtures exercise the self-protection, the live-holder skip, and the single-pass completion against real git state, on top of the preserved apply-path guards. *Why it matters:* regressions in removal behavior get caught by a ten-second self-test instead of by a lost worktree.
+
+## Known limits
+
+- The liveness check keys on process working directories: a process holding a worktree only through an open file (with its working directory elsewhere) is not detected. This boundary is a documented, accepted residual with a 30-day re-triage criterion — any protection miss of that shape escalates the check to a wider predicate (decision record ADR-021).
+- The check's self-canary proves the scan ran, not that it saw every process — paired with the block-when-unavailable behavior above, a degraded scan refuses removals instead of risking them.
+- Follow-ups filed rather than fixed here: duplicate branch rows under the widest sweep scope, a truncated help text, two unregistered invocation forms in the script-execution allowlist, per-branch lookup performance, protect-list seeding on fresh installs, and harness-branch sweep coverage (issue numbers in the References below).
+
+Report issues at https://github.com/cody-hutson/pmo-platform/issues.
+
+## Reversibility
+
+CHEAP / HIGH confidence. A single `git revert -m 1` of the release pull request restores prior behavior — one code file plus one new decision record and three doc edits, no data migration, and all new protections are classification-side. The release's own close ran the new sweep first under a halt-revert-rerun guard, and the standard 30-day outcome window applies.
+
+---
+
+### Operator and engineering detail
+
+**Release shape.** `novel` class, four issues on one branch (D-C SINGLE; plan committed as Engineering Commit 0), serialized per-issue commits in protective-gates-first order #333 → #326 → #53, one release PR (#668; merge SHA `38f97d314c9499104f49d43b0c0345d7ed99921b`; 6 tracked files), signed-annotated `v1.11` tag at the merge SHA (ED25519, zero signing bypasses). Four Stage 4 D-gates (D-ReleaseClass novel · D-C SINGLE · D-Stage5-Topology COMBINED · D-VerifyOnly-57 Option 1) plus the 2026-06-11 Collective Review scope-lock (amendments A-ADR, A-Fixture, A-Recheck; R-4..R-8 ratified as-spec'd; deviation rows DL-1..DL-9 in the plan). The liveness-oracle selection (all-process `lsof` cwd scan over absolute-path binary, self-canary, fail-closed) is recorded in `release/ADRs/ADR-021-liveness-oracle-selection.md`, filed Accepted at the scope-lock per the ADR-020 precedent.
+
+**The #57 chain.** The v1.02 apply-path dead-code defect was dispositioned VERIFY-ONLY at Stage 4 (the hardening already shipped in the seed tree — plain-`if` apply gate, apply-before-emit ordering, self-test guards). The release PR carried `References #57` only; closure happened at Stage 13 with the three-link evidence comment: Stage 4 line-cited disposition + live self-test PASS at `eecbb5e`, Stage 7 fresh post-rewiring audit at `25960aa` (zero RC-1..6 regressions across 34 functions), Stage 8 evidence-completeness acceptance at `f2b3152` (4/4 ACs MET, currency re-run, guard fixtures byte-identical to merge-base).
+
+**Verification highlights.** `--self-test` PASS at every commit on the branch and on merged main; Stage 8 QA executed three hub-authorized fixture-bounded REAL applies (SELF survival under `--apply --force`; live-held before/after with both oracle scans observed in one apply; the #53 defect-scenario fixed-point); Stage 12 ran the post-merge live-workspace dry-run regression — the session's own worktree classified `SELF — script's own runtime worktree (protected)`, two concurrent live sessions skipped with per-PID reasons, exit 0. Stage 12 Phase A.5 merged 16 v1.10-close-out commits from main with zero matrix-path overlap before the 18/18-green merge.
+
+**Stage 13 choreography change.** The two invoker docs now describe the four-phase apply (remove → resolve → verify → prune): `core/rules/git-workflow.md` § PR Process Step 10 and `release/references/pipeline/stage-13-close.md` Phase C4. Phase C4 also records the permanent simplification: the spoke's own worktree is protected in-script, so detaching before `--apply` matters only to release the release branch for same-run draining.
+
+For full implementation detail see the [RELEASE_LOG.md entry](../RELEASE_LOG.md#deployment-log-v111) and [the release plan](../plans/v1.11_RELEASE_PLAN.md).
+
+### References
+
+- Milestone: cleanup-orphan-state-reliability (#170, v1.11)
+- Integration PR: #668 at `38f97d314c9499104f49d43b0c0345d7ed99921b`
+- Closed issues: #333 · #326 · #53 · #57 (VERIFY-ONLY, closed at Stage 13 with evidence)
+- Decision record: ADR-021 (liveness-oracle selection, Accepted 2026-06-11)
+- Follow-ups: #654 (harness-branch sweep coverage) · #655 (gh-call batch-prefetch) · #656 (protect-list install seeding) · #659 (script-execution allowlist invocation forms) · #669 (help-text truncation) · #670 (duplicate branch rows under --all) · #679 (pipeline-event-log emit path)
+- Stage 12 chore PR: #680 (RELEASE_LOG row + Deployment Log)
+- Tag: `v1.11` (signed-annotated, ED25519)
+

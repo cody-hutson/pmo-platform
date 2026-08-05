@@ -18,6 +18,8 @@ This file back-casts the existing `v2.01_RELEASE_NOTES.md` canonical note throug
 
 The three sections below show what each Surface 1 / Surface 2 / Surface 3 emit would look like if the dual-write mechanism had been active when v2.01 shipped on 2026-05-17.
 
+> **[Editorial note — the Surface-1 invocation shown below is a PRE-§5.1 idiom; do not copy it.]** This example was written against the v2.01-era emit and shows `gh release create --notes-file <note path>`. That invocation is now **forbidden**: `--notes-file` publishes the note's YAML frontmatter as raw text on the public Release page, which `release-notes-standard.md` §5.1 prohibits (see §5.5 and §5.6 for the sanctioned state machine). The current emit is `--notes "$BODY"` where `BODY="$(sed '1,/^---$/d; 1,/^---$/d' <note path>)"`. The historical invocation is **preserved verbatim below** because rewriting it would falsify the illustration of what the v2.01-era mechanism actually did — this note, not an edit, is the correction.
+
 **Reading guide:**
 - Surface 1 mirrors the canonical note body verbatim (excluding frontmatter); operators preview this by running `cat release/releases/notes/v2.01_RELEASE_NOTES.md | sed -n '/^---$/,/^---$/!p'` (drops YAML frontmatter).
 - Surface 2 distills Section 6a bullets into Keep-a-Changelog format; the per-bullet shape is `**<Capability>.** <one-sentence WHAT>. *Why it matters:* <consequence>. ([#N](URL))`.

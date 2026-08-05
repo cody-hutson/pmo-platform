@@ -730,15 +730,101 @@ _vf_compute_verdict() {
 # strictly AFTER its merge). The network sub-checks (Surface-1 Release + body-drift)
 # need `gh`; offline ⇒ N/A on the lifecycle surface, fail-closed on the gate surface
 # (the merge gate must not certify completeness blind, per the version-freeness FM-2
-# precedent). NOTE: the SEPARATE network cutover CLOSE_COMPLETENESS_RELEASE_CUTOFF
-# below is still __none__-defaulted, so those two sub-checks remain dormant — "armed"
-# refers to the ROW cutover only.
+# precedent). The SEPARATE network cutover CLOSE_COMPLETENESS_RELEASE_CUTOFF below
+# carries its own committed default and gates ONLY sub-checks (h)+(i).
+#
+# THREE CUTOVERS, ONE WALK. A third cutover CLOSE_COMPLETENESS_OUTPUTS_CUTOFF gates
+# ONLY the Stage-13 OUTPUT-SET sub-checks (j) the Phase-B `**Velocity:**` field and
+# (k) the Phase-A7 `#### Release Learnings` block. It is separate because the shared
+# row cutoff cannot be raised to suit it: those two outputs became mandatory long
+# after the companion-artifact set did, so one shared literal would have to sit at
+# the LATER of the two anchors and would narrow sub-checks (a)-(g) from nineteen rows
+# to four. Its floor is a rule, not a preference — release-velocity-tracking.md § 10
+# and stage-13-close.md Phase B GRANDFATHER the velocity field with NO backfill, so
+# the oldest anchor reachable without a prohibited backfill is the first row that
+# carries one. Every cutover here is an in-loop FILE-ORDER LATCH, never a version
+# comparison (see the note at the network sub-check below for why comparison is the
+# wrong instrument for this corpus).
+#
+# TWO SURFACE SETS, DELIBERATELY ASYMMETRIC — and it is governed, not a tidy-up
+# candidate. Sub-check (j) resolves the block's HOME SURFACE (hot ledger, or the
+# archive segment its `_Archived: [segment](…)` sentinel names) and asserts the field
+# is co-located with the body there; sub-check (k) reads the hot ledger ONLY and never
+# resolves. RECORDS_POLICY.md's RELEASE_LOG retention row is the warrant: aged-out
+# `#### Deployment Log` BODIES relocate into same-directory RELEASE_LOG_ARCHIVE-*.md
+# segments, while `#### Release Learnings` blocks are NEVER relocated at any window.
+# Reading segments for learnings is therefore unreachable code that manufactures false
+# positives on any release whose Deployment-Log body was swept; reading the hot file
+# alone for velocity fabricates a finding every time the archival chore runs. The same
+# two-surface set is already resolved by the shipped consumer (estimate-usage.sh
+# release_log_velocity_map) and the shipped producer (automated-closeout.sh
+# _collect_deployment_log_files) — this gate is the third reader and adopts theirs
+# rather than minting a fourth.
 #
 # LOG-ROW BLIND SPOT (inherited, documented): like Check 32, this gate is LOG-row-
 # driven — a close that never wrote its `RELEASE_LOG` row is invisible to it. LOG-row
 # presence is the close-time Step 4 table's responsibility, not this gate's.
 
-# _cc_row_findings <surface> <version> <milestone> <tag>
+# ─── Deployment-Log / Release-Learnings block primitives (sub-checks j + k) ────
+#
+# Sets CC_DL_FILES to the hot ledger followed by its same-directory archive
+# segments, in that order. Resolved with the SHIPPED CONSUMER's glob form
+# (estimate-usage.sh release_log_velocity_map) rather than a hardcoded basename,
+# so a sandbox ledger picks up only its own siblings and never the live corpus.
+# A repository with no segments yields the hot ledger alone, so pre-sweep
+# behaviour is unchanged.
+_cc_deployment_log_files() {
+  local _log="$1" _dir _stem _f
+  CC_DL_FILES=( "$_log" )
+  _dir="$(/usr/bin/dirname "$_log")"
+  _stem="$(/usr/bin/basename "$_log" .md)"
+  for _f in "$_dir"/"${_stem}"_ARCHIVE-*.md; do
+    [[ -f "$_f" ]] && CC_DL_FILES+=( "$_f" )
+  done
+  return 0
+}
+
+# _cc_h4_block_body <file> <exact-h4-heading>
+#   Echo the lines strictly between <exact-h4-heading> and the next `#### `
+#   heading (or EOF). Exit 1 with no output when the heading is absent.
+#   ONE block-extraction idiom serves both sub-checks — the Deployment Log block
+#   and the Release Learnings block are the same shape. Headings compare after a
+#   whitespace trim, so this resolves the SAME block automated-closeout.sh's
+#   _probe_deployment_log_block resolves rather than diverging on trailing space.
+_cc_h4_block_body() {
+  /usr/bin/awk -v hd="$2" '
+    { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+    line == hd { inblk = 1; seen = 1; next }
+    inblk && line ~ /^#### / { inblk = 0 }
+    inblk { print }
+    END { exit(seen ? 0 : 1) }
+  ' "$1" 2>/dev/null
+}
+
+# _cc_h4_count <file> <exact-h4-heading> — how many times the heading appears.
+_cc_h4_count() {
+  /usr/bin/awk -v hd="$2" '
+    { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+    line == hd { n++ }
+    END { print n+0 }
+  ' "$1" 2>/dev/null
+}
+
+# _cc_next_h4_after <file> <exact-h4-heading>
+#   Echo the FIRST `#### ` heading strictly after <exact-h4-heading>.
+#   exit 0 — a following heading exists (printed)
+#   exit 1 — <exact-h4-heading> itself is absent
+#   exit 2 — it is present but is the last H4 in the file (nothing follows)
+_cc_next_h4_after() {
+  /usr/bin/awk -v hd="$2" '
+    { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+    !seen && line == hd { seen = 1; next }
+    seen && line ~ /^#### / { print line; found = 1; exit }
+    END { exit(seen ? (found ? 0 : 2) : 1) }
+  ' "$1" 2>/dev/null
+}
+
+# _cc_row_findings <surface> <version> <milestone> <tag> <net-in-scope> <outputs-in-scope>
 #   THE PER-ROW ASSERTION. Pure-ish: takes the row fields + the surface; reads
 #   in-repo corpus files (and, for the network sub-checks, the repo's own published
 #   Release via the delegated tools). Echoes ZERO or more finding lines on stdout
@@ -749,16 +835,22 @@ _vf_compute_verdict() {
 #   (fail-closed). Corpus paths are read from CC_* (set by the orchestrator).
 _cc_row_findings() {
   local surface="$1" _ver="$2" _ms="$3" _tag="$4"
+  # $5 — whether this row is at/after the SEPARATE network cutover. Computed by
+  # the CALLER as an in-loop file-order latch (see _cc_compute_verdict), because
+  # LOG file order is the only ordering this corpus has. It is NOT re-derived here
+  # by comparing version strings: see the note at the network sub-check below.
+  local _net_in_scope="${5:-0}"
+  # $6 — whether this row is at/after the SEPARATE Stage-13 OUTPUT-SET cutover.
+  # Same caller-computed file-order latch as $5, for the same reason. DEFAULTED to
+  # 0 so a stale 5-argument call degrades to "not eligible" rather than erroring.
+  local _outputs_in_scope="${6:-0}"
+  local _log="${CC_LOG:-release/releases/RELEASE_LOG.md}"
   local _index="${CC_INDEX:-release/releases/RELEASE_INDEX.md}"
   local _digest="${CC_DIGEST:-release/releases/RELEASE_DIGEST.md}"
   local _changelog="${CC_CHANGELOG:-CHANGELOG.md}"
   local _notes_dir="${CC_NOTES_DIR:-release/releases/notes}"
   local _lint="${CC_LINT:-core/deploy/tools/lint_release_corpus.py}"
   local _drift="${CC_DRIFT:-release/tools/check-release-body-drift.sh}"
-  # The published-Release sub-check is itself cutover-gated + dormant-by-default,
-  # exactly like Check 32's $c32_release_cutoff. __none__ ⇒ the network surface
-  # sub-checks (Release existence + body-drift) are skipped (N/A) regardless of gh.
-  local _release_cutoff="${CLOSE_COMPLETENESS_RELEASE_CUTOFF:-__none__}"
 
   # (a) NOTES file present (version stem OR milestone slug — Check 32's resolution)
   local _notes_ok=0
@@ -815,10 +907,25 @@ _cc_row_findings() {
     printf '%s: §3.2 note-content lint tooling unavailable (cannot verify note-content)\n' "$_ver"
   fi
 
-  # Network sub-checks (h Surface-1 Release + i §5.1 body-drift) — cutover-gated +
-  # dormant by default (__none__). Run only for rows at/after the SEPARATE network
-  # cutover, and only when this row reached it.
-  if [[ "$_release_cutoff" != "__none__" && ( "$_ver" == "$_release_cutoff" || "$_ver" > "$_release_cutoff" ) ]]; then
+  # Network sub-checks (h Surface-1 Release + i §5.1 body-drift) — cutover-gated.
+  # Run only for rows at/after the SEPARATE network cutover.
+  #
+  # WHY THIS IS A CALLER-COMPUTED LATCH AND NOT A COMPARISON HERE. This test used
+  # to read:
+  #     [[ "$_ver" == "$_release_cutoff" || "$_ver" > "$_release_cutoff" ]]
+  # `>` inside [[ ]] is a LEXICOGRAPHIC string compare, not a version compare, so
+  # it breaks at the digit-width boundary: [[ "v3.100" > "v3.89" ]] is FALSE, and
+  # v3.100 silently fell OUT of scope while v3.90 (one row earlier) stayed in. A
+  # scope hole that opens only at v*.100 is one no one would notice until it had
+  # been swallowing rows for a while.
+  #
+  # The fix is not a better comparison — it is to stop comparing. The corpus's
+  # only real ordering is RELEASE_LOG FILE ORDER (date-ascending, NOT version-
+  # ordered), which is exactly what the sibling row cutover and
+  # automated-closeout.sh's _drift_block_in_scope both already latch on. The
+  # caller walks the LOG once and latches this flag in the same pass, so there is
+  # one ordering idiom in this file rather than two that disagree.
+  if [[ "$_net_in_scope" == "1" ]]; then
     local _gh_ok=0
     if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then _gh_ok=1; fi
     if [[ $_gh_ok -eq 0 ]]; then
@@ -855,6 +962,148 @@ _cc_row_findings() {
       fi
     fi
   fi
+
+  # ─── Stage-13 OUTPUT-SET sub-checks (j velocity + k learnings) — #4452 ────────
+  # Network-free. Cutover-gated by the THIRD, caller-computed latch ($6) for the
+  # reasons in the header block above. Both are STRUCTURAL assertions: they read
+  # the shape of a mandated Stage-13 output, never its content.
+  if [[ "$_outputs_in_scope" == "1" ]]; then
+    local _dl_head="#### Deployment Log ${_ver}"
+    local _rl_head="#### Release Learnings ${_ver}"
+
+    # ── (j) the Phase-B `**Velocity:**` field ──────────────────────────────────
+    #
+    # THE GRAMMAR IS CONSUMED, NOT RE-DERIVED. release-velocity-tracking.md § 3.4
+    # states the normative core against the grammar the SHIPPED consumer actually
+    # parses (estimate-usage.sh release_log_velocity_map): a non-N/A field needs an
+    # UNBOLDED `planned <N> pts` AND a `class <release-class>`; an N/A field begins
+    # `**Velocity:** N/A`. The two regexes below are that consumer's, verbatim. N5
+    # (no emphasis inside the numerals) is enforced AS A CONSEQUENCE of the first —
+    # `planned **28** pts` fails `planned [0-9]+ pts` by construction — so there is
+    # no second copy of the token shape here to drift away from the producer's.
+    # I1-I4 are INCIDENTAL and are deliberately NOT asserted: the `mechanism:`
+    # marker (no form reaches a third of the corpus, so asserting one reds a correct
+    # majority), the narrative tail, `files-changed`, `allocation`, and field
+    # position (§ 3.4 N6 is normative for PLACEMENT, and no consumer reads it — the
+    # producer enforces it at emit time; asserting it here would red hand-authored
+    # historical rows for a property nothing depends on).
+    local _re_pts='planned [0-9]+ pts'
+    local _re_cls='class [a-z][a-z-]*'
+    local _re_na='^\*\*Velocity:\*\* N/A'
+    local _hot_body _hot_found=1
+    _hot_body="$(_cc_h4_block_body "$_log" "$_dl_head")" || _hot_found=0
+    if [[ $_hot_found -eq 0 ]]; then
+      printf '%s: no `%s` block in the hot ledger (%s)\n' \
+        "$_ver" "$_dl_head" "$(/usr/bin/basename "$_log")"
+    else
+      # HOME-SURFACE RESOLUTION — NOT first-hit-wins. The sweep leaves the heading
+      # in the hot ledger with a machine-greppable pointer; that pointer, not "the
+      # first surface that happens to carry a field", is what names where the
+      # block's BODY lives. `_Archived: [segment](` is sweep-release-corpus.py's own
+      # declared SENTINEL_PREFIX — cited, not re-derived.
+      local _dl_dir _segname _home _home_ok=1
+      _dl_dir="$(/usr/bin/dirname "$_log")"
+      _segname="$(printf '%s\n' "$_hot_body" \
+        | /usr/bin/sed -n 's/^_Archived: \[segment\](\([^)]*\))_.*$/\1/p' \
+        | /usr/bin/head -1)"
+      if [[ -n "$_segname" ]]; then
+        _home="${_dl_dir}/${_segname}"
+        if [[ ! -f "$_home" ]]; then
+          printf '%s: archival pointer names %s, which does not exist (dangling segment pointer)\n' \
+            "$_ver" "$_segname"
+          _home_ok=0
+        elif ! _cc_h4_block_body "$_home" "$_dl_head" >/dev/null; then
+          printf '%s: archival pointer names %s, which carries no `%s` block (dangling segment pointer)\n' \
+            "$_ver" "$_segname" "$_dl_head"
+          _home_ok=0
+        fi
+      else
+        _home="$_log"
+      fi
+
+      if [[ $_home_ok -eq 1 ]]; then
+        local _body _vel_line
+        _body="$(_cc_h4_block_body "$_home" "$_dl_head")"
+        _vel_line="$(printf '%s\n' "$_body" | /usr/bin/grep -m1 '^\*\*Velocity:\*\*' || true)"
+
+        # T4 CO-LOCATION. A field written into a segment while the body is still
+        # live in the hot ledger (or vice versa) exits 0, passes a corpus-wide
+        # grep, AND parses under the consumer grammar — the record is split across
+        # two files and every cheaper observable reads identical on both. Only this
+        # assertion separates them. RECORDS_POLICY.md supplies the warrant: a
+        # segment inherits its parent's class and is a disposition DESTINATION,
+        # never itself a disposition SOURCE.
+        _cc_deployment_log_files "$_log"
+        local _other _other_vel
+        for _other in "${CC_DL_FILES[@]}"; do
+          [[ "$_other" == "$_home" ]] && continue
+          _other_vel="$(_cc_h4_block_body "$_other" "$_dl_head" 2>/dev/null \
+            | /usr/bin/grep -c '^\*\*Velocity:\*\*' || true)"
+          if [[ "${_other_vel:-0}" -gt 0 ]]; then
+            printf '%s: **Velocity:** field is NOT co-located with the block body — body resolves to %s, field also present in %s (split record; a segment is a disposition destination, never a source)\n' \
+              "$_ver" "$(/usr/bin/basename "$_home")" "$(/usr/bin/basename "$_other")"
+          fi
+        done
+
+        if [[ -z "$_vel_line" ]]; then
+          printf '%s: missing Phase-B **Velocity:** field in the Deployment Log block (body surface: %s)\n' \
+            "$_ver" "$(/usr/bin/basename "$_home")"
+        elif [[ ! "$_vel_line" =~ $_re_na ]] \
+             && { [[ ! "$_vel_line" =~ $_re_pts ]] || [[ ! "$_vel_line" =~ $_re_cls ]]; }; then
+          printf '%s: **Velocity:** field fails the shipped-consumer grammar (needs unbolded `planned <N> pts` AND `class <c>`, or the N/A form): %s\n' \
+            "$_ver" "${_vel_line:0:100}"
+        fi
+      fi
+    fi
+
+    # ── (k) the Phase-A7 `#### Release Learnings` block ────────────────────────
+    #
+    # HOT LEDGER ONLY, UNCONDITIONALLY — and this asymmetry with (j) is deliberate
+    # and governed, NOT an inconsistency to be tidied away. sweep-release-corpus.py
+    # declares KEEP_CLASS = "Release Learnings" and never sweeps it (heading AND
+    # body stay in the hot file at every window); RECORDS_POLICY.md's RELEASE_LOG
+    # retention row ratifies the same carve-out. Routing this limb through
+    # CC_DL_FILES would be unreachable code that MANUFACTURES false positives on
+    # every release whose Deployment-Log body was swept — the segment shows the
+    # Deployment-Log heading with no learnings sibling, which is correct on that
+    # surface and a finding only to a resolver that should not have looked there.
+    # Asserts STRUCTURE, never content: a block recording `Source events: 0` with an
+    # N/A triple is the synthesizer's conformant zero-event form. A gate demanding a
+    # non-N/A `Surprise` would be asserting that the operator had one.
+    local _rl_next _rl_next_exit=0
+    _rl_next="$(_cc_next_h4_after "$_log" "$_dl_head")" || _rl_next_exit=$?
+    case $_rl_next_exit in
+      0) if [[ "$_rl_next" != "$_rl_head" ]]; then
+           printf '%s: missing Phase-A7 `%s` block — expected as the H4 immediately following its Deployment Log block, found: %s\n' \
+             "$_ver" "$_rl_head" "$_rl_next"
+         fi ;;
+      2) printf '%s: missing Phase-A7 `%s` block — expected as the H4 immediately following its Deployment Log block, found: <end of file>\n' \
+           "$_ver" "$_rl_head" ;;
+      *) : ;;   # the Deployment Log block itself is absent — (j) already said so
+    esac
+
+    local _rl_n
+    _rl_n="$(_cc_h4_count "$_log" "$_rl_head")"
+    if [[ "${_rl_n:-0}" -gt 1 ]]; then
+      printf '%s: `%s` heading appears %s times (exactly one required)\n' \
+        "$_ver" "$_rl_head" "$_rl_n"
+    fi
+
+    if [[ "${_rl_n:-0}" -ge 1 ]]; then
+      local _rl_body _rl_missing="" _fld
+      _rl_body="$(_cc_h4_block_body "$_log" "$_rl_head")"
+      for _fld in 'Synthesized at' 'Source events' 'Source-row anchors' \
+                  'Surprise' 'Would-change' 'Watch-for'; do
+        if ! printf '%s\n' "$_rl_body" | /usr/bin/grep -q "^\*\*${_fld}:\*\*"; then
+          _rl_missing="${_rl_missing:+$_rl_missing, }${_fld}"
+        fi
+      done
+      if [[ -n "$_rl_missing" ]]; then
+        printf '%s: `%s` block missing canonical field(s): %s\n' \
+          "$_ver" "$_rl_head" "$_rl_missing"
+      fi
+    fi
+  fi
 }
 
 # _cc_compute_verdict <surface>
@@ -888,6 +1137,62 @@ _cc_compute_verdict() {
   # Setting CLOSE_COMPLETENESS_CHECK_CUTOFF=__none__ still re-dormants the gate.
   local cc_cutoff="${CLOSE_COMPLETENESS_CHECK_CUTOFF:-v3.89}"
 
+  # ─── SEPARATE network cutover (sub-checks h + i) — ARMED (#3699) ──────────────
+  # Governs ONLY the two sub-checks that need a network read: (h) a published
+  # GitHub Release exists, and (i) its body equals the frontmatter-stripped note
+  # (release-notes-standard.md §5.1, delegated to check-release-body-drift.sh).
+  # This is the CI path for the §5.1 invariant: Check 47 asserts it too, but Check
+  # 47 has no automatic invocation anywhere — it runs only when a human remembers
+  # a local `deploy.sh --check`. This workflow already carries GH_TOKEN and
+  # fetch-depth: 0 and already delegates to the same engine, so arming this value
+  # gives the invariant a CI home without a new workflow, a new sentinel, or a
+  # carve-out to the network-free --check-required-subset predicate.
+  #
+  #   Why v3.96: the OLDEST value that arms against a CLEAN baseline. Eleven
+  #   published bodies are drifted (v3.67, v3.69.1, v3.72, v3.73, v3.73.1, v3.77,
+  #   v3.84, v3.87, v3.88, v3.91, v3.95); v3.96 is the first LOG row after the last
+  #   of them. Arming lower would red the gate on rows whose repair is a separate,
+  #   IRREVERSIBLE public mutation, and a warn log pre-poisoned with known debt can
+  #   never evidence the "≥3-day review with zero false positives" flip threshold
+  #   in .github/close-completeness.enforce — which would make that flip
+  #   permanently unevaluable. Same selection rule as the row cutover above.
+  #   This is a PREVENTION anchor: every future close is covered from day one.
+  #   Historical coverage belongs to Check 47's own (standing, local) cutoff.
+  #
+  # __none__ remains the explicit re-dormant escape hatch.
+  local cc_release_cutoff="${CLOSE_COMPLETENESS_RELEASE_CUTOFF:-v3.96}"
+
+  # ─── THIRD cutover: the Stage-13 OUTPUT-SET sub-checks (j)+(k) — ARMED (#4452) ─
+  # Governs ONLY the two sub-checks that assert the two Stage-13 outputs whose
+  # absence nothing reported: (j) the Phase-B `**Velocity:**` field and (k) the
+  # Phase-A7 `#### Release Learnings` block. Both are network-free.
+  #
+  # WHY A THIRD LITERAL RATHER THAN RAISING THE SHARED ROW CUTOFF. The shared cutoff
+  # is one value read by sub-checks (a)-(g). Those two outputs became mandatory long
+  # after the companion-artifact set did, so a single shared literal would have to
+  # sit at the LATER anchor and would narrow (a)-(g) from nineteen rows to four —
+  # paying for new coverage by deleting existing coverage. Check 32 already runs
+  # exactly this shape (c32_cutoff + c32_release_cutoff, both file-order latches),
+  # and this check already runs a second cutoff; this is the third member of a
+  # shipped pattern, not a new convention.
+  #
+  #   Why v4.03: the OLDEST cutoff with zero standing findings — the same selection
+  #   rule the row cutover above records, applied to these two sub-checks. The floor
+  #   is a RULE, not a preference: release-velocity-tracking.md § 10 and
+  #   stage-13-close.md Phase B GRANDFATHER the velocity field with NO backfill
+  #   (a synthesized planned-vs-delivered ratio would bias the calibration baseline
+  #   the field feeds), so every anchor at or below v4.02 carries a standing finding
+  #   that cannot lawfully be remediated. v4.03 is the oldest anchor reachable
+  #   without a prohibited backfill. Anchoring at the next unreleased version instead
+  #   would match NO row and assert nothing — which is why the denominator emit after
+  #   the row loop is mandatory rather than decorative.
+  #   Arming baseline: cutoff resolves to LOG row `v4.03`, 4 VERIFIED rows in scope,
+  #   0 findings. A different in-scope count means a different arm row — the runtime
+  #   assertion after the row loop names the row that actually armed.
+  #
+  # __none__ remains the explicit re-dormant escape hatch.
+  local cc_outputs_cutoff="${CLOSE_COMPLETENESS_OUTPUTS_CUTOFF:-v4.03}"
+
   # Dormancy is now an EXPLICIT opt-out, not the default: the __none__ sentinel is the
   # escape hatch by which an operator or a CI job can re-dormant the gate (e.g. to honor
   # a reflexive-pipeline-loop exemption), and the cutoff VALUE — not the dormancy — is
@@ -902,6 +1207,7 @@ _cc_compute_verdict() {
   fi
 
   # Export corpus paths for _cc_row_findings (single resolution point).
+  export CC_LOG="$cc_log"
   export CC_INDEX="${CC_INDEX:-release/releases/RELEASE_INDEX.md}"
   export CC_DIGEST="${CC_DIGEST:-release/releases/RELEASE_DIGEST.md}"
   export CC_CHANGELOG="${CC_CHANGELOG:-CHANGELOG.md}"
@@ -933,7 +1239,9 @@ _cc_compute_verdict() {
       }') || cc_rows=""
 
   local cc_past_cutoff=false cc_targets=0 cc_findings=0 cc_detail="" _last_verified="" _cc_arm_row=""
-  local _row _ver _ms _tag _state _rf
+  local cc_past_release_cutoff=false _cc_net_arm_row="" _cc_net_targets=0
+  local cc_past_outputs_cutoff=false _cc_outputs_arm_row="" _cc_outputs_targets=0
+  local _row _ver _ms _tag _state _rf _net _outputs
   while IFS= read -r _row; do
     [[ -n "$_row" ]] || continue
     _ver="${_row%%|*}"
@@ -946,6 +1254,33 @@ _cc_compute_verdict() {
       cc_past_cutoff=true
       _cc_arm_row="$_ver"          # #4176: record WHICH row armed, for the R8 assertion
     fi
+
+    # SECOND, INDEPENDENT latch on the SAME walk — the network cutover (#3699).
+    # Identical file-order semantics to the row cutover above and to
+    # automated-closeout.sh's _drift_block_in_scope: latch on the first
+    # cutoff-prefix match, then take the contiguous file-order suffix. Latched
+    # BEFORE the row-cutover `continue` so the two cutoffs stay independent — a
+    # network cutoff set EARLIER than the row cutoff must still resolve correctly
+    # rather than silently never arming.
+    if [[ "$cc_release_cutoff" != "__none__" && "$cc_past_release_cutoff" == "false" \
+          && "$_ver" == "$cc_release_cutoff"* ]]; then
+      cc_past_release_cutoff=true
+      _cc_net_arm_row="$_ver"
+    fi
+
+    # THIRD, INDEPENDENT latch on the SAME walk — the Stage-13 output-set cutover
+    # (#4452). Identical file-order semantics to the two latches above; latched
+    # BEFORE the row-cutover `continue` for the same reason, so an outputs cutoff
+    # set EARLIER than the row cutoff still resolves rather than never arming.
+    # NO VERSION COMPARISON is introduced anywhere by this cutover — the lexicographic
+    # `>` failure class documented at the network sub-check is structurally
+    # unreachable from here.
+    if [[ "$cc_outputs_cutoff" != "__none__" && "$cc_past_outputs_cutoff" == "false" \
+          && "$_ver" == "$cc_outputs_cutoff"* ]]; then
+      cc_past_outputs_cutoff=true
+      _cc_outputs_arm_row="$_ver"
+    fi
+
     [[ "$cc_past_cutoff" == "true" ]] || continue
 
     # VERIFIED-only (the completeness contract is VERIFIED-scoped; a DEPLOYED-not-
@@ -955,7 +1290,15 @@ _cc_compute_verdict() {
     cc_targets=$((cc_targets + 1))
     _last_verified="$_ver"   # LOG file order is chronological ⇒ last wins
 
-    _rf="$(_cc_row_findings "$surface" "$_ver" "$_ms" "$_tag")"
+    _net=0
+    if [[ "$cc_past_release_cutoff" == "true" ]]; then _net=1; _cc_net_targets=$((_cc_net_targets + 1)); fi
+
+    _outputs=0
+    if [[ "$cc_outputs_cutoff" != "__none__" && "$cc_past_outputs_cutoff" == "true" ]]; then
+      _outputs=1; _cc_outputs_targets=$((_cc_outputs_targets + 1))
+    fi
+
+    _rf="$(_cc_row_findings "$surface" "$_ver" "$_ms" "$_tag" "$_net" "$_outputs")"
     if [[ -n "$_rf" ]]; then
       cc_detail+="$_rf"$'\n'
       cc_findings=$((cc_findings + $(printf '%s\n' "$_rf" | /usr/bin/grep -c . )))
@@ -971,6 +1314,44 @@ _cc_compute_verdict() {
   # (that would block a PR on a configuration error rather than a completeness defect).
   # STDERR ONLY: the stdout protocol line (CLEAN/INCOMPLETE/SKIP) is parsed by string
   # surgery at all three call sites (Check 48, the probe, the self-test) — do not touch it.
+  # Same assertion for the SEPARATE network cutover (#3699). Reported unconditionally
+  # on every armed run so the network scope is never invisible: a network cutoff that
+  # matches NO row would otherwise silently disable sub-checks (h)+(i) while the gate
+  # still verdicts CLEAN — the vacuous-pass shape this block exists to prevent.
+  # STDERR ONLY (the stdout protocol line is parsed by string surgery downstream).
+  if [[ "$cc_release_cutoff" == "__none__" ]]; then
+    printf 'close-completeness: network sub-checks (Surface-1 Release + §5.1 body-drift) explicitly re-dormanted (CLOSE_COMPLETENESS_RELEASE_CUTOFF=__none__)\n' >&2
+  elif [[ -z "$_cc_net_arm_row" ]]; then
+    printf 'close-completeness: WARNING — network cutoff %s matched NO LOG row; the Surface-1 + §5.1 body-drift sub-checks asserted NOTHING on this run.\n' \
+      "$cc_release_cutoff" >&2
+  elif [[ "$_cc_net_arm_row" != "$cc_release_cutoff" ]]; then
+    printf 'close-completeness: WARNING — network cutoff %s armed at LOG row %s (prefix match, not an exact row). %s VERIFIED row(s) network-checked; verify this is intended.\n' \
+      "$cc_release_cutoff" "$_cc_net_arm_row" "$_cc_net_targets" >&2
+  else
+    printf 'close-completeness: network sub-checks armed at LOG row %s; %s VERIFIED row(s) network-checked\n' \
+      "$_cc_net_arm_row" "$_cc_net_targets" >&2
+  fi
+
+  # Same assertion for the THIRD (Stage-13 output-set) cutover (#4452). A third
+  # cutoff inherits NONE of the row cutoff's anti-vacuity machinery, so it carries
+  # its own: without this emit, an outputs cutoff anchored at an unreleased version
+  # (or simply mistyped) asserts NOTHING while the gate still verdicts CLEAN, and
+  # that is indistinguishable from a pass. Reported unconditionally on every armed
+  # run so the outputs scope is never invisible.
+  # STDERR ONLY (the stdout protocol line is parsed by string surgery downstream).
+  if [[ "$cc_outputs_cutoff" == "__none__" ]]; then
+    printf 'close-completeness: outputs sub-checks (Phase-B velocity + Phase-A7 learnings) explicitly re-dormanted (CLOSE_COMPLETENESS_OUTPUTS_CUTOFF=__none__)\n' >&2
+  elif [[ -z "$_cc_outputs_arm_row" ]]; then
+    printf 'close-completeness: WARNING — outputs cutoff %s matched NO LOG row; the Phase-B velocity + Phase-A7 learnings sub-checks asserted NOTHING on this run.\n' \
+      "$cc_outputs_cutoff" >&2
+  elif [[ "$_cc_outputs_arm_row" != "$cc_outputs_cutoff" ]]; then
+    printf 'close-completeness: WARNING — outputs cutoff %s armed at LOG row %s (prefix match, not an exact row). %s VERIFIED row(s) asserted; verify this is intended.\n' \
+      "$cc_outputs_cutoff" "$_cc_outputs_arm_row" "$_cc_outputs_targets" >&2
+  else
+    printf 'close-completeness: outputs sub-checks armed at LOG row %s; %s VERIFIED row(s) asserted\n' \
+      "$_cc_outputs_arm_row" "$_cc_outputs_targets" >&2
+  fi
+
   if [[ -n "$_cc_arm_row" ]]; then
     if [[ "$_cc_arm_row" != "$cc_cutoff" ]]; then
       printf 'close-completeness: WARNING — cutoff %s armed at LOG row %s (prefix match, not an exact row). Scope is %s VERIFIED row(s); verify this is intended.\n' \
@@ -6520,6 +6901,52 @@ cmd_check() {
   # consequence to state plainly: this gate's coverage of history is nil and grows
   # only as releases accrue.
   #
+  # ─── PENDING CUTOFF LOWERING: v3.78 -> v3.56, AFTER the re-emit (#3699) ────────
+  # DECIDED but NOT YET APPLIED, and the ordering is the whole point. Eleven
+  # published bodies are drifted (v3.67, v3.69.1, v3.72, v3.73, v3.73.1, v3.77,
+  # v3.84, v3.87, v3.88, v3.91, v3.95). This check ships ENFORCE by default, so
+  # lowering the cutoff BEFORE those bodies are repaired would arm a wider gate
+  # against rows whose repair is a separate, IRREVERSIBLE public mutation — a
+  # standing local FAIL over 54 rows instead of the 29 it covers now.
+  #
+  #   Target value:  v3.56   (in-scope cardinality 54; expected findings 0)
+  #   Why v3.56:     it is the exact evaluability boundary, not merely "lower".
+  #                  Of 154 LOG rows, 101 return tool exit 3 (no flat note
+  #                  resolvable) and are structurally invisible to this check.
+  #                  Exactly one unevaluable row (v3.65.1, no published Release —
+  #                  Check 32 owns that) sits inside the suffix, giving 53 readable
+  #                  of 54 in-scope. Any lower value adds only exit-3 rows:
+  #                  coverage theater. This applies the selection rule already
+  #                  stated above to the REPAIRED corpus — it is not a new rule.
+  #   Apply WHEN:    after release/tools/reemit-release-bodies.sh --execute has run
+  #                  and all eleven verify MATCH. Not before.
+  #   Apply WHAT:    this literal AND the shared default in
+  #                  release/tools/automated-closeout.sh (DRIFT_CHECK_CUTOFF) in the
+  #                  same change — the standard guarantees the two surfaces never
+  #                  disagree, so lowering one alone breaks that guarantee.
+  #   Cost, stated:  29 -> 54 network-checked rows on every local `deploy.sh
+  #                  --check`, roughly +2 minutes.
+  #
+  # This is recorded HERE, at the literal, precisely because the SELF-ARMING CUTOVER
+  # note elsewhere in this file warns that "a version literal would have needed
+  # stamping by a later spoke — a step that can be forgotten, leaving the gate
+  # permanently dormant." A reader who changes this value finds the ordering
+  # constraint at the point of change rather than in a release plan they may not
+  # have open.
+  #
+  # ─── CI PATH (#3699) ──────────────────────────────────────────────────────────
+  # This check has NO automatic invocation of its own: it is not in the
+  # --check-required-subset allowlist (that subset's selection predicate is
+  # network-free, and this check needs `gh release view`) and it has no dedicated
+  # mirror. It runs only on a local `deploy.sh --check` that a human remembers.
+  # Eleven bodies drifted undetected for exactly that reason.
+  # The §5.1 INVARIANT — as distinct from this check — is now asserted in CI by
+  # .github/workflows/close-completeness.yml, via Check 48's per-row sub-check (i),
+  # which delegates to the SAME engine (check-release-body-drift.sh) and is armed by
+  # CLOSE_COMPLETENESS_RELEASE_CUTOFF. The invariant therefore survives even if this
+  # check is later retired; the two are not redundant, they are differently scoped
+  # (this one reaches back over history; the CI one is a forward prevention anchor).
+  #
   # SHIPPED ENFORCE (not warn-mode-initial): findings route through
   # flag_release_body_drift, which switches on $RELEASE_BODY_DRIFT_MODE — resolved
   # via resolve_check_mode "release-body-drift" with an ENFORCE default. A mode file
@@ -6539,8 +6966,18 @@ cmd_check() {
   # the mid-close states (Surface 1 not yet published; note not yet on origin/main)
   # both return tool exit 3, which maps to N/A and NEVER to a finding. A release can
   # fail its own close here only by publishing a genuinely drifted body — which is
-  # the gate working, not a loop. Both shipped emit paths derive the body from the
-  # note by the same §5.1 transform, so that path is closed by construction.
+  # the gate working, not a loop.
+  # CORRECTED (#3699): this block previously asserted that "both shipped emit paths
+  # derive the body from the note by the same §5.1 transform, so that path is closed
+  # by construction." That was FALSE and is the root cause this card fixed. Only
+  # automated-closeout.sh stripped correctly; release-executor Mode F and the
+  # Stage-12 chip pattern in hub-spoke-bridge.md both passed `--notes-file <raw
+  # note>`, publishing the YAML frontmatter as raw text. Two of the eleven drifted
+  # bodies are byte-identical to their raw note. The eleven-release clean streak that
+  # made the claim look true was PATH SELECTION, not repair — closes that happened to
+  # route through automated-closeout.sh came out clean. All three emit surfaces are
+  # now on the `--notes "$BODY"` form; the claim is true as of that fix, and it is
+  # recorded as a fix rather than restated as an assumption.
   # Recorded here because this is where a future maintainer looks; do not re-derive.
   #
   # FRESHNESS PRESUMPTION (accepted residual, sharper under enforce): the tool reads
@@ -9534,6 +9971,7 @@ EOF
     CC_VERSIONFILE="$_version" CC_NOTES_DIR="$_notes" CC_LINT="$_lint" CC_DRIFT="$_drift" \
     CC_ALLOWLIST="$_t/none.txt" \
     CLOSE_COMPLETENESS_CHECK_CUTOFF="$1" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
+    CLOSE_COMPLETENESS_OUTPUTS_CUTOFF="__none__" \
     _cc_compute_verdict "lifecycle" 2>/dev/null
   }
 
@@ -9547,6 +9985,7 @@ EOF
     CC_VERSIONFILE="$_version" CC_NOTES_DIR="$_notes" CC_LINT="$_lint" CC_DRIFT="$_drift" \
     CC_ALLOWLIST="$_t/none.txt" \
     CLOSE_COMPLETENESS_CHECK_CUTOFF="$1" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
+    CLOSE_COMPLETENESS_OUTPUTS_CUTOFF="__none__" \
     _cc_compute_verdict "lifecycle" 2>&1 >/dev/null
   }
 
@@ -9582,6 +10021,7 @@ EOF
         CC_VERSIONFILE="$_version" CC_NOTES_DIR="$_notes" CC_LINT="$_lint" CC_DRIFT="$_drift" \
         CC_ALLOWLIST="$_t/none.txt" \
         CLOSE_COMPLETENESS_CHECK_CUTOFF="v9.98" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
+        CLOSE_COMPLETENESS_OUTPUTS_CUTOFF="__none__" \
         _cc_compute_verdict "lifecycle" 2>/dev/null)"; _tok="${_v%% *}"
   [[ "$_tok" == "INCOMPLETE" ]] || { echo "FAIL: a now-VERIFIED incomplete row (v9.98) must be caught once it is VERIFIED-scoped, got '$_v'"; failures=$((failures+1)); }
 
@@ -9612,11 +10052,196 @@ EOF
   # (7) a cutoff matching NO row asserts nothing and would report CLEAN 0 — vacuously
   #     clean. It must say so out loud. (Anti-vacuity: a gate that passes on zero
   #     assertions is indistinguishable from a gate that passes.)
+  #     The needle is pinned to the ROW cutoff's own message, not the bare phrase
+  #     `matched NO LOG row`: all THREE cutoffs now emit that phrase, so a loose
+  #     needle would let this assertion pass on a SIBLING cutoff's warning while the
+  #     row cutoff's own warning had regressed away — cross-talk between anti-vacuity
+  #     emits is itself a vacuity, and the fixture pins the other two to __none__
+  #     precisely so only one voice can answer here.
   _e="$(_cc_selftest_stderr "v0.01")"
-  printf '%s' "$_e" | /usr/bin/grep -q 'matched NO LOG row' \
+  printf '%s' "$_e" | /usr/bin/grep -q 'WARNING — cutoff v0.01 matched NO LOG row' \
     || { echo "FAIL: a no-match cutoff must WARN that zero rows were asserted, got '$_e'"; failures=$((failures+1)); }
 
   /bin/rm -rf "$_t" 2>/dev/null || true
+
+  # ─── Assertion group OS — Stage-13 OUTPUT-SET sub-checks (j)+(k) [#4452] ─────
+  #
+  # Offline + hermetic, in its OWN sandbox so the group above keeps its fixture.
+  #
+  # EVERY assertion here grades the verbatim FINDING LINE, and that is the whole
+  # point of the group rather than a stylistic preference. Four cheaper observables
+  # were tried and all four are VACUOUS on this very fixture:
+  #   T1 exit code            — the warn sentinel maps INCOMPLETE to 0; identical on
+  #                             every arm, passing and failing alike.
+  #   T2 corpus-wide grep     — `^**Velocity:**` reads 2 on the PASSING arm OS-2 and
+  #                             2 on the BROKEN arms OS-3 and OS-5.
+  #   T3 "reports INCOMPLETE" — seven other sub-checks can produce that verdict.
+  #   T4 "the field parses"   — OS-5's wrong-surface field parses under the shipped
+  #                             consumer grammar EXACTLY as OS-4's right-surface one
+  #                             does. OS-4 and OS-5 are indistinguishable under all
+  #                             four; only the co-location finding separates them,
+  #                             which is why that assertion exists at all.
+  # A control that survives a trap is informative; one that does not is theatre.
+  echo "self-test: starting assertion group OS (Stage-13 output-set sub-checks, #4452)" >&2
+  local _o; _o="$(/usr/bin/mktemp -d -t outputset-selftest.XXXXXX)"
+  /bin/mkdir -p "$_o/notes" "$_o/tools"
+  local _olog="$_o/RELEASE_LOG.md" _oseg="$_o/RELEASE_LOG_ARCHIVE-v0.md"
+  local _oidx="$_o/RELEASE_INDEX.md" _odig="$_o/RELEASE_DIGEST.md" _ochg="$_o/CHANGELOG.md"
+  local _over="$_o/.version" _onotes="$_o/notes"
+  local _olint="$_o/tools/lint_release_corpus.py" _odrift="$_o/check-release-body-drift.sh"
+  /bin/cat > "$_olint" <<'STUB'
+import sys
+sys.exit(0)
+STUB
+  /bin/cat > "$_odrift" <<'STUB'
+#!/usr/bin/env bash
+exit 3
+STUB
+  /bin/chmod +x "$_odrift"
+  # Companion output-set COMPLETE for both rows, so sub-checks (a)-(g) contribute
+  # zero findings and every finding observed below is attributable to (j)/(k).
+  /usr/bin/printf '# v0.99 notes\n' > "$_onotes/v0.99_RELEASE_NOTES.md"
+  /usr/bin/printf '# v0.98 notes\n' > "$_onotes/v0.98_RELEASE_NOTES.md"
+  /usr/bin/printf '# RELEASE_INDEX\n| v0.98 | ms98 | d |\n| v0.99 | ms99 | d |\n' > "$_oidx"
+  /usr/bin/printf '# RELEASE_DIGEST\n### v0.98 (d)\nx\n### v0.99 (d)\nx\n' > "$_odig"
+  /usr/bin/printf '# Changelog\n## [v0.98] - d\nx\n## [v0.99] - d\nx\n' > "$_ochg"
+  /usr/bin/printf 'v0.99\n' > "$_over"
+
+  local _ovel='**Velocity:** planned 12 pts / delivered 12 pts (1.00); files-changed 3; allocation 0/12/0 pts (feature/debt/protocol-slack); class routine; mechanism: compute-release-velocity.sh'
+  local _ovelb='**Velocity:** planned **12** pts / delivered **12** pts (**1.00**); class routine'
+  local _ovelna='**Velocity:** N/A — no size:* labels on milestone membership (cannot derive points); class routine (excluded from calibration ratio)'
+  local _orl99=$'#### Release Learnings v0.99\n\n**Synthesized at:** 2026-01-01T00:00:00Z\n**Source events:** 0 row(s)\n**Source-row anchors:** N/A\n\n**Surprise:** N/A\n**Would-change:** N/A\n**Watch-for:** N/A'
+  local _orl98=$'#### Release Learnings v0.98\n\n**Synthesized at:** 2026-01-01T00:00:00Z\n**Source events:** 0 row(s)\n**Source-row anchors:** N/A\n\n**Surprise:** N/A\n**Would-change:** N/A\n**Watch-for:** N/A'
+
+  # The v0.98 sibling is the SPECIFICITY arm and is well-formed in EVERY fixture:
+  # live-in-hot body, conformant field, learnings block in its N7 position. Any
+  # `v0.98:` line in any arm means the assertion swept instead of discriminating.
+  _os_write() {   # <fixture-name>
+    local _hdr
+    _hdr=$'# RELEASE_LOG (output-set self-test fixture)\n| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |\n|---|---|---|---|---|---|---|---|\n| v0.98 | ms98 | #1 | #2 | `a` | `v0.98` | VERIFIED | 2026-01-01 |\n| v0.99 | ms99 | #1 | #2 | `b` | `v0.99` | VERIFIED | 2026-01-01 |'
+    local _sib
+    _sib="$(/usr/bin/printf '\n#### Deployment Log v0.98\n**Result:** SUCCESS\n%s\n\n%s\n' "$_ovel" "$_orl98")"
+    /bin/rm -f "$_oseg"
+    case "$1" in
+      suppressed)   /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n' "$_hdr" "$_sib" > "$_olog" ;;
+      emitted)      /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n\n%s\n%s\n' "$_hdr" "$_ovel" "$_orl99" "$_sib" > "$_olog" ;;
+      bolded)       /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n\n%s\n%s\n' "$_hdr" "$_ovelb" "$_orl99" "$_sib" > "$_olog" ;;
+      naform)       /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n\n%s\n%s\n' "$_hdr" "$_ovelna" "$_orl99" "$_sib" > "$_olog" ;;
+      archived)     /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n_Archived: [segment](RELEASE_LOG_ARCHIVE-v0.md)_\n\n%s\n%s\n' "$_hdr" "$_orl99" "$_sib" > "$_olog"
+                    /usr/bin/printf '# segment\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n' "$_ovel" > "$_oseg" ;;
+      wrongsurface) /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n\n%s\n%s\n' "$_hdr" "$_orl99" "$_sib" > "$_olog"
+                    /usr/bin/printf '# segment\n\n#### Deployment Log v0.99\n%s\n' "$_ovel" > "$_oseg" ;;
+      bothsurfaces) /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n_Archived: [segment](RELEASE_LOG_ARCHIVE-v0.md)_\n%s\n\n%s\n%s\n' "$_hdr" "$_ovel" "$_orl99" "$_sib" > "$_olog"
+                    /usr/bin/printf '# segment\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n' "$_ovel" > "$_oseg" ;;
+      dangling)     /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n_Archived: [segment](RELEASE_LOG_ARCHIVE-nope.md)_\n\n%s\n%s\n' "$_hdr" "$_orl99" "$_sib" > "$_olog" ;;
+      misplaced)    /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n%s\n\n%s\n' "$_hdr" "$_ovel" "$_sib" "$_orl99" > "$_olog" ;;
+      shortfields)  /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n\n%s\n%s\n' "$_hdr" "$_ovel" \
+                      "$(/usr/bin/printf '%s\n' "$_orl99" | /usr/bin/grep -v '^\*\*Surprise:\*\*' | /usr/bin/grep -v '^\*\*Source-row anchors:\*\*')" "$_sib" > "$_olog" ;;
+      duplicated)   /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n\n%s\n%s\n\n%s\n' "$_hdr" "$_ovel" "$_orl99" "$_sib" "$_orl99" > "$_olog" ;;
+    esac
+  }
+
+  # Per-row finding detail (the engine's stderr) for the fixture as written.
+  _os_detail() {
+    CC_LOG="$_olog" CC_INDEX="$_oidx" CC_DIGEST="$_odig" CC_CHANGELOG="$_ochg" \
+    CC_VERSIONFILE="$_over" CC_NOTES_DIR="$_onotes" CC_LINT="$_olint" CC_DRIFT="$_odrift" \
+    CC_ALLOWLIST="$_o/none.txt" \
+    CLOSE_COMPLETENESS_CHECK_CUTOFF="v0.98" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
+    CLOSE_COMPLETENESS_OUTPUTS_CUTOFF="${1:-v0.98}" \
+    _cc_compute_verdict "lifecycle" 2>&1 >/dev/null
+  }
+  _os_must() {      # <label> <fixed-needle> <detail>
+    /usr/bin/printf '%s' "$3" | /usr/bin/grep -qF "$2" \
+      || { echo "FAIL: OS $1 — expected a finding containing '$2', got: $(/usr/bin/printf '%s' "$3" | /usr/bin/tr '\n' ';')"; failures=$((failures+1)); }
+  }
+  _os_must_not() {  # <label> <fixed-needle> <detail>
+    if /usr/bin/printf '%s' "$3" | /usr/bin/grep -qF "$2"; then
+      echo "FAIL: OS $1 — must NOT report '$2', got: $(/usr/bin/printf '%s' "$3" | /usr/bin/tr '\n' ';')"; failures=$((failures+1))
+    fi
+  }
+  local _od
+
+  # OS-1 SUPPRESSED (today's shipped state: the close emits neither output) — BOTH
+  # findings, matched on CONTENT. This is the negative control the card requires:
+  # it fires while the exit code stays 0 and the corpus-wide grep still passes.
+  _os_write suppressed;   _od="$(_os_detail)"
+  _os_must     "1 velocity"  'v0.99: missing Phase-B **Velocity:** field in the Deployment Log block (body surface: RELEASE_LOG.md)' "$_od"
+  _os_must     "1 learnings" 'v0.99: missing Phase-A7 `#### Release Learnings v0.99` block' "$_od"
+  _os_must_not "1 sibling"   'v0.98:' "$_od"
+
+  # OS-2 EMITTED (the fix) — zero (j)/(k) findings.
+  _os_write emitted;      _od="$(_os_detail)"
+  _os_must_not "2 velocity"  'v0.99: missing Phase-B' "$_od"
+  _os_must_not "2 learnings" 'v0.99: missing Phase-A7' "$_od"
+  _os_must_not "2 sibling"   'v0.98:' "$_od"
+
+  # OS-3 BOLDED NUMERALS (§ 3.4 N5; the live v4.0/v4.01 defect shape) — the grammar
+  # finding fires. The line reads perfectly to a human and is dropped as unkeyable
+  # by the shipped consumer, which is exactly why presence alone is not enough.
+  _os_write bolded;       _od="$(_os_detail)"
+  _os_must     "3 grammar"   'v0.99: **Velocity:** field fails the shipped-consumer grammar' "$_od"
+  _os_must_not "3 sibling"   'v0.98:' "$_od"
+
+  # OS-4 EXPLICIT N/A (§ 3.4 N4) — conformant; the N/A form satisfies the grammar
+  # jointly. Without this the grammar limb could degenerate into "every field must
+  # carry points", which would red every legitimately unsized release.
+  _os_write naform;       _od="$(_os_detail)"
+  _os_must_not "4 na-form"   'v0.99: **Velocity:**' "$_od"
+
+  # OS-5 ARCHIVED + CO-LOCATED — body relocated to the segment, field co-located
+  # with it there. ZERO findings: the record is intact, one file over. A hot-ledger-
+  # only resolver FABRICATES a missing-velocity finding on this exact input.
+  _os_write archived;     _od="$(_os_detail)"
+  _os_must_not "5 archived"  'v0.99: missing Phase-B' "$_od"
+  _os_must_not "5 sibling"   'v0.98:' "$_od"
+
+  # OS-6 T4 WRONG-SURFACE WRITE — body still live in the hot ledger, field written
+  # into a segment. Split record. Indistinguishable from OS-5 by exit code, by
+  # corpus-wide grep, and by the consumer grammar; only co-location separates them.
+  _os_write wrongsurface; _od="$(_os_detail)"
+  _os_must     "6 split"     'v0.99: **Velocity:** field is NOT co-located with the block body' "$_od"
+  _os_must     "6 surfaces"  'body resolves to RELEASE_LOG.md, field also present in RELEASE_LOG_ARCHIVE-v0.md' "$_od"
+
+  # OS-7 T4 DUPLICATE — the field on BOTH surfaces. Also a split record: a segment
+  # is a disposition destination, never a source (RECORDS_POLICY.md).
+  _os_write bothsurfaces; _od="$(_os_detail)"
+  _os_must     "7 split"     'body resolves to RELEASE_LOG_ARCHIVE-v0.md, field also present in RELEASE_LOG.md' "$_od"
+
+  # OS-8 DANGLING SEGMENT POINTER — the sentinel names a segment that is not there.
+  _os_write dangling;     _od="$(_os_detail)"
+  _os_must     "8 dangling"  'v0.99: archival pointer names RELEASE_LOG_ARCHIVE-nope.md, which does not exist' "$_od"
+
+  # OS-9 LEARNINGS MIS-PLACED — the block exists but is not the H4 immediately after
+  # its Deployment Log block. The finding NAMES the heading actually found, which is
+  # what makes it falsifiable rather than a boolean.
+  _os_write misplaced;    _od="$(_os_detail)"
+  _os_must     "9 n7"        'found: #### Deployment Log v0.98' "$_od"
+
+  # OS-10 LEARNINGS MISSING FIELDS — the block is in position but structurally short.
+  _os_write shortfields;  _od="$(_os_detail)"
+  _os_must     "10 fields"   'block missing canonical field(s): Source-row anchors, Surprise' "$_od"
+
+  # OS-11 LEARNINGS DUPLICATED — a second block reads as authoritative and is dead.
+  _os_write duplicated;   _od="$(_os_detail)"
+  _os_must     "11 unique"   'heading appears 2 times (exactly one required)' "$_od"
+
+  # OS-12 ANTI-VACUITY — an outputs cutoff matching NO row asserts nothing and would
+  # verdict CLEAN. It must say so out loud, in its OWN voice: the message names the
+  # outputs cutoff specifically, so it can never be confused with the row cutoff's
+  # identically-shaped warning (assertion (7) above pins the converse).
+  _os_write suppressed;   _od="$(_os_detail v7.77)"
+  _os_must     "12 vacuity" 'WARNING — outputs cutoff v7.77 matched NO LOG row' "$_od"
+  _os_must_not "12 gated"   'v0.99: missing Phase-B' "$_od"
+
+  # OS-13 THE ESCAPE HATCH IS REAL — __none__ re-dormants (j)/(k) and ONLY them.
+  # Without this the group could pass with the sub-checks unconditionally armed,
+  # and the cutoff would be decoration.
+  _os_write suppressed;   _od="$(_os_detail __none__)"
+  _os_must     "13 dormant" 'outputs sub-checks (Phase-B velocity + Phase-A7 learnings) explicitly re-dormanted' "$_od"
+  _os_must_not "13 gated-v" 'v0.99: missing Phase-B' "$_od"
+  _os_must_not "13 gated-l" 'v0.99: missing Phase-A7' "$_od"
+
+  /bin/rm -rf "$_o" 2>/dev/null || true
 
   # ─── Assertion group DE — decision-emission minimum set (Check 61) [#4026] ────
   #
@@ -10168,6 +10793,8 @@ EOF
   echo "  close-completeness invariant validated (#1290 AC5; mis-arm group #4176):" >&2
   echo "    explicit-__none__ cutover SKIPs / abbreviated scaffold caught (INCOMPLETE) / complete set CLEAN / VERIFIED-scoped (DEPLOYED excluded, VERIFIED included)" >&2
   echo "    mis-arm (5) prefix-shortened cutoff WARNs naming the armed row / (6) exact-row cutoff does NOT warn but still names it / (7) no-match cutoff WARNs vacuous (zero rows asserted)" >&2
+  echo "  Stage-13 output-set sub-checks (j velocity + k learnings) validated (#4452, group OS):" >&2
+  echo "    OS-1 suppressed -> BOTH findings / OS-2 emitted -> zero / OS-3 bolded numerals -> grammar finding / OS-4 explicit-N/A conformant / OS-5 archived+co-located -> zero / OS-6 T4 wrong-surface write -> split-record / OS-7 field on both surfaces -> split-record / OS-8 dangling segment pointer -> finding / OS-9 learnings mis-placed names the heading found / OS-10 short field-set / OS-11 duplicate heading / OS-12 no-match outputs cutoff WARNs vacuous / OS-13 __none__ re-dormants (j)+(k) only. Every arm graded on the FINDING LINE — exit code, corpus-wide grep and 'the field parses' are all identical on OS-4/OS-5 and OS-6." >&2
   echo "  decision-emission minimum set validated (#4026, group DE):" >&2
   echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET" >&2
   echo "  complementary-pair ownership validated (#4178, group CP):" >&2

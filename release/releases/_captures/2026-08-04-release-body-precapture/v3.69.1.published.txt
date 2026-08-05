@@ -1,0 +1,10 @@
+Security patch resolving two coordinated-disclosure advisories.
+
+## Security fixes
+- **[GHSA-9cjm-v22x-4x33](https://github.com/cody-hutson/pmo-platform/security/advisories/GHSA-9cjm-v22x-4x33)** (High, CVSS 7.3) — PreToolUse security hooks failed **open** when `jq` was unresolvable under the pinned PATH, silently disabling the perimeter on documented Homebrew installs. Fixed: shared absolute-path jq resolver + **mode-coupled fail-closed** across the whole hook class; a second fail-open (fs-boundary `..` traversal when python3 is unavailable) closed; CI regression guard added.
+- **[GHSA-rw36-5pf9-w2vc](https://github.com/cody-hutson/pmo-platform/security/advisories/GHSA-rw36-5pf9-w2vc)** (Medium, CVSS 5.0) — Stored XSS in the eval-viewer: attacker-influenced eval output reached `innerHTML` render sinks unescaped. Fixed: **per-sink** escaping + defense-in-depth transport escaping; xlsx hyperlink sanitization.
+
+## Also included
+- Deploy fix: co-deploy `lib/dep-resolve.sh` into `.claude/hooks/lib/` so the hardened hooks resolve their shared helper in the deployed layout.
+
+Affected version ranges and full technical detail are in each advisory.

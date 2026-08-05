@@ -1,0 +1,24 @@
+Hotfix to the v3.73 security patch. The everyday `update.sh` did not refresh the security hooks deployed on your machine, so the v3.73 hook hardening (and any future one) sat undelivered until you re-ran the full installer. This release closes that gap.
+
+## What you need to do
+
+**Pull the latest clone and run `./update.sh`.** It now refreshes your deployed security hooks automatically — including the v3.73 hardening a prior `update.sh` would have skipped. Re-running `setup-workspace.sh` remains a fallback.
+
+## What changed
+
+- **`update.sh` now refreshes your security hooks (#3430).** The update command deployed skills and packages but left the `.claude/hooks` bundle untouched, so a hook security fix only reached you via the full installer. A normal `update.sh` now refreshes it too — the v3.73 hardening actually lands when you update.
+- **Your own edits to a hook are preserved, not overwritten.** The refresh is checksum-aware: a stock hook is updated to the new version; a hook *you edited* is left as-is with a one-line notice, so a security update never silently clobbers a local change.
+- **A no-op update stays a no-op.** If your hooks are already current, the refresh reports nothing changed and `update.sh` keeps its unchanged exit status.
+
+## Known limits
+
+- The fix is delivered by the very command it improves, so the first hop requires pulling the clone and running `./update.sh` once. After that, hook fixes ride along with normal updates.
+- An edited hook is preserved by design, which means it does not auto-receive a security fix — the "preserved" notice is your cue to reconcile it by hand.
+
+## Reversibility
+
+**CHEAP** — additive, opt-in (`setup-workspace.sh --refresh-hooks` + one `update.sh` phase), with a 7-case regression test. A full `setup-workspace.sh` run remains an unchanged fallback.
+
+---
+
+Delivered by #3431 (issue #3430). Availability-edge follow-up: #3429. Full notes: [`release/releases/notes/v3.73.1_RELEASE_NOTES.md`](https://github.com/cody-hutson/pmo-platform/blob/main/release/releases/notes/v3.73.1_RELEASE_NOTES.md).

@@ -1,0 +1,10 @@
+Internal hardening of the release orchestrator (`release-hub` Mode R/O). Nothing changes in day-to-day platform use — this makes the platform's own release process safer, harder to leave half-finished, and clearer about the next step.
+
+**What changed**
+- The readiness pre-flight is strictly **recommend-only** — it can no longer change the very thing it assesses.
+- It always **names the next step** (run the release, or clear this cleanup list first).
+- A new **architecture-conformance check** catches methodology-hardcoding + risky rename cascades before they enter a release.
+- The release driver **always claims a version and logs the deploy** — never "merged but not recorded."
+- A **per-wave collision check** avoids two divergent builds of the same item.
+
+5 slices on PR #3405 (Release Class routine); #2574 + #2575 deferred to a coordinated follow-up. Full notes: `release/releases/notes/v3.72_RELEASE_NOTES.md`.

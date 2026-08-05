@@ -1,0 +1,55 @@
+
+# The work-item type layer — a generic Work Item entity, a work-organization mapping framework, and a declarative type-pack meta-schema
+
+2026-06-07 · v1.07
+
+The platform gains the foundation of its work-item layer. A thin, generic **Work Item** now sits beneath Milestone and Workstream as the hierarchy node; a domain-neutral **work-organization mapping framework** maps a way of working to a work hierarchy; and a declarative **type-pack meta-schema** lets a user bring their own work types — or take a best-practice default — so an agent understands the shape of their work by nature rather than by assuming one methodology. It is a methodology-agnostic template, deliberately separate from the release pipeline's own ticket model.
+
+> **Skip the rest** unless you care about how the platform models, types, and rolls up delivery work — how a project's work items are structured, named, and related. Day-to-day status, comms, and project artifacts are unaffected by this release.
+
+## Who this affects
+
+- Anyone who will define or configure how a project's delivery work is structured — the work-item types, their hierarchy, and how they roll up (this release lays the foundation that later milestones build on)
+- Anyone reading the platform's data architecture (the entity model gains one new generic entity, and the meta-schema that parameterizes it)
+- General platform use — status outputs, skills, project artifacts — is unaffected; nothing changes operationally yet
+
+## What changed for everyone using the platform
+
+- **There is now a generic Work Item beneath Milestone and Workstream.** A single thin entity serves as the hierarchy node for delivery work, with a type discriminator and a parent reference, so work can be typed, placed in a hierarchy, and rolled up to its Milestone. *Why it matters:* before this, there was no layer to hang typed delivery work on — work could not be placed or rolled up across methodologies. This is the node everything else attaches to.
+- **A methodology can be mapped to a work hierarchy.** A domain-neutral framework describes the path from a concept to a hierarchy-by-methodology to a best-practice schema (or a user's own), in one place. *Why it matters:* the platform no longer assumes one way of working — the mapping is explicit and pluggable, so different methodologies project onto the same underlying model.
+- **Work types are declarative — bring your own, or take a best-practice default.** A type-pack meta-schema lets work-item kinds and their per-type fields be declared rather than hard-coded, projecting onto the mapping framework and resolving against the generic entity. *Why it matters:* a user describes their work types once and an agent understands their work structure by nature, with no change to platform code; future kinds parameterize the entity instead of amending the frozen entity roster.
+
+## Known limits
+
+- This release lands the **foundation only** — the generic entity, the mapping framework, and the type-pack meta-schema. It does not yet refit the skills that read work items at invocation, nor ship methodology breakdown, cross-kind rollup/translation, storage/projection, a glossary, or migration; those are deferred to later milestones tracked under the work-item-type-layer umbrella.
+- Adding the generic entity required a one-entity amendment to a deliberately frozen entity roster; that change was made under an explicit sign-off gate, not casually. Once the type meta-schema consumes the entity it becomes a contract — which is why the release-level reversibility is rated EXPENSIVE.
+- The type meta-schema's per-type "schema only where it applies" materialization is the central design bet; it was validated in design with worked examples and a cross-kind rollup query, but it has not yet been exercised at platform scale.
+
+Report issues via the standard intake at the GitHub Issues page.
+
+## Reversibility
+
+EXPENSIVE / HIGH confidence at the release level. The three changes land via a single release PR (#526); `git revert <merge-sha>` reverses the slice, and the corpus chore PRs revert the same way. The entity becomes a contract once the type meta-schema consumes it, so undoing the layer after downstream adoption means unwinding the type layer and every consumer — before that consumption point, reversibility is CHEAP (only the ADR and an additive entity block revert). Governance, schema, and documentation changes only; no data migration ships in this release. The Tier-2 entity-roster amendment, the establishing ADR, and the Stage 9 GO are the sign-off gate.
+
+---
+
+### Operator and engineering detail
+
+**Release shape.** `novel` class (operator-rendered at the Stage 4 Decision Gate; basis: two new schema/ADR files, ≥3 D-class decisions, and a scoped Tier-2 governance change to the FROZEN entity roster). Deep Stage 9 review (Collective Review N-way consistency + cross-D upstream-compatibility scan + blast-radius); the GO carried the Tier-2 SCOPE CHANGE authorization for the one new entity. Branch topology `D-C SINGLE` — one release branch, sequential Engineering commits, one release PR (#526), the plan committed as Engineering Commit 0. The bundle is a hard-sequenced chain (#506 → #532 + #507): the two shared files (`project-entity-model.md`, `entity-field-schemas.md`) are resolved by the sequence, so no parallel Engineering was needed.
+
+**#506 — C1: the generic Work Item entity + the establishing ADR (the governance act).** Added a thin generic `Work Item` entity to `project-entity-model.md §4` (Entity Core 7 + a `work_item_type` discriminator + a `parent_ref` BELONGS_TO edge + relationships-by-reference) with the work-item→Milestone rollup edge in §5, and re-froze the entity roster with a dated SCOPE-CHANGE amendment line mirroring the 2026-05-16 RAID-Item precedent. The establishing `core/ADRs/ADR-018-work-item-type-layer.md` records the work-item-type-layer architecture decisions ratified on the umbrella (a hybrid model / methodology-projected kinds / a now-scoped foundation) and was renumbered from ADR-017 at Phase A6.5 after a collision with another in-flight ADR-017. The bounded G2 cascade added the generic-entity field schema and a bounded X-rule to `entity-field-schemas.md §3/§4`. The entity-model edit was treated as unauthorized until the Stage 9 GO rendered the Tier-2 SCOPE CHANGE.
+
+**#532 — the work-organization mapping framework (the projection target).** A new domain-neutral discipline, `work-organization-mapping-framework.md`, maps the path from concept to hierarchy-by-methodology to best-practice work-item schemas or a user's plug-and-play set — the model that the type meta-schema projects onto.
+
+**#507 — C2: the declarative type-pack meta-schema (the design act; the hard consumer of C1).** A new `core/schemas/work-item-type-schema.md` defines the type-pack meta-schema — methodology-projected kinds, built-vocabulary relationships, and per-type schemas materialized only where a kind needs them — projecting onto #532's framework and resolving `work_item_type` against #506's entity. It registers in the framework catalog, unifies the methodology-variation projection view, composes (rather than restates) the existing methodology-parameterization pattern, and generalizes the `intake-desk` type-map seam. The skill-propagation refit that would have every delivery skill read the type registry at invocation was held out of this release and routed to a later milestone to keep the release a two-spine `novel` slice rather than a multi-skill `cross-cutting` one.
+
+For full implementation detail see the [RELEASE_LOG.md entry](../RELEASE_LOG.md#deployment-log-v107) and [the release plan](../plans/v1.07_RELEASE_PLAN.md).
+
+### References
+
+- Milestone: declarative-workitem-type-model
+- Integration PR: #526 at `d98c28dac07da9f99335c33c7c57f2acb70815aa`
+- Closed issues: #506 · #532 · #507
+- Deferred (tracked under the work-item-type-layer umbrella): #409 — C3 / C5 / C6 / C7 / C8 / C9
+- Tag: `v1.07` (signed-annotated, ED25519)
+

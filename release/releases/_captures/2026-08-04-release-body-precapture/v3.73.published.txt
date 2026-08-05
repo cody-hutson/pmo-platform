@@ -1,0 +1,14 @@
+Security patch closing two coordinated-disclosure advisories. Neither is remotely exploitable — both require local access — but both are worth patching.
+
+## Fixes
+
+**[GHSA-g9g6-28c9-vrx5](https://github.com/cody-hutson/pmo-platform/security/advisories/GHSA-g9g6-28c9-vrx5) — LOW / CWE-693.** Two warn/enforce security hooks skipped their check entirely when a co-shipped helper was missing, empty, or corrupt — silently, even in enforce mode — and one helper had never been installed on deployed workspaces. They now fail **closed** in enforce and degrade cleanly in warn/off, verify the helper's API (not mere presence), and the missing helper is now co-deployed.
+
+**[GHSA-fxcr-7x63-3g94](https://github.com/cody-hutson/pmo-platform/security/advisories/GHSA-fxcr-7x63-3g94) — MEDIUM / CWE-59, CWE-200, CWE-352.** The local eval-review tool (`pmo-skill-refiner`) followed symlinks/hardlinks out of the workspace (arbitrary file read), embedded secrets verbatim into the served + shareable HTML, and accepted unauthenticated writes. Reads are now confined to the workspace, embedded text is size-capped + best-effort redacted, and the write endpoint requires a same-origin Host + a per-run CSRF token.
+
+## Action required
+
+**Re-run `docs/scripts/setup-workspace.sh`** against your workspace to pick up the updated hooks and the newly co-deployed helper (`update.sh` does not refresh hooks).
+
+Full notes: [`release/releases/notes/v3.73_RELEASE_NOTES.md`](https://github.com/cody-hutson/pmo-platform/blob/v3.73/release/releases/notes/v3.73_RELEASE_NOTES.md)
+

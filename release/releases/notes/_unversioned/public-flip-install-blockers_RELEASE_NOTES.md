@@ -34,40 +34,40 @@ This release closes the fresh-install and onboarding blockers that gate the priv
 ### Fresh-install bootstrap
 
 - **Fresh install deploys the full skill roster, not zero skills (#606).** Phase 2 skill deployment used release change-detection (an empty diff on a clean clone -> nothing to deploy) instead of a full-roster deploy. Bootstrap now deploys the complete roster on a fresh install. *Why it matters:* this was the launch blocker — a new public user got 0 skills.
-- **Manual-mode bootstrap installs `.skill` packages (#144).** `deploy.sh` manual mode skipped `.skill`-package installation (the initial bootstrap mechanism gap); the bootstrap path now installs them.
+- **Manual-mode bootstrap installs `.skill` packages (#144).** `deploy.sh` manual mode skipped `.skill`-package installation (the initial bootstrap mechanism gap); the bootstrap path now installs them. *Why it matters:* anyone who installed manually rather than through the scripted path ended up with an incomplete install and no indication of it.
 
 ### Install-path resolution (SESSION)
 
-- **Config-first install-path resolution ladder — ADR-013 (#233, #243, #607).** `detect_install_path()` now resolves via a config-first ladder (reading `operator.toml`) with structured terminal output, replacing the session-tiebreaker heuristic. The hardcoded fallback session-path and the literal session UUID that could reference an orphaned session are removed. A `COWORK_AVAILABLE` flag-guard makes a session-less machine deploy the user-local skill roster instead of hard-failing (#607). Check-8 is re-pointed to the `operator.toml` config.
+- **Config-first install-path resolution ladder — ADR-013 (#233, #243, #607).** `detect_install_path()` now resolves via a config-first ladder (reading `operator.toml`) with structured terminal output, replacing the session-tiebreaker heuristic. The hardcoded fallback session-path and the literal session UUID that could reference an orphaned session are removed. A `COWORK_AVAILABLE` flag-guard makes a session-less machine deploy the user-local skill roster instead of hard-failing (#607). Check-8 is re-pointed to the `operator.toml` config. *Why it matters:* the install path is now something you can set and read rather than something the installer guesses, and a machine with no active session installs normally instead of stopping.
 
 ### Sandboxing & honored overrides
 
-- **Sandbox overrides honored through skill deploy (#611).** The documented sandboxing was Phase-1-only — skill deployment ignored `--workspace-root` / `--config-root`. The overrides are now honored in Phase 2 (HONOR override), so a sandboxed deploy stays inside the sandbox.
+- **Sandbox overrides honored through skill deploy (#611).** The documented sandboxing was Phase-1-only — skill deployment ignored `--workspace-root` / `--config-root`. The overrides are now honored in Phase 2 (HONOR override), so a sandboxed deploy stays inside the sandbox. *Why it matters:* a deploy you asked to stay inside a test directory was reaching outside it and writing to your real one.
 
 ### Validation (`validate-install.sh`)
 
-- **A5 no longer false-positives on legitimate vocabulary (#608).** The A5 check flagged legitimate `CLAUDE.md` vocabulary as unresolved tokens; it now distinguishes real unresolved tokens from intentional vocabulary.
-- **A9 checks the correct skills path (#609).** A9 checked the workspace skills path instead of the `$HOME` install path; it now checks the path skills actually deploy to.
+- **A5 no longer false-positives on legitimate vocabulary (#608).** The A5 check flagged legitimate `CLAUDE.md` vocabulary as unresolved tokens; it now distinguishes real unresolved tokens from intentional vocabulary. *Why it matters:* a healthy install was being reported as broken, which is the kind of false alarm that teaches people to ignore the checker.
+- **A9 checks the correct skills path (#609).** A9 checked the workspace skills path instead of the `$HOME` install path; it now checks the path skills actually deploy to. *Why it matters:* the check was looking in the wrong place, so it could pass while the skills you rely on were missing.
 
 ### Update safety (`update.sh`)
 
 - **Two-hash managed-section tamper detection — ADR-014 (#612).** Managed-section tampering was silently ignored and the documented `.backup-tampered-` was never implemented. `update.sh` now detects managed-section tampering via a two-hash scheme and writes the documented tamper backup before overwriting. *Why it matters:* this strengthens the update-time integrity guarantee — a hand-edited managed section is detected and preserved instead of silently clobbered.
-- **`EX_NOCHANGE` (exit 64) wired (#613).** The documented no-change exit code was not wired; `update.sh` now exits 64 when there is nothing to apply.
+- **`EX_NOCHANGE` (exit 64) wired (#613).** The documented no-change exit code was not wired; `update.sh` now exits 64 when there is nothing to apply. *Why it matters:* a script that calls the updater can now tell "nothing to do" apart from "it worked", which are different things worth acting on differently.
 
 ### Deploy tooling (`deploy.sh`)
 
-- **`--check` no longer false-DRIFTs sync-map references; `--warn` exits 0 (#610).** `deploy.sh --check` false-DRIFTed on sync-map-injected references and `--warn` did not exit 0; both are corrected.
-- **`--report` continues past skill FAILs — verified no-op (#265).** The intended behavior (a complete drift report that does not stop at the first skill FAIL) was already in place after the earlier re-version work; verified no code change required this release.
+- **`--check` no longer false-DRIFTs sync-map references; `--warn` exits 0 (#610).** `deploy.sh --check` false-DRIFTed on sync-map-injected references and `--warn` did not exit 0; both are corrected. *Why it matters:* the drift report named problems that were not real, and the warn mode failed builds it was only supposed to warn about.
+- **`--report` continues past skill FAILs — verified no-op (#265).** The intended behavior (a complete drift report that does not stop at the first skill FAIL) was already in place after the earlier re-version work; verified no code change required this release. *Why it matters:* nothing changed for you here — it is recorded so the item is visibly closed by checking rather than left open on the assumption it was still broken.
 
 ### Counts, version, and harness hygiene
 
-- **SKILL_LIST count convention reconciled (#242).** The `deploy.sh` SKILL_LIST count and the `skill-deployment.md` "custom" count were reconciled to a single convention.
-- **`.version` reconciled to the v3.x tag scheme (#614).** `.version` (previously `v1.04`) is reconciled to the latest-tag (`v3.x`) scheme, and the release-tagging convention for the public flip is documented. This release itself is version-less and untagged; the reconciliation is independent of it.
-- **Deploy-test harness hygiene (#615).** The composition-surface count drift (14<->17) is reconciled and the CI install-tests workflow now runs the full test set rather than 2 of 5.
+- **SKILL_LIST count convention reconciled (#242).** The `deploy.sh` SKILL_LIST count and the `skill-deployment.md` "custom" count were reconciled to a single convention. *Why it matters:* two places reported a different number of skills, so whichever one you read, you could not tell whether your install was complete.
+- **`.version` reconciled to the v3.x tag scheme (#614).** `.version` (previously `v1.04`) is reconciled to the latest-tag (`v3.x`) scheme, and the release-tagging convention for the public flip is documented. This release itself is version-less and untagged; the reconciliation is independent of it. *Why it matters:* the version your install reported no longer disagrees with the versions actually published, which is what the skew warning compares against.
+- **Deploy-test harness hygiene (#615).** The composition-surface count drift (14<->17) is reconciled and the CI install-tests workflow now runs the full test set rather than 2 of 5. *Why it matters:* three of the five install tests were never running, so the install path was less tested than the green build suggested.
 
 ### Version-skew notifier (folded-in fast-follow)
 
-- **`notify-version-skew.sh` repaired and wired (#632).** The version-skew notifier was non-functional (a `REPO_ROOT` path bug) and was not wired into the settings template. It now uses a 2-candidate `.version` resolver, ships a snapshot via `setup-workspace`/`update`, is wired into `SessionStart` via `core/settings.json.template`, and has a regression test wired into the install-tests CI. This makes #614's `.version` reconciliation functional. Folded into this release as a post-GO fast-follow per operator direction (the standalone main-targeted PR was superseded).
+- **`notify-version-skew.sh` repaired and wired (#632).** The version-skew notifier was non-functional (a `REPO_ROOT` path bug) and was not wired into the settings template. It now uses a 2-candidate `.version` resolver, ships a snapshot via `setup-workspace`/`update`, is wired into `SessionStart` via `core/settings.json.template`, and has a regression test wired into the install-tests CI. This makes #614's `.version` reconciliation functional. Folded into this release as a post-GO fast-follow per operator direction (the standalone main-targeted PR was superseded). *Why it matters:* you now actually get told when your installed copy has fallen behind the published one — the warning existed but had never once fired.
 
 ## Operator action
 

@@ -1,0 +1,63 @@
+
+# Cross-platform install foundation: Windows entry-points, a doctor command, and safer multi-destination tracking
+
+2026-07-25 · v3.91
+
+This release lays the cross-platform foundation for installing and running the platform off macOS, adds a self-diagnosis command for install problems, and lets you route work-tracking to more than one destination — with a guardrail that stops private content from being filed to a public tracker.
+
+## Who this affects
+
+- **Operators on Windows or Linux** — you now have native entry-points and a self-check, instead of assuming a macOS/POSIX shell.
+- **Anyone who installs or updates** from a folder other than the repository root — a partial-update failure is fixed.
+- **Anyone who tracks work in more than one place** (e.g., a public GitHub repo *and* a private tracker) — you can now configure multiple destinations safely.
+
+Everyday use on macOS is unchanged and needs no action.
+
+## What changed for everyone using the platform
+
+- **Windows install/update entry-points.** New `install.ps1` and `update.ps1` PowerShell scripts run a **`-DryRun` preview** that checks your environment and proves the composition step works without any bash prerequisite. *Why it matters:* Windows operators get a real, verifiable starting point instead of a WSL/Git-Bash requirement.
+- **Non-repo-root updates no longer half-fail.** Running the update from a directory other than the repo root used to silently skip a phase; it now resolves the correct location and completes. *Why it matters:* updates are reliable regardless of where you run them from.
+- **New `doctor.sh` self-diagnosis.** Run it to get an actionable, read-only report of common install faults (missing Python, unwritable home, missing config). *Why it matters:* a fast "what's wrong with my install?" answer you can paste into a bug report — it never changes anything on disk.
+- **Executable QA-as-code checks (`qa.sh`).** The onboarding/install quality checks are now runnable code, not a manual checklist. *Why it matters:* install health is verifiable on demand and in CI.
+- **Multi-destination work-tracking with a scope guardrail.** You can define several trackers and mark each `public` or `private`; a new guardrail blocks PII-marked content from reaching a `public` destination. *Why it matters:* teams that mix a public repo with a private tracker no longer risk cross-posting private content. It ships in **warn-first** mode (it flags, doesn't hard-block) except for high-confidence personal-identity leaks to a public destination, which are always blocked.
+- **Cross-platform CI.** Install and QA now run on macOS, Linux, and Windows in CI. *Why it matters:* cross-platform regressions are caught automatically, before they reach an operator on another OS.
+
+### Configuring multiple trackers (new schema)
+
+In `operator.toml`, replace the single `[adapters].ticketing` value with one named block per destination:
+
+```toml
+[trackers.public_repo]
+platform = "github"
+identifier = "your-org/your-repo"
+scope = "public"
+
+[trackers.private_board]
+platform = "github"
+identifier = "your-org/internal-tracking"
+scope = "private"
+```
+
+If you set none, behavior is unchanged (a single default destination). The old `[adapters].ticketing` value is still honored as a deprecated alias, so no immediate change is required.
+
+## Known limits
+
+- **This is the Windows *foundation*, not a full working install yet.** Today the Windows path is proven via the `-DryRun` preview; a fully bash-free Windows install (the underlying `deploy.sh` still requires bash) is delivered by follow-up work (#301, #342, #44). *For now:* use `-DryRun` to validate the environment; the full install path continues to need a POSIX shell.
+- **The scope-segregation guardrail ships warn-first.** Except for always-blocked high-confidence identity leaks, it flags rather than hard-blocks; turning on full enforcement is a separate, deliberate opt-in.
+- **The new cross-platform CI checks run on every pull request but are not yet a hard merge requirement** (they are enforced by the release process's never-merge-red discipline). Making them a required check is an optional repository-settings step.
+
+Report issues at https://github.com/cody-hutson/pmo-platform/issues.
+
+## Reversibility
+
+**MODERATE** · confidence **HIGH**. The release is a single pull request (#3925); a `git revert` of the merge commit cleanly restores the prior behavior. The one higher-risk element — the new action-gating scope-segregation hook — ships warn-first with an independent enable flag and an allowlist, so its enforcement can be adjusted or disabled without touching the rest of the release.
+
+
+### Operator and engineering detail
+
+Full audit detail: RELEASE_LOG row `#deployment-log-v391` (v3.91), plan `release/releases/plans/v3.91_RELEASE_PLAN.md`.
+
+Cross-cutting release, D-C SINGLE topology — six issues shipped as delivery slices on one branch, one PR (#3925), 45 files. Build order `#382 → #299 → #303 → #302 → #384 → #304`. #382 lands the non-repo-root cwd fix in `orchestrate.sh` (deploy.sh guard byte-unchanged); #299 adds the `core/deploy/qa/` module + `qa.sh`; #303 adds the Windows `.ps1` entry-points with a pinned `-DryRun` contract and relaxes the non-Darwin gates (opt-in), deferring the `orchestrate.py` port to #301; #302 adds `doctor.sh` reusing #299's read-only registry; #384 adds the `[trackers.<id>]` schema (round-trip-safe) + the fail-closed scope-segregation hook (**ADR-091**); #304 adds the tiered cross-platform CI matrix.
+
+Notable pipeline events: Stage-5 Phase A6.5 adversarial design review found a stacked *fail-open* in the security hook and it was corrected to **fail-closed** before build; at Collective Review an expansion (pulling the full deploy-decomposition in) was **considered and reverted** to a coordination hand-off after the re-plan showed it could not deliver a working Windows install in-band and would fragment epic #1182 — so full bash-free Windows is coordinated to **#47/#48**. Stage-7 Dev Testing (beyond CI) caught and fixed two real defects (a `doctor.sh` healthy-install false-positive and a no-op-update idempotency regression). The release re-versioned twice — **v3.89 → v3.90 → v3.91** — as two concurrent releases claimed the intervening slots (`template-system-governance-wave-1` took v3.89, `blast-radius-scan-correctness` took v3.90); each collision was caught at a version re-verify *before* any binding write or tag, so no work was lost. Verification: Stage 8 QA ACCEPT-WITH-NOTES (all acceptance criteria met or ratified-deferred; the one open item — making the new CI checks a hard branch-protection requirement — was dispositioned as ratify-the-existing-posture), Stage 9 GO on the 13-dimension readiness scan. Follow-ups: #301/#342/#44 (full bash-free Windows), plus a noted CI-coverage gap (the install-tests workflow does not fetch tags, so the no-op-idempotency regression class is exercised only by full-clone local testing).
+

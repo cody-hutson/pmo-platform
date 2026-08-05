@@ -1,0 +1,47 @@
+
+# Orchestration disciplines move into the reference the platform reads at runtime
+
+2026-06-26 · v2.25
+
+The orchestration patterns the platform had been learning by trial and error — how to launch sub-tasks, when to push back on their recommendations, how to keep a number consistent everywhere it appears — are now written into the reference the platform consults while it coordinates work. A class of cross-ticket, cascade, and consistency failures is now caught while the work is being authored, rather than after a failed check or a mis-routed sub-task.
+
+## What changed for everyone using the platform
+
+- **A number you change in one place no longer leaves stale copies elsewhere.** When a piece of work changes a count, a list, or a threshold, the platform now prompts itself to find and update every other place that value appears. *Why it matters:* you stop seeing the kind of inconsistency where one document says "5 checks" and another still says "4".
+- **The platform pushes back on busywork instead of rubber-stamping it.** When a sub-task returns a recommendation, the platform now weighs whether it actually adds value before adopting it. *Why it matters:* accurate-but-pointless suggestions get filtered out rather than acted on.
+- **Cross-cutting scope creep is caught while the work is happening.** When work on one item starts touching the scope of another, the platform now notices and raises it rather than letting the change land silently. *Why it matters:* a fix for one thing no longer quietly redefines another without anyone deciding that was intended.
+- **The coordination know-how lives in one consulted place, not scattered notes.** Hard-won practices — how to phrase a launch, how to keep work safe from accidental data loss, how to recover when two parallel efforts collide — are now in the reference the platform reads, not in loose operator notes. *Why it matters:* the behavior is consistent and durable instead of dependent on whoever remembered the lesson.
+
+## Known limits
+
+- These disciplines govern how the platform coordinates its own multi-step work; they are internal orchestration improvements, not a change to any project artifact you author.
+- The empirical check on sub-task behavior confirmed that security rules are inherited as expected in the main workspace, but found a residual gap in one isolated-worktree session context; that gap is named and tracked rather than hidden, and is followed up separately.
+- Report issues at https://github.com/cody-hutson/pmo-platform/issues with the `cluster: hub-spoke-orchestration` label.
+
+## Reversibility
+
+CHEAP / HIGH confidence. `git revert -m 1` of either integration PR reverses its half of the release; every change is additive — new reference subsections, new test fixtures, one deploy-check, and a documentation reconcile, with no skill, package, schema, or data changes — so reversion is clean and the two halves have no rollback-ordering constraint. Standard 30-day outcome window per the release class.
+
+---
+
+### Operator and engineering detail
+
+**Cascade-completeness + necessity/value-add (#78, #210)** — `release/references/how-to/hub-spoke-bridge.md` (the runtime hub reference) gains a Procedure-3 Spoke-Template cascade block: a spoke whose spec changes a count / enumeration / threshold must enumerate every stale occurrence (parallel to the existing R1). Procedure 4 Step 5 gains a 7th hub-evaluation dimension — a necessity/value-add test that lets the hub diverge from accurate-but-inert spoke recommendations instead of rubber-stamping them.
+
+**Four chip disciplines lifted memory→corpus (#1669)** — verbatim chip-source, issues-as-spoke-contract-not-chat-blocks, hook-safe git idioms, and concurrent-spoke contention recovery are codified as four discipline subsections in `hub-spoke-bridge.md`, with Stage-6 anti-pattern bullets in `release/references/specs/release-personas.md`. The four operator-local memory files that previously held these lessons are evicted on merge (operator-side; not a repo change).
+
+**Mid-Stage-5 cross-ticket detection + de-fragile authoring (#31, #879)** — #31 adds a mid-build cross-ticket scope-detection heuristic plus a hub escalation handler to `hub-spoke-bridge.md`, a Phase-0.7 protocol section to `release/references/pipeline/stage-05-solutioning.md`, and is anchored by founding **ADR-041** (slim-kernel). #879 lands a durable-corpus de-fragile authoring pre-check at both the bridge's Stage-6 chip guidance and `core/standards/reference-durability-standard.md`, so fragile reference constructs are caught at authoring time (the reference-durability CI gate is the load-bearing Stage-9 check for this release).
+
+**Empirical hook-inheritance suite (#189, ADR-042)** — Spoke B reports the empirical truth about whether the subagent-tier PreToolUse mechanisms fire in a spoke's worktree context. It ships a Layer-A CI regression (`core/deploy/tests/test_agent_tools_conformance.sh` + three `agent-tools-conformance` fixtures wired into `.github/workflows/install-tests.yml`), a Layer-B operator probe (`core/hooks/tests/subagent-hook-inheritance.test.sh` + a probe doc), the new **Check 46 `agent-tools-list-conformance`** `deploy.sh --check`, a `core/standards/subagent-security-posture.md` §1/§3 reconcile, and founding **ADR-042**. The finding: subagent hook-inheritance is **confirmed at workspace root**; the worktree-session hook-loading residual is *surfaced* (an AC-satisfying documentary outcome, not masked) and tracked as **#1472**.
+
+**Version + ADR re-numbering (record note)** — this release was re-versioned `v2.23 → v2.25` at Stage 12: two sibling releases (`functional-people-graph`, `corpus-conventions-and-standards-hygiene`) merged to main mid-build and claimed v2.23/v2.24, so the version stepped to the next-free above the v2.24 floor. The two founding ADRs were renumbered alongside (ADR-040→041→042 cascade) — version + ADR identity only, no scope or design change. The git branch slugs retain the original `v2.23-` prefix as stable refs. No `SKILL.md` was edited, so no skill `version:` bump and no `.skill` package rebuild apply to this release.
+
+For full implementation detail see the [RELEASE_LOG.md entry](../RELEASE_LOG.md) and [the release plan](../plans/v2.25_RELEASE_PLAN.md).
+
+### References
+
+- Milestone: [76-hub-spoke-orchestration-discipline](https://github.com/cody-hutson/pmo-platform/milestone/168)
+- Integration PRs: [#2016](https://github.com/cody-hutson/pmo-platform/pull/2016) (Spoke A, `3f8dd91f248c8c6a877bb7cd31298a68aac6479f`) · [#2017](https://github.com/cody-hutson/pmo-platform/pull/2017) (Spoke B, `029b5c6320bb873f681c5f7a04195112ef99040e`)
+- Closed issues: [#31](https://github.com/cody-hutson/pmo-platform/issues/31) · [#78](https://github.com/cody-hutson/pmo-platform/issues/78) · [#189](https://github.com/cody-hutson/pmo-platform/issues/189) · [#210](https://github.com/cody-hutson/pmo-platform/issues/210) · [#879](https://github.com/cody-hutson/pmo-platform/issues/879) · [#1669](https://github.com/cody-hutson/pmo-platform/issues/1669)
+- Follow-up: [#1472](https://github.com/cody-hutson/pmo-platform/issues/1472) (worktree-session hook-load residual)
+
