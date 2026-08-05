@@ -21,7 +21,7 @@ This document maps each of the 13 pipeline stages defined in [`pipeline/`](../pi
 | 2 | Triage | `pipeline-triage` | (single-purpose skill — runs A1–A6.5) | Tier 2 (Recommend) | Coverage. [`pipeline-triage`](../../skills/pipeline-triage/SKILL.md) owns Workflow Readiness gate execution (G1/G2 per [`gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md)) over the `status: proposed` **improvement** backlog — auto-executes A1–A6.5 and produces the consolidated triage summary; verdict (B1–B3) stays operator-only (Tier 3). Distinct from `delivery-engine`'s sprint-backlog (project-ops) triage modes. |
 | 3 | Bundle | `release-planner` | Mode A — Backlog Analysis | Tier 2 (Recommend) | Coverage. Mode A produces dependency graph + suggested bundles + version recommendations. Stage 3 Release Readiness gate (Gate 3 criteria) executes upstream of Mode A output. Forward-ref: **release-planner Bundle mode** enrichment. |
 | 4 | Planning | `release-planner` | Mode B — Release Planning | Tier 2 (Recommend) | Coverage. Mode B writes `release/releases/plans/[version]_RELEASE_PLAN.md` with implementation sequence, dependency ordering, risk register. |
-| 5 | Solutioning | `pmo-technical-analyst` | Mode C — Architecture / Infrastructure Review (closest-domain bridging fit) | Tier 2 (Recommend) | **PARTIAL FIT** — `pmo-technical-analyst` is project-ops scoped (vendor FDDs, IDDs, ERP architectures); Stage 5 targets platform-internal design (skill structure, governance edits, schema changes). Per [`release-personas.md`](release-personas.md) Stage 5, planned replacement is the **Principal Engineer skill**. Use Mode C as bridging fit only until the Principal Engineer skill ships. Forward-ref: **role skills**. |
+| 5 | Solutioning | `pmo-principal-engineer` | Mode A — Architecture & NFR Governance; Mode B — Build-vs-Buy & Design Review | Tier 2 (Recommend) | Coverage. Forward-ref **resolved**: `pmo-principal-engineer` shipped and owns Stage 5, matching the [`release-personas.md`](release-personas.md) Stage 5 persona (Principal Engineer — Architecture Assessment) directly. The prior `pmo-technical-analyst` Mode C bridging fit is **discharged** — that skill is project-ops scoped (vendor FDDs, IDDs, ERP architectures) and no longer owns this stage; it remains available as a composed technical-review input. |
 | 6 | Engineering | — | — | Tier 1 (Auto) with Tier 3 checkpoint | **GAP** — no scoped skill. Existing reference workflow [`implementation-execution-pattern.md`](../how-to/implementation-execution-pattern.md) (supersedes deprecated implementer skill per implementation-execution-pattern.md) is the procedure. `release-executor` handles approved-plan execution (Stage 12) not engineering implementation; `pmo-skill-editor` Mode A handles skill-only edits (subset). Forward-ref: **role skills** (engineering-skill candidate). |
 | 7 | Dev Testing | `pmo-qa-auditor` (primary) + `pmo-skill-editor` (skill modifications) | `pmo-qa-auditor` Mode G — Dev Testing (PR + release plan → eval-assertion ladder → PR-comment quality report); `pmo-skill-editor` Mode C — Regression | Tier 1 / Tier 2 (mixed: structural auto, judgment recommend) | Coverage. Mode G executes Stage 7 Phases A–D per [`stage-07-dev-testing.md`](../pipeline/stage-07-dev-testing.md) §5 (Phase E stays operator/hub-owned); `pmo-skill-editor` Mode C runs friction-log regression checks for skill-modification PRs. Forward-ref resolved: the dedicated mode planned per [`release-personas.md`](release-personas.md) Stage 7 shipped as **Mode G — Dev Testing**. |
 | 8 | QA Testing | `pmo-qa-auditor` | Mode H — Acceptance Review (GitHub Issue AC → per-criterion verdicts under the Stage-8 six-value enum → Acceptance Report); Mode B — Cross-Skill Coherence Review for cross-issue coherence in multi-issue releases | Tier 2 (Recommend) | Coverage. Mode H executes Stage 8 Phases A–C + report assembly per [`stage-08-qa-testing.md`](../pipeline/stage-08-qa-testing.md) §5, consuming the acceptance-assertion contract (enum verbatim; all-drift-out score); the acceptance verdict stays operator-rendered (Phase E). Forward-ref resolved: the dedicated mode planned per [`release-personas.md`](release-personas.md) Stage 8 shipped as **Mode H — Acceptance Review**. |
@@ -33,7 +33,7 @@ This document maps each of the 13 pipeline stages defined in [`pipeline/`](../pi
 
 ## Gaps
 
-Five gaps surfaced by the table: two open skill-build candidates (G1, G4), one **resolved** (G2 — the `pipeline-triage` skill now owns Stage 2), one partial-fit bridging assignment with replacement scheduled at a future role-skills release (G3), and one structural gap by design (G5).
+Five gaps surfaced by the table: two open skill-build candidates (G1, G4), two **resolved** (G2 — the `pipeline-triage` skill now owns Stage 2; G3 — `pmo-principal-engineer` shipped and replaced the `pmo-technical-analyst` Mode C bridging assignment at Stage 5), and one structural gap by design (G5).
 
 ### G1: Stage 1 (Intake) — no improvement-issue authoring skill
 
@@ -46,11 +46,11 @@ Five gaps surfaced by the table: two open skill-build candidates (G1, G4), one *
 - **Stage role:** Evaluate each issue for priority, feasibility, fit; produce Approved/Deferred/Rejected decision; run dependency-state validation (G2-04).
 - **Resolution:** the [`pipeline-triage`](../../skills/pipeline-triage/SKILL.md) skill (release module) owns this stage — it auto-executes A1–A6.5 over the `status: proposed` improvement backlog and produces the consolidated triage summary; the verdict stays operator-only (Tier 3). Standalone-skill decision per ADR-063 (delivery-engine / release-planner / ppm-agent all ruled out: `delivery-engine` triage modes are sprint-backlog project-ops; `ppm-agent` produces decision frames but doesn't run the Workflow Readiness gate; `release-planner` Mode A consumes Approved issues, downstream of triage).
 
-### G3: Stage 5 (Solutioning) — partial-fit only via pmo-technical-analyst
+### G3: Stage 5 (Solutioning) — CLOSED, `pmo-principal-engineer` owns the stage
 
 - **Stage role:** Resolve technical design decisions, validate feasibility, produce implementation-ready specifications. Per [`release-personas.md`](release-personas.md) Stage 5: Principal Engineer — Architecture Assessment.
-- **Why `pmo-technical-analyst` is partial fit:** `pmo-technical-analyst` Modes A-E target vendor/project artifacts. Mode C closest. Stage 5 targets platform-internal design — different domain. Persona card explicitly identifies the Principal Engineer skill as planned replacement.
-- **Forward-reference:** role skills — Principal Engineer skill.
+- **Resolution:** `pmo-principal-engineer` shipped and is the stage owner. Its Modes A (Architecture & NFR Governance) and B (Build-vs-Buy & Design Review) are platform-internal-design scoped, which is what the stage needs and what the prior bridge lacked.
+- **Why the bridge existed and why it is gone:** `pmo-technical-analyst` Modes A-E target vendor/project artifacts; Mode C was the closest available fit while no platform-internal design skill existed. Stage 5 targets platform-internal design — a different domain — so the fit was always partial and the persona card named the Principal Engineer skill as the replacement. That replacement has landed, so the bridging arrangement is **discharged**, not merely deprecated.
 
 ### G4: Stage 6 (Engineering) — reference workflow only, no skill
 
@@ -74,7 +74,7 @@ Markers annotated on affected rows above signal expected enrichment at known fut
 | **concurrency** | Stages 12, 13 | Concurrency-control logic for parallel-PR scenarios; cross-release dependency-check at Stage 13 |
 | **intake skills** | Stages 1, 2 | New intake + triage skills filling G1 + G2 gaps |
 | **release-planner Bundle** | Stage 3 | `release-planner` Mode A enrichment for Bundle gate (Gate 3 criteria automation) |
-| **role skills** | Stages 5, 6 | Principal Engineer skill replaces `pmo-technical-analyst` Mode C bridging at Stage 5; engineering skill fills G4 |
+| **role skills** | Stage 6 | Stage 5 leg **resolved** — `pmo-principal-engineer` shipped and replaced the `pmo-technical-analyst` Mode C bridging. Remaining: an engineering skill to fill G4 |
 
 ## Maintenance Discipline
 

@@ -4,7 +4,7 @@ purpose: Canonical mechanism for an agent to decide proceed-vs-pause-vs-escalate
 type: spec
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
-consumers: "Decision-class skills and pipeline stages (pre-action gate across the six in-scope decision-domains: Deferrals, Estimations, Slicing & Decomposition, Internal Knowledge Depth, Tool Use, Design & Architecture); the Stage-4 currency-check (named consumer)"
+consumers: "Decision-class skills and pipeline stages (pre-action gate across the six in-scope decision-domains: Deferrals, Estimations, Slicing & Decomposition, Internal Knowledge Depth, Tool Use, Design & Architecture); the Stage-4 currency-check (named consumer); the Adherence Checkpoint Index in core/rules/decision-time-adherence.md (named consumer — the deployed trigger layer of the § 1.0 predicate)"
 applies_to: Any agent decision point across the six in-scope decision-domains (Deferrals, Estimations, Slicing & Decomposition, Internal Knowledge Depth, Tool Use, Design & Architecture); decision-class skills and pipeline stages; the Stage-4 currency-check (named consumer).
 parallel_to: reversibility-protocol.md (the cost-of-error axis) + autonomy-tiers.md (the standing-authorization axis) — this protocol composes both as its two threshold axes, never restating their tables. Imports discovery-discipline.md § 2.5 as the pause-to-learn gap-closer; registers a 3rd pre-action sibling alongside autonomous-execution-model.md Retry/Escalate; reuses decision-discipline.md verification + ceremony-guard mechanisms.
 source: "The decision-confidence Research spike (COMPOSE posture, hard design constraints); the Stage 5 Solutioning design; co-developed with the Define ADR sibling. See § Provenance."
@@ -33,6 +33,16 @@ The protocol is a **compose, not a redefine** layer. It does not invent a new ti
 Decision-confidence is **paired with but distinct from** reversibility (the *what-if-wrong cost*, per `reversibility-protocol.md` § Definition) and from autonomy (the *who-acts-under-what-authorization*, per `autonomy-tiers.md` § Definition). All three travel together: the signal says *how grounded the conclusion is*; reversibility says *how expensive being wrong is*; autonomy says *how much standing authorization already exists*. The threshold model (§ 2) is exactly the rule that combines them. `[INFERRED: from reversibility-protocol.md § Definition confidence-pairing + autonomy-tiers.md § Definition orthogonality]`
 
 This protocol governs **decision-class** work in the sense `decision-discipline.md` § 1.1 defines it — a recommendation, a proceed/defer choice, a plan, an escalation, a proposed action. It does not fire on observations, status summaries, or evidence citations (those are not decisions; see § 6 omission semantics).
+
+## § 1.0 — The objective trigger predicate
+
+The sections below specify *how* the gate decides. This section specifies *when it must fire* — the layer the protocol previously left unstated, and the reason a held rule can be correct, available, and still not applied.
+
+**The predicate.** The gate fires when **both** hold: (1) the agent is about to state, rely on, or act on a claim; and (2) that claim's ground is an **intermediate signal** — something derived, secondhand, or transient — rather than a direct read of the thing the claim is about. Three intermediate-signal shapes recur: the agent's **own tool output** (a search result, an exit code, a count it produced), **another agent's or tool's self-report** (a delegated summary, a "clean" verdict, a status line), and a **transiently-observable population** (a queue, a list, a set that can be empty now and non-empty in an hour).
+
+**The predicate is observable, never introspected.** It asks *what is this claim standing on?* — not *am I unsure?* This is load-bearing rather than stylistic: **a gate with a self-assessed trigger cannot fire on a moment the agent does not perceive as a decision.** An agent that mis-reads its own derived result as a fact is, by construction, not unsure — so a confidence-keyed trigger is silent in exactly the case that most needs it. This predicate exists for that case. It is the same constraint § 1.3 applies to the signal, applied one layer earlier: § 1.3 forbids a self-report as an *input*; § 1.0 forbids it as a *trigger*.
+
+**Division of labor with the deployed rule.** This section owns the predicate. The **deployed trigger index** — the bounded set of checkpoint signatures, each binding a governing rule, a required ground-truth read, and an emitted token — lives in `core/rules/decision-time-adherence.md`, together with the index-eligibility gate that bounds its growth. This spec says *when the gate fires*; that rule says *which checkpoint fires and what is emitted*. Neither restates the other.
 
 ## § 1 — The Confidence Signal
 
@@ -147,11 +157,13 @@ Per the AC "≥1 candidate live consumer named (handed to Create)," the **primar
 
 A roadmap-maintenance skill is the **preferred** live consumer *if it ships in the same window* — but this protocol does **not** hard-bind to it; the Stage-4 currency-check keeps the consumer independent of any in-flight skill. This section satisfies the Define→Create handoff: the Create slice's scope is "the consumer named in the Define spec," and this is that name.
 
+The **second named live consumer** is the **Adherence Checkpoint Index** in `core/rules/decision-time-adherence.md` — the deployed trigger layer this spec's § 1.0 predicate governs. Its relationship to the gate is directional and narrow: a checkpoint's required ground-truth read is performed *first*, and the read's outcome enters this protocol's § 2 threshold matrix only when it comes back `DIVERGENT` or `UNGROUNDED` (the read contradicts the claim, or cannot be performed). A corroborating read carries the checkpoint's token and proceeds without invoking the matrix — the checkpoint is the cheap rung, this gate is the expensive one, and routing every corroborated read through the matrix would be the ceremony § 5 exists to catch.
+
 ### 6.1 Omission semantics — when the protocol does NOT fire
 
 The gate is for decisions, not for everything:
 
-- **Observations / status / evidence citations** — not decision-class (per `decision-discipline.md` § 1.1); no signal computed.
+- **Observations / status / evidence citations reported _as_ observations** — not decision-class (per `decision-discipline.md` § 1.1); no signal computed. **But an observation _promoted into a load-bearing claim_ is a decision-class input** and carries its adherence checkpoint per `core/rules/decision-time-adherence.md` § 2. The distinction is the § 1.0 predicate: a read that stays a read is exempt; a read the agent then stands a conclusion on is not. This narrowing is deliberate — the unqualified form of this bullet exempted the exact moment the recurring adherence failures occur.
 - **A well-understood one-line action with a `[SOURCE]`-floor and a CHEAP tier** — `CONVERGENT` at CHEAP is PROCEED by the matrix; invoking the loop would be the theater the guard exists to catch.
 - **An action already covered by a named standing authorization** — autonomy classification governs; this protocol does not re-open an approval the framework already granted (it lowers ceremony, never raises it — I2).
 
@@ -166,6 +178,7 @@ This protocol composes five existing docs; the relationship to each is stated he
 | [`discovery-discipline.md`](../disciplines/discovery-discipline.md) | § 2.5 knowability triage is the § 3 loop's gap-closer (step 2); § 5.4 discovery-shifts-reversibility is exit E4. This protocol is the **mid node**: discovery (pre-artifact) → [decision-confidence] → RCA (post-failure). | imports |
 | [`autonomous-execution-model.md`](../disciplines/autonomous-execution-model.md) | The PAUSE-TO-LEARN trigger is the **3rd pre-action sibling** to Retry/Escalate; ESCALATE (E3) routes to its Escalate Pattern; the § 3.2 budget is modeled on its iteration thresholds. Registering the 3rd sibling in that file is the Create slice's additive edit, not this spec's. | registers-into |
 | [`decision-discipline.md`](../disciplines/decision-discipline.md) | CS-1 reuses its § 2.1 Localization Check + § 2.1.1 verification primitives; ESCALATE tiering uses its § 3 triage; the § 5 anti-theater guard reuses its § 5 ceremony guards. | reuses |
+| [`core/rules/decision-time-adherence.md`](../rules/decision-time-adherence.md) | The deployed **trigger layer + obligation surface**. This spec owns the mechanism (§ 1.0 predicate, § 1 signal, § 2 matrix, § 3 loop, § 5 guard); that rule owns which checkpoint fires and what token is emitted. Its § 6 declaration contract is what bounds the index. | deploys |
 
 **Cross-reference constraint:** this file references its peers but introduces no runtime dependency on a *consumer* — the Stage-4 currency-check (§ 6) cites this file, not the reverse.
 
