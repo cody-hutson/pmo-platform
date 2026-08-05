@@ -30,7 +30,12 @@ set -u
 REPO_UNDER_TEST="$(cd "$(dirname "$0")/../../.." && pwd -P)"
 TOOLS="${REPO_UNDER_TEST}/release/tools"
 
-for t in check-adr-numbers.py renumber-adr.py generate-adr-index.py; do
+# The tools this suite exercises, AND their import closure. `generate-adr-index.py`
+# imports the ADR filename contract from `check-adr-numbers.py` and the shared
+# frontmatter bound from `check-adr-durability.py`; a staged copy that cannot resolve
+# an import fails at module load, so the closure is part of the fixture's contract.
+# `check-adr-durability.py` is additionally invoked directly (A3c) against a worktree.
+for t in check-adr-numbers.py renumber-adr.py generate-adr-index.py check-adr-durability.py; do
   [ -f "${TOOLS}/${t}" ] || { echo "FATAL: ${TOOLS}/${t} missing — the suite cannot test a tool that is not there" >&2; exit 1; }
 done
 
@@ -52,8 +57,12 @@ seed_origin() {
   local s="$ROOT/seed-$1"
   mkdir -p "$s/core/ADRs" "$s/release/ADRs" "$s/release/tools"
   ( cd "$s" && G -c init.defaultBranch=main init -q )
+  # The staged set is the import CLOSURE, not just the entry points: the projector
+  # loads `check-adr-numbers.py` (filename contract) and `check-adr-durability.py`
+  # (shared frontmatter bound) by path from its own directory.
   cp "${TOOLS}/check-adr-numbers.py" "${TOOLS}/renumber-adr.py" \
-     "${TOOLS}/generate-adr-index.py" "$s/release/tools/"
+     "${TOOLS}/generate-adr-index.py" "${TOOLS}/check-adr-durability.py" \
+     "$s/release/tools/"
   # Records carry FRONTMATTER, because the release index is projected from it.
   # A frontmatter-less stub would make the projector refuse and the fixture would
   # be testing a shape the corpus does not have.

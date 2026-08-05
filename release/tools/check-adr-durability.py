@@ -104,9 +104,10 @@ R2 EXEMPTIONS (all structural — no per-instance judgment)
      grounding evidence the decision rests on. Evidence is point-in-time BY
      CONSTRUCTION; pinning it is correct, not rot. The block is located through the
      SHARED `frontmatter_bounds()`, which tolerates the marker HTML comment that opens
-     most of the corpus; an earlier line-0-anchored form resolved NOTHING on those
-     files, so this exemption silently no-opped on a majority of the corpus and
-     reported policy-exempt evidence as a violation. See `source_observation_lines()`.
+     most of the corpus — single-line or multi-line; an earlier line-0-anchored form
+     resolved NOTHING on those files, so this exemption silently no-opped on a majority
+     of the corpus and reported policy-exempt evidence as a violation. See
+     `source_observation_lines()`.
   3. A closed set of explicit historical-framing anchors on the line ("as of",
      "at the time", "at authoring", "at merge time", "then-current", "originally",
      …). An anchored count/SHA is a dated fact, not a live claim. Closed vocabulary,
@@ -395,9 +396,17 @@ IDENT_FIELDS = ("title", "release", "deciders")
 # and a markdown heading are excluded) and not glued to a word character. Mirrors
 # SHA_RE's boundary idiom rather than introducing a second convention.
 IDENT_ISSUE_RE = re.compile(r"(?<![0-9A-Za-z_#])#(\d+)\b")
-# Frontmatter parsing. A line that is blank, or is nothing but a whole-line HTML
-# comment, may PRECEDE the opening `---`.
-FM_SKIP_RE = re.compile(r"^\s*(?:<!--.*?-->)?\s*$")
+# Frontmatter parsing. Blank lines and HTML comments may PRECEDE the opening `---`.
+#
+# The comment tolerance is a STATE MACHINE, not a per-line regular expression. A
+# line-scoped expression cannot see a comment that SPANS lines, and no flag repairs
+# that: the subject handed to the expression is ONE line, so it contains no `-->` to
+# match and no newline for `re.DOTALL`'s `.` to cross. (DOTALL is the right tool where
+# the subject is the whole document — `av-verify.py` and `lint_release_corpus.py` both
+# use it correctly for exactly that. It is the wrong tool here.) Carrying an
+# `in_comment` bit ACROSS lines is the only shape that sees the whole construct.
+FM_COMMENT_OPEN = "<!--"
+FM_COMMENT_CLOSE = "-->"
 FM_DELIM = "---"
 FM_KEY_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*):")
 
@@ -443,25 +452,75 @@ def strip_fences(lines):
     return out
 
 
+def _strip_html_comments(line, in_comment):
+    """Remove HTML-comment spans from `line`; return `(residue, still_open)`.
+
+    `in_comment` carries state IN from the previous line, which is the entire point:
+    an HTML comment is a MULTI-LINE construct, so a scanner that restarts at every
+    line structurally cannot see one that spans.
+
+    Comments do not nest (HTML spec), so a `<!--` met while already inside a comment
+    is ordinary comment text — and a single line may legitimately close one span and
+    open another (`<!-- a --> <!-- b`), which is why the returned bit is computed from
+    the LAST transition on the line rather than from a count.
+    """
+    out = []
+    i = 0
+    while i < len(line):
+        if in_comment:
+            j = line.find(FM_COMMENT_CLOSE, i)
+            if j < 0:
+                break                       # the comment runs past end-of-line
+            i = j + len(FM_COMMENT_CLOSE)
+            in_comment = False
+            continue
+        j = line.find(FM_COMMENT_OPEN, i)
+        if j < 0:
+            out.append(line[i:])
+            break
+        out.append(line[i:j])
+        i = j + len(FM_COMMENT_OPEN)
+        in_comment = True
+    return ("".join(out), in_comment)
+
+
 def frontmatter_bounds(lines):
     """(start, end) 0-based indices of the LEADING `---` frontmatter block, or None.
 
-    TOLERATES blank lines and whole-line HTML comments before the opening delimiter.
-    That tolerance is load-bearing, not cosmetic: a majority of the shipped ADR corpus
-    opens with a durability or repo-integrity marker comment rather than with `---`, so
-    a detector that requires line 0 to be `---` silently resolves NOTHING on those
-    files — it returns "no frontmatter" instead of "frontmatter I could not parse", and
-    a caller cannot tell the two apart.
+    TOLERATES blank lines and HTML comments — SINGLE-LINE OR MULTI-LINE — before the
+    opening delimiter. That tolerance is load-bearing, not cosmetic: a majority of the
+    shipped ADR corpus opens with a durability or repo-integrity marker comment rather
+    than with `---`, so a detector that requires line 0 to be `---` silently resolves
+    NOTHING on those files — it returns "no frontmatter" instead of "frontmatter I
+    could not parse", and a caller cannot tell the two apart.
 
-    This is the SHARED bound: `identity_field_findings()` (R4) and
-    `source_observation_lines()` (the R2 provenance exemption) both resolve through it,
-    so the two rules can never disagree about where an ADR's frontmatter begins.
+    The multi-line limb is the same defect one generation on. The first repair matched
+    a comment with a per-line regex, which handles the whole-line form the corpus
+    happens to use today and is blind to a comment that spans two lines — reopening
+    the identical silent no-op for the next marker anyone wraps. The scan is therefore
+    stateful (`_strip_html_comments`).
+
+    ASYMMETRY, DELIBERATE. Comment-awareness applies to the LEADING region ONLY. The
+    closing-delimiter scan below stays literal because between the delimiters the
+    content is YAML, where `<!--` is STRING CONTENT and not markup: `ADR-089` carries
+    a quoted ``<!-- key: value -->`` inside a `source_observations:` scalar. Tracking
+    comment state through the block would let an unbalanced `<!--` inside a YAML
+    string swallow the closing `---` — trading this defect for a worse one.
+
+    This is the SHARED bound. Three consumers resolve through it — R4
+    (`identity_field_findings()`), the R2 provenance exemption
+    (`source_observation_lines()`), and `generate-adr-index.py`'s `read_frontmatter()`,
+    which imports this module by path — so no two of them can disagree about where an
+    ADR's frontmatter begins, and there is no second copy to fix next time.
     """
     start = None
+    in_comment = False
     for i, line in enumerate(lines):
-        if FM_SKIP_RE.match(line):
-            continue
-        start = i if line.strip() == FM_DELIM else None
+        residue, in_comment = _strip_html_comments(line, in_comment)
+        residue = residue.strip()
+        if not residue:
+            continue                        # blank, or nothing outside a comment
+        start = i if residue == FM_DELIM else None
         break
     if start is None:
         return None
@@ -890,6 +949,44 @@ def _legacy_line0_source_observation_lines(lines):
     return marked
 
 
+def _legacy_line_scoped_frontmatter_bounds(lines):
+    """The PRE-FIX frontmatter bound — kept ONLY as a mutation control.
+
+    The defect it reproduces is the loss of STATE AT THE LINE BOUNDARY, so that is
+    what it is written as: the same `_strip_html_comments` scanner, re-entered with
+    `in_comment=False` on EVERY line. A line whose comment does not close within it
+    leaves the scanner open, the line is not skippable, and the bound gives up — which
+    is precisely how the shipped per-line regex behaved on a comment spanning lines.
+
+    Written this way ON PURPOSE, rather than by keeping a copy of the flagged
+    expression. A verbatim copy of the flagged pattern would re-raise the very CodeQL
+    alert this change exists to clear ("this regular expression does not match comments
+    containing newlines") — a control that reintroduces the defect it controls for is
+    not a control. Its per-line behaviour is instead pinned CASE BY CASE in the
+    self-test (blank / whole-line comment / two adjacent comments / unterminated /
+    comment-with-trailing-text / text-then-comment), which is the shipped expression's
+    behaviour on each of those shapes.
+
+    Never call this outside the self-test. It exists so the suite can prove the
+    multi-line cases are load-bearing, by asserting they FAIL when the fix is reverted.
+    A test that passes both before and after a fix tests nothing.
+    """
+    start = None
+    for i, line in enumerate(lines):
+        # The whole defect, in one argument: the carried state is thrown away.
+        residue, still_open = _strip_html_comments(line, False)
+        if not still_open and not residue.strip():
+            continue
+        start = i if line.strip() == FM_DELIM else None
+        break
+    if start is None:
+        return None
+    for j in range(start + 1, len(lines)):
+        if lines[j].strip() == FM_DELIM:
+            return (start, j)
+    return None
+
+
 def _mutation_kill_count_re(cases, rules_fn):
     """Neuter COUNT_RE; return the must-flag cases that STILL report R2-COUNT.
 
@@ -946,6 +1043,23 @@ def _mutation_revert_frontmatter(text, rules_fn):
         return rules_fn(text)
     finally:
         source_observation_lines = live
+
+
+def _mutation_revert_line_scoped_bound(fn):
+    """Run `fn()` with the PRE-FIX LINE-SCOPED frontmatter bound restored.
+
+    The third mutation arm, and the one that makes the multi-line cases falsifiable.
+    Every consumer resolves the block through the module-global `frontmatter_bounds`,
+    so swapping that global reverts the fix for R4, the R2 exemption, and the index
+    projector alike — which is precisely the blast radius the shared bound buys.
+    """
+    global frontmatter_bounds
+    live, frontmatter_bounds = (frontmatter_bounds,
+                                _legacy_line_scoped_frontmatter_bounds)
+    try:
+        return fn()
+    finally:
+        frontmatter_bounds = live
 
 
 def self_test():
@@ -1194,6 +1308,85 @@ def self_test():
           frontmatter_bounds(COMMENT_FIRST.splitlines()) == (1, 5))
     check("frontmatter_bounds returns None when there is no frontmatter",
           frontmatter_bounds(["# Title", "", "prose"]) is None)
+
+    # ── MULTI-LINE leading comment ──────────────────────────────────────────────
+    # The CodeQL arm. A leading marker comment that SPANS lines is invisible to any
+    # per-line expression, so the bound resolved NOTHING and every consumer silently
+    # no-opped — the identical failure the comment-first repair above was built for,
+    # one generation on. The mutation arms below prove these cases are load-bearing.
+    MULTI_COMMENT_FIRST = ("<!-- reference-durability: allow-link\n"
+                           "     and the marker spans a second line -->\n" + CLEAN)
+    MULTI_COMMENT_THREE = ("<!-- a\n b\n c -->\n" + CLEAN)
+    # HTML comments do not nest, but one line may CLOSE a span and OPEN another.
+    CLOSE_THEN_OPEN = ("<!-- first --> <!-- second\n still second -->\n" + CLEAN)
+    check("frontmatter_bounds resolves through a MULTI-LINE leading HTML comment",
+          frontmatter_bounds(MULTI_COMMENT_FIRST.splitlines()) == (2, 6))
+    check("frontmatter_bounds resolves through a THREE-line leading HTML comment",
+          frontmatter_bounds(MULTI_COMMENT_THREE.splitlines()) == (3, 7))
+    check("frontmatter_bounds handles a line that closes one comment and opens another",
+          frontmatter_bounds(CLOSE_THEN_OPEN.splitlines()) == (2, 6))
+    check("frontmatter_bounds returns None on a comment left UNTERMINATED at EOF",
+          frontmatter_bounds("<!-- never closed\nstill inside\n".splitlines()) is None)
+    check("frontmatter_bounds still refuses PROSE before the delimiter",
+          frontmatter_bounds(("prose\n" + CLEAN).splitlines()) is None)
+    check("R4 fires THROUGH a MULTI-LINE leading HTML comment (consumer arm)",
+          rules(MULTI_COMMENT_FIRST.replace('deciders: "operator + Stage 5 spoke"',
+                                            'deciders: "spoke (#999901)"')) == ["R4"])
+    # Mutation arms. Each case above must FAIL against the pre-fix line-scoped bound;
+    # a case that passes on an unrepaired tree asserts a property the fix did not supply.
+    check("MUTATION: the multi-line bound FAILS on the pre-fix line-scoped expression",
+          _mutation_revert_line_scoped_bound(
+              lambda: frontmatter_bounds(MULTI_COMMENT_FIRST.splitlines())) is None)
+    check("MUTATION: the close-then-open bound FAILS on the pre-fix expression",
+          _mutation_revert_line_scoped_bound(
+              lambda: frontmatter_bounds(CLOSE_THEN_OPEN.splitlines())) is None)
+    check("MUTATION: R4 goes SILENT through a multi-line comment on the pre-fix bound",
+          _mutation_revert_line_scoped_bound(
+              lambda: rules(MULTI_COMMENT_FIRST.replace(
+                  'deciders: "operator + Stage 5 spoke"',
+                  'deciders: "spoke (#999901)"'))) == [])
+    # Specificity control: the single-line form 70 of the shipped corpus depends on
+    # must resolve IDENTICALLY under both bounds. If this ever diverges, the fix has
+    # widened past the defect it was built for.
+    check("SPECIFICITY: single-line comment resolves identically under both bounds",
+          frontmatter_bounds(COMMENT_FIRST.splitlines())
+          == _mutation_revert_line_scoped_bound(
+              lambda: frontmatter_bounds(COMMENT_FIRST.splitlines()))
+          == (1, 5))
+    check("SPECIFICITY: a bare `---` opening resolves identically under both bounds",
+          frontmatter_bounds(CLEAN.splitlines())
+          == _mutation_revert_line_scoped_bound(
+              lambda: frontmatter_bounds(CLEAN.splitlines()))
+          == (0, 4))
+    # `_strip_html_comments` unit arms — the state machine's own contract.
+    check("_strip_html_comments carries an OPEN comment across a line boundary",
+          _strip_html_comments("<!-- open", False) == ("", True))
+    check("_strip_html_comments closes a carried comment and returns the residue",
+          _strip_html_comments("tail --> rest", True) == (" rest", False))
+    check("_strip_html_comments treats a nested `<!--` as comment TEXT (no nesting)",
+          _strip_html_comments("<!-- a <!-- b --> c", False) == (" c", False))
+    check("_strip_html_comments leaves a comment-free line untouched",
+          _strip_html_comments("plain text", False) == ("plain text", False))
+    # The MUTATION CONTROL'S OWN contract. It is written as a state-discarding scan
+    # rather than as a copy of the flagged expression, so its fidelity to that
+    # expression is pinned here, shape by shape. Each pair is (leading line, does the
+    # pre-fix bound still find the `---` beneath it?) — exactly what the shipped
+    # regex answered on that shape. If a row here ever moves, the control has stopped
+    # reproducing the defect and every mutation arm above is asserting nothing.
+    _LEGACY_SHAPES = (
+        ("", True),                          # blank line
+        ("   ", True),                       # whitespace only
+        ("<!-- marker -->", True),           # whole-line comment — the corpus shape
+        ("<!-- a --> <!-- b -->", True),     # two adjacent CLOSED comments
+        ("<!-- unterminated", False),        # the defect: comment spans the boundary
+        ("<!-- a --> trailing", False),      # comment then text
+        ("leading <!-- a -->", False),       # text then comment
+    )
+    for _lead, _finds in _LEGACY_SHAPES:
+        check("LEGACY-CONTROL fidelity: %r -> %s"
+              % (_lead, "resolves" if _finds else "gives up"),
+              (_legacy_line_scoped_frontmatter_bounds(
+                  ([_lead] + CLEAN.splitlines())) is not None) == _finds)
 
     # Delta posture — a finding on an unchanged line is not re-flagged.
     dirty = CLEAN + "\nCommit f0a0516 did it.\n"

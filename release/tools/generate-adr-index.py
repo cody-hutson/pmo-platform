@@ -30,8 +30,19 @@ verification posture, same emission-and-custody rules.
 NO SECOND PARSER
 ----------------
 `ADR_FILE_RE` and `ADR_GLOB` are IMPORTED from `check-adr-numbers.py`, the declared
-SSOT of the ADR number space. This tool re-encodes no filename regex. The body-
-section set is not this tool's concern at all — that is the durability lint's R5.
+SSOT of the ADR number space. `frontmatter_bounds()` is IMPORTED from
+`check-adr-durability.py`, the declared SSOT of the ADR frontmatter bound. This tool
+re-encodes neither the filename regex nor the frontmatter detector: each lives in the
+linter that enforces its half of the contract, and each is loaded here by path — one
+pattern, one mechanism. The body-section set is not this tool's concern at all — that
+is the durability lint's R5.
+
+The frontmatter import is not stylistic. This tool originally shipped a COPY of the
+bound's skip expression, and CodeQL flagged the copy and its original as one defect:
+a PER-LINE comment matcher is blind to a comment that spans lines, so a marker wrapped
+onto two lines makes the whole block undetectable and every column silently wrong. A
+copy is a second thing to fix and a second thing to forget. The import means the next
+repair to the bound lands here for free.
 
 SCOPE — release module only
 ---------------------------
@@ -123,9 +134,31 @@ def _import_number_space():
     return module
 
 
+def _import_durability_contract():
+    """Import the ADR frontmatter bound from its SSOT (`check-adr-durability.py`).
+
+    Same by-path mechanism, and for the same reason, as `_import_number_space()`
+    above: the linter that ENFORCES a contract owns that contract's primitives, and
+    every other tool reads them rather than re-encoding them. Loading the module is
+    side-effect-free — its work is behind an `argparse` main guard.
+    """
+    path = TOOL_DIR / "check-adr-durability.py"
+    spec = importlib.util.spec_from_file_location("check_adr_durability", path)
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive
+        raise RuntimeError("cannot load the ADR frontmatter contract from %s" % path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 _NS = _import_number_space()
 ADR_FILE_RE = _NS.ADR_FILE_RE
 ADR_GLOB = _NS.ADR_GLOB
+
+_DUR = _import_durability_contract()
+# THE SHARED BOUND. Comment-tolerant (single-line AND multi-line) by construction —
+# see `check-adr-durability.frontmatter_bounds`. Not re-implemented here.
+frontmatter_bounds = _DUR.frontmatter_bounds
 
 # The projected module. Deliberately singular — see the SCOPE block above.
 ADR_DIR = "release/ADRs"
@@ -157,8 +190,6 @@ REGION_NOTE = (
 # `adr-schema.md` §2 — the leading-token rule, cited not re-decided.
 NYGARD = ("Proposed", "Accepted", "Deprecated", "Superseded")
 
-FM_SKIP_RE = re.compile(r"^\s*(?:<!--.*?-->)?\s*$")
-FM_DELIM = "---"
 FM_KEY_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*):\s?(.*)$")
 TITLE_PREFIX_RE = re.compile(r"^ADR-\d{3}\s*[—–-]\s*")
 UNESCAPED_PIPE_RE = re.compile(r"(?<!\\)\|")
@@ -189,30 +220,34 @@ def _unquote(value):
 
 
 def read_frontmatter(text):
-    """Return the top-level scalar map of the leading `---` block.
+    """Return the top-level scalar map of the leading `---` block, or None.
 
-    TOLERATES blank lines and whole-line HTML comments before the opening
-    delimiter — most of the ADR corpus opens with a durability marker comment, and
-    a line-0-anchored reader silently resolves NOTHING on those files.
+    The block's BOUNDS are not computed here. They come from the SHARED
+    `frontmatter_bounds()` imported from `check-adr-durability.py`, so the projector
+    and the durability lint can never disagree about which bytes are an ADR's
+    frontmatter — and the comment tolerance (blank lines and HTML comments, SINGLE-
+    LINE OR MULTI-LINE, before the opening delimiter) is inherited rather than
+    re-encoded. Most of the ADR corpus opens with a marker comment; a reader that
+    cannot see past one silently resolves NOTHING on those files and emits a wrong
+    row for every column.
+
+    This function owns only the SCALAR READ: top-level `key: value` pairs. A nested
+    or continuation line is skipped — a record needing more than a scalar map is a
+    record this projector must not guess at.
     """
     lines = text.split("\n")
-    i = 0
-    while i < len(lines) and FM_SKIP_RE.match(lines[i]):
-        i += 1
-    if i >= len(lines) or lines[i].strip() != FM_DELIM:
-        return None
+    bounds = frontmatter_bounds(lines)
+    if bounds is None:
+        return None                        # absent, or an unterminated block
+    start, end = bounds
     out = {}
-    key = None
-    for line in lines[i + 1:]:
-        if line.strip() == FM_DELIM:
-            return out
+    for line in lines[start + 1:end]:
         if line[:1] in (" ", "\t", "-"):
             continue                       # a nested/continuation line; not a scalar
         m = FM_KEY_RE.match(line)
         if m:
-            key = m.group(1)
-            out[key] = m.group(2)
-    return None                            # unterminated block — not a frontmatter
+            out[m.group(1)] = m.group(2)
+    return out
 
 
 def leading_status_token(value):
@@ -463,6 +498,48 @@ def self_test():
     eq("unquote/single", _unquote("'plain'"), "plain")
     eq("unquote/bare", _unquote("plain"), "plain")
 
+    # --- frontmatter bound: the shared, comment-tolerant reader ----------------
+    # The projector reads EVERY column out of the frontmatter, so a bound that cannot
+    # find the block does not fail loudly — it emits a wrong row. These arms pin the
+    # leading-comment tolerance the corpus actually depends on (70 of 115 records open
+    # with a marker comment) and the MULTI-LINE case CodeQL flagged.
+    _FM_BODY = "---\ntitle: \"ADR-001 — T\"\nstatus: Accepted\n---\n\n# ADR-001 — T\n"
+    eq("fm/bare-delim", (read_frontmatter(_FM_BODY) or {}).get("status"), "Accepted")
+    eq("fm/single-line-comment",
+       (read_frontmatter("<!-- reference-durability: allow-link -->\n" + _FM_BODY)
+        or {}).get("status"), "Accepted")
+    eq("fm/multi-line-comment",
+       (read_frontmatter("<!-- reference-durability: allow-link\n"
+                         "     wrapped onto a second line -->\n" + _FM_BODY)
+        or {}).get("status"), "Accepted")
+    eq("fm/close-then-open-comment",
+       (read_frontmatter("<!-- a --> <!-- b\n still b -->\n" + _FM_BODY)
+        or {}).get("status"), "Accepted")
+    # Controls — each must resolve to None, and for the stated reason.
+    eq("fm/absent", read_frontmatter("# Title\n\nprose\n"), None)
+    eq("fm/unterminated-block", read_frontmatter("---\ntitle: x\n"), None)
+    eq("fm/unterminated-comment", read_frontmatter("<!-- never closed\nstill in\n"), None)
+    eq("fm/prose-before-delim", read_frontmatter("prose\n" + _FM_BODY), None)
+    # MUTATION ARM. Revert the shared bound to its pre-fix LINE-SCOPED form and the
+    # multi-line case must go dark. A case that passes under both bounds is asserting
+    # a property the fix did not supply. The legacy expression is imported from the
+    # durability module too — reverting the fix must not require a third copy of it.
+    global frontmatter_bounds
+    _live, frontmatter_bounds = (frontmatter_bounds,
+                                 _DUR._legacy_line_scoped_frontmatter_bounds)
+    try:
+        eq("fm/MUTATION-multi-line-goes-dark-on-pre-fix-bound",
+           read_frontmatter("<!-- reference-durability: allow-link\n"
+                            "     wrapped onto a second line -->\n" + _FM_BODY), None)
+        # SPECIFICITY under the same mutation: the single-line form 70 of the shipped
+        # corpus uses must read IDENTICALLY under both bounds. If this arm ever moves,
+        # the fix has widened past the defect it was built for.
+        eq("fm/MUTATION-single-line-unchanged-on-pre-fix-bound",
+           (read_frontmatter("<!-- reference-durability: allow-link -->\n" + _FM_BODY)
+            or {}).get("status"), "Accepted")
+    finally:
+        frontmatter_bounds = _live
+
     # --- fixture tree: projection + verify, both arms ---------------------
     with tempfile.TemporaryDirectory() as tmp:
         _seed(tmp, [(1, "Accepted", "alpha", 1),
@@ -512,6 +589,29 @@ def self_test():
         eq("verify/orphan-row-names-it",
            any(l.startswith("ORPHAN\tADR-002") for l in out), True)
 
+    # --- end-to-end: a record whose file opens with a MULTI-LINE comment ---
+    # The arms above are unit-level. This one drives the WHOLE projector over a record
+    # shaped like the corpus's marker convention but wrapped onto two lines. The failure
+    # it guards is not an exception — it is a wrong row emitted quietly.
+    with tempfile.TemporaryDirectory() as tmp:
+        _seed(tmp, [(1, "Accepted", "alpha", 1)])
+        fp = Path(tmp) / ADR_DIR / "ADR-001-fixture.md"
+        fp.write_text("<!-- reference-durability: allow-link\n"
+                      "     wrapped onto a second line -->\n"
+                      + fp.read_text(encoding="utf-8"), encoding="utf-8")
+        try:
+            rows, _notes = collect_records(os.path.join(tmp, ADR_DIR))
+            eq("e2e/multi-line-comment-row-count", len(rows), 1)
+            eq("e2e/multi-line-comment-status", rows[0][2]["Status"], "Accepted")
+            eq("e2e/multi-line-comment-title", rows[0][2]["Title"], "Fixture record 1")
+            eq("e2e/multi-line-comment-write", do_write(tmp, lambda _m: None), 0)
+            eq("e2e/multi-line-comment-verify-clean", do_verify(tmp, lambda _m: None), 0)
+        except IndexError_ as exc:
+            # A bound that cannot see the marker reports the RECORD as unparseable.
+            # Name it as a failure rather than letting it abort the suite: a traceback
+            # here reads as a broken test, and it is a broken PROJECTOR.
+            failures.append("[e2e/multi-line-comment] the record was unreadable: %s" % exc)
+
     # --- structural failures are exit 3, never a silent clean -------------
     with tempfile.TemporaryDirectory() as tmp:
         _seed(tmp, [(1, "Draft", "alpha", 1)])
@@ -544,8 +644,10 @@ def self_test():
         for f in failures:
             print("  - " + f)
         return 1
-    print("generate-adr-index self-test: PASS (derivation rules / escaping / write / "
-          "verify clean + 3 control arms / 3 structural-failure arms)")
+    print("generate-adr-index self-test: PASS (derivation rules / escaping / "
+          "shared frontmatter bound: 4 tolerance + 4 control + 2 mutation arms / "
+          "write / verify clean + 3 control arms / multi-line-comment end-to-end / "
+          "3 structural-failure arms)")
     return 0
 
 
