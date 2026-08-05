@@ -36,8 +36,40 @@ NO SECOND PARSER
 ``ADR_DIRS``, ``ADR_FILE_RE``, ``collect()``, ``evaluate()`` and ``next_free()``
 are IMPORTED from ``check-adr-numbers.py``, the declared SSOT of the ADR number
 space. This tool re-encodes no home-set, no filename regex, and no verdict rule:
-the refusal test in R1 is the imported ``evaluate()`` run against the simulated
-post-move union, so the tool and the gate can never disagree about what is legal.
+the refusal test in R1 is the imported ``evaluate()``, so the tool and the gate
+can never disagree about what is legal.
+
+R1'S LEGALITY TEST IS A DELTA, NOT AN ABSOLUTE
+----------------------------------------------
+``evaluate()`` grades a WHOLE number space; execution granularity here is ONE
+move. Those two are only equivalent at N=1. Asking "is the post-move union
+problem-free?" refuses every move of a multi-claim reconciliation, because the
+OTHER outstanding claims are counted as problems with THIS move — so at N>=2
+every ordering refuses and the tool deadlocks against a plan it computed itself.
+That is not hypothetical: `57a53a69` broke the deadlock with a hand ``git mv``.
+
+R1 therefore runs the SAME imported ``evaluate()`` on BOTH sides of the move and
+compares:
+
+  REFUSE if the move INTRODUCES a problem the corpus did not already carry, or
+  if it fails to ADVANCE the corpus toward a legal end state.
+
+The safety property is unchanged and is now stated exactly: the tool never
+creates a violation the gate would fail. It simply no longer requires one move
+to finish work that takes three. See ``_problem_keys`` (why a GAP keys as ONE
+problem rather than per missing number) and ``_residual`` (the advance measure).
+
+THE ASSIGNMENT IS MINIMAL: A FREE CLAIM IS HELD FIXED
+-----------------------------------------------------
+``reconcile_at_merge()`` reassigns only the claims that genuinely collide. A
+branch claim whose number the mainline does NOT hold, and which already sits
+inside the free range the merged union needs, is HELD FIXED — it is already
+where it belongs, and moving it costs a second provenance note, a second
+citation sweep and a second ``§ Renumber log`` entry for a record that never
+needed to move. Holding it also removes one way a plan can self-conflict: it
+is what stops the planner targeting a number another row of the same plan
+still occupies. The order-preserving tie-break then applies to the claims that
+DO move. See ADR-115.
 
 USAGE
 -----
@@ -58,8 +90,10 @@ USAGE
 
 THE SIX STEPS (each individually verifiable)
 --------------------------------------------
-  R1  refuse-or-proceed  — non-zero exit and ZERO mutation if the move is not
-                           legal. Never --force, never overwrite.
+  R1  refuse-or-proceed  — non-zero exit and ZERO mutation if the move
+                           INTRODUCES a violation or fails to advance (see
+                           "R1's legality test is a delta"). Never --force,
+                           never overwrite.
   R2  git mv             — the record itself; git records a rename.
   R3  citation sweep     — branch-scoped (see the R3 scoping rule below).
   R4  index surfaces     — the HAND-MAINTAINED index (`core/ADRs/README.md`) gets
@@ -284,6 +318,63 @@ def lineage(n, ref, root):
     return "MAINLINE" if n in mainline else "BRANCH-CLAIM"
 
 
+def _problem_keys(problems):
+    """Key ``evaluate()``'s messages so two runs of it can be compared.
+
+    NOT a second verdict rule. The messages are produced by the imported
+    ``evaluate()``; this only gives each one a stable identity so "did THIS move
+    introduce it?" is answerable.
+
+    DUPLICATE keys per number and MALFORMED per path, because those are
+    per-subject problems: resolving one leaves the others' keys untouched.
+
+    GAP keys as ONE problem, deliberately, because contiguity is a property of
+    the whole sequence rather than of any number. A downward cascade MOVES the
+    hole (fill 115, open 116) before it closes it, and keying per missing number
+    would read a moved hole as a NEW problem and refuse the very move that
+    repairs it. The advance test (`_residual`) is what stops a hole being
+    shuffled forever, so nothing is lost by keying it coarsely here.
+
+    An unrecognised message keys by its full text, so a future verdict kind is
+    treated as new-and-therefore-refused rather than silently admitted.
+    """
+    keys = set()
+    for p in problems:
+        if p.startswith("DUPLICATE:"):
+            m = re.search(r"ADR-(\d+)", p)
+            keys.add(("DUPLICATE", int(m.group(1))) if m else ("DUPLICATE", p))
+        elif p.startswith("MALFORMED:"):
+            keys.add(("MALFORMED", p.split(" does not match", 1)[0].strip()))
+        elif p.startswith("GAP:"):
+            keys.add(("GAP",))
+        else:
+            keys.add(("UNKNOWN", p))
+    return keys
+
+
+def _residual(by_number):
+    """Distance from a legal end state. Lower is strictly closer; (0, 0) is clean.
+
+    Two components, compared lexicographically:
+
+      [0] duplicate mass — how many records share a number with another. Every
+          collision repair strictly reduces it.
+      [1] how far the LOWEST hole sits below the top of the sequence. A
+          downward cascade fills holes from the bottom, so the lowest hole
+          climbs one slot per move and this reaches 0 when the run closes up.
+
+    Together they make "advance" a well-ordered claim rather than a hopeful one:
+    a move that shuffles a record sideways, or opens a hole as deep as the one
+    it filled, does not decrease either component and is refused.
+    """
+    if not by_number:
+        return (0, 0)
+    excess = sum(len(v) - 1 for v in by_number.values())
+    top = max(by_number)
+    missing = sorted(set(range(1, top + 1)) - set(by_number))
+    return (excess, top + 1 - (missing[0] if missing else top + 1))
+
+
 def _rel(root, path):
     """Repo-relative posix form, so mainline and worktree paths compare equal."""
     p = Path(path)
@@ -300,14 +391,26 @@ def reconcile_at_merge(ref, root):
     """Return (anchor, [(number, path, verdict, suggested), ...]) for this tree.
 
     Replaces `atomic_claim`. For a branch holding claims B above a mainline
-    anchor A, the merged result is contiguous iff B == {A+1 .. A+|B|}. Each
-    claim is graded against the slot it must occupy for that to hold.
+    anchor A, the merged result is contiguous iff the union occupies exactly
+    ``1 .. A+|B|`` — so the slots the branch must end up holding are the free
+    range ``A+1 .. A+|B|``.
 
     "Ours" is a PATH test, not a number test: a number is this branch's claim
     when the working tree holds a file for it that the mainline does not. A
     number test would miss the collision case outright — at a duplicate the
     mainline holds the number too, under a different filename, which is exactly
     the case that has to be reconciled.
+
+    THE ASSIGNMENT IS MINIMAL. Determining WHICH claims move comes before
+    ordering the ones that do. A claim already sitting inside the free range,
+    on a number the mainline does not hold, is HELD FIXED: it is where it
+    belongs, and reassigning it would renumber a record for nothing — a second
+    provenance note, a second citation sweep, a second `§ Renumber log` entry.
+    Held claims are also what keeps the plan self-consistent: without this
+    clause the planner hands out the free range from the bottom and can target
+    a number a later row of the same plan still occupies, producing a plan no
+    ordering can execute. The order-preserving tie-break (ADR-115) then applies
+    to the claims that genuinely collide, over the slots that remain.
     """
     a, mainline_by_n = anchor(ref, root)
     mainline = {n: set(p) for n, p in mainline_by_n.items()}
@@ -315,19 +418,31 @@ def reconcile_at_merge(ref, root):
     ours = sorted(n for n, paths in worktree.items()
                   if not paths <= mainline.get(n, set()))
     rows = []
-    for i, n in enumerate(ours):
-        expected = a + 1 + i
+    for n, verdict, expected in assign_claims(a, ours, set(mainline)):
         path = sorted(worktree[n] - mainline.get(n, set()))[0]
-        if n in mainline:
-            verdict = "DUPLICATE"
-        elif n == expected:
-            verdict = "BINDS"
-        elif n > expected:
-            verdict = "WOULD-GAP"
-        else:
-            verdict = "DUPLICATE"
         rows.append((n, path, verdict, expected))
     return a, rows
+
+
+def assign_claims(a, ours, mainline_numbers):
+    """The minimal assignment. Pure: (anchor, [claims], {mainline numbers}).
+
+    Returns ``[(number, verdict, target), ...]`` in ``ours`` order. Split out of
+    ``reconcile_at_merge`` so the rule can be pinned by the self-test without a
+    git fixture — the assignment is the part that was wrong, so it is the part
+    that has to be gradable directly.
+    """
+    free_range = list(range(a + 1, a + 1 + len(ours)))
+    held = {n for n in ours if n not in mainline_numbers and n in set(free_range)}
+    open_slots = [s for s in free_range if s not in held]
+    out = []
+    for n in ours:
+        if n in held:
+            out.append((n, "BINDS", n))
+            continue
+        out.append((n, "DUPLICATE" if n in mainline_numbers else "WOULD-GAP",
+                    open_slots.pop(0)))
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -676,19 +791,51 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
     # never disagree about what is a GAP or a DUPLICATE. Paths are unioned as
     # SETS in repo-relative form so a file present in both the mainline and the
     # working tree (every unchanged record) counts once, not twice.
-    simulated = {n: set(p) for n, p in mainline.items()}
+    #
+    # It is asked as a DELTA. `evaluate()` grades a whole number space, but one
+    # invocation performs ONE move; at N>=2 outstanding claims the two are
+    # incompatible, because no single move can make the whole union clean while
+    # the others stand. So evaluate() runs on BOTH sides of this move and the
+    # move is refused only if it INTRODUCES a problem, or fails to advance.
+    current = {n: set(p) for n, p in mainline.items()}
     for n, paths in worktree.items():
-        if n == old:
-            continue
-        simulated.setdefault(n, set()).update(paths)
-    simulated.setdefault(new, set()).add(_rel(root, new_path))
-    problems = evaluate({n: sorted(v) for n, v in simulated.items()}, [])
-    if problems:
-        log(f"R1 REFUSE: moving ADR-{old:03d} → ADR-{new:03d} is not legal "
-            f"against {ref}:")
-        for p in problems:
-            log("    " + p)
+        current.setdefault(n, set()).update(paths)
+    old_rel_sim, new_rel_sim = _rel(root, old_path), _rel(root, new_path)
+
+    def _union(applied):
+        """The union with this move applied (True) or backed out (False)."""
+        u = {n: set(v) for n, v in current.items()}
+        (gone_n, gone), (here_n, here) = (
+            ((old, old_rel_sim), (new, new_rel_sim)) if applied
+            else ((new, new_rel_sim), (old, old_rel_sim))
+        )
+        if gone_n in u:
+            u[gone_n].discard(gone)
+            if not u[gone_n]:
+                del u[gone_n]
+        u.setdefault(here_n, set()).add(here)
+        return u
+
+    before_union, after_union = _union(False), _union(True)
+    before = evaluate({n: sorted(v) for n, v in before_union.items()}, [])
+    after = evaluate({n: sorted(v) for n, v in after_union.items()}, [])
+    introduced = _problem_keys(after) - _problem_keys(before)
+    if introduced:
+        log(f"R1 REFUSE: moving ADR-{old:03d} → ADR-{new:03d} INTRODUCES a "
+            f"violation that {ref} ∪ this tree does not already carry:")
+        for p in after:
+            if _problem_keys([p]) & introduced:
+                log("    " + p)
         return 2
+    if _residual(after_union) >= _residual(before_union):
+        log(f"R1 REFUSE: moving ADR-{old:03d} → ADR-{new:03d} introduces no new "
+            f"violation but does not advance the reconciliation "
+            f"(residual {_residual(before_union)} → {_residual(after_union)}).")
+        return 2
+    if before:
+        log(f"R1 outstanding: {len(before)} violation(s) stand before this move; "
+            f"{len(after)} after. This move is one step of the assignment, not "
+            f"the whole of it.")
 
     cause = (CAUSE_DUPLICATE if old in mainline else CAUSE_GAP).format(old=old)
     log(f"R1 PROCEED: ADR-{old:03d} → ADR-{new:03d} ({old_path} → {new_path})")
@@ -843,14 +990,29 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
     # confident GAP that the merge does not have. That is the same
     # answer-computed-over-the-wrong-population defect this whole tool exists to
     # fix — and the fixture caught this verify step committing it.
+    #
+    # And it is the SAME DELTA R1 asked, for the same reason: R6 grades what
+    # this move did, not whether the whole assignment has finished. Requiring a
+    # clean union here would revert every move of a multi-claim reconciliation
+    # AFTER performing it — R1's deadlock relocated to the verify step, which is
+    # exactly what the multi-claim fixture caught. R6's question is "did the
+    # move land as R1 predicted?": nothing new escaped, and the advance R1
+    # promised actually happened on disk.
     post = worktree_claims(root)
     merged = {n: set(p) for n, p in mainline.items()}
     for n, paths in post.items():
         merged.setdefault(n, set()).update(paths)
-    residual = evaluate({n: sorted(v) for n, v in merged.items()}, [])
-    if residual:
-        return revert("the merge result would fail check-adr-numbers: "
-                      + "; ".join(residual))
+    landed = evaluate({n: sorted(v) for n, v in merged.items()}, [])
+    escaped = _problem_keys(landed) - _problem_keys(before)
+    if escaped:
+        return revert("the move introduced a violation the corpus did not "
+                      "already carry: " + "; ".join(
+                          p for p in landed if _problem_keys([p]) & escaped))
+    if _residual(merged) >= _residual(before_union):
+        return revert(
+            "the move did not advance the reconciliation on disk "
+            f"(residual {_residual(before_union)} → {_residual(merged)}); R1 "
+            "predicted it would")
 
     git("add", "-A", root=root)
     log("R6 verify: zero dangling in-scope citations; provenance note present; "
@@ -943,13 +1105,74 @@ def self_test():
        insert_provenance("# ADR\n\n## Context\n\nx\n", note)[1], "no-status-section")
     eq("provenance/section", body.index(note) < body.index("## Context"), True)
 
+    # ---- R1's delta predicate (the N>=2 deadlock) --------------------------
+    # The union at a three-duplicate reconciliation, in the shape the live
+    # release faces: the mainline holds 1..4, the branch holds different files
+    # at 3 and 4 plus a claim at 5 the mainline does not have.
+    dup3 = {1: ["m1"], 2: ["m2"], 3: ["m3", "b3"], 4: ["m4", "b4"], 5: ["b5"]}
+    after_one = {1: ["m1"], 2: ["m2"], 3: ["m3"], 4: ["m4", "b4"], 5: ["b5"],
+                 6: ["b3"]}
+    # The OLD predicate's question — "is the post-move union clean?" — is still
+    # answered NO here, and that is the point: the tool must proceed anyway.
+    eq("delta/one-move-does-not-clean-the-union",
+       bool(evaluate(after_one, [])), True)
+    eq("delta/but-it-introduces-nothing",
+       _problem_keys(evaluate(after_one, [])) - _problem_keys(evaluate(dup3, [])),
+       set())
+    eq("delta/and-it-advances", _residual(after_one) < _residual(dup3), True)
+    # SPECIFICITY — a move that lands a gap IS refused, at the same N.
+    to_the_moon = {1: ["m1"], 2: ["m2"], 3: ["m3"], 4: ["m4", "b4"], 5: ["b5"],
+                   9: ["b3"]}
+    eq("delta/a-new-gap-is-still-refused",
+       ("GAP",) in (_problem_keys(evaluate(to_the_moon, []))
+                    - _problem_keys(evaluate(dup3, []))), True)
+    # A hole that MOVES up is progress, not a new problem — the downward-cascade
+    # limb. Keying GAP per missing number would refuse this and re-deadlock.
+    hole_low = {1: ["a"], 2: ["b"], 3: ["c"], 5: ["e"], 6: ["f"]}
+    hole_high = {1: ["a"], 2: ["b"], 3: ["c"], 4: ["e"], 6: ["f"]}
+    eq("delta/a-moved-hole-is-not-a-new-problem",
+       _problem_keys(evaluate(hole_high, [])) - _problem_keys(evaluate(hole_low, [])),
+       set())
+    eq("delta/a-moved-hole-advances", _residual(hole_high) < _residual(hole_low),
+       True)
+    # ... and shuffling a record sideways without moving the hole does NOT.
+    sideways = {1: ["a"], 2: ["b"], 3: ["c"], 5: ["e"], 7: ["f"]}
+    eq("delta/a-sideways-shuffle-does-not-advance",
+       _residual(sideways) >= _residual(hole_low), True)
+    eq("residual/clean-is-zero", _residual({1: ["a"], 2: ["b"]}), (0, 0))
+    eq("problem-keys/unknown-verdict-is-conservative",
+       _problem_keys(["SOMETHING-NEW: a future rule"]),
+       {("UNKNOWN", "SOMETHING-NEW: a future rule")})
+
+    # ---- the minimal assignment (ADR-115's hold-fixed clause) --------------
+    # Same shape as dup3: two true duplicates and one branch claim already
+    # sitting on a mainline-free number. The free range is 5..7; the claim at 5
+    # is HELD, so the duplicates take 6 and 7.
+    minimal = assign_claims(4, [3, 4, 5], {1, 2, 3, 4})
+    eq("assignment/minimal-plan", minimal,
+       [(3, "DUPLICATE", 6), (4, "DUPLICATE", 7), (5, "BINDS", 5)])
+    # The defect this replaced: handing out the free range from the bottom
+    # targets 5 for claim 3 while claim 5 still holds it — a plan no ordering
+    # can execute. No target may be a number another row still occupies.
+    _unmoved = {n for n, v, t in minimal if v == "BINDS"}
+    eq("assignment/no-target-collides-with-an-unmoved-claim",
+       {t for n, v, t in minimal if v != "BINDS"} & _unmoved, set())
+    eq("assignment/plan-is-minimal (one move per true collision)",
+       sum(1 for n, v, t in minimal if v != "BINDS"), 2)
+    # SPECIFICITY — a claim ABOVE the free range is not "already where it
+    # belongs"; it must still move DOWN, or it lands the gap beneath it.
+    eq("assignment/a-claim-above-the-free-range-still-moves",
+       assign_claims(4, [6], {1, 2, 3, 4}), [(6, "WOULD-GAP", 5)])
+    eq("assignment/a-lone-claim-on-the-next-slot-binds",
+       assign_claims(4, [5], {1, 2, 3, 4}), [(5, "BINDS", 5)])
+
     if failures:
         print("renumber-adr self-test: FAIL")
         for f in failures:
             print("  - " + f)
         return 1
     print("renumber-adr self-test: PASS (citation boundaries / path-exact / "
-          "re-sort / provenance)")
+          "re-sort / provenance / R1 delta predicate / minimal assignment)")
     return 0
 
 

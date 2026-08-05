@@ -376,6 +376,98 @@ assert_eq "A10 downward move wrote the provenance note too" \
   "$(grep -cE '\*\*Numbering provenance — `006 → 005`\.\*\*' release/ADRs/ADR-005-bravo.md)" "1"
 assert_eq "A10 downward move left zero dangling ADR-006" "$(cite_count design-note.md 6)" "0"
 
+echo "=== A12 — the MULTI-CLAIM reconciliation (N>=2; the deadlock shape) ==="
+# WHY THIS FIXTURE EXISTS. Every case above holds ONE outstanding claim, and at
+# N=1 "does this move introduce a problem?" and "is the post-move union clean?"
+# are the same question. They diverge at N>=2, and the suite could not see it:
+# it reported 53/53 green while the tool refused every move of a real
+# three-claim reconciliation, in BOTH orderings. That gap shipped twice and was
+# worked around by hand (`57a53a69`). This is the live release's shape in
+# miniature — two true duplicates plus one branch claim already sitting on a
+# mainline-free number, which is also the minimal-assignment case (ADR-115).
+seed_origin origin12
+G clone -q "$ROOT/origin12" "$ROOT/wt-A12"
+( cd "$ROOT/wt-A12" && G checkout -q -b feat/a
+  for n in 004 005; do
+    printf '# ADR-%s — alpha\n\n## Status\n\nProposed.\n' "$n" > "core/ADRs/ADR-$n-alpha.md"
+  done
+  G add -A >/dev/null && G commit -qm a && G push -q origin feat/a && \
+  G checkout -q main && G merge -q --no-edit feat/a && G push -q origin main )
+# B authors THREE records: 004 and 005 collide with A's, 006 does not.
+author_B origin12 wt-B12 4
+( cd "$ROOT/wt-B12"
+  for n in 005 006; do
+    { printf -- '---\ntitle: "ADR-%s — Bravo record"\nstatus: Proposed\ndate: 2026-02-02\nrelease: bravo-release\n---\n\n# ADR-%s — bravo\n\n## Status\n\nProposed.\n\n## Context\n\n' "$n" "$n"
+      for i in 1 2 3 4 5 6 7 8 9 10; do
+        printf 'Context paragraph %d carrying enough prose that a rename stays detectable.\n\n' "$i"
+      done
+      printf '## Decision\n\nBravo decides.\n' ; } > "release/ADRs/ADR-$n-bravo$n.md"
+  done
+  printf 'Notes cite ADR-004, ADR-005 and ADR-006.\n' > multi-note.md
+  python3 release/tools/generate-adr-index.py --write >/dev/null
+  G add -A >/dev/null && G commit -qm "author 005 + 006" )
+cd "$ROOT/wt-B12" && G fetch -q origin
+D12="$(python3 release/tools/renumber-adr.py --detect 2>&1)"
+
+# --- the assignment is MINIMAL and self-consistent ---------------------------
+assert_eq "A12 --detect holds the mainline-free claim FIXED (BINDS, not moved)" \
+  "$(printf '%s\n' "$D12" | grep -c '^CLAIM	ADR-006	.*	BINDS')" "1"
+assert_eq "A12 --detect moves exactly the two true duplicates" \
+  "$(printf '%s\n' "$D12" | grep -c 'DUPLICATE')" "2"
+assert_eq "A12 --detect targets 007 and 008, never the occupied 006" \
+  "$(printf '%s\n' "$D12" | grep -cE 'next=(7|8)$')" "2"
+assert_eq "A12 MINIMALITY CONTROL — no row targets a number another claim holds" \
+  "$(printf '%s\n' "$D12" | grep -c 'next=6')" "0"
+
+# --- the deadlock arm: both moves execute, unaided ---------------------------
+M1="$(python3 release/tools/renumber-adr.py --renumber 4 7 --apply 2>&1)"; M1_RC=$?
+assert_eq "A12 DEADLOCK ARM — the FIRST move of a multi-claim plan exits 0" "$M1_RC" "0"
+# The disagreeing control that makes the arm above a measurement. After move 1
+# the union is STILL illegal — ADR-005 is still duplicated — which is precisely
+# the state the old whole-union predicate refused to pass through. A tool that
+# only proceeds from a clean union cannot reach this line.
+python3 release/tools/check-adr-numbers.py >/dev/null 2>&1
+assert_eq "A12 CONTROL — the union is still ILLEGAL after move 1 (the old predicate's refusal condition)" \
+  "$?" "1"
+assert_eq "A12 the move SAYS it is one step of a plan, not the whole of it" \
+  "$(printf '%s\n' "$M1" | grep -c 'R1 outstanding: .* violation(s) stand before this move')" "1"
+# ONE COMMIT PER MOVE, and the suite asserts the constraint rather than tiptoeing
+# around it. R1's dirty-tree refusal is load-bearing — `<ref>...HEAD` is only the
+# complete branch diff against a clean tree — so a multi-claim plan is a sequence
+# of commits, not a batch. Sensitivity first: without the commit, move 2 refuses.
+python3 release/tools/renumber-adr.py --renumber 5 8 --apply >/dev/null 2>&1
+assert_eq "A12 SENSITIVITY — a second move on an uncommitted tree is refused (dirty-tree guard intact)" \
+  "$?" "2"
+G commit -qm "renumber ADR-004 -> ADR-007" >/dev/null
+M2="$(python3 release/tools/renumber-adr.py --renumber 5 8 --apply 2>&1)"; M2_RC=$?
+assert_eq "A12 DEADLOCK ARM — the SECOND move exits 0" "$M2_RC" "0"
+
+# --- the end state -----------------------------------------------------------
+C12="$(python3 release/tools/check-adr-numbers.py 2>&1)"; C12_RC=$?
+assert_eq "A12 the reconciled tree PASSES check-adr-numbers" "$C12_RC" "0"
+printf '%s\n' "$C12" | grep -q 'contiguous 001..008' \
+  && ok "A12 contiguous 001..008, no duplicates" \
+  || bad "A12 contiguous 001..008, no duplicates" "$C12"
+assert_file "A12 the held record was NOT renumbered" "release/ADRs/ADR-006-bravo006.md"
+assert_eq "A12 the held record carries NO provenance note (it never moved)" \
+  "$(grep -cE '\*\*Numbering provenance' release/ADRs/ADR-006-bravo006.md)" "0"
+assert_eq "A12 the first moved record carries its provenance note" \
+  "$(grep -cE '\*\*Numbering provenance — `004 → 007`\.\*\*' release/ADRs/ADR-007-bravo.md)" "1"
+assert_eq "A12 the second moved record carries its provenance note" \
+  "$(grep -cE '\*\*Numbering provenance — `005 → 008`\.\*\*' release/ADRs/ADR-008-bravo005.md)" "1"
+assert_eq "A12 zero dangling ADR-004/ADR-005 in the branch's own citation set" \
+  "$(( $(cite_count multi-note.md 4) + $(cite_count multi-note.md 5) ))" "0"
+assert_eq "A12 SPECIFICITY — the held claim's citation was NOT swept" \
+  "$(cite_count multi-note.md 6)" "1"
+
+# --- SPECIFICITY: the delta predicate still refuses a genuinely illegal move --
+G commit -qm "renumber ADR-005 -> ADR-008" >/dev/null
+BEFORE12="$(G rev-parse HEAD):$(G status --porcelain | wc -l | tr -d ' ')"
+python3 release/tools/renumber-adr.py --renumber 7 12 --apply >/dev/null 2>&1
+assert_eq "A12 SPECIFICITY — a move that would LAND a gap is still refused" "$?" "2"
+assert_eq "A12 zero mutation after the refusal" \
+  "$(G rev-parse HEAD):$(G status --porcelain | wc -l | tr -d ' ')" "$BEFORE12"
+
 echo
 echo "renumber-adr fixture: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ] || exit 1
