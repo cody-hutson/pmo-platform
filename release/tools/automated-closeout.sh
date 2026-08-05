@@ -3104,6 +3104,26 @@ phase_commit_chore_pr() {
   done
 
   if [[ -z "$($GIT -C "$REPO_ROOT" diff --staged --name-only 2>/dev/null)" ]]; then
+    # Staging-completeness assertion, empty-staged-set arm (#4710). The E9 assert
+    # below runs only AFTER a commit exists, so this early-return escapes it —
+    # which is exactly how the worse half of #4710 stayed silent: 6.5 and 6.6
+    # reported an injected write and this branch then reported green "no-op"
+    # directly beneath them, with no chore commit at all. An inject_* phase marked
+    # PASS wrote a field to disk (its SKIPPED/FAIL limbs write nothing), so an
+    # EMPTY staged set contradicts its own report.
+    #   Reads the PHASE RECORD, not TOUCHED_ARCHIVE_SEGMENTS. A guard that consults
+    # the same recorder whose omission IS the defect cannot catch that omission —
+    # it would go vacuous the moment a future write site forgets to record, which
+    # is the regression this exists to catch. Structurally general: any future
+    # inject_* phase is covered without touching this code.
+    local _iw="" _i
+    for ((_i=0; _i<${#PHASE_NAMES[@]}; _i++)); do
+      if [[ "${PHASE_NAMES[$_i]}" == inject_* && "${PHASE_RESULTS[$_i]}" == "PASS" ]]; then _iw="${_iw}${PHASE_NAMES[$_i]} "; fi
+    done
+    if [[ -n "$_iw" ]]; then
+      mark_phase "commit_chore_pr" "FAIL" "staging-completeness: ${_iw% } reported an injected write but the staged set is EMPTY — the write landed on a surface files=() does not name, so a mandated output would be dropped from the chore PR while every phase reported green"
+      return 3
+    fi
     mark_phase "commit_chore_pr" "SKIPPED" "nothing staged — phases 6-9 + 9.5 + 9.6 were no-op (already up-to-date)"
     return 0
   fi
