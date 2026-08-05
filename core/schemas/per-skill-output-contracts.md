@@ -637,9 +637,10 @@ Read the roster live from that table. Its gates fall into two firing classes: th
 against every audited output, and **conditional** gates that fire only when the output under audit
 carries the property the gate tests (a SKILL.md file, a Stage 5 spec carrying a `### Cascade-Sweep`
 block, an output that asserts ownership, an output that names a generated artifact, an
-ask-when-ambiguous-tier transcript). Applicability is therefore a property of **the output under
-audit**, not of the emitting skill — which is why this registry holds no per-skill
-gate-applicability matrix.
+ask-when-ambiguous-tier transcript). Applicability is therefore resolved **per audited output** —
+from its type, its content, or its provenance — and cannot be precomputed as a fixed per-skill
+table, because one skill emits outputs that trip different conditional gates. That is why this
+registry holds no per-skill gate-applicability matrix.
 
 ### Reversibility Tier + Confidence
 
