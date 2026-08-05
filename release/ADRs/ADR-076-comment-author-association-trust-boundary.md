@@ -52,6 +52,6 @@ CHEAP / Confidence HIGH — text reverts with the release PR; locks revert via t
 
 - ADR-062 — substrate-vs-canonical precedent (issue bodies remain historical record) — consumed by this design's reconciliation posture.
 
-### Issue References
+## References
 
 - Parent improvement: #3261 (author-association trust boundary; evidence instance recorded in its Evidence section)

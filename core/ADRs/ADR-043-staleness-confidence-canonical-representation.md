@@ -35,7 +35,7 @@ A **continuous score is a projection onto the scale, never the scale itself.** A
 - The score→band projection rule is the only rule-based projection; every discrete mechanism is a total function of its source signal, so two readers bin the same signal identically.
 - **Reversibility: MODERATE / Confidence: HIGH.** The bands are a vocabulary (re-mapping a row is a doc edit — CHEAP); the single score-projection rule is MODERATE but isolated to one mechanism, so the blast radius of a reversal is one rule, not five. Each consumer edit is a one-line reference removal, so rollback is mechanical. Confidence is HIGH on the depth-axis reframing (grounded in the formula being all-time-terms) and MEDIUM on the exact score cut-points (the 2×-threshold default is reasoned and calibratable).
 
-## Alternatives considered
+## Alternatives Considered
 
 | Option | Decision | Rationale |
 |---|---|---|

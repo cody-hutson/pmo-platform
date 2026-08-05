@@ -86,5 +86,5 @@ The gate criterion (**SR-G5** in `stage-05-solutioning.md` § 7.2) rolls out **s
 - **ADR-062** (substrate-vs-canonical precedent) — establishes the Stage-6-ADR-authoring precedent and the role-string `deciders` convention this ADR follows.
 - **ADR-050** (deliverable-domain axis) — the `domain:` class field the sibling tracer dispatches on; ADR-090's scanner-boundary test generalizes the extend-vs-sibling question that axis first raised.
 
-### Issue References
+## References
 Originating deliverable: #3120 (milestone `blast-radius-scan-correctness`, #272). The historical miss this mode reproduces and prevents: #230 → RCA #3118. Sibling in-release fixes on the same tool: #3300 (worktree exclusion — the corrected scan base this mode runs on), #3291 (path-true consumer matching), #675 (LC_ALL=C pin). The Stage-5 design that produced this ADR's spec is the #3120 Stage-5 Solutioning output.

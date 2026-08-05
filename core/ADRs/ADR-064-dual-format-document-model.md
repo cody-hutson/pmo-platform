@@ -60,7 +60,7 @@ map encodes* (the map's `exclude` list), **not** a reason to make the message-wr
 model's drift tracking reuses the Artifact Register's existing `Current Version` / `Last Updated` columns
 rather than a new render-log tracker.
 
-## Alternatives considered
+## Alternatives Considered
 
 - **Executor = comms-writer.** Rejected. comms-writer owns no entity (a sent message is not a tracked
   Artifact CI), produces an ephemeral message rather than a version-tracked file, and has no

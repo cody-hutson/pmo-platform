@@ -73,6 +73,14 @@ jobs:
 
           OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-depersonalization[[:space:]]*-->'
 
+          # The literal-escaper and the ADR `deciders:` carve-out decision are
+          # defined ONCE, in a sourced library that the committed fixture suite
+          # (release/tools/tests/test_deciders_carveout.sh) exercises through the
+          # same entry point. An inline copy here would pass its own tests while
+          # this gate diverged — the shadow-source failure the carve-out
+          # reconciliation exists to end.
+          . "${GITHUB_WORKSPACE:-.}/release/tools/lib/deciders-carveout.sh"
+
           # --- 0. FAIL-LOUD-ON-CANONICAL (OPERATOR_IDENTITY required; ----------
           #        COLLABORATOR_NAMES optional — solo-operator). -----------------
           # A PII control that silently scans nothing is indistinguishable from a
@@ -145,10 +153,18 @@ jobs:
 
           # Build the operator-literal pattern list (one literal per line). The
           # handle comes from the actor; name/email lines come from the input.
+          # HANDLE_LITERAL is tracked separately from OP_LITERALS because the ADR
+          # `deciders:` carve-out partitions them: §1.2 sanctions the NAME there and
+          # never the handle, so the handle must stay matchable inside the carve-out
+          # branch. Same source, same resolution conditions — one variable, two uses.
           OP_LITERALS=""
+          HANDLE_LITERAL=""
           if [ "$BOT" -eq 0 ]; then
             if [ "$IS_CANONICAL" -eq 1 ] || [ "$FORK_OPTED_OUT" -eq 0 ]; then
-              [ -n "${ACTOR:-}" ] && OP_LITERALS="$ACTOR"
+              if [ -n "${ACTOR:-}" ]; then
+                OP_LITERALS="$ACTOR"
+                HANDLE_LITERAL="$ACTOR"
+              fi
               if [ -n "${OPERATOR_IDENTITY:-}" ]; then
                 OP_LITERALS="$(printf '%s\n%s\n' "$OP_LITERALS" "$OPERATOR_IDENTITY")"
               fi
@@ -166,18 +182,20 @@ jobs:
 
           # Compose the case-sensitive, word-boundary pattern set. Each non-empty
           # line is matched as a literal (regex-escaped) with \b boundaries.
+          # esc_lines comes from the sourced carve-out library above, so this gate and
+          # its fixture suite build their pattern sets with identical escaping.
           PATTERN_FILE="$(mktemp)"
-          esc_lines() {
-            # read literal lines, drop blanks, regex-escape, wrap in \b...\b
-            printf '%s\n' "$1" | while IFS= read -r ln || [ -n "$ln" ]; do
-              ln="$(printf '%s' "$ln" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-              [ -z "$ln" ] && continue
-              esc="$(printf '%s' "$ln" | sed 's/[][\\.^$*+?(){}|/]/\\&/g')"
-              printf '\\b%s\\b\n' "$esc"
-            done
-          }
           esc_lines "$OP_LITERALS" >> "$PATTERN_FILE"
           esc_lines "$COLLAB_LITERALS" >> "$PATTERN_FILE"
+
+          # NOT-CARVED partition — the literals the ADR `deciders:` carve-out does
+          # NOT cover. Built through the SAME esc_lines helper as PATTERN_FILE, so
+          # the two sets cannot drift into different escaping. Empty when no handle
+          # resolves (bot actor / opted-out fork), which the carve-out predicate
+          # treats as "fall back to the shipped whole-line behaviour" rather than
+          # inventing a verdict for a dimension that is already dark.
+          NOT_CARVED_FILE="$(mktemp)"
+          esc_lines "$HANDLE_LITERAL" >> "$NOT_CARVED_FILE"
 
           if [ ! -s "$PATTERN_FILE" ]; then
             echo ":white_check_mark: Depersonalization — no operator/collaborator literals resolved for this run (bot actor and/or no inputs); nothing to match" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -211,29 +229,35 @@ jobs:
               [ -z "$hit" ] && continue
               LN="${hit%%:*}"
               CONTENT="${hit#*:}"
-              # line-scoped override
-              if printf '%s' "$CONTENT" | grep -qE "$OVERRIDE"; then
-                SUPPRESSED="${SUPPRESSED}${f}:${LN} (override-suppressed)"$'\n'
-                continue
-              fi
-              # ADR deciders carve-out (#1487): the operator LITERAL NAME is a
-              # sanctioned architect-of-record authorship attribution ONLY on a
-              # frontmatter `deciders:` line inside an ADR file. Field-scoped: the
-              # skip fires iff BOTH the file is an ADR (core/ADRs/*.md or
-              # release/ADRs/*.md) AND the added line matches ^deciders:. Every
-              # other identity surface stays blocked — emails, paths, the handle on
-              # any non-deciders line or non-ADR file, the operator name in an ADR
-              # BODY line, any non-ADR file, and the whole collaborator dimension.
-              # Reuses the SUPPRESSED channel so exempted lines are reported, not
-              # silent. Sits AFTER the override block and BEFORE FOUND=1 so it can
-              # never short-circuit the email/handle-elsewhere/collaborator matches.
-              case "$f" in
-                core/ADRs/*.md|release/ADRs/*.md)
-                  if printf '%s' "$CONTENT" | grep -qE '^deciders:'; then
-                    SUPPRESSED="${SUPPRESSED}${f}:${LN} (deciders carve-out — #1487)"$'\n'
-                    continue
-                  fi
-                  ;;
+              # Per-line verdict — the line-scoped override AND the ADR `deciders:`
+              # carve-out, decided in the sourced library so the committed fixture
+              # suite asserts against this code path rather than a look-alike.
+              #
+              # The carve-out is NAME-SCOPED. depersonalization-spec.md §1.2 sanctions
+              # the operator's literal NAME on a frontmatter `deciders:` line inside
+              # an ADR and nothing more; the GitHub handle is never sanctioned, on any
+              # line, `deciders:` included. The skip therefore fires iff the file is
+              # an ADR (core/ADRs/*.md or release/ADRs/*.md) AND the added line
+              # matches ^deciders: AND the line carries no un-carved literal.
+              # Suppressions reuse the SUPPRESSED channel so exempted lines are
+              # reported, not silent, and the whole decision sits BEFORE FOUND=1 so it
+              # can never short-circuit a match outside the carve-out.
+              #
+              # KNOWN RESIDUAL, recorded rather than silently carried: the not-carved
+              # set holds the handle only, so the operator email and the collaborator
+              # dimension are still suppressed whole-line on a `deciders:` line. §1.2
+              # declares both blocked. Closing that half was scoped out of this change
+              # deliberately, not overlooked.
+              case "$(depersonalization_line_verdict \
+                        "$f" "$CONTENT" "$PATTERN_FILE" "$NOT_CARVED_FILE" "$OVERRIDE")" in
+                CLEAN)
+                  continue ;;
+                SUPPRESSED-OVERRIDE)
+                  SUPPRESSED="${SUPPRESSED}${f}:${LN} (override-suppressed)"$'\n'
+                  continue ;;
+                SUPPRESSED-CARVEOUT)
+                  SUPPRESSED="${SUPPRESSED}${f}:${LN} (deciders carve-out — name-scoped)"$'\n'
+                  continue ;;
               esac
               # redact: echo only the line number + a short redacted marker, never
               # the full PII value (mirror gitleaks --redact).
@@ -241,7 +265,7 @@ jobs:
               REPORT="${REPORT}${f}:${LN}: <redacted — operator/collaborator personal data match>"$'\n'
             done <<< "$HITS"
           done
-          rm -f "$PATTERN_FILE"
+          rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE"
 
           if [ -n "$SUPPRESSED" ]; then
             {
@@ -304,8 +328,20 @@ jobs:
           set -euo pipefail
 
           OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-issue-ref[[:space:]]*-->'
-          # designated reference-block headers (reuse the parser-clean anchor family)
-          REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Rr]elated|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
+          # Designated reference-block headers (reuse the parser-clean anchor family).
+          # The `Source(s)` arm is explicit: `[Ss]ources?` matches `Source` and
+          # `Sources` but NOT `Source(s)`, whose parenthetical then hit the `$` anchor
+          # and failed — while this gate's own failure message, core/ADRs/README.md,
+          # and reference-durability-standard.md all NAME `### Source(s)` as
+          # recognized. That was a specification-versus-implementation defect, not a
+          # policy choice, so the implementation is corrected to the stated set.
+          #
+          # `Related ADRs` is deliberately NOT recognized. It is a cross-ADR-link
+          # section, where core/standards/adr-authoring-guide.md § Issue references in
+          # ADRs forbids a bare #N outright (zone 1) — recognizing it would move the
+          # placement cut point ABOVE that section and make this gate accept exactly
+          # the placement the authoring guide prohibits.
+          REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Rr]elated|[Pp]rovenance|[Ss]ources?|[Ss]ource\(s\))[[:space:]]*:?[[:space:]]*$'
 
           # SCOPE: every changed .md MINUS the self-doc files that necessarily
           # quote worked-example #N (they carry a file-top allow-issue-ref).
@@ -469,14 +505,17 @@ jobs:
             echo "- **different repository** — the number resolves to a TRANSFERRED issue now living in another repo."
             echo "- **pull-request number** — the number is a PR, not an issue."
             echo "- **deprecated IMP-NNN** — the legacy improvement id; use a GitHub issue \`#N\`."
-            echo "- **placed outside a reference block** — a valid \`#N\` must sit under \`### Issue References\` / \`### References\` / \`## Related\` / \`## Provenance\` / \`### Source(s)\`."
+            echo "- **placed outside a reference block** — a valid \`#N\` must sit under a recognized heading, at any level: \`Issue References\` / \`References\` / \`Related\` / \`Provenance\` / \`Source\` / \`Sources\` / \`Source(s)\`. In an ADR the designated block is \`## References\`; \`## Related ADRs\` is NOT recognized, because a bare \`#N\` is prohibited there outright."
             echo ""
-            echo "See [\`core/rules/git-workflow.md\` § Repository-Integrity Gates](../blob/main/core/rules/git-workflow.md)."
+            echo "See [\`core/rules/git-workflow.md\` § Repository-Integrity Gates](../blob/main/core/rules/git-workflow.md) and [\`core/standards/adr-authoring-guide.md\` § Issue references in ADRs](../blob/main/core/standards/adr-authoring-guide.md)."
             echo ""
-            echo "### Override (a deliberately-quoted or external reference)"
+            echo "### Override — a RARE exception, not the default remedy"
             echo ""
-            echo 'Add the marker anywhere in the file:'
-            echo '`<!-- repo-integrity: allow-issue-ref -->`'
+            echo 'Adding the marker `repo-integrity: allow-issue-ref` (wrapped in an HTML comment) anywhere in a file skips this gate for the WHOLE file — placement AND validity, so a 404, a redirect, a transferred issue and a PR number all pass unexamined.'
+            echo ""
+            echo 'It is warranted only when BOTH limbs hold: (1) the file DISPLAYS an issue-reference construct as its subject matter — self-documentation, a template, a worked example, a test fixture — or its numbers are synthetic / out-of-repo and cannot resolve by construction; AND (2) neither remedy is available — the reference cannot be relocated into a designated reference block, and it cannot be replaced by an inline summary without destroying what the file is for.'
+            echo ""
+            echo 'A marker declared under this criterion carries a trailing rationale INSIDE the comment naming which limb applies. A bare marker is a silenced warning, not a declaration. Carrying provenance is not demonstration: move the reference into a reference block with a summary noun phrase instead.'
           } | tee -a "$GITHUB_STEP_SUMMARY"
           exit 1
 
@@ -614,6 +653,96 @@ jobs:
           fi
 
           echo ":white_check_mark: ADR-number integrity — numbers are unique and contiguous" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Release ADR index is a faithful projection of the ADR file set
+        run: |
+          set -euo pipefail
+
+          # Same two-layer posture as the numbering gate above: self-test FIRST, so a
+          # projector that has stopped discriminating cannot certify the index. The
+          # self-test carries three control arms (delete a row / hand-edit a derived
+          # cell / orphan a row) plus three structural-failure arms.
+          python3 release/tools/generate-adr-index.py --self-test
+
+          # `release/ADRs/README.md`'s table is a DERIVED surface: every column is
+          # projected from the ADR file set and each record's own frontmatter. This
+          # step is the gate that makes a missing row or a stale Status structurally
+          # impossible rather than merely currently-absent. Contract:
+          # release/references/standards/release-corpus-schema.md § Derived-Surface
+          # Contract. Founding record: ADR-117.
+          set +e
+          python3 release/tools/generate-adr-index.py --verify | tee /tmp/adr-index.out
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "### Release ADR index projection"
+            echo '```'
+            cat /tmp/adr-index.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # exit 3 = structural failure (markers gone, unparseable frontmatter) — the
+          # projector could not compute an answer, which must never read as a clean one.
+          if [ "$RC" -eq 3 ]; then
+            echo "::error::The ADR index projector could not resolve its inputs — it verified nothing." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if [ "$RC" -ne 0 ]; then
+            {
+              echo "## :x: Release ADR index is out of date"
+              echo ""
+              echo "The table in \`release/ADRs/README.md\` is GENERATED. \`MISSING\` = a record with no row;"
+              echo "\`ORPHAN\` = a row with no record; \`DRIFT\` = a hand-edited cell that contradicts the"
+              echo "record's own frontmatter."
+              echo ""
+              echo "Fix: \`python3 release/tools/generate-adr-index.py --write\` and commit. Do NOT hand-edit a row."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo ":white_check_mark: Release ADR index — every column matches its record" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Merge-time ADR renumber — tool self-test + two-branch behavioural fixture
+        run: |
+          set -euo pipefail
+
+          # Two complementary layers, and BOTH are required. The pure-function
+          # self-test owns the citation-boundary property (renumbering ADR-010
+          # must not corrupt ADR-100..109) — the fixture's small number range
+          # cannot exercise it. The fixture owns the behavioural property the
+          # card's AC-1 actually asserts: two branches author concurrently and
+          # both merge, with T0 asserting the root cause directly (both
+          # claimants PASS locally before the race resolves) and A7 proving the
+          # suite fails when the renumber is done by hand.
+          python3 release/tools/renumber-adr.py --self-test
+
+          set +e
+          bash release/tools/tests/test_renumber_adr.sh | tee /tmp/renumber-adr.out
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "### Merge-time ADR renumber fixture"
+            echo '```'
+            tail -20 /tmp/renumber-adr.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$RC" -ne 0 ]; then
+            {
+              echo "## :x: ADR renumber fixture FAILED"
+              echo ""
+              echo "\`release/tools/renumber-adr.py\` is the sanctioned merge-time renumber"
+              echo "(Stage 12 Phase A.5.7 / gate \`G-EX9\`). A failing assertion means a"
+              echo "renumber would leave dangling citations, a stale index surface, or a"
+              echo "missing \`## Status\` numbering-provenance note."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo ":white_check_mark: ADR renumber — six-step move verified end-to-end" | tee -a "$GITHUB_STEP_SUMMARY"
 
   draft-file:
     name: Draft-file gate
@@ -1070,17 +1199,27 @@ jobs:
   # ---------------------------------------------------------------------------
   # GATE 9 — ADR durability lint (#1490). The sibling of GATE 4: that gate guards
   #          ADR *identity* (one global, gap-free ADR-NNN sequence); this one guards
-  #          ADR *durability*. Three rules, all in release/tools/check-adr-durability.py:
+  #          ADR *durability*. The rules are enumerated authoritatively in the module
+  #          docstring of release/tools/check-adr-durability.py — read the roster there,
+  #          not from this comment. In outline:
   #            R1 STATUS-ENUM     the `status:` leading token is Proposed | Accepted |
   #                               Deprecated | Superseded (a prose tail is allowed —
   #                               the schema's leading-token rule, not a closed enum).
   #            R2 STALE-ANCHOR    a hardcoded commit SHA or a live corpus-population
-  #                               count baked into durable prose.
+  #                               count baked into durable prose. The count half matches
+  #                               a CLOSED vocabulary of population nouns and is
+  #                               deliberately a HIGH-PRECISION PARTIAL NET: a green run
+  #                               is not evidence that no live count is present. Its
+  #                               admitted shapes, its three excluded classes, and the
+  #                               command to re-derive the bound are stated in the
+  #                               checker's R2-COUNT RECALL BOUND docstring block.
   #            R3 OPERATOR-HANDLE the operator's literal GitHub handle. The sanctioned
   #                               ADR carve-out is NAME-scoped (the literal name on a
   #                               `deciders:` line); the HANDLE is never sanctioned, so
   #                               R3 closes the gap the line-scoped depersonalization
   #                               skip would otherwise leave open.
+  #            R4 IDENT-REF       a bare issue reference in an ADR identity frontmatter
+  #                               field; see the checker's R4 SCOPE block.
   #
   #          DELTA-SCOPED + WARN-MODE: scans only ADR files changed in the PR, and only
   #          lines ADDED since the base (the net-new posture the other gates use), so
@@ -1185,6 +1324,12 @@ jobs:
             echo "- **R1** a \`status:\` value whose leading token is outside \`Proposed | Accepted | Deprecated | Superseded\`."
             echo "- **R2** a hardcoded commit SHA or a live corpus-population count in durable prose."
             echo "- **R3** the operator's literal GitHub handle (the ADR carve-out covers the literal *name* on a \`deciders:\` line — never the handle)."
+            echo "- **R4** a bare issue reference \`#N\` in an identity frontmatter field (\`title:\` / \`release:\` / \`deciders:\`)."
+            echo ""
+            echo "…or, on the structural dimension (delta-scoped, WARN-MODE):"
+            echo ""
+            echo "- **R5-NEW** a NET-NEW ADR that does not carry the \`adr-schema.md\` §3 body-section set."
+            echo "- **R5-LOST** a CHANGED ADR that has LOST a §3 section it carried at the base."
             echo ""
             echo "See \`core/standards/adr-authoring-guide.md\` and \`core/rules/git-workflow.md\` § Repository-Integrity Gates."
             echo ""
@@ -1193,12 +1338,16 @@ jobs:
             echo "- **R1** — use a Nygard enum token; a prose tail after it is fine."
             echo "- **R2** — state the fact so it survives: cite the deriving command instead of a count, summarize the change instead of a SHA, or anchor the number historically (\"as of authoring, ...\")."
             echo "- **R3** — write the operator's literal name, or the operator-name token, instead of the handle."
+            echo "- **R4** — name the release by its slug and the deciders by role or literal name, and move the issue reference to \`source_observations:\` or to the ADR's designated \`## References\` block with a summary noun phrase. There is no marker for this one."
+            echo "- **R5** — add the exact H2 string the finding names. A section declaring a single forced approach is conformant CONTENT; an ABSENT section is the defect. Position does not matter and neither does heading count — R5 asserts presence only."
             echo ""
             echo "### Exemptions (already handled)"
             echo ""
             echo "- Fenced code blocks, the \`source_observations:\` frontmatter block, historically-anchored lines, and \`Superseded\`/\`Deprecated\` records are R2-exempt by construction."
-            echo "- A file that genuinely needs a pinned anchor: add \`<!-- adr-durability: allow-anchor -->\` (R2 only — never R3)."
+            echo "- R4 exempts fenced renderings, \`source_observations:\` (not an identity field), and frozen records — and NOTHING else. Neither override marker suppresses it."
+            echo "- A file that genuinely needs a pinned anchor: add \`<!-- adr-durability: allow-anchor -->\` (R2 only — never R3, never R4)."
             echo "- Whole-file skip: \`<!-- repo-integrity: allow-adr-durability -->\`."
+            echo "- **R5 is delta-only and has an empty population on the existing corpus by construction.** It never fires on a section a record was already missing before this PR — 29 of 111 sweepable records carry a §3 gap the conformance sweep scoped OUT with a named blocking authority, and warning on those would be guarding before cleaning. \`Superseded\`/\`Deprecated\` records are exempt (they can never conform, by policy), and neither override marker suppresses R5 — structure is not durability."
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
           if [ "$WARN_MODE" = "true" ]; then

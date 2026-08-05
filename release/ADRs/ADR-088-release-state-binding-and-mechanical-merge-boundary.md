@@ -4,7 +4,7 @@ title: "ADR-088 — Release-state binding points: Gate 3 asserts identity-mode i
 status: Accepted
 date: 2026-07-22
 release: version-identity-and-corpus-ledgers
-deciders: "Stage-5 Solutioning spokes (#3590 for the Gate-3 boundary; #3594 for the merge boundary, incl. the empirical union-corruption test) + hub R1 adversarial verification + operator decision 2026-07-22 (one combined ADR over two thin ones)"
+deciders: "Stage-5 Solutioning spokes (one for the Gate-3 boundary; one for the merge boundary, incl. the empirical union-corruption test) + hub R1 adversarial verification + operator decision 2026-07-22 (one combined ADR over two thin ones)"
 tags: [release-identity, version-claim, gate-criteria, corpus-ledgers, merge-strategy, git-attributes, two-phase-allocation, composes-adr-036]
 source_observations:
   - "Gate 3's version criterion existed only as PROSE at stage-03-bundle.md:264, which explicitly deferred 'the Gate-3 spec enforcement of this conditional' to 'a separate fissioned card'. A live grep of core/schemas/gate-criteria-spec.md for 'version assigned'/'no collision' returned 0 hits — so the enforcement criterion was never created, and an AC phrased as 'make the criterion conditional' had no subject to modify."
@@ -69,7 +69,7 @@ A committed root `.gitattributes` binds `merge=union` to exactly the **pure-addi
 
 Both decisions follow from it. Gate 3 stops asserting a binding that has not happened. The merge driver stops mechanically resolving surfaces whose rows supersede one another. A future surface joins the union set only if it is genuinely append-only; a future gate criterion asserts only what is bound at the moment it fires.
 
-## Alternatives considered
+## Alternatives Considered
 
 **For D1 — make the existing criterion conditional.** Rejected on grounds of fact: there was no existing criterion in the gate spec to make conditional. The AC's verb was authored against prose in a different file.
 
@@ -91,3 +91,8 @@ Higher-than-CHEAP because both touch load-bearing release-identity and corpus su
 ## Reflexive cutover
 
 Applies to all releases entering the pipeline after this ADR's introducing-release merge. Existing version-keyed artifacts are grandfathered; no retroactive rewrite.
+
+## References
+
+- #3590 — the Stage-5 Solutioning spoke for the Gate-3 binding boundary.
+- #3594 — the Stage-5 Solutioning spoke for the mechanical-merge boundary, including the empirical union-corruption test.

@@ -176,6 +176,67 @@ printf '%s\n' "$CLEANDEP_JSON" | grep -oE '\{[^{}]*sync[^{}]*\}' | grep -q '"ver
 rm -rf "$STUB_DIR"
 
 # ---------------------------------------------------------------------------
+# CIAC method parsing: span selection, comparators, and the SKIP/ERROR split
+#
+# WHY. This roll-up read 0 PASS / 3 SKIP / 1 ERROR on a release whose criteria
+# were all substantively sound, and the causes were three parser defects rather
+# than three unverifiable criteria:
+#   (i)   extract_command took the LAST backtick span, so a method that mentions
+#         a flag or a symbol in backticks yielded that as its "verb";
+#   (ii)  a non-allowlisted verb rendered ERROR (malformed input) rather than an
+#         honest SKIP (the executor declining to run a tool);
+#   (iii) no comparator but ">=", so "expect zero" — the shape most verification
+#         criteria actually take — was inexpressible and fell through to prose.
+# Each arm below carries a control that must move the other way.
+# ---------------------------------------------------------------------------
+eval "$(sed -n '/^RUNNABLE_VERBS=/,/^}/p'      "$VERIFY")"
+eval "$(sed -n '/^is_runnable_verb()/,/^}/p'   "$VERIFY")"
+eval "$(sed -n '/^looks_like_command()/,/^}/p' "$VERIFY")"
+eval "$(sed -n '/^extract_command()/,/^}/p'    "$VERIFY")"
+eval "$(sed -n '/^extract_threshold()/,/^}/p'  "$VERIFY")"
+eval "$(sed -n '/^compare_threshold()/,/^}/p'  "$VERIFY")"
+
+M_FLAGFIRST='run `--self-test` (expect exit 0); then `grep -c -E "X" some/file.md` — expect exactly 3'
+[ "$(extract_command "$M_FLAGFIRST" | awk '{print $1}')" = "grep" ] \
+  && ok "extract_command skips a flag-shaped span and takes the first RUNNABLE one" \
+  || bad "extract_command still takes the first span regardless of whether it is a command"
+# CONTROL — a method whose ONLY span is a tool invocation must still surface that
+# verb, not silently report "no runnable command"; otherwise the SKIP below would
+# be indistinguishable from an unparseable method.
+[ "$(extract_command 'run `python3 release/tools/x.py --self-test`' | awk '{print $1}')" = "python3" ] \
+  && ok "extract_command CONTROL — a lone non-allowlisted command is still surfaced by verb" \
+  || bad "extract_command control — a lone tool invocation was not surfaced"
+is_runnable_verb grep && ! is_runnable_verb python3 \
+  && ok "verb allowlist stays closed (grep in, python3 out)" \
+  || bad "verb allowlist is not behaving as a closed set"
+if looks_like_command "grep" && ! looks_like_command "--self-test" && ! looks_like_command "§Top"; then
+  ok "looks_like_command rejects flags and prose, accepts a bare verb"
+else
+  bad "looks_like_command misclassifies a flag or a prose token"
+fi
+
+t_thr() { [ "$(extract_threshold "$1" | tr '\t' ' ')" = "$2" ]; }
+if t_thr 'expect 0' '== 0' && t_thr 'expect exactly 3, one per writer' '== 3' \
+   && t_thr '≥ 5 hits' '>= 5' && t_thr 'at least 2' '>= 2' \
+   && t_thr 'at most 3' '<= 3' && t_thr 'expect zero findings' '== 0'; then
+  ok "extract_threshold parses all four comparator shapes (== / >= / <=, incl. zero)"
+else
+  bad "extract_threshold does not parse the comparator set (BSD sed will not honour \\| in a BRE — use -E)"
+fi
+# CONTROL — a method with no threshold must yield nothing, or every rc-graded row
+# would silently acquire a bogus count comparison.
+[ -z "$(extract_threshold 'confirm the recorded no-overlap decision')" ] \
+  && ok "extract_threshold CONTROL — a threshold-free method yields no comparator" \
+  || bad "extract_threshold invented a comparator for a threshold-free method"
+if [ "$(compare_threshold 0 '==' 0)" = PASS ] && [ "$(compare_threshold 1 '==' 0)" = FAIL ] \
+   && [ "$(compare_threshold 3 '>=' 2)" = PASS ] && [ "$(compare_threshold 1 '>=' 2)" = FAIL ] \
+   && [ "$(compare_threshold 1 '<=' 3)" = PASS ] && [ "$(compare_threshold 4 '<=' 3)" = FAIL ]; then
+  ok "compare_threshold discriminates in BOTH directions on all three comparators"
+else
+  bad "compare_threshold does not discriminate on one or more comparators"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo

@@ -65,7 +65,7 @@ Appending also matches the construction the corpus already runs on the payload s
 | **Not decided here** | Whether the two CSV templates now owe a `.provenance.yml` in addition to their existing `.meta.yml`. Under this decision they do, and the form is now unambiguous — but authoring them is a different population from this card's twelve and is left to the work that owns the CSV registry rows. |
 | **Not decided here** | Enforcement. Nothing in `core/deploy/`, `.github/`, or `core/config/` validates provenance presence or family-enum membership today, and this ADR adds no check. The obligation above is a stated contract, not a gate. |
 
-## Alternatives considered
+## Alternatives Considered
 
 **Substitute the extension** (`person-entity-template.provenance.yml`). This is what §4.4's worked example implied, and it reads more cleanly. **Rejected** on the collision and information-loss arguments above. The tidier name is not worth a mapping that stops being injective the first time a family ships two formats.
 

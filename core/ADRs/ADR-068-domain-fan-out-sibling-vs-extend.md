@@ -95,5 +95,5 @@ The Stage-5 A6.5 adversarial self-review then surfaced the sibling's one real co
 - **ADR-050** (deliverable-domain axis) — establishes the `domain:` class field this tool dispatches on; ADR-068 consumes that axis as the scanner selector.
 - **ADR-005** (append-pattern-aware cross-PR contention scoring) — the release-scope ADR whose format this record follows.
 
-### Issue References
+## References
 Originating executable-counterpart deliverable: #505 (milestone `80-solutioning-and-engineering-skill-modes`). Spec-level method admission it makes runnable: #345 (closed). Epic rollup: #1186. The Stage-5 design that produced this ADR's spec is the #505 Stage-5 Solutioning output.

@@ -23,23 +23,23 @@ Accepted (operator standing-GO at Collective Review 2026-05-27; spec authored at
 The core/ module hosts the shared kernel — content consumed by BOTH operations and release. At Stage 5 Solutioning for the core migration, six categories of file-placement decisions surfaced as non-obvious (per-file audience analysis required rather than whole-directory migration):
 
 1. RELEASE_LOG.md placement (operator-instance vs core/governance/)
-2. Standards split (45 files: core vs release vs operations)
-3. Specs split (21 files: core vs release)
-4. Engineering tools split (13 files: core/deploy/tools/ vs release/tools/)
-5. Roadmaps split (8 files: core vs operations vs release)
-6. .claude/rules/ split (8 files: core vs release)
+2. Standards split (core vs release vs operations)
+3. Specs split (core vs release)
+4. Engineering tools split (core/deploy/tools/ vs release/tools/)
+5. Roadmaps split (core vs operations vs release)
+6. .claude/rules/ split (core vs release)
 7. Agent definitions placement (8 .claude/agents/pmo-*.md → release/ per Surface 1.4)
 8. raid-log.schema.json (operations-only artifact → operations/, not core/)
 
-Adversarial review surfaced 4 Blocker findings (PR-1 standards arithmetic 33+13≠46 actually 45; PR-2 RELEASE_LOG.md orphans 30 incoming refs; PR-3 cycle-prevention grep under-specified — empirical ≥80 baseline; FM-1 + FM-2 cascade-omission patterns) and Counter-Designs CD-1 (rewrite-map authoring at Stage 5 vs 6) and CD-2 (RELEASE_LOG.md template-at-core counter-design). Operator decision at Collective Review APPROVE WITH OVERRIDES 2026-05-27 ratified the spec's classifications with deferred-residual acceptance — cross-citation rewrite work routes to follow-on cleanup tickets.
+Adversarial review surfaced 4 Blocker findings, with figures as of that review (PR-1 standards arithmetic 33+13≠46 actually 45; PR-2 RELEASE_LOG.md orphans 30 incoming refs; PR-3 cycle-prevention grep under-specified — empirical ≥80 baseline; FM-1 + FM-2 cascade-omission patterns) and Counter-Designs CD-1 (rewrite-map authoring at Stage 5 vs 6) and CD-2 (RELEASE_LOG.md template-at-core counter-design). Operator decision at Collective Review APPROVE WITH OVERRIDES 2026-05-27 ratified the spec's classifications with deferred-residual acceptance — cross-citation rewrite work routes to follow-on cleanup tickets.
 
 ## Decision
 
 **The canonical file-placement boundary for the core/ module is LOCKED at these per-class classifications:**
 
 ### Hook layer (`core/hooks/` + `core/config/allowlists/`)
-- **10 hooks** (8 block-*.sh + 2 helpers) → `core/hooks/`
-- **14 allowlist files** (`.claude/*.txt`) → `core/config/allowlists/` (corrects Stage 4 plan's "8" count via empirical survey)
+- **10 hooks** as of authoring (8 block-*.sh + 2 helpers) → `core/hooks/`
+- **14 allowlist files** (`.claude/*.txt`) → `core/config/allowlists/` (corrects Stage 4 plan's "8" count via empirical survey as of authoring)
 - **9 test fixtures** + test-runner.sh → `core/hooks/tests/`
 - **2 mode files** (`.mode`, `deploy-check.mode`) → `core/hooks/{.mode.template, deploy-check.mode.template}` (operator-instance live values at install-time)
 - **Runtime artifacts** (*.jsonl warn-logs, hook-errors.log) → NOT migrated; auto-create in operator instance
@@ -80,28 +80,39 @@ Adversarial review surfaced 4 Blocker findings (PR-1 standards arithmetic 33+13�
 - `RELEASE_LOG.md` → **operator-instance** at `~/Claude/personal/pmo-instance/RELEASE_LOG.md` per harness plan § 2.4 — NOT in any module
 - `governance/adr/` → the migration sub-task owns ADR migration end-to-end (R5); existing ADR-001..005 land at appropriate per-module ADRs/
 
-### Agent definitions (8 files)
+### Agent definitions
 - `.claude/agents/pmo-*.md` → `release/.claude/agents/`
 - Pipeline-bound spoke personas; zero operations-side consumers
 
 ### Workspace-root template
 - `core/CLAUDE.md.template` (depersonalized) — operator-instance setup script writes `~/Claude/CLAUDE.md` with substitutions applied
 
+## Alternatives Considered
+
+The alternatives on this decision arrived as adversarial-review **counter-designs** rather than as a pre-generated option set. § Context names them and the § Composition with adversarial review findings table below records each one's disposition; this section recalls the load-bearing rejections rather than restating that table.
+
+- **CD-2 — `RELEASE_LOG.md` as a templated artifact at `core/`** — **NOT ADOPTED.** Operator-instance separation per the harness plan § 2.4 is preserved; the incoming citations counted at the time are accepted as residual instead, with cross-citation rewrite deferred to follow-on tickets.
+- **CD-5 — a pre-commit grep in Surface 13** — **NOT ADOPTED.** Per-batch commit verification is used instead.
+- **CD-1 — authoring the rewrite map at Stage 5 rather than Stage 6** — **DEFERRED** under the operator standing-GO; the map is authored at Stage 6.
+- **CD-4 — a rewrite-strategy enum carried by this ADR** — **DEFERRED**; the enum lives in the migration spec, not in this boundary lock.
+
+The selected path is § Decision: per-class placement locks decided by **per-file audience analysis** rather than whole-directory migration, which is what the six non-obvious categories in § Context required.
+
 ## Consequences
 
-1. **Module-migration scope locked: operations migration absorbs raid-log.schema.json + 1 operations roadmap; release migration absorbs 11 release-standards + 9 release-specs + 9 release-tools + 1 release-roadmap + release-process.md + RELEASE_PROTOCOL.md + 8 agent definitions.**
+1. **Module-migration scope locked — populations as of authoring: operations migration absorbs raid-log.schema.json + 1 operations roadmap; release migration absorbs 11 release-standards + 9 release-specs + 9 release-tools + 1 release-roadmap + release-process.md + RELEASE_PROTOCOL.md + 8 agent definitions.**
 
 2. **Tooling-adaptation scope locked: deploy.sh adapt; path rewrites; Check 14/15.** The adaptation reads `core/deploy/deploy.sh` byte-identical-to-source as starting point; path rewrites read cross-module reference scope (≥80 baseline cycle violations per adversarial PR-3); Check 14/15 tooling extends `core/deploy/tools/check-doc-links.py`.
 
-3. **RELEASE_LOG.md operator-instance routing (adversarial PR-2 acceptance):** 30 standards + OPERATIONS.md + schemas cite RELEASE_LOG.md as incoming reference. Per operator standing-GO, these citations remain in-text at the core-migration close — cross-citation rewrite work deferred to follow-on tickets. Counter-design CD-2 (templated artifact at core) NOT adopted this release; preserves operator-instance separation per harness plan § 2.4.
+3. **RELEASE_LOG.md operator-instance routing (adversarial PR-2 acceptance):** as of authoring, 30 standards + OPERATIONS.md + schemas cite RELEASE_LOG.md as incoming reference. Per operator standing-GO, these citations remain in-text at the core-migration close — cross-citation rewrite work deferred to follow-on tickets. Counter-design CD-2 (templated artifact at core) NOT adopted this release; preserves operator-instance separation per harness plan § 2.4.
 
-4. **Cycle-prevention contract:** Core MUST NOT depend on operations or release. Verified via `grep -rln "operations/|release/" pmo-platform-v2/core/`. Per adversarial PR-3 baseline, ≥80 matches exist at the core-migration close (disciplines residual); subsequent audits resolve at extraction-readiness validation.
+4. **Cycle-prevention contract:** Core MUST NOT depend on operations or release. Verified via `grep -rln "operations/|release/" pmo-platform-v2/core/`. Per adversarial PR-3 baseline, ≥80 matches existed as of the core-migration close (disciplines residual); subsequent audits resolve at extraction-readiness validation.
 
 5. **Per-file rationale durability:** ADR-007 supersedes any prior per-file classification claim in Stage 4 plan or Stage 5 spec where contradicted. Future re-classifications require ADR-007 amendment.
 
 ## Reversibility
 
-**MODERATE** — re-classification involves file moves + cross-module reference cascade updates per per-edit discipline. CHEAP for individual file moves (e.g., reclassify a single standard from core to release); MODERATE for multi-file re-classification (e.g., move all 6 cross-cutting roadmaps to a different module).
+**MODERATE** — re-classification involves file moves + cross-module reference cascade updates per per-edit discipline. CHEAP for individual file moves (e.g., reclassify a single standard from core to release); MODERATE for multi-file re-classification (e.g., move all 6 then-current cross-cutting roadmaps to a different module).
 
 **Confidence:** MEDIUM-HIGH at operator standing-GO ratification; the 4 Blocker findings from adversarial review carry forward as residual but operator accepted with explicit deferred-resolution route. HIGH at extraction-readiness validation (will empirically test).
 
@@ -110,8 +121,8 @@ Adversarial review surfaced 4 Blocker findings (PR-1 standards arithmetic 33+13�
 | Finding | Disposition |
 |---|---|
 | PR-1 (standards arithmetic 45 ≠ 46) | Resolved — empirical re-count during the core migration; 34 core + 11 release = 45 total |
-| PR-2 (RELEASE_LOG.md orphans 30 incoming refs) | Accepted as residual; deferred cleanup. Counter-design CD-2 documented but NOT adopted. |
-| PR-3 (cycle-prevention grep ≥80 matches) | Accepted as residual; ADR-007 locks the boundary; rewrite map deferred to subsequent migration tickets |
+| PR-2 (RELEASE_LOG.md orphans 30 incoming refs, as of that review) | Accepted as residual; deferred cleanup. Counter-design CD-2 documented but NOT adopted. |
+| PR-3 (cycle-prevention grep ≥80 matches, as of that review) | Accepted as residual; ADR-007 locks the boundary; rewrite map deferred to subsequent migration tickets |
 | PR-4 (block-skill-direct-edit hook semantics) | Resolved — hook stays at core/hooks/; pmo-skill-editor at release/skills/ creates Case D dependency edge (release → core, acceptable) |
 | FM-1 + FM-2 cascade-omissions | Resolved — empirical counts cited inline in this ADR; commit messages cite per-batch arithmetic |
 | FM-3 spec-vs-reality canonicalization | Resolved — solutioning-output-template.md routes to release/ |

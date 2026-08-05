@@ -39,7 +39,7 @@ The forks: **(1)** does the `_pmo/` page become the SSOT, or is the roster the r
 
 5. **Never auto-create a Person.** Project initiation (project-initiator Mode A Step 2b) bootstraps `_pmo/` and links existing entities by id, but an unresolved person name routes to the operator clarification queue (Tier-1) — never a scaffold-time auto-create (mirrors the ADR-040 resolve-by-name migration: zero-match → queue; never first-match auto-pick; never silently dropped).
 
-## Alternatives considered
+## Alternatives Considered
 
 - **Make the people-roster the Person record** — rejected: the roster is operator-instance functional config (capability/coverage), not the identity SSOT; promoting it would fork identity away from the entity model's `person_id` anchor and re-introduce the per-instance-store problem.
 - **Add `aliases` as a frozen §3.10 Person field** — rejected: it would be a Tier-2 SCOPE CHANGE to the frozen entity surface for a rename-safety affordance that lives correctly in the view/convention layer; the convention home (people-coverage-graph §2.3) preserves the frozen boundary (Q2).

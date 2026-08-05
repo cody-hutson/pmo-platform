@@ -83,7 +83,7 @@ operating-model.md and [`five-function-spine-and-process-flows.md`](../disciplin
 ### Decision 3 alternatives
 
 - **(A) Data-inline + single column-header note (selected per Collective Review CONFLICT-2 resolution).**
-- **(B) Bidirectional per-stage pointers (13 hyperlinks per file, 26 total cross-references — Stage 5 spec § 5 Pattern B)** — REJECTED. Coherence threshold violation (cross-file hop fatigue); redundant for the dominant reader use case (reading operating-model.md and seeing `**Universal Function:** Executing` answers what a hyperlink to spine doc would also answer). The spoke author judgment cited at Stage 4 ("structurally independent... weak mutual reference possible but not blocking") set the precedent the Collective Review then formalized.
+- **(B) Bidirectional per-stage pointers (13 hyperlinks per file, 26 total cross-references at the time — Stage 5 spec § 5 Pattern B)** — REJECTED. Coherence threshold violation (cross-file hop fatigue); redundant for the dominant reader use case (reading operating-model.md and seeing `**Universal Function:** Executing` answers what a hyperlink to spine doc would also answer). The spoke author judgment cited at Stage 4 ("structurally independent... weak mutual reference possible but not blocking") set the precedent the Collective Review then formalized.
 - **(C) No cross-reference (zero hyperlinks between the two files)** — REJECTED. Loses the reciprocal-navigation affordance — readers on one file cannot discover the companion file. The Related References section in the spine doc and the column-header note in operating-model.md preserve reciprocity at minimum density.
 
 ## Reversibility
@@ -92,7 +92,7 @@ operating-model.md and [`five-function-spine-and-process-flows.md`](../disciplin
 
 - **Cardinality model revision** would require updating every skill-build that consumes operating-model.md (potentially 5+ role-skill files in the role-skill wave alone) plus updating [`stage-to-skill-mode-mapping.md`](../../release/references/specs/stage-to-skill-mode-mapping.md) per-row entries.
 - **Citation discipline revision** (switching to duplicate-inline) would require re-authoring operating-model.md to inline all cited schema content, plus establishing a drift-detection mechanism for the new dual-source state.
-- **Cross-reference pattern revision** (switching to bidirectional 26-cross-ref pattern) would require adding 24 cross-references (12 new per stage in operating-model.md, 12 new in the spine doc), plus updating ADR-004's Decision 1 rationale (which currently cites the 2-cross-ref total as a positive consequence of Primary+Secondary scheme).
+- **Cross-reference pattern revision** (switching to bidirectional 26-cross-ref pattern) would, at the time, require adding 24 cross-references (12 new per stage in operating-model.md, 12 new in the spine doc), plus updating ADR-004's Decision 1 rationale (which currently cites the 2-cross-ref total as a positive consequence of Primary+Secondary scheme).
 
 Reversal is structurally possible but operationally expensive — comparable to ADR-004's cardinality decision in terms of downstream cascade scope. Decision revision should be accompanied by a new ADR superseding this one, citing the new evidence that justifies the revision.
 

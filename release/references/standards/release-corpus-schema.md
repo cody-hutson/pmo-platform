@@ -25,6 +25,8 @@ Authored per the Stage 5 spec + Collective Review. Composes with [release-notes-
 
 The release corpus records one fact per release — *release X shipped, containing Y, at SHA Z* — across four ledger surfaces. **Two of those surfaces are SOURCE and two are DERIVED, and the split is per-field, not per-file.** This section is the register that `duplicate-source-discipline.md` § 1 requires: every restatement of a release fact either names its source here or is a defect.
 
+**The contract is the pattern, not just the ledger set.** It governs any surface in this repository that RESTATES a fact another file already owns. Two families are registered below: the **release-ledger** family (the four surfaces above, projected by `generate_release_index.py`) and the **release ADR index** (`release/ADRs/README.md`, projected by `generate-adr-index.py`). A third in-corpus instance of the same shape — the generated hook registry — is governed by its own founding record rather than registered here, because its population is not release corpus. A surface that restates a fact and appears in neither register is a defect, not an exception.
+
 ### Roles
 
 | Surface | Role | Authoritative for | Notes |
@@ -35,6 +37,9 @@ The release corpus records one fact per release — *release X shipped, containi
 | `release/releases/RELEASE_INDEX.md` | **DERIVED (5 of 6 columns) · hybrid** | — except the **`Theme`** column, which is the INDEX's own source content | Verified **whole-file**: outside `Theme` the INDEX is not hand-edited. |
 | `release/releases/RELEASE_DIGEST.md` | **DERIVED at emission** | — | Verified **closing entry only**: historical entries carry legitimate post-emission operator edits. |
 | `CHANGELOG.md` | **DERIVED at emission** | — | Same posture as the DIGEST. |
+| `core/ADRs/ADR-*.md` + `release/ADRs/ADR-*.md` — filename + frontmatter | **SOURCE — decision record** | an ADR's number, title, status, decision date and originating release | The record owns every fact about itself. `status:` is enum-prefixed with an optional prose tail per the ADR schema; the **leading token** is the fact, the tail is a ratification anchor that lives on the record. |
+| `release/ADRs/README.md` — the `ADR-INDEX` region | **DERIVED (all 5 columns) · whole-table** | — | Verified **region-scoped**: the README's prose sections are hand-authored and outside the projection. No hybrid column — unlike the INDEX's `Theme`, every column here is derivable, so there is no round-trip limb. |
+| `core/ADRs/README.md` | **NEITHER — curated thematic document** | its own curation | Deliberately not an index and deliberately not projected. Registered here so the negative is explicit and the question is not re-opened. |
 
 ### Per-field provenance
 
@@ -52,6 +57,19 @@ The projector is `core/deploy/tools/generate_release_index.py`. It reads two **f
 | CHANGELOG summary | the note's frontmatter `summary:`, with the `(see release notes)` fallback | file |
 | CHANGELOG Release URL | the repository slug | required argument (`--repo-slug`) |
 
+The ADR-index projector is `release/tools/generate-adr-index.py`. It reads **files only** — the ADR file set and each record's frontmatter — and takes no run-scoped input at all: no clock, no anchor argument, no environment variable, no operator config. Its output is therefore a pure function of the corpus, which is why it can be verified by re-derivation rather than by a stored baseline.
+
+| Derived field | Source | Kind |
+|---|---|---|
+| ADR-index `ADR` (link text + href) | the record's **filename** | file |
+| ADR-index `Title` | the record's `title:`, with its `ADR-NNN — ` prefix stripped | file |
+| ADR-index `Status` | the **leading Nygard token** of the record's `status:`; the sanctioned prose tail is not projected | file |
+| ADR-index `Date` | the record's `date:` | file |
+| ADR-index `Release` | the record's `release:`, with a trailing version-binding parenthetical dropped | file |
+| ADR-index row order | ascending by ADR number | derived from the file set |
+
+**Why the Status tail is dropped rather than projected.** A `Proposed (flips to Accepted at Stage 9)` tail is a *promise about a future gate*, tracked on the record and by the Stage-13 ratification-flip backstop. Projecting it into an index would put a second, staler copy of a ratification claim in a navigation surface — the duplicate-source defect this contract exists to prevent, re-created one layer down.
+
 **Why the anchors are arguments and not derivations.** The INDEX and the LOG carry the **merge** anchor; the DIGEST, the note's `date:` and the CHANGELOG carry the **close-out run** anchor. Both are sampled exactly once, by the close-out orchestrator, at sites that already exist. A projector that could reach a clock could become a second writer of a fact that already has one — which is precisely the mechanism that produced the INDEX `Date` grandfathering enumeration the projector still carries. Anchor taxonomy and sampling rules: [`date-variable-convention.md § Emission-Time Anchors`](../../../core/standards/date-variable-convention.md).
 
 ### Emission and custody
@@ -67,8 +85,13 @@ The projector is `core/deploy/tools/generate_release_index.py`. It reads two **f
 | `release/releases/RELEASE_INDEX.md` | whole file, on the 5 derived columns **plus** a `Theme` round-trip integrity limb **plus** a recent-first row-order limb | `generate_release_index.py --verify`, invoked by `deploy.sh` Check 23 |
 | `release/releases/RELEASE_DIGEST.md` | the closing version's entry only | close-out `assert_derived_surfaces` phase (presence + residue) and `deploy.sh` Checks 32/48 (presence) |
 | `CHANGELOG.md` | the closing version's entry only | same |
+| `release/ADRs/README.md` | the `ADR-INDEX` managed region only, on all 5 derived columns, **plus a set-difference in BOTH directions** (a record with no row, and a row with no record) | `generate-adr-index.py --verify`, invoked by the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml` |
 
-A hand-edit to any of the INDEX's five derived columns **fails** Check 23. A hand-edit to INDEX `Theme` is **sanctioned** and protected by the integrity limb. A hand-edit to a historical DIGEST or CHANGELOG entry is **allowed**. A closing DIGEST or CHANGELOG entry that diverges at close-out **fails**.
+A hand-edit to any of the INDEX's five derived columns **fails** Check 23. A hand-edit to INDEX `Theme` is **sanctioned** and protected by the integrity limb. A hand-edit to a historical DIGEST or CHANGELOG entry is **allowed**. A closing DIGEST or CHANGELOG entry that diverges at close-out **fails**. A hand-edit to any cell inside the ADR-INDEX region **fails**, and so does a merged ADR with no row — which is the failure this surface was converted to make impossible.
+
+**Both-directions verification is not optional on a projected index, and the reason is asymmetric.** A per-cell comparison alone would pass a table that is simply missing a record — the exact defect that produced this surface. A coexistence limb alone would pass a table whose every row contradicts its record. The ADR index carried **both** defects simultaneously before conversion, which is why its check asserts both.
+
+**A projector must never silently regenerate to clear a finding.** `--verify` is read-only; the remedy is a separate `--write` invocation the author runs and commits. A check that repaired what it measured could not distinguish a stale index from a corrupted one.
 
 ## Archive Segments
 

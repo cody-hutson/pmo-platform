@@ -87,7 +87,7 @@ token-allow markers do not cover an arbitrary external person's name).
   to existing/added entities. The affected entity surfaces are RE-FROZEN with this amendment
   in effect.
 
-## Alternatives considered
+## Alternatives Considered
 
 | Option | Decision | Rationale |
 |---|---|---|

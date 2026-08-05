@@ -42,7 +42,7 @@ body:
     id: considered-options
     attributes:
       label: Considered Options
-      description: List each option evaluated with pros and cons.
+      description: "Required — content conditional (adr-schema.md §3.1): this field is always answered, but what it says depends on the decision. List each option evaluated with pros and cons; if a single forced approach existed, say so instead — that is a valid, conformant answer."
       placeholder: |
         **Option 1: [Name]**
         - Pro: ...
@@ -51,6 +51,9 @@ body:
         **Option 2: [Name]**
         - Pro: ...
         - Con: ...
+
+        — or, where no options were weighed —
+        Single forced approach; no viable alternative was weighed.
     validations:
       required: true
 

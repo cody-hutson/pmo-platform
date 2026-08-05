@@ -37,7 +37,7 @@ The open question this ADR resolves: should the change domain get a fourth share
 
 Revisit this decision and **promote the change-domain body to a shared `domain-best-practices/change.md` guide** IF a **second *peer* change-domain *designer* skill** is introduced (i.e., a second consumer that would design against the change methodologies directly, not merely compose `change-management`). That is the "multiple peer consumers" condition the software-guide precedent rests on; when it holds for the change domain, the shared-guide form earns its keep and the cite-not-restate calculus flips. Until then, the self-bundled form is single-source-optimal.
 
-## Options considered
+## Alternatives Considered
 
 | # | Option | Trade-off | Verdict |
 |---|---|---|---|

@@ -2,7 +2,7 @@
 title: "ADR-087 — `Stop`-hook agent-loop re-entry as a hook class (ship-inert activation boundary)"
 status: Proposed
 date: 2026-07-22
-release: pipeline-telemetry-tail (#261) (v3.83; bound at the Stage-12 tag-claim, forward-renumbered from provisional v3.80)
+release: pipeline-telemetry-tail (v3.83; bound at the Stage-12 tag-claim, forward-renumbered from provisional v3.80)
 deciders: "Stage 8 QA spoke surfaced the gap (the rationale lived only in a skill references/ file); the operator elected 'companion ADR, not a widening of ADR-086' at the Stage 9 plan-review gate 2026-07-22; the Stage-9 remediation spoke authored it; operator ratifies at the Stage 9 / activation gate"
 tags: [core, runtime-control, hooks, agent-loop, activation-boundary, session-retro, precedent, autonomy]
 source_observations:
@@ -51,6 +51,16 @@ Three candidate mechanisms were available, and the constraint that decided among
 
 **Scope bound.** This ADR governs the **hook class** — the re-entry mechanism and the conditions under which the platform will register one. It does **not** govern what any particular re-entrant hook does with the turn it takes, nor the sampling policy of the capability that motivated it (that is the skill's own contract), nor the activation decision for any specific instance.
 
+## Alternatives Considered
+
+Recorded from this record's own § Context, which tables the three candidate mechanisms and names the constraint that decided among them — a shell hook cannot make the agent reason.
+
+| Option | Verdict | Why |
+|---|---|---|
+| **`Stop` + `decision:block`** | **SELECTED** | The only supported way to obtain a reflection at a session boundary: a `Stop` hook may return `{"decision":"block","reason":…}`, which re-enters the agent. It also receives the session identifier and transcript pointer on stdin, so a cheap triviality predicate is computable without a model call. |
+| **`SessionEnd`** | Rejected | Session-terminal and correct in principle, but a cleanup hook: it can run a script, not a reflection, and cannot re-enter the agent loop. Using it would force deferred reflection at the next session start, needing catch-up machinery and reflecting on a session whose context is already gone. |
+| **No hook (skill only)** | Kept as the floor, not the answer | The skill is fully usable with no hook installed; the hook only automates the timing. That is what makes the ship-inert posture honest rather than a stub. |
+
 ## Consequences
 
 - **The platform now has two hook shapes, and they are not interchangeable.** A *gate* hook constrains a pending action and is reasoned about in terms of blast radius. A *re-entrant* hook consumes agent turns and is reasoned about in terms of loop safety and interruption cost. A reviewer assessing a new hook must first decide which shape it is; the four obligations above apply only to the second.
@@ -87,7 +97,7 @@ Three candidate mechanisms were available, and the constraint that decided among
 - **ADR-078** (security-hook dependency-resolution posture) — the nearest prior hook-scoped decision. It governs how a *gate* hook resolves its dependencies; this ADR introduces the second hook shape that decision's framing did not contemplate.
 - No superseding or superseded relationship. This is the first ADR to govern agent-loop re-entry as a class.
 
-### Issue References
+## References
 
 - #2423 — the per-session self-retrospection capability whose trigger introduced the `Stop` registration; the ship-inert activation boundary and its pre-activation conditions attach to that work item.
 - #261 — release milestone `pipeline-telemetry-tail`, under which the hook class was reviewed and this record was directed at the plan-review gate.

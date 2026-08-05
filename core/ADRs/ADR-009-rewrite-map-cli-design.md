@@ -23,7 +23,7 @@ Accepted as architectural intent at P2-T5 (this ticket commits `check-doc-links.
 This release reorganizes the workspace structure such that documentation cross-references move from flat `pmo-platform/reference/*` to module-prefixed `pmo-platform-v2/{core,operations,release}/{disciplines,schemas,standards,specs}/*`. Existing `check-doc-links.py` (at `core/deploy/tools/check-doc-links.py` post-Wave-C) detects broken refs but cannot emit rewrite suggestions. Wave E extends it with `--from-path X --to-path Y` mode that emits a rewrite map (source ref → target ref) for consumption by Wave E path-rewrites + cross-module audit + cleanup tickets.
 
 Per adversarial review:
-- **PR-2 (Blocker — count contradiction):** Stage 5 spec Summary claimed "8 paths" while Surface 3 enumerates 14 — internal self-contradiction; resolution: 14 patterns is the empirical truth.
+- **PR-2 (Blocker — count contradiction):** Stage 5 spec Summary claimed "8 paths" while Surface 3 enumerates 14 — internal self-contradiction; resolution: as of that review, 14 patterns is the empirical truth.
 - **PR-1 (Major — heterogeneous prefix abstraction):** 4 v1 prefixes + 4 v2 prefixes collapsed into one tuple; the abstraction works but obscures repo-boundary in failure messages.
 - **PR-3 (Blocker — EMIT-ONLY non-enforcement):** Spec names file mutation as "Catastrophic" but mitigation is "code review at Stage 6 verifies EMIT-ONLY semantics" — non-structural. Best-practice requires executable test fixture verifying mtime/content-hash unchanged after invocation.
 - **FM-2 (Major — prefix-anchor false-positive):** `new_path = to_path + target_path_only[len(from_path):]` works for direct-segment-substitution but FAILS for restructuring renames (e.g., `pmo-platform/reference/explanation/` → `core/disciplines/` drops the `explanation/` segment but string-concat preserves it).
@@ -120,6 +120,17 @@ $ check-doc-links.py --from-path "pmo-platform/reference/explanation/" \
 #   pmo-platform-v2/core/disciplines/explanation/<file>
 # which may not match the actual v2 layout. Verify cascade manually.
 ```
+
+## Alternatives Considered
+
+Each structural rule in § Decision states the shape it was chosen over; the alternatives are recorded per rule rather than as one option set.
+
+- **Rule 1 — the CLI shape.** The `--rewrite-map` JSON single-flag interface (adversarial CD-1) was **not taken**; Rule 1 states its own rationale for the two-flag `--from-path` / `--to-path` form: composable with shell loops at the invocation pattern, argparse-natural with no JSON parser overhead at the consumer, and a test fixture that is two strings rather than a JSON document.
+- **Rule 2 — the prefix table.** A single collapsed prefix tuple was **not taken**; per the adversarial review the collapsed abstraction works but obscures the repo boundary in failure messages, so the table is split into named V1/V2 constants.
+- **The EMIT-ONLY contract.** Relying on Stage-6 code review to hold it was **not taken**; the adversarial review classified that mitigation as non-structural for a failure the spec itself names catastrophic, so an executable fixture asserting mtime and content-hash unchanged replaces it.
+- **Asymmetric restructuring renames.** Silent prefix-substitution was **not taken**; because string concatenation preserves a segment a restructuring rename drops, the design adds a default-enabled asymmetry warning rather than guessing the correct cascade.
+
+One adjacent disposition was operator-ratified rather than designed here: Check 15 is **retired** from the v2 deploy surface, with release-corpus integrity moving to an external tool or an operator-instance fallback wrapper, and the integrity-gap window accepted at Collective Review.
 
 ## Consequences
 

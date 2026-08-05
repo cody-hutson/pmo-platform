@@ -60,6 +60,19 @@ judgment-class steps (per the gate-criteria Check enum) promote only their
 evidence-gathering substrate; structural/metrics steps may promote fully. The
 canonical definition lives in core/standards/agent-script-promotion-framework.md.
 
+## Alternatives Considered
+
+Recorded from this record's own § Context, which generates four candidate shapes at Stage 5 and states the constraint that eliminated each.
+
+| Option | Verdict | Why |
+|---|---|---|
+| **(A) 5-rung form-anchored enum** (prose procedure → documented command → tracked tool → checkpoint-wired → autonomous guard) | **SELECTED** | Discrete and schema-validatable; every estate member classifies into exactly one rung; the cheapest and most common first promotion keeps its own rung. |
+| **(B) Reuse of the gate-criteria Check enum** (structural / metrics / judgment) | Rejected | The duplicate-source discipline and the skill-pipeline-alignment standard's parallel-vocabulary decision-test forbid overloading an existing enum with second semantics — the Check enum classifies what kind of check a criterion is, not what form its implementation takes. |
+| **(C) 4-rung collapse** merging documented-command into agent-procedure | Rejected — survived to the trade-off matrix | Lost on estate evidence: the documented-command rung has real current members, and prose→command-block is the cheapest, most common first promotion, so collapsing it erases the rung where most promotions begin. |
+| **(D) Continuous readiness score** (0–100, no discrete rungs) | Rejected | The parent work item's acceptance criteria require a discrete, schema-validatable target-promotion-level value; a continuous score cannot populate the field deterministically and decision tables cannot branch on it. |
+
+A related vocabulary constraint shaped the naming rather than the shape: the autonomy-tiers disambiguation table forbids a fifth bare-numbered tier vocabulary, which drove the `AS` prefix (confirmed collision-free by a corpus grep).
+
 ## Consequences
 
 Positive: every estate member classifies into exactly one rung

@@ -141,6 +141,20 @@ approval-evidence signal in the payload, or require every skill to emit an
 raw tool-call payload today (the `autonomy_tier:` frontmatter is itself a *future*
 outbound), so both reproduce the unavailable-signal trap.
 
+## Alternatives Considered
+
+This record already carries an explicit **Rejected alternatives** paragraph at the end of § Decision, and § Context weighs the competing hook designs that targeted the same enforcement surface. Recorded here in the canonical section, selected option first:
+
+| Option | Verdict | Why |
+|---|---|---|
+| **One payload-triggered `block-autonomy-ceiling.sh`** absorbing the §4 contract's substance | **SELECTED** | The payload trigger is the universal signal every hook already uses, and reading `operator.toml` at runtime has a working precedent. It gates parent-session and subagent-session calls identically without depending on the unreadable `subagent_type` field — superior coverage on a feasible substrate. |
+| **The standard's deferred `block-subagent-tier-violation.sh`** (subagent-session detection) | Rejected | It rests on a trigger signal the hook layer cannot read: the same document states hooks do not read session-context fields, and a survey of the suite found zero hooks reading any session / subagent / transcript field. It would be a false-enforcement floor — it could not fire as specified. The narrower name also mis-describes scope, since parent-session tool calls are in-scope for the surface. |
+| **(a) Retain the §4 design and defer entirely** until a session signal exists | Rejected | Leaves the autonomy dial unenforced indefinitely on a premise that is not merely absent but contradicted by the suite's own design, while the payload-triggered floor is buildable today. |
+| **(b) Ship two separate hooks** (ceiling + subagent-tier) | Rejected | Leaves the corpus naming two designs for one surface and ships a second hook that cannot fire. |
+| **(c) Infer tier from a `cascade_scope` / approval-evidence payload signal, or require every skill to emit an `autonomy_tier:` frontmatter field** | Rejected | Neither signal exists in a raw tool-call payload today (the frontmatter field is itself a future outbound), so both reproduce the unavailable-signal trap. |
+
+One further alternative was weighed inside the selected design and is recorded in § Decision item 3: an **unmapped action is ALLOWED** rather than denied. A deny-default would break routine work because the hook gates every mutation, so the deny-bias of `block-destructive` is deliberately inverted here and retained only for the bounded, enumerated Tier-0 set.
+
 ## Consequences
 
 - **Every mutation tool call now passes through `block-autonomy-ceiling.sh`** —

@@ -41,7 +41,7 @@ The original framing also conflated the cleanup behavior with `cleanup-orphan-st
 
 4. **Consume, do not re-implement.** The skill keys on the reconciled `lifecycle_state` / `promotion_state` fields (zero reads of the deprecated single-field machine), derives staleness the way the platform already detects it (the >30-day-unreferenced zombie-detection signal, recommend-only), and consumes the `artifact-lint` report as the source for superseded / version-chain candidates rather than re-deriving lineage. The lifecycle, lineage, and staleness logic already exist on-tree; `generated-cleanup` wires to those outputs.
 
-## Alternatives considered
+## Alternatives Considered
 
 - **(B) A `weekly-status-rollup` hook** — rejected: folding cleanup into the roll-up couples an artifact-surface hygiene scan to a cross-project status cadence, denies the operator on-demand invocation (AC-1 requires a named, working on-demand trigger), and would force `weekly-status-rollup/SKILL.md` edits that the skill-mode choice avoids entirely (dissolving the soft contention with the #369 spoke). The roll-up's job is status synthesis, not surface mutation.
 - **(C) A standalone MCP scheduled task** — eliminated on seam-fit: the platform already exposes a `/schedule` seam that any on-demand skill can register against, so a bespoke MCP scheduled-task carrier would duplicate scheduling infrastructure for no capability gain. Candidate A reuses the existing seam; C reinvents it.

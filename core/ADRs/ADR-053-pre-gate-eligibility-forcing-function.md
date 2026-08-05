@@ -32,7 +32,7 @@ Add a **Gate 0 — gate-eligibility precondition** at the head of the Informatio
 
 Gate 0 is the read-side **enforcement** of the Standing-GO model (a declare/enforce pair); it changes no Standing-GO content and references it by name.
 
-## Options considered
+## Alternatives Considered
 
 | # | Option | Trade-off | Verdict |
 |---|---|---|---|

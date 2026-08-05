@@ -90,14 +90,14 @@ trigger and the Stage-4 D-Gate **cite** it, they do not restate it.
 - One added required line at the Stage-4 D-Gate when a D-decision touches a skill's Anthropic
   coupling.
 
-### Reversibility
+## Reversibility
 
 **MODERATE / Confidence HIGH.** Reversal is a new superseding ADR plus re-pointing the two
 citations (registry trigger, D-Gate line); it introduces no data migration and no schema
 change. Pre-application the change is CHEAP; it crosses to MODERATE once skills are
 re-classified or re-pointed under the rule.
 
-## Options considered
+## Alternatives Considered
 
 | Option | Decision | Rationale |
 |---|---|---|

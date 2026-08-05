@@ -1,3 +1,4 @@
+<!-- derived-surface: source=release/ADRs/ADR-*.md (filename + frontmatter) · projector=release/tools/generate-adr-index.py · anchor=none (no run-scoped input) · derived-columns=ADR,Title,Status,Date,Release · source-column=NONE (whole-table projection; every column is derivable, so there is no hybrid round-trip limb) · contract=release/references/standards/release-corpus-schema.md § Derived-Surface Contract · REGION-SCOPED: only the ADR-INDEX region below is projected -->
 # Release Module Architecture Decision Records (ADRs)
 
 Architecture Decision Records for the `release/` module of the pmo-platform — the SDLC / pipeline domain (Stages 1-13 of the release pipeline, file-contention audits, pipeline reference-doc layout). Each ADR captures a structurally-load-bearing decision with status, context, decision rationale, consequences, reversibility, and cross-ADR composition.
@@ -8,30 +9,57 @@ ADRs follow the canonical **[ADR schema](../../core/schemas/adr-schema.md)** —
 
 ## Naming convention
 
-`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 + ADR-006 + ADR-007 + ADR-008 + ADR-009 live in [`../../core/ADRs/`](../../core/ADRs/); this module holds ADR-001, ADR-002, ADR-005, ADR-011, ADR-021, ADR-024, ADR-025, ADR-026, ADR-036, ADR-037, ADR-072, ADR-073, ADR-074, ADR-079, ADR-086, ADR-088. Future release-scoped ADRs continue the global sequence. The platform-wide-unique + gap-free numbering rule is enforced in CI by `release/tools/check-adr-numbers.py` (the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml`).
+`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing **across the platform, not per module**. `core/ADRs/` and `release/ADRs/` share ONE global sequence, so the two directories interleave: which numbers are release-scoped is not a fact to be enumerated, it is a fact **derivable from which directory the file sits in**. The generated index below is that derivation for this module; the core module's records live in [`../../core/ADRs/`](../../core/ADRs/).
+
+A number is **allocated at authorship and bound at merge** — an unmerged claim on a sibling branch does not bind the sequence, and stepping past one lands a gap that the contiguity gate fails as readily as a duplicate. The binding oracle and the merge-time reconciliation are tooled: `release/tools/renumber-adr.py --next-free` / `--renumber`. See [ADR-115](ADR-115-adr-number-claim-binds-at-merge.md) for the decision and [`../../core/ADRs/README.md`](../../core/ADRs/README.md) § Renumber log for the worked precedents.
+
+**Enforcement.** The platform-wide-unique + gap-free numbering rule is enforced in CI by `release/tools/check-adr-numbers.py`, and the completeness of the index below by `release/tools/generate-adr-index.py --verify` — both in the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml`.
 
 ## Release-scoped ADRs
+
+**This table is a DERIVED surface.** Every column — link, title, status, date, release — is projected from the ADR file set and each record's own frontmatter. It is not hand-maintained, and a hand-edited row fails `--verify`. Regenerate with `python3 release/tools/generate-adr-index.py --write`. Contract: [`../references/standards/release-corpus-schema.md`](../references/standards/release-corpus-schema.md) § Derived-Surface Contract. Founding record: [ADR-117](ADR-117-adr-index-derived-surface-and-scoped-conformance-claim.md).
+
+<!-- ADR-INDEX:BEGIN -->
+<!-- The table below is GENERATED from the ADR file set. Do not hand-edit a row: `generate-adr-index.py --verify` fails a hand-edit, and the record's own frontmatter is the source for every column. Add an ADR, then run `python3 release/tools/generate-adr-index.py --write`. -->
 
 | ADR | Title | Status | Date | Release |
 |---|---|---|---|---|
 | [ADR-001](ADR-001-cross-pr-overlap-audit-baseline.md) | Cross-PR Overlap Audit baseline policy when open-PR set is empty | Accepted | 2026-05-01 | file-overlap-audit |
 | [ADR-002](ADR-002-modular-pipeline-stages-split.md) | Modular Pipeline Stages Split | Accepted | 2026-05-10 | platform-architecture-operating-model |
 | [ADR-005](ADR-005-append-pattern-aware-cross-pr-contention-scoring.md) | Append-pattern aware cross-PR contention scoring (extends ADR-001) | Accepted | 2026-05-17 | stage-execution-and-process-discipline |
-| [ADR-011](ADR-011-analysis-class-methodology-design-treatment.md) | Analysis-class methodology-design treatment: Stage 5 persona variant (not a new stage) | Proposed | 2026-06-02 | v1.04-planning |
+| [ADR-011](ADR-011-analysis-class-methodology-design-treatment.md) | Analysis-class methodology-design treatment: Stage 5 persona variant (not a new stage) | Accepted | 2026-06-02 | v1.04-planning |
 | [ADR-021](ADR-021-liveness-oracle-selection.md) | Liveness oracle: all-process lsof cwd snapshot, fail-closed | Accepted | 2026-06-11 | v1.11-cleanup-orphan-state-reliability |
-| [ADR-024](ADR-024-cross-release-impact-model.md) | Cross-release impact model: structural-blast-radius axis (F1–F6 ref-form sweep) + GO baseline-currency | Accepted | 2026-06-14 | cross-release-impact-model |
+| [ADR-024](ADR-024-cross-release-impact-model.md) | Cross-release impact model (structural-blast-radius axis via F1–F6 ref-form sweep + GO baseline-currency) | Accepted | 2026-06-14 | cross-release-impact-model |
 | [ADR-025](ADR-025-sior-escalation-canonicalization.md) | SIOR escalation canonicalization: single-source protocol doc + link-reference consumption | Accepted | 2026-06-13 | sior-escalation-discipline-across-the-comms-triage-technical |
-| [ADR-026](ADR-026-spoke-launch-quota-reservation-telemetry-event.md) | Per-spoke quota telemetry: a new `spoke-launch` event_type, not a `test-run` payload key | Proposed | 2026-06-13 | parallel-launch-quota-budget-gate |
-| [ADR-036](ADR-036-version-claim-determinism.md) | Deterministic version-claiming: a host-agnostic capability (slug-primary, defer-to-claim, atomic CAS) bound to a config-selected `repo_host` adapter | Accepted | 2026-06-21 | release-version-claim-determinism |
-| [ADR-037](ADR-037-version-slot-cross-release-contended-axis.md) | Version slot as a cross-release contended axis (extends ADR-024): version-slot virtual-path token on the unchanged `serialize()` predicate | Proposed | 2026-06-21 | release-version-claim-determinism |
-| [ADR-072](ADR-072-region-scoped-av-invariant-verification.md) | Region-scoped AV invariant verification: QC4-05 restricts each assertion to a declared lexical region (region × polarity) so a comment-vs-code / negation match cannot produce a verdict | Proposed | 2026-07-03 | 70-verification-execution-surface |
-| [ADR-073](ADR-073-cross-issue-integration-check-stage9-extension.md) | Cross-issue release-integration check: extend Stage 9 (Phase A3.6 + QC3.5 + G-PR10) over a new Stage 7.5, reading the executor-emitted CIAC verdicts read-only (single-runner) with a G-PR9-style evidence-freshness guard | Proposed | 2026-07-03 | 70-verification-execution-surface |
-| [ADR-074](ADR-074-stage8-consumes-runtime-evidence-for-behavioral-ac.md) | Stage 8 consumes the Stage-7 A8 runtime `test-run` result for behavioral-AC acceptance (Phase A validates the envelope, Phase B adds the Test-results read) rather than defining its own Stage-8 execution step — one dispatch map, honest `suite-skip` fallback for unmapped domains | Proposed | 2026-07-03 | 70-verification-execution-surface |
-| [ADR-079](ADR-079-hub-owned-subtask-close.md) | Hub-owned sub-task close (spoke posts output; hub closes) — relocates sub-task-close ownership from spoke to hub so the authorized-close guardrail false-positive is removed in-git (the spoke's close *action* was the harness-warning trigger; no harness change) | Proposed | 2026-07-11 | 98-pipeline-freshness-and-spoke-safety |
-| [ADR-086](ADR-086-event-log-schema-decision-subtype-extension.md) | Event-log schema decision-subtype extension — § 3 stays the SSOT and is extended in place on both axes (a new `decision` subtype `cascade-sweep-block`, and a net-new top-level `event_type=session-retro`), with § 3 read data-driven at runtime and the tool's static list a best-effort degradation mirror (unverified, one known divergence); scoped to the type/subtype axis only; rejects collapsing a distinct event into a catch-all subtype to avoid a governed schema change | Proposed | 2026-07-19 | pipeline-telemetry-tail |
-| [ADR-088](ADR-088-release-state-binding-and-mechanical-merge-boundary.md) | Release-state binding points: Gate 3 asserts identity-mode intent, not claim-time version freeness; mechanical merge (`merge=union`) is safe only for pure-additive ledgers | Accepted | 2026-07-22 | version-identity-and-corpus-ledgers |
+| [ADR-026](ADR-026-spoke-launch-quota-reservation-telemetry-event.md) | Per-spoke quota telemetry: a new `spoke-launch` event_type, not a `test-run` payload key | Accepted | 2026-06-13 | parallel-launch-quota-budget-gate |
+| [ADR-036](ADR-036-version-claim-determinism.md) | Deterministic version-claiming: a host-agnostic capability (slug-primary identity, intent-to-bump, defer-to-claim, atomic compare-and-swap) bound to a config-selected repo_host adapter | Accepted | 2026-06-21 | release-version-claim-determinism |
+| [ADR-037](ADR-037-version-slot-cross-release-contended-axis.md) | Version slot as a cross-release contended axis (extends ADR-024) via a version-slot virtual-path token on the unchanged serialize() predicate | Accepted | 2026-06-21 | release-version-claim-determinism |
+| [ADR-052](ADR-052-engineering-parallelism-postures.md) | Stage-6 Engineering parallelism posture taxonomy (names existing D-C SINGLE / OPTION-A topology behavior as postures + adds dispatch) | Accepted | 2026-06-30 | 73-concurrent-execution-safety |
+| [ADR-054](ADR-054-records-classification-retention-model.md) | Records classification + retention model — 4-class value-based taxonomy, derived not minted, destruction=none | Accepted | 2026-06-30 | 20-records-management-naming-and-cleanup |
+| [ADR-055](ADR-055-artifact-name-segment-order.md) | Artifact-name segment order — project-code-first, with charset-vs-grammar enforcement honestly bounded | Accepted | 2026-06-30 | 20-records-management-naming-and-cleanup |
+| [ADR-056](ADR-056-generated-cleanup-trigger-surface.md) | Generated-artifact cleanup trigger surface — a new on-demand skill (/generated-cleanup), schedulable via the existing /schedule seam, distinct from the orphan-state cleanup script | Accepted | 2026-06-30 | 20-records-management-naming-and-cleanup |
+| [ADR-066](ADR-066-design-gate-delivery-approach-conditioning.md) | Design-before-slicing gate conditioned on delivery_approach: a new Gate-3 criterion (G3-18) that biases the design-invocation expectation per the declared methodology via the §5 Skill Consumption Pattern, base behavior unchanged when the axis is absent | Accepted | 2026-07-01 | 105-knowledge-corpus-tail-closeout |
+| [ADR-072](ADR-072-region-scoped-av-invariant-verification.md) | Region-scoped AV invariant verification | Accepted | 2026-07-03 | 70-verification-execution-surface |
+| [ADR-073](ADR-073-cross-issue-integration-check-stage9-extension.md) | Cross-issue release-integration check: Stage-9 extension over new Stage 7.5 | Accepted | 2026-07-03 | 70-verification-execution-surface |
+| [ADR-074](ADR-074-stage8-consumes-runtime-evidence-for-behavioral-ac.md) | Stage 8 consumes Stage-7 runtime evidence for behavioral-AC acceptance (does not re-execute) | Accepted | 2026-07-03 | 70-verification-execution-surface |
+| [ADR-075](ADR-075-plan-verification-executor-shared-contract.md) | Plan-verification executor: a versioned shared-executor contract over a thin check-family dispatcher | Accepted | 2026-07-03 | 70-verification-execution-surface |
+| [ADR-076](ADR-076-comment-author-association-trust-boundary.md) | Comment author-association trust boundary at the pipeline's comment-I/O seam | Accepted | 2026-07-04 | 109-comment-trust-boundary |
+| [ADR-079](ADR-079-hub-owned-subtask-close.md) | Hub-owned sub-task close (spoke posts output; hub closes) | Accepted | 2026-07-11 | 98-pipeline-freshness-and-spoke-safety |
+| [ADR-086](ADR-086-event-log-schema-decision-subtype-extension.md) | Event-log schema decision-subtype extension (cascade-sweep-block + session-retro) | Accepted | 2026-07-19 | pipeline-telemetry-tail |
+| [ADR-088](ADR-088-release-state-binding-and-mechanical-merge-boundary.md) | Release-state binding points: Gate 3 asserts identity-mode intent, not claim-time freeness; mechanical merge is safe only for pure-additive ledgers | Accepted | 2026-07-22 | version-identity-and-corpus-ledgers |
+| [ADR-093](ADR-093-scoped-conditional-binding-acceptance-fit-gate.md) | Scoped, conditional-binding acceptance-fit gate at Stage 2 with phased rollout | Proposed | 2026-07-25 | intake-and-gate-protocol-hardening |
+| [ADR-094](ADR-094-extend-before-create.md) | Extend-before-create lands as a separately-triggered SR-G6 (non-T3), generalizing ADR-090; a Maintainability value-extension, not a new discipline | Proposed | 2026-07-25 | intake-and-gate-protocol-hardening |
+| [ADR-099](ADR-099-mode-r-disposition-set-fit-test.md) | Milestone-readiness disposition set: closed as a vocabulary, not a cardinality | Proposed | 2026-07-27 | release-hub-mode-r-depth |
+| [ADR-100](ADR-100-event-log-payload-pipe-grammar.md) | Event-log payload pipe grammar (escaped `\|` as the canonical multi-value separator) | Proposed | 2026-07-27 | decision-telemetry-emission |
+| [ADR-102](ADR-102-quota-budget-successor-substrate-finops-cumulative-draw.md) | The quota-budget gate's per-spoke cost successor is the FinOps store's cumulative per-spoke draw, not ADR-026's `spoke-launch` startup reservation | Proposed | 2026-07-28 | agent-finops-intelligence |
+| [ADR-105](ADR-105-release-corpus-normalization.md) | The release corpus has two typed file sources and two run-scoped inputs, one projector, and per-field provenance — not one authoritative ledger | Accepted | 2026-08-02 | governance-hardening |
+| [ADR-110](ADR-110-composition-lock-at-stage-4-entry.md) | A Milestone's composition is locked to additions at Stage-4 Planning entry; the lock binds the act, not the disposition, and its unmarked state is not eligibility | Proposed | 2026-08-03 | release-bundle-and-sequence-gates |
+| [ADR-111](ADR-111-priority-carrier-agnostic-p-level-detection.md) | The P-level digit is the canonical priority satisfier; the carrier is not part of the contract | Proposed | 2026-08-03 | release-bundle-and-sequence-gates |
+| [ADR-115](ADR-115-adr-number-claim-binds-at-merge.md) | An ADR number is allocated at authorship and bound at merge; only the mainline binds, and the reconciliation is tooled | Proposed | 2026-08-04 | adr-corpus-conformance |
+| [ADR-117](ADR-117-adr-index-derived-surface-and-scoped-conformance-claim.md) | The ADR index is a derived surface and cannot drift; the conformance claim is scoped to a named baseline and its residual is stated | Proposed | 2026-08-04 | adr-corpus-conformance |
+<!-- ADR-INDEX:END -->
 
-ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout. ADR-011, ADR-021, ADR-024, ADR-025, and ADR-026 are authored natively in the modular-monolith layout.
+ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
 
 ## Scope
 
@@ -55,37 +83,13 @@ ADR-024 (cross-release impact model) ──extends──> ADR-037 (version slot 
 
 ADR-001 establishes the baseline-pinned analysis policy (last-N merged PRs + open PRs at audit-start commit SHA) when the open-PR set is empty at audit time. ADR-005 extends ADR-001 with append-pattern detection (`overlap_class` enum: `append-pattern` / `line-range-overlap` / `single-pr`) — files with `overlap_class = append-pattern` are informational only since append-pattern PRs almost never conflict at merge time. ADR-002 records the architectural decision to split the legacy monolithic `pipeline-stages.md` into 13 self-contained per-stage shards.
 
-## Cross-numbering with core/ADRs/
-
-| ADR | Module | Status |
-|---|---|---|
-| ADR-001 | release | migrated (2026-05-27) |
-| ADR-002 | release | migrated (2026-05-27) |
-| ADR-003 | core | migrated (2026-05-27) |
-| ADR-004 | core | migrated (2026-05-27) |
-| ADR-005 | release | migrated (2026-05-27) |
-| ADR-006 | core | authored (2026-05-27) |
-| ADR-007 | core | authored (2026-05-27) |
-| ADR-008 | core | authored (2026-05-27); implementation follow-on |
-| ADR-009 | core | authored (2026-05-27); implementation follow-on |
-| ADR-011 | release | authored at Stage 6 (2026-06-02) |
-| ADR-021 | release | authored at Stage 6 (2026-06-11) |
-| ADR-024 | release | authored at Stage 6 (2026-06-14) |
-| ADR-025 | release | authored at Stage 6 (2026-06-13) |
-| ADR-026 | release | authored at Stage 6 (2026-06-13) |
-| ADR-036 | release | authored at Stage 6 (2026-06-21) |
-| ADR-037 | release | authored at Stage 6 (2026-06-21) |
-| ADR-072 | release | authored at Stage 6 (2026-07-03) |
-| ADR-073 | release | authored at Stage 6 (2026-07-03) |
-| ADR-074 | release | authored at Stage 6 (2026-07-03) |
-| ADR-079 | release | authored at Stage 6 (2026-07-11) |
-| ADR-086 | release | authored at Stage 6 (2026-07-19) |
-
-> ADR-010 is core-scope and indexed in [`../../core/ADRs/README.md`](../../core/ADRs/README.md); ADR-011 continues the platform-global monotonic sequence as a release-scoped decision. ADR-012 through ADR-020 are core-scope and indexed in the core README; ADR-021 resumes the release-scoped thread after them. ADR-022 and ADR-023 are core-scope and indexed in the core README; ADR-024, ADR-025, and ADR-026 resume the release-scoped thread after them. ADR-027 through ADR-035 are core-scope and indexed in the core README; ADR-036 and ADR-037 resume the release-scoped thread after them. ADR-038 through ADR-071 are core-scope and indexed in the core README; ADR-072, ADR-073, and ADR-074 resume the release-scoped thread after them. ADR-075 and ADR-076 are release-scoped but pending indexing above; ADR-077 and ADR-078 are core-scope and indexed in the core README; ADR-079 resumes the release-scoped thread after them. ADR-080 through ADR-085 are core-scope and indexed in the core README; ADR-086 resumes the release-scoped thread after them; ADR-087 returns to core scope (the `Stop`-hook agent-loop re-entry class — a runtime-control decision, indexed in the core README) even though it was authored in the same release as ADR-086.
+This graph is a curated statement of **relationships between records**, not an enumeration of the population — the population is the generated table above. A composition edge is added here only when one record actually extends, supersedes, or is consumed alongside another.
 
 ## Authoring new ADRs
 
-New release-scoped ADRs ship through the pipeline at Stage 5 (Solutioning) per [`../references/pipeline/stage-05-solutioning.md`](../references/pipeline/stage-05-solutioning.md). For **when to write an ADR** (the trigger / non-trigger rubric), the copy-paste template, and the supersede-not-edit immutability policy, see [`../../core/standards/adr-authoring-guide.md`](../../core/standards/adr-authoring-guide.md). File path: `release/ADRs/ADR-NNN-<short-slug>.md`. After authoring, append the new ADR row to the table above + add cross-reference to consuming files via [`../../core/standards/per-stage-shard-standard.md`](../../core/standards/per-stage-shard-standard.md) § Related ADRs (if applicable).
+New release-scoped ADRs ship through the pipeline at Stage 5 (Solutioning) per [`../references/pipeline/stage-05-solutioning.md`](../references/pipeline/stage-05-solutioning.md). For **when to write an ADR** (the trigger / non-trigger rubric), the copy-paste template, and the supersede-not-edit immutability policy, see [`../../core/standards/adr-authoring-guide.md`](../../core/standards/adr-authoring-guide.md). File path: `release/ADRs/ADR-NNN-<short-slug>.md`.
+
+After authoring, run `python3 release/tools/generate-adr-index.py --write` — **do not hand-add a row.** The index above is a projection; a hand-added row fails `--verify` the moment it diverges from the record, which is exactly the drift this surface was converted to eliminate. Then add cross-references to consuming files via [`../../core/standards/per-stage-shard-standard.md`](../../core/standards/per-stage-shard-standard.md) § Related ADRs (if applicable).
 
 ## Status enum
 
@@ -98,10 +102,13 @@ ADR `status:` follows the [Nygard convention](https://cognitect.com/blog/2011/11
 | Deprecated | Superseded by a later ADR; remains for audit trail |
 | Superseded | Replaced; cite the superseding ADR in `## Status` block |
 
+The schema permits an optional prose tail after the leading token (a ratification anchor or a supersession pointer). The generated index above shows the **leading token only** — a ratification promise is tracked on the record and by the Stage-13 flip gate, never in an index.
+
 ## Related references
 
 - [`../../core/standards/adr-authoring-guide.md`](../../core/standards/adr-authoring-guide.md) — when to write an ADR (trigger/non-trigger rubric), copy-paste template + worked example, supersede-not-edit policy
 - [`../../core/schemas/adr-schema.md`](../../core/schemas/adr-schema.md) — canonical ADR frontmatter + body-section schema (field/section contract)
-- [`../../core/ADRs/README.md`](../../core/ADRs/README.md) — core-module ADR index
+- [`../../core/ADRs/README.md`](../../core/ADRs/README.md) — core-module curated thematic document (NOT an index — see its own § Format note)
+- [`../references/standards/release-corpus-schema.md`](../references/standards/release-corpus-schema.md) — § Derived-Surface Contract, which governs the generated table above
 - [`../../core/disciplines/decision-discipline.md`](../../core/disciplines/decision-discipline.md) — decision-class briefing discipline (the sibling; does NOT govern ADR authoring)
 - [`../references/pipeline/stage-05-solutioning.md`](../references/pipeline/stage-05-solutioning.md) — Stage 5 ADR materialization process
