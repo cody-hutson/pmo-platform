@@ -1,0 +1,53 @@
+<!-- reference-durability: allow-link -->
+
+# The delivery-engine can now size capacity, hold estimate ranges, and gate the lifecycle
+
+2026-06-13 · v1.16
+
+The delivery-engine gains four reference foundations that turn sprint planning and release-readiness from rules-of-thumb into governed method: a capacity model that computes how much a team can actually deliver, an estimation standard that holds estimates honest as ranges sized to how mature the work is, a 15-stage delivery lifecycle that names the sequence work moves through, and an eleven-gate project lifecycle that names every go/kill checkpoint with its decision authority. Sprint planning, the readiness gate, and RAID/decision tracking now read these instead of improvising.
+
+## Who this affects
+
+- Anyone who plans a sprint or reviews capacity — sprint planning now sizes scope against a real effective-capacity figure (not a raw headcount), with context-switching, team-growth drag, and effort allocation accounted for
+- Anyone who quotes an estimate or velocity — estimates and velocity are now expressed as ranges sized to how far the work has matured, and an over-tight range is rejected
+- Anyone who runs a readiness gate or tracks decisions — the readiness gate and RAID/decision tracking now resolve a work item to a named lifecycle stage and gate, with the decision authority for each checkpoint stated
+
+## What changed for everyone using the platform
+
+- **Sprint planning now sizes scope against effective capacity, not headcount.** The delivery-engine computes how much a team can really deliver — discounting for context-switching across concurrent projects, the drag of adding people late, and how effort splits across planned work, unplanned work, and tech debt — and plans the sprint against that figure. *Why it matters:* commitments are made against what the team can actually deliver, so over-commitment that only shows up as a missed sprint gets caught at planning time.
+- **Estimates and velocity are now quoted as ranges, sized to how mature the work is.** Early, ill-defined work carries a wide range; well-specified work carries a tight one — and a range tighter than the work's maturity allows is rejected rather than reported. *Why it matters:* a single-number estimate on barely-defined work stops masquerading as precision, so forecasts carry their real uncertainty instead of a false point figure.
+- **Work now moves through a named 15-stage delivery lifecycle.** The sequence a project passes through — from demand intake to post-implementation closure — is now a defined set of stages with entry and exit criteria, so the readiness and done gates check a work item against the right stage. *Why it matters:* "what stage is this in and what does it owe to advance" has a consistent answer instead of varying by who is asked.
+- **The project lifecycle now has eleven named gates, each with a decision authority.** Every go/kill checkpoint from idea screen to closure is named, with its entry and exit criteria, the decisions it makes, and who holds the authority to make them. *Why it matters:* a gate decision is attributed to the right checkpoint and the right authority holder, so release-readiness and decision tracking stop conflating distinct approvals.
+
+## Known limits
+
+- This release lands the delivery-engine *reference foundations* and wires the skill to read them; it does not retro-fit historical projects or trackers to the new lifecycle and gate model.
+- Several quantitative thresholds in these references are domain best-practice (named PMO and software-engineering sources) rather than measured from an internal study; they are flagged as such in the documents and are starting calibration points an operator can tune.
+- The eleven project-lifecycle gates are deliberately distinct from the platform's own release-pipeline stage gates; the documents call out the boundary so the two gate conventions are not cross-wired.
+- Report issues at https://github.com/cody-hutson/pmo-platform/issues.
+
+## Reversibility
+
+CHEAP / HIGH confidence. A single revert of the release pull request removes the four new reference documents and the skill wiring that reads them; the change is additive (new reference docs plus mode wiring plus a one-line sprint-defaults edit) with no data migration to unwind. The standard 30-day outcome window applies.
+
+---
+
+### Operator and engineering detail
+
+**Release shape.** `novel` release class, CHEAP reversibility, four issues delivered through one integration pull request at merge SHA `a915daa94caa68423b42cbf7e7db69a4dfbc37e1`, signed-annotated `v1.16` tag at the merge SHA. The four deliverables are new reference documents under the delivery-engine's `references/` set plus the SKILL.md mode wiring (Modes C/D/E/F/G) that consumes them and a surgical single-source edit to `sprint-defaults.md`. The delivery-engine `.skill` package was rebuilt at Stage 12 so package-to-source parity holds on main. A concurrent v1.15 merged into main mid-pipeline; the conflict on the delivery-engine SKILL.md was resolved at Stage 12 with both edit-sets preserved.
+
+**Capacity model (capacity-model.md).** A new reference doc models *effective* delivery capacity for a managed delivery team: the capacity formula, context-switching penalties across concurrent projects, the Brooks's-Law thresholds for late team additions, the effort-allocation split, team-stability and vendor-ramp thresholds, the staffing-concentration (bus-factor) risk, and the demand-versus-supply gap with RAG bands. It is wired into delivery-engine Mode D (sprint planning) for the formula and penalties and Mode E (execution control) for the demand-supply gap. Two of its inputs are referenced, not restated: the focus factor (owned by the estimation standard) and the platform-level bus-factor rule (owned by the km-protocols discipline).
+
+**Estimation standards (estimation-standards.md).** A new reference doc is the canonical home for estimation discipline: the Cone-of-Uncertainty band widths that bound an estimate's precision by lifecycle phase, the planning-horizon commit-versus-forecast rule, the canonical focus-factor table (this doc is now the single owner of that value, promoted unchanged from its sole prior occurrence in `sprint-defaults.md`), the three-zone buffer model, the velocity-and-estimates-as-ranges enforcement rule, and the contingency-versus-management-reserve distinction. Mode D reads the band widths, horizon rules, focus-factor table, and buffer model; Mode E reads the velocity-as-range enforcement. The cone rule is normative — a stated range narrower than the item's phase band is rejected.
+
+**Lifecycle stages (lifecycle-stages.md).** A new reference doc enumerates the 15-stage universal delivery lifecycle — the temporal axis of project delivery, grouped into five phases (Capture, Prepare, Build, Validate, Deliver) — with per-stage entry and exit criteria and the artifacts each stage consumes and produces. Mode C reads the entry criteria of the execution stages; Mode F reads the exit criteria of the validation stages, including the QA/Acceptance exit predicate that blocks a move to Plan Review while a P1 defect is open. The doc carries an explicit boundary statement that this is the project delivery lifecycle, not the platform's own release pipeline, and a methodology mapping covering five of eight common methodologies.
+
+**Gate definitions (gate-definitions.md).** A new reference doc is the canonical sequence of project-lifecycle gates — eleven gates, Idea Screen through Closure, each prefixed `LG-` — with entry criteria, exit criteria, key decisions, authority holder, required artifacts, and escalation path per gate. Mode F applies the per-gate exit criteria and the transition rule; Mode G attributes gate decisions to the correct gate and authority holder; Mode C situates the sprint readiness gate as one of the eleven. The doc cross-references the sibling gate-type taxonomy (Phase / Quality / Flow / Approval / Hypothesis) rather than restating it, and the `LG-` prefix is deliberately namespaced to prevent collision with the platform's release-pipeline stage gates. Together the three governance docs form a clean three-axis model: the temporal stage sequence, the gate-instance sequence, and the gate-type taxonomy, each owning one axis and cross-referencing the others.
+
+**Process notes.** Two CI gates flagged a durable-corpus fragility at Stage 9 Plan Review and were de-fragiled before merge. The eleven-gate model carried an operator override at Collective Review. For full implementation detail see the [RELEASE_LOG.md entry](../RELEASE_LOG.md#deployment-log-v116) and [the release plan](../plans/v1.16_RELEASE_PLAN.md).
+
+### References
+
+- Milestone: delivery-capacity-and-lifecycle-gating (v1.16)
+- Integration PR: #859 at `a915daa94caa68423b42cbf7e7db69a4dfbc37e1`
+- Closed issues: #272 (capacity model) · #273 (estimation standards) · #274 (lifecycle stages) · #275 (gate definitions)
