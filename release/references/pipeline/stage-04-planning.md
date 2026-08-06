@@ -245,6 +245,21 @@ A6's verdict is advisory — it surfaces capacity risk in the plan. The load-bea
 ## 6. Outputs
 Release plan file (`release/releases/plans/vX.Y_RELEASE_PLAN.md`), committed on release branch. Sections: Implementation Sequence, File Change Matrix, Integration Points, Risk Register, Delivery Strategy, Verification Plan, Rollback Strategy, Quota Budget (Phase A6 output), Cross-Issue Acceptance Criteria (present-when-nonzero — see § below).
 
+**File Change Matrix — new-executable companion obligation.** When the matrix carries an
+`add` row for a tracked executable script — any `*.sh` the platform will invoke via
+`bash <path>` / `sh <path>` / `source <path>` / `. <path>` — the matrix MUST also carry
+the companion `core/config/allowlists/script-execution-allowlist.txt` row for that
+script, and the plan MUST state the script's CI wiring (the job that executes it, or an
+explicit statement that it is not CI-executed). The obligation itself, including the four
+required invocation forms and the rule that the entries ship in the same release rather
+than a follow-up, is stated at the Stage-5 design-spec template's script-execution
+allowlist callout ([`solutioning-output-template.md`](../standards/solutioning-output-template.md))
+and at the agent-script promotion framework's authoring-and-review requirements
+([`agent-script-promotion-framework.md`](../../../core/standards/agent-script-promotion-framework.md));
+this step binds it into the plan's own matrix so the prerequisite is planned at Stage 4
+rather than rediscovered at Solutioning. A delivered script whose allowlist row never
+entered the matrix is unrunnable agent-side on arrival.
+
 The `### Quota Budget` section records the Phase A6 Checkpoint A estimate. Scaffold:
 
 ```markdown

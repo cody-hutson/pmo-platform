@@ -392,6 +392,100 @@ test_case "bash -c 'echo ok' allows (no script path)" \
   "$(bash_payload 'bash -c "echo ok"')" \
   0
 
+# --------------------------------------------------------------------------
+# BLOCK-022: release/tools/tests/ suite registration
+#
+# The eight shell suites in release/tools/tests/ are registered in the
+# script-execution allowlist so the agent asked to dev-test one can actually
+# run it. These cases assert the GUARD'S VERDICT against the token-resolved
+# deployed allowlist -- they never run a suite and never assert a suite's own
+# exit status.
+#
+# WHY A MUST-FLAG CONTROL IS MANDATORY HERE: without it, a fixture in which
+# the allowlist failed to load would report eight green must-not-flag cases
+# while asserting nothing (is_script_allowlisted returns 1 for every path when
+# the file is missing -- i.e. everything blocks, and a permissive-side probe
+# alone could not tell that apart from a correct allowlist). The control is
+# also the anti-broadening arm: it is a sibling in the SAME directory, in the
+# SAME invocation shape, differing ONLY in allowlist membership, so a wildcard
+# directory glob would permit it and fail this case. Its path must NOT exist
+# on disk -- registration is a path-pattern match, not a file-existence check,
+# so a non-existent name can never be accidentally satisfied by a future suite.
+#
+# FORM COVERAGE, and the substrate boundary that bounds it. The allowlist
+# registers each suite in four forms; two of them are prefixed with the
+# [PMO_PLATFORM_ROOT] token. setup-ci-layout.sh (which materializes the
+# deployed posture these cases run against) resolves [CLAUDE_WORKSPACE_ROOT],
+# [OPERATOR_HOMEDIR_PATH] and [OPERATOR_GITHUB] only -- it does NOT resolve
+# [PMO_PLATFORM_ROOT], which core/deploy/compose.py resolves at real deploy
+# time. Unresolved, "[PMO_PLATFORM_ROOT]" is a shell `case` BRACKET EXPRESSION
+# matching one character, so no command path can match those two patterns on
+# this substrate and neither token-prefixed form is exercisable here. The three
+# form-coverage cases therefore pin the two token-free registered forms and the
+# detector's interpreter arms, which is the whole of what this substrate can
+# assert. The token-form gap is a fidelity limitation of the CI layout helper,
+# not of the registration.
+# --------------------------------------------------------------------------
+
+echo ""
+echo "BLOCK-022: release/tools/tests/ suite registration"
+echo "---"
+
+# must-not-flag -- one per suite, bare-relative form (allowlist form 4).
+test_case "BLOCK-022 suite: test_action_item_gate_predicate.sh allows (registered)" \
+  "$(bash_payload 'bash release/tools/tests/test_action_item_gate_predicate.sh')" \
+  0
+
+test_case "BLOCK-022 suite: test_corpus_home_tolerance.sh allows (registered)" \
+  "$(bash_payload 'bash release/tools/tests/test_corpus_home_tolerance.sh')" \
+  0
+
+test_case "BLOCK-022 suite: test_deciders_carveout.sh allows (registered)" \
+  "$(bash_payload 'bash release/tools/tests/test_deciders_carveout.sh')" \
+  0
+
+test_case "BLOCK-022 suite: test_domain_blast_radius.sh allows (registered)" \
+  "$(bash_payload 'bash release/tools/tests/test_domain_blast_radius.sh')" \
+  0
+
+test_case "BLOCK-022 suite: test_lint_release_corpus_versionless.sh allows (registered)" \
+  "$(bash_payload 'bash release/tools/tests/test_lint_release_corpus_versionless.sh')" \
+  0
+
+test_case "BLOCK-022 suite: test_renumber_adr.sh allows (registered)" \
+  "$(bash_payload 'bash release/tools/tests/test_renumber_adr.sh')" \
+  0
+
+test_case "BLOCK-022 suite: test_structural_blast_radius.sh allows (registered)" \
+  "$(bash_payload 'bash release/tools/tests/test_structural_blast_radius.sh')" \
+  0
+
+test_case "BLOCK-022 suite: test_verify_release_plan.sh allows (registered)" \
+  "$(bash_payload 'bash release/tools/tests/test_verify_release_plan.sh')" \
+  0
+
+# must-not-flag, form coverage -- one representative suite, three invocation
+# shapes: the ./ relative form, the bare form through a second interpreter, and
+# the bare form behind an absolute interpreter path (the ANCHOR_PREFIX_BASH arm).
+test_case "BLOCK-022 form: ./ relative form allows (allowlist form 3)" \
+  "$(bash_payload 'bash ./release/tools/tests/test_verify_release_plan.sh')" \
+  0
+
+test_case "BLOCK-022 form: sh <suite> allows (bare form, sh interpreter)" \
+  "$(bash_payload 'sh release/tools/tests/test_verify_release_plan.sh')" \
+  0
+
+test_case "BLOCK-022 form: /bin/bash ./<suite> allows (absolute-interpreter prefix)" \
+  "$(bash_payload '/bin/bash ./release/tools/tests/test_verify_release_plan.sh')" \
+  0
+
+# must-flag control (MANDATORY) -- an unregistered sibling in the same
+# directory. This is what makes the eight cases above falsifiable. The path
+# must never be created on disk.
+test_case "BLOCK-022 control: unregistered sibling in the same directory blocks" \
+  "$(bash_payload 'bash release/tools/tests/zz_unregistered_control.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
 # ==========================================================================
 # NEW-B: Write/Edit primary-write guard
 # ==========================================================================

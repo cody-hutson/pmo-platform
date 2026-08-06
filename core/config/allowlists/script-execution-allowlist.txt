@@ -98,13 +98,47 @@ release/tools/automated-closeout.sh
 # Runs in the closeout-smoke CI job AND is invoked agent-side at Stage 7 Dev Testing
 # and by anyone building the corpus-home seam; without all four invocation forms it
 # is BLOCK-DESTRUCTIVE-022-blocked agent-side and the suite cannot be run to verify
-# a change against the constraint. NOTE: this is the FIRST release/tools/tests/
-# entry in this file — the four pre-existing suites in that directory are
-# unallowlisted and run only in CI (tracked separately; not fixed here).
+# a change against the constraint.
 [PMO_PLATFORM_ROOT]/release/tools/tests/test_corpus_home_tolerance.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_corpus_home_tolerance.sh
 ./release/tools/tests/test_corpus_home_tolerance.sh
 release/tools/tests/test_corpus_home_tolerance.sh
+# release/tools/tests/*.sh regression + conformance suites — the remaining seven
+# of the eight suites in that directory (test_corpus_home_tolerance.sh is
+# registered immediately above). Each is executed agent-side at Stage 6
+# self-verification and Stage 7 Dev Testing as well as in CI; without all four
+# invocation forms per the per-tool form convention above the agent-side path is
+# BLOCK-DESTRUCTIVE-022-blocked and the Stage-7 spoke asked to dev-test a suite
+# cannot produce its real verdict. (CI runs no Claude hooks, so these entries are
+# for the agent-side path, not the workflow.)
+[PMO_PLATFORM_ROOT]/release/tools/tests/test_action_item_gate_predicate.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_action_item_gate_predicate.sh
+./release/tools/tests/test_action_item_gate_predicate.sh
+release/tools/tests/test_action_item_gate_predicate.sh
+[PMO_PLATFORM_ROOT]/release/tools/tests/test_deciders_carveout.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_deciders_carveout.sh
+./release/tools/tests/test_deciders_carveout.sh
+release/tools/tests/test_deciders_carveout.sh
+[PMO_PLATFORM_ROOT]/release/tools/tests/test_domain_blast_radius.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_domain_blast_radius.sh
+./release/tools/tests/test_domain_blast_radius.sh
+release/tools/tests/test_domain_blast_radius.sh
+[PMO_PLATFORM_ROOT]/release/tools/tests/test_lint_release_corpus_versionless.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_lint_release_corpus_versionless.sh
+./release/tools/tests/test_lint_release_corpus_versionless.sh
+release/tools/tests/test_lint_release_corpus_versionless.sh
+[PMO_PLATFORM_ROOT]/release/tools/tests/test_renumber_adr.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_renumber_adr.sh
+./release/tools/tests/test_renumber_adr.sh
+release/tools/tests/test_renumber_adr.sh
+[PMO_PLATFORM_ROOT]/release/tools/tests/test_structural_blast_radius.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_structural_blast_radius.sh
+./release/tools/tests/test_structural_blast_radius.sh
+release/tools/tests/test_structural_blast_radius.sh
+[PMO_PLATFORM_ROOT]/release/tools/tests/test_verify_release_plan.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_verify_release_plan.sh
+./release/tools/tests/test_verify_release_plan.sh
+release/tools/tests/test_verify_release_plan.sh
 # version-grammar.sh — sourced SSOT library (validate/parse/compare); consumers
 # source it, so all four invocation forms (incl. source/.) must be allowlisted
 # (BLOCK-DESTRUCTIVE-022 gates both `bash <path>` execution and `source <path>`).
