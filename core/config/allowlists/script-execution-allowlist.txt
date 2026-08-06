@@ -254,3 +254,23 @@ core/deploy/tests/test_package_freshness_exit_codes.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_check45_governing_doc_name_match.sh
 ./core/deploy/tests/test_check45_governing_doc_name_match.sh
 core/deploy/tests/test_check45_governing_doc_name_match.sh
+
+# context-budget-auditor Measure-mode scanner — read-only per-component token-cost
+# scan across the loadable-component surface, plus a --self-test mode. Invoked
+# agent-side by the skill's Measure mode, so all four invocation forms per the
+# per-tool form convention above are required; without them the scan is
+# BLOCK-DESTRUCTIVE-022-blocked and the skill's Measure mode is dead agent-side.
+[PMO_PLATFORM_ROOT]/core/skills/context-budget-auditor/scripts/measure-context-budget.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/skills/context-budget-auditor/scripts/measure-context-budget.sh
+./core/skills/context-budget-auditor/scripts/measure-context-budget.sh
+core/skills/context-budget-auditor/scripts/measure-context-budget.sh
+
+# skill-compliance-auditor Measure-mode harness support — the deterministic slice of
+# the compliance pipeline (--dry-run cost governor, --classify structural trace
+# classifier, --self-test). Read-only. Invoked agent-side by the skill's Measure
+# mode, so all four invocation forms per the per-tool form convention above are
+# required; without them the harness is BLOCK-DESTRUCTIVE-022-blocked agent-side.
+[PMO_PLATFORM_ROOT]/core/skills/skill-compliance-auditor/scripts/measure-skill-compliance.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/skills/skill-compliance-auditor/scripts/measure-skill-compliance.sh
+./core/skills/skill-compliance-auditor/scripts/measure-skill-compliance.sh
+core/skills/skill-compliance-auditor/scripts/measure-skill-compliance.sh
