@@ -539,8 +539,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        # Default depth: each --self-test reads committed fixtures from the working
-        # tree, not git history — a shallow checkout is sufficient.
+        with:
+          fetch-depth: 0   # NOT boilerplate, and NOT the engine's requirement — the engine
+                           # reads no git history. It is the DISCOVERED TOOLS' requirement,
+                           # measured at first enablement: check-release-body-drift.sh and
+                           # reemit-release-bodies.sh both resolve `origin/main:<path>` in
+                           # their own fixtures, and under the default shallow checkout that
+                           # ref does not exist, so the note read comes back empty and the
+                           # suites fail for a non-defect reason. The sibling macOS job
+                           # already carries fetch-depth: 0 for the same class of reason,
+                           # and check-release-body-drift.sh ran GREEN there — which is the
+                           # evidence this is a checkout-depth problem and not a defect in
+                           # the tools' assertions.
+                           #
+                           # Recorded because the tempting alternative is the forbidden one:
+                           # the cheap way to green those two would have been to drop them
+                           # from discovery. Deepening the checkout keeps every discovered
+                           # tool in scope and fixes the runner's capability instead, which
+                           # is the F1 disposition — never the glob.
 
       - uses: actions/setup-python@v7
         with:

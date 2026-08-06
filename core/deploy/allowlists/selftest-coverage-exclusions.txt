@@ -24,6 +24,14 @@
 # --- checkable without re-deriving it.
 core/deploy/tools/build-skill-packages.sh  # no --self-test dispatch; the P3 shell case-arm shape matched a COMMENT at :46 "sandbox under --self-test) would silently resolve back". Invoked with the flag it treats it as a skill name: "cannot resolve module for '--self-test'" (exit 1).
 
+# --- Non-hermetic self-tests (F4): the tool genuinely dispatches on --self-test, but
+# --- the suite cannot reach a verdict on a CI runner. These are REAL self-tests taken
+# --- out of the gate, NOT retired false positives, and the engine raises a standing
+# --- ::warning:: naming them on every run for exactly that reason. Each is a
+# --- hermeticity defect in the tool, owned by that tool's card — the disposition is
+# --- "fix the tool", never "narrow the scope", and it stays visible until it is fixed.
+release/tools/cleanup-orphan-state.sh  # F4 non-hermetic: workspace_boundary_check runs unconditionally after arg parsing and before the --self-test dispatch, so the suite is unreachable anywhere outside the operator workspace root. Measured on ubuntu-latest at first enablement: "ERROR: invoked from /home/runner/work/pmo-platform/pmo-platform - outside workspace /home/runner/Claude (defense-in-depth boundary)", exit 2. NOT OS-bound, so a "# selftest-runner:" declaration would be a false claim - the macOS runner fails identically. Remediation is at the tool (exempt the hermetic fixture run from the destructive-scope guard, or resolve the root from the checkout), owned by that tool's card; deepening the checkout cannot reach it.
+
 # --- release/tools/tests/** and its siblings: OUT of the --self-test discovery scope
 # --- by design (FORK 2, decided at Stage 5). These are bare-invocation suites, not
 # --- --self-test dispatchers; the predicate reaches them only through docstrings and
