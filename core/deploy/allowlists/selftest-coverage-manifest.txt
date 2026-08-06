@@ -15,6 +15,7 @@
 # scope: release/tools/*.sh
 release/tools/append-pipeline-event.sh
 release/tools/automated-closeout.sh
+release/tools/blast-radius.sh
 release/tools/capture-release-bodies.sh
 release/tools/check-emission-contract-subset.sh
 release/tools/check-release-body-drift.sh
