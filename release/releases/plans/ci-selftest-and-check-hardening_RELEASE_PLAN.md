@@ -1,0 +1,341 @@
+---
+title: Release Plan — ci-selftest-and-check-hardening (CI executes every self-test the platform advertises, and the check tools it enforces are correct)
+type: release-plan
+plan_type: release
+status: ACTIVE
+release: slug-only (ADR-092 — the concrete version binds at the Stage-12 atomic claim)
+milestone: ci-selftest-and-check-hardening
+release_class: novel
+reversibility: CHEAP / Confidence HIGH
+---
+# Release Plan — `ci-selftest-and-check-hardening`
+
+**Milestone:** `ci-selftest-and-check-hardening` (milestone 302). Six members, one branch, one pull request, one merge.
+**Version identity:** **slug-only** per **ADR-092**. The plan file is `ci-selftest-and-check-hardening_RELEASE_PLAN.md` and the branch is `release/ci-selftest-and-check-hardening`; no `vX.Y` stem appears in the plan filename, the branch name, or this plan's identity prose. Bump class is `minor` — a capability release, not corrective, so the patch floor does not apply. The concrete number binds at the **Stage-12 atomic claim**, which renames this file into the major-version bucket and resolves the `{{RELEASE_VERSION}}` token.
+**Topology:** **SINGLE** — one release branch, one pull request, one merge gate; this plan lands as **Engineering Commit 0**.
+**Concurrency posture:** **P0 fully-serial.** Stage-6 work routes one card at a time in the approved sequence on the single branch. Force-push, including the lease-guarded form, is prohibited on the shared branch under any multi-chip activity.
+**Release class:** **`novel`** (operator verdict at the Stage-4 gate). Posture: engagement density **Standard** · Stage-9 review depth **Deep** · Stage-5 activation bias **ALL** · Stage-13 outcome window **30-day**.
+
+> **Provenance.** This file transcribes the Stage-4 Release Planning output, reconciled forward through the six approved Stage-5 Solutioning designs and the Collective Review scope-lock of 2026-08-05 (Wednesday). Where a later measurement or decision superseded a Stage-4 figure, **this file carries the decided state** and the § Deviation Log records the delta against the Stage-4 plan of record. The Stage-4 output comment is the historical record and is not edited. Authored at Engineering Commit 0 by the first Stage-6 Engineering spoke.
+
+---
+
+## Header
+
+| Field | Value |
+|-------|-------|
+| **Version** | `{{RELEASE_VERSION}}` — slug-only pre-claim (ADR-092); bump class `minor` |
+| **Date Created** | 2026-08-05 (Wednesday) |
+| **Release Manager** | Agent-assisted (`release-hub` Mode O) |
+| **Status** | Executing (Stage 6 Engineering) |
+| **Branch** | `release/ci-selftest-and-check-hardening` |
+| **Pull Request** | (populated at pull-request creation) |
+| **Milestone** | `ci-selftest-and-check-hardening` (302) |
+| **Baseline** | `origin/main` @ `c0122aa0` — Commit-0 re-pin **confirms** the Stage-4 pin; zero commits of drift |
+
+### Commit-0 version re-verify
+
+The Stage-4 version determination is **provisional** until the Stage-12 atomic claim, and three sibling releases were live-but-unbranched when this release entered Engineering, so the re-verify is the rung most likely to fire rather than ceremony. It was re-run at Commit 0 against authoritative refs, with a known-taken sensitivity arm on every surface:
+
+| Surface | Subject (next-free minor) | Sensitivity arm | Denominator |
+|---|---|---|---|
+| Origin git tags, freshly fetched | **0** occurrences | the immediately preceding version: **1** | 154 tags |
+| Published GitHub Releases | **0** occurrences | the immediately preceding version: **1** | 154 published releases |
+| Release ledger row, read from `origin/main` with a brace-delimited ref rather than any worktree copy | **0** occurrences | the immediately preceding version: **8** occurrences across its row plus its deployment-log block | 161 version rows |
+| The version adapter's own next-free computation, dry-run | recomputed next-free **equals** the planned version | — | — |
+
+**Verdict: PROCEED.** The planned version is absent from the claimed set on all four arms and equals the recomputed next-free. No colliding tag, published release, or ledger row exists. The branch and this plan file stay slug-primary and do not rename on any later re-derivation.
+
+---
+
+## Change Description
+
+*Operator-facing. Authored at Stage 6 Phase C1; refreshed by the final Engineering slice.*
+
+**Outcome.** Continuous integration stops trusting hand-run claims. Today the platform advertises self-tests on dozens of tools and executes only a minority of them in CI, so a recorded "self-test PASS" is an assertion rather than an observation; separately, three of the checks CI does run are wrong in ways that make them quieter than they should be. This release closes both halves. It replaces the hardcoded roster in the release-tooling smoke workflow with **discovery** — every tool that advertises a self-test is found and run, across both tool trees and all four file-extension globs — and it repairs the three checks whose defects were masking real findings: a hierarchy check that lost assertions to apostrophes and never scanned two whole trees, a blast-radius tracer that emitted a silent zero-byte success after roughly half an hour on high-fan-in nodes, and a documentation-link allowlist whose name no longer described its role. It also removes the hook blocks that made the suites and scripts unrunnable by the agent asked to verify them.
+
+**The through-line.** Every card in this release is an instance of one failure shape: **a control that reports success without having measured anything.** An unexecuted self-test, a check whose scan surface silently narrowed, a tracer that exits zero having written nothing, a test suite an agent cannot run and therefore reports on by reading. The remedy in each case is the same — make the control either produce a real verdict or fail loudly — and the release ships the enforcement that keeps it that way.
+
+**Key decisions.** Release class held at **`novel`**. The discovery gate's scope was **widened** at Collective Review from two globs to four, adding ten more tools, all of which were measured green before the widening so first-enablement risk did not move. The documentation-link allowlist's name was **ratified** rather than renamed, which removed the release's last cross-release file-contention surface. The "new executable requires an allowlist entry" convention was found to **already have two canonical homes** predating every suite in the population, so this release adds a **pointer**, not a third statement. The one acceptance criterion in the release that could not fail was **restated** into a criterion that can.
+
+**Reversibility.** **CHEAP** across the whole release. Every change is additive content, an in-place single-sentence reconcile, or a bounded algorithmic fix inside one tool; no file is renamed, no reference graph is rewritten, and no identifier moves. Whole-release rollback is a revert of the merge commit; per-card rollback is a revert of that card's commit, which is clean because the only shared file is appended to in disjoint regions by two commits that are never squashed together.
+
+**Downstream impact.** No behavior changes for end users. Contributors will notice two things. First, a tool that advertises a self-test is now executed by CI whether or not anyone remembered to add it to a list — and a newly-added tool whose self-test fails will fail the pull request rather than passing silently. Second, the release's first continuous-integration run after the discovery gate lands is expected to surface pre-existing failures in tools whose self-tests had never been executed; those are findings, not regressions, and the plan budgets a triage pass for them.
+
+**What this release does NOT claim.** It does not claim that a live agent session's shell calls reach the security hook at all — that is a harness-attachment property, it is currently false for sessions rooted inside the repository or a worktree, and it is owned by a different milestone. It does not claim that the operator's deployed allowlist is current: the hook reads a token-resolved **deployed** copy that is regenerated by the installer rather than by the deploy script, and closing that gap is a sibling milestone's card, deliberately not pulled in here. This release discharges its allowlist acceptance criteria through a committed, CI-invoked fixture that is independent of both residuals.
+
+---
+
+## Scope
+
+### Summary
+
+**Six members. `effective_pts` 26 against a 25 upper bound — breached, acknowledged, and kept by operator override.** The override's ground is that this is genuinely one capability whose realization exceeds the band: the enforcement mechanism and the hook registrations that make its subjects runnable are not separable without shipping a gate that cannot be dev-tested end to end. Splitting them would satisfy the number and defeat the outcome. Sizing scale: extra-small 1, small 2, medium 4, large 8; raw 23 × 1.15 for the `novel` class = 26.45, rounded half-up to **26**.
+
+Capability outcome: **CI executes every self-test the platform advertises, and the check tools it enforces are actually correct.**
+
+### Members
+
+Cards are named by their capability descriptor throughout this plan. The § References block at the end pairs each descriptor with its tracker number and a one-line summary.
+
+| # | Card | Type | Size | Wave | Primary files |
+|---|---|---|---|---|---|
+| 1 | **Test-suite allowlist registration** — the release/tools test suites are hook-blocked agent-side | bug | M | W1 | script-execution allowlist; Stage-4 planning spec; hook-test fixture |
+| 2 | **Precedent skill-script registration** — the two measure-scripts carry no allowlist entry | bug | XS | W1 | script-execution allowlist |
+| 3 | **Discovery-based self-test enforcement** (keystone) | story | L | W2 | release-tooling smoke workflow; Stage-7 dev-testing spec |
+| 4 | **Hierarchy-check recall repair** — quote-span and scan-root defects | bug | M | W3 | hierarchy checker; deploy-tools README |
+| 5 | **Blast-radius depth-2 bound** — silent zero-byte success on high-fan-in nodes | bug | M | W4 | blast-radius tool; blast-radius protocol standard |
+| 6 | **Documentation-link allowlist naming** — ratify the identifier, home the rationale | bug | S | W4 | doc-link maintenance rule; the allowlist file header |
+
+### Scope lock (Collective Review, Stage-5 exit, 2026-08-05 Wednesday)
+
+**Membership is six. `effective_pts` is 26. No card was added, trimmed, or deferred at Collective Review.**
+
+A seventh candidate — the card covering the deploy script's inability to refresh composition surfaces — is **explicitly NOT in scope**. It was considered at the readiness gate and deliberately not pulled in; two independent Stage-5 spokes then found it gates the acceptance criteria on both allowlist cards, because the security hook reads the token-resolved **deployed** allowlist, which the installer regenerates and the deploy script does not. Before this release could reconsider, the sibling milestone **`hub-spoke-execution-safety`** claimed that card at 2026-08-06T00:39:43Z, sized it medium, moved it to bundled, and scaffolded its full stage set. That milestone also holds the other half of the same compound failure — a control that does not enforce, paired with a fix that does not fix. **Disposition: coordinate, do not contest.** This release discharges both allowlist acceptance criteria through a committed, CI-invoked fixture and records the deployed-refresh as a post-merge dependency on the sibling release. Membership stays six; `effective_pts` stays 26.
+
+**Decisions rendered at Collective Review:**
+
+| ID | Decision | Reversibility · confidence |
+|---|---|---|
+| **D-1** | The deployed-allowlist refresh gap is a **cross-release dependency owned by the sibling milestone**, not scope for this release. Both allowlist cards discharge their guard-behavior criterion through the committed fixture instead. | CHEAP · HIGH |
+| **D-2** | **Widen the discovery gate by two globs, adding ten tools.** The original two-glob scope was itself an enumeration by file extension — the same two trees hold twelve Python tools in the release tree and five shell tools in the deploy tree — so a discovery gate whose own scope is hardcoded by extension reproduces the anti-pattern it exists to forbid. All ten added tools were measured green at Stage 5, so first-enablement risk does not move; the manifest change is two lines. | CHEAP · HIGH |
+| **D-3** | **The convention placement premise was false.** The "new executable requires an allowlist entry, in all four invocation forms, shipped in the same release" obligation is already stated canonically in two places, both predating every suite in the affected population: the Stage-5 design-spec template's script-execution allowlist callout, and the agent-script promotion framework's authoring-and-review requirements. A third full statement would be a shadow single-source-of-truth that drifts from the two originals. The change is a **cite-not-restate pointer** in the Stage-4 planning spec's Outputs section. Discriminator: that section sits inside the Stage-4 canonical-checklist attestation and the plan-readiness gate, so a step placed there is re-affirmed on every release; the alternative home is affirmed by neither. | CHEAP · HIGH |
+| **D-4** | **The allowlist guard-behavior criterion is RESTATED, because the original could not fail.** As worded — "running each suite agent-side produces its real verdict, not a hook block" — the observation is identical with the entries present and with them absent, because a session rooted in the repository or a worktree loads no pre-tool-use hook wiring at all. That is a broken probe, not a pass. The replacement asserts the guard's verdict directly against the deployed allowlist through a committed fixture: **eight must-not-flag cases (one per suite), three form-coverage cases, and one mandatory must-flag control** on a sibling path that must not exist on disk. The must-flag arm is what makes the criterion falsifiable — without it a fixture whose allowlist failed to load would report eight passes. | CHEAP · HIGH |
+
+---
+
+## Dependency Graph
+
+Directional; an arrow means the left card must land before the right one.
+
+```
+Test-suite allowlist registration ──┐
+                                    ├──► Discovery-based self-test enforcement ──► Hierarchy-check recall repair
+Precedent skill-script registration ┘
+
+Blast-radius depth-2 bound        (independent — no in-bundle predecessor)
+Documentation-link allowlist name (independent — no in-bundle predecessor)
+```
+
+| Edge | Basis | Strength |
+|---|---|---|
+| Registration cards → discovery gate | **Artifact readiness.** The discovery gate's negative test and its first-enablement triage pass are exercised against the suites and scripts the registration cards make runnable, so landing them first means Stage 7 dev-tests the gate against an already-registered tree. | MEDIUM |
+| Discovery gate → hierarchy-check repair | **Strong and file-verified.** The hierarchy repair adds recall cases to a checker that is absent from the workflow's current six-tool roster. Without the discovery gate landing first, those new self-tests ship executed by nothing. | HIGH |
+| The two registration cards, against each other | **Not a dependency — a contention pair.** Both append to the script-execution allowlist. Ordered for merge hygiene, not for correctness. | n/a |
+
+**Zero circular chains**; all fifteen unordered pairs over the six nodes were classified exhaustively (four directed edges, one contention pair, ten unrelated), and the same closure procedure applied to a deliberately-cyclic injected triple does surface the cycle, so the procedure detects. **No hard external blockers.**
+
+---
+
+## Implementation Sequence
+
+| Wave | Cards | Why here |
+|---|---|---|
+| **W1** | Test-suite allowlist registration, then precedent skill-script registration | Allowlist foundation. Both append to one file; the first carries a larger block and one in-place reconcile, so it lands first and the second appends to a stable region. |
+| **W2** | Discovery-based self-test enforcement | Keystone. Lands after W1 so its first-enablement triage runs against a registered tree. |
+| **W3** | Hierarchy-check recall repair | Lands into an already-enforced tree, which is the coverage gap this milestone was widened to close. |
+| **W4** | Blast-radius depth-2 bound; documentation-link allowlist naming | No in-bundle predecessor. The blast-radius card should land after the discovery gate if its self-test criterion resolves to *add* one, so the new self-test is auto-discovered rather than separately wired. |
+
+**Commit order on the release branch:** Commit 0 is this plan file, alone. Then one commit per card in the wave order above. **Commits are never squashed** — a revert of any one card must be clean, and the two allowlist commits touch the same file.
+
+---
+
+## Stage Applicability Matrix
+
+**Stage 5 activated at release level** — activation is all-or-nothing per the planning-to-solutioning handoff, and any trigger on any card activates for all. This is independently consistent with the `novel` class's ALL activation bias.
+
+| Card | S5 | S6 | S7 | S8 |
+|---|---|---|---|---|
+| Test-suite allowlist registration | ✓ | ✓ | ✓ | ✓ |
+| Precedent skill-script registration | ✓ | ✓ | ✓ | ✓ |
+| Discovery-based self-test enforcement | ✓ | ✓ | ✓ **negative test MANDATORY** | ✓ |
+| Hierarchy-check recall repair | ✓ | ✓ | ✓ | ✓ |
+| Blast-radius depth-2 bound | ✓ | ✓ | ✓ **performance plus two control arms** | ✓ |
+| Documentation-link allowlist naming | ✓ | ✓ | ✓ documentation-conformance pass | ✓ |
+
+**No Stage 7 or Stage 8 skip is proposed.** Stages 9 through 13 are release-scoped and apply once, not per card. The documentation-link card reduces to a documentation-conformance pass at Stage 7 because the ratify decision made it a two-file change.
+
+---
+
+## Contention Map
+
+### Within-release — one shared file
+
+| File | Cards | Overlap class | Mitigation |
+|---|---|---|---|
+| The script-execution allowlist | Test-suite registration × precedent skill-script registration | **append-pattern** — both add contiguous comment-header plus four-form blocks at distinct regions | Structurally present, operationally low. Sequence the test-suite card first, since it carries the one in-place reconcile and wants a stable region. Two commits, never squashed. |
+
+**Edges that dissolved on reconciliation — do not carry them forward.** The deploy script was expected to be a three-way within-release contention. It is not: the discovery card's dead-path item was found already fixed upstream, the hierarchy card's edit condition does not fire, and the documentation-link card's ratify decision removed its deploy-script edit. **The deploy script is not in this release's file set at all.**
+
+The deploy-tools README was expected to be a second shared file. It is not: the hierarchy card adds a row that does not currently exist, and under the ratify decision the documentation-link card no longer edits that file.
+
+### Cross-release
+
+| File | This release | Sibling | Class |
+|---|---|---|---|
+| The release-tooling smoke workflow | Discovery card rewrites the node-graph tools self-test job and adds discovery | A card in the `ci-wiring-and-flake-elimination` milestone whose sole affected file is the same workflow, in the `closeout-smoke` job | **File-level serialization edge.** Whichever merges second re-baselines onto a materially rewritten workflow. |
+
+**Not contention, verified so it is not re-litigated downstream:** the sibling flake card in the hub-and-spoke milestone shares no file with the blast-radius card — one owns a test suite's flakiness, the other owns the tool's algorithmic bound. The deployed-refresh card shares no file with either registration card — it owns the refresh *mechanism*, this release owns the allowlist *content*.
+
+---
+
+## Risk Register
+
+| ID | Risk | Severity | Owner stage | Mitigation | Reversibility |
+|---|---|---|---|---|---|
+| **RR-1** | **Smoke-workflow serialization with the sibling CI-wiring card.** The sibling's sole affected file is the file this release's discovery card rewrites. | **LOW at hunk level; the file-level serialization edge stands.** The two cards target *different jobs* in that file — the sibling touches the `closeout-smoke` job's blast-radius step, this release retires the node-graph roster — so the collision is same-file / different-job, and a merge conflict is unlikely at the hunk level even though the file is commit-serialized. | S6 / S9 | Record the edge on both milestones' parallelization maps. Re-check at the Stage-9 pre-gate audit against real branch state. | CHEAP |
+| **RR-2** | ~~Deploy-script cross-release contention across seven sibling cards.~~ | **RETIRED** | — | **The deploy script is out of this release entirely.** The ratify decision removed the documentation-link card's edit; the discovery card's item was already fixed upstream; the hierarchy card's condition does not fire. **This release touches no contended file.** | — |
+| **RR-3** | **First-enablement red on the discovery gate.** Turning discovery-based enforcement on will execute self-tests that have never been executed. | **LOW-MEDIUM.** Measured rather than assumed: **39 of 39 in-scope self-tests ran green at Stage 5, with zero repository mutation observed.** The residual is the gap between a Stage-5 measurement and the CI runner's own environment, not an expectation of mass failure. | S7 | Budget a Stage-7 triage pass as first-class scope, small rather than large. Each failure is fixed or tracked; **a first-run failure is never resolved by narrowing the discovery glob** — that is the anti-pattern the card exists to forbid. | CHEAP |
+| **RR-4** | **The registration cards' original guard-behavior criterion rested on an unverifiable premise** — whether a live agent session's shell call reaches the hook at all. | **LOW for this release.** The mechanism is now **resolved**: it is a settings-scope property, not a caller-class property. A session rooted at the repository or at a worktree loads no pre-tool-use hook wiring, because the hook block lives only in the workspace-root settings file while the repository and worktree roots carry a settings file whose sole key is permissions. The root cause is tracked in the `96-update-install-config-safety` milestone; the symptom-side framing belongs to the hub-and-spoke milestone. | S6 / S7 | The criterion was restated (D-4) so it no longer depends on the ambiguity. The committed fixture asserts the guard's verdict directly, and its entry point is itself allowlisted in all four forms, so a Stage-7 spoke can run it regardless of how attachment resolves. | CHEAP |
+| **RR-5** | ~~Two open decisions can stall Engineering.~~ | **CLOSED** | — | Both are rendered: the documentation-link card ratifies, and the convention placement resolves to a pointer. No decision remains open at Engineering entry. | — |
+| **RR-6** | **The blast-radius fix has no regression net by default.** The tool is one of **5 of 22** shell tools in the release tree that dispatch no self-test — the other four being the two blast-radius variants' sibling, the pipeline-event query tool, the version-freeness test, and the release-plan verifier. A performance fix with no self-test, landing in the release whose keystone is self-test enforcement, is the exact fail-open shape this milestone exists to close. | **MEDIUM** | S5 / S6 | The card's own criterion routes this: add one, or record why not. **Recommend ADD** — once the discovery gate lands, a new self-test on that tool is automatically discovered and CI-enforced with zero extra wiring. | CHEAP |
+| **RR-7** | **Shared usage-window envelope.** Four release-planning hubs launched within thirty-five seconds on one account. | **MEDIUM** | hub runtime | Quota budget verdict **WARN**; split every parallel wave three and three; re-validate at every wave. Do not route this to a launch stagger — it is a cumulative-draw problem and spreading launches changes nothing cumulative. | CHEAP |
+| **RR-8** | **The hierarchy card's scope widening has an unmeasured finding count.** Adding a third tree moves the scan from roughly 539 files to roughly 725 against a current count of zero findings, which the card itself calls weaker evidence than it appears. | **MEDIUM** | S7 | Measure and record the post-fix scanned and finding counts. **A non-zero count on the newly-scanned tree is a success signal — recall recovered — not a regression.** State that in the pull request so Stage 8 does not read it as a defect. | CHEAP |
+| **RR-9** | **Rollback coupling on the allowlist file.** Two cards append to one file; a revert of either is a partial revert of a shared artifact. | **LOW** | S6 / S12 | Append-pattern, distinct regions, **separate commits, never squashed** — so a revert of either commit is clean. | CHEAP |
+| **RR-10** | **One member was bundled without a Stage-2 approve verdict.** | **LOW** | S9 | Operator-rendered at the readiness gate. Carry the residual into the Stage-9 decision briefing so it is re-affirmed rather than forgotten. | CHEAP |
+
+**Reversibility posture — corrected.** The Stage-4 plan recorded the documentation-link card's rename as "the only MODERATE-reversibility act in the release." **That statement is VOID.** The operator rendered **ratify**, not rename, so no reference cascade occurs and that card is **CHEAP** like every other. **The whole release is CHEAP.** Rollback granularity is per-commit; every card's file set is disjoint from the others' except the one append-pattern contention pair, so any single revert is clean.
+
+---
+
+## Cross-Issue Acceptance Criteria
+
+Each spans two or more cards, asserts a constraint the *integrated* release must hold, and is graded at the Stage-9 quality-control read on the merged pull request.
+
+- [ ] **CIAC-1 — the discovery gate's tree boundary is stated, and the two cards agree on it.** The discovery set and the allowlist registration set must be reconciled explicitly: either the release-tools test directory is inside the discovery boundary, in which case the workflow's inline roster of individually-named suite steps is retired alongside the node-graph roster, or it is outside and the workflow says so in one sentence. A release that registers seven suites for agent execution while leaving CI's coverage of them undeclared has shipped two half-answers. *Method:* the boundary statement is present in the workflow and does not contradict the allowlist diff.
+- [ ] **CIAC-2 — the blast-radius self-test, if added, is discovered rather than wired.** If that card's criterion resolves to add a self-test, it is discovered and executed by the new job with **no bespoke wiring** — the concrete proof that discovery-not-enumeration works. If it resolves to ship without one, the Deviation Log records why and restates the count of release-tree shell tools lacking a self-test, currently **5 of 22**. *Method:* the tool's self-test exits zero **and** appears in the discovery job's emitted tool list; or the deviation entry exists.
+- [ ] **CIAC-3 — the hierarchy card's new recall cases are CI-executed, not merely committed.** This is the coverage gap the milestone's scope was widened to close, and it is the release's sharpest cohesion constraint: the checker is verifiably absent from today's roster, so without the discovery gate landing first these tests ship enforced by nothing. *Method:* the checker's self-test exits zero, its case count strictly exceeds the pre-release count of 21, and the tool is present in the discovery job's emitted set while appearing **zero** times as a hardcoded name in the workflow — discovered, never enumerated.
+- [ ] **CIAC-4 — the convention this release cites is obeyed by this release's own new executables.** If the discovery card's design adds any committed shell script, that file carries its own four-form allowlist entry in the same pull request. A release that binds "new executable requires an allowlist entry" into the planning matrix and then ships an unregistered executable has falsified its own rule on first application. *Method:* every added shell path in the branch diff has at least four matching non-comment lines in the script-execution allowlist. **Vacuously met if the release adds no shell file.**
+
+---
+
+## File Change Matrix
+
+Machine-readable path list — one path per line, for deterministic extraction by downstream stage prompts.
+
+```
+core/config/allowlists/script-execution-allowlist.txt
+release/references/pipeline/stage-04-planning.md
+core/hooks/tests/block-destructive.test.sh
+.github/workflows/release-tooling-smoke.yml
+release/references/pipeline/stage-07-dev-testing.md
+core/deploy/tools/check-work-hierarchy.py
+core/deploy/tools/README.md
+release/tools/blast-radius.sh
+release/references/standards/blast-radius-protocol.md
+core/rules/doc-link-maintenance.md
+core/deploy/allowlists/skip-doc-link-check-ci.txt
+release/releases/plans/ci-selftest-and-check-hardening_RELEASE_PLAN.md
+```
+
+**Per-card intent:**
+
+| Card | Path | Operation | Notes |
+|---|---|---|---|
+| Test-suite registration | script-execution allowlist | **edit** | Append a comment-header plus four-form blocks for the **seven unregistered** suites, alphabetical. Delete the stale trailing sentence in the existing test-directory header, which claims four pre-existing unallowlisted suites and is falsified by this change. **Verify, never re-add,** the one suite already registered in all four forms. **No directory glob in any form.** |
+| Test-suite registration | Stage-4 planning spec | **edit** | One paragraph in the Outputs section binding the new-executable companion obligation into the plan's own File Change Matrix, **citing** the two canonical statements rather than restating the four-form rule. |
+| Test-suite registration | hook-test fixture | **edit** | Twelve labeled cases: eight must-not-flag (one per suite), three form-coverage, one **mandatory** must-flag control on a sibling path that must not exist on disk. |
+| Precedent skill-script registration | script-execution allowlist | **edit** | Two scripts × four forms = eight pattern lines plus two comment headers. The diff must show exactly that — **no wildcard broadening** of the skill-scripts path. |
+| Discovery gate | release-tooling smoke workflow | **edit** | Discovery across both tool trees and **all four globs** per D-2; retire the six-tool roster literal; meta-assertion on the discovered count. Also update the in-repo gate-efficacy header block. |
+| Discovery gate | Stage-7 dev-testing spec | **edit** | The dev-test ladder cites an enforced gate rather than a hand-run command. |
+| Discovery gate | *(possible NEW)* a discovery script | **add — conditional** | Only if the design factors discovery out of the workflow. **If added, it carries its own four-form allowlist entry** — this release's own rule applied reflexively (CIAC-4). |
+| Hierarchy repair | hierarchy checker | **edit** | Quote-span pattern (drop the single-quote alternation); default scan roots; extra scan files; new self-test recall cases. |
+| Hierarchy repair | deploy-tools README | **add** | **Author** a checker row stating the hierarchy scan scope. There is no such row today — this is an add, not an update. |
+| Blast-radius bound | blast-radius tool | **edit** | Bound or memoize the second-order computation; move the seen-file filter ahead of the scans; non-empty-or-explicit-partial output contract; add a self-test. |
+| Blast-radius bound | blast-radius protocol standard | **edit** | **Added at Stage 5** — the protocol's exit table, schema, and options all move with the fix. The Stage-4 plan listed only the tool. |
+| Documentation-link naming | doc-link maintenance rule | **edit** | Move the naming-note content here as the durable home for the rationale. |
+| Documentation-link naming | the allowlist file header | **edit** | Trim the note whose content moved. |
+| Release | this plan file | **add** | Engineering Commit 0, slug-primary; binds to the version-keyed path only at the Stage-12 atomic claim. |
+
+**Files deliberately NOT in the matrix, with the reason stated so the omission is visible:** the **deploy script** (the discovery card's item was already fixed upstream; the hierarchy card's edit condition does not fire; the ratify decision removed the documentation-link card's edit — see RR-2 RETIRED); the **link-check workflow**, the **documentation-link checker**, and the **doc-link target-paths allowlist** (all three were rename-path files only, and the operator rendered ratify); the **hub-and-spoke bridge reference** (D-3 selected the planning spec instead, and a second home is the failure that decision avoids); the two **canonical convention statements** (both correct as-is — this release cites them, it does not edit them); and the **three Python suites** in the release-tools test directory (outside the guard's shell-script detector, so the registration denominator is eight, not eleven).
+
+**Reference-cascade posture for the documentation-link card.** Under **ratify**, **no sweep occurs and no reference is rewritten**, so there is no pre-count-to-post-count target to meet. The Stage-4 plan's recorded target of four surviving references is **wrong on both limbs** and is corrected here: the correct census is **13 references in the tracked corpus and 17 in total**, the extra four being in gitignored operator-local configuration. Both figures are recorded as evidence of the ratify decision's cost avoidance, not as a sweep target. The Stage-4 census also under-counted because the authoring harness's search shortcut silently skips gitignored paths — a methodology note that outlives this release: **a completeness probe must use an explicitly-scoped search, and must say whether its scope is tracked-only.**
+
+---
+
+## Verification Plan
+
+| Card | Verification method | Expected result |
+|---|---|---|
+| Test-suite registration | file-content assertion plus a committed CI-invoked fixture | Each of the seven newly-registered suites present in four forms; the eighth verified unchanged. The guard-behavior criterion is discharged by the fixture per D-4 — **never by an ad-hoc spoke run**, which cannot fail. |
+| Precedent skill-script registration | file-content assertion across four forms × two scripts, plus a diff-width check | Eight added pattern lines plus two comment headers, no wildcard broadening. The residual set is empty — pre-verified as exactly two unregistered of eight skill scripts. |
+| Discovery gate | behavioral, **mandatory negative test**, and a meta-assertion | A deliberately-broken self-test fails the pull request; a tool that advertises a self-test but is not discovered fails the meta-assertion; the retired roster literal returns zero hits. |
+| Hierarchy repair | self-test recall and specificity cases plus a corpus re-run | The apostrophe case finds one and **fails against the pre-fix predicate**; the double-quote and backtick cases find zero, preserving precision; post-fix scanned and finding counts recorded. Pre-fix baseline: 539 scanned, 0 found, self-test 21 of 21. |
+| Blast-radius bound | performance measurement plus **two control arms** | The depth-2 run on a high-fan-in hub node completes within a stated bound; the low-fan-out arm does not regress; the depth-1 arm is at parity; **no silent zero-byte success**. Note for Stage 7: "low fan-out" means one to three referrers — a sixteen-referrer target already takes about ninety seconds and is **not** a valid control arm. |
+| Documentation-link naming | documentation-link self-test, dead-file-reference gate, and the deploy check's link check | Zero dangling references; the check reports no broken cross-references in scope. **No reference-cascade count applies** — ratify performs no sweep. |
+
+---
+
+## Quota Budget
+
+**Verdict:** **WARN**
+**Parallel-eligible spokes per parallel stage:** Stage 5: 6 · Stage 7: 6 · Stage 8: 6
+**Per-spoke cost estimate:** size-bucket ordinal band, source **heuristic** — no telemetry medians exist. Worst batch mix: one large, three medium, one small, one extra-small.
+**Assumed remaining usage-window envelope:** no operator-stated envelope was supplied. Conservative default assumed and stated: the window is treated as partially consumed and — the load-bearing part — **shared four ways**, because four release-planning sub-tasks were created within thirty-five seconds on one account.
+**Estimated cumulative draw, worst parallel batch:** roughly 55 to 75 percent of the conservative shared envelope, which is the WARN band.
+**Routing:** WARN — window-aware launch timing plus a **three-and-three split** of every parallel wave. Hold the large spoke in the first sub-wave. If the operator states a fresh, uncontended window at wave time, a single six-spoke wave is acceptable. **Do not route this to a launch stagger** — it is a cumulative-draw problem.
+**Note:** the runtime checkpoint re-validates at **every** parallel wave and is the load-bearing one; this estimate is advisory and one-time. Bands and the cumulative-draw budget are calibration-pending at MEDIUM confidence.
+
+---
+
+## Delivery Strategy
+
+Single release branch, one pull request, one merge gate. Seven commits: Commit 0 is this plan file alone, then one per card in wave order. **Commit-0 version re-verify is mandatory and was run — see § Header.** Commit messages are depersonalized; continuous integration hard-fails a commit message carrying a personal email address or a user-home path.
+
+The pull request body confines tracker references to a designated block and uses non-close phrasing, so no auto-close fires at merge; member cards are marked closed at Stage 13 against close-out evidence.
+
+---
+
+## Rollback
+
+**Whole release:** revert the merge commit. The merge is a true two-parent commit, so the first-parent revert form applies.
+
+**Per card:** revert that card's commit. Every card's file set is disjoint from the others' except the script-execution allowlist, where the two registration commits append at distinct regions and are never squashed — so either reverts cleanly.
+
+**No rollback trap in this release.** Nothing is renamed, no identifier moves, no reference graph is rewritten, and no enforcing gate is flipped over a corpus that a revert would return to non-conformant. The one gate this release *adds* — discovery-based self-test enforcement — fails a pull request rather than mutating anything, so reverting it restores the prior, quieter behavior with no residue.
+
+**The single asymmetry worth naming:** reverting the discovery gate after the first-enablement triage pass has landed fixes would leave those fixes in place with nothing executing them. That is a strictly better state than before the release, not a broken one, but a reviewer should know it is the shape of a partial revert.
+
+---
+
+## Deviation Log
+
+Deltas against the Stage-4 plan of record. The Stage-4 output comment is historical and is not edited; **this file carries the decided state.**
+
+| ID | Stage-4 plan of record | Corrected state in this file | Source |
+|---|---|---|---|
+| **Δ-selftest-denominator** | The blast-radius risk row read "one of **3 of 22** release-tree shell tools without a self-test" | **5 of 22.** Twenty-two shell tools exist in the release tree and **seventeen dispatch a self-test**; the five without are the two blast-radius variants, the pipeline-event query tool, the version-freeness test, and the release-plan verifier. Re-measured at Commit 0: 22 total, 17 dispatching, three with no mention at all plus two that mention the flag without dispatching it. | Stage 5 measurement, re-verified at Commit 0 |
+| **Δ-enforcement-counts** | "14 of 19 release-tree self-tests unenforced; 17 of 23 in the deploy-tools tree" | **12 of 17** in the release tree and **14 of 22** in the deploy-tools tree. The milestone's own outcome statement was corrected to these figures at the Stage-4 gate. | Stage 5 measurement |
+| **Δ-first-enablement-severity** | First-enablement red rated **HIGH**, "the single largest source of Stage-7 schedule risk" | **LOW-MEDIUM.** All **39 of 39** in-scope self-tests were measured green at Stage 5 with **zero repository mutation**. The triage pass is still budgeted, but as a small pass rather than the release's dominant risk. | Stage 5 measurement |
+| **Δ-workflow-serialization-severity** | Smoke-workflow serialization rated **HIGH** | **LOW at hunk level**; the file-level serialization edge with the sibling card **stands**. The two cards target different jobs in the same file, so a hunk-level conflict is unlikely even though the file is commit-serialized. | Stage 5 / milestone parallelization map |
+| **Δ-deploy-contention-retired** | Deploy-script cross-release contention across seven sibling cards rated **HIGH**, with a conditional deferral recommended on its account | **RETIRED.** The deploy script is out of the release entirely — the ratify decision removed the last edit. **This release touches no contended file**, and the deferral recommendation it grounded is moot. | Collective Review (D-A ratify) |
+| **Δ-reversibility-void** | "The only MODERATE-reversibility act in the release is the rename — a graph operation whose revert must re-cascade all 8 live references" | **VOID.** Ratify was rendered; no rename occurs. That card is **CHEAP**, and so is the whole release. | Collective Review (D-A ratify) |
+| **Δ-refcascade-count** | Reference-cascade post-count "must read **4**, not 0" | **Wrong on both limbs, and no target applies.** Under ratify **no sweep occurs**, so there is no post-count. The correct census is **13 tracked references / 17 total** — the extra four in gitignored operator-local configuration, missed originally because the authoring harness's search shortcut silently skips gitignored paths. | Stage 5 correction on the card |
+| **Δ-blast-radius-fileset** | The blast-radius card's file set listed only the tool | **Plus one: the blast-radius protocol standard.** Its exit table, schema, and options all move with the fix. | Stage 5 design |
+| **Δ-fork2-premise** | The discovery-boundary fork assumed the release-tools **test** directory contains no self-test dispatch, so a keyed glob would discover **0** | **False.** The release-plan-verifier suite in that directory carries a real self-test dispatch, so a keyed glob discovers **1**, not 0. **Consequence: the sibling CI-wiring card is NOT subsumed** by the discovery design and remains a real, separate card. The subsumption question the Stage-4 plan asked Stage 5 to decide is therefore answered **no**. | Stage 5 measurement, re-verified at Commit 0 |
+| **Δ-convention-home** | Recommended the hub-and-spoke bridge reference as the convention's home, on a reachability argument | **The planning spec's Outputs section, as a cite-not-restate pointer** (D-3). The reachability argument does not discriminate — both homes are reachable. **Attestation** does: a step in that section is re-affirmed by every release's canonical-checklist attestation and the plan-readiness gate, while the alternative is affirmed by neither. And the premise that the convention needed a home was false — it already has two, both predating every affected suite. | Stage 5 seam-search, ratified at Collective Review |
+| **Δ-ac3-restated** | The registration cards' guard-behavior criterion read "produces its real verdict, not a hook block" | **Restated** (D-4) — the original was a broken probe returning the same observation with the entries present and absent. Replaced by a committed, CI-invoked fixture with eight must-not-flag, three form-coverage, and **one mandatory must-flag control**. | Collective Review |
+| **Δ-discovery-scope-widened** | Discovery scoped to two globs | **Four globs, ten more tools** (D-2). A discovery gate whose own scope is hardcoded by file extension reproduces the anti-pattern it forbids. All ten measured green first; the manifest change is two lines. | Collective Review |
+
+---
+
+## References
+
+Designated reference block. Each entry pairs the tracker number with a summary noun phrase, so the meaning survives even if the number does not.
+
+| Number | What it is |
+|---|---|
+| Milestone **302** | `ci-selftest-and-check-hardening` — this release's milestone; six members, `effective_pts` 26, composition locked at Stage-4 planning entry 2026-08-05. |
+| **#4325** | Test-suite allowlist registration — seven of the eight release-tools shell suites carry zero script-execution allowlist entries and are hook-blocked agent-side. |
+| **#3325** | Precedent skill-script registration — the two skill measure-scripts carry no allowlist entry, deferred from an earlier release's scope-lock. |
+| **#3702** | Discovery-based self-test enforcement — the keystone; CI discovers and runs every tool advertising a self-test across both tool trees and all four globs. |
+| **#3706** | Hierarchy-check recall repair — the quote-span pattern loses assertions between apostrophes, and two trees are never scanned. |
+| **#3197** | Blast-radius depth-2 bound — the tracer emits a silent zero-byte success after roughly thirty-two minutes on high-fan-in hub nodes. |
+| **#3710** | Documentation-link allowlist naming — the identifier no longer describes its role; ratified rather than renamed, with the rationale homed in the maintenance rule. |
+| **#4774** | The Stage-4 release-planning sub-task carrying this plan's source output and the operator's plan-approval decision record. |
+| **#4447** | The deployed-allowlist refresh gap — the deploy script cannot refresh composition surfaces. **Not in this release's scope;** owned by the `hub-spoke-execution-safety` milestone, which claimed it 2026-08-06T00:39:43Z. |
+| **#4436** | The other half of that compound failure — a control that does not enforce. Also owned by `hub-spoke-execution-safety`. |
+| **#1531** | The harness-attachment root cause — pre-tool-use hooks do not load for sessions rooted in the repository or a worktree. Owned by the `96-update-install-config-safety` milestone. |
+| **#3936** | The sibling CI-wiring card in the `ci-wiring-and-flake-elimination` milestone whose sole affected file is the release-tooling smoke workflow. **Not subsumed** by this release's discovery design — see the Deviation Log's fork-premise entry. |
+| **ADR-092** | The version-identity decision record: release branches and plan files are slug-primary, and the concrete version binds at the Stage-12 atomic claim. |
+| **ADR-005** | The file-overlap classification decision record, which supplies the append-pattern and line-range-overlap classes used in the Contention Map. |
