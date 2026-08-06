@@ -394,12 +394,21 @@ def tracked_scripts(root: Path) -> list[str]:
 # --------------------------------------------------------------------------------
 
 
+# GitHub workflow commands are emitted for REAL gate runs only. The --self-test
+# fixtures below drive the arms through deliberately-failing trees, and those runs
+# must not raise annotations: a GREEN job decorated with a dozen "failure"
+# annotations from fixtures that were SUPPOSED to fail teaches a reviewer to ignore
+# this gate's annotations, which is worse than having none. Measured on a real run
+# before this guard existed.
+_ANNOTATE = True
+
+
 def err(msg: str) -> None:
-    print(f"::error::{msg}")
+    print(f"::error::{msg}" if _ANNOTATE else f"[err] {msg}")
 
 
 def warn(msg: str) -> None:
-    print(f"::warning::{msg}")
+    print(f"::warning::{msg}" if _ANNOTATE else f"[warn] {msg}")
 
 
 # --------------------------------------------------------------------------------
@@ -733,6 +742,8 @@ class _Fixture:
 
 
 def _selftest() -> int:
+    global _ANNOTATE
+    _ANNOTATE = False  # fixture failures are expected; see the note at err()/warn()
     results: list[tuple[bool, str]] = []
 
     def check(ok: bool, label: str):
@@ -949,7 +960,7 @@ def _selftest() -> int:
             ctx.audit_exclusions()
         out = buf.getvalue()
         check(
-            "::warning::" in out and "genuinely DISPATCHES" in out,
+            "[warn]" in out and "genuinely DISPATCHES" in out,
             "T-26 excluding a genuine dispatcher raises a standing warning",
         )
         check(
@@ -1047,7 +1058,10 @@ def _selftest() -> int:
     finally:
         fx.close()
 
-    # ---- Report
+    # ---- Report. Annotations go back ON here: a fixture failing is expected and
+    # silent, but the ENGINE failing its own fixtures must be loud — that is the one
+    # condition under which this gate cannot be trusted at all.
+    _ANNOTATE = True
     failed = [label for ok, label in results if not ok]
     for ok, label in results:
         print(f"{'PASS' if ok else 'FAIL'} [{label}]")
