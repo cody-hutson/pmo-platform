@@ -401,16 +401,25 @@ test_case "bash -c 'echo ok' allows (no script path)" \
 # deployed allowlist -- they never run a suite and never assert a suite's own
 # exit status.
 #
-# WHY A MUST-FLAG CONTROL IS MANDATORY HERE: without it, a fixture in which
-# the allowlist failed to load would report eight green must-not-flag cases
-# while asserting nothing (is_script_allowlisted returns 1 for every path when
-# the file is missing -- i.e. everything blocks, and a permissive-side probe
-# alone could not tell that apart from a correct allowlist). The control is
-# also the anti-broadening arm: it is a sibling in the SAME directory, in the
-# SAME invocation shape, differing ONLY in allowlist membership, so a wildcard
-# directory glob would permit it and fail this case. Its path must NOT exist
-# on disk -- registration is a path-pattern match, not a file-existence check,
-# so a non-existent name can never be accidentally satisfied by a future suite.
+# WHY A MUST-FLAG CONTROL IS MANDATORY HERE: the 11 must-not-flag cases below
+# are all "allows" assertions, and an allows-only fixture cannot tell a correct
+# allowlist apart from one that permits everything. Measured: widen the allowlist
+# to `*`, or stub the hook to `exit 0`, and all 11 stay green while this control
+# is the ONLY case in this block that turns red (11/11 green + control red, on
+# both arms). A guard that has stopped guarding is the vacuity this control exists
+# to catch, and it is the direction no "allows" case can report by construction.
+#
+# The OPPOSITE direction needs no control, so this comment does not claim one: if
+# the allowlist fails to load, is_script_allowlisted returns 1 for every path, so
+# everything blocks and the must-not-flag cases go red together (measured: 11/11
+# red, this control still green). A load failure is already loud.
+#
+# The control is also the anti-broadening arm: it is a sibling in the SAME
+# directory, in the SAME invocation shape, differing ONLY in allowlist
+# membership, so a wildcard directory glob would permit it and fail this case.
+# Its path must NOT exist on disk -- registration is a path-pattern match, not a
+# file-existence check, so a non-existent name can never be accidentally
+# satisfied by a future suite.
 #
 # FORM COVERAGE, and the substrate boundary that bounds it. The allowlist
 # registers each suite in four forms; two of them are prefixed with the
@@ -480,8 +489,8 @@ test_case "BLOCK-022 form: /bin/bash ./<suite> allows (absolute-interpreter pref
   0
 
 # must-flag control (MANDATORY) -- an unregistered sibling in the same
-# directory. This is what makes the eight cases above falsifiable. The path
-# must never be created on disk.
+# directory. This is what makes the 11 must-not-flag cases above falsifiable.
+# The path must never be created on disk.
 test_case "BLOCK-022 control: unregistered sibling in the same directory blocks" \
   "$(bash_payload 'bash release/tools/tests/zz_unregistered_control.sh')" \
   2 "BLOCK-DESTRUCTIVE-022"

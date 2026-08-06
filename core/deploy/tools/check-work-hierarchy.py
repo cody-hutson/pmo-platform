@@ -818,8 +818,22 @@ def main():
         # its ERROR on the first line and this one must too. Printing the TSV first
         # would hand the operator `VOCAB ...` as the diagnosis. Named inline, the
         # message is self-contained on the one line the consumer reads.
-        print("ERROR\tH1 scan population is empty — every configured scan surface "
-              "is unresolved: " + ", ".join(unresolved), file=sys.stderr)
+        #
+        # The wording is DERIVED rather than asserted, because an empty population
+        # does not imply that every surface failed to resolve: a surface that
+        # resolves but holds no scannable file produces the same zero. Hardcoding
+        # "every configured scan surface is unresolved" misreports the partial case
+        # (3 of 4 resolving still yields that sentence), and joining an EMPTY
+        # unresolved list yields an error naming no subject at all — both on the one
+        # line the operator gets. The count carries the distinction the prose cannot.
+        configured = len(DEFAULT_SCAN_ROOTS) + len(EXTRA_SCAN_FILES)
+        if unresolved:
+            detail = ("%d of %d configured scan surfaces unresolved: %s"
+                      % (len(unresolved), configured, ", ".join(unresolved)))
+        else:
+            detail = ("all %d configured scan surfaces resolved but yielded no "
+                      "scannable file" % configured)
+        print("ERROR\tH1 scan population is empty — " + detail, file=sys.stderr)
         return 3
     for loc, text in h1:
         out.append("H1\t" + loc + "\t" + text)

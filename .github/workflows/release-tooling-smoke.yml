@@ -65,9 +65,21 @@ name: Release tooling smoke
 #              on disk but is no longer discovered is a HARD failure, which is what
 #              makes narrowing a '# scope:' glob unable to green a failing tool.
 #              Runner affinity is declared AT THE TOOL ('# selftest-runner: macos'),
-#              so the ubuntu/macOS split is derived too — today exactly one tool
-#              declares macOS (automated-closeout.sh, which resolves gh at Homebrew
-#              paths at load time, before argument parsing).
+#              so the ubuntu/macOS split is derived too. The marker at the tool is the
+#              authority; this paragraph is NOT a maintained census, so read the live
+#              split from the engine — `check-selftest-coverage.py --list --runner
+#              macos` (or `--runner ubuntu`) — rather than trusting a count written
+#              here. Measured when this note was last reconciled: 57 discovered = 54
+#              ubuntu + 3 macOS. All three macOS declarers live in release/tools/:
+#              automated-closeout.sh (hard-exits at LOAD time, before argument
+#              parsing, unless gh resolves at a Homebrew path), plus
+#              check-release-body-drift.sh and reemit-release-bodies.sh (which share a
+#              non-portable frontmatter-strip idiom that yields an EMPTY body under
+#              GNU sed on the Linux runner). The drift check is worth naming rather
+#              than leaving to a count: it is a live Stage-13 gate whose drift legs
+#              (B, I) FAIL OPEN on Linux — reporting "no drift" when drift exists — so
+#              an F1 triage that reads it as part of the ubuntu partition
+#              misattributes both where it runs and how it fails.
 #              SCOPE BOUNDARY, stated because it is real: release/tools/tests/** and
 #              core/deploy/tools/tests/** are OUTSIDE this discovery scope. Those are
 #              bare-invocation suites, not --self-test dispatchers — and the boundary
