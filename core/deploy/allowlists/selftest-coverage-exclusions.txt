@@ -1,0 +1,53 @@
+# Self-test coverage exclusions — the PRECISION mechanism for the discovery gate
+# (release/tools/check-selftest-coverage.py).
+#
+# Format:  <repo-relative path>  # <reason>
+# An entry WITHOUT a reason is a parse error, asserted by the engine's own
+# --self-test. Suppression must cost a written justification, in the diff,
+# attributable to an author.
+#
+# WHY THIS FILE EXISTS RATHER THAN A TIGHTER REGEX. The advertise predicate is
+# recall-biased on purpose: a false negative is an unenforced self-test — the exact
+# defect the gate closes — and it is SILENT, while a false positive is one line here
+# and it is LOUD. Precision belongs in this file. Do not "fix" a false positive by
+# narrowing the regex; that re-opens the silent class.
+#
+# WHAT AN ENTRY HERE IS NOT. Excluding a tool is never a valid disposition for a
+# FAILING self-test that genuinely dispatches. The engine emits a standing
+# ::warning:: for any in-scope exclusion whose comment-stripped text still contains
+# --self-test, precisely so a real self-test cannot be quietly retired from the gate.
+# Narrowing a '# scope:' directive in the manifest is not a disposition either — it
+# is a hard failure (Arm B(i)).
+
+# --- Predicate false positives (F3): matched by the recall-biased predicate, but the
+# --- file has no --self-test dispatch. The quoted match is REQUIRED so the claim is
+# --- checkable without re-deriving it.
+core/deploy/tools/build-skill-packages.sh  # no --self-test dispatch; the P3 shell case-arm shape matched a COMMENT at :46 "sandbox under --self-test) would silently resolve back". Invoked with the flag it treats it as a skill name: "cannot resolve module for '--self-test'" (exit 1).
+
+# --- release/tools/tests/** and its siblings: OUT of the --self-test discovery scope
+# --- by design (FORK 2, decided at Stage 5). These are bare-invocation suites, not
+# --- --self-test dispatchers; the predicate reaches them only through docstrings and
+# --- fixture literals. NOTE, because the premise is easy to get wrong: this tree is
+# --- NOT empty of real dispatch — test_verify_release_plan.sh carries a genuine one.
+# --- The boundary is a scope decision, not an emptiness claim. Arm D surveils these
+# --- suites for workflow wiring instead; wiring them is separate, tracked work.
+release/tools/tests/test_av_verify.py  # out of declared scope — tests/ suite, bare-invocation entry point; surveilled by Arm D
+release/tools/tests/test_bundle_issues_parser.py  # out of declared scope — tests/ suite; already wired as a named step in release-tooling-smoke.yml
+release/tools/tests/test_native_dep_mirror.py  # out of declared scope — tests/ suite, bare-invocation entry point; surveilled by Arm D
+release/tools/tests/test_verify_release_plan.sh  # out of declared scope — tests/ suite; it DOES carry a real --self-test dispatch, and is excluded by scope decision, not for lack of one
+
+# --- Skill-owned scripts (core/skills/**, release/skills/**): outside both declared
+# --- tool trees. Enumerated rather than left implicit so no skill script is silently
+# --- assumed covered by this gate.
+core/skills/finops-usage-extractor/scripts/extract-usage.sh  # covered by the finops-selftest job in release-tooling-smoke.yml
+core/skills/finops-usage-extractor/scripts/rollup-attribution.sh  # covered by the finops-selftest job in release-tooling-smoke.yml
+core/skills/finops-usage-extractor/scripts/report-usage.sh  # covered by the finops-selftest job in release-tooling-smoke.yml
+core/skills/finops-usage-extractor/scripts/estimate-usage.sh  # covered by the finops-selftest job in release-tooling-smoke.yml
+core/skills/context-budget-auditor/scripts/measure-context-budget.sh  # out of declared scope — skill-owned script, no CI executor today
+core/skills/pmo-qa-auditor/scripts/fitness-audit-search-primitives.sh  # out of declared scope — skill-owned script, no CI executor today
+core/skills/skill-compliance-auditor/scripts/measure-skill-compliance.sh  # out of declared scope — skill-owned script, no CI executor today
+release/skills/pmo-skill-refiner/scripts/run_eval_audit.py  # out of declared scope — skill-owned script, no CI executor today
+
+# --- Other trees outside the two declared tool trees.
+core/hooks/session-retro-trigger.sh  # out of declared scope — hook runtime, not a release/deploy tool
+core/deploy/deploy.sh  # out of declared scope by deliberate release decision; its checks are gated by deploy-check-ci.yml, which pins macOS for its BSD stat/md5 dependencies

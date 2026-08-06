@@ -1,0 +1,75 @@
+# Self-test coverage manifest — the COMMITTED FLOOR for the selftest-discovery
+# CI gate. Regenerate with:
+#   python3 release/tools/check-selftest-coverage.py --emit-manifest
+#
+# Do NOT hand-edit the path list: --reconcile fails when it diverges from what
+# the scope directives below actually discover, in either direction.
+#
+# The '# scope:' directives and the paths they produce are co-located ON
+# PURPOSE. Narrowing a directive drops its paths out of the discovered set
+# while they remain here and on disk, which is a HARD failure (Arm B(i)) — so
+# greening a narrowed scope requires deleting the lines immediately below it,
+# in the same diff, in the reviewer's eye. Narrowing the scope is NOT a valid
+# disposition for a failing self-test; see the F1-F4 triage classes in the
+# gate's ADR.
+# scope: release/tools/*.sh
+release/tools/append-pipeline-event.sh
+release/tools/automated-closeout.sh
+release/tools/capture-release-bodies.sh
+release/tools/check-emission-contract-subset.sh
+release/tools/check-release-body-drift.sh
+release/tools/claim-version.sh
+release/tools/cleanup-orphan-state.sh
+release/tools/compute-close-class-telemetry.sh
+release/tools/compute-cycle-time.sh
+release/tools/compute-dora-metrics.sh
+release/tools/compute-front-cluster-telemetry.sh
+release/tools/compute-middle-cluster-telemetry.sh
+release/tools/compute-release-velocity.sh
+release/tools/produce-learnings-register.sh
+release/tools/reemit-release-bodies.sh
+release/tools/synthesize-release-learnings.sh
+release/tools/version-grammar.sh
+# scope: release/tools/*.py
+release/tools/av-verify.py
+release/tools/bundle-issues-parser.py
+release/tools/check-adr-durability.py
+release/tools/check-adr-numbers.py
+release/tools/check-analysis-staleness.py
+release/tools/check-line-range-overlap.py
+release/tools/check-release-links.py
+release/tools/check-selftest-coverage.py
+release/tools/compute-milestone-positions.py
+release/tools/generate-adr-index.py
+release/tools/native-dep-mirror.py
+release/tools/renumber-adr.py
+release/tools/sweep-release-corpus.py
+# scope: core/deploy/tools/*.py
+core/deploy/tools/_frontmatter.py
+core/deploy/tools/backfill-relationship-edges.py
+core/deploy/tools/build-doc-index.py
+core/deploy/tools/build-hook-registry.py
+core/deploy/tools/check-adr-flip.py
+core/deploy/tools/check-approved-queue-depth.py
+core/deploy/tools/check-count-structure.py
+core/deploy/tools/check-doc-frontmatter.py
+core/deploy/tools/check-doc-links.py
+core/deploy/tools/check-extraction-contract.py
+core/deploy/tools/check-host-binding.py
+core/deploy/tools/check-identity-conformance.py
+core/deploy/tools/check-label-parity.py
+core/deploy/tools/check-milestone-epic-membership.py
+core/deploy/tools/check-ownership-collision.py
+core/deploy/tools/check-skill-count-imp.py
+core/deploy/tools/check-version-anchors.py
+core/deploy/tools/check-work-hierarchy.py
+core/deploy/tools/compose-portfolio.py
+core/deploy/tools/cross_module_audit_helper.py
+core/deploy/tools/generate_release_index.py
+core/deploy/tools/stamp-node-frontmatter.py
+# scope: core/deploy/tools/*.sh
+core/deploy/tools/check-canonical-structure.sh
+core/deploy/tools/check-citation-anchors.sh
+core/deploy/tools/check-convention.sh
+core/deploy/tools/check-registry-currency.sh
+core/deploy/tools/path-leak-patterns.sh

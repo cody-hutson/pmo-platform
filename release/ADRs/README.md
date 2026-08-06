@@ -57,6 +57,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-111](ADR-111-priority-carrier-agnostic-p-level-detection.md) | The P-level digit is the canonical priority satisfier; the carrier is not part of the contract | Proposed | 2026-08-03 | release-bundle-and-sequence-gates |
 | [ADR-115](ADR-115-adr-number-claim-binds-at-merge.md) | An ADR number is allocated at authorship and bound at merge; only the mainline binds, and the reconciliation is tooled | Accepted | 2026-08-04 | adr-corpus-conformance |
 | [ADR-117](ADR-117-adr-index-derived-surface-and-scoped-conformance-claim.md) | The ADR index is a derived surface and cannot drift; the conformance claim is scoped to a named baseline and its residual is stated | Accepted | 2026-08-04 | adr-corpus-conformance |
+| [ADR-119](ADR-119-selftest-coverage-is-discovered-with-a-committed-manifest-floor.md) | Self-test coverage is discovered against a declared scope, floored by a committed manifest, and gated by a thin caller over a committed engine | Proposed | 2026-08-05 | ci-selftest-and-check-hardening |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
