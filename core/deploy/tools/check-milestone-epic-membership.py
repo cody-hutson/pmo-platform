@@ -19,6 +19,14 @@ matches its membership (M2), and whether its pipeline scaffold is complete (M3).
       must never gate. It is emitted as its own sub-invariant so it can be silenced
       without disabling the (precise) M1 leg.
 
+      Each `named-not-member` ref carries ONE inline bracketed SUB-CLASS TOKEN
+      naming why it is not a member, because "named but not a member" collapses
+      states whose remedies are opposite: a ref sitting in ANOTHER milestone is a
+      mis-scoped card, a ref in NO milestone is an unattached one, a ref that IS in
+      this milestone but excluded from the reconciled set is a Scope line to drop,
+      and a ref nothing could resolve is an unknown that must not be guessed at.
+      See the M2 SUB-CLASS VOCABULARY block below the constants.
+
 WHY THE TWO LEGS READ DIFFERENT MEMBERSHIP SETS
 -----------------------------------------------
 M1 is OPEN-scoped. It is the FAIL-capable leg and asks a live-drift question —
@@ -105,9 +113,29 @@ OUTPUT (TSV) / EXIT CODES
   SKIP_MS    <ms>  no-declared-epic           M1 skipped for this milestone
   M1         <ms>  <issue>  <parent>  <declared>
   M2         <ms>  <named>  <live>  <detail>
+             detail's `named-not-member:` refs each carry ONE bracketed
+             sub-class token: [elsewhere:ms#<N>] · [no-milestone] ·
+             [member-excluded[:sub-task]] · [unresolved].
+             `member-not-named:` refs are UNANNOTATED and byte-unchanged.
   EXEMPT     <leg> <detail>
   COUNT_M1   <n>                              FAIL-capable findings
-  COUNT_M2   <n>                              warn-only findings
+  COUNT_M2   <n>                              warn-only findings — MILESTONE ROWS
+  COUNT_M2_NNM <n>                            named-not-member REFS (NNM). A
+                                              DIFFERENT denominator from COUNT_M2:
+                                              that one counts rows, this one counts
+                                              refs. Never conflate them.
+  COUNT_M2_NNM_ELSEWHERE        <n>           \
+  COUNT_M2_NNM_NO_MILESTONE     <n>            > always emitted, 0 included; the
+  COUNT_M2_NNM_MEMBER_EXCLUDED  <n>            > four sum to COUNT_M2_NNM
+  COUNT_M2_NNM_UNRESOLVED       <n>           /
+  M2_REF_RESOLUTION <status> <requested> <resolved>
+                                              status ∈ {not-needed, fetched,
+                                              degraded, fixture}. `degraded` says
+                                              the overlay call FAILED — distinct
+                                              from `fetched` with 0 resolved, so a
+                                              dead resolver is never rendered as a
+                                              population that genuinely could not
+                                              be resolved.
   SKIP_MS    <ms>  not-yet-scaffolded         M3: 0 attached AND 0 orphans AND
                                               0 narrowed-unlabelled stage titles
   M3         <ms>  MISSING <stage> | ORPHAN-STAGE-TITLE #<n> | UNLABELLED #<n>
@@ -146,6 +174,35 @@ SCOPE_SECTION = re.compile(
 SUB_TASK_LABEL = "sub-task"
 SUB_TASK_LEGACY_LABEL = "type:subtask"
 EPIC_LABEL = "type:epic"
+
+# ── M2 SUB-CLASS VOCABULARY ─────────────────────────────────────────────────
+# The enum models the OUTCOME OF RESOLVING the ref, not the ref's milestone
+# state. That is the distinction that makes it closed: "resolver could not
+# answer" and "resolver answered 'no milestone'" are different facts, and an
+# enum keyed on the ref's state has no cell for the first one.
+#
+#   elsewhere:ms#<N>        resolved — the ref belongs to a DIFFERENT milestone
+#   no-milestone            resolved — the ref belongs to NO milestone
+#   member-excluded[:sub-task]
+#                           resolved to THIS milestone, but filtered out of the
+#                           reconciled `live` set. `live` excludes sub-tasks, so
+#                           on the live path that filter is the cause; the
+#                           `:sub-task` qualifier is appended only when the
+#                           member node CONFIRMS it, never asserted from the
+#                           classification alone
+#   unresolved              NOT resolved — no source could answer
+#
+# `unresolved` is a POSITIVELY EMITTED unknown, never a default. The same rule
+# `scope_marker` states for the scaffold marker applies to the resolution
+# question: absence from a source is information, not a value. Collapsing
+# `unresolved` into `no-milestone` would reintroduce, one level down, the exact
+# misclassification these tokens exist to remove.
+#
+# The kind is the segment BEFORE the first colon; anything after it is verified
+# detail. That is what lets `elsewhere:ms#<N>` and `member-excluded:sub-task`
+# carry an argument without widening the counted vocabulary.
+M2_SUBCLASS_KINDS = ("elsewhere", "no-milestone", "member-excluded", "unresolved")
+M2_SUBCLASS_TOKEN = re.compile(r'#\d+\[([a-z-]+)(?::[^\]]+)?\]')
 
 # ── M3 scaffold-completeness vocabulary (#3819) ─────────────────────────────
 # Scope is a FUNCTION OF THE STAGE NUMBER, per hub-spoke-bridge.md Procedure 1.
@@ -260,6 +317,23 @@ def _gh(args):
     return proc.stdout
 
 
+def _gh_partial(args):
+    """`gh` invocation that TOLERATES a non-zero exit when stdout still carries data.
+
+    `gh api graphql` returns rc=1 whenever ANY alias in a batched query fails to
+    resolve — while populating `data` for every alias that DID resolve. `_gh()`
+    above raises on non-zero rc, so routing a batched aliased query through it
+    would abort the whole check on one rotted reference.
+
+    This is a SIBLING, not a loosening: five other fetchers depend on `_gh()`'s
+    raise-on-rc contract, and widening it to serve one partial-tolerant caller
+    would trade a loud failure for a silent one everywhere else. Returns stdout
+    only; the caller decides what an undecodable or empty stream means.
+    """
+    proc = subprocess.run(args, capture_output=True, text=True)
+    return proc.stdout
+
+
 def iter_json_docs(text):
     """Yield each JSON document from a CONCATENATED stream.
 
@@ -344,6 +418,103 @@ def fetch_milestone_members(repo):
             raise RuntimeError("unexpected payload re-fetching milestone #%d" % number)
         members[str(number)] = nodes
     return members
+
+
+def _parse_ref_milestone_payload(text):
+    """PURE. Parse a batched aliased issue→milestone response into the OVERLAY map.
+
+    The overlay is TRI-STATE, and the tri-state is the whole contract:
+
+        {"<ref>": "<milestone-number>"}  the ref resolved AND carries a milestone
+        {"<ref>": None}                  the ref resolved AND carries NO milestone
+        key ABSENT                       the ref did NOT resolve
+
+    A map built the obvious way — comprehending only the nodes whose `milestone`
+    is truthy — drops the middle row into the third, and every closed,
+    milestone-less reference then reads `unresolved`. That is inference-by-absence
+    one level below the misclassification the sub-class tokens exist to remove,
+    so the null-milestone key is written explicitly rather than filtered out.
+
+    Returns None — distinct from an empty dict — when the response was absent or
+    undecodable. Empty-but-decodable means "the call worked and resolved nothing";
+    None means "the call did not work". Only the caller can tell those apart, and
+    only if this function keeps them apart.
+    """
+    if not (text or "").strip():
+        return None
+    try:
+        docs = list(iter_json_docs(text))
+    except ValueError:
+        return None
+    out = {}
+    try:
+        for payload in docs:
+            repo_node = ((payload or {}).get("data") or {}).get("repository") or {}
+            for alias, node in repo_node.items():
+                # A ref that did not resolve arrives as `<alias>: null` plus an
+                # entry in `errors[]`. Skipping it is what makes its key ABSENT.
+                if not alias.startswith("r") or not isinstance(node, dict):
+                    continue
+                number = node.get("number")
+                if number is None:
+                    continue
+                milestone = node.get("milestone")
+                out[str(number)] = (str(milestone.get("number"))
+                                    if isinstance(milestone, dict) else None)
+    except (AttributeError, TypeError):
+        return None
+    return out
+
+
+def fetch_ref_milestones(repo, refs):
+    """Deferred, batched ref→milestone overlay. Returns (ok, {ref: ms-or-None}).
+
+    ONE GraphQL document of `r<N>: issue(number:N){ number milestone{ number } }`
+    aliases, chunked at 100 — not an N+1 per-ref fan-out, which this module's own
+    docstring rules out. It exists because the two FREE indices are incomplete BY
+    CONSTRUCTION: the membership map is open-milestone-scoped and the issue index
+    is OPEN-scoped, so a closed issue sitting in a closed milestone is invisible
+    to both, and a zero-fetch design would report it `no-milestone` — the exact
+    misclassification the sub-class split exists to eliminate.
+
+    STRUCTURALLY CANNOT RAISE, and that is expressed as a MECHANISM rather than a
+    docstring promise: the body is wrapped, so no escape is possible. The reason
+    it matters is the caller's exit-code fork — `main()`'s live-fetch guard
+    catches RuntimeError only, so any other exception exits 1 with a traceback on
+    the same stream deploy.sh parses as TSV, which then reads as a clean check.
+    A property no line enforces is not a fail-posture.
+
+    `ok` is the DEGRADED-vs-CLEAN discriminator. A call that failed and a call
+    that succeeded while resolving nothing both return an empty map; an output
+    that cannot tell those apart is the fail-open shape this check must not have.
+    Callers degrade to the free indices and then to `unresolved` either way — the
+    flag changes what is REPORTED, never what is computed.
+    """
+    refs = sorted(set(str(r) for r in refs), key=int)
+    if not refs:
+        return True, {}
+    owner, _, name = repo.partition("/")
+    mapping, ok = {}, True
+    try:
+        for start in range(0, len(refs), 100):
+            chunk = refs[start:start + 100]
+            aliases = "\n".join(
+                "    r%s: issue(number:%s){ number milestone{ number } }" % (r, r)
+                for r in chunk)
+            query = ("query($owner:String!,$name:String!){\n"
+                     "  repository(owner:$owner,name:$name){\n"
+                     + aliases + "\n  }\n}\n")
+            parsed = _parse_ref_milestone_payload(
+                _gh_partial(["gh", "api", "graphql",
+                             "-f", "query=" + query,
+                             "-F", "owner=" + owner, "-F", "name=" + name]))
+            if parsed is None:
+                ok = False
+                continue
+            mapping.update(parsed)
+    except Exception:  # noqa: BLE001 — deliberate; see the docstring
+        return False, mapping
+    return ok, mapping
 
 
 def fetch_milestone_by_slug(repo, wanted):
@@ -719,7 +890,163 @@ def analyse_m3(milestones):
     return load_bearing, advisory, policy, info, denom, marker, skipped
 
 
-def analyse(milestones, issues, members_all=None):
+# ── M2 divergence + sub-class resolution ────────────────────────────────────
+
+def _issues_by_milestone(issues):
+    """{milestone-number: [open-issue-node, ...]}. Milestone-less issues dropped."""
+    by_ms = {}
+    for iss in issues:
+        ms = iss.get("milestone")
+        if not ms:
+            continue
+        by_ms.setdefault(str(ms.get("number")), []).append(iss)
+    return by_ms
+
+
+def m2_divergence(milestones, issues, members_all=None):
+    """The M2 set difference, per milestone. ONE definition, TWO call sites.
+
+    Returns {ms_num: (named, live, missing, extra)} for every milestone whose
+    description names at least one card — `missing` = named but not a live
+    member, `extra` = live member the description omits. Milestones naming no
+    card are absent from the map, exactly as the join skips them.
+
+    `analyse()` consumes it to build the emitted rows and `main()` consumes it to
+    build the overlay's candidate set. THEY MUST NEVER DRIFT: a candidate set
+    computed from a narrower difference than the one emitted would leave refs
+    unresolvable for no reason, and a wider one would pay for refs nothing
+    reports. Same rule, same reason, as `unlabelled_stage_titled` above — do not
+    inline either call site.
+
+    The returned tuple carries `named` and `live` as well as the two differences
+    because the caller needs their cardinalities for the emitted row; returning
+    only the differences would force `analyse()` to recompute both sets, which is
+    precisely the second definition this helper exists to prevent.
+    """
+    by_ms = _issues_by_milestone(issues)
+    out = {}
+    for ms in milestones:
+        ms_num = str(ms.get("number"))
+        named = named_cards(ms.get("description") or "")
+        if not named:
+            continue
+        # M2 membership spans ALL states (see the analyse docstring); the OPEN
+        # `children` set stays M1's basis and is the offline/--fixture fallback.
+        if members_all is None:
+            live = set(str(c.get("number"))
+                       for c in by_ms.get(ms_num, []) if not is_sub_task(c))
+        else:
+            live = set(str(c.get("number"))
+                       for c in members_all.get(ms_num, []) if not is_sub_task(c))
+        out[ms_num] = (named, live,
+                       sorted(named - live, key=int),
+                       sorted(live - named, key=int))
+    return out
+
+
+def m2_ref_indices(issues, members_all):
+    """The two FREE ref→milestone indices — no network call, both incomplete.
+
+    Returns (member_ms, open_ms):
+      member_ms  {ref: (milestone-number, is-sub-task)} over every member of every
+                 OPEN milestone, ALL issue states, sub-tasks INCLUDED. The
+                 inclusion is load-bearing: the sub-task exclusion is exactly what
+                 `member-excluded` has to be able to name, and an index that
+                 pre-filtered them could not.
+      open_ms    {ref: milestone-number-or-None} over every OPEN issue, INCLUDING
+                 the milestone-less ones the by-milestone grouping drops.
+
+    Both are incomplete by construction — open-milestone-scoped and OPEN-scoped
+    respectively — which is the whole reason the deferred overlay exists. Their
+    incompleteness is never read as an answer; it falls through to `unresolved`.
+    """
+    member_ms = {}
+    for ms_num, nodes in (members_all or {}).items():
+        for node in nodes:
+            member_ms.setdefault(str(node.get("number")),
+                                 (str(ms_num), is_sub_task(node)))
+    open_ms = {}
+    for iss in issues:
+        ms = iss.get("milestone")
+        open_ms[str(iss.get("number"))] = str(ms.get("number")) if ms else None
+    return member_ms, open_ms
+
+
+def _m2_classify(ref, ms_num, resolved_ms, member_ms):
+    """Turn a RESOLVED milestone answer into a sub-class (kind, detail) pair."""
+    if resolved_ms is None:
+        return "no-milestone", None
+    if str(resolved_ms) == str(ms_num):
+        entry = member_ms.get(ref)
+        # The qualifier is appended only when the member node confirms it. On the
+        # live path the sub-task filter is the only thing that can remove a
+        # confirmed member from `live`, but naming a cause the data did not show
+        # is the habit this whole token set exists to break.
+        return "member-excluded", ("sub-task" if entry and entry[1] else None)
+    return "elsewhere", "ms#" + str(resolved_ms)
+
+
+def resolve_named_ref(ref, ms_num, ref_milestone, member_ms, open_ms):
+    """Why is `ref`, named in ms#<ms_num>'s Scope, absent from its reconciled set?
+
+    Returns one (kind, detail) pair from the closed four-value enum documented at
+    M2_SUBCLASS_KINDS. Pure — every source is an already-materialised map.
+
+    Resolution order, most-complete source first:
+      1. `ref_milestone` — the deferred overlay, TRI-STATE (see
+         `_parse_ref_milestone_payload`). A present key is authoritative whether
+         its value is a milestone number or None.
+      2. `member_ms` — any-state member of an OPEN milestone.
+      3. `open_ms` — any OPEN issue, including one carrying no milestone.
+      4. `unresolved`.
+
+    ABSENCE FROM THE OVERLAY IS NEVER `no-milestone`. It falls through to the two
+    free indices and, failing those, to the positively-emitted unknown. The
+    overlay says "no milestone" by holding the key with a None value, never by
+    not holding the key — those are different facts and the caller must be able
+    to tell them apart.
+    """
+    ref = str(ref)
+    if ref_milestone and ref in ref_milestone:
+        return _m2_classify(ref, ms_num, ref_milestone[ref], member_ms)
+    if ref in (member_ms or {}):
+        return _m2_classify(ref, ms_num, member_ms[ref][0], member_ms)
+    if open_ms and ref in open_ms:
+        return _m2_classify(ref, ms_num, open_ms[ref], member_ms)
+    return "unresolved", None
+
+
+def m2_subclass_token(kind, detail):
+    """Render one inline bracketed sub-class token. Kind before the colon."""
+    return "[%s]" % kind if detail is None else "[%s:%s]" % (kind, detail)
+
+
+def m2_subclass_counts(m2):
+    """Sub-class tally over the EMITTED M2 rows. Pure — takes analyse()'s output.
+
+    Returns (total, {kind: n}). Reading the emitted rows rather than an internal
+    accumulator is deliberate: the counters then describe what an operator can
+    actually see, and a token that stops being emitted stops being counted.
+
+    COUNTS REFS. `COUNT_M2` counts milestone ROWS. Different denominators — the
+    invariant is stated against this total and never against `COUNT_M2`.
+
+    `total` counts every token found, while the buckets count only the four known
+    kinds, so `sum(buckets) == total` is a real assertion about the enum staying
+    closed rather than an arithmetic tautology. `member-not-named` refs carry no
+    token and are therefore invisible to this tally by construction.
+    """
+    counts = dict((kind, 0) for kind in M2_SUBCLASS_KINDS)
+    total = 0
+    for row in m2:
+        for kind in M2_SUBCLASS_TOKEN.findall(row[3]):
+            total += 1
+            if kind in counts:
+                counts[kind] += 1
+    return total, counts
+
+
+def analyse(milestones, issues, members_all=None, ref_milestone=None):
     """Pure join — no I/O, so the self-test can drive it with synthetic data.
 
     `issues` is the OPEN issue set and drives M1 (the FAIL-capable live-drift
@@ -733,13 +1060,17 @@ def analyse(milestones, issues, members_all=None):
     conflating them puts a false positive in front of the operator on a leg that
     is already advisory. When members_all is None the OPEN set is used (the
     pre-existing behavior, and what the offline --fixture path drives).
+
+    `ref_milestone` is the optional deferred ref→milestone overlay, added the same
+    way `members_all` was: an optional trailing argument, defaulting to the
+    pre-existing behaviour. It drives the `named-not-member` sub-class tokens and
+    NOTHING else. IT IS INJECTED, NEVER FETCHED HERE — keeping this join pure and
+    I/O-free is what keeps `--self-test` offline and credential-free, which is a
+    CI roster invariant. Return arity is unchanged.
     """
-    by_ms = {}
-    for iss in issues:
-        ms = iss.get("milestone")
-        if not ms:
-            continue
-        by_ms.setdefault(str(ms.get("number")), []).append(iss)
+    by_ms = _issues_by_milestone(issues)
+    divergence = m2_divergence(milestones, issues, members_all)
+    member_ms, open_ms = m2_ref_indices(issues, members_all)
 
     m1, m2, skipped, exempted = [], [], [], []
     declared_count = 0
@@ -765,24 +1096,22 @@ def analyse(milestones, issues, members_all=None):
                     m1.append((ms_num, str(child.get("number")), parent_num, epic))
 
         # ── M2 reconciliation (warn-only) ────────────────────────────────
-        named = named_cards(desc)
-        if not named:
+        # The set difference comes from m2_divergence() — the SAME binding main()
+        # uses to build the overlay's candidate set. Do not recompute it here.
+        entry = divergence.get(ms_num)
+        if entry is None:
             continue
-        # M2 membership spans ALL states (see the analyse docstring); `children`
-        # is OPEN-only and stays M1's basis. Falling back to `children` keeps the
-        # offline --fixture path and the synthetic self-test fixtures working.
-        if members_all is None:
-            live = set(str(c.get("number")) for c in children)
-        else:
-            live = set(str(c.get("number"))
-                       for c in members_all.get(ms_num, [])
-                       if not is_sub_task(c))
-        missing = sorted(named - live, key=int)   # named but not live members
-        extra = sorted(live - named, key=int)     # live members not named
+        named, live, missing, extra = entry
         if missing or extra:
             detail = []
             if missing:
-                detail.append("named-not-member: " + ",".join("#" + n for n in missing))
+                # Each ref carries ONE sub-class token. `member-not-named` below
+                # is deliberately left unannotated and byte-identical.
+                detail.append("named-not-member: " + ",".join(
+                    "#%s%s" % (n, m2_subclass_token(
+                        *resolve_named_ref(n, ms_num, ref_milestone,
+                                           member_ms, open_ms)))
+                    for n in missing))
             if extra:
                 detail.append("member-not-named: " + ",".join("#" + n for n in extra))
             m2.append((ms_num, str(len(named)), str(len(live)), "; ".join(detail)))
@@ -916,6 +1245,188 @@ def self_test():
                                         {"number": 55, "labels": {"nodes": []}}]})
     check("M1 stays OPEN-scoped when an all-states membership map is supplied",
           len(m1_all) == 0)
+
+    # ── M2 named-not-member SUB-CLASS tokens ─────────────────────────────
+    # Every arm below pairs a subject with a discriminating control, because the
+    # failure this token set exists to prevent is a plausible-looking wrong
+    # answer, not a crash. An arm whose control also passes proves nothing.
+
+    def _m2_detail(milestones, issues, members=None, overlay=None):
+        _, rows, _, _, _ = analyse(milestones, issues, members, overlay)
+        return rows[0][3] if rows else ""
+
+    # T-A: the ref is a member of a DIFFERENT milestone, resolvable for free.
+    ms = [{"number": 2, "description": "### Scope\n1. #10 — a\n2. #77 — b\n"}]
+    members = {"2": [{"number": 10, "labels": {"nodes": []}}],
+               "3": [{"number": 77, "labels": {"nodes": []}}]}
+    check("M2 T-A elsewhere token names the other milestone",
+          "#77[elsewhere:ms#3]" in _m2_detail(ms, [_iss(10, ms=2)], members))
+
+    # T-B: the ref is an OPEN issue carrying no milestone — the free open-issue
+    # index answers, and the answer is a milestone-less one.
+    ms = [{"number": 2, "description": "### Scope\n1. #10 — a\n2. #88 — b\n"}]
+    members = {"2": [{"number": 10, "labels": {"nodes": []}}]}
+    check("M2 T-B no-milestone token from the open-issue index",
+          "#88[no-milestone]" in
+          _m2_detail(ms, [_iss(10, ms=2), _iss(88)], members))
+
+    # T-B2 + control: THE MODAL LIVE CASE — a closed, milestone-less ref, invisible
+    # to both free indices, resolvable ONLY by an overlay entry whose value is
+    # None. A map that drops null-milestone keys passes every other arm here and
+    # fails this one; that is the entire reason it exists.
+    ms = [{"number": 2, "description": "### Scope\n1. #10 — a\n2. #90 — b\n"}]
+    members = {"2": [{"number": 10, "labels": {"nodes": []}}]}
+    check("M2 T-B2 overlay key with a NULL value yields no-milestone",
+          "#90[no-milestone]" in
+          _m2_detail(ms, [_iss(10, ms=2)], members, {"90": None}))
+    check("M2 T-B2-ctrl the same ref with the overlay entry REMOVED is unresolved",
+          "#90[unresolved]" in _m2_detail(ms, [_iss(10, ms=2)], members, {}))
+
+    # T-C: in neither free index and no overlay entry → the positively-emitted
+    # unknown. Never coerced to no-milestone.
+    ms = [{"number": 2, "description": "### Scope\n1. #10 — a\n2. #99 — b\n"}]
+    check("M2 T-C unresolved token when nothing can answer",
+          "#99[unresolved]" in
+          _m2_detail(ms, [_iss(10, ms=2)],
+                     {"2": [{"number": 10, "labels": {"nodes": []}}]}))
+
+    # T-D + control: the overlay resolves a ref BOTH free indices miss — the live
+    # closed-issue-in-a-closed-milestone shape. The control drops the overlay and
+    # must degrade to unresolved, which is what proves the overlay is load-bearing
+    # rather than shadowing an answer a free index already had.
+    ms = [{"number": 2, "description": "### Scope\n1. #10 — a\n2. #77 — b\n"}]
+    members = {"2": [{"number": 10, "labels": {"nodes": []}}]}
+    check("M2 T-D overlay resolves a ref both free indices miss",
+          "#77[elsewhere:ms#4242]" in
+          _m2_detail(ms, [_iss(10, ms=2)], members, {"77": "4242"}))
+    check("M2 T-D-ctrl the same fixture without the overlay is unresolved",
+          "#77[unresolved]" in _m2_detail(ms, [_iss(10, ms=2)], members, None))
+
+    # T-G: an unresolved ref must not carry `no-milestone` anywhere on its token —
+    # the anti-inference-by-absence control, asserted negatively.
+    check("M2 T-G an unresolved ref is not reported as no-milestone",
+          "no-milestone" not in _m2_detail(ms, [_iss(10, ms=2)], members, None))
+
+    # T-H: the ref IS a member of THIS milestone but carries `sub-task`, so it is
+    # filtered out of the reconciled set. Emitting `elsewhere:ms#<itself>` here
+    # would send the operator hunting for the milestone they are already reading.
+    ms = [{"number": 2, "description": "### Scope\n1. #10 — a\n2. #55 — b\n"}]
+    members_st = {"2": [{"number": 10, "labels": {"nodes": []}},
+                        {"number": 55,
+                         "labels": {"nodes": [{"name": SUB_TASK_LABEL}]}}]}
+    t_h = _m2_detail(ms, [_iss(10, ms=2)], members_st)
+    check("M2 T-H a same-milestone excluded member reads member-excluded",
+          "#55[member-excluded:sub-task]" in t_h)
+    check("M2 T-H-ctrl it is NOT reported as elsewhere-to-itself",
+          "elsewhere:ms#2" not in t_h)
+
+    # T-E1 / T-E2: the counters. Deliberately two separate check() calls — a
+    # mutation that zeroes every sub-count still satisfies the sum invariant
+    # (0+0+0+0 == 0 is false only because the total moves with it), while a
+    # mutation that MIS-BUCKETS leaves the sum intact and is caught only by T-E1.
+    ms = [{"number": 2, "description":
+           "### Scope\n1. #10 — a\n2. #77 — b\n3. #90 — c\n4. #55 — d\n5. #99 — e\n"}]
+    members_mix = {"2": [{"number": 10, "labels": {"nodes": []}},
+                         {"number": 55,
+                          "labels": {"nodes": [{"name": SUB_TASK_LABEL}]}}],
+                   "3": [{"number": 77, "labels": {"nodes": []}}]}
+    _, m2_mix, _, _, _ = analyse(ms, [_iss(10, ms=2)], members_mix, {"90": None})
+    mix_total, mix_counts = m2_subclass_counts(m2_mix)
+    check("M2 T-E1 one ref of each sub-class buckets 1/1/1/1",
+          mix_total == 4 and mix_counts["elsewhere"] == 1
+          and mix_counts["no-milestone"] == 1
+          and mix_counts["member-excluded"] == 1
+          and mix_counts["unresolved"] == 1)
+    check("M2 T-E2 the four sub-counts sum to the named-not-member total",
+          sum(mix_counts.values()) == mix_total)
+
+    # T-F: the OPPOSITE leg is byte-identical. The 4-tuple is hardcoded rather
+    # than recomputed, so a refactor of the set difference cannot quietly agree
+    # with itself.
+    ms = [{"number": 2, "description": "### Scope\n1. #10 — a\n"}]
+    _, m2_opp, _, _, _ = analyse(ms, [_iss(10, ms=2)],
+                                 {"2": [{"number": 10, "labels": {"nodes": []}},
+                                        {"number": 12, "labels": {"nodes": []}}]})
+    check("M2 T-F member-not-named output is byte-identical",
+          m2_opp == [("2", "1", "2", "member-not-named: #12")])
+
+    # T-F2: a BOTH-DIRECTIONS row — the two-segment join, which no pre-existing
+    # fixture covered and which is the one path where field 3's bytes genuinely
+    # move. Full-string equality, not a substring.
+    ms = [{"number": 2, "description": "### Scope\n1. #10 — a\n2. #77 — b\n"}]
+    _, m2_both, _, _, _ = analyse(ms, [_iss(10, ms=2)],
+                                  {"2": [{"number": 10, "labels": {"nodes": []}},
+                                         {"number": 12, "labels": {"nodes": []}}]},
+                                  {"77": "4242"})
+    check("M2 T-F2 both-direction row keeps the member-not-named segment intact",
+          m2_both == [("2", "2", "2",
+                       "named-not-member: #77[elsewhere:ms#4242]; "
+                       "member-not-named: #12")])
+
+    # T-I: `m2_divergence` has TWO call sites (the join and the overlay's
+    # candidate set) and they must never drift. Asserted directly rather than
+    # trusted: the difference the helper reports is the difference the row emits.
+    div = m2_divergence(ms, [_iss(10, ms=2)],
+                        {"2": [{"number": 10, "labels": {"nodes": []}},
+                               {"number": 12, "labels": {"nodes": []}}]})
+    check("M2 T-I m2_divergence agrees with the emitted row",
+          div["2"][2] == ["77"] and div["2"][3] == ["12"])
+
+    # T-J: the overlay parser's TRI-STATE contract, driven from a raw payload of
+    # the exact shape the API returns. Resolved-with-milestone, resolved-with-none
+    # and did-not-resolve are three outcomes, and the middle one is the one an
+    # obvious implementation loses.
+    payload = ('{"data":{"repository":{'
+               '"r51":{"number":51,"milestone":{"number":4242}},'
+               '"r52":{"number":52,"milestone":null},'
+               '"rGHOST":null}},'
+               '"errors":[{"type":"NOT_FOUND","path":["repository","rGHOST"]}]}')
+    parsed = _parse_ref_milestone_payload(payload)
+    check("M2 T-J overlay parse keeps a resolved milestone",
+          parsed.get("51") == "4242")
+    check("M2 T-J2 overlay parse keeps a NULL milestone as a present None value",
+          "52" in parsed and parsed["52"] is None)
+    check("M2 T-J3 overlay parse OMITS a ref that did not resolve",
+          len(parsed) == 2)
+    check("M2 T-J4 an undecodable overlay response is None, not an empty map",
+          _parse_ref_milestone_payload("Traceback (most recent call last):")
+          is None
+          and _parse_ref_milestone_payload("") is None
+          and _parse_ref_milestone_payload('{"data":{"repository":{}}}') == {})
+
+    # T-K: the fetcher's DEGRADED-vs-CLEAN discriminator. Exercised WITHOUT a
+    # network call by substituting the transport in-process — no subprocess, no
+    # credentials, so the offline/stdlib-only invariant holds. This arm exists
+    # because `ok` is the only thing that separates "the resolver died" from "the
+    # resolver ran and resolved nothing", and an untested flag is not a control.
+    global _gh_partial                        # restored in the finally below
+    _real_transport = _gh_partial
+
+    def _transport_raises(_args):
+        raise OSError("transport exploded")
+
+    try:
+        _gh_partial = (lambda _args:
+                       '{"data":{"repository":'
+                       '{"r7":{"number":7,"milestone":null}}}}')
+        ok_arm = fetch_ref_milestones("o/n", ["7"])
+        _gh_partial = lambda _args: ""          # decoded nothing
+        empty_arm = fetch_ref_milestones("o/n", ["7"])
+        _gh_partial = _transport_raises         # blew up
+        raised_arm = fetch_ref_milestones("o/n", ["7"])
+        _gh_partial = _transport_raises
+        no_refs_arm = fetch_ref_milestones("o/n", [])
+    finally:
+        _gh_partial = _real_transport
+
+    check("M2 T-K a working overlay call reports ok with the tri-state map",
+          ok_arm == (True, {"7": None}))
+    check("M2 T-K-ctrl an undecodable overlay call reports DEGRADED, not empty-ok",
+          empty_arm == (False, {}))
+    check("M2 T-K2 a raising transport returns degraded instead of propagating",
+          raised_arm == (False, {}))
+    check("M2 T-K3 an empty candidate set makes no call and is not degraded",
+          no_refs_arm == (True, {}))
 
     # PAGINATION: `gh --paginate` concatenates page documents with NO separator.
     # A newline-split parse silently yields ZERO rows past page 1 — a FALSE-GREEN
@@ -1277,6 +1788,8 @@ def main():
 
     members_all = None
     m3_input = None
+    ref_milestone = None
+    ref_resolution = ("not-needed", 0, 0)
     if args.fixture:
         try:
             with open(args.fixture, "r", encoding="utf-8") as fh:
@@ -1285,6 +1798,11 @@ def main():
             # Optional: a fixture may supply an explicit all-states membership
             # map to drive M2; absent it, M2 falls back to the OPEN set.
             members_all = data.get("members_all")
+            # Optional: a fixture may also supply the ref→milestone overlay, so
+            # the sub-class tokens are exercisable entirely offline.
+            ref_milestone = data.get("ref_milestone")
+            if ref_milestone is not None:
+                ref_resolution = ("fixture", len(ref_milestone), len(ref_milestone))
             m3_input = data.get("m3")
         except (OSError, ValueError, KeyError) as exc:
             print("ERROR\tfixture unreadable: " + str(exc), file=sys.stderr)
@@ -1303,8 +1821,22 @@ def main():
         except RuntimeError as exc:
             print("ERROR\t" + str(exc), file=sys.stderr)
             return 3
+        # Deferred ref→milestone overlay. The candidate set comes from the SAME
+        # m2_divergence() binding the join consumes, and the call fires ONLY when
+        # that set is non-empty — a clean M2 leg costs zero extra calls. The
+        # fetcher cannot raise and cannot move the exit code, so it sits outside
+        # the RuntimeError guard above deliberately: it has nothing to guard.
+        candidates = set()
+        for _named, _live, missing, _extra in m2_divergence(
+                milestones, issues, members_all).values():
+            candidates.update(missing)
+        if candidates:
+            resolved_ok, ref_milestone = fetch_ref_milestones(repo, candidates)
+            ref_resolution = ("fetched" if resolved_ok else "degraded",
+                              len(candidates), len(ref_milestone))
 
-    m1, m2, skipped, exempted, declared = analyse(milestones, issues, members_all)
+    m1, m2, skipped, exempted, declared = analyse(milestones, issues, members_all,
+                                                  ref_milestone)
     # `--leg` restricts what is REPORTED, never what is computed: analyse() is one
     # pure join and splitting it would give the legs two membership bases to drift
     # apart. Default `all` emits every row, so the pre-existing output is unchanged.
@@ -1326,6 +1858,20 @@ def main():
         out.append("EXEMPT\t" + leg + "\t" + detail)
     out.append("COUNT_M1\t" + str(len(m1)))
     out.append("COUNT_M2\t" + str(len(m2)))
+    # NNM counters are REF-denominated; COUNT_M2 above is ROW-denominated. Both
+    # are emitted unconditionally, zeros included, so a consumer never has to
+    # infer a missing counter's value from its absence. Read them with awk EXACT
+    # field equality — a grep for COUNT_M2_NNM prefix-collides with all four
+    # sub-counters.
+    nnm_total, nnm_counts = m2_subclass_counts(m2)
+    out.append("COUNT_M2_NNM\t" + str(nnm_total))
+    for kind in M2_SUBCLASS_KINDS:
+        out.append("COUNT_M2_NNM_%s\t%d"
+                   % (kind.upper().replace("-", "_"), nnm_counts[kind]))
+    # The resolver's own state, always emitted: a dead overlay and a population
+    # that genuinely could not be resolved otherwise produce identical output,
+    # and a check that cannot report its own degradation reports it as clean.
+    out.append("M2_REF_RESOLUTION\t%s\t%d\t%d" % ref_resolution)
     if m3_input is not None:
         out.extend(emit_m3(*analyse_m3(m3_input)))
     print("\n".join(out))

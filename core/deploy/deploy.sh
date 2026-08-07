@@ -9582,6 +9582,23 @@ sys.stdout.write("".join(out) + "|")
   #                       WARN-ONLY, never enforce-capable. A description legitimately
   #                       lags membership mid-release; gating it would make it
   #                       chronically non-green. Emitted as its own sub-invariant.
+  # M2 SUB-CLASS TOKENS: every `named-not-member` ref carries exactly ONE inline
+  # bracketed token saying why it is not a member — [elsewhere:ms#N] (it sits in a
+  # different milestone) · [no-milestone] (it sits in none) · [member-excluded:sub-task]
+  # (it IS in this milestone but the sub-task filter removes it from the reconciled
+  # set) · [unresolved] (nothing could answer). The remedies are opposite, so
+  # collapsing them made the warn line unactionable: the operator had to open every
+  # ref by hand. The four are summarized by COUNT_M2_NNM plus one sub-counter each,
+  # and the whole per-milestone detail now reaches the warn line — before this, the
+  # M2 read took field $2 only and DISCARDED the refs entirely.
+  # READ THOSE COUNTERS WITH awk EXACT FIELD EQUALITY. `grep COUNT_M2_NNM`
+  # prefix-collides with all four sub-counters; `awk '$1=="..."'` does not.
+  # M2's EMITTER IS DELIBERATELY UNCHANGED. Routing it through flag_advisory_only —
+  # the structurally-non-escalating helper M3 uses, and the correct fix for the
+  # enforce-leak recorded below — would violate the governing card's acceptance
+  # criterion, which asserts in as many words that M2 still routes through the WARN
+  # emitter unconditionally. The fix is right and is tracked separately; taking it
+  # here would trade a latent defect for a failed criterion.
   # The two legs read DIFFERENT membership sets, deliberately. M1 is OPEN-scoped: it
   # asks a live-drift question, and a completed card's parent-epic is history. M2's
   # set spans ALL issue states, because an OPEN-only set cannot tell "the Scope names
@@ -9616,16 +9633,53 @@ sys.stdout.write("".join(out) + "|")
     elif ! command -v gh >/dev/null 2>&1; then
       log "  SKIP:  gh unavailable — milestone↔epic membership needs the live milestone + issue set (offline/unauth; mirrors Check 39/40/51/52/53)"
     else
-      local c56_mode c56_out c56_exit=0
+      local c56_mode c56_out c56_exit=0 c56_sentinel
       c56_mode=$(resolve_check_mode "milestone-epic-membership")
       c56_out=$(/usr/bin/python3 "$c56_script" --repo "$AUDIT_REPO" --output-format tsv 2>&1) || c56_exit=$?
+      # STRUCTURAL-VALIDITY SENTINEL — a broken measurement must not read clean.
+      # exit 1 means TWO different things: "M1/M2 findings present" and "the
+      # primitive raised". An unhandled traceback lands on this same captured
+      # stream (2>&1), parses as TSV with zero M1/M2/M3 rows, and the branches
+      # below then print OK on all three legs. Reproduced, not theorised.
+      # COUNT_M2 is emitted unconditionally and after every M1/M2 row, so
+      # exactly one such row is the evidence the emit ran to completion. Counted
+      # with awk exact field equality so COUNT_M2_NNM* cannot inflate it.
+      c56_sentinel=$(echo "$c56_out" | awk -F'\t' '$1=="COUNT_M2"{n++} END{print n+0}')
       if [[ $c56_exit -eq 3 ]]; then
         flag_warn_or_issue "milestone-epic-membership" "input failure (exit 3): $(echo "$c56_out" | head -1) — the live milestone/issue set was unreadable; fix gh auth/connectivity"
+      elif [[ ( $c56_exit -eq 0 || $c56_exit -eq 1 ) && "$c56_sentinel" != "1" ]]; then
+        # ONE finding naming the cause, and every leg gated behind it — the same
+        # degraded posture the sibling checks on this file already state, not a
+        # third shape. Nothing reports clean OR dirty from an unparseable emit.
+        flag_warn_or_issue "milestone-epic-membership" "NOT-EVALUATED — the primitive produced no parseable emit (exit $c56_exit; expected exactly 1 COUNT_M2 row, saw ${c56_sentinel:-0}). M1, M2 and M3 are ALL unevaluated — this is not a clean result: $(echo "$c56_out" | head -1)"
       elif [[ $c56_exit -eq 0 || $c56_exit -eq 1 ]]; then
         local c56_declared c56_m1 c56_m2
         c56_declared=$(echo "$c56_out" | awk -F'\t' '$1=="DECLARED"{print $2}')
         c56_m1=$(echo "$c56_out" | awk -F'\t' '$1=="M1"{print "ms#"$2":#"$3"(parent #"$4"!=epic #"$5")"}' | paste -sd'; ' -)
         c56_m2=$(echo "$c56_out" | awk -F'\t' '$1=="M2"{print "ms#"$2}' | paste -sd, -)
+        # M2 sub-class decomposition + the per-milestone detail. awk EXACT field
+        # equality throughout: a grep for COUNT_M2_NNM matches all four
+        # sub-counters too, which would silently report a sub-count as the total.
+        local c56_m2_nnm c56_m2_else c56_m2_none c56_m2_mex c56_m2_unres c56_m2_res c56_m2_detail c56_m2_degraded=""
+        c56_m2_nnm=$(echo   "$c56_out" | awk -F'\t' '$1=="COUNT_M2_NNM"{print $2}')
+        c56_m2_else=$(echo  "$c56_out" | awk -F'\t' '$1=="COUNT_M2_NNM_ELSEWHERE"{print $2}')
+        c56_m2_none=$(echo  "$c56_out" | awk -F'\t' '$1=="COUNT_M2_NNM_NO_MILESTONE"{print $2}')
+        c56_m2_mex=$(echo   "$c56_out" | awk -F'\t' '$1=="COUNT_M2_NNM_MEMBER_EXCLUDED"{print $2}')
+        c56_m2_unres=$(echo "$c56_out" | awk -F'\t' '$1=="COUNT_M2_NNM_UNRESOLVED"{print $2}')
+        c56_m2_res=$(echo   "$c56_out" | awk -F'\t' '$1=="M2_REF_RESOLUTION"{print $2}')
+        # Joined by awk with an explicit "; ", NOT `paste -sd'; '`: paste's -d
+        # takes a CYCLING LIST of delimiters, so a two-character argument
+        # alternates ';' and ' ' between records. These records carry spaces, so
+        # every second boundary would be indistinguishable from an intra-record
+        # space. printf also emits no trailing newline, which keeps the detail a
+        # SINGLE LINE — flag_warn_or_issue's jsonl writer escapes backslash and
+        # double-quote only, so an embedded newline would write malformed JSONL
+        # into the warn log the enforce-flip decision is read from.
+        c56_m2_detail=$(echo "$c56_out" | awk -F'\t' '$1=="M2"{printf "%sms#%s %s", (n++ ? "; " : ""), $2, $5}')
+        # A dead resolver and a population that genuinely could not be resolved
+        # otherwise produce identical counters. The primitive reports which, so
+        # the warn line says which.
+        [[ "$c56_m2_res" == "degraded" ]] && c56_m2_degraded=" [ref resolution DEGRADED — tokens fell back to the free indices; treat unresolved counts as unmeasured]"
         if [[ -z "$c56_m1" && -z "$c56_m2" ]]; then
           log "  OK:    milestone↔epic membership — no drift (${c56_declared:-0} milestone(s) declare an epic; M2 reconciliation clean)"
         else
@@ -9639,8 +9693,17 @@ sys.stdout.write("".join(out) + "|")
             fi
           fi
           # M2 — warn-only ALWAYS (never gates, independent of mode)
+          # KNOWN, TRACKED, AND NOT FIXED HERE: this call is UNGUARDED, while M1
+          # above guards with an explicit mode branch. flag_warn_or_issue carries
+          # an enforce case that emits FAIL and increments the issue counter, so
+          # flipping milestone-epic-membership.mode to enforce WOULD make M2 gate
+          # — contradicting the "warn-only ALWAYS" this comment asserts. The fix
+          # is to route M2 through flag_advisory_only, as M3 already is; it is out
+          # of scope here because the governing card's acceptance criterion
+          # requires M2 to keep routing through the WARN emitter unconditionally,
+          # and it is tracked as its own defect. Do not take it opportunistically.
           if [[ -n "$c56_m2" ]]; then
-            flag_warn_or_issue "milestone-epic-membership" "M2 reconciliation (warn-only; advisory) — description↔membership divergence on: $c56_m2"
+            flag_warn_or_issue "milestone-epic-membership" "M2 reconciliation (warn-only; advisory) — description↔membership divergence on: $c56_m2 [named-not-member ${c56_m2_nnm:-0}: ${c56_m2_else:-0} in another milestone, ${c56_m2_none:-0} in no milestone, ${c56_m2_mex:-0} member-excluded, ${c56_m2_unres:-0} unresolved]${c56_m2_degraded} — $c56_m2_detail"
           fi
         fi
         # M3 — scaffold completeness. Routed through flag_advisory_only, NOT
