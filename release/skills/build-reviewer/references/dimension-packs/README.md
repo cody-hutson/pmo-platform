@@ -12,6 +12,7 @@ This document is the **pack registry** and the **shared pack schema**. New packs
 |---|---|---|---|---|
 | `copilot-builder` | [`copilot-builder-dimensions.md`](copilot-builder-dimensions.md) | Copilot Builder Agent Document Pack (30 documents + 1 derived artifact) | 12 | inherited from SKILL.md `## Principal Dimensions` |
 | `pmo-platform` | [`pmo-platform-dimensions.md`](pmo-platform-dimensions.md) | PMO platform production-readiness review (skills, governance files, reference docs, pipeline stages, suite contracts) | 12 | inherited from SKILL.md `## Principal Dimensions` |
+| `security` | [`security-dimensions.md`](security-dimensions.md) | Review-time AppSec/SecOps review of a platform surface (security controls, hooks, CI security jobs, dependency + secret posture); organized by area — 3 areas, 4+2+2 hierarchy | 8 | inherited from SKILL.md `## Principal Dimensions` |
 | `generic` | [`generic-document-pack-dimensions.md`](generic-document-pack-dimensions.md) | Any document pack without a domain-specific pack match (default fallback) | 7 | inherited from SKILL.md `## Principal Dimensions` |
 
 **How to read the table:**
@@ -87,6 +88,8 @@ At invocation time, build-reviewer selects exactly one pack via this priority or
 1. **User-specified (wins unconditionally):** If the invoking context passes a pack name (e.g., `--pack=pmo-platform`, or an explicit `pack_name` argument), load that pack. User override wins over any other signal. If the named pack does not exist in the registry, the skill fails fast with a registry-miss error.
 2. **Path-pattern inferred (first-match):** If no pack is user-specified, scan each registered pack's `detection_patterns` against the target paths. Load the **first pack whose patterns match any target path**. Scan order is registry order (top-to-bottom in the table above). A target path matches a pack if any path in the review's scope matches any glob in that pack's `detection_patterns`.
 3. **Default fallback:** If neither user-specified nor path-pattern resolves, load the pack whose `default_when_no_match: true` is set (today: `generic`).
+
+**Known shadowing — the `security` pack auto-detects on two of its four patterns.** The `pmo-platform` pack carries `**/core/**`, which subsumes the `security` pack's `**/core/security/**` and `**/core/hooks/**` and sits earlier in scan order, so a target under those two trees resolves to `pmo-platform` by first-match. The `security` pack's other two patterns (the security workflow file and the secret-scanner config) are unshadowed and do auto-select it. This is recorded rather than resolved: promoting `security` above `pmo-platform` would send a broad platform review to the security pack whenever its target set happens to include a hook file, which is the worse failure — and the actual fix is to narrow `**/core/**`, which is that pack's own decision. Explicit selection (`--pack=security`) is unaffected: user-specified selection wins unconditionally at step 1, and it is the invocation path the skill's security triggers name.
 
 **Fallback indicator rule:** When the `generic` pack is loaded via fallback (step 3), the review output MUST render a visible banner at the top of the findings register:
 
