@@ -445,13 +445,19 @@ fi
 #   D2 the passthrough() branch — operator-added keys inside a MANAGED section go
 #                             through a DIFFERENT function than the prior_order
 #                             loop, and had zero coverage.
-#   D3 column-0 line-anchoring — five production consumers read operator.toml with
-#                             a line-anchored, SECTION-BLIND `grep -E '^key'`. Suite
-#                             T's section-aware awk is whitespace-tolerant and would
-#                             PASS on an indented re-emit that every one of those
-#                             consumers would MISS — silently dropping the autonomy
-#                             ceiling to its fallback. P-7 probes with the consumers'
-#                             own shape so this suite fails IFF a consumer would.
+#   D3 column-0 line-anchoring — five production consumers read operator.toml with a
+#                             COLUMN-0 line-anchored key probe. Three of the five are
+#                             still section-blind `grep -E '^key'`; the two autonomy-
+#                             ceiling readers were hardened to section-AWARE in this
+#                             release and deliberately KEPT the column-0 anchor (strict
+#                             parity). COLUMN-0 anchoring — not section-blindness — is
+#                             therefore the property all five still share, and the one
+#                             P-7 rests on. Suite T's section-aware awk is whitespace-
+#                             tolerant and would PASS on an indented re-emit that every
+#                             one of those five would MISS — silently dropping the
+#                             autonomy ceiling to its fallback. P-7 probes with the
+#                             consumers' own shape so this suite fails IFF a consumer
+#                             would. (See the fuller note at P-7 itself.)
 #   D4 MANAGED-key durability — Suite T asserts only non-managed subtables.
 #
 # NEGATIVE SCOPE — deliberately NOT asserted. Do not "strengthen" this suite by
@@ -827,11 +833,16 @@ else
 fi
 
 mut_anchor=$(grep -c '^automation_level' "${PRES_MUT}" 2>/dev/null | tr -d ' ')
-if [ "${mut_anchor}" = "0" ]; then
-  report "P-8 negative control (b): the P-7 column-0 probe DOES report an indented key" 1
+# Mutation-applied precondition (the P-0 idiom, applied to the control itself): an
+# ABSENT key also yields 0 at column 0, so `mut_anchor == 0` alone passes vacuously
+# on an empty subject — including the exact key-drop P-7 exists to catch. Prove the
+# sed bit before drawing the conclusion: the key must now be present INDENTED.
+mut_indented=$(grep -c '^[[:space:]][[:space:]]*automation_level' "${PRES_MUT}" 2>/dev/null | tr -d ' ')
+if [ "${mut_anchor}" = "0" ] && [ "${mut_indented}" -ge 1 ]; then
+  report "P-8 negative control (b): the P-7 column-0 probe DOES report an indented key (mutation applied: ${mut_indented} indented)" 1
 else
   report "P-8 negative control (b): the P-7 column-0 probe DOES report an indented key" 0 \
-    "expected 0 against a copy with automation_level indented; got ${mut_anchor} — BROKEN PROBE"
+    "expected column-0 count 0 WITH the key present indented; got column-0=${mut_anchor}, indented=${mut_indented} — BROKEN PROBE (indented=0 means the mutation never applied)"
 fi
 
 # --- Stage 5c (Suite C): CLAUDE.md workspace-root composition surface (ADR-120) ---
@@ -1121,10 +1132,14 @@ fi  # end Suite C target-present guard
 # triple over the RESOLVED file: basename because the workspace root is baked into
 # every command string, and resolved because the template's _comment key names a
 # script in prose that substitute_template strips by design. A filename-shaped scan
-# of the RAW template counts 18 scripts where the hooks block holds 17, and the
-# phantom (setup-workspace.sh) can never appear in a deployed file — S-0a is the
+# of the RAW template counts 19 scripts where the hooks block holds 17; the TWO
+# phantoms (setup-workspace.sh and update.sh — both named only in the _comment prose,
+# which substitute_template strips) can never appear in a deployed file. S-0a is the
 # arm that pins that distinction so the suite cannot be "fixed" toward the wrong
-# population.
+# population. S-0a derives BOTH figures at runtime and asserts only `raw > hooks-block`,
+# so the numbers written here are a worked illustration, never the assertion — the
+# _comment gained its second phantom (update.sh) in this same release when the Layer-1
+# / Layer-2 sentence was added, which is exactly why the arm is not hardcoded.
 #
 # NEGATIVE SCOPE — deliberately NOT asserted. Each is correct shipped behaviour and
 # asserting it would make a correct build red:
@@ -1700,9 +1715,13 @@ fi
 
 # --- S-13: THE REBOOTSTRAP PATH. A plain setup-workspace.sh re-run — no flags at
 #     all — over a healthy workspace routes main() -> detect_state_and_route() ->
-#     rebootstrap(), which re-renders the managed settings.json. ADR-121 §Decision 4
-#     scopes the guard to "the new --refresh-settings flow AND the existing
-#     fresh/rebootstrap flows", and this is the arm for the second half.
+#     rebootstrap(), which re-renders the managed settings.json. The Stage-5 design
+#     record (sub-task #4790) scopes the guard to "the new --refresh-settings flow
+#     AND the existing fresh/rebootstrap flows", and this is the arm for the second
+#     half. That scope is a Stage-5 decision, NOT an ADR clause — ADR-121 §Decision 4
+#     is "Migration precedes regeneration; warning alone is not sufficient", which
+#     governs the guard's ORDER, not the set of flows it covers. This arm conforms to
+#     both records.
 #
 # THE DEFECT THIS MUST FAIL ON, stated concretely: rebootstrap() called
 # substitute_templates -> substitute_template directly, overwriting the managed file
