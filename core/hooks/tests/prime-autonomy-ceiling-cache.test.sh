@@ -20,15 +20,28 @@
 #      numeric map of what the reader RESOLVES, on every fixture. A divergence here is
 #      the failure mode that hardening only one of the two hooks would have created.
 #
-# THE FIXTURE SET (A-N + absent-file) is the section-awareness matrix. Three inputs
-# changed verdict when the readers were hardened, and all three moved fail-OPEN ->
+# THE FIXTURE SET (A-O + absent-file) is the section-awareness matrix. Four inputs
+# changed verdict when the readers were hardened, and all four moved fail-OPEN ->
 # fail-restrictive:
 #   B  exact-name key under another section, sorting BEFORE [automation]
 #   C  same-PREFIX key (automation_level_ci_autoresolve) under another section
 #   K  dotted subtable header [automation.experimental]
+#   O  same-PREFIX key INSIDE [automation], above the real key
 # Fixture D is the one that explains why the defect survived so long: the same collision
 # sorting AFTER [automation] was already harmless, so the bug was file-ORDER dependent
 # and invisible to casual testing.
+#
+# WHY O IS NOT A DUPLICATE OF C — and why this suite was incomplete without it. The
+# hardened reader closes the prefix class with TWO independent mechanisms: section
+# awareness, and an "=" terminator on the key match. C exercises only the first. Its
+# prefix key sits under [aaa_other], so the section boundary alone already excludes it
+# and the terminator is never consulted — meaning the terminator could be deleted and
+# every fixture A-N would still resolve exactly as expected. O puts the prefix key
+# INSIDE [automation], where section awareness cannot help and ONLY the terminator can
+# reject it. Deleting the terminator flips O from off(0) to bounded_auto(2) — the
+# fail-OPEN reopened — so the suite now goes RED for a regression it previously could
+# not see. A gate that goes green without asserting an invariant it claims is a defect,
+# not a pass (core/standards/gate-efficacy-standard.md).
 #
 # G and H are the deliberate NON-changes: two shapes of VALID in-section TOML (an inline
 # trailing comment, an indented key) that both readers mis-parse, identically, onto the
@@ -38,7 +51,7 @@
 # that a later permissive "fix" cannot land silently.
 #
 # NOT VACUOUS BY CONSTRUCTION: the suite reverts the reader to its pre-fix shape in a
-# throwaway copy and asserts B / C / K flip back to bounded_auto(2). A matrix that cannot
+# throwaway copy and asserts B / C / K / O flip back to bounded_auto(2). A matrix that cannot
 # tell the hardened reader from the broken one is not evidence, and this suite FAILS
 # rather than reporting a pass if the mutation changes nothing.
 #
@@ -181,6 +194,14 @@ add_fx N "NEGATIVE CONTROL: a valid bounded_auto must still resolve bounded_auto
   '[automation]
 automation_level = "bounded_auto"' bounded_auto 2
 
+# O is the TERMINATOR arm — the only fixture in this set that section-awareness alone
+# cannot satisfy. The prefix key is IN the target section and sorts above the real key,
+# so the reader reaches it first and must reject it on the "=" terminator or not at all.
+add_fx O "same-PREFIX key INSIDE [automation], above the real key — only the \"=\" terminator rejects it" \
+  '[automation]
+automation_level_ci_autoresolve = "bounded_auto"
+automation_level = "off"' off 0
+
 add_fx Z "operator.toml ABSENT entirely" "" recommend 1
 
 DENOM="${#FX_ID[@]}"
@@ -270,7 +291,7 @@ fi
 # red. If the mutation changes nothing, this suite cannot see the defect it guards, and
 # saying so is the only honest verdict.
 echo ""
-echo "--- broken-state arm: the pre-fix section-blind reader must reopen B / C / K ---"
+echo "--- broken-state arm: the pre-fix section-blind reader must reopen B / C / K / O ---"
 PREFIX_TWIN="${SBX}/twin-prefix.txt"
 /bin/cat > "$PREFIX_TWIN" <<'PREEOF'
 resolve_level_direct() {
@@ -285,6 +306,7 @@ resolve_level_direct() {
 PREEOF
 
 reopened=""
+reopened_n=0
 unchanged_ok=1
 i=0
 while [ "$i" -lt "$DENOM" ]; do
@@ -292,9 +314,10 @@ while [ "$i" -lt "$DENOM" ]; do
   old="$(run_twin "$PREFIX_TWIN" "$toml")"
   new="$(run_twin "$TWIN_BLOCK" "$toml")"
   case "$id" in
-    B|C|K)
+    B|C|K|O)
       if [ "$old" = "bounded_auto" ] && [ "$new" != "bounded_auto" ]; then
         reopened="${reopened} ${id}[${old}->${new}]"
+        reopened_n=$((reopened_n + 1))
       else
         unchanged_ok=0
         bad "broken-state arm: fixture ${id} did not demonstrate the fail-OPEN closure (pre=[${old}] post=[${new}])"
@@ -310,7 +333,7 @@ while [ "$i" -lt "$DENOM" ]; do
   i=$((i + 1))
 done
 if [ "$unchanged_ok" = 1 ] && [ -n "$reopened" ]; then
-  ok "broken-state arm: the pre-fix reader resolves bounded_auto on${reopened}; every other fixture is byte-identical (strict parity: 3 of ${DENOM} changed, all fail-OPEN -> fail-restrictive)"
+  ok "broken-state arm: the pre-fix reader resolves bounded_auto on${reopened}; every other fixture is byte-identical (strict parity: ${reopened_n} of ${DENOM} changed, all fail-OPEN -> fail-restrictive)"
 fi
 
 # =====================================================================
@@ -319,7 +342,7 @@ fi
 echo ""
 echo "================================"
 /usr/bin/printf 'Total: %d  PASS: %d  FAIL: %d\n' $((PASS + FAIL)) "$PASS" "$FAIL"
-/usr/bin/printf 'denominator: %d fixtures x (level + twin-agreement + primer-cache) + 3 structural/liveness + 1 broken-state arm\n' "$DENOM"
+/usr/bin/printf 'denominator: %d fixtures x (level + twin-agreement + primer-cache) + 4 structural/liveness + 1 broken-state arm\n' "$DENOM"
 echo "================================"
 if [ "$FAIL" -gt 0 ]; then exit 1; fi
 exit 0

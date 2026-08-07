@@ -391,12 +391,16 @@ fi
 # by any test. That is the path the section-blindness defect lived on. These cases delete
 # the cache and drive the ceiling from a seeded operator.toml, through the REAL hook.
 #
-# The three fail-OPEN shapes (B exact-name key under another section sorting first,
-# C same-PREFIX key, K dotted subtable header) are asserted as BLOCKS. Before the
-# hardening each of them resolved bounded_auto(2) from a config whose [automation] table
-# says off(0), and the same payload was ALLOWED. The pre/post delta is characterized
-# fixture-by-fixture in tests/prime-autonomy-ceiling-cache.test.sh; this suite asserts
-# the consequence where it actually matters — the hook's allow/block verdict.
+# The four fail-OPEN shapes (B exact-name key under another section sorting first,
+# C same-PREFIX key under another section, K dotted subtable header, O same-PREFIX key
+# INSIDE [automation]) are asserted as BLOCKS. Before the hardening each of them
+# resolved bounded_auto(2) from a config whose [automation] table says off(0), and the
+# same payload was ALLOWED. The pre/post delta is characterized fixture-by-fixture in
+# tests/prime-autonomy-ceiling-cache.test.sh; this suite asserts the consequence where
+# it actually matters — the hook's allow/block verdict.
+#
+# B/C/K are closed by section-awareness; O is closed ONLY by the "=" terminator, which
+# is why it is arm R-4b rather than a fourth variation on R-4.
 echo ""
 echo "Suite R — direct-resolve path (cache absent)"
 echo "---"
@@ -452,6 +456,19 @@ automation_level_ci_autoresolve = "bounded_auto"
 [automation]
 automation_level = "off"'
 test_case "R-4 fail-OPEN closed: same-PREFIX key automation_level_ci_autoresolve → still BLOCKED" \
+  "$R_TIER1_PAYLOAD" 2 "BLOCK-AUTONOMY-003"
+
+# R-4b is R-4's matched pair, and it is the arm that actually pins the "=" terminator.
+# R-4 puts the prefix key under ANOTHER section, so section-awareness alone already
+# excludes it and the terminator is never consulted — R-4 passes with the terminator
+# deleted. Here the prefix key is INSIDE [automation] and sorts ABOVE the real key, so
+# the reader reaches it first and the terminator is the ONLY thing that can reject it.
+# Without this arm the terminator could be removed and both hook suites stayed green
+# while off(0) silently resolved back to bounded_auto(2) and this write was ALLOWED.
+seed_operator_toml '[automation]
+automation_level_ci_autoresolve = "bounded_auto"
+automation_level = "off"'
+test_case "R-4b fail-OPEN closed: same-PREFIX key INSIDE [automation], above the real key → still BLOCKED" \
   "$R_TIER1_PAYLOAD" 2 "BLOCK-AUTONOMY-003"
 
 # R-5 fail-OPEN closure: a dotted subtable header. A section probe anchored
