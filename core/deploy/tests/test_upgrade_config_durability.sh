@@ -758,10 +758,23 @@ else
     "expected exactly 1 exact-line match each; got:${p6_fail}"
 fi
 
-# P-7 (D3): probe with the CONSUMERS' own shape — line-anchored and section-blind.
-# Five production readers resolve operator.toml this way, two of them the autonomy
-# ceiling. Exactly 1 is the contract: 0 means the key moved off column 0 or was
-# dropped (the consumer silently falls back), >1 means an ambiguous resolution.
+# P-7 (D3): probe with the CONSUMERS' own shape — COLUMN-0 LINE-ANCHORED. Five
+# production readers resolve operator.toml with a column-0 key anchor. Exactly 1 is the
+# contract: 0 means the key moved off column 0 or was dropped (the consumer silently
+# falls back), >1 means an ambiguous resolution.
+#
+# The two autonomy-ceiling readers (block-autonomy-ceiling.sh,
+# prime-autonomy-ceiling-cache.sh) were ALSO section-blind when this probe was written
+# and are now section-AWARE. That hardening deliberately preserved the column-0 anchor —
+# strict parity — precisely so this probe's premise stays true of them; only their
+# out-of-section behaviour changed, which this probe does not exercise. The remaining
+# three readers are still section-blind, so "column-0" rather than "section-blind" is
+# the property this probe actually rests on, and the one to keep true.
+#
+# SCOPE: the subject is the SEEDED preservation fixture below, not a stock install. On a
+# stock install the count is legitimately 0 (write_operator_toml emits no [automation]
+# table), which is why this asserts against a fixture that seeds the key at column 0
+# rather than against a live operator.toml.
 p7_fail=""
 for p7_key in automation_level operator_github pmo_platform_repo_name operator_instance_evals_results_path; do
   p7_n=$(grep -c "^${p7_key}" "${PRES_TOML}" 2>/dev/null | tr -d ' ')
