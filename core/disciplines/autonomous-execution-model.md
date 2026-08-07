@@ -176,7 +176,7 @@ Agents do **NOT** initiate rollback autonomously. The Rollback Pattern is operat
 2. **Identify rollback target** — merge commit SHA introducing the regression (`git log --oneline main` to locate).
 3. **Execute** `git revert <merge-sha>` on `main` — single revert undoes the squash-merged release atomically.
 4. **Push** the revert via PR-merge per `gh` CLI; force-merge prohibited per `git-workflow.md`.
-5. **Delete release tag** if appropriate: `git tag -d vX.Y` then `git push origin :vX.Y`.
+5. **Retain the release tag** — do NOT delete it. Version tags are host-protected and the remote delete is rejected for every account, the owner included, per `core/rules/git-workflow.md` § Tag Retention. The tag stays as the historical record that the version was claimed and then withdrawn; step 7's RELEASE_LOG rollback entry is what records the withdrawal.
 6. **Reopen** all release issues; restore Status=Bundled; reassign Milestone vX.Y.
 7. **Append** a `RELEASE_LOG.md` rollback entry per `RELEASE_PROTOCOL.md` § Rollback protocol.
 8. **Restart** at Stage 4 Planning with a revised plan that addresses the regression cause.

@@ -6,7 +6,10 @@ that **changed its version mid-pipeline** (`vX claimed → abandoned → reshipp
 the collision class the version-claim-determinism capability exists to prevent. This
 records the rare recoverable case: an abandoned version whose git tag was pushed before
 the version was abandoned (`disposition=tag-orphaned`), which the recovery-doctrine
-reaper reads to find the orphan tag to clean up.
+reaper reads to find the orphan tag and settle it. **Settling it means retaining it**
+wherever the repository host protects version tags — `refs/tags/v*` cannot be deleted on
+the remote by any account, so the row's terminal state is `tag-retained` and the tag
+stays. See `core/rules/git-workflow.md` § Tag Retention, which owns that rule.
 
 > Provenance: narrowed to an orphan-tag recovery record per #3109 (was a collision-rate telemetry surface, #1679). The producer records only `tag-orphaned` re-versions going forward — a `disposition=none` re-version (no tag cut, the common defer-to-merge path) is no longer written; the historical `none`/`unrecoverable` rows below are retained under the append-only contract.
 
@@ -39,6 +42,23 @@ MUTABLE CELLS (consumer): the `disposition` and `reaped_ref` cells are the ONLY
          (slug, abandoned_version), header-column-resolved (not by ordinal). Every
          other cell is immutable once written. This is the one sanctioned in-place
          mutation in the ledger; it is NOT a row rewrite.
+
+OPERATOR CORRECTION: the immutability above binds the automated producer and the
+         reaper — no tool may amend a cell outside the two named. It does not bind an
+         operator-gated corpus correction landing through a reviewed pull request,
+         which may amend a cell whose recorded value is factually wrong. That is the
+         same amending-edit class the recovery doctrine's R-3 disposition already
+         applies to corpus rows. Such an edit is never made by a tool, and it states
+         its basis in the cell it rewrites.
+
+RESIDUAL_LABELS IS EVENT-SCOPED, NOT ROW-SCOPED. Where one re-version event
+         contributes several rows, those rows carry the SAME residual text — the
+         residue belongs to the event, not to each abandoned version separately. So a
+         row's residual_labels legitimately names a version other than that row's own
+         `abandoned_version`, and every multi-row event in the ledger below follows
+         this. Do NOT "correct" a sibling row to name its own version: that would
+         break the linkage between an event's residue and the claim cascade that
+         produced it, and would make the edited event the only divergent one.
 
 COLUMNS (typed):
   slug                  string (kebab)   Durable capability slug — join key to RELEASE_LOG.
@@ -90,8 +110,25 @@ DISPOSITION ENUM (closed set) ↔ FIELD MAPPING (the reaper reads this, unambigu
                                                                        and is NOT canonical for any live
                                                                        row. The reaper READS this to find
                                                                        what to reap.
+  tag-retained   ≡ was tag-orphaned; host forbids the deletion       — TERMINAL. The orphan tag is confirmed
+                   (reaped_ref stays —)                                and RETAINED, because refs/tags/v* is
+                                                                       protected at the repository host and the
+                                                                       remote delete is rejected for every
+                                                                       account (core/rules/git-workflow.md
+                                                                       § Tag Retention). No action is pending
+                                                                       and none is possible. reaped_ref stays
+                                                                       `—` — nothing was reaped, so there is no
+                                                                       cleanup ref to record. A row in this
+                                                                       state carries NO reap authority, so the
+                                                                       reaper skips it by construction.
+                                                                       WRITTEN BY the reaper.
   tag-reaped     ≡ reaped_ref set (was tag-orphaned)                 — the reaper deleted the orphan tag;
                                                                        reaped_ref records the cleanup ref.
+                                                                       Reachable only on a deployment whose
+                                                                       host does NOT protect version tags;
+                                                                       where tag protection is active this
+                                                                       state is unreachable and tag-retained
+                                                                       is the terminal state instead.
                                                                        WRITTEN BY the reaper.
   row-reaped     ≡ reaped_ref set (an abandoned-version corpus row   — an abandoned-version corpus row was
                    was rolled forward)                                 rolled forward to the canonical
@@ -110,17 +147,30 @@ DERIVATION — abandoned_versions from a claim sequence (handles the round-trip 
   Each member of the abandoned set is one row.
 ```
 
-## Evidence-grounding (why every historical `disposition` is `none` or `unrecoverable`)
+## Evidence-grounding (why each historical `disposition` reads as it does)
 
-Every post-instrumentation abandoned version below is a **live tag of the SIBLING
+Almost every post-instrumentation abandoned version below is a **live tag of the SIBLING
 release that won the slot** (probed `git ls-remote --tags origin <v>` 2026-06-21 —
 each resolved as the canonical tag of the `collided_with` sibling), NOT an orphan of
 the abandoning release. Under the defer-to-merge model the loser recomputed and the
 winner's tag is canonical — so `abandoned_tag_pushed=false` and `disposition=none` are
 grounded by the probe, not asserted. The reaper's canonical-version guard correctly
-refuses to reap any of these (they are canonical for a live row). The sole exception
-is the v1.03 boundary row: it predates the determinism work, its abandoned artifacts
-are lost, and it is recorded `unrecoverable` (the reaper reads, never reaps it).
+refuses to touch any of these (they are canonical for a live row).
+
+Two rows are not of that shape:
+
+- The **v1.03 boundary row** predates the determinism work, its abandoned artifacts are
+  lost, and it is recorded `unrecoverable` (the reaper reads, never acts on it).
+- The **`64-hub-autonomy-conformance` v3.31 row** is the ledger's one genuine orphan
+  tag: pushed, not canonical for any live RELEASE_LOG row, and still on origin. It is
+  recorded `tag-retained` — the terminal state — because the repository host protects
+  `refs/tags/v*` with an active deletion rule and no bypass actors, so no account can
+  remove it. Its row records what the tag actually is; nothing is pending.
+
+**No row in this ledger has ever been reaped.** `reaped_ref` is `—` on every row and
+neither `tag-reaped` nor `row-reaped` appears in the disposition census — the recovery
+tooling's one live payload resolved to retention, which is the correct outcome and not a
+backlog.
 
 ## Ledger
 
@@ -134,7 +184,7 @@ are lost, and it is recorded `unrecoverable` (the reaper reads, never reaps it).
 | 79-qa-devtest-modes-and-automated-eval-execution | v3.67 | v3.68 | v3.66 → v3.67 → v3.68 | false | 3103304260d6b2b930e2477fa4825a220a61a369 | software-domain-templates@v3.66 + methodology-pack-catalog@v3.67 | Commit-0 + Stage-12-A.5.6 | none | none | — | 2026-07-10 |
 | 79-qa-devtest-modes-and-automated-eval-execution | v3.66 | v3.68 | v3.66 → v3.67 → v3.68 | false | 3103304260d6b2b930e2477fa4825a220a61a369 | software-domain-templates@v3.66 + methodology-pack-catalog@v3.67 | Commit-0 + Stage-12-A.5.6 | none | none | — | 2026-07-10 |
 | 66-release-identity-and-spec-hardening | v3.37 | v3.38 | v3.37 → v3.38 | false | 27ddc19bcba3d9c112baf864e87ee25fb4ac9c88 | 21-shared-entity-storage-layout@v3.37 | S12 | none | provisional v3.37 re-versioned forward at the Stage-12 pre-merge freeness check (A.5.6c) after the sibling claimed v3.37; no v3.37 tag cut by this release; plan file renamed to v3.38 + D-Version/R1 records updated; the four on-branch commit subjects retain the as-authored `docs(v3.37):` provisional prefix | — | 2026-07-01 |
-| 64-hub-autonomy-conformance | v3.31 | v3.32 | v3.28 → v3.29 → v3.30 → v3.31 → v3.32 | true | bdadfae4592fa460ca33a354a5861043ec866338 | v3.28,v3.29,v3.30,v3.31 | S12 | tag-orphaned | v3.31 orphan tag left in place per no-tag-deletion; next release already past it | — | 2026-06-30 |
+| 64-hub-autonomy-conformance | v3.31 | v3.32 | v3.28 → v3.29 → v3.30 → v3.31 → v3.32 | true | bdadfae4592fa460ca33a354a5861043ec866338 | v3.28,v3.29,v3.30,v3.31 | S12 | tag-retained | branch + commit subjects retain the as-authored provisional labels; the v3.31 tag is RETAINED — refs/tags/v* is protected at the repository host by an active tag ruleset carrying a deletion rule with no bypass actors, so no account can delete it (core/rules/git-workflow.md § Tag Retention). Retention costs nothing here: the tag is a redundant duplicate of the v3.30 release tag — same target commit 6264b001, same tag message, cut 56s later by a repeat claim-tool invocation (corroborated at RELEASE_LOG_ARCHIVE-v3.md:554) — so it points at no distinct content | — | 2026-06-30 |
 | 64-hub-autonomy-conformance | v3.30 | v3.32 | v3.28 → v3.29 → v3.30 → v3.31 → v3.32 | false | bdadfae4592fa460ca33a354a5861043ec866338 | v3.28,v3.29,v3.30,v3.31 | S12 | none | v3.31 orphan tag left in place per no-tag-deletion; next release already past it | — | 2026-06-30 |
 | 64-hub-autonomy-conformance | v3.29 | v3.32 | v3.28 → v3.29 → v3.30 → v3.31 → v3.32 | false | bdadfae4592fa460ca33a354a5861043ec866338 | v3.28,v3.29,v3.30,v3.31 | S12 | none | v3.31 orphan tag left in place per no-tag-deletion; next release already past it | — | 2026-06-30 |
 | 64-hub-autonomy-conformance | v3.28 | v3.32 | v3.28 → v3.29 → v3.30 → v3.31 → v3.32 | false | bdadfae4592fa460ca33a354a5861043ec866338 | v3.28,v3.29,v3.30,v3.31 | S12 | none | v3.31 orphan tag left in place per no-tag-deletion; next release already past it | — | 2026-06-30 |
