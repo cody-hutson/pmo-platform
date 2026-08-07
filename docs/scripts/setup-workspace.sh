@@ -996,9 +996,14 @@ resolve_all_tokens() {
           "${git_username_default}" "" "false"
         ;;
       "[COWORK_INSTALL_PATH_BASE]")
-        # Paired with core/CLAUDE.md.template's vocabulary line, which is what
-        # compute_active_tokens greps to derive ACTIVE_TOKENS. Both carry the
-        # REGISTERED token name (depersonalization-spec.md §1; compose.py maps
+        # Paired with the reserved-token vocabulary line in
+        # core/deploy/composition-surface-manifest.sh, which is one of the three
+        # files compute_active_tokens greps to derive ACTIVE_TOKENS. ADR-120
+        # §Decision 8 moved that declaration OUT of core/CLAUDE.md.template — whose
+        # whole body became a managed section — and made the manifest the third
+        # grep input; the template carries this token 0 times now, the manifest 2.
+        # Both this resolver and the manifest carry the REGISTERED token name
+        # (depersonalization-spec.md §1; compose.py maps
         # [paths].cowork_install_path to it). Before this pairing the resolver
         # stored [COWORK_INSTALL_PATH] while write_operator_toml read
         # [COWORK_INSTALL_PATH_BASE], so cowork_install_path was written EMPTY on
@@ -1126,10 +1131,12 @@ substitute_templates() {
   # substitution here plus a marker-fenced write there — is precisely the
   # divergence that produced the false-regeneration-marker defect this supersedes.
   # The settings.json arm is retained: it remains wholly Customizable (§2.3).
-  substitute_template \
-    "${SOURCE_REPO}/core/settings.json.template" \
-    "${WORKSPACE_ROOT}/.claude/settings.json" \
-    "yes"
+  #
+  # It is NOT a bare substitute_template. ADR-121 §Decision 4 requires the guard on
+  # every re-render of the managed file, and this function is reached by the
+  # fresh/rebootstrap/recovery flows as well as by a first install. The dispatcher
+  # is defined with the rest of the guard machinery in Section 14b.
+  settings_install_or_guarded_rerender
   json_set_bool "${ARTIFACTS_FILE}" "templates_substituted" "true"
 }
 
@@ -1597,6 +1604,65 @@ settings_guard_and_regen() {
       warn "settings guard returned an unrecognized verdict '${verdict}'; writing nothing."
       SETTINGS_GUARD_STATE="SKIP-UNKNOWN"
       return 0
+      ;;
+  esac
+}
+
+# The install-time entry point to the guard, called from substitute_templates and
+# therefore reached by fresh_install, rebootstrap and guided_recovery.
+#
+# ADR-121 §Decision 4 scopes the guard to "the new --refresh-settings flow AND the
+# existing fresh/rebootstrap flows". Only the first half shipped initially: a plain
+# setup-workspace.sh re-run over a healthy workspace routes to rebootstrap, which
+# called substitute_template directly and overwrote the managed file with no
+# classification at all — measurably dropping operator-added keys with no migration,
+# no backup and no warning, on the one path docs/UPDATE.md §6.4 names. This is the
+# missing half, and it deliberately REUSES settings_guard_and_regen rather than
+# adding a second classifier: one guard, one contract, one set of S-* verdicts.
+#
+# The two cases are genuinely different and must not be collapsed:
+#
+#   NO live file (a genuinely fresh workspace) — there is nothing to preserve, and
+#   settings_guard_and_regen returns SKIP-NOTARGET without writing precisely because
+#   it is a refresh, not an installer. The direct substitute_template IS the install
+#   write; routing it through the guard instead would deploy no settings.json at all.
+#
+#   A live file EXISTS (rebootstrap, guided recovery, or a re-run over a workspace
+#   someone hand-edited) — the write is a RE-RENDER and must be classified first,
+#   exactly as the update path classifies it.
+settings_install_or_guarded_rerender() {
+  local target="${WORKSPACE_ROOT}/.claude/settings.json"
+
+  if [ ! -f "${target}" ]; then
+    substitute_template \
+      "${SOURCE_REPO}/core/settings.json.template" \
+      "${target}" \
+      "yes"
+    # The platform just wrote this file from the current template, so both baselines
+    # are recordable. Without it the first update finds no baseline and runs the
+    # structural diff on every run.
+    record_settings_baseline
+    return 0
+  fi
+
+  # The overlay is the migration DESTINATION, so it must exist before the guard can
+  # migrate into it. scaffold_settings_local is create-once by contract, so calling
+  # it here and again later in the flow is idempotent.
+  scaffold_settings_local
+  settings_guard_and_regen
+
+  # Baseline re-anchoring is ARM-SCOPED, mirroring refresh_settings_flow. Every arm
+  # that WROTE re-anchored both baselines inside settings_regenerate already. The
+  # arms that wrote nothing (S-0, S-4, SKIP-*) must keep the baselines as read from
+  # state: re-anchoring SETTINGS_INSTALLED_SHA to a file the platform did NOT write
+  # is exactly what would make the NEXT run read an operator-edited file as an
+  # "untouched platform copy" (the S-1 arm) and regenerate over it with no migration
+  # — reintroducing the silent-drop this function exists to close, one run later.
+  case "${SETTINGS_GUARD_STATE}" in
+    S-1|S-2|S-3|S-5)
+      : ;;
+    *)
+      info "Settings guard wrote nothing (${SETTINGS_GUARD_STATE:-none}); baselines left as recorded."
       ;;
   esac
 }
@@ -2465,10 +2531,9 @@ fresh_install() {
   create_dir_layout
   resolve_all_tokens
   substitute_templates
-  # substitute_templates has just written settings.json from the CURRENT template,
-  # so both ADR-121 baselines are recordable now. Without this the first update
-  # would find no baseline and run the structural diff on every run.
-  record_settings_baseline
+  # Both ADR-121 baselines are recorded inside settings_install_or_guarded_rerender,
+  # arm-scoped: unconditionally re-recording here would anchor the baseline to a file
+  # the platform did NOT write on the guard's no-write arms (S-4 / SKIP-*).
   scaffold_settings_local
   install_hooks
   configure_hook_activation
@@ -2494,8 +2559,12 @@ rebootstrap() {
   compute_active_tokens
   create_dir_layout
   resolve_all_tokens
+  # substitute_templates routes the settings.json write through the ADR-121 guard
+  # (settings_install_or_guarded_rerender): on this flow a live managed file almost
+  # always exists, so the write is a RE-RENDER and is classified — and any
+  # operator-added key migrated to the overlay — before anything is overwritten.
+  # Baselines are recorded there, arm-scoped to the arms that actually wrote.
   substitute_templates
-  record_settings_baseline
   scaffold_settings_local
   install_hooks
   configure_hook_activation
