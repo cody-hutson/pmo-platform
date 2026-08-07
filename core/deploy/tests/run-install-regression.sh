@@ -80,6 +80,7 @@ REGRESSION_MEMBERS=(
   "test_ps1_dryrun_contract.sh"            # #303 Windows install/update -DryRun proxy contract + gate relaxation
   "test_qa_module.py"                      # QA-as-code registry: import smoke + finding->check 1:1 coverage
   "test_doctor.sh"                         # #302 doctor.sh: two-layer install self-diagnosis + read-only + fault-injection
+  "test_refresh_surfaces.sh"               # update.sh --surfaces-only targeted composition-surface refresh + leakage backstop
 )
 
 SUITE_PASS=0
