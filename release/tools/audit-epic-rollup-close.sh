@@ -367,7 +367,7 @@ for n in order:
     siblings.discard(n)
     siblings -= set(union)
     g2 = {"sibling_epics": sorted(siblings),
-          "project_label_singleton": bool(proj_labels) and not siblings,
+          "project_singleton": bool(proj_labels) and not siblings,
           "project_labels": proj_labels}
     g3 = {"epic_labels": [lb for lb in e["labels"] if lb.startswith("epic:")],
           "scope_evidence": "read the epic body against release/releases/RELEASE_LOG.md"}
@@ -447,7 +447,7 @@ def table(rows, show_reason=False):
         out("| #%d | %s | %d (%d/%d) | %s | %s | %s | %s |\n" % (
             r["number"], title.replace("|", "\\|"),
             r["children_total"], r["children_native"], r["children_label"],
-            sib, "yes" if r["g2"]["project_label_singleton"] else "no",
+            sib, "yes" if r["g2"]["project_singleton"] else "no",
             ", ".join(r["flags"]) or "—",
             (r["reason"] or "—") if show_reason else r["disposition_hint"]))
     out("\n")
@@ -641,7 +641,7 @@ print(v if isinstance(v, str) else json.dumps(v))
   _assert "G2 sibling present -> verdict still CANDIDATE" "CANDIDATE" "$(_verdict "$f9" 91)"
   _assert "G2 sibling list is evidence" "[92]" "$(_field "$f9" 91 g2.sibling_epics)"
   _assert "G2 does not rescue an open-child epic" "EXCLUDED" "$(_verdict "$f9" 92)"
-  _assert "G2 singleton detected" "true" "$(_field "$f9" 93 g2.project_label_singleton)"
+  _assert "G2 singleton detected" "true" "$(_field "$f9" 93 g2.project_singleton)"
   _assert "G2 singleton is NOT a verdict" "CANDIDATE" "$(_verdict "$f9" 93)"
 
   # 10. AC-5 — a run WITH findings still exits 0. Findings are not failures.
