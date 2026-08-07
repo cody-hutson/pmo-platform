@@ -1619,14 +1619,34 @@ else
     "$(printf '%s' "${set_s9_out}" | grep -E 'Phase 5d' | head -2 | tr '\n' '|')"
 fi
 
-# --- S-10 (AC-2, the discoverability half): update.sh scaffolds the Layer-2 overlay
-#     into a workspace that already exists. Installing it only at fresh install
-#     would leave every deployed workspace with no signposted home. ---
+# --- S-10 (AC-2, the discoverability half): the update PATH restores the Layer-2
+#     overlay to a workspace that already exists. Shipping it only at fresh install
+#     would leave every deployed workspace with no signposted home for operator
+#     settings.
+#
+#     SCOPE, stated precisely because a mutation run proved the naive form
+#     mislabelled: this arm asserts the OUTCOME (the overlay exists and is empty),
+#     which is reachable from TWO scaffolds — update.sh Phase 2.5d and the
+#     --refresh-settings flow. Removing Phase 2.5d alone therefore leaves this arm
+#     green, so it must NOT be labelled the Phase-2.5d gate. S-10b is that gate, and
+#     S-11 independently pins the phase's position. The redundancy is deliberate:
+#     Phase 2.5d is what scaffolds the overlay on a workspace where Phase 5d does not
+#     run at all (no deployed settings.json), so neither scaffold subsumes the other.
 if [ -f "${SET_OVERLAY}" ] && [ "$(tr -d ' \n' < "${SET_OVERLAY}")" = "{}" ]; then
-  report "S-10 ./update.sh scaffolds an EMPTY settings.local.json into an EXISTING workspace (Phase 2.5d)" 1
+  report "S-10 the update path restores an EMPTY settings.local.json to an EXISTING workspace (outcome arm; two scaffolds reach it)" 1
 else
-  report "S-10 ./update.sh scaffolds an EMPTY settings.local.json into an EXISTING workspace (Phase 2.5d)" 0 \
+  report "S-10 the update path restores an EMPTY settings.local.json to an EXISTING workspace" 0 \
     "present=$([ -f "${SET_OVERLAY}" ] && echo yes || echo no); body=$(tr -d ' \n' < "${SET_OVERLAY}" 2>/dev/null)"
+fi
+
+# --- S-10b: Phase 2.5d specifically RAN. This is the phase-scoped arm S-10 is not:
+#     it goes red when the scaffold is dropped from the update sequence, which the
+#     outcome arm above cannot detect. ---
+if printf '%s' "${set_s9_out}" | grep -q 'Phase 2.5d: operator settings-overlay scaffold'; then
+  report "S-10b Phase 2.5d ran in the update sequence (phase-scoped arm)" 1
+else
+  report "S-10b Phase 2.5d ran in the update sequence (phase-scoped arm)" 0 \
+    "no 'Phase 2.5d' line in the update output — the scaffold phase is not wired"
 fi
 
 # --- S-11: phase ORDER. Scripts (5c) must land before the registrations that name
