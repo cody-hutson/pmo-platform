@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.13] - 2026-08-07
+
+Every self-check the platform advertises now runs automatically, and three checks that were quietly missing things were repaired.
+
+[Full notes](release/releases/notes/v4.13_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.13)
+
 ## [v4.12] - 2026-08-05
 
 Published release pages now match the notes they came from, and every release records its own delivery rate and learnings.
