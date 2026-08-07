@@ -48,6 +48,9 @@
 #   16.5 pattern_scan      synthesize-release-learnings.sh --mode pattern-detect (ON by default;
 #                          --no-pattern-scan suppresses). Report body is surfaced in the close-out
 #                          report, incl. the near-threshold band (sub-threshold disposition). Signal-only.
+#   16.7 audit_epic_rollup audit-epic-rollup-close.sh --dry-run (ON by default; --no-epic-audit
+#                          suppresses). Surfaces open type:epic issues whose children all reached a
+#                          COMPLETED terminal state, for operator disposition. Signal-only — gates nothing.
 #   17 generate_report     structured markdown or JSON close-out report
 #
 # Usage:
@@ -71,6 +74,8 @@
 #     --no-pattern-scan        Suppress the post-close synthesize-release-learnings.sh
 #                              --mode pattern-detect scan (it runs by default)
 #     --with-pattern-scan      Accepted, no-op — the scan is now the default
+#     --no-epic-audit          Suppress the post-close audit-epic-rollup-close.sh epic
+#                              rollup-close audit (it runs by default, report-only)
 #     --outcome <ENUM>         **Outcome:** value on the Deployment Log block (#37):
 #                              SUCCESS (default) / PARTIAL / ROLLBACK / DEFERRED
 #     --outcome-rationale <t>  One-line rationale; REQUIRED when --outcome != SUCCESS
@@ -207,6 +212,7 @@ RELEASE_PLANS_DIR="$REPO_ROOT/release/releases/plans"
 CLEANUP_TOOL="$SCRIPT_DIR/cleanup-orphan-state.sh"
 COMPUTE_CYCLE_TIME="$SCRIPT_DIR/compute-cycle-time.sh"
 SYNTHESIZE_LEARNINGS="$SCRIPT_DIR/synthesize-release-learnings.sh"
+AUDIT_EPIC_ROLLUP="$SCRIPT_DIR/audit-epic-rollup-close.sh"
 # Velocity producer for the Phase 6.6 `**Velocity:**` field. Sibling of
 # COMPUTE_CYCLE_TIME above, same form factor and same exit-code contract.
 # Deliberately NOT registered in check_paths(): that probe enumerates the four
@@ -262,6 +268,14 @@ OUTPUT="markdown"        # markdown | json
 # --with-pattern-scan is still accepted as a compatible no-op.
 WITH_PATTERN_SCAN=1
 PATTERN_SCAN_REPORT=""   # captured pattern-detect report body, surfaced in the close-out report
+
+# Epic rollup-close audit (phase 16.7). ON by default for the same reason the
+# pattern scan is: a detective capability nobody remembers to invoke is the exact
+# failure mode the epic-rollup gap already demonstrates. --no-epic-audit is the
+# escape hatch. Report-only — the phase records counts and surfaces the body, and
+# gates nothing.
+WITH_EPIC_AUDIT=1
+EPIC_AUDIT_REPORT=""     # captured epic rollup-close report body, surfaced in the close-out report
 SELF_TEST=0
 CHECK_PATHS=0            # offline corpus-path resolution probe (CI smoke gate)
 REVERSION_SPEC=""        # --reversion "<final>|<claimed-seq>|<merge_sha>|<collided>|<stage>|<residual>"
@@ -358,7 +372,7 @@ PHASE_DETAILS=()
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
-  /usr/bin/sed -n '2,87p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '2,92p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -4180,6 +4194,55 @@ phase_pattern_scan() {
   return 3
 }
 
+# ─── Phase 16.7: audit_epic_rollup ───────────────────────────────────────────
+#
+# Third instance of the established signal-only pattern (phases 16 and 16.5):
+# invoke a population-scoped detective tool, capture its report, gate nothing.
+#
+# Placed AFTER phases 13/14 have closed this release's issues and milestone, so
+# the audit reads fresh state — an epic whose last child closed as part of THIS
+# release is visible on this run rather than a release later.
+#
+# The audit is report-only by construction: it renders no close verdict, and its
+# G2/G3 signals are operator-judgment annotations. This phase therefore never
+# returns non-zero on findings; only a tool-level failure is a phase failure.
+
+phase_audit_epic_rollup() {
+  if [[ "$WITH_EPIC_AUDIT" -eq 0 ]]; then
+    mark_phase "audit_epic_rollup" "N/A" "suppressed by --no-epic-audit"
+    return 0
+  fi
+
+  if [[ ! -x "$AUDIT_EPIC_ROLLUP" ]]; then
+    mark_phase "audit_epic_rollup" "SKIPPED" "audit-epic-rollup-close.sh not executable at $AUDIT_EPIC_ROLLUP"
+    return 0
+  fi
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "audit_epic_rollup" "DRY-RUN" "would invoke: $AUDIT_EPIC_ROLLUP --dry-run --markdown"
+    return 0
+  fi
+
+  # CAPTURE the report; do not discard it. An exit status alone asserts nothing
+  # here — the tool exits 0 whether it surfaces 0 candidates or 40 — so the phase
+  # note carries the counts parsed out of the report body, and the body itself is
+  # surfaced in the close-out report so the operator dispositions candidates at
+  # the same beat they close the release.
+  local _audit_out _audit_rc _clean _flagged
+  _audit_out="$("$AUDIT_EPIC_ROLLUP" --dry-run --markdown 2>&1)"
+  _audit_rc=$?
+  if [[ "$_audit_rc" -eq 0 ]]; then
+    EPIC_AUDIT_REPORT="$_audit_out"
+    _clean="$(/usr/bin/printf '%s\n' "$_audit_out" | /usr/bin/awk -F '\\| ' '/^\| Clean candidates \|/ { gsub(/[^0-9]/,"",$3); print $3; exit }')"
+    _flagged="$(/usr/bin/printf '%s\n' "$_audit_out" | /usr/bin/awk -F '\\| ' '/^\| Flagged candidates \|/ { gsub(/[^0-9]/,"",$3); print $3; exit }')"
+    mark_phase "audit_epic_rollup" "PASS" \
+      "clean-candidates=${_clean:-unparsed}, flagged-candidates=${_flagged:-unparsed} (report-only; no Issues closed)"
+    return 0
+  fi
+  mark_phase "audit_epic_rollup" "FAIL" "audit-epic-rollup-close.sh returned non-zero (rc=${_audit_rc})"
+  return 3
+}
+
 # ─── Phase 17/18: generate_report ────────────────────────────────────────────
 
 generate_markdown_report() {
@@ -4270,6 +4333,19 @@ EOF
     echo "Signal-only (gates nothing, files nothing). Near-threshold rows are captured learnings that span >= 2 versions but sit below the auto-promotion threshold — record each one's disposition in the Phase-A7.2 learnings register (\`Type\` = one-off / pattern; \`Disposition\` = backlog issue # / carry-forward / accepted-residual)."
     echo
     /usr/bin/printf '%s\n' "$PATTERN_SCAN_REPORT"
+    echo
+  fi
+  # Epic rollup-close audit (phase 16.7). Same discipline as the pattern scan: the
+  # body is emitted rather than discarded, so the candidate list is in front of the
+  # operator at the close beat. Signal-only — it closes nothing and files nothing;
+  # G2 (true epic vs mislabelled initiative) and G3 (body scope shipped) are
+  # annotations for operator judgment, not verdicts.
+  if [[ -n "$EPIC_AUDIT_REPORT" ]]; then
+    echo "## Epic Rollup-Close Audit"
+    echo
+    echo "Signal-only (gates nothing, closes nothing). Candidates are epics whose children have ALL reached a completed terminal state; flagged candidates additionally carry abandoned (\`NOT_PLANNED\`) or research-only children. Disposition is the operator's — close the epic, or decline it with a \`rollup-close-disposition\` comment so later runs skip it."
+    echo
+    /usr/bin/printf '%s\n' "$EPIC_AUDIT_REPORT"
     echo
   fi
   if [[ "$MODE" == "dry-run" ]]; then
@@ -6277,7 +6353,7 @@ STUB
   fi
 
   # Test 7: usage block extractable
-  if ! /usr/bin/sed -n '2,87p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
+  if ! /usr/bin/sed -n '2,92p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
     echo "FAIL: usage block extraction"; failures=$((failures+1))
   fi
 
@@ -7076,6 +7152,95 @@ FOLOG
   OUTPUT="$_ps_saved_out"
   WITH_PATTERN_SCAN="$_ps_saved_wps"; MODE="$_ps_saved_mode"
   SYNTHESIZE_LEARNINGS="$_ps_saved_syn"; PATTERN_SCAN_REPORT="$_ps_saved_rep"
+
+  # ── #1825: audit_epic_rollup (phase 16.7) default + report capture ──────────
+  # Same shape as the pattern-scan arms above, and for the same reason: the phase
+  # invokes a tool that exits 0 whether it surfaces 0 candidates or 40, so an exit
+  # status asserts nothing. Every assertion is on the RECORDED DETAIL and the
+  # emitted report SECTION. A stub audit keeps this hermetic — no gh, no network.
+  local _ea_saved_wea="$WITH_EPIC_AUDIT" _ea_saved_mode="$MODE"
+  local _ea_saved_tool="$AUDIT_EPIC_ROLLUP" _ea_saved_rep="$EPIC_AUDIT_REPORT"
+  local _ea_tmp; _ea_tmp="$(/usr/bin/mktemp -d)"
+
+  # a) DEFAULT IS ON — parsed from source, so a later re-assignment cannot make
+  #    this pass vacuously. A detective phase nobody invokes is the failure mode
+  #    the epic-rollup gap itself demonstrates.
+  if ! /usr/bin/grep -qE '^WITH_EPIC_AUDIT=1$' "${BASH_SOURCE[0]}"; then
+    echo "FAIL: #1825 — WITH_EPIC_AUDIT must default to 1; a flag-gated audit never fires"; failures=$((failures+1))
+  fi
+  # b) The escape hatch is parsed. Needle ASSEMBLED at runtime so it cannot match
+  #    its own source line and survive deletion of the parser arm.
+  local _ea_no
+  _ea_no="$(/usr/bin/printf -- '\\-\\-no\\-epic\\-audi%s) WITH_EPIC_AUDIT=0; shift' 't')"
+  [[ "$(grep_count -E -- "$_ea_no" "${BASH_SOURCE[0]}")" == "1" ]] \
+    || { echo "FAIL: #1825 — --no-epic-audit escape hatch missing from the flag parser"; failures=$((failures+1)); }
+  # c) The report must NOT be discarded to /dev/null — the defect phase 16.5 had.
+  if declare -f phase_audit_epic_rollup | /usr/bin/grep -q '/dev/null'; then
+    echo "FAIL: #1825 — phase_audit_epic_rollup discards its report to /dev/null"; failures=$((failures+1))
+  fi
+  # d) Suppression path records the honest reason.
+  WITH_EPIC_AUDIT=0; MODE="apply"; EPIC_AUDIT_REPORT=""
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_audit_epic_rollup >/dev/null 2>&1
+  [[ "$(get_phase audit_epic_rollup)" == "N/A|suppressed by --no-epic-audit" ]] \
+    || { echo "FAIL: #1825 — suppressed run should record N/A with the --no-epic-audit reason, got '$(get_phase audit_epic_rollup)'"; failures=$((failures+1)); }
+  # e) CONTENT SIGNAL: the detail must carry the two counts PARSED from the report.
+  {
+    echo '#!/bin/bash'
+    echo 'echo "# Epic Rollup-Close Audit"'
+    echo 'echo ""'
+    echo 'echo "| Bucket | Count |"'
+    echo 'echo "|---|---|"'
+    echo 'echo "| Clean candidates | 5 |"'
+    echo 'echo "| Flagged candidates | 10 |"'
+    echo 'echo "## Candidates — clean rollup"'
+    echo 'exit 0'
+  } > "$_ea_tmp/audit.sh"
+  /bin/chmod +x "$_ea_tmp/audit.sh"
+  AUDIT_EPIC_ROLLUP="$_ea_tmp/audit.sh"
+  WITH_EPIC_AUDIT=1; MODE="apply"; EPIC_AUDIT_REPORT=""
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_audit_epic_rollup >/dev/null 2>&1
+  local _ea_rd; _ea_rd="$(get_phase audit_epic_rollup)"
+  [[ "$_ea_rd" == "PASS|clean-candidates=5, flagged-candidates=10 (report-only; no Issues closed)" ]] \
+    || { echo "FAIL: #1825 — phase detail must carry the parsed counts, got '$_ea_rd'"; failures=$((failures+1)); }
+  # Anti-vacuity control: DIFFERENT counts must produce a DIFFERENT detail.
+  # Without this arm a hardcoded string satisfies the assertion above.
+  /usr/bin/sed -i '' 's/| Clean candidates | 5 |/| Clean candidates | 3 |/' "$_ea_tmp/audit.sh"
+  EPIC_AUDIT_REPORT=""; PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_audit_epic_rollup >/dev/null 2>&1
+  [[ "$(get_phase audit_epic_rollup)" == *"clean-candidates=3"* ]] \
+    || { echo "FAIL: #1825 — the count in the phase detail is not actually parsed from the report (control arm did not move), got '$(get_phase audit_epic_rollup)'"; failures=$((failures+1)); }
+  # f) A FAILING audit is a phase FAIL — but findings alone never are. This is the
+  #    line between "the tool broke" and "the tool found something".
+  echo '#!/bin/bash
+exit 4' > "$_ea_tmp/audit.sh"
+  /bin/chmod +x "$_ea_tmp/audit.sh"
+  EPIC_AUDIT_REPORT=""; PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_audit_epic_rollup >/dev/null 2>&1 || true
+  [[ "$(get_phase audit_epic_rollup)" == FAIL\|* ]] \
+    || { echo "FAIL: #1825 — a non-zero audit exit must record a phase FAIL, got '$(get_phase audit_epic_rollup)'"; failures=$((failures+1)); }
+  # g) The captured body reaches the operator-facing markdown report.
+  local _ea_saved_out="$OUTPUT"; OUTPUT="markdown"
+  EPIC_AUDIT_REPORT="# Epic Rollup-Close Audit
+| Clean candidates | 5 |
+## Candidates — clean rollup"
+  local _ea_report; _ea_report="$(generate_markdown_report 2>/dev/null)"
+  echo "$_ea_report" | /usr/bin/grep -q '^## Epic Rollup-Close Audit$' \
+    || { echo "FAIL: #1825 — the close-out report must carry the Epic Rollup-Close Audit section"; failures=$((failures+1)); }
+  echo "$_ea_report" | /usr/bin/grep -q 'Candidates — clean rollup' \
+    || { echo "FAIL: #1825 — the captured audit body did not reach the close-out report"; failures=$((failures+1)); }
+  # Specificity: with NO captured report the section must be ABSENT, not empty.
+  EPIC_AUDIT_REPORT=""
+  if generate_markdown_report 2>/dev/null | /usr/bin/grep -q '^## Epic Rollup-Close Audit$'; then
+    echo "FAIL: #1825 — the epic-audit section must be omitted when nothing was captured"; failures=$((failures+1))
+  fi
+  OUTPUT="$_ea_saved_out"
+  WITH_EPIC_AUDIT="$_ea_saved_wea"; MODE="$_ea_saved_mode"
+  AUDIT_EPIC_ROLLUP="$_ea_saved_tool"; EPIC_AUDIT_REPORT="$_ea_saved_rep"
+  /bin/rm -rf "$_ea_tmp" 2>/dev/null || true
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  echo "  phase_audit_epic_rollup wiring validated (#1825 — default ON (source-parsed) / --no-epic-audit suppresses with the honest reason / NO /dev/null discard / detail carries the PARSED counts with a moved-control anti-vacuity arm / tool failure is a phase FAIL while findings are not / captured body reaches the close-out report, and the section is ABSENT when nothing was captured)" >&2
   /bin/rm -rf "$_ps_tmp" 2>/dev/null || true
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
@@ -7197,6 +7362,7 @@ while [[ $# -gt 0 ]]; do
     --json) OUTPUT="json"; shift ;;
     --with-pattern-scan) WITH_PATTERN_SCAN=1; shift ;;   # compatible no-op: now the default
     --no-pattern-scan) WITH_PATTERN_SCAN=0; shift ;;
+    --no-epic-audit) WITH_EPIC_AUDIT=0; shift ;;
     --reversion) REVERSION_SPEC="$2"; shift 2 ;;
     --outcome) OUTCOME="$2"; shift 2 ;;
     --outcome-rationale) OUTCOME_RATIONALE="$2"; shift 2 ;;
@@ -7256,6 +7422,7 @@ phase_assert_anchor_hygiene || { generate_report; exit 3; }           # Phase 15
 phase_check_release_body_drift || { generate_report; exit 3; }        # Phase 15.6 — post-emit §5.1 drift assert (genuine drift inside the cutoff scope BLOCKS; capability-absent / artifact-missing stay non-blocking)
 phase_invoke_orphan_cleanup || { generate_report; exit 3; }
 phase_pattern_scan || { generate_report; exit 3; }
+phase_audit_epic_rollup || { generate_report; exit 3; }              # Phase 16.7 — epic rollup-close audit (#1825); signal-only, gates nothing
 
 generate_report
 exit 0
