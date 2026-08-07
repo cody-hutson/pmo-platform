@@ -44,7 +44,7 @@ The spec's reversibility clause fixes the marker convention and the category con
 
 **The workspace-root `CLAUDE.md` is re-categorized from Customizable to Composition-surface. `settings.json` remains wholly Customizable and is unaffected by this record.**
 
-Concretely, and stated so that Engineering cannot read it two ways:
+Concretely, and stated so that Engineering cannot misread it:
 
 1. **Scope is `CLAUDE.md` only.** This record defines **no** JSON composition model, structural or otherwise. The spec's JSON clause stands unamended, verbatim; no fence, no merge, and no overlay semantics are defined for `settings.json`, whose update-time contract — *not refreshed by the update script* — is unchanged by this record.
 
