@@ -45,8 +45,14 @@ anchor per ADR-115 §Decision (1) — next-free is `anchor(origin/main) + 1`, ne
 **Numbering provenance — `120 → 121`.** Drafted at Stage 5 as **ADR-120**. Between the design and
 this write, a concurrent release claimed 119 on the mainline and the sibling card in this release
 claimed 120 on this branch, so the rule-determined next-free advanced to 121. No file was ever
-created at 120 for this record — the draft lived in the Stage-5 handoff comment — so the move cost
-nothing and required no citation sweep. In-release Stage-4/Stage-5 citations reading "ADR-120" in
+created at 120 for this record — the draft lived in the Stage-5 handoff comment — so nothing had to
+be moved or renamed. The move did **not** come free of a citation sweep, however, and the original
+claim that it did was wrong: the release plan had already been authored at Engineering Commit 0
+against the drafted numbers, so it carried 24 `ADR-119` and 10 `ADR-120` references — every one of
+them denoting an in-release record — plus two ADR filenames in its machine-readable File Change
+Matrix that never existed on disk. All were re-classified and repointed at the pre-PR reconciliation
+pass. No file outside that plan cited a drafted number, because the corpus edits for this record were
+authored after the shift. In-release Stage-4/Stage-5 citations reading "ADR-120" in
 the settings-refresh context denote this record; ADR-120 itself is the sibling CLAUDE.md
 re-categorization record. The substance the operator ratified — scope and mechanism — is unchanged
 by the renumber.
