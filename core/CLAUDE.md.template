@@ -30,7 +30,7 @@ will pull them at scaffold-time):
   [OPERATOR_GITHUB]        — GitHub handle (comms-writer signatures)
   [OPERATOR_HOMEDIR_PATH]  — $HOME at workspace-setup time
   [CLAUDE_WORKSPACE_ROOT]  — Claude workspace root path (settings.json.template)
-  [COWORK_INSTALL_PATH]    — Cowork install dir (skill-deployment.md tier-2 per
+  [COWORK_INSTALL_PATH_BASE] — Cowork install dir (skill-deployment.md tier-2 per
                               depersonalization-spec.md §3.1; NOT referenced by
                               either template — reserved for downstream
                               Cowork-specific surfaces)

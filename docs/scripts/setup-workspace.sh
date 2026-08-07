@@ -48,7 +48,8 @@
 #
 # Usage:
 #   ./setup-workspace.sh [--source-repo PATH] [--workspace-root PATH]
-#                        [--init-only-state] [--dry-run] [--help]
+#                        [--init-only-state] [--non-interactive] [--dry-run]
+#                        [--help]
 #
 # Exit codes (sysexits(3)):
 #   0   — success
@@ -81,6 +82,13 @@ readonly EXPECTED_HOOK_COUNT_MIN=8
 # Composition-surface install floor (per composition-surface-spec.md §1).
 # Empirically 14 files at present; loop is data-driven from manifest.
 readonly EXPECTED_SEED_FILE_COUNT_MIN=10
+# Declared non-interactive defaults for the two required identity tokens that
+# have NO environment source to derive from (unlike NAME/EMAIL/GIT_EMAIL, which
+# derive from `git config --global`). Named constants rather than inline
+# literals so they are greppable and single-sourced. Reachable ONLY under
+# --non-interactive; the interactive path is unchanged and still has no default.
+readonly NI_DEFAULT_ROLE_TITLE="Operator"
+readonly NI_DEFAULT_ORGANIZATION="Unspecified"
 # Composition library — provides Pattern C write primitive + manifest helpers.
 # Sourced lazily in install_composition_surface_files (after SOURCE_REPO is set).
 LIB_COMPOSITION_SOURCED=0
@@ -100,6 +108,7 @@ WORKSPACE_ROOT=""
 SOURCE_REPO=""
 INIT_ONLY_STATE=0
 REFRESH_HOOKS=0
+NON_INTERACTIVE=0
 DRY_RUN=0
 INSTALL_COMPLETE=0
 SUPPRESS_VALIDATE_HINT=0    # set when guided-recovery exits without doing work
@@ -140,6 +149,11 @@ Options:
                           run. Skips the scaffold/token/skill phases. This is the
                           path update.sh uses so a hook/helper security fix reaches
                           an already-installed workspace (#3430).
+  --non-interactive       Resolve every token from its declared default and never
+                          read stdin. A required token with no available default
+                          fails with a non-zero exit naming the token; no value is
+                          ever silently substituted. Intended for scripted /
+                          sandboxed installs. Does not change interactive behavior.
   --dry-run               Preview planned actions; perform no state mutation
   --help                  Show this help
 
@@ -363,6 +377,8 @@ parse_argv() {
         INIT_ONLY_STATE=1; shift ;;
       --refresh-hooks)
         REFRESH_HOOKS=1; shift ;;
+      --non-interactive)
+        NON_INTERACTIVE=1; shift ;;
       --dry-run)
         DRY_RUN=1; shift ;;
       --help|-h)
@@ -740,6 +756,38 @@ resolve_token() {
     return 0
   fi
 
+  # --non-interactive: resolve from the token's DECLARED default and never read
+  # stdin. Placed AFTER the cache check and AFTER the dry-run check so both of
+  # those semantics are unchanged. The default is VALIDATED against the same
+  # validator_regex the interactive path applies — storing it unvalidated would
+  # write a config the interactive path would have rejected (e.g. a
+  # `git config user.name` of "x" fails the >=2-char name pattern). A required
+  # token with no default HARD-FAILS naming the token rather than silently
+  # substituting an empty value.
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then
+    if [ -n "${default_value}" ]; then
+      if [ -n "${validator_regex}" ] && \
+         ! printf '%s' "${default_value}" | grep -qE "${validator_regex}"; then
+        err "Non-interactive: default for ${token} does not match the required format."
+        err "  default: '${default_value}'"
+        err "  Set a valid value in <config-root>/operator.toml, then re-run."
+        exit 1
+      fi
+      json_set "${TOKENS_FILE}" "${token}" "${default_value}"
+      info "Non-interactive: ${token} = ${default_value} (declared default)"
+      return 0
+    fi
+    if [ "${required}" != "true" ]; then
+      json_set "${TOKENS_FILE}" "${token}" ""
+      info "Non-interactive: ${token} = (empty; optional)"
+      return 0
+    fi
+    err "Non-interactive: required token ${token} has no default and no cached value."
+    err "  Provide it in <config-root>/operator.toml (default ~/.config/pmo-platform/operator.toml),"
+    err "  or run without --non-interactive to be prompted."
+    exit 1
+  fi
+
   local attempts=0
   local max_attempts=3
   local value=""
@@ -792,6 +840,22 @@ resolve_all_tokens() {
     git_username_default=$(git config --global user.name 2>/dev/null || true)
   fi
 
+  # Declared non-interactive defaults for the three required identity tokens the
+  # interactive path deliberately offers no default for. These stay EMPTY under
+  # the interactive path so its behavior is byte-identical — offering a
+  # git-derived name (or a literal role/org) at an interactive prompt would be a
+  # behavior change outside this card's scope. [OPERATOR_EMAIL] and
+  # [OPERATOR_GIT_EMAIL] already carry a git-derived default on both paths and
+  # are therefore untouched.
+  local ni_name_default=""
+  local ni_role_title_default=""
+  local ni_organization_default=""
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then
+    ni_name_default="${git_username_default}"
+    ni_role_title_default="${NI_DEFAULT_ROLE_TITLE}"
+    ni_organization_default="${NI_DEFAULT_ORGANIZATION}"
+  fi
+
   # Resolve dependent-source tokens FIRST (so derived tokens can read from cache).
   # OPERATOR_NAME must precede OPERATOR_FIRST_NAME (derived as `name | head word`).
   # OPERATOR_EMAIL must precede OPERATOR_GIT_EMAIL (default = email value).
@@ -806,7 +870,7 @@ resolve_all_tokens() {
         case "${pre_token}" in
           "[OPERATOR_NAME]")
             resolve_token "${pre_token}" "Operator full name (e.g., Firstname Lastname)" \
-              "" "^[A-Za-z][A-Za-z .-]+$" "true"
+              "${ni_name_default}" "^[A-Za-z][A-Za-z .-]+$" "true"
             ;;
           "[OPERATOR_EMAIL]")
             resolve_token "${pre_token}" "Operator email" \
@@ -823,7 +887,7 @@ resolve_all_tokens() {
     case "${tok}" in
       "[OPERATOR_NAME]")
         resolve_token "${tok}" "Operator full name (e.g., Firstname Lastname)" \
-          "" "^[A-Za-z][A-Za-z .-]+$" "true"
+          "${ni_name_default}" "^[A-Za-z][A-Za-z .-]+$" "true"
         ;;
       "[OPERATOR_FIRST_NAME]")
         local has_first; has_first=$(json_has_key "${TOKENS_FILE}" "${tok}")
@@ -842,11 +906,11 @@ resolve_all_tokens() {
         ;;
       "[OPERATOR_ROLE_TITLE]")
         resolve_token "${tok}" "Operator role title (e.g., Senior Program Manager)" \
-          "" "^[A-Za-z ].+$" "true"
+          "${ni_role_title_default}" "^[A-Za-z ].+$" "true"
         ;;
       "[OPERATOR_ORGANIZATION]")
         resolve_token "${tok}" "Operator organization (e.g., Acme Corp)" \
-          "" "^[A-Za-z0-9 &.,'-]+$" "true"
+          "${ni_organization_default}" "^[A-Za-z0-9 &.,'-]+$" "true"
         ;;
       "[OPERATOR_PROJECT_NAME]")
         resolve_token "${tok}" "Active PMO project name" \
@@ -881,7 +945,15 @@ resolve_all_tokens() {
         resolve_token "${tok}" "Operator GitHub handle (optional; Enter to skip)" \
           "${git_username_default}" "" "false"
         ;;
-      "[COWORK_INSTALL_PATH]")
+      "[COWORK_INSTALL_PATH_BASE]")
+        # Paired with core/CLAUDE.md.template's vocabulary line, which is what
+        # compute_active_tokens greps to derive ACTIVE_TOKENS. Both carry the
+        # REGISTERED token name (depersonalization-spec.md §1; compose.py maps
+        # [paths].cowork_install_path to it). Before this pairing the resolver
+        # stored [COWORK_INSTALL_PATH] while write_operator_toml read
+        # [COWORK_INSTALL_PATH_BASE], so cowork_install_path was written EMPTY on
+        # every first install and the token re-prompted forever (read_operator_toml
+        # skips empty values, so the cache never hit). Edit BOTH or neither.
         resolve_token "${tok}" "Cowork install path" \
           "${HOME}/Library/Application Support/Claude/local-agent-mode-sessions" "" "false"
         ;;

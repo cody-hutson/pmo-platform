@@ -110,7 +110,7 @@ The default workspace location is `~/Claude/pmo-platform`. To install elsewhere,
 4. Computes the active token set from the templates at `core/CLAUDE.md.template` and `core/settings.json.template`.
 5. Detects state at `~/Claude/.claude/.workspace-setup.state` and routes one of three branches: fresh-install, re-bootstrap, or guided recovery.
 6. Creates the workspace directory layout.
-7. Resolves operator-identifying tokens via interactive prompts; writes the canonical `operator.toml` at `~/.config/pmo-platform/operator.toml` (XDG-spec; mode 0600).
+7. Resolves operator-identifying tokens — via interactive prompts by default, or from each token's declared default with no read from stdin under `--non-interactive`; writes the canonical `operator.toml` at `~/.config/pmo-platform/operator.toml` (XDG-spec; mode 0600).
 8. Substitutes tokens into `CLAUDE.md` and `.claude/settings.json` from the templates.
 9. Installs the PreToolUse hooks at `~/Claude/.claude/hooks/` from `core/hooks/*.sh`.
 10. Installs composition-surface seed files (allowlists, exemption lists) from `core/config/allowlists/` to runtime locations (`~/Claude/.claude/` for hook-tier; `~/Claude/personal/pmo-instance/` for instance-tier), wrapped in MANAGED SECTION + OPERATOR ADDITIONS fences per [`composition-surface-spec.md` §2](../core/standards/composition-surface-spec.md). Install-if-missing semantics: operator edits to OPERATOR ADDITIONS sections are preserved on re-run.
@@ -126,6 +126,7 @@ The default workspace location is `~/Claude/pmo-platform`. To install elsewhere,
 | `--workspace-root PATH` | Workspace destination (default: `~/Claude`). Also the Phase 2 deploy-target root — skills deploy under `PATH/.claude/skills` instead of the live `~`, so a sandboxed install redirects every write. |
 | `--config-root PATH` | Root for operator config writes (default: `~/.config/pmo-platform`; or `PMO_PLATFORM_CONFIG_ROOT` env var). Used by integration tests + sandboxed dry-runs to isolate from operator state. |
 | `--init-only-state` | Verify artifacts empirically without performing install operations; writes state file on pass |
+| `--non-interactive` | Resolve every token from its declared default and never read stdin, so a fresh install completes unattended. A required token with no available default exits non-zero naming the token — no value is ever silently substituted. Does not change interactive behavior. |
 | `--dry-run` | Preview planned actions; perform no state mutation |
 | `--help` | Show the canonical usage banner |
 
