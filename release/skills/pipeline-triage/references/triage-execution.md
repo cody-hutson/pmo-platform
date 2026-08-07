@@ -104,12 +104,24 @@ in-scope issue, then assemble the consolidated summary.
 ### A4 — feasibility quick-check
 
 - **Definition:** `stage-02-triage.md` §5 (A4) + the advisory architecture evaluative-lens pass (§5,
-  non-gate).
+  non-gate) + the **Scope-Altitude Determination (A4.7)** block in the same section — the
+  enforcement point for the stage-local, advisory, non-gate-blocking criterion **SA-G1**.
 - **Run:** a lightweight feasibility read against current file state. When the proposal introduces or
   reshapes a component (new skill / artifact class / relocation / scope decision), additionally apply
   the advisory architecture evaluative-lens pass (triple-Venn + K1-vs-K2–K5 classifier) — advisory,
-  not a Gate-2 criterion.
-- **Emit:** feasibility flags (+ any architecture-lens miss, advisory).
+  not a Gate-2 criterion. Then run the **A4.7 scope-altitude determination**: resolve the
+  asserted-outcome set **A** and the declared-scope set **S** by the §5 A4.7 operand rules
+  (R0 form-agnostic extraction · A1 assertion-outside-a-named-block · A2 determinacy floor ·
+  S1–S4 interpretation), then evaluate **Limb A** (scope indeterminacy) ∨ **Limb B** (containment,
+  SA1 ∧ SA2 ∧ SA3) against the closed guard list N1–N7. The predicate, the guards, the two named
+  shapes and their tells are **defined in §5 A4.7** — cite it, do not restate it. `SA-G1` is
+  **not** a `gate-criteria-spec.md` registry criterion: it adds no Gate-2 criterion, is outside the
+  Layer-2 judgment aggregate, and has no path to a blocked triage intake.
+- **Emit:** feasibility flags (+ any architecture-lens miss, advisory) **+ the `SA-G1` value**, one
+  of `CONTAINED` / `FLAG(<limb>,<shape>)` / `n/a(N#)` / `UNKNOWN(<reason>)` / `HELD(untrusted-body)`.
+  A body whose template will not resolve, whose declared-scope block is unparseable, whose **A** is
+  unresolvable per A2, or whose read failed emits `UNKNOWN(<reason>)` — **never `CONTAINED`**. The
+  degraded value is a distinct emit, not a silent clean read.
 
 ### A5 — priority re-evaluation
 
