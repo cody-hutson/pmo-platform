@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.13 | ci-selftest-and-check-hardening | 2026-08-06 | — | #4897 | [notes/v4.13_RELEASE_NOTES.md](notes/v4.13_RELEASE_NOTES.md) |
 | v4.12 | release-notes-and-learnings | 2026-08-05 | — | #4769 | [notes/v4.12_RELEASE_NOTES.md](notes/v4.12_RELEASE_NOTES.md) |
 | v4.11 | adr-corpus-conformance | 2026-08-05 | — | #4736 | [notes/v4.11_RELEASE_NOTES.md](notes/v4.11_RELEASE_NOTES.md) |
 | v4.10 | 103-skill-suite-conformance-and-usability-ac | 2026-08-04 | — | #4712 | [notes/v4.10_RELEASE_NOTES.md](notes/v4.10_RELEASE_NOTES.md) |
