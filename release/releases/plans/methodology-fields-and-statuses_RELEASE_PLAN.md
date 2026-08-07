@@ -6,7 +6,8 @@ status: ACTIVE
 release: slug-only (ADR-092 — the concrete version binds at the Stage-12 atomic claim)
 milestone: methodology-fields-and-statuses
 release_class: cross-cutting
-reversibility: CHEAP / Confidence HIGH
+domain_practice: { source: N/A — pipeline-internal release, date: 2026-08-06, domain: governance }
+reversibility: MIXED / Confidence HIGH
 ---
 # Release Plan — `methodology-fields-and-statuses`
 
@@ -65,7 +66,7 @@ This was verified against the enforcing gate rather than argued from the documen
 
 **Allocated for the first card: mainline anchor plus one.** The record carries a numbering note in its own § Status recording the advisory sibling claims and the rejected reservation. If a sibling merges first, the record renumbers at merge by the sanctioned tool — the designed workflow, tested in CI — and gains a numbering-provenance note. The two further ADRs this release ships bind at their own cards' build steps under the same rule, re-verified at that moment; they are deliberately **not** pre-assigned here, because a pre-assigned number is exactly the stale artifact the rule exists to avoid.
 
-**This reverses a hub ruling and is surfaced for operator re-ratification.** If the operator upholds the reservation, the remedy is one invocation of the renumber tool; the record is authored so that either outcome is a filename-and-citations move, not a rewrite.
+**This was surfaced for operator re-ratification and has since been CLOSED (2026-08-07):** the hub confirmed against ADR-115 that next-free is the mainline anchor plus one — a **rule, not a judgment** — so no ratification was required and the reservation was withdrawn. The record stands as authored; the remedy, were the number ever to move at merge, remains one invocation of the renumber tool.
 
 ---
 
@@ -281,6 +282,12 @@ Single branch, one pull request, one merge, write-serialized. Commits reference 
 
 ---
 
+## Acceptance-Criteria Reconciliation (ratified at the Stage-7 wave-1 gate, 2026-08-07)
+
+**#1825 AC-4 — method text reconciled to the ratified Report shape.** AC-4's method previously required **G2 and G3** as evidence columns, while the Stage-5 "Report shape" — the ratified artifact — specifies no G3 column; G3 surfaces only under `--json`. Dev Test correctly graded the criterion **PARTIAL** against the method text where Stage 6 recorded **MET** against the Report shape.
+
+**Resolution:** the *method text* is what drifted, not the tool. AC-4's method is reconciled to read: *assert G2 appears as an evidence column in the default report, and that G3 is retrievable under `--json`.* Both gates remain **annotate-only** — neither is adjudicated, because G2 is not mechanically decidable from label topology (`label-taxonomy.md:50–57` places `project:*` on container and children alike). Stage 8 grades AC-4 against this reconciled method, not against Stage 6's inherited MET.
+
 ## Rollback
 
 **Whole release:** revert the merge commit, first-parent form. Every corpus surface returns in one operation.
@@ -290,6 +297,24 @@ Single branch, one pull request, one merge, write-serialized. Commits reference 
 **The part a revert does not cover.** Materialization creates live labels. Labels are repository *state*, not repository *content*: a revert cannot remove them, and any item that acquired one keeps it. Label deletion is a repository-settings mutation and is therefore a **user-side action**, run by the operator against the repository, and it must be named explicitly in the Stage-12 rollback record. **Order matters:** revert the merge first, then delete the labels — reverting first restores the parity checker to its pre-release state so the gate does not immediately re-flag the deletion as drift. If the extended apply-set lands, the manual deletion obligation covers the Axis-1 rows and the kind label as well, not only the two pipeline rows.
 
 **Rollback is operator-authorized. No autonomous rollback.**
+
+**The eight created label rows (rollback names them explicitly — a runbook that says "delete the eight rows" without naming them is not executable):**
+
+```bash
+# STEP 1 — revert the merge FIRST (first-parent form), so the parity checker
+# returns to its pre-release state and does not re-flag the deletion as drift.
+# STEP 2 — then remove the eight rows this release created:
+gh label delete "status: done"            --yes --repo <owner>/<repo>
+gh label delete "type:card"               --yes --repo <owner>/<repo>
+gh label delete "work-status: backlog"    --yes --repo <owner>/<repo>
+gh label delete "work-status: ready"      --yes --repo <owner>/<repo>
+gh label delete "work-status: in-progress" --yes --repo <owner>/<repo>
+gh label delete "work-status: in-review"  --yes --repo <owner>/<repo>
+gh label delete "work-status: done"       --yes --repo <owner>/<repo>
+gh label delete "work-status: cancelled"  --yes --repo <owner>/<repo>
+```
+
+**`status: in-progress` is NOT in that list and must NOT be deleted — it is forward-only.** It existed before this release carrying a default colour and a null description; this release *reconciled* it rather than creating it. Deleting it removes a row the pipeline is now using, and restoring its prior value would restore a malformed row.
 
 ---
 
@@ -314,7 +339,7 @@ Deltas against the Stage-4 plan of record. The Stage-4 output comment is histori
 | **Δ-epic-population** | Roughly 53 open epics | **42** at the pinned baseline, of which 15 are naive candidates and **6** survive gating. The headline defect — zero rollup-close logic — reproduces exactly; the population figure was supporting context, and a 21% shrink does not change the remediation. | Stage 4 re-measurement |
 | **Δ-cross-pr-contention** | Excluding the deploy script "removes 100% of cross-release contention" | **False as a release-wide claim.** It was true for card 3's matrix alone. Cards 1 and 4 add three further sibling intersections, including a **new** one on the label grammar found at Commit 0. All sibling edits are additive, so the exposure is merge-order friction rather than corruption. | Stage 5 (card 4) + Commit-0 re-measurement |
 | **Δ-adr-allocation** | Two design comments named concrete ADR numbers | **Numbers are allocated by rule at Commit 0, never carried forward.** One of the named numbers was already taken on a sibling branch. Three separate probes in one session returned stale or incomplete sets minutes apart, which is precisely why the rule replaces the number. | Operator ruling; Commit-0 measurement |
-| **Δ-adr-rule-corrected** | The rule was *reserve the first slot strictly above every in-flight sibling claim*, leaving two slots for the siblings that must renumber | **The rule is the mainline anchor plus one.** ADR-115 states the number binds at merge, that next-free is never the maximum of the claimed set, and that an unmerged sibling claim is advisory — and it names the reservation strategy as **worse than a duplicate**, because the contiguity gate fails a gap as readily as a duplicate and a merged hole then fails every subsequent pull request. Verified against the enforcing gate with four arms: the reserved slot returns **FAIL — GAP**; the anchor-plus-one returns **PASS**; a duplicate control returns **FAIL — DUPLICATE**, so the PASS is meaningful. **This reverses a hub ruling and needs operator re-ratification;** the remedy either way is one invocation of the sanctioned renumber tool. | Commit-0 measurement against ratified governance |
+| **Δ-adr-rule-corrected** | The rule was *reserve the first slot strictly above every in-flight sibling claim*, leaving two slots for the siblings that must renumber | **The rule is the mainline anchor plus one.** ADR-115 states the number binds at merge, that next-free is never the maximum of the claimed set, and that an unmerged sibling claim is advisory — and it names the reservation strategy as **worse than a duplicate**, because the contiguity gate fails a gap as readily as a duplicate and a merged hole then fails every subsequent pull request. Verified against the enforcing gate with four arms: the reserved slot returns **FAIL — GAP**; the anchor-plus-one returns **PASS**; a duplicate control returns **FAIL — DUPLICATE**, so the PASS is meaningful. **This reversed a hub ruling and was CLOSED on 2026-08-07 as rule-determined, not a judgment call** — ADR-115 governs and no operator ratification was required; the remedy, were the number ever to move at merge, remains one invocation of the sanctioned renumber tool. | Commit-0 measurement against ratified governance |
 
 ---
 

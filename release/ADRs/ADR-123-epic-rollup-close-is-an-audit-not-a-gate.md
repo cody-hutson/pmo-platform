@@ -11,7 +11,7 @@ source_observations:
   - "At the build baseline, 42 open epics partition exactly into 15 rollup-close candidates, 21 with at least one open child, and 6 with no children at all. The partition was verified exact rather than assumed."
   - "Two independent topological predicates were built to decide whether a candidate is a true epic or an initiative container mislabelled as one. Both over-matched at 14 of 15, and the narrower one additionally produced a false negative on the single candidate carrying the initiative-container shape it was built to catch."
   - "The cause of that failure is structural: the taxonomy places the initiative label on the container AND on every one of its children, so container and thrust are label-identical by construction. The distinguishing fact lives only in body prose."
-  - "8 of 15 candidates carry at least one child closed as abandoned rather than delivered, one of them 7 of 14. A criterion reading 'all children closed' admits every one of them as complete."
+  - "9 of 15 candidates carry at least one child closed as abandoned rather than delivered, one of them 7 of 14. A criterion reading 'all children closed' admits every one of them as complete."
   - "1 of 15 candidates has a child set consisting entirely of research spikes — research answered, with no capability necessarily shipped."
   - "The label-linked and native child mechanisms are not kept in sync. At the baseline 0 open children were reachable by label alone, but 29 such children exist historically, 21 of them under a single epic. The sensitivity arm is non-zero, so the zero is a real transient absence rather than a broken probe."
   - "The carrier epic self-labels: the taxonomy applies the epic label to the umbrella ticket as well as its children. A child-set query that does not exclude the carrier returns the epic as its own open child."
@@ -38,7 +38,7 @@ The originating card framed this as a missing close-out step and deferred the me
 
 The second of those was probed empirically rather than assumed. Two independent topological predicates were built. **Both over-matched at 14 of 15**, and the narrower one additionally returned a **false negative** on the one candidate carrying exactly the initiative-container shape it was built to catch. The cause is structural and not fixable by a better predicate: the taxonomy places the initiative label on the container **and** on every one of its children, so container and thrust are **label-identical by construction**. The distinguishing fact lives only in body prose.
 
-**Two further gates were decidable, cheap, and absent from the original criteria.** 8 of 15 candidates carry at least one child closed as *abandoned* rather than delivered — one of them 7 of 14 — so a criterion reading "all children closed" admits every one of them as complete. And 1 of 15 has a child set consisting entirely of research spikes: research answered, capability not necessarily shipped. Adding both narrows the population from 42 to 15 to 6.
+**Two further gates were decidable, cheap, and absent from the original criteria.** 9 of 15 candidates carry at least one child closed as *abandoned* rather than delivered — one of them 7 of 14 — so a criterion reading "all children closed" admits every one of them as complete. And 1 of 15 has a child set consisting entirely of research spikes: research answered, capability not necessarily shipped. Adding both narrows the population from 42 to 15 to 5.
 
 ## Decision
 
