@@ -1611,8 +1611,13 @@ settings_guard_and_regen() {
 # The install-time entry point to the guard, called from substitute_templates and
 # therefore reached by fresh_install, rebootstrap and guided_recovery.
 #
-# ADR-121 §Decision 4 scopes the guard to "the new --refresh-settings flow AND the
-# existing fresh/rebootstrap flows". Only the first half shipped initially: a plain
+# The Stage-5 design record for this card (sub-task #4790) scopes the guard to "the
+# new --refresh-settings flow AND the existing fresh/rebootstrap flows". That scope is
+# a Stage-5 decision, NOT an ADR clause: ADR-121 §Decision 4 is "Migration precedes
+# regeneration; warning alone is not sufficient", which governs the guard's ORDER, not
+# the set of flows it covers. The behaviour below conforms to both records.
+#
+# Only the first half of that scope shipped initially: a plain
 # setup-workspace.sh re-run over a healthy workspace routes to rebootstrap, which
 # called substitute_template directly and overwrote the managed file with no
 # classification at all — measurably dropping operator-added keys with no migration,
