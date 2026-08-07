@@ -112,7 +112,7 @@ The depersonalization stack depends on a workspace-setup mechanism that creates 
 4. `update.sh` script regenerates resolved files on package updates per [`composition-surface-spec.md § 3.2`](composition-surface-spec.md).
 5. `deploy.sh` reads `[CLAUDE_WORKSPACE_ROOT]` from operator.toml.
 6. `.claude/hooks/*.sh` read `[CLAUDE_WORKSPACE_ROOT]` at startup.
-7. `.claude/settings.json` is regenerated from `core/settings.json.template` + operator.toml on install and update.
+7. `.claude/settings.json` is regenerated from `core/settings.json.template` + operator.toml on install and on update — the update-time half by `update.sh` Phase 5d, and only after the ADR-121 guard has classified the live file, so a re-render cannot silently drop keys the operator added to it. Operator-added keys are migrated to `.claude/settings.local.json`, which is never regenerated.
 8. `comms-writer` skill reads `[OPERATOR_*]` from `/CLAUDE.md § Workspace Owner` at signature-emission time.
 9. `project-initiator` skill resolves `{{OPERATOR_NAME}}` / `{{OPERATOR_ROLE_TITLE}}` placeholders from `/CLAUDE.md § Workspace Owner` at scaffold-time.
 10. `core/rules/skill-deployment.md` uses `[COWORK_INSTALL_PATH_BASE]` token.
