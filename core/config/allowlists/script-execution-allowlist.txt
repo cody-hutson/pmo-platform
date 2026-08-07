@@ -132,9 +132,13 @@ release/tools/automated-closeout.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_corpus_home_tolerance.sh
 ./release/tools/tests/test_corpus_home_tolerance.sh
 release/tools/tests/test_corpus_home_tolerance.sh
-# release/tools/tests/*.sh regression + conformance suites — the remaining seven
-# of the eight suites in that directory (test_corpus_home_tolerance.sh is
-# registered immediately above). Each is executed agent-side at Stage 6
+# release/tools/tests/*.sh regression + conformance suites — every suite in that
+# directory other than test_corpus_home_tolerance.sh, which is registered
+# immediately above. (Registration is per-suite and enumerated below rather than
+# stated as a count against a directory census: that directory also holds a
+# non-suite load generator invoked from inside a suite, so a file count and a
+# suite count are not the same number and a stated total goes stale on either
+# one changing.) Each is executed agent-side at Stage 6
 # self-verification and Stage 7 Dev Testing as well as in CI; without all four
 # invocation forms per the per-tool form convention above the agent-side path is
 # BLOCK-DESTRUCTIVE-022-blocked and the Stage-7 spoke asked to dev-test a suite
@@ -160,6 +164,10 @@ release/tools/tests/test_lint_release_corpus_versionless.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_renumber_adr.sh
 ./release/tools/tests/test_renumber_adr.sh
 release/tools/tests/test_renumber_adr.sh
+[PMO_PLATFORM_ROOT]/release/tools/tests/test_spoke_run_directory.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_spoke_run_directory.sh
+./release/tools/tests/test_spoke_run_directory.sh
+release/tools/tests/test_spoke_run_directory.sh
 [PMO_PLATFORM_ROOT]/release/tools/tests/test_structural_blast_radius.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_structural_blast_radius.sh
 ./release/tools/tests/test_structural_blast_radius.sh

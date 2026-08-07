@@ -400,6 +400,30 @@ jobs:
         # to any operator-instance path). Gates on exit code.
         run: bash release/tools/tests/test_action_item_gate_predicate.sh
 
+      - name: NC-NS-1 — spoke run-directory discipline (clause + behaviour)
+        # The negative control for spoke output-path namespacing. A spawned
+        # Stage-6 spoke once picked up a PRIOR spoke's leftover stage-comment
+        # file from a shared temp parent and nearly posted it to the wrong
+        # sub-task — a READ of a path it never wrote.
+        # Two properties make this suite grade the DESIGN rather than a POSIX
+        # guarantee, and both are why it is wired here rather than left as prose:
+        #   (1) Deletion sensitivity. The six clause arms are re-run against a
+        #       copy of hub-spoke-bridge.md with the run-directory section
+        #       excised, and ALL SIX must fail there. An arm that survives the
+        #       excision is asserting a file is non-empty, not that the contract
+        #       clause is present — which is exactly how the first draft of this
+        #       control would have passed with the clause deleted.
+        #   (2) A deliberately NON-CONFORMING reader. One arm globs the shared
+        #       temp parent and MUST find the prior run's leftover (non-zero).
+        #       That reproduces the original defect on purpose, so the
+        #       conforming arm's zero is a property of conformance rather than
+        #       of there being no file to collide with.
+        # Offline + deterministic (one mktemp tree; no network, no gh, no writes
+        # to any operator-instance path or into the checkout). No workflow input
+        # is interpolated — the step is a fixed command, so there is no
+        # untrusted-data path into the shell. Gates on exit code.
+        run: bash release/tools/tests/test_spoke_run_directory.sh
+
       - name: bundle-issues-parser regression suite (13 legs + 5 rank/sort assertions)
         # Wires a suite that shipped with ZERO executors. The release plan names
         # `test_bundle_issues_parser.py` as this card's "Executable regression" and

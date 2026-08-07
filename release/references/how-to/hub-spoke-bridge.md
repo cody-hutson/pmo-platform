@@ -931,7 +931,7 @@ This discipline emerged from C1 routing (2026-04-25), where a chip prompt instru
 
 This is the read-only sibling of the Worktree-discipline block above: where that block hardens a *content-modifying* spoke's filesystem reach, this block bounds a *read-only* spoke's GitHub-write reach. It applies to the read-only spokes — the complement of the content-modifying Stages 6/12/13 — i.e. **Stages 4/5/7/8/9 + the adversarial-review spoke + the research-methodology variant** (the read-only partition per [`subagent-security-posture.md` § Mechanism 1](../../../core/standards/subagent-security-posture.md)). Every read-only spoke prompt MUST carry this clause verbatim:
 
-> **Read-only means read-only across every surface — files AND GitHub.** You may READ any issue, PR, file, or thread the task requires. You may WRITE in exactly one place: a single output comment on your own assigned sub-task #{SUB_TASK_NUMBER}. You MUST NOT:
+> **Read-only means read-only across every surface — files AND GitHub.** You may READ any issue, PR, file, or thread the task requires. **On the GitHub surface** you may WRITE in exactly one place: a single output comment on your own assigned sub-task #{SUB_TASK_NUMBER}. (This bound is the GitHub surface only. Every spoke also writes local scratch files — the temp-file posting idiom below *requires* it — and that surface is bounded separately and universally by the Spoke Template's § Run-Directory Discipline. "Exactly one place" was previously stated without that qualifier and read as covering both surfaces, which is the silence a spoke once resolved by picking up another spoke's leftover file.) You MUST NOT:
 > - invoke `spawn_task` or the `Agent` tool for any purpose (recursion is prohibited — see § Recursion prohibited; this restates that constraint on the write surface, it adds no new one);
 > - comment on, edit, label, re-open, transition, or otherwise mutate any issue or PR other than your assigned sub-task — **including a sibling sub-task in this release** — by ANY tool, `gh`-via-`Bash` included;
 > - create any new issue, PR, or task.
@@ -1149,7 +1149,7 @@ The default shape for multi-phase work is a new milestone plus one issue per pha
 
 Because the `block-destructive` agent hook matches destructive-git substrings **lexically** in a Bash command string (it scans the literal text, not the parsed git semantics), a chip prompt MUST prescribe git idioms that do not present a destructive substring to the matcher even when the operation is safe:
 
-- **Post issue and comment bodies via a Write-tool temp file + `gh api --input <file>`** (or `gh pr create --body-file` / `gh issue create --body-file`), never by inlining a large body into a `-f body=...` argument — a heredoc or inlined body can carry incidental substrings the lexical matcher trips on, and the temp-file path is also the parser-clean-friendly route.
+- **Post issue and comment bodies via a Write-tool temp file + `gh api --input <file>`** (or `gh pr create --body-file` / `gh issue create --body-file`), never by inlining a large body into a `-f body=...` argument — a heredoc or inlined body can carry incidental substrings the lexical matcher trips on, and the temp-file path is also the parser-clean-friendly route. **That temp file goes in the spoke's run directory** (`$SPOKE_OUT`, per the Spoke Template's § Run-Directory Discipline) — this mandate is what creates the local write, so it names the path discipline that bounds it rather than leaving the target unspecified.
 - **Regenerate a branch with `git checkout -B <branch> origin/main` + `git push --force-with-lease`**, never `git reset --hard` or an unguarded `git push --force` — `checkout -B` re-points the branch without a destructive substring, and `--force-with-lease` is the safe lease-checked push the hook permits where bare `--force` is blocked.
 
 **Why this idiom holds regardless of hook coverage — do not maintain it as a workaround for absent hooks.** Two independent reasons keep it load-bearing, and they point in opposite directions, which is why the idiom survives either state:
@@ -1617,6 +1617,43 @@ Scope: this block binds ALL spokes at every stage, not Stage 5 alone — the
 observed failures spanned every stage. It binds by ACT, not by role: whoever
 asserts the zero owns its record, including a hub or a one-off session outside
 this template.
+
+**Cutover discipline:** Applies to all releases going forward.
+
+## Run-Directory Discipline (all spokes)
+
+Resolve exactly ONE run directory at start, and confine every scratch artifact
+to it — on the READ side as well as the write side:
+
+    SCRATCH_BASE="<harness session scratchpad dir, if one was supplied;
+                   otherwise ${TMPDIR:-/tmp}>"
+    SPOKE_OUT="$(mktemp -d "${SCRATCH_BASE}/spoke-<STAGE>-<SUB_TASK_NUMBER>-XXXXXX")"
+
+- **Write** every scratch artifact — comment bodies, evidence files, extracted
+  payloads, intermediate output — inside `$SPOKE_OUT` and nowhere else.
+- **Read** scratch input only from `$SPOKE_OUT`. Never `ls`, glob, or
+  path-construct your way into a shared temp parent to find a file you did not
+  create in THIS run. A scratch file you did not write in this run is another
+  spoke's artifact: it is not yours to read, and it is not yours to post.
+- **Echo the resolved `$SPOKE_OUT`** on its own line in your output comment's
+  `### Evidence` section. One line. That is what makes a wrong-path post
+  detectable afterwards from the durable artifact rather than only in-session.
+
+Both keys are load-bearing and neither works alone. `mktemp -d` supplies
+uniqueness **by construction** — including across a re-run of the same stage on
+the same sub-task, which is the case a sub-task-keyed path silently fails: run 2
+resolves run 1's directory with run 1's leftovers still in it, reproducing the
+hazard while the namespacing looks present. The sub-task number supplies
+traceability, which a bare random directory does not.
+
+**Honest scope — the read side is a convention, not an interlock.** The write
+side is mechanical: a directory that did not exist cannot be collided with. The
+read side is a prompt clause with **no enforcement path** — the `Read` matcher
+wires exactly one PreToolUse hook and it is unrelated to filesystem scoping, so
+nothing intercepts a read of another run's directory before or after the
+`hub-spoke-execution-safety` enforcement point lands. The echo above is the
+compensating control: it makes a violation observable after the fact. Treat the
+read clause as discipline you owe, not as a guard that will catch you.
 
 **Cutover discipline:** Applies to all releases going forward.
 

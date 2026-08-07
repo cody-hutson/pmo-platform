@@ -24,6 +24,10 @@ Concurrency is governed by two gates that compose; there is **no fixed concurren
 
 "Parallel-safe" is a *coordination* property (no shared write surface) — it is orthogonal to the usage-window envelope, against which concurrent spokes still draw cumulatively. (Spec: `hub-spoke-bridge.md` § Per-Account Usage Window Constraint + `quota-budget-protocol.md`.)
 
+## Output path
+
+Every spoke prompt Mode O renders MUST carry the run-directory clause verbatim: the spoke resolves ONE run directory (`mktemp -d` under a session scratch base, suffixed with the stage and sub-task number), writes every scratch artifact inside it, reads scratch input only from it, and echoes the resolved path in its output comment. Uniqueness is by construction, so a re-run of the same stage on the same sub-task cannot land on the prior run's leftovers — the failure a sub-task-keyed path allows. Canonical clause + its honest read-side boundary: `hub-spoke-bridge.md` § Run-Directory Discipline (Spoke Template). Cite it; do not restate it here.
+
 ## Worktree detect-first guard
 
 A spawned spoke can land in the **primary checkout** instead of an isolated worktree (observed). The spoke prompt MUST instruct the spoke to **detect first, then act**:
