@@ -255,6 +255,17 @@ core/deploy/tests/test_package_freshness_exit_codes.sh
 ./core/deploy/tests/test_check45_governing_doc_name_match.sh
 core/deploy/tests/test_check45_governing_doc_name_match.sh
 
+# Check 22 G1-06 priority-carrier regression — hermetic net for the criterion's
+# delegation to the shared carrier-agnostic detector. Run by the install-tests
+# shell-tests job AND agent-side at Stage 6/7 dev testing, which is why all four
+# invocation forms are registered: a delivered test whose allowlist rows never
+# landed is BLOCK-DESTRUCTIVE-022-blocked and therefore unrunnable agent-side on
+# arrival. (CI runs no Claude hooks, so these entries serve the agent-side path.)
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_g1_06_priority_carrier.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_g1_06_priority_carrier.sh
+./core/deploy/tests/test_g1_06_priority_carrier.sh
+core/deploy/tests/test_g1_06_priority_carrier.sh
+
 # context-budget-auditor Measure-mode scanner — read-only per-component token-cost
 # scan across the loadable-component surface, plus a --self-test mode. Invoked
 # agent-side by the skill's Measure mode, so all four invocation forms per the

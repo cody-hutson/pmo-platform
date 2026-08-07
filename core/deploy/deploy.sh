@@ -5608,8 +5608,9 @@ cmd_check() {
   #          observation (no AC field). Pattern (d) behavioral/`method:` is a
   #          recommend-only refinement, not gated here (structural detector
   #          stays on the three lexical patterns + the bug adapter).
-  #   G1-06  Priority `P1`-`P4` in improvement body OR Severity `P1`-`P4` in
-  #          bug body per Adapter G1-06-Bug; n/a for observation
+  #   G1-06  a `P1`-`P4` level in the body Priority OR Severity field,
+  #          resolved through the ADR-111 shared detector (carrier-agnostic —
+  #          this check binds no carrier of its own); n/a for observation
   #   G1-09  label-body template match — label_template (Step 1) must agree
   #          with inferred_template (Step 2) per Template Detection Logic at
   #          gate-criteria-spec.md § Gate 1
@@ -5640,18 +5641,25 @@ cmd_check() {
   # follow-on (after the ≥3-day shakedown); this release ships WARN. Mode
   # files are operator-instance runtime state and are NOT committed.
   #
-  # Template Detection Logic — pragmatic body-marker variant:
-  #   gate-criteria-spec.md § Gate 1 (Template Detection Logic, Step 2) cites
-  #   `### Priority` AND `### Category` AND `### Description` for improvement,
-  #   but the actual rendered improvement issue bodies use `**Priority:**` and
-  #   `**Category:**` (dropdown bold) rather than `### Priority` and
-  #   `### Category` (section headers). This check uses the unique textarea
-  #   section headers that DO appear in rendered bodies:
+  # Template Detection Logic — unique-textarea-marker variant:
+  #   GitHub Issue Forms renders EVERY field — dropdown and textarea alike —
+  #   as `### <label>` followed by the value. Template inference therefore uses
+  #   the textarea labels that are UNIQUE to one template, rather than the
+  #   Priority/Category dropdowns, which are not:
   #     bug         → `### Reproduction Steps`
   #     observation → `### What is missing?`
   #     improvement → `### Proposed Change`
-  #   The pragmatic markers are unique to each template per the body-marker-
-  #   uniqueness verification in gate-criteria-spec.md § Gate 1.
+  #   The markers are unique per the body-marker-uniqueness verification in
+  #   gate-criteria-spec.md § Gate 1.
+  #
+  #   PRIORITY CARRIER: not asserted here. G1-06 delegates to the ADR-111
+  #   shared detector — see the G1-06 resolve block below. An earlier revision
+  #   of this comment asserted that rendered bodies carry `**Priority:**` and
+  #   `**Category:**` rather than the heading form. That was wrong in both
+  #   directions: it trusted the `###` render for textarea fields in the same
+  #   breath as it denied it for dropdown fields, and it made the G1-06
+  #   detector blind to every form-rendered body. Do not re-state a carrier
+  #   distribution here — a distribution drifts, an authority does not.
   #
   # Sub-checks:
   #   22a token   — verifies `gh auth status` reports `repo` scope; if
@@ -5703,6 +5711,96 @@ cmd_check() {
       local c22_issue_count c22_finding_count=0
       c22_issue_count=$(printf '%s' "$c22_issues_json" | jq 'length' 2>/dev/null || echo 0)
 
+      # ── G1-06 priority resolution — DELEGATED, never re-implemented ──────
+      # ADR-111 decides: "The P-level digit is the canonical priority
+      # satisfier. The carrier is not part of the contract... A consumer that
+      # needs an issue's priority reuses the shared detector. Authoring a
+      # fourth carrier-specific matcher re-creates precisely the divergence
+      # documented in the Context table." This block therefore holds NO
+      # carrier grammar of its own: it resolves the whole population once
+      # through release/tools/bundle-issues-parser.py parse_priority_body and
+      # looks the answer up per issue. The map is `|<number>:<level>` repeated,
+      # with `-` for unresolved, and a trailing `|` so every entry is delimited
+      # on both sides.
+      #
+      # Cost model, stated honestly rather than rounded down: ONE python
+      # process for the whole population (not one per issue), plus an
+      # in-process parameter-expansion lookup per issue that forks nothing.
+      # It is not O(1) in issues — the per-issue lookup scans the map string —
+      # but it spawns no process per issue, which is the property that matters
+      # against a query carrying --limit 5000.
+      #
+      # DEGRADED-STATE CONTRACT — the posture the two following Check-22
+      # editors bind to; do not invent a third. When the primitive is missing,
+      # unrunnable, or fails, this block emits EXACTLY ONE finding naming the
+      # cause, sets c22_prio_ok=false, and the per-issue G1-06 branch is then
+      # SKIPPED: the criterion reads NOT-EVALUATED, never FAILED. An empty map
+      # is indistinguishable from a population that genuinely carries no
+      # priorities, so letting the per-issue branch run would turn ONE root
+      # cause into one spurious FAIL per issue — and in enforce mode would
+      # block the deploy once per issue. A degraded measurement is never
+      # rendered as a clean one, and it is never fanned out either.
+      local c22_prio_tool="${_audit_src_root:-.}/release/tools/bundle-issues-parser.py"
+      local c22_prio_map="" c22_prio_ok=true c22_prio_exit=0
+      local c22_prio_rows=0 c22_prio_colons="" c22_prio_diag=""
+      if [[ ! -f "$c22_prio_tool" ]]; then
+        c22_prio_ok=false
+        flag_g1_enforcement "g1-enforcement" \
+          "G1-06 NOT EVALUATED across ${c22_issue_count} bundled issue(s) — priority primitive missing: $c22_prio_tool (deploy the release module or restore the tool)"
+        c22_finding_count=$((c22_finding_count + 1))
+      elif [[ ! -x "/usr/bin/python3" ]]; then
+        c22_prio_ok=false
+        flag_g1_enforcement "g1-enforcement" \
+          "G1-06 NOT EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot run the priority primitive"
+        c22_finding_count=$((c22_finding_count + 1))
+      else
+        # >>> G1-06-DELEGATE-BEGIN — core/deploy/tests/test_g1_06_priority_carrier.sh
+        #     extracts the program between this marker and the END marker
+        #     VERBATIM and executes it against fixture JSON, so the regression
+        #     net tests this glue rather than only the library behind it.
+        #     stderr is CAPTURED (2>&1), never discarded: an absent
+        #     interpreter, a syntax error and a data-shape change are three
+        #     different failures with three different fixes, and a message
+        #     naming only the tool path distinguishes none of them.
+        c22_prio_map=$(printf '%s' "$c22_issues_json" | /usr/bin/python3 -c '
+import importlib.util, json, pathlib, sys
+spec = importlib.util.spec_from_file_location("bundle_issues_parser", pathlib.Path(sys.argv[1]))
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+out = []
+for i in json.load(sys.stdin):
+    out.append("|%s:%s" % (i["number"], mod.parse_priority_body(i.get("body") or "") or "-"))
+sys.stdout.write("".join(out) + "|")
+' "$c22_prio_tool" 2>&1) || c22_prio_exit=$?
+        # >>> G1-06-DELEGATE-END
+        if [[ "$c22_prio_exit" -ne 0 ]]; then
+          c22_prio_ok=false
+          c22_prio_diag=$(printf '%s\n' "$c22_prio_map" | /usr/bin/grep -v '^[[:space:]]*$' | /usr/bin/tail -1)
+          flag_g1_enforcement "g1-enforcement" \
+            "G1-06 NOT EVALUATED across ${c22_issue_count} bundled issue(s) — priority primitive failed (exit ${c22_prio_exit}): ${c22_prio_diag:-(no diagnostic on stdout or stderr)}"
+          c22_finding_count=$((c22_finding_count + 1))
+          c22_prio_map=""
+        else
+          # Extraction-ran assertion — SCOPE-INVARIANT by construction. It
+          # asserts that every queried issue produced a row, NOT that any row
+          # resolved a level. "Zero resolved" is a legitimate result for a
+          # small conformant population and becomes common the moment the
+          # evaluated population is narrowed, so resolution count is the wrong
+          # proxy; rows-equals-issues holds at every scope. The row count is
+          # the ':' count in the map (no issue number or P-level contains one),
+          # computed by pattern removal so it forks nothing.
+          c22_prio_colons="${c22_prio_map//[^:]/}"
+          c22_prio_rows=${#c22_prio_colons}
+          if [[ "$c22_prio_rows" -ne "$c22_issue_count" ]]; then
+            c22_prio_ok=false
+            flag_g1_enforcement "g1-enforcement" \
+              "G1-06 NOT EVALUATED — priority extraction returned ${c22_prio_rows} row(s) for ${c22_issue_count} bundled issue(s); a partial extraction is a broken probe, not a clean population"
+            c22_finding_count=$((c22_finding_count + 1))
+            c22_prio_map=""
+          fi
+        fi
+      fi
+
       # Per-issue iteration. For each issue:
       #  1. Determine intake-tier label count + label_template (Step 1)
       #  2. Infer template from unique body markers (Step 2; pragmatic
@@ -5715,6 +5813,7 @@ cmd_check() {
       local _has_imp _has_bug _has_obs _label_total
       local _bm_repro _bm_obswhat _bm_propchange _title_ok _title_reason
       local _ac_lines _ac_total _ac_bad _ac_line _ac_norm _ac_ok
+      local _prio _prio_field _prio_needle
       while IFS= read -r _issue_line; do
         [[ -n "$_issue_line" ]] || continue
         _num=$(printf '%s' "$_issue_line" | jq -r '.number')
@@ -5801,19 +5900,34 @@ cmd_check() {
           fi
         fi
 
-        # G1-06 — Priority (improvement) OR Severity P-level (bug per
-        # Adapter G1-06-Bug); n/a observation
-        if [[ "$_template" == "improvement" ]]; then
-          if ! printf '%s' "$_body" | /usr/bin/grep -qE '\*\*Priority:\*\*[[:space:]]*P[1-4]'; then
+        # G1-06 — a P1-P4 level in the body Priority OR Severity field.
+        # Template-agnostic BY DESIGN per gate-criteria-spec.md § Gate 1
+        # Adapter G1-06-Bug and ADR-111: the P-level DIGIT is the canonical
+        # satisfier, never the field name and never the qualifier word
+        # ("High" / "Material" resolve to unset, because the qualifier
+        # vocabulary is deliberately template-divergent and widening the
+        # grammar to accept a word would invent a level the author never
+        # wrote). n/a for observation — that template defines no such field.
+        #
+        # Carrier-blindness is the defect this branch used to carry: it bound
+        # the bold-inline form only and was therefore blind to every
+        # form-rendered body. Do NOT re-add a carrier literal here — change
+        # the shared detector, which every consumer inherits.
+        #
+        # Gated on c22_prio_ok per the degraded-state contract above: when the
+        # primitive degraded, G1-06 is NOT-EVALUATED (one finding, emitted at
+        # block start), never a per-issue FAIL.
+        if [[ "$c22_prio_ok" == "true" && ( "$_template" == "improvement" || "$_template" == "bug" ) ]]; then
+          # In-process map lookup — forks nothing. Empty or "-" means the
+          # shared detector resolved no P-level for this body.
+          _prio_needle="|${_num}:"
+          _prio="${c22_prio_map##*"$_prio_needle"}"
+          _prio="${_prio%%|*}"
+          if [[ -z "$_prio" || "$_prio" == "-" ]]; then
+            _prio_field="Priority"
+            [[ "$_template" == "bug" ]] && _prio_field="Severity"
             flag_g1_enforcement "g1-enforcement" \
-              "issue #${_num} — G1-06 FAIL: Priority field missing or no P1-P4 value (improvement.yml expects '**Priority:** P1-Urgent'-style anchor)"
-            c22_finding_count=$((c22_finding_count + 1))
-          fi
-        elif [[ "$_template" == "bug" ]]; then
-          # Adapter G1-06-Bug — Severity P-level digit canonical
-          if ! printf '%s' "$_body" | /usr/bin/grep -qE '\*\*Severity:\*\*[[:space:]]*P[1-4]'; then
-            flag_g1_enforcement "g1-enforcement" \
-              "issue #${_num} — G1-06 FAIL: Severity field missing or no P1-P4 value (Adapter G1-06-Bug — bug.yml expects '**Severity:** P1-Blocker'-style anchor)"
+              "issue #${_num} — G1-06 FAIL: no P1-P4 level found in the body ${_prio_field} field (any carrier — '### ${_prio_field}' heading, '**${_prio_field}:**' inline, or list-bullet form; the P-level DIGIT is the satisfier, not the qualifier word — see gate-criteria-spec.md § Gate 1 Adapter G1-06-Bug)"
             c22_finding_count=$((c22_finding_count + 1))
           fi
         fi
