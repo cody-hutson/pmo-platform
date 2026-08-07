@@ -48,11 +48,24 @@ The Stage-4 version determination is **provisional** until the Stage-12 atomic c
 
 ### Commit-0 ADR-number allocation
 
-Allocation is **by rule**, not by a number carried forward from a design comment. The one global, gap-free sequence spans **both** ADR directories, and the in-repo number checker reads the *worktree* — so it passes on a number already taken on another ref and cannot protect an allocation. The rule is therefore: sweep every local and remote ref, both directories, and take the first slot strictly above every in-flight claim; **HALT on collision, no auto-increment.**
+Allocation is **by rule**, not by a number carried forward from a design comment. What the rule *is*, however, was measured at Commit 0 rather than assumed — and the measurement **overturned the allocation this release entered Engineering with.**
 
-Measured at Commit 0 across **121 refs**, both ADR directories: mainline maximum **119**; **120 triple-claimed** across the three in-flight release refs; **121 claimed** by one of them. Sensitivity arm — the same shape recovers the known mainline maximum (1 hit) and **129** ADR files in total across all refs. Specificity arm — the 130-series returns zero on that same non-empty population, so the absences are real. Two slots (122, 123) are reserved for the two siblings that must renumber upward off the triple-claimed 120.
+The global sweep ran first. Across **121 local and remote refs**, both ADR directories: mainline anchor **119**; the next slot **triple-claimed** across the three in-flight release refs; the slot after it **claimed** by one of them. Sensitivity arm — the same shape recovers the known mainline anchor and 129 ADR files in total across all refs. Specificity arm — a series well above every claim returns zero on that same non-empty population, so the absences are real.
 
-**Allocated for the first card: ADR-124** — verified free on every ref at Commit 0. The two further ADRs this release ships bind at their own cards' build steps under the same rule, re-verified at that moment; they are deliberately **not** pre-assigned here, because a pre-assigned number is exactly the stale artifact this rule exists to avoid.
+The plan carried into Engineering was to reserve a slot **strictly above every in-flight claim**, leaving two slots free for the siblings that must renumber. **That is the one allocation the ratified rule forbids by name.** ADR-115 states that a number is allocated at authorship and **bound at merge**, that next-free is the mainline anchor plus one, that it is *never* the maximum of the claimed set, and that an unmerged sibling claim is **advisory**. Its § Context names the reservation strategy explicitly as *worse* than a duplicate: the contiguity gate fails a gap exactly as readily as a duplicate, so a branch that steps above an unmerged claim and merges first lands a hole on the mainline that fails **every** subsequent pull request until someone fills it. A duplicate inconveniences one branch; a gap blocks the repository.
+
+This was verified against the enforcing gate rather than argued from the document, with four arms:
+
+| Arm | Candidate | Gate verdict |
+|---|---|---|
+| Baseline (no new record) | — | **PASS** — the probe is not stuck red |
+| Subject | the reserved slot above every in-flight claim | **FAIL — GAP**, naming all four missing numbers |
+| Comparator | mainline anchor plus one | **PASS** |
+| Specificity | a deliberate duplicate | **FAIL — DUPLICATE**, so the gate is not gap-only and the comparator's PASS is meaningful |
+
+**Allocated for the first card: mainline anchor plus one.** The record carries a numbering note in its own § Status recording the advisory sibling claims and the rejected reservation. If a sibling merges first, the record renumbers at merge by the sanctioned tool — the designed workflow, tested in CI — and gains a numbering-provenance note. The two further ADRs this release ships bind at their own cards' build steps under the same rule, re-verified at that moment; they are deliberately **not** pre-assigned here, because a pre-assigned number is exactly the stale artifact the rule exists to avoid.
+
+**This reverses a hub ruling and is surfaced for operator re-ratification.** If the operator upholds the reservation, the remedy is one invocation of the renumber tool; the record is authored so that either outcome is a filename-and-citations move, not a rewrite.
 
 ---
 
@@ -183,7 +196,7 @@ core/schemas/work-item-type-schema.md
 core/packs/_common/pack.toml
 release/references/specs/ticket-information-architecture.md
 core/schemas/field-lifecycle-matrix.md
-core/ADRs/ADR-124-axis1-work-status-label-surface.md
+core/ADRs/ADR-120-axis1-work-status-label-surface.md
 core/deploy/tools/check-label-parity.py
 release/governance/release-process.md
 release/references/how-to/hub-spoke-bridge.md
@@ -205,7 +218,7 @@ release/releases/plans/methodology-fields-and-statuses_RELEASE_PLAN.md
 | Axis-1 field | shared base pack | **edit** | Six additive label rows plus a header-note reconcile and one enum-comment update. **Both archetype packs stay byte-unchanged** — see the Deviation Log. |
 | Axis-1 field | ticket information architecture | **edit** | New peer section carrying the field row, the valid-transition diagram, and the two-axis comparison table. The categorization section is **not touched** — its static-after-assignment framing must not acquire a dynamic label. |
 | Axis-1 field | field-lifecycle matrix | **edit** | One additive row plus a footnote stating the all-dashes reading is **by design, not omission**. |
-| Axis-1 field | ADR-124 | **add** | The seventh-group decision, the prefix as a hard runtime constraint, the base-pack homing, and the blocked-is-derived ruling. |
+| Axis-1 field | ADR-120 | **add** | The seventh-group decision, the prefix as a hard runtime constraint, the base-pack homing, and the blocked-is-derived ruling. Number is the mainline anchor plus one per the binding rule — see § Commit-0 ADR-number allocation. |
 | Status contract | pack meta-schema | **edit** | One new peer subsection: status resolution when no platform adapter is configured. The adjacent worked-example subsection, the adapter-binding line, and the existing kind-fallback caveat are **not altered**. |
 | Status contract | a new ADR | **add** | Binding-not-restatement: the contract is K1, the adapter binding stays K4. |
 | Materialization | parity checker | **edit** | Additive read-only emit flag as its own boolean flag — **not** a new output-format value, which the deploy script pins. Sibling parser so the existing signature is untouched. |
@@ -235,7 +248,7 @@ release/releases/plans/methodology-fields-and-statuses_RELEASE_PLAN.md
 | Axis-1 field | field-content assertion over the ticket-architecture spec | The field definition resolves. **Baseline is 0 occurrences at the pinned commit**, so a non-zero post-state is the differential. The workspace-root context file is **dropped** from the method — it is not in this repository. |
 | Axis-1 field | section-presence assertion | The two-axis section is present **after this change**. The grading target is presence, not extension of a pre-existing model — the cited two-axis model did not exist in that file. |
 | Axis-1 field | set-equality diff | The documented value list equals the entity-layer enum exactly: no added blocked state, no collapsed first two states, terminal cancellation retained. |
-| Axis-1 field | pack-contribution assertion | Six rows present in the **shared base pack** with the new group, **and both archetype packs byte-unchanged**. Graded against ADR-124, not against the original criterion text. |
+| Axis-1 field | pack-contribution assertion | Six rows present in the **shared base pack** with the new group, **and both archetype packs byte-unchanged**. Graded against ADR-120, not against the original criterion text. |
 | Axis-1 field | applied to both packs' declared kinds | Holds unchanged; no hardcoded kind list anywhere in the delta. Both packs are literally untouched, so this holds by construction. |
 | Status contract | one traversal plus two projections | The read path resolves without baking a methodology-specific kind into the neutral toolkit. |
 | Status contract | section presence plus caveat cross-check | Both configured and unconfigured paths defined; the unconfigured path emits an **explicit caveat**, never a silent default. |
@@ -301,6 +314,7 @@ Deltas against the Stage-4 plan of record. The Stage-4 output comment is histori
 | **Δ-epic-population** | Roughly 53 open epics | **42** at the pinned baseline, of which 15 are naive candidates and **6** survive gating. The headline defect — zero rollup-close logic — reproduces exactly; the population figure was supporting context, and a 21% shrink does not change the remediation. | Stage 4 re-measurement |
 | **Δ-cross-pr-contention** | Excluding the deploy script "removes 100% of cross-release contention" | **False as a release-wide claim.** It was true for card 3's matrix alone. Cards 1 and 4 add three further sibling intersections, including a **new** one on the label grammar found at Commit 0. All sibling edits are additive, so the exposure is merge-order friction rather than corruption. | Stage 5 (card 4) + Commit-0 re-measurement |
 | **Δ-adr-allocation** | Two design comments named concrete ADR numbers | **Numbers are allocated by rule at Commit 0, never carried forward.** One of the named numbers was already taken on a sibling branch. Three separate probes in one session returned stale or incomplete sets minutes apart, which is precisely why the rule replaces the number. | Operator ruling; Commit-0 measurement |
+| **Δ-adr-rule-corrected** | The rule was *reserve the first slot strictly above every in-flight sibling claim*, leaving two slots for the siblings that must renumber | **The rule is the mainline anchor plus one.** ADR-115 states the number binds at merge, that next-free is never the maximum of the claimed set, and that an unmerged sibling claim is advisory — and it names the reservation strategy as **worse than a duplicate**, because the contiguity gate fails a gap as readily as a duplicate and a merged hole then fails every subsequent pull request. Verified against the enforcing gate with four arms: the reserved slot returns **FAIL — GAP**; the anchor-plus-one returns **PASS**; a duplicate control returns **FAIL — DUPLICATE**, so the PASS is meaningful. **This reverses a hub ruling and needs operator re-ratification;** the remedy either way is one invocation of the sanctioned renumber tool. | Commit-0 measurement against ratified governance |
 
 ---
 
@@ -323,4 +337,5 @@ Designated reference block. Each entry pairs the tracker number with a summary n
 | **ADR-069** | The methodology pack as the plug-and-play composing unit — placement, manifest, selection. |
 | **ADR-070** | The pack composition grammar — pack role and inheritance, the label contribution facet, the work-status projection over the entity base, and the role-conditional kinds relaxation. |
 | **ADR-077** | The cross-cutting control field layer — the pre-registered home should a surfaced blocked marker ever be wanted. |
-| **ADR-124** | This release's first decision record: the Axis-1 delivery work-status label surface — seventh grammar group, load-bearing name prefix, base-pack homing, and blocked-is-derived. |
+| **ADR-115** | The ADR-number binding rule: a number is allocated at authorship and bound at merge, next-free is the mainline anchor plus one and never the maximum of the claimed set, and reserving a slot above an unmerged sibling claim is worse than a duplicate. |
+| **ADR-120** | This release's first decision record: the Axis-1 delivery work-status label surface — seventh grammar group, load-bearing name prefix, base-pack homing, and blocked-is-derived. |
