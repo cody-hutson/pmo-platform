@@ -197,7 +197,7 @@ core/schemas/work-item-type-schema.md
 core/packs/_common/pack.toml
 release/references/specs/ticket-information-architecture.md
 core/schemas/field-lifecycle-matrix.md
-core/ADRs/ADR-120-axis1-work-status-label-surface.md
+core/ADRs/ADR-124-axis1-work-status-label-surface.md
 core/deploy/tools/check-label-parity.py
 release/governance/release-process.md
 release/references/how-to/hub-spoke-bridge.md
@@ -219,7 +219,7 @@ release/releases/plans/methodology-fields-and-statuses_RELEASE_PLAN.md
 | Axis-1 field | shared base pack | **edit** | Six additive label rows plus a header-note reconcile and one enum-comment update. **Both archetype packs stay byte-unchanged** — see the Deviation Log. |
 | Axis-1 field | ticket information architecture | **edit** | New peer section carrying the field row, the valid-transition diagram, and the two-axis comparison table. The categorization section is **not touched** — its static-after-assignment framing must not acquire a dynamic label. |
 | Axis-1 field | field-lifecycle matrix | **edit** | One additive row plus a footnote stating the all-dashes reading is **by design, not omission**. |
-| Axis-1 field | ADR-120 | **add** | The seventh-group decision, the prefix as a hard runtime constraint, the base-pack homing, and the blocked-is-derived ruling. Number is the mainline anchor plus one per the binding rule — see § Commit-0 ADR-number allocation. |
+| Axis-1 field | ADR-124 | **add** | The seventh-group decision, the prefix as a hard runtime constraint, the base-pack homing, and the blocked-is-derived ruling. Number is the mainline anchor plus one per the binding rule — see § Commit-0 ADR-number allocation. |
 | Status contract | pack meta-schema | **edit** | One new peer subsection: status resolution when no platform adapter is configured. The adjacent worked-example subsection, the adapter-binding line, and the existing kind-fallback caveat are **not altered**. |
 | Status contract | a new ADR | **add** | Binding-not-restatement: the contract is K1, the adapter binding stays K4. |
 | Materialization | parity checker | **edit** | Additive read-only emit flag as its own boolean flag — **not** a new output-format value, which the deploy script pins. Sibling parser so the existing signature is untouched. |
@@ -249,7 +249,7 @@ release/releases/plans/methodology-fields-and-statuses_RELEASE_PLAN.md
 | Axis-1 field | field-content assertion over the ticket-architecture spec | The field definition resolves. **Baseline is 0 occurrences at the pinned commit**, so a non-zero post-state is the differential. The workspace-root context file is **dropped** from the method — it is not in this repository. |
 | Axis-1 field | section-presence assertion | The two-axis section is present **after this change**. The grading target is presence, not extension of a pre-existing model — the cited two-axis model did not exist in that file. |
 | Axis-1 field | set-equality diff | The documented value list equals the entity-layer enum exactly: no added blocked state, no collapsed first two states, terminal cancellation retained. |
-| Axis-1 field | pack-contribution assertion | Six rows present in the **shared base pack** with the new group, **and both archetype packs byte-unchanged**. Graded against ADR-120, not against the original criterion text. |
+| Axis-1 field | pack-contribution assertion | Six rows present in the **shared base pack** with the new group, **and both archetype packs byte-unchanged**. Graded against ADR-124, not against the original criterion text. |
 | Axis-1 field | applied to both packs' declared kinds | Holds unchanged; no hardcoded kind list anywhere in the delta. Both packs are literally untouched, so this holds by construction. |
 | Status contract | one traversal plus two projections | The read path resolves without baking a methodology-specific kind into the neutral toolkit. |
 | Status contract | section presence plus caveat cross-check | Both configured and unconfigured paths defined; the unconfigured path emits an **explicit caveat**, never a silent default. |
@@ -287,6 +287,20 @@ Single branch, one pull request, one merge, write-serialized. Commits reference 
 **#1825 AC-4 — method text reconciled to the ratified Report shape.** AC-4's method previously required **G2 and G3** as evidence columns, while the Stage-5 "Report shape" — the ratified artifact — specifies no G3 column; G3 surfaces only under `--json`. Dev Test correctly graded the criterion **PARTIAL** against the method text where Stage 6 recorded **MET** against the Report shape.
 
 **Resolution:** the *method text* is what drifted, not the tool. AC-4's method is reconciled to read: *assert G2 appears as an evidence column in the default report, and that G3 is retrievable under `--json`.* Both gates remain **annotate-only** — neither is adjudicated, because G2 is not mechanically decidable from label topology (`label-taxonomy.md:50–57` places `project:*` on container and children alike). Stage 8 grades AC-4 against this reconciled method, not against Stage 6's inherited MET.
+
+## Re-baseline (Stage 7, 2026-08-07)
+
+**The pinned baseline `f157a811` is superseded.** `release/release-check-enforcement-gates` (PR #4932) merged to `main` as **`52d8a55e`** while this release was in flight, advancing the mainline by 11 commits. Every figure in this plan measured against `f157a811` remains a correct historical measurement **at that anchor** and is retained as such; it is not current state.
+
+**Actions taken at the Stage-7 wave-2 gate:**
+- `git merge origin/main` into the release branch (repo convention per `core/rules/git-workflow.md` — **not** a rebase, which would rewrite 15 commits that several worktrees hold and force a push).
+- **ADR-120 → ADR-124.** The merge brought the sibling's own `ADR-120` to mainline, making this release's claim a genuine duplicate. `renumber-adr.py --detect` independently returned `ANCHOR 120 · NEXT-FREE 121 · ADR-120 DUPLICATE next=124`, with 121/122/123 reported `BINDS` — they sit inside the merged union's slot set and the mainline does not claim them, so ADR-115's exclusion clause leaves them in place. A single-record move, 9 citations swept across 3 files, provenance note written. The sibling's ADR-120 was not touched.
+- **ADR-123** gained its three missing durability sections (`Alternatives Considered`, `Reversibility`, `Related ADRs`).
+- **The Axis-1 transition graph is no longer restated here.** `ticket-information-architecture.md` now cites `entity-lifecycle-protocol.md` §3.10 as the owner. An earlier draft diverged from it at one edge, asserting `cancelled` reachable from *any* non-terminal state where §3.10 enumerates three sources — the exact second-source failure the document's own two-axis boundary forbids.
+
+**Governance the merge brings into force for this release:** `05c965a3 — feat(#3826): make a failing required PR check a Stage-9 NO-GO input`. This release's own Stage 9 runs under that rule. Re-baselining before Stage 8 is what makes that true; holding would have run our GO/NO-GO under superseded rules.
+
+**Stage 9 must re-measure every population figure.** The open-issue denominator was observed moving 44 in ~17 hours during Stage 7; no count in this plan may be carried forward to a gate.
 
 ## Rollback
 
@@ -363,7 +377,7 @@ Designated reference block. Each entry pairs the tracker number with a summary n
 | **ADR-070** | The pack composition grammar — pack role and inheritance, the label contribution facet, the work-status projection over the entity base, and the role-conditional kinds relaxation. |
 | **ADR-077** | The cross-cutting control field layer — the pre-registered home should a surfaced blocked marker ever be wanted. |
 | **ADR-115** | The ADR-number binding rule: a number is allocated at authorship and bound at merge, next-free is the mainline anchor plus one and never the maximum of the claimed set, and reserving a slot above an unmerged sibling claim is worse than a duplicate. |
-| **ADR-120** | This release's first decision record: the Axis-1 delivery work-status label surface — seventh grammar group, load-bearing name prefix, base-pack homing, and blocked-is-derived. |
+| **ADR-124** | This release's first decision record: the Axis-1 delivery work-status label surface — seventh grammar group, load-bearing name prefix, base-pack homing, and blocked-is-derived. |
 | **ADR-121** | This release's second decision record: the status-resolution fallback when no platform adapter is configured, and the binding of that contract to the adapter layer. Its § Consequences is the citable home for the symptom-honesty statement. |
 | **ADR-122** | This release's third decision record: the sub-task status mirror stays a point-in-time snapshot, and label materialization gets a read-only emit path rather than an automated one. |
 | **ADR-123** | This release's fourth decision record: the epic rollup-close surface is an audit rather than a gate, and its two undecidable gates are annotated rather than adjudicated. |
@@ -419,4 +433,4 @@ This release gives the delivery **work-status axis** a field, a live label surfa
 - Release plan: this file, top — `release/releases/plans/methodology-fields-and-statuses_RELEASE_PLAN.md`
 - Milestone: `methodology-fields-and-statuses` (milestone 265) — see § References for the per-card index
 - User-facing release note: authored at Stage 13 Close at `release/releases/notes/vX.Y_RELEASE_NOTES.md`, where the version binds at the Stage-12 atomic claim per ADR-092. This section is the operator-facing pre-merge artifact and does not substitute for that note.
-- Decision records: ADR-120, ADR-121, ADR-122, ADR-123 — summarized in § References
+- Decision records: ADR-124, ADR-121, ADR-122, ADR-123 — summarized in § References

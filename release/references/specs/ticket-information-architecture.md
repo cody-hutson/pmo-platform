@@ -253,13 +253,20 @@ Invalid transitions (e.g., Proposed → Done, Bundled → Proposed) indicate a p
 
 The value domain is the generic Axis-1 base machine owned by the entity layer ([`entity-field-schemas.md`](../../../core/schemas/entity-field-schemas.md) §3.18 V-WI-04). It is cited here, never restated as a second enum: a copy that drifts from the entity layer is the failure this citation avoids.
 
-**Valid transitions:**
+**Valid transitions — owned elsewhere, cited here.** The Axis-1 transition graph is owned by
+[`core/standards/entity-lifecycle-protocol.md`](../../../core/standards/entity-lifecycle-protocol.md) **§3.10**,
+which enumerates each edge with its triggering agent and qualifying evidence. **This section does not restate it.**
+Restating a transition set beside the enum it derives from is exactly the second-source failure this document's own
+two-axis boundary forbids — and an earlier draft of this section diverged from §3.10 at one edge by asserting
+`cancelled` reachable from *any* non-terminal state, where §3.10 enumerates three sources.
 
-```
-backlog → ready → in-progress → in-review → done
-                                              (done is terminal)
-cancelled  ← reachable from any non-terminal state (terminal)
-```
+The **value enum** (V-WI-04) is `backlog, ready, in-progress, in-review, done, cancelled`, read verbatim from
+[`core/schemas/entity-field-schemas.md`](../../../core/schemas/entity-field-schemas.md) `:633`; `done` and `cancelled`
+are terminal. For *which* transitions between those values are valid, and who may perform them, read §3.10.
+
+> **Open at the entity layer, deliberately not resolved here:** §3.10 carries `in-review → cancelled` in **neither**
+> its valid nor its `[INVALID-TRANSITION]` table. That is a gap in the owning spec, not in this projection, and it
+> routes to the entity layer rather than being answered by a downstream document.
 
 **Blocked is not a value.** A blocked item still occupies a lifecycle position, so blocked-ness is a *derived condition* of an unsatisfied `BLOCKS` / `DEPENDS_ON` relationship rather than an Axis-1 state — the platform already carries that edge, and storing the condition as a value would be a second source of truth for a fact the edge already holds.
 

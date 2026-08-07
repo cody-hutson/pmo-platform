@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-120 — The Axis-1 delivery work-status label surface is its own grammar group with its own name prefix, homed in the shared base pack, and blocked is not one of its values
+title: ADR-124 — The Axis-1 delivery work-status label surface is its own grammar group with its own name prefix, homed in the shared base pack, and blocked is not one of its values
 status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
 date: 2026-08-07
 release: methodology-fields-and-statuses
@@ -17,13 +17,15 @@ source_observations:
   - "The two value domains share the tokens for active work and for completion, and the GitHub label namespace is flat. Two cards in one release were about to contribute rows into that shared namespace."
 ---
 
-# ADR-120 — The Axis-1 delivery work-status label surface is its own grammar group with its own name prefix, homed in the shared base pack, and blocked is not one of its values
+# ADR-124 — The Axis-1 delivery work-status label surface is its own grammar group with its own name prefix, homed in the shared base pack, and blocked is not one of its values
 
 ## Status
 
 **Proposed** — flips to **Accepted** when the operator ratifies it at the release close gate. Authored at Stage 6 per the Stage-6 ADR-authoring precedent. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
 
 **Numbering.** This record's number is `anchor(mainline) + 1`, derived at Engineering Commit 0 against the mainline anchor, per the rule ADR-115 ratifies. At that instant three sibling branches held unmerged claims on this same number and one of them also held the next. Those claims are **advisory** and do not bind the sequence. A reservation strictly above them was considered and rejected: it lands a multi-number hole, and the contiguity gate fails a gap exactly as readily as a duplicate — a duplicate inconveniences one branch, a gap blocks the repository. The rejection is not theoretical here; the gate was run against both candidates at Commit 0 and returned FAIL-on-gap for the reserved number and PASS for this one, with a duplicate control arm confirming the gate is not gap-only. If a sibling merges first, this record renumbers at merge time by the sanctioned tool, and this section gains a numbering-provenance note.
+
+**Numbering provenance — `120 → 124`.** Held **ADR-120** branch-local; renumbered to **ADR-124** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 120. In-release citations that read "ADR-120" denote this record.
 
 ## Context
 

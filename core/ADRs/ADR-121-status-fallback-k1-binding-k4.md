@@ -118,6 +118,6 @@ The one asymmetry worth naming is temporal rather than technical: once the route
 | **ADR-070** | The pack composition grammar. Its work-status projection over the entity base is the layer this fallback governs the *resolution* of; this record adds a constraint on adapters and re-founds nothing. |
 | **ADR-077** | The cross-cutting control layer, whose adapter-expression posture Decision (1) mirrors: the value domain is declared in the grammar, the host expression is operator-local. |
 | **ADR-115** | The ADR-number binding rule this record's numbering follows, and whose rejection of reserving a slot above unmerged sibling claims this record's § Status applies and verifies against the gate. |
-| **ADR-120** | This release's first record, the Axis-1 label surface. Decision (2) states the relationship deliberately: the dependency is parameterized, not coupled — this record references none of that record's label rows, groups, or state literals. |
+| **ADR-124** | This release's first record, the Axis-1 label surface. Decision (2) states the relationship deliberately: the dependency is parameterized, not coupled — this record references none of that record's label rows, groups, or state literals. |
 | **ADR-062** | Canonical-spec-edit-wins. Applied here: the originating card's premises were superseded by live state at design time, and its body was left as historical record rather than amended. |
 | **ADR-092** | The version-identity decision governing the release this record ships in — slug-primary in flight, version bound at the atomic claim. |

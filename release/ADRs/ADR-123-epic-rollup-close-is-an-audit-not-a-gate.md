@@ -89,3 +89,24 @@ The tool can close candidates, but only under double opt-in: an apply flag **plu
 **The exemption is documented, not amended.** This record does not propose making epics carry lifecycle labels. That would trade a small, well-understood blind spot for a large invariant-maintenance obligation across a container tier whose children already carry the state. The blind spot is instead covered by an external detective sweep — which is the appropriate instrument for a deliberate exemption.
 
 **What this record does not settle.** Whether any individual epic *should* close remains an operator judgment on every candidate, permanently. This record makes the population visible, the mechanical part reliable, and the judgment part explicit — it does not automate the judgment, and the design's central claim is that it should not.
+
+
+## Alternatives Considered
+
+| Option | Verdict | Why |
+|---|---|---|
+| **(a) Detective audit alone** | Rejected | A capability with no invocation cadence re-creates this card's own originating failure — the thing exists and nobody runs it. |
+| **(b) Pipeline step alone** | Rejected | Fails on false-positive cost. A naive rollup signal over-matches at 14 of 15; gating a release on a predicate that is not mechanically decidable converts a reporting problem into a blocking one. |
+| **(c) Hybrid — report-only audit + signal-only close-out phase + a named Stage-13 paragraph** | **SELECTED** | Supplies the capability, the cadence, and the name, while gating nothing. Not invented for this card: `automated-closeout.sh` phases 16 and 16.5 already invoke population-scoped detective tools in dry-run and surface their reports. |
+| **(d) Host the check in `deploy.sh --check`** | Rejected **on the merits** | Recorded so it is not re-proposed. It would make a blocking gate out of a non-decidable predicate — and `type:epic` is exempt from the status-label invariant (`label-taxonomy.md:99`), so a gate cannot assert on the field at all. |
+
+## Reversibility
+
+**CHEAP · confidence HIGH.** Every artifact is additive: one net-new report-only tool, one signal-only close-out phase that renumbers nothing, two appended governance paragraphs, and two allowlist rows. Reverting the merge in first-parent form returns every surface in one operation. The audit creates no labels, mutates no issue, and gates nothing, so there is no repository state to unwind — this record carries none of the not-git-native rollback burden that the label-materialization half of this release does.
+
+## Related ADRs
+
+- **ADR-124 — Axis-1 work-status label surface.** Establishes the work-status group this release's other cards project over. Independent of this record: the audit reads epic membership, not work-status.
+- **ADR-122 — the sub-task status mirror is not resynced.** Same release; shares the finding that a specification without a bound writer is not an implemented behaviour.
+- **ADR-121 — K1 status fallback / K4 adapter binding.** Same release; its § Consequences carries this release's symptom-honesty statement.
+- **ADR-115 — an ADR number claim binds at merge.** Governs this record's own number, which moved from an earlier allocation when a sibling release merged ahead of it.
