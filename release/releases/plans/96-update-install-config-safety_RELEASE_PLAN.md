@@ -28,7 +28,7 @@ Four open build cards, one theme: **the install/update path stops losing operato
 - **#1531's residual is one function, not "the installer prompts".** `setup-workspace.sh` has exactly **4** interactive prompt sites; three already degrade safely on closed stdin. Only `resolve_token` hard-fails.
 - **Two ACs on #1531 were mutually unsatisfiable as written** — AC-1 said "template defaults" while the template ships `""` for every required identity field and AC-2 forbids substituting empty. Restated at the gate as *each token's **declared** non-interactive default*.
 - **A live managed-key config-loss defect was found inside the gate's own subject.** `[paths].cowork_install_path` is blanked on every first install: the resolver stores `[COWORK_INSTALL_PATH]` while the writer reads the registered `[COWORK_INSTALL_PATH_BASE]`. Operator-approved for in-scope fix (D-1531-D Option 1).
-- **ADR-119 ratified at Stage 5, scoped CLAUDE.md-only** — no JSON-structural model. That decoupled #1355 from #3831 and let #1355 **expand** to own the `settings.json` refresh under ADR-120.
+- **ADR-120 ratified at Stage 5, scoped CLAUDE.md-only** — no JSON-structural model. That decoupled #1355 from #3831 and let #1355 **expand** to own the `settings.json` refresh under ADR-121. *(Both records shifted +1 from their Stage-4/Stage-5 draft numbers after a concurrent release claimed 119 on the mainline. Every ADR number in this plan is the SHIPPED number — see DEV-6.)*
 - **The sharpest assertion in the release is a probe-shape one.** Five production consumers read `operator.toml` with a **line-anchored, section-blind** `grep -E '^key'`. A section-aware assertion would pass on an indented re-emit that every one of those consumers would miss — silently dropping the **autonomy ceiling** to its fallback. The gate probes with the consumers' own shape.
 
 ## Commit-0 Version Re-Verify
@@ -62,8 +62,8 @@ Run at Engineering Commit 0 on **2026-08-06 (Thursday)** per the release-identit
 |---|---|---|---|
 | #1531 | `S` (2) | `setup-workspace.sh` non-interactive fresh install + `operator.toml` config-preservation regression gate | E1 |
 | #1842 | `M` (4) | Operator config surface for git-native release automation (toggles + no-op degradation) | E2 |
-| #3831 | `L` (8) | CUSTOMIZABLE update-refresh mechanism (gated on ADR-119) | E3 |
-| #1355 | `M` (4) | Managed `settings.json` overwrite is unguarded (expanded at Stage 5 to own the refresh; carries ADR-120) | E4 |
+| #3831 | `L` (8) | CUSTOMIZABLE update-refresh mechanism (gated on ADR-120) | E3 |
+| #1355 | `M` (4) | Managed `settings.json` overwrite is unguarded (expanded at Stage 5 to own the refresh; carries ADR-121) | E4 |
 
 **Closed and out of build scope:** #1354 (delivered by v3.86 #2232) · #1492 (delivered 2026-06-27). Their closure rationale was re-read at Stage 4 and holds.
 
@@ -72,17 +72,17 @@ Run at Engineering Commit 0 on **2026-08-06 (Thursday)** per the release-identit
 ## Dependency Graph
 
 ```
-ADR-119 (Accepted) ═══hard═══► #3831      #3831 AC-1 requires status: Accepted
-ADR-119 ┄┄soft, conditional┄► #1355       RESOLVED at Stage 5 → DECOUPLES
+ADR-120 (Accepted) ═══hard═══► #3831      #3831 AC-1 requires status: Accepted
+ADR-120 ┄┄soft, conditional┄► #1355       RESOLVED at Stage 5 → DECOUPLES
 #1842 ┄┄soft┄► #1531                       #1531's gate fixture must cover #1842's operator.toml surface
 #1531 ⋈ #1842 ⋈ #1355   file contention   docs/scripts/setup-workspace.sh
 #1531 ⋈ #3831 ⋈ #1355   file contention   core/deploy/tests/test_upgrade_config_durability.sh
 #3831 ⋈ #1355           file contention   core/standards/composition-surface-spec.md · docs/UPDATE.md
 ```
 
-**Circular-chain check: zero cycles.** Transitive closure over the six edges yields a DAG rooted at ADR-119 with #1531/#1842 as independent sources. Sensitivity arm: injecting a synthetic `#1355 ⇒ ADR-119` edge produces a detected cycle, so the checker can see one.
+**Circular-chain check: zero cycles.** Transitive closure over the six edges yields a DAG rooted at ADR-120 with #1531/#1842 as independent sources. Sensitivity arm: injecting a synthetic `#1355 ⇒ ADR-120` edge produces a detected cycle, so the checker can see one.
 
-**The conditional edge resolved at Stage 5.** ADR-119 was ratified **CLAUDE.md-only** — no JSON-structural composition model; `composition-surface-spec.md` §2.3 stands verbatim. That selects the *decoupled* branch: #1355's mechanism is independent of #3831's design, and the blanket serialization the milestone description implied is **not** warranted. #1355 stays last on file-contention grounds alone.
+**The conditional edge resolved at Stage 5.** ADR-120 was ratified **CLAUDE.md-only** — no JSON-structural composition model; `composition-surface-spec.md` §2.3 stands verbatim. That selects the *decoupled* branch: #1355's mechanism is independent of #3831's design, and the blanket serialization the milestone description implied is **not** warranted. #1355 stays last on file-contention grounds alone.
 
 ## Implementation Sequence
 
@@ -92,9 +92,9 @@ ADR-119 ┄┄soft, conditional┄► #1355       RESOLVED at Stage 5 → DECOUP
 |---|---|---|
 | 0 | **Commit 0** — this plan file | Plan on disk before any implementation commit |
 | **E1** | **#1531** (S) | Foundation. Lands `--non-interactive` on `setup-workspace.sh` and the preservation suite in `test_upgrade_config_durability.sh` — the two most-contended files — first, so every later card rebases onto a settled base. Depends on nothing. |
-| **E2** | **#1842** (M) | Immediately after, so the `operator.toml` surface E1's gate asserts actually exists in this release (CIAC-1). Pulled earlier than the milestone description's step 5: its "fully independent" claim was falsified by three verified couplings. Does **not** depend on ADR-119. |
-| ⛔ | **ADR-119 Accepted** | **HARD GATE — a Stage-5→Stage-6 boundary condition on #3831 alone, not an Engineering step.** **DISCHARGED:** ratified at Stage 5 Collective Review (operator-rendered, 2026-08-06), scope CLAUDE.md-only, mechanism = extend `COMPOSITION_SURFACE_FILES` rather than a new `CUSTOMIZABLE_FILES` array. |
-| **E3** | **#3831** (L) | Once ADR-119 is Accepted. Largest, highest-reversibility-cost card; goes after the two cheap ones so a NO-GO on the ADR would have cost the least sunk work. |
+| **E2** | **#1842** (M) | Immediately after, so the `operator.toml` surface E1's gate asserts actually exists in this release (CIAC-1). Pulled earlier than the milestone description's step 5: its "fully independent" claim was falsified by three verified couplings. Does **not** depend on ADR-120. |
+| ⛔ | **ADR-120 Accepted** | **HARD GATE — a Stage-5→Stage-6 boundary condition on #3831 alone, not an Engineering step.** **DISCHARGED:** ratified at Stage 5 Collective Review (operator-rendered, 2026-08-06), scope CLAUDE.md-only, mechanism = extend `COMPOSITION_SURFACE_FILES` rather than a new `CUSTOMIZABLE_FILES` array. |
+| **E3** | **#3831** (L) | Once ADR-120 is Accepted. Largest, highest-reversibility-cost card; goes after the two cheap ones so a NO-GO on the ADR would have cost the least sunk work. |
 | **E4** | **#1355** (M) | Last. Shares `setup-workspace.sh` with E1/E2 and `composition-surface-spec.md` + `docs/UPDATE.md` with E3 — landing last means it rebases once onto a settled base and reconciles both governance surfaces in one informed pass. |
 
 **Delivery strategy.** D-C **SINGLE** (one `release/96-update-install-config-safety` branch, one PR, one merge). Justified by the contention map: three of four cards claim `test_upgrade_config_durability.sh` and three claim `setup-workspace.sh`, so per-issue branches would move contention from commit-order to PR-merge-order without reducing it, while adding rebase cost on two thin-history files.
@@ -114,25 +114,41 @@ ADR-119 ┄┄soft, conditional┄► #1355       RESOLVED at Stage 5 → DECOUP
 
 ## File Change Matrix
 
-**Machine-readable path list** — one repo-relative path per line, for deterministic extraction by Stages 7 / 8 / 9.
+**Machine-readable path list** — one repo-relative path per line, for deterministic extraction by Stages 7 / 8 / 9. **Reconciled at the pre-PR pass against the landed diff** (`git diff --name-only origin/main...HEAD`, n=32) so the extraction target and the tree agree; see DEV-7 for the three phantom rows removed and the surfaces added.
 
 ```
 docs/scripts/setup-workspace.sh
+docs/scripts/validate-install.sh
 core/CLAUDE.md.template
-core/deploy/tests/test_upgrade_config_durability.sh
-install.sh
-docs/INSTALL.md
-update.sh
+core/settings.json.template
+core/config/platform-config.toml.template
 core/deploy/compose.py
 core/deploy/composition-surface-manifest.sh
+core/deploy/deploy.sh
+core/deploy/lib-composition.sh
+core/deploy/tests/test_upgrade_config_durability.sh
 core/deploy/tests/test_compose.py
-core/config/operator.toml.template
-core/settings.json.template
+core/deploy/tests/test_install_end_to_end.sh
+core/deploy/tests/test_lib_composition.sh
+core/hooks/block-autonomy-ceiling.sh
+core/hooks/prime-autonomy-ceiling-cache.sh
+core/hooks/tests/block-autonomy-ceiling.test.sh
+core/hooks/tests/prime-autonomy-ceiling-cache.test.sh
+core/schemas/platform-config-schema.md
 core/standards/composition-surface-spec.md
-core/ADRs/ADR-119-composition-surface-customizable-files-expansion.md
-core/ADRs/ADR-120-settings-json-operator-key-durability.md
+core/standards/depersonalization-spec.md
+core/ADRs/ADR-120-claude-md-composition-surface-recategorization.md
+core/ADRs/ADR-121-settings-json-baseline-anchored-refresh.md
+install.sh
+update.sh
+docs/INSTALL.md
 docs/UPDATE.md
+docs/platform-config-reference.md
 release/governance/release-process.md
+release/tools/lib/platform-toggle.sh
+release/tools/tests/test_platform_toggle.sh
+release/releases/plans/96-update-install-config-safety_RELEASE_PLAN.md
+.github/workflows/release-tooling-smoke.yml
 ```
 
 ### Per-path intent
@@ -146,13 +162,19 @@ release/governance/release-process.md
 | `docs/INSTALL.md` | E1 | **edit** | Flag-table row + reconcile the "via interactive prompts" prose. Reconcile, do not annotate. |
 | `update.sh` | E3 | **edit** | Customizable regeneration phase (sibling to the managed-section phase); workspace-root resolver tier. |
 | `core/deploy/compose.py` | E3 | **edit** | Emit the markdown marker form. The **read** path already handles it; scope is the emitter, not the parser. |
-| `core/deploy/composition-surface-manifest.sh` | E3 | **edit** | Extend `COMPOSITION_SURFACE_FILES` per ADR-119. **Bash-3.2 constraint:** plain assignment only — no `declare -a`. |
+| `core/deploy/composition-surface-manifest.sh` | E3 | **edit** | Extend `COMPOSITION_SURFACE_FILES` per ADR-120. **Bash-3.2 constraint:** plain assignment only — no `declare -a`. |
 | `core/deploy/tests/test_compose.py` | E3 | **edit** | New case: markdown marker **emission** (existing coverage is extraction-only). |
-| `core/config/operator.toml.template` | E2 | **edit** | Git-automation toggles + always-on declarations + detection/degradation rule. No key named `automation_level` outside `[automation]` (R-5). |
+| `core/deploy/lib-composition.sh` · `core/deploy/tests/test_lib_composition.sh` | E3, E4 | **edit** | The dialect-aware writer/reader half of the composition primitive plus its unit suite. Not in the Stage-4 matrix — see DEV-7. |
+| `core/deploy/deploy.sh` · `docs/scripts/validate-install.sh` · `core/deploy/tests/test_install_end_to_end.sh` | E3, E4 | **edit** | Deploy-check + install-validation + end-to-end coverage that had to move with the re-categorization and the settings guard. Not in the Stage-4 matrix — see DEV-7. |
+| `core/config/platform-config.toml.template` | E2 | **edit** | **This is where #1842's config surface actually landed** — a new `[git_release_automation]` section with three boolean toggles, NOT `operator.toml`. Always-on declarations + detection/degradation rule stated in-section. **CIAC-1.** |
+| `release/tools/lib/platform-toggle.sh` · `release/tools/tests/test_platform_toggle.sh` · `.github/workflows/release-tooling-smoke.yml` | E2 | **add** | #1842's terminal in-code absent-key resolver (AI-002), its suite, and the CI smoke that runs it. Not in the Stage-4 matrix — see DEV-7. |
+| `core/schemas/platform-config-schema.md` · `docs/platform-config-reference.md` | E2 | **edit** | Schema + operator reference rows for the new section. Not in the Stage-4 matrix — see DEV-7. |
+| `core/hooks/block-autonomy-ceiling.sh` · `core/hooks/prime-autonomy-ceiling-cache.sh` (+ their two `tests/` suites) | E2 | **edit** | The two autonomy-ceiling readers hardened from section-BLIND to section-AWARE while deliberately keeping the column-0 anchor (strict parity), so #1531's P-7 premise stays true of them. Discharges **R-5 / AI-001** at the reader rather than only at the writer. Not in the Stage-4 matrix — see DEV-7. |
+| `core/config/operator.toml.template` | — | **NO EDIT** | The Stage-4 matrix assigned #1842's toggles here. **They did not land here** — `platform-config.toml.template` is the platform-behavior surface and `operator.toml` is the operator-identity surface (ADR-022 split). The row is retained as a NO-EDIT so the "no second `automation_level`" constraint (R-5) stays visible: it is discharged by construction, since the two surfaces are different files. **CIAC-1.** |
 | `core/settings.json.template` | E4 | **edit** | Per the #1355 design. |
-| `core/standards/composition-surface-spec.md` | E3, E4 | **edit** | E3 amends under ADR-119; E4 reconciles after. **CIAC-2.** |
-| `core/ADRs/ADR-119-…md` | E3 | **add** | The formal-ADR gate. Number re-verified: `check-adr-numbers.py` → contiguous 001..118 at the Stage-4 pin. |
-| `core/ADRs/ADR-120-…md` | E4 | **add** | Allocated at Stage 5 after #1842 recorded *no ADR required*, so 120 was never consumed. The spoke-proposed 121 was corrected to 120 to preserve contiguity. |
+| `core/standards/composition-surface-spec.md` · `core/standards/depersonalization-spec.md` | E3, E4 | **edit** | E3 amends under ADR-120; E4 reconciles after. **CIAC-2.** |
+| `core/ADRs/ADR-120-claude-md-composition-surface-recategorization.md` | E3 | **add** | The formal-ADR gate for #3831. **Drafted as ADR-119; shipped as ADR-120** — a concurrent release claimed 119 on the mainline mid-run (DEV-6). The Stage-4 "contiguous 001..118 at the Stage-4 pin" re-verification is superseded by that claim; allocation is `anchor(origin/main) + 1` per ADR-115, not `max(claimed_set) + 1`. |
+| `core/ADRs/ADR-121-settings-json-baseline-anchored-refresh.md` | E4 | **add** | The formal-ADR gate for #1355's expanded scope. **Drafted as ADR-120; shipped as ADR-121.** The Stage-5 note that "the spoke-proposed 121 was corrected to 120 to preserve contiguity" is **falsified** — 121 is the number this record actually holds, because the sibling above consumed 120 after the mainline took 119. Contiguity is a consequence of the anchor rule, never an input to it. |
 | `docs/UPDATE.md` | E3, E4 | **edit** | E3: the Customizable row. E4: the Layer-2 overlay guidance. **CIAC-3.** |
 | `release/governance/release-process.md` | E2 | **edit** | Config-gating + no-op degradation narrative. |
 | `core/deploy/tests/run-install-regression.sh` | — | **NO EDIT** | `test_upgrade_config_durability.sh` is already registered in the explicit `REGRESSION_MEMBERS` array. #1531 AC-4 is satisfied by construction — a registration line would be a no-op diff on a shared file. |
@@ -187,8 +209,8 @@ Baseline `c0122aa0`. `prior` = commits touching the path across all history.
 
 | # | Risk | Sev | Rev. | Conf. | Mitigation / Owner |
 |---|---|---|---|---|---|
-| **R-1** | **ADR-119 is a hard gate on the release's largest card** (#3831 is 8 of 18 pts). | CRITICAL | EXPENSIVE | HIGH | **DISCHARGED** — ratified at Stage 5 Collective Review, scope CLAUDE.md-only. The pre-agreed deferral path was not needed. |
-| **R-2** | **`composition-surface-spec.md` §2.3 forecloses a comment-fence for `settings.json`** — JSON has no comment syntax. An ADR-119 assuming a symmetric fence would contradict the spec it amends. | CRITICAL | EXPENSIVE | HIGH | **DISCHARGED** — ADR-119 scoped CLAUDE.md-only; §2.3 stands verbatim. #1355 then expanded to own the `settings.json` refresh under ADR-120. |
+| **R-1** | **ADR-120 is a hard gate on the release's largest card** (#3831 is 8 of 18 pts). | CRITICAL | EXPENSIVE | HIGH | **DISCHARGED** — ratified at Stage 5 Collective Review, scope CLAUDE.md-only. The pre-agreed deferral path was not needed. |
+| **R-2** | **`composition-surface-spec.md` §2.3 forecloses a comment-fence for `settings.json`** — JSON has no comment syntax. An ADR-120 assuming a symmetric fence would contradict the spec it amends. | CRITICAL | EXPENSIVE | HIGH | **DISCHARGED** — ADR-120 scoped CLAUDE.md-only; §2.3 stands verbatim. #1355 then expanded to own the `settings.json` refresh under ADR-121. |
 | **R-3** | **No release-identity mode declared (G3-19).** | HIGH | CHEAP | HIGH | **DISCHARGED** — declared at the Stage-4 gate: mode `versioned`, bump-class intent `minor`. |
 | **R-4** | **Test-file contention: 3 of 4 cards claim `test_upgrade_config_durability.sh`** (thin history — weak regression signal). | HIGH | CHEAP | HIGH | Strict E1→E3→E4 append-only-new-suite ordering with coordinated suite letters P/C/S. **CIAC-4.** |
 | **R-5** | **`block-autonomy-ceiling.sh` pinned SECTION-BLIND-GREP assumption.** The hook resolves the autonomy ceiling by `grep '^automation_level'` without parsing the `[automation]` section. A second same-named key silently mis-resolves it — **fail-open on a security control**. | HIGH | MODERATE | HIGH | #1842 introduces no `automation_level` key outside `[automation]`; #1531 Suite P asserts `grep -c '^automation_level' == 1`. **AI-001.** |
@@ -202,8 +224,8 @@ Baseline `c0122aa0`. `prior` = commits touching the path across all history.
 
 ## Cross-Issue Acceptance Criteria
 
-- [ ] **CIAC-1 (#1531 × #1842 on `core/deploy/tests/test_upgrade_config_durability.sh` + `core/config/operator.toml.template`):** whatever `operator.toml` surface #1842 lands — a new named table or new keys under `[automation]` — is covered by #1531's preservation gate: the seeded fixture contains that surface and asserts it survives the installer round-trip with no table and no key dropped. *Method:* `grep -qE '<the surface #1842 landed>' core/deploy/tests/test_upgrade_config_durability.sh` **AND** `bash core/deploy/tests/run-install-regression.sh` exits 0. *Graded at Stage 9 on the merged PR.*
-- [ ] **CIAC-2 (#1355 × #3831 on `core/standards/composition-surface-spec.md`):** after both land, the spec states **one** categorization for `settings.json` — no residual pairing of §2.3's "wholly Customizable … not Composition-surface" with an unreconciled refresh claim, and every amended clause cites its authorizing ADR. *Method:* `grep -n 'not yet implemented\|wholly Customizable\|COMPOSITION_SURFACE_FILES' core/standards/composition-surface-spec.md` — every hit is either reconciled-to-shipped or explicitly scoped by ADR-119/ADR-120; zero unreconciled pairs. *Graded at Stage 9.*
+- [ ] **CIAC-1 (#1531 × #1842 on `core/config/platform-config.toml.template` × `core/deploy/tests/test_upgrade_config_durability.sh`) — RESTATED at the pre-PR pass (operator decision D-N).** The Stage-4 form asked whether #1531's preservation gate covered "whatever `operator.toml` surface #1842 lands", and carried an unfilled `<the surface #1842 landed>` placeholder as its method. **#1842 landed no `operator.toml` surface at all** — its config went to `core/config/platform-config.toml.template` under a new `[git_release_automation]` section — so the coverage question is vacuous and the *real* surviving coupling is **non-interference**, which is what AI-001 / R-5 always named. The autonomy-ceiling readers resolve their dial with a **column-0 anchor**, so a second column-0 `automation_level` anywhere in the config surface #1531's gate round-trips would resolve ambiguously and silently drop the ceiling to its fallback. The constraint: **#1842's shipped surface introduces no key that collides with the `operator.toml` key namespace #1531's Suite P pins.** It is discharged *by construction* — the two surfaces are different files under the ADR-022 identity/behavior split — and the shipped `[git_release_automation]` header states the same disjointness ("different FILES … no shared key name or key prefix"). #1531's Suite P-7 holds the complementary half, asserting the dial resolves exactly once at column 0 in the seeded `operator.toml` fixture. *Method:* `grep -c '^automation_level' core/config/platform-config.toml.template` — expect zero. *Graded at Stage 9 on the merged PR.*
+- [ ] **CIAC-2 (#1355 × #3831 on `core/standards/composition-surface-spec.md`):** after both land, the spec states **one** categorization for `settings.json` — no residual pairing of §2.3's "wholly Customizable … not Composition-surface" with an unreconciled refresh claim, and every amended clause cites its authorizing ADR (ADR-120 for the `CLAUDE.md` category **assignment**, ADR-121 for the Customizable category's update-time **behavior**; neither amends §2.3). **Method restated at the pre-PR pass:** the Stage-4 method was a three-alternate substring grep, which exits 0 whenever *any* alternate matches — and `COMPOSITION_SURFACE_FILES` always matches — so it passed unconditionally and could not fail. The falsifiable residue is the unreconciled hedge itself: the spec's "specified but not yet implemented" wording is what an unreconciled pairing would leave behind. *Method:* `grep -c 'not yet implemented' core/standards/composition-surface-spec.md` — expect zero. *Graded at Stage 9.*
 - [ ] **CIAC-3 (#1355 × #3831 on `docs/UPDATE.md`):** the Customizable row and the Layer-2 overlay guidance agree — the file states one refresh mechanism for `settings.json` with no surviving contradiction between the two cards' edits. *Method:* `grep -n 'settings\.json\|settings\.local\.json\|not refreshed by' docs/UPDATE.md` — the two sections are mutually consistent. *Graded at Stage 9.*
 - [ ] **CIAC-4 (#1531 × #3831 × #1355 on `core/deploy/tests/test_upgrade_config_durability.sh`):** the merged file runs green end-to-end with all three new suites present **and** pre-existing Suites F, G and T still passing, with no suite-letter collision, and the HARD sandbox invariant (`mktemp -d` root redirection, trap cleanup, before/after per-file-hash manifest of the real `$HOME/.claude` byte-identical) holding across the combined run. *Method:* `bash core/deploy/tests/run-install-regression.sh` exits 0 and its summary shows no net assertion loss. *Graded at Stage 9.*
 
@@ -223,7 +245,7 @@ Baseline `c0122aa0`. `prior` = commits touching the path across all history.
 
 **#1842 — git-automation config surface.** Standalone no-consumer verification, four assertions in catch order: (1) **absent-key** default, not false-key default — the production state of every existing install, since `schema_migrate()` never migrates; (2) off-path no-op is *silent*, not merely harmless — no error, warning, or non-zero exit; (3) the new surface survives `write_operator_toml` unchanged; (4) autonomy-ceiling non-interference — `grep -c '^automation_level' == 1` and the resolved ceiling unchanged from pre-change.
 
-**#3831 — CUSTOMIZABLE refresh.** ADR-119 `status: Accepted`; sandboxed perturbed managed-section source → `update.sh` exits `EX_OK 0` (not `EX_NOCHANGE`); operator content outside the fence byte-identical; `compose.py` emits the markdown marker form; resolver correct under all precedence paths.
+**#3831 — CUSTOMIZABLE refresh.** ADR-120 `status: Accepted`; sandboxed perturbed managed-section source → `update.sh` exits `EX_OK 0` (not `EX_NOCHANGE`); operator content outside the fence byte-identical; `compose.py` emits the markdown marker form; resolver correct under all precedence paths.
 
 **#1355 — `settings.json` operator-key durability.** Positive **and** negative arms: with an operator key present → the key survives or is migrated; with no operator keys → clean exit and **no** warning (the negative arm is what catches a mis-firing guard). Build against **4** missing registrations plus the `Stop` block — the corrected measurement, taken against `~/Claude/.claude/settings.json` (the deployed target), not `~/.claude/settings.json`.
 
@@ -268,16 +290,17 @@ Every count in this release carries its denominator, a sensitivity arm with an o
 | D-1531-D | `cowork_install_path` blanking | **Option 1 — fix in-scope.** Two one-token edits that must land together (AI-005) | 2026-08-06 |
 | D-1531-E | Gate placement | **Extend** `test_upgrade_config_durability.sh` — no new harness, no `REGRESSION_MEMBERS` edit | 2026-08-06 |
 | D-1531-F | Suite-letter coordination | **P** = #1531 · **C** = #3831 · **S** = #1355 | 2026-08-06 |
-| D-D | ADR-119 | **Status `Proposed` → `Accepted`.** Scope **CLAUDE.md only**; mechanism = **extend `COMPOSITION_SURFACE_FILES`**, not a new array. Overturns #3831's own AC-2 — Stage 5 working as intended | 2026-08-06 |
-| D-E | #1355 scope | **EXPANDS to own the `settings.json` refresh** (Tier 2 `[SCOPE CHANGE]`), carrying **ADR-120**. Keeps the Outcome Statement true as written rather than narrowing it | 2026-08-06 |
+| D-D | ADR-120 (drafted as ADR-119) | **Status `Proposed` → `Accepted`.** Scope **CLAUDE.md only**; mechanism = **extend `COMPOSITION_SURFACE_FILES`**, not a new array. Overturns #3831's own AC-2 — Stage 5 working as intended | 2026-08-06 |
+| D-E | #1355 scope | **EXPANDS to own the `settings.json` refresh** (Tier 2 `[SCOPE CHANGE]`), carrying **ADR-121** (drafted as ADR-120). Keeps the Outcome Statement true as written rather than narrowing it | 2026-08-06 |
 | — | #1842 reader semantics | **Strict-parity reader.** The permissive variant would have *raised* the ceiling `recommend → bounded_auto` on 2 of 14 fixtures for an operator who changed nothing — a silent security-posture widening delivered by an update. Rejected on evidence | 2026-08-06 |
-| — | #1842 ADR requirement | **None required** — which is why ADR-120, not 121, is free for #1355 | 2026-08-06 |
+| — | #1842 ADR requirement | **None required.** The Stage-5 corollary drawn from this — *"which is why ADR-120, not 121, is free for #1355"* — was **falsified in flight** and is corrected here: a concurrent release claimed 119 on the mainline, so #3831's record took 120 and #1355's took **121** after all. #1842 needing no ADR remains true; the number it freed was consumed by the shift, not by #1842. See DEV-6 | 2026-08-06 |
+| **D-N** | **CIAC-1 restatement** (pre-PR pass) | **RESTATED to the surface that actually shipped.** #1842 landed its config in `core/config/platform-config.toml.template` `[git_release_automation]`, **not** `operator.toml`, so the Stage-4 coverage question was vacuous and its method carried an unfilled `<the surface #1842 landed>` placeholder that made `verify-release-plan.sh` exit 3. Restated as the **non-interference** constraint AI-001 / R-5 always named, with an executing method. CIAC-2's method was restated in the same pass for the same class of defect — it was a substring grep that could not fail | 2026-08-07 |
 
 ## Action Items
 
 | ID | Item | Owner | State |
 |---|---|---|---|
-| **AI-001** | #1842 must not introduce a second `automation_level` key (or the hook must become section-aware) | #1842 design + DT | Resolved into #1842's ACs at Stage 5; asserted by Suite P-7 |
+| **AI-001** | #1842 must not introduce a second `automation_level` key (or the hook must become section-aware) | #1842 design + DT | **Closed — BOTH limbs satisfied.** #1842 introduced no `automation_level` key at all (its surface is a different file entirely — **CIAC-1**), *and* both autonomy-ceiling readers were hardened from section-BLIND to section-AWARE, keeping the column-0 anchor so #1531's P-7 premise stays true of them. Asserted by Suite P-7 |
 | **AI-002** | The no-op contract defaults on an **absent** key, not `false` | #1842 | OPEN — satisfied by the shipped resolver; verified at Stage 7/8 |
 | **AI-003** | Stage 8 verifies #1842 standalone with no consumer present | Stage 8 | OPEN |
 | **AI-004** | Stage 9 A6.6 re-measures the in-flight sibling roster | Stage 9 | OPEN |
@@ -287,13 +310,19 @@ Every count in this release carries its denominator, a sensitivity arm with an o
 
 **DEV-1 — the pinned baseline moved before Engineering started.** Stage 4 pinned `origin/main` at `c0122aa0`; the release branch is cut from `86bc649e` — **7 commits of drift**, the `v4.12` close-out chain (`release-notes-and-learnings` Stage-13 corpus update plus a re-emit resolver fix). Resolved by construction: the branch is cut from post-merge `main`, and every count in this plan that depends on the tree is restated against the Commit-0 baseline. Verified non-colliding with this release's matrix: the drift touches `release/releases/` corpus files and `release/tools/reemit-release-bodies.sh`, none of which appear in the File Change Matrix.
 
-**DEV-2 — R-1 and R-2 were discharged before Engineering opened, not carried.** Both CRITICAL risks were gated on ADR-119, which was ratified at Stage-5 Collective Review with a CLAUDE.md-only scope. Recorded rather than deleted so the Stage-9 reviewer sees that the two highest-severity entries were closed by a decision, not by omission.
+**DEV-2 — R-1 and R-2 were discharged before Engineering opened, not carried.** Both CRITICAL risks were gated on ADR-120, which was ratified at Stage-5 Collective Review with a CLAUDE.md-only scope. Recorded rather than deleted so the Stage-9 reviewer sees that the two highest-severity entries were closed by a decision, not by omission.
 
-**DEV-3 — the #3831/#1355 mechanism inverted at Stage 5.** ADR-119 was ratified as an **extension of `COMPOSITION_SURFACE_FILES`**, not the new `CUSTOMIZABLE_FILES` array the Stage-4 plan and #3831's own AC-2 both assumed. The Stage-4 File Change Matrix entry "Add the `CUSTOMIZABLE_FILES` array" is superseded accordingly, and #1355 **expanded** (Tier 2 `[SCOPE CHANGE]`) to own the `settings.json` refresh rather than the release narrowing its Outcome Statement.
+**DEV-3 — the #3831/#1355 mechanism inverted at Stage 5.** ADR-120 was ratified as an **extension of `COMPOSITION_SURFACE_FILES`**, not the new `CUSTOMIZABLE_FILES` array the Stage-4 plan and #3831's own AC-2 both assumed. The Stage-4 File Change Matrix entry "Add the `CUSTOMIZABLE_FILES` array" is superseded accordingly, and #1355 **expanded** (Tier 2 `[SCOPE CHANGE]`) to own the `settings.json` refresh rather than the release narrowing its Outcome Statement.
 
 **DEV-4 — #1531 gained a fifth file the Stage-4 matrix does not list.** `core/CLAUDE.md.template` enters the matrix under D-1531-D Option 1. Contention is **0** — no sibling card touches it — but #3831 reads its post-edit state later in the release, so the E1 edit is deliberately kept to a single token.
 
 **DEV-5 — a hub measurement was taken against the wrong file and is corrected here.** The `settings.json` registration gap was first measured against `~/.claude/settings.json` (Claude Code's user-global config, which carries no `hooks` key). The deployed target is `~/Claude/.claude/settings.json`. Re-measured: **18** distinct `.sh` registered in the template vs **14** deployed — **4** missing plus the `Stop` block, not 3. The decision is unaffected; the build target is not.
+
+**DEV-6 — both ADR numbers shifted +1 mid-run, and the shift DID require a citation sweep.** Drafted at Stage 5 as ADR-119 (#3831) and ADR-120 (#1355). A concurrent release — the `ci-selftest-and-check-hardening` line — claimed **119** on the mainline before either draft was written to disk, and under ADR-115 next-free is `anchor(origin/main) + 1`, so both advanced: #3831's record ships as **ADR-120**, #1355's as **ADR-121**. `release/ADRs/ADR-119-selftest-coverage-is-discovered-with-a-committed-manifest-floor.md` is that other release's record and is **unrelated to this one** — it must not be repointed or removed.
+
+Both shipped records state that the renumber "required no citation sweep". **That claim was false and is corrected in the records themselves.** It held for the ADR *files* — neither was ever created at its drafted number — but not for this plan, which had already been written at Commit 0 against the drafted numbers and carried **24** `ADR-119` references and **10** `ADR-120` references, all of them meaning the two in-release records, plus **two ADR file paths that never existed** in the machine-readable File Change Matrix. Every one was re-classified and repointed at the pre-PR pass; **zero** referred to the real mainline ADR-119. The corpus itself never drifted — `composition-surface-spec.md`, `setup-workspace.sh` and the test suites were authored after the shift and already cite 120/121 correctly. The lesson is narrow and worth keeping: a renumber's blast radius is the set of artifacts already written against the old number, which at Commit-0-authored-plan timing is never empty.
+
+**DEV-7 — the File Change Matrix was reconciled to the landed diff at the pre-PR pass.** The matrix declares itself a machine-readable path list "for deterministic extraction by Stages 7 / 8 / 9", so a stale list mis-aims the reviewer rather than merely reading oddly. Measured against `git diff --name-only origin/main...HEAD` (n=**32**): **19** landed paths were absent from the list and **3** listed paths were never touched. The three phantoms were the two non-existent ADR filenames (DEV-6) and `core/config/operator.toml.template` — the surface the Stage-4 matrix assigned #1842's toggles to, which they did not land on. The absent 19 are the surfaces the four Stage-5 designs grew past the Stage-4 matrix: the platform-toggle library and its suite plus the CI smoke that runs it, the schema and operator-reference rows for the new config section, the two autonomy-ceiling readers and their suites, the composition primitive and its unit suite, `deploy.sh` / `validate-install.sh` / the end-to-end suite, `depersonalization-spec.md`, and the plan file itself. The list now matches the tree exactly.
 
 ## Out of Scope — Logged, Not Acted On
 
@@ -317,14 +346,14 @@ The install and update path stops losing operator configuration and stops requir
 |---|---|---|
 | #1531 | `--non-interactive` fresh install + `operator.toml` preservation gate (Suite P) + the `cowork_install_path` blanking fix | IN PROGRESS |
 | #1842 | Operator config surface for git-native release automation, degrading to a no-op on an absent key | PENDING |
-| #3831 | `update.sh` refreshes the Customizable files, under ADR-119 | PENDING |
-| #1355 | Managed `settings.json` operator keys migrated rather than dropped, under ADR-120 | PENDING |
+| #3831 | `update.sh` refreshes the Customizable files, under ADR-120 | PENDING |
+| #1355 | Managed `settings.json` operator keys migrated rather than dropped, under ADR-121 | PENDING |
 
 All four are **marked as closed at Stage 13** via the release close-out; none closes at merge.
 
 ### Key decisions
 
-- **ADR-119 ratified CLAUDE.md-only**, extending `COMPOSITION_SURFACE_FILES` rather than minting a parallel array — which decoupled #1355 from #3831 and let it expand to own the `settings.json` refresh under ADR-120.
+- **ADR-120 ratified CLAUDE.md-only**, extending `COMPOSITION_SURFACE_FILES` rather than minting a parallel array — which decoupled #1355 from #3831 and let it expand to own the `settings.json` refresh under ADR-121.
 - **`--non-interactive`, not `--accept-defaults`** — the flag names the invariant both acceptance criteria assert, where the alternative would have promised exactly the silent substitution one of them forbids.
 - **The preservation gate probes with the consumers' own shape.** A section-aware assertion would have passed on an indented re-emit that four production readers — including two that resolve the autonomy ceiling — would have missed.
 - **#1842 takes the strict-parity reader.** The permissive variant silently *raised* the autonomy ceiling for an operator who changed nothing.
