@@ -138,7 +138,12 @@ name: Release tooling smoke
 #                  reason -> the engine's own --self-test fails on a parse error;
 #                  break the schema-v1 emit so the doc
 #                  tracer's normalized output changes -> the blast-radius tool-family
-#                  test fails; revert the carve-out's un-carved re-test so the handle is
+#                  test fails (that regression now runs against a COMMITTED golden
+#                  fixture under release/tools/tests/fixtures/blast-radius-f1/ rather
+#                  than a script reconstructed from git history at run time, so it is
+#                  hermetic and reads no git; and the suite runs under
+#                  BLAST_RADIUS_TESTS_STRICT so a skipped assertion is RED rather than a
+#                  silent pass); revert the carve-out's un-carved re-test so the handle is
 #                  suppressed again on a deciders: line -> the carve-out suite's FX-1 /
 #                  FX-7 / AC-2' arms fail; "fix" the disagreement by deleting the
 #                  carve-out so both gates go strict -> its FX-2 / AC-3' arms and its
@@ -274,10 +279,35 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0   # blast-radius test recovers the pre-refactor blast-radius.sh
-                           # from this file's git history for the F1 before-vs-after
-                           # normalized-diff regression; a shallow checkout would leave
-                           # only the current blob and degrade F1 to a determinism check.
+          # RETAINED for this job's SIBLING self-tests, NOT for the blast-radius test.
+          # After #3818 that test reads a committed golden fixture and makes ZERO git
+          # history calls; it no longer justifies this line and is not why it stays.
+          #
+          # This job's macOS self-test partition reads origin/main and the tag set:
+          #   automated-closeout.sh       — git diff / cat-file origin/main:…   (60 refs)
+          #   check-release-body-drift.sh — git ls-tree origin/main -- …/notes  (39 refs)
+          #   reemit-release-bodies.sh    — origin/main + tag reads             (10 refs)
+          #
+          # Reconciling this against the selftest-discovery job's stated doctrine below
+          # ("a tool that later does need history is a tool whose self-test is not
+          # hermetic; the fix is at that tool, not a blanket fetch-depth: 0"):
+          #   1. That doctrine is APPLIED here, not overridden. The blast-radius test was
+          #      the non-hermetic tool, and the fix landed AT THE TOOL — a committed
+          #      golden — rather than by leaning on this line.
+          #   2. It does not reach the three tools above. Their subject IS the
+          #      relationship to origin/main (does the release body match the canonical
+          #      note on main; does the close-out state match main's release corpus).
+          #      Making them hermetic would delete what they check, not fix them.
+          #   3. The failure mode is SILENT, which is why this cannot be left to discover
+          #      itself. Verified: in a depth-1 single-branch checkout with origin/main
+          #      absent, check-release-body-drift.sh --self-test still EXITS 0 while
+          #      degrading its git-reading arms to "N/A (never FAIL)". Dropping this line
+          #      turns those assertions into silent no-ops, not into failures — the exact
+          #      success-without-checking shape #3818 exists to remove.
+          #   4. The cost argument is job-scoped and stays satisfied: the
+          #      selftest-discovery job keeps its shallow checkout, so nothing there is
+          #      slowed to accommodate anything here.
+          fetch-depth: 0
 
       - name: Verify prerequisites
         run: |
@@ -308,12 +338,23 @@ jobs:
         run: python3 release/tools/check-selftest-coverage.py --run --runner=macos
 
       - name: Blast-radius tool-family tests (schema-v1 lib + domain fan-out)
-        # Exercises the blast-radius doc tracer's default-path regression under a
-        # NORMALIZED diff (proves the shared-lib refactor is a no-op) AND the
+        # Exercises the blast-radius doc tracer's default-path regression against a
+        # COMMITTED golden fixture (proves the shared-lib refactor is a no-op) AND the
         # domain-blast-radius software import-graph scanner + its field semantics.
-        # Offline + deterministic (mktemp fixtures scanned via --root; no network).
+        # Offline + deterministic — the F1 corpus is a committed fixture copied to a
+        # mktemp tree and scanned via --root; no network, and after #3818 no git either.
         # Without this step, ZERO CI reference blast-radius — the tool could rot
         # unexercised. Requires jq (present on the macOS runner via /usr/bin/jq).
+        #
+        # STRICT makes a SKIP red. Every skip predicate in that suite is unreachable in a
+        # well-formed checkout (the golden is a committed file; jq is on the image), so a
+        # skip here means the harness or fixture is broken — not an environment
+        # condition. This is what keeps the suite from reporting a clean exit 0 when the
+        # assertion it exists to make did not run, which is the defect #3818 describes.
+        # It is set on THIS STEP ONLY: locally a skip stays advisory so a developer
+        # without jq is not blocked.
+        env:
+          BLAST_RADIUS_TESTS_STRICT: '1'
         run: bash release/tools/tests/test_domain_blast_radius.sh
 
       - name: ADR deciders carve-out — two-gate agreement suite
