@@ -10,24 +10,32 @@
 #   - Marker syntax:                                core/standards/composition-surface-spec.md §2
 #
 # Format per entry (delimiter: pipe):
-#   "<source-relative-path>|<runtime-tier>|<tokens-flag>"
+#   "<source-relative-path>|<runtime-tier>|<tokens-flag>[|<marker-dialect>]"
 #
 #   <source-relative-path>  Path relative to repo root (where the package source lives)
-#   <runtime-tier>          "hook"      → <workspace-root>/.claude/<basename>
-#                           "instance"  → <instance-base>/<basename>
-#                           "hub-state" → <instance-base>/hub-state/<basename>
-#                                         (<instance-base> resolved by
-#                                          lib_compose_resolve_target via the
-#                                          lib-instance-path.sh resolver — #1830)
-#                                         (per core/standards/depersonalization-spec.md §4
-#                                          <OPERATOR_INSTANCE_HUB_STATE_PATH> token resolution
-#                                          — schema templates for hub-state Surfaces A/C +
-#                                          action-items per hub-session-continuity.md §2 +
-#                                          hub-action-tracking.md §2; runtime per-release
-#                                          subdirectories (vX.Y/) created lazily by hub
-#                                          on first surface emit)
+#   <runtime-tier>          "hook"           → <workspace-root>/.claude/<basename>
+#                           "instance"       → <instance-base>/<basename>
+#                           "hub-state"      → <instance-base>/hub-state/<basename>
+#                                              (<instance-base> resolved by
+#                                               lib_compose_resolve_target via the
+#                                               lib-instance-path.sh resolver — #1830)
+#                                              (per core/standards/depersonalization-spec.md §4
+#                                               <OPERATOR_INSTANCE_HUB_STATE_PATH> token resolution
+#                                               — schema templates for hub-state Surfaces A/C +
+#                                               action-items per hub-session-continuity.md §2 +
+#                                               hub-action-tracking.md §2; runtime per-release
+#                                               subdirectories (vX.Y/) created lazily by hub
+#                                               on first surface emit)
+#                           "workspace-root" → <workspace-root>/<basename minus trailing .template>
+#                                              (ADR-120; the only suffix-stripping tier)
 #   <tokens-flag>           "tokens"    → substitute [OPERATOR_*] / [CLAUDE_*] tokens at write
 #                           "raw"       → install verbatim (no substitution)
+#   <marker-dialect>        OPTIONAL 4th field (ADR-120).
+#                           "plain"     → comment-prefixed fence (# === BEGIN … ===)
+#                           "markdown"  → HTML-comment fence (<!-- === BEGIN … === -->)
+#                           ABSENT      → "plain". awk -F'|' '{print $4}' on a 3-field row
+#                                         returns empty, so every pre-ADR-120 row keeps its
+#                                         exact prior behavior with no rewrite.
 #
 # Adding a new composition-surface file: append one row. No other code change needed.
 #
@@ -36,7 +44,7 @@
 # (the macOS system bash), `declare -a` inside a function — or inside a script
 # sourced from a function — makes the array function-local; the caller never
 # sees it. The lib_compose_source_manifest helper IS a function, so any
-# `declare -a` here would silently break all 19 composition-surface installs.
+# `declare -a` here would silently break all 20 composition-surface installs.
 # Plain assignment is global by default in bash 3.2, which is what we need.
 # (Verified: bash 3.2.57(1)-release on Darwin 25.x.)
 
@@ -79,4 +87,55 @@ COMPOSITION_SURFACE_FILES=(
   "release/releases/hub-state/pending-approvals.md.template|hub-state|raw"
   "release/releases/hub-state/action-items.md.template|hub-state|raw"
   "release/releases/hub-state/sessions.md.template|hub-state|raw"
+
+  # Workspace-root tier (<workspace-root>/CLAUDE.md). The operator's top-level
+  # governance file, re-categorized from Customizable to Composition-surface by
+  # ADR-120. First and only `markdown`-dialect entry: its fence is the
+  # HTML-comment form per composition-surface-spec.md §2.2. The
+  # `workspace-root` tier strips the trailing `.template`, so this row targets
+  # <workspace-root>/CLAUDE.md — NOT <workspace-root>/CLAUDE.md.template.
+  #
+  # Token-bearing: the composition writer substitutes the four identity tokens
+  # the template body consumes ([OPERATOR_NAME], [OPERATOR_FIRST_NAME],
+  # [OPERATOR_ROLE_TITLE], [OPERATOR_ORGANIZATION]). All four are REQUIRED at
+  # install, so none can resolve empty and survive unsubstituted into the
+  # composed file — which is the invariant that keeps this row safe under the
+  # installer's own unresolved-token verification gate.
+  "core/CLAUDE.md.template|workspace-root|tokens|markdown"
 )
+
+# --- Install-time token vocabulary (ADR-120 §Decision 8) --------------------
+# LOAD-BEARING COMMENT — NOT documentation. docs/scripts/setup-workspace.sh
+# `compute_active_tokens` greps THIS FILE (alongside core/CLAUDE.md.template and
+# core/settings.json.template) for [(OPERATOR|CLAUDE|COWORK)_*] to derive
+# ACTIVE_TOKENS — the set it prompts for and writes into operator.toml.
+#
+# WHY IT LIVES HERE: this declaration used to sit in core/CLAUDE.md.template's
+# authoring header. ADR-120 makes that template's whole body the managed section,
+# and an OPTIONAL token left empty in operator.toml would then survive
+# unsubstituted into the composed CLAUDE.md and fail the installer's
+# unresolved-token verification gate. The header had to leave the template; the
+# declaration could not simply be deleted with it.
+#
+# DELETING OR RENAMING A TOKEN BELOW SHRINKS ACTIVE_TOKENS. The installer then
+# stops resolving it and write_operator_toml persists it EMPTY — the exact
+# silent-blanking failure the [COWORK_INSTALL_PATH_BASE] pairing fix addressed.
+# Keep the spelling identical to core/standards/depersonalization-spec.md §1 and
+# to compose.py's FIELD_TO_TOKEN. Pinned by test_lib_composition.sh.
+#
+#   [OPERATOR_NAME]            — Operator's full name (required)
+#   [OPERATOR_FIRST_NAME]      — First name; derived as first word of [OPERATOR_NAME]
+#   [OPERATOR_ROLE_TITLE]      — Job title (required)
+#   [OPERATOR_ORGANIZATION]    — Employer / organization (required)
+#   [OPERATOR_EMAIL]           — Workspace owner's email (comms-writer signatures)
+#   [OPERATOR_GIT_EMAIL]       — Git commit-attribution email (settings.json.template)
+#   [OPERATOR_PHONE]           — Workspace owner's phone (optional)
+#   [OPERATOR_GITHUB]          — GitHub handle (optional)
+#   [OPERATOR_HOMEDIR_PATH]    — $HOME at workspace-setup time
+#   [CLAUDE_WORKSPACE_ROOT]    — Claude workspace root path (settings.json.template)
+#   [COWORK_INSTALL_PATH_BASE] — Cowork install dir (depersonalization-spec.md §3.1)
+#   [OPERATOR_PROJECT_NAME]    — Active PMO project name. Retained in the active set
+#                                deliberately: no template body consumes it since
+#                                ADR-120 de-tokenized its one illustrative use, but
+#                                dropping it here would change install prompting,
+#                                which is a separate decision from this one.

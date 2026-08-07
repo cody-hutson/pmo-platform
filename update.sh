@@ -222,6 +222,7 @@ regenerate_managed_sections() {
     local src="${LIB_COMPOSE_ENTRY_SRC}"
     local tier="${LIB_COMPOSE_ENTRY_TIER}"
     local tokens_flag="${LIB_COMPOSE_ENTRY_TOKENS_FLAG}"
+    local dialect="${LIB_COMPOSE_ENTRY_DIALECT}"
 
     local source_file="${REPO_ROOT}/${src}"
     local basename; basename="$(basename "${src}")"
@@ -230,6 +231,10 @@ regenerate_managed_sections() {
     if ! target=$(lib_compose_resolve_target "${basename}" "${tier}" "${WORKSPACE_ROOT}"); then
       continue
     fi
+    # The resolver may strip a suffix (workspace-root tier drops `.template`), so
+    # backups and operator-facing messages name the TARGET file, not the source
+    # template. Identical to `basename` for every non-stripping tier.
+    local target_basename; target_basename="$(basename "${target}")"
 
     count=$((count + 1))
 
@@ -239,7 +244,7 @@ regenerate_managed_sections() {
     fi
 
     if [ ! -f "${target}" ]; then
-      info "Target absent (${basename}); fresh install needed via setup-workspace.sh"
+      info "Target absent (${target_basename}); fresh install needed via setup-workspace.sh"
       continue
     fi
 
@@ -251,8 +256,15 @@ regenerate_managed_sections() {
     # tamper must compare the live body against installed_sha, never against the
     # source-template hash. `|| true` guards the no-match case under set -e
     # (pre-ADR-014 installs carry no installed_sha line).
-    local stored_managed_sha; stored_managed_sha=$(grep -E '^# managed_sha:' "${target}" | head -1 | awk '{print $3}' || true)
-    local stored_installed_sha; stored_installed_sha=$(grep -E '^# installed_sha:' "${target}" | head -1 | awk '{print $3}' || true)
+    # Marker greps are DIALECT-AWARE (ADR-120): a marker line is `# <key>: <hex>`
+    # in the plain dialect and `<!-- <key>: <hex> -->` in the markdown dialect.
+    # A `#`-pinned grep returns empty against a markdown-fenced target, so
+    # stored_managed_sha would never equal source_sha and the file would
+    # regenerate on EVERY run forever — EX_NOCHANGE becomes unreachable.
+    # `awk '{print $3}'` is field-correct for BOTH forms ($1 is the comment
+    # opener, $2 the key, $3 the hex), so only the pattern changes.
+    local stored_managed_sha; stored_managed_sha=$(grep -E '^(# |<!-- )managed_sha:' "${target}" | head -1 | awk '{print $3}' || true)
+    local stored_installed_sha; stored_installed_sha=$(grep -E '^(# |<!-- )installed_sha:' "${target}" | head -1 | awk '{print $3}' || true)
     local live_body_sha; live_body_sha=$(lib_compose_installed_body_sha "${target}" || true)
 
     # --- Tamper detection (runs REGARDLESS of the source-SHA skip) ---
@@ -262,20 +274,20 @@ regenerate_managed_sections() {
     # the anchor is back-filled on the next legitimate regen / --force-regen).
     if [ -n "${stored_installed_sha}" ] && [ "${live_body_sha}" != "${stored_installed_sha}" ]; then
       if [ "${DRY_RUN}" -eq 1 ]; then
-        info "[dry-run] tampered → would back up + regenerate: ${basename}"
+        info "[dry-run] tampered → would back up + regenerate: ${target_basename}"
         regenerated=$((regenerated + 1))
         continue
       fi
       local tamper_backup="${WORKSPACE_ROOT}/.backup-tampered-$(date -u +%Y%m%dT%H%M%SZ)"
       mkdir -p "${tamper_backup}"
-      cp "${target}" "${tamper_backup}/${basename}"
-      warn "tamper detected in managed section of ${basename}; backed up to ${tamper_backup}/${basename}; regenerating from template."
-      if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}"; then
+      cp "${target}" "${tamper_backup}/${target_basename}"
+      warn "tamper detected in managed section of ${target_basename}; backed up to ${tamper_backup}/${target_basename}; regenerating from template."
+      if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "${dialect}"; then
         regenerated=$((regenerated + 1))
-        info "Regenerated (tamper): ${basename}"
+        info "Regenerated (tamper): ${target_basename}"
       else
-        err "Regeneration failed for ${basename}; restoring from tamper backup"
-        cp "${tamper_backup}/${basename}" "${target}"
+        err "Regeneration failed for ${target_basename}; restoring from tamper backup"
+        cp "${tamper_backup}/${target_basename}" "${target}"
         exit "${EX_REGENFAIL}"
       fi
       continue
@@ -287,21 +299,36 @@ regenerate_managed_sections() {
     fi
 
     if [ "${DRY_RUN}" -eq 1 ]; then
-      info "[dry-run] would regenerate: ${basename} (source ${source_sha:0:12} ≠ installed ${stored_managed_sha:0:12})"
+      info "[dry-run] would regenerate: ${target_basename} (source ${source_sha:0:12} ≠ installed ${stored_managed_sha:0:12})"
       regenerated=$((regenerated + 1))
       continue
     fi
 
+    # Unconditional pre-write backup (ADR-120 §Decision 7). This runs on EVERY
+    # real regeneration, independent of the tamper anchor — which matters most
+    # for a workspace-root target, because no installed CLAUDE.md has ever
+    # carried an installed_sha marker, so the tamper-backup path above cannot
+    # fire on its first rewrite. This is the recovery path an EXPENSIVE-
+    # reversibility write depends on.
     local backup_dir="${BACKUP_DIR_ROOT}-$(date -u +%Y%m%dT%H%M%SZ)"
     mkdir -p "${backup_dir}"
-    cp "${target}" "${backup_dir}/${basename}"
+    cp "${target}" "${backup_dir}/${target_basename}"
 
-    if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}"; then
+    # Out-of-fence discard notice (composition-surface-spec.md §3.3). A bare
+    # warning is proportionate for an allowlist; for a workspace-root target —
+    # the operator's top-level governance file — name the path AND the backup
+    # location, so content held outside either fence is recoverable rather than
+    # merely reported lost.
+    if [ "${tier}" = "workspace-root" ]; then
+      info "Regenerating workspace-root target ${target}: content INSIDE the OPERATOR ADDITIONS fence is preserved verbatim; content outside either fence is not carried forward. Pre-write copy: ${backup_dir}/${target_basename}"
+    fi
+
+    if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "${dialect}"; then
       regenerated=$((regenerated + 1))
-      info "Regenerated: ${basename} (backup: ${backup_dir}/${basename})"
+      info "Regenerated: ${target_basename} (backup: ${backup_dir}/${target_basename})"
     else
-      err "Regeneration failed for ${basename}; restoring from backup"
-      cp "${backup_dir}/${basename}" "${target}"
+      err "Regeneration failed for ${target_basename}; restoring from backup"
+      cp "${backup_dir}/${target_basename}" "${target}"
       exit "${EX_REGENFAIL}"
     fi
   done

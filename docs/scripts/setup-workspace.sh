@@ -462,11 +462,23 @@ check_source_repo() {
 }
 
 # --- Section 9: Active token set computation (FM-5 absorption) ---
+# The manifest is a THIRD grep input, not an accident of file layout (ADR-120
+# §Decision 8). ADR-120 makes core/CLAUDE.md.template's whole body a managed
+# section, so its authoring header — which declared the reserved token vocabulary
+# — had to leave the template: an OPTIONAL token resolving empty would otherwise
+# survive unsubstituted into the composed CLAUDE.md and fail run_verification_gate.
+# The vocabulary declaration moved to core/deploy/composition-surface-manifest.sh
+# and that file is grepped here, so ACTIVE_TOKENS is byte-identical across the
+# move. Without this third input the set silently loses [OPERATOR_EMAIL],
+# [OPERATOR_PHONE], [OPERATOR_GITHUB], [OPERATOR_HOMEDIR_PATH], and
+# [COWORK_INSTALL_PATH_BASE] — the last being the token whose resolver/writer
+# pairing was just repaired, so the regression would be a silent re-break.
 compute_active_tokens() {
   ACTIVE_TOKENS=$(
     grep -hoE '\[(OPERATOR|CLAUDE|COWORK)_[A-Z_]+\]' \
       "${SOURCE_REPO}/core/CLAUDE.md.template" \
       "${SOURCE_REPO}/core/settings.json.template" \
+      "${SOURCE_REPO}/core/deploy/composition-surface-manifest.sh" \
       2>/dev/null \
     | sort -u \
     | tr '\n' ' '
@@ -1069,10 +1081,13 @@ with open(target_path, "w") as f:
 }
 
 substitute_templates() {
-  substitute_template \
-    "${SOURCE_REPO}/core/CLAUDE.md.template" \
-    "${WORKSPACE_ROOT}/CLAUDE.md" \
-    "no"
+  # CLAUDE.md is NOT written here. ADR-120 re-categorized it from Customizable to
+  # Composition-surface: it is a row in core/deploy/composition-surface-manifest.sh
+  # and install_composition_surface_files (Section 15b) is its sole writer at
+  # install, as ./update.sh is at update. Two writers on one file — a whole-file
+  # substitution here plus a marker-fenced write there — is precisely the
+  # divergence that produced the false-regeneration-marker defect this supersedes.
+  # The settings.json arm is retained: it remains wholly Customizable (§2.3).
   substitute_template \
     "${SOURCE_REPO}/core/settings.json.template" \
     "${WORKSPACE_ROOT}/.claude/settings.json" \
@@ -1520,6 +1535,7 @@ install_composition_surface_files() {
     local src="${LIB_COMPOSE_ENTRY_SRC}"
     local tier="${LIB_COMPOSE_ENTRY_TIER}"
     local tokens_flag="${LIB_COMPOSE_ENTRY_TOKENS_FLAG}"
+    local dialect="${LIB_COMPOSE_ENTRY_DIALECT}"
 
     local source_file="${SOURCE_REPO}/${src}"
     if [ ! -f "${source_file}" ]; then
@@ -1532,25 +1548,28 @@ install_composition_surface_files() {
     if ! target=$(lib_compose_resolve_target "${basename}" "${tier}" "${WORKSPACE_ROOT}"); then
       continue
     fi
+    # The resolver may strip a suffix (workspace-root tier drops `.template`), so
+    # operator-facing messages name the TARGET file, not the source template.
+    local target_basename; target_basename="$(basename "${target}")"
 
     if [ -e "${target}" ]; then
       preserved_count=$((preserved_count + 1))
-      info "PRESERVED (operator-state): ${basename}"
+      info "PRESERVED (operator-state): ${target_basename}"
       continue
     fi
 
     if [ "${DRY_RUN}" -eq 1 ]; then
-      info "[dry-run] would install: ${basename} (tier=${tier}, tokens=${tokens_flag})"
+      info "[dry-run] would install: ${target_basename} (tier=${tier}, tokens=${tokens_flag}, dialect=${dialect})"
       installed_count=$((installed_count + 1))
       continue
     fi
 
-    if lib_compose_write "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}"; then
+    if lib_compose_write "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "" "${dialect}"; then
       installed_count=$((installed_count + 1))
-      info "INSTALLED: ${basename}"
+      info "INSTALLED: ${target_basename}"
       printf 'rm-file:%s\n' "${target}" >> "${ROLLBACK_OPS_FILE}"
     else
-      err "Install failed: ${basename}"
+      err "Install failed: ${target_basename}"
       exit 73
     fi
   done
