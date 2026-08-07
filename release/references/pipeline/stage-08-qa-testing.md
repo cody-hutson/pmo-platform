@@ -49,8 +49,9 @@ re-implement their detection — it consumes their own results, the same
 evidence-consumption posture this stage takes toward the Stage-7 runtime suites.
 
 Read every required row with `gh pr checks <PR> --required --json name,state,bucket,link`;
-the command exits non-zero on a failing or pending check and on an unresolvable PR or
-an authentication failure, so branch on the parsed output rather than on the exit code.
+in this `--json` form the command exits **0** even when a required row is failing or
+pending — the exit code signals only an unresolvable PR or an authentication failure —
+so branch on the parsed rows and never on the exit code.
 The `Issue-reference validity gate` is the worked example: the two classes it enforces
 are a bare `#N`-form issue reference placed outside a designated reference block with no
 inline provenance marker, and a deprecated `IMP-NNN` reference. A `bucket` of `fail` on

@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-120 — G1 enforcement authority is class-scoped and release-scoped; detection stays backlog-wide
+title: ADR-120 — G1 enforcement authority is class-scoped and release-scoped; the evaluated population is the deploying milestone
 status: Proposed — flips to Accepted at this release's operator gate. The flip is verified against this file's `status:` field, never inferred from milestone closure, a review comment, or a plan row.
 date: 2026-08-06
 release: release-check-enforcement-gates
@@ -17,7 +17,7 @@ source_observations:
   - "A verdict-enum-decoupled-from-emit resolver already exists in the same file for the same reason, and an emitter that is structurally incapable of incrementing the issue counter already exists beside it. Neither had to be invented."
 ---
 
-# ADR-120 — G1 enforcement authority is class-scoped and release-scoped; detection stays backlog-wide
+# ADR-120 — G1 enforcement authority is class-scoped and release-scoped; the evaluated population is the deploying milestone
 
 ## Status
 
@@ -45,8 +45,14 @@ There is a fourth problem, and it is the one that made this hard rather than mer
 
 **1. Two surfaces, one check.**
 
-- **Layer-B(d) — standing detector.** Sweeps the whole open `status: bundled` population every run, at recommend-tier, never FAIL-capable. Nothing is silenced by this decision. Every structural defect the check found before, it still finds and still reports.
+- **Layer-B(d) — recommend-tier detection.** Every finding outside the gate's FAIL-capable authority is emitted at recommend-tier rather than gating-tier, never FAIL-capable.
 - **Layer-B(g) — release gate.** Evaluates the milestone being deployed and holds the only authority to block.
+
+**What shipped, stated against the code rather than against the intent.** Layer-B(d)'s **tier semantics shipped; its population did not.** Check 22 holds exactly **one** issue-list query and that query carries `--milestone`, so both surfaces read the *same* milestone-scoped population and differ only in tier. There is no backlog-wide sweep. The two-authority split is real and is what this record decides; the claim that detection continues to cover the whole backlog is **not** true of the shipped implementation, and every statement of it in this record has been reconciled to the implementation rather than left standing.
+
+The consequence is the whole point of stating it: a structural G1 defect on a bundled card in **any other milestone** is not demoted to recommend-tier — it is **never evaluated**, and emits at no tier at all. Measured live at `2026-08-07T20:07:19Z` (baseline pinned per audit-baseline discipline; the population is mobile and this figure is not a constant): **207** open `status: bundled` issues spread across **48** milestone buckets, of which **10** sit in the deploying milestone and **197** across the other 47 are outside every query the check makes. The Stage-8 QA measurement of the same structure at its own earlier anchor read 204 of 235 across 46 milestones, and 15 of 16 measurable G1-01 defects emitting at no tier. The two anchors differ because the backlog moved; the **structure** they measure is the same and is not a function of the anchor.
+
+**This is a description correction, not a scope reversal.** The milestone-scoped evaluation is the decision, it stands, and nothing here re-opens it. What was wrong was the record, not the code.
 
 **2. The enforce-population contract.**
 
@@ -61,7 +67,7 @@ There is a fourth problem, and it is the one that made this hard rather than mer
 | Verdict | Meaning | Disposition |
 |---|---|---|
 | `RESOLVED` | a candidate was derived **and validated present-and-open** | gate the resolved milestone |
-| `NONE` | nothing asserted and no release branch attached | **not applicable** — evaluate nothing, block nothing |
+| `NONE` | nothing asserted and no release branch attached | **not applicable** — evaluate nothing, block nothing. Because the two surfaces share one milestone-scoped query, "evaluate nothing" is **total**: no detection runs either, and the run emits no G1 finding at any tier |
 | `UNRESOLVED` | a release context exists but no title validated, or the validator could not be read | fail-closed if **asserted**; advisory if **detected** |
 | `INVALID` | a candidate was derived and rejected — absent, or present but closed | fail-closed if **asserted**; advisory if **detected** |
 
@@ -99,15 +105,16 @@ Three properties of this contract are load-bearing and are stated rather than le
 - The graduation to enforce becomes a decision about a bounded set rather than an unbounded one. The measured shakedown signal also stops being dominated by findings on cards no release owns.
 - Three previously-indistinguishable states — no release in flight, unidentified release, invalid release — become three distinct log shapes with distinct reason tokens. A mis-resolved run is now visible in the same log the graduation decision reads.
 - No new emitter, no new check, no new file, and no third milestone-lookup form. The resolver copies a verdict-enum-decoupled-from-emit shape already in the file; the not-applicable state routes to an emitter that already exists and already cannot escalate.
-- Detection coverage is unchanged. Every finding that used to gate and no longer does is still emitted, at recommend-tier, with its tier named in the message.
+- Within the deploying milestone, a finding that used to gate and no longer does is still emitted, at recommend-tier, with its tier named in the message. **Detection coverage outside that milestone is not preserved** — see the corresponding entry under Negative, which is where this consequence actually lands.
 
 **Negative, and stated rather than minimized.**
 
-- **Findings outside the enforce population lose their teeth.** 108 structural findings move from gating to advisory. They are still reported; nothing forces anyone to act on them. That is the price of a gate that can actually be cleared, and the standing detector plus the named bundling-gate successor are the mitigation.
+- **Findings outside the enforce population lose their teeth — and findings outside the deploying milestone lose their voice.** Two different losses, and the second is the larger one. *Within* the milestone, 108 structural findings move from gating to advisory: still reported, with nothing forcing anyone to act on them. *Outside* it, findings are not demoted — they are **not produced**, because the population is never queried. At the pinned baseline that is 197 of 207 bundled cards across 47 other milestone buckets emitting at no tier. The mitigation is therefore **only** the named bundling-gate successor; the backlog-wide detector is not available as a mitigation because it was not built. Stating it as one would be the same over-claim this ADR was corrected for.
 - **The gate now depends on resolving a release identity**, which is a new class of thing that can be wrong. The four-state contract bounds *how* it can be wrong; it does not eliminate the dependency.
 - **Validation proves existence, not correctness.** A candidate that resolves to a different, concurrently-open release passes validation untouched, and concurrent release branches make that reachable. This residual is **bounded by disclosure, not closed**: the resolved slug, the source that produced it, and the milestone-set denominator are logged before any finding, so a wrong scope is legible at read time rather than silent. This record does not claim otherwise, and a later summary of it must not either.
 - **Branch-name detection is not total over naming history.** Two documented release-branch forms are parsed and both candidates are tried; a third form and any future variant resolve to advisory rather than to a false gating finding. Detached HEAD — which the session protocol prescribes at session end — and post-merge mainline both resolve to `NONE`. Layer-B(g)'s live window is therefore **an attached release branch during Engineering through Plan Review**, narrower than the stage range alone implies.
 - **The warn-mode log now carries three row shapes where it carried one.** Any consumer counting gating rows must filter on shape rather than on presence.
+- **One runtime message still asserts the detector that was not built, and is knowingly left in place.** The `NONE`-branch advisory emitted by the check states that *"the Layer-B(d) backlog-wide detector is unaffected and G1 defects remain visible at recommend-tier"*. Under the shipped single milestone-scoped query that is false: on `NONE` the whole evaluation is skipped and no G1 finding is emitted at any tier. It is **not** corrected here because this reconciliation is scope-locked to the record, and the file carrying that string is under concurrent edit by three sibling cards in this release; a text-only change to a four-way-contended surface buys a merge conflict for no behavioural gain. It is recorded here so a reader who finds the message and this ADR disagreeing knows which one is right — **this record is** — and so the correction is a known, owned follow-on rather than a rediscovery.
 
 **Durability of the contract, stated precisely.** This contract is **fail-closed on an asserted-but-unresolvable or invalid release identity**, and **not-applicable when no release is in flight**. It is **not** fail-closed in the general sense: when no release identity is asserted, Layer-B(g) does not evaluate and does not block, by design. The property that makes the not-applicable branch safe is not a default value but the **emitter** — a helper that contains no mode branch and no issue-counter increment anywhere in its body, and therefore cannot escalate under any future mode flip. A reader summarizing this record as "fail-closed" has mis-stated it. This paragraph exists because an ADR outlives the release that wrote it, and a wrong durability claim outlives them both.
 

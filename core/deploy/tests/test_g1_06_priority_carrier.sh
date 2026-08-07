@@ -37,13 +37,26 @@
 #      Catches: a silently-swallowed stderr, a degraded state rendered clean.
 #   D. Lookup arm — a faithful copy of the per-issue map lookup, driven by the
 #      map arm B produced. Catches: a broken needle, a lost delimiter.
-#   E. Drift guard — four arms, the first of which is restricted to NON-COMMENT
-#      lines precisely because the change's own comments name the delegated
-#      function, so a bare substring grep stays green on a deleted delegation.
-#   F. Self-falsification — constructs the regressed state (delegation deleted,
-#      comment retained) and PROVES arm E discriminates: GREEN on the live
-#      file, RED on the regressed one. If a future edit makes the guard
+#   E. Drift guard — E1 AND E2 are both restricted to NON-COMMENT lines,
+#      because this file's own comments name the delegated function and quote
+#      the superseded carrier forms, so a bare substring grep stays green on
+#      either regression.
+#   F. Self-falsification for E1 — constructs the regressed state (delegation
+#      deleted, comment retained) and PROVES arm E1 discriminates: GREEN on the
+#      live file, RED on the regressed one. If a future edit makes the guard
 #      undiscriminating, THIS arm fails and says so.
+#   G. Self-falsification for E2 — re-injects the ACTUAL pre-fix carrier
+#      matchers and proves E2 goes RED on them and GREEN on the live file, with
+#      the superseded chimera pattern run alongside as the control that shows
+#      it was green on BOTH. An assertion that cannot fail is not a guard.
+#   H. Stderr-capture guard — the delegate region's `2>&1` is SHIPPED BEHAVIOUR
+#      that no other arm holds. The region extractor above stops at the heredoc
+#      terminator, so the redirection on the closing line is outside every
+#      extracted program, and arm C exercises the TEST harness's own `2>&1`
+#      rather than deploy.sh's. Reverting the shipped redirection to
+#      `2>/dev/null` therefore left all arms green while the only surviving
+#      artifact was a COMMENT asserting stderr is captured. H is the executable
+#      form of that comment, and it is comment-blind for exactly that reason.
 #
 # Hermetic by construction: no `gh`, no network, no live tracker. It reads the
 # in-repo parser (stdlib-only, __main__-guarded, import-safe) and the in-repo
@@ -241,13 +254,38 @@ else
   fail "E1 no non-comment reference to parse_priority_body — the delegation was removed (a comment mentioning it does not count)"
 fi
 
-# E2 — no local carrier regex has re-grown. This is the arm that stops the
-#      original bug recurring: the check must never bind a carrier itself.
-E2_PATTERN='\*\*(Priority|Severity):\*\*[[:space:]]*P\[1-4\]'
-if /usr/bin/grep -qE "$E2_PATTERN" "$DEPLOY_SH"; then
-  fail "E2 a local carrier regex has re-grown in deploy.sh — change the shared detector instead"
+# E2 — no carrier-specific matcher has re-grown. This is the arm that stops the
+#      original bug recurring, and per ADR-111 ("The carrier is not part of the
+#      contract") it is the ONLY executable guard on that consequence.
+#
+#      PICK A LAYER, AND IT IS SHELL SOURCE. This arm reads deploy.sh, so it
+#      matches the form a carrier matcher takes THERE — an ERE naming a carrier
+#      label alongside a P-level bracket expression, exactly as the original bug
+#      was written:
+#          /usr/bin/grep -qE '\*\*Priority:\*\*[[:space:]]*P[1-4]'
+#
+#      The superseded form of this arm was a CHIMERA of two layers. It required
+#      the literal `**Priority:**` — a RENDERED-BODY form, asterisks unescaped —
+#      immediately followed by the literal `P[1-4]` — a SOURCE form, brackets as
+#      a character class. Neither layer emits both: in source the asterisks are
+#      escaped (`\*\*`), so the substring `**` never appears; in a rendered body
+#      the value is `P2`, never the literal `P[1-4]`. The two halves were
+#      mutually exclusive, so no re-growth could ever match it, and `P[1-4]`
+#      appears nowhere in the live file at all. Arm G proves it on the real
+#      pre-fix tree rather than arguing it here.
+#
+#      NON-COMMENT lines only, for E1's reason: this file's own comments quote
+#      the old carrier forms, and a comment quoting one is not a re-growth.
+#      Carrier HEADING probes in live code (`^### Priority[[:space:]]*$`) are
+#      deliberately NOT matched — they test section PRESENCE and bind no
+#      P-level, and it is binding the level locally that ADR-111 forbids.
+E2_PATTERN='^[[:space:]]*[^#[:space:]].*(Priority|Severity).*P(\[|\()[0-9]'
+E2_SUPERSEDED='\*\*(Priority|Severity):\*\*[[:space:]]*P\[1-4\]'
+_e2_hits=$(/usr/bin/grep -cE "$E2_PATTERN" "$DEPLOY_SH" || true)
+if [[ "${_e2_hits:-0}" -eq 0 ]]; then
+  pass "E2 no carrier-specific matcher in deploy.sh source"
 else
-  pass "E2 no local carrier regex in deploy.sh"
+  fail "E2 ${_e2_hits} carrier-specific matcher(s) re-grown in deploy.sh — delegate to the shared detector instead"
 fi
 
 # E3 — the authority still exists at its cited home.
@@ -324,6 +362,110 @@ if [[ "${_naive_live:-0}" -ge 1 && "${_regressed_removed:-0}" -ge 1 ]]; then
   pass "F CONTROL — the naive substring form is green on BOTH states (live ${_naive_live}, regressed ${_regressed_removed}); the tightening is load-bearing, not cosmetic"
 else
   fail "F CONTROL — could not demonstrate the naive form's blindness; arm F's claim is unproven"
+fi
+
+# ── G. Self-falsification for E2: prove the carrier guard can actually go red ─
+echo ""
+echo "── G. Self-falsification — E2 must be RED on a re-grown carrier matcher ──"
+# The fixture is not invented. These are the ACTUAL two matchers this check
+# carried before the delegation landed, restored verbatim. A guard that cannot
+# go red on the exact state it was written to prevent is not a guard.
+cp "$DEPLOY_SH" "$TMPDIR_T/deploy_carrier.sh"
+cat >> "$TMPDIR_T/deploy_carrier.sh" <<'REGROWN'
+          if ! printf '%s' "$_body" | /usr/bin/grep -qE '\*\*Priority:\*\*[[:space:]]*P[1-4]'; then
+          if ! printf '%s' "$_body" | /usr/bin/grep -qE '\*\*Severity:\*\*[[:space:]]*P[1-4]'; then
+REGROWN
+_e2_regrown=$(/usr/bin/grep -cE "$E2_PATTERN" "$TMPDIR_T/deploy_carrier.sh" || true)
+
+# Directional, so both halves are required — "red on the regressed copy" proves
+# nothing unless the live file is green.
+if [[ "${_e2_hits:-1}" -eq 0 && "${_e2_regrown:-0}" -ge 1 ]]; then
+  pass "G E2 is GREEN on the live file (0) and RED on the re-grown fixture (${_e2_regrown}) — the guard DISCRIMINATES"
+elif [[ "${_e2_hits:-1}" -ne 0 ]]; then
+  fail "G cannot demonstrate discrimination — the LIVE file already matches E2 (${_e2_hits}), so the green half of the assertion is unavailable (see E2)"
+else
+  fail "G E2 is GREEN on the re-grown fixture — the guard cannot detect the regression it exists to prevent"
+fi
+
+# The control that makes arm G mean something: the SUPERSEDED chimera must be
+# shown green on BOTH states. That is the precise defect this rewrite closes —
+# not a mis-aimed guard, but one structurally incapable of firing.
+_sup_live=$(/usr/bin/grep -cE "$E2_SUPERSEDED" "$DEPLOY_SH" || true)
+_sup_regrown=$(/usr/bin/grep -cE "$E2_SUPERSEDED" "$TMPDIR_T/deploy_carrier.sh" || true)
+if [[ "${_sup_live:-1}" -eq 0 && "${_sup_regrown:-1}" -eq 0 ]]; then
+  pass "G CONTROL — the superseded chimera is green on BOTH states (live 0, re-grown 0); it could never have fired, so the rewrite is load-bearing"
+else
+  fail "G CONTROL — the superseded pattern fired (live ${_sup_live}, re-grown ${_sup_regrown}); arm G's premise is unproven"
+fi
+
+# ── H. The SHIPPED stderr capture inside the delegate region ─────────────────
+echo ""
+echo "── H. Stderr capture: the region's 2>&1 is shipped, so it is ASSERTED ────"
+# Why this arm exists. The extractor above stops at the heredoc terminator, so
+# the redirection on the closing line is outside every extracted program, and
+# arm C therefore exercises THIS FILE's `2>&1`, not deploy.sh's. Flipping the
+# shipped redirection to `2>/dev/null` left every other arm green and the only
+# surviving artifact was a comment asserting stderr is captured. H is the
+# executable form of that comment.
+delegate_region() { /usr/bin/sed -n '/G1-06-DELEGATE-BEGIN/,/G1-06-DELEGATE-END/p' "$1"; }
+_noncomment() { /usr/bin/grep -E '^[[:space:]]*[^#[:space:]]' || true; }
+
+"$PY" - "$DEPLOY_SH" "$TMPDIR_T/deploy_discard.sh" <<'PY'
+import sys
+src = open(sys.argv[1], encoding="utf-8").read().splitlines(True)
+out, inside, flipped = [], False, 0
+for line in src:
+    if "G1-06-DELEGATE-BEGIN" in line:
+        inside = True
+    if inside and not line.lstrip().startswith("#") and "2>&1" in line:
+        line = line.replace("2>&1", "2>/dev/null")
+        flipped += 1
+    if "G1-06-DELEGATE-END" in line:
+        inside = False
+    out.append(line)
+open(sys.argv[2], "w", encoding="utf-8").writelines(out)
+sys.stderr.write("flipped=%d\n" % flipped)
+PY
+
+_h_live=$(delegate_region "$DEPLOY_SH" | _noncomment | /usr/bin/grep -cF '2>&1' || true)
+_h_reg=$(delegate_region "$TMPDIR_T/deploy_discard.sh" | _noncomment | /usr/bin/grep -cF '2>&1' || true)
+_d_live=$(delegate_region "$DEPLOY_SH" | _noncomment | /usr/bin/grep -cF '2>/dev/null' || true)
+
+if [[ "${_h_live:-0}" -ge 1 ]]; then
+  pass "H1 the delegate region CAPTURES stderr — ${_h_live} non-comment 2>&1 redirection(s)"
+else
+  fail "H1 no non-comment 2>&1 in the delegate region — stderr is being discarded, and the region comment asserting otherwise is now false"
+fi
+
+if [[ "${_d_live:-0}" -eq 0 ]]; then
+  pass "H2 no discarding redirection on a non-comment line in the delegate region"
+else
+  fail "H2 ${_d_live} discarding redirection(s) in the delegate region — an absent interpreter, a syntax error and a data-shape change would report identically"
+fi
+
+if [[ "${_h_live:-0}" -ge 1 && "${_h_reg:-1}" -eq 0 ]]; then
+  pass "H3 GREEN on the live file (${_h_live}) and RED on the discard fixture (0) — the guard DISCRIMINATES"
+else
+  fail "H3 could not demonstrate discrimination (live ${_h_live}, discard fixture ${_h_reg}) — H1's claim is unproven"
+fi
+
+# Two controls. The first is the entire reason H is comment-blind: the region's
+# OWN comment contains the literal `2>&1`, so a comment-inclusive grep stays
+# green on a file whose executable redirection has been deleted.
+_c_live=$(delegate_region "$DEPLOY_SH" | /usr/bin/grep -cF '2>&1' || true)
+_c_reg=$(delegate_region "$TMPDIR_T/deploy_discard.sh" | /usr/bin/grep -cF '2>&1' || true)
+if [[ "${_c_live:-0}" -ge 1 && "${_c_reg:-0}" -ge 1 ]]; then
+  pass "H CONTROL a — a comment-inclusive region grep is green on BOTH states (live ${_c_live}, discard ${_c_reg}); the prose survives the deletion, which is why H is comment-blind"
+else
+  fail "H CONTROL a — could not demonstrate the comment's blindness; H's comment restriction is unjustified"
+fi
+
+_w_live=$(/usr/bin/grep -cF '2>&1' "$DEPLOY_SH" || true)
+_w_reg=$(/usr/bin/grep -cF '2>&1' "$TMPDIR_T/deploy_discard.sh" || true)
+if [[ "${_w_live:-0}" -ge 1 && "${_w_reg:-0}" -ge 1 ]]; then
+  pass "H CONTROL b — a whole-file grep is green on BOTH states (live ${_w_live}, discard ${_w_reg}); region-scoping is load-bearing, not cosmetic"
+else
+  fail "H CONTROL b — could not demonstrate the whole-file form's blindness"
 fi
 
 echo ""
