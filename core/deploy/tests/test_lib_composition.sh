@@ -260,6 +260,30 @@ test_claude_md_claim_manifest_consistent
 #
 # The assertion is a SET EQUALITY against the pinned vocabulary, not a count: a
 # count would pass a swap (one token dropped, another misspelled in).
+#
+# WHAT THIS TEST DOES AND DOES NOT ASSERT — stated precisely, because the two are
+# easy to conflate and the gate-efficacy standard treats an overclaiming label as a
+# defect in its own right. This test RE-IMPLEMENTS compute_active_tokens' grep
+# rather than invoking it: setup-workspace.sh runs `main "$@"` at end-of-file and
+# carries no source-guard, so the function cannot be sourced without running the
+# whole installer. The consequence is a bounded and DELIBERATE blind spot:
+#
+#   COVERED — a token line dropped from the manifest (arm 1 goes red); the manifest
+#   contributing nothing at all (arm 2); the manifest removed from the installer's
+#   grep inputs entirely (arm 3).
+#
+#   NOT COVERED — a mutation that keeps the manifest path but NARROWS the
+#   installer's own token regex (e.g. dropping COWORK from the alternation). All
+#   three arms here stay green because arm 1 uses this file's copy of the regex,
+#   not the installer's, so [COWORK_INSTALL_PATH_BASE] would silently leave the
+#   real ACTIVE_TOKENS while this test reads 13/0.
+#
+# That gap is CLOSED DOWNSTREAM, not left open: the end-to-end consequence is
+# asserted by test_upgrade_config_durability.sh Suite P arm P-2c, which fails when
+# [paths].cowork_install_path is written blank on a fresh install — which is
+# exactly what a narrowed regex produces. Do not "fix" the labels below by widening
+# what they claim; either keep the claim matched to the assertion, or give
+# setup-workspace.sh a source-guard and invoke the real derivation here.
 printf '\nTest 7: manifest preserves the full install-time token vocabulary (ADR-120)\n'
 test_manifest_declares_full_token_vocabulary() {
   local repo_root derived expected
@@ -297,7 +321,7 @@ test_manifest_declares_full_token_vocabulary() {
     '[OPERATOR_ROLE_TITLE]' \
     | LC_ALL=C sort -u | tr '\n' ' ')
 
-  assert_eq "derived ACTIVE_TOKENS set is unchanged across the header relocation" \
+  assert_eq "the three grep inputs together still carry the full pinned token vocabulary (re-derived here, not read from the installer)" \
     "${expected}" "${derived}"
 
   # Sensitivity control: the manifest alone must contribute a NON-EMPTY set. If
@@ -322,6 +346,11 @@ test_manifest_declares_full_token_vocabulary() {
   # blank — a gate that goes green without asserting its invariant. Verified by
   # mutation: dropping the third input turns this arm red, and the end-to-end
   # consequence red in test_upgrade_config_durability.sh Suite P (P-2, P-2c).
+  #
+  # Its reach is the PATH, not the regex: this arm asserts that setup-workspace.sh
+  # still names the manifest among its grep inputs. A mutation that keeps the path
+  # and narrows the token alternation passes here by construction — see the blind
+  # spot named in this test's header and its downstream catcher, P-2c.
   local setup_script reads_manifest
   setup_script="${repo_root}/docs/scripts/setup-workspace.sh"
   if /usr/bin/grep -qF '${SOURCE_REPO}/core/deploy/composition-surface-manifest.sh' "${setup_script}"; then
@@ -329,7 +358,7 @@ test_manifest_declares_full_token_vocabulary() {
   else
     reads_manifest=0
   fi
-  assert_eq "compute_active_tokens greps the manifest for the vocabulary (ADR-120 §8)" \
+  assert_eq "compute_active_tokens still names the manifest path among its grep inputs (ADR-120 §8)" \
     "1" "${reads_manifest}"
 }
 test_manifest_declares_full_token_vocabulary

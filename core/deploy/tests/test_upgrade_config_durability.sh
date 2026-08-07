@@ -1431,11 +1431,30 @@ set_state_baseline "${SET_STATE}" "" ""
 set_s3_missing_before=$(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${SET_JSON}") | grep -c . || true)
 set_s3_log=$(set_refresh); set_s3_exit=$?
 
-if [ "${set_s3_exit}" -eq 0 ] && printf '%s' "${set_s3_log}" | grep -q 'S-3 MIGRATED operator-added settings'; then
+# The name says MIGRATED, so the assertion must be CONTENT, not the log line that
+# announces it. Asserting only `grep 'S-3 MIGRATED'` would stay green under exactly
+# the rejected alternative this arm exists to exclude — warn about the operator's
+# keys but never move them — because that build still prints the warning. Under
+# gate-efficacy Requirement (a) a log line is a proxy signal and is forbidden as the
+# sole verdict-bearing assertion (the S-10 -> S-10b remedy, applied here).
+# The log grep is RETAINED as a conjunct: it pins the classification that produced
+# the migration, so the arm cannot pass off some other write path as an S-3.
+set_s3_overlay_keys=$(python3 -c '
+import json, sys
+try:
+    doc = json.load(open(sys.argv[1]))
+except Exception:
+    print(0); sys.exit(0)
+print(len(doc) if isinstance(doc, dict) else 0)
+' "${SET_OVERLAY}")
+if [ "${set_s3_exit}" -eq 0 ] \
+   && [ "${set_s3_overlay_keys}" -gt 0 ] \
+   && grep -q 'SUITE_S_OPERATOR_KEY' "${SET_OVERLAY}" \
+   && printf '%s' "${set_s3_log}" | grep -q 'S-3 MIGRATED operator-added settings'; then
   report "S-3 operator-added content is MIGRATED, not merely warned about (AC-1)" 1
 else
   report "S-3 operator-added content is MIGRATED, not merely warned about (AC-1)" 0 \
-    "exit ${set_s3_exit}; $(printf '%s' "${set_s3_log}" | grep -E 'S-[0-5]' | head -2 | tr '\n' '|')"
+    "exit ${set_s3_exit}; overlay_keys=${set_s3_overlay_keys} (expected >0); operator key in overlay=$(grep -q 'SUITE_S_OPERATOR_KEY' "${SET_OVERLAY}" && echo yes || echo NO); $(printf '%s' "${set_s3_log}" | grep -E 'S-[0-5]' | head -2 | tr '\n' '|')"
 fi
 set_s3_named=0
 for set_key in SUITE_S_OPERATOR_KEY 'Bash(suite-s-operator-tool \*)' operator-hook.sh; do
@@ -1678,6 +1697,207 @@ else
   report "S-12 a no-delta re-run leaves settings.json byte-identical and Phase 5d reports no change" 0 \
     "hash_changed=$([ "${set_s12_before}" = "${set_s12_after}" ] && echo no || echo YES); $(printf '%s' "${set_s12_out}" | grep -E 'Phase 5d' | head -1)"
 fi
+
+# --- S-13: THE REBOOTSTRAP PATH. A plain setup-workspace.sh re-run — no flags at
+#     all — over a healthy workspace routes main() -> detect_state_and_route() ->
+#     rebootstrap(), which re-renders the managed settings.json. ADR-121 §Decision 4
+#     scopes the guard to "the new --refresh-settings flow AND the existing
+#     fresh/rebootstrap flows", and this is the arm for the second half.
+#
+# THE DEFECT THIS MUST FAIL ON, stated concretely: rebootstrap() called
+# substitute_templates -> substitute_template directly, overwriting the managed file
+# with no classification. Measured on that build, all three operator shapes were
+# dropped — not migrated, not backed up, zero WARN lines — while --refresh-settings
+# migrated all three from the identical fixture. Suite S had NO rebootstrap arm, so
+# nothing caught it. Remove settings_install_or_guarded_rerender's guarded branch and
+# this arm goes red.
+#
+# A DEDICATED WORKSPACE, deliberately. S-1..S-12 drive ${SET_WS} through a long
+# sequence of hand-written baselines and stripped registrations; routing a
+# no-flag re-run through that state would make the fixture ambiguous. This is a
+# clean install whose ONLY perturbation is the operator injection, so a red result
+# has exactly one cause. Still under ${SBX}, so the R-8 invariant below covers it.
+#
+# ASSERTIONS ARE CONTENT, NOT LOG LINES (gate-efficacy Requirement (a)): the verdict
+# is "the keys are in the overlay and gone from the managed file", which a
+# warn-but-do-not-migrate build fails. The log grep is a conjunct, never the sole
+# assertion — the same S-10 -> S-10b remedy applied to S-3 above.
+printf '\nS-13: the rebootstrap path (a plain re-run) is guard-gated (ADR-121 D-4)\n'
+
+REB_WS="${SBX}/reb-ws"
+REB_CONFIG="${SBX}/reb-config"
+REB_JSON="${REB_WS}/.claude/settings.json"
+REB_OVERLAY="${REB_WS}/.claude/settings.local.json"
+mkdir -p "${REB_WS}" "${REB_CONFIG}"
+sed -e "s|^claude_workspace_root = .*|claude_workspace_root = \"${REB_WS}\"|" \
+    -e "s|^operator_homedir_path = .*|operator_homedir_path = \"${SBX}/home\"|" \
+    "${SBX}/config/operator.toml" > "${REB_CONFIG}/operator.toml"
+chmod 600 "${REB_CONFIG}/operator.toml"
+
+reb_install_log=$(GIT_CONFIG_GLOBAL="${SBX}/gitcfg/ok" "${SETUP}" \
+  --source-repo "${REPO_ROOT}" --workspace-root "${REB_WS}" \
+  --config-root "${REB_CONFIG}" --non-interactive 0<&- 2>&1)
+reb_install_exit=$?
+
+if [ "${reb_install_exit}" -eq 0 ] && [ -f "${REB_JSON}" ]; then
+  report "S-13 precondition: fresh install deployed a managed settings.json (the guarded re-render must not break first install)" 1
+else
+  report "S-13 precondition: fresh install deployed a managed settings.json" 0 \
+    "exit ${reb_install_exit}; $(printf '%s' "${reb_install_log}" | tail -3 | tr '\n' '|')"
+fi
+
+if [ ! -f "${REB_JSON}" ]; then
+  report "S-13 rebootstrap arms (deployed settings.json present)" 0 "missing: ${REB_JSON}"
+else
+
+# Inject the same three operator shapes S-3 uses, into the MANAGED file.
+python3 -c '
+import json, sys
+p = sys.argv[1]
+doc = json.load(open(p))
+doc["env"] = {"REBOOT_OPERATOR_KEY": "operator-value"}
+doc["permissions"]["allow"].append("Bash(reboot-operator-tool *)")
+doc["hooks"]["PreToolUse"].append({"matcher": "RebootMatcher",
+    "hooks": [{"type": "command", "command": "/opt/reboot/operator-hook.sh"}]})
+with open(p, "w") as f:
+    json.dump(doc, f, indent=2); f.write("\n")
+' "${REB_JSON}"
+
+# PRECONDITION (the arm must not be vacuous): all three shapes ARE in the managed
+# file, and NONE are in the overlay, before the re-run.
+reb_before=0
+for reb_key in REBOOT_OPERATOR_KEY 'reboot-operator-tool' 'operator-hook.sh'; do
+  grep -q "${reb_key}" "${REB_JSON}" && reb_before=$((reb_before + 1))
+done
+reb_overlay_before=0
+for reb_key in REBOOT_OPERATOR_KEY 'reboot-operator-tool' 'operator-hook.sh'; do
+  grep -q "${reb_key}" "${REB_OVERLAY}" 2>/dev/null && reb_overlay_before=$((reb_overlay_before + 1))
+done
+if [ "${reb_before}" -eq 3 ] && [ "${reb_overlay_before}" -eq 0 ]; then
+  report "S-13 precondition: 3 of 3 operator shapes present in the managed file, 0 in the overlay (assertion is not vacuous)" 1
+else
+  report "S-13 precondition: 3 of 3 operator shapes present in the managed file, 0 in the overlay" 0 \
+    "managed=${reb_before} (expected 3); overlay=${reb_overlay_before} (expected 0)"
+fi
+
+# Confirm the route really is rebootstrap — otherwise a green result below could
+# come from some other flow and the arm would be measuring the wrong subject.
+reb_state_ok=$(jq -r '.verification_passed // false' "${REB_WS}/.claude/.workspace-setup.state" 2>/dev/null)
+
+# THE RE-RUN. No flags: exactly what an operator types.
+reb_log=$(GIT_CONFIG_GLOBAL="${SBX}/gitcfg/ok" "${SETUP}" \
+  --source-repo "${REPO_ROOT}" --workspace-root "${REB_WS}" \
+  --config-root "${REB_CONFIG}" --non-interactive 0<&- 2>&1)
+reb_exit=$?
+
+if [ "${reb_state_ok}" = "true" ] && printf '%s' "${reb_log}" | grep -q 'RE-BOOTSTRAP flow'; then
+  report "S-13 the no-flag re-run really did route to rebootstrap (subject control)" 1
+else
+  report "S-13 the no-flag re-run really did route to rebootstrap (subject control)" 0 \
+    "verification_passed=${reb_state_ok}; flow=$(printf '%s' "${reb_log}" | grep -E '(FRESH-INSTALL|RE-BOOTSTRAP|REFRESH-[A-Z]+) flow' | head -1)"
+fi
+
+# THE HEADLINE ASSERTION — content, not a log line. All three shapes must be in the
+# overlay after a plain re-run, exactly as they are after --refresh-settings.
+reb_migrated=0
+for reb_key in REBOOT_OPERATOR_KEY 'reboot-operator-tool' 'operator-hook.sh'; do
+  grep -q "${reb_key}" "${REB_OVERLAY}" 2>/dev/null && reb_migrated=$((reb_migrated + 1))
+done
+if [ "${reb_exit}" -eq 0 ] && [ "${reb_migrated}" -eq 3 ]; then
+  report "S-13 a plain re-run MIGRATES all 3 operator shapes to the overlay (was 0 of 3 — silently dropped — before the guard reached this path)" 1
+else
+  report "S-13 a plain re-run MIGRATES all 3 operator shapes to the overlay" 0 \
+    "exit ${reb_exit}; migrated=${reb_migrated} of 3. 0 of 3 means the rebootstrap re-render is UNGUARDED again — operator keys are being destroyed, not preserved."
+fi
+
+# The other half of the contract: the managed file regenerates clean.
+if grep -q 'REBOOT_OPERATOR_KEY' "${REB_JSON}"; then
+  report "S-13 the managed file is regenerated clean after the re-run" 0 "operator key still present in ${REB_JSON}"
+else
+  report "S-13 the managed file is regenerated clean after the re-run" 1
+fi
+
+# Migration is not destruction: a pre-migration copy must exist.
+if ls -d "${REB_WS}"/.backup-pre-update-* >/dev/null 2>&1; then
+  report "S-13 a pre-migration backup of the managed file exists (migration is recoverable, not destructive)" 1
+else
+  report "S-13 a pre-migration backup of the managed file exists" 0 "no .backup-pre-update-* under ${REB_WS}"
+fi
+
+# The re-render must still deliver the platform registrations it exists to deliver.
+reb_missing=$(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${REB_JSON}") | grep -c . || true)
+if [ "${reb_missing}" -eq 0 ]; then
+  report "S-13 the full template registration set is present after the re-run (preservation did not cost the refresh)" 1
+else
+  report "S-13 the full template registration set is present after the re-run" 0 \
+    "${reb_missing} registration(s) missing after rebootstrap"
+fi
+
+# S-13 probe validity: the shape-counting comparator used above must be provably
+# able to return a non-3. A count whose control cannot move is a broken probe.
+reb_control=0
+for reb_key in REBOOT_ABSENT_SENTINEL_KEY 'reboot-absent-sentinel-tool' 'reboot-absent-sentinel.sh'; do
+  grep -q "${reb_key}" "${REB_OVERLAY}" 2>/dev/null && reb_control=$((reb_control + 1))
+done
+if [ "${reb_control}" -eq 0 ] && [ "${reb_migrated}" -eq 3 ]; then
+  report "S-13 the shape comparator discriminates (3 real shapes found / 0 sentinel shapes found) — the 3 above is a real 3" 1
+else
+  report "S-13 the shape comparator discriminates" 0 \
+    "sentinel=${reb_control} (expected 0); real=${reb_migrated} (expected 3). Equal values mean a BROKEN PROBE and the S-13 counts are meaningless."
+fi
+
+# --- S-13d: the no-write arms must NOT re-anchor the baseline. ---
+# settings_regenerate re-anchors both baselines on every arm that WROTE. The arms
+# that wrote nothing (S-4 CONFLICT, SKIP-*) must leave the baselines as read from
+# state. Re-anchoring SETTINGS_INSTALLED_SHA to a file the platform did NOT write is
+# a delayed-fuse version of the very defect S-13 closes: the NEXT run would match
+# that sha, classify the operator-edited file as an "untouched platform copy" (S-1),
+# and regenerate over it with no migration at all. One run later, keys gone.
+#
+# Added because a mutation proved it uncovered: deleting the arm-scoping left the
+# suite 112/0 green. This arm is what makes that mutation red.
+#
+# The fixture reuses the overlay the S-13 arms just populated: env.REBOOT_OPERATOR_KEY
+# now lives there, so re-introducing the SAME key with a DIFFERENT value into the
+# managed file is a genuine migration conflict -> CONFLICT -> S-4 -> write nothing.
+python3 -c '
+import json, sys
+p = sys.argv[1]
+doc = json.load(open(p))
+doc["env"] = {"REBOOT_OPERATOR_KEY": "managed-file-DIFFERENT-value"}
+with open(p, "w") as f:
+    json.dump(doc, f, indent=2); f.write("\n")
+' "${REB_JSON}"
+
+reb_d_live_sha=$(set_sha "${REB_JSON}")
+reb_d_state_before=$(jq -r '.settings_installed_sha // ""' "${REB_WS}/.claude/.workspace-setup.state" 2>/dev/null)
+reb_d_log=$(GIT_CONFIG_GLOBAL="${SBX}/gitcfg/ok" "${SETUP}" \
+  --source-repo "${REPO_ROOT}" --workspace-root "${REB_WS}" \
+  --config-root "${REB_CONFIG}" --non-interactive 0<&- 2>&1)
+reb_d_live_after=$(set_sha "${REB_JSON}")
+reb_d_state_after=$(jq -r '.settings_installed_sha // ""' "${REB_WS}/.claude/.workspace-setup.state" 2>/dev/null)
+
+# Precondition: the run really did hit a no-write arm. Without this the baseline
+# assertion below could pass for the wrong reason (a normal write path re-anchoring
+# to a file it legitimately wrote).
+if printf '%s' "${reb_d_log}" | grep -q 'S-4 settings refresh ABORTED' \
+   && [ "${reb_d_live_sha}" = "${reb_d_live_after}" ]; then
+  report "S-13d precondition: the conflicting re-run hit a NO-WRITE arm (S-4) and left the managed file byte-identical" 1
+else
+  report "S-13d precondition: the conflicting re-run hit a NO-WRITE arm (S-4)" 0 \
+    "managed_changed=$([ "${reb_d_live_sha}" = "${reb_d_live_after}" ] && echo no || echo YES); $(printf '%s' "${reb_d_log}" | grep -E 'S-[0-5] ' | head -2 | tr '\n' '|')"
+fi
+
+# THE ASSERTION: the recorded anchor must NOT have become the sha of the
+# operator-edited file the platform declined to overwrite.
+if [ -n "${reb_d_state_after}" ] && [ "${reb_d_state_after}" != "${reb_d_live_sha}" ]; then
+  report "S-13d a no-write arm does NOT re-anchor settings_installed_sha to the operator-edited file (next run still classifies structurally)" 1
+else
+  report "S-13d a no-write arm does NOT re-anchor settings_installed_sha to the operator-edited file" 0 \
+    "state anchor after='${reb_d_state_after}' equals the operator-edited live sha='${reb_d_live_sha}'. The NEXT run would read this file as an untouched platform copy (S-1) and regenerate over it with NO migration — the silent drop, one run later. (anchor before='${reb_d_state_before}')"
+fi
+
+fi  # end S-13 target-present guard
 
 fi  # end Suite S target-present guard
 
