@@ -255,6 +255,21 @@ core/deploy/tests/test_package_freshness_exit_codes.sh
 ./core/deploy/tests/test_check45_governing_doc_name_match.sh
 core/deploy/tests/test_check45_governing_doc_name_match.sh
 
+# Targeted composition-surface refresh regression (test_refresh_surfaces.sh) — new
+# in-tree bash CLI. Asserts that `deploy.sh --deploy` CANNOT heal a regressed
+# composition surface (it never sources the composition-surface manifest), that its
+# no-changes message says so, and that `./update.sh --surfaces-only` does heal it
+# without redeploying skills, refreshing hooks, restamping .version, or writing
+# .last-update. Hermetic: refuses to start unless HOME and both root overrides
+# resolve inside its sandbox. Executed agent-side at Stage 6 self-verification and
+# Stage 7 Dev Testing; all four invocation forms so BLOCK-DESTRUCTIVE-022 does not
+# block the agent-side path. (CI runs no Claude hooks, so this entry is for the
+# agent-side path, not the workflow.)
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_refresh_surfaces.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_refresh_surfaces.sh
+./core/deploy/tests/test_refresh_surfaces.sh
+core/deploy/tests/test_refresh_surfaces.sh
+
 # context-budget-auditor Measure-mode scanner — read-only per-component token-cost
 # scan across the loadable-component surface, plus a --self-test mode. Invoked
 # agent-side by the skill's Measure mode, so all four invocation forms per the

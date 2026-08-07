@@ -63,12 +63,15 @@ The script:
 4. **Skill redeploy**: invokes `core/deploy/orchestrate.sh phase_deploy_skills`, which calls `core/deploy/deploy.sh --deploy`. This ensures any new skills shipped in the pulled release land in `~/.claude/skills/` without a separate operator step.
 5. **State update**: writes timestamp to `~/.config/pmo-platform/.last-update`.
 
+The five steps above are the procedural summary. The full effect list — including the needle and roster scaffolds, the security-hook bundle refresh, and the `.version` snapshot — is enumerated in § 3.5, which is also where you decide between a full update and a targeted `--surfaces-only` refresh.
+
 ### 3.3 Useful flags
 
 | Flag | Purpose |
 |---|---|
 | `--dry-run` | Preview planned regenerations; perform no writes |
 | `--force-regen` | Regenerate every composition-surface file unconditionally (default: only those whose source SHA changed) |
+| `--surfaces-only` | **Targeted refresh.** Regenerate composition-surface managed sections and nothing else — no skill redeploy, no security-hook refresh, no `.version` restamp, no `.last-update` write. Use this to heal one stale allowlist without the blast radius of a full update. See § 3.5 |
 | `--workspace-root PATH` | Workspace root for managed-section regen targets + backup dir (default: `~/Claude`; or `PMO_PLATFORM_WORKSPACE_ROOT` env var) |
 | `--config-root PATH` | Root for operator config reads (operator.toml) + state writes (.last-update). Default: `~/.config/pmo-platform`; or `PMO_PLATFORM_CONFIG_ROOT` env var |
 | `--help` | Show usage |
@@ -82,6 +85,14 @@ The root flags + env-var counterparts let integration tests sandbox cleanly with
 ```
 
 The validate script asserts: hooks installed, composition-surface files present, settings.json valid, CLAUDE.md tokens resolved.
+
+### 3.5 Blast radius of a full update, and when to use `--surfaces-only`
+
+A full `./update.sh` performs, in order: an operator-instance backup · a create-once needle + roster scaffold · composition-surface managed-section regeneration across **all 19** manifest entries (only drifted entries are rewritten; OPERATOR ADDITIONS are preserved) · a full skill redeploy via `deploy.sh --deploy` · a security-hook bundle refresh across **all 22** hooks plus the co-shipped primitives, installing any hook that is missing · a `.version` snapshot refresh · a `.last-update` state write.
+
+**The two denominators — 19 composition surfaces and 22 security hooks — are stable; how many actually change on your instance is state-dependent. Run `./update.sh --dry-run` for the current magnitudes.** A full update is **not** a drop-in substitute for a targeted refresh: when all you need is to bring one composition surface current, use `./update.sh --surfaces-only`, which touches nothing else.
+
+**`core/deploy/deploy.sh --deploy` cannot refresh a composition surface.** It reads three change sets — skills, packages, and harness artifacts — and never sources the composition-surface manifest, so it exits 0 reporting that there is nothing to deploy while leaving a stale allowlist exactly as it was. If a document, issue, or runbook tells you to run `deploy.sh --deploy` to refresh an allowlist or other composition surface, that instruction is wrong; use `./update.sh --surfaces-only` (targeted) or a full `./update.sh` instead.
 
 ---
 
