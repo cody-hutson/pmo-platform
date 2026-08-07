@@ -1,4 +1,20 @@
 #!/usr/bin/env bash
+# selftest-runner: macos
+#   Read by release/tools/check-selftest-coverage.py. This suite's frontmatter-strip
+#   path is NOT portable: on the Linux runner the strip yields an EMPTY body, so the
+#   DRIFT legs (B, I) compare nothing against nothing and return 0 where 1 is
+#   expected. Measured at the discovery gate's first enablement; the same invocation
+#   is green on macOS, and was green for many releases as a named step in this repo's
+#   macOS smoke job. So the tool stays IN SCOPE and stays ENFORCED — on the runner
+#   where it is known good — rather than being dropped from discovery, which is the
+#   one disposition the enforcement card forbids.
+#
+#   RESIDUAL, stated because a runner declaration must not be mistaken for a fix:
+#   the non-portability is real. On Linux this tool reports "no drift" when drift
+#   exists — a FAIL-OPEN in a Stage-13 gate, not a cosmetic difference. Repairing
+#   the strip (here, and in the sibling tools that share the idiom) is separate,
+#   tracked work owned by this tool's card. This declaration buys enforcement today;
+#   it does not discharge that defect.
 # check-release-body-drift.sh — Release body-source-of-record drift check.
 # Per release/references/standards/release-notes-standard.md § 5.1 / § 5.6.
 #

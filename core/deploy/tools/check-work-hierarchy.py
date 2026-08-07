@@ -92,12 +92,14 @@ OUTPUT (TSV) / EXIT CODES
   H1        <path>:<line>  <text> a doc asserting an unlicensed parent tier
   H2        <issue>  <parent>     an epic whose parent is also an epic
   EXEMPT    <leg>  <detail>       suppressed by the exemption list
+  SKIP      H1  <reason>          a configured scan surface that does not resolve
   SKIP      H2  <reason>          gh unavailable / unauthenticated
   COUNT     <n>                   total non-exempt findings
 
   exit 0 — clean (no findings)
   exit 1 — findings present
-  exit 3 — input failure (SSOT vocabulary unreadable / zero kinds; GraphQL error)
+  exit 3 — input failure (SSOT vocabulary unreadable / zero kinds; GraphQL error;
+           EVERY configured H1 scan surface unresolved — an empty scan population)
 
 Python 3.9-compatible (no tomllib, no 3.10+ syntax) — matches /usr/bin/python3 on
 the operator baseline.
@@ -138,14 +140,51 @@ ARROW = r'(?:→|->|>|»)'
 BANNED_PARENT_TIERS = ("Initiative", "Roadmap")
 
 # Quoted / code spans on a line — a chain inside one of these is CITED, not asserted.
-QUOTE_SPAN_RE = re.compile(r'"[^"]*"|“[^”]*”|`[^`]*`|\'[^\']*\'')
+#
+# The straight-apostrophe alternation is BOUNDARY-ANCHORED. An unanchored
+# `'[^']*'` makes a POSSESSIVE open a span: `The platform's hierarchy is
+# Initiative -> Epic and that's wrong` yields one 44-char "quote" that swallows the
+# whole assertion, so H1 never evaluates it. Measured on this corpus when the fix
+# landed, the unanchored form masked 299,294 characters across 1,659 lines —
+# 15.1% of the guard's ENTIRE suppression surface — because 11,665 word-position
+# apostrophes appear across 637 of the 727 scanned files. That is the default
+# English sentence, not an exotic shape.
+#
+# The lookaround pair requires a NON-alphanumeric on each outer side, which a
+# possessive or a contraction never has. The inner `'(?=[0-9A-Za-z])` allowance
+# lets a contraction sit INSIDE a genuine quoted span (`'Don't be too verbose'`)
+# without ending it. The two inner branches are mutually exclusive on their first
+# character, so the star is deterministic — no backtracking blowup (measured
+# 0.0002s on a 4KB unterminated-quote line).
+#
+# Do NOT "simplify" this by deleting the alternation: 621 genuine single-quoted
+# spans in this corpus (shell/regex/glob literals — `'*.json'`, `'s/^# //'`) depend
+# on it, and dropping it scores no better than the unanchored form it replaces
+# (both 8/12 on the self-test's recall/precision matrix; this form scores 12/12).
+# Do NOT add a smart-single-quote alternation: U+2019 IS the typographic
+# apostrophe, so it would reintroduce this exact bug.
+QUOTE_SPAN_RE = re.compile(
+    r'"[^"]*"'
+    r'|“[^”]*”'
+    r'|`[^`]*`'
+    r"|(?<![0-9A-Za-z])'(?:[^']|'(?=[0-9A-Za-z]))*'(?![0-9A-Za-z])"
+)
 
-# Normative surfaces H1 scans. release/releases/ is EXCLUDED: it is the archival +
-# generated release corpus (plans, notes, logs), which legitimately narrates
-# historical hierarchies and is not a normative assertion surface.
-DEFAULT_SCAN_ROOTS = ("core", "release")
+# Normative surfaces H1 scans — all three platform modules. release/releases/ is
+# EXCLUDED: it is the archival + generated release corpus (plans, notes, logs),
+# which legitimately narrates historical hierarchies and is not a normative
+# assertion surface. `operations/` carries NO such archival subtree — its .md files
+# are skill definitions, references, and templates, every one of them a normative
+# agent-facing surface, so a hierarchy restatement there binds agent behavior
+# exactly as one in `core/` does. It is scanned.
+DEFAULT_SCAN_ROOTS = ("core", "release", "operations")
 EXCLUDED_PREFIXES = (os.path.join("release", "releases"),)
-EXTRA_SCAN_FILES = ("CLAUDE.md",)
+# The repo root carries NO CLAUDE.md — the governed surface is the TEMPLATE that
+# deploys to it. The tree walk cannot reach it: its filter is `fn.endswith(".md")`
+# and `.md.template` fails that test, so before this entry the CLAUDE surface was
+# scanned ZERO times, not incidentally. EXTRA_SCAN_FILES bypasses the suffix filter
+# by design (it yields an explicit path), which is why naming it here works.
+EXTRA_SCAN_FILES = (os.path.join("core", "CLAUDE.md.template"),)
 
 EXEMPT_FILE_DEFAULT = os.path.join(".claude", "work-hierarchy-exemption-list.txt")
 
@@ -267,6 +306,28 @@ def iter_scan_files(root, scan_roots, extra_files):
         full = os.path.join(root, extra)
         if os.path.isfile(full):
             yield full
+
+
+def unresolved_surfaces(root, scan_roots, extra_files):
+    """Configured H1 scan surfaces that do not resolve on disk.
+
+    A configured-but-absent surface contributes ZERO files and is otherwise
+    INDISTINGUISHABLE from a surface that is present and clean — both read as
+    silence. That silence is how `EXTRA_SCAN_FILES = ("CLAUDE.md",)` shipped
+    naming a path this repo has never had, contributing nothing while the check
+    read green. Reported, never swallowed.
+
+    Pure and side-effect-free: a sibling of iter_scan_files over the SAME
+    configuration triple, so the two cannot disagree about what was configured.
+    """
+    missing = []
+    for scan_root in scan_roots:
+        if not os.path.isdir(os.path.join(root, scan_root)):
+            missing.append("root:" + scan_root)
+    for extra in extra_files:
+        if not os.path.isfile(os.path.join(root, extra)):
+            missing.append("file:" + extra)
+    return missing
 
 
 def run_h1(root, kinds, exemptions, scan_roots, extra_files):
@@ -452,6 +513,152 @@ def self_test():
         check("H1 empty SSOT yields zero kinds (fail-loud input)",
               len(load_licensed_kinds(tmp)) == 0)
 
+    # ── R1–R14: RECALL cases ────────────────────────────────────────────────
+    # Everything above tests PRECISION — that H1 does not fire where it should
+    # not. None of it could detect the opposite failure: an assertion H1 never
+    # EVALUATED. Two such blind spots shipped together.
+    #
+    #   R1–R9  the citation guard treated a POSSESSIVE as a quote delimiter, so
+    #          any assertion between two apostrophes on one line was masked out
+    #          before the predicate ran.
+    #   R10–R14 two configured scan surfaces resolved to nothing — `operations/`
+    #          was never in the roots, and the named extra file did not exist —
+    #          each contributing a SILENT zero indistinguishable from "clean".
+    #
+    # A check that reads `COUNT 0` without establishing recall has measured
+    # nothing. These cases are that establishment.
+
+    # R1: the reproduction line from the card. Returns 0 against the pre-fix
+    # predicate — the apostrophes swallow the whole assertion.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _mkroot(tmp, "The platform's hierarchy is Initiative -> Epic and that's wrong.\n")
+        f, _, _ = run_h1(root, load_licensed_kinds(root), set(), ("core",), ())
+        check("R1 H1 fires on an assertion between two possessive apostrophes", len(f) == 1)
+
+    # R2: the STRUCTURAL proof, independent of run_h1 — a possessive pair must not
+    # form a span AT ALL. Fails by construction against the pre-fix pattern, so
+    # this regression can never be greened by tuning the H1 predicate instead.
+    check("R2 a possessive pair does not open a quote span",
+          QUOTE_SPAN_RE.search("The platform's ladder and that's it") is None)
+
+    # R3-R5: PRECISION MUST SURVIVE. The same chain inside each genuine delimiter,
+    # on a line that ALSO carries apostrophes — the fix must not trade recall for
+    # precision. R5 pins the smart-quote alternation, which the live corpus
+    # exercises ZERO times, so only this case stands between it and a future
+    # "unused alternation" pruning.
+    for tag, body in (
+        ("double quotes", 'The team\'s note says "Initiative -> Epic" is wrong.\n'),
+        ("backticks", "The team's note says `Initiative -> Epic` is wrong.\n"),
+        ("smart quotes", "The team's note says “Initiative -> Epic” is wrong.\n"),
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _mkroot(tmp, body)
+            f, _, _ = run_h1(root, load_licensed_kinds(root), set(), ("core",), ())
+            check("R3-5 citation guard still suppresses a chain in " + tag, len(f) == 0)
+
+    # R6-R8: the SINGLE-QUOTE delimiter stays live. Deleting the alternation
+    # outright — the obvious "simplification", and the one the card's own Expected
+    # Behavior invites — would fire on all three of these. R8 is the largest class
+    # in this corpus (shell/regex/glob literals); R7 is suppressed only by the
+    # inner-contraction allowance, so it also guards a revert to the simpler
+    # boundary-anchored form.
+    for tag, body in (
+        ("a quoted citation", "It does not use 'Initiative -> Epic'.\n"),
+        ("a quote containing a contraction",
+         "It avoids 'the platform's Initiative -> Epic ladder'.\n"),
+        ("a code literal", "    HIERARCHY = 'Initiative -> Epic'\n"),
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _mkroot(tmp, body)
+            f, _, _ = run_h1(root, load_licensed_kinds(root), set(), ("core",), ())
+            check("R6-8 single-quoted span still suppresses " + tag, len(f) == 0)
+
+    # R9: PLURAL possessives — a trailing apostrophe with no following letter. The
+    # boundary anchor must key on the character AFTER the quote, not merely before.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _mkroot(tmp, "The teams' ladder is Roadmap -> Story and the groups' view.\n")
+        f, _, _ = run_h1(root, load_licensed_kinds(root), set(), ("core",), ())
+        check("R9 H1 fires between two plural possessives", len(f) == 1)
+
+    # R10: SENSITIVITY — an absent configured surface is reported, by kind.
+    with tempfile.TemporaryDirectory() as tmp:
+        os.makedirs(os.path.join(tmp, "core"), exist_ok=True)
+        check("R10 unresolved_surfaces names an absent root and an absent file",
+              unresolved_surfaces(tmp, ("core", "nope"), ("nope.md",))
+              == ["root:nope", "file:nope.md"])
+
+    # R11: SPECIFICITY — a fully resolvable configuration reports NOTHING (a probe
+    # that flags everything proves nothing), and the configured extra file is
+    # actually SCANNED. Driven through the SHIPPED constants over a mirrored tree:
+    # the tree walk filters on `.md`, so an extra entry naming a `.md.template`
+    # reaches H1 ONLY via this bypass. Repoint it at a path nothing resolves and
+    # this case fails rather than contributing a silent zero.
+    with tempfile.TemporaryDirectory() as tmp:
+        for scan_root in DEFAULT_SCAN_ROOTS:
+            os.makedirs(os.path.join(tmp, scan_root), exist_ok=True)
+        for extra in EXTRA_SCAN_FILES:
+            full = os.path.join(tmp, extra)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w", encoding="utf-8") as fh:
+                fh.write("The hierarchy is Initiative -> Epic.\n")
+        f, _, scanned = run_h1(tmp, {"epic"}, set(), DEFAULT_SCAN_ROOTS, EXTRA_SCAN_FILES)
+        check("R11 a resolvable config reports nothing and scans its extra file",
+              unresolved_surfaces(tmp, DEFAULT_SCAN_ROOTS, EXTRA_SCAN_FILES) == []
+              and scanned == len(EXTRA_SCAN_FILES) and len(f) == 1)
+
+    # ── R12: THE CONJUNCTION PROOF — the two legs are NOT independent ────────
+    # A possessive-bearing assertion seeded in operations/ is found by NEITHER leg
+    # alone: widening the roots without narrowing the quote span still yields 0
+    # (the apostrophes mask it), and narrowing the quote span without widening the
+    # roots never reads the file. ONLY BOTH TOGETHER surface it — so a half
+    # implementation reads green and looks done.
+    #
+    # Asserted through the SHIPPED DEFAULT_SCAN_ROOTS rather than a hand-passed
+    # tuple, which is what makes it load-bearing: dropping `operations` from the
+    # constant fails here even though the regex is correct. The narrowed arm is
+    # the control — it proves the widening is what moved the result, not the
+    # regex alone.
+    with tempfile.TemporaryDirectory() as tmp:
+        _mkroot(tmp, "nothing is asserted on this line\n")
+        skill_dir = os.path.join(tmp, "operations", "skills", "x")
+        os.makedirs(skill_dir, exist_ok=True)
+        with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as fh:
+            fh.write("The team's ladder is Initiative -> Epic and that's the model.\n")
+        kinds = load_licensed_kinds(tmp)
+        shipped, _, _ = run_h1(tmp, kinds, set(), DEFAULT_SCAN_ROOTS, ())
+        narrowed, _, _ = run_h1(tmp, kinds, set(), ("core", "release"), ())
+        check("R12 a seeded operations/ assertion needs BOTH legs to surface",
+              len(shipped) == 1 and len(narrowed) == 0)
+
+    # R13: the input to main()'s exit-3 arm. A scan over an EMPTY population finds
+    # nothing by construction and would otherwise read green — the same failure
+    # this whole check exists to detect, one level up.
+    with tempfile.TemporaryDirectory() as tmp:
+        _, _, scanned = run_h1(tmp, {"epic"}, set(), DEFAULT_SCAN_ROOTS, EXTRA_SCAN_FILES)
+        missing = unresolved_surfaces(tmp, DEFAULT_SCAN_ROOTS, EXTRA_SCAN_FILES)
+        check("R13 an empty population scans 0 and names every unresolved surface",
+              scanned == 0
+              and len(missing) == len(DEFAULT_SCAN_ROOTS) + len(EXTRA_SCAN_FILES))
+
+    # R14: the shipped configuration must resolve against THIS repo, not merely
+    # against a synthetic tree. Every case above builds whatever the constants
+    # happen to name, so all of them pass just as well when an entry points at a
+    # path that does not exist — which is precisely how `EXTRA_SCAN_FILES =
+    # ("CLAUDE.md",)` shipped dead. Measured: reverting that repoint leaves the
+    # other 34 cases green. Only an assertion against a REAL checkout catches it.
+    #
+    # The root is derived from this module's own location rather than the process
+    # cwd, so the case is invariant to where the runner invokes it from. Copy this
+    # tool outside the repo and the case goes RED — correctly: from there the
+    # configured surfaces genuinely do not resolve. A loud failure is recoverable;
+    # the silent pass it replaces was not. The SSOT-marker conjunct is the
+    # sensitivity arm — it fails if the path derivation itself drifts, so an
+    # unresolvable root can never be mistaken for a clean one.
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    check("R14 every shipped scan surface resolves in this checkout",
+          os.path.isdir(os.path.join(repo_root, "core", "packs"))
+          and unresolved_surfaces(repo_root, DEFAULT_SCAN_ROOTS, EXTRA_SCAN_FILES) == [])
+
     # H2-a: synthetic epic-under-epic parent map → must FAIL.
     nodes = [{"number": 11, "parent": {"number": 22,
               "labels": {"nodes": [{"name": "type:epic"}]}}}]
@@ -597,6 +804,37 @@ def main():
 
     h1, h1_ex, scanned = run_h1(root, kinds, exemptions, DEFAULT_SCAN_ROOTS, EXTRA_SCAN_FILES)
     out.append("SCANNED\t" + str(scanned))
+    unresolved = unresolved_surfaces(root, DEFAULT_SCAN_ROOTS, EXTRA_SCAN_FILES)
+    for surface in unresolved:
+        out.append("SKIP\tH1\tunresolved scan surface: " + surface)
+    if scanned == 0:
+        # Fail loud — the same discipline as the zero-kind SSOT guard above. A scan
+        # over an EMPTY population finds nothing BY CONSTRUCTION and would read
+        # green, which is the exact failure this check exists to detect one level up.
+        #
+        # The unresolved surfaces are named INLINE rather than left to the SKIP rows
+        # because the rows would not survive the trip: deploy.sh captures this run
+        # with 2>&1 and reports `head -1` on exit 3, so every other exit-3 path puts
+        # its ERROR on the first line and this one must too. Printing the TSV first
+        # would hand the operator `VOCAB ...` as the diagnosis. Named inline, the
+        # message is self-contained on the one line the consumer reads.
+        #
+        # The wording is DERIVED rather than asserted, because an empty population
+        # does not imply that every surface failed to resolve: a surface that
+        # resolves but holds no scannable file produces the same zero. Hardcoding
+        # "every configured scan surface is unresolved" misreports the partial case
+        # (3 of 4 resolving still yields that sentence), and joining an EMPTY
+        # unresolved list yields an error naming no subject at all — both on the one
+        # line the operator gets. The count carries the distinction the prose cannot.
+        configured = len(DEFAULT_SCAN_ROOTS) + len(EXTRA_SCAN_FILES)
+        if unresolved:
+            detail = ("%d of %d configured scan surfaces unresolved: %s"
+                      % (len(unresolved), configured, ", ".join(unresolved)))
+        else:
+            detail = ("all %d configured scan surfaces resolved but yielded no "
+                      "scannable file" % configured)
+        print("ERROR\tH1 scan population is empty — " + detail, file=sys.stderr)
+        return 3
     for loc, text in h1:
         out.append("H1\t" + loc + "\t" + text)
 

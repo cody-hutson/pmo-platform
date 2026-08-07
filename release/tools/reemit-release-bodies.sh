@@ -1,4 +1,16 @@
 #!/usr/bin/env bash
+# selftest-runner: macos
+#   Read by release/tools/check-selftest-coverage.py. Same non-portable
+#   frontmatter-strip idiom as check-release-body-drift.sh: on the Linux runner the
+#   strip yields an empty body and legs A / L / L2 hit the tool's own
+#   "ABORT: frontmatter strip produced an EMPTY body" guard. Measured at the
+#   discovery gate's first enablement; green on macOS. The tool stays IN SCOPE and
+#   ENFORCED on the runner where it is known good, rather than dropped from
+#   discovery — the disposition the enforcement card forbids.
+#
+#   RESIDUAL: unlike its sibling, this tool FAILS SAFE on Linux (it aborts rather
+#   than publishing an empty body), so the non-portability costs availability, not
+#   correctness. Repairing the shared strip idiom is separate, tracked work.
 # reemit-release-bodies.sh — re-emit published GitHub Release bodies from their
 # canonical in-repo notes, per release-notes-standard.md § 5.6 step 2.
 #

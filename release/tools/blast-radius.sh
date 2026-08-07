@@ -41,12 +41,25 @@ readonly EXIT_INTERNAL=1
 readonly EXIT_BAD_TARGET=2
 readonly EXIT_EXCLUDED_TARGET=3
 readonly EXIT_MISSING_DEP=4
+# 5 is NOT free. domain-blast-radius.sh already owns EXIT_SCANNER_NOT_IMPLEMENTED=5, and
+# both tracers emit one shared schema-v1 contract — so a consumer switching on exit code
+# must be able to tell "the domain scanner is unavailable" apart from "your result was
+# truncated". 6 is the next free code across that two-tool family.
+readonly EXIT_PARTIAL=6
 
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
 HARD_CAP_DEPTH=4
 DEFAULT_DEPTH=2
+# Deterministic second-order fan-out cap. 300 sits above the observed corpus maximum
+# first-order fan-out (246), so it cannot fire on today's corpus and changes no output
+# today; it converts future corpus growth from an unbounded run into a marked partial.
+# Deliberately NOT a wall-clock timeout: a timeout makes the same input produce different
+# output on a loaded machine, and this tool's output is a design artifact consumed by
+# Stage-8 verification, where non-reproducible impact analysis is disqualifying. A cap on
+# a sorted list is reproducible for a given input; a stopwatch is not. 0 = unlimited.
+DEFAULT_MAX_EXPAND=300
 
 # ---------------------------------------------------------------------------
 # Argument parsing state
@@ -59,6 +72,22 @@ ARG_NO_COLOR=0
 declare -a ARG_EXCLUDE_ADDITIONAL=()
 ARG_TARGET=""
 ARG_MODE=""   # "" = default doc-reference tracer; "structural" = path-move consumer sweep (#3120)
+ARG_MAX_EXPAND="$DEFAULT_MAX_EXPAND"
+
+# ---------------------------------------------------------------------------
+# Partial-result state. Set ONLY by compute_second_order when the fan-out cap fires.
+# When set, the run emits an explicit marker (JSON .partial / .partial_reason /
+# .stats.partial, and a visible line in the table and md presenters) AND exits
+# EXIT_PARTIAL — so a truncated run cannot be read downstream as "no blast radius".
+# ---------------------------------------------------------------------------
+PARTIAL=0
+PARTIAL_REASON=""
+
+# Self-test fixture root. Script-scope on purpose: the EXIT trap that removes it fires
+# AFTER run_self_test has returned, so a `local` would already be out of scope and
+# `set -u` would turn the cleanup into an unbound-variable error — which would make a
+# 13/13 PASS suite still exit non-zero.
+SELFTEST_TMPDIR=""
 
 # ---------------------------------------------------------------------------
 # Default exclusions (hardcoded; --exclude adds to these)
@@ -130,6 +159,12 @@ OPTIONS
                         Default: table if stdout is a tty, json otherwise
   --depth=N             Recursion depth for second-order detection (default path only)
                         Default: 2; hard cap: $HARD_CAP_DEPTH
+  --max-expand=N        Cap the number of first-order referrers expanded for second-order
+                        detection. The first-order list is sorted reference_count DESC,
+                        path ASC, so truncation is deterministic and keeps the
+                        highest-signal referrers. When the cap fires the run emits an
+                        explicit partial-result marker and exits $EXIT_PARTIAL.
+                        Default: $DEFAULT_MAX_EXPAND; 0 = unlimited.
   --include-mirrors     Include mirror-pair references in output (filtered by default)
   --root=PATH           Repo root for scanning
                         Default: \$(git rev-parse --show-toplevel)
@@ -137,6 +172,7 @@ OPTIONS
   --no-color            Disable ANSI color in table output
   -h, --help            Show this help and exit
   --version             Show CLI version + schema version and exit
+  --self-test           Run the built-in hermetic regression suite and exit
 
 EXIT CODES
   0  Success
@@ -144,6 +180,8 @@ EXIT CODES
   2  Bad target (default mode: not a regular file; structural mode: empty/outside-repo old path)
   3  Target is under an exclusion glob (default mode only)
   4  Missing dependency (jq not on PATH)
+  6  Partial result: second-order expansion capped by --max-expand. Output IS produced
+     and carries .partial = true — it is truncated, NOT "no blast radius".
 
 EXAMPLES
   # Trace what references pipeline/stage-05-solutioning.md (table to terminal)
@@ -177,6 +215,10 @@ parse_args() {
         printf 'blast-radius %s (schema v%s)\n' "$CLI_VERSION" "$SCHEMA_VERSION"
         exit "$EXIT_OK"
         ;;
+      --self-test)
+        run_self_test
+        exit $?
+        ;;
       --format=*)
         ARG_FORMAT="${1#--format=}"
         ;;
@@ -190,6 +232,13 @@ parse_args() {
       --depth)
         shift
         ARG_DEPTH="${1:-}"
+        ;;
+      --max-expand=*)
+        ARG_MAX_EXPAND="${1#--max-expand=}"
+        ;;
+      --max-expand)
+        shift
+        ARG_MAX_EXPAND="${1:-}"
         ;;
       --include-mirrors)
         ARG_INCLUDE_MIRRORS=1
@@ -264,6 +313,12 @@ parse_args() {
   fi
   if [ "$ARG_DEPTH" -gt "$HARD_CAP_DEPTH" ]; then
     err "--depth=$ARG_DEPTH exceeds hard cap $HARD_CAP_DEPTH"
+    exit "$EXIT_INTERNAL"
+  fi
+
+  # Validate max-expand (non-negative integer; 0 = unlimited)
+  if ! [[ "$ARG_MAX_EXPAND" =~ ^[0-9]+$ ]]; then
+    err "Invalid --max-expand value: '$ARG_MAX_EXPAND' (must be a non-negative integer; 0 = unlimited)"
     exit "$EXIT_INTERNAL"
   fi
 
@@ -555,12 +610,35 @@ find_first_order() {
   # Grep each token with `-F` (literal string), `-H -n` (file + line)
   # We grep three times rather than build a complex regex — simpler, faster
   # in practice, and produces predictable output for line-level dedup.
+  # BATCHED, not per-file. The prior form was `xargs -0 -I {} -n 1 grep ...`, where the
+  # `-I` replacement-string flag implies `-L 1` and therefore forks ONE grep process per
+  # input file. With N scanned files, K tokens fired (1-3, gated by the basename-
+  # uniqueness rule) and F first-order referrers, a depth-2 run cost (1+F)*K*N process
+  # spawns — six figures on a high-fan-in target, and the whole of the hang: the cost was
+  # process CREATION, not bytes scanned. Batching drops spawns to the number of xargs
+  # batches while leaving the bytes scanned identical — which is exactly why the output
+  # is byte-identical before and after.
+  #
+  # `-H` is retained so a batch that resolves to a single file still emits the
+  # `<abs>:<line>:` prefix the awk reassembly below requires. `--` is added so a token
+  # beginning with `-` cannot be read as an option. xargs auto-splits at ARG_MAX without
+  # `-I`, so arbitrarily large corpora stay safe. This is the same idiom
+  # find_structural_consumers already uses — the fix converges the two code paths onto
+  # one form rather than introducing a new one.
   grep_token() {
     local token="$1"
     [ -z "$token" ] && return
+    # Explicit empty guard. Dropping `-I` also drops xargs' implicit no-run-on-empty
+    # behavior on GNU (BSD xargs skips an empty batch; GNU xargs runs the command once
+    # unless -r), and a `grep -F -H -n -- TOKEN` invoked with no file operands reads
+    # STDIN and blocks. The callers already guarantee a non-empty list, so this guard is
+    # belt-and-braces — but it is what makes the batched form portable across both greps
+    # rather than correct-by-caller-accident. `-r`/`--no-run-if-empty` is GNU-only and
+    # would not have been portable.
+    [ -s "$files_abs" ] || return
     # xargs to feed file list (handles >ARG_MAX file counts safely)
     < "$files_abs" tr '\n' '\0' \
-      | xargs -0 -I {} -n 1 grep -F -H -n "$token" {} 2>/dev/null \
+      | xargs -0 grep -F -H -n -- "$token" 2>/dev/null \
       || true
   }
 
@@ -800,6 +878,24 @@ compute_second_order() {
     return
   fi
 
+  # Deterministic fan-out cap (--max-expand), applied BEFORE the scan loop so it skips
+  # whole referrer expansions rather than filtering their results afterwards. fo_json
+  # arrives already sorted reference_count DESC, path ASC (aggregate_matches_v1), so the
+  # truncation is reproducible for a given input and keeps the highest-signal referrers.
+  # When it fires the run is explicitly marked partial and exits EXIT_PARTIAL — the whole
+  # point is that a truncated run can never be mistaken for "no blast radius".
+  if [ "$ARG_MAX_EXPAND" -gt 0 ]; then
+    local fo_total
+    fo_total="$(printf '%s\n' "$fo_paths" | grep -c . || true)"
+    [ -z "$fo_total" ] && fo_total=0
+    if [ "$fo_total" -gt "$ARG_MAX_EXPAND" ]; then
+      fo_paths="$(printf '%s\n' "$fo_paths" | head -n "$ARG_MAX_EXPAND")"
+      PARTIAL=1
+      PARTIAL_REASON="second-order expansion capped at --max-expand=${ARG_MAX_EXPAND} of ${fo_total} first-order referrers"
+      err "PARTIAL RESULT: ${PARTIAL_REASON}"
+    fi
+  fi
+
   local so_tsv="$WORK_DIR/so.tsv"
   : > "$so_tsv"
 
@@ -993,6 +1089,15 @@ render_table() {
     "$depth" "$include_mirrors" "$total" "$elapsed" "$filtered"
   c_reset
 
+  # Visible on the degraded path so a human reading the table cannot mistake a truncated
+  # run for a complete one (the JSON marker and exit 6 cover machine consumers).
+  if [ "$(printf '%s' "$json" | jq -r '.partial // false')" = "true" ]; then
+    c_red
+    printf '  !! PARTIAL RESULT — %s\n' "$(printf '%s' "$json" | jq -r '.partial_reason')"
+    printf '  !! Second-order results below are TRUNCATED, not complete.\n'
+    c_reset
+  fi
+
   printf '\n'
   c_bold; printf 'First-order referrers (%s)\n' "$first_count"; c_reset
 
@@ -1052,6 +1157,13 @@ render_md() {
   scanned_at=$(printf '%s' "$json" | jq -r '.scanned_at')
 
   printf '# Blast radius — `%s`\n\n' "$target"
+
+  # Visible on the degraded path — same reason as the table presenter.
+  if [ "$(printf '%s' "$json" | jq -r '.partial // false')" = "true" ]; then
+    printf '> **!! PARTIAL RESULT** — %s\n>\n' "$(printf '%s' "$json" | jq -r '.partial_reason')"
+    printf '> Second-order results below are TRUNCATED, not complete.\n\n'
+  fi
+
   printf '| Stat | Value |\n|---|---|\n'
   printf '| scanned_at | %s |\n' "$scanned_at"
   printf '| depth | %s |\n' "$depth"
@@ -1098,6 +1210,155 @@ render_md() {
 }
 
 # ---------------------------------------------------------------------------
+# Built-in regression suite (--self-test)
+#
+# 13 assertions in 3 groups. HERMETIC: every fixture lives in an isolated mktemp tree
+# scanned via --root, so counts never depend on the surrounding repo. No network, no gh,
+# no git. Runs in ~2s.
+#
+# The suite asserts STRUCTURE and COUNTS, never wall-clock. A timing assertion on a
+# shared CI runner is a flake generator; asserting the defect shape directly is
+# deterministic and still discriminates a regression, because the defect IS a shape
+# (a per-file xargs replstr form) rather than a threshold.
+#
+# T1 is a structural regression guard on grep_token. T1z is its EXTRACTION CONTROL: it
+# proves the awk range-scope actually pulled a non-empty function body AND that a
+# deliberately wrong anchor yields nothing — so T1a's zero is a real zero rather than a
+# zero-length haystack. T2 proves a clean run is provably non-empty and provably
+# unmarked; T3 forces the bounded path and proves the marker fires, names the true
+# total, and truncates for real. T2e and T3e are the specificity arms proving the
+# marker is not always-on.
+# ---------------------------------------------------------------------------
+run_self_test() {
+  local self="${BASH_SOURCE[0]}"
+  local pass=0 fail=0
+
+  st_ok()   { pass=$((pass + 1)); printf '  PASS  %s\n' "$1"; }
+  st_bad()  { fail=$((fail + 1)); printf '  FAIL  %s\n' "$1"; }
+  st_eq()   { # st_eq <expected> <actual> <label>
+    if [ "$1" = "$2" ]; then st_ok "$3 [$2]"; else st_bad "$3 — expected '$1', got '$2'"; fi
+  }
+  st_true() { # st_true <rc> <label>   (rc 0 = pass)
+    if [ "$1" = "0" ]; then st_ok "$2"; else st_bad "$2"; fi
+  }
+
+  if ! command -v jq >/dev/null 2>&1; then
+    printf 'blast-radius --self-test: missing dependency jq\n' >&2
+    return "$EXIT_MISSING_DEP"
+  fi
+
+  printf 'blast-radius.sh --self-test\n\n'
+
+  # -------------------------------------------------------------------------
+  # T1 — structural regression guard on grep_token (the defect shape itself)
+  # -------------------------------------------------------------------------
+  local body body_lines bogus_lines code hits rc
+  body="$(awk '/^  grep_token\(\) \{$/{f=1} f{print} f && /^  \}$/{exit}' "$self")"
+  body_lines="$(printf '%s\n' "$body" | grep -c . || true)"
+  # Same extractor, deliberately wrong anchor — MUST yield nothing.
+  bogus_lines="$(awk '/^  grep_token_NOT_A_REAL_ANCHOR\(\) \{$/{f=1} f{print} f && /^  \}$/{exit}' "$self" | grep -c . || true)"
+  rc=0
+  { [ "${body_lines:-0}" -ge 5 ] && [ "${bogus_lines:-0}" -eq 0 ]; } || rc=1
+  st_true "$rc" "T1z CONTROL: grep_token body extracted (${body_lines:-0} lines); bogus anchor yields ${bogus_lines:-0}"
+
+  # Strip comments before asserting on the CODE, so prose that merely names the retired
+  # flag cannot fail the assertion (and so a defect cannot hide inside a comment).
+  code="$(printf '%s\n' "$body" | awk '{ sub(/[[:space:]]*#.*$/, ""); print }')"
+
+  # Bracket-expression `[-]` rather than `\-`: a stray backslash before `-` in an ERE is
+  # undefined behavior that GNU grep warns about, and this suite runs on the GNU runner.
+  # Catches both spellings of the retired form (`-I {}` and `-I{}`).
+  hits="$(printf '%s\n' "$code" | grep -c -E -e '[[:space:]][-]I([[:space:]]|[{])|[[:space:]][-]n[[:space:]]+1([[:space:]]|$)' || true)"
+  st_eq "0" "${hits:-0}" "T1a grep_token carries NO per-file xargs replstr form (-I / -n 1)"
+
+  hits="$(printf '%s\n' "$code" | grep -c -F -e 'xargs -0 grep -F -H -n --' || true)"
+  st_eq "1" "${hits:-0}" "T1b grep_token uses the batched xargs form"
+
+  # -------------------------------------------------------------------------
+  # Fixture: docs/target.md <- 12 referrers; refs/r01.md <- 5; refs/r12.md <- 2.
+  # Every basename is unique across the tree, so the basename-uniqueness gate classifies
+  # each target as unique and the token set fired is stable. r01 and r12 sit at opposite
+  # ends of the tie-broken sort ON PURPOSE: capping at 3 keeps r01's expansion and drops
+  # r12's, so T3d observes a real reduction rather than a cap that changed nothing.
+  # -------------------------------------------------------------------------
+  local fx i
+  SELFTEST_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/blast-radius-selftest.XXXXXX")"
+  trap 'rm -rf "${SELFTEST_TMPDIR:-}"' EXIT
+  fx="$SELFTEST_TMPDIR"
+  mkdir -p "$fx/docs" "$fx/refs" "$fx/so"
+  printf 'the target; it references nothing\n' > "$fx/docs/target.md"
+  for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
+    printf 'first-order referrer %s -> docs/target.md\n' "$i" > "$fx/refs/r${i}.md"
+  done
+  for i in 01 02 03 04 05; do
+    printf 'second-order referrer %s -> refs/r01.md\n' "$i" > "$fx/so/s${i}.md"
+  done
+  for i in 01 02; do
+    printf 'second-order referrer %s -> refs/r12.md\n' "$i" > "$fx/so/t${i}.md"
+  done
+
+  local out err_out bytes fo so partial reason
+  out="$fx/out.json"; err_out="$fx/out.err"
+
+  # -------------------------------------------------------------------------
+  # T2 — bounded traversal + NON-EMPTY EXTRACTION on a clean run
+  # -------------------------------------------------------------------------
+  rc=0
+  bash "$self" --root "$fx" --format=json --depth=2 docs/target.md > "$out" 2>"$err_out" || rc=$?
+  st_eq "0" "$rc" "T2a clean depth-2 run exits 0"
+
+  bytes="$(wc -c < "$out" | tr -d ' ')"
+  rc=0; [ "${bytes:-0}" -gt 200 ] || rc=1
+  st_true "$rc" "T2b clean run emits NON-EMPTY output (${bytes:-0} bytes) — not a silent 0-byte success"
+
+  fo="$(jq -r '.stats.first_order_count' "$out" 2>/dev/null || echo ERR)"
+  st_eq "12" "$fo" "T2c first_order_count"
+
+  so="$(jq -r '.stats.second_order_count' "$out" 2>/dev/null || echo ERR)"
+  st_eq "7" "$so" "T2d second_order_count (5 via refs/r01.md + 2 via refs/r12.md)"
+
+  partial="$(jq -r '.partial // false' "$out" 2>/dev/null || echo ERR)"
+  st_eq "false" "$partial" "T2e SPECIFICITY: a complete run carries NO partial marker"
+
+  # -------------------------------------------------------------------------
+  # T3 — partial-result contract: force the bounded path (AC-5)
+  # -------------------------------------------------------------------------
+  rc=0
+  bash "$self" --root "$fx" --format=json --depth=2 --max-expand=3 docs/target.md > "$out" 2>"$err_out" || rc=$?
+  st_eq "6" "$rc" "T3a a capped run exits EXIT_PARTIAL, NOT 0"
+
+  partial="$(jq -r '.partial // false' "$out" 2>/dev/null || echo ERR)"
+  st_eq "true" "$partial" "T3b a capped run carries .partial = true"
+
+  reason="$(jq -r '.partial_reason // ""' "$out" 2>/dev/null || echo "")"
+  rc=0
+  { printf '%s' "$reason" | grep -q -F -e '--max-expand=3' \
+    && printf '%s' "$reason" | grep -q -F -e 'of 12 first-order referrers'; } || rc=1
+  st_true "$rc" "T3c partial_reason names BOTH the cap and the true total [${reason}]"
+
+  fo="$(jq -r '.stats.first_order_count' "$out" 2>/dev/null || echo ERR)"
+  so="$(jq -r '.stats.second_order_count' "$out" 2>/dev/null || echo ERR)"
+  rc=0
+  { [ "$fo" = "12" ] && [ "$so" = "5" ]; } || rc=1
+  st_true "$rc" "T3d truncation is REAL and scoped: first_order still complete (fo=$fo of 12), second_order cut (so=$so of 7)"
+
+  rc=0
+  bash "$self" --root "$fx" --format=json --depth=2 --max-expand=0 docs/target.md > "$out" 2>"$err_out" || rc=$?
+  partial="$(jq -r '.partial // false' "$out" 2>/dev/null || echo ERR)"
+  so="$(jq -r '.stats.second_order_count' "$out" 2>/dev/null || echo ERR)"
+  local rc2=0
+  { [ "$rc" = "0" ] && [ "$partial" = "false" ] && [ "$so" = "7" ]; } || rc2=1
+  st_true "$rc2" "T3e SPECIFICITY: --max-expand=0 (unlimited) exits 0, no marker, full so=7"
+
+  printf '\n%s/%s assertions passed\n' "$pass" "$((pass + fail))"
+  if [ "$fail" -gt 0 ]; then
+    printf 'blast-radius --self-test: FAILED (%s)\n' "$fail" >&2
+    return 1
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 main() {
@@ -1139,11 +1400,28 @@ main() {
   local json
   json=$(build_json "$elapsed")
 
+  # Partial-result marker, injected AFTER build_json and deliberately NOT inside
+  # lib/schema-v1-emit.sh. Keeping it here means the shared library is untouched, so
+  # domain-blast-radius.sh is untouched and schema_version does not bump. On a
+  # non-truncated run the output is byte-identical to before this change — the keys
+  # appear ONLY on the degraded path, so no existing consumer ever sees a new key.
+  if [ "$PARTIAL" = "1" ]; then
+    json="$(printf '%s' "$json" | jq --arg r "$PARTIAL_REASON" \
+      '.partial = true | .partial_reason = $r | .stats.partial = true')"
+  fi
+
   case "$ARG_FORMAT" in
     json)  printf '%s\n' "$json" ;;
     table) render_table "$json" ;;
     md)    render_md "$json" ;;
   esac
+
+  # A capped run exits non-zero AND carries the marker — both limbs, not one. A consumer
+  # that checks only the exit code catches it; a consumer that reads only the JSON
+  # catches it. Neither can read a truncated result as "no blast radius".
+  if [ "$PARTIAL" = "1" ]; then
+    exit "$EXIT_PARTIAL"
+  fi
 
   exit "$EXIT_OK"
 }

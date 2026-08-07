@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# selftest-runner: macos
+#   Read by release/tools/check-selftest-coverage.py. This script hard-exits at LOAD
+#   time (before argument parsing) unless `gh` resolves at /opt/homebrew/bin/gh or
+#   /usr/local/bin/gh — the macOS Homebrew locations — so `--self-test` is unreachable
+#   on a runner that installs gh anywhere else. The requirement is a property of THIS
+#   TOOL, so it is declared here rather than as a workflow exclusion: an exclusion
+#   would let a runner constraint masquerade as a coverage decision, and a workflow
+#   entry would re-create the hardcoded roster this gate exists to retire.
 # automated-closeout.sh — Automated Stage 13 close-out
 #
 # Wraps the Stage 13 chore-PR pattern per pipeline/stage-13-close.md § Phase B
