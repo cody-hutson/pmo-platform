@@ -273,6 +273,67 @@ jobs:
         # defect fails the test rather than passing it vacuously.
         run: bash core/deploy/tests/test_check31_marker_probe_determinism.sh
 
+      - name: Run Check 22 G1-06 priority-carrier regression (test_g1_06_priority_carrier.sh)
+        # Check 22's G1-06 criterion used to bind one priority carrier and was
+        # therefore blind to every body the intake form renders. The fix delegates
+        # to the shared carrier-agnostic detector rather than authoring a fourth
+        # matcher, so the property worth guarding is the DELEGATION, not the
+        # library behind it. This test extracts the delegate program from the live
+        # deploy.sh and executes it against fixture JSON; its drift guard is
+        # restricted to NON-COMMENT lines because the change's own comment names
+        # the delegated function, and a bare substring grep therefore stays green
+        # on a deleted delegation. Its arm F constructs that exact regressed state
+        # and fails if the guard cannot tell the two apart. Hermetic: no gh, no
+        # network — which is the only option available, since Check 22 itself
+        # requires a live tracker and is correctly excluded from the
+        # network-free required-check subset. Consumes no workflow event input.
+        run: bash core/deploy/tests/test_g1_06_priority_carrier.sh
+
+      - name: Run Check 22 G1-01 title-floor regression (test_g1_title_floor.sh)
+        # Pre-existing test that had never been CI-wired. A regression net that
+        # never executes cannot hold anything in place, so it is wired here
+        # alongside its sibling rather than left as a file that only ever runs by
+        # hand. No change to the test itself. Consumes no workflow event input.
+        run: bash core/deploy/tests/test_g1_title_floor.sh
+
+      - name: Run Check 22 form-family scope regression (test_g1_form_family.sh)
+        # Check 22 terminated every kind-form card at its intake-tier label count
+        # with a verdict whose remediation told a correctly-labelled author to
+        # relabel. The fix partitions the population into four form families
+        # before any criterion runs, and derives which criteria read a kind-form
+        # card from that card's OWN declared body sections rather than from a
+        # family-wide assertion — because field presence varies within the family.
+        # Two properties are worth guarding and neither is visible by reading the
+        # code: the partition is TOTAL (a fixture per live pack kind, plus the
+        # multi-tier cell that is empty on the live population and would otherwise
+        # rot unobserved), and applicability is DERIVED (a kind-form body carrying
+        # acceptance criteria is graded; one without is not). The test extracts and
+        # executes the shipped evaluation region between the deploy.sh C22-EVAL
+        # sentinels, so it exercises the shipped path rather than a copy, and it
+        # reads its kind vocabulary from the pack SSOT so it names no kind either.
+        # Hermetic: no gh, no network. Consumes no workflow event input.
+        run: bash core/deploy/tests/test_g1_form_family.sh
+
+      - name: Run Check 22 release-identity resolver regression (test_g1_release_resolver.sh)
+        # Check 22 now evaluates the milestone BEING DEPLOYED, so a resolver
+        # decides the population on every run. Its load-bearing property is not
+        # visible by reading the code: the milestone read must be PAGINATED,
+        # because `gh api` does not auto-paginate and GitHub's default page is
+        # 30 rows, while the open-milestone population sits within one row of
+        # that boundary — an un-paginated read starts calling a legitimate
+        # in-flight release "absent" with no code change at all. The test
+        # extracts the shipped resolver between the deploy.sh C22-RESOLVER
+        # sentinels, drives it against a stubbed `gh` that honours the real
+        # API's pagination semantics over a 201-row fixture, and grades the
+        # pagination arms against a deliberately REGRESSED copy that must go
+        # red — a probe that cannot fail on the defect it names is not
+        # evidence. It also holds the provenance split (an operator-ASSERTED
+        # candidate fails closed; a branch-DETECTED one degrades to advisory)
+        # and the three verdicts that must never be rendered as a missing
+        # milestone: unreachable validator, empty read, unrecognized branch
+        # form. Hermetic: no gh, no network. Consumes no workflow event input.
+        run: bash core/deploy/tests/test_g1_release_resolver.sh
+
   hook-tests:
     name: Hook test harness (macOS)
     # The core/hooks/tests/*.test.sh files + their test-runner.sh exercise the

@@ -307,6 +307,39 @@ core/deploy/tests/test_check45_governing_doc_name_match.sh
 ./core/deploy/tests/test_refresh_surfaces.sh
 core/deploy/tests/test_refresh_surfaces.sh
 
+# Check 22 G1-06 priority-carrier regression — hermetic net for the criterion's
+# delegation to the shared carrier-agnostic detector. Run by the install-tests
+# shell-tests job AND agent-side at Stage 6/7 dev testing, which is why all four
+# invocation forms are registered: a delivered test whose allowlist rows never
+# landed is BLOCK-DESTRUCTIVE-022-blocked and therefore unrunnable agent-side on
+# arrival. (CI runs no Claude hooks, so these entries serve the agent-side path.)
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_g1_06_priority_carrier.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_g1_06_priority_carrier.sh
+./core/deploy/tests/test_g1_06_priority_carrier.sh
+core/deploy/tests/test_g1_06_priority_carrier.sh
+
+# Check 22 form-family scope regression — hermetic net for Template Detection
+# Logic Step 0 (the four-family partition) and for the kind-form applicability
+# derivation. Same four invocation forms, for the same reason as its sibling
+# above: it is run by the install-tests shell-tests job AND agent-side at Stage
+# 6/7 dev testing, and a delivered test whose allowlist rows never landed is
+# blocked and therefore unrunnable agent-side on arrival.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_g1_form_family.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_g1_form_family.sh
+./core/deploy/tests/test_g1_form_family.sh
+core/deploy/tests/test_g1_form_family.sh
+
+# Check 22 release-identity resolver regression — hermetic net for the 4-token
+# verdict enum, the PAGINATED milestone validator, and the asserted-vs-detected
+# provenance split. Same four invocation forms, for the same reason as the two
+# siblings above: it is run by the install-tests shell-tests job AND agent-side
+# at Stage 6/7 dev testing, and a delivered test whose allowlist rows never
+# landed is blocked and therefore unrunnable agent-side on arrival.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_g1_release_resolver.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_g1_release_resolver.sh
+./core/deploy/tests/test_g1_release_resolver.sh
+core/deploy/tests/test_g1_release_resolver.sh
+
 # context-budget-auditor Measure-mode scanner — read-only per-component token-cost
 # scan across the loadable-component surface, plus a --self-test mode. Invoked
 # agent-side by the skill's Measure mode, so all four invocation forms per the

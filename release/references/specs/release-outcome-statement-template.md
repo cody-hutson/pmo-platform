@@ -245,12 +245,12 @@ Six anti-patterns surface the goal-anchor-as-status-theater risk explicitly flag
 **Anti-pattern:**
 
 ```markdown
-**AFTER** — The 13-dimension scan ships per the release plan's §3.2 detailed mechanism.
+**AFTER** — The readiness scan ships per the release plan's §3.2 detailed mechanism.
 ```
 
 **Why bad:** The Outcome should be self-contained at the Milestone description level. A reader visiting the Milestone page should understand what becomes true without opening the release plan file.
 
-**Fix:** State the outcome plainly. "Stage 9 Plan Review applies a 13-dimension Release Readiness Scan against the assembled implementation; the operator sees per-dimension PASS/FAIL evidence in the Decision Briefing" is self-contained. The release plan's §3.2 then details the mechanism for engineers.
+**Fix:** State the outcome plainly. "Stage 9 Plan Review applies a Release Readiness Scan against the assembled implementation; the operator sees per-dimension PASS/FAIL evidence in the Decision Briefing" is self-contained. The release plan's §3.2 then details the mechanism for engineers.
 
 ## 7. Verification mechanism (HYBRID)
 

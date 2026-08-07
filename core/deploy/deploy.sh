@@ -5596,10 +5596,54 @@ cmd_check() {
   # earlier and cheaper. Lowest blast radius; mirrors deploy.sh --check
   # warn-mode shakedown precedent (Checks 8/9/10/14/15/18/19/20/21).
   #
+  # ENFORCE-SCOPE, on TWO further axes (ADR-120). The determination above is on
+  # the STATUS axis and it still stands, verbatim: the population is bundled-
+  # only and is NOT extended to `status: proposed`. Two axes are added BESIDE
+  # it — neither reverses it:
+  #   * CLASS axis — FAIL-capable authority is held by the F1 governance-intake
+  #     family ONLY, and only on cards that do not carry `sub-task`. F0, F2, F3
+  #     and every `sub-task` card are DETECTED and recommend-flagged, never
+  #     gated. Enforcing G1 against a form family the criteria were not written
+  #     for is the false-positive direction the § Gate 1 template-awareness
+  #     precondition already names, and § Gate 3 already exempts "sub-task
+  #     decompositions within an already-bundled parent" by name.
+  #   * MILESTONE axis — the gate evaluates the milestone BEING DEPLOYED, not
+  #     the whole backlog. A gate blocks the transition it guards; a backlog-
+  #     wide gate blocks a release on defects that belong to other releases,
+  #     which is not drainable by the operator shipping this one.
+  # Layer-B therefore splits into Layer-B(d) — a standing backlog-wide DETECTOR
+  # at recommend-tier — and Layer-B(g) — a release-scoped GATE. The governed
+  # record is gate-criteria-spec.md § Gate 1 "G1 Enforcement-Layer Split"; that
+  # section, not this comment, is the authority for the population contract.
+  #
+  # This is a SCOPE change, not a graduation. The mode is untouched and still
+  # resolves to `warn` with no `g1-enforcement.mode` file present (see MODE
+  # DECOUPLING below). Nothing here flips warn→enforce, and the 195→1 drop in
+  # what WOULD block is a change in scope, never in posture.
+  #
   # COVERAGE (per gate-criteria-spec.md § Gate 1 + its G1 Enforcement-Layer
   # Split): Check 22 (Layer-B gate) now EVALUATES ALL 9 G1 criteria —
   # ENFORCES the 5 structural (FAIL-capable) + RECOMMEND-FLAGS the 4 judgment
   # (advisory, never FAIL).
+  #
+  # SCOPE — which cards each criterion reads (Template Detection Logic Step 0).
+  # The population is partitioned into four form families before any criterion
+  # runs, so no card class is undefined:
+  #   F0 multi-tier        >1 intake-tier label      — G1-09 FAIL, today's emit
+  #   F1 governance-intake exactly 1 intake-tier lbl — the applies-to triple,
+  #                                                    unchanged in every cell
+  #   F2 kind-form         0 tier lbls + a pack-declared `type:<kind_id>` label
+  #                                                  — G1-01 always (identity
+  #                                                    mapping); G1-03/05a/06
+  #                                                    iff the BODY declares the
+  #                                                    field's section; G1-09
+  #                                                    satisfied by Step 0
+  #   F3 unresolved-form   0 tier lbls + no pack kind — its OWN G1-09 finding,
+  #                                                    never F1's remediation
+  # The licensed kind vocabulary is resolved from the pack SSOT at run time and
+  # is named nowhere in this file. F2 applicability is derived per issue from
+  # declared field sections rather than asserted per family, because field
+  # presence VARIES within the family — see the applicability block below.
   #
   # Structural criteria ENFORCED (gate-checked; emit via flag_g1_enforcement):
   #   G1-01  title prefix `[Category]:` (improvement) / `[Bug]:` (bug per
@@ -5616,8 +5660,9 @@ cmd_check() {
   #          observation (no AC field). Pattern (d) behavioral/`method:` is a
   #          recommend-only refinement, not gated here (structural detector
   #          stays on the three lexical patterns + the bug adapter).
-  #   G1-06  Priority `P1`-`P4` in improvement body OR Severity `P1`-`P4` in
-  #          bug body per Adapter G1-06-Bug; n/a for observation
+  #   G1-06  a `P1`-`P4` level in the body Priority OR Severity field,
+  #          resolved through the ADR-111 shared detector (carrier-agnostic —
+  #          this check binds no carrier of its own); n/a for observation
   #   G1-09  label-body template match — label_template (Step 1) must agree
   #          with inferred_template (Step 2) per Template Detection Logic at
   #          gate-criteria-spec.md § Gate 1
@@ -5648,27 +5693,43 @@ cmd_check() {
   # follow-on (after the ≥3-day shakedown); this release ships WARN. Mode
   # files are operator-instance runtime state and are NOT committed.
   #
-  # Template Detection Logic — pragmatic body-marker variant:
-  #   gate-criteria-spec.md § Gate 1 (Template Detection Logic, Step 2) cites
-  #   `### Priority` AND `### Category` AND `### Description` for improvement,
-  #   but the actual rendered improvement issue bodies use `**Priority:**` and
-  #   `**Category:**` (dropdown bold) rather than `### Priority` and
-  #   `### Category` (section headers). This check uses the unique textarea
-  #   section headers that DO appear in rendered bodies:
+  # Template Detection Logic — unique-textarea-marker variant:
+  #   GitHub Issue Forms renders EVERY field — dropdown and textarea alike —
+  #   as `### <label>` followed by the value. Template inference therefore uses
+  #   the textarea labels that are UNIQUE to one template, rather than the
+  #   Priority/Category dropdowns, which are not:
   #     bug         → `### Reproduction Steps`
   #     observation → `### What is missing?`
   #     improvement → `### Proposed Change`
-  #   The pragmatic markers are unique to each template per the body-marker-
-  #   uniqueness verification in gate-criteria-spec.md § Gate 1.
+  #   The markers are unique per the body-marker-uniqueness verification in
+  #   gate-criteria-spec.md § Gate 1.
+  #
+  #   PRIORITY CARRIER: not asserted here. G1-06 delegates to the ADR-111
+  #   shared detector — see the G1-06 resolve block below. An earlier revision
+  #   of this comment asserted that rendered bodies carry `**Priority:**` and
+  #   `**Category:**` rather than the heading form. That was wrong in both
+  #   directions: it trusted the `###` render for textarea fields in the same
+  #   breath as it denied it for dropdown fields, and it made the G1-06
+  #   detector blind to every form-rendered body. Do not re-state a carrier
+  #   distribution here — a distribution drifts, an authority does not.
   #
   # Sub-checks:
+  #   22-0 release  — resolves the release identity into a 4-token verdict
+  #       (RESOLVED / NONE / UNRESOLVED / INVALID) and maps each to exactly one
+  #       EXISTING emitter. Runs BEFORE 22a deliberately: on NONE nothing in
+  #       this check may emit a gating finding, and 22a's own scope emit sits
+  #       between the mode resolve and the query. See _c22_resolve_release.
   #   22a token   — verifies `gh auth status` reports `repo` scope; if
   #       missing, the check warns once and exits cleanly
-  #   22b per-issue — iterates open `status: bundled` issues; applies
+  #   22b per-issue — iterates open `status: bundled` issues IN THE MILESTONE
+  #       BEING DEPLOYED (Layer-B(g); see ENFORCE-SCOPE above); applies
   #       Template Detection Logic; ENFORCES G1-01/G1-03/G1-05a/G1-06/G1-09
-  #       (structural) + RECOMMEND-FLAGS G1-02/G1-04/G1-05b/G1-08 (judgment)
-  #       per applies-to triple using Adapter Blocks G1-01-Bug / G1-01-Obs /
-  #       G1-05-Bug / G1-06-Bug
+  #       (structural) on the F1 governance-intake family only, excluding cards
+  #       that carry `sub-task`, + RECOMMEND-FLAGS G1-02/G1-04/G1-05b/G1-08
+  #       (judgment) per applies-to triple using Adapter Blocks G1-01-Bug /
+  #       G1-01-Obs / G1-05-Bug / G1-06-Bug. Structural findings OUTSIDE that
+  #       authority (F0, F2, F3, or any `sub-task` card) are still detected and
+  #       are emitted at recommend-tier — Layer-B(d)
   #
   # The check runs whenever AUDIT_REPO resolves to a tracker; with no tracker
   # configured the bundled-issue query returns an empty set and it no-ops.
@@ -5682,6 +5743,165 @@ cmd_check() {
   # after a 2-3 release calibration window: "keep in mind the right time to
   # perform this work and the tools/processes available currently."
   #
+  # >>> C22-RESOLVER-BEGIN — core/deploy/tests/test_g1_release_resolver.sh
+  #     extracts the region between this marker and the END marker VERBATIM and
+  #     executes it against a stubbed `gh`, so the net exercises the SHIPPED
+  #     resolver rather than a re-implementation. Moving or renaming a marker
+  #     makes extraction fail LOUDLY.
+  #
+  # _c22_resolve_release — echoes ONE line of a 4-token CLOSED verdict enum on
+  # stdout; the CALLER maps each token to an emit. The verdict is decoupled
+  # from the emit, which is not a new idea on this surface: _vf_compute_verdict
+  # above already echoes a 5-token enum for the same reason, and its own
+  # comment says so ("the CALLER maps it to a warn-emit OR an exit code — the
+  # verdict is decoupled from the emit"). Shape copied, not invented.
+  #
+  # Line grammar — six whitespace-delimited fields, free text LAST:
+  #     <TOKEN> <SOURCE> <REASON> <MILESTONES-READ> <CANDIDATE> <DETAIL...>
+  #   RESOLVED    env|branch   -                 <n>  <milestone title>  <detail>
+  #   NONE        -            -                 0    -                  <detail>
+  #   UNRESOLVED  env|branch   <reason-token>    <n>  <candidate|->      <detail>
+  #   INVALID     env|branch   <reason-token>    <n>  <candidate>        <detail>
+  # CANDIDATE is whitespace-free BY CONSTRUCTION: a git ref name cannot contain
+  # whitespace, and an env-supplied candidate that does is rejected outright as
+  # `INVALID env malformed-candidate`, so no field can be shifted by its value.
+  #
+  # SOURCE IS LOAD-BEARING, and it is the difference between a gate and a
+  # nuisance. An `env` candidate is ASSERTED — an operator typed
+  # PMO_G1_ENFORCE_MILESTONE — so a candidate that will not validate is
+  # fail-closed: refusing to gate on a population you cannot identify is the
+  # correct answer to an assertion you cannot honour. A `branch` candidate is
+  # DETECTED — a regex on a ref name fired with no operator intent — so a
+  # candidate that will not validate degrades to ADVISORY. Inheriting "fail
+  # closed" for both would turn three ordinary release-workflow states into
+  # gating findings: a milestone closed at Stage 13 while a worktree is still
+  # attached to its release branch; an offline or rate-limited run on a release
+  # branch; and any branch-naming form this resolver does not parse.
+  #
+  # VALIDATION IS PAGINATED, and that is the entire correctness argument for
+  # the membership test. `gh api` does NOT auto-paginate and GitHub's default
+  # page is 30 rows; the open-milestone population sits within ONE row of that
+  # boundary, so an unpaginated read would classify a legitimate in-flight
+  # release as absent and emit a gating finding whose stated reason is FALSE —
+  # with no arm distinguishing "truncated" from "absent". The form below is
+  # copied from core/deploy/tools/check-milestone-epic-membership.py
+  # fetch_milestones() (`per_page=100` + `--paginate`), whose module docstring
+  # states the harm verbatim: "a truncated membership set would turn every
+  # unlisted card into a phantom `named-not-member`, so it must never be
+  # silently accepted." Do NOT drop either token, and do NOT author a third
+  # milestone-lookup form in this repository.
+  #
+  # `state=all` (not `state=open`) is equally deliberate: reading the state per
+  # row is what makes `closed-milestone` and `absent-from-milestone-set` two
+  # DISTINCT reason tokens. Under an open-only read a closed milestone and a
+  # nonexistent one are byte-identical, and they have different remediations.
+  #
+  # A ZERO-ROW READ IS `UNRESOLVED`, NEVER `INVALID`. A probe whose population
+  # came back empty has not shown the candidate is absent; it has shown the
+  # probe did not run. Same rule Check 63 states as "a clean zero over an empty
+  # population is exactly what this check must never report."
+  _c22_resolve_release() {
+    local _cand="" _src="" _alt="" _branch="" _suffix="" _raw="" _rows=""
+    local _rc=0 _n=0 _diag=""
+
+    # Rung 1 — EXPLICIT ASSERTION. Precedent: PMO_VERSION_FREENESS_CANDIDATE is
+    # an existing release-scoped env input to this same validator.
+    if [[ -n "${PMO_G1_ENFORCE_MILESTONE:-}" ]]; then
+      _cand="$PMO_G1_ENFORCE_MILESTONE"
+      _src="env"
+      case "$_cand" in
+        *[[:space:]]*)
+          printf 'INVALID env malformed-candidate 0 <whitespace> PMO_G1_ENFORCE_MILESTONE contains whitespace; supply the milestone title as a single token\n'
+          return 0
+          ;;
+      esac
+    else
+      # Rung 2 — DETECTED from the checked-out ref, and FORM-TOTAL over the two
+      # release-branch forms the corpus documents: `release/<slug>` (form A) and
+      # the version-prefixed `release/vX.Y-<slug>` (form B, named in
+      # core/rules/git-workflow.md as a form the platform's own tooling must
+      # still handle). BOTH candidates are offered and whichever validates wins;
+      # neither is assumed. Form C (per-issue branches) does not match
+      # `release/*` and correctly yields NONE, as do a detached HEAD — which
+      # hub-spoke-bridge.md PRESCRIBES at session end — and post-merge `main`.
+      # Layer-B(g)'s live window is therefore an ATTACHED release branch during
+      # Stages 6-9, which is narrower than "Stages 6-9" and is stated here so no
+      # reader over-reads the gate's reach.
+      _branch="$(git -C "${_audit_src_root:-.}" symbolic-ref --short -q HEAD 2>/dev/null || true)"
+      case "$_branch" in
+        release/*)
+          _suffix="${_branch#release/}"
+          _cand="$_suffix"
+          _src="branch"
+          _alt="$(printf '%s' "$_suffix" | /usr/bin/sed -E 's/^v[0-9]+\.[0-9]+-//')"
+          [[ "$_alt" == "$_suffix" ]] && _alt=""
+          ;;
+      esac
+    fi
+
+    # Rung 3 — nothing asserted and nothing detected. This is NOT a degraded
+    # state: the absence of a release-identity assertion is a determinate
+    # answer, and the caller must never render it as one.
+    if [[ -z "$_cand" ]]; then
+      printf 'NONE - - 0 - no release-identity assertion and no release branch attached\n'
+      return 0
+    fi
+
+    if [[ -z "${AUDIT_REPO:-}" ]]; then
+      printf 'UNRESOLVED %s no-tracker-configured 0 %s AUDIT_REPO is empty; the milestone set cannot be read\n' "$_src" "$_cand"
+      return 0
+    fi
+
+    # stderr is CAPTURED (2>&1), never discarded: an unauthenticated gh, a rate
+    # limit and a 404 are three failures with three different fixes, and a
+    # message naming only the endpoint distinguishes none of them.
+    _raw="$(gh api "repos/${AUDIT_REPO}/milestones?state=all&per_page=100" --paginate \
+      --jq '.[] | "\(.state)|\(.title)"' 2>&1)" || _rc=$?
+    if [[ "$_rc" -ne 0 ]]; then
+      _diag="$(printf '%s\n' "$_raw" | /usr/bin/grep -v '^[[:space:]]*$' | /usr/bin/tail -1)"
+      printf 'UNRESOLVED %s validator-unreachable 0 %s milestone set unreadable (exit %s): %s\n' \
+        "$_src" "$_cand" "$_rc" "${_diag:-(no diagnostic on stdout or stderr)}"
+      return 0
+    fi
+    # Shape filter — keeps a stray stderr line captured by 2>&1 out of the
+    # membership set AND out of the denominator, so the count reported to the
+    # operator is the count actually tested against.
+    _rows="$(printf '%s\n' "$_raw" | /usr/bin/grep -E '^(open|closed)\|' || true)"
+    _n=$(printf '%s\n' "$_rows" | /usr/bin/grep -c '^' || true)
+    [[ -n "$_rows" ]] || _n=0
+    if [[ "$_n" -eq 0 ]]; then
+      printf 'UNRESOLVED %s validator-empty-set 0 %s the milestone read returned no rows; an empty population is a broken probe, not evidence of absence\n' \
+        "$_src" "$_cand"
+      return 0
+    fi
+
+    if printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "open|${_cand}"; then
+      printf 'RESOLVED %s - %s %s validated open in the milestone set\n' "$_src" "$_n" "$_cand"
+      return 0
+    fi
+    if [[ -n "$_alt" ]] && printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "open|${_alt}"; then
+      printf 'RESOLVED %s - %s %s validated open in the milestone set (version-prefixed branch form)\n' "$_src" "$_n" "$_alt"
+      return 0
+    fi
+    if printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "closed|${_cand}"; then
+      printf 'INVALID %s closed-milestone %s %s the milestone exists but is CLOSED; a closed milestone is not a gateable release scope\n' "$_src" "$_n" "$_cand"
+      return 0
+    fi
+    if [[ -n "$_alt" ]] && printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "closed|${_alt}"; then
+      printf 'INVALID %s closed-milestone %s %s the milestone exists but is CLOSED; a closed milestone is not a gateable release scope\n' "$_src" "$_n" "$_alt"
+      return 0
+    fi
+    # Absent from a set read TO EXHAUSTION. The denominator travels with the
+    # verdict so the operator can see what the claim was measured against — a
+    # bare "not found" is unreadable without it.
+    if [[ "$_src" == "branch" ]]; then
+      printf 'UNRESOLVED branch form-unrecognized %s %s no documented release-branch form yielded a milestone title; branch naming variance is not evidence that a milestone is missing\n' "$_n" "$_cand"
+      return 0
+    fi
+    printf 'INVALID %s absent-from-milestone-set %s %s not present among the milestones read\n' "$_src" "$_n" "$_cand"
+  }
+  # >>> C22-RESOLVER-END
+
   # Mode is resolved per-check (NOT the shared $DEPLOY_CHECK_MODE) — the check
   # runs whenever $G1_ENFORCEMENT_MODE is not "off". Resolved at block start.
   # `local` here matches DEPLOY_CHECK_MODE's scope; bash dynamic scoping makes
@@ -5691,38 +5911,315 @@ cmd_check() {
   if [[ "$G1_ENFORCEMENT_MODE" != "off" ]]; then
     log "Check 22: G1 enforcement on bundled issues (mode=${G1_ENFORCEMENT_MODE})"
 
+    # 22-0 — release-identity resolution, mapped to the FOUR dispositions.
+    # Placed BEFORE 22a by ordinal, not by region: 22a itself calls
+    # flag_g1_enforcement, so a resolver landing after it would leave "NONE
+    # cannot block" true of the resolver's own emit and false of Check 22 as a
+    # whole. Each verdict routes to exactly ONE EXISTING emitter; no emitter is
+    # added and no emitter body is changed.
+    #   RESOLVED               -> gate the deploying milestone (22a + 22b run)
+    #   NONE                   -> flag_advisory_only, exactly one line. That
+    #                             helper has no mode `case`, no enforce branch
+    #                             and no ISSUES increment anywhere in its body,
+    #                             so "no release in flight" is STRUCTURALLY
+    #                             incapable of becoming a blocker — not merely
+    #                             currently-absent, and not flippable by a
+    #                             future mode change.
+    #   UNRESOLVED / INVALID   -> asserted (env): one gating finding, evaluate
+    #                             nothing (the exit-3 input-failure idiom,
+    #                             extended from unreadable INPUT to
+    #                             unresolvable SCOPE). Detected (branch): one
+    #                             advisory line — see SOURCE above.
+    local c22_verdict c22_vtok c22_vsrc c22_vreason c22_mcount c22_ms c22_vdetail
+    local c22_gate_run=true
+    c22_verdict="$(_c22_resolve_release)"
+    read -r c22_vtok c22_vsrc c22_vreason c22_mcount c22_ms c22_vdetail <<<"$c22_verdict"
+    case "$c22_vtok" in
+      RESOLVED)
+        : # fall through to 22a/22b, scoped to $c22_ms
+        ;;
+      NONE)
+        flag_advisory_only "g1-enforcement-scope" \
+          "no release in flight — Layer-B(g) release gate is NOT APPLICABLE this run (${c22_vdetail}); the Layer-B(d) backlog-wide detector is unaffected and G1 defects remain visible at recommend-tier"
+        c22_gate_run=false
+        ;;
+      *)
+        c22_gate_run=false
+        if [[ "$c22_vsrc" == "env" ]]; then
+          flag_g1_enforcement "g1-enforcement" \
+            "G1 enforce scope NOT DETERMINED — release identity '${c22_ms}' asserted via PMO_G1_ENFORCE_MILESTONE but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. Refusing to gate on a population that could not be identified — correct the assertion or unset it"
+        else
+          flag_advisory_only "g1-enforcement-scope" \
+            "release identity detected from the checked-out branch but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. A DETECTED candidate never blocks — set PMO_G1_ENFORCE_MILESTONE to assert a scope and make this fail-closed"
+        fi
+        ;;
+    esac
+
     # 22a — gh auth scope check (issue list read requires `repo` for
     # private repos; this is non-fatal — check warns once and exits if
     # scope missing, since the check is non-gate-blocking detection)
     local c22_scope_ok=true
-    if ! gh auth status --hostname github.com 2>&1 | /usr/bin/grep -qE '\brepo\b'; then
-      flag_g1_enforcement "g1-enforcement" "gh auth scope missing 'repo' — cannot iterate bundled issues (run 'gh auth refresh -s repo')"
-      c22_scope_ok=false
+    if [[ "$c22_gate_run" == "true" ]]; then
+      if ! gh auth status --hostname github.com 2>&1 | /usr/bin/grep -qE '\brepo\b'; then
+        flag_g1_enforcement "g1-enforcement" "gh auth scope missing 'repo' — cannot iterate bundled issues (run 'gh auth refresh -s repo')"
+        c22_scope_ok=false
+      fi
     fi
 
-    if [[ "$c22_scope_ok" == "true" ]]; then
+    if [[ "$c22_gate_run" == "true" && "$c22_scope_ok" == "true" ]]; then
       # 22b — per-issue G1 evaluation
-      # Single bulk query: all open status:bundled issues with body+labels.
+      # Single bulk query: open status:bundled issues IN THE DEPLOYING
+      # MILESTONE, with body+labels. `--milestone` is appended to the EXISTING
+      # query rather than added as a second query site, so the check still
+      # holds exactly one issue-list read (CIAC-1).
       local c22_issues_json
       c22_issues_json=$(gh issue list --repo "$AUDIT_REPO" --state open \
-        --label "status: bundled" --limit 5000 \
+        --label "status: bundled" --milestone "$c22_ms" --limit 5000 \
         --json number,title,body,labels 2>/dev/null || echo "[]")
 
       local c22_issue_count c22_finding_count=0
       c22_issue_count=$(printf '%s' "$c22_issues_json" | jq 'length' 2>/dev/null || echo 0)
 
+      # DENOM line — Check 63's idiom, adopted rather than re-invented ("a clean
+      # zero over an empty population is exactly what this check must never
+      # report"). A narrowed gate that resolves the WRONG milestone still emits
+      # a clean run; the only thing that makes that visible at read time is the
+      # scope travelling with the verdict. So the resolved slug, the source that
+      # produced it, and the denominator it was measured against are all logged
+      # BEFORE any finding — and a RESOLVED verdict over an empty population is
+      # then legible as a zero-over-zero rather than as a pass.
+      log "  DENOM: g1-enforcement — ${c22_issue_count} open 'status: bundled' issue(s) in milestone '${c22_ms}' (release identity from ${c22_vsrc}, validated against ${c22_mcount} paginated milestone(s)); Layer-B(g) FAIL-capable authority = structural AND F1 governance-intake AND NOT sub-task"
+
+      # >>> C22-EVAL-BEGIN — core/deploy/tests/test_g1_form_family.sh extracts the
+      #     region between this marker and the END marker VERBATIM and runs it
+      #     against fixture JSON, so the regression net exercises the SHIPPED
+      #     evaluation path (block-start resolves, Step-0 family branch, and the
+      #     per-issue criterion applicability) rather than a re-implementation of
+      #     it. Moving or renaming a marker makes extraction fail LOUDLY.
+      #
+      # ── Structural-finding ROUTER (not an emitter) ────────────────────────
+      # ADR-120 assigns FAIL-capable authority to `structural AND F1 AND NOT
+      # sub-task AND in-deploying-milestone`. The milestone conjunct is already
+      # satisfied by the query; the remaining two are a per-card predicate, so
+      # they are enforced HERE as a real predicate rather than as documentation.
+      #
+      # This adds NO emitter and changes NO emitter body: both branches
+      # terminate in the two helpers that already exist, and the only reason it
+      # is a function at all is that the alternative — repeating the same
+      # seven-line dispatch at each of the seven structural emit sites — is how
+      # one site ends up routing differently from the other six.
+      #
+      # `c22_finding_count` counts GATING findings only, so it is incremented
+      # here and only here on the gating branch. A recommend-tier structural
+      # finding is still DETECTED and still written to the warn log with
+      # "level":"recommend" — it is not silence, it is Layer-B(d).
+      #
+      # The block-start NOT-EVALUATED findings do NOT route through this: they
+      # are POPULATION-WIDE degraded-measurement statements, not per-card
+      # verdicts, and they keep the single-finding contract the two preceding
+      # editors of this block named. Do not fold them in.
+      _c22_emit_structural() {
+        if [[ "$_c22_gate_authority" == "true" ]]; then
+          flag_g1_enforcement "g1-enforcement" "$1"
+          c22_finding_count=$((c22_finding_count + 1))
+        else
+          recommend_g1_enforcement "g1-enforcement" \
+            "$1 [Layer-B(d) detector-tier: outside Layer-B(g) enforce authority, which is F1 governance-intake AND NOT sub-task — detected, never gate-blocking]"
+        fi
+      }
+      # ── G1-06 priority resolution — DELEGATED, never re-implemented ──────
+      # ADR-111 decides: "The P-level digit is the canonical priority
+      # satisfier. The carrier is not part of the contract... A consumer that
+      # needs an issue's priority reuses the shared detector. Authoring a
+      # fourth carrier-specific matcher re-creates precisely the divergence
+      # documented in the Context table." This block therefore holds NO
+      # carrier grammar of its own: it resolves the whole population once
+      # through release/tools/bundle-issues-parser.py parse_priority_body and
+      # looks the answer up per issue. The map is `|<number>:<level>` repeated,
+      # with `-` for unresolved, and a trailing `|` so every entry is delimited
+      # on both sides.
+      #
+      # Cost model, stated honestly rather than rounded down: ONE python
+      # process for the whole population (not one per issue), plus an
+      # in-process parameter-expansion lookup per issue that forks nothing.
+      # It is not O(1) in issues — the per-issue lookup scans the map string —
+      # but it spawns no process per issue, which is the property that matters
+      # against a query carrying --limit 5000.
+      #
+      # DEGRADED-STATE CONTRACT — the posture the two following Check-22
+      # editors bind to; do not invent a third. When the primitive is missing,
+      # unrunnable, or fails, this block emits EXACTLY ONE finding naming the
+      # cause, sets c22_prio_ok=false, and the per-issue G1-06 branch is then
+      # SKIPPED: the criterion reads NOT-EVALUATED, never FAILED. An empty map
+      # is indistinguishable from a population that genuinely carries no
+      # priorities, so letting the per-issue branch run would turn ONE root
+      # cause into one spurious FAIL per issue — and in enforce mode would
+      # block the deploy once per issue. A degraded measurement is never
+      # rendered as a clean one, and it is never fanned out either.
+      local c22_prio_tool="${_audit_src_root:-.}/release/tools/bundle-issues-parser.py"
+      local c22_prio_map="" c22_prio_ok=true c22_prio_exit=0
+      local c22_prio_rows=0 c22_prio_colons="" c22_prio_diag=""
+      if [[ ! -f "$c22_prio_tool" ]]; then
+        c22_prio_ok=false
+        flag_g1_enforcement "g1-enforcement" \
+          "G1-06 NOT EVALUATED across ${c22_issue_count} bundled issue(s) — priority primitive missing: $c22_prio_tool (deploy the release module or restore the tool)"
+        c22_finding_count=$((c22_finding_count + 1))
+      elif [[ ! -x "/usr/bin/python3" ]]; then
+        c22_prio_ok=false
+        flag_g1_enforcement "g1-enforcement" \
+          "G1-06 NOT EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot run the priority primitive"
+        c22_finding_count=$((c22_finding_count + 1))
+      else
+        # >>> G1-06-DELEGATE-BEGIN — core/deploy/tests/test_g1_06_priority_carrier.sh
+        #     extracts the program between this marker and the END marker
+        #     VERBATIM and executes it against fixture JSON, so the regression
+        #     net tests this glue rather than only the library behind it.
+        #     stderr is CAPTURED (2>&1), never discarded: an absent
+        #     interpreter, a syntax error and a data-shape change are three
+        #     different failures with three different fixes, and a message
+        #     naming only the tool path distinguishes none of them.
+        c22_prio_map=$(printf '%s' "$c22_issues_json" | /usr/bin/python3 -c '
+import importlib.util, json, pathlib, sys
+spec = importlib.util.spec_from_file_location("bundle_issues_parser", pathlib.Path(sys.argv[1]))
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+out = []
+for i in json.load(sys.stdin):
+    out.append("|%s:%s" % (i["number"], mod.parse_priority_body(i.get("body") or "") or "-"))
+sys.stdout.write("".join(out) + "|")
+' "$c22_prio_tool" 2>&1) || c22_prio_exit=$?
+        # >>> G1-06-DELEGATE-END
+        if [[ "$c22_prio_exit" -ne 0 ]]; then
+          c22_prio_ok=false
+          c22_prio_diag=$(printf '%s\n' "$c22_prio_map" | /usr/bin/grep -v '^[[:space:]]*$' | /usr/bin/tail -1)
+          flag_g1_enforcement "g1-enforcement" \
+            "G1-06 NOT EVALUATED across ${c22_issue_count} bundled issue(s) — priority primitive failed (exit ${c22_prio_exit}): ${c22_prio_diag:-(no diagnostic on stdout or stderr)}"
+          c22_finding_count=$((c22_finding_count + 1))
+          c22_prio_map=""
+        else
+          # Extraction-ran assertion — SCOPE-INVARIANT by construction. It
+          # asserts that every queried issue produced a row, NOT that any row
+          # resolved a level. "Zero resolved" is a legitimate result for a
+          # small conformant population and becomes common the moment the
+          # evaluated population is narrowed, so resolution count is the wrong
+          # proxy; rows-equals-issues holds at every scope. The row count is
+          # the ':' count in the map (no issue number or P-level contains one),
+          # computed by pattern removal so it forks nothing.
+          c22_prio_colons="${c22_prio_map//[^:]/}"
+          c22_prio_rows=${#c22_prio_colons}
+          if [[ "$c22_prio_rows" -ne "$c22_issue_count" ]]; then
+            c22_prio_ok=false
+            flag_g1_enforcement "g1-enforcement" \
+              "G1-06 NOT EVALUATED — priority extraction returned ${c22_prio_rows} row(s) for ${c22_issue_count} bundled issue(s); a partial extraction is a broken probe, not a clean population"
+            c22_finding_count=$((c22_finding_count + 1))
+            c22_prio_map=""
+          fi
+        fi
+      fi
+
+      # ── Step-0 kind vocabulary — DELEGATED, never re-implemented ──────────
+      # Template Detection Logic Step 0 (gate-criteria-spec.md § Gate 1)
+      # partitions the population into FOUR form families before any criterion
+      # runs, so no card class is left undefined. Its F2 predicate needs the
+      # LICENSED KIND VOCABULARY, and that vocabulary is configuration, not a
+      # literal: `type:<kind_id>` is the label-surface projection of the
+      # work_item_type discriminator, and the live set is whatever the
+      # deployment's selected packs declare. Hardcoding a kind pair here would
+      # bake one methodology's archetype into a methodology-neutral gate and go
+      # stale the moment a pack declares another kind — the conditional-where-
+      # adaptive-belongs shape ADR-033 rules against.
+      #
+      # This block therefore holds NO kind vocabulary of its own. It resolves the
+      # pack union ONCE through core/deploy/tools/check-work-hierarchy.py
+      # --emit-kinds — the SSOT reader Check 55 already consumes — and tests each
+      # issue's labels against it by parameter expansion, which forks nothing per
+      # issue. The delegate's own contract is what makes the answer trustworthy:
+      # it exits 3 on an empty SSOT *and* on a PARTIALLY-parsed one (fewer
+      # kind_id rows read than the packs declare), so a silently-short vocabulary
+      # — the mode that returns a plausible non-empty subset — cannot reach here.
+      #
+      # DEGRADED-STATE CONTRACT — the posture the G1-06 block above names, BOUND
+      # rather than re-invented. Primitive missing, interpreter unrunnable, or a
+      # non-zero exit ⇒ EXACTLY ONE finding naming the cause, c22_kinds_ok=false,
+      # and the family branch then reads NOT-EVALUATED for every issue that is
+      # not F0/F1: it emits nothing per issue rather than guessing a family. A
+      # guessed family is a wrong verdict on a correctly-labelled card, which is
+      # the precise defect Step 0 exists to remove — so degrading to silence on
+      # that slice is strictly better than degrading to a fan-out of FAILs, and
+      # in enforce mode it is the difference between one blocked deploy and one
+      # per issue. F0 and F1 are label-only predicates and stay fully evaluated.
+      local c22_kinds_tool="${_audit_src_root:-.}/core/deploy/tools/check-work-hierarchy.py"
+      local c22_kinds_out="" c22_kinds_csv="" c22_kinds_ok=true c22_kinds_exit=0
+      local c22_kinds_diag="" c22_kinds_show=""
+      if [[ ! -f "$c22_kinds_tool" ]]; then
+        c22_kinds_ok=false
+        flag_g1_enforcement "g1-enforcement" \
+          "Step-0 form-family resolution NOT EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive missing: $c22_kinds_tool (restore the tool; G1-09 kind-form verdicts are withheld, never guessed)"
+        c22_finding_count=$((c22_finding_count + 1))
+      elif [[ ! -x "/usr/bin/python3" ]]; then
+        c22_kinds_ok=false
+        flag_g1_enforcement "g1-enforcement" \
+          "Step-0 form-family resolution NOT EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot resolve the licensed kind vocabulary"
+        c22_finding_count=$((c22_finding_count + 1))
+      else
+        # stderr CAPTURED (2>&1), never discarded — an absent interpreter, a
+        # partially-parsed pack corpus and an empty one are three failures with
+        # three different fixes, and only the delegate's own message tells them
+        # apart.
+        c22_kinds_out=$(/usr/bin/python3 "$c22_kinds_tool" \
+          --root "${_audit_src_root:-.}" --emit-kinds 2>&1) || c22_kinds_exit=$?
+        if [[ "$c22_kinds_exit" -ne 0 ]]; then
+          c22_kinds_ok=false
+          c22_kinds_diag=$(printf '%s\n' "$c22_kinds_out" | /usr/bin/grep -v '^[[:space:]]*$' | /usr/bin/head -1)
+          flag_g1_enforcement "g1-enforcement" \
+            "Step-0 form-family resolution NOT EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive failed (exit ${c22_kinds_exit}): ${c22_kinds_diag:-(no diagnostic on stdout or stderr)}"
+          c22_finding_count=$((c22_finding_count + 1))
+        else
+          # Comma-delimited with a sentinel on BOTH ends, so a membership test is
+          # one parameter expansion and `card` can never match inside `discard`.
+          # The trailing sentinel is load-bearing for the splitter below, not
+          # decoration: `printf '%s\n'` supplies the final newline that `tr`
+          # turns into the closing comma, because `$(...)` strips the one the
+          # delegate printed.
+          if [[ -n "$c22_kinds_out" ]]; then
+            c22_kinds_csv=",$(printf '%s\n' "$c22_kinds_out" | /usr/bin/tr '\n' ',')"
+            # Sentinel-free rendering for operator-facing messages — the sentinels
+            # serve the membership test, not the reader.
+            c22_kinds_show="${c22_kinds_csv#,}"
+            c22_kinds_show="${c22_kinds_show%,}"
+          fi
+          if [[ -z "$c22_kinds_out" ]]; then
+            # Unreachable through the delegate's own contract (it exits 3 on an
+            # empty set), so this arm exists to keep that guarantee LOCAL: if the
+            # contract ever changes, the family branch must not silently read
+            # every kind-form card as F3 and hand it an unresolved-form finding.
+            c22_kinds_ok=false
+            flag_g1_enforcement "g1-enforcement" \
+              "Step-0 form-family resolution NOT EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive exited 0 with an empty vocabulary; an empty kind set is a broken probe, not a pack corpus with no kinds"
+            c22_finding_count=$((c22_finding_count + 1))
+          fi
+        fi
+      fi
+
       # Per-issue iteration. For each issue:
-      #  1. Determine intake-tier label count + label_template (Step 1)
-      #  2. Infer template from unique body markers (Step 2; pragmatic
+      #  0. Resolve the FORM FAMILY (Step 0) — F0 multi-tier / F1 governance-
+      #     intake / F2 kind-form / F3 unresolved. Total and disjoint: every
+      #     issue lands in exactly one, so silence is not a reachable outcome.
+      #  1. Determine intake-tier label count + label_template (Step 1; F1 only)
+      #  2. Infer template from unique body markers (Step 2; F1 only; pragmatic
       #     variant per leading comment)
-      #  3. Reconcile (Step 3) — emit G1-09 FAIL on mismatch
+      #  3. Reconcile (Step 3; F1 only) — emit G1-09 FAIL on mismatch
       #  4. ENFORCE G1-01 / G1-03 / G1-05a / G1-06 / G1-09 (structural) +
       #     RECOMMEND-FLAG G1-02 / G1-04 / G1-05b / G1-08 (judgment) per the
-      #     applies-to triple
+      #     applies-to triple (F1) or the body-declared field set (F2)
       local _num _title _body _labels _label_template _inferred _template
       local _has_imp _has_bug _has_obs _label_total
       local _bm_repro _bm_obswhat _bm_propchange _title_ok _title_reason
       local _ac_lines _ac_total _ac_bad _ac_line _ac_norm _ac_ok
+      local _prio _prio_field _prio_needle
+      local _family _kind _kind_rest _kind_one
+      local _ap_evidence _ap_ac _ap_prio
+      local _c22_gate_authority
       while IFS= read -r _issue_line; do
         [[ -n "$_issue_line" ]] || continue
         _num=$(printf '%s' "$_issue_line" | jq -r '.number')
@@ -5730,48 +6227,210 @@ cmd_check() {
         _body=$(printf '%s' "$_issue_line" | jq -r '.body // ""')
         _labels=$(printf '%s' "$_issue_line" | jq -r '.labels[].name' 2>/dev/null | /usr/bin/tr '\n' ',')
 
-        # Step 1 — count intake-tier labels
+        # Reset per iteration. `_ac_lines` is function-scoped and is assigned
+        # only inside the G1-05a branch, so without this it would carry the
+        # PREVIOUS issue's bullets into an issue whose own branch did not run.
+        # No F1 verdict moves (G1-05b's reader is gated on the same condition
+        # that assigns it), but the F2 path below has a different applicability
+        # predicate, so the latent leak is closed rather than relied upon.
+        _ac_lines=""
+
+        # ── Step 0 — form-family resolution ───────────────────────────────────
+        # Four families, evaluated in precedence order; every issue lands in
+        # EXACTLY one, so the partition is a total function over the population
+        # and "the gate is silent on this card" is not a reachable state.
+        #
+        #   F0 multi-tier      — >1 intake-tier label
+        #   F1 governance-intake — exactly 1 intake-tier label
+        #   F2 kind-form       — 0 intake-tier labels AND a pack-declared
+        #                        `type:<kind_id>` label
+        #   F3 unresolved-form — 0 intake-tier labels AND no pack-declared kind
+        #
+        # F1 takes precedence over F2 DELIBERATELY, and it is load-bearing: the
+        # interim-vehicle rule (intake-desk references/type-map.md § Kind ↔ label
+        # ↔ level binding) says a resolved kind with no dedicated form emits on
+        # the interim improvement.yml vehicle carrying its kind as a `type:`
+        # label — so `improvement` + `type:task` is CONFORMANT, not a double
+        # category, and every such card keeps its existing verdict byte-for-byte.
         _has_imp=0; _has_bug=0; _has_obs=0
         [[ ",${_labels}" == *",improvement,"* ]] && _has_imp=1
         [[ ",${_labels}" == *",bug,"* ]] && _has_bug=1
         [[ ",${_labels}" == *",observation,"* ]] && _has_obs=1
         _label_total=$((_has_imp + _has_bug + _has_obs))
 
-        if [[ "$_label_total" -ne 1 ]]; then
-          flag_g1_enforcement "g1-enforcement" \
+        _family=""; _kind=""
+        if [[ "$_label_total" -gt 1 ]]; then
+          _family="F0"
+        elif [[ "$_label_total" -eq 1 ]]; then
+          _family="F1"
+        elif [[ "$c22_kinds_ok" != "true" ]]; then
+          _family="NOT-EVALUATED"
+        else
+          # Iterate the KIND SET (bounded by the packs, four members today), not
+          # the label list — the test is then pure parameter expansion and forks
+          # nothing per issue.
+          _kind_rest="${c22_kinds_csv#,}"
+          while [[ -n "$_kind_rest" ]]; do
+            _kind_one="${_kind_rest%%,*}"
+            # Termination is asserted here rather than assumed from the trailing
+            # sentinel: `${var#*,}` is a NO-OP on a comma-less remainder, so a
+            # splitter that trusts the delimiter spins forever the moment the
+            # vocabulary arrives without its trailing comma. Advancing only on a
+            # comma actually present, and emptying otherwise, makes the loop
+            # terminate on any input the delegate can produce.
+            if [[ "$_kind_rest" == *,* ]]; then
+              _kind_rest="${_kind_rest#*,}"
+            else
+              _kind_rest=""
+            fi
+            [[ -n "$_kind_one" ]] || continue
+            if [[ ",${_labels}" == *",type:${_kind_one},"* ]]; then
+              _kind="$_kind_one"
+              break
+            fi
+          done
+          if [[ -n "$_kind" ]]; then _family="F2"; else _family="F3"; fi
+        fi
+
+        # ── Per-card gate authority (ADR-120) ─────────────────────────────────
+        # FAIL-capable authority is held by the F1 governance-intake family, and
+        # only on cards that do not carry `sub-task`. Everything else is
+        # Layer-B(d): detected and recommend-flagged, never gated.
+        #
+        # WHY `NOT sub-task` IS A PREDICATE AND NOT A COMMENT. Every bundled
+        # sub-task carries zero intake-tier labels today, so it lands in F2/F3
+        # and escapes the F1 gate ANYWAY — the guard moves zero cards at the
+        # moment it ships. That escape is a COINCIDENCE of the sub-task
+        # template's label set, not a construction: one `--add-label improvement`
+        # on a stage sub-task re-arms a self-block in which the pipeline's own
+        # bookkeeping cards gate the release they are bookkeeping. § Gate 3
+        # already exempts "sub-task decompositions within an already-bundled
+        # parent" by name, so this applies an EXISTING governed exemption at the
+        # surface that never received it. A guard that currently moves nothing
+        # is still a guard; deleting it because its cell is empty is how the
+        # cell gets filled.
+        #
+        # F0 is deliberately OUTSIDE the enforce population and that is a stated
+        # consequence, not an oversight. Authority is F1; F0 (>1 intake-tier
+        # label) is a different family with a different verdict, so its finding
+        # is detected at recommend-tier like F2's and F3's. Its cell is empty on
+        # the live population.
+        _c22_gate_authority=false
+        if [[ "$_family" == "F1" && ",${_labels}" != *",sub-task,"* ]]; then
+          _c22_gate_authority=true
+        fi
+
+        # F0 — the >1 case. Emit and remediation are today's, VERBATIM: "apply
+        # correct single label" is exactly the right instruction for a card
+        # wearing two intake-tier labels, and the branch this Step 0 replaces
+        # covered both the 0 case and the >1 case. Splitting them out means the
+        # >1 disposition is preserved by statement rather than by coincidence —
+        # the cell is empty on the live population today, and a single label
+        # mutation fills it.
+        if [[ "$_family" == "F0" ]]; then
+          _c22_emit_structural \
             "issue #${_num} — G1-09 FAIL: ${_label_total} intake-tier label(s) (expected exactly 1 of improvement/bug/observation; apply correct single label per pipeline/stage-01-intake.md § Routing)"
-          c22_finding_count=$((c22_finding_count + 1))
           continue
         fi
 
-        _label_template=""
-        [[ "$_has_imp" -eq 1 ]] && _label_template="improvement"
-        [[ "$_has_bug" -eq 1 ]] && _label_template="bug"
-        [[ "$_has_obs" -eq 1 ]] && _label_template="observation"
-
-        # Step 2 — infer template from unique body markers (pragmatic
-        # variant; see leading comment for rationale)
-        _bm_repro=0; _bm_obswhat=0; _bm_propchange=0
-        printf '%s' "$_body" | /usr/bin/grep -qE '^### Reproduction Steps[[:space:]]*$' && _bm_repro=1
-        printf '%s' "$_body" | /usr/bin/grep -qE '^### What is missing\?[[:space:]]*$' && _bm_obswhat=1
-        printf '%s' "$_body" | /usr/bin/grep -qE '^### Proposed Change[[:space:]]*$' && _bm_propchange=1
-
-        _inferred="ambiguous"
-        if [[ "$_bm_repro" -eq 1 ]]; then
-          _inferred="bug"
-        elif [[ "$_bm_obswhat" -eq 1 ]]; then
-          _inferred="observation"
-        elif [[ "$_bm_propchange" -eq 1 ]]; then
-          _inferred="improvement"
+        # NOT-EVALUATED — the kind vocabulary is unavailable, so F2 and F3 cannot
+        # be told apart. The single cause was emitted once at block start; this
+        # issue is withheld, never guessed. Per the degraded-state contract.
+        if [[ "$_family" == "NOT-EVALUATED" ]]; then
+          continue
         fi
 
-        # Step 3 — reconcile
-        _template="$_label_template"
-        if [[ "$_inferred" != "ambiguous" && "$_label_template" != "$_inferred" ]]; then
-          flag_g1_enforcement "g1-enforcement" \
-            "issue #${_num} — G1-09 FAIL: label=${_label_template}, body=${_inferred} (label-body template mismatch — relabel or rewrite body per gate-criteria-spec.md self-repair)"
-          c22_finding_count=$((c22_finding_count + 1))
+        # F3 — no intake-tier label and no pack-declared kind. This is a genuine
+        # routing defect, but it is NOT the F1 defect, so it does not inherit
+        # F1's remediation: telling the author of a `type:spike` card to "apply
+        # correct single label of improvement/bug/observation" instructs them to
+        # break a card whose only real problem is that its kind is not one the
+        # packs license. The message names the labels the card actually carries
+        # and the vocabulary it was measured against.
+        if [[ "$_family" == "F3" ]]; then
+          _c22_emit_structural \
+            "issue #${_num} — G1-09 UNRESOLVED-FORM: no intake-tier label (improvement/bug/observation) and no pack-declared kind label (licensed kinds: ${c22_kinds_show}); labels carried: ${_labels%,} — route it to a form family per pipeline/stage-01-intake.md § Routing"
           continue
+        fi
+
+        if [[ "$_family" == "F1" ]]; then
+          _label_template=""
+          [[ "$_has_imp" -eq 1 ]] && _label_template="improvement"
+          [[ "$_has_bug" -eq 1 ]] && _label_template="bug"
+          [[ "$_has_obs" -eq 1 ]] && _label_template="observation"
+
+          # Step 2 — infer template from unique body markers (pragmatic
+          # variant; see leading comment for rationale)
+          _bm_repro=0; _bm_obswhat=0; _bm_propchange=0
+          printf '%s' "$_body" | /usr/bin/grep -qE '^### Reproduction Steps[[:space:]]*$' && _bm_repro=1
+          printf '%s' "$_body" | /usr/bin/grep -qE '^### What is missing\?[[:space:]]*$' && _bm_obswhat=1
+          printf '%s' "$_body" | /usr/bin/grep -qE '^### Proposed Change[[:space:]]*$' && _bm_propchange=1
+
+          _inferred="ambiguous"
+          if [[ "$_bm_repro" -eq 1 ]]; then
+            _inferred="bug"
+          elif [[ "$_bm_obswhat" -eq 1 ]]; then
+            _inferred="observation"
+          elif [[ "$_bm_propchange" -eq 1 ]]; then
+            _inferred="improvement"
+          fi
+
+          # Step 3 — reconcile
+          _template="$_label_template"
+          if [[ "$_inferred" != "ambiguous" && "$_label_template" != "$_inferred" ]]; then
+            _c22_emit_structural \
+              "issue #${_num} — G1-09 FAIL: label=${_label_template}, body=${_inferred} (label-body template mismatch — relabel or rewrite body per gate-criteria-spec.md self-repair)"
+            continue
+          fi
+        else
+          # F2 — G1-09 is SATISFIED by Step 0: the kind label resolved against the
+          # licensed vocabulary IS the form determination, so there is no
+          # label↔body pair left to reconcile. Steps 2 and 3 are F1-only.
+          _template="kind:${_kind}"
+        fi
+
+        # ── Per-criterion applicability ───────────────────────────────────────
+        # F1 reads its applies-to triple from gate-criteria-spec.md § Gate 1 —
+        # unchanged, and the expressions below are the same predicates the three
+        # criterion branches used to carry inline.
+        #
+        # F2 derives applicability from the ISSUE BODY's declared field sections,
+        # NOT from a family-wide assertion and NOT from any kind literal. The
+        # derivation is the whole anti-blanket defence: field presence varies
+        # WITHIN the kind-form family, so a family-wide "these fields are absent"
+        # is wrong on its face — story.yml declares an Acceptance Criteria field
+        # whose own description states the very patterns G1-05a enforces, while
+        # epic.yml declares no AC, no Evidence and no Priority. Keying on the
+        # body makes the rule (a) total — every issue has a body; (b) per-kind by
+        # construction, with no kind named anywhere; (c) self-revoking — a form
+        # that gains a field enters scope with no edit here; and (d) correct for
+        # the kinds that have NO dedicated form and ride the interim
+        # improvement.yml vehicle, whose bodies do carry the fields and are
+        # gated accordingly. G1-01 is applicability-free: all six templates carry
+        # a prefix-less `title: ""` and the kind forms bind themselves to the same
+        # intake-style-guide.md §7 floor in their own header comments, so the
+        # mapping is identity and the criterion applies to every family.
+        _ap_evidence=false; _ap_ac=false; _ap_prio=false; _prio_field="Priority"
+        if [[ "$_family" == "F1" ]]; then
+          if [[ "$_template" == "improvement" || "$_template" == "bug" ]]; then
+            _ap_evidence=true; _ap_ac=true; _ap_prio=true
+            [[ "$_template" == "bug" ]] && _prio_field="Severity"
+          fi
+        else
+          if printf '%s' "$_body" | /usr/bin/grep -qE '^### Evidence[[:space:]]*$'; then
+            _ap_evidence=true
+          fi
+          if printf '%s' "$_body" | /usr/bin/grep -qE '^### Acceptance Criteria[[:space:]]*$'; then
+            _ap_ac=true
+          fi
+          # Applicability keys on the declared FIELD SECTION; the P-level itself
+          # is still resolved by the ADR-111 shared detector via c22_prio_map, so
+          # this introduces no second priority grammar (CIAC-1).
+          if printf '%s' "$_body" | /usr/bin/grep -qE '^### Priority[[:space:]]*$'; then
+            _ap_prio=true
+          elif printf '%s' "$_body" | /usr/bin/grep -qE '^### Severity[[:space:]]*$'; then
+            _ap_prio=true; _prio_field="Severity"
+          fi
         fi
 
         # G1-01 — title informativeness floor (SYNTACTIC floor only; the
@@ -5794,35 +6453,50 @@ cmd_check() {
           _title_ok=false; _title_reason="too short (${#_title} chars; informative summary expected)"
         fi
         if [[ "$_title_ok" != "true" ]]; then
-          flag_g1_enforcement "g1-enforcement" \
+          _c22_emit_structural \
             "issue #${_num} — G1-01 FAIL: title not an informative summary — ${_title_reason} (see intake-style-guide.md §7)"
-          c22_finding_count=$((c22_finding_count + 1))
         fi
 
-        # G1-03 — evidence-quality labels in body (improvement + bug,
-        # NOT observation per applies-to triple)
-        if [[ "$_template" == "improvement" || "$_template" == "bug" ]]; then
+        # G1-03 — evidence-quality labels in body. F1: improvement + bug, NOT
+        # observation, per the applies-to triple. F2: iff the body declares an
+        # `### Evidence` section — the kind forms declare no Evidence field, so
+        # demanding an evidence label of them would fail a card for omitting a
+        # field its form never offered.
+        if [[ "$_ap_evidence" == "true" ]]; then
           if ! printf '%s' "$_body" | /usr/bin/grep -qE '\[(SOURCE|INFERRED|CONTEXT|RECOMMENDED|ASSUMPTION)' ; then
-            flag_g1_enforcement "g1-enforcement" \
+            _c22_emit_structural \
               "issue #${_num} — G1-03 FAIL: no evidence-quality labels found in body ([SOURCE]/[INFERRED]/[CONTEXT]/[ASSUMPTION – CONFIRM]/[RECOMMENDED])"
-            c22_finding_count=$((c22_finding_count + 1))
           fi
         fi
 
-        # G1-06 — Priority (improvement) OR Severity P-level (bug per
-        # Adapter G1-06-Bug); n/a observation
-        if [[ "$_template" == "improvement" ]]; then
-          if ! printf '%s' "$_body" | /usr/bin/grep -qE '\*\*Priority:\*\*[[:space:]]*P[1-4]'; then
-            flag_g1_enforcement "g1-enforcement" \
-              "issue #${_num} — G1-06 FAIL: Priority field missing or no P1-P4 value (improvement.yml expects '**Priority:** P1-Urgent'-style anchor)"
-            c22_finding_count=$((c22_finding_count + 1))
-          fi
-        elif [[ "$_template" == "bug" ]]; then
-          # Adapter G1-06-Bug — Severity P-level digit canonical
-          if ! printf '%s' "$_body" | /usr/bin/grep -qE '\*\*Severity:\*\*[[:space:]]*P[1-4]'; then
-            flag_g1_enforcement "g1-enforcement" \
-              "issue #${_num} — G1-06 FAIL: Severity field missing or no P1-P4 value (Adapter G1-06-Bug — bug.yml expects '**Severity:** P1-Blocker'-style anchor)"
-            c22_finding_count=$((c22_finding_count + 1))
+        # G1-06 — a P1-P4 level in the body Priority OR Severity field.
+        # Template-agnostic BY DESIGN per gate-criteria-spec.md § Gate 1
+        # Adapter G1-06-Bug and ADR-111: the P-level DIGIT is the canonical
+        # satisfier, never the field name and never the qualifier word
+        # ("High" / "Material" resolve to unset, because the qualifier
+        # vocabulary is deliberately template-divergent and widening the
+        # grammar to accept a word would invent a level the author never
+        # wrote). n/a for observation — that template defines no such field.
+        #
+        # Carrier-blindness is the defect this branch used to carry: it bound
+        # the bold-inline form only and was therefore blind to every
+        # form-rendered body. Do NOT re-add a carrier literal here — change
+        # the shared detector, which every consumer inherits.
+        #
+        # Gated on c22_prio_ok per the degraded-state contract above: when the
+        # primitive degraded, G1-06 is NOT-EVALUATED (one finding, emitted at
+        # block start), never a per-issue FAIL.
+        # Applicability (_ap_prio) is resolved above — F1 from the applies-to
+        # triple, F2 from the body's declared Priority/Severity section.
+        if [[ "$c22_prio_ok" == "true" && "$_ap_prio" == "true" ]]; then
+          # In-process map lookup — forks nothing. Empty or "-" means the
+          # shared detector resolved no P-level for this body.
+          _prio_needle="|${_num}:"
+          _prio="${c22_prio_map##*"$_prio_needle"}"
+          _prio="${_prio%%|*}"
+          if [[ -z "$_prio" || "$_prio" == "-" ]]; then
+            _c22_emit_structural \
+              "issue #${_num} — G1-06 FAIL: no P1-P4 level found in the body ${_prio_field} field (any carrier — '### ${_prio_field}' heading, '**${_prio_field}:**' inline, or list-bullet form; the P-level DIGIT is the satisfier, not the qualifier word — see gate-criteria-spec.md § Gate 1 Adapter G1-06-Bug)"
           fi
         fi
 
@@ -5839,7 +6513,16 @@ cmd_check() {
         # Adapter G1-05-Bug (bug bodies): also accept the literal bug-narrative
         # AC phrases. Pattern (d) behavioral/`method:` is a recommend-only
         # refinement (gate-criteria-spec.md § Gate 1) — NOT gated here.
-        if [[ "$_template" == "improvement" || "$_template" == "bug" ]]; then
+        #
+        # F2 applicability (_ap_prio's sibling, _ap_ac) is body-derived: an
+        # `### Acceptance Criteria` section present ⇒ in scope. This is the cell
+        # a family-wide `n/a` would have got wrong — `story.yml` declares a
+        # REQUIRED Acceptance Criteria field whose description restates G1-05a's
+        # own patterns (verifiable verb, or file/section + observable state), so
+        # exempting the whole kind-form family would have created exactly the
+        # silent blanket exemption this scope rule exists to prevent, on the
+        # criterion where the forms already agree with the gate.
+        if [[ "$_ap_ac" == "true" ]]; then
           # Pull AC checkbox bullets. Match leading `- [ ]` / `- [x]` / `- [X]`
           # (any indentation). This is the gateable AC surface; non-checkbox
           # prose in the AC section is not a bullet and is not checked.
@@ -5874,9 +6557,8 @@ cmd_check() {
             done < <(printf '%s\n' "$_ac_lines")
           fi
           if [[ "$_ac_bad" -gt 0 ]]; then
-            flag_g1_enforcement "g1-enforcement" \
+            _c22_emit_structural \
               "issue #${_num} — G1-05a FAIL: ${_ac_bad} of ${_ac_total} AC bullet(s) match no G1-05a structural pattern (verb-first / backtick-path+state-verb / 'predicate:'$([[ "$_template" == "bug" ]] && printf ' / bug-narrative phrase'); see gate-criteria-spec.md § Gate 1 self-repair)"
-            c22_finding_count=$((c22_finding_count + 1))
           fi
         fi
 
@@ -5887,6 +6569,15 @@ cmd_check() {
         # ISSUES in any mode and never add to c22_finding_count (which counts
         # only gating findings). Lightweight content proxies, not the full
         # judgment evaluation (that remains a human/LLM gate-assist task).
+        #
+        # These branches stay keyed on `_template`, which resolves to
+        # `kind:<kind_id>` for F2 and therefore matches neither arm — the
+        # judgment tier does not reach the kind-form family and is byte-unchanged
+        # by the Step-0 addition. That is deliberate rather than pending: the
+        # applicability question this change answers is about the STRUCTURAL
+        # criteria that were emitting wrong verdicts. Extending the advisory tier
+        # to F2 would add un-asked-for output on 39 live cards under the same
+        # commit, so it is left to a card that scopes it.
 
         # G1-02 — description / bug-narrative actionable (presence proxy).
         if [[ "$_template" == "improvement" ]]; then
@@ -5938,11 +6629,12 @@ cmd_check() {
         fi
 
       done < <(printf '%s' "$c22_issues_json" | jq -c '.[]')
+      # >>> C22-EVAL-END
 
       if [[ "$c22_finding_count" -eq 0 ]]; then
-        log "  OK:    0 gating G1 findings across ${c22_issue_count} bundled issue(s) (structural enforced: G1-01/03/05a/06/09; judgment recommend-flagged: G1-02/04/05b/08)"
+        log "  OK:    0 gating G1 findings across ${c22_issue_count} bundled issue(s) in milestone '${c22_ms}' (structural enforced on F1 AND NOT sub-task: G1-01/03/05a/06/09; judgment recommend-flagged: G1-02/04/05b/08; findings outside the enforce authority recommend-flagged, not silent)"
       else
-        log "  ${c22_finding_count} gating G1 finding(s) emitted across ${c22_issue_count} bundled issue(s) (mode=${G1_ENFORCEMENT_MODE}; judgment criteria recommend-flagged separately, non-gating)"
+        log "  ${c22_finding_count} gating G1 finding(s) emitted across ${c22_issue_count} bundled issue(s) in milestone '${c22_ms}' (mode=${G1_ENFORCEMENT_MODE}; judgment criteria and out-of-authority structural findings recommend-flagged separately, non-gating)"
       fi
     fi
   fi
@@ -8898,6 +9590,23 @@ cmd_check() {
   #                       WARN-ONLY, never enforce-capable. A description legitimately
   #                       lags membership mid-release; gating it would make it
   #                       chronically non-green. Emitted as its own sub-invariant.
+  # M2 SUB-CLASS TOKENS: every `named-not-member` ref carries exactly ONE inline
+  # bracketed token saying why it is not a member — [elsewhere:ms#N] (it sits in a
+  # different milestone) · [no-milestone] (it sits in none) · [member-excluded:sub-task]
+  # (it IS in this milestone but the sub-task filter removes it from the reconciled
+  # set) · [unresolved] (nothing could answer). The remedies are opposite, so
+  # collapsing them made the warn line unactionable: the operator had to open every
+  # ref by hand. The four are summarized by COUNT_M2_NNM plus one sub-counter each,
+  # and the whole per-milestone detail now reaches the warn line — before this, the
+  # M2 read took field $2 only and DISCARDED the refs entirely.
+  # READ THOSE COUNTERS WITH awk EXACT FIELD EQUALITY. `grep COUNT_M2_NNM`
+  # prefix-collides with all four sub-counters; `awk '$1=="..."'` does not.
+  # M2's EMITTER IS DELIBERATELY UNCHANGED. Routing it through flag_advisory_only —
+  # the structurally-non-escalating helper M3 uses, and the correct fix for the
+  # enforce-leak recorded below — would violate the governing card's acceptance
+  # criterion, which asserts in as many words that M2 still routes through the WARN
+  # emitter unconditionally. The fix is right and is tracked separately; taking it
+  # here would trade a latent defect for a failed criterion.
   # The two legs read DIFFERENT membership sets, deliberately. M1 is OPEN-scoped: it
   # asks a live-drift question, and a completed card's parent-epic is history. M2's
   # set spans ALL issue states, because an OPEN-only set cannot tell "the Scope names
@@ -8932,16 +9641,53 @@ cmd_check() {
     elif ! command -v gh >/dev/null 2>&1; then
       log "  SKIP:  gh unavailable — milestone↔epic membership needs the live milestone + issue set (offline/unauth; mirrors Check 39/40/51/52/53)"
     else
-      local c56_mode c56_out c56_exit=0
+      local c56_mode c56_out c56_exit=0 c56_sentinel
       c56_mode=$(resolve_check_mode "milestone-epic-membership")
       c56_out=$(/usr/bin/python3 "$c56_script" --repo "$AUDIT_REPO" --output-format tsv 2>&1) || c56_exit=$?
+      # STRUCTURAL-VALIDITY SENTINEL — a broken measurement must not read clean.
+      # exit 1 means TWO different things: "M1/M2 findings present" and "the
+      # primitive raised". An unhandled traceback lands on this same captured
+      # stream (2>&1), parses as TSV with zero M1/M2/M3 rows, and the branches
+      # below then print OK on all three legs. Reproduced, not theorised.
+      # COUNT_M2 is emitted unconditionally and after every M1/M2 row, so
+      # exactly one such row is the evidence the emit ran to completion. Counted
+      # with awk exact field equality so COUNT_M2_NNM* cannot inflate it.
+      c56_sentinel=$(echo "$c56_out" | awk -F'\t' '$1=="COUNT_M2"{n++} END{print n+0}')
       if [[ $c56_exit -eq 3 ]]; then
         flag_warn_or_issue "milestone-epic-membership" "input failure (exit 3): $(echo "$c56_out" | head -1) — the live milestone/issue set was unreadable; fix gh auth/connectivity"
+      elif [[ ( $c56_exit -eq 0 || $c56_exit -eq 1 ) && "$c56_sentinel" != "1" ]]; then
+        # ONE finding naming the cause, and every leg gated behind it — the same
+        # degraded posture the sibling checks on this file already state, not a
+        # third shape. Nothing reports clean OR dirty from an unparseable emit.
+        flag_warn_or_issue "milestone-epic-membership" "NOT-EVALUATED — the primitive produced no parseable emit (exit $c56_exit; expected exactly 1 COUNT_M2 row, saw ${c56_sentinel:-0}). M1, M2 and M3 are ALL unevaluated — this is not a clean result: $(echo "$c56_out" | head -1)"
       elif [[ $c56_exit -eq 0 || $c56_exit -eq 1 ]]; then
         local c56_declared c56_m1 c56_m2
         c56_declared=$(echo "$c56_out" | awk -F'\t' '$1=="DECLARED"{print $2}')
         c56_m1=$(echo "$c56_out" | awk -F'\t' '$1=="M1"{print "ms#"$2":#"$3"(parent #"$4"!=epic #"$5")"}' | paste -sd'; ' -)
         c56_m2=$(echo "$c56_out" | awk -F'\t' '$1=="M2"{print "ms#"$2}' | paste -sd, -)
+        # M2 sub-class decomposition + the per-milestone detail. awk EXACT field
+        # equality throughout: a grep for COUNT_M2_NNM matches all four
+        # sub-counters too, which would silently report a sub-count as the total.
+        local c56_m2_nnm c56_m2_else c56_m2_none c56_m2_mex c56_m2_unres c56_m2_res c56_m2_detail c56_m2_degraded=""
+        c56_m2_nnm=$(echo   "$c56_out" | awk -F'\t' '$1=="COUNT_M2_NNM"{print $2}')
+        c56_m2_else=$(echo  "$c56_out" | awk -F'\t' '$1=="COUNT_M2_NNM_ELSEWHERE"{print $2}')
+        c56_m2_none=$(echo  "$c56_out" | awk -F'\t' '$1=="COUNT_M2_NNM_NO_MILESTONE"{print $2}')
+        c56_m2_mex=$(echo   "$c56_out" | awk -F'\t' '$1=="COUNT_M2_NNM_MEMBER_EXCLUDED"{print $2}')
+        c56_m2_unres=$(echo "$c56_out" | awk -F'\t' '$1=="COUNT_M2_NNM_UNRESOLVED"{print $2}')
+        c56_m2_res=$(echo   "$c56_out" | awk -F'\t' '$1=="M2_REF_RESOLUTION"{print $2}')
+        # Joined by awk with an explicit "; ", NOT `paste -sd'; '`: paste's -d
+        # takes a CYCLING LIST of delimiters, so a two-character argument
+        # alternates ';' and ' ' between records. These records carry spaces, so
+        # every second boundary would be indistinguishable from an intra-record
+        # space. printf also emits no trailing newline, which keeps the detail a
+        # SINGLE LINE — flag_warn_or_issue's jsonl writer escapes backslash and
+        # double-quote only, so an embedded newline would write malformed JSONL
+        # into the warn log the enforce-flip decision is read from.
+        c56_m2_detail=$(echo "$c56_out" | awk -F'\t' '$1=="M2"{printf "%sms#%s %s", (n++ ? "; " : ""), $2, $5}')
+        # A dead resolver and a population that genuinely could not be resolved
+        # otherwise produce identical counters. The primitive reports which, so
+        # the warn line says which.
+        [[ "$c56_m2_res" == "degraded" ]] && c56_m2_degraded=" [ref resolution DEGRADED — tokens fell back to the free indices; treat unresolved counts as unmeasured]"
         if [[ -z "$c56_m1" && -z "$c56_m2" ]]; then
           log "  OK:    milestone↔epic membership — no drift (${c56_declared:-0} milestone(s) declare an epic; M2 reconciliation clean)"
         else
@@ -8955,8 +9701,17 @@ cmd_check() {
             fi
           fi
           # M2 — warn-only ALWAYS (never gates, independent of mode)
+          # KNOWN, TRACKED, AND NOT FIXED HERE: this call is UNGUARDED, while M1
+          # above guards with an explicit mode branch. flag_warn_or_issue carries
+          # an enforce case that emits FAIL and increments the issue counter, so
+          # flipping milestone-epic-membership.mode to enforce WOULD make M2 gate
+          # — contradicting the "warn-only ALWAYS" this comment asserts. The fix
+          # is to route M2 through flag_advisory_only, as M3 already is; it is out
+          # of scope here because the governing card's acceptance criterion
+          # requires M2 to keep routing through the WARN emitter unconditionally,
+          # and it is tracked as its own defect. Do not take it opportunistically.
           if [[ -n "$c56_m2" ]]; then
-            flag_warn_or_issue "milestone-epic-membership" "M2 reconciliation (warn-only; advisory) — description↔membership divergence on: $c56_m2"
+            flag_warn_or_issue "milestone-epic-membership" "M2 reconciliation (warn-only; advisory) — description↔membership divergence on: $c56_m2 [named-not-member ${c56_m2_nnm:-0}: ${c56_m2_else:-0} in another milestone, ${c56_m2_none:-0} in no milestone, ${c56_m2_mex:-0} member-excluded, ${c56_m2_unres:-0} unresolved]${c56_m2_degraded} — $c56_m2_detail"
           fi
         fi
         # M3 — scaffold completeness. Routed through flag_advisory_only, NOT
