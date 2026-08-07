@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.14] - 2026-08-07
+
+Deploy-time gates now measure what they claim and judge only the release being deployed, not the whole backlog.
+
+[Full notes](release/releases/notes/v4.14_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.14)
+
 ## [v4.13] - 2026-08-07
 
 Every self-check the platform advertises now runs automatically, and three checks that were quietly missing things were repaired.
