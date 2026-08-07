@@ -46,6 +46,18 @@ The Stage-4 version determination is **provisional** until the Stage-12 atomic c
 
 **Verdict: PROCEED.** The planned version is absent from the claimed set on every arm and equals the recomputed next-free off the anchor. No colliding tag or ledger row exists. The branch and this plan file stay slug-primary and do not rename on any later re-derivation.
 
+### Domain Practice Provenance
+
+The release plan template predates the `### Release Class declaration` convention, so the provenance label lands here as its sibling H3, per the Stage-4 Planning placement rule.
+
+**Mode B — SHIP-WITH-FLAG.** This is not a purely pipeline-internal release. The *file placement* is entirely internal and therefore exempt from external sourcing, but the *deliverable content* of the security and data cards must encode **external** domain practice — AppSec/SecOps on one side, data engineering on the other — and the platform encodes neither: `core/standards/domain-best-practices/` ships exactly four guides (`governance.md`, `process.md`, `software.md`, `support.md`), with no `security.md` and no `data.md`. Stage 4 therefore resolved Phase A1.5 to the unsourced-domain flag rather than to the pipeline-internal exemption token. The flag travels with this plan by design: Stage 7 Dev Testing verifies its presence and its dated field, and Stage 9 surfaces the gap to the operator rather than letting the pipeline proceed silently. The two missing guides are filed as their own work item — see the § References block — rather than written as a rider here.
+
+**`domain:` classification (A3-time, from the File Change Matrix).** Dominant domain is **`governance`** — the matrix is overwhelmingly instruction corpus (three `SKILL.md` files plus the skill registry), governed by the canonical skill-structure standard. Secondary domain is **`software`** (the deploy-roster array registration and the package rebuild). Recorded as dominant-plus-secondary rather than left ambiguous.
+
+domain_practice: { source: UNSOURCED-DOMAIN, date: 2026-08-06, rationale: "security-engineering and data-engineering practice have no guide under core/standards/domain-best-practices/ (four guides ship: governance, process, software, support); no inline sourcing performed at Stage 4", domain: governance }
+
+The label above is the **Stage-4 rendering, recovered verbatim** — including its original `date` — from the planning sub-task's output comment. It was authored at Stage 4 and dropped in the Commit-0 transcription of that output into this file; Stage 7 Dev Testing found the absence on all three parallel spokes and it is restored here rather than re-authored, so the staleness signal the `date` field exists to carry stays honest. Stage 5 later *refined* the flat "no security guide and no data guide" reading into a split disposition — security partially sourced, data genuinely unsourced — and that refinement is carried in the § Deviation Log row `Δ-unsourced-domain`, which is where a post-Stage-4 delta belongs under this file's own provenance rule.
+
 ---
 
 ## Change Description
