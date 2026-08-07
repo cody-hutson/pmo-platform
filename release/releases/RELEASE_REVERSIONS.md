@@ -87,7 +87,7 @@ COLUMNS (typed):
                         pre-merge        Stage 12 claim-retry / A.5.6c relabel, or pre-merge).
   disposition           enum (below)     Lifecycle of THIS abandoned claim. Producer writes
                                          none / tag-orphaned / unrecoverable; the recovery
-                                         reaper transitions to tag-reaped / row-reaped.
+                                         reaper transitions to tag-reaped / row-reaped / tag-retained.
   residual_labels       free text | —    The accepted-as-residual immutable build-record labels
                                          (branch name, PR title, commit messages) that retain the
                                          as-authored abandoned-version label. History — never
