@@ -774,10 +774,16 @@ def analyse_m3(milestones):
     issue whose milestone IS this one. So a milestone whose only stage-titled
     artifact is unlabelled AND correctly milestoned satisfies neither of the first
     two limbs and reports `SKIP_MS … not-yet-scaffolded`, silencing the one class
-    that is its only available signal. Live instance: milestone #275
-    `template-system-governance-wave-1`, whose sole stage-titled issue #3848 is
-    unlabelled and correctly milestoned. Limb 3 reuses the narrowed predicate the
-    `UNLABELLED` loop itself applies (`unlabelled_stage_titled`), so the limb and
+    that is its only available signal. The instance that motivated this limb was
+    milestone #275 `template-system-governance-wave-1`, whose sole stage-titled
+    issue #3848 was unlabelled and correctly milestoned; that issue was one of 74
+    remediated by the `sub-task` label backfill, so the case is HISTORICAL rather
+    than live. The limb is not thereby obsolete — it fires on a SHAPE, the backfill
+    cleared one population, and the shape recurs on any future unlabelled,
+    correctly-milestoned stage title. `fx_275` below preserves the shape as a
+    fixture precisely so the guard does not depend on a live specimen existing.
+    Limb 3 reuses the narrowed predicate the `UNLABELLED` loop itself applies
+    (`unlabelled_stage_titled`), so the limb and
     the emission can never disagree, and the narrowing is inherited rather than
     re-stated: a milestone whose only stage-titled member fails the narrowing
     (the #3826 prose shape) still correctly SKIPs.
@@ -878,7 +884,8 @@ def analyse_m3(milestones):
         # what made it REPORTABLE. Until limb 3 was added, a slug-bearing
         # unlabelled title on a milestone with no labelled sub-task and no orphan
         # was recognised here and never reached, because the milestone had already
-        # been skipped upstream (live: #3848 on milestone #275).
+        # been skipped upstream (the motivating instance: #3848 on milestone #275,
+        # since remediated by the `sub-task` label backfill — historical, not live).
         for wi in unlabelled:
             load_bearing.append((ms_num, "UNLABELLED", "#" + str(wi.get("number"))))
 
@@ -1509,12 +1516,19 @@ def self_test():
     check("M3 fx_notstarted: 0 attached AND 0 orphans AND 0 unlabelled ⇒ SKIP",
           sk_ns == ["999"])
 
-    # fx_275 — the third fire limb. Milestone #275 `template-system-governance-
-    # wave-1` holds exactly one stage-titled artifact, #3848, which is UNLABELLED
-    # and CORRECTLY MILESTONED. `attached` is label-gated and `orphans_for()`
-    # excludes issues whose milestone IS this one, so limbs 1 and 2 both read zero
-    # and the milestone reported `SKIP_MS … not-yet-scaffolded` — silencing the one
-    # class that was its only available signal.
+    # fx_275 — the third fire limb. Modelled on milestone #275 `template-system-
+    # governance-wave-1`, which held exactly one stage-titled artifact, #3848,
+    # UNLABELLED and CORRECTLY MILESTONED. `attached` is label-gated and
+    # `orphans_for()` excludes issues whose milestone IS this one, so limbs 1 and 2
+    # both read zero and the milestone reported `SKIP_MS … not-yet-scaffolded` —
+    # silencing the one class that was its only available signal.
+    #
+    # The live specimen is GONE — that issue was one of 74 remediated by the
+    # `sub-task` label backfill — which is exactly why this fixture matters: the
+    # data below is synthetic and constructed inline, so the guard survives the
+    # remediation of every instance it was built to catch. A regression that
+    # re-introduced the blind spot would still be caught here with no live
+    # specimen in the repository.
     #
     # THIS IS THE FOUNDING BLIND SPOT REPRODUCED ONE LEVEL DOWN. fx_264 covers the
     # class whose destroyed attribute is the MILESTONE field; this covers the class
