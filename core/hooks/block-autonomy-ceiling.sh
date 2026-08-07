@@ -430,6 +430,20 @@ readonly MASTER_LIB="${HOOK_DIR}/lib/master-enable.sh"
 if [ -r "$MASTER_LIB" ]; then . "$MASTER_LIB" 2>/dev/null || true; fi
 if command -v master_enable_gate >/dev/null 2>&1; then master_enable_gate "$MASTER_ENABLE_CLASS"; fi
 
+# --- Workspace-scope gate (#4436) — layer 3, DELIBERATELY placed HERE, immediately
+# after the master-activation gate and therefore AFTER the STEP-1 Tier-0 always-block
+# floor — exactly mirroring where this hook already places master-activation, and for
+# the same reason. The Tier-0 floor is PATH-scoped, not session-scoped: it blocks
+# writes INTO the governed tree (governance files, the Engineering/Operations bridge),
+# so bounding it by the SESSION's working directory would gate it on the wrong axis and
+# open the floor to an out-of-tree session. Scope therefore gates only the mode-gated
+# STEP-2 ceiling. Precedence for this hook: bypass -> floor -> master -> SCOPE ->
+# .autonomy-mode -> ceiling. Inverted fail direction on the cwd axis, NOT on the lib
+# axis. See lib/scope-guard.sh. ---
+readonly SCOPE_GUARD_LIB="${HOOK_DIR}/lib/scope-guard.sh"
+if [ -r "$SCOPE_GUARD_LIB" ]; then . "$SCOPE_GUARD_LIB" 2>/dev/null || true; fi
+if command -v scope_guard_gate >/dev/null 2>&1; then scope_guard_gate "$CWD"; fi
+
 # --------------------------------------------------------------------------
 # STEP 2 — CEILING CHECK (mode-gated; permissive default)
 # --------------------------------------------------------------------------

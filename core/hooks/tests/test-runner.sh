@@ -27,6 +27,20 @@ if [ -n "$MASTER_CFG_ROOT" ]; then
   trap '[ -n "${MASTER_CFG_ROOT:-}" ] && /bin/rm -rf "$MASTER_CFG_ROOT"' EXIT
 fi
 
+# #4436: this harness exercises the ACTIVE-hook RULE logic. Post-#4436 every PreToolUse hook
+# carries a layer-3 workspace-scope gate (core/hooks/lib/scope-guard.sh) that exits 0 when the
+# tool call's working directory is outside the governed workspace root. The existing rule
+# payloads carry `"cwd": "/tmp"` or omit cwd entirely, and the CI sandbox root is a mktemp dir
+# — so without neutralization every rule assertion would see an out-of-scope (inert) hook and
+# fail. Export the scope-guard's sandbox root override (the exact analogue of the
+# PMO_PLATFORM_CONFIG_ROOT export above) as "/" so every absolute cwd is in scope and the rule
+# suites test RULES. This does NOT leave the scope layer untested: scope-guard.test.sh owns it
+# and sets PMO_SCOPE_GUARD_ROOT per case, including the out-of-scope and undeterminable arms.
+# CLAUDE_WORKSPACE_ROOT is deliberately NOT used for this — the hooks also read it as
+# PRIMARY_ROOT for their own destructive-write boundary, so re-pointing it would silently
+# change what block-destructive / block-fs-boundary consider primary.
+export PMO_SCOPE_GUARD_ROOT="/"
+
 TOTAL_PASS=0
 TOTAL_FAIL=0
 FAILED_FILES=()

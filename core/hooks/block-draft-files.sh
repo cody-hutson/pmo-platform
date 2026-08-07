@@ -62,6 +62,17 @@ if command -v master_enable_gate >/dev/null 2>&1; then master_enable_gate "$MAST
 
 FILE_PATH="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.file_path // empty')"
 CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
+
+# --- Workspace-scope gate (#4436) — layer 3, AFTER the master-activation gate and
+# BEFORE the .mode / rule path. Precedence: bypass -> master -> SCOPE -> .mode -> rule.
+# Placed BEFORE this hook's own `[ -z "$CWD" ] && CWD="$PWD"` fallback so the guard
+# sees the raw payload value; the guard applies the same $PWD fallback internally
+# (single-sourced there) before deciding. Inverted fail direction on the cwd axis,
+# NOT on the lib axis. See lib/scope-guard.sh. ---
+readonly SCOPE_GUARD_LIB="${HOOK_DIR}/lib/scope-guard.sh"
+if [ -r "$SCOPE_GUARD_LIB" ]; then . "$SCOPE_GUARD_LIB" 2>/dev/null || true; fi
+if command -v scope_guard_gate >/dev/null 2>&1; then scope_guard_gate "$CWD"; fi
+
 [ -z "$FILE_PATH" ] && exit 0
 [ -z "$CWD" ] && CWD="$PWD"
 
