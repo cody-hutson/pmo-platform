@@ -93,6 +93,15 @@ release/tools/query-pipeline-event.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/automated-closeout.sh
 ./release/tools/automated-closeout.sh
 release/tools/automated-closeout.sh
+# audit-epic-rollup-close.sh — epic rollup-close detective audit (report-only).
+# Invoked agent-side by the Stage 13 spoke AND chained from automated-closeout.sh
+# phase 16.7, so all four invocation forms per the per-tool form convention above
+# are required — without them the audit is BLOCK-DESTRUCTIVE-022-blocked agent-side
+# and the close-out phase degrades to a permanent SKIPPED.
+[PMO_PLATFORM_ROOT]/release/tools/audit-epic-rollup-close.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/audit-epic-rollup-close.sh
+./release/tools/audit-epic-rollup-close.sh
+release/tools/audit-epic-rollup-close.sh
 # test_corpus_home_tolerance.sh — corpus-home adapter tolerance conformance suite
 # (CH-1..CH-4 of release/references/standards/corpus-home-adapter-constraints.md).
 # Runs in the closeout-smoke CI job AND is invoked agent-side at Stage 7 Dev Testing
