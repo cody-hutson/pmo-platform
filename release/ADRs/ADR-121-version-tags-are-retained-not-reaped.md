@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-120 — Version tags are retained, not reaped: the retention rule is homed beside the branch-deletion rule, and the recovery tool reads host policy rather than assuming it"
+title: "ADR-121 — Version tags are retained, not reaped: the retention rule is homed beside the branch-deletion rule, and the recovery tool reads host policy rather than assuming it"
 status: Proposed — authored at Stage 6 Engineering for the `hub-spoke-execution-safety` release. Flips to Accepted when the operator ratifies it at the release's close gate. The flip is verified against this file's `status:` field, never inferred from milestone closure.
 date: 2026-08-06
 release: hub-spoke-execution-safety
@@ -16,13 +16,15 @@ source_observations:
   - "An adversarial reviewer established that the redundancy of the specific orphan tag is symmetric evidence: no information to recover and no ambiguity to resolve is exactly the condition under which deletion is safe. A general rule justified by a fact that argues both ways is how an over-broad rule enters a corpus."
 ---
 
-# ADR-120 — Version tags are retained, not reaped: the retention rule is homed beside the branch-deletion rule, and the recovery tool reads host policy rather than assuming it
+# ADR-121 — Version tags are retained, not reaped: the retention rule is homed beside the branch-deletion rule, and the recovery tool reads host policy rather than assuming it
 
 ## Status
 
 **Proposed** — authored at Stage 6 Engineering for the `hub-spoke-execution-safety` release, per the Stage-6 ADR-authoring precedent. It flips to **Accepted** when the operator ratifies it at the release's close gate, and the flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
 
 **Numbering.** Allocated as the next free slot over the union of both ADR directories, which are a single numbering space, verified with the corpus checker and cross-checked against every branch on the remote rather than by reading the highest filename. The number is allocated at authorship and bound at merge; if a sibling merges ahead of this record, the reconciliation is tooled and this Status block will carry the provenance note.
+
+**Numbering provenance — `120 → 121`.** Held **ADR-120** branch-local; renumbered to **ADR-121** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 120. In-release citations that read "ADR-120" denote this record.
 
 ## Context
 
