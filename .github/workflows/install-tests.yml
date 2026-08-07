@@ -287,6 +287,24 @@ jobs:
         # hand. No change to the test itself. Consumes no workflow event input.
         run: bash core/deploy/tests/test_g1_title_floor.sh
 
+      - name: Run Check 22 form-family scope regression (test_g1_form_family.sh)
+        # Check 22 terminated every kind-form card at its intake-tier label count
+        # with a verdict whose remediation told a correctly-labelled author to
+        # relabel. The fix partitions the population into four form families
+        # before any criterion runs, and derives which criteria read a kind-form
+        # card from that card's OWN declared body sections rather than from a
+        # family-wide assertion — because field presence varies within the family.
+        # Two properties are worth guarding and neither is visible by reading the
+        # code: the partition is TOTAL (a fixture per live pack kind, plus the
+        # multi-tier cell that is empty on the live population and would otherwise
+        # rot unobserved), and applicability is DERIVED (a kind-form body carrying
+        # acceptance criteria is graded; one without is not). The test extracts and
+        # executes the shipped evaluation region between the deploy.sh C22-EVAL
+        # sentinels, so it exercises the shipped path rather than a copy, and it
+        # reads its kind vocabulary from the pack SSOT so it names no kind either.
+        # Hermetic: no gh, no network. Consumes no workflow event input.
+        run: bash core/deploy/tests/test_g1_form_family.sh
+
   hook-tests:
     name: Hook test harness (macOS)
     # The core/hooks/tests/*.test.sh files + their test-runner.sh exercise the

@@ -98,7 +98,8 @@ OUTPUT (TSV) / EXIT CODES
 
   exit 0 — clean (no findings)
   exit 1 — findings present
-  exit 3 — input failure (SSOT vocabulary unreadable / zero kinds; GraphQL error;
+  exit 3 — input failure (SSOT vocabulary unreadable / zero kinds / PARTIALLY parsed
+           — fewer kind_id rows read than the packs declare; GraphQL error;
            EVERY configured H1 scan surface unresolved — an empty scan population)
 
 Python 3.9-compatible (no tomllib, no 3.10+ syntax) — matches /usr/bin/python3 on
@@ -117,6 +118,26 @@ import tempfile
 # Derived from core/packs/*/pack.toml `kind_id` rows. Regex-parsed rather than
 # tomllib-parsed: the operator baseline is Python 3.9 (tomllib is 3.11+).
 KIND_ID_RE = re.compile(r'^\s*kind_id\s*=\s*"([a-z0-9][a-z0-9_-]*)"\s*$', re.M)
+
+# STRUCTURAL CONTROL on the regex parse above — the pack file's own shape used as
+# the check on how much of it was read. `KIND_ID_RE` is line-anchored, double-quote
+# only, and permits no trailing content (deliberately: there is no TOML parser
+# behind it, because the operator baseline is Python 3.9). Every one of those
+# constraints is a way for a VALID pack file to be under-read, and under-reading
+# was silent: the only alarm was the empty-set guard, which fires at zero and
+# nowhere else. Measured degraded arms, all returning exit 0 before this control
+# existed: an unreadable `scrum/pack.toml` yielded `['card']` (3 of 4 kinds lost);
+# `kind_id = "story"  # comment` — valid TOML — dropped `story`; `kind_id = 'epic'`
+# — valid TOML — dropped `epic`. One pack declares 3 of the 4 live kinds, so a
+# single file loss removes 75% of the vocabulary while the resolver reports success.
+#
+# Each `[[kinds]]` array-of-tables header declares exactly one kind, so the header
+# count is the expected `kind_id` count for that file. A SHORTFALL (fewer rows
+# parsed than tables declared) is therefore positive evidence of a partial parse,
+# and it needs no TOML parser to compute. The test is deliberately one-sided:
+# a surplus means a `kind_id` outside a `[[kinds]]` table, which is a different
+# anomaly and never a dropped kind, so it does not trip the fail-loud arm.
+KINDS_TABLE_RE = re.compile(r'^[ \t]*\[\[kinds\]\][ \t]*$', re.M)
 
 # A hierarchy arrow: →, ->, >, » (the shapes the corpus actually uses).
 ARROW = r'(?:→|->|>|»)'
@@ -189,24 +210,92 @@ EXTRA_SCAN_FILES = (os.path.join("core", "CLAUDE.md.template"),)
 EXEMPT_FILE_DEFAULT = os.path.join(".claude", "work-hierarchy-exemption-list.txt")
 
 
-def load_licensed_kinds(root):
-    """Derive the licensed work-item-kind vocabulary from the pack SSOT."""
+def load_licensed_kinds_checked(root):
+    """(kinds, degradations) — the pack-union vocabulary PLUS evidence the parse was partial.
+
+    `degradations` is a list of `(pack path, reason)` pairs, empty when the parse is
+    whole. Two reasons are recorded, and they are the two ways a present pack can
+    contribute fewer kinds than it declares:
+
+      * unreadable — the file exists but could not be opened. The previous `except
+        OSError: continue` swallowed this, so a permissions or I/O fault removed a
+        pack's whole contribution with no signal anywhere.
+      * shortfall — the file read cleanly but yielded fewer `kind_id` rows than it
+        declared `[[kinds]]` tables, i.e. `KIND_ID_RE` did not match a row the file
+        does carry.
+
+    An ABSENT pack (no directory, or no `pack.toml` inside it) is NOT a degradation:
+    which packs a deployment licenses is a configuration choice, and treating a
+    deselected pack as a fault would fail loud on a correct instance. The distinction
+    is exactly the point — this function separates *not licensed* from *not read*.
+    """
     kinds = set()
+    degraded = []
     packs_dir = os.path.join(root, "core", "packs")
     if not os.path.isdir(packs_dir):
-        return kinds
+        return kinds, degraded
     for entry in sorted(os.listdir(packs_dir)):
         pack_toml = os.path.join(packs_dir, entry, "pack.toml")
         if not os.path.isfile(pack_toml):
             continue
+        rel = os.path.join("core", "packs", entry, "pack.toml")
         try:
             with open(pack_toml, "r", encoding="utf-8") as fh:
                 text = fh.read()
-        except OSError:
+        except OSError as exc:
+            degraded.append((rel, "unreadable (%s)" % exc.__class__.__name__))
             continue
-        for m in KIND_ID_RE.finditer(text):
-            kinds.add(m.group(1).lower())
-    return kinds
+        matched = KIND_ID_RE.findall(text)
+        declared = KINDS_TABLE_RE.findall(text)
+        if len(matched) < len(declared):
+            degraded.append((rel, "%d [[kinds]] table(s) declared, %d kind_id row(s) parsed"
+                                  % (len(declared), len(matched))))
+        for kid in matched:
+            kinds.add(kid.lower())
+    return kinds, degraded
+
+
+def load_licensed_kinds(root):
+    """Derive the licensed work-item-kind vocabulary from the pack SSOT.
+
+    Signature and return value are unchanged (a set of kind ids) — every existing
+    caller keeps working byte-for-byte. A caller that must distinguish a whole parse
+    from a partial one calls `load_licensed_kinds_checked` instead.
+    """
+    return load_licensed_kinds_checked(root)[0]
+
+
+def _degradation_line(degraded):
+    """One-line diagnostic for a partial SSOT parse.
+
+    Single line on purpose: `deploy.sh` captures this stream with `2>&1` and surfaces
+    one line on exit 3, so a multi-line message loses the part that names the cause.
+    """
+    return ("SSOT vocabulary parse is PARTIAL — the licensed kind set is missing "
+            "row(s) the packs declare: "
+            + "; ".join("%s: %s" % (path, why) for path, why in degraded))
+
+
+def emit_kinds(root):
+    """`--emit-kinds`: the pack-union licensed kind vocabulary, one kind id per line.
+
+    The shell-consumable projection of the SSOT reader, so a consumer that needs the
+    live kind set (a gate resolving whether an issue carries a pack-declared kind
+    label) reads THIS vocabulary rather than authoring a second one. It inherits the
+    fail-loud contract in both directions: a partial parse and an empty set each
+    exit 3 with the cause on stderr, so a consumer can never mistake a degraded read
+    for a small vocabulary.
+    """
+    kinds, degraded = load_licensed_kinds_checked(root)
+    if degraded:
+        print("ERROR\t" + _degradation_line(degraded), file=sys.stderr)
+        return 3
+    if not kinds:
+        print("ERROR\tSSOT vocabulary resolved to zero kinds "
+              "(core/packs/*/pack.toml unreadable or kind_id-less)", file=sys.stderr)
+        return 3
+    print("\n".join(sorted(kinds)))
+    return 0
 
 
 # An H2 exemption entry is `#<issue> <token>` — a '#' immediately followed by
@@ -430,7 +519,15 @@ def run_h2(nodes, exemptions):
 
 # ── self-test ───────────────────────────────────────────────────────────────
 
-SELF_TEST_PACK = 'pack_id = "t"\n[[kinds]]\nkind_id = "epic"\nkind_id = "story"\n'
+# One `[[kinds]]` table per kind — the shape the live packs actually use, and the
+# shape the KINDS_TABLE_RE structural control counts against. The earlier fixture
+# stacked both `kind_id` rows under a single table header; that is not valid TOML
+# (the second key would overwrite the first) and it made the fixture unable to
+# exercise the shortfall control at all. Kind set is unchanged, so every H1 case
+# below is unaffected.
+SELF_TEST_PACK = ('pack_id = "t"\n'
+                  '[[kinds]]\nkind_id = "epic"\n'
+                  '[[kinds]]\nkind_id = "story"\n')
 
 
 def _mkroot(tmp, doc_body):
@@ -748,6 +845,103 @@ def self_test():
     check("single-document JSON still parses",
           [d["a"] for d in iter_json_docs('{"a":9}')] == [9])
 
+    # ── SSOT vocabulary: partial-parse detection + the --emit-kinds CLI ──────
+    # These arms exist because the vocabulary reader's ONLY alarm used to fire at
+    # the empty set, so every partial degradation returned a non-empty subset with
+    # exit 0 and no stderr. Each arm below returns a NON-EMPTY subset, which is
+    # precisely the state the old guard called healthy.
+
+    def _emit_kinds_cli(root_dir):
+        """Run the tool's own --emit-kinds CLI — the glue a shell consumer executes,
+        not just the library behind it."""
+        cp = subprocess.run([sys.executable, os.path.abspath(__file__),
+                             "--root", root_dir, "--emit-kinds"],
+                            capture_output=True, text=True)
+        return cp.returncode, cp.stdout.strip(), cp.stderr.strip()
+
+    def _pack_root(tmp, text):
+        os.makedirs(os.path.join(tmp, "core", "packs", "t"), exist_ok=True)
+        p = os.path.join(tmp, "core", "packs", "t", "pack.toml")
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return tmp, p
+
+    # CONTROL (sensitivity): the healthy fixture must parse WHOLE and emit cleanly.
+    # Without this, every "degraded ⇒ exit 3" assertion below could pass on a
+    # function that returns exit 3 unconditionally.
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _pack_root(tmp, SELF_TEST_PACK)
+        kinds, degraded = load_licensed_kinds_checked(root)
+        rc, out, _err = _emit_kinds_cli(root)
+        check("SSOT control: whole parse reports no degradation",
+              kinds == {"epic", "story"} and degraded == [])
+        check("SSOT control: --emit-kinds emits the vocabulary, exit 0",
+              rc == 0 and out.split("\n") == ["epic", "story"])
+
+    # The legacy signature is preserved verbatim — existing callers get a bare set.
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _pack_root(tmp, SELF_TEST_PACK)
+        check("load_licensed_kinds still returns a bare set (caller contract intact)",
+              load_licensed_kinds(root) == {"epic", "story"})
+
+    # SHORTFALL a — VALID TOML the line-anchored regex cannot match: trailing comment.
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _pack_root(tmp, SELF_TEST_PACK.replace(
+            'kind_id = "story"', 'kind_id = "story"  # the story kind'))
+        kinds, degraded = load_licensed_kinds_checked(root)
+        rc, _out, err = _emit_kinds_cli(root)
+        check("SSOT shortfall (trailing comment) detected on a NON-EMPTY subset",
+              kinds == {"epic"} and len(degraded) == 1)
+        check("SSOT shortfall (trailing comment) exits 3 with a one-line cause",
+              rc == 3 and "PARTIAL" in err and len(err.split("\n")) == 1)
+
+    # SHORTFALL b — VALID TOML, single-quoted literal string.
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _pack_root(tmp, SELF_TEST_PACK.replace(
+            'kind_id = "epic"', "kind_id = 'epic'"))
+        kinds, degraded = load_licensed_kinds_checked(root)
+        rc, _out, _err = _emit_kinds_cli(root)
+        check("SSOT shortfall (single-quoted literal) detected, exits 3",
+              kinds == {"story"} and len(degraded) == 1 and rc == 3)
+
+    # UNREADABLE — the arm the old `except OSError: continue` swallowed whole.
+    # A second pack keeps the result NON-EMPTY, so the empty-set guard cannot be
+    # what catches it.
+    with tempfile.TemporaryDirectory() as tmp:
+        root, blocked = _pack_root(tmp, SELF_TEST_PACK)
+        os.makedirs(os.path.join(tmp, "core", "packs", "u"), exist_ok=True)
+        with open(os.path.join(tmp, "core", "packs", "u", "pack.toml"), "w") as fh:
+            fh.write('pack_id = "u"\n[[kinds]]\nkind_id = "card"\n')
+        os.chmod(blocked, 0o000)
+        try:
+            kinds, degraded = load_licensed_kinds_checked(root)
+            rc, _out, err = _emit_kinds_cli(root)
+            check("SSOT unreadable pack detected despite a non-empty result",
+                  kinds == {"card"} and len(degraded) == 1
+                  and "unreadable" in degraded[0][1])
+            check("SSOT unreadable pack exits 3 rather than reading a short vocabulary",
+                  rc == 3 and "PARTIAL" in err)
+        finally:
+            os.chmod(blocked, 0o644)
+
+    # SPECIFICITY — a DESELECTED pack is configuration, never degradation. Without
+    # this arm the control above could be satisfied by flagging any absent pack,
+    # which would fail loud on every correctly-configured instance.
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _pack_root(tmp, SELF_TEST_PACK)
+        os.makedirs(os.path.join(tmp, "core", "packs", "deselected"), exist_ok=True)
+        kinds, degraded = load_licensed_kinds_checked(root)
+        rc, _out, _err = _emit_kinds_cli(root)
+        check("SSOT deselected pack (no pack.toml) is NOT a degradation",
+              kinds == {"epic", "story"} and degraded == [] and rc == 0)
+
+    # SPECIFICITY — the pre-existing empty-set guard still fires, and reports the
+    # empty-set cause rather than the partial-parse one.
+    with tempfile.TemporaryDirectory() as tmp:
+        rc, _out, err = _emit_kinds_cli(tmp)
+        check("SSOT empty vocabulary still exits 3 with the zero-kinds cause",
+              rc == 3 and "zero kinds" in err and "PARTIAL" not in err)
+
     failed = [n for n, ok in results if not ok]
     for name, ok in results:
         print(("  PASS  " if ok else "  FAIL  ") + name)
@@ -782,6 +976,9 @@ def main():
                     help="run H1 only (offline / doc-invariant only)")
     ap.add_argument("--fixture-parent-map",
                     help="JSON file of GraphQL-shaped epic nodes — drives H2 offline")
+    ap.add_argument("--emit-kinds", action="store_true",
+                    help="print the pack-union licensed kind vocabulary (one id per line) and "
+                         "exit; exits 3 on an empty OR partially-parsed SSOT")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
 
@@ -789,9 +986,22 @@ def main():
         return self_test()
 
     root = os.path.abspath(args.root)
+
+    if args.emit_kinds:
+        # Vocabulary-only mode: filesystem-reading, offline, and it runs BEFORE the
+        # H1/H2 legs so a consumer that needs only the kind set pays for nothing else.
+        return emit_kinds(root)
+
     out = []
 
-    kinds = load_licensed_kinds(root)
+    kinds, kinds_degraded = load_licensed_kinds_checked(root)
+    if kinds_degraded:
+        # Fail loud on a PARTIAL parse, checked BEFORE the empty-set guard below —
+        # a non-empty subset is the likelier degradation and was previously silent,
+        # and when a degraded read also lands on empty this names the actual cause
+        # rather than the symptom.
+        print("ERROR\t" + _degradation_line(kinds_degraded), file=sys.stderr)
+        return 3
     if not kinds:
         # Fail loud — an unreadable SSOT must never read green (the --require-targets
         # discipline). A silent zero-vocabulary scan would find nothing by construction.
