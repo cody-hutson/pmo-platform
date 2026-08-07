@@ -339,3 +339,59 @@ Designated reference block. Each entry pairs the tracker number with a summary n
 | **ADR-077** | The cross-cutting control field layer — the pre-registered home should a surfaced blocked marker ever be wanted. |
 | **ADR-115** | The ADR-number binding rule: a number is allocated at authorship and bound at merge, next-free is the mainline anchor plus one and never the maximum of the claimed set, and reserving a slot above an unmerged sibling claim is worse than a duplicate. |
 | **ADR-120** | This release's first decision record: the Axis-1 delivery work-status label surface — seventh grammar group, load-bearing name prefix, base-pack homing, and blocked-is-derived. |
+| **ADR-121** | This release's second decision record: the status-resolution fallback when no platform adapter is configured, and the binding of that contract to the adapter layer. Its § Consequences is the citable home for the symptom-honesty statement. |
+| **ADR-122** | This release's third decision record: the sub-task status mirror stays a point-in-time snapshot, and label materialization gets a read-only emit path rather than an automated one. |
+| **ADR-123** | This release's fourth decision record: the epic rollup-close surface is an audit rather than a gate, and its two undecidable gates are annotated rather than adjudicated. |
+
+---
+
+## Change Description
+
+Authored at Stage 6 by the position-4 Engineering spoke, which owns the release-scoped Phase C under this release's one-branch / one-PR topology. Covers the whole release, not one card.
+
+### Outcome
+
+This release gives the delivery **work-status axis** a field, a live label surface, a maintenance contract, and an epic-rollup audit. Concretely: a seventh label group with six work-status rows homed in the shared base pack; a documented contract for how status resolves when no platform adapter is configured; a read-only emit path that renders the commands to reconcile declared label rows against live ones (8 rows created, 1 malformed row reconciled); and a report-only detective audit that surfaces open epics whose children have all finished, invoked by default from an existing close-out beat.
+
+**One thing this release deliberately does not change: what an operator sees.** The status-maintenance card ships its unconfigured-adapter fallback only; the binding refit that would make a skill consume the contract is routed as a follow-on. A green Stage 8 therefore means the shipped scope is correct — it does not mean the originating symptom is fixed. ADR-121 § Consequences carries this statement in the corpus so it survives past this plan.
+
+### Issues resolved
+
+| # | Outcome | Status |
+|---|---|---|
+| **#1969** | Axis-1 work-status label group (a seventh grammar group, not a reuse of the status group — that group's cardinality rule *is* the mutex, so filing there would have made the two axes mutually exclusive), six base-pack rows each carrying a colour, plus the field documentation and the two-axis boundary. | **DONE** |
+| **#4179** | Status resolution when no platform adapter is configured — a new peer subsection in the meta-schema plus the ADR binding it to the adapter layer. Two of the card's three declared absences already existed and are cited rather than restated. | **PARTIAL** — the unconfigured-adapter fallback ships; the `delivery-engine` binding refit is **deferred** (that skill carries zero references to the field across all twelve of its files, so the refit is net-new work, not an edit). |
+| **#1828** | Read-only label materialization path (`--emit-fix`) and the Stage-6 precondition it enforces: a status transition can only apply a label that already exists. Applying an unrecognized label auto-creates it malformed, which the name-only parity diff then reports as reconciled. | **DONE** |
+| **#1825** | Epic rollup-close detective audit, a signal-only close-out phase invoking it, and the Stage-13 step name. Report-only: it gates nothing and closes nothing without explicit per-issue authorization. | **DONE** |
+
+### Key decisions
+
+- **The epic rollup surface is an audit, not a gate** — because the taxonomy exempts the epic type from the status-label invariant, and a gate cannot assert on a field governance explicitly exempts. Hosting it as a deploy-time lint was rejected **on the merits**, not merely on scope.
+- **Its two undecidable gates annotate, never adjudicate.** Two topological predicates for true-epic-versus-mislabelled-initiative both over-matched at 14 of 15, and the narrower one returned a false negative on the one candidate carrying the shape it was built to catch. The taxonomy places the grouping label on the container **and** its children, so the two are label-identical by construction.
+- **Suppression is a comment marker, with zero new labels** — a new trigger for an existing state does not earn a parallel label, and the epic type is status-label-exempt regardless.
+- **The sub-task status mirror is not resynced and the grammar rule is not amended** — a whole-corpus probe found zero behavioural sites that read the mirrored value, against a non-zero sensitivity arm.
+- **Materialization gets a read-only emit path rather than an automated one**, and that path **reconciles as well as creates** — a create-only fix would have run green and left the malformed row exactly as it found it.
+- **Axis-1 rows home in the shared base pack**, and the name prefix is load-bearing independently of the group: the runtime invariant discriminates by prefix, and the grammar group is read nowhere in the deploy script.
+- **ADR numbers are the mainline anchor plus one**, never the maximum of the claimed set. This **reverses an earlier hub directive** to reserve a slot above every sibling claim; the reversal was verified against the enforcing gate, where the reservation returns FAIL-GAP and the anchor-plus-one returns PASS against a duplicate control.
+
+### Reversibility
+
+**MIXED · confidence HIGH.** The corpus half is **CHEAP** — revert the merge commit in first-parent form and every file surface returns in one operation. The label half is **not git-native**: label creation is repository *state*, and no revert removes it. Rollback order is therefore **revert the merge first, then delete the eight created label rows** as a user-side repository action — reverting first restores the parity checker to its pre-release state so the gate does not immediately re-flag the deletion as drift. **The reconciled row is forward-only**: it existed before this release carrying a default colour and a null description, so deleting it would remove a row the pipeline is now using, and restoring its prior value would restore a malformed row. Rollback is operator-authorized; there is no autonomous rollback.
+
+### Downstream impact
+
+- **Parity residual: MISSING goes 11 → 3, reduced by 8.** The remaining three are the deliberately-excluded `triage:` rows. This corrects an earlier figure of 12 → 3: the row that was reconciled rather than created was *name*-present all along, so it was never counted in MISSING and reconciling it moves that count by zero.
+- **A systemic declared-versus-live mismatch is surfaced, not fixed.** At baseline only 2 of 34 declared-and-live rows matched their declaration on both colour and description. It is correctly not auto-applied — some live values may be deliberate overrides and the gate cannot distinguish an override from drift. Needs per-row operator disposition.
+- **The `delivery-engine` binding refit** is the named follow-on that would change the operator-visible symptom.
+- **The epic audit's tier gate can upgrade from annotation to filter** if the separate initiative-versus-epic lint lands. Declared, not absorbed, not blocking.
+- **The audit's first live fire surfaces 5 clean and 10 flagged candidates from 42 open epics**, with every exclusion carrying a stated reason.
+- **An availability defect is routed**: the parity check returns an error status when the GraphQL quota is exhausted. The new audit avoids this class by using REST throughout.
+- **An inherited pre-existing package-drift failure** (`pmo-skill-refiner`) is present on the mainline, byte-identical to `origin/main`, and is **not caused by this release**. It must be resolved or explicitly justified before Stage 12.
+- **Cross-release contention re-measured at Commit 0 and again at Phase C:** 5 of this release's 12 matrix files are touched by at least one of the four in-flight sibling branches; one sibling touches none of them. Sibling edits are **not** uniformly additive — three carry single-line paragraph replacements — but every deletion sits in a region disjoint from this release's edits, the nearest being seven lines from this release's Stage-13 append. The exposure is merge-order friction, not corruption. Four sibling branches also hold advisory claims on a decision-record number below this release's; those resolve by merge-time renumber, which is governed behaviour.
+
+### Cross-references
+
+- Release plan: this file, top — `release/releases/plans/methodology-fields-and-statuses_RELEASE_PLAN.md`
+- Milestone: `methodology-fields-and-statuses` (milestone 265) — see § References for the per-card index
+- User-facing release note: authored at Stage 13 Close at `release/releases/notes/vX.Y_RELEASE_NOTES.md`, where the version binds at the Stage-12 atomic claim per ADR-092. This section is the operator-facing pre-merge artifact and does not substitute for that note.
+- Decision records: ADR-120, ADR-121, ADR-122, ADR-123 — summarized in § References
