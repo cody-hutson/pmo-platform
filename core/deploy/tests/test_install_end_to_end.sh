@@ -12,7 +12,7 @@
 #      paths fields populated. setup-workspace.sh reads these via
 #      read_operator_toml and skips the prompts that would have asked for them.
 #   2. Pipe `yes ""` (via process substitution to avoid SIGPIPE / pipefail
-#      interaction) for the 3 uncached prompts (COWORK_INSTALL_PATH,
+#      interaction) for the 3 uncached prompts (COWORK_INSTALL_PATH_BASE,
 #      OPERATOR_PHONE, OPERATOR_PROJECT_NAME). Each has a default or is
 #      optional, so empty input is accepted.
 #   3. Assert post-install state: state file with verification_passed=true,
