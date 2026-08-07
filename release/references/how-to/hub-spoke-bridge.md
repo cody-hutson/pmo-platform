@@ -833,7 +833,7 @@ A skipped **release-scoped** sub-task uses the same format with the milestone na
 
    #### Step 5.5: Quota check before parallel launch
 
-   Before issuing N parallel Agent invocations in the same hub response (the parallel-safe stages 5 / 7 / 8 above), the hub runs **Checkpoint B** of the quota-budget protocol ([`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4) against the *remaining* per-account 5-hour usage-window envelope. This is the load-bearing, ongoing check — it fires before *every* parallel wave, not once at Stage 4, because each wave (Stage 5 batch / Stage 7 batch / Stage 8 batch) faces a potentially different remaining envelope (mid-release quota drift; 5-hour boundary crosses; per-spoke costs varying from the Stage 4 baseline).
+   Before issuing **any** Agent invocation — N in one hub response, or a single one at any stage including the write-serialized 6 / 13 — the hub runs **Checkpoint B** of the quota-budget protocol ([`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4) against the *remaining* per-account 5-hour usage-window envelope. This is the load-bearing, ongoing check — it fires before *every launch*, not once at Stage 4, because each launch faces a potentially different remaining envelope (mid-release quota drift; 5-hour boundary crosses; per-spoke costs varying from the Stage 4 baseline). A singleton is gated too: being serial bounds the concurrent-batch surface, not the envelope, and a lone spoke on a near-tail window dies mid-run exactly the way the gate exists to prevent. Verdict depth varies by launch shape — the full PROCEED / SERIALIZE / DEFER / REDUCE-scope hierarchy for a wave (§ 4.3), the reduced PROCEED / DEFER form for a singleton (§ 4.3a). The check costs zero tool calls, which is what makes per-launch firing affordable.
 
    The hub computes `N_planned × per-spoke-cost-estimate` (Checkpoint A baseline refined by observed per-spoke actuals from prior waves this release) and compares it against the remaining envelope (operator-stated state at hub start, adjusted for elapsed-window time and any per-batch override — see the protocol § 6), then renders one verdict on the usage-window axis:
 
@@ -848,7 +848,7 @@ A skipped **release-scoped** sub-task uses the same format with the milestone na
 
    On **DEFER**, the hub offers the operator an explicit **override-to-PROCEED exit** — the escape hatch for a wrong-stated-envelope deadlock. The override is operator-initiated (the hub renders DEFER as *recommended*; the operator chooses to override), is **deviation-logged** as a recorded auditable choice, and is a one-batch exit (it does not reopen the gate at every wave). When DEFER holds, the hub MAY emit an action-item entry per [`../../../core/standards/hub-action-tracking.md`](../../../core/standards/hub-action-tracking.md) (e.g., "Resume Stage N batch after window-reset at HH:MM") so the deferred batch is tracked and resumed.
 
-   **Ongoing-gate discipline.** This check is a standing pre-launch step for every parallel wave, not a one-time Stage 4 estimate — running it once and treating the batch as cleared for the whole release is the failure mode the runtime checkpoint exists to prevent. **No Autonomy-Tier downgrade.** The verdict is a decision about *whether and when* to launch a batch; it does not reclassify the parallel-safe stages' Autonomy Tier (Stage 5 / 7 / 8 remain auto-launch). **Cutover:** applies to releases entering the pipeline on or after this gate's introducing-release merge SHA recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>); the introducing release itself is exempt (the gate cannot fire on the release that introduces it).
+   **Ongoing-gate discipline.** This check is a standing pre-launch step for **every launch**, not a one-time Stage 4 estimate — running it once and treating the release as cleared is the failure mode the runtime checkpoint exists to prevent. **The verdict is rendered every time, including on PROCEED**: a gate that was skipped and a gate that cleared are otherwise indistinguishable after the fact, and the rendered line is this check's whole audit surface (it emits no pipeline event — see the protocol § 6.1). **No Autonomy-Tier downgrade.** The verdict is a decision about *whether and when* to launch; it does not reclassify any stage's Autonomy Tier (Stage 5 / 7 / 8 remain auto-launch, and gating a Stage-6 singleton is not a downgrade either). **Cutover:** applies to releases entering the pipeline on or after this gate's introducing-release merge SHA recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>); the introducing release itself is exempt (the gate cannot fire on the release that introduces it).
 
    #### File-contention boundary rules
 
@@ -2758,9 +2758,12 @@ releases supply an outcome distribution; the calibration trigger is registered
 on the release log.
 
 **Autonomy-Tier note.** The usage-window mitigations are decisions about
-*whether and when* to launch a batch; they do not reclassify the parallel-safe
-stages' Autonomy Tier (Stage 5/7/8 remain auto-launch). They do not apply to the
-write-serialized stages (6/13), which launch one spoke at a time by design.
+*whether and when* to launch; they do not reclassify any stage's Autonomy Tier
+(Stage 5/7/8 remain auto-launch). They **do** apply at the write-serialized
+stages (6/13): launching one spoke at a time bounds the concurrent-batch
+surface, not the remaining envelope, and a singleton on a near-tail window
+overruns exactly the way a batch does. Gating a singleton is not an autonomy
+downgrade any more than gating a wave is.
 
 **Cutover.** Applies to releases entering the pipeline on or after this
 constraint's introducing-release merge SHA recorded in
