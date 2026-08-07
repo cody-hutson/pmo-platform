@@ -71,6 +71,8 @@ Apply these 5 tests in order at authoring time. Each has a binary answer.
 | **T4** | **File pointer?** Does Proposed Change name ≥1 specific file/section OR explicitly say `[ASSUMPTION – CONFIRM] TBD — identified in Planning`? | Yes — directional or deferred-with-marker, not silent. | D7 (deps/files), `gate-criteria-spec.md` G3-03 |
 | **T5** | **Risk surfaced?** Are the known risks, cross-issue conflicts, or concurrent-work conflicts named? (Even a one-liner: `[ASSUMPTION – CONFIRM] may conflict with #N if both land in same release.`) | Yes — risks named if they exist, OR explicit "None identified". Silent = fail. | D5 (compounding risk) |
 
+**T4 and §4c are different questions.** T4 tests the *presence* of a file pointer; §4c (Scope-Altitude Consistency) tests whether that pointer resolves to **one determinate set** and whether the item's asserted outcomes are **producible from it**. A ticket can pass T4 and still fail §4c. §4c is not a sixth test — it is a body-quality rule enforced at Triage, exactly as §4b is.
+
 ### Failure routing
 
 - **If T1 fails:** Split into multiple tickets with a parent tracking issue. The author commits the split rationale. Operationally, Triage executes the protocol at [fission-convention.md](../protocols/fission-convention.md).
@@ -315,6 +317,62 @@ The fourth bullet is the one that catches a missing seed step. U1: after a fresh
 
 ---
 
+## 4c. Scope-Altitude Consistency
+
+§4b governs an AC set that cannot tell whether the thing works. This section governs a different well-formed-but-insufficient failure: an item whose **asserted outcome** sits at a higher altitude than its own **declared scope** can reach.
+
+**The failure.** A ticket promises a behavioral end-state that the files it says it touches — or the fix directions it says are acceptable — cannot deliver. Nobody errs at any single step: the builder delivers precisely what the declared scope specified, dev testing correctly grades the delivered change PASS, and acceptance review correctly grades the criterion PARTIAL. The defect is in the ticket's **internal consistency**, and no gate examines that. It surfaces at acceptance review — the most expensive place in the pipeline to find it — and it is the dominant root cause behind a release whose PARTIALs all traced to intake authoring rather than to build quality.
+
+**The rule.** A work item's asserted outcomes must be **producible from its own declared scope**, and that declared scope must resolve to **one determinate set**. Two failure directions, both authoring defects:
+
+- **Indeterminate scope.** The declared scope offers alternative fix directions, or pairs a deferral marker with concrete surfaces named elsewhere in the body, or is absent altogether — while a graded acceptance criterion asserts an outcome whose grading *depends on which reading is taken*.
+- **Unreachable outcome.** The declared scope is determinate, and an asserted outcome still requires a surface no member of it can be.
+
+**Where this is enforced.** The check is the Stage-2 **Scope-Altitude Determination (A4.7 / criterion `SA-G1`)** — see [`pipeline/stage-02-triage.md`](../pipeline/stage-02-triage.md) § Scope-Altitude Determination (A4.7). It is **advisory and non-gate-blocking**: it is not a `gate-criteria-spec.md` registry criterion, it rides the existing A6 `feasibility flags` field, and no path from it blocks triage intake. Its output is a prompt to the author, not a rejection.
+
+**The predicate lives at the enforcement point, not here.** The two limbs, the SA1–SA3 containment bar, the operand-resolution rules, and the closed non-fire guard list N1–N7 are stated once, in the A4.7 block — this section cites them rather than restating them, so there is no doctrine pair to keep in sync. One line **is** carried on both surfaces on purpose, because it is the teachable core of the rule and an author needs it at authoring time: the agent-vs-machine discriminator below. That single pair is registered as a per-domain prose exemption under [`duplicate-source-discipline.md`](../../../core/standards/duplicate-source-discipline.md) §1 condition 3 — an edit to it must land on both surfaces in the same change.
+
+### The teachable rule: agent-executed vs. machine-executed
+
+A markdown governance file **can** produce an *agent-executed* outcome — "the stage verifies X", "the reviewer applies Y" — because the executor is an agent reading it. It **cannot** produce a *machine-executed* outcome — "CI fails", "the hook blocks the commit", "the required check goes red" — which needs a workflow, a script, or a hook. Conflating the two is the most common way an assertion outruns its scope, and the most common way a reader wrongly claims it has.
+
+### Two shapes to check your own draft against
+
+**Shape 1 — forked scope.** The declared scope names alternative fix directions while the asserted outcome is a single, unconditional end-state a graded criterion will check.
+
+> **Declared scope:** `schema §N (decision enum) **OR** stage spec §M (emission spec) **+** the validating tool`
+> **Expected Behavior:** "…the two specs agree on the enum, **and** the codified audit row can be written."
+
+The fix directions are alternatives; the assertion is unconditional. Whichever fork is built, the other half of the assertion may still be unreachable — so an acceptance grader can render PARTIAL against a build that did exactly what the ticket authorized.
+
+`[SOURCE: a shipped schema↔stage-shard drift bug whose declared scope offered two alternative fix directions while its Expected Behavior asserted the end-state unconditionally; dev testing graded the delivered change PASS, acceptance review graded the criterion PARTIAL, and no individual actor erred.]`
+
+**Shape 2 — scope carried in a conditional clause.** The body declares **no scope block at all**, and what will be built lives inside one acceptance criterion's own conditional — while a sibling criterion asserts full coverage.
+
+> - [ ] Reuse-first check performed and documented…
+> - [ ] A pipeline-wide evidence store exists — **built net-new only if the reuse-first check finds no adequate existing trail**
+> - [ ] The downstream indicator is upgraded from the single close-gate boolean to the full rate
+> - [ ] The rate is computed **from that store** and emitted
+
+Bullet 2 conditions the object of the build on bullet 1's outcome; bullets 3–4 assert full coverage regardless. Reuse-extension and net-new-ledger are entirely different surfaces, so until the first check runs, nobody can say what the last two criteria will be graded against.
+
+**A caution on how to spot Shape 2.** The tell is that **no declared-scope block resolves in any form** — not at `###`, not at `##`, not as a bold-prose block. It is **not** a heading count. A tell keyed to "the body has no `###` headings" inverts on real bodies: it misses the genuine Shape-2 case, whose body carries an unrelated `###` heading, and it fires on a perfectly well-scoped body that happens to render its whole template at `##`. Heading level is an artifact of how a body was authored; look for the **block**, not the hashes.
+
+`[SOURCE: a deferred capability card carrying no declared-scope block, whose acceptance criteria conditioned the build object on another criterion's outcome while asserting full coverage; the self-contradiction was detected only at acceptance review and required an operator override record to close.]`
+
+### Your two exits as an author
+
+When either shape describes your draft, take one of exactly two exits — and take it **before** build scope locks, which is the whole reason the check fires at triage:
+
+1. **Narrow the assertion** to what the declared scope determinately produces. State the rest as a separate item, or as a non-graded Notes commitment.
+2. **Resolve the scope** — name the branch you actually mean instead of the disjunction, or add the missing producing surface to the declared scope.
+
+Neither exit is "widen the wording until it is vague enough to cover both". A well-formed ticket is determinate in **both** operands, not ambiguous in a way that lets any build satisfy it.
+
+**What this rule is NOT.** It is not a demand for line-level scope — a **file-level directional pointer** is and remains the required form (§2 T4, §5). It does not fire on broad *intent*; it fires on an asserted, acceptance-graded **outcome** the declared scope cannot produce. And a scope field that is *wholly* the sanctioned deferral marker with correspondingly deferred criteria is deliberately open scope, not a defect.
+
+---
+
 ## 5. What Goes at Stage 5 vs. Intake
 
 The decision table below operationalizes the WHAT/HOW boundary. Items in the **Stage 5 Solutioning** column are design decisions; items in the **Intake** column are problem-statement decisions. A well-formed intake ticket populates only the right column (or marks left-column items as `[ASSUMPTION – CONFIRM]` deferred to Stage 5).
@@ -429,6 +487,7 @@ This guide is the doctrine. The following docs are the enforcement surfaces:
 | `release/references/pipeline/stage-02-triage.md` | §6 (Outputs), §7 (Stage-Transition Gate) | Triage validates closure ownership before bundling — every `[ASSUMPTION – CONFIRM]` must carry a resolvable `owner:` / `to close:` per §5c; an unowned assumption is a Triage self-repair finding. |
 | `core/disciplines/root-cause-analysis.md` | §2 (trigger), §4 (invocation points) | The proven `owner:` / `to close:` form (for the bug/unknown-cause class) that §5c generalizes to every intake assumption. |
 | `release/references/standards/solutioning-output-template.md` | § 3.5 (The Solutioning Pre-Read) | Intake-authority mirror pair: this guide's §5c governs intake-*emitted* `[ASSUMPTION – CONFIRM]` assumptions (directional, owned downstream); § 3.5 governs Stage-5-*emitted* advisory pre-reads (non-binding, the issue body stays the contract). Same theme, different emitting stage — the two complete the WHAT-vs-HOW-vs-advisory authority boundary. |
+| `release/references/pipeline/stage-02-triage.md` | § Scope-Altitude Determination (A4.7 / `SA-G1`) | Enforcement surface for §4c. A **stage-local, advisory, non-gate-blocking** criterion — not a `gate-criteria-spec.md` registry criterion, outside the Layer-2 judgment aggregate, riding the existing A6 `feasibility flags` field. It carries the predicate (Limb A ∨ Limb B), the SA1–SA3 bar, the operand-resolution rules and the closed N1–N7 guard list; §4c carries the authoring doctrine and cites them. |
 | `core/schemas/gate-criteria-spec.md` | G1-04 (Proposed Change specificity), G1-05 (AC verifiability — branch (i) per-bullet quality, branch (ii) capability-class usability-AC coverage per §4b) | Triage gates that operationalize T2 (G1-04) and T3 (G1-05); G1-05b branch (ii) is the enforcement surface for §4b, whose § Capability-Class Usability-AC Requirement block carries the predicate, the exempt classes, and the conformance tests. |
 | `core/schemas/gate-criteria-spec.md` + `core/deploy/deploy.sh` Check 22 | G1-01 (title informativeness floor) | Enforcement surfaces for the §7 title rubric. The gate enforces the **syntactic floor only** (no bracket prefix + substance floor); the §7 rubric carries the semantic informativeness bar (judgment, not gate-enforced). |
 | `<OPERATOR_INSTANCE_ANALYSIS_PATH>/intake-quality-review-2026-04-19/best-practices-rubric.md` | D4 (Intake/Design Boundary) | Rubric dimension that scores intake/design boundary respect; T2 maps to D4. |
