@@ -1582,6 +1582,83 @@ else
   report "S-8 the comparator returns empty for an absent file (specificity arm)" 0 "returned ${set_absent_probe} triples for a nonexistent path"
 fi
 
+# --- S-9 (AC-4 + AC-6, end-to-end): the SHIPPED update path — not the flow it
+#     delegates to — carries the missing registrations into a previously-deployed
+#     install. S-1 proves the guard; this proves update.sh actually invokes it. ---
+set_strip_registrations "${SET_JSON}" "${SET_MISSING_SCRIPTS}"
+set_state_baseline "${SET_STATE}" "0000000000000000000000000000000000000000000000000000000000000000" "$(set_sha "${SET_JSON}")"
+rm -f "${SET_OVERLAY}"           # also exercises Phase 2.5d on an existing workspace
+set_s9_missing_before=$(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${SET_JSON}") | grep -c . || true)
+if [ "${set_s9_missing_before}" -gt 0 ]; then
+  report "S-9 precondition: ${set_s9_missing_before} registrations absent before ./update.sh (assertion is not vacuous)" 1
+else
+  report "S-9 precondition: registrations absent before ./update.sh" 0 "nothing missing — the fixture did not seed"
+fi
+
+set_s9_out=$(bash "${REPO_ROOT}/update.sh" \
+  --config-root "${SET_CONFIG}" \
+  --workspace-root "${SET_WS}" 2>&1)
+set_s9_exit=$?
+
+set_s9_missing_after=$(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${SET_JSON}") | grep -c . || true)
+if [ "${set_s9_missing_after}" -eq 0 ]; then
+  report "S-9 ./update.sh carries ALL missing registrations into a previously-deployed install (${set_s9_missing_before} -> 0) — AC-4 + AC-6 end-to-end" 1
+else
+  report "S-9 ./update.sh carries ALL missing registrations into a previously-deployed install" 0 \
+    "still missing ${set_s9_missing_after}: $(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${SET_JSON}") | tr '\n' ' '); update exit ${set_s9_exit}"
+fi
+if set_triples "${SET_JSON}" | grep -q '^Stop|'; then
+  report "S-9 the Stop event block reaches the install via ./update.sh" 1
+else
+  report "S-9 the Stop event block reaches the install via ./update.sh" 0
+fi
+if printf '%s' "${set_s9_out}" | grep -q 'Phase 5d: settings.json content changed'; then
+  report "S-9 Phase 5d reports a real byte delta (the EX_NOCHANGE flag is keyed to content, not to 'the phase ran')" 1
+else
+  report "S-9 Phase 5d reports a real byte delta" 0 \
+    "$(printf '%s' "${set_s9_out}" | grep -E 'Phase 5d' | head -2 | tr '\n' '|')"
+fi
+
+# --- S-10 (AC-2, the discoverability half): update.sh scaffolds the Layer-2 overlay
+#     into a workspace that already exists. Installing it only at fresh install
+#     would leave every deployed workspace with no signposted home. ---
+if [ -f "${SET_OVERLAY}" ] && [ "$(tr -d ' \n' < "${SET_OVERLAY}")" = "{}" ]; then
+  report "S-10 ./update.sh scaffolds an EMPTY settings.local.json into an EXISTING workspace (Phase 2.5d)" 1
+else
+  report "S-10 ./update.sh scaffolds an EMPTY settings.local.json into an EXISTING workspace (Phase 2.5d)" 0 \
+    "present=$([ -f "${SET_OVERLAY}" ] && echo yes || echo no); body=$(tr -d ' \n' < "${SET_OVERLAY}" 2>/dev/null)"
+fi
+
+# --- S-11: phase ORDER. Scripts (5c) must land before the registrations that name
+#     them (5d), and the overlay (2.5d) before the migration that targets it. The
+#     assertion is on observed line order in one real run, not on source reading. ---
+set_l25d=$(printf '%s\n' "${set_s9_out}" | grep -n 'Phase 2.5d' | head -1 | cut -d: -f1)
+set_l5c=$(printf '%s\n' "${set_s9_out}" | grep -n 'Phase 5c' | head -1 | cut -d: -f1)
+set_l5d=$(printf '%s\n' "${set_s9_out}" | grep -n 'Phase 5d' | head -1 | cut -d: -f1)
+if [ -n "${set_l25d}" ] && [ -n "${set_l5c}" ] && [ -n "${set_l5d}" ] \
+   && [ "${set_l25d}" -lt "${set_l5c}" ] && [ "${set_l5c}" -lt "${set_l5d}" ]; then
+  report "S-11 phase order holds in a real run: 2.5d (${set_l25d}) < 5c (${set_l5c}) < 5d (${set_l5d})" 1
+else
+  report "S-11 phase order holds in a real run: 2.5d < 5c < 5d" 0 \
+    "2.5d=${set_l25d:-absent} 5c=${set_l5c:-absent} 5d=${set_l5d:-absent}"
+fi
+
+# --- S-12 (T-1): a second update with nothing to do must NOT flip the change flag
+#     off Phase 5d. Keying that flag to "the phase ran" is precisely what made
+#     EX_NOCHANGE unreachable once before. ---
+set_s12_before=$(set_sha "${SET_JSON}")
+set_s12_out=$(bash "${REPO_ROOT}/update.sh" \
+  --config-root "${SET_CONFIG}" \
+  --workspace-root "${SET_WS}" 2>&1)
+set_s12_after=$(set_sha "${SET_JSON}")
+if [ "${set_s12_before}" = "${set_s12_after}" ] \
+   && printf '%s' "${set_s12_out}" | grep -q 'Phase 5d: settings.json byte-identical'; then
+  report "S-12 a no-delta re-run leaves settings.json byte-identical and Phase 5d reports no change (EX_NOCHANGE stays reachable)" 1
+else
+  report "S-12 a no-delta re-run leaves settings.json byte-identical and Phase 5d reports no change" 0 \
+    "hash_changed=$([ "${set_s12_before}" = "${set_s12_after}" ] && echo no || echo YES); $(printf '%s' "${set_s12_out}" | grep -E 'Phase 5d' | head -1)"
+fi
+
 fi  # end Suite S target-present guard
 
 # --- Stage 6 (AC-b2): deployed-tree link integrity (primitive health + managed
