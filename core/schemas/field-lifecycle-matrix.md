@@ -84,6 +84,7 @@ Six values define the lifecycle state of each field at each pipeline stage.
 | Label — cluster | 2-Triage | Triage Agent | — | **C** | R | L | L | L | L | L | L | L | L |
 | Label — status | 1-Intake | Agent (atomic sync) | **C** | U | U | — | — | U | — | — | — | U | — |
 | Label — lifecycle | 2-Triage (cond.) | Triage Agent | — | O | — | — | — | — | — | — | — | — | — |
+| Label — work-status | — (delivery axis) | Agent or operator | — | — | — | — | — | — | — | — | — | — | — |
 | Milestone | 3-Bundle | Bundle Agent | — | — | **C** | R | R | R | R | R | R | R | R |
 | Assignee | 6-Engineering (typical) | Operator / Engineering Agent | — | — | — | O | — | **C\**/U | — | — | — | — | — |
 | Decision Date (Projects) | 2-Triage | Triage Agent (CER Resolve) | — | **C** | R | L | L | L | L | L | L | L | L |
@@ -91,6 +92,8 @@ Six values define the lifecycle state of each field at each pipeline stage.
 **Automation-handled fields:** Status (Projects) at bookends (Proposed on add, Done on close/merge) and Label — type at intake (template auto-label) are marked **A**. Per the [Automation vs. Agent Responsibility](../../release/references/specs/ticket-information-architecture.md#automation-vs-agent-responsibility) table: agents own intermediate transitions; automations own bookends. Stage (Projects) is ALWAYS agent-driven — no automation touches it.
 
 **State anchor sync:** At transitions T1-T5, agents update Label — status and Status (Projects) atomically per the `sync_state_anchors` pattern in ticket-information-architecture.md. Both show U in the same columns because they track parallel state per ADR-1 ( dual-tracking).
+
+**Label — work-status reads `—` across every stage BY DESIGN, not by omission.** It is the only row in this matrix that does so, so the reason is stated rather than left to be inferred as an oversight. This field tracks the **Axis-1 delivery lifecycle**, which is orthogonal to the release pipeline: it is advanced by delivery-lifecycle transitions (refinement, pull, review, acceptance), not by pipeline stage entry or exit. No pipeline stage creates it, requires it, updates it, or locks it — so no stage column can carry anything but `—`, and its absence on an issue is never a gate failure. Its "Created At" is likewise not a stage: a work item acquires the field when it enters a delivery board, which may be before, during, or entirely outside a release pipeline run. The value domain and the label projection are defined at [`ticket-information-architecture.md`](../../release/references/specs/ticket-information-architecture.md) § Delivery Work-Status (Axis-1) and [`label-taxonomy.md`](../specs/label-taxonomy.md) § Work-Status Labels; the obligation to advance it — which actor, on which observable trigger — belongs to the status-maintenance contract and is cited here rather than restated.
 
 ---
 
