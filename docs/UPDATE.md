@@ -23,16 +23,18 @@ The `update.sh` script regenerates package-managed content from current template
 | Category | Update behavior |
 |---|---|
 | **Universal** (skill prompts, hook scripts, schemas) | Refreshed by `git pull`; no separate action |
-| **Customizable** (`CLAUDE.md`, `settings.json`) | Composed at install by `setup-workspace.sh`; **not refreshed by `update.sh`**. Re-run `setup-workspace.sh` to pick up template changes (recomposes the whole file) |
-| **Composition-surface** (allowlists, exemption lists) | Managed section regenerated; OPERATOR ADDITIONS section preserved verbatim |
+| **Customizable** (`settings.json`) | Composed at install by `setup-workspace.sh`; **not refreshed by `update.sh`**. Re-run `setup-workspace.sh` to pick up template changes (recomposes the whole file) |
+| **Composition-surface** (allowlists, exemption lists, `CLAUDE.md`) | Managed section regenerated; OPERATOR ADDITIONS section preserved verbatim |
 | **Operator-instance** (`projects/`, `personal/`, `knowledge/`) | Never touched |
 
 The contract is defined at [`core/standards/composition-surface-spec.md`](../core/standards/composition-surface-spec.md).
 
+**Your workspace `CLAUDE.md` is refreshed by `update.sh`** (ADR-120). When the shipped template changes, its managed section is regenerated from the current template plus your `operator.toml`, and anything you put in its `OPERATOR ADDITIONS` section at the bottom of the file is preserved verbatim. A copy of the previous file is written to `<workspace-root>/.backup-pre-update-<timestamp>/CLAUDE.md` before every regeneration. Two consequences worth knowing: content placed **outside** both fences is not carried forward (put your additions inside the `OPERATOR ADDITIONS` fence), and re-running `setup-workspace.sh` no longer overwrites an existing `CLAUDE.md` — it is preserved, and `update.sh` is how it moves forward.
+
 ## 2. What does NOT get updated
 
 - Your work: `projects/`, `personal/notes/`, `knowledge/`
-- OPERATOR ADDITIONS sections in composition-surface managed files (allowlists, exemption lists)
+- OPERATOR ADDITIONS sections in composition-surface managed files (allowlists, exemption lists, `CLAUDE.md`)
 - Values you've set in `~/.config/pmo-platform/operator.toml`
 - User-scoped Claude config at `~/.claude/`
 
