@@ -1,10 +1,10 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-119 — Self-test coverage is discovered against a declared scope, floored by a committed manifest, and gated by a thin caller over a committed engine"
-status: Proposed — authored at Stage 6 Engineering for the `ci-selftest-and-check-hardening` release. Flips to Accepted when the operator ratifies it at the release's close gate. The flip is verified against this file's `status:` field, never inferred from milestone closure.
+status: Accepted — ratified by the workspace owner at the `ci-selftest-and-check-hardening` (v4.13) close gate, 2026-08-07. Authored at Stage 6 Engineering; the flip is recorded in this `status:` field, never inferred from milestone closure.
 date: 2026-08-05
 release: ci-selftest-and-check-hardening
-deciders: "Workspace owner (ratification pending at this release's close gate); the discovery-over-enumeration direction and the two-glob scope widening were rendered at the Mode R readiness gate and at Collective Review, designed at Stage 5 Solutioning, authored at Stage 6"
+deciders: "Workspace owner (ratified 2026-08-07 at the v4.13 close gate); the discovery-over-enumeration direction and the two-glob scope widening were rendered at the Mode R readiness gate and at Collective Review, designed at Stage 5 Solutioning, authored at Stage 6"
 tags: [architecture, ci, gate-efficacy, discovery-over-enumeration, single-engine, thin-caller, derived-surface, self-test, reversibility-cheap]
 source_observations:
   - "Three independent verification spokes in one prior release converged on the same finding from disjoint scopes and without coordination: no CI workflow ran the release tooling's --self-test suites. Convergence from disjoint scopes is what separates a systemic gap from a one-tool oversight."
