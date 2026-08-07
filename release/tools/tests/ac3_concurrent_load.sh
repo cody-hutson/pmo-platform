@@ -57,9 +57,23 @@ echo "plan: $ROUNDS rounds x $PAR concurrent = $((ROUNDS*PAR)) suite executions,
 echo
 
 # ---- 1. Load generators: CPU saturation + git contention on the same object store.
+#
+# The git arm is RATE-LIMITED. To be clear about what this does and does not fix: it is
+# NOT the fix for the hang — that was a bare `wait` blocking on these never-exiting
+# generators, corrected at the execution loop below. The sleep is resource hygiene. An
+# unbounded `while :; do git show …; done` forks as fast as the kernel allows, and four of
+# them spend the machine's fork capacity on background noise rather than on the subject.
+#
+# Note also what this arm is now FOR. It was justified when F1's failure mode WAS git
+# contention; after this card the suite makes zero history reads, so contending on git no
+# longer targets the defect. It is retained as background I/O noise and as a "does the fix
+# survive the original stressor" check — not as the load that matters. The CPU arm is.
 pids=()
 for _ in $(seq 1 $((NCPU * 2))); do ( while :; do :; done ) & pids+=("$!"); done
-for _ in 1 2 3 4; do ( while :; do git -C "$REPO" show HEAD:release/tools/blast-radius.sh >/dev/null 2>&1; done ) & pids+=("$!"); done
+for _ in 1 2 3 4; do
+  ( while :; do git -C "$REPO" show HEAD:release/tools/blast-radius.sh >/dev/null 2>&1; sleep 0.05; done ) &
+  pids+=("$!")
+done
 
 # ---- 2. LIVENESS ASSERTION. A load arm that never spawned means the runs below were
 # not loaded and prove nothing — the same defect class as a test that silently does not test.
@@ -69,14 +83,47 @@ if [ "$live" -ne "${#pids[@]}" ]; then
   kill "${pids[@]}" 2>/dev/null; exit 2
 fi
 echo "load: $live generators live on ${NCPU} cores"
+# Detach the generators from job control AFTER the liveness assertion has used them.
+# Killing 32 tracked background jobs makes the shell print a "Terminated" block for each,
+# which buries the graded output under ~100 lines of noise — and this output is what the
+# Stage-7 report quotes. Disowning suppresses the notice; the PIDs stay valid to kill.
+disown "${pids[@]}" 2>/dev/null || true
 echo
 
 # ---- 3. Execute.
+#
+# `wait` MUST name this round's PIDs. A bare `wait` waits for ALL background jobs of this
+# shell — which includes the 32 load generators, and those never exit. Round 1 completes,
+# the bare `wait` then blocks forever on the generators, and the harness hangs with round 1
+# done and no output. That is a hang, not slowness: measured, round 1's eight executions
+# finish in about six seconds and a single suite run costs ~1.6s even under this load.
+#
+# A per-round watchdog bounds the round so a genuine stall is REPORTED rather than silent.
+# It cannot be written with `kill -0` on the children: a finished-but-unreaped child is a
+# zombie, `kill -0` still succeeds on it, and the poll would never observe zero — turning
+# every healthy round into a false stall. So the bound is a killer subprocess, and the
+# stall verdict is read from the round's completion artifacts.
+ROUND_TIMEOUT="${AC3_ROUND_TIMEOUT:-300}"
 for r in $(seq 1 $ROUNDS); do
+  rpids=()
   for c in $(seq 1 $PAR); do
     ( BLAST_RADIUS_TESTS_STRICT=1 bash "$SUITE" > "$out/r${r}c${c}.log" 2>&1; echo $? > "$out/r${r}c${c}.rc" ) &
+    rpids+=("$!")
   done
-  wait
+  start=$SECONDS
+  ( sleep "$ROUND_TIMEOUT"; kill "${rpids[@]}" 2>/dev/null ) & wd=$!
+  wait "${rpids[@]}" 2>/dev/null
+  kill "$wd" 2>/dev/null; wait "$wd" 2>/dev/null
+  done_n=0
+  for c in $(seq 1 $PAR); do [ -f "$out/r${r}c${c}.rc" ] && done_n=$((done_n+1)); done
+  if [ "$done_n" -ne "$PAR" ]; then
+    echo "HARNESS STALLED: round $r produced $done_n/$PAR results within ${ROUND_TIMEOUT}s."
+    echo "  A stalled round is neither a pass nor a fail — the run is VOID, and grading it"
+    echo "  would report a partial denominator as a full one. Raise AC3_ROUND_TIMEOUT or"
+    echo "  reduce the load-generator count, then re-run."
+    kill "${pids[@]}" 2>/dev/null; exit 2
+  fi
+  printf 'round %s/%s complete (%ss)\n' "$r" "$ROUNDS" "$((SECONDS-start))"
 done
 kill "${pids[@]}" 2>/dev/null
 
