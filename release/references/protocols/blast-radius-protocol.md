@@ -45,12 +45,14 @@ Three primary triggers — plus operator-initiated ad-hoc use:
 |---|---|---|
 | `--format=json\|table\|md` | `table` if stdout is a tty, `json` otherwise | Output presenter |
 | `--depth=N` | `2` | Recursion depth for second-order detection; hard cap `4` |
+| `--max-expand=N` | `300` | Deterministic cap on how many first-order referrers are expanded for second-order detection. `0` = unlimited. When the cap fires the run emits a partial-result marker and exits `6` (see § Traversal bound) |
 | `--include-mirrors` | unset (mirrors filtered) | Include mirror-pair references in output (annotated `[MIRROR]`) |
 | `--root=PATH` | `git rev-parse --show-toplevel` | Repo root for scanning; falls back to invocation cwd |
 | `--exclude=GLOB` | (additive to default) | Additional exclusion path-prefix; repeatable |
 | `--no-color` | unset | Disable ANSI color in table output |
 | `-h`, `--help` | — | Usage banner |
 | `--version` | — | CLI version + schema version |
+| `--self-test` | — | Built-in hermetic regression suite (13 assertions over mktemp fixtures scanned via `--root`; no network, no git). Exits `0` on pass. Discovered and executed pre-merge by the `selftest-discovery` CI job — it is not separately wired |
 
 ### Examples
 
@@ -77,6 +79,17 @@ Three primary triggers — plus operator-initiated ad-hoc use:
 | `2` | Bad target (does not exist or not a regular file) |
 | `3` | Target is under an exclusion glob |
 | `4` | Missing dependency (`jq` not on PATH) |
+| `6` | **Partial result** — second-order expansion was capped by `--max-expand`. Output IS produced and carries `partial: true`; it is **truncated, not empty**. Never read a `6` as "no blast radius" |
+
+`5` is deliberately skipped: [`release/tools/domain-blast-radius.sh`](../../tools/domain-blast-radius.sh) already uses it for `EXIT_SCANNER_NOT_IMPLEMENTED`. Both tracers emit the same schema-v1 contract, so a consumer switching on exit code must be able to tell "the domain scanner is unavailable" apart from "your result was truncated".
+
+### Traversal bound
+
+Second-order detection expands each first-order referrer, so its cost grows with fan-in. `--max-expand` bounds that expansion **deterministically**: the first-order list is already sorted `reference_count` DESC then `path` ASC, and the cap truncates that sorted list, so the same input always yields the same truncation and the highest-signal referrers are the ones kept. First-order output is never capped — only the second-order expansion is.
+
+The default (`300`) sits above the largest first-order fan-out observed in this corpus, so it does not fire today and changes no output today. Its purpose is fail-loud-not-hang: as the corpus grows, a target that would once have run unbounded instead returns a marked partial. **This is a cap on a sorted list, not a wall-clock timeout** — a timeout would make the same input produce different output on a loaded machine, and this tool's output feeds Stage-8 verification, where non-reproducible impact analysis is disqualifying.
+
+A capped run signals itself on **both** limbs: exit `6` **and** `partial: true` in the JSON (plus a visible `!! PARTIAL RESULT` line in the `table` and `md` presenters). A consumer that checks only the exit code catches it; a consumer that reads only the JSON catches it.
 
 ### Hook compliance
 
@@ -141,6 +154,7 @@ The CLI emits a JSON v1 document (or a table/markdown rendering of it). Schema:
 - **`include_mirrors`** — Reflects the `--include-mirrors` flag at invocation time.
 - **`stats.first_order_count`** — Distinct files in `first_order`. **This is the AC2 metric.**
 - **`stats.filtered_mirrors`** — Count of mirror-partner files suppressed from `first_order` (when `--include-mirrors` is unset). Detail lives in `filtered_mirrors_detail`.
+- **`partial`** / **`partial_reason`** / **`stats.partial`** — **OPTIONAL; present ONLY on a run whose second-order expansion was capped by `--max-expand`.** `partial` is `true`, `partial_reason` names both the cap and the true first-order total, and `stats.partial` mirrors the boolean for consumers reading the stats block. On a complete run all three keys are **absent**, so output is unchanged for every existing consumer and no `schema_version` bump is required. A consumer that does not know these keys still cannot misread a capped run, because the process also exits `6`. Treat their presence as "this analysis is incomplete", never as "this analysis found nothing".
 
 ### `first_order` vs. `second_order` vs. `filtered_mirrors_detail`
 
@@ -235,7 +249,7 @@ The CLI detects mirror pairs from a **canonical table** (a faithful shadow of `c
 
 - **Markdown link parsing only.** The CLI does not parse YAML frontmatter cross-references (e.g., `consumed-by:` fields in SKILL.md). If a skill ecosystem grows to depend on structured frontmatter, future v2 schema may add a `frontmatter_references` field.
 - **Code-block false positives possible but rare.** A path mentioned inside a fenced code block ( ``` ) is still captured. Sampling on `release-process.md` shows <5% false-positive rate. Operator verification of each finding is cheap (re-run the grep manually).
-- **Performance ceiling.** Bash + grep degrades non-linearly past ~2000 files. Current repo (~600 markdown files) is well within bounds (first-order <1s, second-order at N=2 ~5-10s). If the repo grows 5x, migration to Python+tree-sitter+DAG-construction is the planned escape; schema v1 is preserved across migrations.
+- **Performance shape.** Cost is driven by the second-order expansion, not by first-order: a `--depth=2` run scans the corpus once per token per expanded referrer, so wall-clock scales with `(1 + first_order_count) x tokens x corpus_size`. First-order alone (`--depth=1`) is fast on any target. `--depth=2` is fast on a low-fan-in target and slowest on the architecturally central files — precisely the ones most worth tracing. `--max-expand` bounds the worst case structurally (see § Traversal bound); it does not make the scan asymptotically cheaper. The asymptotic fix — a single inverted pass over the corpus for all referrers at once — is deferred: it would lose the per-target token gating that keeps basename matches from over-counting. If growth makes the worst case intolerable, that inversion (or migration to Python + a real dependency graph) is the escape; schema v1 is preserved across migrations.
 - **Mirror-pair detection is canonical-table driven.** A pair listed in the canonical mirror table (e.g., `core/rules/<f>` ↔ `.claude/rules/<f>`) is treated as a mirror, regardless of byte-identity. Intentional but documented: byte-identity enforcement is `deploy.sh --check` Check 9's job, not the CLI's.
 - **Symlinks not followed.** The CLI scans the source tree as-stored on disk.
 - **Cross-repo references not detected.** Any reference outside `--root` is invisible. If skills/external repos consume PMO files, this is not captured.
@@ -247,6 +261,8 @@ The CLI detects mirror pairs from a **canonical table** (a faithful shadow of `c
 - **Adding new mirror pairs:** Add the pair to BOTH `core/deploy/deploy.sh` Check 9 `MIRROR_PAIRS` and the mirror table in `blast-radius.sh::detect_mirror_pairs` (keep the two in sync — the CLI table is a faithful shadow of the canonical Check 9 array, not an auto-detector). Check 9 enforces byte-identity for the new pair.
 - **Adding new scanned file types:** Edit the `SCANNED_TYPES` array in `blast-radius.sh` and commit per standard release process.
 - **Adding new default exclusions:** Edit the `DEFAULT_EXCLUSIONS` array in `blast-radius.sh`. Prefer operator-passed `--exclude` flags over hardcoded defaults when the exclusion is contextual.
+- **Re-deriving the `--max-expand` default:** the default is set above the largest first-order fan-out in the corpus so it cannot fire on normal targets. Re-derive it when the corpus maximum approaches the current default — a default that starts firing on real targets silently converts complete analyses into partials. Lowering it to bound latency is an operator-visible trade (it truncates second-order expansion on the most-referenced files), not a bug fix.
+- **Changing the traversal or the grep invocation:** `blast-radius.sh --self-test` group T1 asserts the *shape* of `grep_token`'s scan (batched, not one process per file), because the per-file form is a silent performance regression that no output diff would catch. If that function is refactored, keep the assertion pointed at the real invocation rather than relaxing it.
 - **Schema bumps to v2:** Backward-incompatible changes (renaming fields, restructuring arrays) require a 1-release transition window where v1 readers and v2 readers must coexist. Document v1→v2 migration in `blast-radius-protocol-v2-migration.md` at the time of the bump.
 - **Hook allowlist:** The CLI's path lives in `core/config/allowlists/script-execution-allowlist.txt`. If the path moves (e.g., directory rename), update the allowlist entry per [`core/rules/bypass-mode-readiness.md`](../../../core/rules/bypass-mode-readiness.md) §"Allowlist Maintenance".
 

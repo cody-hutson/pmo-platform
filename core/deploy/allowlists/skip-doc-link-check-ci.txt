@@ -6,10 +6,9 @@
 # directory prefix; bare patterns match by basename or substring (per
 # check-doc-links.py is_allowlisted semantics).
 #
-# NAMING NOTE: the `-ci` suffix is historical — the file was introduced when CI
-# was its only caller. It is now the shared tracked base for BOTH surfaces; the
-# name is kept because the frozen release corpus records the artifact under it.
-# Read it as "the tracked allowlist", not "the CI-only allowlist".
+# NAMING: read this as "the tracked allowlist", not the "CI-only" one — the
+# `-ci` suffix is historical. The name is ratified as the durable identifier,
+# not a pending rename; rationale in doc-link-maintenance.md § Allowlist.
 #
 # LAYERED, NOT EXCLUSIVE, with the operator-instance
 # `<instance>/skip-doc-link-check.txt`: `--allowlist` is repeatable and the

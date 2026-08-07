@@ -49,10 +49,43 @@ name: Release tooling smoke
 #              the sourced release/tools/lib/deciders-carveout.sh rather than a
 #              re-implementation, and asserts structurally that repo-integrity.yml
 #              still sources it), in the closeout-smoke job;
-#              (2) each ROSTERED core/deploy/tools corpus tool runs its
-#              committed --self-test when any core/deploy/tools file changes, in the
-#              node-graph-tools-selftest job (the roster and its per-entry rationale
-#              live at that job — not restated here, so the count cannot drift); (3) the CIAC-3 relation holds — the
+#              (2) EVERY tool that dispatches on --self-test across the two release
+#              tool trees runs it — DISCOVERED, never rostered — in the
+#              selftest-discovery job. The scope is declared once, in
+#              core/deploy/allowlists/selftest-coverage-manifest.txt, as four
+#              '# scope:' globs (release/tools/*.sh, release/tools/*.py,
+#              core/deploy/tools/*.py, core/deploy/tools/*.sh); the discovered set is
+#              derived from those globs by a predicate over the tools' own text, so a
+#              tool that GROWS a self-test is covered with zero workflow edits and a
+#              tool that LOSES one fails the gate. NO roster, count, predicate or glob
+#              is re-encoded in this YAML — the engine is
+#              release/tools/check-selftest-coverage.py and this workflow is a thin
+#              caller, per the single-engine discipline deploy-check-ci.yml states.
+#              The same manifest is a committed FLOOR: a path in it that still exists
+#              on disk but is no longer discovered is a HARD failure, which is what
+#              makes narrowing a '# scope:' glob unable to green a failing tool.
+#              Runner affinity is declared AT THE TOOL ('# selftest-runner: macos'),
+#              so the ubuntu/macOS split is derived too. The marker at the tool is the
+#              authority; this paragraph is NOT a maintained census, so read the live
+#              split from the engine — `check-selftest-coverage.py --list --runner
+#              macos` (or `--runner ubuntu`) — rather than trusting a count written
+#              here. Measured when this note was last reconciled: 57 discovered = 54
+#              ubuntu + 3 macOS. All three macOS declarers live in release/tools/:
+#              automated-closeout.sh (hard-exits at LOAD time, before argument
+#              parsing, unless gh resolves at a Homebrew path), plus
+#              check-release-body-drift.sh and reemit-release-bodies.sh (which share a
+#              non-portable frontmatter-strip idiom that yields an EMPTY body under
+#              GNU sed on the Linux runner). The drift check is worth naming rather
+#              than leaving to a count: it is a live Stage-13 gate whose drift legs
+#              (B, I) FAIL OPEN on Linux — reporting "no drift" when drift exists — so
+#              an F1 triage that reads it as part of the ubuntu partition
+#              misattributes both where it runs and how it fails.
+#              SCOPE BOUNDARY, stated because it is real: release/tools/tests/** and
+#              core/deploy/tools/tests/** are OUTSIDE this discovery scope. Those are
+#              bare-invocation suites, not --self-test dispatchers — and the boundary
+#              is a scope DECISION, not an emptiness claim: at least one suite there
+#              does carry a real dispatch. Arm D surveils them for workflow wiring
+#              instead and names every unwired suite on each in-scope PR; (3) the CIAC-3 relation holds — the
 #              class set a downstream gate ASSERTS on is a subset of the MUST rows the
 #              orchestration playbook INSTRUCTS (check-emission-contract-subset.sh over
 #              the committed asserted set), with the lint's own --self-test run in the
@@ -89,6 +122,20 @@ name: Release tooling smoke
 #                  the suite's own P9 / P11 controls fail;
 #                  or regress the in-tree baseline / stop detecting a broken corpus
 #                  path -> its R1 / R2 rules fail today, with no seam required;
+#                  break ANY discovered tool's --self-test (the probe does exactly
+#                  this: it flips version-grammar.sh's F1 X.Y fixture expectation in a
+#                  throwaway copy) -> the selftest-discovery job fails, and it fails
+#                  via that tool's own named assertion, with a control arm on the
+#                  unmutated copy proving the detection is attributable;
+#                  narrow a '# scope:' glob in
+#                  core/deploy/allowlists/selftest-coverage-manifest.txt to drop a
+#                  failing tool out of discovery -> Arm B(i) fails and NAMES every
+#                  dropped path, so greening the narrow requires deleting those lines
+#                  in the same diff (the anti-narrowing probe asserts this today);
+#                  give a tool a --self-test without regenerating the manifest ->
+#                  Arm B(ii) fails; delete a tool's --self-test while it stays in the
+#                  manifest -> Arm B(i) fails; add an exclusions entry with no written
+#                  reason -> the engine's own --self-test fails on a parse error;
 #                  break the schema-v1 emit so the doc
 #                  tracer's normalized output changes -> the blast-radius tool-family
 #                  test fails; revert the carve-out's un-carved re-test so the handle is
@@ -98,15 +145,16 @@ name: Release tooling smoke
 #                  negative control fail; let repo-integrity.yml stop sourcing the
 #                  shared library and grow a private copy again -> its structural
 #                  binding assertion fails (all three falsifiable TODAY, and each was
-#                  run as a mutation before the suite was committed); regress a node-graph tool's --self-test -> the
-#                  node-graph-tools-selftest job fails; add a class to
+#                  run as a mutation before the suite was committed); add a class to
 #                  core/deploy/allowlists/decision-emission-asserted-set.txt that is not
 #                  a MUST row of the playbook's EMISSION-CONTRACT block -> the CIAC-3
 #                  step fails; drop the reserved "unknown" seed from extract-usage.sh's
 #                  dim_agg so sum(by_X.*.tokens) no longer reconciles to session.tokens
 #                  -> the finops-selftest job fails (its own precision probe asserts
-#                  exactly that, in a temp copy); on an unrelated PR all three jobs are
-#                  skipped and absence is treated as pass.
+#                  exactly that, in a temp copy); regress a node-graph tool's
+#                  --self-test -> the selftest-discovery job fails (those six tools are
+#                  now covered by discovery rather than by the retired roster); on an
+#                  unrelated PR all three jobs are skipped and absence is treated as pass.
 # Path-filtered, so ADVISORY by skip-semantics. (Per gate-efficacy-standard.md (b).)
 
 # Smoke-tests the Stage 13 close-out automation on any PR that touches release
@@ -128,26 +176,25 @@ name: Release tooling smoke
 # A warn-only gate is blind to false negatives — this keeps the gate honest, the
 # same discipline reference-durability.yml applies to its fragile-ref detector.
 #
-# Three sibling offline self-tests run in the same closeout-smoke job for the same
-# anti-rot reason: the version allocator (claim-version.sh --self-test and its
-# hermetic fixture suite), the release-body drift check
-# (check-release-body-drift.sh --self-test), and the Stage-13 close-out
-# learnings-register producer (produce-learnings-register.sh --self-test). All three
-# are hermetic — fixture-driven,
-# with any gh/network call degrading to a self-test-internal N/A — so they gate on
-# exit code, credential-free, exactly like the close-out self-test above. The
-# register producer goes one better: its seed source is INJECTED via --triple-file
-# fixtures, so no synthesizer / event-log / gh / network call is reachable at all.
-# Their fixtures previously ran only when invoked manually.
+# The individual `<tool> --self-test` steps that used to sit in this job — the close-out
+# script, the version allocator, the release-body drift check and the learnings-register
+# producer — are GONE. Each was exactly what the discovery job now does for every tool,
+# so keeping them would be duplicate execution AND a second enumeration: the same
+# argument that retires the roster below applies to a hand-listed step.
 #
-# A second job — node-graph-tools-selftest — runs the committed --self-test of its
-# rostered core/deploy/tools corpus tools (roster + per-entry rationale at the job,
-# so the count is stated once) whenever a core/deploy/tools file changes. They are
-# pure-stdlib and OS-agnostic, so that job runs on ubuntu-latest, offline and
-# credential-free, gating on exit code — without it those self-tests could rot
-# unexercised until the next live backfill (Stage-8 QA finding F2). NOTE: path
-# filters are workflow-scoped, so a core/deploy/tools change also triggers the
-# macOS closeout-smoke job below — a harmless, fast, offline over-trigger.
+# A second job — selftest-discovery — DISCOVERS every tool that dispatches on
+# --self-test across the two release tool trees and runs it, replacing a hardcoded
+# 6-tool roster that covered 6 of the 22 eligible core/deploy/tools python tools. A
+# roster is a claim that drifts: a tool that grows a self-test is never added and a
+# tool that loses one is never removed. The tool set now comes from four '# scope:'
+# globs in a committed manifest and a predicate over the tools' own text, computed by
+# release/tools/check-selftest-coverage.py. Those tools are pure-stdlib and
+# OS-agnostic, so the job runs on ubuntu-latest, offline and credential-free, gating
+# on exit code. A tool with a genuine OS requirement declares it AT THE TOOL with
+# '# selftest-runner: macos' and is executed by the macOS job instead — a declaration,
+# not a workflow exclusion, so a runner constraint can never masquerade as a coverage
+# decision. NOTE: path filters are workflow-scoped, so a core/deploy/tools change also
+# triggers the macOS closeout-smoke job below — a harmless, fast, offline over-trigger.
 #
 # Platform (closeout-smoke): macos-latest. automated-closeout.sh pins PATH to
 # /usr/bin:/bin and resolves `gh` at the Homebrew (/opt/homebrew/bin) or Intel
@@ -170,6 +217,14 @@ on:
       # residual path-filter gap, closed here rather than deferred.
       - 'release/skills/release-hub/references/orchestration-playbook.md'
       - 'core/deploy/allowlists/decision-emission-asserted-set.txt'
+      # selftest-discovery inputs: the manifest owns the scope globs AND the expected
+      # set; the exclusions file owns the suppressions. Without these two entries a PR
+      # that narrowed a '# scope:' glob, or added a suppression, would not trigger the
+      # gate that reads them — the same residual-path-filter reasoning as the CIAC-3
+      # entries above, and the one that matters most here because narrowing the scope
+      # is precisely the disposition this gate forbids.
+      - 'core/deploy/allowlists/selftest-coverage-manifest.txt'
+      - 'core/deploy/allowlists/selftest-coverage-exclusions.txt'
       # Procedure 7a gate-predicate inputs: the predicate itself is prose-embedded
       # in the bridge doc and the fixtures are built from the ledger template's
       # 13-field header. Without these two entries an edit to either could regress
@@ -197,6 +252,9 @@ on:
       # residual path-filter gap, closed here rather than deferred.
       - 'release/skills/release-hub/references/orchestration-playbook.md'
       - 'core/deploy/allowlists/decision-emission-asserted-set.txt'
+      # selftest-discovery inputs — see the pull_request block above.
+      - 'core/deploy/allowlists/selftest-coverage-manifest.txt'
+      - 'core/deploy/allowlists/selftest-coverage-exclusions.txt'
       # Procedure 7a gate-predicate inputs — see the pull_request block above.
       - 'release/references/how-to/hub-spoke-bridge.md'
       - 'release/releases/hub-state/action-items.md.template'
@@ -229,32 +287,25 @@ jobs:
           command -v python3
           command -v git
 
-      - name: Self-test (offline unit checks + parser-clean)
-        # Pure helpers only — must NOT reach gh auth / network. Gate on exit code.
-        run: bash release/tools/automated-closeout.sh --self-test
-
-      - name: Self-test — claim-version.sh (offline; hermetic fixtures)
-        # The version allocator's fixtures ran only when invoked manually; CI-gating
-        # them here matches the peer close-out tool above. Hermetic: no git remote / gh
-        # / network (fetch-fail and signing paths are HALT-tested in-process). Gate on
-        # exit code.
-        run: bash release/tools/claim-version.sh --self-test
-
-      - name: Self-test — check-release-body-drift.sh (offline; note-vs-Release compare)
-        # The drift check's fixtures ran only when invoked manually; CI-gating them
-        # keeps the Stage-13 drift gate honest. Hermetic: fixture dirs via
-        # NOTES_DIR_OVERRIDE, and gh/network calls degrade to a self-test-internal N/A.
-        # Gate on exit code.
-        run: bash release/tools/check-release-body-drift.sh --self-test
-
-      - name: Self-test — produce-learnings-register.sh (offline; template render + seed fixtures)
-        # The Stage-13 Phase A7.2 register producer. Hermetic by construction: the seed
-        # source is injected via --triple-file fixtures, so no synthesizer / event-log /
-        # gh / network call is reachable, and --print-path touches no filesystem. Its
-        # assertions pin the contract its live consumer (compute-close-class-telemetry.sh)
-        # reads — canonical markers survive verbatim, L<n>/A<n> rows stay placeholder-
-        # bearing. Gate on exit code.
-        run: bash release/tools/produce-learnings-register.sh --self-test
+      - name: Discovered --self-tests, macOS partition (offline; discovery-based)
+        # The macOS half of the discovery gate. A tool lands here ONLY by declaring
+        # '# selftest-runner: macos' in its own first 40 lines; everything else runs in
+        # the ubuntu selftest-discovery job. Today exactly one tool declares it —
+        # automated-closeout.sh, which pins PATH to /usr/bin:/bin and resolves `gh` at
+        # /opt/homebrew/bin or /usr/local/bin AT LOAD TIME, before its argument parser
+        # is reached, so `--self-test` is literally unreachable on a runner that
+        # installs gh elsewhere.
+        #
+        # That is why the declaration lives at the tool rather than as a workflow
+        # exclusion: the requirement is a property of the script, and an exclusion
+        # would let a runner constraint be recorded as a coverage decision. The engine
+        # asserts the partition is TOTAL and DISJOINT, so a typo'd declaration cannot
+        # silently drop a tool off both runners.
+        #
+        # This step REPLACES four hand-listed `<tool> --self-test` steps (close-out,
+        # claim-version, check-release-body-drift, produce-learnings-register). Three
+        # of those four now run in the ubuntu job by discovery; the fourth runs here.
+        run: python3 release/tools/check-selftest-coverage.py --run --runner=macos
 
       - name: Blast-radius tool-family tests (schema-v1 lib + domain fan-out)
         # Exercises the blast-radius doc tracer's default-path regression under a
@@ -378,19 +429,23 @@ jobs:
         # Wires the CIAC-3 lint that shipped with ZERO call sites. Without this step the
         # script is decorative: with no asserted-set file it takes a `SKIP: … return 0`
         # branch, so the mechanism built to make CIAC-3 mechanical would assert nothing.
-        # Both lines matter and neither substitutes for the other:
-        #   1. the LIVE relation — the committed asserted set MUST be a subset of the
-        #      playbook's MUST rows (a gate asserting a class the playbook never
-        #      instructs can only ever fail);
-        #   2. --self-test — asserts BOTH directions against fixtures, so the lint
-        #      cannot drift into always-passing (its negative cases: an uninstructed
-        #      class exits 1, and a CONDITIONAL-only class exits 1).
+        # This step asserts the LIVE relation only — the committed asserted set MUST be
+        # a subset of the playbook's MUST rows (a gate asserting a class the playbook
+        # never instructs can only ever fail). That is a claim about repo CONTENT and
+        # nothing else runs it.
+        #
+        # The lint's own --self-test used to be a second line here. It is not gone: it
+        # is now run by the selftest-discovery job, because check-emission-contract-subset.sh
+        # is a release/tools/*.sh tool that dispatches on --self-test and is therefore
+        # DISCOVERED. Naming it here as well would be duplicate execution and a second
+        # enumeration — the same argument that retired the node-graph roster. The
+        # "the lint cannot drift into always-passing" guarantee is unchanged; only its
+        # executor moved from a hand-listed line to the discovery gate.
         # Offline, credential-free, no network — gates on exit code like its peers.
         run: |
           set -euo pipefail
           release/tools/check-emission-contract-subset.sh \
             core/deploy/allowlists/decision-emission-asserted-set.txt
-          release/tools/check-emission-contract-subset.sh --self-test
 
       - name: Corpus path-resolution check (offline; hard-fail)
         # HARD-FAILS (exit 1) if any of the four corpus paths do not resolve in
@@ -462,67 +517,255 @@ jobs:
         # the absence fixture.
         run: bash release/tools/tests/test_corpus_home_tolerance.sh
 
-  node-graph-tools-selftest:
-    name: Python corpus-tool self-tests (Ubuntu)
-    # The doc-warehouse stdlib tools ship a committed --self-test; without this job
-    # those self-tests rot unexercised (Stage-8 QA finding F2). Pure-stdlib and
-    # OS-agnostic, so ubuntu-latest — no pip install, no network, no gh/credentials.
-    # Roster: the three v3.55 node-graph tools + compose-portfolio (the
-    # pda-rollup-and-portfolio PORTFOLIO.md composer, same doc-warehouse FK-chain
-    # family) + generate_release_index (the release-corpus projector) +
-    # check-milestone-epic-membership (the M1/M2/M3 milestone-membership checker).
+  selftest-discovery:
+    name: Discovered tool self-tests (Ubuntu)
+    # THE DISCOVERY GATE. Replaces a hardcoded 6-tool roster that covered 6 of the 22
+    # eligible core/deploy/tools python tools — and left the rest, plus every
+    # release/tools self-test, running only when a human typed the command. Every
+    # "self-test PASS" recorded in a release was therefore a hand-run claim, not an
+    # enforced gate; two real defects reached acceptance review behind exactly that
+    # gap, because a self-test nothing executes cannot fire, so it cannot fail.
     #
-    # generate_release_index was added because its self-test carries REGRESSION
-    # GUARDS that are TRUE TODAY — the projector is clock-free and config-free by
-    # contract, and every date-anchor grandfathering entry is a pre-reconciliation
-    # release — and a guard nothing executes cannot fire, so it cannot fail. Check
-    # 23 runs that tool's `--verify`, never its `--self-test`, and this roster was
-    # its only other candidate caller. The `core/deploy/tools/**` path filter above
-    # already triggers on every edit to the module, and the
-    # `release/releases/RELEASE_LOG.md` filter triggers on the corpus the
-    # grandfathering-closure limb reads.
+    # A roster does not fix that — it reproduces it one level up. A tool that GROWS a
+    # self-test is never added to the roster; a tool that LOSES one is never removed.
+    # So the tool set is DISCOVERED: four '# scope:' globs declared in
+    # core/deploy/allowlists/selftest-coverage-manifest.txt, filtered by a predicate
+    # over each tool's own text, computed by release/tools/check-selftest-coverage.py.
     #
-    # check-milestone-epic-membership was added because its 48-assertion --self-test
-    # had ZERO executors: no workflow referenced it and no deploy.sh check runs it,
-    # so the M3 leg's R1 remediation — the narrowed unlabelled-stage-titled predicate
-    # and the three fixture legs added with it — shipped gated by nothing. A
-    # self-test nothing executes cannot fire, so it cannot fail: the identical
-    # fail-open class the finops-selftest job below exists to close, and the one this
-    # release is about. Verified falsifiable rather than assumed: removing the
-    # narrowing from unlabelled_stage_titled() in a throwaway copy fails exactly
-    # those three legs (48/48 -> 45/48) and exits 1, which this loop turns into a red
-    # job. Roster-safe on ubuntu-latest because --self-test returns before any
-    # gh/git call is reachable — instrumenting subprocess.run as a landmine and
-    # invoking self_test() reaches it zero times — so the entry is stdlib-only,
-    # offline and credential-free exactly like its siblings. The
-    # `core/deploy/tools/**` path filter above already triggers on every edit to it.
+    # NO check predicate, glob, roster or count is re-encoded in this YAML. The engine
+    # is committed, locally invocable (`--list` / `--run` / `--reconcile` work offline
+    # from a clean checkout) and carries its own --self-test — the single-engine
+    # thin-caller discipline deploy-check-ci.yml states outright, which every recent
+    # gate in this repo follows. Writing the discovery loop inline here would make this
+    # the one gate that re-implements its own predicate in YAML, reachable only by a
+    # remote CI trigger and impossible to exercise locally except by re-implementing it
+    # a third time — the exact failure the deciders-carveout library exists to prevent.
+    #
+    # The predicate distinguishes DISPATCH from MENTION. This is not a detail: a naive
+    # `grep -l -- --self-test` counts files whose only occurrence is comment prose, and
+    # it produced two wrong published figures for this very tree before the engine was
+    # written. Comment-only mentions are not advertisers.
+    #
+    # Pure-stdlib and OS-agnostic, so ubuntu-latest — no pip install, no network, no
+    # gh/credentials, no git-history read, so the default shallow checkout suffices.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        # Default depth: each --self-test reads committed fixtures from the working
-        # tree, not git history — a shallow checkout is sufficient.
+        # Default (shallow) depth, and this is MEASURED rather than assumed: at first
+        # enablement all 53 tools in this partition passed under a shallow checkout.
+        # The engine itself reads no git history — no network, no gh, no git-log — so
+        # nothing here needs a deeper clone. A tool that later does need history is a
+        # tool whose self-test is not hermetic; the fix is at that tool, not a blanket
+        # fetch-depth: 0 that slows every run to accommodate one.
 
       - uses: actions/setup-python@v7
         with:
           python-version: '3.x'
 
-      - name: Python corpus-tool --self-tests (offline, stdlib-only)
-        # Runs the whole roster (no fail-fast) so one run reports every regression;
-        # emits a ::error:: annotation per failing tool and exits non-zero if any failed.
+      - name: Engine self-test (must pass BEFORE the engine is trusted to gate)
+        # Ordering is load-bearing: a broken engine must not be able to green the gate.
+        # An engine whose discovery silently returned the empty set would report
+        # "0 of 0 passed" and this job would be decoration. These fixtures assert the
+        # properties that would hide such a failure — dispatch-vs-mention, the
+        # anti-narrowing floor and its control, the runner partition, and the refusal
+        # of a probe flag against the real checkout — each with a control arm, because
+        # a detection whose control also fires proves nothing.
+        run: python3 release/tools/check-selftest-coverage.py --self-test
+
+      - name: The discovered set (roster visible in the log, derived not declared)
+        # Printed so a reviewer can audit WHAT ran without reading YAML or the manifest.
+        # This is the affordance the retired roster provided by accident; here it is
+        # derived, so it cannot disagree with what actually executes.
+        run: python3 release/tools/check-selftest-coverage.py --list --explain
+
+      - name: Arm A — run every discovered --self-test (offline, stdlib-only)
+        # No fail-fast: one run reports every regression, not just the first, matching
+        # the sibling finops loop. Emits a ::error:: annotation per failing tool and a
+        # ::group:: per tool, and exits non-zero if any failed.
+        run: python3 release/tools/check-selftest-coverage.py --run --runner=ubuntu
+
+      - name: Arms B/C/D — the meta-assertions
+        # Arm B is the answer to "a tool advertising --self-test but not discovered
+        # must fail the gate", and it is deliberately NOT computed from the same glob
+        # as Arm A. If both sides came from one grep, "advertises but is not
+        # discovered" would be the empty set BY CONSTRUCTION and the assertion would
+        # assert nothing. Arm A's set is a runtime glob; Arm B's is the committed
+        # manifest. They can disagree, which is what gives it teeth:
+        #   B(i)  a manifest path still on disk but no longer discovered -> HARD FAIL.
+        #         Catches BOTH a narrowed '# scope:' glob and a tool that silently lost
+        #         its --self-test.
+        #   B(ii) a discovered path missing from the manifest -> HARD FAIL. A new
+        #         self-testing tool must land in the manifest in the same PR.
+        # Arm C (warn) reconciles repo-wide against a DIFFERENT denominator — every
+        # tracked *.sh/*.py — so an advertiser outside both declared trees is either
+        # wired by a named workflow step or written down with a reason.
+        # Arm D (warn) names every committed tests/ suite that no workflow runs. Those
+        # suites are OUTSIDE this gate's scope by decision, not because they are empty
+        # of dispatch — at least one of them does dispatch — so surveillance, not
+        # silence, is the honest treatment.
+        run: python3 release/tools/check-selftest-coverage.py --reconcile
+
+      - name: Precision probe — a deliberately broken self-test MUST fail the gate
+        # Without this the gate is a claim about itself. Breaks a real fixture
+        # expectation in version-grammar.sh (F1 X.Y: PASS -> REJECT) inside a THROWAWAY
+        # copy, never the checkout, and requires the gate to fail VIA THAT ASSERTION
+        # and to NAME the tool — not merely to exit non-zero, which any unrelated
+        # breakage would also do.
+        #
+        # The control arm runs FIRST, unmutated. A negative test whose control also
+        # fails proves nothing, and running it first means a probe fixture that is
+        # broken for an unrelated reason aborts loudly instead of masquerading as a
+        # detection.
+        #
+        # --only is refused by the engine unless --root is given, so it cannot be used
+        # to narrow the real gate steps above; it exists so this probe's failure is
+        # attributable to the one tool it broke.
         run: |
-          set -uo pipefail
-          rc=0
-          for t in stamp-node-frontmatter backfill-relationship-edges build-doc-index compose-portfolio generate_release_index check-milestone-epic-membership; do
-            echo "::group::${t}.py --self-test"
-            if python3 "core/deploy/tools/${t}.py" --self-test; then
-              echo "OK: ${t}"
-            else
-              echo "::error::${t}.py --self-test FAILED"
-              rc=1
-            fi
-            echo "::endgroup::"
-          done
-          exit "$rc"
+          # -e is ON for every setup step: a failed mktemp / cp / injection must ABORT,
+          # never fall through to a probe that silently tests nothing. It is relaxed
+          # only around the one invocation that is EXPECTED to fail.
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          mkdir -p "$probe/release" "$probe/core/deploy"
+          cp -R release/tools "$probe/release/tools"
+          cp -R core/deploy/tools "$probe/core/deploy/tools"
+          cp -R core/deploy/allowlists "$probe/core/deploy/allowlists"
+          subject="release/tools/version-grammar.sh"
+
+          set +e
+          python3 release/tools/check-selftest-coverage.py \
+            --run --root "$probe" --runner=ubuntu --only "$subject" > "$probe/control.out" 2>&1
+          control_rc=$?
+          set -e
+          if [ "$control_rc" -ne 0 ]; then
+            echo "::error::Control arm FAILED — ${subject} --self-test does not pass in the UNMUTATED probe copy (exit $control_rc), so the mutated arm below would prove nothing."
+            sed -n '1,40p' "$probe/control.out"
+            exit 1
+          fi
+          if grep -q 'FAIL \[F1 X.Y\]' "$probe/control.out"; then
+            echo "::error::Control arm already reports the F1 X.Y failure with no mutation applied; the probe cannot discriminate."
+            exit 1
+          fi
+          echo "Control OK — the unmutated copy passes."
+
+          # The anchor must match exactly once. If the fixture moves, this exits
+          # non-zero and -e aborts the job — a probe that can no longer find what it
+          # breaks reports that, rather than quietly passing.
+          python3 - "$probe/$subject" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
+          old = '_vg_t_canon "v2.12"      PASS   "F1 X.Y"'
+          new = '_vg_t_canon "v2.12"      REJECT "F1 X.Y"'
+          if s.count(old) != 1:
+              sys.exit("probe anchor not found exactly once in version-grammar.sh "
+                       "(count=%d) — the probe would silently stop testing anything" % s.count(old))
+          p.write_text(s.replace(old, new), encoding="utf-8")
+          PY
+
+          set +e
+          python3 release/tools/check-selftest-coverage.py \
+            --run --root "$probe" --runner=ubuntu --only "$subject" > "$probe/probe.out" 2>&1
+          probe_rc=$?
+          set -e
+
+          if [ "$probe_rc" -eq 0 ]; then
+            echo "::error::Precision probe FAILED — the coverage gate returned 0 with a deliberately broken self-test. A broken self-test does not fail the PR; this gate is blind."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+          if ! grep -q 'FAIL \[F1 X.Y\]' "$probe/probe.out"; then
+            echo "::error::Precision probe returned non-zero (exit $probe_rc) but NOT via the mutated assertion — the gate may be failing for an unrelated reason, which would mask a real regression."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+          if ! grep -q "FAIL: $subject" "$probe/probe.out"; then
+            echo "::error::Precision probe returned non-zero but the gate did not NAME ${subject} in its failure list; a failure nobody can attribute is not actionable."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+          echo "Precision probe OK — a deliberately broken self-test failed the gate (exit $probe_rc), via the mutated assertion, naming the tool."
+
+      - name: Precision probe — narrowing a '# scope:' glob MUST fail the gate
+        # This is the guard on the guard. AC-8 forbids resolving a first-enablement
+        # failure by narrowing discovery; without this probe, "Arm B(i) catches
+        # narrowing" would itself be an unexercised claim — which is the precise defect
+        # class this release exists to close.
+        #
+        # Deletes one '# scope:' directive in a throwaway copy of the manifest and
+        # requires --reconcile to fail VIA Arm B(i) and to NAME a dropped path. That
+        # naming is what makes narrowing self-defeating: greening it requires deleting
+        # the listed paths in the same diff, directly beneath the directive that was
+        # narrowed, in the reviewer's eye.
+        run: |
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          mkdir -p "$probe/release" "$probe/core/deploy"
+          cp -R release/tools "$probe/release/tools"
+          cp -R core/deploy/tools "$probe/core/deploy/tools"
+          cp -R core/deploy/allowlists "$probe/core/deploy/allowlists"
+          manifest="$probe/core/deploy/allowlists/selftest-coverage-manifest.txt"
+
+          set +e
+          python3 release/tools/check-selftest-coverage.py --reconcile --root "$probe" > "$probe/control.out" 2>&1
+          control_rc=$?
+          set -e
+          if [ "$control_rc" -ne 0 ]; then
+            echo "::error::Control arm FAILED — --reconcile does not pass on the UNMUTATED probe copy (exit $control_rc), so the narrowing arm below would prove nothing."
+            sed -n '1,60p' "$probe/control.out"
+            exit 1
+          fi
+          echo "Control OK — the unmutated manifest reconciles."
+
+          # The victim path is DERIVED from the manifest, never named here. Hardcoding a
+          # tool name in this workflow would re-introduce, in the probe, the very
+          # enumeration the gate exists to retire — and CIAC-3's method greps this file
+          # for exactly that. The probe deletes the LAST '# scope:' directive and reads
+          # back the first path that directive owned.
+          victim="$(python3 - "$manifest" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1]); lines = p.read_text(encoding="utf-8").splitlines()
+          idx = [i for i, l in enumerate(lines) if l.strip().startswith("# scope:")]
+          if not idx:
+              sys.exit("no '# scope:' directive in the manifest — the probe would "
+                       "silently stop testing anything")
+          cut = idx[-1]
+          owned = []
+          for l in lines[cut + 1:]:
+              if l.strip().startswith("#"):
+                  break
+              if l.strip():
+                  owned.append(l.strip())
+          if not owned:
+              sys.exit("the last '# scope:' directive owns no paths — the probe would "
+                       "silently stop testing anything")
+          del lines[cut]
+          p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print(owned[0])
+          PY
+          )"
+          echo "Narrowed the last '# scope:' directive; expecting the gate to name ${victim} as dropped."
+
+          set +e
+          python3 release/tools/check-selftest-coverage.py --reconcile --root "$probe" > "$probe/probe.out" 2>&1
+          probe_rc=$?
+          set -e
+
+          if [ "$probe_rc" -eq 0 ]; then
+            echo "::error::Anti-narrowing guard FAILED — deleting a '# scope:' directive did not fail --reconcile. Narrowing discovery would silently green a failing tool; this gate is blind."
+            sed -n '1,60p' "$probe/probe.out"
+            exit 1
+          fi
+          if ! grep -q 'Arm B(i) MANIFEST FLOOR' "$probe/probe.out"; then
+            echo "::error::--reconcile returned non-zero (exit $probe_rc) but NOT via Arm B(i) — the manifest floor is not what caught the narrowing."
+            sed -n '1,60p' "$probe/probe.out"
+            exit 1
+          fi
+          if ! grep -q "DROPPED: $victim" "$probe/probe.out"; then
+            echo "::error::Arm B(i) fired but did not NAME ${victim} among the dropped paths; a narrowing the reviewer cannot see in the diff is not deterred."
+            sed -n '1,60p' "$probe/probe.out"
+            exit 1
+          fi
+          echo "Anti-narrowing guard OK (exit $probe_rc) — a narrowed scope failed Arm B(i) and named every dropped path."
 
   finops-selftest:
     name: FinOps usage-extractor script self-tests (Ubuntu)
