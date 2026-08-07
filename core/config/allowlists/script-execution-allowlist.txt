@@ -4,6 +4,35 @@
 # is explicitly allowed. Other script invocations are blocked to prevent the
 # script-laundering Red Team mitigation (write attacker.sh, then bash attacker.sh).
 #
+# COVERAGE BOUNDARY — FOUR CONDITIONS. READ THIS BEFORE CITING THIS FILE AS A CONTROL.
+# ------------------------------------------------------------------------------------
+# This file is read by a PreToolUse hook. A PreToolUse-enforced control is in force only
+# when ALL FOUR of the following hold, and it is NOT in force when any one of them fails:
+#
+#   1. LOADING  - the session resolved a settings surface that declares the hook wiring.
+#                 The wiring applies to any session, main or spawned, whose working
+#                 directory is under the governed workspace root; a session that
+#                 resolves no such surface loads NO HOOKS AT ALL, and a session outside
+#                 that root is excluded by core/hooks/lib/scope-guard.sh.
+#   2. BYPASS   - CLAUDE_HOOK_BYPASS was not set to 1 in the environment the session was
+#                 launched with. This is the FIRST precedence layer and it exits BOTH
+#                 hook classes. BLOCK-DESTRUCTIVE-023 denies SETTING it mid-session; it
+#                 does not narrow the pre-launch case. At this layer the security/
+#                 workflow class asymmetry does not exist.
+#   3. CLASS    - the hook's master-activation class admits it. A security-class hook
+#                 always enforces; a workflow-class hook is inert while master
+#                 activation is off. block-destructive is security class.
+#   4. MODE     - the hook's own mode admits blocking. Most block hooks warn-and-allow
+#                 in warn mode; block-destructive is mode-independent.
+#
+# Where all four hold, this file is a CONTROL. Where any fails, it is a CONVENTION: it
+# still records what the platform intends to permit, and it is still the right thing to
+# maintain, but it is not an interlock and no threat model may treat it as one. Do not
+# accept a risk on the basis that this allowlist "will catch" an unlisted invocation
+# without first checking the four conditions on the path that invocation actually runs on.
+#
+# Canonical statement: core/standards/subagent-security-posture.md, section 3.1.
+#
 # Format:
 #   - One bash GLOB PATTERN per line (shell `case` pattern syntax, NOT regex)
 #   - Token-substituted at install time:
