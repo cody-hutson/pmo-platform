@@ -29,7 +29,7 @@ reversibility: MODERATE / Confidence HIGH
 | **Release Manager** | Agent-assisted (`release-hub` Mode O) |
 | **Status** | Executing (Stage 6 Engineering) |
 | **Branch** | `release/102-specialist-role-coverage` |
-| **Pull Request** | (populated at pull-request creation) |
+| **Pull Request** | 4979 — created in **draft** at Engineering per the stage contract; transitions to ready-for-review at the plan-review gate |
 | **Milestone** | `102-specialist-role-coverage` (245) |
 | **Baseline** | `origin/main` @ `f157a811` — Commit-0 re-pin **confirms** the Stage-4 pin; zero commits of drift |
 
