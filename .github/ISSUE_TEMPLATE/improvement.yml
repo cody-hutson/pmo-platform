@@ -91,6 +91,9 @@ body:
         `[ASSUMPTION – CONFIRM] TBD — identified in Planning`.
         The deferral marker counts as "directional" per G3-03;
         non-marker free-text passes submission but fails G3-03 at Bundle.
+        This list must resolve to ONE determinate set — see the scope-altitude
+        prompt on Proposed Change below, and
+        `release/references/how-to/intake-style-guide.md` §4c.
       placeholder: |
         core/governance/OPERATIONS.md (edit — add section on X)
         operations/skills/skill-name/SKILL.md (edit — update output format)
@@ -140,6 +143,14 @@ body:
         Describe the outcome, not the mechanism. State what the system should do differently.
         If you find yourself writing pseudocode, naming specific algorithm implementations, or prescribing specific implementation patterns, stop — that's Stage 5 Solutioning work.
         For determinate design (e.g., "new section in OPERATIONS.md"), commit it here; for ambiguous design (e.g., "new skill mode"), defer to Solutioning and note "[ASSUMPTION – CONFIRM] mechanism TBD at Stage 5".
+        Scope-altitude check — look back at Affected Files before you submit: every outcome
+        asserted in Description, here, or in Acceptance Criteria must be producible from a
+        surface listed there, and that list must resolve to ONE determinate set. If you offer
+        alternative fix directions, say which one the acceptance criteria assume; if a criterion's
+        object is conditioned on another criterion's outcome, say what the remaining criteria are
+        graded against. A markdown file can produce an agent-executed outcome ("the stage verifies X");
+        it cannot produce a machine-executed one ("CI fails") — that needs a workflow, script, or hook.
+        See `release/references/how-to/intake-style-guide.md` §4c.
     validations:
       required: true
 

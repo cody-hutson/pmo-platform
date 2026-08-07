@@ -70,7 +70,15 @@ body:
     id: affected-files
     attributes:
       label: Affected Files
-      description: Files where the fix will land (directional OK).
+      description: |
+        Files where the fix will land (directional OK).
+        Scope-altitude check — look back at Expected Behavior before you submit:
+        every behavior named there must be producible from a file listed here, and
+        this list must resolve to ONE determinate set. If you are offering
+        alternative fix directions, say which one the acceptance criteria assume.
+        A markdown file can produce an agent-executed outcome ("the stage verifies X");
+        it cannot produce a machine-executed one ("CI fails") — that needs a workflow,
+        script, or hook. See `release/references/how-to/intake-style-guide.md` §4c.
     validations:
       required: true
 
