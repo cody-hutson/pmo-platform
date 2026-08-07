@@ -1102,6 +1102,488 @@ fi
 
 fi  # end Suite C target-present guard
 
+# --- Stage 5d (Suite S): settings.json operator-key guard + refresh (ADR-121) ---
+# Covers #1355 AC-1 / AC-3 / AC-5 / AC-6 / AC-7. Appended as a NEW named suite;
+# Suites F, G, T, P and C above are not modified. Runs under the SAME ${SBX} and the
+# SAME trap-cleanup EXIT, so the R-8 HARD sandbox invariant (and its
+# live-~/.claude/skills manifest proof below) covers every invocation here too —
+# deliberately NOT a second `mktemp -d`.
+#
+# WHAT THIS SUITE GUARDS, stated as the defect it must fail on: update.sh refreshed
+# the hook SCRIPTS and nothing refreshed their REGISTRATIONS, so a workspace could
+# hold every current hook on disk with the events that would invoke them unwired.
+# The field instance was four registration entries across three scripts, plus the
+# whole Stop event block. S-1 and S-3 assert that exact set lands; run either
+# against a build without the guard and they go red.
+#
+# THE DENOMINATOR IS THE TEMPLATE'S OWN REGISTRATION SET, enumerated at runtime —
+# never a hardcoded count. Registration identity is the (event, matcher, basename)
+# triple over the RESOLVED file: basename because the workspace root is baked into
+# every command string, and resolved because the template's _comment key names a
+# script in prose that substitute_template strips by design. A filename-shaped scan
+# of the RAW template counts 18 scripts where the hooks block holds 17, and the
+# phantom (setup-workspace.sh) can never appear in a deployed file — S-0a is the
+# arm that pins that distinction so the suite cannot be "fixed" toward the wrong
+# population.
+#
+# NEGATIVE SCOPE — deliberately NOT asserted. Each is correct shipped behaviour and
+# asserting it would make a correct build red:
+#   (a) The overlay's own contents surviving a refresh beyond create-once + migration
+#       merge — Claude Code owns overlay precedence, not the platform.
+#   (b) A same-path value difference being migrated. It is platform state and is
+#       REPLACED (reported + backed up, never silently dropped); promoting it to the
+#       overlay would pin a stale platform value forever.
+#   (c) Backup-directory uniqueness within the same UTC second — the shipped
+#       convention is second-resolution and two writes in one second share a dir.
+printf '\nStage 5d (Suite S): settings.json operator-key guard + refresh (ADR-121)\n'
+
+mkdir -p "${SBX}/set-ws" "${SBX}/set-config"
+
+SET_WS="${SBX}/set-ws"
+SET_CONFIG="${SBX}/set-config"
+SET_JSON="${SET_WS}/.claude/settings.json"
+SET_OVERLAY="${SET_WS}/.claude/settings.local.json"
+SET_STATE="${SET_WS}/.claude/.workspace-setup.state"
+SET_TEMPLATE="${REPO_ROOT}/core/settings.json.template"
+# The field-observed gap: 4 registration entries across 3 distinct scripts, plus the
+# entire Stop event block. Held as data so every arm probes the same subject.
+SET_MISSING_SCRIPTS="block-scope-segregation.sh verify-session-config.sh session-retro-trigger.sh"
+
+sed -e "s|^claude_workspace_root = .*|claude_workspace_root = \"${SET_WS}\"|" \
+    -e "s|^operator_homedir_path = .*|operator_homedir_path = \"${SBX}/home\"|" \
+    "${SBX}/config/operator.toml" > "${SET_CONFIG}/operator.toml"
+chmod 600 "${SET_CONFIG}/operator.toml"
+
+# Enumerate (event, matcher, basename) triples of a settings JSON document.
+# Prints one "event|matcher|basename" per line, sorted. Empty output for a file that
+# is absent or unparseable — callers distinguish those cases explicitly.
+set_triples() {
+  python3 -c '
+import json, os, sys
+try:
+    with open(sys.argv[1]) as f:
+        doc = json.load(f)
+except Exception:
+    sys.exit(0)
+out = []
+for event, blocks in (doc.get("hooks") or {}).items():
+    for b in blocks:
+        for h in (b.get("hooks") or []):
+            out.append("%s|%s|%s" % (event, b.get("matcher", ""), os.path.basename(h.get("command", ""))))
+print("\n".join(sorted(out)))
+' "$1" 2>/dev/null
+}
+
+# Strip the field-observed registrations from a deployed settings.json, dropping any
+# event block left empty (which is how the Stop block disappears).
+set_strip_registrations() {
+  python3 -c '
+import json, os, sys
+path, missing = sys.argv[1], set(sys.argv[2].split())
+with open(path) as f:
+    doc = json.load(f)
+hooks = doc.get("hooks") or {}
+for event in list(hooks):
+    kept_blocks = []
+    for b in hooks[event]:
+        kept = [h for h in (b.get("hooks") or []) if os.path.basename(h.get("command", "")) not in missing]
+        if kept:
+            nb = dict(b); nb["hooks"] = kept; kept_blocks.append(nb)
+    if kept_blocks:
+        hooks[event] = kept_blocks
+    else:
+        del hooks[event]
+with open(path, "w") as f:
+    json.dump(doc, f, indent=2); f.write("\n")
+' "$1" "$2"
+}
+
+# Write the two ADR-121 baselines into the state file. "" for either means "absent",
+# which the guard must treat as "classify structurally", never as "unchanged".
+set_state_baseline() {
+  python3 -c '
+import json, sys
+path, tpl_sha, inst_sha = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path) as f:
+    state = json.load(f)
+for key, val in (("settings_template_sha", tpl_sha), ("settings_installed_sha", inst_sha)):
+    if val == "":
+        state.pop(key, None)
+    else:
+        state[key] = val
+with open(path, "w") as f:
+    json.dump(state, f, indent=2); f.write("\n")
+' "$1" "$2" "$3"
+}
+
+set_sha() { shasum -a 256 "$1" | awk '{print $1}'; }
+
+set_refresh() {
+  bash "${SETUP}" --source-repo "${REPO_ROOT}" --workspace-root "${SET_WS}" \
+    --config-root "${SET_CONFIG}" --refresh-settings "$@" 0<&- 2>&1
+}
+
+# --- S-0a (probe validity): the comparison population is the RESOLVED hooks block,
+#     not a filename scan of the raw template. Both arms observed. ---
+set_tpl_hook_scripts=$(python3 -c '
+import json, os, sys
+doc = json.load(open(sys.argv[1]))
+print(len({os.path.basename(h.get("command","")) for _e, bs in (doc.get("hooks") or {}).items() for b in bs for h in (b.get("hooks") or [])}))
+' "${SET_TEMPLATE}")
+set_tpl_raw_scan=$(grep -oE '[A-Za-z0-9_.-]+\.sh' "${SET_TEMPLATE}" | LC_ALL=C sort -u | wc -l | tr -d ' ')
+if [ "${set_tpl_raw_scan}" -gt "${set_tpl_hook_scripts}" ]; then
+  report "S-0a raw-filename scan over-counts the registration population (${set_tpl_raw_scan} vs ${set_tpl_hook_scripts}) — the suite keys on the resolved hooks block" 1
+else
+  report "S-0a raw-filename scan over-counts the registration population" 0 \
+    "raw scan=${set_tpl_raw_scan}, hooks-block distinct=${set_tpl_hook_scripts}; expected raw > hooks-block (the _comment key names a script in prose). If the template's _comment changed, re-derive — do NOT relax this to >=."
+fi
+
+# --- S-0b: fresh install establishes the baseline and scaffolds the overlay ---
+set_install_log=$(GIT_CONFIG_GLOBAL="${SBX}/gitcfg/ok" "${SETUP}" \
+  --source-repo "${REPO_ROOT}" \
+  --workspace-root "${SET_WS}" \
+  --config-root "${SET_CONFIG}" \
+  --non-interactive 0<&- 2>&1)
+set_install_exit=$?
+if [ "${set_install_exit}" -eq 0 ] && [ -f "${SET_JSON}" ]; then
+  report "S-0b fresh install for Suite S deployed settings.json" 1
+else
+  report "S-0b fresh install for Suite S deployed settings.json" 0 \
+    "exit ${set_install_exit}; $(printf '%s' "${set_install_log}" | tail -3 | tr '\n' '|')"
+fi
+
+if [ -f "${SET_OVERLAY}" ] && [ "$(tr -d ' \n' < "${SET_OVERLAY}")" = "{}" ]; then
+  report "S-0b install scaffolds an EMPTY settings.local.json overlay (create-once contract)" 1
+else
+  report "S-0b install scaffolds an EMPTY settings.local.json overlay (create-once contract)" 0 \
+    "present=$([ -f "${SET_OVERLAY}" ] && echo yes || echo no); body=$(tr -d ' \n' < "${SET_OVERLAY}" 2>/dev/null)"
+fi
+
+set_state_tpl=$(jq -r '.settings_template_sha // ""' "${SET_STATE}" 2>/dev/null)
+set_state_inst=$(jq -r '.settings_installed_sha // ""' "${SET_STATE}" 2>/dev/null)
+if [ -n "${set_state_tpl}" ] && [ -n "${set_state_inst}" ] && [ "${set_state_tpl}" != "${set_state_inst}" ]; then
+  report "S-0b install records BOTH baselines, and they are distinct (trigger != anchor)" 1
+else
+  report "S-0b install records BOTH baselines, and they are distinct (trigger != anchor)" 0 \
+    "template_sha='${set_state_tpl}' installed_sha='${set_state_inst}'"
+fi
+
+# Guard the rest of the suite on a deployed target — without it every arm below is
+# vacuous rather than failing.
+if [ ! -f "${SET_JSON}" ]; then
+  report "S-* preconditions (deployed settings.json present)" 0 "missing: ${SET_JSON}"
+else
+
+# --- S-1 (AC-4 + AC-6, the headline arm): a workspace installed at an OLDER
+#     template — untouched platform copy, stale trigger — receives every missing
+#     registration. This is the field defect, reproduced exactly. ---
+set_strip_registrations "${SET_JSON}" "${SET_MISSING_SCRIPTS}"
+# The platform DID write this file (from the older template), so the anchor matches
+# it and the trigger is stale. That is precisely the pre-ADR-121 install shape.
+set_state_baseline "${SET_STATE}" "0000000000000000000000000000000000000000000000000000000000000000" "$(set_sha "${SET_JSON}")"
+
+# Probe-validity precondition: the registrations must be ABSENT now, or the
+# post-refresh assertion proves nothing. Sensitivity arm with an observed non-zero.
+set_before_count=$(set_triples "${SET_JSON}" | grep -c . || true)
+set_tpl_count=$(set_triples "${SET_TEMPLATE}" | grep -c . || true)
+set_before_missing=$(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${SET_JSON}") | grep -c . || true)
+if [ "${set_before_missing}" -gt 0 ] && [ "${set_before_count}" -lt "${set_tpl_count}" ]; then
+  report "S-1 precondition: ${set_before_missing} of ${set_tpl_count} template registrations are ABSENT before the refresh (assertion is not vacuous)" 1
+else
+  report "S-1 precondition: registrations are ABSENT before the refresh" 0 \
+    "missing=${set_before_missing} live=${set_before_count} template=${set_tpl_count}"
+fi
+if printf '%s\n' "$(set_triples "${SET_JSON}")" | grep -q '^Stop|'; then
+  report "S-1 precondition: the Stop event block is absent before the refresh" 0 "Stop block unexpectedly present"
+else
+  report "S-1 precondition: the Stop event block is absent before the refresh" 1
+fi
+
+set_s1_log=$(set_refresh); set_s1_exit=$?
+if [ "${set_s1_exit}" -eq 0 ]; then
+  report "S-1 --refresh-settings exits 0 on an untouched stale copy" 1
+else
+  report "S-1 --refresh-settings exits 0 on an untouched stale copy" 0 \
+    "exit ${set_s1_exit}; $(printf '%s' "${set_s1_log}" | tail -3 | tr '\n' '|')"
+fi
+if printf '%s' "${set_s1_log}" | grep -q 'S-1 settings.json is an untouched platform copy'; then
+  report "S-1 guard classified the untouched copy as S-1 (byte-exact anchor arm, no structural diff)" 1
+else
+  report "S-1 guard classified the untouched copy as S-1" 0 \
+    "$(printf '%s' "${set_s1_log}" | grep -E 'S-[0-5]' | head -2 | tr '\n' '|')"
+fi
+
+set_after_missing=$(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${SET_JSON}") | grep -c . || true)
+if [ "${set_after_missing}" -eq 0 ]; then
+  report "S-1 ALL ${set_tpl_count} template registrations reach the previously-deployed install (0 missing, was ${set_before_missing})" 1
+else
+  report "S-1 ALL template registrations reach the previously-deployed install" 0 \
+    "still missing ${set_after_missing}: $(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${SET_JSON}") | tr '\n' ' ')"
+fi
+
+# Name the field-observed scripts explicitly, so the arm reads as the defect it
+# closes rather than as an anonymous set difference.
+set_named_missing=0
+for set_script in ${SET_MISSING_SCRIPTS}; do
+  if ! set_triples "${SET_JSON}" | grep -q "|${set_script}$"; then
+    set_named_missing=$((set_named_missing + 1))
+  fi
+done
+if [ "${set_named_missing}" -eq 0 ]; then
+  report "S-1 the three field-observed scripts are registered after the refresh (block-scope-segregation / verify-session-config / session-retro-trigger)" 1
+else
+  report "S-1 the three field-observed scripts are registered after the refresh" 0 \
+    "${set_named_missing} of 3 still unregistered"
+fi
+if set_triples "${SET_JSON}" | grep -q '^Stop|'; then
+  report "S-1 the Stop event block reaches the previously-deployed install" 1
+else
+  report "S-1 the Stop event block reaches the previously-deployed install" 0 "no Stop registration after refresh"
+fi
+if grep -qE '\[(OPERATOR|CLAUDE|COWORK)_[A-Z_]+\]' "${SET_JSON}" 2>/dev/null; then
+  report "S-1 refreshed settings.json carries no unresolved token" 0 \
+    "$(grep -oE '\[(OPERATOR|CLAUDE|COWORK)_[A-Z_]+\]' "${SET_JSON}" | sort -u | tr '\n' ' ')"
+else
+  report "S-1 refreshed settings.json carries no unresolved token" 1
+fi
+if jq -e 'has("_comment")' "${SET_JSON}" >/dev/null 2>&1; then
+  report "S-1 refreshed settings.json is a clean JSON document (_comment stripped)" 0 "_comment survived the refresh"
+else
+  report "S-1 refreshed settings.json is a clean JSON document (_comment stripped)" 1
+fi
+if [ "$(tr -d ' \n' < "${SET_OVERLAY}")" = "{}" ]; then
+  report "S-1 the overlay is NOT written when there is nothing to migrate" 1
+else
+  report "S-1 the overlay is NOT written when there is nothing to migrate" 0 "overlay body: $(tr -d ' \n' < "${SET_OVERLAY}")"
+fi
+
+# --- S-0 (AC-3): an immediate re-run is a true no-op — both baselines match, so
+#     nothing is written. This is what keeps update.sh's EX_NOCHANGE reachable. ---
+set_s0_before=$(set_sha "${SET_JSON}")
+set_s0_log=$(set_refresh); set_s0_exit=$?
+set_s0_after=$(set_sha "${SET_JSON}")
+if [ "${set_s0_exit}" -eq 0 ] && [ "${set_s0_before}" = "${set_s0_after}" ] \
+   && printf '%s' "${set_s0_log}" | grep -q 'S-0 settings.json already current'; then
+  report "S-0 idempotent re-run writes nothing (both baselines match; byte-identical)" 1
+else
+  report "S-0 idempotent re-run writes nothing" 0 \
+    "exit ${set_s0_exit}; hash_changed=$([ "${set_s0_before}" = "${set_s0_after}" ] && echo no || echo YES); $(printf '%s' "${set_s0_log}" | grep -E 'S-[0-5]' | head -1)"
+fi
+
+# --- S-0 force arm: --force-regen overrides the no-op skip but STILL runs the
+#     guard first, so forcing can never bypass operator-key migration. ---
+set_sf_log=$(set_refresh --force-regen); set_sf_exit=$?
+if [ "${set_sf_exit}" -eq 0 ] && ! printf '%s' "${set_sf_log}" | grep -q 'S-0 settings.json already current'; then
+  report "S-0 --force-regen overrides the no-op skip (classification still rendered)" 1
+else
+  report "S-0 --force-regen overrides the no-op skip" 0 \
+    "exit ${set_sf_exit}; $(printf '%s' "${set_sf_log}" | grep -E 'S-[0-5]' | head -1)"
+fi
+
+# --- S-2 (AC-3, no false fire): a formatting-only difference is NOT a
+#     customization. Re-indent the deployed file and drop the anchor, forcing the
+#     structural path; it must find nothing operator-only and touch no overlay. ---
+python3 -c '
+import json, sys
+p = sys.argv[1]
+doc = json.load(open(p))
+with open(p, "w") as f:
+    json.dump(doc, f, indent=6)   # same content, different bytes
+    f.write("\n\n")
+' "${SET_JSON}"
+set_state_baseline "${SET_STATE}" "" ""
+set_overlay_before=$(set_sha "${SET_OVERLAY}")
+set_s2_log=$(set_refresh); set_s2_exit=$?
+set_overlay_after=$(set_sha "${SET_OVERLAY}")
+if [ "${set_s2_exit}" -eq 0 ] && printf '%s' "${set_s2_log}" | grep -q 'S-2 no operator-added content'; then
+  report "S-2 a formatting-only difference does NOT fire the operator-key guard (AC-3)" 1
+else
+  report "S-2 a formatting-only difference does NOT fire the operator-key guard (AC-3)" 0 \
+    "exit ${set_s2_exit}; $(printf '%s' "${set_s2_log}" | grep -E 'S-[0-5]' | head -1)"
+fi
+if [ "${set_overlay_before}" = "${set_overlay_after}" ]; then
+  report "S-2 the overlay is untouched on a no-customization refresh" 1
+else
+  report "S-2 the overlay is untouched on a no-customization refresh" 0 "overlay hash changed"
+fi
+if [ "$(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${SET_JSON}") | grep -c . || true)" -eq 0 ]; then
+  report "S-2 the full template registration set is still present after the reformat path" 1
+else
+  report "S-2 the full template registration set is still present after the reformat path" 0
+fi
+
+# --- S-3 (AC-1 + AC-5, the guard-gated arm): operator content AND a stale file in
+#     one fixture. The operator key must survive (migrated), AND every template
+#     registration must land. Both halves, or the refresh is not guard-gated. ---
+set_strip_registrations "${SET_JSON}" "${SET_MISSING_SCRIPTS}"
+python3 -c '
+import json, sys
+p = sys.argv[1]
+doc = json.load(open(p))
+doc["env"] = {"SUITE_S_OPERATOR_KEY": "operator-value"}                  # unknown top-level key
+doc["permissions"]["allow"].append("Bash(suite-s-operator-tool *)")      # permissions list extra
+doc["hooks"]["PreToolUse"].append({"matcher": "Task",
+    "hooks": [{"type": "command", "command": "/opt/suite-s/operator-hook.sh"}]})
+with open(p, "w") as f:
+    json.dump(doc, f, indent=2); f.write("\n")
+' "${SET_JSON}"
+set_state_baseline "${SET_STATE}" "" ""
+set_s3_missing_before=$(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${SET_JSON}") | grep -c . || true)
+set_s3_log=$(set_refresh); set_s3_exit=$?
+
+if [ "${set_s3_exit}" -eq 0 ] && printf '%s' "${set_s3_log}" | grep -q 'S-3 MIGRATED operator-added settings'; then
+  report "S-3 operator-added content is MIGRATED, not merely warned about (AC-1)" 1
+else
+  report "S-3 operator-added content is MIGRATED, not merely warned about (AC-1)" 0 \
+    "exit ${set_s3_exit}; $(printf '%s' "${set_s3_log}" | grep -E 'S-[0-5]' | head -2 | tr '\n' '|')"
+fi
+set_s3_named=0
+for set_key in SUITE_S_OPERATOR_KEY 'Bash(suite-s-operator-tool \*)' operator-hook.sh; do
+  grep -q "${set_key}" "${SET_OVERLAY}" || set_s3_named=$((set_s3_named + 1))
+done
+if [ "${set_s3_named}" -eq 0 ]; then
+  report "S-3 all three operator shapes reach settings.local.json (top-level key, permissions entry, hook registration)" 1
+else
+  report "S-3 all three operator shapes reach settings.local.json" 0 \
+    "${set_s3_named} of 3 absent from ${SET_OVERLAY}"
+fi
+if grep -q 'SUITE_S_OPERATOR_KEY' "${SET_JSON}"; then
+  report "S-3 the managed file is regenerated clean (operator content no longer in it)" 0 "operator key still present in the managed file"
+else
+  report "S-3 the managed file is regenerated clean (operator content no longer in it)" 1
+fi
+set_s3_missing_after=$(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${SET_JSON}") | grep -c . || true)
+if [ "${set_s3_missing_before}" -gt 0 ] && [ "${set_s3_missing_after}" -eq 0 ]; then
+  report "S-3 the template addition ALSO lands in the same run (${set_s3_missing_before} missing -> 0) — refresh and preservation both, which is AC-5" 1
+else
+  report "S-3 the template addition ALSO lands in the same run" 0 \
+    "missing before=${set_s3_missing_before} after=${set_s3_missing_after}"
+fi
+if ls -d "${SET_WS}"/.backup-pre-update-* >/dev/null 2>&1; then
+  report "S-3 a pre-migration backup of the managed file exists" 1
+else
+  report "S-3 a pre-migration backup of the managed file exists" 0 "no .backup-pre-update-* under ${SET_WS}"
+fi
+
+# --- S-4: the one case that must never be resolved silently. The overlay already
+#     defines a migrating key with a DIFFERENT value -> abort, write NOTHING. ---
+python3 -c '
+import json, sys
+sp, ov = sys.argv[1], sys.argv[2]
+doc = json.load(open(sp)); doc["env"] = {"SUITE_S_OPERATOR_KEY": "managed-file-value"}
+with open(sp, "w") as f: json.dump(doc, f, indent=2); f.write("\n")
+o = json.load(open(ov)); o.setdefault("env", {})["SUITE_S_OPERATOR_KEY"] = "overlay-DIFFERENT-value"
+with open(ov, "w") as f: json.dump(o, f, indent=2); f.write("\n")
+' "${SET_JSON}" "${SET_OVERLAY}"
+set_state_baseline "${SET_STATE}" "" ""
+set_s4_before=$(set_sha "${SET_JSON}")
+set_s4_overlay_before=$(set_sha "${SET_OVERLAY}")
+set_s4_log=$(set_refresh); set_s4_exit=$?
+set_s4_after=$(set_sha "${SET_JSON}")
+set_s4_overlay_after=$(set_sha "${SET_OVERLAY}")
+if [ "${set_s4_exit}" -eq 0 ] && [ "${set_s4_before}" = "${set_s4_after}" ] \
+   && [ "${set_s4_overlay_before}" = "${set_s4_overlay_after}" ]; then
+  report "S-4 a migration conflict writes NOTHING — managed file and overlay both byte-identical" 1
+else
+  report "S-4 a migration conflict writes NOTHING" 0 \
+    "exit ${set_s4_exit}; managed_changed=$([ "${set_s4_before}" = "${set_s4_after}" ] && echo no || echo YES); overlay_changed=$([ "${set_s4_overlay_before}" = "${set_s4_overlay_after}" ] && echo no || echo YES)"
+fi
+if printf '%s' "${set_s4_log}" | grep -q 'S-4 settings refresh ABORTED' \
+   && printf '%s' "${set_s4_log}" | grep -q 'SUITE_S_OPERATOR_KEY' \
+   && printf '%s' "${set_s4_log}" | grep -q 'REGISTRATIONS did NOT land'; then
+  report "S-4 the abort names the conflicting key AND states that registrations did not land" 1
+else
+  report "S-4 the abort names the conflicting key AND states that registrations did not land" 0 \
+    "$(printf '%s' "${set_s4_log}" | grep -E 'S-4' | head -3 | tr '\n' '|')"
+fi
+
+# --- S-5: an unparseable live file means the runtime is loading NO platform
+#     settings — strictly worse than any customization loss. Back up, regenerate. ---
+printf '{ this is not valid json ' > "${SET_JSON}"
+set_state_baseline "${SET_STATE}" "" ""
+set_s5_log=$(set_refresh); set_s5_exit=$?
+if [ "${set_s5_exit}" -eq 0 ] && printf '%s' "${set_s5_log}" | grep -q 'S-5 settings.json is not parseable JSON'; then
+  report "S-5 an unparseable settings.json is classified as the tamper case" 1
+else
+  report "S-5 an unparseable settings.json is classified as the tamper case" 0 \
+    "exit ${set_s5_exit}; $(printf '%s' "${set_s5_log}" | grep -E 'S-[0-5]' | head -1)"
+fi
+if ls -d "${SET_WS}"/.backup-tampered-* >/dev/null 2>&1; then
+  report "S-5 the unparseable bytes are preserved on the tamper backup convention" 1
+else
+  report "S-5 the unparseable bytes are preserved on the tamper backup convention" 0 "no .backup-tampered-* under ${SET_WS}"
+fi
+if jq -e . "${SET_JSON}" >/dev/null 2>&1 \
+   && [ "$(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${SET_JSON}") | grep -c . || true)" -eq 0 ]; then
+  report "S-5 the file is regenerated to valid JSON carrying the full registration set" 1
+else
+  report "S-5 the file is regenerated to valid JSON carrying the full registration set" 0
+fi
+
+# --- S-6: --dry-run classifies and writes nothing. ---
+python3 -c '
+import json, sys
+p = sys.argv[1]; doc = json.load(open(p))
+doc["env"] = {"SUITE_S_DRYRUN_KEY": "x"}
+with open(p, "w") as f: json.dump(doc, f, indent=2); f.write("\n")
+' "${SET_JSON}"
+set_state_baseline "${SET_STATE}" "" ""
+set_s6_before=$(set_sha "${SET_JSON}")
+set_s6_overlay_before=$(set_sha "${SET_OVERLAY}")
+set_s6_log=$(set_refresh --dry-run); set_s6_exit=$?
+if [ "${set_s6_exit}" -eq 0 ] \
+   && [ "${set_s6_before}" = "$(set_sha "${SET_JSON}")" ] \
+   && [ "${set_s6_overlay_before}" = "$(set_sha "${SET_OVERLAY}")" ] \
+   && printf '%s' "${set_s6_log}" | grep -q '\[dry-run\] S-3'; then
+  report "S-6 --dry-run reports the classification and writes nothing" 1
+else
+  report "S-6 --dry-run reports the classification and writes nothing" 0 \
+    "exit ${set_s6_exit}; $(printf '%s' "${set_s6_log}" | grep -E 'dry-run\] S-' | head -1)"
+fi
+
+# --- S-7 (AC-7): ADR-121 is Accepted. The design gates the refresh mechanism on
+#     the ADR's status FIELD, so the check reads that field rather than inferring
+#     acceptance from the file existing. ---
+SET_ADR="${REPO_ROOT}/core/ADRs/ADR-121-settings-json-baseline-anchored-refresh.md"
+if [ -f "${SET_ADR}" ]; then
+  set_adr_status=$(awk '/^---$/{n++; next} n==1 && /^status:/{sub(/^status:[[:space:]]*/, ""); print; exit}' "${SET_ADR}")
+  case "${set_adr_status}" in
+    Accepted*)
+      report "S-7 ADR-121 status field reads Accepted (AC-7)" 1 ;;
+    *)
+      report "S-7 ADR-121 status field reads Accepted (AC-7)" 0 "status: ${set_adr_status:-<unreadable>}" ;;
+  esac
+else
+  report "S-7 ADR-121 present" 0 "missing: ${SET_ADR}"
+fi
+
+# --- S-8 (probe validity): the arms above must be PROVABLY able to fail. Mirrors
+#     Suite P's P-8 and Suite C's C-9. A zero whose control also returns zero is a
+#     broken probe, so the comparator is exercised on a known-bad subject. ---
+set_probe_tmp="${SBX}/set-probe.json"
+python3 -c '
+import json, sys
+doc = json.load(open(sys.argv[1]))
+del doc["hooks"]["SessionStart"]
+with open(sys.argv[2], "w") as f: json.dump(doc, f, indent=2)
+' "${SET_JSON}" "${set_probe_tmp}"
+set_probe_missing=$(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${set_probe_tmp}") | grep -c . || true)
+set_control_missing=$(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${SET_JSON}") | grep -c . || true)
+if [ "${set_probe_missing}" -gt 0 ] && [ "${set_control_missing}" -eq 0 ]; then
+  report "S-8 the registration comparator discriminates (mutated subject ${set_probe_missing} missing / control 0) — the S-1/S-3 zeros are real" 1
+else
+  report "S-8 the registration comparator discriminates" 0 \
+    "mutated=${set_probe_missing} (expected >0); control=${set_control_missing} (expected 0). Equal values mean a BROKEN PROBE and every S-* zero above is meaningless."
+fi
+set_absent_probe=$(set_triples "${SBX}/set-does-not-exist.json" | grep -c . || true)
+if [ "${set_absent_probe}" -eq 0 ]; then
+  report "S-8 the comparator returns empty for an absent file (specificity arm)" 1
+else
+  report "S-8 the comparator returns empty for an absent file (specificity arm)" 0 "returned ${set_absent_probe} triples for a nonexistent path"
+fi
+
+fi  # end Suite S target-present guard
+
 # --- Stage 6 (AC-b2): deployed-tree link integrity (primitive health + managed
 #     surface). See LIMITATION in the header for why this is scoped. ---
 printf '\nStage 6 (AC-b2): deployed-tree link integrity\n'
