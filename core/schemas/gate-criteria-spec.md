@@ -90,7 +90,70 @@ Named gates inherit all structural checks from the corresponding [field-lifecycl
 The `auto` Automation tag on a G1 criterion conflates **two distinct enforcement surfaces** that fire at different times against different inputs. Naming them apart is the durable policy this subsection records, so no future reader treats "form-required" and "gate-checked" as the same thing:
 
 - **Layer-A — Form HARD-STOP** (intake-time, submission-blocking). The intake template's `validations: required: true` flag on a field. It blocks a **blank form input** at issue-creation time. It is **presence-only** — it cannot inspect content (an evidence label vs. a sentence of prose, a file path vs. a directory). The surface is the `.github/ISSUE_TEMPLATE/*.yml` field set. A HARD-STOP fires the moment the author clicks Submit on an empty required field; it is the earliest and cheapest enforcement point.
-- **Layer-B — Gate SOFT-WARN** (post-creation, content-validating). The `deploy.sh --check` Check 22 per-issue evaluation against a created issue **body**. It validates **content** — structural criteria emit a FAIL (gate-checked), judgment criteria emit a non-gating RECOMMEND. It runs over the `status: bundled` population, after the form already accepted the submission, so it catches what the form structurally cannot.
+- **Layer-B — Gate SOFT-WARN** (post-creation, content-validating). The `deploy.sh --check` Check 22 per-issue evaluation against a created issue **body**. It validates **content** — structural criteria emit a FAIL (gate-checked), judgment criteria emit a non-gating RECOMMEND. It runs over the `status: bundled` population, after the form already accepted the submission, so it catches what the form structurally cannot. **Layer-B is two surfaces, not one** — see § Layer-B(d) / Layer-B(g) immediately below.
+
+#### Layer-B(d) detector and Layer-B(g) gate — one check, two authorities
+
+Layer-B conflates a **standing detector** with a **release gate**, and the two answer different questions. Naming them apart is the durable policy this subsection records ([`ADR-120`](../ADRs/ADR-120-g1-enforcement-authority-is-class-scoped-and-release-scoped.md)).
+
+- **Layer-B(d) — standing detector** (backlog-wide, recommend-tier, never FAIL-capable). Sweeps the whole open `status: bundled` population every run and surfaces every structural G1 defect it finds, whatever the form family and whatever the milestone. Nothing is silenced by the split: a defect outside the gate's authority is still **detected**, still logged, and still readable — it is emitted at recommend-tier instead of gating-tier.
+- **Layer-B(g) — release gate** (release-scoped, structural, FAIL-capable). Evaluates the **milestone being deployed** and holds the only authority to block. A gate blocks the transition it guards; a backlog-wide gate blocks a release on defects belonging to *other* releases, which the operator shipping this one cannot drain.
+
+**Enforce-population contract.** The FAIL-capable authority of Layer-B(g) is exactly:
+
+> `authority = structural ∧ F1 ∧ ¬sub-task ∧ in-deploying-milestone`
+
+Each conjunct, and why it is there:
+
+| Conjunct | Excludes | Why |
+|---|---|---|
+| `structural` | the four judgment criteria | Already the `Check`-column partition; judgment criteria are recommend-tier and never FAIL. A judgment criterion is outside the enforce population under **every** population choice, including any criterion added later. |
+| `F1` | F0 multi-tier, F2 kind-form, F3 unresolved-form | The G1 criteria are written against the governance-intake field set. Enforcing them against a family they were not written for is the false-positive direction the template-awareness precondition above already names. F0's exclusion is a **stated consequence**, not an oversight: authority is F1, and F0 is a different family with a different verdict. |
+| `¬sub-task` | any card carrying the `sub-task` label | § Gate 3 already exempts *"sub-task decompositions within an already-bundled parent"* by name; this applies that **existing governed exemption** at the surface that never received it. Without it, the pipeline's own bookkeeping cards can gate the release they are bookkeeping. |
+| `in-deploying-milestone` | every card in another milestone | Layer-B(g) guards a release transition, so it evaluates that release. |
+
+**Per-template applicability is unchanged, and it composes with authority rather than replacing it.** Within F1, applicability comes from the criterion's existing `improvement | bug | observation` triple: the map below assigns **authority**, the triple assigns **applicability**, and a criterion is enforced only where both hold. **An `n/a` cell is never enforced under any population choice** — the observation template's `n/a` on G1-03 / G1-05a / G1-06 is untouched by anything in this subsection. F2 applicability continues to come from the § Kind-Form Applicability block.
+
+**Per-family authority map.** Rows are keyed by **form family**, never by criterion ID — the criterion-ID space is governed by the tables above and this map must not create a second, divergent enumeration of it.
+
+| Form family | Layer-B(g) authority (FAIL-capable) | Layer-B(d) detection |
+|---|---|---|
+| F1 governance-intake, **not** carrying `sub-task` | **Yes** — structural criteria, per the applies-to triple, within the deploying milestone | Yes |
+| F1 governance-intake carrying `sub-task` | No | Yes — recommend-tier |
+| F0 multi-tier | No | Yes — recommend-tier |
+| F2 kind-form | No | Yes — recommend-tier, applicability per § Kind-Form Applicability |
+| F3 unresolved-form | No | Yes — recommend-tier |
+
+**Release-identity resolution — a four-state closed contract.** Layer-B(g) cannot evaluate until it knows which release is being deployed, and "cannot tell" must be a first-class answer rather than a silent default. The resolver returns exactly one of four verdicts, and each routes to exactly one emitter:
+
+| Verdict | Meaning | Layer-B(g) | Layer-B(d) |
+|---|---|---|---|
+| `RESOLVED` | a candidate was derived **and validated present-and-open** in the milestone set | evaluates the resolved milestone | unaffected |
+| `NONE` | no release-identity assertion, and no release branch attached | **not applicable** — evaluates nothing, blocks nothing | unaffected |
+| `UNRESOLVED` | a release context exists but no title could be validated, or the validator itself could not be read | fail-closed when the candidate was **asserted**; advisory when it was **detected** | unaffected |
+| `INVALID` | a candidate was derived and **rejected** — absent from the milestone set, or present but closed | fail-closed when **asserted**; advisory when **detected** | unaffected |
+
+**Durability of this contract, stated precisely — it is not fail-closed in the general sense.** It is **fail-closed on an asserted-but-unresolvable or invalid release identity**, and **not-applicable when no release is in flight**. When no release identity is asserted, Layer-B(g) does not evaluate and does not block, **by design**. The property that makes the not-applicable branch safe is not a default value but the **emitter**: it routes to a helper that contains no mode branch and no issue-counter increment, and therefore cannot escalate under any future mode flip. A reader must not summarize this section as "fail-closed" — an ADR and a schema outlive the release that wrote them, and a wrong durability claim outlives them both.
+
+**Two bounded residuals, recorded rather than closed.** (1) Validation proves a resolved milestone **exists and is open**; it does not prove it is the **right** one. A candidate that resolves to a different, concurrently-open release passes validation untouched, and concurrent release branches make that reachable. The bound is disclosure, not prevention: the resolved slug, the source that produced it, and the milestone-set denominator are all logged before any finding, so a wrong scope is legible at read time rather than silent. (2) Branch-name detection is not total over release-branch naming history, and both a detached HEAD (which the hub-spoke session protocol prescribes at session end) and post-merge `main` resolve to `NONE`. Layer-B(g)'s live window is therefore **an attached release branch during Engineering through Plan Review**, which is narrower than the stage range alone implies.
+
+**Recorded rationale — why the population is what it is, measured rather than asserted.** Re-measured at build time by driving the **shipped** Check-22 evaluation region over the live population; read `2026-08-06 (Thursday)`, branch anchor at or after the priority-detector reconciliation commit that precedes it in the same release.
+
+| Measurement | Value |
+|---|---|
+| Open `status: bundled` population | 256 |
+| Structural findings **before** the class filter (backlog-wide) | 258 |
+| Structural findings **after** the class filter, still backlog-wide | 150 |
+| Structural findings demoted to Layer-B(d) by the class filter | 108 across 108 cards |
+| — of which the `F1` conjunct is the cause | 108 (90 also carry `sub-task`; 18 are kind-form / unresolved-form) |
+| — of which the `¬sub-task` conjunct is the **sole** cause | **0** — `F1 ∩ sub-task = 0` today, so the conjunct is a **guard**, not a change |
+| Demoted findings by criterion | G1-09 94 · G1-05a 7 · G1-01 7 |
+| Structural findings **after** the milestone filter (this release) | **1** |
+| F0 multi-tier cards in the population | 0 — the cell is empty, and is held by fixture rather than by data |
+
+The two axes are separable and both are load-bearing: the class axis alone leaves 150 gating findings across the backlog — not drainable by any single release — and the milestone axis takes that to 1. Neither axis alone produces a gate an operator can clear.
+
+**Named successors, so the deferral does not decay into permanence.** (a) § Gate 3's body-compliance precondition still has no runner; a G1 re-check at the **bundling transition** is the shift-left successor to a deploy-time gate. (b) The release ledger is the eventual release-identity resolver: it carries the authoritative release↔milestone binding, and once it records in-flight state it supersedes branch-name detection. Both were reviewed and are recorded as successors, not as work this contract performs.
 
 The `structural | judgment` partition already in the **Check** column IS the HARD-STOP / SOFT-WARN seam — it is read off, not invented. `structural` criteria are gate-checked (FAIL-capable at Layer-B); `judgment` criteria are recommend-flagged (advisory at Layer-B, never FAIL). Whether a criterion is *also* Layer-A form-required is a separate axis (a field can be presence-required at the form yet content-checked at the gate, or gate-checked only).
 
@@ -774,7 +837,18 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 
 ## Versioning
 
-**Schema version:** 2.9
+**Schema version:** 2.10
+
+**v2.10 changes (non-breaking — minor; criterion-scope refinement — § Gate 1 Enforcement-Layer Split; NO criterion ID added, renumbered, removed, or re-typed; NO column, header, or applies-to cell changed):**
+
+- **Split Layer-B into Layer-B(d) standing detector and Layer-B(g) release gate**, and recorded the enforce-population contract `structural ∧ F1 ∧ ¬sub-task ∧ in-deploying-milestone` with a per-conjunct rationale. Check 22 previously held one authority over the whole open `status: bundled` population regardless of form family or milestone, which made it FAIL-capable against families the criteria were not written for and against defects belonging to other releases. The split changes **scope**, not posture: the check still ships `warn`, and nothing in this bump flips it. Decision recorded in [`ADR-120`](../ADRs/ADR-120-g1-enforcement-authority-is-class-scoped-and-release-scoped.md).
+- **Added the per-family authority map, keyed by form family and never by criterion ID.** The map assigns **authority**; the pre-existing applies-to column triple assigns **applicability**; a criterion is enforced only where both hold, and an `n/a` cell is never enforced under any population choice. Keying the map by family rather than by ID is deliberate and load-bearing: a criterion-ID-keyed map would be a second enumeration of the criterion-ID space that drifts from the tables above, and it would also be swept by row-shape probes that read those tables. The criterion tables' row count and column projection are **byte-unchanged** by this bump.
+- **Added the four-state release-identity resolution contract** (`RESOLVED` / `NONE` / `UNRESOLVED` / `INVALID`) with its per-state disposition, and stated its durability **precisely**: fail-closed on an asserted-but-unresolvable or invalid identity, **not-applicable** when no release is in flight, and explicitly **not** fail-closed in the general sense. The not-applicable branch is safe because of the emitter it routes to — a helper with no mode branch and no issue-counter increment — not because of a default value some later edit could flip. A summary of this contract as "fail-closed" is a durability over-claim and the block says so, because a schema outlives the release that writes it.
+- **Recorded the population rationale as measurements with a read date**, decomposed per cause, and **recorded two residuals rather than closing them**: validation proves a resolved milestone exists and is open, never that it is the correct one; and branch-name detection is not total over naming history, with detached HEAD and post-merge mainline both resolving to `NONE`. Both are bounded by disclosure — the resolved slug, its source, and the milestone-set denominator are logged before any finding.
+- **Named the two successors** (a runner for § Gate 3's body-compliance precondition; the release ledger as the eventual identity resolver) so the deferral is a recorded decision rather than a silent one.
+- **No figure is restated from a peer schema.** An earlier draft of this bump would have carried a structural-criterion count quoted from the gate-evaluation schema's own parenthetical. That parenthetical disagrees with this file's `Check` column, so restating it would have converted an existing inconsistency into a freshly-authored governed statement. The count is therefore **not** restated here; the divergence is routed for reconciliation at its own surface. Where a count is needed, derive it from the `Check` column in the criteria table above — that column is the authority.
+- **Version-derivation note (the instruction below has now fired FOUR times).** This value was **re-derived against the mainline at commit time**, not pre-allocated: the mainline held **2.8**, a sibling slice on this same release branch landed **2.9** at the preceding commit, so this bump re-derives to **2.10** and carries that slice's block forward verbatim below. The next editor of this block on this branch **appends its change bullets to the v2.10 block above** rather than authoring a fresh block or taking a number — the enumeration is restated, never split, and no side's block is discarded.
+- **Cutover discipline (v2.10 refinements):** the enforce-population contract applies to gate evaluations run strictly AFTER this change's introducing-release merge SHA recorded in the release log; the introducing release itself is exempt (reflexive-pipeline-loop discipline) **yet dogfoods it** — its own milestone is the measured population, and the single gating finding it produces is a real, in-scope defect on one of its own member issues.
 
 **v2.9 changes (non-breaking — minor; criterion-scope refinement — § Gate 1 Template Detection Logic + § Gate 1 Kind-Form Applicability + Adapter G1-06-Bug + G-CL8; NO criterion ID added, renumbered, removed, or re-typed):**
 

@@ -305,6 +305,26 @@ jobs:
         # Hermetic: no gh, no network. Consumes no workflow event input.
         run: bash core/deploy/tests/test_g1_form_family.sh
 
+      - name: Run Check 22 release-identity resolver regression (test_g1_release_resolver.sh)
+        # Check 22 now evaluates the milestone BEING DEPLOYED, so a resolver
+        # decides the population on every run. Its load-bearing property is not
+        # visible by reading the code: the milestone read must be PAGINATED,
+        # because `gh api` does not auto-paginate and GitHub's default page is
+        # 30 rows, while the open-milestone population sits within one row of
+        # that boundary — an un-paginated read starts calling a legitimate
+        # in-flight release "absent" with no code change at all. The test
+        # extracts the shipped resolver between the deploy.sh C22-RESOLVER
+        # sentinels, drives it against a stubbed `gh` that honours the real
+        # API's pagination semantics over a 201-row fixture, and grades the
+        # pagination arms against a deliberately REGRESSED copy that must go
+        # red — a probe that cannot fail on the defect it names is not
+        # evidence. It also holds the provenance split (an operator-ASSERTED
+        # candidate fails closed; a branch-DETECTED one degrades to advisory)
+        # and the three verdicts that must never be rendered as a missing
+        # milestone: unreachable validator, empty read, unrecognized branch
+        # form. Hermetic: no gh, no network. Consumes no workflow event input.
+        run: bash core/deploy/tests/test_g1_release_resolver.sh
+
   hook-tests:
     name: Hook test harness (macOS)
     # The core/hooks/tests/*.test.sh files + their test-runner.sh exercise the

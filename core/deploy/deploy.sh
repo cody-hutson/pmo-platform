@@ -5588,6 +5588,31 @@ cmd_check() {
   # earlier and cheaper. Lowest blast radius; mirrors deploy.sh --check
   # warn-mode shakedown precedent (Checks 8/9/10/14/15/18/19/20/21).
   #
+  # ENFORCE-SCOPE, on TWO further axes (ADR-120). The determination above is on
+  # the STATUS axis and it still stands, verbatim: the population is bundled-
+  # only and is NOT extended to `status: proposed`. Two axes are added BESIDE
+  # it — neither reverses it:
+  #   * CLASS axis — FAIL-capable authority is held by the F1 governance-intake
+  #     family ONLY, and only on cards that do not carry `sub-task`. F0, F2, F3
+  #     and every `sub-task` card are DETECTED and recommend-flagged, never
+  #     gated. Enforcing G1 against a form family the criteria were not written
+  #     for is the false-positive direction the § Gate 1 template-awareness
+  #     precondition already names, and § Gate 3 already exempts "sub-task
+  #     decompositions within an already-bundled parent" by name.
+  #   * MILESTONE axis — the gate evaluates the milestone BEING DEPLOYED, not
+  #     the whole backlog. A gate blocks the transition it guards; a backlog-
+  #     wide gate blocks a release on defects that belong to other releases,
+  #     which is not drainable by the operator shipping this one.
+  # Layer-B therefore splits into Layer-B(d) — a standing backlog-wide DETECTOR
+  # at recommend-tier — and Layer-B(g) — a release-scoped GATE. The governed
+  # record is gate-criteria-spec.md § Gate 1 "G1 Enforcement-Layer Split"; that
+  # section, not this comment, is the authority for the population contract.
+  #
+  # This is a SCOPE change, not a graduation. The mode is untouched and still
+  # resolves to `warn` with no `g1-enforcement.mode` file present (see MODE
+  # DECOUPLING below). Nothing here flips warn→enforce, and the 195→1 drop in
+  # what WOULD block is a change in scope, never in posture.
+  #
   # COVERAGE (per gate-criteria-spec.md § Gate 1 + its G1 Enforcement-Layer
   # Split): Check 22 (Layer-B gate) now EVALUATES ALL 9 G1 criteria —
   # ENFORCES the 5 structural (FAIL-capable) + RECOMMEND-FLAGS the 4 judgment
@@ -5681,13 +5706,22 @@ cmd_check() {
   #   distribution here — a distribution drifts, an authority does not.
   #
   # Sub-checks:
+  #   22-0 release  — resolves the release identity into a 4-token verdict
+  #       (RESOLVED / NONE / UNRESOLVED / INVALID) and maps each to exactly one
+  #       EXISTING emitter. Runs BEFORE 22a deliberately: on NONE nothing in
+  #       this check may emit a gating finding, and 22a's own scope emit sits
+  #       between the mode resolve and the query. See _c22_resolve_release.
   #   22a token   — verifies `gh auth status` reports `repo` scope; if
   #       missing, the check warns once and exits cleanly
-  #   22b per-issue — iterates open `status: bundled` issues; applies
+  #   22b per-issue — iterates open `status: bundled` issues IN THE MILESTONE
+  #       BEING DEPLOYED (Layer-B(g); see ENFORCE-SCOPE above); applies
   #       Template Detection Logic; ENFORCES G1-01/G1-03/G1-05a/G1-06/G1-09
-  #       (structural) + RECOMMEND-FLAGS G1-02/G1-04/G1-05b/G1-08 (judgment)
-  #       per applies-to triple using Adapter Blocks G1-01-Bug / G1-01-Obs /
-  #       G1-05-Bug / G1-06-Bug
+  #       (structural) on the F1 governance-intake family only, excluding cards
+  #       that carry `sub-task`, + RECOMMEND-FLAGS G1-02/G1-04/G1-05b/G1-08
+  #       (judgment) per applies-to triple using Adapter Blocks G1-01-Bug /
+  #       G1-01-Obs / G1-05-Bug / G1-06-Bug. Structural findings OUTSIDE that
+  #       authority (F0, F2, F3, or any `sub-task` card) are still detected and
+  #       are emitted at recommend-tier — Layer-B(d)
   #
   # The check runs whenever AUDIT_REPO resolves to a tracker; with no tracker
   # configured the bundled-issue query returns an empty set and it no-ops.
@@ -5701,6 +5735,165 @@ cmd_check() {
   # after a 2-3 release calibration window: "keep in mind the right time to
   # perform this work and the tools/processes available currently."
   #
+  # >>> C22-RESOLVER-BEGIN — core/deploy/tests/test_g1_release_resolver.sh
+  #     extracts the region between this marker and the END marker VERBATIM and
+  #     executes it against a stubbed `gh`, so the net exercises the SHIPPED
+  #     resolver rather than a re-implementation. Moving or renaming a marker
+  #     makes extraction fail LOUDLY.
+  #
+  # _c22_resolve_release — echoes ONE line of a 4-token CLOSED verdict enum on
+  # stdout; the CALLER maps each token to an emit. The verdict is decoupled
+  # from the emit, which is not a new idea on this surface: _vf_compute_verdict
+  # above already echoes a 5-token enum for the same reason, and its own
+  # comment says so ("the CALLER maps it to a warn-emit OR an exit code — the
+  # verdict is decoupled from the emit"). Shape copied, not invented.
+  #
+  # Line grammar — six whitespace-delimited fields, free text LAST:
+  #     <TOKEN> <SOURCE> <REASON> <MILESTONES-READ> <CANDIDATE> <DETAIL...>
+  #   RESOLVED    env|branch   -                 <n>  <milestone title>  <detail>
+  #   NONE        -            -                 0    -                  <detail>
+  #   UNRESOLVED  env|branch   <reason-token>    <n>  <candidate|->      <detail>
+  #   INVALID     env|branch   <reason-token>    <n>  <candidate>        <detail>
+  # CANDIDATE is whitespace-free BY CONSTRUCTION: a git ref name cannot contain
+  # whitespace, and an env-supplied candidate that does is rejected outright as
+  # `INVALID env malformed-candidate`, so no field can be shifted by its value.
+  #
+  # SOURCE IS LOAD-BEARING, and it is the difference between a gate and a
+  # nuisance. An `env` candidate is ASSERTED — an operator typed
+  # PMO_G1_ENFORCE_MILESTONE — so a candidate that will not validate is
+  # fail-closed: refusing to gate on a population you cannot identify is the
+  # correct answer to an assertion you cannot honour. A `branch` candidate is
+  # DETECTED — a regex on a ref name fired with no operator intent — so a
+  # candidate that will not validate degrades to ADVISORY. Inheriting "fail
+  # closed" for both would turn three ordinary release-workflow states into
+  # gating findings: a milestone closed at Stage 13 while a worktree is still
+  # attached to its release branch; an offline or rate-limited run on a release
+  # branch; and any branch-naming form this resolver does not parse.
+  #
+  # VALIDATION IS PAGINATED, and that is the entire correctness argument for
+  # the membership test. `gh api` does NOT auto-paginate and GitHub's default
+  # page is 30 rows; the open-milestone population sits within ONE row of that
+  # boundary, so an unpaginated read would classify a legitimate in-flight
+  # release as absent and emit a gating finding whose stated reason is FALSE —
+  # with no arm distinguishing "truncated" from "absent". The form below is
+  # copied from core/deploy/tools/check-milestone-epic-membership.py
+  # fetch_milestones() (`per_page=100` + `--paginate`), whose module docstring
+  # states the harm verbatim: "a truncated membership set would turn every
+  # unlisted card into a phantom `named-not-member`, so it must never be
+  # silently accepted." Do NOT drop either token, and do NOT author a third
+  # milestone-lookup form in this repository.
+  #
+  # `state=all` (not `state=open`) is equally deliberate: reading the state per
+  # row is what makes `closed-milestone` and `absent-from-milestone-set` two
+  # DISTINCT reason tokens. Under an open-only read a closed milestone and a
+  # nonexistent one are byte-identical, and they have different remediations.
+  #
+  # A ZERO-ROW READ IS `UNRESOLVED`, NEVER `INVALID`. A probe whose population
+  # came back empty has not shown the candidate is absent; it has shown the
+  # probe did not run. Same rule Check 63 states as "a clean zero over an empty
+  # population is exactly what this check must never report."
+  _c22_resolve_release() {
+    local _cand="" _src="" _alt="" _branch="" _suffix="" _raw="" _rows=""
+    local _rc=0 _n=0 _diag=""
+
+    # Rung 1 — EXPLICIT ASSERTION. Precedent: PMO_VERSION_FREENESS_CANDIDATE is
+    # an existing release-scoped env input to this same validator.
+    if [[ -n "${PMO_G1_ENFORCE_MILESTONE:-}" ]]; then
+      _cand="$PMO_G1_ENFORCE_MILESTONE"
+      _src="env"
+      case "$_cand" in
+        *[[:space:]]*)
+          printf 'INVALID env malformed-candidate 0 <whitespace> PMO_G1_ENFORCE_MILESTONE contains whitespace; supply the milestone title as a single token\n'
+          return 0
+          ;;
+      esac
+    else
+      # Rung 2 — DETECTED from the checked-out ref, and FORM-TOTAL over the two
+      # release-branch forms the corpus documents: `release/<slug>` (form A) and
+      # the version-prefixed `release/vX.Y-<slug>` (form B, named in
+      # core/rules/git-workflow.md as a form the platform's own tooling must
+      # still handle). BOTH candidates are offered and whichever validates wins;
+      # neither is assumed. Form C (per-issue branches) does not match
+      # `release/*` and correctly yields NONE, as do a detached HEAD — which
+      # hub-spoke-bridge.md PRESCRIBES at session end — and post-merge `main`.
+      # Layer-B(g)'s live window is therefore an ATTACHED release branch during
+      # Stages 6-9, which is narrower than "Stages 6-9" and is stated here so no
+      # reader over-reads the gate's reach.
+      _branch="$(git -C "${_audit_src_root:-.}" symbolic-ref --short -q HEAD 2>/dev/null || true)"
+      case "$_branch" in
+        release/*)
+          _suffix="${_branch#release/}"
+          _cand="$_suffix"
+          _src="branch"
+          _alt="$(printf '%s' "$_suffix" | /usr/bin/sed -E 's/^v[0-9]+\.[0-9]+-//')"
+          [[ "$_alt" == "$_suffix" ]] && _alt=""
+          ;;
+      esac
+    fi
+
+    # Rung 3 — nothing asserted and nothing detected. This is NOT a degraded
+    # state: the absence of a release-identity assertion is a determinate
+    # answer, and the caller must never render it as one.
+    if [[ -z "$_cand" ]]; then
+      printf 'NONE - - 0 - no release-identity assertion and no release branch attached\n'
+      return 0
+    fi
+
+    if [[ -z "${AUDIT_REPO:-}" ]]; then
+      printf 'UNRESOLVED %s no-tracker-configured 0 %s AUDIT_REPO is empty; the milestone set cannot be read\n' "$_src" "$_cand"
+      return 0
+    fi
+
+    # stderr is CAPTURED (2>&1), never discarded: an unauthenticated gh, a rate
+    # limit and a 404 are three failures with three different fixes, and a
+    # message naming only the endpoint distinguishes none of them.
+    _raw="$(gh api "repos/${AUDIT_REPO}/milestones?state=all&per_page=100" --paginate \
+      --jq '.[] | "\(.state)|\(.title)"' 2>&1)" || _rc=$?
+    if [[ "$_rc" -ne 0 ]]; then
+      _diag="$(printf '%s\n' "$_raw" | /usr/bin/grep -v '^[[:space:]]*$' | /usr/bin/tail -1)"
+      printf 'UNRESOLVED %s validator-unreachable 0 %s milestone set unreadable (exit %s): %s\n' \
+        "$_src" "$_cand" "$_rc" "${_diag:-(no diagnostic on stdout or stderr)}"
+      return 0
+    fi
+    # Shape filter — keeps a stray stderr line captured by 2>&1 out of the
+    # membership set AND out of the denominator, so the count reported to the
+    # operator is the count actually tested against.
+    _rows="$(printf '%s\n' "$_raw" | /usr/bin/grep -E '^(open|closed)\|' || true)"
+    _n=$(printf '%s\n' "$_rows" | /usr/bin/grep -c '^' || true)
+    [[ -n "$_rows" ]] || _n=0
+    if [[ "$_n" -eq 0 ]]; then
+      printf 'UNRESOLVED %s validator-empty-set 0 %s the milestone read returned no rows; an empty population is a broken probe, not evidence of absence\n' \
+        "$_src" "$_cand"
+      return 0
+    fi
+
+    if printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "open|${_cand}"; then
+      printf 'RESOLVED %s - %s %s validated open in the milestone set\n' "$_src" "$_n" "$_cand"
+      return 0
+    fi
+    if [[ -n "$_alt" ]] && printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "open|${_alt}"; then
+      printf 'RESOLVED %s - %s %s validated open in the milestone set (version-prefixed branch form)\n' "$_src" "$_n" "$_alt"
+      return 0
+    fi
+    if printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "closed|${_cand}"; then
+      printf 'INVALID %s closed-milestone %s %s the milestone exists but is CLOSED; a closed milestone is not a gateable release scope\n' "$_src" "$_n" "$_cand"
+      return 0
+    fi
+    if [[ -n "$_alt" ]] && printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "closed|${_alt}"; then
+      printf 'INVALID %s closed-milestone %s %s the milestone exists but is CLOSED; a closed milestone is not a gateable release scope\n' "$_src" "$_n" "$_alt"
+      return 0
+    fi
+    # Absent from a set read TO EXHAUSTION. The denominator travels with the
+    # verdict so the operator can see what the claim was measured against — a
+    # bare "not found" is unreadable without it.
+    if [[ "$_src" == "branch" ]]; then
+      printf 'UNRESOLVED branch form-unrecognized %s %s no documented release-branch form yielded a milestone title; branch naming variance is not evidence that a milestone is missing\n' "$_n" "$_cand"
+      return 0
+    fi
+    printf 'INVALID %s absent-from-milestone-set %s %s not present among the milestones read\n' "$_src" "$_n" "$_cand"
+  }
+  # >>> C22-RESOLVER-END
+
   # Mode is resolved per-check (NOT the shared $DEPLOY_CHECK_MODE) — the check
   # runs whenever $G1_ENFORCEMENT_MODE is not "off". Resolved at block start.
   # `local` here matches DEPLOY_CHECK_MODE's scope; bash dynamic scoping makes
@@ -5710,25 +5903,84 @@ cmd_check() {
   if [[ "$G1_ENFORCEMENT_MODE" != "off" ]]; then
     log "Check 22: G1 enforcement on bundled issues (mode=${G1_ENFORCEMENT_MODE})"
 
+    # 22-0 — release-identity resolution, mapped to the FOUR dispositions.
+    # Placed BEFORE 22a by ordinal, not by region: 22a itself calls
+    # flag_g1_enforcement, so a resolver landing after it would leave "NONE
+    # cannot block" true of the resolver's own emit and false of Check 22 as a
+    # whole. Each verdict routes to exactly ONE EXISTING emitter; no emitter is
+    # added and no emitter body is changed.
+    #   RESOLVED               -> gate the deploying milestone (22a + 22b run)
+    #   NONE                   -> flag_advisory_only, exactly one line. That
+    #                             helper has no mode `case`, no enforce branch
+    #                             and no ISSUES increment anywhere in its body,
+    #                             so "no release in flight" is STRUCTURALLY
+    #                             incapable of becoming a blocker — not merely
+    #                             currently-absent, and not flippable by a
+    #                             future mode change.
+    #   UNRESOLVED / INVALID   -> asserted (env): one gating finding, evaluate
+    #                             nothing (the exit-3 input-failure idiom,
+    #                             extended from unreadable INPUT to
+    #                             unresolvable SCOPE). Detected (branch): one
+    #                             advisory line — see SOURCE above.
+    local c22_verdict c22_vtok c22_vsrc c22_vreason c22_mcount c22_ms c22_vdetail
+    local c22_gate_run=true
+    c22_verdict="$(_c22_resolve_release)"
+    read -r c22_vtok c22_vsrc c22_vreason c22_mcount c22_ms c22_vdetail <<<"$c22_verdict"
+    case "$c22_vtok" in
+      RESOLVED)
+        : # fall through to 22a/22b, scoped to $c22_ms
+        ;;
+      NONE)
+        flag_advisory_only "g1-enforcement-scope" \
+          "no release in flight — Layer-B(g) release gate is NOT APPLICABLE this run (${c22_vdetail}); the Layer-B(d) backlog-wide detector is unaffected and G1 defects remain visible at recommend-tier"
+        c22_gate_run=false
+        ;;
+      *)
+        c22_gate_run=false
+        if [[ "$c22_vsrc" == "env" ]]; then
+          flag_g1_enforcement "g1-enforcement" \
+            "G1 enforce scope NOT DETERMINED — release identity '${c22_ms}' asserted via PMO_G1_ENFORCE_MILESTONE but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. Refusing to gate on a population that could not be identified — correct the assertion or unset it"
+        else
+          flag_advisory_only "g1-enforcement-scope" \
+            "release identity detected from the checked-out branch but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. A DETECTED candidate never blocks — set PMO_G1_ENFORCE_MILESTONE to assert a scope and make this fail-closed"
+        fi
+        ;;
+    esac
+
     # 22a — gh auth scope check (issue list read requires `repo` for
     # private repos; this is non-fatal — check warns once and exits if
     # scope missing, since the check is non-gate-blocking detection)
     local c22_scope_ok=true
-    if ! gh auth status --hostname github.com 2>&1 | /usr/bin/grep -qE '\brepo\b'; then
-      flag_g1_enforcement "g1-enforcement" "gh auth scope missing 'repo' — cannot iterate bundled issues (run 'gh auth refresh -s repo')"
-      c22_scope_ok=false
+    if [[ "$c22_gate_run" == "true" ]]; then
+      if ! gh auth status --hostname github.com 2>&1 | /usr/bin/grep -qE '\brepo\b'; then
+        flag_g1_enforcement "g1-enforcement" "gh auth scope missing 'repo' — cannot iterate bundled issues (run 'gh auth refresh -s repo')"
+        c22_scope_ok=false
+      fi
     fi
 
-    if [[ "$c22_scope_ok" == "true" ]]; then
+    if [[ "$c22_gate_run" == "true" && "$c22_scope_ok" == "true" ]]; then
       # 22b — per-issue G1 evaluation
-      # Single bulk query: all open status:bundled issues with body+labels.
+      # Single bulk query: open status:bundled issues IN THE DEPLOYING
+      # MILESTONE, with body+labels. `--milestone` is appended to the EXISTING
+      # query rather than added as a second query site, so the check still
+      # holds exactly one issue-list read (CIAC-1).
       local c22_issues_json
       c22_issues_json=$(gh issue list --repo "$AUDIT_REPO" --state open \
-        --label "status: bundled" --limit 5000 \
+        --label "status: bundled" --milestone "$c22_ms" --limit 5000 \
         --json number,title,body,labels 2>/dev/null || echo "[]")
 
       local c22_issue_count c22_finding_count=0
       c22_issue_count=$(printf '%s' "$c22_issues_json" | jq 'length' 2>/dev/null || echo 0)
+
+      # DENOM line — Check 63's idiom, adopted rather than re-invented ("a clean
+      # zero over an empty population is exactly what this check must never
+      # report"). A narrowed gate that resolves the WRONG milestone still emits
+      # a clean run; the only thing that makes that visible at read time is the
+      # scope travelling with the verdict. So the resolved slug, the source that
+      # produced it, and the denominator it was measured against are all logged
+      # BEFORE any finding — and a RESOLVED verdict over an empty population is
+      # then legible as a zero-over-zero rather than as a pass.
+      log "  DENOM: g1-enforcement — ${c22_issue_count} open 'status: bundled' issue(s) in milestone '${c22_ms}' (release identity from ${c22_vsrc}, validated against ${c22_mcount} paginated milestone(s)); Layer-B(g) FAIL-capable authority = structural AND F1 governance-intake AND NOT sub-task"
 
       # >>> C22-EVAL-BEGIN — core/deploy/tests/test_g1_form_family.sh extracts the
       #     region between this marker and the END marker VERBATIM and runs it
@@ -5736,6 +5988,37 @@ cmd_check() {
       #     evaluation path (block-start resolves, Step-0 family branch, and the
       #     per-issue criterion applicability) rather than a re-implementation of
       #     it. Moving or renaming a marker makes extraction fail LOUDLY.
+      #
+      # ── Structural-finding ROUTER (not an emitter) ────────────────────────
+      # ADR-120 assigns FAIL-capable authority to `structural AND F1 AND NOT
+      # sub-task AND in-deploying-milestone`. The milestone conjunct is already
+      # satisfied by the query; the remaining two are a per-card predicate, so
+      # they are enforced HERE as a real predicate rather than as documentation.
+      #
+      # This adds NO emitter and changes NO emitter body: both branches
+      # terminate in the two helpers that already exist, and the only reason it
+      # is a function at all is that the alternative — repeating the same
+      # seven-line dispatch at each of the seven structural emit sites — is how
+      # one site ends up routing differently from the other six.
+      #
+      # `c22_finding_count` counts GATING findings only, so it is incremented
+      # here and only here on the gating branch. A recommend-tier structural
+      # finding is still DETECTED and still written to the warn log with
+      # "level":"recommend" — it is not silence, it is Layer-B(d).
+      #
+      # The block-start NOT-EVALUATED findings do NOT route through this: they
+      # are POPULATION-WIDE degraded-measurement statements, not per-card
+      # verdicts, and they keep the single-finding contract the two preceding
+      # editors of this block named. Do not fold them in.
+      _c22_emit_structural() {
+        if [[ "$_c22_gate_authority" == "true" ]]; then
+          flag_g1_enforcement "g1-enforcement" "$1"
+          c22_finding_count=$((c22_finding_count + 1))
+        else
+          recommend_g1_enforcement "g1-enforcement" \
+            "$1 [Layer-B(d) detector-tier: outside Layer-B(g) enforce authority, which is F1 governance-intake AND NOT sub-task — detected, never gate-blocking]"
+        fi
+      }
       # ── G1-06 priority resolution — DELEGATED, never re-implemented ──────
       # ADR-111 decides: "The P-level digit is the canonical priority
       # satisfier. The carrier is not part of the contract... A consumer that
@@ -5928,6 +6211,7 @@ sys.stdout.write("".join(out) + "|")
       local _prio _prio_field _prio_needle
       local _family _kind _kind_rest _kind_one
       local _ap_evidence _ap_ac _ap_prio
+      local _c22_gate_authority
       while IFS= read -r _issue_line; do
         [[ -n "$_issue_line" ]] || continue
         _num=$(printf '%s' "$_issue_line" | jq -r '.number')
@@ -6000,6 +6284,34 @@ sys.stdout.write("".join(out) + "|")
           if [[ -n "$_kind" ]]; then _family="F2"; else _family="F3"; fi
         fi
 
+        # ── Per-card gate authority (ADR-120) ─────────────────────────────────
+        # FAIL-capable authority is held by the F1 governance-intake family, and
+        # only on cards that do not carry `sub-task`. Everything else is
+        # Layer-B(d): detected and recommend-flagged, never gated.
+        #
+        # WHY `NOT sub-task` IS A PREDICATE AND NOT A COMMENT. Every bundled
+        # sub-task carries zero intake-tier labels today, so it lands in F2/F3
+        # and escapes the F1 gate ANYWAY — the guard moves zero cards at the
+        # moment it ships. That escape is a COINCIDENCE of the sub-task
+        # template's label set, not a construction: one `--add-label improvement`
+        # on a stage sub-task re-arms a self-block in which the pipeline's own
+        # bookkeeping cards gate the release they are bookkeeping. § Gate 3
+        # already exempts "sub-task decompositions within an already-bundled
+        # parent" by name, so this applies an EXISTING governed exemption at the
+        # surface that never received it. A guard that currently moves nothing
+        # is still a guard; deleting it because its cell is empty is how the
+        # cell gets filled.
+        #
+        # F0 is deliberately OUTSIDE the enforce population and that is a stated
+        # consequence, not an oversight. Authority is F1; F0 (>1 intake-tier
+        # label) is a different family with a different verdict, so its finding
+        # is detected at recommend-tier like F2's and F3's. Its cell is empty on
+        # the live population.
+        _c22_gate_authority=false
+        if [[ "$_family" == "F1" && ",${_labels}" != *",sub-task,"* ]]; then
+          _c22_gate_authority=true
+        fi
+
         # F0 — the >1 case. Emit and remediation are today's, VERBATIM: "apply
         # correct single label" is exactly the right instruction for a card
         # wearing two intake-tier labels, and the branch this Step 0 replaces
@@ -6008,9 +6320,8 @@ sys.stdout.write("".join(out) + "|")
         # the cell is empty on the live population today, and a single label
         # mutation fills it.
         if [[ "$_family" == "F0" ]]; then
-          flag_g1_enforcement "g1-enforcement" \
+          _c22_emit_structural \
             "issue #${_num} — G1-09 FAIL: ${_label_total} intake-tier label(s) (expected exactly 1 of improvement/bug/observation; apply correct single label per pipeline/stage-01-intake.md § Routing)"
-          c22_finding_count=$((c22_finding_count + 1))
           continue
         fi
 
@@ -6029,9 +6340,8 @@ sys.stdout.write("".join(out) + "|")
         # packs license. The message names the labels the card actually carries
         # and the vocabulary it was measured against.
         if [[ "$_family" == "F3" ]]; then
-          flag_g1_enforcement "g1-enforcement" \
+          _c22_emit_structural \
             "issue #${_num} — G1-09 UNRESOLVED-FORM: no intake-tier label (improvement/bug/observation) and no pack-declared kind label (licensed kinds: ${c22_kinds_show}); labels carried: ${_labels%,} — route it to a form family per pipeline/stage-01-intake.md § Routing"
-          c22_finding_count=$((c22_finding_count + 1))
           continue
         fi
 
@@ -6060,9 +6370,8 @@ sys.stdout.write("".join(out) + "|")
           # Step 3 — reconcile
           _template="$_label_template"
           if [[ "$_inferred" != "ambiguous" && "$_label_template" != "$_inferred" ]]; then
-            flag_g1_enforcement "g1-enforcement" \
+            _c22_emit_structural \
               "issue #${_num} — G1-09 FAIL: label=${_label_template}, body=${_inferred} (label-body template mismatch — relabel or rewrite body per gate-criteria-spec.md self-repair)"
-            c22_finding_count=$((c22_finding_count + 1))
             continue
           fi
         else
@@ -6136,9 +6445,8 @@ sys.stdout.write("".join(out) + "|")
           _title_ok=false; _title_reason="too short (${#_title} chars; informative summary expected)"
         fi
         if [[ "$_title_ok" != "true" ]]; then
-          flag_g1_enforcement "g1-enforcement" \
+          _c22_emit_structural \
             "issue #${_num} — G1-01 FAIL: title not an informative summary — ${_title_reason} (see intake-style-guide.md §7)"
-          c22_finding_count=$((c22_finding_count + 1))
         fi
 
         # G1-03 — evidence-quality labels in body. F1: improvement + bug, NOT
@@ -6148,9 +6456,8 @@ sys.stdout.write("".join(out) + "|")
         # field its form never offered.
         if [[ "$_ap_evidence" == "true" ]]; then
           if ! printf '%s' "$_body" | /usr/bin/grep -qE '\[(SOURCE|INFERRED|CONTEXT|RECOMMENDED|ASSUMPTION)' ; then
-            flag_g1_enforcement "g1-enforcement" \
+            _c22_emit_structural \
               "issue #${_num} — G1-03 FAIL: no evidence-quality labels found in body ([SOURCE]/[INFERRED]/[CONTEXT]/[ASSUMPTION – CONFIRM]/[RECOMMENDED])"
-            c22_finding_count=$((c22_finding_count + 1))
           fi
         fi
 
@@ -6180,9 +6487,8 @@ sys.stdout.write("".join(out) + "|")
           _prio="${c22_prio_map##*"$_prio_needle"}"
           _prio="${_prio%%|*}"
           if [[ -z "$_prio" || "$_prio" == "-" ]]; then
-            flag_g1_enforcement "g1-enforcement" \
+            _c22_emit_structural \
               "issue #${_num} — G1-06 FAIL: no P1-P4 level found in the body ${_prio_field} field (any carrier — '### ${_prio_field}' heading, '**${_prio_field}:**' inline, or list-bullet form; the P-level DIGIT is the satisfier, not the qualifier word — see gate-criteria-spec.md § Gate 1 Adapter G1-06-Bug)"
-            c22_finding_count=$((c22_finding_count + 1))
           fi
         fi
 
@@ -6243,9 +6549,8 @@ sys.stdout.write("".join(out) + "|")
             done < <(printf '%s\n' "$_ac_lines")
           fi
           if [[ "$_ac_bad" -gt 0 ]]; then
-            flag_g1_enforcement "g1-enforcement" \
+            _c22_emit_structural \
               "issue #${_num} — G1-05a FAIL: ${_ac_bad} of ${_ac_total} AC bullet(s) match no G1-05a structural pattern (verb-first / backtick-path+state-verb / 'predicate:'$([[ "$_template" == "bug" ]] && printf ' / bug-narrative phrase'); see gate-criteria-spec.md § Gate 1 self-repair)"
-            c22_finding_count=$((c22_finding_count + 1))
           fi
         fi
 
@@ -6319,9 +6624,9 @@ sys.stdout.write("".join(out) + "|")
       # >>> C22-EVAL-END
 
       if [[ "$c22_finding_count" -eq 0 ]]; then
-        log "  OK:    0 gating G1 findings across ${c22_issue_count} bundled issue(s) (structural enforced: G1-01/03/05a/06/09; judgment recommend-flagged: G1-02/04/05b/08)"
+        log "  OK:    0 gating G1 findings across ${c22_issue_count} bundled issue(s) in milestone '${c22_ms}' (structural enforced on F1 AND NOT sub-task: G1-01/03/05a/06/09; judgment recommend-flagged: G1-02/04/05b/08; findings outside the enforce authority recommend-flagged, not silent)"
       else
-        log "  ${c22_finding_count} gating G1 finding(s) emitted across ${c22_issue_count} bundled issue(s) (mode=${G1_ENFORCEMENT_MODE}; judgment criteria recommend-flagged separately, non-gating)"
+        log "  ${c22_finding_count} gating G1 finding(s) emitted across ${c22_issue_count} bundled issue(s) in milestone '${c22_ms}' (mode=${G1_ENFORCEMENT_MODE}; judgment criteria and out-of-authority structural findings recommend-flagged separately, non-gating)"
       fi
     fi
   fi
