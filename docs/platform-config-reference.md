@@ -11,7 +11,7 @@
 - **Audience:** Operators tuning platform behavior; anyone asking "what config knobs does the platform have, and where do I set them?"
 - **Two surfaces, one resolver.** Platform configuration lives in two files split by concern (per [ADR-022](../core/ADRs/ADR-022-platform-config-vs-operator-toml-split.md)):
   - **`operator.toml`** — operator-ENVIRONMENT / IDENTITY: identity, paths, host-adapter selectors, methodology default. Security-sensitive (`chmod 600`).
-  - **`platform-config.toml`** — platform-BEHAVIOR: bundling frame, release-size target, release-class default, relationship-mapping tuning. Freely tunable; no PII.
+  - **`platform-config.toml`** — platform-BEHAVIOR: bundling frame, release-size target, release-class default, relationship-mapping tuning, and the behavior categories added since (calibration accrual, failure-mode detector thresholds, progressive-rollout logging, spoke-runtime model posture, security-hook master activation, git-native release-automation toggles). Freely tunable; no PII. Section 4 below is the current catalog.
 - **How a value is resolved.** Both surfaces feed one **5-rung resolver** (global default → portfolio → program → project → individual; most-specific wins). The full resolver, the 3-level fallback, and the two-track update governance are in [`core/governance/OPERATIONS.md § Platform-Config Resolution Protocol`](../core/governance/OPERATIONS.md).
 - **Two ways to change config:**
   - **Track A (default / schema change):** edit a Layer-1 default or the schema → a governed PR (this is a governance file).
@@ -148,6 +148,26 @@ Master activation for the `core/hooks/block-*` PreToolUse hook layer. **Opt-in, 
 |---|---|---|---|
 | `master_enabled` | whether the **workflow-class** `block-*` hooks are active. `false` = a fresh clone's workflow hooks are inert (opt-in); security/floor-class hooks enforce regardless | `true` · `false` | `false` |
 | `security_class_master_optout` | explicit, logged operator acknowledgment that the security/floor-class hooks may ALSO go inert under `master_enabled = false` — a public-surface-safety downgrade. Never silently defaulted true | `true` · `false` | `false` |
+
+### `[git_release_automation]`
+
+Capability switches for git-native release automation. **All three default OFF**, and the capability is inert on any install that has not opted in.
+
+| Field | What it tunes | Allowed values | Default |
+|---|---|---|---|
+| `review_process_integration` | whether release automation participates in the review process (reviewer assignment, review-state transitions) | `true` · `false` | `false` |
+| `ci_auto_resolve` | whether release automation auto-resolves CI outcomes rather than surfacing them for operator action | `true` · `false` | `false` |
+| `comment_auto_resolution` | whether release automation auto-resolves review comments rather than leaving them for the operator | `true` · `false` | `false` |
+
+**Two facets are ALWAYS ON and have no key here — deliberately.** Feature-branch creation timing + naming, and PR statusing (draft on create → ready at the Stage-9 gate), fire whenever the git-based path is detected and expose no dial. Their absence from the table above **is** the non-toggleable declaration: there is no `branch`- or `status`-named key to set, so there is nothing to turn them off with.
+
+**Absent config resolves OFF from an in-code constant, not from this template.** An absent `platform-config.toml`, an absent `[git_release_automation]` section, an absent key, an empty value, and any non-boolean value all resolve to OFF. Only the literal `true` turns a toggle on. This matters more than it looks: the runtime `platform-config.toml` does **not** exist on a stock install, so the shipped template default never reaches a consumer on its own — the constant in `release/tools/lib/platform-toggle.sh` is what makes an install that never received the file behave identically to a fresh install with everything off.
+
+**Where you can set these: 2 rungs, not 5.** Set a value in the global template (a governed Track A change) or in your individual `~/.config/pmo-platform/platform-config.toml` (Track B). The portfolio / program / project rungs do not apply — the fact being configured is platform-scoped (one release pipeline per install), not per-portfolio or per-project.
+
+**Off the git-based path, everything here is a silent no-op.** The git-based path is detected as: the release working tree is a git work tree, AND `operator.toml` `[adapters].repo_host` resolves `github`, AND `[adapters].ai_tool` resolves `claude-code`. When the predicate is false, every facet — toggled and always-on alike — does nothing: no action, no warning, no error, and no non-zero exit. Note that `[adapters]` is absent from a stock runtime `operator.toml`, so both adapter clauses take their documented fallbacks (`github` / `claude-code`), which are also the only shipped values; today the predicate reduces in practice to the work-tree clause alone. The two adapter clauses are a forward host-agnosticism seam, not a live three-way test.
+
+**Not related to `[automation].automation_level`.** That dial (in `operator.toml`, § 3 above) is the autonomy *ceiling*; these are capability *switches*. Turning one on never raises the ceiling — an action stays clamped by `min(automation_level, per-action max)` — so no toggle here can authorize something `automation_level` forbids. Different files, different readers, and no shared key name or key prefix.
 
 ## 5. Consumer examples (how the platform reads these)
 

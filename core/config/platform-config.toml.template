@@ -326,3 +326,57 @@ master_enabled = false
 # git-pre-commit-pii.mode independently of this knob.)
 # Valid: true | false.  Default: false.
 security_class_master_optout = false
+
+[git_release_automation]
+# Git-native release automation (branch creation + naming, PR statusing, CI
+# auto-resolution, review-comment resolution).
+#
+# ALWAYS-ON, NON-TOGGLEABLE (deliberately NOT keys below): feature-branch creation
+# timing + naming; PR statusing (draft-on-create -> ready-at-Stage-9). These fire
+# whenever the git-based path is detected and expose NO dial; their ABSENCE from
+# this section IS the declaration (mechanically assertable — no key below matches
+# `branch` or `status`).
+#
+# ABSENT-KEY CONTRACT (in-code, not template-derived): an absent platform-config.toml,
+# an absent section, an absent key, an empty value, or any non-boolean value ALL resolve
+# to false (OFF) via a terminal in-code constant in release/tools/lib/platform-toggle.sh.
+# Only the literal `true` enables a toggle. A template default alone does NOT reach a
+# consumer -- the runtime platform-config.toml is ABSENT on a stock instance, so an
+# install that never receives the file must behave identically to a fresh install with
+# every toggle off. That equivalence is the contract, not a side effect.
+#
+# RESOLUTION SCOPE IS 2-RUNG, NOT 5 (a deliberate narrowing, stated because a reader
+# otherwise correctly assumes the 5-rung cascade): this section resolves from the global
+# rung (this template) and the individual XDG rung only. Rungs 2-4 (portfolio / program /
+# project) are semantically inapplicable -- the fact configured here is PLATFORM-scoped
+# (one release pipeline per install), not per-portfolio or per-project. The narrowing
+# follows the in-file precedent of core/hooks/lib/master-enable.sh, which narrows to the
+# individual rung for the same reason.
+#
+# NO-OP DEGRADATION: off the git-based path every facet -- toggled AND always-on -- is
+# inert: no action, no warning, no error, no non-zero exit.
+#
+# GIT-BASED-PATH DETECTION (no new key -- it reads surfaces that already exist):
+#   git_based_path := (the release working tree IS a git work tree)
+#                 AND (operator.toml [adapters].repo_host resolves "github";
+#                      documented consumer fallback "github")
+#                 AND (operator.toml [adapters].ai_tool   resolves "claude-code";
+#                      documented consumer fallback "claude-code")
+# Honesty note: [adapters] is ABSENT from a stock runtime operator.toml, so both adapter
+# clauses take their documented fallbacks, which equal the only shipped values. Today the
+# predicate therefore reduces to the work-tree clause alone. The two adapter clauses are a
+# FORWARD host-agnosticism seam, not a live three-way test.
+#
+# RELATIONSHIP TO operator.toml [automation].automation_level: DISJOINT.
+# automation_level is the autonomy CEILING (with an irreducible Tier-0 floor beneath it);
+# the keys below are capability SWITCHES. A toggle set true never raises the ceiling --
+# any action stays clamped by effective = min(automation_level, per-action max), so
+# turning one on cannot authorize an action automation_level forbids. Different FILES
+# (operator.toml vs this one), different readers, no shared key name or key prefix.
+
+# Valid: true | false.  Default: false.
+review_process_integration = false
+# Valid: true | false.  Default: false.
+ci_auto_resolve = false
+# Valid: true | false.  Default: false.
+comment_auto_resolution = false
