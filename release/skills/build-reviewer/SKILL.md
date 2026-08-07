@@ -49,7 +49,7 @@ See [`references/dimension-packs/README.md`](references/dimension-packs/README.m
 
 ## Review Dimensions (Pack-Loaded)
 
-After the domain pack is resolved, render each dimension from the loaded pack in order. Each dimension produces findings or an explicit finding-free verdict with checks-performed evidence per Anti-Laziness Rule #3 in `review-discipline-principles.md` § Section 1.
+After the domain pack is resolved, render each dimension from the loaded pack in order. Each dimension produces findings or an explicit finding-free verdict with checks-performed evidence per Anti-Laziness Rule 3 in `review-discipline-principles.md` § Section 1.
 
 The specific dimensions depend on the pack. See:
 - `references/dimension-packs/copilot-builder-dimensions.md` (12 Copilot-specific dimensions)
@@ -65,7 +65,7 @@ The specific dimensions depend on the pack. See:
 
 1. **Finding ID** — sequential identifier (e.g., F-001)
 2. **Dimension** — which review dimension from the loaded pack (e.g., Dimension 3, PMO-D4, GEN-D2)
-3. **Severity** — severity scale derives from the loaded pack. The `copilot-builder` pack uses `CS1_LOW` / `CS2_MEDIUM` / `CS3_HIGH` / `CS4_CRITICAL` (the Copilot framework's own vocabulary). The `pmo-platform`, `security`, and `generic` packs use the platform-wide `CRITICAL` / `HIGH` / `MEDIUM` / `LOW` scale defined in `core/disciplines/review-discipline-principles.md` § Section 5 — the `security` pack introduces **no** security-specific severity vocabulary, so a security finding rates on the same scale as any other finding and the two-scale contract downstream consumers rely on is unchanged. Copilot-native labels and platform-normalized labels map 1:1 (`CS4_CRITICAL` ↔ `CRITICAL`, etc.); choose one form per review and apply it consistently per Anti-Laziness Rule #7.
+3. **Severity** — severity scale derives from the loaded pack. The `copilot-builder` pack uses `CS1_LOW` / `CS2_MEDIUM` / `CS3_HIGH` / `CS4_CRITICAL` (the Copilot framework's own vocabulary). The `pmo-platform`, `security`, and `generic` packs use the platform-wide `CRITICAL` / `HIGH` / `MEDIUM` / `LOW` scale defined in `core/disciplines/review-discipline-principles.md` § Section 5 — the `security` pack introduces **no** security-specific severity vocabulary, so a security finding rates on the same scale as any other finding and the two-scale contract downstream consumers rely on is unchanged. Copilot-native labels and platform-normalized labels map 1:1 (`CS4_CRITICAL` ↔ `CRITICAL`, etc.); choose one form per review and apply it consistently per Anti-Laziness Rule 7.
 4. **Affected Document(s)** — exact filenames
 5. **Affected Section(s)** — exact section names where applicable
 6. **Finding Description** — precise statement of the issue
@@ -201,7 +201,7 @@ that already governs review behavior.
   no transition path traced — that would ground the finding-free verdict.
 - **Conditional:** do NOT emit a finding-free dimension verdict when the review
   output lacks specific cited evidence of what was checked for that dimension,
-  because Anti-Laziness Rule #3 specifically rejects finding-free dimensions
+  because Anti-Laziness Rule 3 specifically rejects finding-free dimensions
   without explanation of what was checked, and the 30-document pack has been
   through 8 rounds of remediation that make surface-level passes the most common
   reviewer failure in this specific domain.
@@ -214,7 +214,7 @@ that already governs review behavior.
   explicit `Checks performed:` bullet list: the specific cross-references checked,
   enum strings compared, schema fields audited, transition paths traced. The
   bullet list is the evidence that the dimension was exercised; its absence fails
-  Rule #3. If the dimension cannot produce a checks-performed list, the reviewer
+  Rule 3. If the dimension cannot produce a checks-performed list, the reviewer
   did not actually audit it — return to the dimension with the pack open.
 - **Principal response vs. junior response:** Principal renders 5–10 specific
   checks per finding-free dimension ("verified Doc 02 Principle 11 reference
@@ -234,7 +234,7 @@ that already governs review behavior.
   from the `Finding Description`.
 - **Conditional:** do NOT emit a finding whose Root Cause field restates the
   symptom rather than identifying why the symptom exists, because Anti-Laziness
-  Rule #4 explicitly requires a traced root cause ("the reference was not updated
+  Rule 4 explicitly requires a traced root cause ("the reference was not updated
   when Section X was renamed during a prior remediation" is the target shape) and
   symptom-only findings hand the implementation-planner downstream an issue it
   must re-root-cause before it can plan a minimal-change fix.
@@ -274,7 +274,7 @@ that already governs review behavior.
 - **Root cause:** The remediation history is authoritative-looking evidence; it
   carries social signal (8 experts looked at this) that feels like verification.
   Under time pressure the reviewer overweights the social signal and underweights
-  the fresh field-level check — the specific drift pattern Rule #2 exists to
+  the fresh field-level check — the specific drift pattern Rule 2 exists to
   counter.
 - **Mitigation:** For every control-bearing claim, perform the field-level check
   independently — read the exact enum string, compare the schema field list,
@@ -407,7 +407,7 @@ that already governs review behavior.
 - **Mitigation:** Every SEC-D finding names the **failure branch** it exercised
   (what happens when the dependency is missing, the input is malformed, the sink
   is untrusted, the token is unresolvable) and cites the enforcer that would
-  catch it — per Anti-Laziness Rule #3 a finding-free dimension must show the
+  catch it — per Anti-Laziness Rule 3 a finding-free dimension must show the
   failure branch it checked, not the file it found. Architecture-level threat
   modeling is **out of scope** and routes to the Architect Specialist's
   security-architecture mode; a security review that starts decomposing trust

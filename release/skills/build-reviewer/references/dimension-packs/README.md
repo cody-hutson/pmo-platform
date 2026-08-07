@@ -1,4 +1,11 @@
+<!-- reference-durability: allow-link -->
 # Dimension Packs — Pack Registry and Schema
+
+> **Why this file carries a link-class override.** This document is a registry: every
+> row in the Pack Registry table resolves a pack name to its file, and the link *is*
+> the registration. Summarizing the target inline — the usual durability remedy —
+> would delete the mapping the table exists to carry. The links are intra-directory
+> and sibling-relative, so they survive a repository move as a unit.
 
 Build-reviewer loads exactly one **dimension pack** at invocation time. Each pack supplies the review dimensions for a specific domain. Shared review discipline (anti-laziness rules, root-cause requirement, 6-deliverable output structure, reviewer calibration, anti-patterns for reviewers themselves) lives in [`core/disciplines/review-discipline-principles.md`](../../../../../core/disciplines/review-discipline-principles.md) and governs every review regardless of pack.
 

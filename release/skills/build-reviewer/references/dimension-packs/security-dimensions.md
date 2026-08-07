@@ -28,7 +28,7 @@ This pack supplies 8 domain-specific dimensions organized into 3 areas (Control 
 
 ## Review Dimensions
 
-You must evaluate the surface against every dimension below. For each dimension, produce findings or provide explicit evidence-of-check per Anti-Laziness Rule #3. Dimensions are organized into three areas (A–C).
+You must evaluate the surface against every dimension below. For each dimension, produce findings or provide explicit evidence-of-check per Anti-Laziness Rule 3. Dimensions are organized into three areas (A–C).
 
 **Pack-specific evidence requirement.** Every finding — and every finding-free verdict — in this pack must name the **failure branch** it exercised: what happens when the dependency is missing, the input is malformed, the sink is untrusted, the token is unresolvable, the advisory is unpatched, the scanner is misconfigured. A finding that reads identically whether the control fails open or fails closed has not exercised anything. Enforcer *presence* is greppable; enforcer *efficacy* is not, and this pack grades the second.
 
