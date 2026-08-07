@@ -162,7 +162,7 @@ Move your entries into the OPERATOR ADDITIONS section. The next `update.sh` dete
 
 The hook fails silently on any error to avoid blocking session start. Common causes:
 
-- The hook is not registered as a `SessionStart` hook in `.claude/settings.json`. A workspace installed before the hook was wired won't carry the entry — run `./update.sh`, whose Phase 5d refreshes `settings.json` under the operator-key guard and installs the `.version` snapshot the hook reads (`.claude/.version`). A full `setup-workspace.sh` re-run also works but is no longer necessary for this.
+- The hook is not registered as a `SessionStart` hook in `.claude/settings.json`. A workspace installed before the hook was wired won't carry the entry — run `./update.sh`, whose Phase 5d refreshes `settings.json` under the operator-key guard and installs the `.version` snapshot the hook reads (`.claude/.version`). A full `setup-workspace.sh` re-run also works and passes the same operator-key guard before it re-renders, but it is no longer necessary for this.
 - `gh` CLI not authenticated. Run `gh auth status`.
 - `operator_github` not set in `operator.toml`. Required to query the release API.
 - Network unavailable. The hook caches results for 24h; you'll see the notice after connectivity returns.
