@@ -44,11 +44,17 @@ probes=()
 cleanup() { local p; for p in "${probes[@]:-}"; do [ -n "$p" ] && rm -rf "$p"; done; }
 trap cleanup EXIT
 
-mkprobe() {  # echoes a fresh in-repo probe dir containing a copy of release/tools
-  local p; p="$(mktemp -d "$REPO/.ac3-probe-XXXXXX")"
-  cp -R "$REPO/release/tools" "$p/tools"
-  probes+=("$p")
-  printf '%s' "$p"
+# Answers in a GLOBAL, deliberately — NOT by echoing into a command substitution.
+# `p="$(mkprobe)"` would run the function in a SUBSHELL, so the `probes+=(...)` that
+# registers the directory for cleanup would mutate the subshell's copy and vanish. The
+# parent array would stay empty, the EXIT trap would delete nothing, and every run would
+# leak two untracked directories into the repo. Calling convention: invoke bare, then
+# read $MKPROBE_DIR.
+MKPROBE_DIR=""
+mkprobe() {
+  MKPROBE_DIR="$(mktemp -d "$REPO/.ac3-probe-XXXXXX")"
+  cp -R "$REPO/release/tools" "$MKPROBE_DIR/tools"
+  probes+=("$MKPROBE_DIR")
 }
 
 echo "=== AC-3 concurrent-load harness (#3818) ==="
@@ -149,7 +155,7 @@ echo "runs with a SKIP:  $skipped/$total    <-- must be 0"
 echo
 
 # ---- 5a. FALSIFICATION A — golden removed WITH STRICT must go RED with the strong arm absent.
-pA="$(mkprobe)"
+mkprobe; pA="$MKPROBE_DIR"
 rm -f "$pA/tools/tests/fixtures/blast-radius-f1/normalized-golden.json"
 BLAST_RADIUS_TESTS_STRICT=1 bash "$pA/tools/tests/test_domain_blast_radius.sh" > "$pA/f.log" 2>&1; rcA=$?
 if [ "$rcA" -eq 0 ]; then
@@ -167,7 +173,7 @@ echo "falsification A OK — golden removed + STRICT => exit $rcA, SKIP emitted,
 # ---- 5b. FALSIFICATION B — the arm the defect actually describes. Without STRICT the
 # suite exits 0 with the strong arm absent. If the harness cannot tell THAT from a real
 # green run, it cannot detect #3818's failure mode at all.
-pB="$(mkprobe)"
+mkprobe; pB="$MKPROBE_DIR"
 rm -f "$pB/tools/tests/fixtures/blast-radius-f1/normalized-golden.json"
 bash "$pB/tools/tests/test_domain_blast_radius.sh" > "$pB/f.log" 2>&1; rcB=$?   # NO STRICT
 if [ "$rcB" -ne 0 ]; then
