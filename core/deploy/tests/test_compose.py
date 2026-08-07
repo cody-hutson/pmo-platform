@@ -479,7 +479,7 @@ def test_resolve_tokens_derives_first_name(tmp_path: Path) -> None:
     assert tokens["[OPERATOR_FIRST_NAME]"] == "Test"
 
 
-# ----- marker dialects (ADR-120) ----------------------------------------------------------------
+# ----- marker dialects (ADR-122) ----------------------------------------------------------------
 
 
 def _write_with_dialect(tmp_path: Path, dialect, preserved: str = "") -> Path:
@@ -500,10 +500,10 @@ def _write_with_dialect(tmp_path: Path, dialect, preserved: str = "") -> Path:
 
 
 def test_default_dialect_is_plain_and_byte_identical_to_no_dialect(tmp_path: Path) -> None:
-    """Omitting the dialect must produce exactly what the pre-ADR-120 writer produced.
+    """Omitting the dialect must produce exactly what the pre-ADR-122 writer produced.
 
     This is the back-compat guarantee for every manifest row that omits the
-    optional 4th (dialect) field — i.e. every row predating ADR-120.
+    optional 4th (dialect) field — i.e. every row predating ADR-122.
     """
     implicit = _write_with_dialect(tmp_path / "a", None).read_text()
     explicit = _write_with_dialect(tmp_path / "b", "plain").read_text()
@@ -561,7 +561,7 @@ def test_installed_sha_round_trips_through_markdown_fence(tmp_path: Path) -> Non
     assert compose.installed_sha_of(target) != ""
 
 
-# ----- reader tolerance for field-state fence spellings (ADR-120 M-2) ---------------------------
+# ----- reader tolerance for field-state fence spellings (ADR-122 M-2) ---------------------------
 #
 # An installed CLAUDE.md predating this change carries a markdown OPERATOR
 # ADDITIONS fence this writer never emitted. Two spellings are in the field: with

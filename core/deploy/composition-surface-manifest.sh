@@ -27,14 +27,14 @@
 #                                               subdirectories (vX.Y/) created lazily by hub
 #                                               on first surface emit)
 #                           "workspace-root" → <workspace-root>/<basename minus trailing .template>
-#                                              (ADR-120; the only suffix-stripping tier)
+#                                              (ADR-122; the only suffix-stripping tier)
 #   <tokens-flag>           "tokens"    → substitute [OPERATOR_*] / [CLAUDE_*] tokens at write
 #                           "raw"       → install verbatim (no substitution)
-#   <marker-dialect>        OPTIONAL 4th field (ADR-120).
+#   <marker-dialect>        OPTIONAL 4th field (ADR-122).
 #                           "plain"     → comment-prefixed fence (# === BEGIN … ===)
 #                           "markdown"  → HTML-comment fence (<!-- === BEGIN … === -->)
 #                           ABSENT      → "plain". awk -F'|' '{print $4}' on a 3-field row
-#                                         returns empty, so every pre-ADR-120 row keeps its
+#                                         returns empty, so every pre-ADR-122 row keeps its
 #                                         exact prior behavior with no rewrite.
 #
 # Adding a new composition-surface file: append one row. No other code change needed.
@@ -90,7 +90,7 @@ COMPOSITION_SURFACE_FILES=(
 
   # Workspace-root tier (<workspace-root>/CLAUDE.md). The operator's top-level
   # governance file, re-categorized from Customizable to Composition-surface by
-  # ADR-120. First and only `markdown`-dialect entry: its fence is the
+  # ADR-122. First and only `markdown`-dialect entry: its fence is the
   # HTML-comment form per composition-surface-spec.md §2.2. The
   # `workspace-root` tier strips the trailing `.template`, so this row targets
   # <workspace-root>/CLAUDE.md — NOT <workspace-root>/CLAUDE.md.template.
@@ -104,14 +104,14 @@ COMPOSITION_SURFACE_FILES=(
   "core/CLAUDE.md.template|workspace-root|tokens|markdown"
 )
 
-# --- Install-time token vocabulary (ADR-120 §Decision 8) --------------------
+# --- Install-time token vocabulary (ADR-122 §Decision 8) --------------------
 # LOAD-BEARING COMMENT — NOT documentation. docs/scripts/setup-workspace.sh
 # `compute_active_tokens` greps THIS FILE (alongside core/CLAUDE.md.template and
 # core/settings.json.template) for [(OPERATOR|CLAUDE|COWORK)_*] to derive
 # ACTIVE_TOKENS — the set it prompts for and writes into operator.toml.
 #
 # WHY IT LIVES HERE: this declaration used to sit in core/CLAUDE.md.template's
-# authoring header. ADR-120 makes that template's whole body the managed section,
+# authoring header. ADR-122 makes that template's whole body the managed section,
 # and an OPTIONAL token left empty in operator.toml would then survive
 # unsubstituted into the composed CLAUDE.md and fail the installer's
 # unresolved-token verification gate. The header had to leave the template; the
@@ -136,6 +136,6 @@ COMPOSITION_SURFACE_FILES=(
 #   [COWORK_INSTALL_PATH_BASE] — Cowork install dir (depersonalization-spec.md §3.1)
 #   [OPERATOR_PROJECT_NAME]    — Active PMO project name. Retained in the active set
 #                                deliberately: no template body consumes it since
-#                                ADR-120 de-tokenized its one illustrative use, but
+#                                ADR-122 de-tokenized its one illustrative use, but
 #                                dropping it here would change install prompting,
 #                                which is a separate decision from this one.

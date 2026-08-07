@@ -500,8 +500,8 @@ check_source_repo() {
 }
 
 # --- Section 9: Active token set computation (FM-5 absorption) ---
-# The manifest is a THIRD grep input, not an accident of file layout (ADR-120
-# §Decision 8). ADR-120 makes core/CLAUDE.md.template's whole body a managed
+# The manifest is a THIRD grep input, not an accident of file layout (ADR-122
+# §Decision 8). ADR-122 makes core/CLAUDE.md.template's whole body a managed
 # section, so its authoring header — which declared the reserved token vocabulary
 # — had to leave the template: an OPTIONAL token resolving empty would otherwise
 # survive unsubstituted into the composed CLAUDE.md and fail run_verification_gate.
@@ -998,7 +998,7 @@ resolve_all_tokens() {
       "[COWORK_INSTALL_PATH_BASE]")
         # Paired with the reserved-token vocabulary line in
         # core/deploy/composition-surface-manifest.sh, which is one of the three
-        # files compute_active_tokens greps to derive ACTIVE_TOKENS. ADR-120
+        # files compute_active_tokens greps to derive ACTIVE_TOKENS. ADR-122
         # §Decision 8 moved that declaration OUT of core/CLAUDE.md.template — whose
         # whole body became a managed section — and made the manifest the third
         # grep input; the template carries this token 0 times now, the manifest 2.
@@ -1124,7 +1124,7 @@ with open(target_path, "w") as f:
 }
 
 substitute_templates() {
-  # CLAUDE.md is NOT written here. ADR-120 re-categorized it from Customizable to
+  # CLAUDE.md is NOT written here. ADR-122 re-categorized it from Customizable to
   # Composition-surface: it is a row in core/deploy/composition-surface-manifest.sh
   # and install_composition_surface_files (Section 15b) is its sole writer at
   # install, as ./update.sh is at update. Two writers on one file — a whole-file

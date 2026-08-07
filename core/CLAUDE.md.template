@@ -8,7 +8,7 @@ Put your own workspace-specific guidance in the OPERATOR ADDITIONS
 section at the bottom of this file; that section is preserved verbatim
 across every update. CLAUDE.md is a registered composition surface
 (core/deploy/composition-surface-manifest.sh) per
-core/standards/composition-surface-spec.md §1 and ADR-120.
+core/standards/composition-surface-spec.md §1 and ADR-122.
 -->
 
 # CLAUDE.md

@@ -20,7 +20,7 @@
 #     a non-dry-run update from the UNCHANGED source finds nothing to
 #     regenerate (exit EX_NOCHANGE 64) and leaves the operator addition intact.
 #
-#   Suite C (CLAUDE.md workspace-root composition surface, ADR-120):
+#   Suite C (CLAUDE.md workspace-root composition surface, ADR-122):
 #     the CUSTOMIZABLE-refresh mechanism. Asserts the workspace-root manifest
 #     tier resolves <ws>/CLAUDE.md with the `.template` suffix stripped; the
 #     deployed file carries the MARKDOWN marker dialect with a resolved
@@ -845,7 +845,7 @@ else
     "expected column-0 count 0 WITH the key present indented; got column-0=${mut_anchor}, indented=${mut_indented} — BROKEN PROBE (indented=0 means the mutation never applied)"
 fi
 
-# --- Stage 5c (Suite C): CLAUDE.md workspace-root composition surface (ADR-120) ---
+# --- Stage 5c (Suite C): CLAUDE.md workspace-root composition surface (ADR-122) ---
 # The CUSTOMIZABLE-refresh mechanism. Mirrors Suite G's <sbx>/repo-next
 # SHA-perturbation mechanics verbatim, against a different manifest row: the
 # workspace-root tier, the markdown marker dialect, and the operator's top-level
@@ -853,7 +853,7 @@ fi
 #
 # Runs its OWN update invocations rather than folding into Stage 3/4, so Suites
 # F, G, and T are untouched (Stage-4 test-file contention constraint).
-printf '\nStage 5c (Suite C): CLAUDE.md workspace-root composition surface (ADR-120)\n'
+printf '\nStage 5c (Suite C): CLAUDE.md workspace-root composition surface (ADR-122)\n'
 
 CLAUDE_TARGET="${SBX}/ws/CLAUDE.md"
 CLAUDE_SOURCE_REL="core/CLAUDE.md.template"
@@ -881,7 +881,7 @@ else
 
 # C-2: the fence is the MARKDOWN dialect, not the plain one. A plain-dialect
 #      fence in a markdown governance file renders as visible `# ===` noise AND
-#      is what update.sh's pre-ADR-120 `#`-pinned grep expected — so asserting
+#      is what update.sh's pre-ADR-122 `#`-pinned grep expected — so asserting
 #      the markdown form is what makes C-8 below meaningful.
 c2_pass=1
 c2_detail=""
@@ -1019,7 +1019,7 @@ else
     "absolute line ${c6c_line_after} vs in-fence offset ${CLAUDE_OFFSET_AFTER}"
 fi
 
-# C-7: the unconditional pre-write backup (ADR-120 §Decision 7). No installed
+# C-7: the unconditional pre-write backup (ADR-122 §Decision 7). No installed
 #      CLAUDE.md has ever carried an installed_sha marker, so the tamper-backup
 #      path cannot fire on a first rewrite; this asserts the recovery copy the
 #      EXPENSIVE-reversibility write depends on exists REGARDLESS.

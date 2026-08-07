@@ -185,15 +185,15 @@ test_iteration_set_u_safe() {
 test_iteration_set_u_safe
 
 # --- Test 6: CLAUDE.md's regeneration claim agrees with its manifest membership ---
-# GENERALIZED at ADR-120 (was: "CLAUDE.md carries no false update.sh-regen
+# GENERALIZED at ADR-122 (was: "CLAUDE.md carries no false update.sh-regen
 # marker"). The invariant is UNCHANGED — a file's regeneration claim must match
 # its manifest membership, because a claim honored by no mechanism is exactly the
 # false contract that produced the superseded defect. Only the expected VALUES
-# moved: pre-ADR-120 the honest state was claim=0 / member=0; post-ADR-120
+# moved: pre-ADR-122 the honest state was claim=0 / member=0; post-ADR-122
 # CLAUDE.md IS a registered composition surface, so the honest state is
 # claim=1 / member=1. The test is generalized, NOT deleted — a divergence in
 # either direction still fails it.
-printf '\nTest 6: CLAUDE.md regeneration claim <-> manifest membership (ADR-120)\n'
+printf '\nTest 6: CLAUDE.md regeneration claim <-> manifest membership (ADR-122)\n'
 test_claude_md_claim_manifest_consistent() {
   local repo_root template claim_present managed_marker manifest_lists row_shape
   repo_root="${DEPLOY_DIR%/core/deploy}"
@@ -201,7 +201,7 @@ test_claude_md_claim_manifest_consistent() {
 
   # (a) RETAINED, not inverted: a composition-surface SOURCE template carries no
   #     fences (composition-surface-spec.md §1.2) — the writer emits them. This
-  #     expectation is 0 both before and after ADR-120; only the reason changed
+  #     expectation is 0 both before and after ADR-122; only the reason changed
   #     (was "the claim is false", now "the writer owns the fence").
   if /usr/bin/grep -q '=== BEGIN MANAGED SECTION' "${template}"; then
     managed_marker=1
@@ -230,7 +230,7 @@ test_claude_md_claim_manifest_consistent() {
   assert_eq "CLAUDE.md present in COMPOSITION_SURFACE_FILES" "1" "${manifest_lists}"
 
   # (d) THE INVARIANT (generalized): claim and membership agree. Both 1 post-
-  #     ADR-120; both were 0 pre-ADR-120; a 1/0 split in either direction is the
+  #     ADR-122; both were 0 pre-ADR-122; a 1/0 split in either direction is the
   #     false-contract defect this test has always guarded.
   assert_eq "regeneration claim and manifest membership agree" "${manifest_lists}" "${claim_present}"
 
@@ -248,9 +248,9 @@ test_claude_md_claim_manifest_consistent() {
 test_claude_md_claim_manifest_consistent
 
 # --- Test 7: the manifest carries the full install-time token vocabulary ---
-# LOAD-BEARING (ADR-120 §Decision 8). setup-workspace.sh compute_active_tokens
+# LOAD-BEARING (ADR-122 §Decision 8). setup-workspace.sh compute_active_tokens
 # derives ACTIVE_TOKENS by grepping core/CLAUDE.md.template +
-# core/settings.json.template + THIS MANIFEST. ADR-120 moved the reserved-token
+# core/settings.json.template + THIS MANIFEST. ADR-122 moved the reserved-token
 # vocabulary out of the template's authoring header and into the manifest, so a
 # future edit that drops a token line from the manifest silently shrinks
 # ACTIVE_TOKENS — the installer stops resolving that token and
@@ -284,7 +284,7 @@ test_claude_md_claim_manifest_consistent
 # exactly what a narrowed regex produces. Do not "fix" the labels below by widening
 # what they claim; either keep the claim matched to the assertion, or give
 # setup-workspace.sh a source-guard and invoke the real derivation here.
-printf '\nTest 7: manifest preserves the full install-time token vocabulary (ADR-120)\n'
+printf '\nTest 7: manifest preserves the full install-time token vocabulary (ADR-122)\n'
 test_manifest_declares_full_token_vocabulary() {
   local repo_root derived expected
   repo_root="${DEPLOY_DIR%/core/deploy}"
@@ -298,7 +298,7 @@ test_manifest_declares_full_token_vocabulary() {
       2>/dev/null | LC_ALL=C sort -u | tr '\n' ' '
   )
 
-  # The vocabulary as of ADR-120 (core/standards/depersonalization-spec.md §1).
+  # The vocabulary as of ADR-122 (core/standards/depersonalization-spec.md §1).
   # Adding a token to the platform means adding it here deliberately.
   #
   # Normalized through the SAME sort pipeline as `derived` rather than written in
@@ -358,7 +358,7 @@ test_manifest_declares_full_token_vocabulary() {
   else
     reads_manifest=0
   fi
-  assert_eq "compute_active_tokens still names the manifest path among its grep inputs (ADR-120 §8)" \
+  assert_eq "compute_active_tokens still names the manifest path among its grep inputs (ADR-122 §8)" \
     "1" "${reads_manifest}"
 }
 test_manifest_declares_full_token_vocabulary

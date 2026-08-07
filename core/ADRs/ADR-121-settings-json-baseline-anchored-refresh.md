@@ -53,9 +53,10 @@ them denoting an in-release record — plus two ADR filenames in its machine-rea
 Matrix that never existed on disk. All were re-classified and repointed at the pre-PR reconciliation
 pass. No file outside that plan cited a drafted number, because the corpus edits for this record were
 authored after the shift. In-release Stage-4/Stage-5 citations reading "ADR-120" in
-the settings-refresh context denote this record; ADR-120 itself is the sibling CLAUDE.md
-re-categorization record. The substance the operator ratified — scope and mechanism — is unchanged
-by the renumber.
+the settings-refresh context denote this record; in the CLAUDE.md re-categorization context they
+denote the sibling record, which took 120 branch-local when this record vacated it and has since
+renumbered again to **ADR-122** — the mainline claimed 120 while both were still unmerged. The
+substance the operator ratified — scope and mechanism — is unchanged by either renumber.
 
 ## Context
 
@@ -262,7 +263,7 @@ halves are separately CHEAP and could be retained across a revert of the rest.
 Builds on **ADR-014**, whose two-hash separation — source-template hash as the regeneration trigger,
 post-substitution installed-body hash as the tamper anchor — is reused here unchanged in meaning and
 relocated from an in-file marker to the installer's durable state file, because this file's format
-admits no marker. Sibling to **ADR-120**, which amends the category *assignment* of the other
+admits no marker. Sibling to **ADR-122**, which amends the category *assignment* of the other
 Customizable file while this record amends the update-time *contract* of the category itself; the two
 are disjoint and neither amends the JSON clause. Numbering derived per **ADR-115**, whose mainline-anchor
 rule is what makes the `120 → 121` advance rule-determined rather than discretionary. Relates to
@@ -275,7 +276,7 @@ introduced the first Stop-event registration, one of those observed missing from
 
 - The work item carrying the unguarded-overwrite defect and, after its scope change, the
   settings-refresh mechanism this record governs — tracked as issue #1355.
-- The sibling work item carrying the workspace-governance-file refresh, whose record is ADR-120 —
+- The sibling work item carrying the workspace-governance-file refresh, whose record is ADR-122 —
   tracked as issue #3831.
 - The earlier release that refreshed deployed hook scripts on update, delivering the half of this
   mechanism that this record completes — tracked as issue #3430.

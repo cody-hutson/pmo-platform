@@ -261,7 +261,7 @@ regenerate_managed_sections() {
     # tamper must compare the live body against installed_sha, never against the
     # source-template hash. `|| true` guards the no-match case under set -e
     # (pre-ADR-014 installs carry no installed_sha line).
-    # Marker greps are DIALECT-AWARE (ADR-120): a marker line is `# <key>: <hex>`
+    # Marker greps are DIALECT-AWARE (ADR-122): a marker line is `# <key>: <hex>`
     # in the plain dialect and `<!-- <key>: <hex> -->` in the markdown dialect.
     # A `#`-pinned grep returns empty against a markdown-fenced target, so
     # stored_managed_sha would never equal source_sha and the file would
@@ -309,7 +309,7 @@ regenerate_managed_sections() {
       continue
     fi
 
-    # Unconditional pre-write backup (ADR-120 §Decision 7). This runs on EVERY
+    # Unconditional pre-write backup (ADR-122 §Decision 7). This runs on EVERY
     # real regeneration, independent of the tamper anchor — which matters most
     # for a workspace-root target, because no installed CLAUDE.md has ever
     # carried an installed_sha marker, so the tamper-backup path above cannot

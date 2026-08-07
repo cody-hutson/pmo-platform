@@ -37,10 +37,10 @@ CLI:
                   [--dialect {plain,markdown}]
     installed-sha --target <path>          # hex digest of the installed managed body ("" if none)
 
-Marker dialects (ADR-120): the writer emits the fence in the dialect the target's
+Marker dialects (ADR-122): the writer emits the fence in the dialect the target's
 manifest row declares — `plain` (comment-prefixed) or `markdown` (HTML-comment).
 `plain` is the default, so a caller that passes no dialect gets byte-identical
-output to the pre-ADR-120 writer. Both readers are dialect-AGNOSTIC by design.
+output to the pre-ADR-122 writer. Both readers are dialect-AGNOSTIC by design.
 """
 
 from __future__ import annotations
@@ -63,12 +63,12 @@ DEFAULT_OPERATOR_ADDITIONS_PLACEHOLDER = (
     "# Add custom entries below. update.sh never touches this section."
 )
 
-# --- Marker dialects (ADR-120) ---------------------------------------------
+# --- Marker dialects (ADR-122) ---------------------------------------------
 # A composition-surface target's fence is emitted in the dialect its manifest
 # row declares. `plain` is the comment-prefixed form used by every allowlist,
 # mode file, and .toml/.txt surface; `markdown` is the HTML-comment form the
 # spec defines for markdown surfaces (§2.2). `plain` is the DEFAULT: a manifest
-# row that omits the dialect field resolves to it, so every pre-ADR-120 row is
+# row that omits the dialect field resolves to it, so every pre-ADR-122 row is
 # unchanged and un-rewritten.
 #
 # The dialect is a WRITER concern only. Both readers below
@@ -243,7 +243,7 @@ def extract_operator_additions(target_path: Path) -> str:
     Returns the empty string if the target file does not exist, or exists but has no markers.
     Trailing whitespace on the captured content is stripped (the END marker is on its own line).
 
-    Dialect-agnostic and parenthetical-tolerant (ADR-120): matches the plain
+    Dialect-agnostic and parenthetical-tolerant (ADR-122): matches the plain
     `# === … ===` form and the markdown `<!-- === … === -->` form, with or
     without the "(preserved across updates)" suffix. A dialect-pinned reader
     would return "" on an installed markdown-fenced target and silently discard
@@ -302,7 +302,7 @@ def _extract_managed_body(text: str) -> str:
 
     Returns "" when there is no MANAGED fence or the fence body is empty.
 
-    Dialect-agnostic (ADR-120): recognizes the plain and markdown fence forms, so
+    Dialect-agnostic (ADR-122): recognizes the plain and markdown fence forms, so
     the tamper anchor of a markdown-fenced target is computed over the same
     byte-domain the writer emitted rather than reading as "no fence".
     """
@@ -496,7 +496,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             "--dialect",
             default="",
             choices=["", PLAIN_DIALECT, MARKDOWN_DIALECT],
-            help="Marker dialect for the emitted fence (ADR-120). Empty (the "
+            help="Marker dialect for the emitted fence (ADR-122). Empty (the "
                  "default) resolves to 'plain', so callers that omit it keep "
                  "byte-identical output. Readers are dialect-agnostic; this "
                  "selects only what the writer emits.",

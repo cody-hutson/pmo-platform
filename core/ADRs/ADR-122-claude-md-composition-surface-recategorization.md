@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-120 — CLAUDE.md is re-categorized from Customizable to Composition-surface
+title: ADR-122 — CLAUDE.md is re-categorized from Customizable to Composition-surface
 status: Accepted — ratified by the operator at the Stage 5 Collective Review scope-lock gate for the `96-update-install-config-safety` release, 2026-08-06. The flip is verified against this file's `status:` field, never inferred from milestone closure or a review comment.
 date: 2026-08-07
 release: 96-update-install-config-safety
@@ -22,15 +22,19 @@ source_observations:
      is load-bearing for the resolver rather than inert documentation."
 ---
 
-# ADR-120 — CLAUDE.md is re-categorized from Customizable to Composition-surface
+# ADR-122 — CLAUDE.md is re-categorized from Customizable to Composition-surface
 
 ## Status
 
 **Accepted** — ratified by the operator at the Stage 5 Collective Review scope-lock gate for the `96-update-install-config-safety` release, 2026-08-06. Authored at Stage 6 per the Stage-6 ADR-authoring precedent. Acceptance is the Stage-5 → Stage-6 boundary condition on the Customizable-refresh work item and blocks no other card in the release. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified.
 
-**Numbering.** This record's number was derived at Engineering Commit 0 against the mainline anchor per ADR-115 §Decision (1) — next-free is `anchor(origin/main) + 1`, never `max(claimed_set) + 1`. The mainline held 119, so this record takes 120.
+**Numbering.** This record's number was derived at Engineering Commit 0 against the mainline anchor per ADR-115 §Decision (1) — next-free is `anchor(origin/main) + 1`, never `max(claimed_set) + 1`. The mainline held 119 at that moment, so the derivation yielded 120. It **bound** at **122**, two hops later; the derivation rule is unchanged and the moves are recorded in the two provenance notes below, which is where the number is verified.
 
 **Numbering provenance — `119 → 120`.** Drafted at Stage 5 as **ADR-119**. A concurrent release claimed 119 on the mainline before this record was written to disk, so the rule-determined next-free advanced to 120. No file was ever created at 119 on this branch — the draft lived in the Stage-5 handoff comment — so nothing had to be moved or renamed. The move did **not** come free of a citation sweep, however, and the original claim that it did was wrong: the release plan had already been authored at Engineering Commit 0 against the drafted numbers, so it carried 24 `ADR-119` and 10 `ADR-120` references — every one of them denoting an in-release record — plus two ADR filenames in its machine-readable File Change Matrix that never existed on disk. All were re-classified and repointed at the pre-PR reconciliation pass; none had referred to the unrelated mainline ADR-119. No file outside that plan cited a drafted number, because the corpus edits were authored after the shift. The sweep's real scope is therefore the set of artifacts already written against the old number — which, when a plan is authored at Commit 0, is never empty. In-release Stage-4/Stage-5 citations reading "ADR-119" denote this record. The substance the operator ratified — scope and mechanism — is unchanged by the renumber.
+
+**Numbering provenance — `120 → 122`.** Held **ADR-120** branch-local; renumbered to **ADR-122** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 120. In-release citations that read "ADR-120" denote this record **only where the surrounding context is the CLAUDE.md re-categorization**. That qualifier is load-bearing on this hop in a way it was not on the first: the mainline record that took 120 is a live record in this tree, cited here on its own terms, so a bare number no longer disambiguates. This is the record's second move, so its lineage is `119 → 120 → 122` and the hop-1 note above stands unamended — its `ADR-119` and `ADR-120` references are historical and are deliberately not swept. Sibling **ADR-121** did **not** move: the mainline does not claim 121 and it already sat inside the free range, so ADR-115 §Decision (3a) holds it fixed rather than shifting both records for symmetry.
+
+**And this hop's citation sweep was the largest of the release's three number moves, not the smallest — the cost of a renumber rises with how much corpus has been written against the old number.** Hop 1 was cheap only because the release plan alone had been authored at the time; by this hop the whole Engineering corpus existed, so the tooled sweep repointed **98 occurrences across 14 files** — this record, ADR-121, the release plan, the composition-surface spec, the manifest, the composition library and its three test suites, both install/update docs, `setup-workspace.sh`, `update.sh` and `CLAUDE.md.template`. Two corrections were **not** mechanical, and both are the same residual seen from different angles — an artifact carrying the *other* record's claim on the old number. `core/deploy/deploy.sh` was **excluded whole-file**: it is in the branch diff for unrelated reasons, and all three of its `ADR-120` citations are mainline prose about G1 enforcement authority, byte-identical to `origin/main` at the same line numbers, so sweeping them would have manufactured a dangling reference to a record that never moved. Two lines inside ADR-121's own hard-wrapped provenance paragraph were swept and then reverted by hand: the tool's historical-line exemption is line-wise and keys on the `**Numbering provenance — …**` head, so the continuation lines of a wrapped note sit outside it. The first case the tool documents as a known residual; the second is a narrower instance of it and is reported to the release hub rather than fixed here, since changing the tool mid-renumber is the one thing this record's own release discipline forbids.
 
 ## Context
 
@@ -104,7 +108,7 @@ The second is more concrete — rollback is **asymmetric**. Reverting the releas
 
 ## Related ADRs
 
-Builds on **ADR-014**, whose two-hash separation (source-template hash as the regeneration trigger, post-substitution installed-body hash as the tamper anchor) is reused unchanged, and whose absent-anchor *unknown-not-tampered* rule is the specific reason the unconditional first-run backup is required here. Composes with **ADR-022**, which governs the split between the operator-identity config and the platform-behavior config, and which is the reason the one unresolvable token is not simply added to the operator config as part of this change. Numbered under **ADR-115**, whose mainline-anchor allocation rule determined this record's number after a concurrent release claimed the drafted one.
+Builds on **ADR-014**, whose two-hash separation (source-template hash as the regeneration trigger, post-substitution installed-body hash as the tamper anchor) is reused unchanged, and whose absent-anchor *unknown-not-tampered* rule is the specific reason the unconditional first-run backup is required here. Composes with **ADR-022**, which governs the split between the operator-identity config and the platform-behavior config, and which is the reason the one unresolvable token is not simply added to the operator config as part of this change. Numbered under **ADR-115**, whose mainline-anchor allocation rule determined this record's number after two concurrent releases claimed, in turn, the drafted number and then its successor — and whose §Decision (3a) is why the sibling **ADR-121** was held fixed rather than shifted alongside it.
 
 ## References
 

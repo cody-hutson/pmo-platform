@@ -107,7 +107,7 @@ The default workspace location is `~/Claude/pmo-platform`. To install elsewhere,
 1. Detects platform (Darwin required; exits 78 otherwise).
 2. Checks prerequisites (`python3`, `shasum`, `git`, `jq`). On missing, prints the exact `brew install` command and exits 69.
 3. Validates the source repo (the auto-detected repo root); exits 66 if missing or templates absent.
-4. Computes the active token set from three sources: `core/CLAUDE.md.template`, `core/settings.json.template`, and `core/deploy/composition-surface-manifest.sh`. The manifest is a deliberate third input, not an accident of layout — ADR-120 makes the CLAUDE.md template's whole body a managed section, so the reserved-token vocabulary that used to be declared in its authoring header now lives in the manifest and is grepped from there.
+4. Computes the active token set from three sources: `core/CLAUDE.md.template`, `core/settings.json.template`, and `core/deploy/composition-surface-manifest.sh`. The manifest is a deliberate third input, not an accident of layout — ADR-122 makes the CLAUDE.md template's whole body a managed section, so the reserved-token vocabulary that used to be declared in its authoring header now lives in the manifest and is grepped from there.
 5. Detects state at `~/Claude/.claude/.workspace-setup.state` and routes one of three branches: fresh-install, re-bootstrap, or guided recovery.
 6. Creates the workspace directory layout.
 7. Resolves operator-identifying tokens — via interactive prompts by default, or from each token's declared default with no read from stdin under `--non-interactive`; writes the canonical `operator.toml` at `~/.config/pmo-platform/operator.toml` (XDG-spec; mode 0600).

@@ -80,7 +80,7 @@ lib_compose_extract() {
 #   preserved-file: optional path to file containing OPERATOR ADDITIONS content
 #                   (if omitted or empty, the primitive uses the default placeholder comment)
 #   dialect: optional marker dialect ("plain" | "markdown"); omitted/empty → "plain"
-#            (ADR-120). Trailing-optional so existing 4-6 arg callers are unchanged.
+#            (ADR-122). Trailing-optional so existing 4-6 arg callers are unchanged.
 lib_compose_write() {
   local source="$1" target="$2" tokens_flag="$3" operator_toml="$4"
   local override_toml="${5:-}" preserved_file="${6:-}" dialect="${7:-}"
@@ -111,7 +111,7 @@ lib_compose_write() {
 # then write the target with managed-section refreshed and additions preserved.
 # Usage: lib_compose_regen <source> <target> <tokens-flag> <operator-toml> [<override-toml> [<dialect>]]
 #   dialect: optional marker dialect ("plain" | "markdown"); omitted/empty → "plain"
-#            (ADR-120). Trailing-optional so existing 4-5 arg callers are unchanged.
+#            (ADR-122). Trailing-optional so existing 4-5 arg callers are unchanged.
 lib_compose_regen() {
   local source="$1" target="$2" tokens_flag="$3" operator_toml="$4"
   local override_toml="${5:-}" dialect="${6:-}"
@@ -189,9 +189,9 @@ lib_compose_assert_manifest_loaded() {
 # Sets: LIB_COMPOSE_ENTRY_SRC, LIB_COMPOSE_ENTRY_TIER, LIB_COMPOSE_ENTRY_TOKENS_FLAG,
 #       LIB_COMPOSE_ENTRY_DIALECT
 #
-# The 4th field (marker dialect, ADR-120) is OPTIONAL and back-compatible:
+# The 4th field (marker dialect, ADR-122) is OPTIONAL and back-compatible:
 # `awk -F'|' '{print $4}'` on a 3-field row returns empty, which this function
-# normalizes to "plain" — the pre-ADR-120 behavior — so every existing row is
+# normalizes to "plain" — the pre-ADR-122 behavior — so every existing row is
 # unchanged and needs no rewrite.
 # Usage: lib_compose_parse_entry "<entry>"
 lib_compose_parse_entry() {
@@ -213,7 +213,7 @@ lib_compose_parse_entry() {
 #                            (resolves <OPERATOR_INSTANCE_HUB_STATE_PATH> per
 #                             core/standards/depersonalization-spec.md §4)
 #         "workspace-root" → <workspace-root>/<basename minus a trailing .template>
-#                            (ADR-120; the only tier that strips a suffix, because
+#                            (ADR-122; the only tier that strips a suffix, because
 #                             the workspace-root target is the operator-facing file
 #                             itself — <ws>/CLAUDE.md, not <ws>/CLAUDE.md.template)
 #   <instance-base> = pmo_instance_path_for <workspace-root> — the
