@@ -242,6 +242,8 @@ The payload is `bash /tmp/hookprobe-$NONCE/probe.sh`, issued as a **real Bash to
 
 **Both tool classes are testable at S1.** `block-destructive` is `security` class (never inert on master-OFF), mode-independent, **and** wired on `Bash`, `Write` *and* `Edit` matchers. So a **single hook at S1 alone** can carry the control for both the Bash class and the Edit/Write class. The Edit arm does **not** have to wait for the master flip — that constraint belongs to `block-skill-direct-edit` (workflow class, mode-reading, so it needs S3), not to the Edit tool class.
 
+**The two Edit questions are separate, and conflating them is how a green gets over-read.** `NC-EDIT-1` settles whether the **Edit/Write tool class** reaches a hook at all from a spawned session; it rides `block-destructive` and clears at S1. The `NC-EDIT-SKILL-*` arms settle whether **`block-skill-direct-edit` specifically** fires — the hook whose silence was the original observation — and they cannot clear before S2, because that hook is `workflow`-class and its master gate runs *before* its `.mode` read. A passing `NC-EDIT-1` therefore does **not** evidence skill-edit-discipline coverage, and a null result on `NC-EDIT-SKILL-1` at S1 evidences nothing at all: it is the class gate answering, not the hook. `NC-EDIT-SKILL-0` exists to make that distinction observable rather than argued.
+
 ### § 6.1 The arms
 
 | ID | Arm | State | Pre-merge? | Expected |
@@ -257,6 +259,10 @@ The payload is `bash /tmp/hookprobe-$NONCE/probe.sh`, issued as a **real Bash to
 | **NC-EDIT-1** | **Tool-class generalization, Edit/Write, from a spawned session**, via `BLOCK-DESTRUCTIVE-016` (`.git` metadata write) | S1 | NO — **DEFERRED**, but **NOT gated on the master flip** | **L row `BLOCK-DESTRUCTIVE-016` · R exit 2 + banner** |
 | **NC-4** | Scope-guard control — subagent spawned with a working directory **outside** the governed root, NC-1's payload | S1 | NO — **DEFERRED** | **RUNS, exit 0.** Without it, NC-1/NC-2/NC-EDIT-1 are consistent with "hooks now fire everywhere" |
 | **NC-6** | Worktree-provenance arm — repeat NC-1 in a worktree created **after** the re-home and in one that **predates** it | S1 | NO — **DEFERRED** | identical results in both |
+| **NC-EDIT-SKILL-0** | **Class-gate control**, `block-skill-direct-edit`. From a **spawned** session, `Edit` a governed **source-module** path (e.g. `release/skills/release-hub/references/spoke-launch.md`) with no `.editor-session` sentinel, at S1 | S1 | NO — **DEFERRED** | **exit 0, ZERO rows in BOTH logs** — pins the workflow-class gate as the cause and stops a later green being read as coverage the whole time |
+| **NC-EDIT-SKILL-1** | **The hook #3317 observed silent.** Same spawned session and payload, at S2 | **S2** | NO — **DEFERRED**, and this one **DOES** wait for the master flip | **L row in `skill-edit-warn-log.jsonl`** (`hook":"block-skill-direct-edit"`, `rule":"BLOCK-SKILL-EDIT-001"` for SKILL.md / `-002` for a reference doc, `tool":"Edit"`) · **R exit 0** — `warn` records and allows |
+| **NC-EDIT-SKILL-2** | Blocking form of the above | **S3** | NO — **DEFERRED** | **L row in `block-log.jsonl`** · **R exit 2 + banner** |
+| **NC-EDIT-SKILL-S** | **Specificity, three cases**, all at the same state as the arm they control: a **deployed** `.claude/skills/…/SKILL.md` path · a non-skill corpus file · an in-scope path with `tool` = `Bash` | S2 | NO — **DEFERRED** | all **exit 0**, **zero** rows in both logs. Without this, a positive is consistent with a blanket denial rather than with the matcher's declared scope |
 
 **Validated payloads** (each verified against the deployed hooks, with its control arm):
 
@@ -267,8 +273,9 @@ The payload is `bash /tmp/hookprobe-$NONCE/probe.sh`, issued as a **real Bash to
 
 > **DEFERRAL RECORD — negative control for the spawned-session enforcement point.**
 >
-> **Deferred:** arms **NC-1, NC-2, NC-EDIT-1, NC-4, NC-6**.
-> **Why:** each requires precondition state **S1**, which is an operator-executed change to a file outside the repository. The repository can neither see nor gate the user-scope settings file, so **no merge ordering can make these arms in-pipeline.**
+> **Deferred:** arms **NC-1, NC-2, NC-EDIT-1, NC-4, NC-6**, and the four **NC-EDIT-SKILL-\*** arms.
+> **Why:** each requires precondition state **S1** at minimum, which is an operator-executed change to a file outside the repository. The repository can neither see nor gate the user-scope settings file, so **no merge ordering can make these arms in-pipeline.** The `NC-EDIT-SKILL-*` arms other than the class-gate control need **S2** or **S3** on top of that — a second and third operator act, not a longer wait.
+> **Grading note specific to the skill-edit arms:** `block-skill-direct-edit` is `workflow`-class, so it is inert on a default instance and writes to neither log. An absent row from that hook is therefore consistent with *"the gate declined"* and with *"the hook never loaded"* and with *"the call was allowed"*, and discriminates none of them. Do not read one as another. `NC-EDIT-SKILL-0` is what converts that ambiguity into a positive observation of the class gate.
 > **NOT deferred:** **NC-A**, **NC-SCOPE** (both CI-gated), **NC-P**, **NC-L**, and **NC-0 / NC-0E** — the pre-fix baselines, which are executable now and **must** be, because they are **unrecoverable once the wiring lands**.
 > **Grading contract while deferred:** the acceptance criteria for this work **must not** record the deferred arms as passing, and **must not** record them as waived. The correct state is *specified-and-deferred*, with this record as the referent.
 > **Where results land:** the `worktree` column of § 4 above, plus § 5's arm table. **Not a new artifact.**
