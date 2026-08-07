@@ -8,6 +8,7 @@ source: "Stage 5 spec for Release Class taxonomy + differentiated lifecycle; ope
 version: v11.27
 ---
 <!-- reference-durability: allow-version-ref -->
+<!-- reference-durability: allow-link -->
 
 # Release Class Taxonomy
 
@@ -159,7 +160,7 @@ The Methodology Variation table parameterizes release cadence by `delivery_appro
 
 ### With Release Outcome Statement (composition flagged at Collective Review)
 
-The Outcome Statement (release-outcome-statement-template.md) and Release Class (this doc) BOTH land sections in the milestone description. Position convention per [`release-outcome-statement-template.md § 2`](release-outcome-statement-template.md): `### Release Outcome Statement` H3 sits at top-of-description ABOVE any metadata bullets (operator-visible at-a-glance). `## Release Class` H2 sits below (drives subsequent posture; consumed by the 13-dim Readiness Scan dimension-3 anchor per release-readiness-scan-spec.md dim 3). The N-way consistency table at Collective Review confirms heading levels and positions.
+The Outcome Statement (release-outcome-statement-template.md) and Release Class (this doc) BOTH land sections in the milestone description. Position convention per [`release-outcome-statement-template.md § 2`](release-outcome-statement-template.md): `### Release Outcome Statement` H3 sits at top-of-description ABOVE any metadata bullets (operator-visible at-a-glance). `## Release Class` H2 sits below (drives subsequent posture; consumed by the Readiness Scan dimension-3 anchor per release-readiness-scan-spec.md dim 3). The N-way consistency table at Collective Review confirms heading levels and positions.
 
 ### With operator-touchpoint inventory, shadow→warn→enforce convention, and per-gate-class framing directives
 

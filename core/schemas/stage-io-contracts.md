@@ -278,7 +278,7 @@ Stage 9 (Plan Review) produces the Go/No-Go decision record — the deployment a
 |----------|--------|----------|----------------|----------------|----------|------------|
 | Go/No-Go decision record | Decision record (verdict + rationale + conditions + authorization) | YES | GO/NO-GO — Tier 3 (the merge authorization) | Detail | Stage 9 sub-task + parent issue, per the decision-record format | Decision record posted — Gate 9 **G-PR6**; the record IS the deployment authorization (no separate authorization doc) |
 | Evidence package | Assembled reports + PR scope + risk status + deployment readiness | YES | NO | Detail | Stage 9 evidence package | Complete per Gate 9 **G-PR1** (Phase A1–A6 populated) |
-| Release Readiness Scan output | 13-dimension scan (markdown table + `gate-outcome` log row) | YES | NO | Detail | Stage 9 sub-task comment + `pipeline-event-log.md` | Aggregate verdict (ALL-PASS / ANY-FAIL / ANY-PARTIAL) per Phase A6 (G-PR1) |
+| Release Readiness Scan output | fixed-dimension scan (markdown table + `gate-outcome` log row) | YES | NO | Detail | Stage 9 sub-task comment + `pipeline-event-log.md` | Aggregate verdict (ALL-PASS / ANY-FAIL / ANY-PARTIAL) per Phase A6 (G-PR1) |
 | Deployment-readiness verdict | Checklist (PR mergeable / branch current / metadata / rollback) | YES | NO | Summary | Decision record deployment-readiness section | All PASS — Gate 9 **G-PR5** (`gh pr view --json mergeable`) |
 | GO baseline SHA | H3 in release plan `## Cross-PR Overlap Audit → ### Baseline SHA` | YES | NO | Summary | Release plan Baseline-SHA H3 | Recorded per Gate 9 **G-PR9** (makes the GO falsifiable; sibling-merge revalidation predicate) |
 

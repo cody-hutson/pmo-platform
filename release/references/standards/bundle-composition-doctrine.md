@@ -469,7 +469,7 @@ The doctrine composes with the nine sibling Stage 5 outputs by **referencing the
 | This doctrine | release-readiness-scan-spec.md |
 |---|---|
 | Bundle authoring at Stage 3 | Pre-deploy assessment at Stage 9 |
-| Provides input to Scan dimensions (composition-shape, slice-coherence) | Defines 13 dimensions; composition-coherence may be one |
+| Provides input to Scan dimensions (composition-shape, slice-coherence) | Defines the scan's dimensions; composition-coherence may be one |
 
 **Boundary:** doctrine provides composition-shape signal to Scan; Scan independently assesses dimensions including composition-coherence as one input.
 
