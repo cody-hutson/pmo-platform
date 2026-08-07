@@ -10641,6 +10641,19 @@ sys.stdout.write("".join(out) + "|")
   # auditable); prose paraphrases making no `<field> enum:` declaration; and whether
   # the values MEAN the same on both sides — this is a lexical set comparison.
   #
+  # THE A2 ARM CARRIES ITS OWN BOUNDARY, and it is narrower than "cardinality".
+  # A2 reads the "(N values)" parenthetical off the SECTION HEADING only. The
+  # field-semantics rows that restate the same counts inside the section body —
+  # "enum (7 values; see § 2.1)" and its two siblings — are not headings and are
+  # therefore unguarded; and a heading with no parenthetical gives A2 nothing to read,
+  # so `status` (### 2.3 Status enum + lifecycle, which carries none) has ZERO guarded
+  # cardinality carriers. Two of the six carriers across the three registered
+  # hub-action-tracking enums are guarded. Shipped state is in parity on all six —
+  # this is a coverage limit, not a live defect — and the limit is that A2 would not
+  # report it if it were not. Widening A2 to the body carriers is a deliberate
+  # non-goal here, not an oversight: it is named so a reader does not infer that a
+  # green A2 vouches for every count in the file.
+  #
   # WARN-MODE INITIAL via resolve_check_mode "enum-parity", per the Check 51-67
   # precedent, and deliberately OFF the --check-required-subset roster. Re-introducing
   # a divergence is a signal to re-derive a comment, never a reason to block a deploy.

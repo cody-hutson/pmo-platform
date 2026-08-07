@@ -60,7 +60,19 @@
 #       predicate matching free prose against a value set was measured on this
 #       corpus and rejected for its false-positive rate;
 #   (d) whether the values MEAN the same thing on both sides. This is a lexical set
-#       comparison; two surfaces can agree on tokens and disagree on semantics.
+#       comparison; two surfaces can agree on tokens and disagree on semantics;
+#   (e) cardinality carriers OTHER than the section heading. A2 reads the
+#       "(N values)" parenthetical off the ANCHOR LINE only — extract_standard emits
+#       CARD: from the heading match and from nowhere else. Two consequences, both
+#       real in the live corpus. The field-semantics rows that restate the same
+#       counts inside the section body — the "enum (5 values; see § 2.3)" cell and
+#       its two siblings in hub-action-tracking.md — carry no CARD and are
+#       unguarded. And a section whose heading carries no parenthetical gives A2
+#       nothing to read at all: `### 2.3 Status enum + lifecycle` has none, so
+#       `status` has ZERO guarded cardinality carriers, while `category` and
+#       `trigger_type` have one each out of two. Of the six carriers across the three
+#       registered hub-action-tracking enums, two are guarded. Shipped state is in
+#       parity on all six; the limit is that A2 would not say so if it were not.
 #
 # POSIX-portable (BSD + GNU): no \b, no GNU-only flags, LC_ALL=C.
 #
