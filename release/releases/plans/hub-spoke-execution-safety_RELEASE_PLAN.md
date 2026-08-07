@@ -225,8 +225,8 @@ Machine-readable path list — one path per line, for deterministic extraction b
 
 ```
 core/CLAUDE.md.template
-core/config/allowlists/hub-state-enum-parity-map.txt
 core/config/allowlists/script-execution-allowlist.txt
+core/deploy/allowlists/hub-state-enum-parity-map.txt
 core/deploy/composition-surface-manifest.sh
 core/deploy/deploy.sh
 core/deploy/tests/test_refresh_surfaces.sh
@@ -381,6 +381,10 @@ Each entry states what changed, the basis, and the reversibility and confidence 
 **D-13 · Version re-rendered after the first re-verify HALTED.** The Commit-0 re-verify fired on its first ever exercise and halted correctly: the planned slot had been claimed by the concurrent release minutes after that release landed, inside the window in which this release's Engineering tasking was authored. Next-free is rule-computed with **zero degrees of freedom**, so the determination was recorded and the release proceeded rather than manufacturing an operator gate with one legal answer. **Nothing needed unwinding** — under slug-primary identity the branch, filename, and Commit 0 are all slug-named and the version binds only at the atomic claim. The finding that outlives this release is recorded under Commit-0 version re-verify above: **the tag is the authoritative freeness surface; the ledger alone returns a false PROCEED.** CHEAP / HIGH.
 
 **D-14 · Two counting disputes routed to Stage 6 unresolved.** A template-versus-deployed count disagreement and a zero-executor census disagreement were both left open at the scope lock, with the requirement that whoever settles them **publishes the definition, the population, and both probe arms in-band**. This release accumulated five measurement errors; shipping a disputed count as settled would be the same defect in a new place. CHEAP / HIGH.
+
+**D-15 · Enum-parity registry filed under the deploy-check allowlists, not the hook allowlists — path list corrected in place.** The change matrix placed the new registry under the **runtime/hook** allowlist directory while placing its own primitive under the deploy-tools directory on the next line. The two directories are not interchangeable: the hook directory holds runtime permission surfaces read by pre-tool-use hooks (egress, filesystem boundary, script execution, shell injection), while the deploy directory holds the registries that deploy-time checks read as their denominator — including the directly analogous duplicate-source registry that the complementary-pair check consumes. A registry filed in the hook directory would sit beside permission surfaces it has nothing in common with and away from every structural sibling. The registry ships in the deploy-check directory and the machine-readable path list is corrected to match, rather than the file being misfiled to preserve a stale line. CHEAP / HIGH.
+
+**D-16 · The historical-alias table ships without a row-count column.** The design specified a "rows affected" census beside each alias. That column is dropped and the alias mapping — the load-bearing content, and the whole of what the acceptance criterion asks for, which is a **read** rule — ships unchanged. Two reasons, both disqualifying on their own. It is a point-in-time census of **git-ignored operator-instance files the repository does not own**, embedded in a durable standard: the counts are stale the next time any ledger is written, which is the hardcoded-value pattern the platform's own authoring guardrail rejects. And this stage **could not verify them** — the live ledger population is outside this repository, and the only reachable copy is a backup snapshot days older than the figures. Authoring unverifiable counts into a standard would be invention. The census remains on the Stage-5 evidence record, where it is timestamped and attributable. CHEAP / HIGH.
 
 ---
 

@@ -79,13 +79,20 @@ before routing continues. Neither alone is sufficient (`core/standards/hub-sessi
    (see § 4a.2 Join-key note).
 4. Render the "Events emitted this routing point" block in the Decision Briefing.
    Omission is a structural defect.
-5. When the hub or a spoke makes a durable commitment (a deferred edit, reminder,
-   cleanup, decision-to-post, cross-issue-merge wait, or post-action verification),
-   append an `AI-NNN` row to `action-items.md` per
-   `core/standards/hub-action-tracking.md` § 2 (13 fields; zero-padded id; not reused),
-   run § 4a.1 first if the file does not exist, and emit the matching
-   `decision`/`action-item-opened` row. Every subsequent status transition emits its
-   mapped `action-item-*` subtype per `core/standards/hub-action-tracking.md` § 3.
+5. When the hub or a spoke makes a durable commitment — one of the `category`
+   values below — append an `AI-NNN` row to `action-items.md` per
+   `core/standards/hub-action-tracking.md` § 2 (13 fields; zero-padded id; not
+   reused), run § 4a.1 first if the file does not exist, and emit the matching
+   `decision`/`action-item-opened` row. Every subsequent status transition emits
+   its mapped `action-item-*` subtype per that standard's § 3.
+
+<!-- Restated from core/standards/hub-action-tracking.md § 2.1, which is NOT
+     deployed: this file ships inside packages/release-hub.skill and is read at
+     ~/.claude/skills/release-hub/references/. Held in parity by deploy.sh
+     Check 68 (enum-parity). Edit the standard first, never this line.
+category enum: deferred-edit / reminder / cleanup / decision-to-post /
+               cross-issue-merge / verification / decision-deferred
+-->
 
 A routing step that advances with a rendered decision and no emitted row is incomplete.
 

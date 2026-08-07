@@ -15,7 +15,7 @@ version: ""
 
 ## Purpose + Scope
 
-This standard defines how the hub tracks **action items** — durable commitments to execute work at a future routing point (deferred edits, reminders, cleanups, decisions deferred for posting, cross-issue merge waits, post-action verifications). It complements the hub-session-continuity substrate (which governs hub state across session boundaries) and the agent-handoff framework (which governs cross-agent handoff manifests) by adding the third surface: **what the hub OWES** between now and release close.
+This standard defines how the hub tracks **action items** — durable commitments to execute work at a future routing point (deferred edits, reminders, cleanups, decisions deferred for posting, cross-issue merge waits, post-action verifications, decisions deferred for briefing). It complements the hub-session-continuity substrate (which governs hub state across session boundaries) and the agent-handoff framework (which governs cross-agent handoff manifests) by adding the third surface: **what the hub OWES** between now and release close.
 
 The parent design discussion framed the gap as the absence of a tracking mechanism for the obligations that operators and hub repeatedly emit during a release ("dedup that guide after the PR merges," "add a web UI config reminder for Stage 10," "close issue A after issue B merges"). These commitments currently live in sub-task comments, Decision Briefing prose, and operator memory — easy to drop, easy to drift, easy to leak past release close. This standard codifies the surface so commitments are explicit, schema-validated, surfaced at 5 routing points, and **gated at Stage 13 Close** so no `status:open` row leaks across release boundaries.
 
@@ -62,7 +62,7 @@ last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 | `created_at` | ISO 8601 UTC | YES | Original enqueue time |
 | `source_stage` | int 1..13 | YES | Pipeline stage that generated the action item |
 | `source_sub_task` | string `#NNNN` | YES | GitHub Issue (sub-task) carrying the originating context |
-| `category` | enum (6 values; see § 2.1) | YES | Action-specific classification (drives owner/surface defaults) |
+| `category` | enum (7 values; see § 2.1) | YES | Action-specific classification (drives owner/surface defaults) |
 | `owner` | enum: `hub` / `operator` / `spoke:#N` / `external` | YES | Who is responsible to execute the action |
 | `description` | string | YES | Imperative one-liner — what specifically to do |
 | `trigger_type` | enum (4 values; see § 2.2) | YES | When the action fires |
@@ -76,7 +76,7 @@ last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 
 **Schema enforcement:** Hub validates the table at read-time (every routing-point scan per § 4). Malformed rows surface as drift to operator per [`hub-session-continuity.md` § 4.1 Drift Detection](hub-session-continuity.md); hub does NOT auto-repair (operator-write only when modifying rows).
 
-### 2.1 Category enum (6 values)
+### 2.1 Category enum (7 values)
 
 | Category | Definition | Example (from parent design discussion Evidence) |
 |---|---|---|
@@ -86,8 +86,30 @@ last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 | `decision-to-post` | A decision rendered now whose announcement is deferred (e.g., comment to post after a sibling issue closes) | "D5 sub-issue initialization decision to post on parent issue" |
 | `cross-issue-merge` | An action gated on another issue's resolution (e.g., close issue A after issue B merges) | "issue #NNNN close after sibling #NNNN merge" |
 | `verification` | A post-action check to confirm an executed action produced the expected state | "verify deploy.sh --check passes after skill X deploys" |
+| `decision-deferred` | A decision **surfaced but not yet rendered** to the operator, carried forward to a later consolidated briefing per [`decision-briefing.md` § The 5 information-sufficiency gates](../../release/skills/release-hub/references/decision-briefing.md), declared-deferral form. `trigger_detail` MUST name the operator-facing consolidation touchpoint. Discharges when that touchpoint carries the briefing. Distinct from `decision-to-post`, where the decision **is** rendered and only its announcement is deferred | "D-4 scope-lock alternative carried to the Collective Review briefing" |
 
-Categories cover all 5 evidence cases enumerated in the parent design discussion verbatim — each evidence case maps to exactly one category. `verification` adds a post-execution-confirmation surface (parent evidence does not enumerate a case, but hub frequently emits verification action items in practice). Enum expansion is governed via this standard's revision per [`pipeline-event-log-schema.md § 3`](../../release/references/standards/pipeline-event-log-schema.md) closed-enum discipline.
+Categories cover all 5 evidence cases enumerated in the parent design discussion verbatim — each evidence case maps to exactly one category. `verification` adds a post-execution-confirmation surface (parent evidence does not enumerate a case, but hub frequently emits verification action items in practice). `decision-deferred` adds the declared-deferral surface: a well-formed declared deferral is a durable commitment that otherwise conforms at surface time and can then silently never discharge, because nothing carries it to the named touchpoint and § 4 routing point 5 never sees it. Enum expansion is governed via this standard's revision per [`pipeline-event-log-schema.md § 3`](../../release/references/standards/pipeline-event-log-schema.md) closed-enum discipline.
+
+**Why a 7th value rather than a widened `decision-to-post`.** The two discharge differently: `decision-to-post` discharges by *posting* a decision that is already rendered; a declared deferral discharges by *rendering* an unrendered decision to the operator. They carry different trigger shapes, different discharge evidence, and different stakes. Collapsing them into one value would also defeat `category`'s stated purpose in § 2 (it drives owner/surface defaults) — one category with two default surfaces has no defaults.
+
+### 2.1a Historical value aliases
+
+Runtime ledgers seeded before this revision carry values this enum does not admit, because the template that seeds them restated all three enums (§ 2.1 `category`, § 2.2 `trigger_type`, § 2.3 `status`) and diverged from every one. Those ledgers are operator-instance files the platform does not rewrite — most are closed-release audit records, and rewriting a closed release's ledger to a later vocabulary would falsify the record the Stage-13 gate verdict was rendered against. They are made READABLE against this enum instead, by the alias table below. No ledger is migrated; no alias changes any § 4 routing-point-5 gate verdict, because the gate keys on `status ∈ {open, in-flight}` and every alias below is terminal-to-terminal or non-status.
+
+| Field | Pre-revision value | Reads as |
+|---|---|---|
+| `category` | `merge-wait` | `cross-issue-merge` |
+| `category` | `post-action-verification` | `verification` |
+| `category` | `decision-deferred` | `decision-to-post` — **time-scoped; see the rider below** |
+| `status` | `resolved` | `done` |
+| `status` | `withdrawn` | `cancelled` |
+| `trigger_type` | `manual` | `stage-boundary` or `event`, per the row's `trigger_detail` — **not mechanically decidable; read the trigger predicate** |
+
+**Time-scope rider — `decision-deferred` is the one ambiguous alias, and the ambiguity is bounded.** This revision gives `decision-deferred` a new and different meaning, so the value means one thing before the revision and another after it. A row whose `created_at` precedes this revision reads as `decision-to-post` (the pre-revision template used the word as a synonym for it); a row created after reads as the declared deferral defined in § 2.1. This is mechanically decidable because every row already carries `created_at` — the schema holds the discriminator the ambiguity needs, which is why the ambiguity is tolerable rather than disqualifying. The alternative — coining a fresh name — avoids the rider only by deleting a value that live ledgers already carry and orphaning those rows.
+
+**What this section is NOT.** It is a read rule, not a conformance claim. Ledger rows carrying values in **neither** vocabulary — free-text `category` values drawn from a finding-register vocabulary rather than a commitment one — are not aliased here and are not made conformant by this revision. That is a substrate-repurposing defect, categorically distinct from the vocabulary-parity defect this section closes, and it is tracked separately.
+
+**Cutover.** Applies to all releases entering Stage 5 going forward; pre-existing in-flight releases are grandfathered (§ 6 umbrella shape).
 
 ### 2.2 Trigger-type enum (4 values)
 
@@ -241,4 +263,5 @@ Each of the THREE NEW protocols shipping in this standard carries the cutover cl
 
 | Version | Date | Author | Change |
 |---|---|---|---|
+| — | 2026-08-07 | Stage 6 Engineering (per release sub-task) | **Category enum expanded 6 → 7** — `decision-deferred` added for the declared-deferral form (a decision surfaced but not yet rendered, carried to a named operator-facing consolidation touchpoint), which previously had no category and so could conform at surface time and never reach the § 4 routing-point-5 hard gate. Governed act per § 2.1's closed-enum discipline; both cardinality carriers (§ 2 field-semantics row, § 2.1 heading) updated with it. **New § 2.1a Historical value aliases** — a READ rule for ledgers seeded before this revision from a template that had diverged on all three restated enums (`category`, `trigger_type`, `status`); no ledger is migrated, and every alias is verdict-neutral at the routing-point-5 gate. Carries the `created_at` time-scope rider for `decision-deferred`, whose meaning changes across this revision boundary. The § 2.1 / § 2.2 / § 2.3 value sets are unchanged apart from the 7th category value; the template was re-derived from them, not the reverse, and `deploy.sh --check` Check 68 (`enum-parity`) now holds the two in parity mechanically |
 |  | 2026-05-23 | Stage 6 Engineering (per parent release sub-task) | Initial authoring per Stage 5 spec; 13-field action-item schema with AI-NNN namespace; 6-value category enum; 4-value trigger-type enum; 5-state status lifecycle with 7 named transitions; persistence rides on the hub-session-continuity substrate (no parallel persistence directory, no parallel ID namespace, no parallel decision log, no parallel session-ID format); 5-routing-point review cadence (Procedure 0b/2/4/5/7) with Procedure 7 HARD GATE for release-close; 3 protocol-specific cutover clauses (schema, pipeline-event-log subtype additions, review-cadence binding) plus umbrella cutover; cross-cutting composition with the agent-handoff framework + main-thread surfacing + CLAUDE.md push-to-resolve + release-synthesizer |
