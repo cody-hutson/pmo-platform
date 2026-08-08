@@ -236,7 +236,11 @@ core/skills/finops-usage-extractor/scripts/extract-usage.sh
 .github/workflows/install-tests.yml
 core/config/allowlists/script-execution-allowlist.txt
 
-# --- #3936, conditional on D-ScopeBoundary including the 6th suite (edit) ---
+# --- #3936, conditional row retained from Stage 4 (edit) ---
+# D-ScopeBoundary (i) rendered "wire all 6", so this row's condition FIRED. It is
+# retained as the Stage-4 record; whether the 6th suite needs an edit of its own, or
+# is wired purely from the workflow files above, is #3936's Stage-5/6 determination —
+# the corrected 3-file set above is the authoritative #3936 count.
 core/deploy/tools/tests/test-status-label-invariant.sh
 
 # --- #3832 remediation surface, 34 files (edit) ---
