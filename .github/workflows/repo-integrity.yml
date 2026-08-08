@@ -1414,7 +1414,10 @@ jobs:
   #                                  string (a test payload / case label). Detected
   #                                  by stripping quoted spans and re-testing the
   #                                  residual, the same technique GATE 8 uses for
-  #                                  its schema literal.
+  #                                  its schema literal. NOT applied when the line
+  #                                  hands that string to `eval` or `sh -c`, which
+  #                                  EXECUTE it — there the quotes delimit a shell
+  #                                  program, not an inert fixture.
   #             T2 line-scoped     — `# sigpipe-idiom: allow — <reason>` on the
   #                                  line or the line above. This is the SAME
   #                                  rationale #3832's AC-3 already requires, so
@@ -1448,22 +1451,58 @@ jobs:
         run: |
           set -euo pipefail
 
-          # A: any writer piped into a QUIET grep. Writer-agnostic by construction —
-          #    a `printf`-only pattern undercounted the real population by 15 sites,
-          #    6 of them inside a file the acceptance probe claimed was clean.
-          IDIOM_Q='^[^#]*(printf|echo|cat|print)[[:space:]][^|]*\|[[:space:]]*grep([[:space:]]+-[A-Za-z-]+)*[[:space:]]+-[A-Za-z]*q'
-          # B: any grep piped into head. NOTE the `.*` and not `[^|]*` — the naive
-          #    form stops at the first `|`, which for an alternation needle
-          #    (`grep -oE 'size:(XS|S|M|L|XL)' | head -1`) sits INSIDE the quoted
-          #    pattern, making the site invisible to its own detector.
-          IDIOM_H='^[^#]*grep.*\|[[:space:]]*head([[:space:]]|$)'
+          # DETECT THE READER, NOT THE WRITER. The first version of this gate named
+          # its writers -- `(printf|echo|cat|print)` -- while declaring itself
+          # "writer-agnostic by construction". It was neither: a four-word allowlist
+          # with a single-hop `[^|]*` guard, defeated twelve ways (a `find`/`git`/
+          # `sed`/function producer, a `--quiet` long option, a `-mN` reader, an
+          # intervening filter stage, a backslash-continued pipeline, and -- the
+          # widest hole -- ANY path-qualified command, `| /usr/bin/grep -q`, which
+          # is the dominant form in the largest file in scope.
+          #
+          # The hazard is structural: a pipe feeding a reader that closes its input
+          # early. A pipe implies a writer BY CONSTRUCTION, so anchoring on the
+          # reader is writer-agnostic in fact and not merely in claim, and it is
+          # stage-agnostic for free -- an intervening filter is just another pipe.
+          #
+          # Read `[^|]\|` as "a single pipe, not the second half of `||`". Each line
+          # is tested with a leading space prepended (see NORMALISED below), so that
+          # guard also admits a line that BEGINS with the pipe, which is how a
+          # backslash-continued pipeline breaks across lines.
+          # `([^|[:space:]]*/)?` is the path prefix. `e?grep` admits `egrep`.
+          #
+          # A: a pipe into a grep that STOPS EARLY -- `-q`/`--quiet`/`--silent`
+          #    (quiet) or `-mN`/`--max-count` (bounded). `-m` belongs here because
+          #    the sanctioned `| head -N` -> `-mN` rewrite only removes the hazard
+          #    when the pipeline collapses to a SINGLE command; with a producer
+          #    still upstream it merely relocates it (measured: rc non-zero).
+          IDIOM_Q='^[^#]*[^|]\|[[:space:]]*([^|[:space:]]*/)?e?grep[[:space:]]([^|]*[[:space:]])?(-[A-Za-z]*[qm][A-Za-z]*([[:space:]]|[0-9]|$)|--quiet|--silent|--max-count)'
+          # B: a pipe into head, from ANY producer. The trailing class closes the
+          #    command-substitution form `$(… | head)`, where `head` is followed by
+          #    `)` rather than by whitespace or end-of-line.
+          IDIOM_H='^[^#]*[^|]\|[[:space:]]*([^|[:space:]]*/)?head([[:space:]]|$|\)|;|&|`)'
+          # KNOWN RESIDUAL, stated rather than left to be discovered: `^[^#]*` is the
+          # trailing-comment guard, so a `#` appearing BEFORE the pipe in live code
+          # (`"${#arr[@]}" | grep -q x`) suppresses detection. It fails closed --
+          # a miss, never a false alarm -- and is the price of not flagging every
+          # comment that discusses the idiom.
           # T2/T3 markers. Un-anchored comment form, matching GATE 8's precedent.
           LINE_MARK='sigpipe-idiom:[[:space:]]*allow'
           FILE_MARK='repo-integrity:[[:space:]]*allow-sigpipe-idiom'
 
           # Scope: changed shell sources. Excluded: the ledger surface, build
-          # artifacts, and this workflow tree (whose own regexes would match
-          # themselves — the self-reference trap).
+          # artifacts, and this workflow's own YAML (whose regexes would match
+          # themselves — the self-reference trap). The exclusion is deliberately
+          # narrowed to `*.yml`/`*.yaml`: a real shell script living under
+          # `.github/workflows/` used to be skipped along with them, which was a
+          # hole rather than a design.
+          #
+          # A shell script need not carry a `.sh` extension. A changed file with no
+          # recognised extension is admitted when its FIRST LINE is a shell shebang
+          # — the only reliable signal, and the one that closed the extensionless
+          # -script hole. `read` rather than `head` so the gate does not model the
+          # very idiom it forbids.
+          #
           # NOTE: a `while read` loop, not `mapfile`. `mapfile` is bash 4+, which
           # makes the gate body unrunnable on a bash-3.2 developer machine — and a
           # gate that can only be exercised by a remote CI trigger can only be
@@ -1476,8 +1515,18 @@ jobs:
             [ -z "$f" ] && continue
             [ -f "$f" ] || continue
             case "$f" in
-              release/releases/*|packages/*|.github/workflows/*) continue ;;
-              *.sh|*.bash) FILES+=("$f") ;;
+              release/releases/*|packages/*) continue ;;
+              .github/workflows/*.yml|.github/workflows/*.yaml) continue ;;
+            esac
+            case "$f" in
+              *.sh|*.bash) FILES+=("$f"); continue ;;
+              *.md|*.py|*.yml|*.yaml|*.json|*.toml|*.txt|*.skill|*.sha256) continue ;;
+            esac
+            SHEBANG=""
+            IFS= read -r SHEBANG < "$f" 2>/dev/null || true
+            case "$SHEBANG" in
+              '#!'*sh|'#!'*sh[[:space:]]*|'#!'*"env "[bdkz]*sh*|'#!'*bash*|'#!'*zsh*|'#!'*ksh*|'#!'*dash*)
+                FILES+=("$f") ;;
               *) : ;;
             esac
           done <<<"$CHANGED_LIST"
@@ -1523,11 +1572,30 @@ jobs:
               LN="${entry%%:*}"
               line="${entry#*:}"
 
+              # NORMALISED: a leading space, so the `[^|]\|` guard that rejects `||`
+              # also admits a line that BEGINS with the pipe.
+              NORMALISED=" ${line}"
+
               # Does either idiom appear at all?
               MATCHED=""
-              grep -qE "$IDIOM_Q" <<<"$line" && MATCHED="writer | grep -q"
+              grep -qE "$IDIOM_Q" <<<"$NORMALISED" && MATCHED="writer | grep -q/-mN"
               if [ -z "$MATCHED" ]; then
-                grep -qE "$IDIOM_H" <<<"$line" && MATCHED="grep | head"
+                grep -qE "$IDIOM_H" <<<"$NORMALISED" && MATCHED="writer | head"
+              fi
+
+              # CONTINUATION JOIN. The other half of a broken pipeline: the WRITER
+              # line ends in `|` (or `\`) and the reader sits alone on this line
+              # with no pipe of its own. Only consulted when this line WOULD match
+              # were a pipe prepended, so the extra file read costs nothing on the
+              # overwhelming majority of lines.
+              if [ -z "$MATCHED" ] && [ "$LN" -gt 1 ] 2>/dev/null; then
+                if grep -qE "$IDIOM_Q" <<<" | ${line}" || grep -qE "$IDIOM_H" <<<" | ${line}"; then
+                  PREVJ="$(sed -n "$((LN - 1))p" "$f" 2>/dev/null || true)"
+                  case "$PREVJ" in
+                    *'|'|*'\') MATCHED="writer | reader (continued pipeline)" ;;
+                    *) : ;;
+                  esac
+                fi
               fi
               [ -z "$MATCHED" ] && continue
 
@@ -1548,8 +1616,17 @@ jobs:
               # T1 content-exempt: strip single-quoted spans and re-test. If the
               # idiom no longer matches the residual, it lived entirely inside a
               # quoted payload — a fixture string, not executed code.
-              RESIDUAL="$(sed -E "s/'[^']*'//g" <<<"$line")"
-              if ! grep -qE "$IDIOM_Q" <<<"$RESIDUAL" && ! grep -qE "$IDIOM_H" <<<"$RESIDUAL"; then
+              #
+              # EXCEPT where the line hands that string to an evaluator. `eval '…'`
+              # and `sh -c '…'` EXECUTE their quoted payload, so the single quotes
+              # mark a shell program, not an inert fixture. Exempting those was the
+              # one place T1's own premise did not hold.
+              if grep -qE '(^|[^[:alnum:]_./-])(eval|[a-z]*sh[[:space:]]+-c)([[:space:]]|$)' <<<"$line"; then
+                RESIDUAL="$line"
+              else
+                RESIDUAL="$(sed -E "s/'[^']*'//g" <<<"$line")"
+              fi
+              if ! grep -qE "$IDIOM_Q" <<<" ${RESIDUAL}" && ! grep -qE "$IDIOM_H" <<<" ${RESIDUAL}"; then
                 EXEMPT_CONTENT=$((EXEMPT_CONTENT + 1))
                 continue
               fi
@@ -1610,6 +1687,9 @@ jobs:
             echo "  not matches, so every match on the first line survives."
             echo "- \`grep A | grep -v B | head -1\` folds only into the LAST grep. Folding into"
             echo "  the first discards the line the filter would have kept."
+            echo "- \`| head -N\` -> \`-mN\` only REMOVES the hazard when the pipeline collapses"
+            echo "  to a single command. With a producer still upstream, \`producer | grep -mN\`"
+            echo "  short-circuits exactly as \`| head\` did — the hazard moved, it did not go."
             echo "- An empty haystack: \`printf '%s' \"\"\` emits ZERO lines, \`<<<\"\"\` emits ONE"
             echo "  empty line. If the needle can match an empty line, guard with \`[ -n \"\$v\" ]\`."
             echo ""
