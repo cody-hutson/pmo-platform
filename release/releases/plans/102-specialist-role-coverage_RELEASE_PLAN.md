@@ -196,7 +196,7 @@ Three sibling releases were in flight at the Commit-0 baseline. None of them tou
 Machine-readable path list — one path per line, for deterministic extraction by downstream stage prompts.
 
 ```
-core/ADRs/ADR-120-domain-is-a-parameter-of-the-architect-role.md
+core/ADRs/ADR-121-domain-is-a-parameter-of-the-architect-role.md
 release/skills/pmo-architect/SKILL.md
 release/skills/pmo-architect/references/composition-and-reversibility.md
 core/specs/skill-consultation-map.md
@@ -337,4 +337,4 @@ Designated reference block. Each entry pairs the tracker number with a summary n
 | **ADR-094** | Extend before create — the general form of this release's default, applied here to a role rather than a file. |
 | **ADR-114** | The composition-aware trigger-collision gate — the standing enforcement behind CIAC-1. |
 | **ADR-115** | An ADR number is allocated at authorship and bound at merge — the rule that decided this release's decision-record number. |
-| **ADR-120** | Domain is a parameter of the architect role, exactly as altitude is — this release's own decision record, authored in-scope at W1. |
+| **ADR-121** | Domain is a parameter of the architect role, exactly as altitude is — this release's own decision record, authored in-scope at W1. |
