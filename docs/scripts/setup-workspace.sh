@@ -48,7 +48,8 @@
 #
 # Usage:
 #   ./setup-workspace.sh [--source-repo PATH] [--workspace-root PATH]
-#                        [--init-only-state] [--dry-run] [--help]
+#                        [--init-only-state] [--non-interactive] [--dry-run]
+#                        [--help]
 #
 # Exit codes (sysexits(3)):
 #   0   — success
@@ -81,6 +82,13 @@ readonly EXPECTED_HOOK_COUNT_MIN=8
 # Composition-surface install floor (per composition-surface-spec.md §1).
 # Empirically 14 files at present; loop is data-driven from manifest.
 readonly EXPECTED_SEED_FILE_COUNT_MIN=10
+# Declared non-interactive defaults for the two required identity tokens that
+# have NO environment source to derive from (unlike NAME/EMAIL/GIT_EMAIL, which
+# derive from `git config --global`). Named constants rather than inline
+# literals so they are greppable and single-sourced. Reachable ONLY under
+# --non-interactive; the interactive path is unchanged and still has no default.
+readonly NI_DEFAULT_ROLE_TITLE="Operator"
+readonly NI_DEFAULT_ORGANIZATION="Unspecified"
 # Composition library — provides Pattern C write primitive + manifest helpers.
 # Sourced lazily in install_composition_surface_files (after SOURCE_REPO is set).
 LIB_COMPOSITION_SOURCED=0
@@ -95,13 +103,36 @@ readonly DEFAULT_CONFIG_ROOT="${PMO_PLATFORM_CONFIG_ROOT:-${HOME}/.config/pmo-pl
 CONFIG_ROOT=""              # resolved in parse_argv → finalize_paths
 OPERATOR_TOML=""            # derived from CONFIG_ROOT
 
+# The runtime-native operator settings overlay (ADR-121 §Decision 7). Layer 2:
+# operator-owned, git-ignored, merged by Claude Code itself, and NEVER written by
+# the platform beyond a create-once empty scaffold. It is the destination the
+# settings guard migrates operator-added keys to before the managed
+# .claude/settings.json is regenerated.
+readonly SETTINGS_LOCAL_BASENAME="settings.local.json"
+
 # --- Section 2: Mutable state (scalars only; bash-3.2-compatible) ---
 WORKSPACE_ROOT=""
 SOURCE_REPO=""
 INIT_ONLY_STATE=0
 REFRESH_HOOKS=0
+REFRESH_SETTINGS=0
+FORCE_REGEN=0
+NON_INTERACTIVE=0
 DRY_RUN=0
 INSTALL_COMPLETE=0
+
+# settings.json baseline (ADR-121 §Decision 2). Two hashes with ADR-014's exact
+# semantics, relocated from an in-file marker fence — which JSON cannot carry
+# (composition-surface-spec.md §2.3) — to the installer's durable state file:
+#   SETTINGS_TEMPLATE_SHA  = SHA-256 of core/settings.json.template — the
+#                            REGENERATION TRIGGER (managed_sha analogue).
+#   SETTINGS_INSTALLED_SHA = SHA-256 of the file as the platform last wrote it —
+#                            the TAMPER ANCHOR (installed_sha analogue).
+# Empty means "no baseline recorded", which the guard treats as S-2 (classify
+# structurally before writing) — never as "unchanged".
+SETTINGS_TEMPLATE_SHA=""
+SETTINGS_INSTALLED_SHA=""
+SETTINGS_GUARD_STATE=""     # S-0..S-5, set by settings_guard_and_regen
 SUPPRESS_VALIDATE_HINT=0    # set when guided-recovery exits without doing work
 INSTALL_MODE=""             # "fresh-install" | "init-only-state" | "rebootstrapped"
 STATE_FILE=""
@@ -140,6 +171,23 @@ Options:
                           run. Skips the scaffold/token/skill phases. This is the
                           path update.sh uses so a hook/helper security fix reaches
                           an already-installed workspace (#3430).
+  --refresh-settings      Re-render ONLY the managed .claude/settings.json into an
+                          EXISTING workspace, under the baseline-anchored guard
+                          (ADR-121): an untouched platform copy is regenerated, and
+                          operator-added keys are migrated to
+                          .claude/settings.local.json and backed up BEFORE the
+                          rewrite. Skips the scaffold/hook/skill phases. This is the
+                          path update.sh uses so a hook REGISTRATION reaches an
+                          already-installed workspace, the sibling of --refresh-hooks
+                          (which delivers only the hook SCRIPTS).
+  --force-regen           Force the settings re-render even when both recorded
+                          baselines match (the S-0 no-op skip). The guard still runs
+                          first — this never bypasses operator-key migration.
+  --non-interactive       Resolve every token from its declared default and never
+                          read stdin. A required token with no available default
+                          fails with a non-zero exit naming the token; no value is
+                          ever silently substituted. Intended for scripted /
+                          sandboxed installs. Does not change interactive behavior.
   --dry-run               Preview planned actions; perform no state mutation
   --help                  Show this help
 
@@ -363,6 +411,12 @@ parse_argv() {
         INIT_ONLY_STATE=1; shift ;;
       --refresh-hooks)
         REFRESH_HOOKS=1; shift ;;
+      --refresh-settings)
+        REFRESH_SETTINGS=1; shift ;;
+      --force-regen)
+        FORCE_REGEN=1; shift ;;
+      --non-interactive)
+        NON_INTERACTIVE=1; shift ;;
       --dry-run)
         DRY_RUN=1; shift ;;
       --help|-h)
@@ -446,11 +500,23 @@ check_source_repo() {
 }
 
 # --- Section 9: Active token set computation (FM-5 absorption) ---
+# The manifest is a THIRD grep input, not an accident of file layout (ADR-122
+# §Decision 8). ADR-122 makes core/CLAUDE.md.template's whole body a managed
+# section, so its authoring header — which declared the reserved token vocabulary
+# — had to leave the template: an OPTIONAL token resolving empty would otherwise
+# survive unsubstituted into the composed CLAUDE.md and fail run_verification_gate.
+# The vocabulary declaration moved to core/deploy/composition-surface-manifest.sh
+# and that file is grepped here, so ACTIVE_TOKENS is byte-identical across the
+# move. Without this third input the set silently loses [OPERATOR_EMAIL],
+# [OPERATOR_PHONE], [OPERATOR_GITHUB], [OPERATOR_HOMEDIR_PATH], and
+# [COWORK_INSTALL_PATH_BASE] — the last being the token whose resolver/writer
+# pairing was just repaired, so the regression would be a silent re-break.
 compute_active_tokens() {
   ACTIVE_TOKENS=$(
     grep -hoE '\[(OPERATOR|CLAUDE|COWORK)_[A-Z_]+\]' \
       "${SOURCE_REPO}/core/CLAUDE.md.template" \
       "${SOURCE_REPO}/core/settings.json.template" \
+      "${SOURCE_REPO}/core/deploy/composition-surface-manifest.sh" \
       2>/dev/null \
     | sort -u \
     | tr '\n' ' '
@@ -740,6 +806,38 @@ resolve_token() {
     return 0
   fi
 
+  # --non-interactive: resolve from the token's DECLARED default and never read
+  # stdin. Placed AFTER the cache check and AFTER the dry-run check so both of
+  # those semantics are unchanged. The default is VALIDATED against the same
+  # validator_regex the interactive path applies — storing it unvalidated would
+  # write a config the interactive path would have rejected (e.g. a
+  # `git config user.name` of "x" fails the >=2-char name pattern). A required
+  # token with no default HARD-FAILS naming the token rather than silently
+  # substituting an empty value.
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then
+    if [ -n "${default_value}" ]; then
+      if [ -n "${validator_regex}" ] && \
+         ! printf '%s' "${default_value}" | grep -qE "${validator_regex}"; then
+        err "Non-interactive: default for ${token} does not match the required format."
+        err "  default: '${default_value}'"
+        err "  Set a valid value in <config-root>/operator.toml, then re-run."
+        exit 1
+      fi
+      json_set "${TOKENS_FILE}" "${token}" "${default_value}"
+      info "Non-interactive: ${token} = ${default_value} (declared default)"
+      return 0
+    fi
+    if [ "${required}" != "true" ]; then
+      json_set "${TOKENS_FILE}" "${token}" ""
+      info "Non-interactive: ${token} = (empty; optional)"
+      return 0
+    fi
+    err "Non-interactive: required token ${token} has no default and no cached value."
+    err "  Provide it in <config-root>/operator.toml (default ~/.config/pmo-platform/operator.toml),"
+    err "  or run without --non-interactive to be prompted."
+    exit 1
+  fi
+
   local attempts=0
   local max_attempts=3
   local value=""
@@ -792,6 +890,22 @@ resolve_all_tokens() {
     git_username_default=$(git config --global user.name 2>/dev/null || true)
   fi
 
+  # Declared non-interactive defaults for the three required identity tokens the
+  # interactive path deliberately offers no default for. These stay EMPTY under
+  # the interactive path so its behavior is byte-identical — offering a
+  # git-derived name (or a literal role/org) at an interactive prompt would be a
+  # behavior change outside this card's scope. [OPERATOR_EMAIL] and
+  # [OPERATOR_GIT_EMAIL] already carry a git-derived default on both paths and
+  # are therefore untouched.
+  local ni_name_default=""
+  local ni_role_title_default=""
+  local ni_organization_default=""
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then
+    ni_name_default="${git_username_default}"
+    ni_role_title_default="${NI_DEFAULT_ROLE_TITLE}"
+    ni_organization_default="${NI_DEFAULT_ORGANIZATION}"
+  fi
+
   # Resolve dependent-source tokens FIRST (so derived tokens can read from cache).
   # OPERATOR_NAME must precede OPERATOR_FIRST_NAME (derived as `name | head word`).
   # OPERATOR_EMAIL must precede OPERATOR_GIT_EMAIL (default = email value).
@@ -806,7 +920,7 @@ resolve_all_tokens() {
         case "${pre_token}" in
           "[OPERATOR_NAME]")
             resolve_token "${pre_token}" "Operator full name (e.g., Firstname Lastname)" \
-              "" "^[A-Za-z][A-Za-z .-]+$" "true"
+              "${ni_name_default}" "^[A-Za-z][A-Za-z .-]+$" "true"
             ;;
           "[OPERATOR_EMAIL]")
             resolve_token "${pre_token}" "Operator email" \
@@ -823,7 +937,7 @@ resolve_all_tokens() {
     case "${tok}" in
       "[OPERATOR_NAME]")
         resolve_token "${tok}" "Operator full name (e.g., Firstname Lastname)" \
-          "" "^[A-Za-z][A-Za-z .-]+$" "true"
+          "${ni_name_default}" "^[A-Za-z][A-Za-z .-]+$" "true"
         ;;
       "[OPERATOR_FIRST_NAME]")
         local has_first; has_first=$(json_has_key "${TOKENS_FILE}" "${tok}")
@@ -842,11 +956,11 @@ resolve_all_tokens() {
         ;;
       "[OPERATOR_ROLE_TITLE]")
         resolve_token "${tok}" "Operator role title (e.g., Senior Program Manager)" \
-          "" "^[A-Za-z ].+$" "true"
+          "${ni_role_title_default}" "^[A-Za-z ].+$" "true"
         ;;
       "[OPERATOR_ORGANIZATION]")
         resolve_token "${tok}" "Operator organization (e.g., Acme Corp)" \
-          "" "^[A-Za-z0-9 &.,'-]+$" "true"
+          "${ni_organization_default}" "^[A-Za-z0-9 &.,'-]+$" "true"
         ;;
       "[OPERATOR_PROJECT_NAME]")
         resolve_token "${tok}" "Active PMO project name" \
@@ -881,7 +995,20 @@ resolve_all_tokens() {
         resolve_token "${tok}" "Operator GitHub handle (optional; Enter to skip)" \
           "${git_username_default}" "" "false"
         ;;
-      "[COWORK_INSTALL_PATH]")
+      "[COWORK_INSTALL_PATH_BASE]")
+        # Paired with the reserved-token vocabulary line in
+        # core/deploy/composition-surface-manifest.sh, which is one of the three
+        # files compute_active_tokens greps to derive ACTIVE_TOKENS. ADR-122
+        # §Decision 8 moved that declaration OUT of core/CLAUDE.md.template — whose
+        # whole body became a managed section — and made the manifest the third
+        # grep input; the template carries this token 0 times now, the manifest 2.
+        # Both this resolver and the manifest carry the REGISTERED token name
+        # (depersonalization-spec.md §1; compose.py maps
+        # [paths].cowork_install_path to it). Before this pairing the resolver
+        # stored [COWORK_INSTALL_PATH] while write_operator_toml read
+        # [COWORK_INSTALL_PATH_BASE], so cowork_install_path was written EMPTY on
+        # every first install and the token re-prompted forever (read_operator_toml
+        # skips empty values, so the cache never hit). Edit BOTH or neither.
         resolve_token "${tok}" "Cowork install path" \
           "${HOME}/Library/Application Support/Claude/local-agent-mode-sessions" "" "false"
         ;;
@@ -997,15 +1124,552 @@ with open(target_path, "w") as f:
 }
 
 substitute_templates() {
-  substitute_template \
-    "${SOURCE_REPO}/core/CLAUDE.md.template" \
-    "${WORKSPACE_ROOT}/CLAUDE.md" \
-    "no"
+  # CLAUDE.md is NOT written here. ADR-122 re-categorized it from Customizable to
+  # Composition-surface: it is a row in core/deploy/composition-surface-manifest.sh
+  # and install_composition_surface_files (Section 15b) is its sole writer at
+  # install, as ./update.sh is at update. Two writers on one file — a whole-file
+  # substitution here plus a marker-fenced write there — is precisely the
+  # divergence that produced the false-regeneration-marker defect this supersedes.
+  # The settings.json arm is retained: it remains wholly Customizable (§2.3).
+  #
+  # It is NOT a bare substitute_template. ADR-121 §Decision 4 requires the guard on
+  # every re-render of the managed file, and this function is reached by the
+  # fresh/rebootstrap/recovery flows as well as by a first install. The dispatcher
+  # is defined with the rest of the guard machinery in Section 14b.
+  settings_install_or_guarded_rerender
+  json_set_bool "${ARTIFACTS_FILE}" "templates_substituted" "true"
+}
+
+# --- Section 14b: settings.json operator-key guard + baseline-anchored refresh ---
+# ADR-121. The managed .claude/settings.json is the registry binding the platform's
+# security hooks to the events they guard. Before this section existed, update.sh
+# refreshed the hook SCRIPTS (Phase 5c) and nothing refreshed their REGISTRATIONS,
+# so a workspace could hold every current hook on disk with the events that would
+# invoke them unwired. This section is the registration half.
+#
+# It is deliberately NOT a merge. settings.json is 100% platform-owned; the
+# operator's surface is the runtime-native settings.local.json overlay, which
+# Claude Code merges itself. So the contract is: DETECT -> MIGRATE -> REGENERATE.
+#
+# ORDERING (ADR-121 §Decision 4 + §Decision 8) — the guard is the refresh's
+# precondition and there is no code path around it. settings_regenerate is called
+# ONLY from settings_guard_and_regen, after a classification has been rendered.
+
+# SHA-256 of a file; empty string when the file is absent (never an error, so a
+# missing baseline reads as "unknown" rather than aborting under set -e).
+settings_sha_of() {
+  if [ ! -f "$1" ]; then
+    printf ''
+    return 0
+  fi
+  shasum -a 256 "$1" | awk '{print $1}'
+}
+
+# Record BOTH baselines from the current source template and the file as it now
+# stands on disk. Called only by code that has just written settings.json from the
+# current template, so "installed" genuinely means "what the platform wrote".
+record_settings_baseline() {
+  SETTINGS_TEMPLATE_SHA="$(settings_sha_of "${SOURCE_REPO}/core/settings.json.template")"
+  SETTINGS_INSTALLED_SHA="$(settings_sha_of "${WORKSPACE_ROOT}/.claude/settings.json")"
+}
+
+# ADR-121 §Decision 7: create-once, empty, never regenerated. The `[ -f ]` guard IS
+# that guarantee — identical in contract to scaffold_localized_needles /
+# scaffold_localized_roster. The body is exactly `{}` and nothing else: any
+# commentary or default would make "has the operator customized this?" undecidable
+# (Stage-5 trap T-7).
+scaffold_settings_local() {
+  local overlay="${WORKSPACE_ROOT}/.claude/${SETTINGS_LOCAL_BASENAME}"
+  if [ -f "${overlay}" ]; then
+    info "PRESERVED (operator data, never regenerated): ${overlay}"
+    return 0
+  fi
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would scaffold operator settings overlay → ${overlay}"
+    return 0
+  fi
+  mkdir -p "$(dirname "${overlay}")"
+  printf '{}\n' > "${overlay}"
+  info "Scaffolded operator settings overlay → ${overlay}"
+  if [ -n "${ROLLBACK_OPS_FILE}" ] && [ -f "${ROLLBACK_OPS_FILE}" ]; then
+    printf 'rm-file:%s\n' "${overlay}" >> "${ROLLBACK_OPS_FILE}"
+  fi
+}
+
+# Structural classifier (ADR-121 §Decision 3 + §Decision 10). Compares the LIVE
+# file against the FRESHLY RESOLVED template — never a hardcoded key list, because
+# the whole file is template-rendered and any fixed list is stale on its next
+# revision.
+#
+# Registration identity is the (event, matcher, basename(command)) triple:
+#   - basename, not full path, because [CLAUDE_WORKSPACE_ROOT] is baked into every
+#     command string, so a path-keyed diff false-fires on any workspace move (T-6);
+#   - over the RESOLVED file, not the raw template, because the template's _comment
+#     key names setup-workspace.sh in prose and substitute_template strips that key
+#     by design — a filename-shaped scan of the raw template counts a registration
+#     a deployed file can never carry.
+#
+# Emits a JSON verdict on stdout:
+#   {"verdict": "CLEAN"|"OPERATOR"|"CONFLICT"|"MALFORMED",
+#    "operator_paths": [...], "platform_overrides": [...],
+#    "conflicts": [...], "fragment": {...}}
+#
+# "operator_only" means: present in live, ABSENT from the resolved template. A
+# same-path value difference is platform state and is REPLACED by the refresh (it
+# is reported as a platform_override and preserved in the pre-write backup, never
+# silently dropped) — promoting it into the overlay would pin a stale platform
+# value forever, which is the worse failure.
+#
+# BOUNDED RESIDUAL (accepted, ADR-121 §Consequences): a key the PLATFORM retired
+# since install also reads as absent-from-template. The byte-exact S-1 arm is what
+# keeps that from mattering in the ordinary case — an untouched copy regenerates
+# with no diff at all, so a retired key simply disappears. The residual is confined
+# to "the operator edited the file AND the platform retired a key in the same
+# window", where the bias is toward preservation: the key lands in the operator's
+# own, editable overlay and is named in the warning.
+settings_classify() {
+  local resolved="$1" live="$2" overlay="$3"
+  S_RESOLVED="${resolved}" S_LIVE="${live}" S_OVERLAY="${overlay}" python3 -c '
+import json, os, sys
+
+env = os.environ
+
+def load(path, default=None):
+    if not path or not os.path.isfile(path):
+        return default
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except (ValueError, OSError):
+        return "__MALFORMED__"
+
+resolved = load(env["S_RESOLVED"])
+live = load(env["S_LIVE"])
+overlay = load(env["S_OVERLAY"], {})
+
+if live == "__MALFORMED__" or live is None:
+    print(json.dumps({"verdict": "MALFORMED", "operator_paths": [], "platform_overrides": [], "conflicts": [], "fragment": {}}))
+    sys.exit(0)
+if resolved == "__MALFORMED__" or resolved is None:
+    sys.stderr.write("FATAL: resolved settings template is not readable JSON\n")
+    sys.exit(1)
+if overlay == "__MALFORMED__" or overlay is None:
+    overlay = {}
+
+PERM_LISTS = ("deny", "allow", "ask")
+
+operator_paths = []
+platform_overrides = []
+fragment = {}
+
+def triple(event, matcher, cmd):
+    return (event, matcher, os.path.basename(cmd or ""))
+
+def hook_triples(doc):
+    """(event, matcher, basename) -> the enclosing (matcher, entry) it came from."""
+    out = {}
+    for event, blocks in (doc.get("hooks") or {}).items():
+        if not isinstance(blocks, list):
+            continue
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            matcher = block.get("matcher", "")
+            for entry in (block.get("hooks") or []):
+                if not isinstance(entry, dict):
+                    continue
+                out[triple(event, matcher, entry.get("command", ""))] = (event, matcher, entry)
+    return out
+
+def frag_set(path_keys, value):
+    node = fragment
+    for k in path_keys[:-1]:
+        node = node.setdefault(k, {})
+    node[path_keys[-1]] = value
+
+def walk(live_node, tpl_node, path):
+    """Object-key set difference, recursing into shared object keys."""
+    for key, lval in live_node.items():
+        here = path + [key]
+        dotted = ".".join(here)
+        if key not in tpl_node:
+            operator_paths.append(dotted)
+            frag_set(here, lval)
+            continue
+        tval = tpl_node[key]
+        if isinstance(lval, dict) and isinstance(tval, dict):
+            walk(lval, tval, here)
+        elif lval != tval:
+            platform_overrides.append(dotted)
+
+# (1)+(4) generic object-key difference, with the two modelled arrays carved out.
+live_top = {k: v for k, v in live.items() if k not in ("permissions", "hooks")}
+tpl_top = {k: v for k, v in resolved.items() if k not in ("permissions", "hooks")}
+walk(live_top, tpl_top, [])
+
+# (2) permissions.{deny,allow,ask} — string-set difference, both ways.
+lperm = live.get("permissions") or {}
+tperm = resolved.get("permissions") or {}
+if isinstance(lperm, dict) and isinstance(tperm, dict):
+    extra_perm = {}
+    for name in PERM_LISTS:
+        lv = lperm.get(name) or []
+        tv = tperm.get(name) or []
+        if isinstance(lv, list) and isinstance(tv, list):
+            extras = [x for x in lv if x not in tv]
+            if extras:
+                extra_perm[name] = extras
+                operator_paths.append("permissions.%s[+%d]" % (name, len(extras)))
+    # any non-list / unmodelled key under permissions falls through the generic walk
+    lrest = {k: v for k, v in lperm.items() if k not in PERM_LISTS}
+    trest = {k: v for k, v in tperm.items() if k not in PERM_LISTS}
+    walk(lrest, trest, ["permissions"])
+    if extra_perm:
+        node = fragment.setdefault("permissions", {})
+        for name, extras in extra_perm.items():
+            node[name] = extras
+elif lperm != tperm:
+    platform_overrides.append("permissions")
+
+# (3) hook registrations — set difference over the identity triple.
+ltrip = hook_triples(live)
+ttrip = hook_triples(resolved)
+live_only = [t for t in ltrip if t not in ttrip]
+if live_only:
+    hooks_frag = fragment.setdefault("hooks", {})
+    grouped = {}
+    for t in live_only:
+        event, matcher, entry = ltrip[t]
+        grouped.setdefault((event, matcher), []).append(entry)
+        operator_paths.append("hooks.%s[%s]:%s" % (event, matcher, t[2]))
+    for (event, matcher), entries in grouped.items():
+        block = {"hooks": entries}
+        if matcher:
+            block["matcher"] = matcher
+        hooks_frag.setdefault(event, []).append(block)
+
+# Conflict detection (ADR-121 §Decision 5): a scalar/object leaf the overlay
+# already defines with a DIFFERENT value. List merges are set-unions and cannot
+# conflict.
+conflicts = []
+
+def check_conflicts(frag, ov, path):
+    for key, fval in frag.items():
+        here = path + [key]
+        dotted = ".".join(here)
+        if key not in ov:
+            continue
+        oval = ov[key]
+        if isinstance(fval, dict) and isinstance(oval, dict):
+            check_conflicts(fval, oval, here)
+        elif isinstance(fval, list) and isinstance(oval, list):
+            continue
+        elif fval != oval:
+            conflicts.append(dotted)
+
+if isinstance(overlay, dict):
+    check_conflicts(fragment, overlay, [])
+
+if conflicts:
+    verdict = "CONFLICT"
+elif operator_paths:
+    verdict = "OPERATOR"
+else:
+    verdict = "CLEAN"
+
+print(json.dumps({
+    "verdict": verdict,
+    "operator_paths": sorted(operator_paths),
+    "platform_overrides": sorted(platform_overrides),
+    "conflicts": sorted(conflicts),
+    "fragment": fragment,
+}))
+'
+}
+
+# Deep-merge the migration fragment into the operator overlay. Objects recurse,
+# lists set-union (append only what is absent), and a scalar the overlay already
+# defines is NEVER clobbered — the CONFLICT verdict has already aborted that case
+# before this runs, so this is belt-and-braces on an already-guarded path.
+settings_migrate_to_overlay() {
+  local overlay="$1" fragment_json="$2"
+  S_OVERLAY="${overlay}" S_FRAGMENT="${fragment_json}" python3 -c '
+import json, os
+
+env = os.environ
+overlay_path = env["S_OVERLAY"]
+fragment = json.loads(env["S_FRAGMENT"])
+
+try:
+    with open(overlay_path, "r") as f:
+        overlay = json.load(f)
+    if not isinstance(overlay, dict):
+        overlay = {}
+except (OSError, ValueError):
+    overlay = {}
+
+def merge(dst, src):
+    for key, val in src.items():
+        if key not in dst:
+            dst[key] = val
+        elif isinstance(dst[key], dict) and isinstance(val, dict):
+            merge(dst[key], val)
+        elif isinstance(dst[key], list) and isinstance(val, list):
+            for item in val:
+                if item not in dst[key]:
+                    dst[key].append(item)
+        # else: an existing scalar is left untouched (CONFLICT already aborted)
+
+merge(overlay, fragment)
+
+os.makedirs(os.path.dirname(overlay_path) or ".", exist_ok=True)
+with open(overlay_path, "w") as f:
+    json.dump(overlay, f, indent=2)
+    f.write("\n")
+'
+}
+
+# Render the template through substitute_template — the SAME writer the install
+# path uses, so install-time and update-time bytes are identical by construction and
+# the two shipped failure gates (hard-fail on unparseable substituted JSON, hard-fail
+# on unresolved tokens) are inherited rather than re-implemented (SR-G3).
+#
+# The render targets the per-run SCRATCH tmpdir, never the live file, and the refresh
+# then installs those verified bytes. That ordering is load-bearing, not stylistic:
+# substitute_template writes its target BEFORE the unresolved-token gate runs and
+# records an `rm-file:` rollback op against it, so rendering straight onto the live
+# path would mean a token-resolution failure first writes a broken settings.json and
+# then has the EXIT-trap DELETE it — leaving the workspace with no platform settings
+# at all, strictly worse than the stale file this card exists to refresh. Rendering
+# to scratch makes every failure mode leave the live file exactly as it was.
+#
+# Scratch is not operator state, so this runs under --dry-run too; that is what lets
+# --dry-run report a real classification instead of guessing at one.
+SETTINGS_RESOLVED=""
+settings_render_to_scratch() {
+  SETTINGS_RESOLVED="${SESSION_TMPDIR}/settings.resolved.json"
+  local saved_dry="${DRY_RUN}"
+  DRY_RUN=0
   substitute_template \
     "${SOURCE_REPO}/core/settings.json.template" \
-    "${WORKSPACE_ROOT}/.claude/settings.json" \
+    "${SETTINGS_RESOLVED}" \
     "yes"
-  json_set_bool "${ARTIFACTS_FILE}" "templates_substituted" "true"
+  DRY_RUN="${saved_dry}"
+}
+
+# Install the already-verified scratch render over the live file. Called ONLY from
+# settings_guard_and_regen, and only after a classification has been rendered.
+settings_regenerate() {
+  cp "${SETTINGS_RESOLVED}" "${WORKSPACE_ROOT}/.claude/settings.json"
+  record_settings_baseline
+}
+
+# The guard. Renders exactly one of S-0..S-5 and is the ONLY caller of
+# settings_regenerate.
+settings_guard_and_regen() {
+  local src="${SOURCE_REPO}/core/settings.json.template"
+  local target="${WORKSPACE_ROOT}/.claude/settings.json"
+  local overlay="${WORKSPACE_ROOT}/.claude/${SETTINGS_LOCAL_BASENAME}"
+  SETTINGS_GUARD_STATE=""
+
+  if [ ! -f "${src}" ]; then
+    warn "settings template not found at ${src}; skipping settings refresh"
+    SETTINGS_GUARD_STATE="SKIP-NOSRC"
+    return 0
+  fi
+  if [ ! -f "${target}" ]; then
+    info "No deployed settings.json at ${target}; a full setup-workspace.sh run installs it. Skipping refresh."
+    SETTINGS_GUARD_STATE="SKIP-NOTARGET"
+    return 0
+  fi
+
+  local src_sha live_sha
+  src_sha="$(settings_sha_of "${src}")"
+  live_sha="$(settings_sha_of "${target}")"
+
+  # --- S-0: both baselines match and no force → no write, no flag flip. Mirrors
+  # Phase 3's managed_sha short-circuit and is what keeps EX_NOCHANGE reachable.
+  if [ "${FORCE_REGEN}" -eq 0 ] \
+     && [ -n "${SETTINGS_TEMPLATE_SHA}" ] && [ "${src_sha}" = "${SETTINGS_TEMPLATE_SHA}" ] \
+     && [ -n "${SETTINGS_INSTALLED_SHA}" ] && [ "${live_sha}" = "${SETTINGS_INSTALLED_SHA}" ]; then
+    info "S-0 settings.json already current (template + installed baselines both match); no write."
+    SETTINGS_GUARD_STATE="S-0"
+    return 0
+  fi
+
+  # Render once, to scratch, before any decision. Every write path below installs
+  # these already-verified bytes, so a render failure can never damage the live file.
+  settings_render_to_scratch
+
+  # --- S-1: live file is byte-identical to what the platform last wrote. That is
+  # proof of an untouched platform copy, so no structural diff is needed and a
+  # platform-retired key simply disappears with the rewrite.
+  if [ -n "${SETTINGS_INSTALLED_SHA}" ] && [ "${live_sha}" = "${SETTINGS_INSTALLED_SHA}" ]; then
+    if [ "${DRY_RUN}" -eq 1 ]; then
+      info "[dry-run] S-1 untouched platform copy → would regenerate settings.json"
+      SETTINGS_GUARD_STATE="S-1"
+      return 0
+    fi
+    info "S-1 settings.json is an untouched platform copy; regenerating from the current template."
+    settings_regenerate
+    SETTINGS_GUARD_STATE="S-1"
+    return 0
+  fi
+
+  # --- S-2..S-5: classify structurally against the freshly rendered template.
+  local verdict_json
+  verdict_json="$(settings_classify "${SETTINGS_RESOLVED}" "${target}" "${overlay}")"
+  local verdict operator_paths platform_overrides conflicts fragment
+  verdict="$(printf '%s' "${verdict_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["verdict"])')"
+  operator_paths="$(printf '%s' "${verdict_json}" | python3 -c 'import json,sys; print(", ".join(json.load(sys.stdin)["operator_paths"]))')"
+  platform_overrides="$(printf '%s' "${verdict_json}" | python3 -c 'import json,sys; print(", ".join(json.load(sys.stdin)["platform_overrides"]))')"
+  conflicts="$(printf '%s' "${verdict_json}" | python3 -c 'import json,sys; print(", ".join(json.load(sys.stdin)["conflicts"]))')"
+  fragment="$(printf '%s' "${verdict_json}" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["fragment"]))')"
+
+  case "${verdict}" in
+    MALFORMED)
+      # --- S-5: the runtime is loading NO platform settings at all, which is
+      # strictly worse than any customization loss. Preserve the bytes on the
+      # tamper convention, then regenerate.
+      SETTINGS_GUARD_STATE="S-5"
+      if [ "${DRY_RUN}" -eq 1 ]; then
+        info "[dry-run] S-5 settings.json is not parseable JSON → would back up + regenerate"
+        return 0
+      fi
+      local tamper_backup="${WORKSPACE_ROOT}/.backup-tampered-$(date -u +%Y%m%dT%H%M%SZ)"
+      mkdir -p "${tamper_backup}"
+      cp "${target}" "${tamper_backup}/settings.json"
+      warn "S-5 settings.json is not parseable JSON; backed up to ${tamper_backup}/settings.json; regenerating from template."
+      settings_regenerate
+      return 0
+      ;;
+    CONFLICT)
+      # --- S-4: the ONE case where migration would lose data. Write nothing at
+      # all, name the conflict, and state plainly that the platform registrations
+      # did not land. Non-fatal — the rest of the update continues.
+      SETTINGS_GUARD_STATE="S-4"
+      local conflict_backup="${WORKSPACE_ROOT}/.backup-pre-update-$(date -u +%Y%m%dT%H%M%SZ)"
+      if [ "${DRY_RUN}" -eq 0 ]; then
+        mkdir -p "${conflict_backup}"
+        cp "${target}" "${conflict_backup}/settings.json"
+      fi
+      warn "S-4 settings refresh ABORTED — ${SETTINGS_LOCAL_BASENAME} already defines: ${conflicts}"
+      warn "S-4 nothing was written. Platform security-hook REGISTRATIONS did NOT land in ${target}."
+      warn "S-4 resolve the conflicting key(s) in ${overlay}, then re-run. Pre-abort copy: ${conflict_backup}/settings.json"
+      return 0
+      ;;
+    OPERATOR)
+      # --- S-3: migrate → back up → regenerate. Migration FIRST, so "apply the
+      # platform version" is never destructive (ADR-121 §Decision 4).
+      SETTINGS_GUARD_STATE="S-3"
+      if [ "${DRY_RUN}" -eq 1 ]; then
+        info "[dry-run] S-3 operator-added content in settings.json: ${operator_paths}"
+        info "[dry-run] would migrate it to ${overlay}, back up, then regenerate"
+        return 0
+      fi
+      scaffold_settings_local
+      settings_migrate_to_overlay "${overlay}" "${fragment}"
+      local backup_dir="${WORKSPACE_ROOT}/.backup-pre-update-$(date -u +%Y%m%dT%H%M%SZ)"
+      mkdir -p "${backup_dir}"
+      cp "${target}" "${backup_dir}/settings.json"
+      warn "S-3 MIGRATED operator-added settings → ${overlay}: ${operator_paths}"
+      warn "S-3 pre-migration copy of the managed file: ${backup_dir}/settings.json"
+      if [ -n "${platform_overrides}" ]; then
+        warn "S-3 platform-owned value(s) REPLACED by the platform version (recoverable from the copy above): ${platform_overrides}"
+      fi
+      settings_regenerate
+      info "S-3 regenerated ${target} from the current template."
+      return 0
+      ;;
+    CLEAN)
+      # --- S-2 resolving to the S-1 outcome: the live file differs from the
+      # resolved template only at platform-owned paths (or only in formatting), so
+      # there is nothing to preserve. AC-3's no-false-fire arm.
+      SETTINGS_GUARD_STATE="S-2"
+      if [ "${DRY_RUN}" -eq 1 ]; then
+        info "[dry-run] S-2 no operator-added content → would regenerate settings.json"
+        return 0
+      fi
+      if [ -n "${platform_overrides}" ]; then
+        local pv_backup="${WORKSPACE_ROOT}/.backup-pre-update-$(date -u +%Y%m%dT%H%M%SZ)"
+        mkdir -p "${pv_backup}"
+        cp "${target}" "${pv_backup}/settings.json"
+        warn "S-2 platform-owned value(s) REPLACED by the platform version (pre-write copy: ${pv_backup}/settings.json): ${platform_overrides}"
+      fi
+      info "S-2 no operator-added content in settings.json; regenerating from the current template."
+      settings_regenerate
+      return 0
+      ;;
+    *)
+      warn "settings guard returned an unrecognized verdict '${verdict}'; writing nothing."
+      SETTINGS_GUARD_STATE="SKIP-UNKNOWN"
+      return 0
+      ;;
+  esac
+}
+
+# The install-time entry point to the guard, called from substitute_templates and
+# therefore reached by fresh_install, rebootstrap and guided_recovery.
+#
+# The Stage-5 design record for this card (sub-task #4790) scopes the guard to "the
+# new --refresh-settings flow AND the existing fresh/rebootstrap flows". That scope is
+# a Stage-5 decision, NOT an ADR clause: ADR-121 §Decision 4 is "Migration precedes
+# regeneration; warning alone is not sufficient", which governs the guard's ORDER, not
+# the set of flows it covers. The behaviour below conforms to both records.
+#
+# Only the first half of that scope shipped initially: a plain
+# setup-workspace.sh re-run over a healthy workspace routes to rebootstrap, which
+# called substitute_template directly and overwrote the managed file with no
+# classification at all — measurably dropping operator-added keys with no migration,
+# no backup and no warning, on the one path docs/UPDATE.md §6.4 names. This is the
+# missing half, and it deliberately REUSES settings_guard_and_regen rather than
+# adding a second classifier: one guard, one contract, one set of S-* verdicts.
+#
+# The two cases are genuinely different and must not be collapsed:
+#
+#   NO live file (a genuinely fresh workspace) — there is nothing to preserve, and
+#   settings_guard_and_regen returns SKIP-NOTARGET without writing precisely because
+#   it is a refresh, not an installer. The direct substitute_template IS the install
+#   write; routing it through the guard instead would deploy no settings.json at all.
+#
+#   A live file EXISTS (rebootstrap, guided recovery, or a re-run over a workspace
+#   someone hand-edited) — the write is a RE-RENDER and must be classified first,
+#   exactly as the update path classifies it.
+settings_install_or_guarded_rerender() {
+  local target="${WORKSPACE_ROOT}/.claude/settings.json"
+
+  if [ ! -f "${target}" ]; then
+    substitute_template \
+      "${SOURCE_REPO}/core/settings.json.template" \
+      "${target}" \
+      "yes"
+    # The platform just wrote this file from the current template, so both baselines
+    # are recordable. Without it the first update finds no baseline and runs the
+    # structural diff on every run.
+    record_settings_baseline
+    return 0
+  fi
+
+  # The overlay is the migration DESTINATION, so it must exist before the guard can
+  # migrate into it. scaffold_settings_local is create-once by contract, so calling
+  # it here and again later in the flow is idempotent.
+  scaffold_settings_local
+  settings_guard_and_regen
+
+  # Baseline re-anchoring is ARM-SCOPED, mirroring refresh_settings_flow. Every arm
+  # that WROTE re-anchored both baselines inside settings_regenerate already. The
+  # arms that wrote nothing (S-0, S-4, SKIP-*) must keep the baselines as read from
+  # state: re-anchoring SETTINGS_INSTALLED_SHA to a file the platform did NOT write
+  # is exactly what would make the NEXT run read an operator-edited file as an
+  # "untouched platform copy" (the S-1 arm) and regenerate over it with no migration
+  # — reintroducing the silent-drop this function exists to close, one run later.
+  case "${SETTINGS_GUARD_STATE}" in
+    S-1|S-2|S-3|S-5)
+      : ;;
+    *)
+      info "Settings guard wrote nothing (${SETTINGS_GUARD_STATE:-none}); baselines left as recorded."
+      ;;
+  esac
 }
 
 # --- Section 15: Hook install with checksum drift detection ---
@@ -1448,6 +2112,7 @@ install_composition_surface_files() {
     local src="${LIB_COMPOSE_ENTRY_SRC}"
     local tier="${LIB_COMPOSE_ENTRY_TIER}"
     local tokens_flag="${LIB_COMPOSE_ENTRY_TOKENS_FLAG}"
+    local dialect="${LIB_COMPOSE_ENTRY_DIALECT}"
 
     local source_file="${SOURCE_REPO}/${src}"
     if [ ! -f "${source_file}" ]; then
@@ -1460,25 +2125,28 @@ install_composition_surface_files() {
     if ! target=$(lib_compose_resolve_target "${basename}" "${tier}" "${WORKSPACE_ROOT}"); then
       continue
     fi
+    # The resolver may strip a suffix (workspace-root tier drops `.template`), so
+    # operator-facing messages name the TARGET file, not the source template.
+    local target_basename; target_basename="$(basename "${target}")"
 
     if [ -e "${target}" ]; then
       preserved_count=$((preserved_count + 1))
-      info "PRESERVED (operator-state): ${basename}"
+      info "PRESERVED (operator-state): ${target_basename}"
       continue
     fi
 
     if [ "${DRY_RUN}" -eq 1 ]; then
-      info "[dry-run] would install: ${basename} (tier=${tier}, tokens=${tokens_flag})"
+      info "[dry-run] would install: ${target_basename} (tier=${tier}, tokens=${tokens_flag}, dialect=${dialect})"
       installed_count=$((installed_count + 1))
       continue
     fi
 
-    if lib_compose_write "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}"; then
+    if lib_compose_write "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "" "${dialect}"; then
       installed_count=$((installed_count + 1))
-      info "INSTALLED: ${basename}"
+      info "INSTALLED: ${target_basename}"
       printf 'rm-file:%s\n' "${target}" >> "${ROLLBACK_OPS_FILE}"
     else
-      err "Install failed: ${basename}"
+      err "Install failed: ${target_basename}"
       exit 73
     fi
   done
@@ -1668,6 +2336,8 @@ write_state_file() {
   S_DRIFT_FILE="${DRIFT_DECISIONS_FILE}" \
   S_ARTIFACTS_FILE="${ARTIFACTS_FILE}" \
   S_DIRS_FILE="${DIRS_CREATED_FILE}" \
+  S_SETTINGS_TEMPLATE_SHA="${SETTINGS_TEMPLATE_SHA}" \
+  S_SETTINGS_INSTALLED_SHA="${SETTINGS_INSTALLED_SHA}" \
   S_OUT="${STATE_FILE}" \
   python3 -c '
 import json
@@ -1703,6 +2373,13 @@ state = {
     "hook_drift_decisions": drift,
     "verified_artifacts": artifacts,
     "directory_layout_created": dirs,
+    # ADR-121 settings baseline. Flat, snake_case, subject-first, forming a
+    # subject-prefixed pair — the convention the existing hook_checksums /
+    # hook_drift_decisions and source_repo_path / source_repo_sha pairs already
+    # set. settings_template_sha is the regeneration trigger; settings_installed_sha
+    # is the tamper anchor (ADR-014 semantics, sidecar carrier).
+    "settings_template_sha": env.get("S_SETTINGS_TEMPLATE_SHA", ""),
+    "settings_installed_sha": env.get("S_SETTINGS_INSTALLED_SHA", ""),
 }
 
 out_path = env["S_OUT"]
@@ -1722,12 +2399,65 @@ with open(out_path, "w") as f:
   info "WROTE state file: ${STATE_FILE}"
 }
 
+# Surgical, field-scoped persistence of the two ADR-121 settings baselines.
+#
+# WHY NOT write_state_file: that function REBUILDS the whole state document from
+# the per-run scratch JSON files. A refresh flow populates only three of them
+# (tokens / checksums / drift, restored by read_existing_state) — verified_artifacts
+# and directory_layout_created are still at their init defaults, and install_mode is
+# the refresh mode. Calling it from a refresh flow would therefore overwrite a
+# fully-verified artifact record with all-false and blank the recorded directory
+# layout. That is why refresh_hooks_flow does not call it either.
+#
+# The invariant the settings baseline actually needs is "persist the two fields
+# after a refresh, or the structural diff becomes the every-run path" — which this
+# satisfies exactly, by updating those two keys in place and touching nothing else.
+persist_settings_baseline_to_state() {
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would record settings baselines in ${STATE_FILE}"
+    return 0
+  fi
+  if [ ! -f "${STATE_FILE}" ]; then
+    warn "No state file at ${STATE_FILE}; settings baseline not recorded (next run classifies structurally)."
+    return 0
+  fi
+  S_STATE="${STATE_FILE}" \
+  S_SETTINGS_TEMPLATE_SHA="${SETTINGS_TEMPLATE_SHA}" \
+  S_SETTINGS_INSTALLED_SHA="${SETTINGS_INSTALLED_SHA}" \
+  python3 -c '
+import json
+import os
+
+env = os.environ
+path = env["S_STATE"]
+with open(path, "r") as f:
+    state = json.load(f)
+
+state["settings_template_sha"] = env.get("S_SETTINGS_TEMPLATE_SHA", "")
+state["settings_installed_sha"] = env.get("S_SETTINGS_INSTALLED_SHA", "")
+
+with open(path, "w") as f:
+    json.dump(state, f, indent=2)
+    f.write("\n")
+' || {
+    warn "Could not record settings baseline in ${STATE_FILE}; next run will classify structurally."
+    return 0
+  }
+  info "Recorded settings baselines in ${STATE_FILE}"
+}
+
 # --- Section 19: Re-bootstrap (branch b) — populate maps from existing state ---
 read_existing_state() {
   if [ ! -f "${STATE_FILE}" ]; then
     return 0
   fi
-  S_STATE="${STATE_FILE}" \
+  # The three map surfaces are restored to their scratch JSON files as before; the
+  # two ADR-121 settings baselines are scalars, so they come back on stdout and are
+  # assigned to their globals. An absent field restores to "" — which the guard
+  # reads as "no baseline recorded" (S-2, classify before writing), never as
+  # "unchanged". That is the correct degradation for a pre-ADR-121 state file.
+  local restored
+  restored=$(S_STATE="${STATE_FILE}" \
   S_TOKENS_FILE="${TOKENS_FILE}" \
   S_CHECKSUMS_FILE="${CHECKSUMS_FILE}" \
   S_DRIFT_FILE="${DRIFT_DECISIONS_FILE}" \
@@ -1745,7 +2475,12 @@ with open(env["S_CHECKSUMS_FILE"], "w") as f:
     json.dump(state.get("hook_checksums", {}), f, indent=2)
 with open(env["S_DRIFT_FILE"], "w") as f:
     json.dump(state.get("hook_drift_decisions", {}), f, indent=2)
-'
+
+print(state.get("settings_template_sha", "") or "")
+print(state.get("settings_installed_sha", "") or "")
+') || return 1
+  SETTINGS_TEMPLATE_SHA=$(printf '%s\n' "${restored}" | sed -n '1p')
+  SETTINGS_INSTALLED_SHA=$(printf '%s\n' "${restored}" | sed -n '2p')
 }
 
 # --- Section 20: Guided recovery (branch c) ---
@@ -1801,6 +2536,10 @@ fresh_install() {
   create_dir_layout
   resolve_all_tokens
   substitute_templates
+  # Both ADR-121 baselines are recorded inside settings_install_or_guarded_rerender,
+  # arm-scoped: unconditionally re-recording here would anchor the baseline to a file
+  # the platform did NOT write on the guard's no-write arms (S-4 / SKIP-*).
+  scaffold_settings_local
   install_hooks
   configure_hook_activation
   install_composition_surface_files
@@ -1825,7 +2564,13 @@ rebootstrap() {
   compute_active_tokens
   create_dir_layout
   resolve_all_tokens
+  # substitute_templates routes the settings.json write through the ADR-121 guard
+  # (settings_install_or_guarded_rerender): on this flow a live managed file almost
+  # always exists, so the write is a RE-RENDER and is classified — and any
+  # operator-added key migrated to the overlay — before anything is overwritten.
+  # Baselines are recorded there, arm-scoped to the arms that actually wrote.
   substitute_templates
+  scaffold_settings_local
   install_hooks
   configure_hook_activation
   install_composition_surface_files
@@ -1868,6 +2613,66 @@ refresh_hooks_flow() {
   # (they record rm-file rollback ops). If install_hooks aborts under set -e, this is not
   # reached and the partial co-deploy rolls back, as intended.
   INSTALL_COMPLETE=1
+}
+
+# --- Section 22c: Refresh-settings flow (ADR-121) ---
+# Re-render ONLY the managed .claude/settings.json into an EXISTING workspace,
+# under the baseline-anchored guard. The key-granular sibling of --refresh-hooks:
+# that flow delivers the hook SCRIPTS, this one delivers the REGISTRATIONS that
+# make them fire. It does NOT scaffold dirs, install hooks, or redeploy skills.
+#
+# It DOES call write_state_file, which refresh_hooks_flow does not — and that
+# omission is exactly why the hook checksum baseline is frozen at the last full
+# setup on a live install. Repeating it here would freeze the settings baseline
+# permanently and make the structural diff the every-run path, so the call is a
+# hard requirement of this flow rather than a nicety (Stage-5 trap T-2).
+refresh_settings_flow() {
+  INSTALL_MODE="refresh-settings"
+  info "REFRESH-SETTINGS flow — re-render the managed settings.json only"
+  if [ ! -f "${WORKSPACE_ROOT}/.claude/settings.json" ]; then
+    err "No deployed settings.json at ${WORKSPACE_ROOT}/.claude/settings.json — run a full setup-workspace.sh first."
+    exit 1
+  fi
+
+  # Restore the recorded token map + both settings baselines. Best-effort: a
+  # missing or unreadable state leaves the baselines empty, which the guard treats
+  # as S-2 (classify structurally before writing) — the conservative default.
+  read_existing_state || warn "Could not read existing state; classifying settings.json structurally."
+
+  compute_active_tokens
+  # If the state carried no token map (a pre-state install, or a state written
+  # before tokens resolved), fall back to reading operator.toml directly. This is
+  # non-interactive by construction — read_operator_toml parses the file and never
+  # prompts — so an unattended update never blocks here. If BOTH are empty the
+  # substituter's own unresolved-token gate fires loudly, which is the correct
+  # outcome: better a named failure than a settings.json carrying raw tokens.
+  local token_count
+  token_count=$(json_keys "${TOKENS_FILE}" | grep -c . || true)
+  if [ "${token_count}" -eq 0 ]; then
+    info "No token map in state; reading operator.toml directly for the re-render."
+    read_operator_toml
+  fi
+
+  # Part (a) before part (b): the overlay must exist as a migration destination
+  # before the guard can migrate anything into it.
+  scaffold_settings_local
+  settings_guard_and_regen
+  # Mark success as soon as the guard returns. The guard installs only
+  # already-verified bytes and never leaves a partial write, so from here the
+  # EXIT-trap rollback has nothing legitimate to undo — and must not be allowed to
+  # remove a settings.json this flow just refreshed.
+  INSTALL_COMPLETE=1
+
+  # Persist the (possibly updated) baselines. Skipped only when the guard wrote
+  # nothing at all, so an aborted S-4 never records a baseline it did not create.
+  case "${SETTINGS_GUARD_STATE}" in
+    S-1|S-2|S-3|S-5)
+      persist_settings_baseline_to_state
+      ;;
+    *)
+      info "Settings guard wrote nothing (${SETTINGS_GUARD_STATE:-none}); state file left unchanged."
+      ;;
+  esac
 }
 
 # --- Section 23: Init-only-state flow (FM-4 absorption) ---
@@ -2051,6 +2856,11 @@ main() {
 
   if [ "${REFRESH_HOOKS}" -eq 1 ]; then
     refresh_hooks_flow
+    return 0
+  fi
+
+  if [ "${REFRESH_SETTINGS}" -eq 1 ]; then
+    refresh_settings_flow
     return 0
   fi
 

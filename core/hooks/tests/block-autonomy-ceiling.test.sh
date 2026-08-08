@@ -380,6 +380,158 @@ fi
 /bin/rm -rf "$DEP_SANDBOX" "$NOHELPER_SANDBOX"
 
 # =====================================================================
+# SUITE R — DIRECT-RESOLVE PATH (cache ABSENT), section-awareness end to end
+# =====================================================================
+# Suite letter R (Reader). P is taken by the install-regression preservation suite;
+# C and S are reserved by sibling cards in this release.
+#
+# WHY THIS SUITE EXISTS. Every ceiling assertion above sets the ceiling through the
+# CACHE file, so resolve_level_direct — the fallback the hook uses whenever the
+# SessionStart primer has not run, or a tool call lands before it — was never exercised
+# by any test. That is the path the section-blindness defect lived on. These cases delete
+# the cache and drive the ceiling from a seeded operator.toml, through the REAL hook.
+#
+# The four fail-OPEN shapes (B exact-name key under another section sorting first,
+# C same-PREFIX key under another section, K dotted subtable header, O same-PREFIX key
+# INSIDE [automation]) are asserted as BLOCKS. Before the hardening each of them
+# resolved bounded_auto(2) from a config whose [automation] table says off(0), and the
+# same payload was ALLOWED. The pre/post delta is characterized fixture-by-fixture in
+# tests/prime-autonomy-ceiling-cache.test.sh; this suite asserts the consequence where
+# it actually matters — the hook's allow/block verdict.
+#
+# B/C/K are closed by section-awareness; O is closed ONLY by the "=" terminator, which
+# is why it is arm R-4b rather than a fourth variation on R-4.
+echo ""
+echo "Suite R — direct-resolve path (cache absent)"
+echo "---"
+set_mode "enforce"
+
+R_CFG="${TEST_HOME}/.config/pmo-platform"
+/bin/mkdir -p "$R_CFG"
+# Master ON for this suite when running standalone. Under test-runner.sh,
+# PMO_PLATFORM_CONFIG_ROOT is already exported master-ON and takes precedence; this
+# write covers the standalone case without conflicting with it.
+/usr/bin/printf '[security_hooks]\nmaster_enabled = true\n' > "${R_CFG}/platform-config.toml"
+
+# seed_operator_toml <body> — write the fixture and DELETE the cache, so the hook must
+# take the direct-resolve path. Deleting the cache is the whole point of the suite.
+seed_operator_toml() {
+  /usr/bin/printf '%s\n' "$1" > "${R_CFG}/operator.toml"
+  /bin/rm -f "$CACHE_FILE"
+}
+
+R_TIER1_PAYLOAD="$(write_payload "${TEST_WS}/projects/Default/01-Governance/plan.md" "${TEST_WS}/projects/Default")"
+
+# R-1 sensitivity: a plain in-section bounded_auto resolves 2 → the Tier-1 write is
+# at-ceiling → ALLOW. Without this arm every block below could be a hook that blocks
+# unconditionally once the cache is gone.
+seed_operator_toml '[automation]
+automation_level = "bounded_auto"'
+test_case "R-1 direct-resolve, cache absent: [automation] bounded_auto → Tier-1 write ALLOWED" \
+  "$R_TIER1_PAYLOAD" 0
+
+# R-2 subject: the same read at off resolves 0 → the Tier-1 write exceeds → BLOCK.
+# R-1 and R-2 are the discrimination pair: the direct path returns different verdicts
+# for different configs, so it is genuinely reading the file.
+seed_operator_toml '[automation]
+automation_level = "off"'
+test_case "R-2 direct-resolve, cache absent: [automation] off → Tier-1 write BLOCKED" \
+  "$R_TIER1_PAYLOAD" 2 "BLOCK-AUTONOMY-003"
+
+# R-3 fail-OPEN closure: an exact-name key under ANOTHER section, sorting BEFORE
+# [automation]. Pre-hardening this resolved bounded_auto(2) and ALLOWED the write.
+seed_operator_toml '[aaa_other]
+automation_level = "bounded_auto"
+
+[automation]
+automation_level = "off"'
+test_case "R-3 fail-OPEN closed: colliding exact-name key under another section → still BLOCKED" \
+  "$R_TIER1_PAYLOAD" 2 "BLOCK-AUTONOMY-003"
+
+# R-4 fail-OPEN closure: a same-PREFIX key. The prior reader had no "=" terminator, so
+# a DIFFERENTLY-NAMED key collided too — the hazard was the prefix class, not the name.
+seed_operator_toml '[aaa_other]
+automation_level_ci_autoresolve = "bounded_auto"
+
+[automation]
+automation_level = "off"'
+test_case "R-4 fail-OPEN closed: same-PREFIX key automation_level_ci_autoresolve → still BLOCKED" \
+  "$R_TIER1_PAYLOAD" 2 "BLOCK-AUTONOMY-003"
+
+# R-4b is R-4's matched pair, and it is the arm that actually pins the "=" terminator.
+# R-4 puts the prefix key under ANOTHER section, so section-awareness alone already
+# excludes it and the terminator is never consulted — R-4 passes with the terminator
+# deleted. Here the prefix key is INSIDE [automation] and sorts ABOVE the real key, so
+# the reader reaches it first and the terminator is the ONLY thing that can reject it.
+# Without this arm the terminator could be removed and both hook suites stayed green
+# while off(0) silently resolved back to bounded_auto(2) and this write was ALLOWED.
+seed_operator_toml '[automation]
+automation_level_ci_autoresolve = "bounded_auto"
+automation_level = "off"'
+test_case "R-4b fail-OPEN closed: same-PREFIX key INSIDE [automation], above the real key → still BLOCKED" \
+  "$R_TIER1_PAYLOAD" 2 "BLOCK-AUTONOMY-003"
+
+# R-5 fail-OPEN closure: a dotted subtable header. A section probe anchored
+# ^\[[a-z_]+\] would not even see this line; the reader string-compares the trimmed
+# header, so [automation.experimental] is correctly NOT the target section.
+seed_operator_toml '[automation.experimental]
+automation_level = "bounded_auto"
+
+[automation]
+automation_level = "off"'
+test_case "R-5 fail-OPEN closed: dotted subtable [automation.experimental] → still BLOCKED" \
+  "$R_TIER1_PAYLOAD" 2 "BLOCK-AUTONOMY-003"
+
+# R-6 no-regression: absent operator.toml keeps the documented recommend(1) default, so
+# a Tier-2 staging write still exceeds the ceiling.
+/bin/rm -f "${R_CFG}/operator.toml" "$CACHE_FILE"
+test_case "R-6 direct-resolve, no operator.toml at all → recommend(1) default holds (Tier-2 BLOCKED)" \
+  "$(write_payload "${TEST_WS}/projects/Default/08-Generated/out.md" "${TEST_WS}/projects/Default")" \
+  2 "BLOCK-AUTONOMY-003"
+
+# R-7 floor invariant: the irreducible Tier-0 floor runs BEFORE the master gate and
+# before the ceiling check, so it must still block with the ceiling read at its most
+# permissive AND with the cache absent. This is the assertion that would catch a change
+# to the ceiling reader that accidentally reordered or short-circuited the floor.
+seed_operator_toml '[automation]
+automation_level = "bounded_auto"'
+test_case "R-7 Tier-0 floor still ALWAYS enforces (bounded_auto, cache absent, enforce)" \
+  "$(write_payload "${TEST_WS}/pmo-platform/CLAUDE.md" "${TEST_WS}/pmo-platform")" \
+  2 "BLOCK-AUTONOMY-001"
+
+# R-8 blast-radius bound: with master OFF (the SHIPPED default), the ceiling check is
+# inert — so the reader change reaches only instances that opted in. Asserted by driving
+# the R-2 config, which blocks under master ON, and observing exit 0 under master OFF.
+R_MASTER_OFF="$(/usr/bin/mktemp -d)"
+seed_operator_toml '[automation]
+automation_level = "off"'
+r8_err="$(/usr/bin/mktemp)"; r8_exit=0
+/usr/bin/printf '%s' "$R_TIER1_PAYLOAD" \
+  | HOME="$TEST_HOME" PMO_PLATFORM_CONFIG_ROOT="$R_MASTER_OFF" /bin/bash "$HOOK" 2>"$r8_err" >/dev/null || r8_exit="$?"
+r8_stderr="$(/bin/cat "$r8_err")"; /bin/rm -f "$r8_err"; /bin/rm -rf "$R_MASTER_OFF"
+if [ "$r8_exit" = 0 ]; then
+  echo "PASS: R-8 master-OFF (shipped default) → ceiling check inert, identical payload exits 0"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: R-8 master-OFF inert (exit=%s expected=0)\n  stderr: %s\n' "$r8_exit" "$r8_stderr"; FAIL=$((FAIL + 1))
+fi
+
+# R-9 floor-under-master-OFF: the Tier-0 floor is NOT gated by master activation. Paired
+# with R-8 on the same master-OFF config, this is what proves R-8's exit 0 is the ceiling
+# going inert and not the whole hook going inert.
+R_MASTER_OFF2="$(/usr/bin/mktemp -d)"
+r9_err="$(/usr/bin/mktemp)"; r9_exit=0
+/usr/bin/printf '%s' "$(write_payload "${TEST_WS}/pmo-platform/CLAUDE.md" "${TEST_WS}/pmo-platform")" \
+  | HOME="$TEST_HOME" PMO_PLATFORM_CONFIG_ROOT="$R_MASTER_OFF2" /bin/bash "$HOOK" 2>"$r9_err" >/dev/null || r9_exit="$?"
+r9_stderr="$(/bin/cat "$r9_err")"; /bin/rm -f "$r9_err"; /bin/rm -rf "$R_MASTER_OFF2"
+if [ "$r9_exit" = 2 ] && /usr/bin/printf '%s' "$r9_stderr" | /usr/bin/grep -qE "BLOCK-AUTONOMY-001"; then
+  echo "PASS: R-9 master-OFF → Tier-0 floor STILL blocks (R-8's exit 0 is the ceiling, not the hook)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: R-9 floor under master-OFF (exit=%s expected=2, want BLOCK-AUTONOMY-001)\n  stderr: %s\n' "$r9_exit" "$r9_stderr"; FAIL=$((FAIL + 1))
+fi
+
+/bin/rm -f "${R_CFG}/operator.toml" "${R_CFG}/platform-config.toml"
+
+# =====================================================================
 # Summary
 # =====================================================================
 echo ""

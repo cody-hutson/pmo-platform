@@ -40,12 +40,30 @@
 #     because it has the highest false-positive risk of any hook (it gates every
 #     mutation). See core/rules/bypass-mode-readiness.md.
 #
-# SECTION-BLIND-GREP ASSUMPTION (pinned): the ceiling read greps `^automation_level`
-#   line-anchored WITHOUT parsing the `[automation]` TOML section, because the key
-#   is unique repo-wide (C0 #322 / #1429 survey: 0 prior occurrences) — exactly as
-#   notify-version-skew.sh greps `^operator_github` without parsing `[identity]`.
-#   If a second `automation_level` key is ever introduced under a different
-#   section, this resolution would need section-awareness.
+# SECTION-AWARE CEILING READ (supersedes the pinned SECTION-BLIND-GREP assumption).
+#   The ceiling is resolved by parsing the [automation] TOML section and matching
+#   `automation_level` with an `=` terminator, so (a) a same-named key under any other
+#   section and (b) any same-PREFIX key (e.g. automation_level_ci_autoresolve) are both
+#   unreachable. The prior reader was `grep -E '^automation_level'` with NO terminator,
+#   which matched the whole prefix class — the hazard was never limited to a duplicate of
+#   the exact name, and its apparent safety was file-ORDER dependent (a colliding key
+#   sorting AFTER [automation] was harmlessly overridden, which is why it evaded casual
+#   testing). Idiom lifted verbatim from lib/master-enable.sh _me_read_field.
+#   STRICT PARITY: the column-0 key anchor and the value extraction are byte-equivalent
+#   to the prior reader, so the ONLY changed inputs are the out-of-section ones, which
+#   previously resolved fail-OPEN and now resolve fail-restrictive. Two shapes of VALID
+#   in-section TOML that the prior reader mis-parsed — an inline trailing comment, and an
+#   indented key — are deliberately still mis-parsed, identically, both landing on the
+#   `recommend` default: correcting them would RAISE the resolved ceiling for an operator
+#   who changed nothing, and a security-posture widening must ship as its own visible
+#   change, never as a side effect of a hardening patch.
+#   TWIN COPY: prime-autonomy-ceiling-cache.sh carries resolve_level_direct()
+#   BYTE-IDENTICALLY — edit both or neither. That is also why this one function uses
+#   absolute tool literals (/usr/bin/awk, /usr/bin/printf) rather than this file's $AWK /
+#   $PRINTF constants: identical bytes make the twins diffable, and the constants hold
+#   exactly those same strings. core/hooks/tests/prime-autonomy-ceiling-cache.test.sh
+#   asserts the two resolve identically on every fixture, so copy drift is caught by
+#   behaviour rather than by convention alone.
 #
 # CACHE (FMF-1): the session-stable dial is resolved ONCE at SessionStart by the
 #   sibling prime-autonomy-ceiling-cache.sh hook, which writes the numeric ceiling
@@ -83,7 +101,9 @@ readonly CAT="/bin/cat"
 readonly TR="/usr/bin/tr"
 readonly DATE="/bin/date"
 readonly SHASUM="/usr/bin/shasum"
-readonly AWK="/usr/bin/awk"
+# NOTE: no AWK constant. The one awk call site (resolve_level_direct) is a byte-identical
+# twin of the same function in prime-autonomy-ceiling-cache.sh and therefore spells the
+# absolute path inline; a constant here would be unreferenced.
 readonly PYTHON3="/usr/bin/python3"
 
 # --- METADATA ---
@@ -282,18 +302,49 @@ level_to_num() {
   esac
 }
 
-# Direct resolve from operator.toml — the notify-version-skew.sh:67 pattern.
-# Used as the fallback when the SessionStart cache is absent.
+# Direct resolve from operator.toml. Used as the fallback when the SessionStart cache
+# is absent. See the SECTION-AWARE CEILING READ block in the header for why this parses
+# the section rather than grepping the key, and why the parse is deliberately no more
+# permissive than the reader it replaces.
+#
+# TWIN COPY — byte-identical to prime-autonomy-ceiling-cache.sh resolve_level_direct().
+# Edit both or neither; the primer's test suite asserts they agree on every fixture.
+# BEGIN TWIN: resolve_level_direct
 resolve_level_direct() {
-  local level="recommend"   # default-on, matches C0 default; a missing config never opens the gate
-  if [ -r "$OPERATOR_TOML" ]; then
-    local parsed
-    # shellcheck disable=SC2016  # awk field ref ($2) — single quotes intentional
-    parsed="$("$GREP" -E '^automation_level' "$OPERATOR_TOML" 2>/dev/null | /usr/bin/head -1 | "$AWK" -F= '{gsub(/[" ]/,"",$2); print $2}')"
+  # Fail-restrictive on EVERY failure path: unreadable config, absent awk, malformed
+  # TOML, absent [automation], absent key, unrecognized value all keep this default.
+  # The target is `recommend`, not `off` — this hook gates every mutation and carries the
+  # highest false-positive risk in the suite, so the codebase's documented safe direction
+  # is "never resolve HIGHER than configured", not "resolve as low as possible".
+  local level="recommend"
+  local parsed
+  if [ -r "$OPERATOR_TOML" ] && [ -x /usr/bin/awk ]; then
+    # shellcheck disable=SC2016  # awk field refs ($0) — single quotes intentional
+    parsed="$(/usr/bin/awk -v sect='[automation]' '
+      # Section header: string-compare (trimmed) against the target header, so a "[" in
+      # a value can never be misread as a section and a dotted subtable header such as
+      # [automation.experimental] is NOT the target section.
+      /^[[:space:]]*\[/ {
+        line = $0
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+        insect = (line == sect) ? 1 : 0
+        next
+      }
+      # Column-0 anchor (parity with the prior reader) + an "=" terminator (which the
+      # prior reader lacked, and whose absence is what admitted the whole prefix class).
+      insect == 1 && /^automation_level[[:space:]]*=/ {
+        split($0, a, "=")
+        v = a[2]
+        gsub(/[" ]/, "", v)
+        print v
+        exit
+      }
+    ' "$OPERATOR_TOML" 2>/dev/null || true)"
     case "$parsed" in off|recommend|bounded_auto) level="$parsed" ;; esac
   fi
-  "$PRINTF" '%s' "$level"
+  /usr/bin/printf '%s' "$level"
 }
+# END TWIN: resolve_level_direct
 
 # Resolve the numeric ceiling: cache file first (a single read), else direct.
 resolve_ceiling_num() {
