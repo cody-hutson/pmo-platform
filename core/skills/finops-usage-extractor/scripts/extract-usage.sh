@@ -554,8 +554,12 @@ self_test() {
     # form across BSD (macOS) and GNU (CI runners); `touch -d` is not.
     find "$cf_src" -type f -name '*.jsonl' -exec touch -t 202001010000 {} + 2>/dev/null
     touch -t 202006010000 "$cf_store/usage.jsonl" 2>/dev/null
-    cf_pick="$( { jq -r 'select(.record=="session") | .session_id' "$cf_store/usage.jsonl" 2>/dev/null || true; } | sort | head -1)"
-    cf_file="$( { find "$cf_src" -type f -name "${cf_pick:-__none__}.jsonl" 2>/dev/null || true; } | head -1)"
+    # `head` closes its input on the first line, and every producer still upstream
+    # inherits the broken pipe (#3832). `sort` has to consume the whole stream
+    # regardless, so it is snapshotted rather than bounded; `find` answers the
+    # first-hit question directly with `-print -quit`.
+    cf_pick="$(head -1 <<<"$( { jq -r 'select(.record=="session") | .session_id' "$cf_store/usage.jsonl" 2>/dev/null || true; } | sort)")"
+    cf_file="$(find "$cf_src" -type f -name "${cf_pick:-__none__}.jsonl" -print -quit 2>/dev/null || true)"
     if [ -z "$cf_pick" ] || [ -z "$cf_file" ]; then
       echo "FAIL: carry-forward sub-test cannot resolve a source file for session '${cf_pick:-}'"; fail=1
     else
