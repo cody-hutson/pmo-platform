@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-128 — The close class is a declared deliverable-type value that conditions one gate spec, never a parallel close path
+title: ADR-129 — The close class is a declared deliverable-type value that conditions one gate spec, never a parallel close path
 status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
 date: 2026-08-07
 release: 58-task-artifact-lifecycle-and-knowledge
@@ -18,7 +18,7 @@ source_observations:
   - "Blast radius over the four governance targets returned Structural on all four (first-order fan-out 47 to 178 inbound references each). That is expected for keystone governance surfaces and is the reason the design is additive-only: no inbound reference's meaning changes because the deployable path is byte-unchanged."
 ---
 
-# ADR-128 — The close class is a declared deliverable-type value that conditions one gate spec, never a parallel close path
+# ADR-129 — The close class is a declared deliverable-type value that conditions one gate spec, never a parallel close path
 
 ## Status
 
@@ -29,6 +29,8 @@ source_observations:
 **That safeguard was not sufficient, and the note below is the proof.** A sibling release merged mid-run and took the number this record had claimed. The claim was correct when made and stale within the hour — which is the exact property the number-binds-at-merge decision exists to handle, and the reason a branch-local claim is *detection, never binding*. The reconciliation ran through the sanctioned tool rather than by hand, so all six steps landed including this provenance note — the one step a hand-performed renumber reliably skips.
 
 **Numbering provenance — `127 → 128`.** Held **ADR-127** branch-local; renumbered to **ADR-128** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 127. In-release citations that read "ADR-127" denote this record.
+
+**Numbering provenance — `128 → 129`.** Held **ADR-128** branch-local; renumbered to **ADR-129** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 128. In-release citations that read "ADR-128" denote this record.
 
 ## Context
 
