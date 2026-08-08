@@ -194,6 +194,33 @@ check "non-ADR file — carve-out does not apply" "$nonadr" "BLOCKED"
 ovr="$(depersonalization_line_verdict "release/ADRs/x.md" "deciders: \"$FIXTURE_HANDLE\" <!-- repo-integrity: allow-depersonalization -->" "$PATTERN_FILE" "$NOT_CARVED" "$OVERRIDE_RE")"
 check "override marker still takes precedence" "$ovr" "SUPPRESSED-OVERRIDE"
 
+# EMPTY-HAYSTACK ARM — pins the here-string conversion's one non-mechanical hazard.
+# The verdict function reads its haystack from `<<<"$content"` rather than a
+# `printf '%s' "$content" | grep` pipe. The two are NOT equivalent when content is
+# empty: printf emits ZERO lines, `<<<` emits ONE empty line. A pattern set able to
+# match an empty line therefore flips `no match` to `match` on the swap, turning a
+# CLEAN verdict into BLOCKED — in a branch-protection required gate, on any blank
+# added line a PR happens to contain. Nothing pinned this before the conversion.
+empty_v="$(depersonalization_line_verdict "release/ADRs/x.md" "" "$PATTERN_FILE" "$NOT_CARVED" "$OVERRIDE_RE")"
+check "empty added line is CLEAN (here-string empty-haystack guard holds)" "$empty_v" "CLEAN"
+
+# …and the same arm against a pattern file that DOES match an empty line, which is
+# the condition the guard exists for. Built through the library's own esc_lines is
+# impossible here by construction (it drops blank lines — that is its job), so the
+# hostile pattern file is written directly. Without the `[ -z ]` guard this arm
+# returns BLOCKED; with it, CLEAN. This is the arm that would have caught a
+# mechanical `printf | grep` -> `<<<` substitution on this file.
+EMPTY_MATCHING="$TMP/patterns_empty_matching"
+printf '^.*$\n' > "$EMPTY_MATCHING"
+empty_hostile="$(depersonalization_line_verdict "release/ADRs/x.md" "" "$EMPTY_MATCHING" "$NOT_CARVED" "$OVERRIDE_RE")"
+check "empty line stays CLEAN even against an empty-matching pattern set" "$empty_hostile" "CLEAN"
+
+# NON-VACUITY CONTROL for the arm above — the hostile pattern file must actually be
+# hostile. A NON-empty line run against the same empty-matching set must NOT be
+# CLEAN; if it were, the arm above would pass for the wrong reason and prove nothing.
+hostile_ctl="$(depersonalization_line_verdict "core/standards/x.md" "any content at all" "$EMPTY_MATCHING" "$NOT_CARVED" "$OVERRIDE_RE")"
+check "control — the empty-matching pattern set does match a non-empty line" "$hostile_ctl" "BLOCKED"
+
 # esc_lines behaviour preservation — the helper was MOVED, not rewritten, so a literal
 # carrying regex metacharacters must still be escaped rather than interpreted.
 meta="$(esc_lines 'a.b*c' | tr -d '\n')"

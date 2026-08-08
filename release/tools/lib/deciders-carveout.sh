@@ -68,6 +68,17 @@ esc_lines() {
 #   already dark. It is also why the -s test is explicit and comes FIRST: `grep -f`
 #   against an empty file, or one carrying a blank line, matches EVERY line on some
 #   implementations, which would silently invert the carve-out into a blanket block.
+#
+#   EMPTY-HAYSTACK GUARD (the `[ -n "$_dc_content" ]` tests below). These greps read
+#   their haystack from a here-string rather than a `printf | grep` pipe, so that a
+#   short-circuiting reader can never leave the writer holding an unwritten residual
+#   (the SIGPIPE class fixed in test_sandbox_roots.sh and in deploy.sh Check 31). The
+#   two forms are NOT interchangeable on an empty haystack: `printf '%s' ""` emits
+#   ZERO lines, while `<<<""` emits ONE empty line — so a pattern able to match an
+#   empty line flips `no match` to `match` on the swap. On this code path that
+#   inverts a depersonalization CLEAN verdict into BLOCKED, in a branch-protection
+#   required gate, on any blank added line. The explicit -n test restores the
+#   printf semantics exactly; it is load-bearing, not defensive decoration.
 adr_deciders_carveout_suppresses() {
   _dc_path="${1?adr_deciders_carveout_suppresses: path required}"
   _dc_content="${2-}"
@@ -78,10 +89,12 @@ adr_deciders_carveout_suppresses() {
     *) return 1 ;;
   esac
 
-  printf '%s' "$_dc_content" | grep -qE '^deciders:' || return 1
+  if [ -z "$_dc_content" ] || ! grep -qE '^deciders:' <<<"$_dc_content"; then
+    return 1
+  fi
 
   if [ -n "$_dc_not_carved" ] && [ -s "$_dc_not_carved" ] \
-     && printf '%s' "$_dc_content" | grep -qE -f "$_dc_not_carved"; then
+     && [ -n "$_dc_content" ] && grep -qE -f "$_dc_not_carved" <<<"$_dc_content"; then
     return 1
   fi
   return 0
@@ -105,12 +118,17 @@ depersonalization_line_verdict() {
   _dv_not_carved="${4-}"
   _dv_override="${5-}"
 
-  if [ ! -s "$_dv_patterns" ] \
-     || ! printf '%s' "$_dv_content" | grep -qE -f "$_dv_patterns"; then
+  # Here-string form + explicit empty-haystack guard — see the note on
+  # adr_deciders_carveout_suppresses above. `[ -z "$_dv_content" ]` is what keeps a
+  # blank added line CLEAN; without it `<<<""` supplies the one empty line an
+  # empty-matching pattern needs, and the gate blocks the PR.
+  if [ ! -s "$_dv_patterns" ] || [ -z "$_dv_content" ] \
+     || ! grep -qE -f "$_dv_patterns" <<<"$_dv_content"; then
     printf 'CLEAN\n'
     return 0
   fi
-  if [ -n "$_dv_override" ] && printf '%s' "$_dv_content" | grep -qE "$_dv_override"; then
+  if [ -n "$_dv_override" ] && [ -n "$_dv_content" ] \
+     && grep -qE "$_dv_override" <<<"$_dv_content"; then
     printf 'SUPPRESSED-OVERRIDE\n'
     return 0
   fi
