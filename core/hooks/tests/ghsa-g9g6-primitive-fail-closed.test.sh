@@ -133,9 +133,14 @@ build_layout "$D" enforce 1 1 trunc; assert "enforce+TRUNCATED-lib -> FAIL-CLOSE
 build_layout "$D" enforce empty 1 ok; assert "enforce+classifier-EMPTY(present) -> FAIL-CLOSED"       2 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")"
 build_layout "$D" enforce trunc 1 ok; assert "enforce+classifier-TRUNCATED(present) -> FAIL-CLOSED"   2 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")"
 build_layout "$D" warn    empty 1 ok; assert "warn+classifier-EMPTY -> DEGRADE"                       0 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")"
-# A stale lib fails CLOSED at the guard regardless of mode (established GHSA-9cjm / ADR-078
-# D4 posture — a broken security-infra lib denies; recover by reinstalling). Off is no escape.
-build_layout "$D" off     1 1 stale;  assert "off+STALE-lib -> FAIL-CLOSED at guard (D4 posture)"     2 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")"
+# A stale lib is MODE-COUPLED at the guard. The unconditional-deny posture this line used
+# to assert was superseded: for a hook that HAS a mode surface, an unusable helper denies in
+# enforce (the enforce arm two lines above) and degrades with a loud stderr notice in
+# warn/off, because in those modes a rule match would not have blocked either. The recovery
+# is unchanged — reinstall the bundle. The unconditional posture is retained, deliberately,
+# on the always-enforce hooks that carry no mode surface; that floor is what makes degrading
+# this cohort safe, and it is asserted in hook-fail-closed.test.sh section (6).
+build_layout "$D" off     1 1 stale;  assert "off+STALE-lib -> DEGRADE at guard (mode-coupled)"       0 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")"
 # Caller-owns-exit: a lib whose deny_ fns are silent no-ops (corrupt-lib shape) must still
 # fail closed in enforce — the exit-2 lives at the call site, not only inside the callee.
 build_layout "$D" enforce 0 1 noop;   assert "enforce+NO-OP-deny lib+classifier-absent -> FAIL-CLOSED" 2 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")"

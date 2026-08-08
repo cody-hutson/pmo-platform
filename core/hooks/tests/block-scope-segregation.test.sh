@@ -191,10 +191,22 @@ sbox_run() { # name mode extra_env expected_exit [pattern]
 sbox_run "missing-jq enforce → fail CLOSED (exit 2)" enforce "" 2 "DEPENDENCY"
 sbox_run "missing-jq warn → degrade (exit 0)"        warn    "" 0 "DEPENDENCY-DEGRADED"
 sbox_run "missing-jq + bypass → allow (exit 0)"      enforce "CLAUDE_HOOK_BYPASS=1" 0
-# Missing dep helper entirely → fail CLOSED regardless of mode.
+# Missing dep helper entirely → MODE-COUPLED, like the jq gate above it. enforce
+# denies; warn/off degrade with the notice still on stderr, because an unusable helper
+# must not block harder than a rule match would and in warn/off a match does not block.
 /bin/rm -f "${SBX}/.claude/hooks/lib/dep-resolve.sh"
-sbox_run "missing-helper enforce → fail CLOSED (exit 2)" enforce "" 2 "LIB-MISSING"
-sbox_run "missing-helper off → fail CLOSED (exit 2)"     off     "" 2 "LIB-MISSING"
+sbox_run "missing-helper enforce → fail CLOSED (exit 2)" enforce "" 2 "LIB-MISSING.*fail-closed"
+sbox_run "missing-helper warn → degrade (exit 0)"        warn    "" 0 "LIB-MISSING.*degraded"
+sbox_run "missing-helper off → degrade (exit 0)"         off     "" 0 "LIB-MISSING.*degraded"
+
+# A stale helper that also redefines get_mode must not choose the guard's own verdict.
+# The guard sources the helper inside its own condition, so it is in the shell by the
+# time the failure branch runs; the mode is snapshotted readonly above the guard so a
+# sourced definition cannot overwrite it. Mode file says enforce → must still deny.
+/usr/bin/head -78 "${HDIR}/lib/dep-resolve.sh" > "${SBX}/.claude/hooks/lib/dep-resolve.sh"
+/usr/bin/printf 'get_mode() { /usr/bin/printf "off"; }\n' >> "${SBX}/.claude/hooks/lib/dep-resolve.sh"
+sbox_run "stale helper redefining get_mode + enforce → still fail CLOSED (readonly snapshot)" \
+  enforce "" 2 "LIB-MISSING.*fail-closed"
 /bin/rm -rf "$SBX"
 
 printf '\nTotal: %d  PASS: %d  FAIL: %d\n' "$((PASS + FAIL))" "$PASS" "$FAIL"
