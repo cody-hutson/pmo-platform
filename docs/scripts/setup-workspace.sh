@@ -103,6 +103,16 @@ readonly DEFAULT_CONFIG_ROOT="${PMO_PLATFORM_CONFIG_ROOT:-${HOME}/.config/pmo-pl
 CONFIG_ROOT=""              # resolved in parse_argv → finalize_paths
 OPERATOR_TOML=""            # derived from CONFIG_ROOT
 
+# User-scope settings surface — the re-home target for the PreToolUse hook wiring
+# (#4436). Same sandbox-root pattern as CONFIG_ROOT above: a --user-settings flag and
+# a PMO_USER_SETTINGS_FILE env var let integration tests point this at a sandbox
+# instead of the operator's real ${HOME}/.claude/settings.json.
+#
+#   Precedence: --user-settings CLI flag > PMO_USER_SETTINGS_FILE env var
+#               > $HOME-based default
+readonly DEFAULT_USER_SETTINGS="${PMO_USER_SETTINGS_FILE:-${HOME}/.claude/settings.json}"
+USER_SETTINGS=""            # resolved in parse_argv
+
 # The runtime-native operator settings overlay (ADR-121 §Decision 7). Layer 2:
 # operator-owned, git-ignored, merged by Claude Code itself, and NEVER written by
 # the platform beyond a create-once empty scaffold. It is the destination the
@@ -115,6 +125,7 @@ WORKSPACE_ROOT=""
 SOURCE_REPO=""
 INIT_ONLY_STATE=0
 REFRESH_HOOKS=0
+REHOME_HOOK_WIRING=0
 REFRESH_SETTINGS=0
 FORCE_REGEN=0
 NON_INTERACTIVE=0
@@ -171,6 +182,22 @@ Options:
                           run. Skips the scaffold/token/skill phases. This is the
                           path update.sh uses so a hook/helper security fix reaches
                           an already-installed workspace (#3430).
+  --rehome-hook-wiring    Merge the PreToolUse hook wiring from
+                          core/settings.json.template into the USER-scope settings
+                          surface, so sessions rooted in the repo, in a worktree, or
+                          anywhere outside the workspace project root resolve the
+                          hooks at all (#4436). Merges the PreToolUse object ONLY --
+                          never SessionStart, never Stop, never any non-hooks key --
+                          and preserves every unrelated key already in the target.
+                          Idempotent. Deliberately NOT part of any other flow: it
+                          writes outside the workspace root and it turns enforcement
+                          on for sessions that previously had none, so it is an
+                          explicit operator act, ordered AFTER script-allowlist
+                          reconciliation. Backs the target up before writing.
+  --user-settings PATH    User-scope settings file (default:
+                          ${HOME}/.claude/settings.json; can also be set via
+                          PMO_USER_SETTINGS_FILE env var). Used by integration tests
+                          + sandboxed dry-runs to isolate from operator state.
   --refresh-settings      Re-render ONLY the managed .claude/settings.json into an
                           EXISTING workspace, under the baseline-anchored guard
                           (ADR-121): an untouched platform copy is regenerated, and
@@ -411,6 +438,11 @@ parse_argv() {
         INIT_ONLY_STATE=1; shift ;;
       --refresh-hooks)
         REFRESH_HOOKS=1; shift ;;
+      --rehome-hook-wiring)
+        REHOME_HOOK_WIRING=1; shift ;;
+      --user-settings)
+        if [ -z "${2:-}" ]; then err "--user-settings requires PATH"; exit 64; fi
+        USER_SETTINGS="$2"; shift 2 ;;
       --refresh-settings)
         REFRESH_SETTINGS=1; shift ;;
       --force-regen)
@@ -436,7 +468,8 @@ parse_argv() {
 # safety property the previous top-level constants gave.
 finalize_paths() {
   OPERATOR_TOML="${CONFIG_ROOT}/operator.toml"
-  readonly OPERATOR_TOML CONFIG_ROOT
+  [ -n "${USER_SETTINGS}" ] || USER_SETTINGS="${DEFAULT_USER_SETTINGS}"
+  readonly OPERATOR_TOML CONFIG_ROOT USER_SETTINGS
 }
 
 # --- Section 8: Prerequisite checks ---
@@ -1954,6 +1987,40 @@ install_hooks() {
     printf 'rm-file:%s\n' "${masterlib_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
+  # Co-deploy the workspace-scope gate lib into .claude/hooks/lib/. Every block-* PreToolUse
+  # hook sources it from ${HOOK_DIR}/lib/scope-guard.sh at runtime (#4436) as precedence
+  # layer 3, so a hook is inert for a tool call whose working directory is outside the
+  # governed workspace root. A MISSING copy is fail-toward-current-behavior on the LIB axis —
+  # the hook keeps enforcing rather than going silent — so this is a SOFT dependency, exactly
+  # like master-enable.sh; but without it the re-homed PreToolUse wiring is unbounded and
+  # hooks fire in unrelated repositories. Sourced lib, not a registered hook (no block-*
+  # name) → the hook-registry checks correctly ignore it. Reached by every flow (fresh /
+  # rebootstrap / the refresh-hooks path update.sh delegates to).
+  local scopelib_src="${SOURCE_REPO}/core/hooks/lib/scope-guard.sh"
+  local scopelib_dst="${WORKSPACE_ROOT}/.claude/hooks/lib/scope-guard.sh"
+  if [ ! -r "${scopelib_src}" ]; then
+    warn "scope-guard.sh not found at ${scopelib_src}; block-* hooks will be UNBOUNDED (they enforce in every session that loads the wiring)"
+  elif [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would co-deploy scope-guard.sh → ${scopelib_dst}"
+  else
+    mkdir -p "${WORKSPACE_ROOT}/.claude/hooks/lib"
+    cp "${scopelib_src}" "${scopelib_dst}"
+    info "INSTALLED: scope-guard.sh (block-* workspace-scope gate)"
+    printf 'rm-file:%s\n' "${scopelib_dst}" >> "${ROLLBACK_OPS_FILE}"
+  fi
+
+  # Surface the enforcement point rather than performing it (#4436). The hooks installed
+  # above are loaded ONLY by sessions whose project root resolves to the workspace root —
+  # a session rooted in the repo or a worktree resolves no settings file with a hooks key
+  # and therefore loads no hooks at all, which is why the script allowlist has never
+  # governed the spawned-session path. Re-homing the PreToolUse wiring to user scope
+  # closes that, but it writes outside the workspace root and must be ordered after
+  # script-allowlist reconciliation, so it is a separate, explicit operator act.
+  info "NOTE: hooks installed above load only for sessions rooted under ${WORKSPACE_ROOT}."
+  info "      Repo- and worktree-rooted sessions (and the subagents they spawn) load NONE."
+  info "      To extend coverage to them, after reconciling the script allowlist run:"
+  info "        bash ${SOURCE_REPO}/docs/scripts/setup-workspace.sh --rehome-hook-wiring"
+
   install_mode_template_if_missing ".mode.template" ".mode"
   install_mode_template_if_missing "deploy-check.mode.template" "deploy-check.mode"
 
@@ -2615,7 +2682,187 @@ refresh_hooks_flow() {
   INSTALL_COMPLETE=1
 }
 
-# --- Section 22c: Refresh-settings flow (ADR-121) ---
+# --- Section 22c: Re-home the PreToolUse hook wiring to user scope (#4436) ---
+# THE ENFORCEMENT POINT FOR THE SPAWNED-SESSION PATH.
+#
+# The workspace-project settings file (<workspace-root>/.claude/settings.json) is the
+# only surface that declares the hook wiring, and Claude Code loads it only when the
+# session's project root resolves to the workspace root. A session rooted in the repo,
+# in a worktree, or in any repo subdirectory has NO settings file with a hooks key on
+# its resolution path, and a subagent it spawns inherits whatever that session loaded --
+# which is nothing. Merging the PreToolUse object into the USER-scope surface puts the
+# wiring on every session's resolution path regardless of project root.
+#
+# SCOPE: the PreToolUse object and nothing else from the template.
+#   Installing the template wholesale would additionally register a Stop hook
+#   (core/hooks/session-retro-trigger.sh) the harness invokes at EVERY assistant-turn
+#   boundary, plus a SessionStart addition -- neither of which the operator opted into
+#   by asking for a hook-wiring security fix. ADR-087 ships the Stop hook inert, but
+#   inertness there is INSTANCE STATE (it depends on [session_retro] being absent from
+#   operator.toml), not a property of this change. A fix whose blast radius depends on
+#   a config key it never mentions is not bounded, so this refuses it. Measured delta
+#   of the PreToolUse-only scoping: ONE additional script (block-scope-segregation.sh,
+#   security class) and ZERO new events.
+#
+# AUTHORITY: core/settings.json.template, NOT the deployed workspace copy. The two have
+#   drifted -- update.sh advances the hook SCRIPTS but nothing refreshes the wiring that
+#   NAMES them, because settings.json is not a registered composition surface (tracked
+#   separately as #4915; this function deliberately does not fix that). Re-homing the
+#   deployed copy would perpetuate a stale wiring.
+#
+# WHY THIS IS ITS OWN MODE AND NOT PART OF ANY OTHER FLOW -- three independent reasons:
+#   1. It writes OUTSIDE the workspace root. Every other flow honors the sandbox
+#      invariant that a run with --workspace-root <sandbox> touches only that sandbox;
+#      an automatic user-scope write would break it for every install and every test.
+#   2. It turns enforcement ON for sessions that previously had none. The DEPLOYED
+#      allowlist can be stale against exactly the paths release tooling runs even
+#      when the in-repo source is complete, because deploy.sh --deploy never sources
+#      the composition-surface manifest and so cannot refresh an allowlist -- it
+#      exits 0 reporting nothing to deploy and leaves the stale file as it was
+#      (#4447, open; refresh with update.sh --surfaces-only, not deploy.sh).
+#      So this must be ordered AFTER allowlist reconciliation -- an ordering only
+#      an operator can honor.
+#   3. It is the operator-executed precondition the release records as AI-004 member 1.
+#      Merging the repository change must not, by itself, alter live enforcement state.
+#
+# Idempotent, backup-first, and reversible: delete the PreToolUse key from the target
+# (or restore the .bak) and the prior posture returns immediately.
+rehome_pretooluse_wiring() {
+  local template="${SOURCE_REPO}/core/settings.json.template"
+  local target="${USER_SETTINGS}"
+
+  if [ ! -r "${template}" ]; then
+    err "settings template not found at ${template}"
+    exit 66
+  fi
+
+  info "Re-homing PreToolUse hook wiring"
+  info "  source: ${template} (PreToolUse object only)"
+  info "  target: ${target}"
+
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would merge the PreToolUse object into ${target} (all other keys preserved)"
+    return 0
+  fi
+
+  if [ -f "${target}" ]; then
+    cp "${target}" "${target}.pmo-bak"
+    info "Backed up existing settings → ${target}.pmo-bak"
+  fi
+
+  python3 -c '
+import json, os, re, sys
+
+template_path, target_path, ws_root = sys.argv[1], sys.argv[2], sys.argv[3]
+
+with open(template_path, "r") as f:
+    raw = f.read()
+
+# The PreToolUse commands carry exactly one token; resolve it the same way
+# substitute_template does (literal str.replace, no sed metacharacter hazards).
+raw = raw.replace("[CLAUDE_WORKSPACE_ROOT]", ws_root)
+tmpl = json.loads(raw)
+
+pre = tmpl.get("hooks", {}).get("PreToolUse")
+if not pre:
+    sys.stderr.write("FATAL: template has no hooks.PreToolUse object\n")
+    sys.exit(1)
+
+# Refuse to install an unresolved token into a live settings surface: an unresolved
+# command path is a wired hook that can never execute -- a silent enforcement hole.
+unresolved = sorted(set(re.findall(r"\[(?:OPERATOR|CLAUDE|COWORK)_[A-Z_]+\]", json.dumps(pre))))
+if unresolved:
+    sys.stderr.write("FATAL: unresolved token(s) in PreToolUse object: {}\n".format(", ".join(unresolved)))
+    sys.exit(1)
+
+target = {}
+if os.path.exists(target_path):
+    with open(target_path, "r") as f:
+        body = f.read().strip()
+    if body:
+        try:
+            target = json.loads(body)
+        except json.JSONDecodeError as e:
+            sys.stderr.write("FATAL: existing {} is not valid JSON: {}\n".format(target_path, e))
+            sys.exit(1)
+    if not isinstance(target, dict):
+        sys.stderr.write("FATAL: existing {} is not a JSON object\n".format(target_path))
+        sys.exit(1)
+
+before = json.dumps(target, sort_keys=True)
+
+# MERGE, never clobber. Only hooks.PreToolUse is written; every other top-level key
+# and every other hook EVENT already present in the target is preserved untouched.
+hooks = target.get("hooks")
+if not isinstance(hooks, dict):
+    hooks = {}
+hooks["PreToolUse"] = pre
+target["hooks"] = hooks
+
+after = json.dumps(target, sort_keys=True)
+
+os.makedirs(os.path.dirname(target_path) or ".", exist_ok=True)
+with open(target_path, "w") as f:
+    json.dump(target, f, indent=2)
+    f.write("\n")
+
+groups = len(pre)
+regs = sum(len(g.get("hooks", [])) for g in pre)
+scripts = sorted({h.get("command", "").rsplit("/", 1)[-1] for g in pre for h in g.get("hooks", [])})
+sys.stderr.write("INFO: PreToolUse re-homed: {} matcher group(s), {} registration(s), {} distinct script(s)\n".format(groups, regs, len(scripts)))
+sys.stderr.write("INFO: preserved top-level keys: {}\n".format(", ".join(sorted(k for k in target if k != "hooks")) or "(none)"))
+sys.stderr.write("INFO: preserved hook events: {}\n".format(", ".join(sorted(k for k in hooks if k != "PreToolUse")) or "(none)"))
+sys.stderr.write("INFO: result: {}\n".format("unchanged (idempotent re-run)" if before == after else "updated"))
+' "${template}" "${target}" "${WORKSPACE_ROOT}" || {
+    err "PreToolUse re-home failed: ${template} → ${target}"
+    exit 74
+  }
+
+  # Verify rather than assert: every wired command must exist and be executable, or the
+  # wiring is a claimed control that cannot fire (the #4449 partial-install class, which
+  # becomes load-bearing the moment this wiring goes live).
+  local unresolvable
+  unresolvable="$(python3 -c '
+import json, os, sys
+with open(sys.argv[1]) as f:
+    data = json.load(f)
+bad = []
+for g in data.get("hooks", {}).get("PreToolUse", []):
+    for h in g.get("hooks", []):
+        c = h.get("command", "")
+        if not (os.path.exists(c) and os.access(c, os.X_OK)):
+            bad.append(c)
+print("\n".join(sorted(set(bad))))
+' "${target}")"
+  if [ -n "${unresolvable}" ]; then
+    warn "Re-homed wiring references command(s) that do not exist or are not executable:"
+    printf '%s\n' "${unresolvable}" | while IFS= read -r line; do
+      [ -n "${line}" ] && warn "  ${line}"
+    done
+    warn "Run setup-workspace.sh --refresh-hooks first; a wired hook that cannot execute is a silent enforcement hole."
+  else
+    info "VERIFIED: every re-homed command exists and is executable"
+  fi
+
+  info ""
+  info "Enforcement is now live for sessions rooted anywhere under ${WORKSPACE_ROOT}."
+  info "Sessions outside that root remain uncovered (core/hooks/lib/scope-guard.sh, layer 3)."
+  info "To revert: remove the PreToolUse key from ${target}, or restore ${target}.pmo-bak"
+}
+
+rehome_hook_wiring_flow() {
+  INSTALL_MODE="rehome-hook-wiring"
+  info "REHOME-HOOK-WIRING flow — merge the PreToolUse object into the user-scope settings surface only"
+  if [ ! -d "${WORKSPACE_ROOT}/.claude/hooks" ]; then
+    err "No deployed hooks at ${WORKSPACE_ROOT}/.claude/hooks — run a full setup-workspace.sh first."
+    exit 1
+  fi
+  rehome_pretooluse_wiring
+  SUPPRESS_VALIDATE_HINT=1
+  INSTALL_COMPLETE=1
+}
+
+# --- Section 22d: Refresh-settings flow (ADR-121) ---
 # Re-render ONLY the managed .claude/settings.json into an EXISTING workspace,
 # under the baseline-anchored guard. The key-granular sibling of --refresh-hooks:
 # that flow delivers the hook SCRIPTS, this one delivers the REGISTRATIONS that
@@ -2851,6 +3098,11 @@ main() {
 
   if [ "${INIT_ONLY_STATE}" -eq 1 ]; then
     init_only_state_flow
+    return 0
+  fi
+
+  if [ "${REHOME_HOOK_WIRING}" -eq 1 ]; then
+    rehome_hook_wiring_flow
     return 0
   fi
 

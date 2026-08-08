@@ -1,0 +1,38 @@
+{
+  "depth": 2,
+  "filtered_mirrors_detail": [],
+  "first_order": [
+    {
+      "is_mirror": false,
+      "matches": [
+        {
+          "line": 2,
+          "snippet": "reference to docs/target.md"
+        }
+      ],
+      "path": "b.md",
+      "reference_count": 1
+    },
+    {
+      "is_mirror": false,
+      "matches": [
+        {
+          "line": 2,
+          "snippet": "see [t](docs/target.md) and docs/target.md again"
+        }
+      ],
+      "path": "docs/a.md",
+      "reference_count": 1
+    }
+  ],
+  "include_mirrors": false,
+  "schema_version": "1",
+  "second_order": [],
+  "stats": {
+    "filtered_mirrors": 0,
+    "first_order_count": 2,
+    "second_order_count": 0,
+    "total_files_scanned": 3
+  },
+  "target": "docs/target.md"
+}

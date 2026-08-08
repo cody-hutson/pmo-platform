@@ -181,6 +181,29 @@ Each failing run prints, in the run summary, the line-numbered matches, a link b
 
 The ADR durability lint ships **warn-mode**, and its flip to enforce is **deliberately deferred**: it locks a clean baseline rather than creating one, so enabling it before the ADR corpus has had its full structural-conformance pass would turn CI red on pre-existing content. The flip becomes eligible only once that conformance pass has landed a clean baseline, and then only after the standard warn-log shakedown described in the bypass-mode readiness reference.
 
+## Tag Retention
+
+Version tags are permanent. A tag matching `refs/tags/v*` cannot be deleted or force-updated on the remote: the repository host enforces an active tag ruleset — named `protect-version-tags` on the canonical repository — carrying a `deletion` rule and a `non_fast_forward` rule, with no bypass actors declared. No account can override it, the repository owner included. The only way to remove a version tag is to first amend or disable that ruleset; that is an operator decision taken outside any release procedure, never a step inside one.
+
+**This is a tag rule, not a ref rule.** Branches are swept routinely — § PR Process step 10 deletes merged branches by design, locally and on the remote. The asymmetry is deliberate. A branch is working state and is expected to disappear once it merges. A version tag is the atomically claimed record that a version resolved to a commit — the thing a release note, a deployment-log row, a downstream consumer, and the version-claim compare-and-swap all resolve against. Deleting one breaks whatever resolved it and erases the claim record itself.
+
+**What this means for procedures.**
+
+- No procedure may prescribe deleting a version tag on the remote. Neither `git push --delete origin <tag>` nor the `git push origin :<tag>` refspec form can succeed against a protected tag — a step naming either is a step that cannot run.
+- A **local** tag delete (`git tag -d <tag>`) is unaffected; the ruleset governs the remote only. Dropping a local tag after a lost version claim stays correct.
+- An orphan or superseded version tag is **retained and recorded**, not reaped. Record it in the re-version ledger and move on; an extra tag is one ref pointing at a commit that stays reachable through its canonical tag.
+- Rollback does not delete the release tag. Revert the merge and record the rollback; the tag remains as the record that the version was claimed and then withdrawn.
+
+**Rule versus enforcement — one authority, one discriminator.** The rule above is platform doctrine; the ruleset is this deployment's mechanical enforcement of it. On a deployment that has not configured tag protection the rule still governs, and the recovery tooling still carries a reap path for that case behind an explicit double opt-in — because the platform cannot assert what a differently-configured host permits, and tooling that refused unconditionally would bake one deployment's host configuration into a portable tool. The discriminator is the host, and the tooling reads it rather than assuming it: **where tag protection is configured the reap path is unreachable and the tooling reports the tag retained; where it is provably not configured, reaping is an operator-gated exception to this rule, never the default; where host policy cannot be read, nothing is attempted.** A reader who finds tooling and this rule apparently disagreeing resolves it here — the tool reads the host, this rule states the intent.
+
+**Verifying the control.** This is host configuration, not corpus text — searching this repository will not find it. Read it live:
+
+```bash
+gh api repos/:owner/:repo/rulesets --jq '.[] | select(.target == "tag")'
+```
+
+An empty result means this deployment carries no mechanical enforcement, not that the rule does not apply.
+
 ## Session Start Checklist
 Every Claude Code session begins with:
 1. **Identify context.** Confirm `pwd` — if inside a worktree (`.claude/worktrees/*`), you're in the right place. If at `${HOME}/Claude/` directly or any other path, STOP — see §Primary Checkout Discipline before proceeding. All subsequent steps assume worktree context.
@@ -200,6 +223,7 @@ Every Claude Code session begins with:
 - Never run `git checkout main && git pull` inside a worktree (claims main, blocks primary; use `git fetch origin main && git merge origin/main` instead)
 - Never use `gh issue list --limit N` (or any batch CLI command with a result-cap parameter) without verifying N ≥ total dataset size. Silent truncation produces misclassified state — see § Batch CLI Query Limits below.
 - Never commit draft / scratch / proposal / working-notes content as tracked files in the public repo — see § Draft / scratch content below for where it belongs.
+- Never delete a version tag on the remote — `refs/tags/v*` is host-protected and the push is rejected for every account, owner included; see § Tag Retention.
 
 ## Draft / scratch content — not in the public repo
 

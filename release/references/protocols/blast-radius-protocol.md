@@ -93,7 +93,11 @@ A capped run signals itself on **both** limbs: exit `6` **and** `partial: true` 
 
 ### Hook compliance
 
-The CLI uses only `grep`, `find`, `jq`, `sort`, `awk`, `sed` — all permitted under the `bypass-mode-readiness.md` hook layer. **However**, BLOCK-DESTRUCTIVE-022 (subprocess script execution) requires the CLI's path to be present in `core/config/allowlists/script-execution-allowlist.txt` before bash invocation succeeds. This is a one-time operator/deployment step; the entry covers absolute, worktree, and relative invocation forms. See [`core/rules/bypass-mode-readiness.md`](../../../core/rules/bypass-mode-readiness.md) §"Allowlist Maintenance".
+The CLI uses only `grep`, `find`, `jq`, `sort`, `awk`, `sed` — all permitted under the `bypass-mode-readiness.md` hook layer. **However**, BLOCK-DESTRUCTIVE-022 (subprocess script execution) requires the CLI's path to be present in `core/config/allowlists/script-execution-allowlist.txt` before bash invocation succeeds **wherever that guard is in force**. This is a one-time operator/deployment step; the entry covers absolute, worktree, and relative invocation forms. See [`core/rules/bypass-mode-readiness.md`](../../../core/rules/bypass-mode-readiness.md) §"Allowlist Maintenance".
+
+**Coverage boundary — four conditions.** BLOCK-DESTRUCTIVE-022 is enforced by a PreToolUse hook, and such a control is in force only when **all four** hold, and not when any one fails: (1) **loading** — the session resolved a settings surface declaring the hook wiring (any session, main or spawned, whose working directory is under the governed workspace root; a session resolving no such surface loads no hooks at all, and one outside the root is excluded by the scope guard); (2) **bypass** — `CLAUDE_HOOK_BYPASS` was not set in the launching environment (layer 1, which exits **both** hook classes, so the security/workflow asymmetry does **not** exist there); (3) **master-activation class** — `security` always enforces, `workflow` is inert while master activation is off; (4) **mode** — most block hooks warn-and-allow in warn mode, a minority are mode-independent. A citation naming fewer than four overstates the coverage. Canonical statement: [`core/standards/subagent-security-posture.md` § 3.1](../../../core/standards/subagent-security-posture.md).
+
+**Read this as a deployment prerequisite, not as a guarantee.** The allowlist entry is what makes the CLI runnable *under the guard*; it is not what makes the CLI runnable, and its absence is not a reason to expect an unallowlisted invocation to be caught.
 
 ---
 

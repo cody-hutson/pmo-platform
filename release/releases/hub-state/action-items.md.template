@@ -35,10 +35,17 @@ next release's action-items.md — implicit carry-forward is prohibited.
 TABLE BELOW IS APPEND-ONLY. Rows mutate IN-PLACE only to update status +
 resolved_at + resolution. Field semantics per the canonical schema spec.
 
-status enum: open / resolved / superseded / withdrawn
-category enum: deferred-edit / reminder / cleanup / decision-deferred /
-               merge-wait / post-action-verification
-trigger_type enum: event / time / manual
+The three enums below are RESTATED from the canonical schema, not authored
+here — they ship into every runtime ledger so a reader can pick a conformant
+value without the corpus open. The standard is the derived-from side: edit
+core/standards/hub-action-tracking.md first, then re-derive these lines.
+Held in parity by deploy.sh --check Check 68 (enum-parity), which registers
+each (template, field) pair against its owning section.
+
+status enum: open / in-flight / done / cancelled / superseded
+category enum: deferred-edit / reminder / cleanup / decision-to-post /
+               cross-issue-merge / verification / decision-deferred
+trigger_type enum: stage-boundary / event / time / cross-issue-merge
 -->
 
 | id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |

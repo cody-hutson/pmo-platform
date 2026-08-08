@@ -199,6 +199,15 @@ jobs:
         # security fix must reach an already-installed workspace, preserving operator edits.
         run: bash core/deploy/tests/test_refresh_hooks.sh
 
+      - name: Run hook-wiring re-home regression (test_rehome_hook_wiring.sh)
+        # #4436: setup-workspace.sh --rehome-hook-wiring merges the PreToolUse object into
+        # the USER-scope settings surface so repo- and worktree-rooted sessions (and the
+        # subagents they spawn) resolve the hook wiring at all. Gates the merge contract,
+        # which is where the blast radius lives: PreToolUse ONLY (never the template's Stop
+        # or SessionStart objects), unrelated operator keys preserved, idempotent, fails
+        # closed on a corrupt target, and no OTHER flow performs the user-scope write.
+        run: bash core/deploy/tests/test_rehome_hook_wiring.sh
+
       - name: Run composition-lib regression (test_lib_composition.sh)
         run: bash core/deploy/tests/test_lib_composition.sh
 

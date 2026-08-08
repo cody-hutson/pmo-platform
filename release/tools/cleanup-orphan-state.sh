@@ -26,19 +26,38 @@
 #     --spawn-task             Outcome 2 only — claude/* and agent-* orphans
 #     --historical             Outcome 3 only — all merged-no-active-work
 #     --all                    All 3 outcomes (default)
-#     --reap-orphan-tags       Outcome 4 (re-version recovery) — reap the orphaned git
+#     --reap-orphan-tags       Outcome 4 (re-version recovery) — settle the orphaned git
 #                              tag of an ABANDONED version. SEPARATE opt-in scope: it is
-#                              NOT run by --all / --release-close (a reap needs ledger
-#                              authority + double opt-in). Reads the re-version ledger
-#                              (RELEASE_REVERSIONS.md) for rows with disposition=
-#                              tag-orphaned, reaps each (non-force git push --delete +
-#                              git tag -d), and writes the row back (disposition→
-#                              tag-reaped, reaped_ref). Also reports stale-version corpus
-#                              rows needing the runbook's R-3 roll-forward (report-only —
-#                              never edits corpus prose). See
+#                              NOT run by --all / --release-close (any deletion needs
+#                              ledger authority + double opt-in). Reads the re-version
+#                              ledger (RELEASE_REVERSIONS.md) for rows with disposition=
+#                              tag-orphaned, then classifies each against HOST TAG POLICY:
+#                                protected    → RETAINED; row → tag-retained; NO push is
+#                                               issued and --force is not required. This
+#                                               is the branch that fires wherever a tag
+#                                               ruleset with a deletion rule is active —
+#                                               per core/rules/git-workflow.md
+#                                               § Tag Retention, a version tag is kept.
+#                                unprotected  → the pre-existing reap path (non-force
+#                                               git push --delete + git tag -d, behind
+#                                               --apply --force), writing the row back
+#                                               (disposition→tag-reaped, reaped_ref).
+#                                undetermined → nothing attempted, no row transitioned;
+#                                               the reason is named. Host policy could
+#                                               not be READ, and indeterminacy fails
+#                                               CLOSED (see tag_protection_state()).
+#                              Also reports stale-version corpus rows needing the
+#                              runbook's R-3 roll-forward (report-only — never edits
+#                              corpus prose). See
 #                              release/references/how-to/re-version-recovery.md.
-#         --abandoned <tag>    Pre-ledger explicit authority — reap THIS tag (the only
+#         --abandoned <tag>    Pre-ledger explicit authority — consider THIS tag (the only
 #                              path that does not require a ledger row). Never inferred.
+#         --assume-unprotected Operator assertion that this deployment's host carries no
+#                              tag protection. Skips the host query and takes the
+#                              unprotected branch. Use only when host policy is genuinely
+#                              unreadable AND you know the host does not protect tags;
+#                              it asserts host state, it does not override a host that
+#                              does protect (the push is still rejected server-side).
 #         --ledger <path>      Point at a re-version ledger other than the default
 #                              (release/releases/RELEASE_REVERSIONS.md).
 #   MODE (one of, default --dry-run):
@@ -150,17 +169,19 @@ OUTPUT="markdown"         # markdown | json
 FORCE=0
 SELF_TEST=0
 
-# Re-version recovery (--reap-orphan-tags scope). The reaper consumes the
+# Re-version recovery (--reap-orphan-tags scope). The tool consumes the
 # machine-readable re-version ledger to learn which abandoned-version tags an
-# AUTHORITY has declared orphaned, then reaps them (non-force git push --delete +
-# git tag -d) and writes the outcome back. Abandonment is NEVER inferred — only the
-# ledger's `disposition = tag-orphaned` rows or an explicit --abandoned <tag>
-# authorize a reap. Field names + the disposition enum are #1679's frozen schema
-# (RELEASE_REVERSIONS.md): the reaper READS disposition / abandoned_version /
+# AUTHORITY has declared orphaned, classifies each against host tag policy, and writes
+# the outcome back. Abandonment is NEVER inferred — only the ledger's
+# `disposition = tag-orphaned` rows or an explicit --abandoned <tag> put a tag in
+# scope. Field names + the disposition enum are the ledger's frozen schema
+# (RELEASE_REVERSIONS.md): the tool READS disposition / abandoned_version /
 # abandoned_tag_pushed / merge_sha and WRITES the two mutable cells disposition
-# (→ tag-reaped) and reaped_ref, keyed on (slug, abandoned_version), header-resolved.
+# (→ tag-retained where the host protects the tag, → tag-reaped where it does not) and
+# reaped_ref, keyed on (slug, abandoned_version), header-resolved.
 LEDGER_PATH="${REVERSION_LEDGER:-$REPO_ROOT/release/releases/RELEASE_REVERSIONS.md}"
 ABANDONED_ARG=""          # explicit pre-ledger authority (one tag); never inferred
+ASSUME_UNPROTECTED=0      # operator assertion of host state; see tag_protection_state()
 RELEASE_LOG_PATH="$REPO_ROOT/release/releases/RELEASE_LOG.md"
 
 # Always-protected names (never touched regardless of protect-list state)
@@ -967,10 +988,120 @@ tag_is_canonical_release() {
   return 1
 }
 
+# ─── Host tag-protection preflight ───────────────────────────────────────────
+#
+# Answers, for ONE tag: does the REMOTE's host actively forbid deleting it? Echoes
+# exactly one of three states — never a boolean, because the third state is the point:
+#
+#   protected     an ACTIVE host ruleset targets tags, carries a `deletion` rule, and
+#                 its ref-name include set matches this tag
+#   unprotected   DETERMINATELY not protected — either the remote is not a
+#                 policy-bearing host at all (a local path or non-GitHub URL, where no
+#                 such ruleset can exist), or its policy WAS read and covers nothing
+#   undetermined  the remote IS a policy-bearing host but its policy could not be read
+#                 (gh absent, unauthenticated, or the endpoint errored)
+#
+# FAIL DIRECTION — deliberate, and the reason this preflight is worth its lines.
+# `undetermined` is NOT folded into `unprotected`. A preflight that failed open would
+# fall through to the reap path's "--force required; tag delete is MODERATE-reversible"
+# message on exactly the credential class that cannot read host policy — telling an
+# operator a deletion is moderately reversible on a repository where it cannot execute
+# at all. So indeterminacy fails CLOSED to no-attempt.
+#
+# Failing closed costs nothing on a genuinely unprotected deployment, because the
+# capability is preserved two ways that do not require reading a host:
+#   (1) a NON-policy-bearing remote resolves `unprotected` determinately with no host
+#       query — which is also why every pre-existing self-test keeps its behaviour
+#       unchanged: the reap fixtures push to a local bare-directory remote, so they
+#       take this arm on its merits, not by an exemption; and
+#   (2) an operator who knows their deployment carries no tag protection asserts it
+#       with --assume-unprotected — the same shape as --abandoned: state the authority
+#       the tool refuses to infer.
+#
+# Reversibility of this preflight: CHEAP / confidence HIGH (one read-only branch).
+#
+# CALLING CONVENTION — the answer is returned in the GLOBAL `TAG_PROTECTION_STATE`, and
+# this function must be called DIRECTLY, never as `$(tag_protection_state …)`. Command
+# substitution forks a subshell, so the two companion globals below would be set in the
+# child and lost — yielding an `undetermined` with an empty reason, which reads as a
+# populated classification and is not one. The three values are one answer and travel
+# together.
+TAG_PROTECTION_STATE=""       # protected | unprotected | undetermined
+TAG_PROTECTION_REASON=""      # populated on `undetermined`; empty otherwise
+TAG_PROTECTION_RULESET=""     # populated on `protected`; empty otherwise
+tag_protection_state() {
+  local tag="$1" url owner_repo ids id row name has_del incs pat
+  TAG_PROTECTION_STATE=""; TAG_PROTECTION_REASON=""; TAG_PROTECTION_RULESET=""
+
+  # Operator assertion of host state — an explicit claim, never an inference.
+  if [[ "$ASSUME_UNPROTECTED" == "1" ]]; then TAG_PROTECTION_STATE="unprotected"; return 0; fi
+
+  # Arm 1 — is the remote a policy-bearing host at all? A bare directory path, a
+  # file:// URL, or any non-GitHub remote cannot carry a GitHub ruleset, so
+  # `unprotected` here is a DETERMINATION, not a guess. No network call is made.
+  url=$(git remote get-url "$REMOTE_NAME" 2>/dev/null || printf '%s' "$REMOTE_NAME")
+  case "$url" in
+    *github.com[:/]*) : ;;
+    *) TAG_PROTECTION_STATE="unprotected"; return 0 ;;
+  esac
+  owner_repo=$(printf '%s' "$url" \
+    | sed -E 's#^[a-z]+://[^@]*@#https://#; s#^[^@]*@github\.com:#https://github.com/#' \
+    | sed -E 's#^https?://[^/]*github\.com/##; s#\.git$##; s#/+$##')
+  if [[ -z "$owner_repo" || "$owner_repo" != */* ]]; then
+    TAG_PROTECTION_STATE="undetermined"
+    TAG_PROTECTION_REASON="could not derive owner/repo from the remote URL"
+    return 0
+  fi
+
+  # Arm 2 — read host policy. Any failure to READ is `undetermined`, never
+  # `unprotected`. gh is invoked through the script's resolved absolute path, NOT via
+  # `command -v`: this script pins PATH to the system directories, so a bare `gh`
+  # lookup misses a Homebrew install and would report every host undetermined.
+  # gh's embedded --jq is used, so no external jq is required.
+  ensure_gh_bin
+  if [[ -z "$GH_BIN" ]]; then
+    TAG_PROTECTION_STATE="undetermined"
+    TAG_PROTECTION_REASON="gh CLI unavailable, so host policy is unreadable"
+    return 0
+  fi
+  if ! ids=$("$GH_BIN" api "repos/${owner_repo}/rulesets" --paginate \
+               --jq '.[] | select(.target == "tag" and .enforcement == "active") | .id' 2>/dev/null); then
+    TAG_PROTECTION_STATE="undetermined"
+    TAG_PROTECTION_REASON="rulesets endpoint unreadable by the invoking credential"
+    return 0
+  fi
+  for id in $ids; do
+    if ! row=$("$GH_BIN" api "repos/${owner_repo}/rulesets/${id}" \
+                 --jq '[.name, ((([.rules[].type] | index("deletion")) != null)), (.conditions.ref_name.include // [] | join(" "))] | @tsv' 2>/dev/null); then
+      TAG_PROTECTION_STATE="undetermined"
+      TAG_PROTECTION_REASON="ruleset detail unreadable by the invoking credential"
+      return 0
+    fi
+    name=$(awk -F'\t' '{print $1}' <<<"$row")
+    has_del=$(awk -F'\t' '{print $2}' <<<"$row")
+    incs=$(awk -F'\t' '{print $3}' <<<"$row")
+    [[ "$has_del" == "true" ]] || continue
+    for pat in $incs; do
+      # `~ALL` is GitHub's every-ref sentinel. Otherwise glob-match the full ref form,
+      # and the bare tag name as a tolerant fallback. RHS is deliberately UNQUOTED so
+      # [[ == ]] performs pattern matching, which is what a ruleset include pattern is.
+      # shellcheck disable=SC2053
+      if [[ "$pat" == "~ALL" ]] || [[ "refs/tags/${tag}" == $pat ]] || [[ "$tag" == $pat ]]; then
+        TAG_PROTECTION_STATE="protected"
+        TAG_PROTECTION_RULESET="$name"
+        return 0
+      fi
+    done
+  done
+  TAG_PROTECTION_STATE="unprotected"   # policy WAS read and covers nothing — a determination
+  return 0
+}
+
 # Classify one authority-declared-abandoned tag: REMOVE if it is genuinely an orphan
-# on origin, else a counted SKIP reason. Guards (in order): authority gate (must be in
-# ABANDONED_SET — held by construction here), canonical-version guard, on-origin probe
-# (idempotency). reshipped_as/merge_sha come from the ledger row (the re-create source
+# on origin AND the host permits removing it, else a counted RETAINED/SKIP reason.
+# Guards (in order): authority gate (must be in ABANDONED_SET — held by construction
+# here), canonical-version guard, on-origin probe (idempotency), host tag-protection
+# preflight. reshipped_as/merge_sha come from the ledger row (the re-create source
 # for a wrongly-reaped tag).
 classify_tag() {
   local tag="$1" slug="$2" action="REMOVE" on_origin reshipped="?" merge_sha="?"
@@ -984,11 +1115,31 @@ classify_tag() {
   if tag_is_canonical_release "$tag"; then
     action="SKIP — canonical version of a live RELEASE_LOG row (not an orphan)"
   fi
-  # Guard 2 — idempotency: already absent from origin → nothing to reap.
+  # Guard 2 — idempotency: already absent from origin → nothing to reap. Ordered BEFORE
+  # the protection preflight because an absent tag needs no host answer, and "already
+  # absent" is the more informative classification than "retained".
   if [[ "$action" == "REMOVE" ]]; then
     on_origin=$(git ls-remote --tags "$REMOTE_NAME" "refs/tags/${tag}" 2>/dev/null | grep -c "refs/tags/${tag}$" || true)
     [[ -z "$on_origin" ]] && on_origin=0
     [[ "$on_origin" == "0" ]] && action="SKIP — already absent from origin (nothing to reap)"
+  fi
+  # Guard 3 — host tag-protection preflight. A protected tag is RETAINED per the
+  # tag-retention rule (core/rules/git-workflow.md § Tag Retention): the reap path is
+  # unreachable for it, so the tool says so up front instead of demanding a double
+  # opt-in for a push the host will reject. An UNDETERMINED host fails closed to
+  # no-attempt — see tag_protection_state() for why that direction is deliberate.
+  if [[ "$action" == "REMOVE" ]]; then
+    # Called DIRECTLY, never in a command substitution — the answer travels in three
+    # globals, and a subshell would strand the reason and the ruleset name.
+    tag_protection_state "$tag"
+    case "$TAG_PROTECTION_STATE" in
+      protected)
+        action="RETAINED — host tag protection active${TAG_PROTECTION_RULESET:+ (ruleset '${TAG_PROTECTION_RULESET}', deletion rule)}"
+        ;;
+      undetermined)
+        action="SKIP — tag protection undetermined (${TAG_PROTECTION_REASON:-reason unreported}); nothing attempted"
+        ;;
+    esac
   fi
   TAG_CANDIDATES+=("${tag}	${slug:-?}	${reshipped}	${merge_sha}	${action}")
 }
@@ -1400,6 +1551,16 @@ reap_orphan_tags() {
     [[ -z "$r" ]] && continue
     tag=$(awk -F'\t' '{print $1}' <<<"$r"); slug=$(awk -F'\t' '{print $2}' <<<"$r")
     action=$(awk -F'\t' '{print $5}' <<<"$r")
+    # Retained-under-host-protection: settle the ledger row and move on. No push is
+    # issued and --force is NOT required, because nothing destructive is attempted.
+    # Ordered ahead of the generic non-REMOVE skip so the row transition happens; every
+    # other non-REMOVE action (canonical guard, already-absent, protection undetermined)
+    # still falls through to that skip and transitions nothing.
+    if [[ "$action" == RETAINED* ]]; then
+      echo "RETAINED tag $tag — $action; no deletion attempted" >&2
+      [[ -n "$slug" && "$slug" != "?" ]] && ledger_mark_retained "$slug" "$tag"
+      continue
+    fi
     [[ "$action" != "REMOVE" ]] && { echo "SKIPPED tag $tag — $action" >&2; continue; }
     # Double opt-in: --force required (MODERATE-reversibility — re-pushable but
     # transiently breaks any reference that resolved the tag).
@@ -1502,6 +1663,50 @@ ledger_mark_reaped() {
   if [[ "$rc" -eq 0 ]]; then
     printf '%s\n' "$rewritten" > "$LEDGER_PATH"     # in-place content replace; no rm/mv
     echo "PASS ledger-writeback — ($slug, $ver) → disposition=tag-reaped, reaped_ref=$ref" >&2
+  else
+    echo "WARN ledger-writeback — no matching tag-orphaned row for ($slug, $ver); ledger unchanged" >&2
+  fi
+  return 0
+}
+
+# Write-back sibling for the RETAINED outcome: transition the matched ledger row IN
+# PLACE from `tag-orphaned` to the terminal `tag-retained`, mutating ONE cell —
+# `disposition`. `reaped_ref` is deliberately LEFT UNSET: it is the back-reference the
+# reaper fills when it reaps, and nothing was reaped. The transition is what
+# de-authorizes the row for any future reap, because load_abandonment_authority()
+# selects only on `tag-orphaned` — so idempotency holds by construction, with no extra
+# guard. Same append-only invariant as ledger_mark_reaped(): exactly one row changes,
+# no row is added or removed, no other cell is touched, and a non-match leaves the
+# ledger byte-for-byte unchanged.
+ledger_mark_retained() {
+  local slug="$1" ver="$2"
+  [[ -w "$LEDGER_PATH" ]] || { echo "WARN ledger-writeback — $LEDGER_PATH not writable; skipped" >&2; return 0; }
+  local di si vi ncol
+  di=$(table_col_index "$LEDGER_PATH" "disposition")
+  si=$(table_col_index "$LEDGER_PATH" "slug")
+  vi=$(table_col_index "$LEDGER_PATH" "abandoned_version")
+  if [[ -z "$di" || -z "$si" || -z "$vi" ]]; then
+    echo "WARN ledger-writeback — could not resolve disposition/slug/abandoned_version columns; skipped" >&2
+    return 0
+  fi
+  ncol=$(awk -F'|' '/^\|/ {print NF; exit}' "$LEDGER_PATH")
+  local rewritten rc=0
+  rewritten=$(awk -F'|' -v OFS='|' \
+      -v slug="$slug" -v ver="$ver" -v di="$((di + 1))" \
+      -v si="$((si + 1))" -v vi="$((vi + 1))" -v nf="$ncol" '
+    function trim(s){ gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+    {
+      if ($0 ~ /^\|/ && NF == nf && trim($si) == slug && trim($vi) == ver && trim($di) == "tag-orphaned") {
+        $di = " tag-retained "
+        changed = 1
+      }
+      print
+    }
+    END { if (!changed) exit 3 }
+  ' "$LEDGER_PATH") || rc=$?
+  if [[ "$rc" -eq 0 ]]; then
+    printf '%s\n' "$rewritten" > "$LEDGER_PATH"     # in-place content replace; no rm/mv
+    echo "PASS ledger-writeback — ($slug, $ver) → disposition=tag-retained (no reap; reaped_ref left unset)" >&2
   else
     echo "WARN ledger-writeback — no matching tag-orphaned row for ($slug, $ver); ledger unchanged" >&2
   fi
@@ -2411,13 +2616,22 @@ selftest_no_live_worktree_pipes() {
   return 0
 }
 
-# Orphan-tag reap fixtures (T-1..T-9). HERMETIC: never touches the real origin. The
-# real-reap / verify-after cases (T-3/T-7) run `git push --delete` and `git ls-remote`
-# against a PID-scoped FIXTURE BARE REMOTE (a local `git init --bare`), with REMOTE_NAME
-# temporarily repointed at it — so the reap primitive is observed FIRING against a
-# throwaway, not assumed and not aimed at origin. Classification/guard/write-back cases
-# run in-process on injected state + a throwaway ledger (LEDGER_PATH override). Net-zero:
-# the fixture remote + its tag + the throwaway ledger are removed on every exit path.
+# Orphan-tag fixtures (T-1..T-11). HERMETIC: never touches the real origin, and issues
+# no host-policy query. The real-reap / verify-after cases (T-3/T-7) run
+# `git push --delete` and `git ls-remote` against a PID-scoped FIXTURE BARE REMOTE (a
+# local `git init --bare`), with REMOTE_NAME temporarily repointed at it — so the reap
+# primitive is observed FIRING against a throwaway, not assumed and not aimed at origin.
+# Classification/guard/write-back cases run in-process on injected state + a throwaway
+# ledger (LEDGER_PATH override). Net-zero: the fixture remote + its tags + the throwaway
+# ledgers are removed on every exit path.
+#
+# Why T-1..T-9 are unaffected by the host tag-protection preflight, and why that is a
+# property rather than an exemption: the fixture remote is a bare DIRECTORY, so
+# tag_protection_state() resolves `unprotected` on its first arm — the remote is not a
+# policy-bearing host, therefore no ruleset can exist on it — and returns without any
+# network call. These tests exercise the unprotected code path on its merits. T-10/T-11
+# cover the two new branches by stubbing the preflight, because a hermetic self-test
+# must not depend on a live host.
 selftest_orphan_tag_reap() {
   local base saved_remote="$REMOTE_NAME" saved_ledger="$LEDGER_PATH" saved_log="$RELEASE_LOG_PATH"
   local saved_force="$FORCE" saved_aband="$ABANDONED_ARG" saved_scope="$SCOPE" saved_mode="$MODE"
@@ -2544,6 +2758,93 @@ selftest_orphan_tag_reap() {
       echo "self-test: orphan-tag reap check FAILED — T-7: verify-after did not reclassify a surviving tag (got '$action')" >&2; fail=1
     fi
     git tag -d "$tag" >/dev/null 2>&1 || true
+
+    # ── T-10 / T-11: host tag-protection preflight ──
+    # The real preflight needs a live policy-bearing host, which a hermetic self-test
+    # must not depend on — so it is STUBBED per case and restored afterwards. What is
+    # observed is the reap loop's behaviour given each preflight answer, which is the
+    # part that can regress. Fresh tag + fresh throwaway ledger, because the T-1..T-9
+    # fixtures are already spent (their row is tag-reaped and carries no authority).
+    local tag2="cleanup-selftest-prot-$$" slug2="cleanup-selftest-protslug-$$"
+    local fix_ledger2="${fix_base}/ledger-protection.md" saved_tps
+    saved_tps=$(declare -f tag_protection_state)
+    _write_protection_fixture_ledger() {
+      {
+        echo '| slug | abandoned_version | final_version | claimed_versions | abandoned_tag_pushed | merge_sha | collided_with | resolved_at_stage | disposition | residual_labels | reaped_ref | date |'
+        echo '|---|---|---|---|---|---|---|---|---|---|---|---|'
+        echo "| ${slug2} | ${tag2} | v9.99 | ${tag2} → v9.99 | true | ${base} | — | S12 | tag-orphaned | branch retains label | — | 2026-06-21 |"
+      } > "$fix_ledger2"
+    }
+    if git update-ref "refs/tags/${tag2}" "$base" >/dev/null 2>&1 \
+       && git push -q "$fix_remote_dir" "refs/tags/${tag2}" >/dev/null 2>&1; then
+
+      # ── T-10: PROTECTED → RETAINED, no push issued, row → tag-retained, no --force ──
+      _write_protection_fixture_ledger
+      tag_protection_state() { TAG_PROTECTION_STATE="protected"; TAG_PROTECTION_RULESET="selftest-protect"; TAG_PROTECTION_REASON=""; }
+      REMOTE_NAME="$fix_remote_dir"; LEDGER_PATH="$fix_ledger2"; RELEASE_LOG_PATH="$fix_log"; ABANDONED_ARG=""
+      TAG_CANDIDATES=(); ABANDONED_SET=()
+      detect_orphan_tags >/dev/null 2>&1 || true
+      action=$(awk -F'\t' '{print $5}' <<<"${TAG_CANDIDATES[0]:-}")
+      if [[ "$action" != RETAINED* ]]; then
+        echo "self-test: orphan-tag reap check FAILED — T-10: protected tag not classified RETAINED (got '$action')" >&2; fail=1
+      fi
+      # --force deliberately OFF: the retained path must need no double opt-in, because
+      # it attempts nothing destructive.
+      FORCE=0; reap_orphan_tags >/dev/null 2>&1 || true
+      if ! git ls-remote --tags "$fix_remote_dir" "refs/tags/${tag2}" 2>/dev/null | grep -q "refs/tags/${tag2}$"; then
+        echo "self-test: orphan-tag reap check FAILED — T-10: a protected tag was DELETED (no push may be issued)" >&2; fail=1
+      fi
+      if ! grep -q '| tag-retained |' "$fix_ledger2"; then
+        echo "self-test: orphan-tag reap check FAILED — T-10: ledger row not transitioned to tag-retained" >&2; fail=1
+      fi
+      if grep -q '| tag-orphaned |' "$fix_ledger2"; then
+        echo "self-test: orphan-tag reap check FAILED — T-10: ledger still carries tag-orphaned (in-place transition failed)" >&2; fail=1
+      fi
+      # reaped_ref must stay unset — nothing was reaped, so the back-reference is empty.
+      if ! grep -qE '\| tag-retained \|[^|]*\| — \|' "$fix_ledger2"; then
+        echo "self-test: orphan-tag reap check FAILED — T-10: reaped_ref was written on a retain (must stay unset)" >&2; fail=1
+      fi
+      # Re-classification must find no authority — idempotency by construction.
+      TAG_CANDIDATES=(); ABANDONED_SET=(); detect_orphan_tags >/dev/null 2>&1 || true
+      if [[ "${#TAG_CANDIDATES[@]}" -ne 0 ]]; then
+        echo "self-test: orphan-tag reap check FAILED — T-10: a retained (tag-retained) row was re-authorized" >&2; fail=1
+      fi
+
+      # ── T-11: UNDETERMINED fails CLOSED — nothing attempted even WITH --force ──
+      # The load-bearing assertion of the preflight's fail direction: an unreadable host
+      # policy must never fall through to the deletion path, and must name its reason
+      # rather than emitting the reversibility grade of an operation it cannot assess.
+      _write_protection_fixture_ledger
+      tag_protection_state() { TAG_PROTECTION_STATE="undetermined"; TAG_PROTECTION_RULESET=""; TAG_PROTECTION_REASON="selftest: host policy unreadable"; }
+      LEDGER_PATH="$fix_ledger2"; TAG_CANDIDATES=(); ABANDONED_SET=()
+      detect_orphan_tags >/dev/null 2>&1 || true
+      action=$(awk -F'\t' '{print $5}' <<<"${TAG_CANDIDATES[0]:-}")
+      # The reason must be present AND non-empty. Asserting only the surrounding shape
+      # would pass on "undetermined ()" — an empty reason reads as a populated
+      # classification and is not one. That exact defect shipped once, from a
+      # command-substitution subshell stranding the reason global, and was caught by a
+      # live run rather than by this test; the assertion is tightened so the reverse
+      # holds next time.
+      case "$action" in
+        "SKIP — tag protection undetermined (selftest: host policy unreadable); nothing attempted") : ;;
+        *) echo "self-test: orphan-tag reap check FAILED — T-11: undetermined host not classified with its named reason (got '$action')" >&2; fail=1 ;;
+      esac
+      FORCE=1; reap_orphan_tags >/dev/null 2>&1 || true
+      if ! git ls-remote --tags "$fix_remote_dir" "refs/tags/${tag2}" 2>/dev/null | grep -q "refs/tags/${tag2}$"; then
+        echo "self-test: orphan-tag reap check FAILED — T-11: undetermined host FAILED OPEN — the tag was deleted under --force" >&2; fail=1
+      fi
+      if ! grep -q '| tag-orphaned |' "$fix_ledger2"; then
+        echo "self-test: orphan-tag reap check FAILED — T-11: undetermined host transitioned a ledger row (must transition nothing)" >&2; fail=1
+      fi
+
+      eval "$saved_tps"
+      git push -q --delete "$fix_remote_dir" "refs/tags/${tag2}" >/dev/null 2>&1 || true
+      git tag -d "$tag2" >/dev/null 2>&1 || true
+    else
+      eval "$saved_tps"
+      echo "self-test: orphan-tag reap check SKIPPED (T-10/T-11) — could not stage the protection fixture tag" >&2
+    fi
+    unset -f _write_protection_fixture_ledger
   else
     echo "self-test: orphan-tag reap check SKIPPED (T-2/T-3/T-4/T-6/T-7) — could not set up fixture remote" >&2
   fi
@@ -2597,7 +2898,7 @@ selftest_orphan_tag_reap() {
   esac
 
   if [[ "$fail" -ne 0 ]]; then exit 1; fi
-  echo "self-test: orphan-tag reap check PASS — T-1 authority gate / T-2 dry-run / T-3 real-reap-observed / T-4 double-opt-in / T-5 canonical-guard / T-6 idempotency / T-7 verify-after / T-8 stale-row report-only / T-9 ledger write-back" >&2
+  echo "self-test: orphan-tag reap check PASS — T-1 authority gate / T-2 dry-run / T-3 real-reap-observed / T-4 double-opt-in / T-5 canonical-guard / T-6 idempotency / T-7 verify-after / T-8 stale-row report-only / T-9 ledger write-back / T-10 protected-host retain / T-11 undetermined-host fail-closed" >&2
   return 0
 }
 
@@ -2817,6 +3118,7 @@ while [[ $# -gt 0 ]]; do
     --historical)    SCOPE="historical"; shift ;;
     --reap-orphan-tags) SCOPE="reap-orphan-tags"; shift ;;
     --abandoned)     ABANDONED_ARG="${2:-}"; shift 2 ;;
+    --assume-unprotected) ASSUME_UNPROTECTED=1; shift ;;
     --ledger)        LEDGER_PATH="${2:-}"; shift 2 ;;
     --all)           SCOPE="all"; shift ;;
     --dry-run)       MODE="dry-run"; shift ;;
@@ -2833,6 +3135,7 @@ done
 [[ "$FORCE" == "1" && "$MODE" != "apply" ]] && die "--force requires --apply (double opt-in)"
 [[ "$SCOPE" == "release-close" && -z "$MILESTONE_SLUG" ]] && die "--release-close requires a milestone slug"
 [[ -n "$ABANDONED_ARG" && "$SCOPE" != "reap-orphan-tags" ]] && die "--abandoned requires --reap-orphan-tags"
+[[ "$ASSUME_UNPROTECTED" == "1" && "$SCOPE" != "reap-orphan-tags" ]] && die "--assume-unprotected requires --reap-orphan-tags"
 
 # ─── Main ────────────────────────────────────────────────────────────────────
 

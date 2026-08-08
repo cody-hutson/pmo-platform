@@ -64,6 +64,7 @@ RELEASE_SKILLS=(
   implementation-planner
   pipeline-triage
   pmo-architect
+  pmo-data-engineer
   pmo-devops-sre
   pmo-principal-engineer
   pmo-qa-lead
@@ -3194,6 +3195,14 @@ cmd_deploy() {
   if [[ ${#CHANGED_SKILLS[@]} -eq 0 ]] && [[ ${#CHANGED_PACKAGES[@]} -eq 0 ]] && \
      [[ ${#CHANGED_HARNESS[@]} -eq 0 ]]; then
     log "No skill, package, or harness changes detected. Nothing to deploy."
+    log "  Note: composition surfaces (hook-tier allowlists, hub-state templates,"
+    log "        platform-config seed) are OUT OF SCOPE for --deploy and were NOT"
+    log "        examined. --deploy reads three change sets — skills, packages,"
+    log "        harness artifacts — and composition surfaces are a fourth category"
+    log "        it does not source. A clean result here says nothing about them."
+    log "        To refresh a composition surface, run:"
+    log "          ./update.sh --surfaces-only    (targeted — surfaces only)"
+    log "          ./update.sh                    (full update; wider blast radius)"
     exit 0
   fi
 
@@ -10592,6 +10601,115 @@ sys.stdout.write("".join(out) + "|")
     fi
   fi
 
+  # ─── Check 68: hub-state enum parity, template/playbook ↔ standard (warn-mode initial) ───
+  #
+  # WHAT IT ASSERTS. Every derived surface registered in
+  # core/deploy/allowlists/hub-state-enum-parity-map.txt declares the same enum value
+  # set as the standard section that owns it (A1), and that section's declared
+  # "(N values)" heading matches the set beneath it (A2).
+  #
+  # THE DEFECT IT CLOSES, and why it is not cosmetic. The action-items template
+  # restated three enums from hub-action-tracking.md and diverged from the standard on
+  # ALL THREE — including `status`, where it omitted `done`, the terminal state the
+  # Stage-13 action-item hard gate reads. The template is what the hub COPIES into
+  # every operator-instance ledger, so the divergence propagated into runtime records
+  # rather than sitting inert in a doc. Nothing detected it for months because both
+  # files read as authoritative to whoever opened one first.
+  #
+  # WHY THE PAIRING IS AN EXPLICIT REGISTRY, NOT INFERENCE. Guessing which standard
+  # owns a given enum from the template comment is the exact guess that produced the
+  # defect: a sibling template restating a DIFFERENT standard's enum was in perfect
+  # parity the whole time. Inference would have had to guess right three times to
+  # notice. The registry declares the pairing and costs one line per pair.
+  #
+  # WHY THE DERIVED SURFACES RESTATE AT ALL, rather than citing. Restating is normally
+  # duplicate-source debt. These qualify under duplicate-source-discipline.md § 1
+  # condition 1 because THEY ARE DEPLOYED AND THEIR CONTRACT IS NOT: the templates are
+  # copied into operator-instance ledgers read without the repo open, and
+  # orchestration-playbook.md ships inside packages/release-hub.skill and is read from
+  # ~/.claude/skills/, while core/standards/** is in NO package and is not deployed at
+  # all. A citation from either surface would point a runtime reader at a file absent
+  # from their machine. Restating is correct here; this check is what stops it drifting.
+  #
+  # THE WRAPPED-CONTINUATION REQUIREMENT IS LOAD-BEARING. `category` wraps across two
+  # lines in the live template. A line-bounded parser reads a TRUNCATED set — a check
+  # reporting on a set the file does not declare, on the very surface it was built for.
+  # The primitive's self-test carries both wrapped arms (a wrapped IN-PARITY set must
+  # return zero; a wrapped divergence must NAME the continuation-line value), so a
+  # regression to line-bounded parsing cannot pass. Do NOT "simplify" that parser.
+  #
+  # DECLARED COVERAGE BOUNDARY — a property of the REGISTRY, not of a hoped-for corpus.
+  # All three known category-vocabulary surfaces are INSIDE the registry; none was
+  # deleted to make the boundary look empty. NOT covered: runtime ledger INSTANCES
+  # (operator-instance, git-ignored, outside every deploy-check denominator — this gate
+  # fixes the SEED, never the instances already seeded); unregistered surfaces (the
+  # registry IS the denominator, and its rows are printed in DENOM so the boundary is
+  # auditable); prose paraphrases making no `<field> enum:` declaration; and whether
+  # the values MEAN the same on both sides — this is a lexical set comparison.
+  #
+  # THE A2 ARM CARRIES ITS OWN BOUNDARY, and it is narrower than "cardinality".
+  # A2 reads the "(N values)" parenthetical off the SECTION HEADING only. The
+  # field-semantics rows that restate the same counts inside the section body —
+  # "enum (7 values; see § 2.1)" and its two siblings — are not headings and are
+  # therefore unguarded; and a heading with no parenthetical gives A2 nothing to read,
+  # so `status` (### 2.3 Status enum + lifecycle, which carries none) has ZERO guarded
+  # cardinality carriers. Two of the six carriers across the three registered
+  # hub-action-tracking enums are guarded. Shipped state is in parity on all six —
+  # this is a coverage limit, not a live defect — and the limit is that A2 would not
+  # report it if it were not. Widening A2 to the body carriers is a deliberate
+  # non-goal here, not an oversight: it is named so a reader does not infer that a
+  # green A2 vouches for every count in the file.
+  #
+  # WARN-MODE INITIAL via resolve_check_mode "enum-parity", per the Check 51-67
+  # precedent, and deliberately OFF the --check-required-subset roster. Re-introducing
+  # a divergence is a signal to re-derive a comment, never a reason to block a deploy.
+  # Flip with an `enum-parity.mode` file after the >=3-day warn-log review.
+  #
+  # Primitive: core/deploy/tools/check-enum-parity.sh (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 68: Hub-state enum parity (derived template/playbook restatements vs the standard that owns each enum; warn-mode initial; enforce-flip deferred)"
+    local c68_script="core/deploy/tools/check-enum-parity.sh"
+    local c68_registry="core/deploy/allowlists/hub-state-enum-parity-map.txt"
+    if [[ ! -f "$c68_script" ]]; then
+      flag_warn_or_issue "enum-parity" "primitive script missing: $c68_script (the gate cannot assert anything without it; a repo defect, not a benign absence)"
+    elif [[ ! -f "$c68_registry" ]]; then
+      flag_warn_or_issue "enum-parity" "registry missing: $c68_registry — without it the gate has no denominator and would report a vacuous zero"
+    else
+      local c68_mode
+      c68_mode=$(resolve_check_mode "enum-parity")
+      # ── control arms FIRST: a probe that cannot be shown to detect proves nothing ──
+      local c68_fx_out c68_fx_rc=0
+      c68_fx_out=$(bash "$c68_script" --self-test 2>&1) || c68_fx_rc=$?
+      log "  CTRL:  enum-parity — $(echo "$c68_fx_out" | tail -1)"
+      if [[ $c68_fx_rc -ne 0 ]]; then
+        log "  FAIL:  enum-parity-fixtures — fixture regression (hard-fail on every mode). A probe that can no longer be shown to detect AND to discriminate proves nothing by returning zero."
+        echo "$c68_fx_out" | sed 's/^/         /'
+        ISSUES=$((ISSUES + 1))
+      else
+        # ── the scan: denominator first, then findings ─────────────────────────
+        local c68_out c68_rc=0
+        c68_out=$(bash "$c68_script" 2>&1) || c68_rc=$?
+        log "  DENOM: enum-parity — $(echo "$c68_out" | sed -n 's/^DENOM: //p' | tail -1)"
+        if [[ $c68_rc -eq 3 ]]; then
+          flag_warn_or_issue "enum-parity" "scan-surface error — $(echo "$c68_out" | grep '^SCAN-ERROR: ' | sed 's/^SCAN-ERROR: //' | paste -sd'; ' -). The denominator was not established, so a zero here would be untrustworthy; this is not a clean result"
+        elif [[ $c68_rc -ne 0 ]]; then
+          local _c68_hit
+          while IFS= read -r _c68_hit; do
+            [[ -z "$_c68_hit" ]] && continue
+            if [[ "$c68_mode" == "enforce" ]]; then
+              log "  FAIL:  enum-parity — ${_c68_hit#FAIL: }"
+              ISSUES=$((ISSUES + 1))
+            else
+              flag_warn_or_issue "enum-parity" "${_c68_hit#FAIL: } A hub copying the derived surface writes rows the standard's closed enum does not admit, and the divergence is invisible at write time"
+            fi
+          done < <(echo "$c68_out" | grep '^FAIL: ' || true)
+        else
+          log "  OK:    enum-parity — every registered derived surface declares its standard's value set, and every declared cardinality matches"
+        fi
+      fi
+    fi
+  fi
+
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
@@ -12443,6 +12561,12 @@ main() {
       echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, unexpected=1) (#2656)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"
+      echo ""
+      echo "Out of scope: --deploy does NOT refresh composition surfaces (hook-tier"
+      echo "      allowlists, hub-state templates, platform-config seed). Those are"
+      echo "      regenerated by ./update.sh --surfaces-only (targeted) or a full"
+      echo "      ./update.sh — never by this script, which does not source the"
+      echo "      composition-surface manifest."
       echo ""
       echo "Note: --init mode (a legacy cutover migration) was REMOVED per the"
       echo "      Stage 5 spec §1.7. v2 ships with the target layout; no migration needed."

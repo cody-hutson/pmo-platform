@@ -129,6 +129,18 @@ fi
 TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
 CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
 
+# --- Workspace-scope gate (#4436) — layer 3, AFTER the master-activation gate and
+# BEFORE the .mode / rule path. Precedence: bypass -> master -> SCOPE -> .mode -> rule.
+# The PreToolUse wiring is re-homed out of workspace-project scope so repo- and
+# worktree-rooted sessions resolve it at all; this bounds that reach to the governed
+# workspace root, so hooks do not begin firing in unrelated repositories. The fail
+# direction is INVERTED on the cwd axis (an undeterminable cwd does NOT enforce) and
+# NOT inverted on the lib axis (a missing lib does NOT gate, so the hook keeps
+# enforcing — a deleted file must never be a silent kill switch). See lib/scope-guard.sh. ---
+readonly SCOPE_GUARD_LIB="${HOOK_DIR}/lib/scope-guard.sh"
+if [ -r "$SCOPE_GUARD_LIB" ]; then . "$SCOPE_GUARD_LIB" 2>/dev/null || true; fi
+if command -v scope_guard_gate >/dev/null 2>&1; then scope_guard_gate "$CWD"; fi
+
 # --- HELPERS ---
 
 # sha256 digest helper (16 chars) for block-log evidence — avoids logging raw tool_input
@@ -341,6 +353,9 @@ case "$TOOL_NAME" in
     fi
 
     # BLOCK-DESTRUCTIVE-023 — anti-injection: deny mid-session setting of CLAUDE_HOOK_BYPASS
+    # and of PMO_SCOPE_GUARD_ROOT (#4436), the layer-3 scope-guard root override. Both are
+    # pre-launch, operator-only knobs; a mid-session assignment of either is an injection
+    # vector, so they carry one posture and one rule ID rather than drifting apart.
     # The escape hatch must be operator-only (set BEFORE claude launch), not accessible to
     # Claude via prompt injection. This rule enforces the asymmetry.
     if matches "${ANCHOR_PREFIX_BASH}"'(export[[:space:]]+)?CLAUDE_HOOK_BYPASS='; then
@@ -352,6 +367,11 @@ case "$TOOL_NAME" in
       block "BLOCK-DESTRUCTIVE-023" \
         "CLAUDE_HOOK_BYPASS command-prefix assignment denied (injection-attack vector)." \
         "to bypass hooks, exit claude and relaunch with: CLAUDE_HOOK_BYPASS=1 claude"
+    fi
+    if matches "${ANCHOR_PREFIX_BASH}"'(export[[:space:]]+)?PMO_SCOPE_GUARD_ROOT='; then
+      block "BLOCK-DESTRUCTIVE-023" \
+        "PMO_SCOPE_GUARD_ROOT cannot be set mid-session (it re-points the layer-3 workspace-scope guard)." \
+        "to change the governed scope root, exit claude and relaunch with: PMO_SCOPE_GUARD_ROOT=<path> claude"
     fi
 
     # ----- NEW-B: subprocess script ban (closes Red Team C1 — script laundering) -----

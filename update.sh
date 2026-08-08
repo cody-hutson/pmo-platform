@@ -53,6 +53,12 @@ readonly EX_INTERRUPT=130
 # --- Flags ---
 DRY_RUN=0
 FORCE_REGEN=0
+# Targeted composition-surface refresh. When 1, main dispatches surfaces_only_flow
+# (a NAMED flow enumerating its own members) instead of the full top-level sequence.
+# Declared as a named flow rather than as negative guards inside the shared sequence
+# on purpose: a phase added to the full sequence later cannot silently join this mode,
+# because the mode's member list is the function body and nothing else.
+SURFACES_ONLY=0
 # Set to 1 only when --workspace-root is passed explicitly (#611, R-A). The
 # default WORKSPACE_ROOT (~/Claude) is the workspace tree, a DIFFERENT root than
 # the deploy targets (~/.claude); so the Phase-5 deploy root is bridged from
@@ -97,6 +103,16 @@ Options:
   --dry-run             Preview planned regenerations; perform no writes
   --force-regen         Regenerate all composition-surface files unconditionally
                         (default: only regenerate files whose source SHA changed)
+  --surfaces-only       Regenerate composition-surface managed sections ONLY.
+                        Runs preflight, schema migration, the instance backup,
+                        and managed-section regeneration — and nothing else.
+                        Skips: needle/roster scaffolds, skill redeploy, the
+                        security-hook bundle refresh, the .version snapshot, and
+                        the .last-update state write. Use this to refresh a single
+                        stale allowlist or other composition surface without the
+                        blast radius of a full update. Note: core/deploy/deploy.sh
+                        --deploy CANNOT refresh a composition surface; this flag
+                        (or a full ./update.sh) is the only path that can.
   --config-root PATH    Root for operator config reads/writes (default:
                         ${HOME}/.config/pmo-platform; or PMO_PLATFORM_CONFIG_ROOT env var)
   --workspace-root PATH Workspace root for managed-section regen targets +
@@ -129,6 +145,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)       DRY_RUN=1; shift ;;
     --force-regen)   FORCE_REGEN=1; shift ;;
+    --surfaces-only) SURFACES_ONLY=1; shift ;;
     --config-root)
       if [ -z "${2:-}" ]; then err "--config-root requires PATH"; exit 1; fi
       CONFIG_ROOT="$2"; shift 2 ;;
@@ -726,23 +743,56 @@ refresh_version_snapshot() {
   info "Refreshed .version snapshot ($(head -1 "${version_dst}" | tr -d '[:space:]'))"
 }
 
+# --- Surfaces-only flow (--surfaces-only) ---
+# Regenerate composition-surface managed sections into an EXISTING workspace, and
+# nothing else. It reuses regenerate_managed_sections UNCHANGED, so the ADR-014
+# dual-hash model, tamper detection with backup, verbatim OPERATOR-ADDITIONS
+# preservation, and the EX_REGENFAIL contract stay single-sourced — there is no
+# second copy of those semantics to drift. This mirrors setup-workspace.sh's
+# refresh_hooks_flow, whose header names this script as the owner of exactly this
+# category: the hook-tier allowlists are composition-surface files refreshed by
+# update.sh's regenerate_managed_sections, not there.
+#
+# It does NOT scaffold needles or the roster, redeploy skills, refresh the
+# security-hook bundle, restamp the .version snapshot, or write .last-update.
+#
+# The .last-update omission is deliberate and load-bearing, not an oversight.
+# write_last_update is the LAST member of the full sequence, so a .last-update
+# timestamp adjacent to a surface's managed_at is positive evidence that the whole
+# sequence ran. Writing it from a targeted refresh would destroy that discriminator
+# and make the marker lie about which flow touched the instance.
+#
+# Adding a phase to the full sequence does NOT add it here: this function's body is
+# the mode's entire contract, so an unlisted phase cannot join the mode by default.
+surfaces_only_flow() {
+  info "SURFACES-ONLY flow — regenerate composition-surface managed sections only"
+  preflight
+  schema_migrate
+  backup_instance_dir
+  regenerate_managed_sections
+}
+
 # --- Main ---
 trap 'err "Interrupted"; exit '"${EX_INTERRUPT}" INT TERM
 
-preflight
-schema_migrate
-backup_instance_dir
-scaffold_needles
-scaffold_roster
-scaffold_settings_local
-regenerate_managed_sections
-redeploy_skills
-refresh_hooks
-# Phase 5d MUST follow Phase 5c: hook scripts land first, then the registrations that
-# name them. Reordering would wire events to scripts not yet on disk (ADR-121 §8).
-refresh_settings
-refresh_version_snapshot
-write_last_update
+if [ "${SURFACES_ONLY}" -eq 1 ]; then
+  surfaces_only_flow
+else
+  preflight
+  schema_migrate
+  backup_instance_dir
+  scaffold_needles
+  scaffold_roster
+  scaffold_settings_local
+  regenerate_managed_sections
+  redeploy_skills
+  refresh_hooks
+  # Phase 5d MUST follow Phase 5c: hook scripts land first, then the registrations that
+  # name them. Reordering would wire events to scripts not yet on disk (ADR-121 §8).
+  refresh_settings
+  refresh_version_snapshot
+  write_last_update
+fi
 
 # Exit code (#613): a no-op run returns EX_NOCHANGE so callers can distinguish
 # "nothing to do" from a successful update that applied changes. A tamper-
