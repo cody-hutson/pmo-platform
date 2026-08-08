@@ -62,7 +62,12 @@ readonly ALLOWLIST_FILE="${CLAUDE_DIR}/fs-boundary-allowlist.txt"
 get_mode() {
   local mode="enforce" raw
   if [ -f "$MODE_FILE" ]; then
-    raw="$(/bin/cat "$MODE_FILE" 2>/dev/null | /usr/bin/head -n 1 | /usr/bin/tr -d '[:space:]')"
+    # `|| echo` makes the substitution total. The pipeline returns 1 on a present-but-
+    # unreadable mode file, and this runs under `set -euo pipefail` BEFORE the ERR trap is
+    # armed — measured, the hook still resolves to the default here and fails closed, but
+    # only via a subtle `set -e` interaction with assignment-inside-function. The fallback
+    # removes the dependence on it and matches the shape the other cohort hooks already use.
+    raw="$(/bin/cat "$MODE_FILE" 2>/dev/null | /usr/bin/head -n 1 | /usr/bin/tr -d '[:space:]' || echo enforce)"
     case "$raw" in
       warn|enforce|off) mode="$raw" ;;
       *) mode="enforce" ;;

@@ -76,7 +76,12 @@ readonly PATTERNS_LIB="${HOOK_DIR}/lib/fragile-ref-patterns.sh"
 get_mode() {
   local mode="warn" raw
   if [ -f "$MODE_FILE" ]; then
-    raw="$(/bin/cat "$MODE_FILE" 2>/dev/null | /usr/bin/tr -d '[:space:]')"
+    # `|| echo` makes the substitution total. The pipeline returns 1 on a present-but-
+    # unreadable mode file, and this runs under `set -euo pipefail` BEFORE the ERR trap is
+    # armed — measured, the hook still resolves to the default here and degrades, but only
+    # via a subtle `set -e` interaction with assignment-inside-function. The fallback
+    # removes the dependence on it and matches the shape the other cohort hooks already use.
+    raw="$(/bin/cat "$MODE_FILE" 2>/dev/null | /usr/bin/tr -d '[:space:]' || echo warn)"
     case "$raw" in
       warn|enforce|off) mode="$raw" ;;
     esac
