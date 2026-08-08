@@ -309,6 +309,19 @@ jobs:
           #      slowed to accommodate anything here.
           fetch-depth: 0
 
+      - name: Ensure jq
+        # closeout-smoke runs suites that hard-depend on jq. macos-latest normally
+        # ships it, but without this step an image lacking jq makes
+        # test_structural_blast_radius.sh exit 0 having run 0 of its 15 assertions —
+        # a suite reporting success while asserting nothing, which is the exact
+        # defect class this release exists to eliminate. install-tests.yml already
+        # guards all three of its jq-dependent jobs this way; this mirrors that.
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            brew install jq
+          fi
+          jq --version
+
       - name: Verify prerequisites
         run: |
           set -euo pipefail
