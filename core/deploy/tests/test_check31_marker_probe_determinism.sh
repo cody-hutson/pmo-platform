@@ -267,16 +267,18 @@ ac7_lines=$(printf '%s\n' "$AC7_CONTENT" | wc -l | tr -d ' ')
 # It is T9's discrimination control; see the note above the T9 assertion.
 AC7_SMALL="$(printf '%s\n%s\n' 'SENTINEL-LITERAL-3832 appears on line one — the EARLY match' 'one short filler line')"
 
-# SIGPIPE disposition, READ rather than assumed. Bash records a signal that was
-# ignored on entry to the shell and reports it through `trap -p`; a shell holding
-# the default disposition prints nothing. Diagnostic only — the assertion below
-# accepts either, so a wrong reading cannot turn this arm red on its own.
+# SIGPIPE disposition — probed, and the probe's LIMIT stated rather than hidden.
+# `trap -p PIPE` reports a signal that was ignored on entry to the shell and
+# prints nothing otherwise. That reading is ADVISORY and known to be incomplete:
+# on the GitHub-hosted macOS runner it prints nothing (reading "not ignored")
+# while the writer nonetheless returns 1 rather than dying on the signal. So the
+# probe cannot establish which regime you are in; the observed exit code is the
+# fact, and this label is a hint. Nothing is asserted on it — the T9 predicate
+# below accepts both codes precisely because this cannot be determined portably.
 if [ -n "$(trap -p PIPE 2>/dev/null)" ]; then
-  ac7_disp="SIG_IGN inherited — writer sees EPIPE and returns 1 (the CI shape)"
-  ac7_rc_expect=1
+  ac7_disp="shell reports SIGPIPE inherited-ignored"
 else
-  ac7_disp="default — writer dies on the signal, bash reports 128+13"
-  ac7_rc_expect=141
+  ac7_disp="shell reports no inherited ignore (advisory only — the macOS runner reads this way and still returns 1)"
 fi
 
 # Raw pipeline status under pipefail, asserted directly rather than inferred.
@@ -325,7 +327,7 @@ if [[ "$ac7_old" == "CLEAN" && "$ac7_rc_old" -ne 0 ]] \
    && { [[ "$ac7_rc_old" -eq 141 ]] || [[ "$ac7_rc_old" -eq 1 ]]; } \
    && [[ "$ac7_old_small" == "BLOCKED" && "$ac7_rc_old_small" -eq 0 ]]; then
   report "T9 pre-conversion form breaks its pipe on the same fixture and misreports CLEAN (rc=$ac7_rc_old; small-haystack control BLOCKED at rc=0)" 1
-  echo "        SIGPIPE disposition: $ac7_disp (expected rc=$ac7_rc_expect, observed rc=$ac7_rc_old)"
+  echo "        rc=$ac7_rc_old — 141 where the writer DIES on SIGPIPE, 1 where it sees EPIPE and returns instead; both are this defect. Probe (advisory): $ac7_disp"
   echo "        pre-conversion='$ac7_old' rc=$ac7_rc_old   converted='$ac7_new' rc=$ac7_rc_new   control(small)='$ac7_old_small' rc=$ac7_rc_old_small"
 else
   report "T9 pre-conversion form breaks its pipe on the same fixture and misreports CLEAN" 0 \
