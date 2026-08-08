@@ -2028,6 +2028,17 @@ install_hooks() {
   # matches the hook's in-script default; the in-script default is the operative posture,
   # since a template that is never installed carries no posture at all.
   install_mode_template_if_missing ".gh-path-leak-mode.template" ".gh-path-leak-mode"
+  # block-autonomy-ceiling.sh likewise reads its own .autonomy-mode. Its template was
+  # tracked but had no install call site, so a fresh install never received it and the
+  # hook fell through to its in-script `enforce` default -- contradicting the WARN-MODE-
+  # INITIAL posture its own header declares. That gap became load-bearing in this release:
+  # mode-coupling the dependency guard makes this hook newly trip on a stale helper, so
+  # without the install the version-skew over-block does not clear, it relocates here
+  # (Stage 7 F-01, measured before/after). Installing the template is the whole fix.
+  # `.verify-session-config-mode` has the same missing-call-site defect and is deliberately
+  # NOT fixed here -- it is not on this release's path and stays with #5073, which also
+  # carries the durable remedy: an assertion that every tracked mode template has a call site.
+  install_mode_template_if_missing ".autonomy-mode.template" ".autonomy-mode"
 
   # Ship a .version snapshot alongside the deployed hooks so notify-version-
   # skew.sh resolves "the version deployed into this workspace" via its sibling
