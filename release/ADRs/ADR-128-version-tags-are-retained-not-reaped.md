@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-127 — Version tags are retained, not reaped: the retention rule is homed beside the branch-deletion rule, and the recovery tool reads host policy rather than assuming it"
+title: "ADR-128 — Version tags are retained, not reaped: the retention rule is homed beside the branch-deletion rule, and the recovery tool reads host policy rather than assuming it"
 status: Proposed — authored at Stage 6 Engineering for the `hub-spoke-execution-safety` release. Flips to Accepted when the operator ratifies it at the release's close gate. The flip is verified against this file's `status:` field, never inferred from milestone closure.
 date: 2026-08-06
 release: hub-spoke-execution-safety
@@ -16,7 +16,7 @@ source_observations:
   - "An adversarial reviewer established that the redundancy of the specific orphan tag is symmetric evidence: no information to recover and no ambiguity to resolve is exactly the condition under which deletion is safe. A general rule justified by a fact that argues both ways is how an over-broad rule enters a corpus."
 ---
 
-# ADR-127 — Version tags are retained, not reaped: the retention rule is homed beside the branch-deletion rule, and the recovery tool reads host policy rather than assuming it
+# ADR-128 — Version tags are retained, not reaped: the retention rule is homed beside the branch-deletion rule, and the recovery tool reads host policy rather than assuming it
 
 ## Status
 
@@ -29,6 +29,8 @@ source_observations:
 **Numbering provenance — `121 → 123`.** Held **ADR-121** branch-local; renumbered to **ADR-123** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 121. In-release citations that read "ADR-121" denote this record.
 
 **Numbering provenance — `123 → 127`.** Held **ADR-123** branch-local; renumbered to **ADR-127** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 123. In-release citations that read "ADR-123" denote this record.
+
+**Numbering provenance — `127 → 128`.** Held **ADR-127** branch-local; renumbered to **ADR-128** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 127. In-release citations that read "ADR-127" denote this record.
 
 ## Context
 
