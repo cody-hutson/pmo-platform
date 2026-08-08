@@ -2714,10 +2714,14 @@ refresh_hooks_flow() {
 #   1. It writes OUTSIDE the workspace root. Every other flow honors the sandbox
 #      invariant that a run with --workspace-root <sandbox> touches only that sandbox;
 #      an automatic user-scope write would break it for every install and every test.
-#   2. It turns enforcement ON for sessions that previously had none. The script
-#      allowlist has documented gaps against exactly the paths release tooling runs
-#      (see #4325 / #4447), so this must be ordered AFTER allowlist reconciliation --
-#      an ordering only an operator can honor.
+#   2. It turns enforcement ON for sessions that previously had none. The DEPLOYED
+#      allowlist can be stale against exactly the paths release tooling runs even
+#      when the in-repo source is complete, because deploy.sh --deploy never sources
+#      the composition-surface manifest and so cannot refresh an allowlist -- it
+#      exits 0 reporting nothing to deploy and leaves the stale file as it was
+#      (#4447, open; refresh with update.sh --surfaces-only, not deploy.sh).
+#      So this must be ordered AFTER allowlist reconciliation -- an ordering only
+#      an operator can honor.
 #   3. It is the operator-executed precondition the release records as AI-004 member 1.
 #      Merging the repository change must not, by itself, alter live enforcement state.
 #
