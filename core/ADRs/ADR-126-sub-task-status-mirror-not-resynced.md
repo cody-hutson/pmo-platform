@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-122 — The sub-task status mirror stays a point-in-time snapshot, and label materialization gets a read-only emit path rather than an automated one
+title: ADR-126 — The sub-task status mirror stays a point-in-time snapshot, and label materialization gets a read-only emit path rather than an automated one
 status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
 date: 2026-08-07
 release: methodology-fields-and-statuses
@@ -16,13 +16,15 @@ source_observations:
   - "The parity gate compares label NAMES only. At the build-time baseline, of 34 declared rows that were live, only 2 matched their declaration on both colour and description. A green gate is therefore evidence about names alone, and the malformed-row class it cannot see is large rather than incidental."
 ---
 
-# ADR-122 — The sub-task status mirror stays a point-in-time snapshot, and label materialization gets a read-only emit path rather than an automated one
+# ADR-126 — The sub-task status mirror stays a point-in-time snapshot, and label materialization gets a read-only emit path rather than an automated one
 
 ## Status
 
 **Proposed** — flips to **Accepted** when the operator ratifies it at the release close gate. Authored at Stage 6 per the Stage-6 ADR-authoring precedent. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
 
 **Numbering.** This record's number is the mainline anchor plus one, where the anchor already includes this release's two earlier records, derived at build time per the rule the numbering ADR ratifies. At that moment **four** sibling branches held unmerged claims on a number below this one and two of them also held the number directly below it; **no branch held this one**. Those claims are *advisory* and do not bind the sequence. A reservation strictly above every sibling claim was considered and rejected on that ADR's own ground — a gap blocks the repository where a duplicate merely inconveniences one branch — and the rejection was verified against the enforcing predicate rather than argued from the document, with three arms: this number returns **PASS** on a contiguous `001..122` with no gaps and no duplicates; the reserved slot one higher returns **FAIL — GAP**, naming the number it skipped; and a deliberate collision on an already-taken number is **detected**, which is what makes the PASS meaningful rather than blind. An earlier hub ruling directed allocation from one number higher on the premise that three siblings needed three reserved slots; that premise was falsified at build time — the two numbers below this one were taken by *this release's own* earlier cards, not by siblings, and the siblings pile on a single lower number that no reservation strategy resolves. If a sibling merges first, this record renumbers at merge time by the sanctioned tool and this section gains a numbering-provenance note.
+
+**Numbering provenance — `122 → 126`.** Held **ADR-122** branch-local; renumbered to **ADR-126** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 122. In-release citations that read "ADR-122" denote this record.
 
 ## Context
 

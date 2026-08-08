@@ -379,7 +379,7 @@ Designated reference block. Each entry pairs the tracker number with a summary n
 | **ADR-115** | The ADR-number binding rule: a number is allocated at authorship and bound at merge, next-free is the mainline anchor plus one and never the maximum of the claimed set, and reserving a slot above an unmerged sibling claim is worse than a duplicate. |
 | **ADR-124** | This release's first decision record: the Axis-1 delivery work-status label surface — seventh grammar group, load-bearing name prefix, base-pack homing, and blocked-is-derived. |
 | **ADR-125** | This release's second decision record: the status-resolution fallback when no platform adapter is configured, and the binding of that contract to the adapter layer. Its § Consequences is the citable home for the symptom-honesty statement. |
-| **ADR-122** | This release's third decision record: the sub-task status mirror stays a point-in-time snapshot, and label materialization gets a read-only emit path rather than an automated one. |
+| **ADR-126** | This release's third decision record: the sub-task status mirror stays a point-in-time snapshot, and label materialization gets a read-only emit path rather than an automated one. |
 | **ADR-123** | This release's fourth decision record: the epic rollup-close surface is an audit rather than a gate, and its two undecidable gates are annotated rather than adjudicated. |
 
 ---
@@ -433,4 +433,4 @@ This release gives the delivery **work-status axis** a field, a live label surfa
 - Release plan: this file, top — `release/releases/plans/methodology-fields-and-statuses_RELEASE_PLAN.md`
 - Milestone: `methodology-fields-and-statuses` (milestone 265) — see § References for the per-card index
 - User-facing release note: authored at Stage 13 Close at `release/releases/notes/vX.Y_RELEASE_NOTES.md`, where the version binds at the Stage-12 atomic claim per ADR-092. This section is the operator-facing pre-merge artifact and does not substitute for that note.
-- Decision records: ADR-124, ADR-125, ADR-122, ADR-123 — summarized in § References
+- Decision records: ADR-124, ADR-125, ADR-126, ADR-123 — summarized in § References
