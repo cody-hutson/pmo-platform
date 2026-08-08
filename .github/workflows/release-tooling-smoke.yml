@@ -582,6 +582,36 @@ jobs:
         # the absence fixture.
         run: bash release/tools/tests/test_corpus_home_tolerance.sh
 
+      - name: platform-toggle resolver truth table (13 arms + identity + 2 broken-state mutations)
+        # Guards the absent-key contract of release/tools/lib/platform-toggle.sh: the
+        # no-op default is a TERMINAL IN-CODE CONSTANT, not a value read from a config
+        # file. That distinction is load-bearing rather than pedantic — the runtime
+        # platform-config.toml does not exist on a stock instance and the update path
+        # does not create it, so a template default alone never reaches a consumer, and
+        # the repo's 5-rung reader returns EMPTY (not false) when a field is absent
+        # everywhere. The suite asserts the property that follows: an install that never
+        # received the file, a fresh install, and an install setting the key explicitly
+        # false are behaviourally indistinguishable.
+        #
+        # It also asserts the reader is SECTION-AWARE with an `=` terminator, so neither
+        # a same-named key under another section, a same-PREFIX key, nor a dotted
+        # subtable header can resolve the toggle.
+        #
+        # This step exists because a committed suite that no runner reaches cannot fail,
+        # and a check that cannot fail is indistinguishable in the artifact from a clean
+        # one (core/standards/gate-efficacy-standard.md, condition R2).
+        #
+        # NOT VACUOUS BY CONSTRUCTION: the suite mutates the library into each of the two
+        # shapes it exists to rule out — a section-blind unterminated reader, and a
+        # flipped terminal default — and FAILS if the truth table does not turn red on
+        # each. A table that cannot tell a broken resolver from a working one fails the
+        # job rather than reporting a pass.
+        #
+        # Hermetic: mktemp fixtures only; no network, no gh, no git, no write to the
+        # checkout. PMO_PLATFORM_CONFIG_ROOT is pinned per fixture, so the operator's
+        # real ~/.config is never read. Gates on exit code.
+        run: bash release/tools/tests/test_platform_toggle.sh
+
   selftest-discovery:
     name: Discovered tool self-tests (Ubuntu)
     # THE DISCOVERY GATE. Replaces a hardcoded 6-tool roster that covered 6 of the 22

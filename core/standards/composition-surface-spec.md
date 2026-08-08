@@ -33,17 +33,23 @@ Files in the package fall into one of four categories on the universality × edi
 | Category | Universality | Operator extends? | Install behavior | Update behavior |
 |---|---|---|---|---|
 | **Universal** | High (K1) | No | Read in-place from clone | `git pull` updates source; no separate install or update step |
-| **Customizable** | Mixed (template + tokens) | No (one-shot resolution) | Token-substitute → write to runtime location | **Not refreshed by `update.sh`.** Re-run `setup-workspace.sh` to recompose from the current template + operator.toml (full-file overwrite). *(An auto-refresh-on-`update.sh` mechanism for Customizable files is specified but not yet implemented.)* |
+| **Customizable** | Mixed (template + tokens) | No (one-shot resolution) | Token-substitute → write to runtime location | **Refreshed by `update.sh` under a baseline-anchored guard** (ADR-121): whole-file re-render from the current template + operator.toml, but only after the guard has classified the live file. An untouched platform copy is regenerated outright; operator-added content is migrated to the runtime-native operator overlay and the pre-write file backed up first; a migration conflict aborts the refresh for that install rather than guessing. |
 | **Composition-surface** | Mixed (seed + extensions) | Yes | Token-substitute managed section → write with markers → leave empty operator-additions section | Regenerate managed section from current template + current operator.toml; preserve operator-additions section verbatim |
 | **Operator-instance** | Low (K2-K5) | Yes (entirely operator-owned) | Never created by package | Never touched by package |
 
-The durability work this spec introduces closes the update-time gap for the **Composition-surface category** (implemented: `update.sh` regenerates managed sections while preserving operator additions). The **Customizable update behavior** — auto-refresh of Customizable files (CLAUDE.md, settings.json) on `update.sh` — is **specified here but not yet implemented**; Customizable files are refreshed by re-running `setup-workspace.sh`. Pre-spec, the package shipped install-time mechanisms but no update-time mechanism, forcing operators to manually merge on `git pull` or re-install (losing customizations).
+The durability work this spec introduces closes the update-time gap for the **Composition-surface category** (implemented: `update.sh` regenerates managed sections while preserving operator additions). Pre-spec, the package shipped install-time mechanisms but no update-time mechanism, forcing operators to manually merge on `git pull` or re-install (losing customizations).
+
+**Update-time coverage by category.** The workspace-root `CLAUDE.md` was re-categorized from Customizable to Composition-surface by **ADR-122** and is refreshed by `update.sh` through the ordinary composition-surface path — the `workspace-root` manifest tier, the `markdown` marker dialect, and the same preserve-operator-additions contract every other registered surface uses. `settings.json` remains **wholly Customizable** — §2.3 forecloses a marker carve-out for JSON, so it is not a composition surface and carries no fence — but its *update-time contract* was amended by **ADR-121**: `update.sh` Phase 5d now refreshes it by whole-file re-render, gated by the operator-key guard described in the category row above. The two records are disjoint: ADR-122 changed a file's category **assignment**; ADR-121 changed the Customizable category's update-time **behavior**. Neither amends §2.3.
+
+The two Customizable-category members therefore diverge by mechanism, and the divergence is a property of the file formats rather than an inconsistency. Markdown can carry a comment fence but has no separately-merged operator counterpart, so operator content is preserved **in place**. JSON can carry no fence but does have one — Claude Code's own `settings.local.json` — so operator content is **relocated there** and the managed file is owned outright by the platform. Each format gets the preservation mechanism it can actually support.
+
+There is **no** `CUSTOMIZABLE_FILES` manifest array and none is planned; a file that needs update-time refresh *with a preserved in-file operator fence* is registered as a composition surface rather than given a parallel mechanism. `settings.json` needs the refresh without the fence, which is why it is refreshed without being registered.
 
 ### §1.1 Category assignment is durable
 
 Per [`duplicate-source-discipline.md`](duplicate-source-discipline.md), each file belongs to exactly one category. The category is named in either:
 
-- The package manifest — Composition-surface files are declared in the `COMPOSITION_SURFACE_FILES` array ([`core/deploy/composition-surface-manifest.sh`](../deploy/composition-surface-manifest.sh)). Customizable files (CLAUDE.md, settings.json) are composed directly by `setup-workspace.sh` `substitute_templates()`; a parallel `CUSTOMIZABLE_FILES` manifest array is specified but not yet implemented in code.
+- The package manifest — Composition-surface files are declared in the `COMPOSITION_SURFACE_FILES` array ([`core/deploy/composition-surface-manifest.sh`](../deploy/composition-surface-manifest.sh)). The remaining Customizable file (`settings.json`) is composed directly by `setup-workspace.sh` `substitute_templates()` at install and re-rendered by the same substituter through `--refresh-settings` at update — one writer at both moments, and deliberately **not** a manifest entry. **There is no `CUSTOMIZABLE_FILES` array**: per ADR-122, a file needing update-time refresh is registered in the existing manifest rather than given a parallel one, because once a file carries a preserved operator-additions fence and is regenerated at update time it satisfies every axis of the Composition-surface row and none of the Customizable row.
 - An operator-policy registry (for Operator-instance files — never in package).
 - Implicit (for Universal files — every K1 file not otherwise classified).
 
@@ -51,7 +57,13 @@ Recategorization is a breaking change — Stage 5 Solutioning gate.
 
 ### §1.2 Registered Composition-surface files (informative)
 
-The authoritative manifest is the `COMPOSITION_SURFACE_FILES` array in [`core/deploy/composition-surface-manifest.sh`](../deploy/composition-surface-manifest.sh) (sourced by `setup-workspace.sh` and `update.sh`). The categories of file currently in this surface are the per-domain allowlists (`core/config/allowlists/*.txt`), the hub-state schema templates (`release/releases/hub-state/*.template`), and — as of the adapter-config-foundation release — the platform-behavior config surface [`core/config/platform-config.toml.template`](../config/platform-config.toml.template). Like every composition-surface source file, the platform-config template carries NO fences in source — install-time composition (§3.1) wraps its Layer-1 global defaults in the §2.1 plain-text MANAGED SECTION fence and appends the empty OPERATOR ADDITIONS section the operator then extends. Its per-tier *value* overrides are NOT carried in this surface — they live in separate Layer-2 surfaces (XDG config / `PORTFOLIO.md` / `program-config.toml` / `PROJECT.md`) per [`platform-config-schema.md`](../schemas/platform-config-schema.md).
+The authoritative manifest is the `COMPOSITION_SURFACE_FILES` array in [`core/deploy/composition-surface-manifest.sh`](../deploy/composition-surface-manifest.sh) (sourced by `setup-workspace.sh` and `update.sh`). The categories of file currently in this surface are the per-domain allowlists (`core/config/allowlists/*.txt`), the hub-state schema templates (`release/releases/hub-state/*.template`), the platform-behavior config surface [`core/config/platform-config.toml.template`](../config/platform-config.toml.template) (adapter-config-foundation), and — as of ADR-122 — the workspace-root [`core/CLAUDE.md.template`](../CLAUDE.md.template). Like every composition-surface source file, these templates carry NO fences in source — install-time composition (§3.1) wraps their content in the MANAGED SECTION fence and appends the empty OPERATOR ADDITIONS section the operator then extends. The platform-config template's per-tier *value* overrides are NOT carried in this surface — they live in separate Layer-2 surfaces (XDG config / `PORTFOLIO.md` / `program-config.toml` / `PROJECT.md`) per [`platform-config-schema.md`](../schemas/platform-config-schema.md).
+
+**Manifest entry format.** Each row is `<source-relative-path>|<runtime-tier>|<tokens-flag>[|<marker-dialect>]`. The 4th field is optional and defaults to `plain` when absent, so every row predating ADR-122 is unchanged. Tiers are `hook`, `instance`, `hub-state`, and `workspace-root`; `workspace-root` resolves to the workspace root itself and is the only tier that **strips a trailing `.template`** from the source basename to form the target name, because its target is the operator-facing file rather than a template copy.
+
+**One writer per file.** `CLAUDE.md` is written by the composition writer at install *and* at update; the install script's whole-file substitution arm for it was removed when it was re-categorized. A file emitting markers through one mechanism while a second mechanism owns the file is the divergence class that produced the false-regeneration-marker defect ADR-122 supersedes.
+
+**The manifest carries the install-time token vocabulary.** Its trailing comment block declares the `[OPERATOR_*]` / `[CLAUDE_*]` / `[COWORK_*]` token set, and `setup-workspace.sh` `compute_active_tokens` greps this file alongside the two templates to derive the set it resolves and persists. That comment is load-bearing, not documentation: deleting a token line shrinks the derived set, and the installer then writes that key into `operator.toml` empty.
 
 ---
 
@@ -74,9 +86,11 @@ Composition-surface files at runtime carry two clearly-fenced sections:
 # === END OPERATOR ADDITIONS ===
 ```
 
-### §2.2 Markdown files (future markdown composition surfaces)
+### §2.2 Markdown files
 
-> **CLAUDE.md is NOT a registered composition surface — it is a Customizable file (§1).** It is composed at install by `setup-workspace.sh` via full-file `[OPERATOR_*]` token substitution and refreshed by re-running `setup-workspace.sh`; it carries no managed-section marker and is absent from `COMPOSITION_SURFACE_FILES`. The markdown marker form below is the **defined form for a future markdown composition surface** — no markdown composition surface is currently registered. (This classification is the recorded decision for CLAUDE.md's category; no separate ADR is filed.)
+> **CLAUDE.md IS a registered composition surface** (ADR-122), and is the first and currently only file using the `markdown` marker dialect. It is written by the composition writer at install and regenerated by `update.sh` when the source template changes, with operator additions preserved verbatim. A manifest row selects this dialect with the 4th field `markdown`; rows that omit the field get the §2.1 plain form.
+>
+> **Reader tolerance is part of the contract.** The fence *writer* is dialect-selected, but both *readers* (`extract_operator_additions`, `_extract_managed_body`) are dialect-agnostic and additionally tolerate the optional `(preserved across updates)` parenthetical. This is required, not cosmetic: installed files predating ADR-122 carry a markdown additions fence in two spellings, and a dialect-pinned reader would return empty on both and discard the operator's content on the first regeneration.
 
 ```markdown
 <!-- === BEGIN MANAGED SECTION (regenerated by update.sh; do not edit) === -->
@@ -95,9 +109,10 @@ Composition-surface files at runtime carry two clearly-fenced sections:
 
 JSON has **no in-file comment syntax** and therefore **no marker carve-out**. Composition is expressed structurally:
 
-- The **entire file is composed at install** from template + operator.toml. Like CLAUDE.md, settings.json is a Customizable file: **`update.sh` does not refresh it** — re-run `setup-workspace.sh` to recompose it (full-file overwrite). Operator customization for JSON-format runtime files flows through:
+- The **entire file is composed at install** from template + operator.toml, and **re-composed at update** by `update.sh` Phase 5d under the ADR-121 baseline-anchored guard (whole-file re-render, never a merge). ADR-122 left this section unamended — its scope is `CLAUDE.md` only and it defines no JSON composition model — and ADR-121 does not amend the no-marker rule above either; it changes only *when* the whole-file re-render runs and what must happen before it. Operator customization for JSON-format runtime files flows through:
+  - **`<workspace-root>/.claude/settings.local.json`** — the runtime-native, operator-owned Layer-2 overlay that Claude Code merges itself. This is the designated destination: the installer and `update.sh` scaffold it empty, and the guard migrates any operator-added key found in the managed file into it before regenerating. **It is never regenerated by the package.**
   - The user-scoped `~/.claude/settings.json` (Claude Code's existing surface for user-global config).
-  - New fields added to operator.toml (which the template then resolves when settings.json is recomposed at install/reinstall).
+  - New fields added to operator.toml (which the template then resolves when settings.json is recomposed at install or update).
 
 This is a deliberate simplification: JSON-format runtime files are treated as **wholly Customizable** category, not Composition-surface.
 
@@ -164,7 +179,7 @@ Operator additions inside the OPERATOR ADDITIONS fence:
 - MUST NOT include another BEGIN MANAGED SECTION / END MANAGED SECTION marker pair (the fence is non-recursive).
 - MUST NOT span the END OPERATOR ADDITIONS marker (the marker terminates the section).
 
-Operator content outside any fence (above MANAGED SECTION or below OPERATOR ADDITIONS) is **discarded on update** with a warning. This enforces the two-fence structure as the canonical operator-extension surface.
+Operator content outside any fence (above MANAGED SECTION or below OPERATOR ADDITIONS) is **discarded on update** with a warning. This enforces the two-fence structure as the canonical operator-extension surface. For a **`workspace-root`-tier** target the warning is upgraded to a named-path notice that also states the pre-write backup location — proportionate to a top-level governance file, where a bare "content discarded" line is not enough to recover from.
 
 ---
 
@@ -188,9 +203,9 @@ The following implementation artifacts realize this spec:
 - [`core/hooks/notify-version-skew.sh`](../hooks/notify-version-skew.sh) — SessionStart version-notify hook.
 - [`docs/UPDATE.md`](../../docs/UPDATE.md) — operator-facing update procedure.
 
-> **Customizable files (CLAUDE.md, settings.json) are not composition surfaces.** They are composed at install by `setup-workspace.sh` `substitute_templates()` (full-file token substitution) and refreshed by re-running `setup-workspace.sh`; `update.sh` regenerates only the registered composition-surface managed sections. `setup-workspace.sh` writes Customizable files by whole-file token substitution (no markers), and writes composition-surface files with the §2 markers.
+> **`settings.json` is the remaining Customizable file and is not a composition surface.** It is composed at install by `setup-workspace.sh` `substitute_templates()` (full-file token substitution, no markers) and re-rendered at update by `update.sh` Phase 5d, which delegates to `setup-workspace.sh --refresh-settings` so the same substituter produces the bytes at both moments. `update.sh` Phase 3 still regenerates only the registered composition-surface managed sections — the settings refresh is a separate phase precisely because the file carries no fence for Phase 3 to regenerate. `CLAUDE.md` moved out of this category at ADR-122 and is now written by the composition writer at both moments.
 
-The `COMPOSITION_SURFACE_FILES` manifest in [`core/deploy/composition-surface-manifest.sh`](../deploy/composition-surface-manifest.sh) (sourced by `setup-workspace.sh` and `update.sh`) is the authoritative list of files in this category — it currently includes the per-domain allowlists, the hub-state schema templates, and [`core/config/platform-config.toml.template`](../config/platform-config.toml.template) (the platform-behavior config surface, adapter-config-foundation). Adding a new composition-surface file is a single appended entry in that manifest — no other code change needed.
+The `COMPOSITION_SURFACE_FILES` manifest in [`core/deploy/composition-surface-manifest.sh`](../deploy/composition-surface-manifest.sh) (sourced by `setup-workspace.sh` and `update.sh`) is the authoritative list of files in this category — it currently includes the per-domain allowlists, the hub-state schema templates, [`core/config/platform-config.toml.template`](../config/platform-config.toml.template) (the platform-behavior config surface, adapter-config-foundation), and [`core/CLAUDE.md.template`](../CLAUDE.md.template) (workspace-root tier, markdown dialect, ADR-122). Adding a new composition-surface file is a single appended entry in that manifest — no other code change needed.
 
 ---
 

@@ -23,17 +23,31 @@ The `update.sh` script regenerates package-managed content from current template
 | Category | Update behavior |
 |---|---|
 | **Universal** (skill prompts, hook scripts, schemas) | Refreshed by `git pull`; no separate action |
-| **Customizable** (`CLAUDE.md`, `settings.json`) | Composed at install by `setup-workspace.sh`; **not refreshed by `update.sh`**. Re-run `setup-workspace.sh` to pick up template changes (recomposes the whole file) |
-| **Composition-surface** (allowlists, exemption lists) | Managed section regenerated; OPERATOR ADDITIONS section preserved verbatim |
+| **Customizable** (`settings.json`) | Composed at install by `setup-workspace.sh`; **refreshed by `update.sh`** (whole-file re-render) under a guard that migrates any keys you added to `.claude/settings.local.json` and backs the file up first |
+| **Composition-surface** (allowlists, exemption lists, `CLAUDE.md`) | Managed section regenerated; OPERATOR ADDITIONS section preserved verbatim |
 | **Operator-instance** (`projects/`, `personal/`, `knowledge/`) | Never touched |
 
 The contract is defined at [`core/standards/composition-surface-spec.md`](../core/standards/composition-surface-spec.md).
 
+**Your workspace `CLAUDE.md` is refreshed by `update.sh`** (ADR-122). When the shipped template changes, its managed section is regenerated from the current template plus your `operator.toml`, and anything you put in its `OPERATOR ADDITIONS` section at the bottom of the file is preserved verbatim. A copy of the previous file is written to `<workspace-root>/.backup-pre-update-<timestamp>/CLAUDE.md` before every regeneration. Two consequences worth knowing: content placed **outside** both fences is not carried forward (put your additions inside the `OPERATOR ADDITIONS` fence), and re-running `setup-workspace.sh` no longer overwrites an existing `CLAUDE.md` — it is preserved, and `update.sh` is how it moves forward.
+
+**Your `.claude/settings.json` is refreshed by `update.sh`** (ADR-121). This is the file that registers the platform's security hooks against the events they guard, so a workspace installed before a hook was wired used to hold that hook on disk while nothing ever invoked it. Phase 5d now re-renders the whole file from the current template plus your `operator.toml`, immediately after the hook scripts themselves are refreshed. Before it writes, a guard classifies what is there: an untouched platform copy is regenerated with no ceremony; anything you added is **moved into `.claude/settings.local.json`** and the previous file copied to `<workspace-root>/.backup-pre-update-<timestamp>/settings.json`, with every moved key named in the output. If a key being moved already exists in your overlay with a different value, the refresh **aborts for that run** and tells you so rather than guessing — resolve the conflict in the overlay and re-run.
+
+### 1.1 Customizing your settings
+
+Put your own Claude Code settings in **`<workspace-root>/.claude/settings.local.json`**, never in `.claude/settings.json`.
+
+- `.claude/settings.json` is **platform-managed (Layer 1)**. It is re-rendered whole-file from the shipped template, so anything you add there is migrated out and replaced on the next update.
+- `.claude/settings.local.json` is **yours (Layer 2)**. Claude Code merges it over the managed file natively, it is git-ignored, and the package never regenerates it — `setup-workspace.sh` and `update.sh` only create it empty (`{}`) if it does not exist.
+
+Extra permissions, `env` values, and your own hooks all belong in the overlay. There is deliberately no pointer comment inside `.claude/settings.json` itself: JSON has no comment syntax, and the installer strips the template's one comment key so the runtime file is clean JSON.
+
 ## 2. What does NOT get updated
 
 - Your work: `projects/`, `personal/notes/`, `knowledge/`
-- OPERATOR ADDITIONS sections in composition-surface managed files (allowlists, exemption lists)
+- OPERATOR ADDITIONS sections in composition-surface managed files (allowlists, exemption lists, `CLAUDE.md`)
 - Values you've set in `~/.config/pmo-platform/operator.toml`
+- **`.claude/settings.local.json`** — your settings overlay. Created empty once if absent, then never touched again.
 - User-scoped Claude config at `~/.claude/`
 
 ## 3. Procedure
@@ -159,7 +173,7 @@ Move your entries into the OPERATOR ADDITIONS section. The next `update.sh` dete
 
 The hook fails silently on any error to avoid blocking session start. Common causes:
 
-- The hook is not registered as a `SessionStart` hook in `.claude/settings.json`. Workspaces installed before the hook was wired won't carry the entry — re-run `docs/scripts/setup-workspace.sh` to refresh `settings.json` and install the `.version` snapshot the hook reads (`.claude/.version`).
+- The hook is not registered as a `SessionStart` hook in `.claude/settings.json`. A workspace installed before the hook was wired won't carry the entry — run `./update.sh`, whose Phase 5d refreshes `settings.json` under the operator-key guard and installs the `.version` snapshot the hook reads (`.claude/.version`). A full `setup-workspace.sh` re-run also works and passes the same operator-key guard before it re-renders, but it is no longer necessary for this.
 - `gh` CLI not authenticated. Run `gh auth status`.
 - `operator_github` not set in `operator.toml`. Required to query the release API.
 - Network unavailable. The hook caches results for 24h; you'll see the notice after connectivity returns.
