@@ -9,6 +9,8 @@ Nine PreToolUse hooks enforce security invariants that make it safe to run Claud
 
 These nine are the **bypass-mode security hooks**. Other `block-*.sh` scripts in `core/hooks/` are owned by their own discipline docs and are NOT part of this registry — each declares its owner in its own `# hook-owner:` header line. Currently these are `block-skill-direct-edit.sh` (skill-edit discipline — owned by [`core/standards/canonical-skill-structure.md`](../standards/canonical-skill-structure.md), operationally surfaced in [`skill-deployment.md`](skill-deployment.md)), `block-fragile-refs.sh` (reference-durability discipline — owned by [`core/standards/reference-durability-standard.md`](../standards/reference-durability-standard.md)), and `block-gh-path-leak.sh` + `block-draft-files.sh` (git-workflow discipline — owned by [`core/rules/git-workflow.md`](git-workflow.md)). The hook-registry completeness check (`deploy.sh --check`) reconciles every `core/hooks/block-*.sh` against its **declared owning doc** (its `# hook-owner:` line), so this scoping is enforced, not merely asserted.
 
+**Registry membership and mode-file cohort are different sets — do not read one as the other.** The nine above are this registry's *membership*, fixed by declared ownership (`# hook-owner:`). Which hooks a given mode file reaches is a separate question, fixed by which file each hook's `MODE_FILE` names. The two do not imply each other in either direction, and neither is a subset of the other. Concretely: four of the nine read the shared `.claude/hooks/.mode`, and so do all four of the registry-external hooks named above — so editing `.mode` reaches four hooks this registry does **not** own. Conversely, three registry members carry their own mode file and are untouched by a `.mode` change. The authoritative membership of any mode cohort is derived, never memorized: a hook belongs to a mode file's cohort exactly when its `MODE_FILE` names that file, so a hook that is given its own mode file leaves the shared cohort at that moment. § Warn-Mode vs. Enforce-Mode carries the current derivation and the command that reproduces it.
+
 Beyond the nine security hooks, this registry also documents one **workflow-class posture hook** — `verify-session-config.sh` (VERIFY-SESSION-CONFIG-001..099), a `SessionStart` hook that verifies the session's resolved model + effort at launch. It is deliberately not one of the nine security hooks and is not reconciled by the `block-*.sh` completeness check (it carries no `block-` name and declares its own `# hook-owner:`); it is co-documented here because it layers onto the same `CLAUDE_HOOK_BYPASS` / master-enable / per-hook-mode precedence chain and honors the Master Activation Layer as a workflow-class hook. It is a non-blocking notifier (SessionStart cannot block), so it fails toward advisory rather than the security hooks' fail-closed posture.
 
 > **This file is GENERATED.** The canonical index `core/rules/bypass-mode-readiness.md` is assembled at deploy time by [`core/deploy/tools/build-hook-registry.py`](../deploy/tools/build-hook-registry.py) from the per-hook source fragments under `core/rules/bypass-mode-readiness/`. Do NOT hand-edit this file — edit the per-hook source (`bypass-mode-readiness/block-<hook>.md`) or a cross-cutting fragment (`bypass-mode-readiness/_header.md`, `bypass-mode-readiness/_cross-cutting.md`) and regenerate. The `deploy.sh --check` index-freshness check fails any stale committed index; the completeness check fails any hook script missing its owner. Per [ADR-030](../ADRs/ADR-030-hook-registry-drop-in-with-generated-index.md).
@@ -438,15 +440,24 @@ The helper validates that the target is one of the 8 known allowlists and that t
 
 ## Warn-Mode vs. Enforce-Mode
 
-`.claude/hooks/.mode` (shared between `block-egress.sh`, `block-mcp-writes.sh`, `block-shell-injection.sh`, and `block-fs-boundary.sh`):
+**Which hooks a mode file reaches is derived, not memorized.** A hook is in a mode file's cohort exactly when its own `MODE_FILE` names that file. Reproduce the shared-`.mode` cohort with:
+
+```
+git grep -l 'MODE_FILE="${HOOK_DIR}/\.mode"' -- ':(glob)core/hooks/*.sh'
+```
+
+`.claude/hooks/.mode` is currently read by **eight** hooks — four inside this registry (`block-egress.sh`, `block-mcp-writes.sh`, `block-shell-injection.sh`, `block-fs-boundary.sh`) and four owned by other discipline docs (`block-skill-direct-edit.sh`, `block-fragile-refs.sh`, `block-gh-path-leak.sh`, `block-draft-files.sh`). Three further hooks carry their **own** mode file and are unaffected by a `.mode` change: `block-autonomy-ceiling.sh` (`.autonomy-mode`), `block-scope-segregation.sh` (`.scope-segregation-mode`), `verify-session-config.sh` (`.verify-session-config-mode`). Giving a hook its own mode file removes it from the shared cohort and adds a row to that list; re-run the command above rather than trusting this paragraph's count after any such change.
 
 | Value | Behavior |
 |---|---|
 | `enforce` | Hook exits 2 on violation (default after initial shakedown) |
-| `warn` | Hook logs to `egress-warn-log.jsonl` / `mcp-warn-log.jsonl` / `shell-injection-warn-log.jsonl` / `fs-boundary-warn-log.jsonl` and exits 0 |
+| `warn` | Hook logs to its own warn log (`egress-warn-log.jsonl`, `mcp-warn-log.jsonl`, `shell-injection-warn-log.jsonl`, `fs-boundary-warn-log.jsonl`, …) and exits 0 |
 | `off` | Hook exits 0 immediately (disables the hook) |
+| `LIB-MISSING` (any value) | **Mode-coupled.** When `lib/dep-resolve.sh` is absent, unreadable, unparseable or stale, a hook with a mode surface denies (`exit 2`, `BLOCKED (fail-closed)`) in `enforce`, and in `warn`/`off` exits 0 after emitting a `[CLAUDE-HOOK:<hook>:LIB-MISSING] WARN (degraded, …)` notice on stderr. The notice is emitted in `off` as well as `warn`: `off` disables *rule enforcement*, not *install-integrity reporting*, and a silent degrade would leave nothing for an operator to notice. Recovery is a bundle reinstall — see § Recovery Procedures. |
 
-**Destructive + credential-read + rm-prefer-trash hooks always enforce** (high-confidence, narrow rules, low false-positive risk). Egress, MCP writes, shell-injection, and fs-boundary have warn-mode.
+**Destructive + credential-read + rm-prefer-trash hooks always enforce** (high-confidence, narrow rules, low false-positive risk) and have no mode surface at all. The eight `.mode` readers listed above have warn-mode.
+
+**The always-enforce three keep an unconditional `LIB-MISSING` deny, and that is load-bearing rather than incidental.** Their matchers span Read, Bash, Write and Edit, so a missing helper stays immediately visible even while the mode-capable cohort is degrading — which is the property that makes degrading the cohort acceptable in the first place. `core/hooks/tests/check-hook-dep-hardening.sh` CHECK-4 fails if one of the three acquires a mode-coupled guard. **Scope of that guarantee, stated plainly:** it holds for an absent, unreadable or truncated helper. It does **not** hold for a syntactically-valid helper whose top level runs `exit 0` — that terminates the hook from inside the guard's own condition before the guard can rule, and `bash -n` cannot detect it because the syntax is valid. That residual is pre-existing, is tracked as its own defect, and is printed on every run of `core/hooks/tests/hook-fail-closed.test.sh` section (6) so a green suite is never mistaken for a total guarantee.
 
 **Initial deploy state:** `warn` (fast-path 3-day shakedown). User flips to `enforce` after reviewing warn logs and adding any legitimate false-positive patterns to the relevant allowlist.
 
@@ -459,6 +470,8 @@ The helper validates that the target is one of the 8 known allowlists and that t
 3. Edit the faulty hook (hook is bypassed so the edit succeeds)
 4. Exit Claude
 5. Relaunch without env var to restore enforcement
+
+**`CLAUDE_HOOK_BYPASS` does not clear a `LIB-MISSING` block.** The `lib/dep-resolve.sh` guard is evaluated *before* the bypass check in every hook that carries it, so a missing or corrupt helper blocks regardless of the environment variable. The procedure above applies to rule-match and hook-error loops, not to helper-integrity failures. Recovery for that class is a **hook-bundle reinstall from your own terminal** — `bash docs/scripts/setup-workspace.sh` — which the hooks do not gate, because they gate the agent's tool calls and not the operator's shell. Since the guard became mode-coupled, a hook whose mode file reads `warn` or `off` degrades instead of blocking and prints the reinstall instruction itself; the hard block now comes only from `enforce` and from the three always-enforce hooks.
 
 ### Missing `jq` dependency
 
@@ -514,7 +527,7 @@ Before flipping `.mode` from `warn` to `enforce`:
 - [ ] `allowlist-additions.log` reviewed — all additions have plausible reasons
 - [ ] No critical false-positive patterns remaining (i.e., any legitimate action has a working allowlist entry)
 - [ ] `block-destructive`, `block-credential-reads`, and `block-rm-prefer-trash` hooks have been exercised without false positives (these are always-enforce)
-- [ ] Operator confirms readiness via commit to `.mode` change (note: this flip affects all four warn-mode hooks — `block-egress`, `block-mcp-writes`, `block-shell-injection`, `block-fs-boundary` — simultaneously)
+- [ ] Operator confirms readiness via commit to `.mode` change (note: this flip affects **every** hook whose `MODE_FILE` names the shared `.mode`, simultaneously — currently eight: `block-egress`, `block-mcp-writes`, `block-shell-injection`, `block-fs-boundary`, **plus the four registry-external readers** `block-skill-direct-edit`, `block-fragile-refs`, `block-gh-path-leak`, `block-draft-files`. It does **not** affect the three hooks carrying their own mode file. Re-derive the cohort before flipping — see § Warn-Mode vs. Enforce-Mode for the command)
 
 ## Related
 

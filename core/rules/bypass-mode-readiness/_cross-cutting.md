@@ -108,15 +108,24 @@ The helper validates that the target is one of the 8 known allowlists and that t
 
 ## Warn-Mode vs. Enforce-Mode
 
-`.claude/hooks/.mode` (shared between `block-egress.sh`, `block-mcp-writes.sh`, `block-shell-injection.sh`, and `block-fs-boundary.sh`):
+**Which hooks a mode file reaches is derived, not memorized.** A hook is in a mode file's cohort exactly when its own `MODE_FILE` names that file. Reproduce the shared-`.mode` cohort with:
+
+```
+git grep -l 'MODE_FILE="${HOOK_DIR}/\.mode"' -- ':(glob)core/hooks/*.sh'
+```
+
+`.claude/hooks/.mode` is currently read by **eight** hooks — four inside this registry (`block-egress.sh`, `block-mcp-writes.sh`, `block-shell-injection.sh`, `block-fs-boundary.sh`) and four owned by other discipline docs (`block-skill-direct-edit.sh`, `block-fragile-refs.sh`, `block-gh-path-leak.sh`, `block-draft-files.sh`). Three further hooks carry their **own** mode file and are unaffected by a `.mode` change: `block-autonomy-ceiling.sh` (`.autonomy-mode`), `block-scope-segregation.sh` (`.scope-segregation-mode`), `verify-session-config.sh` (`.verify-session-config-mode`). Giving a hook its own mode file removes it from the shared cohort and adds a row to that list; re-run the command above rather than trusting this paragraph's count after any such change.
 
 | Value | Behavior |
 |---|---|
 | `enforce` | Hook exits 2 on violation (default after initial shakedown) |
-| `warn` | Hook logs to `egress-warn-log.jsonl` / `mcp-warn-log.jsonl` / `shell-injection-warn-log.jsonl` / `fs-boundary-warn-log.jsonl` and exits 0 |
+| `warn` | Hook logs to its own warn log (`egress-warn-log.jsonl`, `mcp-warn-log.jsonl`, `shell-injection-warn-log.jsonl`, `fs-boundary-warn-log.jsonl`, …) and exits 0 |
 | `off` | Hook exits 0 immediately (disables the hook) |
+| `LIB-MISSING` (any value) | **Mode-coupled.** When `lib/dep-resolve.sh` is absent, unreadable, unparseable or stale, a hook with a mode surface denies (`exit 2`, `BLOCKED (fail-closed)`) in `enforce`, and in `warn`/`off` exits 0 after emitting a `[CLAUDE-HOOK:<hook>:LIB-MISSING] WARN (degraded, …)` notice on stderr. The notice is emitted in `off` as well as `warn`: `off` disables *rule enforcement*, not *install-integrity reporting*, and a silent degrade would leave nothing for an operator to notice. Recovery is a bundle reinstall — see § Recovery Procedures. |
 
-**Destructive + credential-read + rm-prefer-trash hooks always enforce** (high-confidence, narrow rules, low false-positive risk). Egress, MCP writes, shell-injection, and fs-boundary have warn-mode.
+**Destructive + credential-read + rm-prefer-trash hooks always enforce** (high-confidence, narrow rules, low false-positive risk) and have no mode surface at all. The eight `.mode` readers listed above have warn-mode.
+
+**The always-enforce three keep an unconditional `LIB-MISSING` deny, and that is load-bearing rather than incidental.** Their matchers span Read, Bash, Write and Edit, so a missing helper stays immediately visible even while the mode-capable cohort is degrading — which is the property that makes degrading the cohort acceptable in the first place. `core/hooks/tests/check-hook-dep-hardening.sh` CHECK-4 fails if one of the three acquires a mode-coupled guard. **Scope of that guarantee, stated plainly:** it holds for an absent, unreadable or truncated helper. It does **not** hold for a syntactically-valid helper whose top level runs `exit 0` — that terminates the hook from inside the guard's own condition before the guard can rule, and `bash -n` cannot detect it because the syntax is valid. That residual is pre-existing, is tracked as its own defect, and is printed on every run of `core/hooks/tests/hook-fail-closed.test.sh` section (6) so a green suite is never mistaken for a total guarantee.
 
 **Initial deploy state:** `warn` (fast-path 3-day shakedown). User flips to `enforce` after reviewing warn logs and adding any legitimate false-positive patterns to the relevant allowlist.
 
@@ -129,6 +138,8 @@ The helper validates that the target is one of the 8 known allowlists and that t
 3. Edit the faulty hook (hook is bypassed so the edit succeeds)
 4. Exit Claude
 5. Relaunch without env var to restore enforcement
+
+**`CLAUDE_HOOK_BYPASS` does not clear a `LIB-MISSING` block.** The `lib/dep-resolve.sh` guard is evaluated *before* the bypass check in every hook that carries it, so a missing or corrupt helper blocks regardless of the environment variable. The procedure above applies to rule-match and hook-error loops, not to helper-integrity failures. Recovery for that class is a **hook-bundle reinstall from your own terminal** — `bash docs/scripts/setup-workspace.sh` — which the hooks do not gate, because they gate the agent's tool calls and not the operator's shell. Since the guard became mode-coupled, a hook whose mode file reads `warn` or `off` degrades instead of blocking and prints the reinstall instruction itself; the hard block now comes only from `enforce` and from the three always-enforce hooks.
 
 ### Missing `jq` dependency
 
@@ -184,7 +195,7 @@ Before flipping `.mode` from `warn` to `enforce`:
 - [ ] `allowlist-additions.log` reviewed — all additions have plausible reasons
 - [ ] No critical false-positive patterns remaining (i.e., any legitimate action has a working allowlist entry)
 - [ ] `block-destructive`, `block-credential-reads`, and `block-rm-prefer-trash` hooks have been exercised without false positives (these are always-enforce)
-- [ ] Operator confirms readiness via commit to `.mode` change (note: this flip affects all four warn-mode hooks — `block-egress`, `block-mcp-writes`, `block-shell-injection`, `block-fs-boundary` — simultaneously)
+- [ ] Operator confirms readiness via commit to `.mode` change (note: this flip affects **every** hook whose `MODE_FILE` names the shared `.mode`, simultaneously — currently eight: `block-egress`, `block-mcp-writes`, `block-shell-injection`, `block-fs-boundary`, **plus the four registry-external readers** `block-skill-direct-edit`, `block-fragile-refs`, `block-gh-path-leak`, `block-draft-files`. It does **not** affect the three hooks carrying their own mode file. Re-derive the cohort before flipping — see § Warn-Mode vs. Enforce-Mode for the command)
 
 ## Related
 
