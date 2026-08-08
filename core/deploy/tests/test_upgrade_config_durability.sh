@@ -322,10 +322,10 @@ else
 fi
 
 # Phase 3 reports a non-zero regenerated count.
-if printf '%s' "${upd_out}" | grep -qE 'Phase 3 complete: [0-9]+ files surveyed, [1-9][0-9]* regenerated'; then
+if grep -qE 'Phase 3 complete: [0-9]+ files surveyed, [1-9][0-9]* regenerated' <<<"${upd_out}"; then
   report "update reports >=1 managed section regenerated" 1
 else
-  p3=$(printf '%s' "${upd_out}" | grep -E 'Phase 3 complete' | head -1)
+  p3=$(grep -m1 -E 'Phase 3 complete' <<<"${upd_out}")
   report "update reports >=1 managed section regenerated" 0 "${p3}"
 fi
 
@@ -386,7 +386,7 @@ tr_parsed=$(awk '
 ' "${CFG_TOML}" 2>/dev/null)
 
 check_field() { # desc  needle
-  if printf '%s\n' "${tr_parsed}" | grep -qF "$2"; then
+  if grep -qF "$2" <<<"${tr_parsed}"; then
     report "$1" 1
   else
     report "$1" 0 "missing [$2] in parsed trackers: $(printf '%s' "${tr_parsed}" | tr '\n' ';')"
@@ -734,7 +734,7 @@ else
     "run1 exit ${pres_exit1}; run2 exit ${pres_exit2}; ${pres_tail}"
 fi
 
-if printf '%s\n' "${pres_log2}" | grep -q 'RE-BOOTSTRAP flow'; then
+if grep -q 'RE-BOOTSTRAP flow' <<<"${pres_log2}"; then
   report "P-4 second run took the RE-BOOTSTRAP branch (both write paths exercised)" 1
 else
   report "P-4 second run took the RE-BOOTSTRAP branch (both write paths exercised)" 0 \
@@ -903,8 +903,8 @@ report "C-2 deployed CLAUDE.md carries the markdown marker dialect" "${c2_pass}"
 
 # C-2b: markdown marker LINES (not just fences), with field 3 = the hex digest —
 #       the field index update.sh's awk depends on for both dialects.
-c2b_sha=$(grep -E '^<!-- managed_sha:' "${CLAUDE_TARGET}" | head -1 | awk '{print $3}')
-if printf '%s' "${c2b_sha}" | grep -qE '^[0-9a-f]{64}$'; then
+c2b_sha=$(grep -m1 -E '^<!-- managed_sha:' "${CLAUDE_TARGET}" | awk '{print $3}')
+if grep -qE '^[0-9a-f]{64}$' <<<"${c2b_sha}"; then
   report "C-2b managed_sha marker is markdown-form with a resolved 64-hex digest" 1
 else
   report "C-2b managed_sha marker is markdown-form with a resolved 64-hex digest" 0 \
@@ -956,12 +956,12 @@ extract_additions_block() {
   ' "$1"
 }
 offset_in_fence() {
-  extract_additions_block "$1" | grep -nF "${CLAUDE_SENTINEL}" | head -1 | cut -d: -f1
+  extract_additions_block "$1" | grep -m1 -nF "${CLAUDE_SENTINEL}" | cut -d: -f1
 }
 
 CLAUDE_ADDITIONS_BEFORE=$(extract_additions_block "${CLAUDE_TARGET}")
 CLAUDE_OFFSET_BEFORE=$(offset_in_fence "${CLAUDE_TARGET}")
-if printf '%s' "${CLAUDE_ADDITIONS_BEFORE}" | grep -qF "${CLAUDE_SENTINEL}"; then
+if grep -qF "${CLAUDE_SENTINEL}" <<<"${CLAUDE_ADDITIONS_BEFORE}"; then
   report "C-4a operator addition injected inside CLAUDE.md additions fence" 1
 else
   report "C-4a operator addition injected inside CLAUDE.md additions fence" 0
@@ -1011,7 +1011,7 @@ fi
 # C-6c: the managed body DID move (the delta grew it), so C-6a is proving
 #       preservation across a real rewrite rather than across a no-op. Without
 #       this arm, C-6a would also pass if nothing had been regenerated at all.
-c6c_line_after=$(grep -nF "${CLAUDE_SENTINEL}" "${CLAUDE_TARGET}" | head -1 | cut -d: -f1)
+c6c_line_after=$(grep -m1 -nF "${CLAUDE_SENTINEL}" "${CLAUDE_TARGET}" | cut -d: -f1)
 if [ -n "${c6c_line_after}" ] && [ "${c6c_line_after}" -gt "${CLAUDE_OFFSET_AFTER}" ]; then
   report "C-6c sensitivity control: the managed body precedes the fence and was rewritten" 1
 else
@@ -1052,13 +1052,13 @@ if [ "${cnoop_exit}" -eq 64 ]; then
   report "C-8a re-run with no delta exits EX_NOCHANGE (64) — markdown managed_sha parsed" 1
 else
   report "C-8a re-run with no delta exits EX_NOCHANGE (64) — markdown managed_sha parsed" 0 \
-    "exit ${cnoop_exit}; $(printf '%s' "${cnoop_out}" | grep -E 'Phase 3 complete' | head -1)"
+    "exit ${cnoop_exit}; $(grep -m1 -E 'Phase 3 complete' <<<"${cnoop_out}")"
 fi
-if printf '%s' "${cnoop_out}" | grep -qE 'Phase 3 complete: [0-9]+ files surveyed, 0 regenerated'; then
+if grep -qE 'Phase 3 complete: [0-9]+ files surveyed, 0 regenerated' <<<"${cnoop_out}"; then
   report "C-8b no-delta re-run regenerates 0 files (no perpetual-regen loop)" 1
 else
   report "C-8b no-delta re-run regenerates 0 files (no perpetual-regen loop)" 0 \
-    "$(printf '%s' "${cnoop_out}" | grep -E 'Phase 3 complete' | head -1)"
+    "$(grep -m1 -E 'Phase 3 complete' <<<"${cnoop_out}")"
 fi
 
 # C-9: workspace-root resolver precedence — flag > env var > $HOME default.
@@ -1070,7 +1070,7 @@ resolves_claude_md() {
   # target absent. Reads the survey line rather than the exit code, because the
   # exit code aggregates every manifest row.
   local out="$1"
-  if printf '%s' "${out}" | grep -qE 'Target absent \(CLAUDE\.md\)'; then
+  if grep -qE 'Target absent \(CLAUDE\.md\)' <<<"${out}"; then
     printf '0'
   else
     printf '1'
@@ -1308,7 +1308,7 @@ else
   report "S-1 precondition: registrations are ABSENT before the refresh" 0 \
     "missing=${set_before_missing} live=${set_before_count} template=${set_tpl_count}"
 fi
-if printf '%s\n' "$(set_triples "${SET_JSON}")" | grep -q '^Stop|'; then
+if grep -q '^Stop|' <<<"$(set_triples "${SET_JSON}")"; then
   report "S-1 precondition: the Stop event block is absent before the refresh" 0 "Stop block unexpectedly present"
 else
   report "S-1 precondition: the Stop event block is absent before the refresh" 1
@@ -1321,11 +1321,11 @@ else
   report "S-1 --refresh-settings exits 0 on an untouched stale copy" 0 \
     "exit ${set_s1_exit}; $(printf '%s' "${set_s1_log}" | tail -3 | tr '\n' '|')"
 fi
-if printf '%s' "${set_s1_log}" | grep -q 'S-1 settings.json is an untouched platform copy'; then
+if grep -q 'S-1 settings.json is an untouched platform copy' <<<"${set_s1_log}"; then
   report "S-1 guard classified the untouched copy as S-1 (byte-exact anchor arm, no structural diff)" 1
 else
   report "S-1 guard classified the untouched copy as S-1" 0 \
-    "$(printf '%s' "${set_s1_log}" | grep -E 'S-[0-5]' | head -2 | tr '\n' '|')"
+    "$(grep -m2 -E 'S-[0-5]' <<<"${set_s1_log}" | tr '\n' '|')"
 fi
 
 set_after_missing=$(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${SET_JSON}") | grep -c . || true)
@@ -1378,21 +1378,21 @@ set_s0_before=$(set_sha "${SET_JSON}")
 set_s0_log=$(set_refresh); set_s0_exit=$?
 set_s0_after=$(set_sha "${SET_JSON}")
 if [ "${set_s0_exit}" -eq 0 ] && [ "${set_s0_before}" = "${set_s0_after}" ] \
-   && printf '%s' "${set_s0_log}" | grep -q 'S-0 settings.json already current'; then
+   && grep -q 'S-0 settings.json already current' <<<"${set_s0_log}"; then
   report "S-0 idempotent re-run writes nothing (both baselines match; byte-identical)" 1
 else
   report "S-0 idempotent re-run writes nothing" 0 \
-    "exit ${set_s0_exit}; hash_changed=$([ "${set_s0_before}" = "${set_s0_after}" ] && echo no || echo YES); $(printf '%s' "${set_s0_log}" | grep -E 'S-[0-5]' | head -1)"
+    "exit ${set_s0_exit}; hash_changed=$([ "${set_s0_before}" = "${set_s0_after}" ] && echo no || echo YES); $(grep -m1 -E 'S-[0-5]' <<<"${set_s0_log}")"
 fi
 
 # --- S-0 force arm: --force-regen overrides the no-op skip but STILL runs the
 #     guard first, so forcing can never bypass operator-key migration. ---
 set_sf_log=$(set_refresh --force-regen); set_sf_exit=$?
-if [ "${set_sf_exit}" -eq 0 ] && ! printf '%s' "${set_sf_log}" | grep -q 'S-0 settings.json already current'; then
+if [ "${set_sf_exit}" -eq 0 ] && ! grep -q 'S-0 settings.json already current' <<<"${set_sf_log}"; then
   report "S-0 --force-regen overrides the no-op skip (classification still rendered)" 1
 else
   report "S-0 --force-regen overrides the no-op skip" 0 \
-    "exit ${set_sf_exit}; $(printf '%s' "${set_sf_log}" | grep -E 'S-[0-5]' | head -1)"
+    "exit ${set_sf_exit}; $(grep -m1 -E 'S-[0-5]' <<<"${set_sf_log}")"
 fi
 
 # --- S-2 (AC-3, no false fire): a formatting-only difference is NOT a
@@ -1410,11 +1410,11 @@ set_state_baseline "${SET_STATE}" "" ""
 set_overlay_before=$(set_sha "${SET_OVERLAY}")
 set_s2_log=$(set_refresh); set_s2_exit=$?
 set_overlay_after=$(set_sha "${SET_OVERLAY}")
-if [ "${set_s2_exit}" -eq 0 ] && printf '%s' "${set_s2_log}" | grep -q 'S-2 no operator-added content'; then
+if [ "${set_s2_exit}" -eq 0 ] && grep -q 'S-2 no operator-added content' <<<"${set_s2_log}"; then
   report "S-2 a formatting-only difference does NOT fire the operator-key guard (AC-3)" 1
 else
   report "S-2 a formatting-only difference does NOT fire the operator-key guard (AC-3)" 0 \
-    "exit ${set_s2_exit}; $(printf '%s' "${set_s2_log}" | grep -E 'S-[0-5]' | head -1)"
+    "exit ${set_s2_exit}; $(grep -m1 -E 'S-[0-5]' <<<"${set_s2_log}")"
 fi
 if [ "${set_overlay_before}" = "${set_overlay_after}" ]; then
   report "S-2 the overlay is untouched on a no-customization refresh" 1
@@ -1465,11 +1465,11 @@ print(len(doc) if isinstance(doc, dict) else 0)
 if [ "${set_s3_exit}" -eq 0 ] \
    && [ "${set_s3_overlay_keys}" -gt 0 ] \
    && grep -q 'SUITE_S_OPERATOR_KEY' "${SET_OVERLAY}" \
-   && printf '%s' "${set_s3_log}" | grep -q 'S-3 MIGRATED operator-added settings'; then
+   && grep -q 'S-3 MIGRATED operator-added settings' <<<"${set_s3_log}"; then
   report "S-3 operator-added content is MIGRATED, not merely warned about (AC-1)" 1
 else
   report "S-3 operator-added content is MIGRATED, not merely warned about (AC-1)" 0 \
-    "exit ${set_s3_exit}; overlay_keys=${set_s3_overlay_keys} (expected >0); operator key in overlay=$(grep -q 'SUITE_S_OPERATOR_KEY' "${SET_OVERLAY}" && echo yes || echo NO); $(printf '%s' "${set_s3_log}" | grep -E 'S-[0-5]' | head -2 | tr '\n' '|')"
+    "exit ${set_s3_exit}; overlay_keys=${set_s3_overlay_keys} (expected >0); operator key in overlay=$(grep -q 'SUITE_S_OPERATOR_KEY' "${SET_OVERLAY}" && echo yes || echo NO); $(grep -m2 -E 'S-[0-5]' <<<"${set_s3_log}" | tr '\n' '|')"
 fi
 set_s3_named=0
 for set_key in SUITE_S_OPERATOR_KEY 'Bash(suite-s-operator-tool \*)' operator-hook.sh; do
@@ -1522,13 +1522,13 @@ else
   report "S-4 a migration conflict writes NOTHING" 0 \
     "exit ${set_s4_exit}; managed_changed=$([ "${set_s4_before}" = "${set_s4_after}" ] && echo no || echo YES); overlay_changed=$([ "${set_s4_overlay_before}" = "${set_s4_overlay_after}" ] && echo no || echo YES)"
 fi
-if printf '%s' "${set_s4_log}" | grep -q 'S-4 settings refresh ABORTED' \
-   && printf '%s' "${set_s4_log}" | grep -q 'SUITE_S_OPERATOR_KEY' \
-   && printf '%s' "${set_s4_log}" | grep -q 'REGISTRATIONS did NOT land'; then
+if grep -q 'S-4 settings refresh ABORTED' <<<"${set_s4_log}" \
+   && grep -q 'SUITE_S_OPERATOR_KEY' <<<"${set_s4_log}" \
+   && grep -q 'REGISTRATIONS did NOT land' <<<"${set_s4_log}"; then
   report "S-4 the abort names the conflicting key AND states that registrations did not land" 1
 else
   report "S-4 the abort names the conflicting key AND states that registrations did not land" 0 \
-    "$(printf '%s' "${set_s4_log}" | grep -E 'S-4' | head -3 | tr '\n' '|')"
+    "$(grep -m3 -E 'S-4' <<<"${set_s4_log}" | tr '\n' '|')"
 fi
 
 # --- S-5: an unparseable live file means the runtime is loading NO platform
@@ -1536,11 +1536,11 @@ fi
 printf '{ this is not valid json ' > "${SET_JSON}"
 set_state_baseline "${SET_STATE}" "" ""
 set_s5_log=$(set_refresh); set_s5_exit=$?
-if [ "${set_s5_exit}" -eq 0 ] && printf '%s' "${set_s5_log}" | grep -q 'S-5 settings.json is not parseable JSON'; then
+if [ "${set_s5_exit}" -eq 0 ] && grep -q 'S-5 settings.json is not parseable JSON' <<<"${set_s5_log}"; then
   report "S-5 an unparseable settings.json is classified as the tamper case" 1
 else
   report "S-5 an unparseable settings.json is classified as the tamper case" 0 \
-    "exit ${set_s5_exit}; $(printf '%s' "${set_s5_log}" | grep -E 'S-[0-5]' | head -1)"
+    "exit ${set_s5_exit}; $(grep -m1 -E 'S-[0-5]' <<<"${set_s5_log}")"
 fi
 if ls -d "${SET_WS}"/.backup-tampered-* >/dev/null 2>&1; then
   report "S-5 the unparseable bytes are preserved on the tamper backup convention" 1
@@ -1568,11 +1568,11 @@ set_s6_log=$(set_refresh --dry-run); set_s6_exit=$?
 if [ "${set_s6_exit}" -eq 0 ] \
    && [ "${set_s6_before}" = "$(set_sha "${SET_JSON}")" ] \
    && [ "${set_s6_overlay_before}" = "$(set_sha "${SET_OVERLAY}")" ] \
-   && printf '%s' "${set_s6_log}" | grep -q '\[dry-run\] S-3'; then
+   && grep -q '\[dry-run\] S-3' <<<"${set_s6_log}"; then
   report "S-6 --dry-run reports the classification and writes nothing" 1
 else
   report "S-6 --dry-run reports the classification and writes nothing" 0 \
-    "exit ${set_s6_exit}; $(printf '%s' "${set_s6_log}" | grep -E 'dry-run\] S-' | head -1)"
+    "exit ${set_s6_exit}; $(grep -m1 -E 'dry-run\] S-' <<<"${set_s6_log}")"
 fi
 
 # --- S-7 (AC-7): ADR-121 is Accepted. The design gates the refresh mechanism on
@@ -1646,11 +1646,11 @@ if set_triples "${SET_JSON}" | grep -q '^Stop|'; then
 else
   report "S-9 the Stop event block reaches the install via ./update.sh" 0
 fi
-if printf '%s' "${set_s9_out}" | grep -q 'Phase 5d: settings.json content changed'; then
+if grep -q 'Phase 5d: settings.json content changed' <<<"${set_s9_out}"; then
   report "S-9 Phase 5d reports a real byte delta (the EX_NOCHANGE flag is keyed to content, not to 'the phase ran')" 1
 else
   report "S-9 Phase 5d reports a real byte delta" 0 \
-    "$(printf '%s' "${set_s9_out}" | grep -E 'Phase 5d' | head -2 | tr '\n' '|')"
+    "$(grep -m2 -E 'Phase 5d' <<<"${set_s9_out}" | tr '\n' '|')"
 fi
 
 # --- S-10 (AC-2, the discoverability half): the update PATH restores the Layer-2
@@ -1676,7 +1676,7 @@ fi
 # --- S-10b: Phase 2.5d specifically RAN. This is the phase-scoped arm S-10 is not:
 #     it goes red when the scaffold is dropped from the update sequence, which the
 #     outcome arm above cannot detect. ---
-if printf '%s' "${set_s9_out}" | grep -q 'Phase 2.5d: operator settings-overlay scaffold'; then
+if grep -q 'Phase 2.5d: operator settings-overlay scaffold' <<<"${set_s9_out}"; then
   report "S-10b Phase 2.5d ran in the update sequence (phase-scoped arm)" 1
 else
   report "S-10b Phase 2.5d ran in the update sequence (phase-scoped arm)" 0 \
@@ -1686,9 +1686,9 @@ fi
 # --- S-11: phase ORDER. Scripts (5c) must land before the registrations that name
 #     them (5d), and the overlay (2.5d) before the migration that targets it. The
 #     assertion is on observed line order in one real run, not on source reading. ---
-set_l25d=$(printf '%s\n' "${set_s9_out}" | grep -n 'Phase 2.5d' | head -1 | cut -d: -f1)
-set_l5c=$(printf '%s\n' "${set_s9_out}" | grep -n 'Phase 5c' | head -1 | cut -d: -f1)
-set_l5d=$(printf '%s\n' "${set_s9_out}" | grep -n 'Phase 5d' | head -1 | cut -d: -f1)
+set_l25d=$(grep -m1 -n 'Phase 2.5d' <<<"${set_s9_out}" | cut -d: -f1)
+set_l5c=$(grep -m1 -n 'Phase 5c' <<<"${set_s9_out}" | cut -d: -f1)
+set_l5d=$(grep -m1 -n 'Phase 5d' <<<"${set_s9_out}" | cut -d: -f1)
 if [ -n "${set_l25d}" ] && [ -n "${set_l5c}" ] && [ -n "${set_l5d}" ] \
    && [ "${set_l25d}" -lt "${set_l5c}" ] && [ "${set_l5c}" -lt "${set_l5d}" ]; then
   report "S-11 phase order holds in a real run: 2.5d (${set_l25d}) < 5c (${set_l5c}) < 5d (${set_l5d})" 1
@@ -1706,11 +1706,11 @@ set_s12_out=$(bash "${REPO_ROOT}/update.sh" \
   --workspace-root "${SET_WS}" 2>&1)
 set_s12_after=$(set_sha "${SET_JSON}")
 if [ "${set_s12_before}" = "${set_s12_after}" ] \
-   && printf '%s' "${set_s12_out}" | grep -q 'Phase 5d: settings.json byte-identical'; then
+   && grep -q 'Phase 5d: settings.json byte-identical' <<<"${set_s12_out}"; then
   report "S-12 a no-delta re-run leaves settings.json byte-identical and Phase 5d reports no change (EX_NOCHANGE stays reachable)" 1
 else
   report "S-12 a no-delta re-run leaves settings.json byte-identical and Phase 5d reports no change" 0 \
-    "hash_changed=$([ "${set_s12_before}" = "${set_s12_after}" ] && echo no || echo YES); $(printf '%s' "${set_s12_out}" | grep -E 'Phase 5d' | head -1)"
+    "hash_changed=$([ "${set_s12_before}" = "${set_s12_after}" ] && echo no || echo YES); $(grep -m1 -E 'Phase 5d' <<<"${set_s12_out}")"
 fi
 
 # --- S-13: THE REBOOTSTRAP PATH. A plain setup-workspace.sh re-run — no flags at
@@ -1809,7 +1809,7 @@ reb_log=$(GIT_CONFIG_GLOBAL="${SBX}/gitcfg/ok" "${SETUP}" \
   --config-root "${REB_CONFIG}" --non-interactive 0<&- 2>&1)
 reb_exit=$?
 
-if [ "${reb_state_ok}" = "true" ] && printf '%s' "${reb_log}" | grep -q 'RE-BOOTSTRAP flow'; then
+if [ "${reb_state_ok}" = "true" ] && grep -q 'RE-BOOTSTRAP flow' <<<"${reb_log}"; then
   report "S-13 the no-flag re-run really did route to rebootstrap (subject control)" 1
 else
   report "S-13 the no-flag re-run really did route to rebootstrap (subject control)" 0 \
@@ -1899,12 +1899,12 @@ reb_d_state_after=$(jq -r '.settings_installed_sha // ""' "${REB_WS}/.claude/.wo
 # Precondition: the run really did hit a no-write arm. Without this the baseline
 # assertion below could pass for the wrong reason (a normal write path re-anchoring
 # to a file it legitimately wrote).
-if printf '%s' "${reb_d_log}" | grep -q 'S-4 settings refresh ABORTED' \
+if grep -q 'S-4 settings refresh ABORTED' <<<"${reb_d_log}" \
    && [ "${reb_d_live_sha}" = "${reb_d_live_after}" ]; then
   report "S-13d precondition: the conflicting re-run hit a NO-WRITE arm (S-4) and left the managed file byte-identical" 1
 else
   report "S-13d precondition: the conflicting re-run hit a NO-WRITE arm (S-4)" 0 \
-    "managed_changed=$([ "${reb_d_live_sha}" = "${reb_d_live_after}" ] && echo no || echo YES); $(printf '%s' "${reb_d_log}" | grep -E 'S-[0-5] ' | head -2 | tr '\n' '|')"
+    "managed_changed=$([ "${reb_d_live_sha}" = "${reb_d_live_after}" ] && echo no || echo YES); $(grep -m2 -E 'S-[0-5] ' <<<"${reb_d_log}" | tr '\n' '|')"
 fi
 
 # THE ASSERTION: the recorded anchor must NOT have become the sha of the

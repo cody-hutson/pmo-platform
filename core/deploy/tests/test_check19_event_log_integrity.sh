@@ -196,14 +196,14 @@ printf '\nT1/T4: positive control + #4051 regression guard (valid 3/3 fixture)\n
 seed_valid
 R="$(check19_region)"
 
-if printf '%s' "${R}" | grep -q 'OK:.*log rows=3, write-log lines=3, header preserved'; then
+if grep -q 'OK:.*log rows=3, write-log lines=3, header preserved' <<<"${R}"; then
   report "T1 19b+19c EXECUTE and report OK with real counts (rows=3, lines=3)" 1
 else
   report "T1 19b+19c EXECUTE and report OK with real counts (rows=3, lines=3)" 0 \
     "$(printf '%s' "${R}" | tr '\n' '|')"
 fi
 
-if printf '%s' "${R}" | grep -q 'pipeline-event-log-integrity'; then
+if grep -q 'pipeline-event-log-integrity' <<<"${R}"; then
   report "T1 no integrity finding on a valid fixture" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
 else
   report "T1 no integrity finding on a valid fixture" 1
@@ -213,7 +213,7 @@ fi
 # literals resolve. Any one of them reappearing means a literal regressed.
 t4_ok=1; t4_detail=""
 for msg in 'log file missing' 'write-log missing' 'schema doc missing'; do
-  if printf '%s' "${R}" | grep -q "${msg}"; then t4_ok=0; t4_detail="${t4_detail}${msg}; "; fi
+  if grep -q "${msg}" <<<"${R}"; then t4_ok=0; t4_detail="${t4_detail}${msg}; "; fi
 done
 if [ "${t4_ok}" = "1" ]; then
   report "T4 all three path literals resolve (no presence-failure message)" 1
@@ -230,12 +230,12 @@ seed_valid
 printf '| 2026-07-27T00:00:04Z | v0.0 | stage-06 | decision | fixture | spoke:#4051 | hand-edit | CHEAP | resolved | %s fixture:bypass |\n' "${SENTINEL}" >> "${LOG}"
 R="$(check19_region)"
 
-if printf '%s' "${R}" | grep -q 'row-count parity drift'; then
+if grep -q 'row-count parity drift' <<<"${R}"; then
   report "T2 19b flags row-count parity drift" 1
 else
   report "T2 19b flags row-count parity drift" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
 fi
-if printf '%s' "${R}" | grep -q 'rows=4' && printf '%s' "${R}" | grep -q 'lines=3'; then
+if grep -q 'rows=4' <<<"${R}" && grep -q 'lines=3' <<<"${R}"; then
   report "T2 the finding names the real counts (rows=4, lines=3)" 1
 else
   report "T2 the finding names the real counts (rows=4, lines=3)" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
@@ -258,7 +258,7 @@ MANGLED="${HEADER/| ts_iso |/| timestamp |}"
 } > "${LOG}"
 R="$(check19_region)"
 
-if printf '%s' "${R}" | grep -q 'header row missing or malformed'; then
+if grep -q 'header row missing or malformed' <<<"${R}"; then
   report "T3 19c flags the mangled header row" 1
 else
   report "T3 19c flags the mangled header row" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
@@ -283,12 +283,12 @@ printf '\nT6: absent instance log -> SKIP, no flag (fresh install / CI must not 
 rm -f "${LOG}" "${WLOG}"
 R="$(check19_region)"
 
-if printf '%s' "${R}" | grep -q 'SKIP:.*no event log at'; then
+if grep -q 'SKIP:.*no event log at' <<<"${R}"; then
   report "T6 absent event log emits SKIP naming the resolved path" 1
 else
   report "T6 absent event log emits SKIP naming the resolved path" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
 fi
-if printf '%s' "${R}" | grep -q 'pipeline-event-log-integrity'; then
+if grep -q 'pipeline-event-log-integrity' <<<"${R}"; then
   report "T6 SKIP raises NO integrity finding" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
 else
   report "T6 SKIP raises NO integrity finding" 1
@@ -333,12 +333,12 @@ else
 fi
 
 R="$(check19_region "${FARM}")"
-if printf '%s' "${R}" | grep -q 'path-resolution failure'; then
+if grep -q 'path-resolution failure' <<<"${R}"; then
   report "T7 unresolvable schema flags a PATH-RESOLUTION FAILURE" 1
 else
   report "T7 unresolvable schema flags a PATH-RESOLUTION FAILURE" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
 fi
-if printf '%s' "${R}" | grep -q 'BROKEN CONTROL'; then
+if grep -q 'BROKEN CONTROL' <<<"${R}"; then
   report "T7 the finding names itself a broken control, not a missing artifact" 1
 else
   report "T7 the finding names itself a broken control, not a missing artifact" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
@@ -346,8 +346,8 @@ fi
 # The decisive non-nesting assertion: the schema finding AND the Class A SKIP
 # both appear in the same run. Under the pre-#4051 flat if/elif chain, arm 1
 # (absent log) fired and the schema arm was never evaluated.
-if printf '%s' "${R}" | grep -q 'path-resolution failure' \
-   && printf '%s' "${R}" | grep -q 'SKIP:'; then
+if grep -q 'path-resolution failure' <<<"${R}" \
+   && grep -q 'SKIP:' <<<"${R}"; then
   report "T7 schema arm fires INDEPENDENTLY of the absent instance log (not nested)" 1
 else
   report "T7 schema arm fires INDEPENDENTLY of the absent instance log (not nested)" 0 \
