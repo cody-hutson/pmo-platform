@@ -25,7 +25,7 @@ reversibility: CHEAP-to-MODERATE / Confidence HIGH
 | **Branch** | `release/58-task-artifact-lifecycle-and-knowledge` |
 | **PR** | (populated at PR creation — Stage 6 Phase C2) |
 | **Milestone** | `58-task-artifact-lifecycle-and-knowledge` (179) |
-| **Baseline** | `origin/main` @ `10433f92` (Commit-0 re-pin; the Stage-4 pin `0186e10b` and the Stage-5 pin `876f8632` are both superseded — `main` advanced five times during planning) |
+| **Baseline** | `origin/main` @ `c74de241` (re-baselined mid-Engineering after `102-specialist-role-coverage` merged; supersedes the Commit-0 pin `10433f92`, the Stage-4 pin `0186e10b`, and the Stage-5 pin `876f8632` — `main` advanced five times during planning and once more during Engineering) |
 | **Release class** | **`novel`** (operator-ratified at the Stage-4 gate; re-affirmed at Collective Review under ruling **R-D**). Posture: engagement density **Standard** · Stage-9 review depth **Deep** · Stage-5 activation bias **ALL** · Stage-13 outcome window **30-day** |
 | **Topology** | **D-C SINGLE** — one release branch, sequential Engineering commits, one PR, one merge |
 | **Concurrency posture** | **P0 fully-serial.** Stage-6 chips route one at a time in the approved sequence on the single branch; force-push (including `--force-with-lease`) is prohibited on the shared branch under any multi-chip activity |
@@ -158,7 +158,7 @@ release/releases/RELEASE_LOG.md
 
 This zero is what makes steps 2 and 3 genuinely parallel-safe — on evidence, not assertion.
 
-**Cross-PR contention.** Re-measured at Commit 0 (`10433f92`); the Stage-4 measurement at `0186e10b` is superseded.
+**Cross-PR contention.** Re-measured mid-Engineering at `c74de241`; the Commit-0 measurement at `10433f92` and the Stage-4 measurement at `0186e10b` are both superseded.
 
 | File | Colliding party | Class | `overlap_class` | Mitigation |
 |---|---|---|---|---|
@@ -248,7 +248,7 @@ This zero is what makes steps 2 and 3 genuinely parallel-safe — on evidence, n
 | **R8** | **Size-band breach (28 effective vs. a 25 ceiling), accepted at Stage 3.** | Scope | Milestone § Size-band reframe. | **Nothing changes at plan scope.** The accepted-residual mitigation *was* the internal sequence, and that sequence survives unmodified — #101 lands first and independently. | — |
 | **R9** | **#21's problem-evidence was `PV-D` (unsourced)** — anticipatory motivation sourced to operator direction rather than a witnessed instance. | Warrant | §11.1 classification; card's own flag. | **RE-ANCHORED to `PV-A`** (operator, Stage-4 gate) against the stalled D3/D5 open decisions in `core/disciplines/actor-model-and-governance-as-contract.md`. | CHEAP · HIGH |
 | **R10** | **#335's hook decision could have added a runtime surface**, triggering the new-executable companion obligation and a warn-mode rollout checklist. | Scope | AC5: *"if a hook is added: warn-mode-initial."* | **RESOLVED — D-3 ratified SKIP-AS-RESIDUAL.** No hook ships; the release stays single-domain `governance`; three conditional files leave the matrix. | CHEAP · HIGH |
-| **R11** | **Baseline-pin staleness is demonstrated, not theoretical** — `main` advanced during the Stage-4 audit, again during Stage-5, and three more times before Engineering opened. | Process | Five mainline advances across the planning window. | Stated as an explicit residual. Commit 0 re-pins to `10433f92`; Stage-9 Phase A6.6 re-measures fresh pre-GO. | — |
+| **R11** | **Baseline-pin staleness is demonstrated, not theoretical** — `main` advanced during the Stage-4 audit, again during Stage-5, three more times before Engineering opened, and **once more mid-Engineering**. | Process | Six mainline advances across the planning-and-build window. The sixth cost this release its ADR number (see § Deviation Log `Δ-adr-number`). | Stated as an explicit residual. Commit 0 pinned `10433f92`; Engineering re-baselined to `c74de241` by merging `origin/main` mid-build rather than racing it; Stage-9 Phase A6.6 re-measures fresh pre-GO. **The durable lesson is shape, not vigilance:** the identity claims that survived this window are the ones that bind late (the version token, the ADR number-binds-at-merge rule); the ones that bound early were all lost. | — |
 | **R12** | **Stage 12 silently skips the stamping pass if `--stamp-slug` is omitted**, shipping an unresolved `RELEASE_VERSION` placeholder into the versioned plan. | Execution | `claim-version.sh` runs the stamp pass **only** when the flag is supplied; backward compatibility makes the omission a no-op rather than an error. | **AI-006.** The flag is a named, gated Stage-12 obligation recorded in § Version identity above and in the Verification Plan below. The pre-flight is the second line of defence — it fails closed when the pre-claim plan carries no token, which is why the token count is verified at Commit 0. | CHEAP · HIGH |
 
 ---
@@ -429,7 +429,7 @@ Read by `G-CL6` at Stage 13.
 
 ## In-Flight Release Roster
 
-**Measured at:** `10433f92` · `2026-08-08T03:33Z` (Commit-0 re-measurement; the Stage-4 roster at `0186e10b` is superseded)
+**Measured at:** `c74de241` · `2026-08-08T04:20Z` (mid-Engineering re-measurement after the `102-specialist-role-coverage` merge; the Commit-0 measurement at `10433f92` and the Stage-4 roster at `0186e10b` are both superseded)
 
 **Population definition:** open PRs with a `release/*` head (drafts included) ∪ remote `release/*` heads carrying no open PR, minus this release.
 
@@ -464,7 +464,7 @@ Read by `G-CL6` at Stage 13.
 | id | What | Discharges at | State at Commit 0 |
 |---|---|---|---|
 | **AI-001** | The File Change Matrix must include `core/specs/domain-token-registry.md` (E5). The Stage-4 FCM predates it | Engineering Commit 0 | **DISCHARGED** — present in § File Change Matrix above |
-| **AI-002** | ADR-127 allocated from **mainline** (`git ls-tree -r --name-only origin/main`), re-derived at Commit 0. `check-adr-numbers.py` reads the *worktree* and would PASS on an already-taken number | Engineering Commit 0 | **DISCHARGED** — see § Deviation Log |
+| **AI-002** | ADR allocated from **mainline** (`git ls-tree -r --name-only origin/main`), re-derived at Commit 0. `check-adr-numbers.py` reads the *worktree* and would PASS on an already-taken number | Engineering Commit 0 | **DISCHARGED — final number `ADR-128`.** Allocated 127 from mainline as instructed; a sibling merged mid-Engineering and took it; reconciled to 128 via `renumber-adr.py --apply`. See § Deviation Log `Δ-adr-number` |
 | **AI-003** | CIAC-2's method cites the pre-ratification **plural** filename; D-2 renamed it singular. Left stale, the Stage-9 grader greps a nonexistent path and reads it as a **pass** | Engineering Commit 0 | **DISCHARGED** — corrected to `gh-api-convention.md` in CIAC-2 above, with the forward-reference caveat stated |
 | **AI-004** | The Stage-9 research-only probe must be **diff-scoped**, not a repo-wide `grep orchestration_pattern = 0` — one occurrence already exists in a test fixture, so the repo-wide form false-fails on day one | Stage 9 | **OPEN** — carried into the #21 AC10 row above |
 | **AI-005** | #21 authoring: §3.5 / §5.5 must be **H2**. AC1's `grep '^## '` does not match `### `, and a fenced `## ` inflates the count | Stage 6 (#21) | **OPEN** — carried into § Issue #21 above |
@@ -490,7 +490,7 @@ Deltas against the Stage-4 plan of record.
 | **Δ-reversibility** | `EXPENSIVE · MEDIUM`, with the cheap-revert window closing at **this** release's own Stage 13 | **`CHEAP-to-MODERATE · HIGH`**, window closing at the **first task-artifact-class release**. Basis: the branch is declaration-gated and this release takes the deployable path, so no issue's closure state becomes path-dependent | Stage-5 D-A gate |
 | **Δ-outcome-claim** | The milestone claimed the release *"proves the path by exercising it on its own two knowledge artifacts"* | **Withdrawn rather than left to fail at Stage 9.** `G-CL3`'s substitution is not executed by a `domain: governance` release. CIAC-1 *as literally written* still holds; the stronger "exercises it" claim did not | Stage-5 D-A gate |
 | **Δ-schema-version** | — | `**Schema version:**` **re-derived against mainline at Commit 0**: mainline held **2.10**, so this bump takes **2.11** in a fresh block. The v2.10 block's own append-rather-than-fresh-block instruction is **branch-scoped** (*"the next editor of this block **on this branch**"*) and that branch has merged; the first editor on a new branch re-derives from mainline and takes a number. The instruction is carried forward for the next editor of this branch | Stage-6 Commit 0 |
-| **Δ-adr-127** | ADR-127 next-free, with a worktree-vs-mainline trap flagged | **Confirmed and allocated.** Mainline max **ADR-126**, union of `core/ADRs/` + `release/ADRs/` contiguous at `001..126` with no gaps — so 127 is genuinely next-free, not merely unused. Re-derived at Commit 0 | Stage-6 Commit 0 |
+| **Δ-adr-number** | ADR-127 next-free, with a worktree-vs-mainline trap flagged | **Allocated 127 correctly, then LOST it to a concurrent merge — final number is ADR-128.** At authoring, mainline max was **ADR-126** and the union of `core/ADRs/` + `release/ADRs/` was contiguous at `001..126`, so 127 was genuinely next-free rather than merely unused. `102-specialist-role-coverage` then merged mid-Engineering and took 127. Reconciled through the **sanctioned tool** (`renumber-adr.py --renumber 127 128 --apply`), not by hand, so all six steps landed — including the `## Status` numbering-provenance note, which is the step a hand-performed renumber reliably skips (and which `G-EX9` exists to assert). The flagged worktree-vs-mainline trap was real but was **not** the failure mode: the allocation came from mainline as instructed and was still overtaken, because a branch-local claim is detection and never binding. **Third identity claim this release has lost to a concurrent merge** — after `v4.15` and `v4.16`. The version claims were structurally cured by the token; the ADR number is cured instead by binding-at-merge plus a tooled reconciliation | Stage-6 Engineering |
 | **Δ-commit0-reverify** | The Commit-0 version re-verify is *"load-bearing, not ceremonial"* and a HALT there is expected behavior | **Structurally retired for this release.** The re-verify detects a literal version claimed out from under the plan; a token-bearing plan holds no literal to collide. Its Commit-0 obligation is replaced by the token-count check — a zero there is the failure this release must not ship | Stage-6 Commit 0 |
 
 ---
@@ -564,7 +564,7 @@ Alongside the mechanism, the release ships the two knowledge artifacts whose def
 
 - Release plan: this file
 - Milestone: `58-task-artifact-lifecycle-and-knowledge` (179)
-- ADR: `release/ADRs/ADR-127-close-class-is-a-declared-deliverable-value-conditioning-one-gate-spec.md`
+- ADR: `release/ADRs/ADR-128-close-class-is-a-declared-deliverable-value-conditioning-one-gate-spec.md`
 - User-facing release notes: `release/releases/notes/{{RELEASE_VERSION}}_RELEASE_NOTES.md` (authored at Stage 13 Close per `release/references/standards/release-notes-standard.md`)
 
 ---
