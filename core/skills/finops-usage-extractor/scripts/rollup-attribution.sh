@@ -566,6 +566,7 @@ self_test() {
   want="$(jq -S 'sort_by(.session_id)' "$fx_oracle" 2>/dev/null)"
   if [ "$got" != "$want" ]; then
     echo "FAIL: CIAC-1 ground-truth — resolver did not reproduce the labeled oracle"
+    # sigpipe-idiom: allow — multi-line diagnostic preview after an already-recorded FAIL; `diff` has no bounded-output flag to fold `head` into.
     diff <(printf '%s\n' "$want") <(printf '%s\n' "$got") 2>/dev/null | head -30
     fail=1
   else

@@ -1358,6 +1358,7 @@ self_test() {
       ok "SE-14 oracle (--json matches estimate.expected.json modulo estimated_utc)"
     else
       bad "SE-14 oracle: --json diverged from estimate.expected.json"
+      # sigpipe-idiom: allow — multi-line diagnostic preview after an already-recorded FAIL; `diff` has no bounded-output flag to fold `head` into.
       diff <(jq -S 'del(.estimated_utc, .generator_version)' "$oracle") \
            <(jq -S 'del(.estimated_utc, .generator_version)' "$JS") 2>/dev/null | head -20
     fi

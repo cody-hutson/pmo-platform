@@ -477,10 +477,10 @@ PAYLOAD="$(cat 2>/dev/null || true)"
 # Extract fields with a tolerant scalar-key match (no jq dependency in the hook
 # path; jq is not guaranteed present and a missing dependency must not wedge Stop).
 json_str() {  # json_str <key>
-  printf '%s' "$PAYLOAD" | sed -n -E 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' | head -1
+  head -1 <<<"$(sed -n -E 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' <<<"$PAYLOAD")"
 }
 json_bool() {  # json_bool <key> — prints true/false, empty when absent
-  printf '%s' "$PAYLOAD" | sed -n -E 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*(true|false).*/\1/p' | head -1
+  head -1 <<<"$(sed -n -E 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*(true|false).*/\1/p' <<<"$PAYLOAD")"
 }
 
 # 3. Native re-entry guard. `stop_hook_active` is true precisely when the agent is

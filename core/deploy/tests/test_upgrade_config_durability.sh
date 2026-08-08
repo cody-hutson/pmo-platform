@@ -1033,7 +1033,7 @@ fi
 #      CLAUDE.md has ever carried an installed_sha marker, so the tamper-backup
 #      path cannot fire on a first rewrite; this asserts the recovery copy the
 #      EXPENSIVE-reversibility write depends on exists REGARDLESS.
-c7_backup=$(find "${SBX}/ws" -maxdepth 2 -path '*/.backup-pre-update-*/CLAUDE.md' 2>/dev/null | head -1)
+c7_backup=$(find "${SBX}/ws" -maxdepth 2 -path '*/.backup-pre-update-*/CLAUDE.md' -print -quit 2>/dev/null)
 if [ -n "${c7_backup}" ] && [ -f "${c7_backup}" ]; then
   report "C-7a pre-write backup of CLAUDE.md exists (unconditional, not tamper-gated)" 1
 else

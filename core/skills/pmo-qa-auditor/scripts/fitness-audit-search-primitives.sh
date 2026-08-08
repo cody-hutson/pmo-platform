@@ -226,7 +226,7 @@ resolve_live() {
       local t; t="$(gh release list --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || true)"
       case "${t}" in (v[0-9]*) printf '%s' "${t}";; (*) printf 'SKIP';; esac ;;
     LIVE:head-sha) git -C "${SCRIPT_DIR}" rev-parse --short HEAD 2>/dev/null || printf 'SKIP' ;;
-    LIVE:root-sha) git -C "${SCRIPT_DIR}" rev-list --max-parents=0 HEAD 2>/dev/null | head -1 | cut -c1-12 || printf 'SKIP' ;;
+    LIVE:root-sha) git -C "${SCRIPT_DIR}" rev-list --max-parents=0 -n 1 HEAD 2>/dev/null | cut -c1-12 || printf 'SKIP' ;;
     *) printf '%s' "$1" ;;
   esac
 }
