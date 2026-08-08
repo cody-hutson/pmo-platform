@@ -84,7 +84,7 @@ preflight_deps() {
 # ── VERBATIM from rollup-attribution.sh:64-68 — parity asserted by --self-test SM-1. Do NOT edit here alone. ──
 generator_version() {
   local v=""
-  [ -r "$SKILL_MD" ] && v="$( { grep -E '^version:' "$SKILL_MD" 2>/dev/null || true; } | head -1 | awk '{print $2}')"
+  [ -r "$SKILL_MD" ] && v="$( { grep -m1 -E '^version:' "$SKILL_MD" 2>/dev/null || true; } | awk '{print $2}')"
   printf '%s' "${v:-unknown}"
 }
 
@@ -92,7 +92,7 @@ generator_version() {
 toml_val() {
   local key="$1" toml="${HOME}/.config/pmo-platform/operator.toml"
   [ -r "$toml" ] || return 0
-  { grep -E "^${key}" "$toml" 2>/dev/null || true; } | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}'
+  { grep -m1 -E "^${key}" "$toml" 2>/dev/null || true; } | awk -F= '{gsub(/[" ]/,"",$2); print $2}'
 }
 
 # ── VERBATIM from rollup-attribution.sh:77-81 — parity asserted by --self-test SM-1. Do NOT edit here alone. ──
