@@ -48,6 +48,23 @@ for req in "$SRC_FRAG" "$SRC_GHPL" "$SRC_DEPLIB" "$SRC_AWK" "$SRC_PATTERNS" "$SR
   fi
 done
 
+# Mode-file names, DERIVED from the hook sources rather than hardcoded. Each hook reads
+# whichever file its own MODE_FILE names and ignores the rest, so writing the requested
+# mode into every declared name drives all of them without per-hook knowledge.
+#
+# This is not defensive tidying. This file writes only `.mode` historically, and the
+# moment one hook moved to its own mode file every `enforce` case here resolved that
+# hook's in-script default instead — five assertions silently stopped testing what they
+# name. The empty-set guard below exists for the same reason: if the derivation returns
+# nothing, no mode is written anywhere and the enforce cases become default cases that
+# still report PASS.
+MODE_FILE_NAMES="$(sed -nE 's/^readonly MODE_FILE="\$\{HOOK_DIR\}\/([^"]+)".*/\1/p' "$HOOK_DIR"/*.sh 2>/dev/null | sort -u | tr '\n' ' ')"
+if [ -z "$(printf '%s' "$MODE_FILE_NAMES" | tr -d '[:space:]')" ]; then
+  echo "FAIL: no mode-file names derived from ${HOOK_DIR}/*.sh — every enforce case below would silently test the in-script default. Check the MODE_FILE declaration shape." >&2
+  echo "Total: 1  PASS: 0  FAIL: 1"
+  exit 1
+fi
+
 # build_layout <dir> <mode> <awk:0|1|empty|trunc> <primitive:0|1|empty> <deplib: ok|stale|trunc|noop>
 #              [patterns: 1|0|empty|trunc]   (default 1 = present and valid)
 # The 6th argument is the co-shipped detector-constant lib (lib/fragile-ref-patterns.sh).
@@ -92,7 +109,10 @@ NOOP
     empty) : > "$d/path-leak-patterns.sh" ;;                 # present-but-empty (sources to nothing)
     # 0 = absent
   esac
-  printf '%s\n' "$mode" > "$d/.mode"
+  local mf
+  for mf in $MODE_FILE_NAMES; do
+    printf '%s\n' "$mode" > "$d/$mf"
+  done
 }
 
 # assert <desc> <expected_exit> <hook_basename> <layout_dir> <json>

@@ -64,6 +64,25 @@ summary_and_exit() {
   exit 0
 }
 
+# --- Mode-file names, DERIVED from the hook sources rather than enumerated ---
+# A hook reads whichever file its own MODE_FILE names; every other mode file in the
+# sandbox is inert. So the safe way to drive "all hooks to mode X" is to write X into
+# every name any hook declares — and to derive that set from the sources, never from a
+# hardcoded list. A hardcoded list is how a mode case silently stops testing anything:
+# the hook resolves its in-script default instead, the assertion quietly re-tests the
+# default, and the suite still reports PASS. That is not hypothetical — it is exactly
+# what happened here when one hook moved to its own mode file and three call sites in
+# this suite still wrote only the three names they knew about.
+MODE_FILE_NAMES="$(/usr/bin/sed -nE 's/^readonly MODE_FILE="\$\{HOOK_DIR\}\/([^"]+)".*/\1/p' "$HOOK_DIR"/*.sh 2>/dev/null | /usr/bin/sort -u | /usr/bin/tr '\n' ' ')"
+
+# write_all_modes <dir> <value>
+write_all_modes() {
+  _wam_dir="$1"; _wam_val="$2"
+  for _wam_name in $MODE_FILE_NAMES; do
+    /usr/bin/printf '%s' "$_wam_val" > "${_wam_dir}/${_wam_name}"
+  done
+}
+
 # Static-literal payloads (built WITHOUT jq).
 READ_PAYLOAD='{"tool_name":"Read","tool_input":{"file_path":"/tmp/x"},"cwd":"/tmp"}'
 BASH_PAYLOAD='{"tool_name":"Bash","tool_input":{"command":"cat /tmp/foo"},"cwd":"/tmp"}'
@@ -91,6 +110,19 @@ if [ "$n_hooks" -ge 1 ]; then
   pass "glob enumerated $n_hooks block-*.sh hook(s) (no hardcoded name-list)"
 else
   fail "empty hook set (glob broken / hooks moved)"
+  summary_and_exit
+fi
+
+# --- (1b) MODE-FILE DERIVATION, with its own empty-set guard ---
+# This set is a precondition for every enforce arm below. If it reads empty, no mode
+# file is written, every hook resolves its in-script default, and the enforce arms
+# quietly become default-arms that still report PASS. Fail loud instead.
+n_modefiles=0
+for _mf in $MODE_FILE_NAMES; do n_modefiles=$((n_modefiles + 1)); done
+if [ "$n_modefiles" -ge 1 ]; then
+  pass "derived $n_modefiles mode-file name(s) from the hook sources:$MODE_FILE_NAMES"
+else
+  fail "no mode-file names derived from ${HOOK_DIR}/*.sh — every enforce arm below would silently test the in-script default instead. Check the MODE_FILE declaration shape."
   summary_and_exit
 fi
 
@@ -126,12 +158,10 @@ for h in $JQ_HOOKS; do
                -e 's#/opt/homebrew/bin/jq#/nonexistent/jq-b#g' \
                -e 's#/usr/local/bin/jq#/nonexistent/jq-c#g' \
                "$DEP_LIB" > "$sbox/lib/dep-resolve.sh"
-  # Drive shared-.mode AND every own-mode-file hook to enforce (no per-hook knowledge;
-  # a hook reads whichever file it uses, the others are inert). Own-mode files:
-  # .autonomy-mode (block-autonomy-ceiling), .scope-segregation-mode (block-scope-segregation).
-  /usr/bin/printf 'enforce' > "$sbox/.mode"
-  /usr/bin/printf 'enforce' > "$sbox/.autonomy-mode"
-  /usr/bin/printf 'enforce' > "$sbox/.scope-segregation-mode"
+  # Drive the shared .mode AND every own-mode-file hook to enforce, from the DERIVED
+  # name set — no per-hook knowledge, so a hook that moves to its own mode file stays
+  # covered without editing this line.
+  write_all_modes "$sbox" enforce
 
   # (3a) ANTI-VACUOUS PRECONDITION — prove genuine unresolvability via the REAL resolver.
   got="$(PATH=/usr/bin:/bin /bin/bash -c ". '$sbox/lib/dep-resolve.sh' 2>/dev/null; resolve_jq" 2>/dev/null)"
@@ -210,7 +240,7 @@ for h in $PY_HOOKS; do
                -e 's#/opt/homebrew/bin/python3#/nonexistent/py-b#g' \
                -e 's#/usr/local/bin/python3#/nonexistent/py-c#g' \
                "$DEP_LIB" > "$sbox/.claude/hooks/lib/dep-resolve.sh"
-  /usr/bin/printf 'enforce' > "$sbox/.claude/hooks/.mode"
+  write_all_modes "$sbox/.claude/hooks" enforce
   allowed="$sbox/allowed"; /bin/mkdir -p "$allowed"
   /bin/ln -s /etc "$allowed/link"   # symlink INSIDE the allowed root → outside (no literal '..')
   /usr/bin/printf '%s\n' "$allowed" > "$sbox/.claude/fs-boundary-allowlist.txt"
@@ -293,9 +323,7 @@ done
 lib_sandbox() {
   _lsb="$(/usr/bin/mktemp -d)"; /bin/mkdir -p "$_lsb/lib"
   /bin/cp "$1" "$_lsb/$(/usr/bin/basename "$1")"
-  /usr/bin/printf '%s' "$2" > "$_lsb/.mode"
-  /usr/bin/printf '%s' "$2" > "$_lsb/.autonomy-mode"
-  /usr/bin/printf '%s' "$2" > "$_lsb/.scope-segregation-mode"
+  write_all_modes "$_lsb" "$2"
   case "$3" in
     absent)    : ;;                                                   # no lib written
     truncated) /usr/bin/head -40 "$DEP_LIB" > "$_lsb/lib/dep-resolve.sh" ;;
