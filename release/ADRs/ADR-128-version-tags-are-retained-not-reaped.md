@@ -1,10 +1,10 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-128 — Version tags are retained, not reaped: the retention rule is homed beside the branch-deletion rule, and the recovery tool reads host policy rather than assuming it"
-status: Proposed — authored at Stage 6 Engineering for the `hub-spoke-execution-safety` release. Flips to Accepted when the operator ratifies it at the release's close gate. The flip is verified against this file's `status:` field, never inferred from milestone closure.
+status: Accepted — ratified at the `hub-spoke-execution-safety` release close gate on 2026-08-08, when the operator executed the three enforcement preconditions and the release milestone transitioned to closed. Authored at Stage 6 Engineering. Ratification is recorded here because this file's `status:` field is the authority; it is never inferred from milestone closure.
 date: 2026-08-06
 release: hub-spoke-execution-safety
-deciders: "Workspace owner (ratification pending at this release's close gate); the premise inversion was rendered at the Stage-4 planning gate, the placement and reaper-shape decisions were designed at Stage 5 Solutioning, adversarially reviewed at Phase A6.5, and authored at Stage 6"
+deciders: "Workspace owner — ratified at this release's close gate on 2026-08-08; the premise inversion was rendered at the Stage-4 planning gate, the placement and reaper-shape decisions were designed at Stage 5 Solutioning, adversarially reviewed at Phase A6.5, and authored at Stage 6"
 tags: [architecture, release-tooling, ref-lifecycle, tag-retention, host-policy, rule-versus-enforcement, fail-closed, doctrine-home, reversibility-cheap]
 source_observations:
   - "Two independent observations converged on the same reading: an uncodified no-tag-deletion policy was overriding a codified REAP disposition on a live orphan tag. Both grepped the documentation corpus for the policy text and correctly found zero hits."
@@ -20,7 +20,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering for the `hub-spoke-execution-safety` release, per the Stage-6 ADR-authoring precedent. It flips to **Accepted** when the operator ratifies it at the release's close gate, and the flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
+**Accepted** — authored at Stage 6 Engineering for the `hub-spoke-execution-safety` release, per the Stage-6 ADR-authoring precedent. It was ratified at that release's close gate on 2026-08-08, when the operator executed the three enforcement preconditions and the release milestone transitioned to closed; the release shipped as **v4.18**. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
 
 **Numbering.** Allocated as the next free slot over the union of both ADR directories, which are a single numbering space, verified with the corpus checker and cross-checked against every branch on the remote rather than by reading the highest filename. The number is allocated at authorship and bound at merge; if a sibling merges ahead of this record, the reconciliation is tooled and this Status block will carry the provenance note.
 

@@ -20,6 +20,18 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.17] - 2026-08-08
+
+Security architecture, security review, and hands-on data engineering now have named owners instead of the nearest general skill.
+
+[Full notes](release/releases/notes/v4.17_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.17)
+
+## [v4.18] - 2026-08-08
+
+Parallel background sessions now get their own workspace and a capacity check, and six release-tooling controls now report what they actually did.
+
+[Full notes](release/releases/notes/v4.18_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.18)
+
 ## [v4.16] - 2026-08-08
 
 The delivery-status labels the platform had only declared on paper now exist for real, and the pipeline applies one of them when engineering starts.

@@ -1,10 +1,10 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-127 — Domain is a parameter of the architect role, exactly as altitude is
-status: Proposed
+status: Accepted — ratified by the operator at the Stage 5 Collective Review scope-lock gate for the `102-specialist-role-coverage` release, recorded on the member cards' Stage-5 sub-tasks; shipped as v4.17 and confirmed at the v4.17 Stage-13 close. The flip is verified against this file's `status:` field, never inferred from milestone closure or a review comment.
 date: 2026-08-06
 release: 102-specialist-role-coverage
-deciders: "Workspace owner — decision rendered 2026-08-06 at the skill-matrix decision gate; durable form authored at this release's Stage 5 Solutioning; flips to Accepted at the Stage-5 Collective Review scope-lock"
+deciders: "Workspace owner — decision rendered 2026-08-06 at the skill-matrix decision gate; durable form authored at this release's Stage 5 Solutioning; ratified to Accepted at the Stage-5 Collective Review scope-lock"
 tags: [architecture, skill, role-skills, specialists, skill-boundary, decomposition-axis, security, data, reversibility-moderate]
 source_observations:
   - "The decision recorded here was rendered by the operator on 2026-08-06 and is held at the operator-local skill matrix, <OPERATOR_INSTANCE_ROADMAPS_PATH>/skill-matrix.md section 5 decision 3b. This record is the durable form of an existing decision; it does not re-decide it."
@@ -19,7 +19,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Rendered by the operator on 2026-08-06 at the skill-matrix decision gate; this record is the durable form of that decision, authored at the Stage 5 Solutioning of the specialist-role-coverage release. It flips to **Accepted** at that release's Stage-5 Collective Review scope-lock. The flip is verified against this file's frontmatter `status:` field, never inferred from a review comment, a plan row, or milestone closure.
+**Accepted.** Rendered by the operator on 2026-08-06 at the skill-matrix decision gate; this record is the durable form of that decision, authored at the Stage 5 Solutioning of the specialist-role-coverage release. It was ratified to **Accepted** at that release's Stage-5 Collective Review scope-lock — the three decisions that gate rendered are recorded on the member cards' Stage-5 sub-tasks — and the release has since shipped as **v4.17**. The flip is verified against this file's frontmatter `status:` field, never inferred from a review comment, a plan row, or milestone closure.
 
 **Numbering.** This record's number was derived against the mainline anchor per the rule that an ADR number is allocated at authorship and bound at merge: the mainline held 119, so this record takes 120. At that instant two sibling branches held unmerged claims on 120 and one held a claim on 121. Under the rejected `max(claimed_set) + 1` reading this record would have taken 122 and landed a two-number hole on the mainline, which the contiguity gate fails as readily as a duplicate. A merge-time renumber is therefore expected and is the tooled path; a gap is not.
 
