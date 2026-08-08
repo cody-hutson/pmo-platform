@@ -17,7 +17,9 @@ source_observations:
 
 ## Status
 
-**Accepted.** Ratified this session by the operator's approval of the GHSA-9cjm remediation scope (full-class hardening) and the explicit warn-vs-enforce posture decision (warn hooks preserve warn semantics; enforce hooks fail closed). Recorded at authoring because the deciding gate — operator approval of the enumerated remediation plan — already ran; this ADR is the durable record of the posture those approvals fixed.
+**Accepted — D4 superseded in part by ADR-129.** Ratified this session by the operator's approval of the GHSA-9cjm remediation scope (full-class hardening) and the explicit warn-vs-enforce posture decision (warn hooks preserve warn semantics; enforce hooks fail closed). Recorded at authoring because the deciding gate — operator approval of the enumerated remediation plan — already ran; this ADR is the durable record of the posture those approvals fixed.
+
+**Supersession — D4, partial.** [ADR-129](ADR-129-lib-missing-guard-is-mode-coupled.md) supersedes D4's *unconditional* fail-closed posture for the hooks that carry a mode surface: for those, an unusable `lib/dep-resolve.sh` denies in `enforce` and degrades with a loud stderr notice in `warn`/`off`. D4 remains the governing record, unchanged and unconditional, for the hooks with no mode surface. This closes the "Accepted residual (over-block on a broken lib)" recorded below, which named exactly this evolution and deferred it to its own ADR. D1, D2, D3, D5, D6, D7 and D8 are unaffected. D4's body below is the founding record of the posture and is deliberately **not** rewritten in place.
 
 ## Context
 
