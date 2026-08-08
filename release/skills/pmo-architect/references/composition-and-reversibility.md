@@ -17,7 +17,7 @@ Every technical / risk claim in a System Architect output is sourced to one of t
 
 **Two-hop chaining (depth ≤ 2 by construction).** The Architect invokes `pmo-principal-engineer` for a within-component sub-question and lets *that* skill chain to `pmo-technical-analyst` for its own review, rather than the Architect re-invoking the analyst beneath it. The edges are operator → Architect → `pmo-technical-analyst` (terminal), and operator → Architect → `pmo-principal-engineer` → `pmo-technical-analyst` (terminal). `pmo-architect` is **not** on the C7 auto-cascade allowlist and must not be added — invocation is manual Specialist-driven chaining through the Skill-tool capability.
 
-**Domain and altitude do not appear in this table, and that is the point.** Enterprise altitude and the data domain are *parameters* on Modes 1 and 2 — the same composition edges, the same modes invoked, a different scope. Only a distinct method earns a row here, which is why security has one and the other two dimensions do not ([ADR-121](../../../../core/ADRs/ADR-121-domain-is-a-parameter-of-the-architect-role.md)).
+**Domain and altitude do not appear in this table, and that is the point.** Enterprise altitude and the data domain are *parameters* on Modes 1 and 2 — the same composition edges, the same modes invoked, a different scope. Only a distinct method earns a row here, which is why security has one and the other two dimensions do not ([ADR-123](../../../../core/ADRs/ADR-123-domain-is-a-parameter-of-the-architect-role.md)).
 
 ## 2. Full reversibility-tier rubric (per `core/specs/reversibility-protocol.md`)
 
