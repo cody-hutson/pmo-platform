@@ -744,6 +744,10 @@ Cutover discipline for D-Version: applies to all releases going forward.
 
 Hub: before creating each sub-task, resolve `{PARENT_STATUS_LABEL}` = the parent issue's current `status:` label via `gh issue view {ISSUE_NUMBER} --json labels` at scaffold time, and stamp it on the `Label:` line below alongside `sub-task` (mirror the parent's lifecycle position at creation — a point-in-time snapshot, not auto-resynced on later parent transitions; per [label-taxonomy.md](../../../core/specs/label-taxonomy.md) Rule 6).
 
+**The resolved value must be a label that exists.** `{PARENT_STATUS_LABEL}` is read off the parent and pasted into a create call, so scaffolding inherits whatever the parent carries — including a row that is declared in a pack but was never materialized live. Two failure shapes follow, and neither announces itself. If the create call **validates** labels, every sub-task creation in this step fails at once, and a release loses its entire scaffold at the moment it is being built. If the call **auto-creates** the unknown label instead, scaffolding succeeds and the taxonomy silently gains a row with a default grey colour and no description — which the parity gate's name-only diff then reports as reconciled, so the malformed row is never surfaced. The second shape is the more damaging one precisely because it looks like success.
+
+Confirm the parent's status row is live before scaffolding — `core/deploy/tools/check-label-parity.py --emit-fix` renders the reconciling `gh label` commands read-only for an operator to run. This is the scaffolding-side instance of the materialization precondition stated in [`release/governance/release-process.md`](../../governance/release-process.md) § Stage 6; the rule is owned there and applied here, not restated.
+
 ```
 Title (per-issue):       Stage {N} {Name} — #{ISSUE_NUMBER} ({MILESTONE})
 Title (release-scoped):  Stage {N} {Name} — {MILESTONE} (release-scoped)

@@ -243,6 +243,48 @@ Invalid transitions (e.g., Proposed → Done, Bundled → Proposed) indicate a p
 
 **Stage field** tracks current pipeline position independently of status. An issue can be Status:In Progress and Stage:7-DevTest. Stage advances linearly; status may not (e.g., Deferred issues return to Approved, not Proposed).
 
+### Delivery Work-Status (Axis-1)
+
+**Work-Status** is the delivery-lifecycle axis: where a *work item* sits in the work of building it. It is orthogonal to the release-pipeline Status/Stage pair above — those are two views of one pipeline axis; this is a second axis entirely.
+
+| Field | Type | Valid Values | Set By | Updated At |
+|---|---|---|---|---|
+| **Work-Status** | Single-select (label-projected) | backlog, ready, in-progress, in-review, done, cancelled | Agent or operator | Delivery-lifecycle transitions — **not** pipeline stage transitions |
+
+The value domain is the generic Axis-1 base machine owned by the entity layer ([`entity-field-schemas.md`](../../../core/schemas/entity-field-schemas.md) §3.18 V-WI-04). It is cited here, never restated as a second enum: a copy that drifts from the entity layer is the failure this citation avoids.
+
+**Valid transitions — owned elsewhere, cited here.** The Axis-1 transition graph is owned by
+[`core/standards/entity-lifecycle-protocol.md`](../../../core/standards/entity-lifecycle-protocol.md) **§3.10**,
+which enumerates each edge with its triggering agent and qualifying evidence. **This section does not restate it.**
+Restating a transition set beside the enum it derives from is exactly the second-source failure this document's own
+two-axis boundary forbids — and an earlier draft of this section diverged from §3.10 at one edge by asserting
+`cancelled` reachable from *any* non-terminal state, where §3.10 enumerates three sources.
+
+The **value enum** (V-WI-04) is `backlog, ready, in-progress, in-review, done, cancelled`, read verbatim from
+[`core/schemas/entity-field-schemas.md`](../../../core/schemas/entity-field-schemas.md) `:633`; `done` and `cancelled`
+are terminal. For *which* transitions between those values are valid, and who may perform them, read §3.10.
+
+> **Open at the entity layer, deliberately not resolved here:** §3.10 carries `in-review → cancelled` in **neither**
+> its valid nor its `[INVALID-TRANSITION]` table. That is a gap in the owning spec, not in this projection, and it
+> routes to the entity layer rather than being answered by a downstream document.
+
+**Blocked is not a value.** A blocked item still occupies a lifecycle position, so blocked-ness is a *derived condition* of an unsatisfied `BLOCKS` / `DEPENDS_ON` relationship rather than an Axis-1 state — the platform already carries that edge, and storing the condition as a value would be a second source of truth for a fact the edge already holds.
+
+**The two axes, side by side.** This table is the boundary: the two answer different questions, compose freely, and must not be conflated.
+
+| | **Axis-1 — Work-Status** | **Axis-2 — pipeline Status** |
+|---|---|---|
+| Question answered | Where is this *work* in its delivery lifecycle? | Where is this *issue* in the release pipeline? |
+| Value domain | The entity-layer Axis-1 enum — stated once in the field row above, never restated | Proposed, Approved, Bundled, In Progress, Done (+ terminal Deferred / Rejected) |
+| Owner of the machine | The entity layer — packs project over it, never re-found it | This spec, together with the pipeline stage definitions |
+| Label surface | `work-status: <value>`, grammar group `work-status` | `status: <value>`, grammar group `status` |
+| Advanced by | Delivery-lifecycle transitions (refinement, pull, review, acceptance) | Pipeline stage entry and exit |
+| Cardinality | One per work item, mutually exclusive within its own group | One per issue, mutually exclusive within its own group |
+
+**They compose.** An item may carry one label from each axis at the same time, and neither constrains the other — an item can be `status: in-progress` (the release pipeline is mid-Engineering) while being `work-status: in-review` (that specific work is with a reviewer).
+
+**The prefix is a mechanism, not a convention.** The two value domains genuinely share the tokens `in-progress` and `done`, and the GitHub label namespace is **flat**. The status-label invariant check discriminates by the `status: ` **name prefix** — it does not read the grammar `group` a row declares — so the distinct `work-status: ` prefix is what keeps a delivery-lifecycle label from tripping the one-status-label mutex on every issue that also carries a pipeline Status label. Renaming these rows into any `status: `-prefixed form is a release-wide regression, not a cosmetic change. Group definitions and cardinality rules live in [`label-taxonomy.md`](../../../core/specs/label-taxonomy.md) § Work-Status Labels and § Rules 8.
+
 ### Categorization (Labels)
 
 Labels classify issues by type and area. They are **static after assignment** and are not used for pipeline state tracking.
@@ -293,6 +335,8 @@ Because Stage already carries that granularity, proposals to add it to **Status*
 | Collapse Status into the Stage values (1:1 alignment) | Destroys the coarse lifecycle axis the saved board views depend on. |
 
 All three pay MODERATE–HIGH cascade cost — the Status values are referenced across the corpus, the deployed GitHub Projects Status single-select, and every saved board view that filters or groups on Status — to buy granularity the platform already has. KEEP is the value-conserving choice: zero cascade cost, and the coarse/fine separation is preserved as a deliberate, documented invariant. The disambiguator's one rendered-surface gap (the Backlog table did not show Stage) is closed by a view-column change, not a Status-value change — see [`github-projects-guide.md`](../../../core/disciplines/github-projects-guide.md) § Saved Views (Backlog).
+
+**Scope of this invariant — Status and Stage are both release-pipeline axes.** The coarse/fine split above is *within* the pipeline axis: Status is the coarse lifecycle phase of an issue in the pipeline, Stage is its fine pipeline position. Neither answers where the *work* sits in its delivery lifecycle — that is the orthogonal Axis-1 question, and it has its own field and its own label group (§ Delivery Work-Status (Axis-1)). Reading this two-field invariant as covering delivery state is the conflation the two-axis boundary exists to prevent.
 
 ---
 
