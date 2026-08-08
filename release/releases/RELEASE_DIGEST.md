@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.17 (2026-08-08) — Security architecture and data engineering now have owners in the skill suite
+
 ### v4.18 (2026-08-08) — Background sessions get their own workspace and a capacity check
 
 ### v4.16 (2026-08-08) — The delivery-status labels the platform promised now actually exist
