@@ -105,7 +105,7 @@ check_cf1() {
 # check_cf2 <line> -> PASS/FAIL  (form: read-only command word + output marker)
 check_cf2() {
   local s="$1"
-  if printf '%s' "${s}" | grep -qE "${CF2_CMD_RE}" && printf '%s' "${s}" | grep -q '→'; then
+  if grep -qE "${CF2_CMD_RE}" <<<"${s}" && grep -q '→' <<<"${s}"; then
     printf 'PASS'
   else
     printf 'FAIL'
@@ -115,7 +115,7 @@ check_cf2() {
 # check_cf3 <token> -> PASS/FAIL/SKIP
 check_cf3() {
   local tok="$1" n
-  if printf '%s' "${tok}" | grep -qE "^${CF3_ISSUE_RE}\$"; then
+  if grep -qE "^${CF3_ISSUE_RE}\$" <<<"${tok}"; then
     command -v gh >/dev/null 2>&1 || { printf 'SKIP'; return; }
     n="${tok#\#}"
     if gh issue view "${n}" --json number >/dev/null 2>&1 || gh pr view "${n}" --json number >/dev/null 2>&1; then
@@ -123,7 +123,7 @@ check_cf3() {
     else
       printf 'FAIL'
     fi
-  elif printf '%s' "${tok}" | grep -qE "^${CF3_VER_RE}\$"; then
+  elif grep -qE "^${CF3_VER_RE}\$" <<<"${tok}"; then
     if [ -n "$(git -C "${SCRIPT_DIR}" tag -l "${tok}" 2>/dev/null)" ]; then printf 'PASS'; return; fi
     command -v gh >/dev/null 2>&1 || { printf 'SKIP'; return; }
     if gh release view "${tok}" --json tagName >/dev/null 2>&1; then printf 'PASS'; else printf 'FAIL'; fi
@@ -141,11 +141,11 @@ check_cf4() {
 # matches_any_form <string> -> 0 if any CF regex matches, 1 otherwise
 matches_any_form() {
   local s="$1"
-  printf '%s' "${s}" | grep -qE "${CF1_RE}" && return 0
-  { printf '%s' "${s}" | grep -qE "${CF2_CMD_RE}" && printf '%s' "${s}" | grep -q '→'; } && return 0
-  printf '%s' "${s}" | grep -qE "${CF3_ISSUE_RE}" && return 0
-  printf '%s' "${s}" | grep -qE "${CF3_VER_RE}" && return 0
-  { printf '%s' "${s}" | grep -qE "${CF4_RE}" && printf '%s' "${s}" | grep -qE '[a-f]' ; } && return 0
+  grep -qE "${CF1_RE}" <<<"${s}" && return 0
+  { grep -qE "${CF2_CMD_RE}" <<<"${s}" && grep -q '→' <<<"${s}"; } && return 0
+  grep -qE "${CF3_ISSUE_RE}" <<<"${s}" && return 0
+  grep -qE "${CF3_VER_RE}" <<<"${s}" && return 0
+  { grep -qE "${CF4_RE}" <<<"${s}" && grep -qE '[a-f]' <<<"${s}" ; } && return 0
   return 1
 }
 
@@ -292,7 +292,8 @@ EOF
       bdeep="$(printf '%s' "${bdeep}" | sed 's/^ *//;s/ *$//' | sed 's/\*\*//g')"
       [ -n "${brange}" ] || continue
       local lo hi
-      lo="$(printf '%s' "${brange}" | grep -oE '[0-9]+' | head -1)"
+      # sigpipe-idiom: allow — `grep -o` emits N matches per LINE, so `-m1` (which counts LINES) would keep both bounds; `head -1` must stay. Writer converted to a here-string.
+      lo="$(grep -oE '[0-9]+' <<<"${brange}" | head -1)"
       hi="$(printf '%s' "${brange}" | grep -oE '[0-9]+' | tail -1)"
       if [ "${pct}" -ge "${lo}" ] && { [ "${pct}" -lt "${hi}" ] || { [ "${hi}" -eq 100 ] && [ "${pct}" -le 100 ]; }; }; then
         gband="${brange}"; gclass="${bclass}"; gdeep="${bdeep}"; break

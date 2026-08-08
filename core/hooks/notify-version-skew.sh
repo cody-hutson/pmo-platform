@@ -64,8 +64,8 @@ local_version=$(head -1 "${VERSION_FILE}" | tr -d '[:space:]')
 operator_github=""
 repo_name="pmo-platform"
 if [ -r "${OPERATOR_TOML}" ]; then
-  operator_github=$(grep -E '^operator_github' "${OPERATOR_TOML}" 2>/dev/null | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-  parsed_repo=$(grep -E '^pmo_platform_repo_name' "${OPERATOR_TOML}" 2>/dev/null | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+  operator_github=$(grep -m1 -E '^operator_github' "${OPERATOR_TOML}" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+  parsed_repo=$(grep -m1 -E '^pmo_platform_repo_name' "${OPERATOR_TOML}" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
   [ -n "${parsed_repo}" ] && repo_name="${parsed_repo}"
 fi
 [ -n "${operator_github}" ] || exit 0
@@ -100,7 +100,7 @@ if [ "${fetch_latest}" -eq 1 ]; then
 fi
 
 # Parse cached tag_name
-latest_version=$(grep -E '"tag_name"' "${CACHE_FILE}" 2>/dev/null | head -1 | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+latest_version=$(grep -m1 -E '"tag_name"' "${CACHE_FILE}" 2>/dev/null | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
 [ -n "${latest_version}" ] || exit 0
 
 # Compare versions (string equality is sufficient for the equal-case; for

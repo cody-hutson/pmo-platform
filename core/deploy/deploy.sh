@@ -8017,7 +8017,7 @@ sys.stdout.write("".join(out) + "|")
         if ! grep -qxF "## ${c34_sec}" "$c34_tmpl"; then
           c34_missing="${c34_missing:+$c34_missing, }${c34_sec}"
         fi
-        if ! printf '%s\n' "$c34_schema_block" | grep -qF "$c34_sec"; then
+        if ! grep -qF "$c34_sec" <<<"$c34_schema_block"; then
           c34_schema_drift="${c34_schema_drift:+$c34_schema_drift, }${c34_sec}"
         fi
       done
@@ -8622,7 +8622,7 @@ sys.stdout.write("".join(out) + "|")
       # P2: any current_phase / target_phase value must be in the #164 enum.
       # Flag a line that assigns a phase value outside {shadow,warn,enforce,removed}.
       local c40_badphase
-      c40_badphase=$(grep -inE '(current_phase|target_phase)[^A-Za-z0-9]+(dark|canary|ga|retired|sunset|live|active|on)\b' "$c40_file" 2>/dev/null | head -3 || true)
+      c40_badphase=$(grep -m3 -inE '(current_phase|target_phase)[^A-Za-z0-9]+(dark|canary|ga|retired|sunset|live|active|on)\b' "$c40_file" 2>/dev/null  || true)
       if [[ -n "$c40_badphase" ]]; then
         flag_warn_or_issue "touchpoint-schema" "current_phase/target_phase value outside the {shadow,warn,enforce,removed} enum in $c40_file"
         c40_problems=$((c40_problems + 1))
@@ -8872,7 +8872,7 @@ sys.stdout.write("".join(out) + "|")
       c44_reg="$(grep -ohE '\[OPERATOR_[A-Z0-9_]+\]' "$c44_spec" | sort -u)"
       while IFS= read -r c44_tok; do
         [[ -z "$c44_tok" ]] && continue
-        printf '%s\n' "$c44_reg" | grep -qxF "$c44_tok" || c44_unreg="${c44_unreg}${c44_tok} "
+        grep -qxF "$c44_tok" <<<"$c44_reg" || c44_unreg="${c44_unreg}${c44_tok} "
       done < <(grep -rEn '\[OPERATOR_[A-Z0-9_]+\]' --include='*.md' core release operations 2>/dev/null | grep -vE 'release/releases/' | grep -v 'depersonalization-token: allow' | grep -ohE '\[OPERATOR_[A-Z0-9_]+\]' | sort -u)
       if [[ -n "$c44_unreg" ]]; then
         flag_warn_or_issue "depersonalization-token" "unregistered [OPERATOR_*] token(s) in corpus, absent from depersonalization-spec.md §1: ${c44_unreg}— register them (with a config home) or mark an illustrative use 'depersonalization-token: allow'"
@@ -9002,7 +9002,7 @@ sys.stdout.write("".join(out) + "|")
       c45_defined="$(grep -E '^\| DP-[0-9]' "$c45_reg" | grep -oE 'DP-[0-9]+' | sort -u)"
       while IFS= read -r c45_ref; do
         [[ -z "$c45_ref" ]] && continue
-        if ! printf '%s\n' "$c45_defined" | grep -qxF "$c45_ref"; then
+        if ! grep -qxF "$c45_ref" <<<"$c45_defined"; then
           flag_warn_or_issue "design-principle-conformance" "DP-id '$c45_ref' is referenced in corpus but not defined in $c45_reg (dangling principle reference — define the entry or fix the reference)"
           c45_ok=0
         fi

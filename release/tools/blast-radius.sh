@@ -1332,8 +1332,8 @@ run_self_test() {
 
   reason="$(jq -r '.partial_reason // ""' "$out" 2>/dev/null || echo "")"
   rc=0
-  { printf '%s' "$reason" | grep -q -F -e '--max-expand=3' \
-    && printf '%s' "$reason" | grep -q -F -e 'of 12 first-order referrers'; } || rc=1
+  { grep -q -F -e '--max-expand=3' <<<"$reason" \
+    && grep -q -F -e 'of 12 first-order referrers' <<<"$reason"; } || rc=1
   st_true "$rc" "T3c partial_reason names BOTH the cap and the true total [${reason}]"
 
   fo="$(jq -r '.stats.first_order_count' "$out" 2>/dev/null || echo ERR)"

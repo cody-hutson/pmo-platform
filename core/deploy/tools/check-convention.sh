@@ -93,13 +93,13 @@ is_naming_exempt() {
   # all-caps basename (letters/digits/underscore, no lowercase) — the all-caps
   # governance/doc convention (SKILL.md, OPERATIONS.md, README.md, INSTALL.md,
   # AUDIT_FRAMEWORK.md, GETTING_STARTED.md, PULL_REQUEST_TEMPLATE.md, …).
-  if printf '%s' "$base" | grep -qE '^[A-Z0-9_]+\.md$'; then return 0; fi
+  if grep -qE '^[A-Z0-9_]+\.md$' <<<"$base"; then return 0; fi
   return 1
 }
 
 # naming_conformant — true iff basename is lowercase-kebab + .md.
 naming_conformant() {
-  printf '%s' "$1" | grep -qE '^[a-z0-9]+(-[a-z0-9]+)*\.md$'
+  grep -qE '^[a-z0-9]+(-[a-z0-9]+)*\.md$' <<<"$1"
 }
 
 # has_evidence_label — true iff the file contains any closed-set evidence label.

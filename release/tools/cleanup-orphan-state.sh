@@ -119,7 +119,7 @@ WORKSPACE_ROOT="${WORKSPACE_ROOT:-${CLAUDE_WORKSPACE_ROOT:-}}"
 if [[ -z "$WORKSPACE_ROOT" ]]; then
   _operator_toml="${HOME}/.config/pmo-platform/operator.toml"
   if [[ -r "$_operator_toml" ]]; then
-    _wr=$(grep -E '^claude_workspace_root' "$_operator_toml" 2>/dev/null | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+    _wr=$(grep -m1 -E '^claude_workspace_root' "$_operator_toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
     [[ -n "$_wr" ]] && WORKSPACE_ROOT="$_wr"
   fi
 fi
@@ -131,8 +131,8 @@ PROTECT_LIST="$WORKSPACE_ROOT/.claude/cleanup-protect-list.txt"
 # Operators can override REPO_SLUG to point cleanup at a fork.
 REPO_SLUG="${REPO_SLUG:-}"
 if [[ -z "$REPO_SLUG" ]] && [[ -r "${HOME}/.config/pmo-platform/operator.toml" ]]; then
-  _gh=$(grep -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-  _repo=$(grep -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+  _gh=$(grep -m1 -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+  _repo=$(grep -m1 -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
   [[ -z "$_repo" ]] && _repo="pmo-platform"
   [[ -n "$_gh" ]] && REPO_SLUG="${_gh}/${_repo}"
 fi
@@ -1419,7 +1419,7 @@ reap_orphan_tags() {
       echo "PASS tag $tag reaped from origin + local" >&2
       TAG_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"REMOVED"
       [[ -n "$slug" && "$slug" != "?" ]] && ledger_mark_reaped "$slug" "$tag"
-    elif printf '%s' "$out" | grep -qiE 'remote rejected|protected|denied|permission|refusing|pre-receive|hook declined'; then
+    elif grep -qiE 'remote rejected|protected|denied|permission|refusing|pre-receive|hook declined' <<<"$out"; then
       echo "FAIL tag $tag — push --delete REFUSED (policy/protection); stop — do not retry" >&2
       TAG_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"REFUSED — push --delete rejected (policy/protection)"
     else
@@ -2571,10 +2571,12 @@ selftest_orphan_tag_reap() {
   } > "$fix_log"
   LEDGER_PATH="$fix_ledger"; RELEASE_LOG_PATH="$fix_log"; ABANDONED_ARG=""; TAG_CANDIDATES=(); ABANDONED_SET=(); STALE_VERSION_ROWS=()
   detect_orphan_tags >/dev/null 2>&1 || true
+  # sigpipe-idiom: allow — array expansion; `<<<"${A[@]}"` space-joins every element onto ONE line, defeating this `^`-anchored per-row match (U2).
   if ! printf '%s\n' "${STALE_VERSION_ROWS[@]:-}" | grep -q "^${slug}	${tag}	"; then
     echo "self-test: orphan-tag reap check FAILED — T-8: abandoning-release stale row not flagged for R-3 roll-forward" >&2; fail=1
   fi
   # False-positive guard: the sibling row (Milestone=sibling-${slug}) must NOT be flagged.
+  # sigpipe-idiom: allow — array expansion; same U2 reason as the row-match above.
   if printf '%s\n' "${STALE_VERSION_ROWS[@]:-}" | grep -q "^sibling-${slug}	"; then
     echo "self-test: orphan-tag reap check FAILED — T-8: sibling canonical row wrongly flagged as stale (false positive)" >&2; fail=1
   fi

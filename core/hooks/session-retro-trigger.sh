@@ -340,12 +340,12 @@ run_self_test() {
       _append_turns "$tr" "${turns_d[$step]}" "${tools_d[$step]}"
       o="$(_payload_for "drv-$sample" "$tr" | PMO_OPERATOR_TOML="$toml" \
            SESSION_RETRO_STATE_DIR="$state" bash "$self" 2>/dev/null)"
-      if printf '%s' "$o" | grep -q '"decision"'; then echo "fire"; else echo "silent"; fi
+      if grep -q '"decision"' <<<"$o"; then echo "fire"; else echo "silent"; fi
     done
     # R6 — after the fire, a Stop carrying stop_hook_active:true emits nothing.
     o="$(_payload_for "drv-$sample" "$tr" | sed 's/"stop_hook_active": false/"stop_hook_active": true/' \
          | PMO_OPERATOR_TOML="$toml" SESSION_RETRO_STATE_DIR="$state" bash "$self" 2>/dev/null)"
-    if printf '%s' "$o" | grep -q '"decision"'; then echo "fire"; else echo "silent"; fi
+    if grep -q '"decision"' <<<"$o"; then echo "fire"; else echo "silent"; fi
     rm -rf "$state" "$(dirname "$tr")"; rm -f "$toml"
   }
 
@@ -413,7 +413,7 @@ run_self_test() {
   # and enforce is permitted to emit the block decision.
   ww_out="$(_payload_for ww-2 "$ww_tr" | PMO_OPERATOR_TOML="$ww_toml" \
             SESSION_RETRO_STATE_DIR="$ww_state" bash "$self" 2>/dev/null)"
-  printf '%s' "$ww_out" | grep -q '"decision"[[:space:]]*:[[:space:]]*"block"' \
+  grep -q '"decision"[[:space:]]*:[[:space:]]*"block"' <<<"$ww_out" \
     || { echo "  FAIL: enforce must emit the block decision once the warn window is satisfied (got: $ww_out)"; fails=$((fails + 1)); }
   rm -rf "$ww_state" "$(dirname "$ww_tr")"; rm -f "$ww_toml"
 

@@ -817,7 +817,7 @@ resolve_token() {
   if [ "${NON_INTERACTIVE}" -eq 1 ]; then
     if [ -n "${default_value}" ]; then
       if [ -n "${validator_regex}" ] && \
-         ! printf '%s' "${default_value}" | grep -qE "${validator_regex}"; then
+         ! grep -qE "${validator_regex}" <<<"${default_value}"; then
         err "Non-interactive: default for ${token} does not match the required format."
         err "  default: '${default_value}'"
         err "  Set a valid value in <config-root>/operator.toml, then re-run."
@@ -865,7 +865,7 @@ resolve_token() {
       fi
     fi
     if [ -n "${validator_regex}" ]; then
-      if ! printf '%s' "${value}" | grep -qE "${validator_regex}"; then
+      if ! grep -qE "${validator_regex}" <<<"${value}"; then
         warn "${token} value did not match expected format. Please retry."
         attempts=$((attempts + 1))
         continue
@@ -1993,7 +1993,7 @@ configure_hook_activation() {
   # clobber. master_enabled is a unique key across the schema, so a flat grep is sufficient.
   if [ -f "${cfg}" ] && grep -qE '^[[:space:]]*master_enabled[[:space:]]*=' "${cfg}" 2>/dev/null; then
     local cur
-    cur="$(grep -E '^[[:space:]]*master_enabled[[:space:]]*=' "${cfg}" | head -1 | sed -E 's/.*=[[:space:]]*//; s/[[:space:]]*#.*//; s/[[:space:]]*$//')"
+    cur="$(grep -m1 -E '^[[:space:]]*master_enabled[[:space:]]*=' "${cfg}" | sed -E 's/.*=[[:space:]]*//; s/[[:space:]]*#.*//; s/[[:space:]]*$//')"
     info "PRESERVED (operator-state): [security_hooks].master_enabled = ${cur} (hook activation unchanged)"
     return 0
   fi

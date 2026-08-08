@@ -63,7 +63,7 @@ preflight_deps() {
 # ── Generator version — read the skill's own version frontmatter (never hardcoded). ──
 generator_version() {
   local v=""
-  [ -r "$SKILL_MD" ] && v="$( { grep -E '^version:' "$SKILL_MD" 2>/dev/null || true; } | head -1 | awk '{print $2}')"
+  [ -r "$SKILL_MD" ] && v="$( { grep -m1 -E '^version:' "$SKILL_MD" 2>/dev/null || true; } | awk '{print $2}')"
   printf '%s' "${v:-unknown}"
 }
 
@@ -71,7 +71,7 @@ generator_version() {
 toml_val() {
   local key="$1" toml="${HOME}/.config/pmo-platform/operator.toml"
   [ -r "$toml" ] || return 0
-  { grep -E "^${key}" "$toml" 2>/dev/null || true; } | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}'
+  { grep -m1 -E "^${key}" "$toml" 2>/dev/null || true; } | awk -F= '{gsub(/[" ]/,"",$2); print $2}'
 }
 
 workspace_root() {
@@ -413,7 +413,7 @@ apply_pr_resolve() {
   while IFS= read -r line; do
     branch="$(printf '%s' "$line" | jq -r '.branch // empty')"
     if printf '%s' "$line" | jq -e 'select(.work_item_kind=="unattributed")' >/dev/null 2>&1 \
-       && printf '%s' "$branch" | grep -qE '^(fix|feat)/'; then
+       && grep -qE '^(fix|feat)/' <<<"$branch"; then
       if iss="$(resolve_pr "$branch")"; then
         printf '%s' "$line" | jq -c --arg iss "$iss" \
           '.work_item=$iss | .work_item_kind="issue" | .attribution_tier="pr-resolved"
@@ -470,8 +470,8 @@ do_emit() {
   # anything but a count, the store's shape is UNKNOWN — which is not the same as clean, and
   # the old `${n:-0}` default silently converted exactly that case into "no legacy records".
   if [ "$probe_rc" -ne 0 ] \
-     || ! printf '%s' "$n_sess"   | grep -qE '^[0-9]+$' \
-     || ! printf '%s' "$n_legacy" | grep -qE '^[0-9]+$'; then
+     || ! grep -qE '^[0-9]+$' <<<"$n_sess" \
+     || ! grep -qE '^[0-9]+$' <<<"$n_legacy"; then
     printf 'FATAL (exit 3): FinOps store shape could not be determined: %s\n' "$store_file" >&2
     printf 'The store-shape preflight could not read the store (jq probe failed, or returned a non-count).\n' >&2
     printf 'Refusing to roll up a store of unknown shape. The store is a derived cache; rebuild it,\n' >&2
@@ -762,6 +762,7 @@ while [ $# -gt 0 ]; do
     --resolve-prs) RESOLVE_PRS=1 ;;
     --self-test)   DO_SELFTEST=1 ;;
     -h|--help)
+      # sigpipe-idiom: allow — `head` truncates the RENDERED help text, not the match set; an intervening `sed` sits between grep and head, so `-m50` would cap the wrong stage.
       grep -E '^#( |$)' "$0" | sed -E 's/^# ?//' | head -50
       exit 0 ;;
     *)

@@ -181,7 +181,7 @@ check_one_skill() {
     local version_value
     version_value="$(grep -m1 -E "^version:" "$src" | tr -d '\r' \
                      | sed -e 's/^version:[[:space:]]*//' -e 's/[[:space:]]*$//')"
-    if ! printf '%s' "$version_value" | grep -qE "$C6_VERSION_RE"; then
+    if ! grep -qE "$C6_VERSION_RE" <<<"$version_value"; then
       echo "FAIL:  $skill — version: '$version_value' does not match the required format vMAJOR.MINOR[-suffix] (regex $C6_VERSION_RE per core/standards/version-field-semantics.md § Format)"
       skill_ok=false
       had_fail=1
