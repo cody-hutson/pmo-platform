@@ -212,9 +212,15 @@ each site will eventually be forgotten at one.
 - [knowledge-architecture.md](../disciplines/knowledge-architecture.md#host-binding-leakage-class)
   § 4.1 — the host-binding leakage class this file is adjudicated against, and
   the exclusion (b) under which its worked examples are legitimate.
-- Agent memory entry `feedback_gh_api_typed_vs_raw_field.md` — the per-agent
-  behavioral record this standard supersedes as the durable platform-level home.
-  The memory entry is the bridge; this file is the destination.
+- **This file is the durable home for the typed-vs-raw field rule, superseding
+  the per-agent behavioral memory that carried it first.** Both incidents above
+  were captured as an agent-memory correction before any standard existed; that
+  capture is the *bridge*, and this file is the *destination*. Per
+  [knowledge-architecture.md](../disciplines/knowledge-architecture.md) § 6, the
+  pointer runs one way — a memory entry may hold a temporary pointer to its
+  corpus home, and the corpus never points back. The tied memory is evicted once
+  this standard ships (encode-then-evict; the corpus write lands first), so the
+  rule has exactly one home and cannot drift into a shadow copy.
 - The verify-before-recommend discipline in `CLAUDE.md` § Universal Preferences —
   post-mutation read-back is its write-side twin. That rule says verify against
   the canonical source before acting on a claim; this one says verify against the
