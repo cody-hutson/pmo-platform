@@ -9,10 +9,24 @@
 # WHAT THIS PROVES, and why a value assertion could not.
 # Check 31 read each file's override marker by piping the stripped body into a quiet
 # grep, under deploy.sh's `set -euo pipefail`. A quiet grep exits on its FIRST match;
-# the writer is still writing, takes SIGPIPE, and pipefail promotes its 141 to the
-# pipeline's status — so a SUCCESSFUL match reported failure and the marker was
+# the writer is still writing, hits EPIPE, and pipefail promotes ITS non-zero status
+# to the pipeline's — so a SUCCESSFUL match reported failure and the marker was
 # silently ignored. The reported Class-L count therefore varied run to run on a
 # byte-identical corpus.
+#
+# THE FAILING STATUS IS NOT ALWAYS 141 — read the disposition, not the folklore.
+# Which non-zero code appears is a property of the writer's SIGPIPE disposition,
+# not of the defect:
+#   * default disposition — the writer DIES on the signal and bash reports 128+13
+#     = 141. This is what a developer shell shows.
+#   * SIGPIPE inherited as SIG_IGN — the writer never receives the signal. It sees
+#     EPIPE, prints `printf: write error: Broken pipe`, and returns 1. This is what
+#     a GitHub-hosted runner hands the step, so on CI the signature is rc=1 —
+#     INDISTINGUISHABLE from `grep` legitimately finding nothing.
+# Both dispositions reproduce the same defect: a haystack that DOES contain the
+# literal is reported CLEAN. Anything downstream that hunts for "141" as THE
+# signature will miss the CI case entirely; hunt for a non-zero status on a
+# pipeline whose reader short-circuits.
 #
 # A single-run count assertion CANNOT fail on this defect: any one run produces some
 # self-consistent number. The defect is run-to-run INEQUALITY, so this file asserts
@@ -211,10 +225,12 @@ done
 # release/. This mirrors the probe_new/probe_old precedent above — copy the
 # predicate, then pin the copy with a drift guard (T10) so it cannot go stale.
 #
-# THE FAILURE MODE BEING PINNED is not a crash. Under `pipefail` the writer takes
-# SIGPIPE and the pipeline reports 141; the predicate is written `if ! <pipeline>`,
-# so 141 inverts to "no match" and a haystack that DOES contain the literal is
-# reported CLEAN. A gate that silently passes what it exists to catch.
+# THE FAILURE MODE BEING PINNED is not a crash. Under `pipefail` the writer fails on
+# the broken pipe and the pipeline reports ITS status (141 under the default SIGPIPE
+# disposition, 1 under an inherited SIG_IGN — see the disposition note in the file
+# header); the predicate is written `if ! <pipeline>`, so that non-zero inverts to
+# "no match" and a haystack that DOES contain the literal is reported CLEAN. A gate
+# that silently passes what it exists to catch.
 
 # CONVERTED form — the shape the sweep landed.
 _ac7_converted() { # <content> <pattern-file> -> CLEAN | BLOCKED
@@ -247,15 +263,34 @@ AC7_CONTENT="$(cat "$ac7_file")"
 ac7_bytes=${#AC7_CONTENT}
 ac7_lines=$(printf '%s\n' "$AC7_CONTENT" | wc -l | tr -d ' ')
 
+# The SMALL companion haystack — same needle, same shape, below the pipe bound.
+# It is T9's discrimination control; see the note above the T9 assertion.
+AC7_SMALL="$(printf '%s\n%s\n' 'SENTINEL-LITERAL-3832 appears on line one — the EARLY match' 'one short filler line')"
+
+# SIGPIPE disposition, READ rather than assumed. Bash records a signal that was
+# ignored on entry to the shell and reports it through `trap -p`; a shell holding
+# the default disposition prints nothing. Diagnostic only — the assertion below
+# accepts either, so a wrong reading cannot turn this arm red on its own.
+if [ -n "$(trap -p PIPE 2>/dev/null)" ]; then
+  ac7_disp="SIG_IGN inherited — writer sees EPIPE and returns 1 (the CI shape)"
+  ac7_rc_expect=1
+else
+  ac7_disp="default — writer dies on the signal, bash reports 128+13"
+  ac7_rc_expect=141
+fi
+
 # Raw pipeline status under pipefail, asserted directly rather than inferred.
 set +e
 ( set -uo pipefail; grep -qE -f "$ac7_pat" <<<"$AC7_CONTENT" ); ac7_rc_new=$?
-# sigpipe-idiom: allow — DELIBERATE pre-conversion reproduction; this is the arm that must return 141.
+# sigpipe-idiom: allow — DELIBERATE pre-conversion reproduction; this is the arm that must fail non-zero.
 ( set -uo pipefail; printf '%s' "$AC7_CONTENT" | grep -qE -f "$ac7_pat" 2>/dev/null ); ac7_rc_old=$?
+# sigpipe-idiom: allow — DELIBERATE pre-conversion reproduction; T9's small-haystack positive control.
+( set -uo pipefail; printf '%s' "$AC7_SMALL" | grep -qE -f "$ac7_pat" 2>/dev/null ); ac7_rc_old_small=$?
 set -e
 
 ac7_new="$(_ac7_converted "$AC7_CONTENT" "$ac7_pat")"
 ac7_old="$(_ac7_prefix    "$AC7_CONTENT" "$ac7_pat")"
+ac7_old_small="$(_ac7_prefix "$AC7_SMALL" "$ac7_pat")"
 
 # T8 — the converted guard survives the fixture and returns the CORRECT verdict.
 if [[ "$ac7_new" == "BLOCKED" && "$ac7_rc_new" -eq 0 ]]; then
@@ -267,12 +302,34 @@ fi
 
 # T9 — NEGATIVE CONTROL. The pre-conversion form must MISREAD this same fixture.
 # If this ever passes, the fixture stopped reproducing the defect and T8 proves nothing.
-if [[ "$ac7_old" == "CLEAN" && "$ac7_rc_old" -eq 141 ]]; then
-  report "T9 pre-conversion form SIGPIPEs on the same fixture and misreports CLEAN (rc=141)" 1
-  echo "        pre-conversion='$ac7_old' rc=$ac7_rc_old   converted='$ac7_new' rc=$ac7_rc_new"
+#
+# WHY THE rc CLAUSE IS A SET AND NOT `141`. The exit code is a property of the
+# writer's SIGPIPE disposition, not of the defect: 141 when the signal is fatal,
+# 1 when it was inherited as SIG_IGN (which is what a GitHub-hosted runner hands
+# the step). Pinning 141 made this arm assert the environment rather than the
+# behaviour, and it turned `Shell harness (macOS)` red at 287dd846 on a fixture
+# that was reproducing the defect perfectly. `verdict == CLEAN` is the load-bearing
+# half and holds under both. The rc clause stays NON-ZERO so a fixture that has
+# stopped firing (rc=0, BLOCKED) still fails this arm.
+#
+# WHY THE SMALL-HAYSTACK CONTROL IS PART OF THE SAME ASSERTION. Under SIG_IGN the
+# failing status is 1 — the very code `grep` returns when it legitimately finds
+# nothing. rc alone can therefore no longer tell "the defect fired" from "the needle
+# never matched", and an arm that cannot tell those apart asserts nothing. The
+# control runs the SAME pre-conversion form against the SAME needle on a haystack
+# below the pipe bound and requires rc=0 / BLOCKED. Passing it proves the needle
+# matches this content, so CLEAN on the large haystack is the defect and not a
+# non-match. Under the default disposition 141 carried that discrimination for
+# free; under SIG_IGN this control is what restores it.
+if [[ "$ac7_old" == "CLEAN" && "$ac7_rc_old" -ne 0 ]] \
+   && { [[ "$ac7_rc_old" -eq 141 ]] || [[ "$ac7_rc_old" -eq 1 ]]; } \
+   && [[ "$ac7_old_small" == "BLOCKED" && "$ac7_rc_old_small" -eq 0 ]]; then
+  report "T9 pre-conversion form breaks its pipe on the same fixture and misreports CLEAN (rc=$ac7_rc_old; small-haystack control BLOCKED at rc=0)" 1
+  echo "        SIGPIPE disposition: $ac7_disp (expected rc=$ac7_rc_expect, observed rc=$ac7_rc_old)"
+  echo "        pre-conversion='$ac7_old' rc=$ac7_rc_old   converted='$ac7_new' rc=$ac7_rc_new   control(small)='$ac7_old_small' rc=$ac7_rc_old_small"
 else
-  report "T9 pre-conversion form SIGPIPEs on the same fixture and misreports CLEAN" 0 \
-    "verdict='$ac7_old' (want CLEAN), rc=$ac7_rc_old (want 141) — the fixture no longer reproduces the defect, so T8 asserts nothing"
+  report "T9 pre-conversion form breaks its pipe on the same fixture and misreports CLEAN" 0 \
+    "verdict='$ac7_old' (want CLEAN), rc=$ac7_rc_old (want 141 or 1, non-zero; disposition: $ac7_disp), small-haystack control='$ac7_old_small' rc=$ac7_rc_old_small (want BLOCKED / 0) — either the fixture no longer reproduces the defect or the needle no longer matches, and T8 asserts nothing"
 fi
 
 # T10 — drift guard for the COPY. T8/T9 grade a reproduction of the converted

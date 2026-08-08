@@ -53,8 +53,11 @@ assert_contains() {
   # SIGPIPE-safe: feed grep via here-string instead of `printf | grep`. A
   # `printf` upstream of a short-circuiting `grep -q` gets EPIPE when grep exits
   # on the first match before printf finishes writing a large haystack; under
-  # `set -o pipefail` printf's exit(141) then dominates the pipeline and the
+  # `set -o pipefail` printf's non-zero exit then dominates the pipeline and the
   # `if` wrongly takes the else branch (intermittent false-FAIL). See #3210.
+  # The code is 141 only where SIGPIPE is fatal; where the shell inherited it as
+  # SIG_IGN (a GitHub-hosted runner) printf returns 1 instead, which reads exactly
+  # like "no match" — so the signature to hunt is a non-zero status, never "141".
   if grep -q -- "${needle}" <<<"${haystack}"; then
     report "${name}" 1
   else

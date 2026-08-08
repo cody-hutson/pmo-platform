@@ -1374,18 +1374,27 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # GATE 10 — SIGPIPE idiom (#3832). A writer piped into a SHORT-CIRCUITING
-  #           reader is a latent false-FAIL: `grep -q` and `head` exit on their
-  #           first match, the writer is still writing, it takes SIGPIPE, and
-  #           `pipefail` promotes its 141 to the pipeline's status — so a
-  #           SUCCESSFUL match reports failure. Written `if ! <pipeline>`, that
-  #           inverts to "no match" and the gate silently passes what it exists
-  #           to catch. It is not theoretical: deploy.sh Check 31 over-reported
-  #           5x (Class L 477 vs a true 93) on exactly this shape.
+  #           reader is a latent false-FAIL: `grep -q`, `grep -mN` and `head`
+  #           exit on their first match, the writer is still writing, its next
+  #           write fails on the broken pipe, and `pipefail` promotes ITS status
+  #           to the pipeline's — so a SUCCESSFUL match reports failure. Written
+  #           `if ! <pipeline>`, that inverts to "no match" and the gate silently
+  #           passes what it exists to catch. It is not theoretical: deploy.sh
+  #           Check 31 over-reported 5x (Class L 477 vs a true 93) on this shape.
+  #
+  #           THE FAILING STATUS IS NOT ALWAYS 141. Which non-zero code appears
+  #           is a property of the writer's SIGPIPE disposition, not of the
+  #           defect: 141 where the signal is fatal (a developer shell), and 1
+  #           where the shell inherited SIGPIPE as SIG_IGN — which is what a
+  #           GitHub-hosted runner hands the step. On CI the signature is
+  #           therefore rc=1, INDISTINGUISHABLE from grep legitimately finding
+  #           nothing. Anything downstream that hunts for "141" will miss the CI
+  #           case; hunt for a non-zero status on a short-circuiting pipeline.
   #
   #           FIRING CONDITIONS (measured, not assumed): pipefail + the status
   #           consumed + a MULTI-LINE haystack + an early match + >~64 KiB of
   #           residual after the matched line. Single-line does not fire at 1 MB;
-  #           multi-line fires between 61 KB (rc=0) and 92 KB (rc=141).
+  #           multi-line fires between 61 KB (rc=0) and 92 KB (rc non-zero).
   #
   #           WHY IT GATES ADDED LINES AND NOT THE TREE: #3832 converts the whole
   #           pinned population in the same PR, so there is no pre-existing corpus
@@ -1570,10 +1579,15 @@ jobs:
             echo "## :x: SIGPIPE-idiom gate FAILED"
             echo ""
             echo "An added shell line pipes a writer into a **short-circuiting reader**"
-            echo "(\`grep -q\` or \`head\`). Under \`pipefail\` the reader exits on its first"
-            echo "match, the writer takes SIGPIPE, and its 141 becomes the pipeline's status —"
-            echo "so a **successful match reports failure**. Written \`if ! <pipeline>\`, that"
-            echo "inverts to \"no match\" and the check silently passes what it exists to catch."
+            echo "(\`grep -q\`, \`grep -mN\` or \`head\`). Under \`pipefail\` the reader exits on"
+            echo "its first match, the writer's next write fails on the broken pipe, and its"
+            echo "non-zero status becomes the pipeline's — so a **successful match reports"
+            echo "failure**. Written \`if ! <pipeline>\`, that inverts to \"no match\" and the"
+            echo "check silently passes what it exists to catch."
+            echo ""
+            echo "The status is **141** where SIGPIPE is fatal and **1** where the shell"
+            echo "inherited it as \`SIG_IGN\` — which is what a GitHub-hosted runner hands the"
+            echo "step. On CI the signature is \`rc=1\`, indistinguishable from \"no match\"."
             echo ""
             echo "### Findings (file:line)"
             echo '```'

@@ -7425,10 +7425,13 @@ sys.stdout.write("".join(out) + "|")
         # the negative assertion that bounds this defect — zero such pipelines in this
         # file — cannot match its own explanatory text and pass vacuously.)
         # Under this script's `set -euo pipefail` (line 2) a `grep -q` that matches EARLY
-        # exits before echo has finished writing; echo then takes SIGPIPE and pipefail
-        # promotes its 141 to the pipeline's status — so a SUCCESSFUL match reported
+        # exits before echo has finished writing; echo then fails on the broken pipe and
+        # pipefail promotes ITS status to the pipeline's — so a SUCCESSFUL match reported
         # FAILURE, the `&&` never fired, and the file's override marker was silently
-        # ignored. Every in-scope file whose fence-stripped body exceeds the 64 KB pipe
+        # ignored. WHICH non-zero status appears is a property of the SIGPIPE disposition,
+        # not of the defect: 141 where the signal is fatal (a developer shell), and 1 where
+        # it was inherited as SIG_IGN (a GitHub-hosted runner), which is indistinguishable
+        # from grep legitimately finding nothing. Do not hunt for 141 alone. Every in-scope file whose fence-stripped body exceeds the 64 KB pipe
         # capacity lost its marker deterministically (7 of 164 for Class L, 3 of 26 for
         # Class V); files near that boundary lost it as a race, which is what made the
         # reported Class-L count vary run-to-run on a byte-identical corpus. A herestring
