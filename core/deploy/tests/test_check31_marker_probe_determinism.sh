@@ -121,7 +121,9 @@ probe_old() {
     # is the defect's own signature (it is what #4224 surfaced on its runner), not a
     # fault in this test — suppressed so a CI reader does not read the control
     # working as the harness breaking.
+    # sigpipe-idiom: allow — DELIBERATE pre-fix reproduction (the T3 control arm). See the header note above: converting these two lines disarms the control that proves this whole file discriminates.
     echo "$body" 2>/dev/null | grep -qE "$LINK_RE" && al=1
+    # sigpipe-idiom: allow — same T3 control arm, version-ref probe.
     echo "$body" 2>/dev/null | grep -qE "$VER_RE" && av=1
     link=$((link + al)); ver=$((ver + av))
   done
@@ -161,6 +163,7 @@ fi
 sub_new=0; sub_old=0
 body="$(cat "$small_link")"
 grep -qE "$LINK_RE" <<< "$body" && sub_new=1
+# sigpipe-idiom: allow — DELIBERATE pre-fix form (the T4 capacity control); it must be the OLD shape to pin T3 to capacity rather than to form.
 echo "$body" | grep -qE "$LINK_RE" && sub_old=1
 [[ "$sub_new" == "1" && "$sub_old" == "1" ]] \
   && report "T4 below-capacity marker is read by BOTH forms (T3 is capacity-bound, not form-bound)" 1 \
@@ -227,6 +230,7 @@ _ac7_converted() { # <content> <pattern-file> -> CLEAN | BLOCKED
 # it disarms the control that proves the converted form is doing anything.
 _ac7_prefix() { # <content> <pattern-file> -> CLEAN | BLOCKED
   ( set -uo pipefail
+    # sigpipe-idiom: allow — DELIBERATE pre-conversion reproduction. This line IS the T9 control; converting it deletes the proof that T8 asserts anything.
     if [ ! -s "$2" ] || ! printf '%s' "$1" | grep -qE -f "$2" 2>/dev/null; then
       printf 'CLEAN\n'
     else
@@ -246,6 +250,7 @@ ac7_lines=$(printf '%s\n' "$AC7_CONTENT" | wc -l | tr -d ' ')
 # Raw pipeline status under pipefail, asserted directly rather than inferred.
 set +e
 ( set -uo pipefail; grep -qE -f "$ac7_pat" <<<"$AC7_CONTENT" ); ac7_rc_new=$?
+# sigpipe-idiom: allow — DELIBERATE pre-conversion reproduction; this is the arm that must return 141.
 ( set -uo pipefail; printf '%s' "$AC7_CONTENT" | grep -qE -f "$ac7_pat" 2>/dev/null ); ac7_rc_old=$?
 set -e
 
