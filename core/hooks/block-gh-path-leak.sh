@@ -128,6 +128,15 @@ fi
 TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
 [ "$TOOL_NAME" = "Bash" ] || exit 0
 
+# --- Workspace-scope gate (#4436) — layer 3, AFTER the master-activation gate and
+# BEFORE the .mode / rule path. Precedence: bypass -> master -> SCOPE -> .mode -> rule.
+# CWD is extracted here (this hook did not previously need it) purely to feed the guard.
+# Inverted fail direction on the cwd axis, NOT on the lib axis. See lib/scope-guard.sh. ---
+CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
+readonly SCOPE_GUARD_LIB="${HOOK_DIR}/lib/scope-guard.sh"
+if [ -r "$SCOPE_GUARD_LIB" ]; then . "$SCOPE_GUARD_LIB" 2>/dev/null || true; fi
+if command -v scope_guard_gate >/dev/null 2>&1; then scope_guard_gate "$CWD"; fi
+
 COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
 [ -z "$COMMAND" ] && exit 0
 

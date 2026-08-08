@@ -275,9 +275,36 @@ def added_lines_for(md: Path, diff_base: str) -> set[int]:
     return added
 
 
+def is_test_fixture(path: Path) -> bool:
+    """True for markdown that is TEST DATA rather than corpus prose.
+
+    A `.md` file under `**/tests/fixtures/**` is an INPUT to a test, not a document
+    anyone navigates. Its links are payload: the blast-radius doc-tracer fixture, for
+    instance, needs `[t](docs/target.md)` in its frozen corpus precisely so the tracer
+    has a reference edge to find, and that target is resolved relative to the fixture's
+    own scan root at test time — not relative to the repo. Resolving it as a corpus link
+    is a category error, and "fixing" it would corrupt the fixture the test depends on.
+
+    This mirrors the exclusion the corpus checks in core/deploy/deploy.sh already apply
+    to `**/tests/fixtures/**`; this checker simply had not needed it before, because no
+    fixture markdown had carried a link.
+
+    Deliberately NARROW: it requires BOTH a `tests` and a `fixtures` path segment, and
+    `fixtures` must follow `tests`. A stray directory merely named `fixtures` elsewhere
+    in the tree is still checked.
+    """
+    parts = path.parts
+    for i, seg in enumerate(parts[:-1]):
+        if seg == "tests" and "fixtures" in parts[i + 1:-1]:
+            return True
+    return False
+
+
 def iter_markdown(roots: list[str], top_level_md: bool,
                   only: set[Path] | None = None):
     """Yield markdown files under each root dir, plus top-level *.md when asked.
+
+    Markdown under `**/tests/fixtures/**` is skipped — see is_test_fixture().
 
     When `only` is provided (the resolved paths of a changed-files set), the
     walk is intersected with it: a file is yielded only if it both falls under
@@ -296,6 +323,8 @@ def iter_markdown(roots: list[str], top_level_md: bool,
             if md in seen:
                 continue
             if only is not None and md not in only:
+                continue
+            if is_test_fixture(md):
                 continue
             seen.add(md)
             yield md
@@ -364,7 +393,33 @@ def run_self_test() -> int:
     assert not is_skippable("stage-02-triage.md"), \
         "self-test: a plain relative link must remain checkable"
 
-    print("self-test OK (release-plan/notes shape consistency + skip classes)")
+    # ── Test-fixture path exclusion, with its own over-skip guard ──
+    # A skip that is not itself tested can broaden silently and swallow a real link,
+    # so both arms are pinned: what MUST be excluded, and what must NOT be.
+    fixture_paths = [
+        "release/tools/tests/fixtures/blast-radius-f1/corpus/docs/a.md",
+        "release/tools/tests/fixtures/deciders-carveout/x.md",
+        "core/deploy/tests/fixtures/nested/deep/y.md",
+    ]
+    for p in fixture_paths:
+        assert is_test_fixture(Path(p)), \
+            f"self-test: expected test-fixture markdown to be excluded: {p!r}"
+
+    # Over-skip guard — these are corpus prose and MUST still be checked. A predicate
+    # that returned True here would silently drop real documents from the scan.
+    not_fixture_paths = [
+        "release/references/pipeline/stage-06-engineering.md",
+        "core/disciplines/architecture-overview.md",
+        "release/tools/tests/README.md",              # under tests/, but not in fixtures/
+        "docs/fixtures/setup.md",                     # a 'fixtures' dir with no 'tests' parent
+        "release/tools/tests/fixtures.md",            # a FILE named fixtures, not a directory
+    ]
+    for p in not_fixture_paths:
+        assert not is_test_fixture(Path(p)), \
+            f"self-test: corpus markdown wrongly excluded as a fixture (over-skip): {p!r}"
+
+    print("self-test OK (release-plan/notes shape consistency + skip classes "
+          "+ test-fixture path exclusion)")
     return 0
 
 

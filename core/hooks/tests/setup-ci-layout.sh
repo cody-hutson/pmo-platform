@@ -186,6 +186,23 @@ else
   log "setup-ci-layout: WARNING master-activation gate missing at ${MASTERLIB_SRC}"
 fi
 
+# 1f) Co-locate the workspace-scope gate lib at .claude/hooks/lib/, mirroring the deployed
+#     posture (setup-workspace.sh co-deploys it there, #4436). Every block-*.sh sources it from
+#     ${HOOK_DIR}/lib/scope-guard.sh as precedence layer 3. WITHOUT this the CI sandbox would
+#     diverge from a correct install: the hooks would take the lib-missing branch (which does
+#     NOT gate, so every rule assertion would still pass) and CI would never exercise the real
+#     layer — a silently vacuous pass, the same CI-fidelity class the co-locations above exist
+#     to prevent. The test-runner neutralizes the layer for the RULE suites by exporting
+#     PMO_SCOPE_GUARD_ROOT=/ ; scope-guard.test.sh owns the layer and sets its own root per case.
+SCOPEGUARD_SRC="${HOOKS_SRC}/lib/scope-guard.sh"
+if [ -f "${SCOPEGUARD_SRC}" ]; then
+  mkdir -p "${HOOKS_DST}/lib"
+  cp "${SCOPEGUARD_SRC}" "${HOOKS_DST}/lib/"
+  log "setup-ci-layout: co-located workspace-scope gate -> ${HOOKS_DST}/lib/scope-guard.sh"
+else
+  log "setup-ci-layout: WARNING workspace-scope gate missing at ${SCOPEGUARD_SRC}"
+fi
+
 # 2) Copy tests + runner (skip this setup script — it is not a test file).
 log "setup-ci-layout: copying tests -> ${TESTS_DST}"
 for tf in "${TESTS_SRC}"/*.sh; do

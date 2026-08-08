@@ -44,7 +44,7 @@ The control-flow core. The hub:
 1. Lists sub-tasks; identifies the **dependency-met actionable subset** (never spawns an unmet-dependency sub-task).
 2. Runs the **Collective Review check** before any Stage-6 routing (fires when ≥2 issues have Solutioning active and all Stage-5 sub-tasks are closed → operator scope-lock GATE).
 3. Runs the action-item scan ([`hub-action-tracking.md`](../../../../core/standards/hub-action-tracking.md)).
-4. For a parallel wave (Stage 5/7/8): runs the **quota-budget gate** + honors the **parallelism class** before spawning ([`spoke-launch.md`](spoke-launch.md)).
+4. Before **every** spawn: runs the **quota-budget gate** — wave *or* singleton, at every stage including the write-serialized 6/13 — and honors the **parallelism class**, which is the stage-scoped half of the pair ([`spoke-launch.md`](spoke-launch.md)). A wave renders the full four-value verdict; a singleton renders the reduced PROCEED/DEFER form. The verdict is rendered on every launch, PROCEED included — the gate emits no event, so an unrendered verdict is indistinguishable from a gate that never ran.
 5. **Per-wave concurrent-PR check (pre-spawn):** before spawning a build spoke for issue #N, query open PRs referencing that issue (`gh pr list --state open --search "#N"` or equivalent; N = the target issue number). If an open PR already references it, **surface to the operator — proceed / adopt / skip — BEFORE spawning**, never deferred to the Stage 7/8 coherence review. **Re-run every wave** (not once at Stage 4): the open-PR population changes mid-run, so a clean planning-time scan does not carry ([`spoke-launch.md`](spoke-launch.md)).
 6. Spawns the wave.
 
@@ -79,13 +79,20 @@ before routing continues. Neither alone is sufficient (`core/standards/hub-sessi
    (see § 4a.2 Join-key note).
 4. Render the "Events emitted this routing point" block in the Decision Briefing.
    Omission is a structural defect.
-5. When the hub or a spoke makes a durable commitment (a deferred edit, reminder,
-   cleanup, decision-to-post, cross-issue-merge wait, or post-action verification),
-   append an `AI-NNN` row to `action-items.md` per
-   `core/standards/hub-action-tracking.md` § 2 (13 fields; zero-padded id; not reused),
-   run § 4a.1 first if the file does not exist, and emit the matching
-   `decision`/`action-item-opened` row. Every subsequent status transition emits its
-   mapped `action-item-*` subtype per `core/standards/hub-action-tracking.md` § 3.
+5. When the hub or a spoke makes a durable commitment — one of the `category`
+   values below — append an `AI-NNN` row to `action-items.md` per
+   `core/standards/hub-action-tracking.md` § 2 (13 fields; zero-padded id; not
+   reused), run § 4a.1 first if the file does not exist, and emit the matching
+   `decision`/`action-item-opened` row. Every subsequent status transition emits
+   its mapped `action-item-*` subtype per that standard's § 3.
+
+<!-- Restated from core/standards/hub-action-tracking.md § 2.1, which is NOT
+     deployed: this file ships inside packages/release-hub.skill and is read at
+     ~/.claude/skills/release-hub/references/. Held in parity by deploy.sh
+     Check 68 (enum-parity). Edit the standard first, never this line.
+category enum: deferred-edit / reminder / cleanup / decision-to-post /
+               cross-issue-merge / verification / decision-deferred
+-->
 
 A routing step that advances with a rendered decision and no emitted row is incomplete.
 

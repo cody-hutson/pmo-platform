@@ -1,0 +1,40 @@
+# hub-state-enum-parity-map.txt — the Check 68 (enum-parity) registry.
+#
+# Each row pairs a DERIVED surface that restates an enum with the STANDARD section
+# that owns it. The check asserts the two declare the identical value set, and that
+# the owning heading's declared cardinality matches the set it heads.
+#
+# WHY THE PAIRING IS DECLARED AND NOT INFERRED. Inferring which standard owns a given
+# enum from a template comment is precisely the guess that produced the defect this
+# gate exists to stop: the action-items template restated three enums and diverged
+# from its standard on all three, while a sibling template restating a DIFFERENT
+# standard's enum stayed in parity. A checker that guessed the owner would have had to
+# guess right three times to notice. The registry costs one line per pair and removes
+# the guess entirely — an unregistered surface is invisible to the gate, which is a
+# declared boundary rather than a silent one (see the coverage boundary in the
+# deploy.sh Check 68 block).
+#
+# WHY A DERIVED SURFACE MAY RESTATE AT ALL. Restating a contract is normally
+# governance debt (core/standards/duplicate-source-discipline.md § 1 — register or
+# remove). Both derived surfaces here qualify under condition 1 BECAUSE THEY ARE
+# DEPLOYED AND THEIR CONTRACT IS NOT: the templates are copied into operator-instance
+# runtime ledgers read without the repo open, and orchestration-playbook.md ships
+# inside packages/release-hub.skill and is read from the deployed skill tree, while
+# core/standards/** is in no package and is not deployed at all. Citing the standard
+# from either surface would point a runtime reader at a file absent from their
+# machine. The restatement is the correct form; this registry is what keeps it from
+# becoming the drift it looks like.
+#
+# FORMAT — four pipe-delimited fields, '#' comments, blank lines ignored:
+#   <derived surface> | <field> | <standard> | <section anchor>
+#
+# The section anchor is matched as a PREFIX of the heading line, so a heading may
+# carry a trailing "(N values)" cardinality without the anchor needing to track it.
+# The DERIVED side is always the side that moves: edit the standard first, then
+# re-derive. The failure message says so on every finding.
+
+release/releases/hub-state/action-items.md.template|category|core/standards/hub-action-tracking.md|### 2.1 Category enum
+release/releases/hub-state/action-items.md.template|status|core/standards/hub-action-tracking.md|### 2.3 Status enum + lifecycle
+release/releases/hub-state/action-items.md.template|trigger_type|core/standards/hub-action-tracking.md|### 2.2 Trigger-type enum
+release/releases/hub-state/pending-approvals.md.template|status|core/standards/hub-session-continuity.md|### 3.1 Surface A
+release/skills/release-hub/references/orchestration-playbook.md|category|core/standards/hub-action-tracking.md|### 2.1 Category enum

@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 # Decision Briefing — the hub's operator-engagement contract (Mode R and Mode O)
 
-How the hub engages the operator at any human touchpoint. **Every obligation in this file — the briefing shape, the adversarial-evaluation rule, the information-sufficiency gates, and the channel rule — binds Mode R and Mode O alike.** Where a section names a Mode O mechanism, read its Mode R counterpart: a spoke output stands for a composed-check verdict. Elaborates `## Mode O` and `## Output Contract` in [`../SKILL.md`](../SKILL.md); cites [`hub-spoke-bridge.md`](../../../references/how-to/hub-spoke-bridge.md) § Operating Principle for the canonical worked examples.
+How the hub engages the operator at any human touchpoint. **Every obligation in this file — the briefing shape, the adversarial-evaluation rule, the information-sufficiency gates, and the channel rule — binds Mode R and Mode O alike.** Where a section names a Mode O mechanism, read its Mode R counterpart: a spoke output stands for a composed-check verdict. Elaborates `## Mode O` and `## Output Contract` in [`../SKILL.md`](../SKILL.md); cites [`hub-spoke-bridge.md`](../../../references/how-to/hub-spoke-bridge.md) § Operating Principle for the worked examples.
 
 ## Principle
 

@@ -48,7 +48,7 @@ Extra permissions, `env` values, and your own hooks all belong in the overlay. T
 - OPERATOR ADDITIONS sections in composition-surface managed files (allowlists, exemption lists, `CLAUDE.md`)
 - Values you've set in `~/.config/pmo-platform/operator.toml`
 - **`.claude/settings.local.json`** — your settings overlay. Created empty once if absent, then never touched again.
-- User-scoped Claude config at `~/.claude/`
+- User-scoped Claude config at `~/.claude/` — including the `PreToolUse` hook wiring. Extending hook coverage to repo- and worktree-rooted sessions is a **one-time operator step** `update.sh` deliberately never performs: see § 3.6
 
 ## 3. Procedure
 
@@ -77,12 +77,15 @@ The script:
 4. **Skill redeploy**: invokes `core/deploy/orchestrate.sh phase_deploy_skills`, which calls `core/deploy/deploy.sh --deploy`. This ensures any new skills shipped in the pulled release land in `~/.claude/skills/` without a separate operator step.
 5. **State update**: writes timestamp to `~/.config/pmo-platform/.last-update`.
 
+The five steps above are the procedural summary. The full effect list — including the needle and roster scaffolds, the security-hook bundle refresh, and the `.version` snapshot — is enumerated in § 3.5, which is also where you decide between a full update and a targeted `--surfaces-only` refresh.
+
 ### 3.3 Useful flags
 
 | Flag | Purpose |
 |---|---|
 | `--dry-run` | Preview planned regenerations; perform no writes |
 | `--force-regen` | Regenerate every composition-surface file unconditionally (default: only those whose source SHA changed) |
+| `--surfaces-only` | **Targeted refresh.** Regenerate composition-surface managed sections and nothing else — no skill redeploy, no security-hook refresh, no `.version` restamp, no `.last-update` write. Use this to heal one stale allowlist without the blast radius of a full update. See § 3.5 |
 | `--workspace-root PATH` | Workspace root for managed-section regen targets + backup dir (default: `~/Claude`; or `PMO_PLATFORM_WORKSPACE_ROOT` env var) |
 | `--config-root PATH` | Root for operator config reads (operator.toml) + state writes (.last-update). Default: `~/.config/pmo-platform`; or `PMO_PLATFORM_CONFIG_ROOT` env var |
 | `--help` | Show usage |
@@ -96,6 +99,36 @@ The root flags + env-var counterparts let integration tests sandbox cleanly with
 ```
 
 The validate script asserts: hooks installed, composition-surface files present, settings.json valid, CLAUDE.md tokens resolved.
+
+### 3.5 Blast radius of a full update, and when to use `--surfaces-only`
+
+A full `./update.sh` performs, in order: an operator-instance backup · a create-once needle + roster scaffold · composition-surface managed-section regeneration across **all 19** manifest entries (only drifted entries are rewritten; OPERATOR ADDITIONS are preserved) · a full skill redeploy via `deploy.sh --deploy` · a security-hook bundle refresh across **all 22** hooks plus the co-shipped primitives, installing any hook that is missing · a `.version` snapshot refresh · a `.last-update` state write.
+
+**The two denominators — 19 composition surfaces and 22 security hooks — are stable; how many actually change on your instance is state-dependent. Run `./update.sh --dry-run` for the current magnitudes.** A full update is **not** a drop-in substitute for a targeted refresh: when all you need is to bring one composition surface current, use `./update.sh --surfaces-only`, which touches nothing else.
+
+**`core/deploy/deploy.sh --deploy` cannot refresh a composition surface.** It reads three change sets — skills, packages, and harness artifacts — and never sources the composition-surface manifest, so it exits 0 reporting that there is nothing to deploy while leaving a stale allowlist exactly as it was. If a document, issue, or runbook tells you to run `deploy.sh --deploy` to refresh an allowlist or other composition surface, that instruction is wrong; use `./update.sh --surfaces-only` (targeted) or a full `./update.sh` instead.
+
+### 3.6 Re-home the PreToolUse hook wiring (one-time, operator-executed)
+
+**`update.sh` does not do this for you, and neither does any other flow. If you never run it, the security hooks do not load for repo- or worktree-rooted sessions — or for the subagents those sessions spawn.**
+
+The hooks `update.sh` installs are loaded **only** by sessions whose project root resolves to your workspace root. A session started inside the platform repo, inside a git worktree, or anywhere else outside the workspace project root resolves **no** settings file carrying a hooks key, and therefore **loads no hooks at all**. A subagent inherits whatever its parent session loaded, so it inherits nothing too. This is why a script allowlist can be complete and still not govern the path your automation actually runs on.
+
+Re-homing the `PreToolUse` object into your **user-scope** settings file puts the wiring on every session's resolution path regardless of project root:
+
+```bash
+bash ~/Claude/pmo-platform/docs/scripts/setup-workspace.sh --rehome-hook-wiring
+```
+
+Preview first with `--dry-run` on the same command.
+
+**Order this AFTER reconciling your script allowlist.** The command turns enforcement **on** for sessions that previously had none, so any gap between the paths your tooling invokes and the entries in the allowlist becomes a live block rather than a latent one. Bring the allowlist current first (§ 3.5, `./update.sh --surfaces-only`), then re-home.
+
+**What it does and does not touch.** It merges the `PreToolUse` object **only** — never `SessionStart`, never `Stop`, never any non-hooks key — and preserves every unrelated key already in the target file. It backs the target up before writing and is idempotent, so re-running it is safe. Coverage stays bounded to your governed workspace root by a scope guard: a session rooted outside that root is still excluded by design.
+
+**Why it is a separate operator act rather than part of `update.sh`.** It writes **outside** the workspace root, which every other flow is forbidden to do, and it changes live enforcement state. Merging a release must not, by itself, alter what is enforced on your machine.
+
+**Reversibility: CHEAP.** Delete the `PreToolUse` key from your user-scope settings file, or restore the backup the command wrote beside it, and the prior posture returns immediately.
 
 ---
 

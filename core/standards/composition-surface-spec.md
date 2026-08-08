@@ -156,6 +156,8 @@ This protects against silent corruption from manual edits without blocking updat
 
 ### §3.2 Update (`./update.sh`)
 
+Two invocation paths regenerate composition surfaces, and they differ only in what else they do. A full `./update.sh` runs the whole update sequence, of which managed-section regeneration is one phase. `./update.sh --surfaces-only` runs the targeted path — pre-flight, schema migration, the instance backup, and managed-section regeneration, and nothing further: no skill redeploy, no security-hook refresh, no `.version` restamp, and no `.last-update` write. The regeneration semantics below are identical on both paths, because both call the same routine; the targeted path exists so a single stale surface can be brought current without the full sequence's blast radius. **`core/deploy/deploy.sh --deploy` is not a third path — it never sources the composition-surface manifest and cannot write a composition surface at all.**
+
 `update.sh` regenerates composition-surface files by:
 
 1. For each file declared in the COMPOSITION_SURFACE_FILES manifest:

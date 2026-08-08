@@ -115,9 +115,10 @@ readonly STATE_FILE_NAME=".workspace-setup.state"
 readonly STATE_SCHEMA_VERSION="1.0"
 readonly OPERATOR_TOML_PATH="${HOME}/.config/pmo-platform/operator.toml"
 
-# Mode A check count (10) is the upper bound; --mode operator-pre-existing
-# runs a subset that drops state-marker (A4) and operator.toml (A10).
-readonly MODE_A_TOTAL=10
+# Mode A check count (11) is the upper bound; --mode operator-pre-existing
+# runs a subset that drops state-marker (A4) and operator.toml (A10). A6b
+# (hook-wiring re-home posture, #4436) runs in BOTH sub-modes.
+readonly MODE_A_TOTAL=11
 readonly MODE_B_TOTAL=4
 
 # --- Section 3: Mutable state (scalars only; bash-3.2-compatible) ---
@@ -678,6 +679,77 @@ else:
   esac
 }
 
+# A6b — hook-wiring re-home posture (#4436).
+#
+# The workspace-project settings.json checked above is loaded ONLY by sessions whose
+# project root resolves to the workspace root. Sessions rooted in the repo or a worktree
+# — and every subagent they spawn — resolve no settings file carrying a hooks key and so
+# load NO hooks at all. `setup-workspace.sh --rehome-hook-wiring` merges the PreToolUse
+# object into the user-scope surface to close that.
+#
+# This check is deliberately NOT a FAIL when the re-home is absent. The re-home is an
+# operator act ordered after script-allowlist reconciliation, and it writes outside the
+# workspace root — an install is legitimately complete without it. What IS a FAIL is a
+# re-home that is PRESENT but references commands that do not exist or are not
+# executable: that is a wired control which can never fire, i.e. a silent enforcement
+# hole, and it is exactly the failure mode a partial install produces once the wiring is
+# live. Reporting coverage rather than asserting it is the point of the check.
+check_a6b_hook_wiring_rehome() {
+  local user_settings="${PMO_USER_SETTINGS_FILE:-${HOME}/.claude/settings.json}"
+
+  if [ ! -f "${user_settings}" ]; then
+    emit_pass "A6b" "INSTALL-HOOK-WIRING-REHOME" \
+      "not re-homed (no user-scope settings file) — repo/worktree-rooted sessions load NO hooks; run 'setup-workspace.sh --rehome-hook-wiring' after reconciling the script allowlist" "A"
+    return
+  fi
+
+  local probe
+  probe="$(python3 -c '
+import json, os, sys
+try:
+    with open(sys.argv[1]) as f:
+        data = json.load(f)
+except Exception as e:
+    print("INVALID|{}".format(e)); sys.exit(0)
+pre = data.get("hooks", {}).get("PreToolUse", []) if isinstance(data, dict) else []
+if not pre:
+    print("ABSENT|0|0"); sys.exit(0)
+cmds = [h.get("command", "") for g in pre for h in g.get("hooks", [])]
+bad = [c for c in cmds if not (os.path.exists(c) and os.access(c, os.X_OK))]
+print("PRESENT|{}|{}|{}".format(len(cmds), len(bad), ",".join(sorted(set(bad))[:3])))
+' "${user_settings}" 2>/dev/null)"
+
+  case "${probe}" in
+    INVALID*)
+      emit_fail "A6b" "INSTALL-HOOK-WIRING-REHOME" \
+        "user-scope settings file is not valid JSON: ${user_settings}" \
+        "repair or restore ${user_settings}.pmo-bak; a corrupt user-scope settings file can break every session" "A"
+      ;;
+    ABSENT*)
+      emit_pass "A6b" "INSTALL-HOOK-WIRING-REHOME" \
+        "not re-homed (user-scope settings file declares no PreToolUse hooks) — repo/worktree-rooted sessions load NO hooks; run 'setup-workspace.sh --rehome-hook-wiring' after reconciling the script allowlist" "A"
+      ;;
+    PRESENT*)
+      local total bad_count bad_sample
+      total="$(printf '%s' "${probe}" | cut -d'|' -f2)"
+      bad_count="$(printf '%s' "${probe}" | cut -d'|' -f3)"
+      bad_sample="$(printf '%s' "${probe}" | cut -d'|' -f4)"
+      if [ "${bad_count}" -gt 0 ]; then
+        emit_fail "A6b" "INSTALL-HOOK-WIRING-REHOME" \
+          "re-homed wiring references ${bad_count} of ${total} command(s) that do not exist or are not executable (e.g. ${bad_sample})" \
+          "run 'setup-workspace.sh --refresh-hooks' then re-run '--rehome-hook-wiring'; a wired hook that cannot execute is a silent enforcement hole" "A"
+      else
+        emit_pass "A6b" "INSTALL-HOOK-WIRING-REHOME" \
+          "re-homed; ${total}/${total} wired PreToolUse commands exist and are executable" "A"
+      fi
+      ;;
+    *)
+      emit_pass "A6b" "INSTALL-HOOK-WIRING-REHOME" \
+        "indeterminate (probe returned no verdict) — treated as not re-homed" "A"
+      ;;
+  esac
+}
+
 check_a7_source_repo() {
   if ! assert_dir_exists "${SOURCE_REPO}/core"; then
     emit_fail "A7" "INSTALL-SOURCE-REPO" "core/ missing in source repo: ${SOURCE_REPO}" \
@@ -811,6 +883,7 @@ mode_a_install_verify() {
   check_a4_state_marker
   check_a5_claude_md
   check_a6_settings_json
+  check_a6b_hook_wiring_rehome
   check_a7_source_repo
   check_a8_deploy_check
   check_a9_skill_roster
@@ -827,6 +900,7 @@ mode_a_operator_pre_existing() {
   emit_skip "A4" "INSTALL-STATE-MARKER" "operator-pre-existing mode (state marker not expected)" "A"
   check_a5_claude_md
   check_a6_settings_json
+  check_a6b_hook_wiring_rehome
   check_a7_source_repo
   check_a8_deploy_check
   check_a9_skill_roster
