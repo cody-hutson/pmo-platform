@@ -505,3 +505,48 @@ Every codified Phase step in `release/references/pipeline/stage-04-planning.md` 
 | **Phase B** operator approve/modify/split/hold | **PENDING** — this is the operator's gate; 6 D-decisions surfaced, 4 scope findings raised |
 
 **Note on issue closure phrasing:** all three cards are to be **marked as closed at Stage 13**; no close-family verb is paired with an issue reference anywhere in this plan, so transcription into a PR body cannot trip GitHub's auto-close parser.
+
+---
+
+## Change Description
+
+### Outcome
+
+The tooling surface stops failing silently. Three defects sharing one failure class are removed: `extract-usage.sh --incremental` no longer destroys session records behind a swallowed error; the SIGPIPE-prone `writer | grep -q` / `| head` idiom is converted across the pinned install-regression surface and held closed by a new enforcing CI gate; and six committed-but-unwired test suites now execute on every relevant PR. The unifying property in each case was a check or tool that had stopped doing its job while its output stayed indistinguishable from success.
+
+### Issues resolved
+
+| # | Outcome | Status |
+|---|---|---|
+| #4188 | `extract-usage.sh --incremental` is fail-closed: a carry-forward error now surfaces as exit 3 with the store intact, where it previously destroyed every record it did not re-extract and exited 0 silently. `--self-test` reaches the carry-forward branch it used to step over, and is provably able to fail. | DONE |
+| #3832 | 101 `writer \| grep -q` and 36 `\| head` sites converted across the 34-file set pinned at `37f68a2b`, with 9 sites retained under a documented rationale. A new enforcing `repo-integrity.yml` gate, anchored on the **reader** rather than a writer allowlist, fails the build on any newly introduced site. | DONE |
+| #3936 | All six suites reported unwired by `check-selftest-coverage.py` Arm D are now invoked as named CI steps — five in `closeout-smoke`, the sixth in `install-tests.yml` / `shell-tests` where its trigger actually covers its subject. Arm D reports `ARM D PASSED` at 14/0. | DONE |
+
+### Key decisions
+
+- **D-C Branch topology = SINGLE** — within-release file contention was empty at plan time, so per-issue isolation bought nothing while adding merge orderings against a live sibling PR. Commit order enforces the `#3832 → #3936` edge for free.
+- **D-Concurrency = P0 fully-serial** — SINGLE is P0 by construction; force-push prohibited on the shared branch.
+- **D-ReleaseClass = `novel`** (re-rendered from `routine` at the Stage-4 gate) — `size:L` present and two substantive new D-decisions, so two `routine` triggers were affirmatively falsified.
+- **D-ScopeBoundary (i) = wire all six Arm-D suites**, not the five in `release/tools/tests/`, so the governed detector becomes the card's verification method rather than a hand-rolled sweep.
+- **D-ScopeBoundary (ii) = pin the AC to the 34-file set at `37f68a2b` and ship a durable CI guard.** A repo-wide criterion was ungradable: the population moved 49 % in two days.
+- **D-G = hold the pin** at `37f68a2b` when mainline advanced mid-flight; the divergence was additive, and post-baseline sites are the later merger's obligation.
+- **AC reading = broad** ("any stdout writer"), rendered at the Stage-7 findings gate. This is what exposed the true 101-site population behind a 25-site measurement.
+- **D-Version** was rule-determined four times as sibling releases claimed slots ahead of this one (`v4.16` → `v4.17` → `v4.18` → `v4.19`); it stays provisional and binds only at the Stage-12 atomic claim.
+
+### Reversibility
+
+**MODERATE / HIGH** — the entire release is one branch, one PR, one merge; `git revert` on the merge commit restores the prior tooling surface cleanly. The one asymmetry is the new enforcing gate: reverting it stops future enforcement but leaves the converted sites correct, so a partial revert degrades safely rather than breaking anything.
+
+### Downstream impact
+
+- The new `repo-integrity.yml` gate requires **branch-protection registration** to become a required check. Until registered it runs and blocks nothing — tracked as a hard blocker on release close.
+- The gate's detector names **two residual arms it cannot catch** (a `#` before the pipe, which fails closed; and a double-quoted needle containing a `-q` token, resolved by a marker). Both are recorded in the gate-coverage register rather than left implicit.
+- **`ARM D PASSED` is not sufficient on its own** as a verification method — a workflow that mentions a suite without invoking it can satisfy it. Runner step conclusions plus assertion output are what settle invocation. Tightening that predicate belongs with the `--self-test` discovery work in a sibling milestone.
+- One newly wired suite (`test-status-label-invariant.sh`) executes but asserts nothing about its own subject; it is filed as separate work rather than repaired here, because fixing the mirror is design work outside this card's wiring scope.
+- **On this platform's CI the SIGPIPE signature is `rc=1`, not `rc=141`** — the runner inherits `SIG_IGN`. Corpus claims naming 141 as *the* signature were reconciled in this release.
+
+### Cross-references
+
+- Release plan: the top of this file.
+- Milestone: `ci-wiring-and-flake-elimination` (GitHub milestone 309).
+- User-facing release notes: `release/releases/notes/<version>_RELEASE_NOTES.md`, authored at Stage 13 Close.
