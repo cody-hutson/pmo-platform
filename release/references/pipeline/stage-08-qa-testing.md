@@ -40,6 +40,34 @@ Set at Stage 8: per-criterion verdict, acceptance score, Stage 7 escape count, o
 ## 5. Process
 **Phase A — Entry Validation (Tier 1):** 4 steps — verify Stage 7 verdict (PASS or CONDITIONAL PASS required), PR still mergeable, quality report present with conformant Handoff Payload (per [DT↔QA Handoff Protocol §Forward Handoff](stage-07-dev-testing.md#dtqa-handoff-protocol)), all AC extractable from issues. Missing or malformed Handoff Payload → post [ADJUST] signal per the inter-stage feedback protocol Tier 1; DT amends in-place (no full re-review required for format-only corrections).
 
+#### Required-gate spot-check (advisory, informational — never an acceptance verdict)
+
+Phase A already reads whether the PR is still mergeable. This sub-block adds the
+adjacent read that the mergeability read alone does not surface: the verdicts of the
+required branch-protection checks on the current PR head. Stage 8 does not
+re-implement their detection — it consumes their own results, the same
+evidence-consumption posture this stage takes toward the Stage-7 runtime suites.
+
+Read every required row with `gh pr checks <PR> --required --json name,state,bucket,link`;
+in this `--json` form the command exits **0** even when a required row is failing or
+pending — the exit code signals only an unresolvable PR or an authentication failure —
+so branch on the parsed rows and never on the exit code.
+The `Issue-reference validity gate` is the worked example: the two classes it enforces
+are a bare `#N`-form issue reference placed outside a designated reference block with no
+inline provenance marker, and a deprecated `IMP-NNN` reference. A `bucket` of `fail` on
+any required row is recorded in the Acceptance Report as an informational finding naming
+that gate — and, for the issue-reference gate, both classes — following the row link for
+file-and-line detail; a `bucket` of `pending`, `cancel`, or `skipping`, a missing row, or
+a failed read is recorded as NOT clean rather than passed over.
+
+**This spot-check renders no per-criterion verdict and gates nothing.** It produces no
+MET / NOT MET / PARTIAL, does not key the Step-0 precedence gate, and does not route a
+lane. Branch protection on the default branch is the authoritative gate for every
+required check; this read exists so a red required gate is visible at acceptance
+rather than first surfacing at the merge attempt.
+
+**Cutover discipline:** Applies to all releases going forward.
+
 **Phase B — Acceptance Review (Tier 2 Recommend):** 4 steps — extract AC per issue, evaluate each criterion against PR content (LLM-graded), classify findings, render per-issue verdict. Decision card format for each finding:
 
 ```
