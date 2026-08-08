@@ -59,7 +59,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-117](ADR-117-adr-index-derived-surface-and-scoped-conformance-claim.md) | The ADR index is a derived surface and cannot drift; the conformance claim is scoped to a named baseline and its residual is stated | Accepted | 2026-08-04 | adr-corpus-conformance |
 | [ADR-119](ADR-119-selftest-coverage-is-discovered-with-a-committed-manifest-floor.md) | Self-test coverage is discovered against a declared scope, floored by a committed manifest, and gated by a thin caller over a committed engine | Accepted | 2026-08-05 | ci-selftest-and-check-hardening |
 | [ADR-123](ADR-123-epic-rollup-close-is-an-audit-not-a-gate.md) | The epic rollup-close surface is an audit, not a gate, and its two undecidable gates are annotated rather than adjudicated | Proposed | 2026-08-07 | methodology-fields-and-statuses |
-| [ADR-128](ADR-128-version-tags-are-retained-not-reaped.md) | Version tags are retained, not reaped: the retention rule is homed beside the branch-deletion rule, and the recovery tool reads host policy rather than assuming it | Proposed | 2026-08-06 | hub-spoke-execution-safety |
+| [ADR-128](ADR-128-version-tags-are-retained-not-reaped.md) | Version tags are retained, not reaped: the retention rule is homed beside the branch-deletion rule, and the recovery tool reads host policy rather than assuming it | Accepted | 2026-08-06 | hub-spoke-execution-safety |
 | [ADR-129](ADR-129-close-class-is-a-declared-deliverable-value-conditioning-one-gate-spec.md) | The close class is a declared deliverable-type value that conditions one gate spec, never a parallel close path | Proposed | 2026-08-07 | 58-task-artifact-lifecycle-and-knowledge |
 <!-- ADR-INDEX:END -->
 
