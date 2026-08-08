@@ -75,13 +75,15 @@ lib_compose_extract() {
 }
 
 # Write a managed file with provided preserved-additions content.
-# Usage: lib_compose_write <source> <target> <tokens-flag> <operator-toml> [<override-toml> [<preserved-file>]]
+# Usage: lib_compose_write <source> <target> <tokens-flag> <operator-toml> [<override-toml> [<preserved-file> [<dialect>]]]
 #   tokens-flag: "tokens" | "raw"
 #   preserved-file: optional path to file containing OPERATOR ADDITIONS content
 #                   (if omitted or empty, the primitive uses the default placeholder comment)
+#   dialect: optional marker dialect ("plain" | "markdown"); omitted/empty → "plain"
+#            (ADR-122). Trailing-optional so existing 4-6 arg callers are unchanged.
 lib_compose_write() {
   local source="$1" target="$2" tokens_flag="$3" operator_toml="$4"
-  local override_toml="${5:-}" preserved_file="${6:-}"
+  local override_toml="${5:-}" preserved_file="${6:-}" dialect="${7:-}"
   local source_sha; source_sha=$(lib_compose_sha_compute "${source}") || return 1
 
   local args=(
@@ -98,16 +100,21 @@ lib_compose_write() {
   if [ -n "${preserved_file}" ]; then
     args+=(--preserved-additions-file "${preserved_file}")
   fi
+  if [ -n "${dialect}" ]; then
+    args+=(--dialect "${dialect}")
+  fi
 
   python3 "${LIB_COMPOSE_PY}" "${args[@]}"
 }
 
 # Regenerate a target file in one shot: extract current OPERATOR ADDITIONS,
 # then write the target with managed-section refreshed and additions preserved.
-# Usage: lib_compose_regen <source> <target> <tokens-flag> <operator-toml> [<override-toml>]
+# Usage: lib_compose_regen <source> <target> <tokens-flag> <operator-toml> [<override-toml> [<dialect>]]
+#   dialect: optional marker dialect ("plain" | "markdown"); omitted/empty → "plain"
+#            (ADR-122). Trailing-optional so existing 4-5 arg callers are unchanged.
 lib_compose_regen() {
   local source="$1" target="$2" tokens_flag="$3" operator_toml="$4"
-  local override_toml="${5:-}"
+  local override_toml="${5:-}" dialect="${6:-}"
   local source_sha; source_sha=$(lib_compose_sha_compute "${source}") || return 1
 
   local args=(
@@ -120,6 +127,9 @@ lib_compose_regen() {
   )
   if [ -n "${override_toml}" ]; then
     args+=(--override-toml "${override_toml}")
+  fi
+  if [ -n "${dialect}" ]; then
+    args+=(--dialect "${dialect}")
   fi
 
   python3 "${LIB_COMPOSE_PY}" "${args[@]}"
@@ -174,24 +184,38 @@ lib_compose_assert_manifest_loaded() {
   fi
 }
 
-# Parse a manifest entry into its three fields by setting global vars.
-# Manifest entry format: "<src-relpath>|<tier>|<tokens-flag>"
-# Sets: LIB_COMPOSE_ENTRY_SRC, LIB_COMPOSE_ENTRY_TIER, LIB_COMPOSE_ENTRY_TOKENS_FLAG
+# Parse a manifest entry into its fields by setting global vars.
+# Manifest entry format: "<src-relpath>|<tier>|<tokens-flag>[|<dialect>]"
+# Sets: LIB_COMPOSE_ENTRY_SRC, LIB_COMPOSE_ENTRY_TIER, LIB_COMPOSE_ENTRY_TOKENS_FLAG,
+#       LIB_COMPOSE_ENTRY_DIALECT
+#
+# The 4th field (marker dialect, ADR-122) is OPTIONAL and back-compatible:
+# `awk -F'|' '{print $4}'` on a 3-field row returns empty, which this function
+# normalizes to "plain" — the pre-ADR-122 behavior — so every existing row is
+# unchanged and needs no rewrite.
 # Usage: lib_compose_parse_entry "<entry>"
 lib_compose_parse_entry() {
   local entry="$1"
   LIB_COMPOSE_ENTRY_SRC=$(printf '%s' "${entry}" | awk -F'|' '{print $1}')
   LIB_COMPOSE_ENTRY_TIER=$(printf '%s' "${entry}" | awk -F'|' '{print $2}')
   LIB_COMPOSE_ENTRY_TOKENS_FLAG=$(printf '%s' "${entry}" | awk -F'|' '{print $3}')
+  LIB_COMPOSE_ENTRY_DIALECT=$(printf '%s' "${entry}" | awk -F'|' '{print $4}')
+  if [ -z "${LIB_COMPOSE_ENTRY_DIALECT}" ]; then
+    LIB_COMPOSE_ENTRY_DIALECT="plain"
+  fi
 }
 
 # Resolve a manifest entry's runtime target path given the workspace root.
 # Usage: lib_compose_resolve_target <basename> <tier> <workspace-root>
-#   tier: "hook"      → <workspace-root>/.claude/<basename>
-#         "instance"  → <instance-base>/<basename>
-#         "hub-state" → <instance-base>/hub-state/<basename>
-#                       (resolves <OPERATOR_INSTANCE_HUB_STATE_PATH> per
-#                        core/standards/depersonalization-spec.md §4)
+#   tier: "hook"           → <workspace-root>/.claude/<basename>
+#         "instance"       → <instance-base>/<basename>
+#         "hub-state"      → <instance-base>/hub-state/<basename>
+#                            (resolves <OPERATOR_INSTANCE_HUB_STATE_PATH> per
+#                             core/standards/depersonalization-spec.md §4)
+#         "workspace-root" → <workspace-root>/<basename minus a trailing .template>
+#                            (ADR-122; the only tier that strips a suffix, because
+#                             the workspace-root target is the operator-facing file
+#                             itself — <ws>/CLAUDE.md, not <ws>/CLAUDE.md.template)
 #   <instance-base> = pmo_instance_path_for <workspace-root> — the
 #                     PMO_INSTANCE_PATH override when set, else the instance leaf
 #                     under <workspace-root> (#1830; resolver-owned leaf).
@@ -209,6 +233,12 @@ lib_compose_resolve_target() {
     hook)      printf '%s/.claude/%s\n' "${workspace_root}" "${basename}" ;;
     instance)  printf '%s/%s\n' "${instance_base}" "${basename}" ;;
     hub-state) printf '%s/hub-state/%s\n' "${instance_base}" "${basename}" ;;
+    workspace-root)
+      # Strip a trailing ".template" so core/CLAUDE.md.template targets
+      # <ws>/CLAUDE.md. Suffix-strip precedent: the install script's mode-template
+      # installer (".mode.template" -> ".mode"). A basename with no .template
+      # suffix passes through unchanged.
+      printf '%s/%s\n' "${workspace_root}" "${basename%.template}" ;;
     *)
       lib_compose_log_err "Unknown tier '${tier}' for basename '${basename}'"
       return 1

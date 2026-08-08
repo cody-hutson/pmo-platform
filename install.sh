@@ -12,7 +12,8 @@
 # (install.sh now lives at repo root next to update.sh).
 #
 # Usage:
-#   ./install.sh [--dry-run] [--init-only-state] [<options-forwarded-to-setup>]
+#   ./install.sh [--dry-run] [--init-only-state] [--non-interactive]
+#                [<options-forwarded-to-setup>]
 #
 # Bash version: 3.2.57-safe.
 
@@ -48,6 +49,10 @@ Options:
                         skill deployment is skipped under dry-run.
   --init-only-state     Verify artifacts empirically without performing
                         install operations (forwarded to setup-workspace.sh).
+  --non-interactive     Resolve every token from its declared default and never
+                        read stdin (forwarded to setup-workspace.sh). A required
+                        token with no available default fails with a non-zero
+                        exit naming the token; no value is silently substituted.
   --workspace-root PATH Workspace destination (default: ${HOME}/Claude).
                         Forwarded to setup-workspace.sh, AND used as the
                         deploy-target root for Phase 2 (skills land under

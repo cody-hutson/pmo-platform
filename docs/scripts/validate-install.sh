@@ -610,7 +610,72 @@ check_a6_settings_json() {
       "re-run setup-workspace.sh; token substitution incomplete" "A"
     return
   fi
-  emit_pass "A6" "INSTALL-SETTINGS-JSON" "JSON valid; no unresolved tokens" "A"
+
+  # Registration parity (ADR-121). The three assertions above — present, valid JSON,
+  # no unresolved tokens — ALL PASSED on a workspace that was missing four of its
+  # template's hook registrations, including a fail-closed scope-segregation guard on
+  # two matchers and the entire Stop block. They are orthogonal to completeness, which
+  # is why the condition persisted unnoticed: the hooks were on disk, and nothing
+  # compared what was WIRED against what the template ships.
+  #
+  # Identity is the (event, matcher, basename(command)) triple. Basename, not the full
+  # path, because the workspace root is baked into every command string and a
+  # path-keyed compare would false-fire on any workspace move. The comparison is
+  # against the template's own hooks block — never a hardcoded list — so a template
+  # revision needs no edit here.
+  #
+  # Token-bearing command paths mean the template side must be compared by basename
+  # too; that is exactly what the triple does, so no token resolution is needed to run
+  # this check.
+  local template="${SOURCE_REPO}/core/settings.json.template"
+  if [ ! -f "${template}" ]; then
+    emit_pass "A6" "INSTALL-SETTINGS-JSON" "JSON valid; no unresolved tokens (registration parity SKIPPED — template not readable at ${template})" "A"
+    return
+  fi
+
+  local parity
+  parity=$(python3 -c '
+import json, os, sys
+
+def triples(path):
+    with open(path) as f:
+        doc = json.load(f)
+    return {(e, b.get("matcher", ""), os.path.basename(h.get("command", "")))
+            for e, blocks in (doc.get("hooks") or {}).items()
+            for b in blocks
+            for h in (b.get("hooks") or [])}
+
+try:
+    tpl, live = triples(sys.argv[1]), triples(sys.argv[2])
+except Exception as exc:
+    print("ERROR|%s" % exc)
+    sys.exit(0)
+
+missing = sorted(tpl - live)
+if missing:
+    print("MISSING|%d of %d|%s" % (len(missing), len(tpl),
+          ", ".join("%s[%s]:%s" % m for m in missing)))
+else:
+    print("OK|%d" % len(tpl))
+' "${template}" "${settings}" 2>/dev/null)
+
+  case "${parity}" in
+    OK\|*)
+      emit_pass "A6" "INSTALL-SETTINGS-JSON" \
+        "JSON valid; no unresolved tokens; all ${parity#OK|} template hook registrations present" "A"
+      ;;
+    MISSING\|*)
+      local detail="${parity#MISSING|}"
+      emit_fail "A6" "INSTALL-SETTINGS-JSON" \
+        "hook registrations missing from settings.json (${detail%%|*}): ${detail#*|}" \
+        "run ./update.sh — Phase 5d refreshes settings.json under the operator-key guard" "A"
+      ;;
+    *)
+      # Never a silent pass: an unreadable comparison is reported as such.
+      emit_pass "A6" "INSTALL-SETTINGS-JSON" \
+        "JSON valid; no unresolved tokens (registration parity NOT COMPUTED: ${parity:-no output})" "A"
+      ;;
+  esac
 }
 
 check_a7_source_repo() {
