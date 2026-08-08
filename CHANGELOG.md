@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.16] - 2026-08-08
+
+The delivery-status labels the platform had only declared on paper now exist for real, and the pipeline applies one of them when engineering starts.
+
+[Full notes](release/releases/notes/v4.16_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.16)
+
 ## [v4.15] - 2026-08-08
 
 Installing and updating the platform no longer discards the settings you already chose, and a fresh install can run unattended.
