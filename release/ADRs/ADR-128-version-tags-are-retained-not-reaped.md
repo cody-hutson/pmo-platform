@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-128 — Version tags are retained, not reaped: the retention rule is homed beside the branch-deletion rule, and the recovery tool reads host policy rather than assuming it"
-status: Accepted — ratified at the `hub-spoke-execution-safety` release close gate on 2026-08-08, when the operator executed the three enforcement preconditions and milestone #301 transitioned to closed (2026-08-08T17:48:12Z). Authored at Stage 6 Engineering. Ratification is recorded here because this file's `status:` field is the authority; it is never inferred from milestone closure.
+status: Accepted — ratified at the `hub-spoke-execution-safety` release close gate on 2026-08-08, when the operator executed the three enforcement preconditions and the release milestone transitioned to closed. Authored at Stage 6 Engineering. Ratification is recorded here because this file's `status:` field is the authority; it is never inferred from milestone closure.
 date: 2026-08-06
 release: hub-spoke-execution-safety
 deciders: "Workspace owner — ratified at this release's close gate on 2026-08-08; the premise inversion was rendered at the Stage-4 planning gate, the placement and reaper-shape decisions were designed at Stage 5 Solutioning, adversarially reviewed at Phase A6.5, and authored at Stage 6"
@@ -20,7 +20,7 @@ source_observations:
 
 ## Status
 
-**Accepted** — authored at Stage 6 Engineering for the `hub-spoke-execution-safety` release, per the Stage-6 ADR-authoring precedent. It was ratified at that release's close gate on 2026-08-08, when the operator executed the three enforcement preconditions and milestone #301 transitioned to closed; the release shipped as **v4.18**. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
+**Accepted** — authored at Stage 6 Engineering for the `hub-spoke-execution-safety` release, per the Stage-6 ADR-authoring precedent. It was ratified at that release's close gate on 2026-08-08, when the operator executed the three enforcement preconditions and the release milestone transitioned to closed; the release shipped as **v4.18**. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
 
 **Numbering.** Allocated as the next free slot over the union of both ADR directories, which are a single numbering space, verified with the corpus checker and cross-checked against every branch on the remote rather than by reading the highest filename. The number is allocated at authorship and bound at merge; if a sibling merges ahead of this record, the reconciliation is tooled and this Status block will carry the provenance note.
 
