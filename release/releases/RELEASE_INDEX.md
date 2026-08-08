@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.15 | 96-update-install-config-safety | 2026-08-07 | — | #4985 | [notes/v4.15_RELEASE_NOTES.md](notes/v4.15_RELEASE_NOTES.md) |
 | v4.14 | release-check-enforcement-gates | 2026-08-07 | — | #4932 | [notes/v4.14_RELEASE_NOTES.md](notes/v4.14_RELEASE_NOTES.md) |
 | v4.13 | ci-selftest-and-check-hardening | 2026-08-06 | — | #4897 | [notes/v4.13_RELEASE_NOTES.md](notes/v4.13_RELEASE_NOTES.md) |
 | v4.12 | release-notes-and-learnings | 2026-08-05 | — | #4769 | [notes/v4.12_RELEASE_NOTES.md](notes/v4.12_RELEASE_NOTES.md) |

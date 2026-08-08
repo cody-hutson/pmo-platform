@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.15 (2026-08-08) — Install and update stop losing the settings you already chose
+
 ### v4.14 (2026-08-07) — The gates now measure what they claim, and reach only the right work
 
 ### v4.13 (2026-08-07) — The checks the platform promises now actually run
