@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-123 — Domain is a parameter of the architect role, exactly as altitude is
+title: ADR-127 — Domain is a parameter of the architect role, exactly as altitude is
 status: Proposed
 date: 2026-08-06
 release: 102-specialist-role-coverage
@@ -15,7 +15,7 @@ source_observations:
   - "The shipped architect description already claims cross-component, middleware, and data architecture, so the data domain was inside the incumbent's declared scope before any data-architect proposal was filed. This is corroboration only. The axis rule is NOT rested on that wording, because a description claim is not itself a capability."
 ---
 
-# ADR-123 — Domain is a parameter of the architect role, exactly as altitude is
+# ADR-127 — Domain is a parameter of the architect role, exactly as altitude is
 
 ## Status
 
@@ -26,6 +26,8 @@ source_observations:
 **Numbering provenance — `120 → 121`.** Held **ADR-120** branch-local; renumbered to **ADR-121** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 120. In-release citations that read "ADR-120" denote this record.
 
 **Numbering provenance — `121 → 123`.** Held **ADR-121** branch-local; renumbered to **ADR-123** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 121. In-release citations that read "ADR-121" denote this record.
+
+**Numbering provenance — `123 → 127`.** Held **ADR-123** branch-local; renumbered to **ADR-127** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 123. In-release citations that read "ADR-123" denote this record.
 
 ## Context
 
