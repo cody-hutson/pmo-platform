@@ -1591,8 +1591,11 @@ jobs:
               if [ -z "$MATCHED" ] && [ "$LN" -gt 1 ] 2>/dev/null; then
                 if grep -qE "$IDIOM_Q" <<<" | ${line}" || grep -qE "$IDIOM_H" <<<" | ${line}"; then
                   PREVJ="$(sed -n "$((LN - 1))p" "$f" 2>/dev/null || true)"
+                  # Double-quoted patterns: `"\\"` is one literal backslash and
+                  # reads unambiguously to shellcheck, where `'\'` trips SC1003.
+                  # Equivalence asserted against all four inputs before the swap.
                   case "$PREVJ" in
-                    *'|'|*'\') MATCHED="writer | reader (continued pipeline)" ;;
+                    *"|"|*"\\") MATCHED="writer | reader (continued pipeline)" ;;
                     *) : ;;
                   esac
                 fi
