@@ -314,6 +314,13 @@ jobs:
         # Offline + deterministic (mktemp fixtures scanned via --root; no network).
         # Without this step, ZERO CI reference blast-radius — the tool could rot
         # unexercised. Requires jq (present on the macOS runner via /usr/bin/jq).
+        #
+        # SIBLING STEP: this one covers the DEFAULT (doc-reference) and DOMAIN
+        # (software import-graph) modes only. The tracer's STRUCTURAL mode
+        # (--mode=structural, the path-move consumer class both other modes are blind
+        # to) is covered by "Structural blast-radius mode …" further down this job,
+        # in a step of its own so a failure stays attributable to one suite. A reader
+        # of either step finds the other here.
         run: bash release/tools/tests/test_domain_blast_radius.sh
 
       - name: ADR deciders carve-out — two-gate agreement suite
@@ -546,6 +553,206 @@ jobs:
         # checkout. PMO_PLATFORM_CONFIG_ROOT is pinned per fixture, so the operator's
         # real ~/.config is never read. Gates on exit code.
         run: bash release/tools/tests/test_platform_toggle.sh
+
+      # ----------------------------------------------------------------------------
+      # release/tools/tests/ — the remaining committed suites, one step per suite.
+      #
+      # These suites were committed and green, and NO runner reached any of them.
+      # A suite nothing exercises is indistinguishable in the artifact from a passing
+      # one, which is the same failure the precision-probe steps above exist to rule
+      # out. (A sixth suite in the same class, core/deploy/tools/tests/
+      # test-status-label-invariant.sh, is wired in install-tests.yml instead — its
+      # subject is deploy.sh, which THIS workflow's paths: filter does not list.)
+      #
+      # ONE STEP PER SUITE, deliberately. A single grouped `run:` block would stop at
+      # the first failure under `set -e` (leaving the remaining suites unrun on that
+      # attempt) and would collapse independent signals into one red step named for
+      # the group. Per-step invocation keeps GitHub's step-level annotation — the unit
+      # the job summary, Dev Testing and Plan Review actually read — attributable to
+      # the one suite that broke. The cost of doing it this way is negligible: all six
+      # newly-wired suites together run in under 4 s, measured locally at the wiring
+      # commit. Every existing step in this workflow follows the same one-script shape.
+      #
+      # RELATIONSHIP TO ARM D of release/tools/check-selftest-coverage.py. Arm D
+      # ANNOTATES an unwired suite: it emits a `::warning::` plus one `UNWIRED SUITE:`
+      # line per suite and returns 0 regardless, so it never fails a build and never
+      # blocks a merge. These steps are the EXECUTION layer; Arm D is only the
+      # SURVEILLANCE layer that tells a reader a suite has stopped being executed.
+      # Do not read an absent Arm D warning as a gate having passed.
+      # ----------------------------------------------------------------------------
+
+      - name: Structural blast-radius mode — fixture + real-repo path-move reproduction
+        # Invokes release/tools/tests/test_structural_blast_radius.sh (15 assertions,
+        # groups S1..S5).
+        #
+        # What rots without it: `blast-radius.sh --mode=structural` is the only tracer
+        # mode that catches a path/folder MOVE — the consumer class the default doc
+        # tracer and the domain import-graph tracer are both blind to. The suite pins
+        # that mode twice: against a committed fixture reproducing the historical
+        # notes-folder-move miss, and against the LIVE repo (containment only), so a
+        # refactor that quietly stops flagging the three real consumers of a moved
+        # corpus path fails here rather than at the next review that misses a move.
+        # It also pins the field semantics (reference_count, is_mirror, second_order)
+        # that downstream readers of the schema-v1 envelope depend on.
+        #
+        # Offline + deterministic: S1/S2/S4 scan isolated mktemp trees via --root; S3
+        # is a containment-only assertion against the checkout. No network, no gh, and
+        # no git-history recovery — `fetch-depth: 0` above is for the domain suite, not
+        # this one. Requires jq, already relied on by the domain step above.
+        #
+        # Arm D relationship: warn-only. Arm D annotates an unwired suite and exits 0;
+        # it does not gate. This step is what actually runs the suite.
+        run: bash release/tools/tests/test_structural_blast_radius.sh
+
+      - name: Precision probe — a broken assertion in the structural suite MUST fail the job
+        # Invokes a THROWAWAY COPY of release/tools/tests/test_structural_blast_radius.sh
+        # (the same suite the step above runs against the real checkout) twice — once
+        # unmutated, once with one assertion deliberately broken.
+        #
+        # Companion to the step above, and the reason wiring that suite is not
+        # decoration: it proves the suite's EXIT CODE is load-bearing. A suite that
+        # prints FAIL and still returns 0 is wired and green and asserts nothing.
+        #
+        # Two arms, both asserted, on a THROWAWAY copy — the checkout is never mutated
+        # and nothing broken is left in the tree:
+        #   CONTROL     — the unmutated copy must be GREEN inside the probe tree. Without
+        #                 this arm, a probe tree that was simply invalid would exit
+        #                 non-zero and be misread as the demonstration succeeding.
+        #   SENSITIVITY — one deliberately-broken assertion must propagate exit 1 out of
+        #                 main(), AND the failure must be attributable to THAT assertion.
+        #                 Asserting the failure REASON (not merely the code) is what stops
+        #                 a missing fixture or an absent jq from masquerading as proof.
+        #
+        # The probe tree is built rather than bare-copied because group S3 resolves
+        # REPO_ROOT from the suite's own location and asserts against three real
+        # consumers; two arrive with release/tools, the third is the single extra cp.
+        # The mutation is anchor-guarded: if the assertion moves, the probe reports that
+        # and fails, instead of silently testing nothing.
+        #
+        # Same idiom as the four other precision probes in this workflow.
+        run: |
+          set -euo pipefail
+          probe="$(mktemp -d)"; trap 'rm -rf "$probe"' EXIT
+          mkdir -p "$probe/release" "$probe/core/deploy"
+          cp -R release/tools "$probe/release/tools"
+          cp core/deploy/deploy.sh "$probe/core/deploy/deploy.sh"
+          suite="$probe/release/tools/tests/test_structural_blast_radius.sh"
+
+          # CONTROL ARM: the unmutated copy must be GREEN in the probe tree.
+          set +e; ctl="$(bash "$suite" 2>&1)"; ctl_rc=$?; set -e
+          if [ "$ctl_rc" -ne 0 ] || printf '%s' "$ctl" | grep -q 'FAIL — S4:'; then
+            echo "::error::Negative-test CONTROL arm failed (exit $ctl_rc) — the probe tree is invalid, so the sensitivity arm below would prove nothing."
+            printf '%s\n' "$ctl" | tail -20; exit 1
+          fi
+
+          # Mutate ONE assertion, guarded so a moved implementation reports rather than
+          # silently passing.
+          python3 - "$suite" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
+          old = 'if [ "$rc" = "1" ]; then ok "S4: --mode=bogus'
+          if s.count(old) != 1:
+              sys.exit("probe anchor not found exactly once (count=%d) — the probe would "
+                       "silently stop testing anything" % s.count(old))
+          p.write_text(s.replace(old, 'if [ "$rc" = "99" ]; then ok "S4: --mode=bogus'), encoding="utf-8")
+          PY
+
+          # SENSITIVITY ARM: the broken assertion must propagate exit 1 out of main().
+          set +e; out="$(bash "$suite" 2>&1)"; rc=$?; set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::Negative-test FAILED — the suite returned 0 with a deliberately-broken S4 assertion. Its exit code is not load-bearing, so wiring it is decoration."
+            printf '%s\n' "$out" | tail -20; exit 1
+          fi
+          if ! printf '%s' "$out" | grep -q 'FAIL — S4:'; then
+            echo "::error::Suite exited $rc but NOT via the broken S4 assertion — it may be failing for an unrelated reason, which would mask the property under test."
+            printf '%s\n' "$out" | tail -20; exit 1
+          fi
+          echo "Negative test OK — a broken assertion propagated exit 1 from main() (exit $rc); control arm was green."
+
+      - name: Version-less release-corpus lint — the discovery negative control
+        # Invokes release/tools/tests/test_lint_release_corpus_versionless.sh
+        # (12 assertions).
+        #
+        # What rots without it: lint_release_corpus.py has to FIND a release note that
+        # carries no version in its filename, and then has to DISCRIMINATE — flag the
+        # note missing its impact beat while leaving the compliant one alone. The suite
+        # seeds a scratch corpus with two version-less notes differing in exactly one
+        # property and asserts both directions, so a lint that silently stopped
+        # resolving version-less notes (reporting a clean corpus because it saw none)
+        # is caught. A find-nothing lint and a nothing-to-find corpus are otherwise
+        # indistinguishable in the output.
+        #
+        # The suite grades on the emitted FINDINGS, treating the exit code as a
+        # secondary signal only — and it publishes its own probe-validity line
+        # (sensitivity non-zero, specificity zero, denominator 2).
+        #
+        # Hermetic: mktemp scratch corpus, no network, no gh, no write to the checkout.
+        #
+        # Arm D relationship: warn-only. Arm D annotates an unwired suite and exits 0;
+        # it does not gate. This step is what actually runs the suite.
+        run: bash release/tools/tests/test_lint_release_corpus_versionless.sh
+
+      - name: verify-release-plan family dispatch + honesty contract
+        # Invokes release/tools/tests/test_verify_release_plan.sh (26 assertions,
+        # groups G1..G5).
+        #
+        # What rots without it: verify-release-plan.sh is the plan-verification
+        # executor whose emitted verdicts Plan Review reads read-only. Its dangerous
+        # failure mode is not crashing, it is FABRICATING — rendering PASS for a check
+        # it did not run, or swallowing a threshold miss. The suite pins the honesty
+        # contract (a threshold miss FAILs; a declared-deferred check renders SKIP, the
+        # honest no-op; a no-match runtime suite renders suite-skip), the family
+        # dispatch, the deploy-check delegation in both the drift and clean directions,
+        # the exit-code mapping, and the parser helpers with controls in both
+        # directions. Unrun, a regression here degrades the gate that every later stage
+        # trusts, silently and in the safe-looking direction.
+        #
+        # Hermetic: mktemp plan fixtures plus a stubbed deploy --check; no network,
+        # no gh, no write to the checkout.
+        #
+        # Arm D relationship: warn-only. Arm D annotates an unwired suite and exits 0;
+        # it does not gate. This step is what actually runs the suite.
+        run: bash release/tools/tests/test_verify_release_plan.sh
+
+      - name: av-verify region-scoped fixture regression
+        # Invokes release/tools/tests/test_av_verify.py (10 frozen cases).
+        # Python, not shell: the suite is stdlib-only with sys.exit(main()) at module
+        # foot, so plain `python3 <path>` gates correctly on its exit code — the same
+        # bare-invocation shape as the bundle-issues-parser step above. It advertises
+        # no --self-test, so it is outside the discovery gate by construction.
+        #
+        # What rots without it: the AV verifier decides which regions of a document
+        # count as assertable, and the fixtures pin the boundary cases that are easy to
+        # regress and hard to notice — a comment-only token, fenced markdown with an
+        # info string, indented and nested fences — plus an explicit false-PASS guard.
+        # Loosen the region scoping and the verifier starts reporting PASS over text it
+        # never actually checked, which reads exactly like a clean run.
+        #
+        # Offline + deterministic: frozen in-repo fixtures only.
+        #
+        # Arm D relationship: warn-only. Arm D annotates an unwired suite and exits 0;
+        # it does not gate. This step is what actually runs the suite.
+        run: python3 release/tools/tests/test_av_verify.py
+
+      - name: native-dep-mirror frozen-fixture regression
+        # Invokes release/tools/tests/test_native_dep_mirror.py (20 frozen cases, of
+        # which 6 also assert unattributed-reference reporting). Same bare-invocation
+        # Python shape and same discovery-scope reasoning as the step above.
+        #
+        # What rots without it: the native-dependency mirror decides which body-level
+        # `FS+0d #N` dependency claims are eligible to become native blocked-by edges,
+        # what to add, and what counts as drift. The fixtures pin the whole
+        # (eligible, to_add, drift) contract per case, including the token forms that
+        # must be REFUSED — a comma-grouped `#1,234` is not an issue id. A mirror that
+        # silently widens its token grammar writes real dependency edges from parsed
+        # noise; one that silently narrows it stops mirroring and reports nothing
+        # wrong. Both directions are only visible with the frozen fixtures running.
+        #
+        # Offline + deterministic: frozen in-repo fixtures only.
+        #
+        # Arm D relationship: warn-only. Arm D annotates an unwired suite and exits 0;
+        # it does not gate. This step is what actually runs the suite.
+        run: python3 release/tools/tests/test_native_dep_mirror.py
 
   selftest-discovery:
     name: Discovered tool self-tests (Ubuntu)
