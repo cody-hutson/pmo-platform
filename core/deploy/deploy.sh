@@ -3579,7 +3579,10 @@ cmd_check() {
   # Legacy duplicate paths — operator-instance state, not v2 source.
   # Retained for operators upgrading workspaces from older layouts.
   log "Check 3: Duplicate detection"
-  if find . -maxdepth 1 -name "Projects" -type d 2>/dev/null | grep -q .; then
+  # `find … | grep -q .` is the SIGPIPE idiom with a non-printf writer: grep exits
+  # on the first path and find takes the broken pipe. `-print -quit` asks find the
+  # same question directly — first hit, then stop — with no pipe to break.
+  if [ -n "$(find . -maxdepth 1 -name "Projects" -type d -print -quit 2>/dev/null)" ]; then
     log "  DUPLICATE: Projects/ (uppercase) still exists alongside projects/"
     ISSUES=$((ISSUES + 1))
   else
@@ -12167,7 +12170,10 @@ cmd_report() {
 
   # --- Duplicate Detection ---
   echo "--- Duplicate Detection ---"
-  if find . -maxdepth 1 -name "Projects" -type d 2>/dev/null | grep -q .; then
+  # `find … | grep -q .` is the SIGPIPE idiom with a non-printf writer: grep exits
+  # on the first path and find takes the broken pipe. `-print -quit` asks find the
+  # same question directly — first hit, then stop — with no pipe to break.
+  if [ -n "$(find . -maxdepth 1 -name "Projects" -type d -print -quit 2>/dev/null)" ]; then
     echo "[FAIL] Projects/ (uppercase) still exists"
     FAIL=$((FAIL + 1))
   else

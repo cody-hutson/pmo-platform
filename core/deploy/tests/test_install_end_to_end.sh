@@ -235,7 +235,11 @@ fi
 
 # Migration-removal regression: no workspace-config.toml anywhere in the sandbox.
 # This guards against any future code path that might re-introduce the legacy cache.
-if find "${SBX}" -name "workspace-config.toml" 2>/dev/null | grep -q .; then
+# `find … | grep -q .` over a whole sandbox install tree is the one member of this
+# class measured FIRING today: at 20,000 entries grep exits on the first path, find
+# takes the broken pipe, and this guard reports NOT-FOUND while the files exist.
+# `-print -quit` asks the same question with no pipe to break.
+if [ -n "$(find "${SBX}" -name "workspace-config.toml" -print -quit 2>/dev/null)" ]; then
   report "no legacy workspace-config.toml" 0
 else
   report "no legacy workspace-config.toml" 1

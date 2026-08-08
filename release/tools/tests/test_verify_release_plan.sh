@@ -43,18 +43,25 @@ bad() { FAIL=$((FAIL+1)); FAILURES+=("$1"); printf '  FAIL — %s\n' "$1"; }
 # verdict_of <json> <id> — pull the verdict for a given check id out of the
 # --format=json output using a portable grep/sed (no jq dependency). Isolates the
 # JSON object containing this id, then reads its verdict field.
+# Each stage reads a here-string rather than a pipe. `head -1` closes its input
+# on the first line, and under `pipefail` every producer still upstream inherits
+# the broken pipe — an intervening `sed` does not make that safe, it just puts
+# one more process in the blast radius. A here-string has no writer to signal,
+# so `head` is retained unchanged and only the writers are removed. All callers
+# take these through command substitution, which strips the trailing newline, so
+# the empty case is byte-identical to the previous form.
 verdict_of() {
-  local json="$1" id="$2"
-  printf '%s\n' "$json" \
-    | grep -oE "\{[^{}]*\"id\":\"$id\"[^{}]*\}" \
-    | sed -n 's/.*"verdict":"\([A-Z]*\)".*/\1/p' | head -1
+  local json="$1" id="$2" obj verdicts
+  obj="$(grep -oE "\{[^{}]*\"id\":\"$id\"[^{}]*\}" <<<"$json" || true)"
+  verdicts="$(sed -n 's/.*"verdict":"\([A-Z]*\)".*/\1/p' <<<"$obj")"
+  head -1 <<<"$verdicts"
 }
 
 family_of() {
-  local json="$1" id="$2"
-  printf '%s\n' "$json" \
-    | grep -oE "\{[^{}]*\"id\":\"$id\"[^{}]*\}" \
-    | sed -n 's/.*"family":"\([a-z-]*\)".*/\1/p' | head -1
+  local json="$1" id="$2" obj families
+  obj="$(grep -oE "\{[^{}]*\"id\":\"$id\"[^{}]*\}" <<<"$json" || true)"
+  families="$(sed -n 's/.*"family":"\([a-z-]*\)".*/\1/p' <<<"$obj")"
+  head -1 <<<"$families"
 }
 
 cd "$REPO_ROOT"
@@ -166,7 +173,8 @@ DRIFT_JSON="$("$STUB_DIR/release/tools/verify-release-plan.sh" --format=json --r
 DRIFT_RC=$?
 set -e
 [ "$DRIFT_RC" -eq 3 ] && ok "deploy --check drift → overall exit 3 (not internal error)" || bad "deploy drift expected exit 3, got $DRIFT_RC"
-grep -q '"family":"regression".*"verdict":"FAIL"\|"verdict":"FAIL".*"family":"regression"' <<<"$DRIFT_JSON" && ok "regression family renders FAIL on drift" || { grep -oE '\{[^{}]*regression[^{}]*\}' <<<"$DRIFT_JSON" | grep -q '"verdict":"FAIL"' && ok "regression family renders FAIL on drift" || bad "regression family did not FAIL on drift"; }
+DRIFT_REGRESSION_OBJ="$(grep -oE '\{[^{}]*regression[^{}]*\}' <<<"$DRIFT_JSON" || true)"
+grep -q '"family":"regression".*"verdict":"FAIL"\|"verdict":"FAIL".*"family":"regression"' <<<"$DRIFT_JSON" && ok "regression family renders FAIL on drift" || { grep -q '"verdict":"FAIL"' <<<"$DRIFT_REGRESSION_OBJ" && ok "regression family renders FAIL on drift" || bad "regression family did not FAIL on drift"; }
 # Clean case: stub deploy exits 0.
 printf '#!/usr/bin/env bash\nexit 0\n' > "$STUB_DIR/core/deploy/deploy.sh"
 set +e
@@ -174,7 +182,8 @@ CLEANDEP_JSON="$("$STUB_DIR/release/tools/verify-release-plan.sh" --format=json 
 CLEANDEP_RC=$?
 set -e
 [ "$CLEANDEP_RC" -eq 0 ] && ok "deploy --check clean → overall exit 0" || bad "deploy clean expected exit 0, got $CLEANDEP_RC"
-printf '%s\n' "$CLEANDEP_JSON" | grep -oE '\{[^{}]*sync[^{}]*\}' | grep -q '"verdict":"PASS"' && ok "sync family renders PASS when clean" || bad "sync family did not PASS when clean"
+CLEANDEP_SYNC_OBJ="$(grep -oE '\{[^{}]*sync[^{}]*\}' <<<"$CLEANDEP_JSON" || true)"
+grep -q '"verdict":"PASS"' <<<"$CLEANDEP_SYNC_OBJ" && ok "sync family renders PASS when clean" || bad "sync family did not PASS when clean"
 rm -rf "$STUB_DIR"
 
 # ---------------------------------------------------------------------------

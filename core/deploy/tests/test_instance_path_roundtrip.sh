@@ -200,7 +200,9 @@ fi
 
 # --- Stage 5: a pre-update instance backup was taken (#1830 Part 3) ---
 printf '\nStage 5: pre-update instance backup\n'
-if find "${SBX}/ws" -maxdepth 1 -type d -name '.backup-pre-update-instance-*' 2>/dev/null | grep -q .; then
+# `-print -quit` rather than `| grep -q .`: the pipe form lets grep close find's
+# output on the first path, and find inherits the broken pipe.
+if [ -n "$(find "${SBX}/ws" -maxdepth 1 -type d -name '.backup-pre-update-instance-*' -print -quit 2>/dev/null)" ]; then
   report "update took a pre-update instance backup" 1
 else
   report "update took a pre-update instance backup" 0 \

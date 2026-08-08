@@ -626,13 +626,17 @@ fi
 # The token name must appear on an ERROR line. Grepping the log for the bare
 # token would be a BROKEN PROBE: the routine "Active token set:" INFO line lists
 # every active token, so it matches whether or not the failure names one.
-if printf '%s\n' "${nifail_log}" | grep -F '[OPERATOR_NAME]' | grep -q '^ERROR:'; then
+# Both conditions hold on the SAME line, so they fold into one grep over a
+# here-string. An intervening filter stage is not a fix: `writer | grep -F … |
+# grep -q` still ends in a reader that closes the pipe on its first match, and
+# the surviving producer takes the broken pipe just as `printf` did.
+if grep -qE '^ERROR:.*\[OPERATOR_NAME\]' <<<"${nifail_log}"; then
   nifail_named=1
 else
   nifail_named=0
 fi
 # Specificity arm: the SUCCESSFUL P-1 log must NOT satisfy the same predicate.
-if printf '%s\n' "${ni_log}" | grep -F '[OPERATOR_NAME]' | grep -q '^ERROR:'; then
+if grep -qE '^ERROR:.*\[OPERATOR_NAME\]' <<<"${ni_log}"; then
   nifail_ctl=1
 else
   nifail_ctl=0
@@ -956,7 +960,13 @@ extract_additions_block() {
   ' "$1"
 }
 offset_in_fence() {
-  extract_additions_block "$1" | grep -m1 -nF "${CLAUDE_SENTINEL}" | cut -d: -f1
+  # Snapshot the producer before the bounded reader sees it. `grep -m1` closes
+  # its input on the first match exactly as `head -1` did, so with a live
+  # producer upstream the `| head -N` -> `-mN` rewrite relocates the SIGPIPE
+  # hazard rather than removing it. A here-string has no writer to signal.
+  local _fence_block
+  _fence_block="$(extract_additions_block "$1")"
+  grep -m1 -nF "${CLAUDE_SENTINEL}" <<<"$_fence_block" | cut -d: -f1
 }
 
 CLAUDE_ADDITIONS_BEFORE=$(extract_additions_block "${CLAUDE_TARGET}")
