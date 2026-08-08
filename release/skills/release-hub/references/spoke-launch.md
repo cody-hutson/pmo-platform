@@ -52,6 +52,10 @@ Auto-launch is bound to the stage's Autonomy Tier: spawn autonomously for Tier-2
 
 A spawned spoke MUST NOT invoke the `Agent` tool or `spawn_task`. The hub is the only caller of spoke-launch primitives. (Full posture: [`subagent-security-posture.md`](../../../../core/standards/subagent-security-posture.md).)
 
+## Hook-response guard
+
+Every spoke prompt Mode O renders MUST carry the hook-response clause verbatim. A spoke that trips a hook, guard, or permission control has exactly two moves — **reword** the offending text, or **surface it to the hub** — and never obfuscates a token, nor re-routes a refused action through a second tool, to reach an outcome a control declined. Surfacing is a first-class outcome, not a failure. Every spoke output renders the `Control firings: none | <list>` line whether or not anything fired, so a routed-around control is distinguishable from an absent one. Canonical clause + its honest enforcement boundary: `hub-spoke-bridge.md` § Hook-Response Discipline (Spoke Template). Cite it; do not restate it here.
+
 ## Fallback — manual copy/paste
 
 When the `Agent` tool is unavailable, or an edit-before-launch / debug / cross-session-carry condition applies, the hub prints the full spoke prompt for the operator to paste into a new session. (Conditions F1–F6: `hub-spoke-bridge.md` § Fallback.)

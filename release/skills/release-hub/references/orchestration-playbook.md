@@ -50,7 +50,7 @@ The control-flow core. The hub:
 
 ## Procedure 3 — Spoke prompt construction
 
-When spawning a per-issue stage spoke (5–13), the hub builds the prompt from the **Spoke Template** (`hub-spoke-bridge.md` § Procedure 3 — read verbatim) + the stage's persona card (`release-personas.md`, via the Stage-to-Persona Mapping). The prompt-construction disciplines (PR-body parser-clean, repo-integrity, spec-anchor, worktree detect-first, hook-safe git, the per-stage chip patterns) are authoring rules the hub applies — each cites its canonical pipeline-shard in `hub-spoke-bridge.md` § Procedure 3. The hub is the ONLY spawner; a spoke never self-spawns (recursion-prohibition: [`spoke-launch.md`](spoke-launch.md)).
+When spawning a per-issue stage spoke (5–13), the hub builds the prompt from the **Spoke Template** (`hub-spoke-bridge.md` § Procedure 3 — read verbatim) + the stage's persona card (`release-personas.md`, via the Stage-to-Persona Mapping). The prompt-construction disciplines (PR-body parser-clean, repo-integrity, spec-anchor, worktree detect-first, hook-safe git, hook-response, the per-stage chip patterns) are authoring rules the hub applies — each cites its canonical pipeline-shard in `hub-spoke-bridge.md` § Procedure 3. The hub is the ONLY spawner; a spoke never self-spawns (recursion-prohibition: [`spoke-launch.md`](spoke-launch.md)).
 
 ## Procedure 4 — Spoke completion handling
 
