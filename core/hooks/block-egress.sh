@@ -66,25 +66,6 @@ readonly SSH_ALLOWLIST="${HOOK_DIR}/../ssh-allowlist.txt"
 # tool-name-matched (not verb-anchored) and not affected by this hook.
 readonly ANCHOR_PREFIX_BASH='(^|[;&|])[[:space:]]*(/(usr/(local/)?|opt/(homebrew|local)/)?bin/)?'
 
-# --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
-# Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
-# `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
-# NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
-readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
-if [ ! -r "$DEP_LIB" ] || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1; then
-  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
-  exit 2
-fi
-JQ="$(resolve_jq)"; readonly JQ
-
-# --- ERROR HANDLERS ---
-log_error() {
-  local ts; ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-  "$PRINTF" '%s [%s] %s\n' "$ts" "$HOOK_NAME" "$1" >> "$ERROR_LOG" 2>/dev/null || true
-}
-
-trap 'rc=$?; log_error "RULE-EVAL-ERROR at line $LINENO (exit $rc)"; "$PRINTF" "[CLAUDE-HOOK:%s:HOOK-ERROR] BLOCKED: rule-eval error at line %s (exit %s). See %s.\n" "$HOOK_NAME" "$LINENO" "$rc" "$ERROR_LOG" >&2; exit 2' ERR
-
 # --- MODE DETECTION (jq-free; defined BEFORE the dependency gate so a mode-gated
 # hook can degrade correctly when jq is unresolvable) ---
 get_mode() {
@@ -97,6 +78,43 @@ get_mode() {
     *) "$PRINTF" 'enforce' ;;  # default on unrecognized value
   esac
 }
+
+# --- LIB-GUARD MODE SNAPSHOT (resolved BEFORE the dependency guard, frozen readonly) ---
+# The guard below sources $DEP_LIB inside its own condition, so by the time the guard's
+# failure branch runs, everything that file defines is already in THIS shell — including
+# a get_mode of its own. Resolving the mode inside the branch would let the artifact
+# under adjudication choose its own verdict. Resolve it here and freeze it: a sourced
+# file cannot overwrite a readonly. Routed through get_mode()/$MODE_FILE (never a
+# literal mode path), so a hook that later moves to its own mode file follows for free.
+LIB_GUARD_MODE="$(get_mode)"; readonly LIB_GUARD_MODE
+
+# --- SHARED DEPENDENCY RESOLVER (mode-coupled: fail CLOSED in enforce, degrade in warn/off) ---
+# Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
+# `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
+# NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
+# Precheck syntax with `bash -n` BEFORE sourcing: a truncated/corrupt lib is a parse
+# error, and sourcing a parse-error file is FATAL to this parent. Also require
+# deny_missing_primitive so a valid-but-stale lib (pre-fix, no helper) trips here.
+# Severity is mode-coupled: a rule match in warn/off would not block, so an unusable
+# helper must not block harder than a match would.
+readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
+if [ ! -r "$DEP_LIB" ] || ! "${BASH:-/bin/bash}" -n "$DEP_LIB" 2>/dev/null || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1 || ! command -v deny_missing_primitive >/dev/null 2>&1; then
+  if [ "$LIB_GUARD_MODE" = "enforce" ]; then
+    "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
+    exit 2
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] WARN (degraded, %s=%s): dependency helper lib/dep-resolve.sh unavailable or invalid; ALL rules for this hook are skipped this run. Reinstall the hook bundle (re-run docs/scripts/setup-workspace.sh) to restore enforcement.\n' "$HOOK_NAME" "${MODE_FILE##*/}" "$LIB_GUARD_MODE" >&2
+  exit 0
+fi
+JQ="$(resolve_jq)"; readonly JQ
+
+# --- ERROR HANDLERS ---
+log_error() {
+  local ts; ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  "$PRINTF" '%s [%s] %s\n' "$ts" "$HOOK_NAME" "$1" >> "$ERROR_LOG" 2>/dev/null || true
+}
+
+trap 'rc=$?; log_error "RULE-EVAL-ERROR at line $LINENO (exit $rc)"; "$PRINTF" "[CLAUDE-HOOK:%s:HOOK-ERROR] BLOCKED: rule-eval error at line %s (exit %s). See %s.\n" "$HOOK_NAME" "$LINENO" "$rc" "$ERROR_LOG" >&2; exit 2' ERR
 
 # --- READ INPUT (jq-free; stdin is consumed exactly once) ---
 INPUT="$(cat)"
