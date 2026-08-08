@@ -11,7 +11,7 @@ reversibility: MODERATE / Confidence HIGH
 # Release Plan — `102-specialist-role-coverage`
 
 **Milestone:** `102-specialist-role-coverage` (milestone 245). Three member cards, one branch, one pull request, one merge.
-**Version identity:** **slug-only** per **ADR-092**. The plan file is `102-specialist-role-coverage_RELEASE_PLAN.md` and the branch is `release/102-specialist-role-coverage`; no version stem appears in the plan filename, the branch name, or this plan's identity prose. Bump class is `minor` — a capability release, not corrective, so the patch floor does not apply. The concrete number binds at the **Stage-12 atomic claim**, which renames this file into the major-version bucket and resolves the `v4.16` token.
+**Version identity:** **slug-only** per **ADR-092**. The plan file is `102-specialist-role-coverage_RELEASE_PLAN.md` and the branch is `release/102-specialist-role-coverage`; no version stem appears in the plan filename, the branch name, or this plan's identity prose. Bump class is `minor` — a capability release, not corrective, so the patch floor does not apply. The concrete number binds at the **Stage-12 atomic claim**, which renames this file into the major-version bucket and resolves the `v4.17` token.
 **Topology:** **SINGLE** — one release branch, one pull request, one merge gate; this plan lands as **Engineering Commit 0**.
 **Concurrency posture:** the Stage-4 recommendation of P0 fully-serial was **superseded at the plan-approval gate**: the operator rendered SINGLE topology with **W2 running its two cards in parallel**, and removed the contention rather than serializing around it by hoisting every registration write into one consolidated W3 commit. Force-push, including the lease-guarded form, is prohibited on the shared branch under any multi-chip activity.
 **Release class:** **`novel`** — re-rendered from `cross-cutting` at the Stage-4 plan-approval gate because the declared class fired none of its three triggers while `novel` fired all three. Posture: engagement density **Tight** (operator override of the per-class mapping, so no ceremony is dropped) · Stage-9 review depth **Deep** · Stage-5 activation bias **ALL** · Stage-13 outcome window **30-day**. Effective size **18** at the `novel` weight.
@@ -24,7 +24,7 @@ reversibility: MODERATE / Confidence HIGH
 
 | Field | Value |
 |-------|-------|
-| **Version** | `v4.16` — slug-only pre-claim (ADR-092); bump class `minor`. Third provisional: `v4.14` and then `v4.15` were each claimed by a sibling release at its own Stage-12 merge while this release was in Stage 7. The full lineage and its re-run evidence are recorded in § Commit-0 version re-verify below. |
+| **Version** | `v4.17` — slug-only pre-claim (ADR-092); bump class `minor`. **Fourth** provisional: `v4.14`, then `v4.15`, then `v4.16` were each claimed by a sibling release at its own Stage-12 merge while this release sat in Stage 7 and Stage 8. The full four-step lineage and its re-run evidence are recorded in § Commit-0 version re-verify below; every entry is SHA-anchored because all four fall on the same calendar day. |
 | **Date Created** | 2026-08-07 (Friday) |
 | **Release Manager** | Agent-assisted (`release-hub` Mode O) |
 | **Status** | Executing (Stage 6 Engineering) |
@@ -35,7 +35,7 @@ reversibility: MODERATE / Confidence HIGH
 
 ### Commit-0 version re-verify
 
-> **The Commit-0 record immediately below is SUPERSEDED — it is retained as history, not as evidence. The operative result is § Superseding re-verify at the end of this section, which carries the full three-step provisional lineage.** A passed check whose subject has since changed is worse than no check at all, because a later stage reads the recorded verdict as current. The check did not fail; the world moved under it.
+> **Every record in this section EXCEPT the last is SUPERSEDED — each is retained as history, not as evidence. The operative result is § Superseding re-verify #2 at the end of this section, which carries the full four-step provisional lineage.** A passed check whose subject has since changed is worse than no check at all, because a later stage reads the recorded verdict as current. None of these checks failed; the world moved under each of them.
 
 The Stage-4 version determination is **provisional** until the Stage-12 atomic claim, and three sibling releases were in flight when this release entered Engineering, so this re-verify is the rung most likely to fire rather than ceremony. It was re-run at Commit 0 against freshly-fetched authoritative refs, with a known-taken sensitivity arm on every surface:
 
@@ -50,7 +50,7 @@ The Stage-4 version determination is **provisional** until the Stage-12 atomic c
 
 **Why it is superseded.** The record above was true when it was written and is false now. Between Commit 0 and this entry the sibling `release-check-enforcement-gates` release reached its own Stage-12 atomic claim and bound `v4.14` at merge `52d8a55e`, then closed through Stage 13. Under ADR-092 a version is provisional until that claim, so a superseded provisional is the **designed** path and not a defect in this release's artifacts — the defect would be leaving a passed verdict standing over a subject that has changed. Both records carry an anchor because they fall on the **same calendar day**: a date alone does not separate them, so each is pinned to a SHA.
 
-#### Superseding re-verify — 2026-08-07 (Friday), post-merge
+#### Superseding re-verify #1 — 2026-08-07 (Friday), post-merge — SUPERSEDED 2026-08-07 by § Superseding re-verify #2, DO NOT READ AS CURRENT
 
 **The provisional has now moved twice, in one Stage-7 pass.** The lineage is recorded rather than collapsed, because the *rate* of movement is itself the finding a later stage needs:
 
@@ -72,11 +72,42 @@ The re-run below is arm-for-arm the Commit-0 table, extended. Subject is the **c
 
 > **One arm disagrees, and the disagreement is instructive rather than a defect.** `v4.15` is **tagged and ledgered but not yet a published GitHub Release** — that release is mid-close, with its Stage-12 row landed and Stage 13 not yet run. Read alone, the published-Releases arm would have reported `v4.15` free and handed this release a version already bound. The **tag** arm is the authoritative one (it is what `claim-version.sh` compare-and-swaps against); the Releases arm is corroboration only, and it lags by design. A single-arm version check is not a version check.
 
-**Verdict: PROCEED at `v4.16`.** The candidate is absent on every arm; both now-taken versions are positively observed on the authoritative arms, so no arm is inert; and `v4.16` equals the recomputed next-free off the anchor. The branch and this plan file remain slug-primary and do not rename; the version binds only at the Stage-12 atomic claim, and `claim-version.sh` recomputes it there rather than trusting this row.
+**Verdict at the second reconcile (`08ff79f5`, 2026-08-07 Friday) — SUPERSEDED 2026-08-07, DO NOT READ AS CURRENT: PROCEED at `v4.16`.** The candidate is absent on every arm; both now-taken versions are positively observed on the authoritative arms, so no arm is inert; and `v4.16` equals the recomputed next-free off the anchor. The branch and this plan file remain slug-primary and do not rename; the version binds only at the Stage-12 atomic claim, and `claim-version.sh` recomputes it there rather than trusting this row.
 
 **Baseline moved with it.** The § Header `Baseline` row records the Commit-0 re-pin at `origin/main` @ `f157a811` and is retained as that historical statement. The operative baseline for the remainder of this release is `origin/main` @ `835599e1`, merged in at `08ff79f5`; branch freshness against it is **0** commits behind.
 
 **Audit-baseline pin, and the standing warning this pass earned.** Tag sets, ledger rows, and published Releases are transiently observable populations — which is how the Commit-0 record went stale, and then how entry 2 above went stale *inside a single reconciliation pass*. Two sibling releases closed while this pass ran. This entry is pinned to `08ff79f5` and measured 2026-08-07. **Stage 12 must re-run the check at the merge boundary and must not consume this row as current** — under ADR-092 the version binds only at the atomic claim, and on this release's observed cadence a version record has a useful life measured in hours.
+
+#### Superseding re-verify #2 — 2026-08-07 (Friday), pre-Stage-9 consolidated pass — **OPERATIVE**
+
+**The warning the entry above ended on was cashed within hours.** `v4.16` was claimed while this release sat in Stage 8. The lineage is now **four** provisionals in one calendar day, so every row is SHA-anchored — a date alone cannot separate them:
+
+| # | Provisional | Re-run anchored at | Outcome | What displaced it |
+|---|---|---|---|---|
+| 1 | `v4.14` | Commit 0, `524b40d9` | SUPERSEDED | `release-check-enforcement-gates` claimed `v4.14` at merge `52d8a55e`, then closed through Stage 13 |
+| 2 | `v4.15` | first reconcile merge, `91f331ab` | SUPERSEDED within the same Stage-7 pass, before any stage consumed it | a third sibling release claimed `v4.15` and landed its Stage-12 `RELEASE_LOG` row on `origin/main` |
+| 3 | `v4.16` | second reconcile merge, `08ff79f5` | SUPERSEDED during Stage 8 | the tag was pushed, and the Stage-12 `RELEASE_LOG` row landed on `origin/main` at `79e2aa3a` — the claim is now visible on **two** authoritative arms, not one |
+| 4 | **`v4.17`** | pre-Stage-9 merge, `3d17f942` | **OPERATIVE** | — |
+
+**One correction to the Stage-8 hand-off, stated plainly.** Stage 8 recorded `v4.16` as a *tag-only* claim with no ledger row. That was true when read and is false now: the merge performed at the head of this pass brought in `79e2aa3a`, the sibling's Stage-12 `RELEASE_LOG` commit, so `v4.16` now carries **19** ledger row-lines as well as its tag. Under ADR-092 the tag alone was already dispositive — the ledger row does not change the verdict, only the strength of the evidence for it.
+
+Arm-for-arm re-run, extended again. Subject is the candidate `v4.17`; the three now-taken versions are the sensitivity controls, and a deliberately-absent version is the specificity control:
+
+| Surface | Subject `v4.17` | Now-taken `v4.16` | Now-taken `v4.15` | Now-taken `v4.14` | Specificity control `v4.99` | Denominator |
+|---|---|---|---|---|---|---|
+| Remote tag refs queried directly at the origin (`git ls-remote --tags origin`) | **0** | **2** refs (tag + peeled) | **2** refs | **2** refs | **0** | 318 remote tag refs |
+| Local tag set after `fetch --tags` | **0** | **1** | **1** | — | — | 160 local tags |
+| Release ledger rows, read from `origin/main` with a brace-delimited ref rather than any worktree copy | **0** | **19** row-lines | **27** row-lines | **32** row-lines | **3** — see the caveat | 1170 ledger lines |
+| Published GitHub Releases | **0** | **0 — see the caveat** | **2** | **2** | **0** | 157 published releases |
+| Descending version-sorted tag list — the anchor read | anchor resolves to `v4.16`, so next-free minor is `v4.17`; the `v4.x` line is contiguous with zero gaps | — | — | — | — | 318 remote tag refs |
+
+> **Two arms misbehave, and both disagreements are load-bearing rather than noise.** (1) The **published-Releases** arm reports `v4.16` **absent** — that release is mid-close with its tag pushed and its Stage-12 ledger row landed, but Stage 13 not yet run. Read alone this arm would have reported `v4.16` free and handed this release a version already bound, for the second consecutive re-verify. (2) The **ledger** arm returns **3** hits for `v4.99`, a version that does not exist — the ledger carries illustrative version tokens in its own prose, so a hit there is not proof of a claim. Between them the two arms establish the same conclusion from opposite directions: the ledger arm can report a **false positive** and the Releases arm a **false negative**, so neither is authoritative alone. The **tag** arm is the authority — it is what `claim-version.sh` compare-and-swaps against, and ADR-092 makes the tag the claim. A single-arm version check is not a version check.
+
+> **A probe-shape note for whoever runs this next.** The shell form of the boundary probe is **broken in this environment**: BSD `grep` has no `-P`, so the ledger and Releases arms initially errored rather than counting. They errored *visibly* — which is the only reason it was caught — and were re-run with a real look-behind. Had those arms silently returned `0`, the run would have read as a clean four-arm confirmation. The same class as the `git grep -E '\b54\b'` trap this release is already tracking.
+
+**Verdict: PROCEED at `v4.17`.** The candidate is absent on all five arms; all three now-taken versions are positively observed on the authoritative tag arm, so no arm is inert; the specificity control returns zero on the tag arm; and `v4.17` equals the recomputed next-free off the anchor over a contiguous `v4.x` line. The branch and this plan file remain slug-primary and do not rename.
+
+**Audit-baseline pin.** This entry is pinned to `3d17f942` and measured 2026-08-07 (Friday; day-of-week validated). **Stage 12 must re-run the check at the merge boundary and must not consume this row as current.** The estimate that a pre-merge version record has a useful life of hours has now held four times in a row; treat it as the operating assumption, not a caution.
 
 ### Domain Practice Provenance
 
@@ -254,7 +285,7 @@ release/releases/plans/102-specialist-role-coverage_RELEASE_PLAN.md
 
 **(2) One already-landed path was absent and has been added:** the data-engineer's composition-contract reference file. It landed in the second wave, which correctly declined to edit this shared plan from its own card's scope; it is added here under the same cross-card reconciliation, so the block matches the branch.
 
-**Still pending, correctly listed, not yet landed:** the skill catalog, the deploy roster array, and the data-engineer package plus its sidecar — all owned by the consolidated registration wave.
+**(3) The consolidated registration wave has now LANDED — this line previously read "still pending, correctly listed, not yet landed" and is reconciled rather than annotated.** The skill catalog, the deploy roster array, and the data-engineer package plus its sidecar all landed in the single W3 commit at the pre-Stage-9 consolidated pass, together with the architect row's two stale cells. Every path in the block above is now present on the branch; none remains pending. Verified by exercise rather than by a green gate: `check-canonical-structure.sh` names `OK: pmo-data-engineer` explicitly, and `check-registry-currency.sh` — which prints only a summary on its PASS path — was proven to hold the skill in its denominator by falsification (pulling the registry row while leaving the roster entry turns it red *naming the skill*, which is also the direct demonstration of why that commit had to be atomic).
 
 **Per-wave intent:**
 
