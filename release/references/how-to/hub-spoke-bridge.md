@@ -1639,9 +1639,15 @@ to it — on the READ side as well as the write side:
   path-construct your way into a shared temp parent to find a file you did not
   create in THIS run. A scratch file you did not write in this run is another
   spoke's artifact: it is not yours to read, and it is not yours to post.
-- **Echo the resolved `$SPOKE_OUT`** on its own line in your output comment's
-  `### Evidence` section. One line. That is what makes a wrong-path post
-  detectable afterwards from the durable artifact rather than only in-session.
+- **Echo the run directory in `${SCRATCH_BASE}`-relative form** — the literal
+  variable name plus the resolved unique directory, e.g.
+  `${SCRATCH_BASE}/spoke-6-5005-a1b2c3` — on its own line in your output
+  comment's `### Evidence` section. One line. **Never the resolved absolute
+  path**: on a default install the scratch base embeds the operator's OS
+  username, and the output comment is a public surface. The relative form
+  carries both facts the control needs — which parent the spoke resolved, and
+  which unique run directory it made — so a wrong-path post stays detectable
+  afterwards from the durable artifact rather than only in-session.
 
 Both keys are load-bearing and neither works alone. `mktemp -d` supplies
 uniqueness **by construction** — including across a re-run of the same stage on

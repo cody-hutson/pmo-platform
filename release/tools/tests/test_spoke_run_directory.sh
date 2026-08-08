@@ -100,10 +100,18 @@ clause_arms() {
   if printf '%s' "$section" | grep -qF 'Read** scratch input only from `$SPOKE_OUT`'
   then echo "A3 PASS"; else echo "A3 FAIL"; fi
 
-  # A4 — it requires the resolved path be echoed into the durable artifact,
+  # A4 — it requires the run directory be echoed into the durable artifact,
   #      which is the only compensating control the unenforceable read side has.
-  if printf '%s' "$section" | grep -qF 'Echo the resolved `$SPOKE_OUT`'
+  #      Relative form only: the output comment is a public surface, and the
+  #      resolved absolute path embeds the operator's OS username on a default
+  #      install.
+  if printf '%s' "$section" | grep -qF 'Echo the run directory in `${SCRATCH_BASE}`-relative form'
   then echo "A4 PASS"; else echo "A4 FAIL"; fi
+
+  # A4b — negative arm: the mandate must NOT ask for the resolved absolute path.
+  #       Without this, re-adding the absolute form later passes a green build.
+  if printf '%s' "$section" | grep -qF 'Echo the resolved `$SPOKE_OUT`'
+  then echo "A4b FAIL"; else echo "A4b PASS"; fi
 
   # A5 — the read-only spoke's GitHub-write bound is scoped to GitHub, so it no
   #      longer reads as a claim about the filesystem surface as well.
@@ -120,7 +128,11 @@ clause_arms() {
 echo "(A) Clause arms — the live corpus"
 # ---------------------------------------------------------------------------
 LIVE_RESULTS="$(clause_arms "$BRIDGE")"
-for arm in A1 A2 A3 A4 A5 A6; do
+# A4b is harvested HERE but deliberately NOT in the A-NEG loop below: it is a
+# negative arm (it passes when the absolute-path form is ABSENT), so it passes
+# legitimately against an excised section and would corrupt the deletion-
+# sensitivity count if included there.
+for arm in A1 A2 A3 A4 A4b A5 A6; do
   if printf '%s\n' "$LIVE_RESULTS" | grep -qx "$arm PASS"; then
     ok "$arm — clause assertion holds in hub-spoke-bridge.md"
   else
