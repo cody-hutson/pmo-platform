@@ -302,6 +302,34 @@ Single branch, one pull request, one merge, write-serialized. Commits reference 
 
 **Stage 9 must re-measure every population figure.** The open-issue denominator was observed moving 44 in ~17 hours during Stage 7; no count in this plan may be carried forward to a gate.
 
+## File Change Matrix — reconciled at the Stage-12 pre-merge step (2026-08-07)
+
+The matrix as planned was **3 paths short** of the branch's actual delta, surfaced at Stage 8 and graded against the real set at the Stage-9 gate. The true change set is **19 files**. The three additions are one release-scoped ADR and two **generated** indexes — none attributable to a single card:
+
+```
+core/ADRs/ADR-124-axis1-work-status-label-surface.md
+core/ADRs/ADR-125-status-fallback-k1-binding-k4.md
+core/ADRs/ADR-126-sub-task-status-mirror-not-resynced.md
+core/ADRs/README.md
+core/config/allowlists/script-execution-allowlist.txt
+core/deploy/allowlists/selftest-coverage-manifest.txt
+core/deploy/tools/check-label-parity.py
+core/packs/_common/pack.toml
+core/schemas/field-lifecycle-matrix.md
+core/schemas/work-item-type-schema.md
+core/specs/label-taxonomy.md
+release/ADRs/ADR-123-epic-rollup-close-is-an-audit-not-a-gate.md
+release/ADRs/README.md
+release/governance/release-process.md
+release/references/how-to/hub-spoke-bridge.md
+release/references/specs/ticket-information-architecture.md
+release/releases/plans/methodology-fields-and-statuses_RELEASE_PLAN.md
+release/tools/audit-epic-rollup-close.sh
+release/tools/automated-closeout.sh
+```
+
+**ADR numbering final at merge.** This release's records are **ADR-123, ADR-124, ADR-125, ADR-126**. Two moved at this step — `ADR-121 → 125` and `ADR-122 → 126` — because the mainline claimed 121 and 122 while the branch was in flight. Per **ADR-115** the number binds at merge and the later claimant moves; the sanctioned tool computed `ANCHOR 122`, reported both as `DUPLICATE`, and left 123/124 `BINDS`. An earlier move at Stage 7 took `ADR-120 → 124` for the same reason. **Reserving upward was never attempted: ADR-115 `:39` calls a mainline gap worse than a duplicate.**
+
 ## Rollback
 
 **Whole release:** revert the merge commit, first-parent form. Every corpus surface returns in one operation.
