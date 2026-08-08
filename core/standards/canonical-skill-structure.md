@@ -33,6 +33,23 @@ The forcing function per D-Creator targets **existing chained PMO skill modifica
 | Rules-mirror pair byte-identity | Deploy-time | `deploy.sh --check` Check 9 |
 | Editor audit-trail on migrated skills | Deploy-time | `deploy.sh --check` Check 10 |
 
+### Coverage boundary of the edit-time gate — canonical statement
+
+**This is the canonical coverage statement for `block-skill-direct-edit` (BLOCK-SKILL-EDIT-001..002). Every doc that cites this hook as a *control* must state this boundary, and may cite here rather than restating it.** The row above says the surface is DUAL-GATE; this section says under what conditions the edit-time half of that pair is actually in force, so a reader cannot take "dual-gate" as an unconditional guarantee.
+
+**The hook governs `Write`/`Edit` calls from a main session and from a spawned subagent alike — spawned sessions are not excluded as a class.** A subagent inherits whatever PreToolUse hooks its session loaded, so the question is never "was it a subagent" but "did the session load the wiring, and do the remaining gates admit the call".
+
+Coverage is the **four-condition conjunction** canonical at [`subagent-security-posture.md` § 3.1](subagent-security-posture.md) — loading ∧ no pre-launch `CLAUDE_HOOK_BYPASS` ∧ master-activation class ∧ hook mode — with two facts specific to this hook:
+
+- **It is `workflow`-class, and master activation ships OFF (opt-in).** So condition 3 is **unsatisfied on the shipped default**, and the hook is inert on a default instance regardless of everything else. Enabling it is `[security_hooks].master_enabled = true`, an operator-executed write to an instance config file the repository never touches — no merge ordering can supply it.
+- **Conditions 3 and 4 are not independent for this hook.** The master gate runs *before* the `.mode` read, and exits `0` when the class is not admitted, so under master-OFF `warn` and `enforce` are indistinguishable and condition 4 is unreachable. A "the mode is set to enforce" citation therefore says nothing about coverage on its own.
+
+Its matcher scope excludes, by design and independently of the four conditions: deploy targets under `.claude/skills/` (source modules only), skills on the editor-exemption allowlist, and skills lacking the `skill_discipline_migrated_v10_2: true` marker. Where the hook does fire, the mode decides the surface: `warn` records to `skill-edit-warn-log.jsonl` and **allows** the call; `enforce` records to `block-log.jsonl` and exits 2.
+
+**The consequence, stated so a risk assessment cannot read past it.** Where all four conditions hold, the edit-time gate is a **control**. Where any fails — and on a default instance condition 3 fails — it is a **convention**: still worth maintaining, still the discipline every editor owes, but **not an interlock**, and no residual may be sized against it without checking the four conditions on the path the work actually runs on. Deploy-time Check 10 is unaffected by all of this and remains the enforcing half of the pair.
+
+**Not yet observed firing from a spawned session.** The `hub-spoke-execution-safety` release ships the enforcement point that makes the wiring resolvable from repo- and worktree-rooted sessions, and states plainly that it does not claim the point has been observed firing. The negative control for this hook is **specified and explicitly deferred** — not passing, not waived — at [`../hooks/tests/subagent-hook-inheritance-probe.md`](../hooks/tests/subagent-hook-inheritance-probe.md) § 6, whose deferral record is the referent. Its precondition is operator-executed and outside the repository.
+
 ### What is NOT enforced (intentional non-enforcement boundary)
 
 NEW skill creation. A skill may be authored via:

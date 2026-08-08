@@ -4,7 +4,7 @@ purpose: "The register-or-remove discipline for content reused across files: dup
 type: standard
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
-consumers: deploy.sh Check 9 / Check 11 / Check 13 (mirror-set + template-sync registries) and Check 13b (complementary-pair ownership registry); authors of any content reused across files; CLAUDE.md §Prefer durable structures
+consumers: deploy.sh Check 9 / Check 11 / Check 13 (mirror-set + template-sync registries), Check 13b (complementary-pair ownership registry), and Check 68 (hub-state enum-parity registry); authors of any content reused across files; CLAUDE.md §Prefer durable structures
 ---
 <!-- reference-durability: allow-link -->
 # Duplicate-Source Discipline — Register or Remove
@@ -28,7 +28,7 @@ Unregistered duplicate content is governance debt. The longer it persists, the h
 
 ## §2 Registered enforcement layer
 
-Three `deploy.sh --check` checks today provide byte-identity enforcement on registered mirror surfaces; a fourth asserts **section ownership** (not byte-identity) on registered complementary pairs, and is listed here because it is the enforcement layer condition 4 rests on:
+Five registered `deploy.sh --check` checks make up the enforcement layer today:
 
 | Check | Surface | Enforcement | Source |
 |---|---|---|---|
@@ -36,6 +36,11 @@ Three `deploy.sh --check` checks today provide byte-identity enforcement on regi
 | **Check 11** — Harness-mirror sync | `harness/<name>/` ↔ `~/.claude/<name>/` for every entry in `HARNESS_LIST` (currently `account-switcher`) | Byte-identity required on canonical files; operator-state files (per `HARNESS_OPERATOR_STATE` allowlist) preserved [SOURCE: `deploy.sh:1798`] | Per D-1.B |
 | **Check 13** — Template-sync drift detection | `TEMPLATE_SYNC_MAP` byte-identity-enforced template pairs | Byte-identity required; matches Check 1 / Check 11 zero-FP posture [SOURCE: `deploy.sh:1929`] | — |
 | **Check 13b** — Complementary-pair ownership | registered pairs in `core/deploy/allowlists/complementary-reference-pairs.txt` | Section-ownership assertion, **not** byte-identity: each exclusively-owned section present in its owner and absent from its peer; each shared section present in both, with content divergence reported as a distinct finding. An unregistered cross-tree same-basename pair is surfaced as a possible accidental fork. Warn-mode (shared cohort) | Condition 4 |
+| **Check 68** — Hub-state enum parity | registered `(derived surface, field)` pairs in `core/deploy/allowlists/hub-state-enum-parity-map.txt` | **Value-set equality**, not byte-identity: the derived surface's `<field> enum:` declaration and the standard section that owns the enum must enumerate the identical set, and a `(N values)` cardinality on the owning heading must match the set beneath it. Two renderings of one enum are never byte-equal by construction — a slash-delimited list versus a markdown definitions table — so `TEMPLATE_SYNC_MAP` (Check 13) is structurally inapplicable and this is the registry that can hold the pair. The derived side is named in every finding, because "mismatch" alone leaves undecided which file moves. Warn-mode initial | Condition 1 |
+
+They assert three different invariants, and the difference is what decides which registry a duplicate belongs in. Checks 9, 11 and 13 assert **byte-identity** on registered mirror surfaces — the condition-1 case where two copies are meant to be the same bytes. Check 13b asserts **section ownership**, the condition-4 case where two files share a basename and deliberately divide the content between them. Check 68 asserts **value-set equality**, a condition-1 case that byte-identity structurally cannot hold: two renderings of one enum — a slash-delimited list and a markdown definitions table — are never byte-equal by design, so a pair that must agree on *meaning* rather than *bytes* needs its own registry.
+
+**Why Check 68's surfaces restate rather than consolidate.** Condition 2 (*consolidate to a canonical source*) is the normal preference and is **wrong for this pair class**, on a property specific to it: the derived surfaces are **deployed and their contract is not**. The hub-state templates are copied wholesale into operator-instance runtime ledgers that are read without the repo open, and `release/skills/release-hub/references/orchestration-playbook.md` ships inside `packages/release-hub.skill` and is read from the deployed skill tree — while `core/standards/**` appears in no package and is not deployed at all. Replacing either restatement with a cross-reference would point a runtime reader at a file absent from their machine, trading a drift risk (which registration closes mechanically) for a resolvability failure (which nothing closes at read time). The general rule this instantiates: **restate when the derived surface is deployed and its contract is not; cite when the contract is at least as reachable as the surface restating it** — and a restatement is only ever a valid answer as *restate + register + mechanize*, never restate alone.
 
 **Out of scope for these checks:**
 - Content-level near-duplicates outside the registered mirror set (the gap this principle addresses).

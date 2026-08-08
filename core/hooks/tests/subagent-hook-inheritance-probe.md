@@ -152,11 +152,151 @@ Fill § 4. The recorded verdict selects the reconcile branch:
 
 **Reconcile outcome:** Inheritance is confirmed at workspace root; whether a worktree session loads any hooks to inherit is the open question. This is recorded in `../../standards/subagent-security-posture.md` §1 + §3 Mechanism 2 as CONFIRMED-at-root with the worktree-loading residual carried to #1472 — not as a both-contexts verification.
 
-**Notes / #1472 disposition:** #1472 (OPEN) — PreToolUse hooks are wired in the workspace-root settings only; a hook-loaded session cannot observe its own absence, so worktree-session hook-loading needs a repo-launched session to test. This probe remains the standing re-test for when #1472 lands: re-run Step 4 from a worktree session and fill the worktree column.
+**Notes / disposition:** #1472 — closed `not_planned` 2026-07-01. PreToolUse hooks were wired in the workspace-root settings only; a hook-loaded session cannot observe its own absence, so worktree-session hook-loading needs a repo-launched session to test. The `hub-spoke-execution-safety` release ships the enforcement point that removes the structural cause, and **§ 5 (P-1) below is the extended form of this probe** — it adds the arms Step 4 lacks and is the instrument that converts the release's central mechanism claim from inference to observation. Step 4 remains valid and is P1-B.
 
 ---
 
-## § 5. Cross-reference
+## § 5. P-1 — the discriminating probe (operator-executed)
+
+**What P-1 settles, and why the release cannot proceed on Step 4 alone.** Step 4 asks whether a hook *fires* in a worktree session. That is not the same question as whether hooks *load* there. A hook that does not fire is consistent with four different worlds, and only one of them is fixable by moving a settings file:
+
+| # | Alternative | Status | Basis |
+|---|---|---|---|
+| (a) | **Matcher scoping** — hooks loaded, the `Bash` matcher failed to match | **RULED OUT** | The wired matcher is the literal string `Bash` and the observed `tool_name` was literally `Bash`. The corpus's one harness-delivered positive (§ 4 row C1) fired through that same matcher string on that same tool class. |
+| (b) | **Hook-path resolution failing silently** | **RULED OUT as file-existence / permission** | Every wired command path exists and is executable (control arm: a fabricated sibling path reports `exists=False executable=False` under the identical test). Only live *conditional on the settings having been loaded at all*. |
+| (c) | **Harness non-delivery of `PreToolUse` for this tool class in this session class** | **NOT RULED OUT — the live alternative** | The only harness-delivery positive anywhere in the corpus is § 4 row C1, recorded from a **Desktop-app** session. **There is no recorded CLI/SDK-class positive control at any working directory.** If (c) holds, no settings placement is an enforcement point. |
+| (d) | **Settings precedence** — a lower-precedence file suppresses the hooks | **RULED OUT as a suppression mechanism** | Precedence can only override what is on the resolution path. No file on a worktree session's path declares hooks, so there is nothing to override and nothing capable of nulling one. A harness rule that scoped project settings by git-root rather than by working directory would change *which file is the project file* — that is a variant of the loading hypothesis, and arm C measures it. |
+
+**Why P-1 cannot run from inside a spoke.** Every arm requires *launching a session at a chosen working directory*. A spoke is already inside a session whose working directory it did not choose and cannot change; a hook-loaded session cannot observe its own absence, and a hook-less one cannot observe its own presence. The choice of working directory is the independent variable, so the operator owns it.
+
+### § 5.1 Shared payload
+
+```bash
+# Run once before the arms. NONCE makes each run distinguishable.
+NONCE="$(date -u +%Y%m%dT%H%M%SZ)-$RANDOM"
+PROBE_DIR="/tmp/hookprobe-$NONCE"
+mkdir -p "$PROBE_DIR"
+printf '#!/usr/bin/env bash\ntouch "%s/WITNESS"\n' "$PROBE_DIR" > "$PROBE_DIR/probe.sh"
+chmod +x "$PROBE_DIR/probe.sh"
+echo "PAYLOAD: bash $PROBE_DIR/probe.sh"
+echo "NONCE:   $NONCE"
+```
+
+The payload is `bash /tmp/hookprobe-$NONCE/probe.sh`, issued as a **real Bash tool call** — never as a pipe. It is an unallowlisted `.sh`, so `BLOCK-DESTRUCTIVE-022` is the expected rule. Blast radius: one `touch` in a scratch directory. `block-destructive` is `security` class (so it is not inert under master-OFF) and mode-independent (so `.mode = warn` does not soften it). **No mode flip, no config change, and no deploy is required for any arm.**
+
+### § 5.2 The observation is a TRIPLE — `W ∧ L ∧ R`
+
+| Signal | Blocked | Not blocked | Forgeable by a stdin pipe? |
+|---|---|---|---|
+| **W** — witness file `$PROBE_DIR/WITNESS` | absent | **present** | **NO** — a pipe never runs the script either way |
+| **L** — a new `block-log.jsonl` row, matching rule, `ts` inside the arm's window | present | absent | **YES — demonstrated** |
+| **R** — the tool result the agent receives | non-zero + hook banner on stderr | exit 0 + script output | it is a transcript claim |
+
+**`L` alone is NOT evidence, and this is not a theoretical caveat.** The row schema is `{ts, hook, rule, tool, input_digest, cwd}` — no `session_id`, no caller class, no delivery-path field — and `cwd` is read from the stdin payload. A row carrying `rule: BLOCK-DESTRUCTIVE-022` and a worktree `cwd` has been produced from a direct stdin pipe that never touched the harness, alongside a control pipe with a `cwd` naming a path that does not exist. **No reader may treat a `cwd`-bearing block-log row as evidence of where a session was rooted.**
+
+**`W` is load-bearing, and only as a pre/post pair.** W-absent alone is consistent with "the script was blocked" *and* with "the script was never invoked". The pre-fix baseline (NC-0) disambiguates: same payload, same session class, W **present** before the wiring lands and W **absent** after.
+
+**Grading rule.** An arm PASSES only on `W ∧ L ∧ R` agreeing. `L` alone → **NOT MET** (forgeable). `R` alone → **NOT MET** (transcript claim). `W` alone without its baseline → **NOT MET** (ambiguous).
+
+### § 5.3 The six arms
+
+| Arm | Launch | Action | Under the **loading** hypothesis | Under **(c) non-delivery** | What it settles |
+|---|---|---|---|---|---|
+| **P1-A** — CLI positive control at workspace root | `cd <workspace-root> && claude` (CLI — the same harness class as every spoke) | issue the payload as a real Bash tool call | **BLOCKED** (W absent · L present · R blocked) | **NOT blocked** | **The single most informative arm.** The CLI/SDK-class positive control the corpus has never had. A NOT-blocked result here voids the enforcement point. |
+| **P1-B** — worktree, working directory varied, delivery path held constant | `cd <repo>/.claude/worktrees/<wt> && claude` | identical payload, identical tool call | **NOT blocked** | NOT blocked | Paired with P1-A, the working-directory discriminator. This is § 3 Step 4, restated. |
+| **P1-C** — project-scope settings materialized | write a resolved **`PreToolUse`-only** settings object to `<worktree>/.claude/settings.json` (throwaway; delete after), start a **fresh** session there | identical payload | **BLOCKED** if project settings load from the session's project directory | NOT blocked | Whether project scope is a viable surface. A BLOCK here means the scope guard is unnecessary and the blast radius is strictly smaller. |
+| **P1-D** — user-scope settings, the shipped mechanism | merge the `PreToolUse` block into the user-scope settings file (back it up first — it carries unrelated operator keys), start a **fresh** session in the worktree | identical payload | **BLOCKED** | NOT blocked | Measures the mechanism this release actually ships. No arm has ever demonstrated that a user-scope `hooks` block is loaded by this harness in any session. |
+| **P1-E** — scope-guard control | with P1-D's wiring live, start a session rooted **outside** the governed workspace root | identical payload | **NOT blocked** (the guard excludes it) | NOT blocked | **Measures the guard rather than asserting it.** Note the expectation differs from the pre-guard prediction: an unguarded user-scope rollout would block here. |
+| **P1-F** — subagent inheritance in the surviving configuration | from whichever of P1-C / P1-D blocked, spawn a subagent (Agent tool) tasked to run the payload | **BLOCKED** | n/a | The spawned-session claim proper. Fills § 4 rows C1/C2, worktree column. |
+
+**Teardown (required, every arm):** delete `$PROBE_DIR`; restore the user-scope settings file from its backup; delete `<worktree>/.claude/settings.json`; leave `block-log.jsonl` untouched (append-only evidence). Reversibility: **CHEAP** — every mutation is a throwaway file with a named restore.
+
+### § 5.4 Decision table — including the null results
+
+| Observation | Reading | Consequence |
+|---|---|---|
+| **P1-A blocked · P1-B not blocked** | Loading hypothesis **CONFIRMED**; working directory is the discriminating variable | Enforcement point valid as shipped. |
+| **P1-A blocked · P1-B blocked** | Loading hypothesis **REFUTED** — hooks DO load in worktrees | The mechanism determination is wrong and the observed non-interception has another cause. The enforcement point must be re-derived. |
+| **P1-A NOT blocked** | **(c) CONFIRMED** — this harness class does not deliver `PreToolUse` for this tool class | **The enforcement point is VOID.** No settings placement fixes it, and the degraded-ship path is the real disposition. |
+| **P1-A blocked · P1-C blocked** | Project-scope settings load from the session's project directory | Project scope is viable and strictly better: no scope guard, no user-scope blast radius, the settings file exists only inside the governed tree. |
+| **P1-A blocked · P1-C not blocked · P1-D blocked** | User scope is the mechanism | The shipped configuration is correct; keep the guard. |
+| **P1-A blocked · P1-C not blocked · P1-D not blocked** | Neither candidate placement is loaded | Enforcement point void by a different route; same consequence as row 3. |
+| **P1-D blocked · P1-E not blocked** | The guard bounds the rollout as designed | Guard **confirmed working**. |
+| **P1-D blocked · P1-E blocked** | The guard did not fire where it should have | Guard **defective** — investigate before relying on the boundary statement. |
+| **Nothing blocks anywhere, including P1-A** | The deployed wiring is broken independently of all of this | Per § 3 Step 6: fix wiring and re-run — **do not record a verdict against a mis-wired baseline.** |
+
+**What a null result means, stated plainly:** a not-blocked observation is informative **only** when its paired positive control blocked in the same run. A P1-B zero is meaningful because P1-A is non-zero; a P1-B zero alongside a P1-A zero is a **broken probe** and yields no mechanism verdict at all.
+
+---
+
+## § 6. Negative control for the enforcement point
+
+**Precondition states.** Naming these separately is what distinguishes an arm that is genuinely deferred from one that was only assumed to be.
+
+| State | Definition | Reached by |
+|---|---|---|
+| **S0** | As-is: no user-scope wiring · master activation off · `.mode` = warn | now |
+| **S1** | S0 + the `PreToolUse` object merged into the user-scope settings surface (`setup-workspace.sh --rehome-hook-wiring`) | operator |
+| **S2** | S1 + master activation enabled | operator |
+| **S3** | S2 + `.mode` = enforce | operator |
+
+**A second blocker, on a different axis from S0–S3 — the auto-mode permission classifier ("the classifier gate").** The states above were originally the only axis this record priced, and that pricing was wrong. A **Claude Code auto-mode permission classifier** sits **upstream of `PreToolUse`** and can deny a tool call before any hook is consulted. It is **not** a precondition state an operator can reach: no value of S0–S3 removes it, and the repository can neither see nor configure it.
+
+Measured at the pre-re-home baseline capture, from a spawned subagent rooted in the release worktree:
+
+- It denied `NC-0`'s specified payload (`bash <unallowlisted>.sh` as a real Bash tool call), **the same payload relocated** to the harness-designated session scratchpad, **and `NC-0`'s own allowlisted read-only specificity control**. A zero whose control also returns zero is a **broken probe**, so the arm was reported **UNUSABLE** rather than as non-interception — and the capture stopped there rather than reshaping the payload, since reshaping to get past the gate is evading the classifier's intent rather than measuring hook coverage.
+- Its denial is **distinguishable from a hook block by inspection**: the classifier returns a permission-denial message naming the auto-mode classifier, whereas a hook block prints `[CLAUDE-HOOK:<hook>:<RULE-ID>] BLOCKED:` on stderr **and** appends a `block-log.jsonl` row. Neither log grew during the denials, so a classifier denial is never mistakable for an `L` signal.
+- It is **nondeterministic.** Three commands were denied and then succeeded **unchanged on immediate retry** (the Bash and Edit specificity arms, and a benign scratch `Write`). **Retry before recording any denial as a result** — a single denial is an instrument event, not an observation.
+
+**Consequence for the deferred set.** `NC-1` and `NC-2` issue `NC-0`'s payload shape from a spawned session, so the classifier gates them **the same way it gated `NC-0`, and reaching S1 does not remove it**; `NC-4` reuses `NC-1`'s payload and inherits the same gate. Treating these arms as "waiting on S1" is wrong — they wait on S1 **and** on an upstream gate that is unowned, unschedulable, and nondeterministic. Every arm below therefore carries **two** blocker axes, and the `State` column names only the first.
+
+**Both tool classes are testable at S1 as far as the hook layer is concerned** — the classifier gate above is a separate question, and it is the one that stopped `NC-0`. `block-destructive` is `security` class (never inert on master-OFF), mode-independent, **and** wired on `Bash`, `Write` *and* `Edit` matchers. So a **single hook at S1 alone** can carry the control for both the Bash class and the Edit/Write class. The Edit arm does **not** have to wait for the master flip — that constraint belongs to `block-skill-direct-edit` (workflow class, mode-reading, so it needs S3), not to the Edit tool class.
+
+**The two Edit questions are separate, and conflating them is how a green gets over-read.** `NC-EDIT-1` settles whether the **Edit/Write tool class** reaches a hook at all from a spawned session; it rides `block-destructive` and clears at S1. The `NC-EDIT-SKILL-*` arms settle whether **`block-skill-direct-edit` specifically** fires — the hook whose silence was the original observation — and they cannot clear before S2, because that hook is `workflow`-class and its master gate runs *before* its `.mode` read. A passing `NC-EDIT-1` therefore does **not** evidence skill-edit-discipline coverage, and a null result on `NC-EDIT-SKILL-1` at S1 evidences nothing at all: it is the class gate answering, not the hook. `NC-EDIT-SKILL-0` exists to make that distinction observable rather than argued.
+
+### § 6.1 The arms
+
+| ID | Arm | State | Pre-merge? | Expected |
+|---|---|---|---|---|
+| **NC-A** | Layer-A CI logic regression (`subagent-hook-inheritance.test.sh`) | S0 | **YES — in-pipeline** | green; proves hook LOGIC, never delivery |
+| **NC-SCOPE** | `scope-guard.test.sh` — unit arms plus an in-situ pair against a real hook (in-scope BLOCK / out-of-scope ALLOW on the identical payload) | S0 | **YES — in-pipeline** | green; proves the guard is reachable from a hook and bounds it |
+| **NC-P** | Payload validation — drive the payloads on stdin against the deployed hooks | S0 | **YES** | unallowlisted → BLOCK 022 exit 2; **allowlisted comparator → exit 0** |
+| **NC-L** | Log-forgeability control — produce a `block-log` row without the harness | S0 | **YES** | row appears; establishes that `L` alone is insufficient |
+| **NC-0** | **Pre-fix baseline, Bash.** Spawn a subagent into the worktree via the Agent tool; it issues the Bash payload as a real tool call | S0 + classifier gate | **ATTEMPTED → NOT RUN.** Denied by the classifier gate on the payload, on a relocated variant, **and on its own allowlisted control** ⇒ **PROBE UNUSABLE**. It was never executable, and its pre-fix comparator window closes with the wiring | **W present · L absent · R exit 0** was the expectation — **never observed.** Use `NC-0S` as the Bash-matcher baseline; do **not** record `NC-0` as passing on it |
+| **NC-0S** | **Substitute Bash-matcher baseline** (the arm that did run). Same spawned subagent; `rm` of a scratch file outside the workspace root — `BLOCK-TRASH-001`, mode-independent, blocks unconditionally when loaded | S0 | **YES — RAN at the baseline capture** | **W present · L absent · R exit 0 ⇒ NOT INTERCEPTED.** A different hook and rule from `NC-0`, so it evidences the Bash *matcher*, not `NC-0`'s allowlist rule |
+| **NC-0E** | **Pre-fix baseline, Edit.** Same spawned subagent, `Edit` payload targeting `<probe>/.git/config` | S0 | **YES — RAN at the baseline capture, same window** | **W present · L absent · R success ⇒ NOT INTERCEPTED.** Stronger than specified: the target was pre-created so the Edit carried a real witness, upgrading the spec's `W n/a` |
+| **NC-1** | Positive block, Bash, from a **spawned** session | S1 **+ classifier gate** | NO — **DEFERRED on TWO blockers.** S1 does not remove the classifier gate, which denied this exact payload shape at `NC-0` | **W absent · L row `BLOCK-DESTRUCTIVE-022` · R exit 2 + banner.** Retry on any denial before recording it — the gate is nondeterministic |
+| **NC-2** | Specificity, Bash — the same spawned subagent invokes an **allowlisted** script | S1 **+ classifier gate** | NO — **DEFERRED on TWO blockers.** The classifier denied precisely this allowlisted control at `NC-0`, which is what condemned that arm | **RUNS, exit 0, no row.** Without this, NC-1 is consistent with a blanket denial — and a classifier denial here reproduces the broken-probe condition rather than yielding a result |
+| **NC-EDIT-1** | **Tool-class generalization, Edit/Write, from a spawned session**, via `BLOCK-DESTRUCTIVE-016` (`.git` metadata write) | S1 | NO — **DEFERRED**, but **NOT gated on the master flip** | **L row `BLOCK-DESTRUCTIVE-016` · R exit 2 + banner** |
+| **NC-4** | Scope-guard control — subagent spawned with a working directory **outside** the governed root, NC-1's payload | S1 **+ classifier gate** | NO — **DEFERRED on TWO blockers** (it reuses NC-1's payload, so it inherits the same gate) | **RUNS, exit 0.** Without it, NC-1/NC-2/NC-EDIT-1 are consistent with "hooks now fire everywhere." A classifier denial here is indistinguishable from the expected pass unless the denial text is read |
+| **NC-6** | Worktree-provenance arm — repeat NC-1 in a worktree created **after** the re-home and in one that **predates** it | S1 | NO — **DEFERRED** | identical results in both |
+| **NC-EDIT-SKILL-0** | **Class-gate control**, `block-skill-direct-edit`. From a **spawned** session, `Edit` a governed **source-module** path (e.g. `release/skills/release-hub/references/spoke-launch.md`) with no `.editor-session` sentinel, at S1 | S1 | NO — **DEFERRED** | **exit 0, ZERO rows in BOTH logs** — pins the workflow-class gate as the cause and stops a later green being read as coverage the whole time |
+| **NC-EDIT-SKILL-1** | **The hook #3317 observed silent.** Same spawned session and payload, at S2 | **S2** | NO — **DEFERRED**, and this one **DOES** wait for the master flip | **L row in `skill-edit-warn-log.jsonl`** (`hook":"block-skill-direct-edit"`, `rule":"BLOCK-SKILL-EDIT-001"` for SKILL.md / `-002` for a reference doc, `tool":"Edit"`) · **R exit 0** — `warn` records and allows |
+| **NC-EDIT-SKILL-2** | Blocking form of the above | **S3** | NO — **DEFERRED** | **L row in `block-log.jsonl`** · **R exit 2 + banner** |
+| **NC-EDIT-SKILL-S** | **Specificity, three cases**, all at the same state as the arm they control: a **deployed** `.claude/skills/…/SKILL.md` path · a non-skill corpus file · an in-scope path with `tool` = `Bash` | S2 | NO — **DEFERRED** | all **exit 0**, **zero** rows in both logs. Without this, a positive is consistent with a blanket denial rather than with the matcher's declared scope |
+
+**Validated payloads** (each verified against the deployed hooks, with its control arm):
+
+- **Bash class** — sensitivity: the unallowlisted `$PROBE_DIR/probe.sh` → `BLOCK-DESTRUCTIVE-022`, exit 2. Specificity: an **allowlisted** in-tree script → exit 0, no row; and `echo hello` → exit 0. The allowlisted comparator is the real control — it discriminates on *allowlist membership*, not merely on "is a script".
+- **Edit/Write class** — sensitivity: `Edit` on `<probe>/.git/config` → `BLOCK-DESTRUCTIVE-016`, exit 2; `Write` on `<probe>/.git/hooks/pre-commit` → exit 2, both observed under master-OFF / `.mode=warn`. Specificity: `Edit` on `<probe>/notes.txt`, same working directory and tool → exit 0. The target path does not exist and is never created; a blocked Edit performs no write.
+
+### § 6.2 Deferral record
+
+> **DEFERRAL RECORD — negative control for the spawned-session enforcement point.**
+>
+> **Deferred:** arms **NC-1, NC-2, NC-EDIT-1, NC-4, NC-6**, and the four **NC-EDIT-SKILL-\*** arms — plus **NC-0**, which this record previously listed as not deferred and which measurement has since shown was never executable.
+> **Why — TWO blockers, not one.** **(1) Precondition state.** Each arm requires **S1** at minimum, which is an operator-executed change to a file outside the repository. The repository can neither see nor gate the user-scope settings file, so **no merge ordering can make these arms in-pipeline.** The `NC-EDIT-SKILL-*` arms other than the class-gate control need **S2** or **S3** on top of that — a second and third operator act, not a longer wait. **(2) The classifier gate.** An auto-mode permission classifier upstream of `PreToolUse` denied `NC-0`'s payload, a relocated variant, and its allowlisted control; it gates `NC-1` / `NC-2` (and `NC-4`, which reuses `NC-1`'s payload) the same way, and **S1 does not remove it**. It is nondeterministic — denied commands succeeded unchanged on immediate retry — so it does not yield a schedulable arm even once S1 lands. See § 6's *second blocker* note for the measurement. **Pricing this deferral at S1 alone understates it: no operator act currently clears blocker (2).**
+> **Grading note specific to the skill-edit arms:** `block-skill-direct-edit` is `workflow`-class, so it is inert on a default instance and writes to neither log. An absent row from that hook is therefore consistent with *"the gate declined"* and with *"the hook never loaded"* and with *"the call was allowed"*, and discriminates none of them. Do not read one as another. `NC-EDIT-SKILL-0` is what converts that ambiguity into a positive observation of the class gate.
+> **NOT deferred, and RUN:** **NC-A**, **NC-SCOPE** (both CI-gated), **NC-P**, **NC-L**, and the pre-fix baselines **NC-0E** and **NC-0S** — which were executable and had to be, because they are **unrecoverable once the wiring lands**. Both returned **NOT INTERCEPTED** on a full `W ∧ L ∧ R` triple.
+> **Attempted and NOT RUN: `NC-0`.** This record previously asserted `NC-0` was "executable now" and grouped it with `NC-0E`. **That assertion was made without running it, and it is false.** `NC-0` was attempted at the baseline capture and denied by the classifier gate — on its payload, on a relocated variant, **and on its own allowlisted specificity control**. Control-also-zero means the instrument, not the mechanism, produced the zero: the arm is **UNUSABLE** and `NC-0` is **NOT RUN**. `NC-0S` is a substitute Bash-*matcher* baseline on a different hook and rule; it does **not** discharge `NC-0`, and recording it as `NC-0` passing would be the exact over-read this document exists to prevent. **`NC-0`'s pre-fix window is now closed** — the comparator it was specified to provide does not exist and cannot be recovered.
+> **Sequencing note, so this reads as what it is.** The § 6.1 / § 6.2 text asserting `NC-0` executable was authored roughly **six hours before the measurement that falsified it** existed. This is a sequencing gap, not a claim made against available evidence — but the correction is load-bearing precisely because the original was stated with confidence about a control nobody had yet run.
+> **Grading contract while deferred:** the acceptance criteria for this work **must not** record the deferred arms as passing, and **must not** record them as waived. The correct state is *specified-and-deferred*, with this record as the referent — except for **`NC-0`**, whose correct state is *attempted, instrument-blocked, **NOT RUN***. That is a third state and it must not be collapsed into either of the other two: "deferred" would imply it is merely waiting on a precondition, and "waived" would imply someone decided it was unnecessary. Neither is what happened.
+> **Where results land:** the `worktree` column of § 4 above, plus § 5's arm table. **Not a new artifact.**
+> **Reversibility:** CHEAP — every arm is read-only or a blocked no-op; the blocked script never executes and the allowlisted comparator is chosen side-effect-free.
+
+---
+
+## § 7. Cross-reference
 
 - Layer A regression: [`subagent-hook-inheritance.test.sh`](subagent-hook-inheritance.test.sh) — proves hook LOGIC; auto-run by `test-runner.sh` / the `install-tests` hook-tests CI job.
 - Posture doc reconciled by this probe's verdict: [`../../standards/subagent-security-posture.md`](../../standards/subagent-security-posture.md) §1 + §3 Mechanism 2.

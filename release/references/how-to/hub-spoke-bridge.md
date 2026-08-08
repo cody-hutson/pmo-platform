@@ -99,7 +99,7 @@ The hub is the operator's command center. At every human touchpoint, the hub's p
 
 **At every touchpoint, the hub produces a Decision Briefing covering:**
 
-1. **Decisions required** — skip recommendations, accepted risks, scope changes, disposition choices, trade-offs with options. Each decision gets: context (what happened), spoke recommendation (with rationale), hub evaluation (concurs or diverges, with rationale), final recommendation, and routing impact. For each option in a trade-off, the hub renders a per-option `### Design-Principle Conformance` line set (ALIGNED / `**CONFLICT.**` / N-A against the matching [`design-principle-register.md`](../../../core/standards/design-principle-register.md) entries) per the D-Gate Template § Design-Principle Conformance — the structural twin of the per-option Upstream-compatibility verdict. Omission on a `scope_predicate`-matching option is a `[STRUCTURAL-DEFECT]` (per `decision-discipline.md` § 5 G2). Each candidate decision is additionally screened for necessity/value-add per the Procedure 4 Step 5 dimension — an accurate-but-inert item is surfaced as a drop-recommendation, not rubber-stamped.
+1. **Decisions required** — skip recommendations, accepted risks, scope changes, disposition choices, trade-offs with options. Each decision carries the full item-1 field set — including the **reversibility tier + confidence** field — as defined in [`decision-briefing.md`](../../skills/release-hub/references/decision-briefing.md) § Principle item 1; that file is the contract, this section is its worked example, and the bridge doc does NOT duplicate the field enumeration. For each option in a trade-off, the hub renders a per-option `### Design-Principle Conformance` line set (ALIGNED / `**CONFLICT.**` / N-A against the matching [`design-principle-register.md`](../../../core/standards/design-principle-register.md) entries) per the D-Gate Template § Design-Principle Conformance — the structural twin of the per-option Upstream-compatibility verdict. Omission on a `scope_predicate`-matching option is a `[STRUCTURAL-DEFECT]` (per `decision-discipline.md` § 5 G2). Each candidate decision is additionally screened for necessity/value-add per the Procedure 4 Step 5 dimension — an accurate-but-inert item is surfaced as a drop-recommendation, not rubber-stamped.
 2. **Findings that change the release plan** — new risks, dependency shifts, scope expansions, discoveries outside the current issue's scope.
 3. **Status summary** — what completed, quality assessment, any blockers.
 4. **Action items surfaced this routing point** — hub-tracked AI-NNN rows from `action-items.md` in the release's resolved hub-state directory (orchestration playbook § 4a.3 — slug-keyed first, version-keyed read-only fallback) whose `trigger_type` predicate matches the current routing point per [`hub-action-tracking.md` § 4 Review Cadence](../../../core/standards/hub-action-tracking.md). Subsection format: `| AI-NNN | Category | Description | Trigger fired | Recommended disposition |`. When zero rows trigger, the subsection reads *"No action items triggered at this routing point"* — omission is a structural defect (forcing-function makes the scan observable). Schema + 6-value category enum + 4-value trigger-type enum + 5-state status lifecycle defined in `hub-action-tracking.md` — bridge doc does NOT duplicate normative content.
@@ -837,7 +837,7 @@ A skipped **release-scoped** sub-task uses the same format with the milestone na
 
    #### Step 5.5: Quota check before parallel launch
 
-   Before issuing N parallel Agent invocations in the same hub response (the parallel-safe stages 5 / 7 / 8 above), the hub runs **Checkpoint B** of the quota-budget protocol ([`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4) against the *remaining* per-account 5-hour usage-window envelope. This is the load-bearing, ongoing check — it fires before *every* parallel wave, not once at Stage 4, because each wave (Stage 5 batch / Stage 7 batch / Stage 8 batch) faces a potentially different remaining envelope (mid-release quota drift; 5-hour boundary crosses; per-spoke costs varying from the Stage 4 baseline).
+   Before issuing **any** Agent invocation — N in one hub response, or a single one at any stage including the write-serialized 6 / 13 — the hub runs **Checkpoint B** of the quota-budget protocol ([`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4) against the *remaining* per-account 5-hour usage-window envelope. This is the load-bearing, ongoing check — it fires before *every launch*, not once at Stage 4, because each launch faces a potentially different remaining envelope (mid-release quota drift; 5-hour boundary crosses; per-spoke costs varying from the Stage 4 baseline). A singleton is gated too: being serial bounds the concurrent-batch surface, not the envelope, and a lone spoke on a near-tail window dies mid-run exactly the way the gate exists to prevent. Verdict depth varies by launch shape — the full PROCEED / SERIALIZE / DEFER / REDUCE-scope hierarchy for a wave (§ 4.3), the reduced PROCEED / DEFER form for a singleton (§ 4.3a). The check costs zero tool calls, which is what makes per-launch firing affordable.
 
    The hub computes `N_planned × per-spoke-cost-estimate` (Checkpoint A baseline refined by observed per-spoke actuals from prior waves this release) and compares it against the remaining envelope (operator-stated state at hub start, adjusted for elapsed-window time and any per-batch override — see the protocol § 6), then renders one verdict on the usage-window axis:
 
@@ -852,7 +852,7 @@ A skipped **release-scoped** sub-task uses the same format with the milestone na
 
    On **DEFER**, the hub offers the operator an explicit **override-to-PROCEED exit** — the escape hatch for a wrong-stated-envelope deadlock. The override is operator-initiated (the hub renders DEFER as *recommended*; the operator chooses to override), is **deviation-logged** as a recorded auditable choice, and is a one-batch exit (it does not reopen the gate at every wave). When DEFER holds, the hub MAY emit an action-item entry per [`../../../core/standards/hub-action-tracking.md`](../../../core/standards/hub-action-tracking.md) (e.g., "Resume Stage N batch after window-reset at HH:MM") so the deferred batch is tracked and resumed.
 
-   **Ongoing-gate discipline.** This check is a standing pre-launch step for every parallel wave, not a one-time Stage 4 estimate — running it once and treating the batch as cleared for the whole release is the failure mode the runtime checkpoint exists to prevent. **No Autonomy-Tier downgrade.** The verdict is a decision about *whether and when* to launch a batch; it does not reclassify the parallel-safe stages' Autonomy Tier (Stage 5 / 7 / 8 remain auto-launch). **Cutover:** applies to releases entering the pipeline on or after this gate's introducing-release merge SHA recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>); the introducing release itself is exempt (the gate cannot fire on the release that introduces it).
+   **Ongoing-gate discipline.** This check is a standing pre-launch step for **every launch**, not a one-time Stage 4 estimate — running it once and treating the release as cleared is the failure mode the runtime checkpoint exists to prevent. **The verdict is rendered every time, including on PROCEED**: a gate that was skipped and a gate that cleared are otherwise indistinguishable after the fact, and the rendered line is this check's whole audit surface (it emits no pipeline event — see the protocol § 6.1). **No Autonomy-Tier downgrade.** The verdict is a decision about *whether and when* to launch; it does not reclassify any stage's Autonomy Tier (Stage 5 / 7 / 8 remain auto-launch, and gating a Stage-6 singleton is not a downgrade either). **Cutover:** applies to releases entering the pipeline on or after this gate's introducing-release merge SHA recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>); the introducing release itself is exempt (the gate cannot fire on the release that introduces it).
 
    #### File-contention boundary rules
 
@@ -935,14 +935,14 @@ This discipline emerged from C1 routing (2026-04-25), where a chip prompt instru
 
 This is the read-only sibling of the Worktree-discipline block above: where that block hardens a *content-modifying* spoke's filesystem reach, this block bounds a *read-only* spoke's GitHub-write reach. It applies to the read-only spokes — the complement of the content-modifying Stages 6/12/13 — i.e. **Stages 4/5/7/8/9 + the adversarial-review spoke + the research-methodology variant** (the read-only partition per [`subagent-security-posture.md` § Mechanism 1](../../../core/standards/subagent-security-posture.md)). Every read-only spoke prompt MUST carry this clause verbatim:
 
-> **Read-only means read-only across every surface — files AND GitHub.** You may READ any issue, PR, file, or thread the task requires. You may WRITE in exactly one place: a single output comment on your own assigned sub-task #{SUB_TASK_NUMBER}. You MUST NOT:
+> **Read-only means read-only across every surface — files AND GitHub.** You may READ any issue, PR, file, or thread the task requires. **On the GitHub surface** you may WRITE in exactly one place: a single output comment on your own assigned sub-task #{SUB_TASK_NUMBER}. (This bound is the GitHub surface only. Every spoke also writes local scratch files — the temp-file posting idiom below *requires* it — and that surface is bounded separately and universally by the Spoke Template's § Run-Directory Discipline. "Exactly one place" was previously stated without that qualifier and read as covering both surfaces, which is the silence a spoke once resolved by picking up another spoke's leftover file.) You MUST NOT:
 > - invoke `spawn_task` or the `Agent` tool for any purpose (recursion is prohibited — see § Recursion prohibited; this restates that constraint on the write surface, it adds no new one);
 > - comment on, edit, label, re-open, transition, or otherwise mutate any issue or PR other than your assigned sub-task — **including a sibling sub-task in this release** — by ANY tool, `gh`-via-`Bash` included;
 > - create any new issue, PR, or task.
 >
 > Every cross-scope finding — a defect on a sibling issue, a needed follow-up ticket, a correction to another spoke's output — is **ROUTED TO THE HUB, never acted on directly**: record it in your output comment's `### Decisions & Recommendations` (or `### Evidence`) section and stop. The hub holds the release context and operator-authorization scope and chooses the proper channel (Procedure 4; § Counter-example matrix — surface roles). Acting on a cross-scope finding yourself — even a correct one — exceeds a read-only mandate and trips the external-write guardrail.
 
-**Why prompt-level and not tools-list-only:** the structural defense (frontmatter `tools:` omits `Agent`/`spawn_task` per [`subagent-security-posture.md` Mechanism 1](../../../core/standards/subagent-security-posture.md)) covers the spawn primitives but **not** the `gh`-via-`Bash` cross-issue-write vector — `Bash` is in the read-only 11-tool set, no PreToolUse hook blocks a `gh issue comment`/`close` on a sibling, and worktree-session hook-loading is itself untested (#1472). When the hub falls back to a `general-purpose` spoke (pmo-* personas not deployed), Mechanism 1 does not apply at all — the prompt clause is then the sole spoke-facing guardrail. The clause is the load-bearing control on the cross-issue-write surface and defense-in-depth on the spawn surface.
+**Why prompt-level and not tools-list-only:** the structural defense (frontmatter `tools:` omits `Agent`/`spawn_task` per [`subagent-security-posture.md` Mechanism 1](../../../core/standards/subagent-security-posture.md)) covers the spawn primitives but **not** the `gh`-via-`Bash` cross-issue-write vector — `Bash` is in the read-only 11-tool set, no PreToolUse hook blocks a `gh issue comment`/`close` on a sibling, and a spoke session's hook coverage is not something the clause can assume (the four-condition boundary in [`subagent-security-posture.md` § 3.1](../../../core/standards/subagent-security-posture.md) — condition 1 in particular is operator-controlled out-of-band; the ticket that formerly tracked this, #1472, was closed `not_planned` 2026-07-01 and is superseded by the `hub-spoke-execution-safety` enforcement point). When the hub falls back to a `general-purpose` spoke (pmo-* personas not deployed), Mechanism 1 does not apply at all — the prompt clause is then the sole spoke-facing guardrail. The clause is the load-bearing control on the cross-issue-write surface and defense-in-depth on the spawn surface.
 
 **Composition, not duplication:** § Recursion prohibited + `subagent-security-posture.md` Mechanism 1 own the spawn/`Agent` exclusion; this clause *cites* them and adds the GitHub-write scope — it does not restate the recursion rule as a new rule (honest-count discipline). The hub-owned-close convention (Procedure 4) is the companion control: a read-only spoke never closes any issue — including its own assigned sub-task, which the hub closes after consuming the output.
 
@@ -1153,10 +1153,15 @@ The default shape for multi-phase work is a new milestone plus one issue per pha
 
 Because the `block-destructive` agent hook matches destructive-git substrings **lexically** in a Bash command string (it scans the literal text, not the parsed git semantics), a chip prompt MUST prescribe git idioms that do not present a destructive substring to the matcher even when the operation is safe:
 
-- **Post issue and comment bodies via a Write-tool temp file + `gh api --input <file>`** (or `gh pr create --body-file` / `gh issue create --body-file`), never by inlining a large body into a `-f body=...` argument — a heredoc or inlined body can carry incidental substrings the lexical matcher trips on, and the temp-file path is also the parser-clean-friendly route.
+- **Post issue and comment bodies via a Write-tool temp file + `gh api --input <file>`** (or `gh pr create --body-file` / `gh issue create --body-file`), never by inlining a large body into a `-f body=...` argument — a heredoc or inlined body can carry incidental substrings the lexical matcher trips on, and the temp-file path is also the parser-clean-friendly route. **That temp file goes in the spoke's run directory** (`$SPOKE_OUT`, per the Spoke Template's § Run-Directory Discipline) — this mandate is what creates the local write, so it names the path discipline that bounds it rather than leaving the target unspecified.
 - **Regenerate a branch with `git checkout -B <branch> origin/main` + `git push --force-with-lease`**, never `git reset --hard` or an unguarded `git push --force` — `checkout -B` re-points the branch without a destructive substring, and `--force-with-lease` is the safe lease-checked push the hook permits where bare `--force` is blocked.
 
-This workaround is load-bearing because of the repo/worktree-session hook-load gap — the PreToolUse hooks that would otherwise enforce destructive-git safety do not load in a repo-rooted or worktree-rooted spoke session the way they do in a workspace-root session, so the lexical-block convention is the discipline the chip must carry explicitly rather than relying on the hook to fire.
+**Why this idiom holds regardless of hook coverage — do not maintain it as a workaround for absent hooks.** Two independent reasons keep it load-bearing, and they point in opposite directions, which is why the idiom survives either state:
+
+- **When the hook IS in force,** the matcher is lexical: it scans the literal command text, not parsed git semantics. A perfectly safe operation carrying a destructive substring is blocked. The idiom is what keeps a legitimate chip from being stopped.
+- **When the hook is NOT in force,** nothing enforces destructive-git safety on the spoke's behalf, and the idiom is the only discipline in play.
+
+Whether a given spoke session is covered is decided by the four-condition coverage boundary in [`subagent-security-posture.md` § 3.1](../../../core/standards/subagent-security-posture.md) — chiefly condition 1, whether the session resolved a settings surface declaring the hook wiring. Historically a repo- or worktree-rooted session resolved none, so spokes ran with no hooks at all; the `hub-spoke-execution-safety` release ships the enforcement point that re-homes the wiring, and the operator applies it out-of-band. **A spoke cannot observe its own coverage, and must not branch on it.** Write chips that satisfy this idiom either way.
 
 **Cutover discipline:** Applies to all releases going forward.
 
@@ -1619,6 +1624,49 @@ this template.
 
 **Cutover discipline:** Applies to all releases going forward.
 
+## Run-Directory Discipline (all spokes)
+
+Resolve exactly ONE run directory at start, and confine every scratch artifact
+to it — on the READ side as well as the write side:
+
+    SCRATCH_BASE="<harness session scratchpad dir, if one was supplied;
+                   otherwise ${TMPDIR:-/tmp}>"
+    SPOKE_OUT="$(mktemp -d "${SCRATCH_BASE}/spoke-<STAGE>-<SUB_TASK_NUMBER>-XXXXXX")"
+
+- **Write** every scratch artifact — comment bodies, evidence files, extracted
+  payloads, intermediate output — inside `$SPOKE_OUT` and nowhere else.
+- **Read** scratch input only from `$SPOKE_OUT`. Never `ls`, glob, or
+  path-construct your way into a shared temp parent to find a file you did not
+  create in THIS run. A scratch file you did not write in this run is another
+  spoke's artifact: it is not yours to read, and it is not yours to post.
+- **Echo the run directory in `${SCRATCH_BASE}`-relative form** — the literal
+  variable name plus the resolved unique directory, e.g.
+  `${SCRATCH_BASE}/spoke-6-5005-a1b2c3` — on its own line in your output
+  comment's `### Evidence` section. One line. **Never the resolved absolute
+  path**: on a default install the scratch base embeds the operator's OS
+  username, and the output comment is a public surface. The relative form
+  carries both facts the control needs — which parent the spoke resolved, and
+  which unique run directory it made — so a wrong-path post stays detectable
+  afterwards from the durable artifact rather than only in-session.
+
+Both keys are load-bearing and neither works alone. `mktemp -d` supplies
+uniqueness **by construction** — including across a re-run of the same stage on
+the same sub-task, which is the case a sub-task-keyed path silently fails: run 2
+resolves run 1's directory with run 1's leftovers still in it, reproducing the
+hazard while the namespacing looks present. The sub-task number supplies
+traceability, which a bare random directory does not.
+
+**Honest scope — the read side is a convention, not an interlock.** The write
+side is mechanical: a directory that did not exist cannot be collided with. The
+read side is a prompt clause with **no enforcement path** — the `Read` matcher
+wires exactly one PreToolUse hook and it is unrelated to filesystem scoping, so
+nothing intercepts a read of another run's directory before or after the
+`hub-spoke-execution-safety` enforcement point lands. The echo above is the
+compensating control: it makes a violation observable after the fact. Treat the
+read clause as discipline you owe, not as a guard that will catch you.
+
+**Cutover discipline:** Applies to all releases going forward.
+
 ## Output
 Post your output as a comment on sub-task #{SUB_TASK_NUMBER}:
 
@@ -1831,7 +1879,7 @@ A spoke that spawns its own next chip bypasses the Hub's orchestration role and 
      reference, not by restating it.
    - **Empirical verification** — for each testable claim in the spoke output, the hub runs verification before producing the Decision Briefing. Verification artifacts (commands run, observed results, file:line citations) are quoted in the per-recommendation Empirical Verification subsection of the briefing. Concurrence-without-verification is non-compliant.
 6. **Produce a Decision Briefing** per the Operating Principle above, applying mechanisms per `core/disciplines/decision-discipline.md` § 3 triage table:
-   - For each decision: spoke recommendation (with rationale) → **Empirical Verification subsection** (per R3 ) → hub evaluation (concurs/diverges with rationale) → final recommendation
+   - For each decision: spoke recommendation (with rationale) → **Empirical Verification subsection** (per R3 ) → hub evaluation (concurs/diverges with rationale) → final recommendation → **reversibility tier + confidence**. This arrow names Step 6's composition ORDER, not the item's field set; the complete set is defined in [`decision-briefing.md`](../../skills/release-hub/references/decision-briefing.md) § Principle item 1 and is not re-enumerated here.
    - Per-recommendation Empirical Verification subsection template:
      ```markdown
      ### Spoke recommendation: <one-line summary>
@@ -1848,6 +1896,7 @@ A spoke that spawns its own next chip bypasses the Hub's orchestration role and 
      **Concur / Diverge:** <concur | diverge>
      **Rationale (release-context overlay):** <hub's broader-context reasoning>
      **Final recommendation to operator:** <action item>
+     **Reversibility tier + confidence:** <CHEAP | MODERATE | EXPENSIVE | IRREVERSIBLE> · <HIGH | MEDIUM | LOW>
      ```
    - When the spoke recommendation is non-testable (pure design choice, narrative summary), the hub states this explicitly: `Empirical Verification: N/A — recommendation is a design choice with no testable claim` — but only with named rationale. Default-N/A without explanation is a structural defect surfaced by Collective Review.
    - Extract findings that change the release plan (new risks, dependency shifts, discoveries)
@@ -2721,9 +2770,12 @@ releases supply an outcome distribution; the calibration trigger is registered
 on the release log.
 
 **Autonomy-Tier note.** The usage-window mitigations are decisions about
-*whether and when* to launch a batch; they do not reclassify the parallel-safe
-stages' Autonomy Tier (Stage 5/7/8 remain auto-launch). They do not apply to the
-write-serialized stages (6/13), which launch one spoke at a time by design.
+*whether and when* to launch; they do not reclassify any stage's Autonomy Tier
+(Stage 5/7/8 remain auto-launch). They **do** apply at the write-serialized
+stages (6/13): launching one spoke at a time bounds the concurrent-batch
+surface, not the remaining envelope, and a singleton on a near-tail window
+overruns exactly the way a batch does. Gating a singleton is not an autonomy
+downgrade any more than gating a wave is.
 
 **Cutover.** Applies to releases entering the pipeline on or after this
 constraint's introducing-release merge SHA recorded in

@@ -32,9 +32,12 @@ The platform defends version identity in three layers, in order:
 Recover is **narrow by construction.** Under defer-to-merge + ref-CAS, an orphan tag
 is rare — the common re-version abandons only a provisional *name* (no tag was ever
 cut), and the version that was "abandoned" is usually the **live canonical tag of the
-sibling release that won the slot**. This runbook reaps a tag **only** when an
+sibling release that won the slot**. This runbook **records** an orphan tag only when an
 authority declares it abandoned *and* confirms a tag was actually pushed for it — never
-by inferring "this version isn't the latest."
+by inferring "this version isn't the latest." It does not remove one: a version tag is
+retained, because `refs/tags/v*` is protected at the repository host and the remote
+delete is rejected for every account. That rule is owned by
+`core/rules/git-workflow.md` § Tag Retention.
 
 ## The three residues and their dispositions
 
@@ -44,7 +47,7 @@ forward (no force-push, no `reset --hard`, no history rewrite).
 
 | ID | Residue | Surface | Disposition | Forward-only mechanism |
 |---|---|---|---|---|
-| **R-1** | The orphan git tag of the abandoned version | The tag — the authoritative, CAS-claimed surface | **REAP** | `git push --delete origin <abandoned-tag>` then `git tag -d <abandoned-tag>` (both non-force). A tag is a ref, not history — deleting an *unreferenced, declared-abandoned* tag removes a pointer and rewrites nothing. |
+| **R-1** | The orphan git tag of the abandoned version | The tag — the authoritative, CAS-claimed surface | **RETAIN AND RECORD** | None on this host, and none is possible. `refs/tags/v*` is protected at the repository host (`core/rules/git-workflow.md` § Tag Retention): the remote delete is rejected for every account, the owner included. Record the orphan in the ledger and transition its row to `tag-retained`. Retention is benign — the orphan points at a commit that stays reachable through its canonical tag. |
 | **R-2** | Stale version labels baked into merged commit messages, the merged PR title, and the release branch name | History — immutable | **ACCEPT AS RESIDUAL, with documented provenance** | None. History cannot be rewritten forward-only (rewriting needs a force-push, which is denied). Record the labels in the ledger's `residual_labels` cell and the RELEASE_LOG note as the as-authored cosmetic build-record artifact they are. |
 | **R-3** | A corpus row claimed under the abandoned version (RELEASE_LOG / RELEASE_INDEX / RELEASE_DIGEST / RELEASE_NOTES / CHANGELOG / `.version`) | The ledgers — conflict-resolved, not CAS | **ROLL FORWARD (amending edit)** | A plain forward `Edit` that restamps the row to the canonical version and self-documents the abandoned-version provenance. The v1.03 release-note frontmatter is the proven end-state exemplar (see Step 1). |
 
@@ -52,13 +55,16 @@ Why these three and not others: the founding architecture establishes that a rel
 has **two** version-claim surfaces — the **tag** (atomic CAS, authoritative) and the
 **corpus ledgers** (conflict-resolved, not CAS) — plus a third **immutable** surface
 (history). Recovery un-claims the abandoned version across exactly those surfaces: the
-authoritative surface is *reaped*, the conflict-resolved surface is *rolled forward*,
-and the immutable surface is *documented*.
+authoritative surface is *retained and recorded*, the conflict-resolved surface is
+*rolled forward*, and the immutable surface is *documented*. The surface taxonomy is
+unchanged by the host tag-protection control — only R-1's disposition verb moved, from
+*reap* to *retain*, because the operation the earlier verb named is one the host
+rejects.
 
 ## Step-by-step recovery (forward-only)
 
 Work the steps in order. The durable record (R-3) is restamped first so the canonical
-version is authoritative before the orphan tag is removed.
+version is authoritative before the orphan tag's ledger row is settled.
 
 ### Step 0 — Establish the canonical version and record the abandonment
 
@@ -104,50 +110,45 @@ chore PR (or a dedicated `chore/<slug>-reversion-recovery` PR if the release is 
 closed). The reaping tool **detects** a stale-version row and reports it, but **never**
 edits corpus prose on its own.
 
-### Step 2 — R-1 orphan-tag reap (only if a tag was pushed for the abandoned version)
+### Step 2 — R-1 orphan-tag record (the tag is retained)
 
-Skip this step entirely if `abandoned_tag_pushed = false` — there is no tag to reap.
+Skip this step entirely if `abandoned_tag_pushed = false` — there is no orphan tag to
+record.
 
-Preview first, then apply, gated on the ledger:
+The tag is **not removed.** Run the detection pass, which reads the ledger, classifies
+each authority-declared-abandoned tag against host policy, and settles its ledger row:
 
 ```bash
-# Preview — reads RELEASE_REVERSIONS.md, lists what it WOULD reap, mutates nothing:
+# Detect and record — reads RELEASE_REVERSIONS.md, classifies, deletes nothing:
 bash release/tools/cleanup-orphan-state.sh --reap-orphan-tags --dry-run
-
-# Apply — requires BOTH --apply AND --force (double opt-in; a tag delete is
-# MODERATE-reversibility — re-pushable from the recorded merge_sha, but it
-# transiently breaks any reference that resolved the tag):
-bash release/tools/cleanup-orphan-state.sh --reap-orphan-tags --apply --force
 ```
 
-The tool authorizes a reap only for a ledger row whose `disposition = tag-orphaned`
-(equivalently, `abandoned_tag_pushed = true` with no `reaped_ref` yet), refuses to reap
-a tag that is the canonical version of a live RELEASE_LOG row, and on success transitions
-that ledger row's `disposition` to `tag-reaped` and writes the cleanup reference into
-`reaped_ref`.
+The tool considers only a ledger row whose `disposition = tag-orphaned` (equivalently,
+`abandoned_tag_pushed = true` with no `reaped_ref` yet) and refuses to touch a tag that
+is the canonical version of a live RELEASE_LOG row. It then reads the host's tag policy
+and takes one of three branches:
+
+| Host policy | What the tool does |
+|---|---|
+| **Protected** — an active host ruleset covers the tag with a deletion rule | Classifies `RETAINED`, transitions the ledger row's `disposition` to `tag-retained`, issues **no** push. `--force` is not required, because nothing destructive is attempted. This is the branch that fires on the canonical repository. |
+| **Provably unprotected** — the remote is not a policy-bearing host, or its policy was read and covers nothing | The pre-existing reap path applies unchanged, still behind the `--apply --force` double opt-in. Reaping here is an operator-gated exception to the retention rule, not the default. |
+| **Undetermined** — the remote is a policy-bearing host whose policy could not be read | Nothing is attempted and no ledger row is transitioned. The tool names the reason and stops. Re-run where host policy is readable, or assert the host state explicitly with `--assume-unprotected` if you know the deployment carries no tag protection. |
 
 If you are recovering a case the ledger does not yet cover, name the tag explicitly with
 the pre-ledger fallback (the tool never guesses):
 
 ```bash
-bash release/tools/cleanup-orphan-state.sh --reap-orphan-tags --abandoned <abandoned-tag> --apply --force
+bash release/tools/cleanup-orphan-state.sh --reap-orphan-tags --abandoned <abandoned-tag> --dry-run
 ```
 
-The reap is **idempotent** — a tag already absent from origin is reported as a no-op,
-so the command is safe to re-run. It requires network reachability to `origin`; a
-transport failure is reported distinctly from a policy refusal (a transport failure is
-retry-safe; a refusal means stop — the tag is protected or in use).
+The record pass is **idempotent** — a row already settled carries no reap authority, and
+a tag already absent from the remote is reported as a no-op, so the command is safe to
+re-run.
 
-**Manual equivalent** (for the no-ledger or hook-blocked path — both non-force):
-
-```bash
-git push --delete origin <abandoned-tag>   # delete on origin FIRST
-git tag -d <abandoned-tag>                  # then delete locally — only after origin succeeds
-```
-
-Delete origin **first** and the local tag **only after** origin succeeds. Deleting the
-local tag while the origin delete failed would leave origin and local divergent (origin
-keeps the tag, local loses it — the inverse of the intended state).
+**There is no manual equivalent, and none is needed.** Both remote-delete command forms
+are rejected by the host ruleset for every account (`core/rules/git-workflow.md`
+§ Tag Retention) — a hand-typed command fails exactly where the tool refuses to try. The recovery end state is the ledger row reading
+`tag-retained`, which the detection pass writes.
 
 ### Step 3 — R-2 residual-label documentation
 
@@ -165,47 +166,44 @@ Confirm the end state:
   re-versioned)` smear);
 - the RELEASE_INDEX and RELEASE_DIGEST entries name the canonical version;
 - the published GitHub Release exists at the canonical tag;
-- the abandoned tag is **absent** from origin —
-  `git ls-remote --tags origin <abandoned-tag>` returns empty;
-- the ledger row's `disposition` is `tag-reaped` (or `row-reaped` for an R-3-only
-  recovery) and `reaped_ref` is set.
+- the abandoned tag is **present** on origin —
+  `git ls-remote --tags origin <abandoned-tag>` returns its SHA. **An empty result is a
+  verification FAILURE, not a success:** it means a version tag was deleted, which no
+  procedure authorizes and the host is configured to prevent;
+- the ledger row's `disposition` is `tag-retained` (or `row-reaped` for an R-3-only
+  recovery, where `reaped_ref` is set).
 
 ## What recovery does NOT do
 
 - **Never force-push to rewrite history.** The stale commit/PR/branch labels (R-2) are
   immutable; they are documented, not rewritten. `git push --force`, `git reset --hard`,
   and history rewrites are denied — recovery uses none of them.
-- **Never reap a tag that an authority has not declared abandoned.** A tag is reaped
-  only when the ledger marks its row `tag-orphaned` (or the operator names it with
-  `--abandoned`). Abandonment is never inferred from "not the latest version."
-- **Never reap a tag that is the canonical version of a live release row.** The
+- **Never delete a version tag.** `refs/tags/v*` is host-protected; the remote delete is
+  rejected for every account, the owner included. An orphan tag is retained and recorded.
+  `core/rules/git-workflow.md` § Tag Retention owns this rule and states its one
+  host-conditional exception: on a deployment that provably carries no tag protection,
+  reaping is an operator-gated exception rather than the default.
+- **Never act on a tag that an authority has not declared abandoned.** A tag is even
+  considered only when the ledger marks its row `tag-orphaned` (or the operator names it
+  with `--abandoned`). Abandonment is never inferred from "not the latest version."
+- **Never touch a tag that is the canonical version of a live release row.** The
   abandoned version of one release is frequently the live tag of the sibling that won
-  the slot; the tool refuses to reap such a tag even if it is wrongly declared abandoned.
+  the slot; the tool refuses such a tag even if it is wrongly declared abandoned.
 - **Never auto-edit corpus prose from the tool.** The R-3 corpus roll-forward is
   Document-Tier-1 authoring, operator-gated; the tool reports a stale-version row, it
   does not rewrite it.
 
-## Hook-blocked → user-side handoff
+## Why there is no hook-blocked handoff for R-1
 
-If a reap step is blocked by a security hook and there is no tool-side alternative,
-hand the equivalent off to the operator with the standard template — cite the blocking
-hook file and rule ID, present the one-click command, state the effect and its
-reversibility tier, and state the post-execution verification:
+A hook-blocked → user-side handoff is warranted only when a **user-side equivalent that
+works** exists. For a version-tag delete none does: the blocker is the host ruleset, not
+a local hook, and the ruleset rejects the push for every account including the owner. A
+handoff here would hand the operator a command guaranteed to fail — the exact failure
+mode the handoff convention exists to prevent.
 
-> ⛔ **Hook-blocked, user-side handoff** — `<hook-file-path>:<RULE-ID>` blocked
-> `deleting the abandoned orphan tag`.
->
-> **Run in your terminal:**
-> ```bash
-> git push --delete origin <abandoned-tag> && git tag -d <abandoned-tag>
-> ```
-> **Effect:** removes the abandoned version's orphan tag from origin and locally.
-> Reversibility: **MODERATE** (re-pushable from the row's recorded merge SHA in hours,
-> but transiently breaks any reference that resolved the tag).
-> **After you run it:** the recovery will re-check `git ls-remote --tags origin
-> <abandoned-tag>` is empty and transition the ledger row to `tag-reaped`.
-
-A plain non-force `git push --delete <tag>` is permitted by the destructive-action hook
-(only force-push forms are blocked), so this handoff fires only in genuinely restricted
-contexts (for example, when the script-execution allowlist does not cover the invoking
-path); the operator runs the manual non-force commands above.
+The distinction is worth stating because it was previously conflated. The **local
+destructive-action hook** permits a plain non-force remote tag delete (only force-push
+forms are in its blocked set), which made the operation look merely hook-gated. The
+**host ruleset** is a separate, stricter mechanism that rejects the push server-side. A
+permissive local hook says nothing about what the host will accept; only the host's
+policy does, and this runbook reads it rather than inferring it.

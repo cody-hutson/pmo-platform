@@ -88,6 +88,10 @@ This hook is Read-tool-matched, not Bash-verb-anchored — the absolute-path-pre
 | Scope | Destructive git ops, rm -rf catastrophic paths, primary-write guard, tamper resistance, script-exec ban |
 | Mode | Always-enforce (high-confidence, narrow rules, low false-positive risk; not gated by `.claude/hooks/.mode`) |
 
+> **Coverage boundary of BLOCK-DESTRUCTIVE-022 (and of every rule in this registry) — FOUR conditions.** "Always-enforce" above describes condition 4 only. A PreToolUse-enforced control is in force only when **all four** hold, and not when any one fails: (1) **loading** — the session resolved a settings surface declaring the hook wiring (any session, main or spawned, whose working directory is under the governed workspace root; a session resolving no such surface loads no hooks at all, and one outside the root is excluded by `core/hooks/lib/scope-guard.sh`); (2) **bypass** — `CLAUDE_HOOK_BYPASS` was not set in the launching environment (layer 1, which exits **both** hook classes, so the security/workflow asymmetry does **not** exist there; -023 denies *setting* it mid-session, which does not narrow the pre-launch case); (3) **master-activation class** — this hook is `security` class and therefore always enforces, going inert only on an explicit logged security-class opt-out; (4) **mode** — this hook is mode-independent. Naming fewer than four overstates the coverage. Canonical statement: [`core/standards/subagent-security-posture.md` § 3.1](../standards/subagent-security-posture.md).
+>
+> **The specific over-claim this exists to stop:** describing `script-execution-allowlist.txt` as a *control* on a path where condition 1 does not hold. Where the wiring is not loaded, the allowlist is a convention — it governs review, not execution.
+
 ### Rule registry
 
 | Rule ID | Description |
@@ -112,7 +116,7 @@ This hook is Read-tool-matched, not Bash-verb-anchored — the absolute-path-pre
 | BLOCK-DESTRUCTIVE-020 | PATH manipulation (`PATH=`, `export PATH`, `unset PATH`) |
 | BLOCK-DESTRUCTIVE-021 | alias / function override of critical tools (`grep`, `jq`, `bash`, `sh`, `printf`) |
 | BLOCK-DESTRUCTIVE-022 | Bash subprocess script execution not in `.claude/script-execution-allowlist.txt` |
-| BLOCK-DESTRUCTIVE-023 | Mid-session setting of `CLAUDE_HOOK_BYPASS` (anti-injection) |
+| BLOCK-DESTRUCTIVE-023 | Mid-session setting of `CLAUDE_HOOK_BYPASS` or `PMO_SCOPE_GUARD_ROOT` (anti-injection) |
 
 See [`§ Absolute-Path-Aware Verb Anchor`](bypass-mode-readiness.md) for the canonical anchor pattern (including the git-family variant declared in this hook as `ANCHOR_PREFIX_GIT`) and [`§ Known Limitations`](bypass-mode-readiness.md) for the Write/Edit primary-write-guard `os.path.realpath` normalization posture (BSD/macOS portability).
 
@@ -385,7 +389,9 @@ A durable master switch governs whether the `block-*` hook layer is active, so a
 
 **How it is read:** each hook sources `core/hooks/lib/master-enable.sh` (co-deployed to `.claude/hooks/lib/` beside `dep-resolve.sh`) with a guarded source plus a single `master_enable_gate <class>` call, placed immediately after the hook's `CLAUDE_HOOK_BYPASS` check and before its `.mode` read. The reader is jq-free and section-aware. **Fail-toward-current-behavior:** if the lib is missing, the hook does NOT gate — it keeps its existing `.mode` enforcement. A hook that cannot read master state never silently disables itself; this is the deliberate opposite of the fail-closed dependency posture — "cannot read master state" must never equal "guard off".
 
-**Runtime precedence inside each hook (highest first):** `CLAUDE_HOOK_BYPASS` (per-session) → **master-enable** (durable) → `.mode` / own-mode (per-hook dial) → rule evaluation.
+**Runtime precedence inside each hook (highest first):** `CLAUDE_HOOK_BYPASS` (per-session) → **master-enable** (durable) → **workspace-scope** (per-tool-call) → `.mode` / own-mode (per-hook dial) → rule evaluation. Upstream of all four sits **loading** — whether the session resolved a settings surface declaring the wiring at all.
+
+**Workspace-scope layer (`core/hooks/lib/scope-guard.sh`).** Each hook sources it with the same guarded-source idiom as `master-enable.sh` and calls `scope_guard_gate "$CWD"` at the point where the tool-call payload's working directory is already parsed. The hook is inert for a tool call whose working directory is not under the governed workspace root. It is a **separate lib, not a function in `master-enable.sh`**, because its fail direction is deliberately **inverted on the cwd axis**: an undeterminable working directory resolves to *do not enforce*, since current behavior for a session that cannot be shown to be inside the governed root is "no hooks fire at all". That is the same fail-toward-current-behavior principle master-enable states, evaluated on a different axis — which is exactly why the two must not share a function. On the **lib-presence** axis the direction is **not** inverted and matches master-enable: a missing `scope-guard.sh` does NOT gate, so the hook keeps enforcing. Inverting that axis too would make deleting one file a silent total kill switch for every security-class hook. `block-autonomy-ceiling` places the call after its Tier-0 floor, mirroring where it already places master-activation: that floor is path-scoped, not session-scoped.
 
 **Security scope (the load-bearing invariant).** Master-OFF governs the **workflow-class** hooks only. Two classes are declared at each hook's gate call site:
 
@@ -416,6 +422,10 @@ Eight allowlists govern specific surfaces:
 | `.claude/scope-segregation-allowlist.txt` | `block-scope-segregation.sh` known-safe content strings (false-positive escape) | fixed-string substrings | substring match |
 
 These eight are the allowlists the bypass-mode hooks consult. The broader workspace carries additional allowlists owned by other surfaces (e.g. the skill-editor exemption list, the reference-durability allowlist, the doc-link skip list) — those belong to their own discipline docs, not this registry.
+
+> **Coverage boundary — what an allowlist in this table IS and IS NOT.** Each file above is read by a PreToolUse hook, so it constrains a tool call only when that hook is in force — which requires **all four** of these, and fails when any one fails: (1) **loading** — the session resolved a settings surface declaring the hook wiring (any session, main or spawned, whose working directory is under the governed workspace root; a session resolving no such surface loads no hooks at all, and one outside the root is excluded by `core/hooks/lib/scope-guard.sh`); (2) **bypass** — `CLAUDE_HOOK_BYPASS` was not set in the launching environment (layer 1, which exits **both** hook classes, so the security/workflow asymmetry does **not** exist there); (3) **master-activation class** — a `security`-class hook always enforces, a `workflow`-class hook is inert while master activation is off; (4) **mode** — most block hooks warn-and-allow in warn mode, a minority are mode-independent. Naming fewer than four overstates the coverage. Canonical statement: [`core/standards/subagent-security-posture.md` § 3.1](../standards/subagent-security-posture.md).
+>
+> Where those conditions hold, an allowlist is a **control**. Where any fails, it is a **convention**: it still records what the platform intends to permit and is still the right thing to maintain, but it is not an interlock and no threat model may treat it as one. Do not accept a residual on the basis that an allowlist "will catch" an invocation without first checking the four conditions on the path that invocation actually runs on.
 
 **Adding entries:** Use the atomic-append helper:
 ```bash

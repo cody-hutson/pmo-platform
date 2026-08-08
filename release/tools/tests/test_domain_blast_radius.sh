@@ -4,12 +4,26 @@ set -euo pipefail
 # instrument (domain-blast-radius.sh) and the shared schema-v1 library it extracts.
 #
 # Three groups, matching the Stage-5 design + the A6.5 build conditions:
-#   (F1) DEFAULT-PATH REGRESSION — blast-radius.sh output is byte-identical, under a
-#        NORMALIZED diff, before vs after the shared-lib refactor. The diff strips the
-#        three non-deterministic fields (scanned_at / scan_root / stats.elapsed_seconds)
-#        with `jq 'del(...)'` on BOTH sides — NOT a byte-match golden (those fields make
-#        a byte-match fail 100% and be non-portable). This proves D3 (sourcing the shared
-#        lib) is a behavior-preserving no-op on the doc corpus.
+#   (F1) DEFAULT-PATH REGRESSION — blast-radius.sh output on a FROZEN 3-file doc corpus
+#        matches a COMMITTED normalized golden. The golden is the pre-shared-lib-refactor
+#        tool's output on that corpus, so a match proves the refactor remains a
+#        behavior-preserving no-op. normalize() strips four fields that are not the
+#        subject of the assertion — three non-deterministic (scanned_at / scan_root /
+#        stats.elapsed_seconds) plus cli_version, a tool-identity label whose bump is not
+#        a behaviour change. Fixture + spec constants + regeneration protocol live in
+#        release/tools/tests/fixtures/blast-radius-f1/README.md.
+#
+#        F1 previously reconstructed the pre-refactor script from git history at run
+#        time. That path is deleted. It could not run in a shallow checkout; its
+#        classifier (`git show <sha>:… | grep -q` under `set -o pipefail`) misread a
+#        SIGPIPE from the early-exiting `grep -q` as "token absent" and classified a
+#        POST-refactor blob as pre-refactor; and the misclassified blob then died with
+#        empty output — which the old code reported as a PASS. This suite now makes ZERO
+#        git HISTORY reads (no `git log`, no `git show`). Stated precisely because it is
+#        checkable: a GIT_TRACE run still shows `git rev-parse --show-toplevel` calls,
+#        but those come from domain-blast-radius.sh resolving its own scan root in the
+#        dispatch group, which passes no --root. They are not history reads and resolve
+#        fine in a shallow clone.
 #   (AC#3) SOFTWARE IMPORT-GRAPH — domain-blast-radius.sh --domain=software on a code
 #        fixture yields a NON-EMPTY schema-v1 first_order[] (the A3.1 code/software row's
 #        method has a runnable counterpart).
@@ -19,127 +33,204 @@ set -euo pipefail
 #        out ([] + count 0); total_files_scanned is the code-file denominator; the full
 #        schema-v1 envelope keys are present.
 #
-# Offline + deterministic: all fixtures live in isolated mktemp trees scanned via
-# --root, so counts never depend on the surrounding repo. No network / gh / git-remote.
+# Offline + deterministic: every scan runs against an isolated mktemp tree via --root, so
+# counts never depend on the surrounding repo. The AC#3 / F4 fixtures are built in mktemp;
+# F1's is a COMMITTED fixture copied to mktemp and scanned there, so the checkout is never
+# mutated and nothing is ever written into a scanned root at run time.
+# No network / gh / git-remote / git-history read.
 #
 # Run:  bash release/tools/tests/test_domain_blast_radius.sh
-# Exit: 0 = all groups pass, 1 = one or more assertions failed.
+#       BLAST_RADIUS_TESTS_STRICT=1 …    — CI mode: a SKIP is RED
+#       … --regenerate-golden            — move the F1 golden (requires a written reason)
+# Exit: 0 = all groups pass, 1 = an assertion failed (or, under STRICT, was skipped).
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 TOOLS_DIR="$(cd "$HERE/.." && pwd -P)"
 REPO_ROOT="$(cd "$TOOLS_DIR/../.." && pwd -P)"
 BLAST_RADIUS="$TOOLS_DIR/blast-radius.sh"
 DOMAIN_BLAST_RADIUS="$TOOLS_DIR/domain-blast-radius.sh"
+FIXTURES="$HERE/fixtures"
+F1_FIXTURE="$FIXTURES/blast-radius-f1"
+F1_GOLDEN="$F1_FIXTURE/normalized-golden.json"
 
 PASS=0
 FAIL=0
+SKIP=0
 FAILURES=()
+SKIPS=()
+
+# STRICT: in CI a SKIP is a DEFECT, not an environment condition. Every skip predicate in
+# this suite is unreachable in a well-formed checkout — the golden fixture is a committed
+# file and jq is on the runner image — so a skip here means the harness or the fixture is
+# broken. Set on the CI step only; locally a skip stays advisory so a developer without jq
+# is not blocked. The strict/non-strict split is what lets the same predicate be advisory
+# to a human and fatal to a machine reading the exit code. See report_and_exit().
+STRICT="${BLAST_RADIUS_TESTS_STRICT:-0}"
 
 ok()   { PASS=$((PASS+1)); printf '  ok   — %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); FAILURES+=("$1"); printf '  FAIL — %s\n' "$1"; }
+# A SKIP means the assertion's SUBJECT COULD NOT BE EVALUATED. It is never a PASS.
+# It always carries a reason, and it always annotates in CI.
+skip() {
+  SKIP=$((SKIP+1)); SKIPS+=("$1")
+  printf '  SKIP — %s\n' "$1"
+  printf '::warning title=blast-radius suite skipped an assertion::%s\n' "$1"
+}
 
-# Strip the three non-deterministic fields for a normalized, portable comparison.
-normalize() { jq -S 'del(.scanned_at, .scan_root, .stats.elapsed_seconds)'; }
+# Strip the fields that are NOT the subject of this assertion:
+#   scanned_at / scan_root / stats.elapsed_seconds — non-deterministic
+#   cli_version                                    — a tool-identity label, not behaviour.
+#     A CLI_VERSION bump is not a doc-fan-out change; freezing it inside the compared
+#     surface would red F1 on a no-op and make golden regeneration routine, which is the
+#     very reflex the regeneration protocol exists to prevent. Its PRESENCE in the
+#     envelope is still asserted — that guarantee moved to the S6 raw-skeleton guard.
+normalize() { jq -S 'del(.scanned_at, .scan_root, .stats.elapsed_seconds, .cli_version)'; }
+
+# Keep in sync with normalize() above. S6 asserts live-minus-golden equals EXACTLY this
+# set, so widening normalize() without widening this list fails the guard by design.
+F1_DELSET='["cli_version","scan_root","scanned_at","stats.elapsed_seconds"]'
 
 require_jq() {
   if ! command -v jq >/dev/null 2>&1; then
-    echo "SKIP: jq not on PATH — cannot run schema-v1 tests" >&2
-    exit 0
+    skip "jq not on PATH — EVERY schema-v1 assertion in this suite is UNEVALUATED"
+    report_and_exit
   fi
 }
 
+# Shared tail, extracted from main() so require_jq's early exit honors STRICT too.
+# A suite that skipped an assertion must not hand a clean exit 0 to a caller that only
+# reads the exit code — that is the defect this suite was rewritten to remove.
+report_and_exit() {
+  echo "=== summary: $PASS passed, $FAIL failed, $SKIP skipped ==="
+  if [ "$SKIP" -gt 0 ]; then
+    printf 'SKIPPED (assertion subject not evaluated):\n'
+    local s; for s in "${SKIPS[@]}"; do printf '  - %s\n' "$s"; done
+  fi
+  if [ "$FAIL" -gt 0 ]; then
+    printf 'FAILURES:\n'
+    local f; for f in "${FAILURES[@]}"; do printf '  - %s\n' "$f"; done
+    exit 1
+  fi
+  if [ "$STRICT" = "1" ] && [ "$SKIP" -gt 0 ]; then
+    echo "::error title=blast-radius suite reported PASS without running an assertion::STRICT mode: ${SKIP} assertion(s) SKIPPED. Every skip predicate in this suite is unreachable in a well-formed checkout (the golden fixture is a committed file and jq is on the runner image), so a SKIP here is a defect in the harness or the fixture, not an environment condition."
+    exit 1
+  fi
+  exit 0
+}
+
 # ---------------------------------------------------------------------------
-# Group F1 — default-path regression under a NORMALIZED diff.
+# Group F1 — default-path regression against a COMMITTED normalized golden.
 #
-# Compare the CURRENT (refactored, shared-lib-sourcing) blast-radius.sh against the
-# pre-refactor version recovered from git, on the SAME doc fixture. Both outputs are
-# normalized (the 3 non-deterministic fields deleted) before diff. The pre-refactor
-# version is whatever blast-radius.sh looked like at origin/main HEAD before this
-# branch's refactor; we recover it and, crucially, run it against a self-contained
-# doc fixture so the comparison does not depend on the live corpus.
+# The golden is the pre-shared-lib-refactor tool's normalized output on a frozen 3-file
+# doc corpus, checked in under fixtures/blast-radius-f1/. Comparing current output to it
+# is the same assertion the old git-history recovery made — `normalize(pre) ==
+# normalize(cur)` — with a deterministic left-hand side instead of one reconstructed at
+# run time. F1 itself now invokes git zero times; see the file header for the precise
+# GIT_TRACE accounting of the whole suite.
+#
+# Guard order is load-bearing: S1 (is the golden itself readable) -> S2' (is the scan
+# INPUT the frozen tree) -> S6 (is the RAW envelope's shape intact) -> the value diff.
+# S2' runs BEFORE the tool so corpus drift can never be misread as a tool regression.
 # ---------------------------------------------------------------------------
 test_f1_default_path_regression() {
-  echo "[F1] default-path regression (normalized diff, doc corpus)"
+  echo "[F1] default-path regression (normalized diff vs committed golden)"
 
-  local fx; fx="$(cd "$(mktemp -d)" && pwd -P)"
-  # trap-scoped cleanup for this fixture
-  # A tiny doc corpus: a.md and b.md both reference target.md by path.
-  mkdir -p "$fx/docs"
-  printf '# target\ncanonical content\n' > "$fx/docs/target.md"
-  printf '# a\nsee [t](docs/target.md) and docs/target.md again\n' > "$fx/docs/a.md"
-  printf '# b\nreference to docs/target.md\n' > "$fx/b.md"
-
-  # The pre-refactor blast-radius.sh: recover the version that did NOT yet source the
-  # shared schema-v1 library, by walking this file's OWN git history and picking the
-  # newest blob whose body lacks the `schema-v1-emit.sh` source line. That commit is
-  # always locally reachable in the checkout (no origin/main ref, no network needed —
-  # respecting the offline smoke posture), so the strong before-vs-after comparison
-  # runs in CI, not only locally. If history is unavailable (e.g. a tarball export),
-  # fall back to a determinism re-run (same input => same normalized output).
-  local pre_ref_script="$fx/blast-radius.prerefactor.sh"
-  local sha
-  pre_ref_script=""
-  while IFS= read -r sha; do
-    [ -z "$sha" ] && continue
-    if ! git -C "$REPO_ROOT" show "${sha}:release/tools/blast-radius.sh" 2>/dev/null \
-         | grep -q 'schema-v1-emit.sh'; then
-      # This revision predates the shared-lib source line — the pre-refactor version.
-      if git -C "$REPO_ROOT" show "${sha}:release/tools/blast-radius.sh" > "$fx/blast-radius.prerefactor.sh" 2>/dev/null \
-         && [ -s "$fx/blast-radius.prerefactor.sh" ]; then
-        pre_ref_script="$fx/blast-radius.prerefactor.sh"
-      fi
-      break
-    fi
-  done <<< "$(git -C "$REPO_ROOT" log --format='%H' -- release/tools/blast-radius.sh 2>/dev/null)"
-
-  local cur_out norm_cur
-  cur_out="$("$BLAST_RADIUS" --format=json --depth=2 --root="$fx" "docs/target.md" 2>/dev/null || true)"
-  norm_cur="$(printf '%s' "$cur_out" | normalize 2>/dev/null || true)"
-
-  if [ -z "$norm_cur" ]; then
-    bad "F1: current blast-radius.sh produced no parseable JSON on the doc fixture"
-    rm -rf "$fx"; return
+  # ---- SKIP gate. The golden is a committed file, so in a well-formed checkout this
+  # predicate is unreachable; under STRICT a skip here is RED. It is never a PASS.
+  if [ ! -s "$F1_GOLDEN" ]; then
+    skip "F1 strong arm did not run — golden fixture missing or empty at ${F1_GOLDEN#"$REPO_ROOT"/}"
+    return
   fi
 
-  if [ -n "$pre_ref_script" ]; then
-    # The pre-refactor script does NOT source the shared lib — run it directly.
-    local pre_out norm_pre
-    pre_out="$(bash "$pre_ref_script" --format=json --depth=2 --root="$fx" "docs/target.md" 2>/dev/null || true)"
-    norm_pre="$(printf '%s' "$pre_out" | normalize 2>/dev/null || true)"
-    if [ -z "$norm_pre" ]; then
-      # The recovered blob yielded no parseable output. Measured at ~30% on BOTH main
-      # and release branches, so this is nondeterminism in the comparison arm, not a
-      # regression in either script — a REQUIRED gate must not fail on it. Take the same
-      # fallback the unavailable-history path already declares: assert the current tool
-      # is deterministic, and say plainly that the stronger before-vs-after comparison
-      # did not run this time.
-      local pre_cur2 pre_norm2
-      pre_cur2="$("$BLAST_RADIUS" --format=json --depth=2 --root="$fx" "docs/target.md" 2>/dev/null || true)"
-      pre_norm2="$(printf '%s' "$pre_cur2" | normalize 2>/dev/null || true)"
-      if [ -n "$pre_norm2" ] && [ "$pre_norm2" = "$norm_cur" ]; then
-        ok "F1: pre-refactor arm empty (recovery nondeterminism) — fell back to determinism check, which PASSES"
-      else
-        bad "F1: pre-refactor arm empty AND the current tool is non-deterministic on the same input"
-      fi
-    elif [ "$norm_pre" = "$norm_cur" ]; then
-      ok "F1: refactored output == pre-refactor output (normalized) — shared-lib refactor is a no-op"
-    else
-      bad "F1: NORMALIZED DIFF between pre-refactor and refactored blast-radius.sh:
-$(diff <(printf '%s' "$norm_pre") <(printf '%s' "$norm_cur") | head -30)"
-    fi
+  # ---- S1 — ATTRIBUTION, not a detector. A corrupt golden already reds via the diff;
+  # this guard adds ZERO unique detection and is kept only because it converts an
+  # unreadable 40-line JSON diff into one sentence naming the fixture. Labelled honestly
+  # so nobody counts it as coverage.
+  if ! jq -e . "$F1_GOLDEN" >/dev/null 2>&1; then
+    bad "F1 (S1 attribution): the committed golden is not parseable JSON — regenerate per fixtures/blast-radius-f1/README.md"
+    return
+  fi
+  local g_schema g_fo
+  g_schema="$(jq -r '.schema_version' "$F1_GOLDEN")"
+  g_fo="$(jq -r '.stats.first_order_count' "$F1_GOLDEN")"
+  if [ "$g_schema" != "1" ] || [ "$g_fo" -lt 2 ]; then
+    bad "F1 (S1 attribution): the committed golden is vacuous or mislabeled (schema_version=$g_schema, first_order_count=$g_fo) — regenerate per fixtures/blast-radius-f1/README.md"
+    return
+  fi
+  ok "F1 (S1): committed golden is readable, schema-v1, non-vacuous (first_order_count=$g_fo)"
+
+  # Copy the frozen corpus to a working dir and scan the COPY, so the checkout is never
+  # mutated and nothing is ever written into a scanned root at run time.
+  local fxwork; fxwork="$(cd "$(mktemp -d)" && pwd -P)"
+  cp -R "$F1_FIXTURE/corpus" "$fxwork/corpus"
+
+  # ---- S2' — the SCAN INPUT is exactly the frozen fixture. Runs on the input, before
+  # the tool, so it is independent of the compared surface and cannot be read as a tool
+  # regression. It catches stray files the tracer never scans (.DS_Store, *.bak) — which
+  # stats.total_files_scanned is BLIND to, because that count is filtered through
+  # SCANNED_TYPES before it is emitted. That blindness is why the old
+  # `total_files_scanned == 3` predicate was replaced rather than kept.
+  local want_manifest='b.md
+docs/a.md
+docs/target.md'
+  local got_manifest
+  got_manifest="$(cd "$fxwork/corpus" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)"
+  if [ "$got_manifest" != "$want_manifest" ]; then
+    bad "F1 (S2'): fixture corpus drifted — the scan input is not the frozen 3-file tree.
+$(diff <(printf '%s\n' "$want_manifest") <(printf '%s\n' "$got_manifest"))"
+    rm -rf "$fxwork"; return
+  fi
+  ok "F1 (S2'): scan input is exactly the frozen 3-file corpus"
+
+  # ---- Run the tool under test. Capture stderr rather than discarding it: the old code
+  # ran this arm under 2>/dev/null, which is why neither silent CI run could be diagnosed
+  # after the fact.
+  local cur_err="$fxwork/cur.err" cur_out norm_cur
+  cur_out="$("$BLAST_RADIUS" --format=json --depth=2 --root="$fxwork/corpus" "docs/target.md" 2>"$cur_err" || true)"
+  if [ -z "$cur_out" ] || ! printf '%s' "$cur_out" | jq -e . >/dev/null 2>&1; then
+    bad "F1: current blast-radius.sh produced no parseable JSON on the frozen corpus — stderr: $(tr '\n' ' ' < "$cur_err" | head -c 200)"
+    rm -rf "$fxwork"; return
+  fi
+
+  # ---- S6 — RAW envelope skeleton. live_paths - golden_paths must be EXACTLY the
+  # normalize() deletion set, and golden_paths - live_paths must be empty.
+  #
+  # This is the guard that recovers what normalizing cli_version away gave up, and it
+  # closes a hole the value diff cannot see: `jq del()` on a MISSING key is a silent
+  # no-op, so a field vanishing from the envelope is invisible to both the value diff
+  # and to any key-set guard on the NORMALIZED surface — the normalized-away fields are
+  # precisely the ones both surfaces are blind to. Only a raw-surface guard sees it.
+  # Self-maintaining: widening normalize() without widening F1_DELSET fails here.
+  local SKEL='[paths | map(if type=="number" then "[]" else tostring end) | join(".")] | unique'
+  local g_skel extra missing
+  g_skel="$(jq -c "$SKEL" "$F1_GOLDEN")"
+  extra="$(printf '%s' "$cur_out"   | jq -c --argjson g "$g_skel" "$SKEL as \$l | \$l - \$g")"
+  missing="$(printf '%s' "$cur_out" | jq -c --argjson g "$g_skel" "$SKEL as \$l | \$g - \$l")"
+  if [ "$extra" != "$F1_DELSET" ] || [ "$missing" != "[]" ]; then
+    bad "F1 (S6): schema-v1 envelope skeleton drift.
+  live-only keys  : $extra   (must equal the normalize() deletion set $F1_DELSET)
+  golden-only keys: $missing (must be [])
+  A SHORT live-only list means a field VANISHED from the envelope — a schema-v1 contract
+  break the value diff structurally cannot see. A LONGER one means a field was added.
+  See ADR-068 and fixtures/blast-radius-f1/README.md."
   else
-    # Fallback: determinism check — re-run the current tool, assert identical normalized output.
-    local cur_out2 norm_cur2
-    cur_out2="$("$BLAST_RADIUS" --format=json --depth=2 --root="$fx" "docs/target.md" 2>/dev/null || true)"
-    norm_cur2="$(printf '%s' "$cur_out2" | normalize 2>/dev/null || true)"
-    if [ "$norm_cur" = "$norm_cur2" ]; then
-      ok "F1 (fallback — no git base available): blast-radius.sh is deterministic under normalized diff"
-    else
-      bad "F1 (fallback): blast-radius.sh normalized output is non-deterministic across two runs"
-    fi
+    ok "F1 (S6): raw schema-v1 envelope skeleton intact (live-minus-golden == normalize() deletion set)"
   fi
 
-  # Assert the doc fixture actually produced referrers (guards a vacuous PASS on empty output).
+  # ---- The assertion itself.
+  norm_cur="$(printf '%s' "$cur_out" | normalize)"
+  if [ "$norm_cur" = "$(cat "$F1_GOLDEN")" ]; then
+    ok "F1: current output == committed pre-refactor golden (normalized) — shared-lib refactor remains a no-op"
+  else
+    bad "F1: NORMALIZED DIFF vs golden.
+  If .stats.total_files_scanned moved and the S2' manifest passed, the cause is a
+  SCANNED_TYPES change in blast-radius.sh — a TOOL change, not fixture drift.
+  If this is a DELIBERATE output change, regenerate per fixtures/blast-radius-f1/README.md;
+  do not edit the golden by hand.
+$(diff "$F1_GOLDEN" <(printf '%s\n' "$norm_cur") | head -30)"
+  fi
+
+  # Non-vacuity of the LIVE output (the golden's own non-vacuity is S1's job).
   local fo
   fo="$(printf '%s' "$norm_cur" | jq -r '.stats.first_order_count')"
   if [ "$fo" -ge 2 ]; then
@@ -148,7 +239,50 @@ $(diff <(printf '%s' "$norm_pre") <(printf '%s' "$norm_cur") | head -30)"
     bad "F1: doc fixture produced first_order_count=$fo (<2) — regression check would be vacuous"
   fi
 
-  rm -rf "$fx"
+  rm -rf "$fxwork"
+}
+
+# ---------------------------------------------------------------------------
+# --regenerate-golden — the ONLY sanctioned way to move the committed golden.
+#
+# Never automatic, never silent. It exists for exactly one case: a DELIBERATE change to
+# blast-radius.sh's doc-corpus output where the new output is correct and the golden is
+# the stale side. Building the fixture for the first time is NOT that case, and neither
+# is "the digest did not match, so the constant must be a typo" — that is the re-bless
+# this door exists to keep out of the diff-by-accident path.
+# ---------------------------------------------------------------------------
+regenerate_golden() {
+  require_jq
+  local reason="${BLAST_RADIUS_GOLDEN_REGEN_REASON:-}"
+  if [ -z "$reason" ]; then
+    echo "REFUSING: --regenerate-golden requires BLAST_RADIUS_GOLDEN_REGEN_REASON." >&2
+    echo "  A golden may only move for a stated, reviewable reason. Example:" >&2
+    echo '    BLAST_RADIUS_GOLDEN_REGEN_REASON="#NNNN — <what changed and why the new output is correct>" \' >&2
+    echo "      bash release/tools/tests/test_domain_blast_radius.sh --regenerate-golden" >&2
+    exit 2
+  fi
+  local work; work="$(cd "$(mktemp -d)" && pwd -P)"
+  cp -R "$F1_FIXTURE/corpus" "$work/corpus"
+  "$BLAST_RADIUS" --format=json --depth=2 --root="$work/corpus" "docs/target.md" \
+    | normalize > "$work/normalized-golden.json"
+  if [ ! -s "$work/normalized-golden.json" ]; then
+    echo "REFUSING: regeneration produced empty output — refusing to write an empty golden." >&2
+    rm -rf "$work"; exit 1
+  fi
+  mv "$work/normalized-golden.json" "$F1_GOLDEN"
+  local bytes sha
+  bytes="$(wc -c < "$F1_GOLDEN" | tr -d ' ')"
+  sha="$(shasum -a 256 "$F1_GOLDEN" | cut -d' ' -f1)"
+  printf '| %s | %s | %s | %s | `%s` |\n' \
+    "$(date -u +%Y-%m-%d)" "$reason" "$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo 'unknown')" \
+    "$bytes" "${sha:0:16}" >> "$F1_FIXTURE/README.md"
+  echo "Regenerated $F1_GOLDEN"
+  echo "  bytes : $bytes"
+  echo "  sha256: $sha"
+  echo "  Regeneration Log row appended to fixtures/blast-radius-f1/README.md."
+  echo "  BOTH the golden diff and the log row must appear in the PR diff."
+  rm -rf "$work"
+  exit 0
 }
 
 # ---------------------------------------------------------------------------
@@ -317,9 +451,16 @@ test_dispatch_contract() {
 }
 
 main() {
+  case "${1:-}" in
+    --regenerate-golden) regenerate_golden ;;
+    "") : ;;
+    *) echo "unknown argument: $1 (expected none, or --regenerate-golden)" >&2; exit 2 ;;
+  esac
+
   require_jq
   echo "=== test_domain_blast_radius.sh ==="
   echo "repo root: $REPO_ROOT"
+  [ "$STRICT" = "1" ] && echo "STRICT mode: a SKIP is a defect and exits non-zero"
   echo
 
   test_f1_default_path_regression; echo
@@ -327,14 +468,7 @@ main() {
   test_f4_field_semantics; echo
   test_dispatch_contract; echo
 
-  echo "=== summary: $PASS passed, $FAIL failed ==="
-  if [ "$FAIL" -gt 0 ]; then
-    printf 'FAILURES:\n'
-    local f
-    for f in "${FAILURES[@]}"; do printf '  - %s\n' "$f"; done
-    exit 1
-  fi
-  exit 0
+  report_and_exit
 }
 
 main "$@"

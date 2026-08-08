@@ -4,6 +4,35 @@
 # is explicitly allowed. Other script invocations are blocked to prevent the
 # script-laundering Red Team mitigation (write attacker.sh, then bash attacker.sh).
 #
+# COVERAGE BOUNDARY — FOUR CONDITIONS. READ THIS BEFORE CITING THIS FILE AS A CONTROL.
+# ------------------------------------------------------------------------------------
+# This file is read by a PreToolUse hook. A PreToolUse-enforced control is in force only
+# when ALL FOUR of the following hold, and it is NOT in force when any one of them fails:
+#
+#   1. LOADING  - the session resolved a settings surface that declares the hook wiring.
+#                 The wiring applies to any session, main or spawned, whose working
+#                 directory is under the governed workspace root; a session that
+#                 resolves no such surface loads NO HOOKS AT ALL, and a session outside
+#                 that root is excluded by core/hooks/lib/scope-guard.sh.
+#   2. BYPASS   - CLAUDE_HOOK_BYPASS was not set to 1 in the environment the session was
+#                 launched with. This is the FIRST precedence layer and it exits BOTH
+#                 hook classes. BLOCK-DESTRUCTIVE-023 denies SETTING it mid-session; it
+#                 does not narrow the pre-launch case. At this layer the security/
+#                 workflow class asymmetry does not exist.
+#   3. CLASS    - the hook's master-activation class admits it. A security-class hook
+#                 always enforces; a workflow-class hook is inert while master
+#                 activation is off. block-destructive is security class.
+#   4. MODE     - the hook's own mode admits blocking. Most block hooks warn-and-allow
+#                 in warn mode; block-destructive is mode-independent.
+#
+# Where all four hold, this file is a CONTROL. Where any fails, it is a CONVENTION: it
+# still records what the platform intends to permit, and it is still the right thing to
+# maintain, but it is not an interlock and no threat model may treat it as one. Do not
+# accept a risk on the basis that this allowlist "will catch" an unlisted invocation
+# without first checking the four conditions on the path that invocation actually runs on.
+#
+# Canonical statement: core/standards/subagent-security-posture.md, section 3.1.
+#
 # Format:
 #   - One bash GLOB PATTERN per line (shell `case` pattern syntax, NOT regex)
 #   - Token-substituted at install time:
@@ -112,9 +141,13 @@ release/tools/audit-epic-rollup-close.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_corpus_home_tolerance.sh
 ./release/tools/tests/test_corpus_home_tolerance.sh
 release/tools/tests/test_corpus_home_tolerance.sh
-# release/tools/tests/*.sh regression + conformance suites — the remaining seven
-# of the eight suites in that directory (test_corpus_home_tolerance.sh is
-# registered immediately above). Each is executed agent-side at Stage 6
+# release/tools/tests/*.sh regression + conformance suites — every suite in that
+# directory other than test_corpus_home_tolerance.sh, which is registered
+# immediately above. (Registration is per-suite and enumerated below rather than
+# stated as a count against a directory census: that directory also holds a
+# non-suite load generator invoked from inside a suite, so a file count and a
+# suite count are not the same number and a stated total goes stale on either
+# one changing.) Each is executed agent-side at Stage 6
 # self-verification and Stage 7 Dev Testing as well as in CI; without all four
 # invocation forms per the per-tool form convention above the agent-side path is
 # BLOCK-DESTRUCTIVE-022-blocked and the Stage-7 spoke asked to dev-test a suite
@@ -140,6 +173,10 @@ release/tools/tests/test_lint_release_corpus_versionless.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_renumber_adr.sh
 ./release/tools/tests/test_renumber_adr.sh
 release/tools/tests/test_renumber_adr.sh
+[PMO_PLATFORM_ROOT]/release/tools/tests/test_spoke_run_directory.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_spoke_run_directory.sh
+./release/tools/tests/test_spoke_run_directory.sh
+release/tools/tests/test_spoke_run_directory.sh
 [PMO_PLATFORM_ROOT]/release/tools/tests/test_structural_blast_radius.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_structural_blast_radius.sh
 ./release/tools/tests/test_structural_blast_radius.sh
@@ -263,6 +300,21 @@ core/deploy/tests/test_package_freshness_exit_codes.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_check45_governing_doc_name_match.sh
 ./core/deploy/tests/test_check45_governing_doc_name_match.sh
 core/deploy/tests/test_check45_governing_doc_name_match.sh
+
+# Targeted composition-surface refresh regression (test_refresh_surfaces.sh) — new
+# in-tree bash CLI. Asserts that `deploy.sh --deploy` CANNOT heal a regressed
+# composition surface (it never sources the composition-surface manifest), that its
+# no-changes message says so, and that `./update.sh --surfaces-only` does heal it
+# without redeploying skills, refreshing hooks, restamping .version, or writing
+# .last-update. Hermetic: refuses to start unless HOME and both root overrides
+# resolve inside its sandbox. Executed agent-side at Stage 6 self-verification and
+# Stage 7 Dev Testing; all four invocation forms so BLOCK-DESTRUCTIVE-022 does not
+# block the agent-side path. (CI runs no Claude hooks, so this entry is for the
+# agent-side path, not the workflow.)
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_refresh_surfaces.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_refresh_surfaces.sh
+./core/deploy/tests/test_refresh_surfaces.sh
+core/deploy/tests/test_refresh_surfaces.sh
 
 # Check 22 G1-06 priority-carrier regression — hermetic net for the criterion's
 # delegation to the shared carrier-agnostic detector. Run by the install-tests

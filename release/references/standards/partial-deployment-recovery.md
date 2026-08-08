@@ -133,7 +133,7 @@ Triggered by Check 5 = full-failure OR (Check 5 = partial-failure AND operator-a
 2. **Identify rollback target** — release merge commit SHA via `gh pr view <release-PR> --json mergeCommit --jq '.mergeCommit.oid'`.
 3. **Execute** `git revert -m 1 <release-merge-SHA>` on a fresh worktree branch (e.g., `rollback/v<X.Y>`); push and create PR.
 4. **Re-deploy previous skill versions** — `git revert` of the release merge naturally restores skill source content; `core/deploy/deploy.sh --deploy <name>` re-syncs the (now-reverted) source to install paths.
-5. **Delete release tag** if appropriate: `git tag -d v<X.Y>` then `git push origin :v<X.Y>`.
+5. **Retain the release tag** — do NOT delete it. Version tags are host-protected and the remote delete is rejected for every account, the owner included, per [`git-workflow.md`](../../../core/rules/git-workflow.md) § Tag Retention. The tag stays as the historical record that the version was claimed and then withdrawn; step 8's RELEASE_LOG rollback entry is what records the withdrawal.
 6. **Revert Stage 12 / Stage 13 chore PRs independently** — the chore PRs (RELEASE_LOG row + INDEX/DIGEST/RELEASE_NOTES updates) are separable from the release content. Per the chore-PR convention each chore PR is its own merge SHA and can be `git revert`ed independently. Sequence: revert release PR first → revert Stage 13 chore PR → revert Stage 12 chore PR.
 7. **Reopen** all release issues; restore Status=Bundled; reassign Milestone v<X.Y>; revert `status: done` → `status: bundled` labels.
 8. **Append `RELEASE_LOG.md` rollback entry** per [`RELEASE_PROTOCOL.md`](../../governance/RELEASE_PROTOCOL.md) § Rollback protocol — release version, files rolled back, reason, date. Update visible-H4 Deployment Log block: `Result: PARTIAL → ROLLED BACK (rollback PR <#>, reverted SHAs: <list>)`.
@@ -146,9 +146,9 @@ Triggered by Check 5 = full-failure OR (Check 5 = partial-failure AND operator-a
 
 Per [`autonomous-execution-model.md`](../../../core/disciplines/autonomous-execution-model.md) § Rollback Pattern Authorization requirement: "Agents do **NOT** initiate rollback autonomously. The Rollback Pattern is operator-authorized at every invocation — explicit confirmation in chat or a sub-task comment is required before the agent executes any of the 8 mechanism steps." This is the load-bearing distinction between Rollback and the other two patterns.
 
-### Tag deletability
+### Tag retention
 
-The release tag created at Stage 12 Phase B3 can be deleted (`git tag -d v<X.Y>` + `git push origin :v<X.Y>`) without git-history loss because tags are pointers to commits, not commits themselves. Reversibility: CHEAP for tag deletion; IRREVERSIBLE for the externally-observable consequence (tag visible in GitHub UI / consumed by downstream tooling between merge and revert).
+The release tag created at Stage 12 Phase B3 is permanent. Version tags are protected at the repository host, so the tag cannot be deleted on the remote by any account — a rollback reverts the merge and leaves the tag in place, per [`git-workflow.md`](../../../core/rules/git-workflow.md) § Tag Retention. This costs nothing: the tag points at a commit that remains in history after the revert, and the RELEASE_LOG rollback entry is what records that the version was withdrawn. Reversibility of the rollback itself is unchanged (IRREVERSIBLE for the consumer-visible deployed-then-reverted state); no tag mutation is involved, so no tag-deletion reversibility grade applies.
 
 ### Reversibility tier (this rollback path)
 
