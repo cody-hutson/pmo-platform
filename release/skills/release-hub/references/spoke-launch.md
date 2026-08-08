@@ -26,7 +26,11 @@ Concurrency is governed by two gates that compose; there is **no fixed concurren
 
 ## Output path
 
-Every spoke prompt Mode O renders MUST carry the run-directory clause verbatim: the spoke resolves ONE run directory (`mktemp -d` under a session scratch base, suffixed with the stage and sub-task number), writes every scratch artifact inside it, reads scratch input only from it, and echoes the resolved path in its output comment. Uniqueness is by construction, so a re-run of the same stage on the same sub-task cannot land on the prior run's leftovers — the failure a sub-task-keyed path allows. Canonical clause + its honest read-side boundary: `hub-spoke-bridge.md` § Run-Directory Discipline (Spoke Template). Cite it; do not restate it here.
+Every spoke prompt Mode O renders MUST carry the run-directory clause verbatim: the spoke resolves ONE run directory (`mktemp -d` under a session scratch base, suffixed with the stage and sub-task number), writes every scratch artifact inside it, reads scratch input only from it, and echoes that directory **in `${SCRATCH_BASE}`-relative form — never the resolved absolute path**, because on a default install the scratch base embeds the operator's OS username and the output comment is a public surface. Uniqueness is by construction, so a re-run of the same stage on the same sub-task cannot land on the prior run's leftovers — the failure a sub-task-keyed path allows. Canonical clause + its honest read-side boundary: `hub-spoke-bridge.md` § Run-Directory Discipline (Spoke Template). Cite it; do not restate it here.
+
+**Path form — the hub's own obligation, and a different question from the one above.** The run-directory clause governs *where* a spoke's scratch goes and that it is unique. It says nothing about the form of the **other** paths Mode O writes into a brief: the repo working copy, a corpus location, a cited file, a command a spoke is told to run. Those are the hub's own emissions. Every one of them uses a sanctioned form per `core/standards/analysis-workspace-standard.md` § 6.1 — repo-relative, `$HOME`-relative, the sanctioned default-expansion, or a registered operator-instance token. An absolute machine path carrying a username segment, and a bare relative operator-instance path, are never emitted. Where no sanctioned form fits — a harness-supplied ephemeral directory, say — emit the relative name, never the resolved absolute path.
+
+**Why the hub is the fix point, not the spoke.** A brief carries a path into a spoke; the spoke echoes it into a public comment; that echo is IRREVERSIBLE, because editing a published comment does not scrub its edit history. Repairing the brief repairs every downstream spoke at once. Repairing the echo repairs one comment that is already public. The observed instance was 19 occurrences across 8 public issues in a single release, all of them injected by the orchestrator and echoed back.
 
 ## Worktree detect-first guard
 
@@ -43,6 +47,32 @@ Before spawning a **build spoke** for issue #N, check whether an open PR already
 - **Query:** `gh pr list --state open --search "#N"` (or equivalent; N = the target issue number).
 - **If an open PR already references #N → surface to the operator (proceed / adopt / skip) BEFORE spawning** — never defer the collision to a later coherence review.
 - **Re-run every wave**, not once at Stage 4: the open-PR population changes mid-run (a clean planning-time scan does not carry). This is the third standing pre-spawn guard, composing with the quota-budget gate + the worktree detect-first guard above.
+
+## Spoke-brief path scan (pre-spawn, per launch)
+
+Before each `Agent({…})` call, scan the **rendered** brief — the exact prompt string about to be passed, not the template it came from — and do not spawn on a non-exempt hit.
+
+```
+bash core/deploy/tools/path-leak-patterns.sh --scan-file <rendered-brief-file>
+```
+
+Exit **0** clean · **1** at least one non-exempt leak, every hit printed as `file:line: text` · **2** the file could not be read, or the flag was not recognized. **Treat 2 as UNKNOWN and do not spawn.** A `--scan-file` invocation against a copy of the primitive that predates that arm returns a usage line and — before this guard shipped — exit 0, which is indistinguishable from clean. Assert the capability before trusting the verdict:
+
+```
+grep -q -- '--scan-file' core/deploy/tools/path-leak-patterns.sh
+```
+
+Repair a hit by rewriting the path into a sanctioned § Output path form and re-scanning. A line that legitimately must carry a flagged form — a worked example of the leak itself — carries the `path-leak: allow` marker the primitive honors.
+
+**What this guard does not cover, stated so no reader assumes otherwise.**
+
+- **It is hub conformance, not an interlock.** As currently configured, the `PreToolUse` matcher set in `core/settings.json.template` is `Bash` / `Write` / `Edit` / `Read` / `WebFetch` / `mcp__.*` — none of which covers the `Agent` tool, so no wired hook sees a brief. That is a statement about the configuration, not about what the matcher field can express; wiring an `Agent`-tool matcher has not been tested and is not foreclosed.
+- **It sees the brief, not the output.** A path a spoke discovers and posts itself is downstream of this scan. `core/hooks/block-gh-path-leak.sh` is the backstop on that surface, subject to its own four-condition coverage boundary.
+- **It cannot see a form the detector does not model.** The permitted vocabulary is the set-complement of the primitive's active classes; a form in neither set falls through. `analysis-workspace-standard.md` § 6.1 names the known instance and the rule for it.
+
+**This is where the deferred mechanical check for the hook-response discipline landed, and the routing is deliberate.** It is not static template-to-template parity: both observed failures were **render**-time losses — the template carried the clause and the rendered prompt did not — so a template-parity check would have been green on exactly the failures in evidence. Scanning the rendered artifact is the only form of the check that could have caught them, and even then only for the path class; the obfuscation class remains undetectable by construction.
+
+This is the **fourth** standing pre-spawn guard, composing with the quota-budget gate, the worktree detect-first guard, and the concurrent-PR collision check above.
 
 ## Stage-Conditional Launch Policy (when to spawn vs gate)
 

@@ -79,6 +79,33 @@ path_leak_scan_line() {
   return 1
 }
 
+# path_leak_scan_file <path> → 0 clean · 1 at least one non-exempt leak · 2 unreadable.
+# Whole-file arm over path_leak_scan_line, for a caller holding a rendered artifact
+# rather than a stream of lines — the release-hub pre-spawn brief scan is the first.
+# Every hit is printed (<path>:<line>: <first 100 chars>), not just the first: a caller
+# repairing a rendered brief should not have to re-scan once per leak.
+#
+# Three exit values, not two, and the third is the load-bearing one. A scanner that
+# reports CLEAN on a file it could not read is the broken-probe shape this platform
+# rejects — failure-to-run and pass must never return the same code. Unreadable is
+# therefore exit 2, distinct from both clean (0) and dirty (1).
+path_leak_scan_file() {
+  local f="${1:-}" n=0 hits=0 line
+  if [ -z "$f" ] || [ ! -f "$f" ] || [ ! -r "$f" ]; then
+    printf 'path-leak-patterns.sh: cannot read file for scan: %s\n' "${f:-<no path given>}" >&2
+    return 2
+  fi
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n+1))
+    if path_leak_scan_line "$line"; then
+      printf '%s:%s: %s\n' "$f" "$n" "$(printf '%s' "$line" | sed 's/^[[:space:]]*//' | cut -c1-100)"
+      hits=$((hits+1))
+    fi
+  done < "$f"
+  [ "$hits" -eq 0 ] && return 0
+  return 1
+}
+
 # --- self-test (run directly; not executed when sourced) ---
 _path_leak_self_test() {
   local fails=0 n=0
@@ -105,13 +132,40 @@ _path_leak_self_test() {
   expect_clean "rooted /…/personal/pmo-instance"  'f="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance"'
   echo "MARKER:"
   expect_clean "path-leak: allow marker"          'see /Users/operator/x  # path-leak: allow'
+
+  # expect_scan <desc> <expected-rc> <file>
+  expect_scan() {
+    n=$((n+1)); local rc=0
+    path_leak_scan_file "$3" >/dev/null 2>&1 || rc=$?
+    if [ "$rc" = "$2" ]; then echo "  ✓ rc=$rc: $1"
+    else echo "  ✗ rc=$rc (expected $2): $1"; fails=$((fails+1)); fi
+  }
+  echo "SCAN-FILE (whole-file arm; three distinct exit values):"
+  local _sf; _sf="$(mktemp -d)"
+  printf 'see core/hooks/block-gh-path-leak.sh\np="$HOME/Claude/pmo-platform"\n' > "${_sf}/clean.txt"
+  printf 'context\nref /Users/operator/Claude/notes.md\n'                        > "${_sf}/dirty.txt"
+  expect_scan "clean file -> 0"                 0 "${_sf}/clean.txt"
+  expect_scan "dirty file -> 1"                 1 "${_sf}/dirty.txt"
+  expect_scan "missing file -> 2 (never 0)"     2 "${_sf}/does-not-exist.txt"
+  rm -rf "$_sf"
+
   echo ""
   if [ "$fails" -eq 0 ]; then echo "SELF-TEST PASS ($n cases)"; return 0; else echo "SELF-TEST FAIL ($fails/$n)"; return 1; fi
 }
 
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
   case "${1:-}" in
-    --self-test) _path_leak_self_test ;;
-    *) echo "path-leak-patterns.sh — source me, or run --self-test"; exit 0 ;;
+    --self-test)  _path_leak_self_test ;;
+    --scan-file)  path_leak_scan_file "${2:-}" ;;
+    "")           echo "path-leak-patterns.sh — source me, or run --self-test / --scan-file <path>"; exit 0 ;;
+    # An UNKNOWN flag exits 2, never 0. A caller invoking --scan-file against a copy
+    # predating that arm would otherwise get exit 0 — indistinguishable from a clean
+    # scan (verified: the pre-change default arm returned 0 on a genuinely dirty file).
+    # This closes the hazard for every copy at or after this version; it CANNOT repair
+    # a copy that predates it, so a caller must also assert the arm exists before
+    # trusting a verdict from a copy it did not ship with.
+    *)            echo "path-leak-patterns.sh: unknown flag '$1' — expected --self-test or --scan-file <path>." >&2
+                  echo "  A copy that does not recognize a flag is OLDER than its caller expects; treat its result as UNKNOWN, never as clean." >&2
+                  exit 2 ;;
   esac
 fi
