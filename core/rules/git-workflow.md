@@ -253,3 +253,5 @@ A dataset of 839 open issues with `--limit 600` returns 600 results; the missing
 3. Verify the returned result count matches the computed dataset size before consuming the output.
 
 **Applies to:** `gh issue list`, `gh pr list`, `gh project item-list`, `gh search`, `gh api` paginated endpoints, and any other batch query that supports `--limit` or paginated truncation. Same rule for any CLI tool with implicit result caps.
+
+**When a truncated read feeds a write:** a lookup that silently missed yields an empty variable, and an empty variable assigned to a typed field is accepted, clears the field, and returns success. The field-write half of this failure — both witnessed degenerate-value forms, the two pre-write guards, and the mandatory post-mutation read-back — is governed by [core/standards/gh-api-convention.md](../standards/gh-api-convention.md).
