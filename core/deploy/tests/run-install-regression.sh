@@ -116,7 +116,7 @@ run_member() {
 
   # A self-SKIP member (Darwin-only test on Linux) prints "SKIP:" and exits 0 —
   # count it as a non-failing pass-through (0 assertions), never a FAIL.
-  if printf '%s' "${out}" | grep -q '^SKIP:'; then
+  if grep -q '^SKIP:' <<<"${out}"; then
     printf '  (skipped on this platform — counted as pass-through)\n'
     return
   fi

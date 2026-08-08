@@ -57,8 +57,8 @@ echo "────────────────────────�
 build_runner() {
   # $1 = deploy.sh to extract from, $2 = output runner path
   local _src="$1" _out="$2" _b _e
-  _b=$(/usr/bin/grep -n '>>> C22-EVAL-BEGIN' "$_src" | head -1 | cut -d: -f1)
-  _e=$(/usr/bin/grep -n '>>> C22-EVAL-END' "$_src" | head -1 | cut -d: -f1)
+  _b=$(/usr/bin/grep -m1 -n '>>> C22-EVAL-BEGIN' "$_src" | cut -d: -f1)
+  _e=$(/usr/bin/grep -m1 -n '>>> C22-EVAL-END' "$_src" | cut -d: -f1)
   [[ -n "$_b" && -n "$_e" && "$_e" -gt "$_b" ]] || return 1
   {
     echo '#!/usr/bin/env bash'

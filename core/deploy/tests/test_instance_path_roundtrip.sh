@@ -178,11 +178,11 @@ else
 fi
 
 # update.sh should explicitly report it PRESERVED the operator needle file.
-if printf '%s' "${upd1_out}" | grep -q "PRESERVED (operator data, never regenerated)"; then
+if grep -q "PRESERVED (operator data, never regenerated)" <<<"${upd1_out}"; then
   report "update reports needle file PRESERVED (never regenerated)" 1
 else
   report "update reports needle file PRESERVED (never regenerated)" 0 \
-    "$(printf '%s' "${upd1_out}" | grep -i needle | head -2 | tr '\n' '|')"
+    "$(grep -m2 -i needle <<<"${upd1_out}" | tr '\n' '|')"
 fi
 
 # --- Stage 4: second update → still byte-identical (idempotent) ---

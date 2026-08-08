@@ -181,7 +181,7 @@ if [ "${t1_exit}" -ne 0 ] && [ "${t1_exit}" -ne 64 ]; then
   t1_ok=0
   t1_detail="exit ${t1_exit} (expected EX_OK 0 or EX_NOCHANGE 64)"
 fi
-if printf '%s' "${t1_out}" | grep -qF "${GUARD_MSG}"; then
+if grep -qF "${GUARD_MSG}" <<<"${t1_out}"; then
   t1_ok=0
   t1_detail="${t1_detail}; repo-root guard fired -> #382 defect (Phase 5 partial-update failure)"
 fi
@@ -209,7 +209,7 @@ if [ "${t2_exit}" -eq 0 ]; then
   t2_ok=0
   t2_detail="deploy.sh exited 0 from a marker-less cwd (guard did NOT fire — safety regressed)"
 fi
-if ! printf '%s' "${t2_out}" | grep -qF "${GUARD_MSG}"; then
+if ! grep -qF "${GUARD_MSG}" <<<"${t2_out}"; then
   t2_ok=0
   t2_detail="${t2_detail}; '${GUARD_MSG}' not in output"
 fi

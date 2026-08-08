@@ -146,8 +146,9 @@ test_case "bash script.sh foo bar ALLOW (no metachar after script)" \
 test_case "var=\$(date) ALLOW (no script-exec prefix)" \
   "$(bash_payload 'TS=$(date +%s); echo $TS')" 0 ""
 
+# sigpipe-idiom: allow — test-case LABEL and PAYLOAD STRING, not executed code; the idiom IS the fixture this case asserts the hook permits. Converting it would delete the thing under test.
 test_case "grep pattern file | head ALLOW" \
-  "$(bash_payload 'grep -E "^foo" file.txt | head -5')" 0 ""
+  "$(bash_payload 'grep -E "^foo" file.txt | head -5')" 0 ""   # sigpipe-idiom: allow — payload string under test, never executed
 
 # ----- Allowlist behavior -----
 

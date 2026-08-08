@@ -1813,7 +1813,7 @@ if [ "${reb_state_ok}" = "true" ] && grep -q 'RE-BOOTSTRAP flow' <<<"${reb_log}"
   report "S-13 the no-flag re-run really did route to rebootstrap (subject control)" 1
 else
   report "S-13 the no-flag re-run really did route to rebootstrap (subject control)" 0 \
-    "verification_passed=${reb_state_ok}; flow=$(printf '%s' "${reb_log}" | grep -E '(FRESH-INSTALL|RE-BOOTSTRAP|REFRESH-[A-Z]+) flow' | head -1)"
+    "verification_passed=${reb_state_ok}; flow=$(grep -m1 -E '(FRESH-INSTALL|RE-BOOTSTRAP|REFRESH-[A-Z]+) flow' <<<"${reb_log}")"
 fi
 
 # THE HEADLINE ASSERTION — content, not a log line. All three shapes must be in the

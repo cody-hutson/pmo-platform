@@ -160,6 +160,7 @@ fi
 
 # Token substitution check — narrow regex matching the install-time verification gate.
 if grep -qE '\[(OPERATOR|CLAUDE|COWORK)_[A-Z_]+\]' "${SBX}/ws/CLAUDE.md" 2>/dev/null; then
+  # sigpipe-idiom: allow — `grep -o` (matches, not lines) plus an intervening `sort -u`, which must consume the WHOLE stream before the truncation is meaningful; `-m3` would cap pre-dedup and change which three tokens are reported.
   unresolved=$(grep -oE '\[(OPERATOR|CLAUDE|COWORK)_[A-Z_]+\]' "${SBX}/ws/CLAUDE.md" | sort -u | head -3 | tr '\n' ' ')
   report "CLAUDE.md tokens substituted" 0 "unresolved: ${unresolved}"
 else
@@ -269,7 +270,7 @@ else
   report "update.sh --dry-run exits EX_NOCHANGE (64) — post-install no-op" 0 "exit ${update_exit}"
 fi
 
-if printf '%s' "${update_output}" | grep -q "Pre-flight passed"; then
+if grep -q "Pre-flight passed" <<<"${update_output}"; then
   report "update.sh preflight passes against sandboxed operator.toml" 1
 else
   report "update.sh preflight passes against sandboxed operator.toml" 0

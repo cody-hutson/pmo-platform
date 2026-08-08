@@ -132,7 +132,7 @@ else
     "exit ${regen_exit}: ${regen_out}"
 fi
 
-STORED_SHA="$(grep -E '^# installed_sha:' "${OUT}" 2>/dev/null | head -1 | awk '{print $3}')"
+STORED_SHA="$(grep -m1 -E '^# installed_sha:' "${OUT}" 2>/dev/null | awk '{print $3}')"
 READBACK_SHA="$(python3 "${COMPOSE_PY}" installed-sha --target "${OUT}" 2>/dev/null)"
 if [ -n "${STORED_SHA}" ] && [ "${STORED_SHA}" = "${READBACK_SHA}" ]; then
   report "T2: installed_sha round-trip (write-stored == read-back, non-empty)" 1

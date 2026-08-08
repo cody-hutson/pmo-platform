@@ -122,11 +122,11 @@ printf '\nTest 3: install.sh error message names the real exit code\n'
 FIXTURE_MSG="${TMPDIR}/fixture-msg"
 build_fixture "${FIXTURE_MSG}" 66
 msg_output=$("${FIXTURE_MSG}/install.sh" --dry-run 2>&1 || true)
-if printf '%s' "${msg_output}" | grep -q 'failed with exit code 66'; then
+if grep -q 'failed with exit code 66' <<<"${msg_output}"; then
   report "Error message correctly reports 'exit code 66'" 1
 else
   report "Error message should reference exit code 66" 0 \
-    "actual: $(printf '%s' "${msg_output}" | grep 'exit code' | head -1)"
+    "actual: $(grep -m1 'exit code' <<<"${msg_output}")"
 fi
 
 # --- Test 4: success path still exits 0 (no false positive) ---

@@ -215,8 +215,8 @@ test_s4_mode_contract() {
 test_s5_lc_all_coverage() {
   echo "[S5] CIAC-4 — every sort under the script-level LC_ALL=C export"
   local export_line first_sort_line
-  export_line="$(grep -n '^export LC_ALL=C' "$BLAST_RADIUS" | head -1 | cut -d: -f1)"
-  first_sort_line="$(grep -nE '[^_-]sort ' "$BLAST_RADIUS" | grep -v '# ' | head -1 | cut -d: -f1 || true)"
+  export_line="$(grep -m1 -n '^export LC_ALL=C' "$BLAST_RADIUS" | cut -d: -f1)"
+  first_sort_line="$(grep -nE '[^_-]sort ' "$BLAST_RADIUS" | grep -m1 -v '# ' | cut -d: -f1 || true)"
   if [ -z "$export_line" ]; then
     bad "S5: no 'export LC_ALL=C' found in blast-radius.sh"
     return
