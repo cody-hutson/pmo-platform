@@ -260,6 +260,17 @@ log "setup-ci-layout: materialized ${materialized} hook-tier allowlist(s)"
 #    it; the live ~/Claude/.claude/hooks/.mode is never touched (R-8).
 printf 'enforce' > "${HOOKS_DST}/.mode"
 
+# 4b) Sandbox .gh-path-leak-mode (enforce), so the layout mirrors the deployed shape
+#     for the one hook that reads its own mode file rather than the shared one. The
+#     seed is enforce for the same reason .mode is — the per-case tests set their own
+#     value — and it is deliberately NOT the hook's shipped default. The shipped
+#     default is exercised by REMOVING this file: with the shared .mode seeded at
+#     enforce and this file absent, an exclusive build resolves the in-script default
+#     and a build that had re-acquired a fallback would be promoted to enforce by the
+#     shared file. Seeding both at the shipped default would make that case agree with
+#     itself and prove nothing.
+printf 'enforce' > "${HOOKS_DST}/.gh-path-leak-mode"
+
 log "setup-ci-layout: layout ready"
 log "  sandbox       : ${SANDBOX}"
 log "  hooks         : ${HOOKS_DST}"

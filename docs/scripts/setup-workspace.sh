@@ -2023,6 +2023,11 @@ install_hooks() {
 
   install_mode_template_if_missing ".mode.template" ".mode"
   install_mode_template_if_missing "deploy-check.mode.template" "deploy-check.mode"
+  # block-gh-path-leak.sh reads its OWN mode file, not the shared .mode, so that its
+  # posture can be promoted without silently promoting the shared cohort. The template
+  # matches the hook's in-script default; the in-script default is the operative posture,
+  # since a template that is never installed carries no posture at all.
+  install_mode_template_if_missing ".gh-path-leak-mode.template" ".gh-path-leak-mode"
 
   # Ship a .version snapshot alongside the deployed hooks so notify-version-
   # skew.sh resolves "the version deployed into this workspace" via its sibling
