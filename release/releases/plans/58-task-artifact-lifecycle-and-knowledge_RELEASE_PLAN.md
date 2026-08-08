@@ -317,7 +317,7 @@ Both CIACs span ≥2 issues, assert a constraint the *integrated* release must h
 | **#101** | AC5 ONE gate spec with a typed branch | explicit `predicate:` (c) | read the spec — a single `G-CL` set with a typed branch, not two parallel close specs | single spec; **zero** criterion IDs added / renumbered / removed / re-typed |
 | **#335** | CC1 K1 doc cites symptom + correct form + verification step | file-path+state (b) | the doc exists at `core/standards/gh-api-convention.md` and contains all three elements | 3/3 present |
 | **#335** | CC2 both degenerate forms + both preventive rules | file-path+state (b) | `grep` for the unexpanded-`@path` form, the empty-from-unset-variable form, the non-empty-validation rule, and the pagination rule | 2 forms + 2 rules present |
-| **#335** | CC3 hook-coverage decision recorded | explicit `predicate:` (c) | the enforce / warn / skip-as-residual decision + rationale appear in the K1 doc | **SKIP-AS-RESIDUAL** recorded with rationale (D-3) |
+| **#335** | CC3 hook-coverage decision recorded | explicit `predicate:` (c) | the enforce / warn / skip-as-residual decision + rationale appear in the K1 doc **or its solutioning record** | **SKIP-AS-RESIDUAL** recorded with rationale (D-3) |
 | **#335** | CC4 §4.1 host-binding disposition recorded **and** CI-clean | file-path+state (b) **+** behavioral (d) | disposition recorded **AND** `bash core/deploy/deploy.sh --check 2>&1 \| grep -i 'host-binding-leak'` | disposition present (clean-by-construction, no allowlist entry); **no unresolved finding** |
 | **#335** | CC5 hook (if added) ships warn-mode-initial | explicit `predicate:` (c) | — | **N/A — no hook ships** (D-3) |
 | **#335** | CC6 memory cross-ref + verify-before-recommend composition | file-path+state (b) | the doc documents post-mutation structural read-back and composes with the verify-before-recommend discipline | both present |
@@ -521,7 +521,7 @@ post-merge by construction (`canonical_path` is verified against `origin/main`).
 | Deliverable | `deliverable_state` | `canonical_path` | `landing_commit` |
 |---|---|---|---|
 | #335 — `gh api` typed-field discipline (K1 standard) | `artifact-accepted` | `core/standards/gh-api-convention.md` | `a4f0c268` |
-| #21 — orchestration-mechanisms (K1 discipline doc) | *(declared by its Engineering spoke)* | *(declared by its Engineering spoke)* | *(declared by its Engineering spoke)* |
+| #21 — orchestration-mechanisms (K1 discipline doc) | `artifact-accepted` | `core/disciplines/orchestration-mechanisms.md` | `d64f0753` |
 
 **No deployed copy is owed for #335.** The change touches no skill source and no
 `core/rules/` mirror pair beyond an additive cross-reference line, so the C3 sync
