@@ -127,4 +127,4 @@ This asymmetry is the concrete reason Decision (2) refused to automate creation.
 | **ADR-092** | The version-identity decision governing the release this record ships in — slug-primary in flight, version bound at the atomic claim. |
 | **ADR-115** | The ADR-number binding rule this record's numbering follows, and whose rejection of reserving a slot above unmerged sibling claims § Status applies and verifies against the enforcing predicate. |
 | **ADR-124** | This release's first record, the Axis-1 work-status label surface. Its six declared rows were materialized by the emit path this record decides — the two cards meet at exactly one point, and it is that apply-set. |
-| **ADR-121** | This release's second record. Its closing observation and this one's are the same finding reached independently from two cards: the platform specifies obligations without a gate that verifies an actor is wired to them. |
+| **ADR-125** | This release's second record. Its closing observation and this one's are the same finding reached independently from two cards: the platform specifies obligations without a gate that verifies an actor is wired to them. |

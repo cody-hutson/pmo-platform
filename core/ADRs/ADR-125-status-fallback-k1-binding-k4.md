@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-121 — The unconfigured-adapter status fallback is K1 while the adapter binding stays K4, and the card ships that one rule because the defect is binding rather than authorship
+title: ADR-125 — The unconfigured-adapter status fallback is K1 while the adapter binding stays K4, and the card ships that one rule because the defect is binding rather than authorship
 status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
 date: 2026-08-07
 release: methodology-fields-and-statuses
@@ -17,13 +17,15 @@ source_observations:
   - "The card's own acceptance criteria were mutually unsatisfiable. One required an altitude row for a grouping label that two ratified surfaces state is not a hierarchy level and that one shipped archetype pack does not declare at all; another forbade hardcoded kinds. Honouring the first violates the second."
 ---
 
-# ADR-121 — The unconfigured-adapter status fallback is K1 while the adapter binding stays K4, and the card ships that one rule because the defect is binding rather than authorship
+# ADR-125 — The unconfigured-adapter status fallback is K1 while the adapter binding stays K4, and the card ships that one rule because the defect is binding rather than authorship
 
 ## Status
 
 **Proposed** — flips to **Accepted** when the operator ratifies it at the release close gate. Authored at Stage 6 per the Stage-6 ADR-authoring precedent. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
 
 **Numbering.** This record's number is `anchor(mainline) + 1` where the mainline anchor already includes this release's first record, derived at build time per the rule ADR-115 ratifies. At that moment three sibling branches held unmerged claims on the number below this one and one of them also held this one. Those claims are **advisory** and do not bind the sequence. A reservation strictly above them was considered and rejected on ADR-115's own ground: it lands a multi-number hole, and the contiguity gate fails a gap exactly as readily as a duplicate — a duplicate inconveniences one branch, a gap blocks the repository. The rejection was verified against the enforcing gate rather than argued from the document, with four arms: baseline **PASS** (the probe is not stuck red), the reserved slot **FAIL — GAP** naming the number it skipped, this number **PASS**, and a deliberate duplicate **FAIL — DUPLICATE**, which is what makes the subject's PASS meaningful rather than gap-blind. If a sibling merges first, this record renumbers at merge time by the sanctioned tool and this section gains a numbering-provenance note.
+
+**Numbering provenance — `121 → 125`.** Held **ADR-121** branch-local; renumbered to **ADR-125** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 121. In-release citations that read "ADR-121" denote this record.
 
 ## Context
 

@@ -108,5 +108,5 @@ The tool can close candidates, but only under double opt-in: an apply flag **plu
 
 - **ADR-124 — Axis-1 work-status label surface.** Establishes the work-status group this release's other cards project over. Independent of this record: the audit reads epic membership, not work-status.
 - **ADR-122 — the sub-task status mirror is not resynced.** Same release; shares the finding that a specification without a bound writer is not an implemented behaviour.
-- **ADR-121 — K1 status fallback / K4 adapter binding.** Same release; its § Consequences carries this release's symptom-honesty statement.
+- **ADR-125 — K1 status fallback / K4 adapter binding.** Same release; its § Consequences carries this release's symptom-honesty statement.
 - **ADR-115 — an ADR number claim binds at merge.** Governs this record's own number, which moved from an earlier allocation when a sibling release merged ahead of it.
