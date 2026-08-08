@@ -3,9 +3,13 @@
 # contributions only. Best-practice defaults (K1 / Layer-3); a deployment SELECTS a
 # pack via operator config and MAY override per project (K4). No operator-specific
 # values. Archetype packs declare `extends = "_common"` and carry ONLY their deltas.
-# NOTE: no work-status block — the Axis-1 base machine is owned by the entity layer
-# (ADR-018 D1); kinds inherit it via `axis1_state_machine = "inherit"`. No `kinds` —
-# a role = "base" pack is non-kind-bearing (widened §1.1 / ADR-070 D4).
+# NOTE: no work-status MACHINE — the Axis-1 base machine is owned by the entity layer
+# (ADR-018 D1); kinds inherit it via `axis1_state_machine = "inherit"`. The archetype-
+# INVARIANT work-status LABEL PROJECTION over that machine IS carried here (see the
+# Work-status block below): ADR-070 D3 homes the shared base projection in this pack,
+# and archetype packs carry only their sub-state deltas. Machine vs. projection is the
+# whole distinction — a pack PROJECTS LABELS OVER the base, it never re-founds it.
+# No `kinds` — a role = "base" pack is non-kind-bearing (widened §1.1 / ADR-070 D4).
 
 [meta]
 pack_id = "_common"
@@ -19,7 +23,8 @@ role = "base"                   # widened §1.1 (ADR-070 D1): non-kind-bearing s
 # (ADR-018 D1 "project labels over the base"; widened §1.1.1 / ADR-070 D2). These are the
 # archetype-INVARIANT rows (the ~80% shared surface) the label-cleave slice relocated out
 # of label-taxonomy.md into this base. Colors are lifted verbatim from the pre-cleave doc
-# rows. `group` ∈ {category|status|cluster|initiative|triage-flag|disposition} (grammar-owned).
+# rows. `group` ∈ {category|status|work-status|cluster|initiative|triage-flag|disposition}
+# (grammar-owned; listed in label-taxonomy.md's own section order).
 
 # --- Category (archetype-invariant content-classification rows; the two-tier intake model
 #     per label-taxonomy.md § Category Labels). `type:*` kind labels are per-archetype
@@ -157,6 +162,54 @@ color = "D93F0B"
 description = "Triaged, rejected — premise stale or out of scope"
 applied_at = "Triage (Stage 2)"
 removed_at = "Issue closed (terminal)"
+
+# --- Work-status (one per work item; the archetype-INVARIANT Axis-1 delivery-lifecycle
+#     projection — the shared base projection ADR-070 D3 homes in this base pack, which
+#     is why these rows live here and not in an archetype pack. Values are the entity-
+#     layer Axis-1 enum VERBATIM (entity-field-schemas.md §3.18 V-WI-04): a label
+#     projection OVER that machine, never a re-founding of it (work-item-type-schema.md
+#     §1.1). The `work-status: ` name prefix is deliberately DISJOINT from `status: `:
+#     the GitHub label namespace is flat, the two axes share the `in-progress` and
+#     `done` tokens, and the status-label invariant check matches on the NAME PREFIX
+#     rather than on this `group` field — so a row named `status: <x>` here would trip
+#     the one-status-label mutex release-wide. See label-taxonomy.md § Work-Status
+#     Labels + § Rules 8. No `blocked` row: blocked-ness is a derived condition of an
+#     unsatisfied BLOCKS / DEPENDS_ON edge, not an Axis-1 state.
+[[labels]]
+group = "work-status"
+name = "work-status: backlog"
+color = "E6E6E6"
+description = "Delivery Axis-1: identified, not yet refined for pull"
+
+[[labels]]
+group = "work-status"
+name = "work-status: ready"
+color = "C2E0C6"
+description = "Delivery Axis-1: refined and pullable"
+
+[[labels]]
+group = "work-status"
+name = "work-status: in-progress"
+color = "FEF2C0"
+description = "Delivery Axis-1: actively being worked"
+
+[[labels]]
+group = "work-status"
+name = "work-status: in-review"
+color = "BFD4F2"
+description = "Delivery Axis-1: work complete, under review"
+
+[[labels]]
+group = "work-status"
+name = "work-status: done"
+color = "0E8A16"
+description = "Delivery Axis-1: accepted complete (terminal)"
+
+[[labels]]
+group = "work-status"
+name = "work-status: cancelled"
+color = "D93F0B"
+description = "Delivery Axis-1: abandoned without completion (terminal)"
 
 # --- Cluster (one domain cluster per issue + optional cross-cutting span-marker — the
 #     orthogonality protocol in § Cluster Labels)
