@@ -14,6 +14,7 @@
 # gate's ADR.
 # scope: release/tools/*.sh
 release/tools/append-pipeline-event.sh
+release/tools/audit-epic-rollup-close.sh
 release/tools/automated-closeout.sh
 release/tools/blast-radius.sh
 release/tools/capture-release-bodies.sh
