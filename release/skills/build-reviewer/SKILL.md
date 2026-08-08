@@ -16,7 +16,7 @@ description: >
   these dependency CVEs", "which of these CVEs are actually reachable",
   "secure-coding and secret-exposure review", "triage the penetration-test
   findings".
-version: v4.15
+version: v4.16
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---

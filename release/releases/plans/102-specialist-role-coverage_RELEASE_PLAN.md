@@ -11,7 +11,7 @@ reversibility: MODERATE / Confidence HIGH
 # Release Plan — `102-specialist-role-coverage`
 
 **Milestone:** `102-specialist-role-coverage` (milestone 245). Three member cards, one branch, one pull request, one merge.
-**Version identity:** **slug-only** per **ADR-092**. The plan file is `102-specialist-role-coverage_RELEASE_PLAN.md` and the branch is `release/102-specialist-role-coverage`; no version stem appears in the plan filename, the branch name, or this plan's identity prose. Bump class is `minor` — a capability release, not corrective, so the patch floor does not apply. The concrete number binds at the **Stage-12 atomic claim**, which renames this file into the major-version bucket and resolves the `v4.15` token.
+**Version identity:** **slug-only** per **ADR-092**. The plan file is `102-specialist-role-coverage_RELEASE_PLAN.md` and the branch is `release/102-specialist-role-coverage`; no version stem appears in the plan filename, the branch name, or this plan's identity prose. Bump class is `minor` — a capability release, not corrective, so the patch floor does not apply. The concrete number binds at the **Stage-12 atomic claim**, which renames this file into the major-version bucket and resolves the `v4.16` token.
 **Topology:** **SINGLE** — one release branch, one pull request, one merge gate; this plan lands as **Engineering Commit 0**.
 **Concurrency posture:** the Stage-4 recommendation of P0 fully-serial was **superseded at the plan-approval gate**: the operator rendered SINGLE topology with **W2 running its two cards in parallel**, and removed the contention rather than serializing around it by hoisting every registration write into one consolidated W3 commit. Force-push, including the lease-guarded form, is prohibited on the shared branch under any multi-chip activity.
 **Release class:** **`novel`** — re-rendered from `cross-cutting` at the Stage-4 plan-approval gate because the declared class fired none of its three triggers while `novel` fired all three. Posture: engagement density **Tight** (operator override of the per-class mapping, so no ceremony is dropped) · Stage-9 review depth **Deep** · Stage-5 activation bias **ALL** · Stage-13 outcome window **30-day**. Effective size **18** at the `novel` weight.
@@ -24,7 +24,7 @@ reversibility: MODERATE / Confidence HIGH
 
 | Field | Value |
 |-------|-------|
-| **Version** | `v4.15` — slug-only pre-claim (ADR-092); bump class `minor`. Supersedes the provisional `v4.14`, which a sibling release claimed at its own Stage-12 merge. The supersession and its re-run evidence are recorded in § Commit-0 version re-verify below. |
+| **Version** | `v4.16` — slug-only pre-claim (ADR-092); bump class `minor`. Third provisional: `v4.14` and then `v4.15` were each claimed by a sibling release at its own Stage-12 merge while this release was in Stage 7. The full lineage and its re-run evidence are recorded in § Commit-0 version re-verify below. |
 | **Date Created** | 2026-08-07 (Friday) |
 | **Release Manager** | Agent-assisted (`release-hub` Mode O) |
 | **Status** | Executing (Stage 6 Engineering) |
@@ -52,21 +52,31 @@ The Stage-4 version determination is **provisional** until the Stage-12 atomic c
 
 #### Superseding re-verify — 2026-08-07 (Friday), post-merge
 
-Re-run at merge commit `91f331ab` (this branch after `origin/main` @ `b75feff7` was merged in), against freshly-fetched authoritative refs. Subject is the **candidate** `v4.15`; `v4.14` is carried as the now-taken arm, which doubles as the sensitivity control — a surface that cannot see the version just claimed cannot be trusted to report the next one free.
+**The provisional has now moved twice, in one Stage-7 pass.** The lineage is recorded rather than collapsed, because the *rate* of movement is itself the finding a later stage needs:
 
-| Surface | Subject `v4.15` | Now-taken arm `v4.14` | Sensitivity arm `v4.13` | Denominator |
+| # | Provisional | Re-run anchored at | Outcome | What displaced it |
 |---|---|---|---|---|
-| Origin git tags, freshly fetched (`git fetch --tags origin`) | **0** occurrences | **1** — claimed | **1** | 158 tags (was 157 at Commit 0; the delta is exactly the new tag) |
-| Remote tag refs queried directly at the origin (`git ls-remote --tags origin`) | **absent** | **present** | present | 158 remote tag refs |
-| Release ledger row, read from `origin/main` with a brace-delimited ref rather than any worktree copy | **0** row-lines | **1** row-line | **1** row-line | 176 ledger table lines |
-| Published GitHub Releases (a surface the Commit-0 table omitted) | **absent** | **present** | present | 156 published releases |
-| Descending version-sorted tag list — the anchor read | anchor resolves to `v4.14`, so next-free minor is `v4.15` | — | — | 158 tags |
+| 1 | `v4.14` | Commit 0, `524b40d9` | SUPERSEDED | `release-check-enforcement-gates` claimed `v4.14` at merge `52d8a55e`, then closed through Stage 13 |
+| 2 | `v4.15` | first reconcile merge, `91f331ab` | SUPERSEDED within the same pass, before any stage consumed it | a third sibling release claimed `v4.15` and landed its Stage-12 `RELEASE_LOG` row on `origin/main` |
+| 3 | **`v4.16`** | second reconcile merge, `08ff79f5` | **OPERATIVE** | — |
 
-**Verdict: PROCEED at `v4.15`.** The candidate is absent from the claimed set on every arm, the now-taken arm is positively observed on every arm (so no arm is inert), and `v4.15` equals the recomputed next-free off the anchor. The branch and this plan file remain slug-primary and do not rename; the version binds only at the Stage-12 atomic claim, and `claim-version.sh` recomputes it there rather than trusting this row.
+The re-run below is arm-for-arm the Commit-0 table, extended. Subject is the **candidate** `v4.16`; the two now-taken versions are carried as sensitivity controls — a surface that cannot see a version already claimed cannot be trusted to report the next one free.
 
-**Baseline moved with it.** The § Header `Baseline` row records the Commit-0 re-pin at `origin/main` @ `f157a811` and is retained as that historical statement. The operative baseline for the remainder of this release is `origin/main` @ `b75feff7`, merged in at `91f331ab`; branch freshness against it is **0** commits behind.
+| Surface | Subject `v4.16` | Now-taken `v4.15` | Now-taken `v4.14` | Denominator |
+|---|---|---|---|---|
+| Origin git tags, freshly fetched (`git fetch --tags origin`) | **0** occurrences | **1** — claimed | **1** — claimed | 159 tags (157 at Commit 0; +2 is exactly the two new tags) |
+| Remote tag refs queried directly at the origin (`git ls-remote --tags origin`) | **absent** | **present** | **present** | 159 remote tag refs |
+| Release ledger row, read from `origin/main` with a brace-delimited ref rather than any worktree copy | **0** row-lines | **1** row-line | **1** row-line | 177 ledger table lines |
+| Published GitHub Releases (a surface the Commit-0 table omitted) | **absent** | **absent — see the caveat below** | **present** | 156 published releases |
+| Descending version-sorted tag list — the anchor read | anchor resolves to `v4.15`, so next-free minor is `v4.16` | — | — | 159 tags |
 
-**Audit-baseline pin.** Tag sets, ledger rows, and published releases are transiently observable populations — that is precisely how the Commit-0 record went stale. This entry is pinned to `91f331ab` and measured 2026-08-07. **Re-check before relying on it at Stage 12.**
+> **One arm disagrees, and the disagreement is instructive rather than a defect.** `v4.15` is **tagged and ledgered but not yet a published GitHub Release** — that release is mid-close, with its Stage-12 row landed and Stage 13 not yet run. Read alone, the published-Releases arm would have reported `v4.15` free and handed this release a version already bound. The **tag** arm is the authoritative one (it is what `claim-version.sh` compare-and-swaps against); the Releases arm is corroboration only, and it lags by design. A single-arm version check is not a version check.
+
+**Verdict: PROCEED at `v4.16`.** The candidate is absent on every arm; both now-taken versions are positively observed on the authoritative arms, so no arm is inert; and `v4.16` equals the recomputed next-free off the anchor. The branch and this plan file remain slug-primary and do not rename; the version binds only at the Stage-12 atomic claim, and `claim-version.sh` recomputes it there rather than trusting this row.
+
+**Baseline moved with it.** The § Header `Baseline` row records the Commit-0 re-pin at `origin/main` @ `f157a811` and is retained as that historical statement. The operative baseline for the remainder of this release is `origin/main` @ `835599e1`, merged in at `08ff79f5`; branch freshness against it is **0** commits behind.
+
+**Audit-baseline pin, and the standing warning this pass earned.** Tag sets, ledger rows, and published Releases are transiently observable populations — which is how the Commit-0 record went stale, and then how entry 2 above went stale *inside a single reconciliation pass*. Two sibling releases closed while this pass ran. This entry is pinned to `08ff79f5` and measured 2026-08-07. **Stage 12 must re-run the check at the merge boundary and must not consume this row as current** — under ADR-092 the version binds only at the atomic claim, and on this release's observed cadence a version record has a useful life measured in hours.
 
 ### Domain Practice Provenance
 
