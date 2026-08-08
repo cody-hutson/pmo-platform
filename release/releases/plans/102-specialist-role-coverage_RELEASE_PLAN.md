@@ -35,7 +35,7 @@ reversibility: MODERATE / Confidence HIGH
 
 ### Commit-0 version re-verify
 
-> **This section carries two records. The Commit-0 record immediately below is SUPERSEDED — it is retained as history, not as evidence. The operative result is § Superseding re-verify at the end of this section.** A passed check whose subject has since changed is worse than no check at all, because a later stage reads the recorded verdict as current. The check did not fail; the world moved under it.
+> **The Commit-0 record immediately below is SUPERSEDED — it is retained as history, not as evidence. The operative result is § Superseding re-verify at the end of this section, which carries the full three-step provisional lineage.** A passed check whose subject has since changed is worse than no check at all, because a later stage reads the recorded verdict as current. The check did not fail; the world moved under it.
 
 The Stage-4 version determination is **provisional** until the Stage-12 atomic claim, and three sibling releases were in flight when this release entered Engineering, so this re-verify is the rung most likely to fire rather than ceremony. It was re-run at Commit 0 against freshly-fetched authoritative refs, with a known-taken sensitivity arm on every surface:
 
