@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.18 | hub-spoke-execution-safety | 2026-08-08 | — | #4924 | [notes/v4.18_RELEASE_NOTES.md](notes/v4.18_RELEASE_NOTES.md) |
 | v4.16 | methodology-fields-and-statuses | 2026-08-07 | — | #4980 | [notes/v4.16_RELEASE_NOTES.md](notes/v4.16_RELEASE_NOTES.md) |
 | v4.15 | 96-update-install-config-safety | 2026-08-07 | — | #4985 | [notes/v4.15_RELEASE_NOTES.md](notes/v4.15_RELEASE_NOTES.md) |
 | v4.14 | release-check-enforcement-gates | 2026-08-07 | — | #4932 | [notes/v4.14_RELEASE_NOTES.md](notes/v4.14_RELEASE_NOTES.md) |
