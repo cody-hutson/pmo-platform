@@ -266,6 +266,7 @@ packages/release-hub.skill
 packages/release-hub.skill.sha256
 core/rules/bypass-mode-readiness.md
 core/rules/bypass-mode-readiness/_cross-cutting.md
+core/rules/bypass-mode-readiness/_header.md
 core/hooks/block-egress.sh
 core/hooks/block-fragile-refs.sh
 core/hooks/block-fs-boundary.sh
@@ -276,6 +277,7 @@ core/hooks/block-skill-direct-edit.sh
 core/hooks/block-autonomy-ceiling.sh
 core/hooks/block-scope-segregation.sh
 core/hooks/tests/check-hook-dep-hardening.sh
+core/hooks/tests/hook-fail-closed.test.sh
 core/hooks/tests/block-egress.test.sh
 core/hooks/tests/block-fs-boundary.test.sh
 core/hooks/tests/block-gh-path-leak.test.sh
@@ -413,6 +415,20 @@ Each entry states what changed, the basis, and the reversibility and confidence 
 **A-11 · The Stage-4 planning-template pointer takes its own heading rather than a bare appended line.** The design specified "one pointer line, not a copy," to avoid deepening the parallel-block debt the two spoke templates already carry. A bare paragraph appended after the preceding block would read as that block's continuation, which is the wrong owner. The pointer therefore takes its own heading and stays four lines — still a pointer, still not a copy, and the debt the design declined to deepen is the duplicated *body*, which this does not duplicate. Cosmetic / CHEAP / HIGH.
 
 **A-10 · Decision-record number re-derived at Commit 0.** The design body cited a number that concurrent merges have since taken. Next-free on the mainline is now ADR-129, measured with both probe arms. Allocate at authoring time from the mainline tree listing, never from the checker. Cosmetic / CHEAP / HIGH.
+
+---
+
+Entries E-1 onward are Stage-6 Engineering deviations, recorded at the commit that carried them.
+
+**E-1 · The breaking-assertion census was short by one, and the miss is in the probe's scope rather than its execution.** Both the design and the independent review reported *exactly three* assertions encoding the superseded unconditional posture, and both were right within their denominator: each probed `core/hooks/tests/block-*.test.sh`. A fourth lives in `ghsa-g9g6-primitive-fail-closed.test.sh`, which does not match that glob, and it surfaced by running the suite rather than by reading it. Re-pointed with the rest. The generalizable point: a census over a glob is only as complete as the glob, and two independent reviewers sharing a denominator do not constitute two independent checks of it. Minor / CHEAP / HIGH.
+
+**E-2 · Two paths added to the File Change Matrix.** `core/rules/bypass-mode-readiness/_header.md` carries the registry-membership-versus-mode-cohort text this card is explicitly scoped to reconcile, and the matrix listed only the cross-cutting fragment. `core/hooks/tests/hook-fail-closed.test.sh` is the glob-derived behavioral meta-test and the only correct home for the runtime posture matrix. Both are required, not discretionary. Minor / CHEAP / HIGH.
+
+**E-3 · The runtime arm went to the behavioral test, and the static check states its own blind spot instead.** The Tier 1 amendment asked that the hardening check either gain a runtime arm or say plainly what it does not cover. It got the second, deliberately: that file is a static grep guard whose companion behavioral test already declares the split — static catches source drift, behavioral catches the runtime semantic. Putting an execution arm inside the grep script would blur a documented separation to satisfy the letter of the amendment. The runtime arm exists, in the behavioral test, where the other runtime arms live; the static check names the scenarios in which its own green is uninformative and points at it. Minor / CHEAP / HIGH.
+
+**E-4 · Per-hook warn/off arms were not duplicated into four more test files.** The design asked for a warn/off arm in each cohort hook's own test. The glob-derived matrix asserts all nine hooks across all three modes structurally, from source classification rather than a name-list, so per-file copies would be four duplicate assertions that a tenth hook would not inherit. The three files whose assertions actually broke were edited, and three of them additionally carry a hostile-library arm. Coverage is strictly greater than the design specified; its distribution is not. Minor / CHEAP / HIGH.
+
+**E-5 · Decision-record number allocated at ADR-129, per A-10 above and against a later spoke-level instruction to reserve ADR-130.** The mainline tops out at ADR-128, so 129 is the true next-free slot. 130 was proposed on the ground that an unmerged sibling claims 129 — but the naming convention states the opposite rule verbatim: an unmerged claim does not bind the sequence, a number is allocated at authorship and *claimed at merge*, first-to-merge takes it and the other claimant renumbers by tool, and pre-reserving a higher slot is explicitly no remedy because the integrity checker fails a gap as readily as a duplicate. Confirmed live — the checker FAILS at 130 (`GAP: missing ADR-129`) and PASSES at 129 (`contiguous 001..129`). The risk is asymmetric: a collision at 129 is resolved mechanically at merge, whereas 130 lands a gap on the mainline if this release merges first, and that gap then fails every subsequent pull request. Major / CHEAP / HIGH.
 
 ---
 
