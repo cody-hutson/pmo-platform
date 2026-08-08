@@ -889,3 +889,54 @@ jobs:
           fi
 
           echo "Precision probe OK — a broken reserved-\"unknown\" seed correctly failed the conservation assertions (exit $probe_rc)."
+
+      - name: Precision probe — the self-test actually FAILS on a broken incremental carry-forward
+        # Companion to the probe above, for the OTHER branch this self-test guards.
+        # --incremental once silently deleted every session record it did not
+        # re-extract, and --self-test could not fail on it because the fixture path it
+        # exercised was the no-source-change early return. The carry-forward assertions
+        # added with that fix are only worth something if they can actually fail, so
+        # this step re-introduces the original jq mis-binding in a THROWAWAY copy and
+        # asserts a non-zero exit VIA a carry-forward assertion specifically.
+        run: |
+          # -e is ON for every setup step: a failed mktemp / cp / injection must ABORT,
+          # never fall through to a probe that silently tests nothing. It is relaxed
+          # only around the one invocation that is EXPECTED to fail.
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          cp -R core/skills/finops-usage-extractor "$probe/finops-usage-extractor"
+          target="$probe/finops-usage-extractor/scripts/extract-usage.sh"
+
+          # The anchor must match exactly once. If the implementation moves, this
+          # exits non-zero and -e aborts the job — a probe that can no longer find
+          # what it breaks reports that, rather than quietly passing.
+          python3 - "$target" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
+          old = '. as $r | select( ($drop | index($r.session_id)) | not )'
+          new = 'select( ($drop | index(.session_id)) | not )'
+          if s.count(old) != 1:
+              sys.exit("carry-forward probe anchor not found exactly once in "
+                       "extract-usage.sh (count=%d) — the probe would silently stop "
+                       "testing anything" % s.count(old))
+          p.write_text(s.replace(old, new), encoding="utf-8")
+          PY
+
+          set +e
+          bash "$target" --self-test > "$probe/probe.out" 2>&1
+          probe_rc=$?
+          set -e
+
+          if [ "$probe_rc" -eq 0 ]; then
+            echo "::error::Carry-forward precision probe FAILED — extract-usage.sh --self-test returned 0 with the jq record mis-binding re-introduced. The incremental carry-forward assertions are not detecting silent record loss; this gate is blind."
+            sed -n '1,60p' "$probe/probe.out"
+            exit 1
+          fi
+
+          if ! grep -q 'carry-forward' "$probe/probe.out"; then
+            echo "::error::Carry-forward precision probe returned non-zero (exit $probe_rc) but NOT via a carry-forward assertion — the self-test may be failing for an unrelated reason, which would mask a real record-loss regression."
+            sed -n '1,60p' "$probe/probe.out"
+            exit 1
+          fi
+
+          echo "Carry-forward precision probe OK — the re-introduced mis-binding correctly failed the carry-forward assertions (exit $probe_rc)."
