@@ -2,7 +2,7 @@
 name: pmo-architect
 description: >
   Architect Specialist across both parameter axes — altitude (enterprise ↔ system; within-component solution depth is pmo-principal-engineer's) and domain (general · security · data). Cross-component, middleware, and data architecture; threat modeling, trust-boundary and security-control design; integration design, blast-radius assessment, system-level ADR authorship. Composes pmo-principal-engineer and pmo-technical-analyst — invokes each, re-implements neither. Modes: System-Design · Integration-Review · Security-Architecture. Triggers: "own the system architecture", "system-scope design call", "enterprise-wide capability landscape", "blast-radius assessment", "cross-component integration boundary", "threat-model this design", "where the trust boundaries fall", "which security controls this architecture owes", "data lineage and storage-flow design", "where this data is mastered", "write the system ADR".
-version: v4.14
+version: v4.15
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---

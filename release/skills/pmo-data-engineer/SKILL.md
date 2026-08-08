@@ -2,7 +2,7 @@
 name: pmo-data-engineer
 description: >
   Data Engineer Specialist — hands-on data-pipeline build and data correctness: ingestion, ETL/ELT transformation, data-quality assertions, source-to-target reconciliation, idempotent replay. Owns whether the data is right on every run — not the topology call (pmo-architect) nor approved-plan execution (pmo-software-engineer). Composes implementation-planner + pmo-technical-analyst, never re-implementing them. Modes: Pipeline-Build · Data-Quality · Analytics-Enablement. Triggers: "build the ingestion pipeline into the warehouse", "write the ETL transformation for this feed", "the nightly load dropped rows", "add data-quality checks on this table", "declare the grain and source-to-target mapping", "reconcile target row counts against source", "backfill the partition, make the replay idempotent", "table is stale — what broke the refresh", "model into a star schema with conformed dimensions", "dedupe on the natural key; handle late-arriving records", "stand up the curated dataset for analytics".
-version: v4.14
+version: v4.15
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 delivery_approach: decisive
