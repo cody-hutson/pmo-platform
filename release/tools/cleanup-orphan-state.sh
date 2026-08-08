@@ -2029,7 +2029,12 @@ selftest_self_guard() {
   out_inside=$(cd "$wt" && "$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
   if [[ "$fail" -eq 1 ]]; then
     echo "self-test: SELF-guard check FAILED — inner dry-run (cwd inside worktree) exited non-zero" >&2
-  elif ! grep -F "${slug}" <<<"$out_inside" | grep -q '"action":"SELF'; then
+  # `grep -F … | grep -q …` is still the SIGPIPE idiom: converting the WRITER half
+  # to a here-string left a live producer feeding a reader that closes on its first
+  # match. Measured firing at 2.1 MB. Collapsing the first stage into a command
+  # substitution leaves no writer process to signal; the here-string is built only
+  # after it has exited. Same tools, same order, same fixed-string semantics.
+  elif ! grep -q '"action":"SELF' <<<"$(grep -F "${slug}" <<<"$out_inside" || true)"; then
     echo "self-test: SELF-guard check FAILED — worktree not classified SELF when script cwd is inside it" >&2
     fail=1
   fi
@@ -2093,7 +2098,7 @@ selftest_liveness_gate() {
   out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
   if [[ "$fail" -eq 1 ]]; then
     echo "self-test: liveness end-to-end FAILED — inner dry-run exited non-zero" >&2
-  elif ! grep -F "${slug}" <<<"$out" | grep -q '"action":"SKIP — live session'; then
+  elif ! grep -q '"action":"SKIP — live session' <<<"$(grep -F "${slug}" <<<"$out" || true)"; then
     echo "self-test: liveness end-to-end FAILED — live-held worktree not labeled live-session" >&2
     fail=1
   fi
@@ -2102,7 +2107,7 @@ selftest_liveness_gate() {
   wait "$holder" 2>/dev/null || true
   if [[ "$fail" -eq 0 ]]; then
     out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || true
-    if grep -F "${slug}" <<<"$out" | grep -q '"action":"SKIP — live session'; then
+    if grep -q '"action":"SKIP — live session' <<<"$(grep -F "${slug}" <<<"$out" || true)"; then
       echo "self-test: liveness end-to-end FAILED — live label persisted after holder exit" >&2
       fail=1
     fi
@@ -2163,7 +2168,7 @@ selftest_fixed_point() {
       echo "self-test: fixed-point check FAILED — worktree '$wt' survived --apply" >&2
       fail=1
     fi
-    if [[ "$fail" -eq 0 ]] && ! grep -F "\"name\":\"${branch}\"" <<<"$out" | grep -q '"action":"REMOVED"'; then
+    if [[ "$fail" -eq 0 ]] && ! grep -q '"action":"REMOVED"' <<<"$(grep -F "\"name\":\"${branch}\"" <<<"$out" || true)"; then
       echo "self-test: fixed-point check FAILED — branch row not REMOVED in the same-run report" >&2
       fail=1
     fi
@@ -2560,12 +2565,12 @@ selftest_agent_detached_sweep() {
     echo "self-test: agent-* sweep check FAILED — inner --spawn-task dry-run exited non-zero" >&2
   else
     # (1) the clean+merged+not-live detached agent-* tree must be reached AND REMOVE.
-    if ! grep -F "\"path\":\"${wt_rm}\"" <<<"$out" | grep -q '"action":"REMOVE"'; then
+    if ! grep -q '"action":"REMOVE"' <<<"$(grep -F "\"path\":\"${wt_rm}\"" <<<"$out" || true)"; then
       echo "self-test: agent-* sweep check FAILED — detached agent-* tree not classified REMOVE (EDIT 4 path arm regression)" >&2
       fail=1
     fi
     # (2) the detached tree with an unmerged commit must SKIP with the counted reason.
-    if ! grep -F "\"path\":\"${wt_skip}\"" <<<"$out" | grep -q '"action":"SKIP — detached, unmerged commits (1)"'; then
+    if ! grep -q '"action":"SKIP — detached, unmerged commits (1)"' <<<"$(grep -F "\"path\":\"${wt_skip}\"" <<<"$out" || true)"; then
       echo "self-test: agent-* sweep check FAILED — detached-unmerged agent-* tree not SKIPPED with counted reason (EDIT 5 regression)" >&2
       fail=1
     fi
@@ -2689,7 +2694,7 @@ selftest_orphan_tag_reap() {
       echo "self-test: orphan-tag reap check FAILED — T-2: ledger-declared on-origin tag not classified REMOVE (got '$action')" >&2; fail=1
     fi
     # dry-run must mutate nothing — the tag is still on the fixture remote.
-    if ! git ls-remote --tags "$fix_remote_dir" "refs/tags/${tag}" 2>/dev/null | grep -q "refs/tags/${tag}$"; then
+    if ! grep -q "refs/tags/${tag}$" <<<"$(git ls-remote --tags "$fix_remote_dir" "refs/tags/${tag}" 2>/dev/null || true)"; then
       echo "self-test: orphan-tag reap check FAILED — T-2: dry-run deleted the tag (must not mutate)" >&2; fail=1
     fi
 
@@ -2699,7 +2704,7 @@ selftest_orphan_tag_reap() {
     if [[ "$action" != "SKIP — needs --force" ]]; then
       echo "self-test: orphan-tag reap check FAILED — T-4: --apply without --force did not SKIP (got '$action')" >&2; fail=1
     fi
-    if ! git ls-remote --tags "$fix_remote_dir" "refs/tags/${tag}" 2>/dev/null | grep -q "refs/tags/${tag}$"; then
+    if ! grep -q "refs/tags/${tag}$" <<<"$(git ls-remote --tags "$fix_remote_dir" "refs/tags/${tag}" 2>/dev/null || true)"; then
       echo "self-test: orphan-tag reap check FAILED — T-4: tag deleted without --force (double opt-in breached)" >&2; fail=1
     fi
 
@@ -2712,7 +2717,7 @@ selftest_orphan_tag_reap() {
       echo "self-test: orphan-tag reap check FAILED — T-3: reap did not report REMOVED (got '$action')" >&2; fail=1
     fi
     # OBSERVE the absence on the fixture remote (the load-bearing assertion).
-    if git ls-remote --tags "$fix_remote_dir" "refs/tags/${tag}" 2>/dev/null | grep -q "refs/tags/${tag}$"; then
+    if grep -q "refs/tags/${tag}$" <<<"$(git ls-remote --tags "$fix_remote_dir" "refs/tags/${tag}" 2>/dev/null || true)"; then
       echo "self-test: orphan-tag reap check FAILED — T-3: tag still present on fixture remote after reap" >&2; fail=1
     fi
     # Local tag must be gone too (two-surface).
@@ -2791,7 +2796,7 @@ selftest_orphan_tag_reap() {
       # --force deliberately OFF: the retained path must need no double opt-in, because
       # it attempts nothing destructive.
       FORCE=0; reap_orphan_tags >/dev/null 2>&1 || true
-      if ! git ls-remote --tags "$fix_remote_dir" "refs/tags/${tag2}" 2>/dev/null | grep -q "refs/tags/${tag2}$"; then
+      if ! grep -q "refs/tags/${tag2}$" <<<"$(git ls-remote --tags "$fix_remote_dir" "refs/tags/${tag2}" 2>/dev/null || true)"; then
         echo "self-test: orphan-tag reap check FAILED — T-10: a protected tag was DELETED (no push may be issued)" >&2; fail=1
       fi
       if ! grep -q '| tag-retained |' "$fix_ledger2"; then
@@ -2830,7 +2835,7 @@ selftest_orphan_tag_reap() {
         *) echo "self-test: orphan-tag reap check FAILED — T-11: undetermined host not classified with its named reason (got '$action')" >&2; fail=1 ;;
       esac
       FORCE=1; reap_orphan_tags >/dev/null 2>&1 || true
-      if ! git ls-remote --tags "$fix_remote_dir" "refs/tags/${tag2}" 2>/dev/null | grep -q "refs/tags/${tag2}$"; then
+      if ! grep -q "refs/tags/${tag2}$" <<<"$(git ls-remote --tags "$fix_remote_dir" "refs/tags/${tag2}" 2>/dev/null || true)"; then
         echo "self-test: orphan-tag reap check FAILED — T-11: undetermined host FAILED OPEN — the tag was deleted under --force" >&2; fail=1
       fi
       if ! grep -q '| tag-orphaned |' "$fix_ledger2"; then
@@ -3016,7 +3021,7 @@ selftest_release_close_merged_pr() {
     # The branch is worktree-attached, so its row reads "SKIP — active worktree
     # attached"; the load-bearing black-box assertion is that it is NOT REMOVE
     # (no false rescue for a branch with no MERGED PR).
-    if grep -F "\"name\":\"${branch}\"" <<<"$out" | grep -q '"action":"REMOVE"'; then
+    if grep -q '"action":"REMOVE"' <<<"$(grep -F "\"name\":\"${branch}\"" <<<"$out" || true)"; then
       echo "self-test: merged-PR rescue check FAILED — unique-commit branch with NO PR classified REMOVE under --release-close (over-removal / R2 regression)" >&2
       fail=1
     fi

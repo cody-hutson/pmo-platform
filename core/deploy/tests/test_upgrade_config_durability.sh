@@ -295,7 +295,7 @@ REPONEXT="${SBX}/repo-next"
 cp -R "${REPO_ROOT}" "${REPONEXT}"
 DELTA_MARKER="# c8-version-delta-probe: simulated managed-content change (do not ship)"
 printf '\n%s\n' "${DELTA_MARKER}" >> "${REPONEXT}/${DELTA_SOURCE_REL}"
-if tail -1 "${REPONEXT}/${DELTA_SOURCE_REL}" | grep -qF "c8-version-delta-probe"; then
+if grep -qF "c8-version-delta-probe" <<<"$(tail -1 "${REPONEXT}/${DELTA_SOURCE_REL}")"; then
   report "repo-next managed source perturbed" 1
 else
   report "repo-next managed source perturbed" 0
@@ -1350,7 +1350,7 @@ fi
 # closes rather than as an anonymous set difference.
 set_named_missing=0
 for set_script in ${SET_MISSING_SCRIPTS}; do
-  if ! set_triples "${SET_JSON}" | grep -q "|${set_script}$"; then
+  if ! grep -q "|${set_script}$" <<<"$(set_triples "${SET_JSON}")"; then
     set_named_missing=$((set_named_missing + 1))
   fi
 done
@@ -1360,7 +1360,7 @@ else
   report "S-1 the three field-observed scripts are registered after the refresh" 0 \
     "${set_named_missing} of 3 still unregistered"
 fi
-if set_triples "${SET_JSON}" | grep -q '^Stop|'; then
+if grep -q '^Stop|' <<<"$(set_triples "${SET_JSON}")"; then
   report "S-1 the Stop event block reaches the previously-deployed install" 1
 else
   report "S-1 the Stop event block reaches the previously-deployed install" 0 "no Stop registration after refresh"
@@ -1651,7 +1651,7 @@ else
   report "S-9 ./update.sh carries ALL missing registrations into a previously-deployed install" 0 \
     "still missing ${set_s9_missing_after}: $(comm -23 <(set_triples "${SET_TEMPLATE}") <(set_triples "${SET_JSON}") | tr '\n' ' '); update exit ${set_s9_exit}"
 fi
-if set_triples "${SET_JSON}" | grep -q '^Stop|'; then
+if grep -q '^Stop|' <<<"$(set_triples "${SET_JSON}")"; then
   report "S-9 the Stop event block reaches the install via ./update.sh" 1
 else
   report "S-9 the Stop event block reaches the install via ./update.sh" 0

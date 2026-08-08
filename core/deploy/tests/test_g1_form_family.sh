@@ -271,7 +271,7 @@ for pair in $KIND_NUMS; do
   # title floor may speak. Its title is a well-formed multi-word summary, so the
   # determinate verdict is CLEAN — and critically, it is NOT the label-count
   # G1-09 FAIL these cards used to receive.
-  if findings_for "$_n" | /usr/bin/grep -q 'G1-09'; then
+  if /usr/bin/grep -q 'G1-09' <<<"$(findings_for "$_n")"; then
     _b_ok=false; _b_detail="${_b_detail}${_k} still receives a G1-09 verdict; "
   fi
   if [[ "$(count_for "$_n")" -ne 0 ]]; then
@@ -285,7 +285,7 @@ else
 fi
 
 # ── C. Derived applicability — the direction a family-wide `n/a` gets wrong ──
-if findings_for "$N_AC_BAD" | /usr/bin/grep -q 'G1-05a'; then
+if /usr/bin/grep -q 'G1-05a' <<<"$(findings_for "$N_AC_BAD")"; then
   pass "C kind-form body DECLARING Acceptance Criteria is evaluated for G1-05a (the story cell)"
 else
   fail "C kind-form body declaring AC was NOT evaluated for G1-05a — the family-wide exemption is back"
@@ -297,7 +297,7 @@ else
 fi
 # The contrast case: a field-less kind body must NOT be graded on AC.
 _epic_like="${KIND_NUMS%% *}"; _epic_like="${_epic_like##*:}"
-if ! findings_for "$_epic_like" | /usr/bin/grep -q 'G1-05a'; then
+if ! /usr/bin/grep -q 'G1-05a' <<<"$(findings_for "$_epic_like")"; then
   pass "C CONTRAST — a kind-form body declaring NO Acceptance Criteria field is not graded on G1-05a"
 else
   fail "C a field-less kind body was graded on G1-05a — applicability is not body-derived"
@@ -309,20 +309,20 @@ else
 fi
 
 # ── D. F0 — the empty-today cell keeps today's verdict, verbatim ─────────────
-if findings_for "$N_F0" | /usr/bin/grep -q 'G1-09 FAIL: 2 intake-tier label(s)' \
-   && findings_for "$N_F0" | /usr/bin/grep -q 'apply correct single label'; then
+if /usr/bin/grep -q 'G1-09 FAIL: 2 intake-tier label(s)' <<<"$(findings_for "$N_F0")" \
+   && /usr/bin/grep -q 'apply correct single label' <<<"$(findings_for "$N_F0")"; then
   pass "D multi-tier card keeps the pre-existing G1-09 emit AND its 'apply correct single label' remediation"
 else
   fail "D multi-tier card lost its verdict or its remediation: $(findings_for "$N_F0")"
 fi
 
 # ── E. F3 — its own finding, never F1's remediation ─────────────────────────
-if findings_for "$N_F3" | /usr/bin/grep -q 'UNRESOLVED-FORM'; then
+if /usr/bin/grep -q 'UNRESOLVED-FORM' <<<"$(findings_for "$N_F3")"; then
   pass "E unlicensed-kind card receives its own UNRESOLVED-FORM finding"
 else
   fail "E unlicensed-kind card did not receive an UNRESOLVED-FORM finding: $(findings_for "$N_F3")"
 fi
-if ! findings_for "$N_F3" | /usr/bin/grep -q 'apply correct single label'; then
+if ! /usr/bin/grep -q 'apply correct single label' <<<"$(findings_for "$N_F3")"; then
   pass "E SPECIFICITY — the F3 finding does NOT carry F1's 'apply correct single label' remediation"
 else
   fail "E the F3 finding carries F1's remediation — it instructs the author to break a correctly-labelled card"

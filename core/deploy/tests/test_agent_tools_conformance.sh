@@ -137,7 +137,7 @@ else
 fi
 
 # ── Part 4 — POSIX-ERE discipline: the recursion pattern carries no `\b` ──
-if grep -nE 'Agent\|spawn_task\|mcp__ccd_session__spawn_task' "${REPO_ROOT}/core/deploy/deploy.sh" | grep -q '\\b'; then
+if grep -q '\\b' <<<"$(grep -nE 'Agent\|spawn_task\|mcp__ccd_session__spawn_task' "${REPO_ROOT}/core/deploy/deploy.sh" || true)"; then
   report "Check 46 recursion ERE is POSIX (no \\b)" 0 "found a \\b in the Check 46 recursion pattern"
 else
   report "Check 46 recursion ERE is POSIX (no \\b)" 1

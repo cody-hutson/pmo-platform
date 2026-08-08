@@ -295,7 +295,7 @@ if [[ "$(tok "$V_UNREACH")" == "UNRESOLVED" && "$(reason "$V_UNREACH")" == "vali
 else
   fail "G an unreachable validator did not degrade correctly: ${V_UNREACH}"
 fi
-if printf '%s' "$V_UNREACH" | /usr/bin/grep -q 'Bad credentials'; then
+if /usr/bin/grep -q 'Bad credentials' <<<"$V_UNREACH"; then
   pass "G CONTROL — the validator's own diagnostic survives into the verdict (stderr captured, not discarded)"
 else
   fail "G CONTROL — the diagnostic was swallowed; three different failures would read identically: ${V_UNREACH}"

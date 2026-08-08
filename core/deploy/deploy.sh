@@ -899,7 +899,10 @@ _cc_row_findings() {
       printf '%s: §3.2 note-content lint path-unresolved (exit 3; corpus unverifiable)\n' "$_ver"
     elif [[ $_lint_exit -ne 0 ]]; then
       local _note_rel="${_notes_dir}/${_ver}_RELEASE_NOTES.md"
-      if printf '%s' "$_lint_out" | /usr/bin/grep -qF "$_note_rel" 2>/dev/null; then
+      # U1 checked: `_note_rel` is "<dir>/<ver>_RELEASE_NOTES.md", never empty, so
+      # the fixed-string needle cannot match the empty line a here-string emits
+      # where `printf '%s'` emitted nothing.
+      if /usr/bin/grep -qF "$_note_rel" <<<"$_lint_out" 2>/dev/null; then
         printf '%s: §3.2 note-content finding for this version (lint_release_corpus.py)\n' "$_ver"
       fi
       # findings only for OTHER versions ⇒ out-of-scope legacy debt (audit-baseline)
@@ -1095,7 +1098,7 @@ _cc_row_findings() {
       _rl_body="$(_cc_h4_block_body "$_log" "$_rl_head")"
       for _fld in 'Synthesized at' 'Source events' 'Source-row anchors' \
                   'Surprise' 'Would-change' 'Watch-for'; do
-        if ! printf '%s\n' "$_rl_body" | /usr/bin/grep -q "^\*\*${_fld}:\*\*"; then
+        if ! /usr/bin/grep -q "^\*\*${_fld}:\*\*" <<<"$_rl_body"; then
           _rl_missing="${_rl_missing:+$_rl_missing, }${_fld}"
         fi
       done
@@ -3967,7 +3970,10 @@ cmd_check() {
             if [[ -n "$_smd_comp_region" ]]; then
               local _cand
               for _cand in ${DEPLOYED_ROSTER[@]+"${DEPLOYED_ROSTER[@]}"}; do
-                if printf '%s' "$_smd_comp_region" | /usr/bin/grep -qF -- "$_cand"; then
+                # U1 checked twice over: `_cand` is a word-split roster entry and so
+                # is never empty, and the enclosing `[[ -n "$_smd_comp_region" ]]`
+                # already guarantees a non-empty haystack.
+                if /usr/bin/grep -qF -- "$_cand" <<<"$_smd_comp_region"; then
                   _smd_dep_names+="$_cand"$'\n'
                 fi
               done
@@ -5487,8 +5493,11 @@ cmd_check() {
     log "Check 21: Native-dep body↔native drift detection"
 
     # 21a — token scope check (non-fatal; mirror is non-gate-blocking)
-    local c21_scope_ok=true
-    if ! gh auth status --hostname github.com 2>&1 | /usr/bin/grep -qE '\brepo\b'; then
+    local c21_scope_ok=true c21_auth=""
+    # The pipefail semantics are preserved deliberately: this must stay false when
+    # `gh` ITSELF fails, not only when the scope is absent. The `&&` group is what
+    # the pipeline's status meant; the here-string removes the writer.
+    if ! { c21_auth="$(gh auth status --hostname github.com 2>&1)" && /usr/bin/grep -qE '\brepo\b' <<<"$c21_auth"; }; then
       flag_warn_or_issue "native-dep-drift" "gh auth scope missing 'repo' — cannot query native deps; native mirror degrades to body-only (run 'gh auth refresh -s repo')"
       c21_scope_ok=false
     fi
@@ -5879,19 +5888,19 @@ cmd_check() {
       return 0
     fi
 
-    if printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "open|${_cand}"; then
+    if /usr/bin/grep -Fxq "open|${_cand}" <<<"$_rows"; then
       printf 'RESOLVED %s - %s %s validated open in the milestone set\n' "$_src" "$_n" "$_cand"
       return 0
     fi
-    if [[ -n "$_alt" ]] && printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "open|${_alt}"; then
+    if [[ -n "$_alt" ]] && /usr/bin/grep -Fxq "open|${_alt}" <<<"$_rows"; then
       printf 'RESOLVED %s - %s %s validated open in the milestone set (version-prefixed branch form)\n' "$_src" "$_n" "$_alt"
       return 0
     fi
-    if printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "closed|${_cand}"; then
+    if /usr/bin/grep -Fxq "closed|${_cand}" <<<"$_rows"; then
       printf 'INVALID %s closed-milestone %s %s the milestone exists but is CLOSED; a closed milestone is not a gateable release scope\n' "$_src" "$_n" "$_cand"
       return 0
     fi
-    if [[ -n "$_alt" ]] && printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "closed|${_alt}"; then
+    if [[ -n "$_alt" ]] && /usr/bin/grep -Fxq "closed|${_alt}" <<<"$_rows"; then
       printf 'INVALID %s closed-milestone %s %s the milestone exists but is CLOSED; a closed milestone is not a gateable release scope\n' "$_src" "$_n" "$_alt"
       return 0
     fi
@@ -5962,9 +5971,12 @@ cmd_check() {
     # 22a — gh auth scope check (issue list read requires `repo` for
     # private repos; this is non-fatal — check warns once and exits if
     # scope missing, since the check is non-gate-blocking detection)
-    local c22_scope_ok=true
+    local c22_scope_ok=true c22_auth=""
     if [[ "$c22_gate_run" == "true" ]]; then
-      if ! gh auth status --hostname github.com 2>&1 | /usr/bin/grep -qE '\brepo\b'; then
+      # Same shape as Check 21a: the `&&` group reproduces what the pipeline's
+      # status meant under pipefail — false when `gh` fails, not only when the
+      # scope is missing — while the here-string removes the writer.
+      if ! { c22_auth="$(gh auth status --hostname github.com 2>&1)" && /usr/bin/grep -qE '\brepo\b' <<<"$c22_auth"; }; then
         flag_g1_enforcement "g1-enforcement" "gh auth scope missing 'repo' — cannot iterate bundled issues (run 'gh auth refresh -s repo')"
         c22_scope_ok=false
       fi
@@ -6366,9 +6378,9 @@ sys.stdout.write("".join(out) + "|")
           # Step 2 — infer template from unique body markers (pragmatic
           # variant; see leading comment for rationale)
           _bm_repro=0; _bm_obswhat=0; _bm_propchange=0
-          printf '%s' "$_body" | /usr/bin/grep -qE '^### Reproduction Steps[[:space:]]*$' && _bm_repro=1
-          printf '%s' "$_body" | /usr/bin/grep -qE '^### What is missing\?[[:space:]]*$' && _bm_obswhat=1
-          printf '%s' "$_body" | /usr/bin/grep -qE '^### Proposed Change[[:space:]]*$' && _bm_propchange=1
+          /usr/bin/grep -qE '^### Reproduction Steps[[:space:]]*$' <<<"$_body" && _bm_repro=1
+          /usr/bin/grep -qE '^### What is missing\?[[:space:]]*$' <<<"$_body" && _bm_obswhat=1
+          /usr/bin/grep -qE '^### Proposed Change[[:space:]]*$' <<<"$_body" && _bm_propchange=1
 
           _inferred="ambiguous"
           if [[ "$_bm_repro" -eq 1 ]]; then
@@ -6421,18 +6433,18 @@ sys.stdout.write("".join(out) + "|")
             [[ "$_template" == "bug" ]] && _prio_field="Severity"
           fi
         else
-          if printf '%s' "$_body" | /usr/bin/grep -qE '^### Evidence[[:space:]]*$'; then
+          if /usr/bin/grep -qE '^### Evidence[[:space:]]*$' <<<"$_body"; then
             _ap_evidence=true
           fi
-          if printf '%s' "$_body" | /usr/bin/grep -qE '^### Acceptance Criteria[[:space:]]*$'; then
+          if /usr/bin/grep -qE '^### Acceptance Criteria[[:space:]]*$' <<<"$_body"; then
             _ap_ac=true
           fi
           # Applicability keys on the declared FIELD SECTION; the P-level itself
           # is still resolved by the ADR-111 shared detector via c22_prio_map, so
           # this introduces no second priority grammar (CIAC-1).
-          if printf '%s' "$_body" | /usr/bin/grep -qE '^### Priority[[:space:]]*$'; then
+          if /usr/bin/grep -qE '^### Priority[[:space:]]*$' <<<"$_body"; then
             _ap_prio=true
-          elif printf '%s' "$_body" | /usr/bin/grep -qE '^### Severity[[:space:]]*$'; then
+          elif /usr/bin/grep -qE '^### Severity[[:space:]]*$' <<<"$_body"; then
             _ap_prio=true; _prio_field="Severity"
           fi
         fi
@@ -6448,10 +6460,10 @@ sys.stdout.write("".join(out) + "|")
         _title_ok=true
         _title_reason=""
         # F1 — no leading bracket type/category prefix
-        if printf '%s' "$_title" | /usr/bin/grep -qE '^[[:space:]]*\[[^]]+\]:[[:space:]]'; then
+        if /usr/bin/grep -qE '^[[:space:]]*\[[^]]+\]:[[:space:]]' <<<"$_title"; then
           _title_ok=false; _title_reason="leftover '[...]:' type prefix (type is on the label — drop it)"
         # F2/F3 — substance floor: bare slug (no internal whitespace) OR too short
-        elif ! printf '%s' "$_title" | /usr/bin/grep -qE '[^[:space:]]+[[:space:]]+[^[:space:]]+'; then
+        elif ! /usr/bin/grep -qE '[^[:space:]]+[[:space:]]+[^[:space:]]+' <<<"$_title"; then
           _title_ok=false; _title_reason="bare slug / single token (name the object + the change, >= 2 words)"
         elif [[ "${#_title}" -lt "${G1_TITLE_MIN_CHARS:-12}" ]]; then
           _title_ok=false; _title_reason="too short (${#_title} chars; informative summary expected)"
@@ -6467,7 +6479,7 @@ sys.stdout.write("".join(out) + "|")
         # demanding an evidence label of them would fail a card for omitting a
         # field its form never offered.
         if [[ "$_ap_evidence" == "true" ]]; then
-          if ! printf '%s' "$_body" | /usr/bin/grep -qE '\[(SOURCE|INFERRED|CONTEXT|RECOMMENDED|ASSUMPTION)' ; then
+          if ! /usr/bin/grep -qE '\[(SOURCE|INFERRED|CONTEXT|RECOMMENDED|ASSUMPTION)' <<<"$_body" ; then
             _c22_emit_structural \
               "issue #${_num} — G1-03 FAIL: no evidence-quality labels found in body ([SOURCE]/[INFERRED]/[CONTEXT]/[ASSUMPTION – CONFIRM]/[RECOMMENDED])"
           fi
@@ -6541,19 +6553,19 @@ sys.stdout.write("".join(out) + "|")
               _ac_norm=$(printf '%s' "$_ac_line" | /usr/bin/sed -E 's/^[0-9]+:[[:space:]]*-[[:space:]]*\[[ xX]?\][[:space:]]+//')
               _ac_ok=false
               # (a) verb-first (case-insensitive)
-              if printf '%s' "$_ac_norm" | /usr/bin/grep -qiE '^(verify|check|confirm|assert|ensure|validate)\b'; then
+              if /usr/bin/grep -qiE '^(verify|check|confirm|assert|ensure|validate)\b' <<<"$_ac_norm"; then
                 _ac_ok=true
               # (b) backtick-wrapped path/token AND a state verb
-              elif printf '%s' "$_ac_norm" | /usr/bin/grep -qE '`[^`]+`' \
-                && printf '%s' "$_ac_norm" | /usr/bin/grep -qiE '\b(contains|includes|has)\b'; then
+              elif /usr/bin/grep -qE '`[^`]+`' <<<"$_ac_norm" \
+                && /usr/bin/grep -qiE '\b(contains|includes|has)\b' <<<"$_ac_norm"; then
                 _ac_ok=true
               # (c) explicit predicate: prefix
-              elif printf '%s' "$_ac_norm" | /usr/bin/grep -qiE '^predicate:'; then
+              elif /usr/bin/grep -qiE '^predicate:' <<<"$_ac_norm"; then
                 _ac_ok=true
               fi
               # Adapter G1-05-Bug — bug-narrative AC phrase (bug bodies only)
               if [[ "$_ac_ok" != "true" && "$_template" == "bug" ]]; then
-                if printf '%s' "$_ac_norm" | /usr/bin/grep -qiE 'reproduction steps no longer trigger actual behavior|running reproduction steps produces expected behavior'; then
+                if /usr/bin/grep -qiE 'reproduction steps no longer trigger actual behavior|running reproduction steps produces expected behavior' <<<"$_ac_norm"; then
                   _ac_ok=true
                 fi
               fi
@@ -6585,12 +6597,12 @@ sys.stdout.write("".join(out) + "|")
 
         # G1-02 — description / bug-narrative actionable (presence proxy).
         if [[ "$_template" == "improvement" ]]; then
-          if ! printf '%s' "$_body" | /usr/bin/grep -qE '^### Description[[:space:]]*$'; then
+          if ! /usr/bin/grep -qE '^### Description[[:space:]]*$' <<<"$_body"; then
             recommend_g1_enforcement "g1-enforcement" \
               "issue #${_num} — G1-02 RECOMMEND: no '### Description' section detected — confirm the change is stated as an actionable WHAT (not just an observation)"
           fi
         elif [[ "$_template" == "bug" ]]; then
-          if ! printf '%s' "$_body" | /usr/bin/grep -qE '^### (Expected Behavior|Actual Behavior)[[:space:]]*$'; then
+          if ! /usr/bin/grep -qE '^### (Expected Behavior|Actual Behavior)[[:space:]]*$' <<<"$_body"; then
             recommend_g1_enforcement "g1-enforcement" \
               "issue #${_num} — G1-02 RECOMMEND: bug narrative incomplete — confirm Reproduction Steps + Expected + Actual are all present (reproduce-and-observe must be possible)"
           fi
@@ -6598,8 +6610,8 @@ sys.stdout.write("".join(out) + "|")
 
         # G1-04 — Proposed Change names a file or protocol (improvement only).
         if [[ "$_template" == "improvement" ]]; then
-          if printf '%s' "$_body" | /usr/bin/grep -qE '^### Proposed Change[[:space:]]*$' \
-            && ! printf '%s' "$_body" | /usr/bin/grep -qE '`[^`]+`|\.(md|sh|ya?ml|py|toml|json)\b|OPERATIONS\.md|CLAUDE\.md|SKILL\.md'; then
+          if /usr/bin/grep -qE '^### Proposed Change[[:space:]]*$' <<<"$_body" \
+            && ! /usr/bin/grep -qE '`[^`]+`|\.(md|sh|ya?ml|py|toml|json)\b|OPERATIONS\.md|CLAUDE\.md|SKILL\.md' <<<"$_body"; then
             recommend_g1_enforcement "g1-enforcement" \
               "issue #${_num} — G1-04 RECOMMEND: Proposed Change names no obvious file/protocol — confirm the WHAT identifies the affected file(s) or protocol(s)"
           fi
@@ -6610,12 +6622,12 @@ sys.stdout.write("".join(out) + "|")
         # bullets. Scoped to the AC checkbox lines captured for G1-05a.
         if [[ "$_template" == "improvement" || "$_template" == "bug" ]]; then
           if [[ -n "$_ac_lines" ]]; then
-            if printf '%s' "$_ac_lines" | /usr/bin/grep -qE '<[A-Za-z][^>]*>'; then
+            if /usr/bin/grep -qE '<[A-Za-z][^>]*>' <<<"$_ac_lines"; then
               recommend_g1_enforcement "g1-enforcement" \
                 "issue #${_num} — G1-05b RECOMMEND: AC bullet(s) contain unreplaced '<...>' placeholder slot(s) — fill the templated slots before bundling"
             fi
           fi
-          if printf '%s' "$_body" | /usr/bin/grep -qE '^[[:space:]]*<!--[[:space:]]*-[[:space:]]*\[[ xX]?\]'; then
+          if /usr/bin/grep -qE '^[[:space:]]*<!--[[:space:]]*-[[:space:]]*\[[ xX]?\]' <<<"$_body"; then
             recommend_g1_enforcement "g1-enforcement" \
               "issue #${_num} — G1-05b RECOMMEND: commented-out AC bullet(s) detected — un-comment or remove them"
           fi
@@ -9093,7 +9105,9 @@ sys.stdout.write("".join(out) + "|")
           # Finding (a): missing tools: field
           c46_output+="${_agent_file}: missing frontmatter \`tools:\` field — an un-enumerated persona is an unbounded tool surface (subagent-security-posture.md § 3 Mechanism 1)"$'\n'
           c46_findings=$((c46_findings + 1))
-        elif /usr/bin/printf '%s' "$_tools_line" | /usr/bin/grep -qE "$c46_recursion_re"; then
+        # U1 checked: `c46_recursion_re` is the static alternation declared above and
+    # requires one of three literal tokens, so it cannot match an empty line.
+    elif /usr/bin/grep -qE "$c46_recursion_re" <<<"$_tools_line"; then
           # Finding (b): recursion surface in tools:
           c46_output+="${_agent_file}: \`tools:\` lists a recursion-surface tool (Agent / spawn_task / mcp__ccd_session__spawn_task) — spokes must NOT spawn sub-spokes (#189; subagent-security-posture.md § 3 Mechanism 1 uniform exclusions)"$'\n'
           c46_findings=$((c46_findings + 1))
@@ -10921,16 +10935,16 @@ EOF
   _v="$(_cc_selftest_verdict "v9.9")"; _tok="${_v%% *}"
   [[ "$_tok" == "INCOMPLETE" || "$_tok" == "CLEAN" ]] || { echo "FAIL: a prefix-shortened cutoff must still verdict, got '$_v'"; failures=$((failures+1)); }
   _e="$(_cc_selftest_stderr "v9.9")"
-  printf '%s' "$_e" | /usr/bin/grep -q 'WARNING — cutoff v9.9 armed at LOG row v9.98' \
+  /usr/bin/grep -q 'WARNING — cutoff v9.9 armed at LOG row v9.98' <<<"$_e" \
     || { echo "FAIL: a prefix-shortened cutoff must WARN naming the armed row, got '$_e'"; failures=$((failures+1)); }
 
   # (6) an EXACT-row cutoff must NOT emit the mis-arm WARNING (no false-positive noise;
   #     without this, (5) could pass on a warning that fires unconditionally).
   _e="$(_cc_selftest_stderr "v9.98")"
-  if printf '%s' "$_e" | /usr/bin/grep -q 'WARNING — cutoff'; then
+  if /usr/bin/grep -q 'WARNING — cutoff' <<<"$_e"; then
     echo "FAIL: an exact-row cutoff must not emit the mis-arm WARNING, got '$_e'"; failures=$((failures+1))
   fi
-  printf '%s' "$_e" | /usr/bin/grep -q 'armed at LOG row v9.98' \
+  /usr/bin/grep -q 'armed at LOG row v9.98' <<<"$_e" \
     || { echo "FAIL: an exact-row cutoff must still name the armed row, got '$_e'"; failures=$((failures+1)); }
 
   # (7) a cutoff matching NO row asserts nothing and would report CLEAN 0 — vacuously
@@ -10943,7 +10957,7 @@ EOF
   #     emits is itself a vacuity, and the fixture pins the other two to __none__
   #     precisely so only one voice can answer here.
   _e="$(_cc_selftest_stderr "v0.01")"
-  printf '%s' "$_e" | /usr/bin/grep -q 'WARNING — cutoff v0.01 matched NO LOG row' \
+  /usr/bin/grep -q 'WARNING — cutoff v0.01 matched NO LOG row' <<<"$_e" \
     || { echo "FAIL: a no-match cutoff must WARN that zero rows were asserted, got '$_e'"; failures=$((failures+1)); }
 
   /bin/rm -rf "$_t" 2>/dev/null || true
@@ -11035,11 +11049,13 @@ STUB
     _cc_compute_verdict "lifecycle" 2>&1 >/dev/null
   }
   _os_must() {      # <label> <fixed-needle> <detail>
-    /usr/bin/printf '%s' "$3" | /usr/bin/grep -qF "$2" \
+    # U1 checked: every caller passes a non-empty literal needle, so the empty
+    # line a here-string emits (where `printf '%s'` emitted nothing) cannot match.
+    /usr/bin/grep -qF "$2" <<<"$3" \
       || { echo "FAIL: OS $1 — expected a finding containing '$2', got: $(/usr/bin/printf '%s' "$3" | /usr/bin/tr '\n' ';')"; failures=$((failures+1)); }
   }
   _os_must_not() {  # <label> <fixed-needle> <detail>
-    if /usr/bin/printf '%s' "$3" | /usr/bin/grep -qF "$2"; then
+    if /usr/bin/grep -qF "$2" <<<"$3"; then
       echo "FAIL: OS $1 — must NOT report '$2', got: $(/usr/bin/printf '%s' "$3" | /usr/bin/tr '\n' ';')"; failures=$((failures+1))
     fi
   }
