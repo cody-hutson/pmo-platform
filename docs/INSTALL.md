@@ -107,14 +107,23 @@ The default workspace location is `~/Claude/pmo-platform`. To install elsewhere,
 1. Detects platform (Darwin required; exits 78 otherwise).
 2. Checks prerequisites (`python3`, `shasum`, `git`, `jq`). On missing, prints the exact `brew install` command and exits 69.
 3. Validates the source repo (the auto-detected repo root); exits 66 if missing or templates absent.
-4. Computes the active token set from the templates at `core/CLAUDE.md.template` and `core/settings.json.template`.
+4. Computes the active token set from three sources: `core/CLAUDE.md.template`, `core/settings.json.template`, and `core/deploy/composition-surface-manifest.sh`. The manifest is a deliberate third input, not an accident of layout — ADR-122 makes the CLAUDE.md template's whole body a managed section, so the reserved-token vocabulary that used to be declared in its authoring header now lives in the manifest and is grepped from there.
 5. Detects state at `~/Claude/.claude/.workspace-setup.state` and routes one of three branches: fresh-install, re-bootstrap, or guided recovery.
 6. Creates the workspace directory layout.
-7. Resolves operator-identifying tokens via interactive prompts; writes the canonical `operator.toml` at `~/.config/pmo-platform/operator.toml` (XDG-spec; mode 0600).
-8. Substitutes tokens into `CLAUDE.md` and `.claude/settings.json` from the templates.
+7. Resolves operator-identifying tokens — via interactive prompts by default, or from each token's declared default with no read from stdin under `--non-interactive`; writes the canonical `operator.toml` at `~/.config/pmo-platform/operator.toml` (XDG-spec; mode 0600).
+8. Substitutes tokens into `CLAUDE.md` and `.claude/settings.json` from the templates, and scaffolds an empty `~/Claude/.claude/settings.local.json` — **your** settings overlay (see below).
 9. Installs the PreToolUse hooks at `~/Claude/.claude/hooks/` from `core/hooks/*.sh`.
 10. Installs composition-surface seed files (allowlists, exemption lists) from `core/config/allowlists/` to runtime locations (`~/Claude/.claude/` for hook-tier; `~/Claude/personal/pmo-instance/` for instance-tier), wrapped in MANAGED SECTION + OPERATOR ADDITIONS fences per [`composition-surface-spec.md` §2](../core/standards/composition-surface-spec.md). Install-if-missing semantics: operator edits to OPERATOR ADDITIONS sections are preserved on re-run.
 11. Runs a post-install verification gate. On pass, writes `.workspace-setup.state` with `verification_passed: true` and prints the validate-install invocation hint.
+
+**Where your own Claude Code settings go.** The install creates two settings files, and the split matters:
+
+| File | Owner | What happens to it |
+|---|---|---|
+| `~/Claude/.claude/settings.json` | **Platform (Layer 1)** | Rendered from `core/settings.json.template`. Re-rendered whole-file by `./update.sh` so security-hook registrations stay current — anything you add here is migrated out and replaced. |
+| `~/Claude/.claude/settings.local.json` | **You (Layer 2)** | Created empty (`{}`) once, then never touched by the package. Claude Code merges it over the managed file natively. Git-ignored. |
+
+Put extra permissions, `env` values, and your own hooks in **`settings.local.json`**. If you do edit the managed file, the update guard will move your keys into the overlay and back the old file up rather than dropping them — but the overlay is the intended home. See [UPDATE.md § 1.1](UPDATE.md).
 
 **Phase 2 — skill deployment.** After workspace bootstrap completes successfully, `install.sh` sources `core/deploy/orchestrate.sh` and invokes `phase_deploy_skills`, which calls `core/deploy/deploy.sh --deploy`. This populates `~/.claude/skills/` so the post-install sanity check at [GETTING_STARTED.md § 2](GETTING_STARTED.md) succeeds out of the box.
 
@@ -126,6 +135,7 @@ The default workspace location is `~/Claude/pmo-platform`. To install elsewhere,
 | `--workspace-root PATH` | Workspace destination (default: `~/Claude`). Also the Phase 2 deploy-target root — skills deploy under `PATH/.claude/skills` instead of the live `~`, so a sandboxed install redirects every write. |
 | `--config-root PATH` | Root for operator config writes (default: `~/.config/pmo-platform`; or `PMO_PLATFORM_CONFIG_ROOT` env var). Used by integration tests + sandboxed dry-runs to isolate from operator state. |
 | `--init-only-state` | Verify artifacts empirically without performing install operations; writes state file on pass |
+| `--non-interactive` | Resolve every token from its declared default and never read stdin, so a fresh install completes unattended. A required token with no available default exits non-zero naming the token — no value is ever silently substituted. Does not change interactive behavior. |
 | `--dry-run` | Preview planned actions; perform no state mutation |
 | `--help` | Show the canonical usage banner |
 

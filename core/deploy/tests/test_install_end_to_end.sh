@@ -12,7 +12,7 @@
 #      paths fields populated. setup-workspace.sh reads these via
 #      read_operator_toml and skips the prompts that would have asked for them.
 #   2. Pipe `yes ""` (via process substitution to avoid SIGPIPE / pipefail
-#      interaction) for the 3 uncached prompts (COWORK_INSTALL_PATH,
+#      interaction) for the 3 uncached prompts (COWORK_INSTALL_PATH_BASE,
 #      OPERATOR_PHONE, OPERATOR_PROJECT_NAME). Each has a default or is
 #      optional, so empty input is accepted.
 #   3. Assert post-install state: state file with verification_passed=true,
@@ -170,6 +170,66 @@ if grep -qE '\[(OPERATOR|CLAUDE|COWORK)_[A-Z_]+\]' "${SBX}/ws/.claude/settings.j
   report "settings.json tokens substituted" 0
 else
   report "settings.json tokens substituted" 1
+fi
+
+# Registration parity at FRESH INSTALL (ADR-121). Present + valid JSON + token-free
+# all passed on a deployed workspace that was missing four of its template's hook
+# registrations, so none of them speaks to completeness. Identity is the
+# (event, matcher, basename(command)) triple — basename because the workspace root is
+# baked into every command string. The denominator is the template's own registration
+# set, computed here rather than hardcoded.
+settings_parity=$(python3 -c '
+import json, os, sys
+
+def triples(path):
+    with open(path) as f:
+        doc = json.load(f)
+    return {(e, b.get("matcher", ""), os.path.basename(h.get("command", "")))
+            for e, blocks in (doc.get("hooks") or {}).items()
+            for b in blocks for h in (b.get("hooks") or [])}
+
+try:
+    tpl, live = triples(sys.argv[1]), triples(sys.argv[2])
+except Exception as exc:
+    print("ERROR|%s" % exc); sys.exit(0)
+missing = sorted(tpl - live)
+print(("MISSING|%d of %d|%s" % (len(missing), len(tpl), ", ".join("%s[%s]:%s" % m for m in missing)))
+      if missing else "OK|%d" % len(tpl))
+' "${REPO_ROOT}/core/settings.json.template" "${SBX}/ws/.claude/settings.json" 2>/dev/null)
+
+case "${settings_parity}" in
+  OK\|*)
+    report "settings.json carries all ${settings_parity#OK|} template hook registrations at fresh install" 1 ;;
+  MISSING\|*)
+    report "settings.json carries all template hook registrations at fresh install" 0 "${settings_parity#MISSING|}" ;;
+  *)
+    # Never a silent pass — an uncomputable parity is a FAIL, not an absence of one.
+    report "settings.json registration parity is computable at fresh install" 0 "${settings_parity:-no output}" ;;
+esac
+
+# The Layer-2 operator overlay is scaffolded empty at install (ADR-121 §Decision 7).
+# Empty is the contract, not an accident: any default or commentary would make "has
+# the operator customized this?" undecidable.
+settings_overlay="${SBX}/ws/.claude/settings.local.json"
+if [ -f "${settings_overlay}" ] && [ "$(tr -d ' \n' < "${settings_overlay}")" = "{}" ]; then
+  report "settings.local.json overlay scaffolded empty at install" 1
+else
+  report "settings.local.json overlay scaffolded empty at install" 0 \
+    "present=$([ -f "${settings_overlay}" ] && echo yes || echo no); body=$(tr -d ' \n' < "${settings_overlay}" 2>/dev/null)"
+fi
+
+# Both ADR-121 baselines recorded at install, and DISTINCT — settings_template_sha is
+# the regeneration trigger (source template) and settings_installed_sha the tamper
+# anchor (post-substitution body). Equal values would mean one of them is measuring
+# the wrong file.
+settings_state="${SBX}/ws/.claude/.workspace-setup.state"
+state_tpl_sha=$(jq -r '.settings_template_sha // ""' "${settings_state}" 2>/dev/null)
+state_inst_sha=$(jq -r '.settings_installed_sha // ""' "${settings_state}" 2>/dev/null)
+if [ -n "${state_tpl_sha}" ] && [ -n "${state_inst_sha}" ] && [ "${state_tpl_sha}" != "${state_inst_sha}" ]; then
+  report "settings baselines recorded at install and distinct (trigger != anchor)" 1
+else
+  report "settings baselines recorded at install and distinct (trigger != anchor)" 0 \
+    "template_sha='${state_tpl_sha}' installed_sha='${state_inst_sha}'"
 fi
 
 # Migration-removal regression: no workspace-config.toml anywhere in the sandbox.

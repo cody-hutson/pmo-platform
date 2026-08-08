@@ -23,6 +23,11 @@ set -Eeuo pipefail
 # --- Constants ---
 readonly SCRIPT_VERSION="v1.04"
 readonly OPERATOR_LOCAL_TOML_BASENAME="operator.local.toml"
+# The runtime-native operator settings overlay (ADR-121). Layer 2: operator-owned,
+# git-ignored, merged by Claude Code itself. The platform only ever creates it empty,
+# once, and migrates operator-added keys into it before regenerating the managed
+# settings.json — it is never regenerated.
+readonly SETTINGS_LOCAL_BASENAME="settings.local.json"
 readonly REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 readonly MANIFEST_FILE="${REPO_ROOT}/core/deploy/composition-surface-manifest.sh"
 readonly LIB_COMPOSITION="${REPO_ROOT}/core/deploy/lib-composition.sh"
@@ -222,6 +227,7 @@ regenerate_managed_sections() {
     local src="${LIB_COMPOSE_ENTRY_SRC}"
     local tier="${LIB_COMPOSE_ENTRY_TIER}"
     local tokens_flag="${LIB_COMPOSE_ENTRY_TOKENS_FLAG}"
+    local dialect="${LIB_COMPOSE_ENTRY_DIALECT}"
 
     local source_file="${REPO_ROOT}/${src}"
     local basename; basename="$(basename "${src}")"
@@ -230,6 +236,10 @@ regenerate_managed_sections() {
     if ! target=$(lib_compose_resolve_target "${basename}" "${tier}" "${WORKSPACE_ROOT}"); then
       continue
     fi
+    # The resolver may strip a suffix (workspace-root tier drops `.template`), so
+    # backups and operator-facing messages name the TARGET file, not the source
+    # template. Identical to `basename` for every non-stripping tier.
+    local target_basename; target_basename="$(basename "${target}")"
 
     count=$((count + 1))
 
@@ -239,7 +249,7 @@ regenerate_managed_sections() {
     fi
 
     if [ ! -f "${target}" ]; then
-      info "Target absent (${basename}); fresh install needed via setup-workspace.sh"
+      info "Target absent (${target_basename}); fresh install needed via setup-workspace.sh"
       continue
     fi
 
@@ -251,8 +261,15 @@ regenerate_managed_sections() {
     # tamper must compare the live body against installed_sha, never against the
     # source-template hash. `|| true` guards the no-match case under set -e
     # (pre-ADR-014 installs carry no installed_sha line).
-    local stored_managed_sha; stored_managed_sha=$(grep -E '^# managed_sha:' "${target}" | head -1 | awk '{print $3}' || true)
-    local stored_installed_sha; stored_installed_sha=$(grep -E '^# installed_sha:' "${target}" | head -1 | awk '{print $3}' || true)
+    # Marker greps are DIALECT-AWARE (ADR-122): a marker line is `# <key>: <hex>`
+    # in the plain dialect and `<!-- <key>: <hex> -->` in the markdown dialect.
+    # A `#`-pinned grep returns empty against a markdown-fenced target, so
+    # stored_managed_sha would never equal source_sha and the file would
+    # regenerate on EVERY run forever — EX_NOCHANGE becomes unreachable.
+    # `awk '{print $3}'` is field-correct for BOTH forms ($1 is the comment
+    # opener, $2 the key, $3 the hex), so only the pattern changes.
+    local stored_managed_sha; stored_managed_sha=$(grep -E '^(# |<!-- )managed_sha:' "${target}" | head -1 | awk '{print $3}' || true)
+    local stored_installed_sha; stored_installed_sha=$(grep -E '^(# |<!-- )installed_sha:' "${target}" | head -1 | awk '{print $3}' || true)
     local live_body_sha; live_body_sha=$(lib_compose_installed_body_sha "${target}" || true)
 
     # --- Tamper detection (runs REGARDLESS of the source-SHA skip) ---
@@ -262,20 +279,20 @@ regenerate_managed_sections() {
     # the anchor is back-filled on the next legitimate regen / --force-regen).
     if [ -n "${stored_installed_sha}" ] && [ "${live_body_sha}" != "${stored_installed_sha}" ]; then
       if [ "${DRY_RUN}" -eq 1 ]; then
-        info "[dry-run] tampered → would back up + regenerate: ${basename}"
+        info "[dry-run] tampered → would back up + regenerate: ${target_basename}"
         regenerated=$((regenerated + 1))
         continue
       fi
       local tamper_backup="${WORKSPACE_ROOT}/.backup-tampered-$(date -u +%Y%m%dT%H%M%SZ)"
       mkdir -p "${tamper_backup}"
-      cp "${target}" "${tamper_backup}/${basename}"
-      warn "tamper detected in managed section of ${basename}; backed up to ${tamper_backup}/${basename}; regenerating from template."
-      if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}"; then
+      cp "${target}" "${tamper_backup}/${target_basename}"
+      warn "tamper detected in managed section of ${target_basename}; backed up to ${tamper_backup}/${target_basename}; regenerating from template."
+      if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "${dialect}"; then
         regenerated=$((regenerated + 1))
-        info "Regenerated (tamper): ${basename}"
+        info "Regenerated (tamper): ${target_basename}"
       else
-        err "Regeneration failed for ${basename}; restoring from tamper backup"
-        cp "${tamper_backup}/${basename}" "${target}"
+        err "Regeneration failed for ${target_basename}; restoring from tamper backup"
+        cp "${tamper_backup}/${target_basename}" "${target}"
         exit "${EX_REGENFAIL}"
       fi
       continue
@@ -287,21 +304,36 @@ regenerate_managed_sections() {
     fi
 
     if [ "${DRY_RUN}" -eq 1 ]; then
-      info "[dry-run] would regenerate: ${basename} (source ${source_sha:0:12} ≠ installed ${stored_managed_sha:0:12})"
+      info "[dry-run] would regenerate: ${target_basename} (source ${source_sha:0:12} ≠ installed ${stored_managed_sha:0:12})"
       regenerated=$((regenerated + 1))
       continue
     fi
 
+    # Unconditional pre-write backup (ADR-122 §Decision 7). This runs on EVERY
+    # real regeneration, independent of the tamper anchor — which matters most
+    # for a workspace-root target, because no installed CLAUDE.md has ever
+    # carried an installed_sha marker, so the tamper-backup path above cannot
+    # fire on its first rewrite. This is the recovery path an EXPENSIVE-
+    # reversibility write depends on.
     local backup_dir="${BACKUP_DIR_ROOT}-$(date -u +%Y%m%dT%H%M%SZ)"
     mkdir -p "${backup_dir}"
-    cp "${target}" "${backup_dir}/${basename}"
+    cp "${target}" "${backup_dir}/${target_basename}"
 
-    if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}"; then
+    # Out-of-fence discard notice (composition-surface-spec.md §3.3). A bare
+    # warning is proportionate for an allowlist; for a workspace-root target —
+    # the operator's top-level governance file — name the path AND the backup
+    # location, so content held outside either fence is recoverable rather than
+    # merely reported lost.
+    if [ "${tier}" = "workspace-root" ]; then
+      info "Regenerating workspace-root target ${target}: content INSIDE the OPERATOR ADDITIONS fence is preserved verbatim; content outside either fence is not carried forward. Pre-write copy: ${backup_dir}/${target_basename}"
+    fi
+
+    if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "${dialect}"; then
       regenerated=$((regenerated + 1))
-      info "Regenerated: ${basename} (backup: ${backup_dir}/${basename})"
+      info "Regenerated: ${target_basename} (backup: ${backup_dir}/${target_basename})"
     else
-      err "Regeneration failed for ${basename}; restoring from backup"
-      cp "${backup_dir}/${basename}" "${target}"
+      err "Regeneration failed for ${target_basename}; restoring from backup"
+      cp "${backup_dir}/${target_basename}" "${target}"
       exit "${EX_REGENFAIL}"
     fi
   done
@@ -414,6 +446,40 @@ scaffold_roster() {
   mkdir -p "$(dirname "${roster_file}")"
   cp "${template}" "${roster_file}"
   info "Scaffolded people-roster → ${roster_file}"
+}
+
+# --- Phase 2.5d: operator settings-overlay scaffold (ADR-121 §Decision 7) ---
+# Create-once ONLY: write an empty {} to <ws>/.claude/settings.local.json if and only
+# if it does NOT already exist. update.sh must NEVER regenerate this file (it is pure
+# operator config, unlike the marker-fenced composition surfaces Phase 3 regenerates)
+# — the `[ -f ] ||` guard IS that guarantee. Mirrors scaffold_needles / scaffold_roster
+# exactly.
+#
+# Scaffolding it HERE, on the update path, is what delivers the Layer-2 overlay to
+# workspaces that already exist. Installing it only at fresh install would leave every
+# deployed workspace with no signposted home for operator settings — which is the
+# discoverability half of the defect this closes. It also has to exist before Phase 5d
+# runs, because it is the destination the guard migrates into.
+#
+# The body is exactly `{}` and nothing else: any commentary or default value would
+# make "has the operator customized this?" undecidable.
+scaffold_settings_local() {
+  info "Phase 2.5d: operator settings-overlay scaffold (create-once; never regenerated)"
+  local overlay="${WORKSPACE_ROOT}/.claude/${SETTINGS_LOCAL_BASENAME}"
+  if [ -f "${overlay}" ]; then
+    info "PRESERVED (operator config, never regenerated): ${overlay}"
+    return 0
+  fi
+  if [ ! -d "${WORKSPACE_ROOT}/.claude" ]; then
+    info "No deployed .claude dir at ${WORKSPACE_ROOT}/.claude; skipping overlay scaffold"
+    return 0
+  fi
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would scaffold operator settings overlay → ${overlay}"
+    return 0
+  fi
+  printf '{}\n' > "${overlay}"
+  info "Scaffolded operator settings overlay → ${overlay}"
 }
 
 # --- Phase 4: State update ---
@@ -565,6 +631,79 @@ refresh_hooks() {
   rm -f "${refresh_out}"
 }
 
+# --- Phase 5d: Refresh the managed settings.json (ADR-121) ---
+# Phase 5c above refreshes the hook SCRIPTS. Their REGISTRATIONS live in
+# <ws>/.claude/settings.json, and until this phase existed nothing refreshed that
+# file at all — update.sh referenced it zero times. The observable consequence on a
+# deployed workspace was hook scripts present on disk, byte-identical to source, with
+# the events that would invoke them unwired and no signal reporting it.
+#
+# Delegates to `setup-workspace.sh --refresh-settings`, exactly as Phase 5c delegates
+# to --refresh-hooks, so the guard, the comparator and the writer are single-sourced
+# rather than re-implemented here.
+#
+# ORDER IS NOT REORDERABLE: this runs AFTER refresh_hooks. A registration must never
+# reach a workspace ahead of the script it names, or the wiring points at nothing.
+#
+# NON-FATAL by construction (the Phase 5c posture): setup-workspace.sh hard-exits on
+# unparseable substituted JSON or an unresolved token, and this runs mid-update, so a
+# settings failure must not take down skill redeploy or the version snapshot. Warn,
+# leave the flag alone, continue.
+refresh_settings() {
+  info "Phase 5d: Refresh managed settings.json via setup-workspace.sh --refresh-settings"
+  local setup="${REPO_ROOT}/docs/scripts/setup-workspace.sh"
+  if [ ! -f "${setup}" ]; then
+    warn "setup-workspace.sh not found at ${setup}; skipping settings refresh"
+    return 0
+  fi
+  local target="${WORKSPACE_ROOT}/.claude/settings.json"
+  if [ ! -f "${target}" ]; then
+    info "No deployed settings.json at ${target}; skipping settings refresh"
+    return 0
+  fi
+
+  # T-1: the EX_NOCHANGE flag flips on a REAL BYTE DELTA, never on "the phase ran"
+  # and never on a log line. Phase 5's own history records why — a flag keyed to
+  # mere success made EX_NOCHANGE unreachable and a true no-op wrongly exited 0.
+  # A content hash cannot be fooled by a phase that runs and changes nothing.
+  local before_sha=""
+  before_sha=$(shasum -a 256 "${target}" | awk '{print $1}')
+
+  local dry_flag="" force_flag=""
+  if [ "${DRY_RUN}" -eq 1 ]; then dry_flag="--dry-run"; fi
+  if [ "${FORCE_REGEN}" -eq 1 ]; then force_flag="--force-regen"; fi
+
+  local refresh_out; refresh_out="$(mktemp -t update-phase5d.XXXXXX)"
+  local rc=0
+  # shellcheck disable=SC2086  # both flags are single controlled tokens (empty or the literal flag)
+  bash "${setup}" --refresh-settings --workspace-root "${WORKSPACE_ROOT}" \
+    --config-root "${CONFIG_ROOT}" --source-repo "${REPO_ROOT}" ${dry_flag} ${force_flag} \
+    >"${refresh_out}" 2>&1 || rc=$?
+  cat "${refresh_out}" >&2
+
+  if [ "${rc}" -ne 0 ]; then
+    rm -f "${refresh_out}"
+    warn "Settings refresh returned non-zero (${rc}); continuing update. The managed settings.json was NOT refreshed — hook registrations may be stale."
+    return 0
+  fi
+
+  # A guardrail change is not permitted to be silent even when it lands inert: name
+  # what became registered, using the guard's own migration + abort lines.
+  if grep -qE '^WARN: S-[345]' "${refresh_out}"; then
+    grep -E '^WARN: S-[345]' "${refresh_out}" >&2
+  fi
+  rm -f "${refresh_out}"
+
+  local after_sha=""
+  after_sha=$(shasum -a 256 "${target}" | awk '{print $1}')
+  if [ "${before_sha}" != "${after_sha}" ]; then
+    PHASE5_DEPLOYED=1
+    info "Phase 5d: settings.json content changed — platform hook registrations refreshed."
+  else
+    info "Phase 5d: settings.json byte-identical after the pass; no change."
+  fi
+}
+
 # --- Phase 5b: Refresh .version snapshot ---
 # Keep <ws>/.claude/.version in sync with the clone so the SessionStart
 # version-skew hook (core/hooks/notify-version-skew.sh) compares against the
@@ -595,9 +734,13 @@ schema_migrate
 backup_instance_dir
 scaffold_needles
 scaffold_roster
+scaffold_settings_local
 regenerate_managed_sections
 redeploy_skills
 refresh_hooks
+# Phase 5d MUST follow Phase 5c: hook scripts land first, then the registrations that
+# name them. Reordering would wire events to scripts not yet on disk (ADR-121 §8).
+refresh_settings
 refresh_version_snapshot
 write_last_update
 
