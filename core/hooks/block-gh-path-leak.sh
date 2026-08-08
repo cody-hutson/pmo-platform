@@ -43,7 +43,24 @@ readonly BYPASS_LOG="${HOOK_DIR}/bypass-log.jsonl"
 readonly WARN_LOG="${HOOK_DIR}/gh-path-leak-warn-log.jsonl"
 readonly MODE_FILE="${HOOK_DIR}/.mode"
 
-# --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
+# --- MODE DETECTION (defined BEFORE the dependency gate so the gate's severity is
+# mode-coupled and the value is resolvable without the helper) ---
+get_mode() {
+  local mode="warn"
+  [ -f "$MODE_FILE" ] && mode="$("$CAT" "$MODE_FILE" 2>/dev/null | "$TR" -d '[:space:]' || echo warn)"
+  case "$mode" in warn|enforce|off) "$PRINTF" '%s' "$mode" ;; *) "$PRINTF" 'warn' ;; esac
+}
+
+# --- LIB-GUARD MODE SNAPSHOT (resolved BEFORE the dependency guard, frozen readonly) ---
+# The guard below sources $DEP_LIB inside its own condition, so by the time the guard's
+# failure branch runs, everything that file defines is already in THIS shell — including
+# a get_mode of its own. Resolving the mode inside the branch would let the artifact
+# under adjudication choose its own verdict. Resolve it here and freeze it: a sourced
+# file cannot overwrite a readonly. Routed through get_mode()/$MODE_FILE (never a
+# literal mode path), so a hook that later moves to its own mode file follows for free.
+LIB_GUARD_MODE="$(get_mode)"; readonly LIB_GUARD_MODE
+
+# --- SHARED DEPENDENCY RESOLVER (mode-coupled: fail CLOSED in enforce, degrade in warn/off) ---
 # Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
 # `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
 # NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
@@ -54,9 +71,15 @@ readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
 # fail-OPEN) instead of blocking. `bash -n` detects that non-fatally so we fail CLOSED
 # (GHSA-g9g6-28c9-vrx5). Also require deny_missing_primitive so a valid-but-stale lib
 # (pre-fix, no helper) fails closed here rather than fail-open at a later ERR trap.
+# Severity is mode-coupled: a rule match in warn/off would not block, so an unusable
+# helper must not block harder than a match would.
 if [ ! -r "$DEP_LIB" ] || ! "${BASH:-/bin/bash}" -n "$DEP_LIB" 2>/dev/null || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1 || ! command -v deny_missing_primitive >/dev/null 2>&1; then
-  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
-  exit 2
+  if [ "$LIB_GUARD_MODE" = "enforce" ]; then
+    "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
+    exit 2
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] WARN (degraded, %s=%s): dependency helper lib/dep-resolve.sh unavailable or invalid; ALL rules for this hook are skipped this run. Reinstall the hook bundle (re-run docs/scripts/setup-workspace.sh) to restore enforcement.\n' "$HOOK_NAME" "${MODE_FILE##*/}" "$LIB_GUARD_MODE" >&2
+  exit 0
 fi
 JQ="$(resolve_jq)"; readonly JQ
 
@@ -74,12 +97,6 @@ log_error() {
   "$PRINTF" '%s [%s] %s\n' "$ts" "$HOOK_NAME" "$1" >> "$ERROR_LOG" 2>/dev/null || true
 }
 trap 'rc=$?; log_error "RULE-EVAL-ERROR at line $LINENO (exit $rc)"; "$PRINTF" "[CLAUDE-HOOK:%s:HOOK-ERROR] rule-eval error at line %s (exit %s).\n" "$HOOK_NAME" "$LINENO" "$rc" >&2; exit 0' ERR
-
-get_mode() {
-  local mode="warn"
-  [ -f "$MODE_FILE" ] && mode="$("$CAT" "$MODE_FILE" 2>/dev/null | "$TR" -d '[:space:]' || echo warn)"
-  case "$mode" in warn|enforce|off) "$PRINTF" '%s' "$mode" ;; *) "$PRINTF" 'warn' ;; esac
-}
 
 # --- READ INPUT (jq-free; stdin is consumed exactly once) ---
 INPUT="$(cat)"
