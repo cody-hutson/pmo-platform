@@ -56,6 +56,6 @@
 <!-- Any match OUTSIDE this Issue References block needs scrutiny. -->
 <!-- See .claude/rules/git-workflow.md § PR Process step 5 for full discipline. -->
 <!-- CI workflow `.github/workflows/pr-body-parser-clean.yml` enforces this rule on PR open/edit. -->
-<!-- Repository-integrity gates (depersonalization / issue-ref / dead-file-ref) run on PR open/sync via `.github/workflows/repo-integrity.yml`; they scan changed FILES, not this body. Override a single file by adding `<!-- repo-integrity: allow-<gate> -->` in that file. See git-workflow.md § Repository-Integrity Gates. -->
+<!-- Repository-integrity gates (blocking: depersonalization / issue-ref / dead-file-ref — plus non-blocking jobs including sigpipe-idiom on changed shell files) run on PR open/sync via `.github/workflows/repo-integrity.yml`; the workflow is the authoritative enumeration. They scan changed FILES, not this body. Override a single file by adding `<!-- repo-integrity: allow-<gate> -->` in that file; the sigpipe-idiom gate also takes a line-scoped `# sigpipe-idiom: allow — <reason>`. See git-workflow.md § Repository-Integrity Gates. -->
 
 Closes #N

@@ -9,6 +9,22 @@ name: Repository integrity
 #                  red; add "#999999" outside a reference block -> issue-ref red;
 #                  add "[x](missing.md)" -> dead-file-ref red.
 # (Three gates, three checks; posture per core/standards/gate-efficacy-standard.md (b).)
+#
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"SIGPIPE-idiom gate" (no WARN_MODE — a finding turns the check RED)  always-reports=yes
+#   invariant: no added line in a changed *.sh / *.bash introduces a writer piped
+#              into a short-circuiting reader (any writer | grep -q, any grep | head)
+#              outside the three declared exemption tiers; a file whose git status is
+#              A or R is scanned WHOLE, closing the rename blind spot.
+#   falsification: add `printf '%s' "$x" | grep -q y` to any changed .sh -> the job
+#                  FAILS (exit 1); add the same line carrying
+#                  `# sigpipe-idiom: allow — <reason>` -> the job PASSES and the line
+#                  is listed in the SUPPRESSED block of the run summary.
+#   posture note: `advisory`, not `required`, is the HONEST declaration today —
+#                 Requirement (b') makes `required` unavailable until the context is
+#                 registered in branch protection, which a PR cannot do. The gate is
+#                 ENFORCING (it exits non-zero on a finding); it is not yet BLOCKING.
+#                 Registering "SIGPIPE-idiom gate" as a required check flips this row
+#                 to posture=required enforcement=branch-protection with no code change.
 
 # Three PR-time integrity gates as three named jobs on one workflow, on the
 # proven parser-clean scaffold (override-marker -> locate-anchor -> scan-changed-
@@ -1354,4 +1370,241 @@ jobs:
             echo "::warning::ADR durability gate (warn-mode): findings reported, not blocking. The enforce-flip is HARD-GATED on the ADR full-conformance pass landing a clean baseline first — do not flip WARN_MODE before then."
             exit 0
           fi
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # GATE 10 — SIGPIPE idiom (#3832). A writer piped into a SHORT-CIRCUITING
+  #           reader is a latent false-FAIL: `grep -q` and `head` exit on their
+  #           first match, the writer is still writing, it takes SIGPIPE, and
+  #           `pipefail` promotes its 141 to the pipeline's status — so a
+  #           SUCCESSFUL match reports failure. Written `if ! <pipeline>`, that
+  #           inverts to "no match" and the gate silently passes what it exists
+  #           to catch. It is not theoretical: deploy.sh Check 31 over-reported
+  #           5x (Class L 477 vs a true 93) on exactly this shape.
+  #
+  #           FIRING CONDITIONS (measured, not assumed): pipefail + the status
+  #           consumed + a MULTI-LINE haystack + an early match + >~64 KiB of
+  #           residual after the matched line. Single-line does not fire at 1 MB;
+  #           multi-line fires between 61 KB (rc=0) and 92 KB (rc=141).
+  #
+  #           WHY IT GATES ADDED LINES AND NOT THE TREE: #3832 converts the whole
+  #           pinned population in the same PR, so there is no pre-existing corpus
+  #           left for a whole-tree scan to find — and a whole-tree arm would need
+  #           a file:line exemption roster on day one, which is the second,
+  #           drifting roster the design avoids. Added-lines-only is also the
+  #           posture 4 of the 9 gates above already use.
+  #
+  #           RENAME BLIND SPOT, CLOSED: a `git mv` of a file carrying a site
+  #           produces no added lines under a pure delta, so a file whose status
+  #           is A (added) or R (renamed) is scanned WHOLE. That is the one place
+  #           this job deliberately does not copy `projects-casing` verbatim.
+  #
+  #           EXEMPTIONS reuse the repo's existing THREE-TIER model — no new
+  #           roster, no new vocabulary:
+  #             T1 content-exempt  — the idiom lies entirely inside a single-quoted
+  #                                  string (a test payload / case label). Detected
+  #                                  by stripping quoted spans and re-testing the
+  #                                  residual, the same technique GATE 8 uses for
+  #                                  its schema literal.
+  #             T2 line-scoped     — `# sigpipe-idiom: allow — <reason>` on the
+  #                                  line or the line above. This is the SAME
+  #                                  rationale #3832's AC-3 already requires, so
+  #                                  the string a reviewer reads and the string
+  #                                  this gate parses are one string.
+  #             T3 file-scoped     — `repo-integrity: allow-sigpipe-idiom`
+  #                                  anywhere in the file.
+  #           T2 and T3 are REPORTED via the SUPPRESSED channel, never silent.
+  #
+  #           POSTURE: enforce day one — no WARN_MODE. The ADR-durability lint
+  #           above defers its flip because it would lock a clean baseline rather
+  #           than create one; this gate CREATES its baseline in the same PR, so
+  #           that deferral rationale does not apply. Warn-only here would exit 0
+  #           while printing findings — the exit-0-with-warnings shape this
+  #           release exists to eliminate.
+  #
+  #           Injection-safety: BASE_SHA/HEAD_SHA bound via env: and used as "$VAR".
+  # ---------------------------------------------------------------------------
+  sigpipe-idiom:
+    name: SIGPIPE-idiom gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # need the base commit for the added-lines delta
+
+      - name: Scan added shell lines for writer-into-short-circuiting-reader pipelines
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # A: any writer piped into a QUIET grep. Writer-agnostic by construction —
+          #    a `printf`-only pattern undercounted the real population by 15 sites,
+          #    6 of them inside a file the acceptance probe claimed was clean.
+          IDIOM_Q='^[^#]*(printf|echo|cat|print)[[:space:]][^|]*\|[[:space:]]*grep([[:space:]]+-[A-Za-z-]+)*[[:space:]]+-[A-Za-z]*q'
+          # B: any grep piped into head. NOTE the `.*` and not `[^|]*` — the naive
+          #    form stops at the first `|`, which for an alternation needle
+          #    (`grep -oE 'size:(XS|S|M|L|XL)' | head -1`) sits INSIDE the quoted
+          #    pattern, making the site invisible to its own detector.
+          IDIOM_H='^[^#]*grep.*\|[[:space:]]*head([[:space:]]|$)'
+          # T2/T3 markers. Un-anchored comment form, matching GATE 8's precedent.
+          LINE_MARK='sigpipe-idiom:[[:space:]]*allow'
+          FILE_MARK='repo-integrity:[[:space:]]*allow-sigpipe-idiom'
+
+          # Scope: changed shell sources. Excluded: the ledger surface, build
+          # artifacts, and this workflow tree (whose own regexes would match
+          # themselves — the self-reference trap).
+          # NOTE: a `while read` loop, not `mapfile`. `mapfile` is bash 4+, which
+          # makes the gate body unrunnable on a bash-3.2 developer machine — and a
+          # gate that can only be exercised by a remote CI trigger can only be
+          # *proved* by re-implementing it, which is the shadow-source failure the
+          # deciders-carveout library was extracted to end. This form lets the
+          # both-direction proof run the SHIPPED body verbatim.
+          CHANGED_LIST="$(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" 2>/dev/null || true)"
+          FILES=()
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            [ -f "$f" ] || continue
+            case "$f" in
+              release/releases/*|packages/*|.github/workflows/*) continue ;;
+              *.sh|*.bash) FILES+=("$f") ;;
+              *) : ;;
+            esac
+          done <<<"$CHANGED_LIST"
+
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo ":white_check_mark: SIGPIPE idiom — no in-scope changed shell files" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          FOUND=0
+          REPORT=""
+          SUPPRESSED=""
+          EXEMPT_CONTENT=0
+
+          for f in "${FILES[@]}"; do
+            # T3 whole-file override.
+            if grep -qE "$FILE_MARK" "$f"; then
+              SUPPRESSED="${SUPPRESSED}${f}: whole file (T3 repo-integrity: allow-sigpipe-idiom)"$'\n'
+              continue
+            fi
+
+            # A file that is ADDED or RENAMED carries no added-line delta for its
+            # pre-existing content, so scan it whole. Anything else: added lines only.
+            STATUS="$(git diff --name-status "$BASE_SHA"..."$HEAD_SHA" -- "$f" | cut -f1 | head -1 || true)"
+            case "$STATUS" in
+              A*|R*)
+                SCAN="$(awk '{ print NR ":" $0 }' "$f")"
+                ;;
+              *)
+                SCAN="$(git diff --unified=0 "$BASE_SHA"..."$HEAD_SHA" -- "$f" \
+                  | awk '
+                    /^@@/ { plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next }
+                    /^\+\+\+/ { next }
+                    /^\+/ { print newln ":" substr($0, 2); newln++ ; next }
+                    /^-/ { next }
+                  ' || true)"
+                ;;
+            esac
+            [ -z "$SCAN" ] && continue
+
+            while IFS= read -r entry || [ -n "$entry" ]; do
+              [ -z "$entry" ] && continue
+              LN="${entry%%:*}"
+              line="${entry#*:}"
+
+              # Does either idiom appear at all?
+              MATCHED=""
+              grep -qE "$IDIOM_Q" <<<"$line" && MATCHED="writer | grep -q"
+              if [ -z "$MATCHED" ]; then
+                grep -qE "$IDIOM_H" <<<"$line" && MATCHED="grep | head"
+              fi
+              [ -z "$MATCHED" ] && continue
+
+              # T2 line-scoped marker: on this line, or on the line above it in the
+              # head file (the conventional placement for a multi-line statement).
+              if grep -qE "$LINE_MARK" <<<"$line"; then
+                SUPPRESSED="${SUPPRESSED}${f}:${LN}: ${MATCHED} (T2, marker on line)"$'\n'
+                continue
+              fi
+              if [ "$LN" -gt 1 ] 2>/dev/null; then
+                PREV="$(sed -n "$((LN - 1))p" "$f" 2>/dev/null || true)"
+                if [ -n "$PREV" ] && grep -qE "$LINE_MARK" <<<"$PREV"; then
+                  SUPPRESSED="${SUPPRESSED}${f}:${LN}: ${MATCHED} (T2, marker on preceding line)"$'\n'
+                  continue
+                fi
+              fi
+
+              # T1 content-exempt: strip single-quoted spans and re-test. If the
+              # idiom no longer matches the residual, it lived entirely inside a
+              # quoted payload — a fixture string, not executed code.
+              RESIDUAL="$(sed -E "s/'[^']*'//g" <<<"$line")"
+              if ! grep -qE "$IDIOM_Q" <<<"$RESIDUAL" && ! grep -qE "$IDIOM_H" <<<"$RESIDUAL"; then
+                EXEMPT_CONTENT=$((EXEMPT_CONTENT + 1))
+                continue
+              fi
+
+              FOUND=1
+              REPORT="${REPORT}${f}:${LN}: [${MATCHED}] ${line}"$'\n'
+            done <<< "$SCAN"
+          done
+
+          if [ -n "$SUPPRESSED" ]; then
+            {
+              echo "### SIGPIPE idiom — suppressed (declared exemptions, reported not silent)"
+              echo '```'
+              printf '%s' "$SUPPRESSED"
+              echo '```'
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          [ "$EXEMPT_CONTENT" -gt 0 ] && \
+            echo "::notice::SIGPIPE idiom: ${EXEMPT_CONTENT} occurrence(s) content-exempt (T1 — idiom inside a quoted payload)." | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$FOUND" -eq 0 ]; then
+            echo ":white_check_mark: SIGPIPE idiom — no writer-into-short-circuiting-reader pipeline on added shell lines" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## :x: SIGPIPE-idiom gate FAILED"
+            echo ""
+            echo "An added shell line pipes a writer into a **short-circuiting reader**"
+            echo "(\`grep -q\` or \`head\`). Under \`pipefail\` the reader exits on its first"
+            echo "match, the writer takes SIGPIPE, and its 141 becomes the pipeline's status —"
+            echo "so a **successful match reports failure**. Written \`if ! <pipeline>\`, that"
+            echo "inverts to \"no match\" and the check silently passes what it exists to catch."
+            echo ""
+            echo "### Findings (file:line)"
+            echo '```'
+            printf '%s' "$REPORT"
+            echo '```'
+            echo ""
+            echo "### Fix — read from a here-string; there is then no writer to signal"
+            echo ""
+            echo '```sh'
+            echo "# before                                   # after"
+            echo "printf '%s' \"\$hay\" | grep -q -- \"\$n\"       grep -q -- \"\$n\" <<<\"\$hay\""
+            echo "grep -E p f | head -1                      grep -m1 -E p f"
+            echo '```'
+            echo ""
+            echo "**Three substitutions are NOT semantics-preserving — check before converting:**"
+            echo ""
+            echo "- \`printf '%s\\n' \"\${A[@]}\"\` emits one line per element; \`<<<\"\${A[@]}\"\`"
+            echo "  space-joins them onto ONE line, breaking any \`^\`-anchored match."
+            echo "- \`grep -o … | head -1\` is NOT \`grep -m1 -o\` — \`-m\` counts matching LINES,"
+            echo "  not matches, so every match on the first line survives."
+            echo "- \`grep A | grep -v B | head -1\` folds only into the LAST grep. Folding into"
+            echo "  the first discards the line the filter would have kept."
+            echo "- An empty haystack: \`printf '%s' \"\"\` emits ZERO lines, \`<<<\"\"\` emits ONE"
+            echo "  empty line. If the needle can match an empty line, guard with \`[ -n \"\$v\" ]\`."
+            echo ""
+            echo "### Exemptions"
+            echo ""
+            echo "- Keeping the form deliberately: add \`# sigpipe-idiom: allow — <one-line reason>\`"
+            echo "  on the line or the line above. It is reported in the SUPPRESSED block, never silent."
+            echo "- Whole file: \`# repo-integrity: allow-sigpipe-idiom\`."
+            echo "- The idiom inside a single-quoted payload string is content-exempt automatically."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
           exit 1
