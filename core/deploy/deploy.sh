@@ -64,6 +64,7 @@ RELEASE_SKILLS=(
   implementation-planner
   pipeline-triage
   pmo-architect
+  pmo-data-engineer
   pmo-devops-sre
   pmo-principal-engineer
   pmo-qa-lead
