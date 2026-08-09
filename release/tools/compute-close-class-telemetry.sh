@@ -24,9 +24,11 @@
 #   Indicator 4 pattern-emergence      : POINTER ONLY — deferred-to-aggregate; the
 #                                        rate is owned by synthesize-release-
 #                                        learnings.sh and never recomputed here.
-#   Indicator 5 rollup-presence        : present|absent — the release-level Outcome:
-#                                        field + Stage-13 A7.1 rollup PRESENCE (the
-#                                        rate is DEFERRED, denominator undefined).
+#   Indicator 5 rollup-presence        : present|absent|N/A — the Stage-13 A7.1
+#                                        recommendation<->choice roll-up, read from the
+#                                        retro / lessons register (the rate is DEFERRED,
+#                                        denominator undefined). MEASURED HERE, never
+#                                        supplied by the caller — see the note below.
 #   Indicator 6 evidence-preservation  : <P>/<S> (<ratio>) — phase-completion evidence
 #                                        preservation read-model over the hub-spoke
 #                                        sub-task `gh` state (NO net-new store): CLOSED
@@ -43,6 +45,21 @@
 # Ratio rounding mode is round-half-up, taken by reference from
 # bundle-composition-doctrine.md § 3 Step 5 (the single definitional home) — NOT
 # re-derived here.
+#
+# INDICATOR 5 MEASURES THE ROLL-UP LIMB ONLY, and that is deliberate.
+# close-class-telemetry.md defines Indicator 5 as a CONJUNCTION: the release-level
+# `Outcome:` field AND the Stage-13 A7.1 recommendation<->choice roll-up. Conjunct A —
+# the `Outcome:` field — is written by the close-out run itself (phase 6.5 injects it, or
+# SKIPs because it is already present; the only other exit aborts the run before this
+# field is ever composed). Probing something the same run just wrote is not a measurement:
+# it returns "present" on every apply-mode run, and publishing that under a
+# `mechanism: compute-close-class-telemetry.sh` label asserts a tool measured what the run
+# authored. A conjunction A AND B whose A is true BY CONSTRUCTION reduces to B, so this
+# tool measures B — the roll-up limb, which is operator-authored in a register no close-out
+# phase writes — and discharges A as a documented construction invariant rather than a
+# fabricated reading. Value domain: present | absent | N/A — no retro register found.
+# The eight-slot grammar is untouched; only this slot's value domain widens (the standard
+# already permits `N/A (reason)` in any slot).
 #
 # Usage:
 #   ./compute-close-class-telemetry.sh <version> --milestone <N> [--retro <path>] [--lessons <path>]
@@ -62,8 +79,13 @@
 #   --lessons <path>   OPTIONAL explicit path to the version's lessons register (Indicator 2).
 #                      Defaults to --retro's path (the template carries both blocks in one file);
 #                      absent -> Indicator 2 N/A.
-#   --outcome-present {0|1}   OPTIONAL Indicator-5 presence override (the Stage 13 spoke knows
-#                      whether the Outcome: field + A7.1 rollup are present). Default: absent.
+#   --outcome-present <any>   DEPRECATED, ACCEPTED-AND-IGNORED. It was a caller-supplied
+#                      Indicator-5 override; Indicator 5 is now measured here from the retro
+#                      register (see the note above), so a caller-supplied value would only
+#                      re-open the fabrication path it was retired to close. Passing it emits
+#                      a one-line stderr deprecation notice and changes nothing. It is
+#                      tolerated for one release so an existing caller does not hard-fail on
+#                      an unknown flag, then removed. Its value is no longer domain-checked.
 #   --close-gate {pass|fail|na}  OPTIONAL Indicator-6 G-CL4 close-gate verdict — the
 #                      RETAINED secondary sub-signal alongside the phase-evidence rate
 #                      (the rate is primary; the boolean loses no signal). Default: na.
@@ -72,14 +94,21 @@
 # introducing-release merge SHA. The introducing release itself is exempt. This
 # script does not gate by version — the caller (Stage 13 spoke) honors cutover.
 #
-# Exit codes:
-#   0 = success (an indicator may legitimately produce N/A — no register, no
-#       carry-forwards, no stage sub-tasks; or the Indicator-4 pointer / I5 presence /
-#       I6 evidence-preservation rate + retained close-gate boolean)
-#   1 = invalid args / required input missing / gh unavailable when carry-forward
-#       closure is requested
-#   2 = malformed source (a register that exists but cannot be parsed, or a
-#       milestone that does not resolve — source-integrity violation; escalate)
+# Exit codes (stated against MEASURED behaviour — a caller may rely on exactly this):
+#   0 = success, INCLUDING every degraded path. An absent register, an unavailable gh, or
+#       an unresolvable repo each set an N/A reason for the indicators they feed and the
+#       run still emits a fully conformant eight-slot line at exit 0.
+#   1 = argument validation ONLY — unknown flag, unexpected positional, missing <version>,
+#       missing --milestone, out-of-domain --close-gate.
+#   2 = a register that EXISTS but is UNREADABLE (an I/O / permission condition, not a
+#       content condition — no content-validity path exits non-zero), or a sub-task
+#       evidence payload that cannot be parsed. Source-integrity violation; escalate.
+#
+#   A CALLER CANNOT DISTINGUISH THE gh-UNAVAILABLE PATH BY EXIT CODE, and must not try.
+#   That disposition is readable only from the emitted line — `carry-forward-closure
+#   N/A — gh unavailable …` and `evidence-preservation N/A — gh unavailable …`.
+#
+# Diagnostics go to stderr; stdout carries the single field-value line and nothing else.
 
 set -euo pipefail
 
@@ -95,7 +124,10 @@ REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
 
 usage() {
-  /usr/bin/sed -n '4,72p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  # Line range = the header comment block, lines 4..111 (ends at the "Diagnostics go to
+  # stderr" line, immediately before the blank line and `set -euo pipefail`). Re-check this
+  # range whenever the header grows or shrinks; a stale upper bound silently truncates --help.
+  /usr/bin/sed -n '4,111p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -128,6 +160,34 @@ CANONICAL_MARKERS=(
   "## 3. Triple Linkage (records the COEXIST relationship)"
 )
 EXPECTED_MARKERS=${#CANONICAL_MARKERS[@]}   # 10 canonical-form markers
+
+# ─── The A7.1 roll-up section marker (Indicator 5) ───────────────────────────
+# A SEPARATE array — deliberately NOT appended to CANONICAL_MARKERS. That array is
+# Indicator 1's DENOMINATOR (EXPECTED_MARKERS above): appending an eleventh entry would
+# silently move retro-conformance from /10 to /11 and retroactively depress the rate on
+# every register already written, biasing the calibration baseline this whole field feeds.
+# Two arrays, two questions, two denominators.
+#
+# Same matching discipline as Indicator 1: the header is mandated verbatim in
+# release-learnings-register-template.md precisely so this read-model can grep it, and a
+# marker counts as present iff a whole line matches it exactly (grep -Fxq) — never as a
+# substring, so a stray mention of the phrase in prose cannot read as a roll-up.
+ROLLUP_MARKERS=(
+  "## 4. Recommendation↔choice delta roll-up (Stage 13 A7.1)"
+)
+
+# ─── Indicator 5: A7.1 roll-up presence ──────────────────────────────────────
+# Returns 0 iff any ROLLUP_MARKERS entry appears as an exact whole line in the register.
+# Mirrors count_retro_conformance's technique verbatim rather than restating it.
+rollup_marker_present() {
+  local file="$1" m
+  for m in "${ROLLUP_MARKERS[@]}"; do
+    if /usr/bin/grep -Fxq "$m" "$file" 2>/dev/null; then
+      return 0
+    fi
+  done
+  return 1
+}
 
 # ─── round-half-up ratio (the canonical mode, by reference) ──────────────────
 # Compute numerator/denominator to 2 decimals using round-half-up at the 2nd
@@ -219,9 +279,22 @@ PY
 # comment-presence (>=1). Echoes "<P> <S> <X>" (X = terminal-stage sub-tasks excluded) from a
 # JSON array of {number,title,state,comments} (both the gh-issue-list array shape and an
 # integer-count shape are accepted). Exit 2 on unparseable source (integrity violation).
+#
+# PAYLOAD TRANSPORT — the payload must NEVER travel as an argv operand. `gh issue list
+# --json number,title,state,comments` over a real milestone returns every sub-task's full
+# comment bodies; that routinely exceeds the platform argument limit (measured 1,098,975 B
+# against an ARG_MAX of 1,048,576), and the interpreter then never starts at all —
+# `/usr/bin/python3: Argument list too long`, no indicator produced, the whole script dead.
+# The heredoc already occupies stdin, so the payload travels on a process-substitution FD
+# whose PATH is the single small argv operand. Created and closed by the shell, so there is
+# no temp-file lifetime to leak and no new CLI flag: this function's own interface is
+# unchanged — callers still pass a JSON STRING, and every --self-test arm below still drives
+# it that way.
 count_subtask_evidence() {
-  local json="$1"
-  /usr/bin/python3 - "$json" <<'PY'
+  local json="$1" _rc=0
+  # `printf` here is the BASH BUILTIN, deliberately — an exec'd /usr/bin/printf would put the
+  # payload back on an argv and re-open the very failure this transport exists to close.
+  /usr/bin/python3 - <(printf '%s' "$json") <<'PY' || _rc=$?
 import json, re, sys
 TRUSTED = {"OWNER", "MEMBER", "COLLABORATOR", "CONTRIBUTOR"}
 # Terminal stages: their own completion evidence is produced at or after the § 3.2 capture
@@ -234,9 +307,13 @@ def is_terminal(title):
     # Unparseable title -> NOT terminal (fail-safe: retain in the denominator).
     return bool(m) and int(m.group(1)) in TERMINAL_STAGES
 
+# argv[1] is a PATH (a process-substitution FD), not the payload itself — see the transport
+# note above. OSError/UnicodeDecodeError join the parse-failure set: an unreadable or
+# undecodable source is the same integrity violation as an unparseable one, exit 2 either way.
 try:
-    items = json.loads(sys.argv[1])
-except (ValueError, TypeError) as e:
+    with open(sys.argv[1], encoding="utf-8") as _fh:
+        items = json.load(_fh)
+except (ValueError, TypeError, OSError, UnicodeDecodeError) as e:
     print(f"sub-task evidence source unparseable: {e}", file=sys.stderr)
     sys.exit(2)
 excluded = 0
@@ -261,6 +338,7 @@ for it in items:
         preserved += 1
 print(f"{preserved} {scaffolded} {excluded}")
 PY
+  return "$_rc"
 }
 
 # ─── Self-test mode (no gh / no network) ─────────────────────────────────────
@@ -326,6 +404,39 @@ if [[ "${1:-}" == "--self-test" ]]; then
   # Test 5: expected-marker count is the canonical 10
   [[ "$EXPECTED_MARKERS" -eq 10 ]] || die "self-test: EXPECTED_MARKERS = $EXPECTED_MARKERS, expected 10"
 
+  # Test 5b: the A7.1 roll-up marker lives in its OWN array. If it were ever appended to
+  # CANONICAL_MARKERS, Indicator 1's denominator would move /10 -> /11 and retro-conformance
+  # would drop retroactively on every register already written. Test 5 above catches the
+  # denominator move; this arm names the cause, so a future editor reads WHY rather than
+  # just WHAT.
+  [[ "${#ROLLUP_MARKERS[@]}" -eq 1 ]] || die "self-test: ROLLUP_MARKERS holds ${#ROLLUP_MARKERS[@]} entries, expected 1"
+  for m in "${CANONICAL_MARKERS[@]}"; do
+    [[ "$m" == "${ROLLUP_MARKERS[0]}" ]] && die "self-test: the A7.1 roll-up marker leaked into CANONICAL_MARKERS — that moves Indicator 1's denominator and retroactively depresses retro-conformance on every existing register"
+  done
+
+  # Test 5c: Indicator 5 — rollup-presence BIVALENCE. This is the anti-tautology control, and
+  # it is the arm the previous implementation could not have: rollup-presence used to read a
+  # caller-supplied flag standing in for a field the close-out run writes itself, so no
+  # reading could ever have differed. Two registers identical except for the marker MUST
+  # produce different answers; a fixture whose two arms agree is a broken probe, not a clean
+  # one, and must fail this suite.
+  RETRO_ROLLUP="$TMPD/retro_rollup.md"
+  { for m in "${CANONICAL_MARKERS[@]}"; do echo "$m"; echo "body"; done
+    echo "${ROLLUP_MARKERS[0]}"
+    echo "rec: tighten the gate · chose: tighten the gate · why: aligned"
+  } > "$RETRO_ROLLUP"
+  RETRO_NOROLLUP="$TMPD/retro_norollup.md"
+  { for m in "${CANONICAL_MARKERS[@]}"; do echo "$m"; echo "body"; done
+    echo "Some prose that merely mentions the Stage 13 A7.1 roll-up without the header."
+  } > "$RETRO_NOROLLUP"
+  rollup_marker_present "$RETRO_ROLLUP"   || die "self-test: rollup-presence(marker present) read ABSENT, expected PRESENT"
+  rollup_marker_present "$RETRO_NOROLLUP" && die "self-test: rollup-presence(marker absent) read PRESENT, expected ABSENT — a substring match, not a whole-line match, would do exactly this"
+
+  # Test 5d: the no-register limb is a THIRD state, distinct from `absent`. Collapsing them
+  # would make a missing register read as a governance failure rather than as an unmeasured
+  # one, which is the distinction the standard's `N/A (reason)` form exists to preserve.
+  rollup_marker_present "$TMPD/does_not_exist.md" && die "self-test: rollup-presence(no file) read PRESENT, expected the predicate to be false so the caller can emit the N/A state"
+
   # Test 6: Indicator 6 — phase-completion evidence preservation (read-model over sub-task gh
   #   state). Denominator = MEASURABLE scaffolded stage sub-tasks (terminal stages 12/13
   #   excluded); numerator = CLOSED with >=1 trusted-authored comment. Covers: full-preserved /
@@ -377,14 +488,58 @@ if [[ "${1:-}" == "--self-test" ]]; then
   [[ "$EP" == "0" && "$ES" == "0" && "$EX" == "0" ]] || die "self-test: subtask-evidence(zero) = $EP/$ES (excl $EX), expected 0/0 (excl 0)"
   R="$(ratio_round_half_up "$EP" "$ES")"; [[ "$R" == "N/A" ]] || die "self-test: subtask-evidence ratio(zero) = $R, expected N/A (no stage sub-tasks scaffolded)"
 
+  # Test 7: Indicator 6 — the OVER-ARGV arm. Every arm above feeds a payload of a few hundred
+  # bytes, so this suite reported PASS for a long time while the tool could not run on ANY live
+  # milestone: `gh issue list --json number,title,state,comments` over a real release returns
+  # every sub-task's full comment bodies, and that payload used to travel as argv. This arm
+  # drives the SAME function through the SAME call form with a payload that genuinely cannot be
+  # passed as an argv operand on the running system, so the suite can no longer be green on a
+  # code path the live invocation cannot execute.
+  #
+  # The fixture is sized ADAPTIVELY rather than to a literal, because the argv ceiling is
+  # platform-dependent (a total-bytes cap on one platform, plus a per-argument cap on another).
+  # A hardcoded size would silently become an in-bounds payload on some host and the arm would
+  # go vacuous — which is precisely the failure class this arm exists to close. The sizing loop
+  # IS the anti-vacuity control: it exits only once an exec with the payload as argv has
+  # actually been refused, and it dies rather than continuing if it never is.
+  printf -v BIG_BODY '%*s' 32768 ''
+  BIG_BODY="${BIG_BODY// /X}"
+  BIG_N=40
+  while :; do
+    EVID_BIG="["
+    BIG_SEP=""
+    for (( BIG_I = 1; BIG_I <= BIG_N; BIG_I++ )); do
+      EVID_BIG="${EVID_BIG}${BIG_SEP}{\"number\":${BIG_I},\"title\":\"Stage 6 · #${BIG_I} · Engineering\",\"state\":\"CLOSED\",\"comments\":[{\"authorAssociation\":\"OWNER\",\"body\":\"${BIG_BODY}\"}]}"
+      BIG_SEP=","
+    done
+    # One OPEN non-terminal (counts in S, not in P) + two terminal-stage sub-tasks (excluded
+    # from S entirely) — so the arm asserts the Indicator-6 SEMANTICS survive the transport
+    # change at scale, not merely that the interpreter starts.
+    EVID_BIG="${EVID_BIG},{\"number\":9001,\"title\":\"Stage 7 · Dev Testing\",\"state\":\"OPEN\",\"comments\":[]}"
+    EVID_BIG="${EVID_BIG},{\"number\":9002,\"title\":\"Stage 12 · Execute — r\",\"state\":\"CLOSED\",\"comments\":[{\"authorAssociation\":\"OWNER\"}]}"
+    EVID_BIG="${EVID_BIG},{\"number\":9003,\"title\":\"Stage 13 · Close — r\",\"state\":\"OPEN\",\"comments\":[]}]"
+    # Negative control: the payload must be genuinely un-passable as an argv operand HERE.
+    if ! /usr/bin/true "$EVID_BIG" 2>/dev/null; then break; fi
+    [[ "$BIG_N" -ge 1280 ]] && die "self-test: could not build an over-argv payload (${#EVID_BIG} bytes at $BIG_N items) — the over-argv arm would be vacuous on this host"
+    BIG_N=$(( BIG_N * 2 ))
+  done
+  read -r EP ES EX < <(count_subtask_evidence "$EVID_BIG")
+  [[ "$EP" == "$BIG_N" ]] || die "self-test: subtask-evidence(over-argv) preserved = $EP, expected $BIG_N"
+  [[ "$ES" == "$(( BIG_N + 1 ))" ]] || die "self-test: subtask-evidence(over-argv) scaffolded = $ES, expected $(( BIG_N + 1 )) (the OPEN sub-task stays in the denominator)"
+  [[ "$EX" == "2" ]] || die "self-test: subtask-evidence(over-argv) terminal-excluded = $EX, expected 2"
+  R="$(ratio_round_half_up "$EP" "$ES")"
+  [[ -n "$R" && "$R" != "N/A" ]] || die "self-test: subtask-evidence ratio(over-argv) = '$R', expected a computed rate"
+
   rm -rf "$TMPD"; trap - EXIT
   echo "self-test: PASS"
   echo "  ratio round-half-up validated (exact / below-half / at-half / above-half / zero-den)"
   echo "  Indicator 1 retro canonical-form conformance validated (full 10/10 + partial 6/10)"
   echo "  Indicator 2 lessons-population validated (placeholder detection 2/4 + zero-prompted N/A)"
   echo "  canonical-marker set validated (10 verbatim Kerth + PMBOK 7 + Triple-Linkage headers)"
+  echo "  Indicator 5 rollup-presence validated (BIVALENT: marker present -> present, marker absent -> absent, no register -> N/A; roll-up marker held in its own array so Indicator 1's denominator stays 10)"
   echo "  Indicator 6 phase-evidence preservation validated (full 4/4 + partial 1/4 + presence-fallback + int-count + zero-scaffolded N/A)"
   echo "  Indicator 6 terminal-stage exclusion validated (Stage-12/13 excluded 4/4 not 4/6 + unparseable-title fail-safe retain + all-terminal N/A)"
+  echo "  Indicator 6 OVER-ARGV transport validated (${#EVID_BIG} bytes, $BIG_N items — refused as argv by exec, accepted by the FD transport, semantics preserved: $EP/$ES excl $EX)"
   exit 0
 fi
 
@@ -394,7 +549,7 @@ VERSION=""
 MILESTONE=""
 RETRO_PATH=""
 LESSONS_PATH=""
-OUTCOME_PRESENT="0"   # Indicator 5 presence (0=absent, 1=present)
+OUTCOME_PRESENT_SEEN=0  # DEPRECATED flag was passed (value ignored; notice emitted)
 CLOSE_GATE="na"       # Indicator 6 (pass|fail|na)
 OUTPUT_FORMAT="human" # human | json
 
@@ -403,7 +558,11 @@ while [[ $# -gt 0 ]]; do
     --milestone) MILESTONE="${2:-}"; shift 2 ;;
     --retro) RETRO_PATH="${2:-}"; shift 2 ;;
     --lessons) LESSONS_PATH="${2:-}"; shift 2 ;;
-    --outcome-present) OUTCOME_PRESENT="${2:-}"; shift 2 ;;
+    # DEPRECATED — accepted and ignored for one release so an existing caller does not
+    # hard-fail on an unknown flag. The value is consumed positionally and discarded; it is
+    # deliberately NOT domain-checked any more, because validating a value nothing reads
+    # would keep asserting a contract this tool no longer honours.
+    --outcome-present) OUTCOME_PRESENT_SEEN=1; shift 2 ;;
     --close-gate) CLOSE_GATE="${2:-}"; shift 2 ;;
     --json) OUTPUT_FORMAT="json"; shift ;;
     --help|-h) usage ;;
@@ -419,8 +578,12 @@ done
 
 [[ -z "$VERSION" ]] && die "Required: <version> (positional)"
 [[ -z "$MILESTONE" ]] && die "Required: --milestone <N> (the release's GitHub milestone number for carry-forward closure)"
-case "$OUTCOME_PRESENT" in 0|1) : ;; *) die "--outcome-present must be 0 or 1 (got '$OUTCOME_PRESENT')" ;; esac
 case "$CLOSE_GATE" in pass|fail|na) : ;; *) die "--close-gate must be pass|fail|na (got '$CLOSE_GATE')" ;; esac
+
+# Deprecation notice to STDERR — stdout carries the field-value line and nothing else.
+if [[ "$OUTCOME_PRESENT_SEEN" -eq 1 ]]; then
+  echo "NOTICE: --outcome-present is DEPRECATED and was IGNORED. Indicator 5 now measures the Stage-13 A7.1 roll-up from the retro register itself; a caller-supplied value would re-open the fabrication path the flag was retired to close. Remove it from the invocation — the flag is accepted for one release, then removed." >&2
+fi
 
 # Default the lessons path to the retro path (template carries both blocks in one file).
 [[ -z "$LESSONS_PATH" && -n "$RETRO_PATH" ]] && LESSONS_PATH="$RETRO_PATH"
@@ -428,9 +591,13 @@ case "$CLOSE_GATE" in pass|fail|na) : ;; *) die "--close-gate must be pass|fail|
 # ─── Indicator 1: retro-conformance ──────────────────────────────────────────
 
 RETRO_PRESENT="N/A"; RETRO_EXPECTED="N/A"; RETRO_RATIO="N/A"; RETRO_NA_REASON=""
+# RETRO_RESOLVED is the ONE resolution answer, reused by Indicator 5 below rather than
+# re-tested there — two `-f` tests on the same path are two chances to drift apart.
+RETRO_RESOLVED=0
 if [[ -n "$RETRO_PATH" && -f "$RETRO_PATH" ]]; then
   # exists -> parse (a register that exists but is unreadable is a source-integrity error)
   [[ -r "$RETRO_PATH" ]] || die "retro register exists but is unreadable: $RETRO_PATH" 2
+  RETRO_RESOLVED=1
   read -r RETRO_PRESENT RETRO_EXPECTED < <(count_retro_conformance "$RETRO_PATH")
   RETRO_RATIO="$(ratio_round_half_up "$RETRO_PRESENT" "$RETRO_EXPECTED")"
 else
@@ -503,8 +670,19 @@ fi
 PATTERN_POINTER="deferred-to-aggregate (see synthesize-release-learnings.sh)"
 
 # ─── Indicator 5: rollup-presence (presence, NOT a rate) ─────────────────────
+# MEASURED here from the retro register — the A7.1 roll-up limb, which is operator-authored
+# and which NO close-out phase writes. The `Outcome:` conjunct is discharged as a documented
+# construction invariant of phase 6.5, not probed; see the INDICATOR 5 note in the header for
+# why probing it would publish a fabricated metric. Three states, and the third one matters:
+# "no register resolved" is a different fact from "register present, roll-up missing", and
+# collapsing them would make an absent register read as a governance failure. The N/A limb
+# reuses Indicator 1's single resolution answer (RETRO_RESOLVED) rather than re-testing.
 
-if [[ "$OUTCOME_PRESENT" == "1" ]]; then ROLLUP_PRESENCE="present"; else ROLLUP_PRESENCE="absent"; fi
+if [[ "$RETRO_RESOLVED" -eq 1 ]]; then
+  if rollup_marker_present "$RETRO_PATH"; then ROLLUP_PRESENCE="present"; else ROLLUP_PRESENCE="absent"; fi
+else
+  ROLLUP_PRESENCE="N/A — no retro register found"
+fi
 
 # ─── Indicator 6: phase-completion evidence preservation (read-model) + retained close-gate ─
 # Primary reading: a bounded read-model over the hub-spoke sub-task `gh` state (NO net-new
