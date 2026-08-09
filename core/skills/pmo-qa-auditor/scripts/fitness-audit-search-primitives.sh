@@ -186,7 +186,7 @@ cmd_validate_evidence() {
   # Seeded sample: N = 10 or all when fewer (mode-spec §4).
   local n=10; [ "${total}" -lt 10 ] && n="${total}"
   local sample
-  sample="$(printf '%s\n' "${candidates}" | awk -v seed="${seed}" 'BEGIN{srand(seed)} {printf "%.9f\t%s\n", rand(), $0}' | sort -n | head -n "${n}" | cut -f2-)"
+  sample="$(printf '%s\n' "${candidates}" | awk -v seed="${seed}" 'BEGIN{srand(seed)} {printf "%.9f\t%s\n", rand(), $0}' | sort -n | head -n "${n}" | cut -f2-)"  # sigpipe-idiom: allow — `head -n` is the sample bound and there is no grep to fold it into; retained as scope-bound, NOT asserted unreachable — the status is consumed under `set -e`
 
   local pass=0 fail=0 skip=0 form tok verdict
   while IFS="$(printf '\t')" read -r form tok; do

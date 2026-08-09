@@ -889,7 +889,7 @@ compute_second_order() {
     fo_total="$(printf '%s\n' "$fo_paths" | grep -c . || true)"
     [ -z "$fo_total" ] && fo_total=0
     if [ "$fo_total" -gt "$ARG_MAX_EXPAND" ]; then
-      fo_paths="$(printf '%s\n' "$fo_paths" | head -n "$ARG_MAX_EXPAND")"
+      fo_paths="$(printf '%s\n' "$fo_paths" | head -n "$ARG_MAX_EXPAND")"  # sigpipe-idiom: allow — `head -n` IS the deterministic fan-out cap, not a search bound, so there is no grep to fold it into; retained as scope-bound, NOT asserted unreachable — the status is consumed under `set -e` and this branch runs only when a residual exists
       PARTIAL=1
       PARTIAL_REASON="second-order expansion capped at --max-expand=${ARG_MAX_EXPAND} of ${fo_total} first-order referrers"
       err "PARTIAL RESULT: ${PARTIAL_REASON}"

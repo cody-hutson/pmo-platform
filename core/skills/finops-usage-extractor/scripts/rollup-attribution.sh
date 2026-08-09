@@ -524,8 +524,8 @@ do_emit() {
   local nroll ncov health overlap
   nroll="$(jq -s '[.[]|select(.record=="rollup")]|length' "$store_file" 2>/dev/null)"
   ncov="$(jq -s '[.[]|select(.record=="coverage")]|length' "$store_file" 2>/dev/null)"
-  health="$(jq -r 'select(.record=="coverage")|.health' "$store_file" 2>/dev/null | head -1)"
-  overlap="$(jq -r 'select(.record=="coverage")|.count_once_overlap' "$store_file" 2>/dev/null | head -1)"
+  health="$(jq -r 'select(.record=="coverage")|.health' "$store_file" 2>/dev/null | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; no `set -e` in this script; jq emits one coverage field and the value is consumed, not the status
+  overlap="$(jq -r 'select(.record=="coverage")|.count_once_overlap' "$store_file" 2>/dev/null | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; no `set -e` in this script; jq emits one coverage field and the value is consumed, not the status
   printf 'finops-usage-extractor rollup: %s (%s rollup record(s), %s coverage; health=%s; count-once-overlap=%s)\n' \
     "$store_file" "${nroll:-?}" "${ncov:-?}" "${health:-?}" "${overlap:-0}" >&2
 }
@@ -603,7 +603,7 @@ self_test() {
   # (C) Coverage emitted + health OK on the (majority-attributable) fixture.
   local ncov health cov_ok
   ncov="$(jq -s '[.[]|select(.record=="coverage")]|length' "$st/usage.jsonl")"
-  health="$(jq -r 'select(.record=="coverage")|.health' "$st/usage.jsonl" | head -1)"
+  health="$(jq -r 'select(.record=="coverage")|.health' "$st/usage.jsonl" | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; no `set -e` in this script; jq emits one coverage field and the value is consumed, not the status
   [ "${ncov:-0}" -eq 1 ] || { echo "FAIL: expected exactly 1 coverage record, got ${ncov:-0}"; fail=1; }
   if [ "$health" = "OK" ]; then echo "  PASS: coverage record emitted (health=OK)";
   else echo "FAIL: coverage health != OK (got '${health:-none}') on the majority-attributable fixture"; fail=1; fi
@@ -641,7 +641,7 @@ self_test() {
 
   # (H) meta bumped to 1.2.0.
   local sv
-  sv="$(jq -r 'select(.record=="meta")|.schema_version' "$st/usage.jsonl" | head -1)"
+  sv="$(jq -r 'select(.record=="meta")|.schema_version' "$st/usage.jsonl" | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; no `set -e` in this script; jq emits one meta field and the value is consumed, not the status
   [ "$sv" = "1.2.0" ] && echo "  PASS: meta.schema_version bumped to 1.2.0" || { echo "FAIL: meta.schema_version != 1.2.0 (got $sv)"; fail=1; }
 
   # (I) FM-2 count-once (hub<->spoke file boundary). A spoke that appears BOTH as an

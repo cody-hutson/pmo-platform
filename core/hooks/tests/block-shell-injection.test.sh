@@ -122,6 +122,7 @@ echo ""
 echo "Negative cases: legitimate Bash patterns (must ALLOW)"
 echo "---"
 
+# sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; covers this test_case and its payload line: strings under test, never executed — the class already marked at :151
 test_case "git log --oneline | head -5 ALLOW" \
   "$(bash_payload 'git log --oneline | head -5')" 0 ""
 

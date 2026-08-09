@@ -140,7 +140,7 @@ _audit_src_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd 
 AUDIT_REPO="${PMO_AUDIT_REPO:-}"
 if [ -z "$AUDIT_REPO" ] && [ -r "${_audit_cfg_root}/operator.toml" ]; then
   AUDIT_REPO="$(grep -E '^[[:space:]]*audit_repo[[:space:]]*=' "${_audit_cfg_root}/operator.toml" 2>/dev/null \
-    | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | tr -d '[:space:]' || true)"
+    | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | tr -d '[:space:]' || true)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; `|| true` discards the status, and upstream of `head` is a grep over operator.toml
 fi
 if [ -z "$AUDIT_REPO" ]; then
   AUDIT_REPO="$(git -C "${_audit_src_root:-.}" remote get-url origin 2>/dev/null \
@@ -594,7 +594,7 @@ _vf_resolve_candidate() {
       local _args=(--sha HEAD --bump "${PMO_VERSION_FREENESS_BUMP}" --dry-run)
       [[ -n "${PMO_VERSION_FREENESS_PATCH_BASE:-}" ]] && _args+=(--patch-base "${PMO_VERSION_FREENESS_PATCH_BASE}")
       local _derived
-      _derived="$(CLAIM_REPO="$repo" bash "$_claim" "${_args[@]}" 2>/dev/null | head -1 | tr -d '[:space:]' || true)"
+      _derived="$(CLAIM_REPO="$repo" bash "$_claim" "${_args[@]}" 2>/dev/null | head -1 | tr -d '[:space:]' || true)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; `|| true` discards the status; the claim tool emits one version line
       # Only return a value that LOOKS like a version (v<digit>...); else empty.
       if [[ "$_derived" =~ ^v[0-9]+\.[0-9]+ ]]; then
         printf '%s' "$_derived"
@@ -1009,7 +1009,7 @@ _cc_row_findings() {
       _dl_dir="$(/usr/bin/dirname "$_log")"
       _segname="$(printf '%s\n' "$_hot_body" \
         | /usr/bin/sed -n 's/^_Archived: \[segment\](\([^)]*\))_.*$/\1/p' \
-        | /usr/bin/head -1)"
+        | /usr/bin/head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a `sed -n …p` emitting 0-1 archive lines, so nothing is left to write
       if [[ -n "$_segname" ]]; then
         _home="${_dl_dir}/${_segname}"
         if [[ ! -f "$_home" ]]; then
@@ -1531,7 +1531,7 @@ _de_release_rows() {
   local _rows="$1" _slug="$2"
   local _r1 _r2="" _msnum
   _r1="$(printf '%s\n' "$_rows" | /usr/bin/awk -F ' \\| ' -v s="$_slug" '$2==s' 2>/dev/null)"
-  _msnum="$(printf '%s\n' "$_r1" | /usr/bin/grep -oE 'ms:#[0-9]+' 2>/dev/null | /usr/bin/head -1 | /usr/bin/sed 's/.*ms:#//')"
+  _msnum="$(printf '%s\n' "$_r1" | /usr/bin/grep -oE 'ms:#[0-9]+' 2>/dev/null | /usr/bin/head -1 | /usr/bin/sed 's/.*ms:#//')"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; U3: `grep -o | head -1` is not `grep -m1 -o` (-m counts lines, not matches); the -o output is a few tokens
   if [[ -n "$_msnum" ]]; then
     _r2="$(printf '%s\n' "$_rows" | /usr/bin/awk -F ' \\| ' -v m="milestone:#${_msnum}" '$7==m' 2>/dev/null)"
   fi
@@ -2493,7 +2493,7 @@ resolve_platform_config() {
   # Rung 3 — program (program-config.toml under the project's program dir, if derivable).
   if [ -n "$project_path" ]; then
     local prog_cfg
-    prog_cfg="$(/usr/bin/find "$(dirname "$project_path")" -maxdepth 3 -name program-config.toml 2>/dev/null | /usr/bin/head -1 || true)"
+    prog_cfg="$(/usr/bin/find "$(dirname "$project_path")" -maxdepth 3 -name program-config.toml 2>/dev/null | /usr/bin/head -1 || true)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; `|| true` discards the status; a status-discarding member of the class Stage 8 measured
     if [ -n "$prog_cfg" ]; then
       hit="$(_toml_field "$prog_cfg" "$field")"
       [ -n "$hit" ] && val="$hit"
@@ -2789,7 +2789,7 @@ detect_install_path() {
   local cowork_base=""
   if [ -r "${_di_cfg_root}/operator.toml" ]; then
     cowork_base="$(grep -E '^[[:space:]]*cowork_install_path[[:space:]]*=' "${_di_cfg_root}/operator.toml" 2>/dev/null \
-      | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
+      | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; `|| true` discards the status, and upstream of `head` is a grep over operator.toml
   fi
   local search_base="$SEARCH_ROOT"
   if [[ -n "$cowork_base" ]]; then
@@ -2864,7 +2864,7 @@ detect_install_path() {
         log "Warning: Multiple $pool_desc sessions found (${#pool[@]}). Using fullest skill roster: $INSTALL_PATH"
       else
         # Rung 4 — logged mtime (non-authoritative last resort) on a skill-count tie.
-        INSTALL_PATH="$(ls -dt "${pool[@]}" 2>/dev/null | head -1 || true)"
+        INSTALL_PATH="$(ls -dt "${pool[@]}" 2>/dev/null | head -1 || true)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; `|| true` discards the status; `ls -dt` lists a handful of session dirs
         log "Warning: tiebreaker fell through to mtime (non-authoritative) among ${#pool[@]} $pool_desc sessions: $INSTALL_PATH"
       fi
     fi
@@ -4402,7 +4402,7 @@ cmd_check() {
       local c8_cowork_base=""
       if [[ -r "${c8_cfg_root}/operator.toml" ]]; then
         c8_cowork_base="$(grep -E '^[[:space:]]*cowork_install_path[[:space:]]*=' "${c8_cfg_root}/operator.toml" 2>/dev/null \
-          | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
+          | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; `|| true` discards the status, and upstream of `head` is a grep over operator.toml
       fi
       if [[ -z "$c8_cowork_base" ]]; then
         log "  SKIP:  cowork_install_path not configured (operator.toml [paths]) — no canonical base to validate against"
@@ -8378,7 +8378,7 @@ sys.stdout.write("".join(out) + "|")
         [[ -e "$c37_script" ]] || continue
         local c37_base; c37_base="$(basename "$c37_script" .sh)"
         local c37_owner
-        c37_owner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "$c37_script" | head -1)"
+        c37_owner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "$c37_script" | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a `sed -n …p` over one hook script, emitting 0-1 owner lines
         if [[ -z "$c37_owner" ]]; then
           # Script with NO ownership declaration — the 5/7/9 failure mode.
           flag_warn_or_issue "hook-registry-completeness" "$c37_base has no '# hook-owner:' declaration — add one to the hook source core/hooks/$c37_base.sh"
@@ -8425,7 +8425,7 @@ sys.stdout.write("".join(out) + "|")
         case "$c37_any" in core/hooks/block-*.sh) continue ;; esac   # covered by (a)
         local c37_abase; c37_abase="$(basename "$c37_any" .sh)"
         local c37_aowner
-        c37_aowner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "$c37_any" | head -1)"
+        c37_aowner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "$c37_any" | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a `sed -n …p` over one hook script, emitting 0-1 owner lines
         [[ -n "$c37_aowner" ]] || continue                            # not opted in
         if [[ ! -f "$c37_aowner" ]]; then
           flag_warn_or_issue "hook-registry-completeness" "$c37_abase declares owner '$c37_aowner', but that owner doc is missing on disk"
@@ -8445,7 +8445,7 @@ sys.stdout.write("".join(out) + "|")
           c37_violations=$((c37_violations + 1))
         else
           local c37_back_owner
-          c37_back_owner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "core/hooks/$c37_sbase.sh" | head -1)"
+          c37_back_owner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "core/hooks/$c37_sbase.sh" | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a `sed -n …p` over one hook script, emitting 0-1 owner lines
           if [[ "$c37_back_owner" != "$c37_src" ]]; then
             flag_warn_or_issue "hook-registry-completeness" "per-hook source $c37_src exists but backing script core/hooks/$c37_sbase.sh does not declare it as owner (declares '$c37_back_owner')"
             c37_violations=$((c37_violations + 1))
@@ -9960,7 +9960,7 @@ sys.stdout.write("".join(out) + "|")
         [[ -e "$c60_script" ]] || continue
         c60_seen=$((c60_seen + 1))
         local c60_base; c60_base="$(basename "$c60_script" .sh)"
-        local c60_class; c60_class="$(sed -n -E 's/^[[:space:]]*readonly[[:space:]]+MASTER_ENABLE_CLASS="?([a-z]+)"?.*/\1/p' "$c60_script" | head -1)"
+        local c60_class; c60_class="$(sed -n -E 's/^[[:space:]]*readonly[[:space:]]+MASTER_ENABLE_CLASS="?([a-z]+)"?.*/\1/p' "$c60_script" | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a `sed -n …p` emitting 0-1 class lines
         if [[ -z "$c60_class" ]]; then
           flag_warn_or_issue "master-enable-class" "$c60_base declares no MASTER_ENABLE_CLASS — every block-*.sh must declare its master-activation class (workflow|security) at the gate call site (#310)"
           c60_findings=$((c60_findings + 1)); continue
@@ -11742,7 +11742,7 @@ cmd_check_close_completeness() {
   local cc_enforce_file="${CLOSE_COMPLETENESS_ENFORCE_FILE:-.github/close-completeness.enforce}"
   local cc_enforce="warn" _cc_tok_line
   if [[ -f "$cc_enforce_file" ]]; then
-    _cc_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$cc_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    _cc_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$cc_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a grep over a one-token .enforce file
     [[ "$_cc_tok_line" == "enforce" ]] && cc_enforce="enforce"
   fi
 
@@ -11804,7 +11804,7 @@ cmd_check_decision_emission() {
   local de_enforce_file="${DECISION_EMISSION_ENFORCE_FILE:-.github/decision-emission.enforce}"
   local de_enforce="warn" _de_tok_line
   if [[ -f "$de_enforce_file" ]]; then
-    _de_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$de_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    _de_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$de_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a grep over a one-token .enforce file
     [[ "$_de_tok_line" == "enforce" ]] && de_enforce="enforce"
   fi
 
@@ -11885,7 +11885,7 @@ cmd_check_required_subset() {
   local rs_enforce_file="${DEPLOY_CHECK_CI_ENFORCE_FILE:-.github/deploy-check-ci.enforce}"
   local rs_enforce="warn" _rs_tok_line
   if [[ -f "$rs_enforce_file" ]]; then
-    _rs_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$rs_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    _rs_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$rs_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a grep over a one-token .enforce file
     [[ "$_rs_tok_line" == "enforce" ]] && rs_enforce="enforce"
   fi
 
@@ -11959,7 +11959,7 @@ cmd_check_release_corpus() {
   local rc_enforce_file="${RELEASE_CORPUS_ENFORCE_FILE:-.github/release-corpus-completeness.enforce}"
   local rc_enforce="warn" _rc_tok_line
   if [[ -f "$rc_enforce_file" ]]; then
-    _rc_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$rc_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    _rc_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$rc_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a grep over a one-token .enforce file
     [[ "$_rc_tok_line" == "enforce" ]] && rc_enforce="enforce"
   fi
 
@@ -12025,7 +12025,7 @@ cmd_check_package_freshness() {
   local pf_enforce_file="${SKILL_PACKAGE_FRESHNESS_ENFORCE_FILE:-.github/skill-package-freshness.enforce}"
   local pf_enforce="warn" _pf_tok_line
   if [[ -f "$pf_enforce_file" ]]; then
-    _pf_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$pf_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    _pf_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$pf_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a grep over a one-token .enforce file
     [[ "$_pf_tok_line" == "enforce" ]] && pf_enforce="enforce"
   fi
 

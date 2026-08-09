@@ -209,7 +209,7 @@ else
     "no .backup-pre-update-instance-* dir under ${SBX}/ws"
 fi
 # And the backup actually captured the needle file content.
-backup_needle="$(find "${SBX}/ws" -path '*.backup-pre-update-instance-*/localized-context-needles.txt' 2>/dev/null | head -1)"
+backup_needle="$(find "${SBX}/ws" -path '*.backup-pre-update-instance-*/localized-context-needles.txt' 2>/dev/null | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; no `set -e` in this suite, and the value is consumed, not the status
 if [ -n "${backup_needle}" ] && [ "$(sha_file "${backup_needle}")" = "${HASH_FILLED}" ]; then
   report "instance backup captured the filled needle file" 1
 else

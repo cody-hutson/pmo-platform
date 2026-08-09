@@ -208,7 +208,7 @@ check_one_skill() {
 
   if [[ "$refs_required" == "true" ]]; then
     local ref_dir="$REPO_ROOT/$module/skills/$skill/references"
-    if [[ ! -d "$ref_dir" ]] || [[ -z "$(find "$ref_dir" -name '*.md' -type f 2>/dev/null | head -1)" ]]; then
+    if [[ ! -d "$ref_dir" ]] || [[ -z "$(find "$ref_dir" -name '*.md' -type f 2>/dev/null | head -1)" ]]; then  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; no `set -e` here; `[[ -z ]]` consumes the value, not the status
       echo "FAIL:  $skill — D-Refs threshold crossed (lines=$lines bytes=$bytes fm=$fm_count); references/ subdir missing or empty"
       skill_ok=false
       had_fail=1
