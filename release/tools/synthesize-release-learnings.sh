@@ -783,7 +783,7 @@ run_self_test() {
 
   # Test 8: pattern-detect dry-run vs apply — branch on whether clusters exist
   local qualifying_count
-  qualifying_count="$(echo "$report" | /usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }')"
+  qualifying_count="$(/usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }' <<<"$report")"
   if [[ "$qualifying_count" == "0" ]]; then
     /usr/bin/grep -q "No clusters meet the auto-promotion criteria" <<<"$report" || die "self-test: pattern-detect zero-cluster footer missing"
   else
@@ -819,7 +819,7 @@ run_self_test() {
   /usr/bin/grep -q "^## Pattern-Detect Report" <<<"$sr_report" \
     || die "self-test: session-retro pattern-detect header missing"
   local sr_qualifying
-  sr_qualifying="$(echo "$sr_report" | /usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }')"
+  sr_qualifying="$(/usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }' <<<"$sr_report")"
   [[ "$sr_qualifying" == "1" ]] \
     || die "self-test: session-retro fixture expected exactly 1 qualifying cluster, got '$sr_qualifying'"
   /usr/bin/grep -q '^### Cluster: `over-building` (theme,' <<<"$sr_report" \
@@ -856,7 +856,7 @@ run_self_test() {
   } > "$dt2_dir/pipeline-event-log.md" || die "self-test: could not write DT-2 fixture"
   dt2_report="$(EVALS_RESULTS_PATH="$dt2_dir" emit_pattern_detect_report 5 3 false false report session-retro)" \
     || die "self-test: DT-2 pattern-detect emit failed"
-  dt2_count="$(echo "$dt2_report" | /usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }')"
+  dt2_count="$(/usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }' <<<"$dt2_report")"
   [[ "$dt2_count" == "1" ]] \
     || die "self-test: an unrecognized label inflated the cluster count (expected 1, got '$dt2_count') — parse_triple containment regressed"
   if /usr/bin/grep -q 'excited' <<<"$dt2_report"; then
@@ -881,7 +881,7 @@ run_self_test() {
   } > "$pa5_dir/pipeline-event-log.md" || die "self-test: could not write PA-5 fixture"
   pa5_report="$(EVALS_RESULTS_PATH="$pa5_dir" emit_pattern_detect_report 5 3 false false report session-retro)" \
     || die "self-test: PA-5 pattern-detect emit failed"
-  pa5_count="$(echo "$pa5_report" | /usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }')"
+  pa5_count="$(/usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }' <<<"$pa5_report")"
   # Two real rows + one excluded zero-state = 2 < cluster-min 3 -> NO qualifying cluster.
   # If the no-learning row were counted it would reach 3 and qualify.
   [[ "$pa5_count" == "0" ]] \
