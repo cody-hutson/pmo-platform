@@ -2674,14 +2674,43 @@ phase_append_changelog() {
 # phase_lint_release_notes applies when it greps its findings for THIS version's path.
 #
 # Read-only and idempotent — it asserts, never mutates, so a resumed close re-runs it
-# safely. Dry-run RUNS it (side-effect-free) so the operator sees findings at the
-# review gate rather than after the commit, mirroring phase_lint_release_notes.
+# safely.
+#
+# ASSERT AT --apply, PREDICT AT --dry-run (#4765). This phase used to run in BOTH
+# modes, on the theory that a read-only check is always free to run early. It is not.
+# The append phases at 8.x/9.5 deliberately write nothing under --dry-run, so by the
+# time control reaches here BOTH slices are empty BY CONSTRUCTION, and the presence
+# limb below fires on the script's own no-op. Since this phase returns 1 and the
+# runner exits 3 on it, the FIRST dry-run of any release aborted right here and the
+# eleven phases after it never enumerated — which made the dry-run review gate that
+# stage-13-close.md Phase A8 mandates structurally unreachable for any release that
+# had not already closed. The presence limb is correct and is kept; only its
+# mode-blindness was the defect. So --dry-run PREDICTS the assertion and returns 0,
+# and --apply runs it byte-for-byte unchanged.
+#
+# Residual, accepted and named: --dry-run no longer PREVIEWS a residue finding on an
+# idempotent re-run (a close resumed after the entries already landed). The gate
+# itself loses nothing — the assertion still runs at --apply at 9.55, which is BEFORE
+# the chore commit at 9.95, so residue is still caught loud before anything is
+# committed, and Checks 32 + 48 remain the corpus-wide detector. What is lost is the
+# preview, and only in the re-run case. Do NOT "fix" that by moving the mode test
+# down into the loop: the presence limb and the two N/A limbs below are co-tenanted
+# and the mode test does not belong inside either.
 #
 # Version-less releases: CHANGELOG is SKIPPED (there is no `## [vX.Y]` key to slice —
 # mirrors phase_append_changelog step (0)); the DIGEST assertion still runs, because
 # phase_append_release_digest writes an H3 for a version-less release too.
 phase_assert_derived_surfaces() {
   local changelog_path="$REPO_ROOT/CHANGELOG.md"
+
+  # DRY-RUN branch — deliberately the FIRST statement in the body, above all three
+  # is_version_less guards and outside the presence loop, so the apply path below is
+  # reached with exactly the control flow it had before. Detail carries no '|' so it
+  # cannot break the markdown phase table in --markdown reports.
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "assert_derived_surfaces" "DRY-RUN" "would assert that the ${VERSION} entries on CHANGELOG.md and release/releases/RELEASE_DIGEST.md are present and carry no unfilled scaffold residue. Not evaluated under --dry-run: the append phases wrote nothing, so both slices are absent by construction and a presence check here would only fail on this script's own no-op. The assertion runs for real at --apply, after the appends land and before the chore commit"
+    return 0
+  fi
 
   # Slice extractors emit "<file-line-number><TAB><line>" so a finding can name the
   # real line in the real file. Header matching is literal (index()==1), not regex,
@@ -6624,6 +6653,54 @@ DG2
   phase_assert_derived_surfaces >/dev/null 2>&1 || { echo "FAIL: AC1-T3 — another version's pre-existing residue must NOT block this close (audit-baseline discipline)"; failures=$((failures+1)); }
   [[ "$(get_phase assert_derived_surfaces | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: AC1-T3 must mark PASS, got '$(get_phase assert_derived_surfaces)'"; failures=$((failures+1)); }
 
+  # (d1) AC1-T6/T7 — MODE-AWARENESS OF THE PRESENCE LIMB (#4765). Two arms over ONE
+  # fixture, differing only in $MODE, so the mode is provably the variable under test
+  # and not the fixture.
+  #
+  # The fixture is the real defect state: a release whose entries are ABSENT from both
+  # derived surfaces. That is what every first --dry-run of a release looks like, because
+  # the append phases at 8.x/9.5 deliberately wrote nothing. Pre-fix, BOTH arms below
+  # returned non-zero, the runner exited 3, and the eleven phases after this one never
+  # enumerated — so the dry-run review gate could not be produced for any release that
+  # had not already closed.
+  #
+  # T7 is the anti-vacuity arm. Without it, T6 is satisfiable by a phase that has been
+  # gutted (presence limb deleted) rather than made mode-aware, and by a fixture that
+  # accidentally contains the v9.99 entries it claims to omit. T7 observes non-zero on
+  # the identical bytes, which proves the fixture really does omit them AND that the
+  # apply-mode limb still fires. T6's outcome assertion is the specificity half: it
+  # demands the literal string DRY-RUN, so a phase that returns 0 by PASSing vacuously
+  # is caught rather than counted as a pass.
+  /bin/cat > "$_sr_tmp/CHANGELOG.md" <<'CL3'
+# Changelog
+
+## [v9.98] - 2026-07-01
+
+A properly authored earlier entry.
+CL3
+  /bin/cat > "$RELEASE_DIGEST" <<'DG3'
+## v9.x
+
+### v9.98 (2026-07-01) — A properly authored earlier headline
+DG3
+  # T6 (must-not-fail arm) — dry-run over absent entries: rc 0, outcome DRY-RUN.
+  MODE="dry-run"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  local _sr_drrc=0
+  phase_assert_derived_surfaces >/dev/null 2>&1 || _sr_drrc=$?
+  [[ "$_sr_drrc" -eq 0 ]] || { echo "FAIL: AC1-T6 — under --dry-run the phase must NOT return non-zero when the ${VERSION} entries are absent (they are absent by construction; the append phases wrote nothing), got rc=$_sr_drrc"; failures=$((failures+1)); }
+  [[ "$(get_phase assert_derived_surfaces | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: AC1-T6 — under --dry-run the outcome must be literally DRY-RUN (a vacuous PASS would also return 0 and must not count), got '$(get_phase assert_derived_surfaces)'"; failures=$((failures+1)); }
+
+  # T7 (must-fail arm / anti-vacuity control) — SAME fixture under --apply: rc non-zero,
+  # outcome FAIL, and the original dropped-write message preserved verbatim.
+  MODE="apply"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  local _sr_aprc=0
+  phase_assert_derived_surfaces >/dev/null 2>&1 || _sr_aprc=$?
+  [[ "$_sr_aprc" -ne 0 ]] || { echo "FAIL: AC1-T7 anti-vacuity — under --apply the SAME absent-entry fixture MUST still fail; rc=0 means either the presence limb was gutted rather than made mode-aware, or the fixture is not actually missing the ${VERSION} entries it claims to omit"; failures=$((failures+1)); }
+  [[ "$(get_phase assert_derived_surfaces | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: AC1-T7 must mark the phase FAIL under --apply, got '$(get_phase assert_derived_surfaces)'"; failures=$((failures+1)); }
+  get_phase assert_derived_surfaces | /usr/bin/grep -qF 'no v9.99 entry on the derived surface' || { echo "FAIL: AC1-T7 — the --apply presence message must be preserved verbatim (AC2: the apply limb is unchanged), got '$(get_phase assert_derived_surfaces)'"; failures=$((failures+1)); }
+
   # (e) AC2 — preflight working-tree tolerance. Drives the shipped predicate with
   # synthetic porcelain text (no git, no network).
   local _sr_tol
@@ -7268,7 +7345,7 @@ exit 4' > "$_ea_tmp/audit.sh"
   echo "  release-anchor hygiene validated (AC4/AC5 — recorded divergences exempt / a NEW divergence reported in BOTH directions / EQUAL-COUNT-UNEQUAL-SET fixture still reported (the count-parity false negative) / non-noreply tagger flagged, noreply tagger not, recorded exemption suppressed, lightweight tag excluded by objecttype / guard is comm-based by construction)" >&2
   echo "  LEDGER-ROW-PARITY fail-open closed (#3113 F-QA-3 — present-but-empty INDEX vs 3-row LOG now FAILs naming both counts / equal populated ledgers still PASS / both-empty 0==0 correctly clean / missing INDEX still FAILs / grep_count single-integer contract on empty-file, missing-file, match and empty-stdin shapes / reintroduction blocked structurally, needle proven against a known-bad control)" >&2
   echo "  phase_sync_primary_checkout validated (AC7 — behind-primary-on-main fast-forwards and HEAD verifiably MOVES to origin/main / non-main primary SKIPPED and NOT moved / absent primary clean no-op (CI hermeticity) / dry-run no-write / source carries no reset-stash-checkout-push-force-cd)" >&2
-  echo "  scaffold-residue detector + pre-authored-note tolerance validated (AC1/AC2 — T1 round-trip: the REAL scaffold trips the REAL token set (anti-drift) / T2 authored note clean / T4 this-version CHANGELOG+DIGEST residue FAILs naming surface:line / T3 audit-baseline control: another version's residue does NOT block / AC2 tolerance: this-version untracked note passes, other-version + modified-tracked + unrelated-untracked all still block)" >&2
+  echo "  scaffold-residue detector + pre-authored-note tolerance validated (AC1/AC2 — T1 round-trip: the REAL scaffold trips the REAL token set (anti-drift) / T2 authored note clean / T4 this-version CHANGELOG+DIGEST residue FAILs naming surface:line / T3 audit-baseline control: another version's residue does NOT block / T6 mode-awareness: --dry-run over ABSENT entries returns 0 and marks literally DRY-RUN, never a vacuous PASS / T7 anti-vacuity: the SAME absent-entry fixture under --apply still returns non-zero, FAILs, and preserves the dropped-write message verbatim / AC2 tolerance: this-version untracked note passes, other-version + modified-tracked + unrelated-untracked all still block)" >&2
   echo "  AC1/AC2 VERSION-LESS shape validated (#3113 Records 2+3 — VL-0 notes_abs_path()==notes_rel_path() in BOTH identity modes / VL-1 producer writes notes/_unversioned/ and creates the dir / VL-2 anti-vacuity: NOT written flat / VL-3 preflight (f) residue gate FIRES (no longer a silent no-op) / VL-4 preflight (b) tolerates the note this run produced (deadlock closed) / VL-5 controls: flat bucket + another version-less release still block / VL-6 §3.2 needle blocks this release, not another / VL-7 chore-PR File Change Matrix names the real path)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
