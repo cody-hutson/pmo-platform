@@ -1483,18 +1483,28 @@ jobs:
           #     A single `|` (never the second half of `||`) or bash's `|&`, then:
           #       a. FIRST, any group openers `(` or `{`, each optionally followed by
           #          earlier commands of that group ahead of the reader, and those
-          #          earlier commands may be pipelines of their own
-          #                                            ->  `| { :; grep -q x; }`
+          #          earlier commands may precede the reader, but ONLY as plain
+          #          words: the span is `[^(){}]*`, so a parameter expansion or a
+          #          nested group in an earlier command ends the match and the
+          #          construct is NOT caught (measured; fails closed).
+          #            caught     ->  `| { :; grep -q x; }`
+          #            NOT caught ->  `| { echo "${a}"; grep -q x; }`
           #       then any number of b/c/d, in any order:
-          #       b. a variable-assignment prefix     ->  `| LC_ALL=C grep -q x`
-          #       c. a redirection prefix             ->  `| 2>/dev/null grep -q x`
+          #       b. a variable-assignment prefix whose VALUE is an unquoted word
+          #            caught     ->  `| LC_ALL=C grep -q x`
+          #            NOT caught ->  `| IFS=' ' grep -q x`   (quoted value)
+          #       c. a redirection prefix with NO space after the operator
+          #            caught     ->  `| 2>/dev/null grep -q x`
+          #            NOT caught ->  `| 2> /dev/null grep -q x`  (spaced)
           #       d. a wrapper NAME FROM THIS LIST, with up to TWO operand words --
           #          a word being a run of characters carrying no whitespace and no
           #          shell metacharacter:
           #          command builtin exec env nice stdbuf time timeout sudo doas
           #          nohup setsid ionice chrt        ->  `| timeout 5 grep -q x`
           #     ...then an optional path qualification ->  `| /usr/bin/grep -q x`
-          #     (b) and (c) are the POSIX simple-command prefix forms (XCU 2.9.1).
+          #     (b) and (c) are NARROWER than the POSIX simple-command prefix
+          #     grammar -- they match the common spellings above, not the class.
+          #     Do not read them as a grammar rule; every clause here is a list.
           #     (d) is A LIST OF NAMES, not a rule: a wrapper not on it is not matched.
           #
           # (2) THE READER — also a list of names and flags. Whether a command stops
@@ -1503,7 +1513,9 @@ jobs:
           #     the class tomorrow. Matched:
           #       * grep / egrep / ggrep / ugrep / rg / pcregrep / pcre2grep / ag
           #         carrying `-q` / `--quiet` / `--silent` / `-mN` / `--max-count`, in
-          #         any flag order or cluster, operand attached (`-q"$n"`) or detached
+          #         any flag order or cluster, operand attached (`-q"$n"`) or detached.
+          #         A digit BEFORE the flag letter in one cluster is NOT matched
+          #            NOT caught ->  `| grep -1q x`   (measured; fails closed)
           #       * `head`, including at the close of a `$(…)` substitution and with no
           #         separating space (`| head|wc`)
           #       * a `sed` whose script carries a `q` command
