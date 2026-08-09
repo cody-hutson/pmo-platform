@@ -1867,7 +1867,7 @@ jobs:
             echo ""
             echo "- Keeping the form deliberately: add \`# sigpipe-idiom: allow — <one-line reason>\`"
             echo "  on the line, or anywhere above it within the same statement (the lookback climbs"
-            echo "  \`|\` and \`\\\\\` continuations — NOT \`&&\`, which joins separate commands)."
+            echo "  a pipe or a line-continuation backslash — NOT \`&&\`, which joins separate commands)."
             echo "  It is reported in the SUPPRESSED block, never silent."
             echo "- Whole file: \`# repo-integrity: allow-sigpipe-idiom\`."
             echo "- The idiom inside a single-quoted payload string is content-exempt automatically."
