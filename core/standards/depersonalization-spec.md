@@ -160,6 +160,7 @@ Compose, do not restate. Each row names a doc this standard touches and the acti
 | [`universal-vs-localized-context.md`](universal-vs-localized-context.md) | Owns the DC1-DC4 audit dimensions + § 6 disposition rubric. | **Cite only.** This spec consumes DC1-DC4 + the 4-class rubric verbatim. |
 | [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) | Owns the K1-K5 tier classifier + parameterization seam principle. | **Cite only.** § 1 token set is keyed to the K1↔K2/K3 seam. |
 | [`duplicate-source-discipline.md`](duplicate-source-discipline.md) | Register-or-remove. The reason this spec cites the upstream standards instead of restating them. | Comply. |
+| [`analysis-workspace-standard.md`](analysis-workspace-standard.md) § 6 | Owns the analysis-corpus → public-surface egress boundary, including the sanctioned path forms an issue/PR body or an orchestrator-emitted brief may carry. | **Cite only.** This spec's § 1 token set is one input to that boundary's prohibited list; it does not define the boundary, and the issue/PR surface is not this spec's surface. |
 
 ---
 

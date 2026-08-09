@@ -72,6 +72,8 @@ The three classes above (§1) classify a **repo ARTIFACT** by whether it ships i
 
 **Coverage boundary (CD-4 — stated, not implied).** The guardrail reuses the existing PII substrate (no new detector), so its coverage is: operator-IDENTITY PII (home-path / phone / personal-email) unconditionally, plus ORGANIZATIONAL/PROJECT content (coworker / employer / **client / project-code / internal-system** names) **only to the extent the operator has declared those needles** in the gitignored localized-context needle file (`core/config/localized-context-needles.txt.example` → the operator-instance `localized-context-needles.txt`; resolved by `lib-instance-path.sh`). Private-project prose that trips no declared needle is NOT detected by content-scan — the CD-1 routing fail-closed (never route a private-scope project to a public destination) is the primary segregation gate; content-scan is defense-in-depth. This residual is deliberate and recorded in [`ADR-091`](../ADRs/ADR-091-scope-segregation-action-gating-hook.md).
 
+**What content may cross onto a `scope: public` destination from the git-ignored analysis corpus is stated in [`analysis-workspace-standard.md`](analysis-workspace-standard.md) § 6**, together with the sanctioned path forms. This section owns the destination classification that rule consumes — it does not own the content rule itself.
+
 ---
 
 ## §3 Composition with sibling standards

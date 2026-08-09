@@ -93,6 +93,12 @@ memory/
 .claude/hooks/*.log
 .claude/hooks/*.jsonl
 .claude/hooks/.mode
+# Per-hook dedicated mode files (.autonomy-mode, .scope-segregation-mode,
+# .verify-session-config-mode, .gh-path-leak-mode). Same class as .mode above:
+# the live value is operator-local runtime state. The glob does NOT match .mode
+# itself (no -mode suffix) nor a *.template (different suffix), so the shipped
+# posture stays tracked while the operator's setting does not.
+.claude/hooks/.*-mode
 .claude/hooks/.session-retro-state/
 # Source-tree hook runtime artifacts (produced when hooks run from the worktree
 # during engineering/testing). The committed source is the .sh + .mode.template;
@@ -100,6 +106,7 @@ memory/
 core/hooks/*.log
 core/hooks/*.jsonl
 core/hooks/.mode
+core/hooks/.*-mode
 core/hooks/.session-retro-state/
 
 # pmo-skill-editor runtime sentinels — session markers, never committed

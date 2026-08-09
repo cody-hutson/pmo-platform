@@ -68,7 +68,37 @@ readonly POSITIONAL_LIB="${HOOK_DIR}/lib/positional-issueref.awk"
 # hook, like DEP_LIB and POSITIONAL_LIB.
 readonly PATTERNS_LIB="${HOOK_DIR}/lib/fragile-ref-patterns.sh"
 
-# --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
+# --- MODE DETECTION (shared harness .mode; warn|enforce|off) ---
+# jq-free (/bin/cat + /usr/bin/tr only), so it resolves without the dependency helper
+# and is therefore defined ahead of the gate below. Extracted from the inline read that
+# used to sit further down; the normalization — whitespace stripped, unrecognized value
+# defaults to warn — is unchanged.
+get_mode() {
+  local mode="warn" raw
+  if [ -f "$MODE_FILE" ]; then
+    # `|| echo` makes the substitution total. The pipeline returns 1 on a present-but-
+    # unreadable mode file, and this runs under `set -euo pipefail` BEFORE the ERR trap is
+    # armed — measured, the hook still resolves to the default here and degrades, but only
+    # via a subtle `set -e` interaction with assignment-inside-function. The fallback
+    # removes the dependence on it and matches the shape the other cohort hooks already use.
+    raw="$(/bin/cat "$MODE_FILE" 2>/dev/null | /usr/bin/tr -d '[:space:]' || echo warn)"
+    case "$raw" in
+      warn|enforce|off) mode="$raw" ;;
+    esac
+  fi
+  "$PRINTF" '%s' "$mode"
+}
+
+# --- LIB-GUARD MODE SNAPSHOT (resolved BEFORE the dependency guard, frozen readonly) ---
+# The guard below sources $DEP_LIB inside its own condition, so by the time the guard's
+# failure branch runs, everything that file defines is already in THIS shell — including
+# a get_mode of its own. Resolving the mode inside the branch would let the artifact
+# under adjudication choose its own verdict. Resolve it here and freeze it: a sourced
+# file cannot overwrite a readonly. Routed through get_mode()/$MODE_FILE (never a
+# literal mode path), so a hook that later moves to its own mode file follows for free.
+LIB_GUARD_MODE="$(get_mode)"; readonly LIB_GUARD_MODE
+
+# --- SHARED DEPENDENCY RESOLVER (mode-coupled: fail CLOSED in enforce, degrade in warn/off) ---
 # Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
 # `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
 # NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
@@ -79,9 +109,15 @@ readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
 # fail-OPEN) instead of blocking. `bash -n` detects that non-fatally so we fail CLOSED
 # (GHSA-g9g6-28c9-vrx5). Also require deny_missing_primitive so a valid-but-stale lib
 # (pre-fix, no helper) fails closed here rather than fail-open at a later ERR trap.
+# Severity is mode-coupled: a rule match in warn/off would not block, so an unusable
+# helper must not block harder than a match would.
 if [ ! -r "$DEP_LIB" ] || ! "${BASH:-/bin/bash}" -n "$DEP_LIB" 2>/dev/null || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1 || ! command -v deny_missing_primitive >/dev/null 2>&1; then
-  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
-  exit 2
+  if [ "$LIB_GUARD_MODE" = "enforce" ]; then
+    "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
+    exit 2
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] WARN (degraded, %s=%s): dependency helper lib/dep-resolve.sh unavailable or invalid; ALL rules for this hook are skipped this run. Reinstall the hook bundle (re-run docs/scripts/setup-workspace.sh) to restore enforcement.\n' "$HOOK_NAME" "${MODE_FILE##*/}" "$LIB_GUARD_MODE" >&2
+  exit 0
 fi
 JQ="$(resolve_jq)"; readonly JQ
 
@@ -128,16 +164,13 @@ readonly MASTER_LIB="${HOOK_DIR}/lib/master-enable.sh"
 if [ -r "$MASTER_LIB" ]; then . "$MASTER_LIB" 2>/dev/null || true; fi
 if command -v master_enable_gate >/dev/null 2>&1; then master_enable_gate "$MASTER_ENABLE_CLASS"; fi
 
-# --- MODE check (shared harness .mode; warn|enforce|off) — read BEFORE the jq gate so a
-# mode-gated hook fails CLOSED only in enforce and stands down in off/warn. Uses /bin/cat,
-# not jq, so it is safe to evaluate ahead of the dependency gate. ---
-MODE="warn"
-if [ -f "$MODE_FILE" ]; then
-  mode_raw="$(/bin/cat "$MODE_FILE" 2>/dev/null | /usr/bin/tr -d '[:space:]')"
-  case "$mode_raw" in
-    warn|enforce|off) MODE="$mode_raw" ;;
-  esac
-fi
+# --- MODE check (shared harness .mode; warn|enforce|off) — already resolved above the
+# dependency guard and frozen readonly, so a mode-gated hook fails CLOSED only in enforce
+# and stands down in off/warn. Reuse the snapshot rather than re-reading: same value, one
+# fewer read, and a value the sourced helper cannot have influenced. The off short-circuit
+# stays HERE — after bypass and the master-enable gate — so the precedence chain is
+# unchanged. ---
+MODE="$LIB_GUARD_MODE"
 [ "$MODE" = "off" ] && exit 0
 
 # --- DEPENDENCY GATE (mode-gated fail-closed: a security control that cannot evaluate its

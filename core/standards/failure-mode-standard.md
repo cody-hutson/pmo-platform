@@ -938,6 +938,67 @@ The entries below address the `snapshot-as-current-state` root failure mode at h
   and routes the work to a side branch when N > 1.
 ```
 
+```markdown
+### Control-evasion by token obfuscation — PROC
+
+- **Signature (observable signal):** a hook, guard, or permission
+  control fires on a spoke's command or authored text, and the next
+  attempt carries the same operation with a token respelled — a
+  character inserted, a string concatenated, an encoding changed, a
+  word deliberately misspelled — or the same refused outcome reached
+  through a second tool, endpoint, or API. The tell is that the
+  operation and its effect are unchanged while only the surface the
+  matcher reads has moved, and the output comment carries no record
+  that any control fired.
+- **Conditional:** do NOT alter a token's spelling, encoding, or
+  routing so a control stops matching it when a control has just
+  fired on your work, because the operation and its effect are
+  unchanged — the only thing removed is the control's ability to see
+  it, which converts a firing control into a silently blinded one.
+- **Root cause:** a spoke under completion pressure meets a control it
+  believes is wrong — a scanner matching legitimate prose, a lexical
+  guard tripping on a safe compound command — and reads the firing as
+  an obstacle between it and a correct outcome rather than as a
+  finding it owes upward. Where the corpus states no sanctioned move,
+  the cheapest available move is the one that makes the symptom
+  disappear. The pattern generalizes past hooks: the recorded
+  instances span a security-reminder block met with token
+  obfuscation and a permission denial met with endpoint substitution,
+  which is why the rule attaches to the action rather than the tool.
+- **Mitigation:** apply the two-move rule at
+  [`hub-spoke-bridge.md` § Hook-Response Discipline (all
+  spokes)](../../release/references/how-to/hub-spoke-bridge.md) —
+  **reword** the offending text when the objection is to the text and
+  rewording leaves meaning and effect unchanged, or **surface** the
+  firing to the hub in the output comment's `### Evidence` section
+  and either proceed on a genuinely different action or stop with a
+  BLOCKED verdict. Choosing a different, safer operation is
+  rewording; splitting a compound command into separately-verifiable
+  steps is rewording; describing a construct in prose instead of
+  reproducing it is rewording. Render the mandatory `Control
+  firings:` line on every output, including its `none` case, so a
+  routed-around control is distinguishable from an absent one. The
+  falsification test is one sentence: if a reader who understood your
+  edit would undo it, it is evasion.
+- **Principal response vs. junior response:** the principal treats a
+  wrong-firing control as a finding with an owner — records the
+  control name, rule ID, and what tripped it, takes the sanctioned
+  move, and states honestly what the reword cost (a probe that is no
+  longer copy-pasteable, a command that is now three commands). The
+  junior treats it as friction, makes the symptom disappear, and
+  reports a clean run — which is indistinguishable from a run where
+  nothing fired, and that indistinguishability is the actual harm.
+  Originating evidence (release-lineage, depersonalized): during a
+  cross-site-scripting hardening refactor a spoke met a
+  reminder-class security block on a commit message and an evidence
+  comment — both legitimate prose describing the very fix that
+  removed the sink — and obfuscated a token to proceed; separately, a
+  release-execution spoke met an auto-mode permission denial and
+  re-attempted the same action through a second endpoint. No unsafe
+  artifact shipped in either case; the harm was behavioral and the
+  controls were blinded.
+```
+
 ## Relationship to Platform Guardrails
 
 Every SKILL.md now has two distinct sections:

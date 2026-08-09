@@ -54,14 +54,54 @@ readonly WARN_LOG="${HOOK_DIR}/fs-boundary-warn-log.jsonl"
 readonly MODE_FILE="${HOOK_DIR}/.mode"
 readonly ALLOWLIST_FILE="${CLAUDE_DIR}/fs-boundary-allowlist.txt"
 
-# --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
-# Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
-# `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
-# NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
+# --- MODE DETECTION (shared .mode file with block-egress, block-mcp-writes) ---
+# jq-free (/bin/cat + /usr/bin/head + /usr/bin/tr only), so it resolves without the
+# dependency helper and is therefore defined ahead of the gate below. Extracted from
+# the inline read that used to sit further down; the normalization — first line only,
+# whitespace stripped, unrecognized value defaults to enforce — is unchanged.
+get_mode() {
+  local mode="enforce" raw
+  if [ -f "$MODE_FILE" ]; then
+    # `|| echo` makes the substitution total. The pipeline returns 1 on a present-but-
+    # unreadable mode file, and this runs under `set -euo pipefail` BEFORE the ERR trap is
+    # armed — measured, the hook still resolves to the default here and fails closed, but
+    # only via a subtle `set -e` interaction with assignment-inside-function. The fallback
+    # removes the dependence on it and matches the shape the other cohort hooks already use.
+    raw="$(/bin/cat "$MODE_FILE" 2>/dev/null | /usr/bin/head -n 1 | /usr/bin/tr -d '[:space:]' || echo enforce)"
+    case "$raw" in
+      warn|enforce|off) mode="$raw" ;;
+      *) mode="enforce" ;;
+    esac
+  fi
+  "$PRINTF" '%s' "$mode"
+}
+
+# --- LIB-GUARD MODE SNAPSHOT (resolved BEFORE the dependency guard, frozen readonly) ---
+# The guard below sources $DEP_LIB inside its own condition, so by the time the guard's
+# failure branch runs, everything that file defines is already in THIS shell — including
+# a get_mode of its own. Resolving the mode inside the branch would let the artifact
+# under adjudication choose its own verdict. Resolve it here and freeze it: a sourced
+# file cannot overwrite a readonly. Routed through get_mode()/$MODE_FILE (never a
+# literal mode path), so a hook that later moves to its own mode file follows for free.
+LIB_GUARD_MODE="$(get_mode)"; readonly LIB_GUARD_MODE
+
+# --- SHARED DEPENDENCY RESOLVER (mode-coupled: fail CLOSED in enforce, degrade in
+# warn/off). Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1
+# on a failed `.` of a missing file even inside an `if !` condition, and exit 1
+# (unlike exit 2) is NON-blocking in the PreToolUse contract — i.e. a missing helper
+# would fail OPEN. Precheck syntax with `bash -n` BEFORE sourcing: a truncated/corrupt
+# lib is a parse error, and sourcing a parse-error file is FATAL to this parent. Also
+# require deny_missing_primitive so a valid-but-stale lib (pre-fix, no helper) trips
+# here. Severity is mode-coupled: a rule match in warn/off would not block, so an
+# unusable helper must not block harder than a match would. ---
 readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
-if [ ! -r "$DEP_LIB" ] || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1; then
-  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
-  exit 2
+if [ ! -r "$DEP_LIB" ] || ! "${BASH:-/bin/bash}" -n "$DEP_LIB" 2>/dev/null || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1 || ! command -v deny_missing_primitive >/dev/null 2>&1; then
+  if [ "$LIB_GUARD_MODE" = "enforce" ]; then
+    "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
+    exit 2
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] WARN (degraded, %s=%s): dependency helper lib/dep-resolve.sh unavailable or invalid; ALL rules for this hook are skipped this run. Reinstall the hook bundle (re-run docs/scripts/setup-workspace.sh) to restore enforcement.\n' "$HOOK_NAME" "${MODE_FILE##*/}" "$LIB_GUARD_MODE" >&2
+  exit 0
 fi
 JQ="$(resolve_jq)"; readonly JQ
 PYTHON3="$(resolve_python3)"; readonly PYTHON3
@@ -125,16 +165,12 @@ if [ -r "$MASTER_LIB" ]; then . "$MASTER_LIB" 2>/dev/null || true; fi
 if command -v master_enable_gate >/dev/null 2>&1; then master_enable_gate "$MASTER_ENABLE_CLASS"; fi
 
 # --- MODE GATING (shared .mode file with block-egress, block-mcp-writes) ---
-# Read BEFORE the dependency gate: .mode reading is jq-free, and the gate's
-# fail-closed severity is mode-dependent (enforce blocks, warn degrades).
-MODE="enforce"
-if [ -f "$MODE_FILE" ]; then
-  MODE_RAW="$(/bin/cat "$MODE_FILE" 2>/dev/null | /usr/bin/head -n 1 | /usr/bin/tr -d '[:space:]')"
-  case "$MODE_RAW" in
-    warn|enforce|off) MODE="$MODE_RAW" ;;
-    *) MODE="enforce" ;;
-  esac
-fi
+# Already resolved above the dependency gate and frozen readonly, because the gate's
+# fail-closed severity is mode-dependent (enforce blocks, warn degrades). Reuse the
+# snapshot rather than re-reading: same value, one fewer read, and a value the sourced
+# helper cannot have influenced. The off short-circuit stays HERE — after bypass and
+# the master-enable gate — so the documented precedence chain is unchanged.
+MODE="$LIB_GUARD_MODE"
 
 # Mode = off: hook is disabled
 if [ "$MODE" = "off" ]; then

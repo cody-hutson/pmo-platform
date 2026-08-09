@@ -229,6 +229,22 @@ core/deploy/tools/check-registry-currency.sh
 ./core/deploy/tools/tests/test-status-label-invariant.sh
 core/deploy/tools/tests/test-status-label-invariant.sh
 
+# path-leak-patterns.sh — the shared path-leak detection primitive. It was
+# source-only until the `--scan-file` arm shipped; the release-hub pre-spawn
+# brief scan now EXECUTES it (`bash <path> --scan-file <rendered-brief>`) before
+# every Agent-tool launch, and `--self-test` is run agent-side whenever the
+# predicate changes. Without all four forms that guard is BLOCK-DESTRUCTIVE-022-
+# blocked agent-side and the feature is dead — observed live during the release
+# that shipped the arm. The generic suffix glob covers a hub whose checkout is a
+# downstream clone or a differently-named directory. `source` is gated by the
+# same rule, so these entries also cover a session sourcing the predicate to
+# scan its own output. (CI runs no Claude hooks; this is the agent-side path.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/path-leak-patterns.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/path-leak-patterns.sh
+./core/deploy/tools/path-leak-patterns.sh
+core/deploy/tools/path-leak-patterns.sh
+*/core/deploy/tools/path-leak-patterns.sh
+
 # extract-roster-needles.sh — generates PII needles from the operator-instance
 # people-roster into the localized-context needle file (people-graph data surface).
 [PMO_PLATFORM_ROOT]/core/deploy/extract-roster-needles.sh

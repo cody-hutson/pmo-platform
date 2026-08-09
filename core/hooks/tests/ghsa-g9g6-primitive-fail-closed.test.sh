@@ -48,6 +48,23 @@ for req in "$SRC_FRAG" "$SRC_GHPL" "$SRC_DEPLIB" "$SRC_AWK" "$SRC_PATTERNS" "$SR
   fi
 done
 
+# Mode-file names, DERIVED from the hook sources rather than hardcoded. Each hook reads
+# whichever file its own MODE_FILE names and ignores the rest, so writing the requested
+# mode into every declared name drives all of them without per-hook knowledge.
+#
+# This is not defensive tidying. This file writes only `.mode` historically, and the
+# moment one hook moved to its own mode file every `enforce` case here resolved that
+# hook's in-script default instead — five assertions silently stopped testing what they
+# name. The empty-set guard below exists for the same reason: if the derivation returns
+# nothing, no mode is written anywhere and the enforce cases become default cases that
+# still report PASS.
+MODE_FILE_NAMES="$(sed -nE 's/^readonly MODE_FILE="\$\{HOOK_DIR\}\/([^"]+)".*/\1/p' "$HOOK_DIR"/*.sh 2>/dev/null | sort -u | tr '\n' ' ')"
+if [ -z "$(printf '%s' "$MODE_FILE_NAMES" | tr -d '[:space:]')" ]; then
+  echo "FAIL: no mode-file names derived from ${HOOK_DIR}/*.sh — every enforce case below would silently test the in-script default. Check the MODE_FILE declaration shape." >&2
+  echo "Total: 1  PASS: 0  FAIL: 1"
+  exit 1
+fi
+
 # build_layout <dir> <mode> <awk:0|1|empty|trunc> <primitive:0|1|empty> <deplib: ok|stale|trunc|noop>
 #              [patterns: 1|0|empty|trunc]   (default 1 = present and valid)
 # The 6th argument is the co-shipped detector-constant lib (lib/fragile-ref-patterns.sh).
@@ -92,7 +109,10 @@ NOOP
     empty) : > "$d/path-leak-patterns.sh" ;;                 # present-but-empty (sources to nothing)
     # 0 = absent
   esac
-  printf '%s\n' "$mode" > "$d/.mode"
+  local mf
+  for mf in $MODE_FILE_NAMES; do
+    printf '%s\n' "$mode" > "$d/$mf"
+  done
 }
 
 # assert <desc> <expected_exit> <hook_basename> <layout_dir> <json>
@@ -133,9 +153,14 @@ build_layout "$D" enforce 1 1 trunc; assert "enforce+TRUNCATED-lib -> FAIL-CLOSE
 build_layout "$D" enforce empty 1 ok; assert "enforce+classifier-EMPTY(present) -> FAIL-CLOSED"       2 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")"
 build_layout "$D" enforce trunc 1 ok; assert "enforce+classifier-TRUNCATED(present) -> FAIL-CLOSED"   2 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")"
 build_layout "$D" warn    empty 1 ok; assert "warn+classifier-EMPTY -> DEGRADE"                       0 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")"
-# A stale lib fails CLOSED at the guard regardless of mode (established GHSA-9cjm / ADR-078
-# D4 posture — a broken security-infra lib denies; recover by reinstalling). Off is no escape.
-build_layout "$D" off     1 1 stale;  assert "off+STALE-lib -> FAIL-CLOSED at guard (D4 posture)"     2 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")"
+# A stale lib is MODE-COUPLED at the guard. The unconditional-deny posture this line used
+# to assert was superseded: for a hook that HAS a mode surface, an unusable helper denies in
+# enforce (the enforce arm two lines above) and degrades with a loud stderr notice in
+# warn/off, because in those modes a rule match would not have blocked either. The recovery
+# is unchanged — reinstall the bundle. The unconditional posture is retained, deliberately,
+# on the always-enforce hooks that carry no mode surface; that floor is what makes degrading
+# this cohort safe, and it is asserted in hook-fail-closed.test.sh section (6).
+build_layout "$D" off     1 1 stale;  assert "off+STALE-lib -> DEGRADE at guard (mode-coupled)"       0 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")"
 # Caller-owns-exit: a lib whose deny_ fns are silent no-ops (corrupt-lib shape) must still
 # fail closed in enforce — the exit-2 lives at the call site, not only inside the callee.
 build_layout "$D" enforce 0 1 noop;   assert "enforce+NO-OP-deny lib+classifier-absent -> FAIL-CLOSED" 2 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")"

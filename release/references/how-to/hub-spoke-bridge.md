@@ -362,6 +362,13 @@ ID (PV-0 through PV-6); do not restate the section. A zero whose control arm
 also returned zero is a BROKEN PROBE, not a clean contention map — report the
 probe unusable rather than the population empty.
 
+## Hook-Response Discipline (Stage 4 planning spokes)
+
+The `## Hook-Response Discipline (all spokes)` block in the Procedure 3 Spoke
+Template binds this template's spoke too — read it there; it is not restated
+here. Its mandatory `Control firings:` line applies to this template's output as
+well, rendered under `### Recommendations`.
+
 ## Output
 Post your output as a comment on sub-task #{SUB_TASK_NUMBER}:
 
@@ -898,7 +905,8 @@ A skipped **release-scoped** sub-task uses the same format with the milestone na
 4. Generate the spoke prompt using the Spoke Template below
 5. Embed the full persona card (behavioral markers + anti-patterns) in the prompt
 6. Review completed spoke outputs across the release for findings relevant to this spoke's issue. Inject cross-issue context into `{ADDITIONAL_READS}` when applicable (e.g., a DT finding on a related issue that this spoke should be aware of)
-7. Invoke the Agent tool per the Spoke Launch Mechanisms § Default subsection (`Agent({subagent_type, prompt, description, model, isolation, run_in_background})`). After invocation, print a brief acknowledgement: *"Hub auto-launches the spoke within authorized scope; awaits result inline (Stage {N} {Name} — #{ISSUE})."* If a fallback condition applies (see subsection), print the prompt for the operator to copy instead.
+7. **Scan the rendered prompt for path leaks before spawning.** Every path this template renders — the repo working copy, a run directory, a corpus location, a cited file, a command a spoke is told to run — uses a sanctioned form per [`core/standards/analysis-workspace-standard.md`](../../../core/standards/analysis-workspace-standard.md) § 6.1, never an absolute machine path carrying a username segment. Scan the **rendered** prompt (not the template) with `core/deploy/tools/path-leak-patterns.sh --scan-file` and do not spawn on a non-exempt hit; exit 2 is UNKNOWN, not clean. Full guard, its capability assertion, and its stated non-coverage: [`release/skills/release-hub/references/spoke-launch.md`](../../skills/release-hub/references/spoke-launch.md) § Spoke-brief path scan. The hub is the fix point because a brief carries a path into a spoke, the spoke echoes it into a public comment, and that echo is IRREVERSIBLE.
+8. Invoke the Agent tool per the Spoke Launch Mechanisms § Default subsection (`Agent({subagent_type, prompt, description, model, isolation, run_in_background})`). After invocation, print a brief acknowledgement: *"Hub auto-launches the spoke within authorized scope; awaits result inline (Stage {N} {Name} — #{ISSUE})."* If a fallback condition applies (see subsection), print the prompt for the operator to copy instead.
 
 **Worktree discipline (engineering + content-modifying spokes):**
 
@@ -1667,6 +1675,74 @@ read clause as discipline you owe, not as a guard that will catch you.
 
 **Cutover discipline:** Applies to all releases going forward.
 
+## Hook-Response Discipline (all spokes)
+
+When a hook, guard, or permission control fires on your work — a block, a warn,
+a denial, a refusal — you have exactly two moves:
+
+1. **Reword** the offending text, when the control's objection is to the TEXT
+   and rewording leaves the action's meaning and effect unchanged.
+2. **Surface it to the hub.** Record the firing in your output comment's
+   `### Evidence` section: the control name, the rule ID, the command or text
+   that tripped it, and what you did next (reworded / chose a different action /
+   stopped). Then either proceed on a genuinely different action, or stop and
+   return `verdict: BLOCKED` with `next: block:operator-decision-at-stage-{N}`.
+   Where a user-side equivalent exists and you have no agent-side one, emit the
+   CLAUDE.md § "Hook-Blocked → User-Side Handoff" template: cite the hook path
+   and rule ID, give the command, state the reversibility tier, and state how
+   you will verify afterwards.
+
+Surfacing is a **first-class outcome, not a failure.** A spoke that stops and
+reports a wrong-firing control has done its job correctly.
+
+You never obfuscate, encode, split, escape, transliterate, or otherwise alter a
+token for the purpose of not matching a control. You never re-attempt a refused
+action through a second tool, endpoint, or API to reach the outcome the control
+just refused. **A denial attaches to the action, not to the tool** — reaching
+the same outcome by another route does not satisfy the denial, it evades it.
+All of this holds when you believe the control is wrong: a control firing
+incorrectly is a finding to report, never an obstacle to route around.
+
+**The line between rewording and evading.** Rewording changes what the text
+SAYS. Evading changes only how the text is SPELLED, so a matcher misses it.
+Three things that look like evasion and are not:
+
+- Choosing a genuinely different, genuinely safer operation — regenerating a
+  branch with `checkout -B` rather than a hard reset changes the operation, not
+  merely its spelling. § Hook-Safe Chip Git Idioms prescribes exactly that, at
+  chip-authoring time, and is not an exception to this rule.
+- Splitting a compound command into plain, separately-verifiable steps when a
+  guard reports it cannot verify the compound. That makes the control's job
+  easier, not harder, and the resulting commands are the ones actually checked.
+- Naming a construct in prose instead of reproducing it verbatim. It conveys the
+  same fact to a reader and hides nothing.
+
+What IS evasion: writing a token with an inserted character, a concatenation, a
+different encoding, or a deliberate misspelling so a scanner does not see it —
+the operation is unchanged and only its spelling moved. Test: **if a reader who
+understood your edit would undo it, it is evasion.**
+
+**Honest scope — this is a discipline, not an interlock.** Nothing detects the
+prohibited move. Obfuscation is definitionally the ABSENCE of the token any
+matcher would key on; the block log records a one-way digest with no session
+attribution; and a call that succeeds leaves no row at all. Two further things
+are true and are stated rather than implied. First, the canonical record for
+this failure class carried it forward as a **harness signal rather than an
+agent-judgment one** — it routed the remedy toward a mechanism, and this clause
+is not that mechanism. Second, a corpus-level convention already existed and was
+named in the brief of the instance that motivated this clause, and was still not
+followed; what no rule prohibited was **tool substitution** specifically, which
+is the limb this clause genuinely adds. It ships because the sanctioned response
+must exist before any control is tightened, and because a stated rule makes a
+future deviation a citable violation rather than a judgment call. The
+compensating control is the mandatory `Control firings:` line in § Output, which
+every spoke renders on every run including when nothing fired — a firing you
+record is auditable afterwards, and a null line you are obliged to render is
+what makes silence mean something. Treat this as discipline you owe, not a guard
+that will catch you.
+
+**Cutover discipline:** Applies to all releases going forward.
+
 ## Output
 Post your output as a comment on sub-task #{SUB_TASK_NUMBER}:
 
@@ -1674,6 +1750,20 @@ Post your output as a comment on sub-task #{SUB_TASK_NUMBER}:
 ### Summary (30 seconds)
 ### Detail
 ### Evidence
+
+This section carries one MANDATORY line, rendered on every spoke output:
+
+    Control firings: none
+
+or, when non-empty, one row per firing — control name · rule ID · what tripped
+it · action taken (reworded / different action / stopped / user-side handoff).
+
+**Render the line every time, including on `none`.** A spoke that routed around
+a control and said nothing, and a spoke that met no control at all, otherwise
+emit byte-identical output; the null line is what makes the second case
+distinguishable from the first. Omission is a structural defect a QA pass can
+see, not a silent pass. Full rule: § Hook-Response Discipline (all spokes).
+
 ### Decisions & Recommendations
 For each finding requiring operator judgment:
 - **Finding:** What was observed

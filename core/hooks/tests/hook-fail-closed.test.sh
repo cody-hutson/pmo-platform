@@ -64,6 +64,25 @@ summary_and_exit() {
   exit 0
 }
 
+# --- Mode-file names, DERIVED from the hook sources rather than enumerated ---
+# A hook reads whichever file its own MODE_FILE names; every other mode file in the
+# sandbox is inert. So the safe way to drive "all hooks to mode X" is to write X into
+# every name any hook declares — and to derive that set from the sources, never from a
+# hardcoded list. A hardcoded list is how a mode case silently stops testing anything:
+# the hook resolves its in-script default instead, the assertion quietly re-tests the
+# default, and the suite still reports PASS. That is not hypothetical — it is exactly
+# what happened here when one hook moved to its own mode file and three call sites in
+# this suite still wrote only the three names they knew about.
+MODE_FILE_NAMES="$(/usr/bin/sed -nE 's/^readonly MODE_FILE="\$\{HOOK_DIR\}\/([^"]+)".*/\1/p' "$HOOK_DIR"/*.sh 2>/dev/null | /usr/bin/sort -u | /usr/bin/tr '\n' ' ')"
+
+# write_all_modes <dir> <value>
+write_all_modes() {
+  _wam_dir="$1"; _wam_val="$2"
+  for _wam_name in $MODE_FILE_NAMES; do
+    /usr/bin/printf '%s' "$_wam_val" > "${_wam_dir}/${_wam_name}"
+  done
+}
+
 # Static-literal payloads (built WITHOUT jq).
 READ_PAYLOAD='{"tool_name":"Read","tool_input":{"file_path":"/tmp/x"},"cwd":"/tmp"}'
 BASH_PAYLOAD='{"tool_name":"Bash","tool_input":{"command":"cat /tmp/foo"},"cwd":"/tmp"}'
@@ -91,6 +110,19 @@ if [ "$n_hooks" -ge 1 ]; then
   pass "glob enumerated $n_hooks block-*.sh hook(s) (no hardcoded name-list)"
 else
   fail "empty hook set (glob broken / hooks moved)"
+  summary_and_exit
+fi
+
+# --- (1b) MODE-FILE DERIVATION, with its own empty-set guard ---
+# This set is a precondition for every enforce arm below. If it reads empty, no mode
+# file is written, every hook resolves its in-script default, and the enforce arms
+# quietly become default-arms that still report PASS. Fail loud instead.
+n_modefiles=0
+for _mf in $MODE_FILE_NAMES; do n_modefiles=$((n_modefiles + 1)); done
+if [ "$n_modefiles" -ge 1 ]; then
+  pass "derived $n_modefiles mode-file name(s) from the hook sources:$MODE_FILE_NAMES"
+else
+  fail "no mode-file names derived from ${HOOK_DIR}/*.sh — every enforce arm below would silently test the in-script default instead. Check the MODE_FILE declaration shape."
   summary_and_exit
 fi
 
@@ -126,12 +158,10 @@ for h in $JQ_HOOKS; do
                -e 's#/opt/homebrew/bin/jq#/nonexistent/jq-b#g' \
                -e 's#/usr/local/bin/jq#/nonexistent/jq-c#g' \
                "$DEP_LIB" > "$sbox/lib/dep-resolve.sh"
-  # Drive shared-.mode AND every own-mode-file hook to enforce (no per-hook knowledge;
-  # a hook reads whichever file it uses, the others are inert). Own-mode files:
-  # .autonomy-mode (block-autonomy-ceiling), .scope-segregation-mode (block-scope-segregation).
-  /usr/bin/printf 'enforce' > "$sbox/.mode"
-  /usr/bin/printf 'enforce' > "$sbox/.autonomy-mode"
-  /usr/bin/printf 'enforce' > "$sbox/.scope-segregation-mode"
+  # Drive the shared .mode AND every own-mode-file hook to enforce, from the DERIVED
+  # name set — no per-hook knowledge, so a hook that moves to its own mode file stays
+  # covered without editing this line.
+  write_all_modes "$sbox" enforce
 
   # (3a) ANTI-VACUOUS PRECONDITION — prove genuine unresolvability via the REAL resolver.
   got="$(PATH=/usr/bin:/bin /bin/bash -c ". '$sbox/lib/dep-resolve.sh' 2>/dev/null; resolve_jq" 2>/dev/null)"
@@ -210,7 +240,7 @@ for h in $PY_HOOKS; do
                -e 's#/opt/homebrew/bin/python3#/nonexistent/py-b#g' \
                -e 's#/usr/local/bin/python3#/nonexistent/py-c#g' \
                "$DEP_LIB" > "$sbox/.claude/hooks/lib/dep-resolve.sh"
-  /usr/bin/printf 'enforce' > "$sbox/.claude/hooks/.mode"
+  write_all_modes "$sbox/.claude/hooks" enforce
   allowed="$sbox/allowed"; /bin/mkdir -p "$allowed"
   /bin/ln -s /etc "$allowed/link"   # symlink INSIDE the allowed root → outside (no literal '..')
   /usr/bin/printf '%s\n' "$allowed" > "$sbox/.claude/fs-boundary-allowlist.txt"
@@ -239,6 +269,142 @@ for h in $PY_HOOKS; do
     /usr/bin/printf 'FAIL: %s: python3-absent expected exit 2 + BLOCK-FS-BOUNDARY-003 (got exit=%s)\n  stderr: %s\n' "$base" "$rc" "$err"
     FAIL=$((FAIL + 1))
   fi
+done
+
+# --- (6) LIB-MISSING x MODE MATRIX — the dependency-guard posture, per hook ----------
+#
+# Section (3) asserts the jq gate. This section asserts the gate ABOVE it: what a hook
+# does when lib/dep-resolve.sh itself is unusable. Different control, different fail
+# direction, and only this one is mode-coupled.
+#
+# Classification is from source, never a name-list, so a tenth mode-capable hook is
+# covered the day it lands:
+#   mode-capable   = declares MODE_FILE  AND carries a LIB-MISSING guard
+#   always-enforce = carries a LIB-MISSING guard, declares NO MODE_FILE
+#
+# Asserted:
+#   mode-capable, lib absent:  enforce -> exit 2 + BLOCKED (fail-closed)
+#                              warn    -> exit 0 + LIB-MISSING + NON-EMPTY stderr
+#                              off     -> exit 0 + LIB-MISSING + NON-EMPTY stderr
+#     The enforce arm is the load-bearing one: a matrix that only proves the permissive
+#     arm has verified the regression, not the invariant. Non-empty stderr in BOTH warn
+#     and off is a requirement, not a nicety — a silent degrade leaves an operator
+#     nothing to notice and nothing to report.
+#   always-enforce, lib absent / truncated: exit 2, with ALL THREE mode files PRESENT
+#     and set to `off`. Present-and-off rather than absent, so the assertion proves
+#     mode-INDEPENDENCE instead of accidentally re-testing an enforce absent-file
+#     default. This is the arm that covers block-credential-reads and
+#     block-rm-prefer-trash, which carried no LIB-MISSING coverage at all before this.
+#
+# NOT asserted, and stated rather than omitted — see the RESIDUAL probe below. A
+# syntactically-valid lib whose top level runs `exit 0` makes the floor hooks exit 0
+# silently: `.` executes the file in the hook's own shell from inside the guard's `if`
+# condition, so a top-level exit terminates the hook before the guard can rule, and
+# `bash -n` cannot catch it because that is a syntax check and the syntax is valid.
+# Pre-existing, tracked as its own defect, and deliberately out of scope for the
+# mode-coupling work, which leaves these three hooks untouched. The probe RUNS every
+# invocation and PRINTS what it observes, so a green suite can never be read as proof
+# that the floor denies under every lib state.
+echo ""
+echo "LIB-MISSING x mode matrix — dependency-guard posture per hook"
+echo "---"
+MODE_HOOKS=""
+FLOOR_HOOKS=""
+for h in $HOOKS; do
+  /usr/bin/grep -qE 'LIB-MISSING' "$h" || continue
+  if /usr/bin/grep -qE '^readonly MODE_FILE=' "$h"; then
+    MODE_HOOKS="$MODE_HOOKS $h"
+  else
+    FLOOR_HOOKS="$FLOOR_HOOKS $h"
+  fi
+done
+
+# lib_sandbox HOOK MODE LIBSTATE — materialize a sandbox, echo its path.
+lib_sandbox() {
+  _lsb="$(/usr/bin/mktemp -d)"; /bin/mkdir -p "$_lsb/lib"
+  /bin/cp "$1" "$_lsb/$(/usr/bin/basename "$1")"
+  write_all_modes "$_lsb" "$2"
+  case "$3" in
+    absent)    : ;;                                                   # no lib written
+    truncated) /usr/bin/head -40 "$DEP_LIB" > "$_lsb/lib/dep-resolve.sh" ;;
+    selfexit)  /usr/bin/printf 'exit 0\n' > "$_lsb/lib/dep-resolve.sh" ;;
+    good)      /bin/cp "$DEP_LIB" "$_lsb/lib/dep-resolve.sh" ;;
+  esac
+  /usr/bin/printf '%s' "$_lsb"
+}
+
+# The workspace-scope layer runs after the payload parse and exits 0 when the cwd is
+# outside the workspace root. Pin the root to each sandbox so it never renders a hook
+# inert and silently vacuates an arm below.
+export PMO_SCOPE_GUARD_ROOT
+
+for h in $MODE_HOOKS; do
+  base="$(/usr/bin/basename "$h")"
+  for m in enforce warn off; do
+    sbox="$(lib_sandbox "$h" "$m" absent)"
+    PMO_SCOPE_GUARD_ROOT="$sbox"
+    payload="$(/usr/bin/printf '{"tool_name":"Bash","tool_input":{"command":"cat /tmp/foo"},"cwd":"%s"}' "$sbox")"
+    rc=0
+    err="$(/usr/bin/printf '%s' "$payload" | /bin/bash "$sbox/$base" 2>&1 >/dev/null)" || rc=$?
+    /bin/rm -rf "$sbox"
+    ok=1
+    /usr/bin/printf '%s' "$err" | /usr/bin/grep -qE 'LIB-MISSING' || ok=0
+    if [ "$m" = enforce ]; then
+      [ "$rc" = 2 ] || ok=0
+      /usr/bin/printf '%s' "$err" | /usr/bin/grep -qF 'BLOCKED (fail-closed)' || ok=0
+    else
+      [ "$rc" = 0 ] || ok=0
+      [ -n "$err" ] || ok=0
+      /usr/bin/printf '%s' "$err" | /usr/bin/grep -qF 'WARN (degraded' || ok=0
+    fi
+    if [ "$ok" = 1 ] && [ "$m" = enforce ]; then
+      pass "$base [$m]: lib absent -> exit 2 + BLOCKED (fail-closed)"
+    elif [ "$ok" = 1 ]; then
+      pass "$base [$m]: lib absent -> exit 0 + LIB-MISSING degrade notice on stderr"
+    else
+      /usr/bin/printf 'FAIL: %s [%s]: lib absent -> unexpected posture (exit=%s)\n  stderr: %s\n' "$base" "$m" "$rc" "$err"
+      FAIL=$((FAIL + 1))
+    fi
+  done
+done
+
+echo ""
+echo "always-enforce floor — mode-INDEPENDENT deny (every mode file present and set off)"
+echo "---"
+for h in $FLOOR_HOOKS; do
+  base="$(/usr/bin/basename "$h")"
+  for st in absent truncated; do
+    sbox="$(lib_sandbox "$h" off "$st")"
+    PMO_SCOPE_GUARD_ROOT="$sbox"
+    payload="$(/usr/bin/printf '{"tool_name":"Bash","tool_input":{"command":"cat /tmp/foo"},"cwd":"%s"}' "$sbox")"
+    rc=0
+    err="$(/usr/bin/printf '%s' "$payload" | /bin/bash "$sbox/$base" 2>&1 >/dev/null)" || rc=$?
+    /bin/rm -rf "$sbox"
+    if [ "$rc" = 2 ]; then
+      pass "$base [every mode file = off]: lib $st -> exit 2 (deny is mode-independent)"
+    else
+      /usr/bin/printf 'FAIL: %s: lib %s with every mode file set off -> expected exit 2, got %s. The mode-capable cohort is allowed to degrade only because this floor still denies.\n  stderr: %s\n' "$base" "$st" "$rc" "$err"
+      FAIL=$((FAIL + 1))
+    fi
+  done
+done
+
+echo ""
+echo "RESIDUAL probe — corrupt-but-valid lib against the always-enforce floor"
+echo "---"
+echo "Not an assertion. Printed every run so a green suite is never mistaken for proof"
+echo "that the floor denies under every lib state. Tracked as a separate defect."
+for h in $FLOOR_HOOKS; do
+  base="$(/usr/bin/basename "$h")"
+  sbox="$(lib_sandbox "$h" off selfexit)"
+  PMO_SCOPE_GUARD_ROOT="$sbox"
+  payload="$(/usr/bin/printf '{"tool_name":"Bash","tool_input":{"command":"cat /tmp/foo"},"cwd":"%s"}' "$sbox")"
+  rc=0
+  err="$(/usr/bin/printf '%s' "$payload" | /bin/bash "$sbox/$base" 2>&1 >/dev/null)" || rc=$?
+  /bin/rm -rf "$sbox"
+  mark="$(/usr/bin/printf '%s' "$err" | /usr/bin/grep -oE 'CLAUDE-HOOK:[a-z-]+:[A-Z0-9-]+' | /usr/bin/head -1)"
+  /usr/bin/printf 'RESIDUAL: %s: lib = single line "exit 0" (passes bash -n) -> exit=%s marker=%s\n' \
+    "$base" "$rc" "${mark:-<none>}"
 done
 
 summary_and_exit

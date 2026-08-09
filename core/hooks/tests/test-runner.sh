@@ -75,6 +75,16 @@ for test_file in *.test.sh; do
 
   /usr/bin/printf '%s — %s\n' "$test_file" "$summary"
 
+  # RESIDUAL pass-through. A suite's full output is captured above and, on every run
+  # that yields a summary line, discarded — i.e. on every pass AND every ordinary
+  # fail. Only a crash reaches the no-summary branch that echoes it. That made the
+  # RESIDUAL disclosure — whose entire purpose is to qualify a GREEN run, so that a
+  # passing suite is never read as a total guarantee — unreachable at exactly the
+  # moment it is meant to speak, while three artifacts (including a ratifying ADR)
+  # asserted it printed on every run. True locally, false at the authoritative
+  # runner. Forward the lines so the claim and the behaviour agree.
+  /usr/bin/printf '%s\n' "$output" | /usr/bin/grep -E '^RESIDUAL' || true
+
   if [ "$rc" -ne 0 ] || [ "$fail" -gt 0 ]; then
     FAILED_FILES+=("$test_file")
   fi
