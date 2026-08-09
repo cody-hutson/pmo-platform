@@ -1028,7 +1028,7 @@ _cc_row_findings() {
       if [[ $_home_ok -eq 1 ]]; then
         local _body _vel_line
         _body="$(_cc_h4_block_body "$_home" "$_dl_head")"
-        _vel_line="$(printf '%s\n' "$_body" | /usr/bin/grep -m1 '^\*\*Velocity:\*\*' || true)"
+        _vel_line="$(printf '%s\n' "$_body" | /usr/bin/grep -m1 '^\*\*Velocity:\*\*' || true)"  # sigpipe-idiom: allow — `|| true` discards the pipeline status, so a broken-pipe 141/1 from the bounded grep never reaches the caller; measured, the captured value is correct at 2.6 MB and the same shape WITHOUT `|| true` returns 141 from 325 KB up
 
         # T4 CO-LOCATION. A field written into a segment while the body is still
         # live in the hot ledger (or vice versa) exits 0, passes a corpus-wide

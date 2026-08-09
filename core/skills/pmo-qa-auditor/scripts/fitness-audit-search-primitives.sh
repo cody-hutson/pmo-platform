@@ -185,8 +185,16 @@ cmd_validate_evidence() {
 
   # Seeded sample: N = 10 or all when fewer (mode-spec §4).
   local n=10; [ "${total}" -lt 10 ] && n="${total}"
-  local sample
-  sample="$(printf '%s\n' "${candidates}" | awk -v seed="${seed}" 'BEGIN{srand(seed)} {printf "%.9f\t%s\n", rand(), $0}' | sort -n | head -n "${n}" | cut -f2-)"  # sigpipe-idiom: allow — `head -n` is the sample bound and there is no grep to fold it into; retained as scope-bound, NOT asserted unreachable — the status is consumed under `set -e`
+  # RANK FIRST, then take the head from a here-string. `sort` drains its input, so
+  # when `head` closed the pipe early it was `sort` that took SIGPIPE and `pipefail`
+  # that promoted it — aborting this script under its own `set -euo pipefail`.
+  # Measured on this exact shape: clean to 500 candidates, aborting at 900 and above
+  # — the same order as blast-radius.sh's fan-out cap, not the "much lower
+  # reachability" it was once assumed to have. Split form: rc=0 to 20,000, sample
+  # byte-identical at 3 / 9 / 10 / 200 / 900 candidates.
+  local ranked sample
+  ranked="$(printf '%s\n' "${candidates}" | awk -v seed="${seed}" 'BEGIN{srand(seed)} {printf "%.9f\t%s\n", rand(), $0}' | sort -n)"
+  sample="$(head -n "${n}" <<<"${ranked}" | cut -f2-)"
 
   local pass=0 fail=0 skip=0 form tok verdict
   while IFS="$(printf '\t')" read -r form tok; do
