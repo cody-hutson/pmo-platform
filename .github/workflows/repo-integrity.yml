@@ -1425,9 +1425,14 @@ jobs:
   #                                  that is the PIPE-PREPENDED form, not the bare
   #                                  line, which would never re-match.
   #             T2 line-scoped     — `# sigpipe-idiom: allow — <reason>` on the
-  #                                  line or the line above. This is the SAME
-  #                                  rationale #3832's AC-3 already requires, so
-  #                                  the string a reviewer reads and the string
+  #                                  line, or anywhere ABOVE it within the same
+  #                                  statement: the lookback climbs continuation
+  #                                  lines, so a marker written above a multi-line
+  #                                  pipeline's HEAD counts. (One line of lookback
+  #                                  was not enough — a correctly-placed marker two
+  #                                  continuations up read as absent.) This is the
+  #                                  SAME rationale #3832's AC-3 already requires,
+  #                                  so the string a reviewer reads and the string
   #                                  this gate parses are one string.
   #             T3 file-scoped     — `repo-integrity: allow-sigpipe-idiom`
   #                                  anywhere in the file.
@@ -1686,12 +1691,29 @@ jobs:
                 SUPPRESSED="${SUPPRESSED}${f}:${LN}: ${MATCHED} (T2, marker on line)"$'\n'
                 continue
               fi
-              if [ "$LN" -gt 1 ] 2>/dev/null; then
-                PREV="$(sed -n "$((LN - 1))p" "$f" 2>/dev/null || true)"
-                if [ -n "$PREV" ] && grep -qE "$LINE_MARK" <<<"$PREV"; then
-                  SUPPRESSED="${SUPPRESSED}${f}:${LN}: ${MATCHED} (T2, marker on preceding line)"$'\n'
-                  continue
-                fi
+              # Walk UP through the statement, not just one line. A marker is
+              # conventionally written above the statement HEAD, and a multi-line
+              # pipeline can put several continuation lines between that head and the
+              # line the idiom actually matched on — in which case a correctly-placed
+              # marker read as absent and the site read as unmarked. Stop at the first
+              # line that does not continue into the next, and bound the walk so a
+              # pathological file cannot make it unbounded.
+              T2_HIT=""
+              K=$((LN - 1))
+              STEPS=0
+              while [ "$K" -ge 1 ] && [ "$STEPS" -lt 10 ]; do
+                PREV="$(sed -n "${K}p" "$f" 2>/dev/null || true)"
+                if grep -qE "$LINE_MARK" <<<"$PREV"; then T2_HIT="$K"; break; fi
+                PREVT="${PREV%"${PREV##*[![:space:]]}"}"
+                case "$PREVT" in
+                  *"|"|*"\\"|*"&&") : ;;   # continues into the line below it
+                  *) break ;;
+                esac
+                K=$((K - 1)); STEPS=$((STEPS + 1))
+              done
+              if [ -n "$T2_HIT" ]; then
+                SUPPRESSED="${SUPPRESSED}${f}:${LN}: ${MATCHED} (T2, marker on line ${T2_HIT})"$'\n'
+                continue
               fi
 
               # T1 content-exempt: strip single-quoted spans and re-test. If the
@@ -1794,7 +1816,8 @@ jobs:
             echo "### Exemptions"
             echo ""
             echo "- Keeping the form deliberately: add \`# sigpipe-idiom: allow — <one-line reason>\`"
-            echo "  on the line or the line above. It is reported in the SUPPRESSED block, never silent."
+            echo "  on the line, or anywhere above it within the same statement (the lookback climbs"
+            echo "  continuation lines). It is reported in the SUPPRESSED block, never silent."
             echo "- Whole file: \`# repo-integrity: allow-sigpipe-idiom\`."
             echo "- The idiom inside a single-quoted payload string is content-exempt automatically."
           } | tee -a "$GITHUB_STEP_SUMMARY"
