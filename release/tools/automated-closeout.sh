@@ -364,7 +364,13 @@ TOUCHED_ARCHIVE_SEGMENTS=()
 
 # Phase outcomes (PASS / FAIL / SKIPPED / N/A / DRY-RUN / MANUAL)
 # Bash 3.2 (macOS default) lacks associative arrays — use parallel indexed arrays
-# keyed by phase name. Lookup is O(n) but phase count is small (<20).
+# keyed by phase name. Lookup is O(n) over a small, dispatch-bounded set (one
+# entry per mark_phase call, so the bound is the dispatch block's length — no
+# pinned count here, because a pinned count is false the next time a phase lands).
+#
+# This record is the ONLY in-file surface that observes EXECUTION rather than
+# declaration, which is why generate_markdown_report and generate_json_report
+# both DERIVE their phase set from it instead of carrying a parallel enumeration.
 PHASE_NAMES=()
 PHASE_RESULTS=()
 PHASE_DETAILS=()
@@ -886,6 +892,23 @@ get_phase() {
     fi
   done
   /usr/bin/printf '—|—\n'
+}
+
+# True when phase-record index $1 holds the FIRST occurrence of its phase name.
+# Both report renderers walk the record through this predicate, so a name marked
+# more than once emits exactly ONE row carrying its FIRST result — the semantics
+# get_phase already has (its lookup returns on the first name hit above), which
+# is what makes the derived render provably additive: the row SET grows by the
+# previously-omitted phases and no existing row changes.
+#
+# Deliberately NOT named phase_* — that prefix is the dispatchable-phase
+# namespace, and `grep '^phase_'` over this file is a live survey/self-test form.
+is_first_phase_occurrence() {
+  local i="$1" j
+  for ((j=0; j<i; j++)); do
+    if [[ "${PHASE_NAMES[$j]}" == "${PHASE_NAMES[$i]}" ]]; then return 1; fi
+  done
+  return 0
 }
 
 # ─── Phase 2: preflight ──────────────────────────────────────────────────────
@@ -4300,14 +4323,63 @@ generate_markdown_report() {
 | Phase | Result | Detail |
 |-------|--------|--------|
 EOF
-  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog assert_derived_surfaces bump_version ledger_guard rebuild_skill_packages commit_chore_pr create_chore_pr await_merge_chore_pr sync_primary_checkout reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release assert_anchor_hygiene check_release_body_drift invoke_orphan_cleanup pattern_scan)
-  local p rd r d
-  for p in "${phases[@]}"; do
-    rd="$(get_phase "$p")"
-    r="${rd%|*}"
-    d="${rd#*|}"
-    /usr/bin/printf '| %s | %s | %s |\n' "$p" "$r" "$d"
+  # ── Phase-outcomes rows: DERIVED from the phase record, never enumerated ─────
+  # Rows come from PHASE_NAMES/PHASE_RESULTS/PHASE_DETAILS, which mark_phase
+  # writes at execution time. A phase added to the dispatch self-reports here with
+  # no edit to this function. This replaced a hand-maintained `phases=()` array
+  # that drifted twice (v4.12's 6.6/6.7, then 16.7) and was silently omitting
+  # three recorded phases: inject_velocity_field, append_release_learnings,
+  # audit_epic_rollup.
+  #
+  # SCOPE OF THAT CONTRACT — narrow on purpose. It holds for THIS table, not for
+  # the report as a whole. Two partial phase enumerations remain hardcoded and DO
+  # need hand-editing when a phase joins the --no-merge deferred set: the
+  # "Deferred Under --no-merge" bullets further down in this function, and the
+  # `deferred` literal in generate_json_report. Do NOT read this as "there is no
+  # report list to edit" — there is; it is simply not this one.
+  #
+  # WHY THE RECORD AND NOT THE phase_*() DEFINITIONS: the record is the only
+  # in-file surface that observes EXECUTION rather than declaration. A definition
+  # scan silently drops post_gate_passage_proof, which is marked inside
+  # phase_run_verification and has no phase_*() function of its own — which would
+  # turn a three-phase omission into a one-phase omission that reads as fixed.
+  #
+  # WHERE THE CROSS-CHECK LIVES: deriving makes the record the sole input to this
+  # audit table, so a dispatched phase that never calls mark_phase is silently
+  # ABSENT. The dispatch<->record cross-check that catches that is a self_test arm,
+  # and that placement is forced, not stylistic: the dispatch block sits BELOW the
+  # "# ─── Argument parsing" banner and is therefore absent from the function-only
+  # slice core/deploy/tests/test_version_stamping.sh sources, so a render-path
+  # self-parse of the dispatch would read zero phases and go vacuous under exactly
+  # the harness that exercises this file.
+  #
+  # Index-loop form is required: under bash 3.2 + set -u, "${PHASE_NAMES[@]}" on
+  # an empty array yields one empty element. Arrays are read directly rather than
+  # through get_phase, whose "RESULT|DETAIL" round-trip mis-splits any detail
+  # containing a literal pipe.
+  local _pr_i
+  for ((_pr_i=0; _pr_i<${#PHASE_NAMES[@]}; _pr_i++)); do
+    is_first_phase_occurrence "$_pr_i" || continue
+    /usr/bin/printf '| %s | %s | %s |\n' \
+      "${PHASE_NAMES[$_pr_i]}" "${PHASE_RESULTS[$_pr_i]}" "${PHASE_DETAILS[$_pr_i]}"
   done
+  echo
+  echo "Rows are the phases this run executed, in execution order. A phase absent from the table did not run — the table is a record of execution, not a declaration of the planned sequence. The full declared sequence is in \`--help\`."
+  # A halted run states the fact of truncation, not just the semantics of absence.
+  # 32 of the 33 in-run generate_report call sites are abort paths
+  # (`phase_X || { generate_report; exit N; }`), so the truncated run is the
+  # DOMINANT artifact a reader sees, and a derived table alone cannot separate
+  # "did not run" from "does not exist". Derived purely from the record — no
+  # second enumeration, no dispatch coupling. Honest bound: this fires only on a
+  # FAIL-terminated run; a signal kill or a die() never reaches generate_report at
+  # all, and no marker helps there.
+  local _pr_last=$(( ${#PHASE_NAMES[@]} - 1 ))
+  if [[ "$_pr_last" -ge 0 ]]; then
+    if [[ "${PHASE_RESULTS[$_pr_last]}" == "FAIL" ]]; then
+      echo
+      echo "**Run halted** at \`${PHASE_NAMES[$_pr_last]}\` — phases after it did not execute."
+    fi
+  fi
   echo
   echo "## Verification"
   echo
@@ -4385,12 +4457,39 @@ EOF
 generate_json_report() {
   local slug="$STATE_MILESTONE_SLUG"
   [[ -z "$slug" ]] && slug="$VERSION"
+  # Phase outcomes for the JSON consumer, derived from the SAME phase record and
+  # the SAME first-occurrence rule the markdown table uses — a `--json` reader had
+  # zero phase visibility before this. Passed as flat argv triples rather than a
+  # delimited blob so a detail containing a pipe, a tab or a newline cannot
+  # desync the fields. argv[15] carries the triple COUNT, which (a) lets python
+  # validate the operand count instead of trusting it and (b) keeps this array
+  # non-empty, so no `"${ARR[@]}"`-on-empty guard is owed under set -u
+  # (ADR-008 Rule 2 — explicit gate over the bash 4.2 `:+` substitution).
+  local _pj_i _pj_n=0
+  for ((_pj_i=0; _pj_i<${#PHASE_NAMES[@]}; _pj_i++)); do
+    is_first_phase_occurrence "$_pj_i" || continue
+    _pj_n=$((_pj_n+1))
+  done
+  local _pj_rec=("$_pj_n")
+  for ((_pj_i=0; _pj_i<${#PHASE_NAMES[@]}; _pj_i++)); do
+    is_first_phase_occurrence "$_pj_i" || continue
+    _pj_rec+=("${PHASE_NAMES[$_pj_i]}" "${PHASE_RESULTS[$_pj_i]}" "${PHASE_DETAILS[$_pj_i]}")
+  done
   /usr/bin/python3 - "$RUN_TS" "$MODE" "$PR_NUMBER" "$VERSION" "$MILESTONE" "$slug" \
     "$STATE_LOG_ROW_STATE" "$STATE_MILESTONE_STATE" "$STATE_TAG_EXISTS" \
-    "$STATE_CYCLE_TIME" "$OPEN_ISSUE_COUNT" "$CHORE_PR_NUMBER" "$OPEN_ISSUE_LIST" "$NO_MERGE" <<'PY'
+    "$STATE_CYCLE_TIME" "$OPEN_ISSUE_COUNT" "$CHORE_PR_NUMBER" "$OPEN_ISSUE_LIST" "$NO_MERGE" \
+    "${_pj_rec[@]}" <<'PY'
 import sys, json
 ts, mode, pr, version, milestone, slug, log_state, ms_state, tag, cycle, open_n, chore_pr, open_list, no_merge = sys.argv[1:15]
 issues = [int(x) for x in open_list.split("\n") if x.strip()]
+# Phase outcomes: argv[15] is the triple count, then flat (name, result, detail)
+# triples. Fail loud on a count mismatch rather than emitting a truncated audit
+# record that reads as complete.
+_pn = int(sys.argv[15])
+_pf = sys.argv[16:]
+if len(_pf) != 3 * _pn:
+    raise SystemExit("phase-record argv mismatch: declared %d triples, got %d operands" % (_pn, len(_pf)))
+phases = [{"name": _pf[i], "result": _pf[i + 1], "detail": _pf[i + 2]} for i in range(0, len(_pf), 3)]
 # --no-merge (#2919): the post-merge-dependent phases defer; surface which ones so a
 # JSON consumer sees the same deferral the markdown report's "Deferred Under --no-merge"
 # section shows. Empty list on the normal (merge) path.
@@ -4406,6 +4505,7 @@ payload = {
     "chore_pr": int(chore_pr) if chore_pr.isdigit() else None,
     "d1_manual_close_candidates": {"count": int(open_n), "issues": issues},
     "deferred_under_no_merge": deferred,
+    "phases": phases,
 }
 print(json.dumps(payload, indent=2))
 PY
@@ -7325,6 +7425,189 @@ exit 4' > "$_ea_tmp/audit.sh"
   /bin/rm -rf "$_ps_tmp" 2>/dev/null || true
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # ── #4773: the close-out report's phase set is DERIVED from the phase record ──
+  # Every assertion below reads the rendered report, never an enumeration, so the
+  # suite cannot be satisfied by re-declaring the answer. Arms (a)-(f) cover
+  # render<->record; arm (g) covers dispatch<->record, which is the invariant the
+  # derivation newly makes load-bearing and which NO seeded arm can reach.
+  # `grep` reads a here-string throughout, never `echo … | grep -q`: under this
+  # script's `set -euo pipefail`, grep -q exits on first match and SIGPIPEs the
+  # writer, so pipefail promotes a SUCCESSFUL match to a non-zero pipeline status.
+  local _dr_saved_out="$OUTPUT"; OUTPUT="markdown"
+  local _dr_report _dr_name _dr_missing="" _dr_n=0
+  # `|| true` is load-bearing, not defensive noise: under `set -euo pipefail` a
+  # grep that matches NOTHING fails the pipeline and kills the shell inside the
+  # command substitution — which would abort the whole suite silently and leave
+  # the vacuity floor below unreachable. Absorb the status here so an empty parse
+  # reaches the floor and is REPORTED rather than crashing the run.
+  local _dr_subjects
+  _dr_subjects="$(/usr/bin/grep -oE 'mark_phase "[a-z0-9_]+"' "${BASH_SOURCE[0]}" \
+    | /usr/bin/sed 's/mark_phase "//;s/"$//' | /usr/bin/sort -u || true)"
+
+  # (a) COMPLETENESS — every recorded phase renders. The denominator is parsed
+  #     from this file's own mark_phase subjects, so it grows with the file rather
+  #     than pinning a count that rots. Pre-fix this arm reports exactly three
+  #     missing (inject_velocity_field, append_release_learnings,
+  #     audit_epic_rollup) — the measured defect, not a predicted one.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  while IFS= read -r _dr_name; do
+    [[ -z "$_dr_name" ]] && continue
+    mark_phase "$_dr_name" "PASS" "seeded by self-test"
+    _dr_n=$((_dr_n+1))
+  done <<< "$_dr_subjects"
+  # Anti-vacuity floor: if the subject parse ever returns a near-empty set (a
+  # mark_phase reformat, or the function-only slice), the arms below would pass on
+  # an empty denominator. Fail loudly instead of going green on nothing.
+  if [[ "$_dr_n" -lt 25 ]]; then
+    echo "FAIL: #4773 — mark_phase subject parse found only ${_dr_n} phases; the completeness arm would be vacuous"
+    failures=$((failures+1))
+  fi
+  _dr_report="$(generate_markdown_report 2>/dev/null)"
+  while IFS= read -r _dr_name; do
+    [[ -z "$_dr_name" ]] && continue
+    /usr/bin/grep -qE "^\| ${_dr_name} \|" <<< "$_dr_report" || _dr_missing="${_dr_missing}${_dr_name} "
+  done <<< "$_dr_subjects"
+  if [[ -n "$_dr_missing" ]]; then
+    echo "FAIL: #4773 — recorded phases absent from the close-out report: ${_dr_missing}"
+    failures=$((failures+1))
+  fi
+
+  # (b) THE AC-2 ARM — a phase name in NO enumeration anywhere still renders. This
+  #     is the arm that fails if the derivation is ever replaced by a list.
+  #     Every synthetic probe name below is passed through a VARIABLE, never as a
+  #     quoted string literal in the mark_phase call, so these test fixtures stay
+  #     out of the production record-subject census that arm (a) and the dispatch
+  #     cross-check parse out of this file's own text. (Prose in this file is part
+  #     of that census's denominator too — spelling the literal form here would
+  #     itself register a phantom subject.)
+  local _dr_probe="zz_synthetic_probe_phase"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "$_dr_probe" "PASS" "synthetic — declared in no enumeration"
+  _dr_report="$(generate_markdown_report 2>/dev/null)"
+  /usr/bin/grep -qE '^\| zz_synthetic_probe_phase \| PASS \|' <<< "$_dr_report" \
+    || { echo "FAIL: #4773 — a recorded phase in no enumeration must still render (the derivation regressed to a list)"; failures=$((failures+1)); }
+
+  # (c) ANTI-VACUITY CONTROL — a name never marked must NOT render. Without this,
+  #     arms (a) and (b) would be satisfied by a renderer that emits everything.
+  if /usr/bin/grep -qE '^\| zz_never_marked_probe \|' <<< "$_dr_report"; then
+    echo "FAIL: #4773 — an unmarked phase name rendered; the table is not record-derived"
+    failures=$((failures+1))
+  fi
+
+  # (d) SUB-PHASE RETENTION (specificity) — post_gate_passage_proof is recorded by
+  #     mark_phase inside phase_run_verification and has NO phase_*() function, so
+  #     any future "simplification" to a definition scan silently drops it. Assert
+  #     both halves: that it really is definition-less, and that it renders.
+  if /usr/bin/grep -qE '^phase_post_gate_passage_proof\(\)' "${BASH_SOURCE[0]}"; then
+    echo "FAIL: #4773 — post_gate_passage_proof now HAS a phase_*() function; this arm's premise is stale, re-derive it"
+    failures=$((failures+1))
+  fi
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "post_gate_passage_proof" "PASS" "sub-phase of run_verification"
+  /usr/bin/grep -qE '^\| post_gate_passage_proof \|' <<< "$(generate_markdown_report 2>/dev/null)" \
+    || { echo "FAIL: #4773 — post_gate_passage_proof must render; a definition-derived set would drop it"; failures=$((failures+1)); }
+
+  # (e) DUPLICATE SAFETY — a name marked twice renders ONCE, carrying the FIRST
+  #     result, matching get_phase's first-match lookup. This is what makes the
+  #     change provably additive rather than a silent output change.
+  local _dr_dup="zz_dup_probe"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "$_dr_dup" "PASS" "first mark"
+  mark_phase "$_dr_dup" "FAIL" "second mark"
+  _dr_report="$(generate_markdown_report 2>/dev/null)"
+  local _dr_dups
+  _dr_dups="$(/usr/bin/grep -cE '^\| zz_dup_probe \|' <<< "$_dr_report" || true)"
+  [[ "$_dr_dups" -eq 1 ]] \
+    || { echo "FAIL: #4773 — a double-marked phase must render exactly one row, got ${_dr_dups}"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| zz_dup_probe \| PASS \| first mark \|' <<< "$_dr_report" \
+    || { echo "FAIL: #4773 — the surviving duplicate row must carry the FIRST result (get_phase semantics)"; failures=$((failures+1)); }
+
+  # (f) HALTED MARKER — a FAIL-terminated run states the fact of truncation, and a
+  #     clean run does NOT. Both directions asserted on the SAME record, one mark
+  #     apart, because a marker that always prints carries no information.
+  local _dr_ok="zz_ok_probe" _dr_halt="zz_halt_probe"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "$_dr_ok" "PASS" "ran"
+  if /usr/bin/grep -qF 'Run halted' <<< "$(generate_markdown_report 2>/dev/null)"; then
+    echo "FAIL: #4773 — the halted marker must NOT appear when the last recorded result is not FAIL"
+    failures=$((failures+1))
+  fi
+  mark_phase "$_dr_halt" "FAIL" "blew up"
+  /usr/bin/grep -qF '**Run halted** at `zz_halt_probe`' <<< "$(generate_markdown_report 2>/dev/null)" \
+    || { echo "FAIL: #4773 — a FAIL-terminated run must name the phase it halted at"; failures=$((failures+1)); }
+
+  # (g) DISPATCH <-> RECORD CROSS-CHECK — the arm every other arm structurally
+  #     cannot be. Arms (a)-(f) SEED the record, so they verify render<->record and
+  #     are green by construction against the failure this derivation newly makes
+  #     silent: a phase added to the dispatch that never calls mark_phase is absent
+  #     from the record, therefore absent from the report, and no seeded arm
+  #     notices. This arm reads the DISPATCH from the file's own text — a second,
+  #     independent recorder — and asserts every dispatched phase is a record
+  #     subject. Two recorders, cross-checked, per the staging guard's own
+  #     rationale: a guard that consults the same recorder whose omission IS the
+  #     defect cannot catch that omission.
+  #
+  #     It lives in the TEST path by necessity, not preference: the dispatch block
+  #     sits BELOW the "# ─── Argument parsing" banner, so it is absent from the
+  #     function-only slice core/deploy/tests/test_version_stamping.sh sources. A
+  #     render-path self-parse would read zero dispatched phases under exactly that
+  #     harness and go vacuous.
+  #     The record side is read from the PRODUCTION region only (everything above
+  #     the self_test definition). Searching the whole file would let a self-test
+  #     arm that happens to mark a phase by string literal satisfy this check on
+  #     the production code's behalf — the test vouching for the code it tests.
+  local _dr_dispatched _dr_dn=0 _dr_unrecorded="" _dr_prod
+  _dr_prod="$(/usr/bin/sed -n '1,/^self_test() {/p' "${BASH_SOURCE[0]}" || true)"
+  # See the note on the subject parse above — an empty dispatch parse must reach
+  # the vacuity floor, not kill the suite.
+  _dr_dispatched="$(/usr/bin/grep -oE '^phase_[a-z0-9_]+ \|\|' "${BASH_SOURCE[0]}" \
+    | /usr/bin/sed 's/^phase_//;s/ ||$//' | /usr/bin/sort -u || true)"
+  while IFS= read -r _dr_name; do
+    [[ -z "$_dr_name" ]] && continue
+    _dr_dn=$((_dr_dn+1))
+    /usr/bin/grep -qF "mark_phase \"${_dr_name}\"" <<< "$_dr_prod" \
+      || _dr_unrecorded="${_dr_unrecorded}${_dr_name} "
+  done <<< "$_dr_dispatched"
+  if [[ "$_dr_dn" -lt 25 ]]; then
+    echo "FAIL: #4773 — dispatch parse found only ${_dr_dn} dispatched phases; the cross-check would be vacuous"
+    failures=$((failures+1))
+  fi
+  if [[ -n "$_dr_unrecorded" ]]; then
+    echo "FAIL: #4773 — dispatched phases that never call mark_phase (they would be silently ABSENT from the close-out report): ${_dr_unrecorded}"
+    failures=$((failures+1))
+  fi
+  # Sensitivity + specificity on the dispatch parse itself: a phase known to be
+  # dispatched must appear in the parsed set, and a fabricated name must not.
+  /usr/bin/grep -qx 'audit_epic_rollup' <<< "$_dr_dispatched" \
+    || { echo "FAIL: #4773 — the dispatch parse missed a known dispatched phase; the cross-check is not reading the dispatch"; failures=$((failures+1)); }
+  if /usr/bin/grep -qx 'zz_not_a_dispatched_phase' <<< "$_dr_dispatched"; then
+    echo "FAIL: #4773 — the dispatch parse matched a fabricated name; it is matching indiscriminately"
+    failures=$((failures+1))
+  fi
+
+  # (h) JSON TWIN — the machine-readable report carries the same derived set, so a
+  #     `--json` consumer is not blind to phase outcomes. Additive key only.
+  local _dr_jprobe="zz_json_probe"
+  OUTPUT="json"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "$_dr_jprobe" "PASS" "detail with a | pipe and a \"quote\""
+  mark_phase "$_dr_jprobe" "FAIL" "duplicate, must not appear"
+  local _dr_json; _dr_json="$(generate_json_report)"
+  /usr/bin/python3 - "$_dr_json" <<'PY' || { echo "FAIL: #4773 — JSON report phase set malformed"; failures=$((failures+1)); }
+import sys, json
+d = json.loads(sys.argv[1])
+p = d.get("phases")
+assert isinstance(p, list) and len(p) == 1, "expected exactly one de-duplicated phase, got %r" % (p,)
+assert p[0]["name"] == "zz_json_probe", p[0]
+assert p[0]["result"] == "PASS", "first-occurrence-wins violated: %r" % (p[0],)
+assert "|" in p[0]["detail"] and '"' in p[0]["detail"], "detail round-trip lost characters: %r" % (p[0],)
+for k in ("timestamp", "mode", "release_pr", "version", "milestone", "release_log",
+          "cycle_time", "chore_pr", "d1_manual_close_candidates", "deferred_under_no_merge"):
+    assert k in d, "pre-existing key %s was dropped — the phases key must be ADDITIVE" % k
+PY
+  OUTPUT="$_dr_saved_out"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failures)" >&2
     exit 1
@@ -7353,6 +7636,7 @@ exit 4' > "$_ea_tmp/audit.sh"
   echo "  AC1/AC2 VERSION-LESS shape validated (#3113 Records 2+3 — VL-0 notes_abs_path()==notes_rel_path() in BOTH identity modes / VL-1 producer writes notes/_unversioned/ and creates the dir / VL-2 anti-vacuity: NOT written flat / VL-3 preflight (f) residue gate FIRES (no longer a silent no-op) / VL-4 preflight (b) tolerates the note this run produced (deadlock closed) / VL-5 controls: flat bucket + another version-less release still block / VL-6 §3.2 needle blocks this release, not another / VL-7 chore-PR File Change Matrix names the real path)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
+  echo "  close-out report phase set is RECORD-DERIVED validated (#4773 — every recorded phase renders against a denominator parsed from this file's own mark_phase subjects (pre-fix: 3 missing — inject_velocity_field / append_release_learnings / audit_epic_rollup) / a phase in NO enumeration still renders (AC-2) / an unmarked name does NOT render (anti-vacuity) / post_gate_passage_proof renders AND is asserted definition-less, so a definition-derived set cannot silently drop it / a double-marked name renders ONE row carrying the FIRST result / the halted marker fires on a FAIL-terminated run and is absent on a clean one / DISPATCH<->RECORD cross-check: every dispatched phase is a record subject, with vacuity floors on both parses plus sensitivity and specificity arms — the one invariant no seeded arm can reach / JSON twin carries the same de-duplicated set with pre-existing keys intact)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
   echo "  usage block extractable" >&2
