@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.20] - 2026-08-09
+
+A broken support library no longer hard-blocks every command, and there is now a written rule for what may be quoted onto a public page.
+
+[Full notes](release/releases/notes/v4.20_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.20)
+
 ## [v4.19] - 2026-08-09
 
 Work whose result is a document can now be closed on that document being accepted, instead of having to pretend it deployed something.

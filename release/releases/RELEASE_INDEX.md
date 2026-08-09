@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.20 | hook-precision-and-boundaries | 2026-08-09 | — | #5081 | [notes/v4.20_RELEASE_NOTES.md](notes/v4.20_RELEASE_NOTES.md) |
 | v4.19 | 58-task-artifact-lifecycle-and-knowledge | 2026-08-09 | — | #5077 | [notes/v4.19_RELEASE_NOTES.md](notes/v4.19_RELEASE_NOTES.md) |
 | v4.17 | 102-specialist-role-coverage | 2026-08-07 | — | #4979 | [notes/v4.17_RELEASE_NOTES.md](notes/v4.17_RELEASE_NOTES.md) |
 | v4.18 | hub-spoke-execution-safety | 2026-08-08 | — | #4924 | [notes/v4.18_RELEASE_NOTES.md](notes/v4.18_RELEASE_NOTES.md) |
