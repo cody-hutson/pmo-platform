@@ -320,7 +320,7 @@ Both CIACs span ≥2 issues, assert a constraint the *integrated* release must h
 | **#335** | CC3 hook-coverage decision recorded | explicit `predicate:` (c) | the enforce / warn / skip-as-residual decision + rationale appear in the K1 doc **or its solutioning record** | **SKIP-AS-RESIDUAL** recorded with rationale (D-3) |
 | **#335** | CC4 §4.1 host-binding disposition recorded **and** CI-clean | file-path+state (b) **+** behavioral (d) | disposition recorded **AND** `bash core/deploy/deploy.sh --check 2>&1 \| grep -i 'host-binding-leak'` | disposition present (clean-by-construction, no allowlist entry); **no unresolved finding** |
 | **#335** | CC5 hook (if added) ships warn-mode-initial | explicit `predicate:` (c) | — | **N/A — no hook ships** (D-3) |
-| **#335** | CC6 memory cross-ref + verify-before-recommend composition | file-path+state (b) | the doc documents post-mutation structural read-back and composes with the verify-before-recommend discipline | both present |
+| **#335** | CC6 durable-home supersession + bridge-to-destination + encode-then-evict + post-mutation read-back | file-path+state (b) | **Re-stated against the amended AC6 (AI-013).** Read the K1 doc's References section for all four elements the amended criterion asks for: (i) it states the doc is the **durable corpus home superseding** the per-agent behavioral memory that carried the rule first; (ii) it names the **bridge-to-destination** relationship; (iii) it names the **encode-then-evict** obligation that retires that memory once this ships; (iv) it documents the **post-mutation structural read-back** as the verify-before-recommend composition. Negative arm the amendment requires: no operator-local memory filename and no memory-store path appears anywhere in the doc | **4/4** elements present; negative arm **0** on both limbs. The prior wording — *"memory cross-ref"* — named the reference the AC6 amendment **deleted**, and its method tested only (iv), so it graded MET while testing none of (i)–(iii) |
 | **#21** | AC1 artifact at the target path with 7+2 sections | file-path+state (b) | `grep '^## ' core/disciplines/orchestration-mechanisms.md` + `type: discipline` frontmatter | 7 H2 + §3.5 + §5.5 (**all H2** per AI-005); frontmatter present |
 | **#21** | AC2 ≥9 contract dimensions with hub-spoke current-state values | explicit `predicate:` (c) | count named dimensions; each carries a hub-spoke value | ≥9, each with a value |
 | **#21** | AC3 SWOT, ≥3 external citations per mechanism | explicit `predicate:` (c) | per-mechanism citation count | ≥3 each |
@@ -362,7 +362,7 @@ Per `verification-checklist.md`:
 | **Parallelism posture** | **P0 fully-serial** at Stage 6. Stages 5/7/8 run parallel-safe, subject to the Quota-Budget WARN split |
 | **Review approach** | Single PR for the entire release, opened **draft** at Engineering start, transitioned ready at the Stage 9 gate |
 | **Merge** | Single merge at Stage 12. Release merges typically require `gh pr merge --admin` — branch protection blocks a plain merge even when CLEAN |
-| **Deployment mechanism** | Git merge. **No S-2 skill copy and no manifest execution** — the manifest is empty (see § Operational Deployment Manifest) |
+| **Deployment mechanism** | Git merge, **plus one manifest entry**. **No S-2 skill copy** (no skill source changes), but the manifest is **not** empty: it carries a single Layer-2 memory-eviction entry, executed **post-merge** at Stage-13 Phase B-OPS under operator authorization (see § Operational Deployment Manifest) |
 | **Plan file** | This file, as **Engineering Commit 0**. Slug-primary in flight; `git mv`'d into the versioned bucket by `claim-version.sh --stamp-slug` at the Stage-12 claim |
 | **Commit-0 version re-verify** | **NOT APPLICABLE — structurally retired for this release.** The re-verify exists to detect a literal version claimed out from under the plan. This plan carries no literal version, so there is no digit to collide. The equivalent Commit-0 obligation is the **token-count check** above |
 | **Stacked-base cleanup posture** | Phase B0 base-shift per dep (default — Option A). No stacked-base waves are planned |
@@ -374,7 +374,7 @@ Per `verification-checklist.md`:
 | Issue | Rollback Method | Complexity |
 |---|---|---|
 | **#21** | Delete `core/disciplines/orchestration-mechanisms.md` + revert the `framework-catalog.md` rows and the README index row. Purely additive, zero consumers at ship time (its consumers D3/D5 are *open decisions*, not code) | **CHEAP** |
-| **#335** | Delete the K1 standard + revert the `git-workflow.md` cross-reference line. No hook shipped, no allowlist row | **CHEAP** |
+| **#335** | Delete the K1 standard + revert the `git-workflow.md` cross-reference line. No hook shipped, no allowlist row. **In-repo only.** The manifest's Layer-2 memory eviction is **outside git and outside this rollback** — once EVICT runs at Stage-13 Phase B-OPS, no revert restores it, which is why VERIFY-CORPUS gates it and ARCHIVE precedes it | **CHEAP in-repo · IRREVERSIBLE for the manifest entry once executed** |
 | **#101** | `git revert` of the release PR. **Re-graded from EXPENSIVE.** The branch is declaration-gated and this release resolves `domain: governance`, so no issue's closure state becomes path-dependent — reverting the keystone orphans nothing and requires no migration or backfill | **CHEAP-to-MODERATE** |
 
 ### Whole-Release Rollback
@@ -393,9 +393,23 @@ Per `verification-checklist.md`:
 
 ## Operational Deployment Manifest
 
-**EMPTY — N/A: no Layer 2 propagation targets in this release.**
+**ONE ENTRY — a memory eviction. This manifest is NOT empty.**
 
-No skill source changes, so no S-2 copy; no schema migration; no content sync. Per `stage-13-close.md` Phase B-OPS1, an empty manifest skips directly to Phase C1. This is the **existing** empty-set path — it is deliberately *not* conditioned by this release's new branch (`G-CL5` explicit no-op), because adding a class branch would duplicate a working trivial-pass and create two routes to one verdict.
+**Corrected at the Stage-6 remediation pass (AI-012).** The manifest previously read EMPTY. That determination reasoned over only three entry classes — S-2 skill copy, schema migration, content sync — and never considered the **memory-eviction** class, which is the class this release actually carries. The three original findings still hold and are unchanged: no skill source changes, so no S-2 copy; no schema migration; no content sync. What was missed is a fourth entry class.
+
+**Why the entry is owed.** `core/standards/gh-api-convention.md` § References ships a commitment in its own body — *"The tied memory is evicted once this standard ships (encode-then-evict; the corpus write lands first)."* Both `knowledge-architecture.md` § 7 and `stage-13-close.md` Phase B-OPS name this manifest as the **discharge vehicle** for exactly that commitment. A corpus doc that commits to an eviction the release schedules nowhere is an obligation with no actor and no checkpoint; the inherited `B-OPS5` absorption-reconciliation gate would then **block the Stage-13 close** on a memory that named this release's codification card and was never absorbed.
+
+**This is a Layer-1 → Layer-2 action, and the boundary is the reason the entry is written out rather than assumed.** Every other change in this release is Layer 1 — git-tracked corpus, reversible by reverting the PR. This entry is the single place where a Layer-1 corpus write commits the platform to **act on the operator-local auto-memory store**, a Layer-2 surface that this release does not govern, that no commit in it touches, and that no `git revert` restores. Crossing that boundary requires an explicit, operator-authorized, post-merge step with a named executor — which is what the row below is. It is deliberately **not** an Engineering action: no Stage-6 step in this release reads or writes the memory store.
+
+| # | Entry (Layer 2 target) | Mechanism | Executor | Trigger | Verification (VERIFY-CORPUS) |
+|---|---|---|---|---|---|
+| 1 | The agent-memory correction that carried the typed-vs-raw-field rule **before** `core/standards/gh-api-convention.md` existed — the entry tied, in the operator-local auto-memory store's ledger, to this release's typed-vs-raw-field codification card — together with its index line and its ledger row | The shipped encode-and-evict lifecycle at `knowledge-architecture.md` § 7: **ARCHIVE → VERIFY-CORPUS → EVICT → RE-POINT**. This manifest introduces **no** mechanism; it supplies the missing **entry** | **Stage-13 Phase B-OPS**, under operator authorization, gated by `G-CL5`. **Never Stage 6** | **Post-merge.** The release PR is MERGED with a non-null merge SHA **and** that SHA is an ancestor of `origin/main`. Evaluated against `origin/main` — never a worktree, never a branch commit | File-anchored, against `origin/main`: `grep -c 'encode-then-evict' core/standards/gh-api-convention.md` → **≥ 1**. A corpus-wide hit count is **not** evidence the destination file was written, so the probe names the file the change writes to |
+
+**Why the entry identifies the memory by its tie and not by its filename.** The literal filename is deliberately absent, for three independent reasons that agree: the file is operator-local content that does not ship publicly; the repository's operator-memory-reference gate **fails** a PR that adds such a reference to a tracked file (verified — the filename matches its detector, a tie-based identification does not); and `knowledge-architecture.md` § 6 runs the pointer **one way** — a memory entry may point at its corpus home, and the corpus never points back. This is the same reasoning the operator ratified when amending the codification card's own acceptance criterion, which declined an exemption marker for this class. The identification is nonetheless unambiguous **and** is the identification the lifecycle itself uses: Phase B-OPS5 and the standing Check 36 backstop both resolve memories by their **ledger tie**, never by filename. The executor resolves this entry the same way.
+
+**Reversibility: IRREVERSIBLE / HIGH — the only such action in a release that is otherwise CHEAP throughout.** Reverting the release PR restores every in-repo change and restores **nothing** of an evicted memory. That asymmetry is why VERIFY-CORPUS is a *precondition* of eviction rather than a post-check, and why ARCHIVE — verbatim capture of the memory body, index line, and ledger row into the Stage-13 sub-task comment — runs **before** any deletion. ARCHIVE is what makes an erroneous eviction recoverable in practice.
+
+**On `G-CL5`.** The close-class disposition is unchanged: this release's task-artifact branch still adds **no** `G-CL5` clause (explicit no-op), because `G-CL5` already evaluates a manifest of any size and a class branch would create two routes to one verdict. What changes is only this release's *own* `G-CL5` evaluation — it is now a real one-entry check rather than the empty-set trivial pass.
 
 ### Schema Migrations
 
@@ -541,7 +555,7 @@ its absence is a declared no-op rather than an unmet obligation.
 | Claim version (`claim-version.sh --stamp-slug`) | | PASS/FAIL | **AI-006** — the `--stamp-slug` flag is mandatory; its omission silently skips the stamping pass |
 | Tag release | | PASS/FAIL | |
 | Skill deployment | | **N/A** | No skill source changed |
-| Manifest execution | | **N/A** | Manifest empty |
+| Manifest execution | | PASS/FAIL | **1 entry** — the Layer-2 memory eviction. Runs at **Stage-13 Phase B-OPS**, post-merge, not at Stage 12; VERIFY-CORPUS is a precondition of EVICT |
 | State anchor update | | PASS/FAIL | |
 | Post-execution verification | | PASS/FAIL | |
 

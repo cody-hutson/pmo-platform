@@ -120,7 +120,7 @@ Eight mechanisms survive §4's criteria. Each carries an alias set (VT-6), a cit
 |---|---|
 | **Strengths** | Relieves DIM-12 by distributing routing across levels; each supervisor's context covers only its subtree. Supports **temporal layering** — different decision cadences at different levels `[CONSENSUS: Moore 2025]`. Degrades gracefully: losing one mid-level supervisor costs one subtree, not the run (DIM-9). |
 | **Weaknesses** | Introduces cross-level information loss: a summary that ascends is lossy, and the loss is invisible at the level that consumes it. Adds a genuinely new coordination surface (DIM-7) — inter-supervisor handoff — that centralization does not have. |
-| **Opportunities** | Directly addresses the incumbent's DIM-12 weakness without changing DIM-3 or DIM-4. It is the **smallest-delta** mechanism from the incumbent: it differs on DIM-1, DIM-2, and DIM-12, and matches on the rest. |
+| **Opportunities** | Directly addresses the incumbent's DIM-12 weakness without changing DIM-3 or DIM-4. It is **a** smallest-delta mechanism from the incumbent — **tied with MECH-5 and MECH-7, which also differ on 3 dimensions (§4.2)** — differing on DIM-1, DIM-2, and DIM-12, and matching on the rest. |
 | **Threats** | Governance surfaces assume a single accountable coordinator; a multi-level variant would need the accountability question answered before, not after, adoption. |
 
 ### MECH-3 — Market / auction allocation
@@ -197,7 +197,7 @@ Eight mechanisms survive §4's criteria. Each carries an alias set (VT-6), a cit
 | | |
 |---|---|
 | **Strengths** | Lowest specification cost — no explicit protocol to author (DIM-7). Naturally accommodates human participation in the same channel. Handles under-specified tasks where the decomposition is not known in advance. |
-| **Weaknesses** | **Inter-agent misalignment is an empirically dominant failure category** `[FRAMEWORK: Cemri et al. 2025]`. Implicit control (DIM-1) means no one is accountable for the next step. Resource draw (DIM-11) scales with conversation length, not with work completed. |
+| **Weaknesses** | **Inter-agent misalignment is a top-level failure category in the empirical taxonomy** `[FRAMEWORK: Cemri et al. 2025]`. Implicit control (DIM-1) means no one is accountable for the next step. Resource draw (DIM-11) scales with conversation length, not with work completed. |
 | **Opportunities** | Applicable to genuinely exploratory work where the stage sequence is not yet known — the class the pipeline handles today by *stopping* and asking the operator. |
 | **Threats** | Directly hostile to DIM-8 and DIM-10: an open conversational channel dissolves the authorship-scoped trust boundary the platform depends on. |
 
@@ -380,6 +380,8 @@ Produce each field below; an item missing any field is not ready.
 
 The item is reviewed against §4.1's criteria exactly as the existing set was. **An exclusion verdict is a successful outcome** and is recorded in §4.3 with its reason — the exclusion register is part of the artifact's evidence, not a record of failure.
 
+**Where the item is filed, and in what shape.** §5.2 produces an intake **body**; it is not yet an intake **item**, and a §5.2 dossier submitted free-form is the untyped shape the platform's intake discipline forbids. A candidate that clears all three §5.1 preconditions is **proposal-tier**: file it on the platform's work tracker against the `improvement.yml` intake template, field-by-field. Map §5.2 onto that template — **Mechanism name** and **Distinctness claim** carry the problem statement and its constraint; **Inclusion verdict** and **Set-property impact** carry the measurable outcome and the acceptance method; the remaining six fields (alias set, citation register, dimension row, SWOT, problem-class fit, and any declared research gap) are the evidence body. A candidate that fails a §5.1 precondition — no external name, no distinct dimension, or no ET1/ET2 anchor — is **not** proposal-tier: capture it against `observation.yml` and promote it once §5.1 holds. The type-to-template rule is owned by the platform's intake style guide, not by this section; the `intake-desk` skill is the front door when the candidate is not yet well-formed enough to file directly.
+
 ### 5.4 What extension may **not** do
 
 Adding a mechanism may not: introduce a selection rule, declare a configuration field, or assign a mechanism to any platform scope. Those are §7's deferrals, and extension does not reopen them.
@@ -420,7 +422,7 @@ The target operating model — [`actor-model-and-governance-as-contract.md`](act
 |---|---|
 | **D3** — orchestration-as-skill vs. orchestration-as-agent | **Primary** — §6.2 |
 | **D5** — migration sequencing from hub-spoke | **Primary** — §6.3 |
-| D1 — the actor ownership split | **Indirect** — DIM-1's determinism axis informs where the split can fall, but the split itself is not decided by mechanism evidence. |
+| D1 — the actor ownership split | **Indirect feed — but a precondition for D3, not an adjacency.** DIM-1's determinism axis informs where the split can fall, and the split itself is not decided by mechanism evidence. D3's residual *(b)* **is** D1 narrowed to DIM-1 (§6.2), so D3 cannot be rendered until D1 is ratified on that axis. This artifact feeds D1 indirectly; it does not discharge it, and no further mechanism evidence would. |
 | D2 — the consuming document's own posture | **Not fed.** |
 | D4 — the form the governance contract takes | **Not fed.** A contract's *form* is orthogonal to which coordination mechanism it constrains. |
 
@@ -437,6 +439,8 @@ D3 is stalled because its only seed is itself forward-looking. It needs a non-fo
 
 **Residual for D3 — what remains after this artifact.** Two things, neither of which is a survey question: *(a)* an enumeration of the platform's own orchestration behaviours classified against DIM-1 — this artifact supplies the axis, not the per-behaviour classification; and *(b)* a decision on whether a skill may hold a DIM-1 value of *judgment-inferred* at all, which is a governance question about what a bounded capability may own, not an empirical one.
 
+**What still blocks D3 — residual *(b)* is D1.** The two residuals are not equivalent, and naming the difference is part of the discharge. Residual *(a)* is **doable from this artifact**: §2 cites the incumbent's operating guide section-by-section and this section supplies the classification rule, so the per-behaviour enumeration is work this artifact enables rather than work it blocks. Residual *(b)* is **D1 — the actor ownership split — narrowed to DIM-1**, and it is not derivable from any amount of further mechanism evidence, because it asks what a bounded capability may *own*, not what working systems *do*. The consuming document named in §6.1 already answers it in target-state prose that is explicitly **not yet ratified**, so *(b)* reduces to *ratify D1 as it applies to DIM-1*. **D1 is therefore a precondition of D3, not an adjacent decision** — §6.1 books it as an indirect feed, which describes the evidence flow correctly but understates the dependency. **D3 cannot be rendered until D1 is ratified on DIM-1**, whatever else this artifact supplies.
+
 **Boundary.** §6 does **not** state which platform behaviours are skill-eligible. It hands D3 an axis, a variance set, and a class mapping.
 
 ### 6.3 D5 discharge — *Migration Path from Hub-Spoke*
@@ -446,7 +450,7 @@ D5 is stalled because its Now/Next/Later table asserts a migration over an **unm
 | What D5 needs | What this artifact supplies | Where |
 |---|---|---|
 | **N5 — A measured BEFORE** | §2's hub-spoke column: **twelve dimensions, each with the incumbent's actual current-state value**, each sourced to a durable section of the operating guide. This converts D5's baseline from assertion to measurement. | §2 |
-| **N6 — Migration cost and reversibility between mechanisms** | A mechanism's **dimension-value delta from the incumbent is its migration surface**. §4.2 records that delta per mechanism: MECH-2 and MECH-5 and MECH-7 differ on 3 dimensions; MECH-6 on 5. Migration cost is therefore ordered, not guessed — MECH-2 is the smallest-delta move and MECH-6 the largest. | §2 + §3 + §4.2 |
+| **N6 — Migration cost and reversibility between mechanisms** | A mechanism's **dimension-value delta from the incumbent is its migration surface**. §4.2 records that delta per mechanism: MECH-2 and MECH-5 and MECH-7 differ on 3 dimensions; MECH-6 on 5. Migration cost is therefore **partially** ordered, not guessed — **MECH-2, MECH-5 and MECH-7 tie at the smallest delta (3 dimensions each)** and MECH-6 is the largest at 5. The delta model does **not** discriminate among the tied three: it narrows the candidate set for a first migration to those three, and selecting one of them requires a criterion this artifact does not supply. | §2 + §3 + §4.2 |
 | **N7 — Admissible shapes of a *partial* migration** | §5.5 Rules 1 and 2 bound it: one mechanism per scope, with parent-cascade inheritance. Together they make a **scoped** partial migration admissible — a child scope may adopt a different mechanism while its parent does not — which is exactly the shape a Now/Next/Later sequence takes. Rules 3 and 4 bound who may authorize it. | §5.5 |
 | **N8 — A grounded motivation, not aesthetics** | **PC-5 (scale and bottleneck relief) is the class the incumbent serves worst**, and the binding weakness is named: in MECH-1 the coordinator is simultaneously the bottleneck (DIM-12) and the single point of failure (DIM-9). That is a specific, evidenced motivation for migration — and PC-5's own platform example is an observed condition, not a hypothetical. | §3 MECH-1 + §3.5 PC-5 |
 
