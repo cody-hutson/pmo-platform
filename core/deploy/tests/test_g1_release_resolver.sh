@@ -54,8 +54,8 @@ echo "────────────────────────�
 build_runner() {
   # $1 = deploy.sh to extract from, $2 = output runner path
   local _src="$1" _out="$2" _b _e
-  _b=$(/usr/bin/grep -n '>>> C22-RESOLVER-BEGIN' "$_src" | head -1 | cut -d: -f1)
-  _e=$(/usr/bin/grep -n '>>> C22-RESOLVER-END' "$_src" | head -1 | cut -d: -f1)
+  _b=$(/usr/bin/grep -m1 -n '>>> C22-RESOLVER-BEGIN' "$_src" | cut -d: -f1)
+  _e=$(/usr/bin/grep -m1 -n '>>> C22-RESOLVER-END' "$_src" | cut -d: -f1)
   [[ -n "$_b" && -n "$_e" && "$_e" -gt "$_b" ]] || return 1
   {
     echo '#!/usr/bin/env bash'
@@ -295,7 +295,7 @@ if [[ "$(tok "$V_UNREACH")" == "UNRESOLVED" && "$(reason "$V_UNREACH")" == "vali
 else
   fail "G an unreachable validator did not degrade correctly: ${V_UNREACH}"
 fi
-if printf '%s' "$V_UNREACH" | /usr/bin/grep -q 'Bad credentials'; then
+if /usr/bin/grep -q 'Bad credentials' <<<"$V_UNREACH"; then
   pass "G CONTROL — the validator's own diagnostic survives into the verdict (stderr captured, not discarded)"
 else
   fail "G CONTROL — the diagnostic was swallowed; three different failures would read identically: ${V_UNREACH}"

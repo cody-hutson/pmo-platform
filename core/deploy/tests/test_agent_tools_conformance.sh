@@ -78,10 +78,10 @@ count_findings() {
   local _agent_file _tools_line
   for _agent_file in "$agents_dir"/pmo-*.md; do
     [ -f "$_agent_file" ] || continue
-    _tools_line=$(grep -E '^tools:' "$_agent_file" 2>/dev/null | head -1) || _tools_line=""
+    _tools_line=$(grep -m1 -E '^tools:' "$_agent_file" 2>/dev/null ) || _tools_line=""
     if [ -z "$_tools_line" ]; then
       findings=$((findings + 1))                                  # finding (a)
-    elif printf '%s' "$_tools_line" | grep -qE "$c46_recursion_re"; then
+    elif grep -qE "$c46_recursion_re" <<<"$_tools_line"; then
       findings=$((findings + 1))                                  # finding (b)
     fi
   done
@@ -137,7 +137,7 @@ else
 fi
 
 # ── Part 4 — POSIX-ERE discipline: the recursion pattern carries no `\b` ──
-if grep -nE 'Agent\|spawn_task\|mcp__ccd_session__spawn_task' "${REPO_ROOT}/core/deploy/deploy.sh" | grep -q '\\b'; then
+if grep -q '\\b' <<<"$(grep -nE 'Agent\|spawn_task\|mcp__ccd_session__spawn_task' "${REPO_ROOT}/core/deploy/deploy.sh" || true)"; then
   report "Check 46 recursion ERE is POSIX (no \\b)" 0 "found a \\b in the Check 46 recursion pattern"
 else
   report "Check 46 recursion ERE is POSIX (no \\b)" 1

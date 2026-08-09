@@ -112,7 +112,7 @@ preflight_deps() {
 # ── VERBATIM from rollup-attribution.sh:64-68 — parity asserted by --self-test SE-1. Do NOT edit here alone. ──
 generator_version() {
   local v=""
-  [ -r "$SKILL_MD" ] && v="$( { grep -E '^version:' "$SKILL_MD" 2>/dev/null || true; } | head -1 | awk '{print $2}')"
+  [ -r "$SKILL_MD" ] && v="$( { grep -m1 -E '^version:' "$SKILL_MD" 2>/dev/null || true; } | awk '{print $2}')"
   printf '%s' "${v:-unknown}"
 }
 
@@ -120,7 +120,7 @@ generator_version() {
 toml_val() {
   local key="$1" toml="${HOME}/.config/pmo-platform/operator.toml"
   [ -r "$toml" ] || return 0
-  { grep -E "^${key}" "$toml" 2>/dev/null || true; } | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}'
+  { grep -m1 -E "^${key}" "$toml" 2>/dev/null || true; } | awk -F= '{gsub(/[" ]/,"",$2); print $2}'
 }
 
 # ── VERBATIM from rollup-attribution.sh:77-81 — parity asserted by --self-test SE-1. Do NOT edit here alone. ──
@@ -645,6 +645,7 @@ while [ $# -gt 0 ]; do
     --verbose)                 VERBOSE=1 ;;
     --self-test)               DO_SELFTEST=1 ;;
     -h|--help)
+      # sigpipe-idiom: allow — `head` truncates the RENDERED help text, not the match set; an intervening `sed` sits between grep and head, so `-m90` would cap the wrong stage.
       grep -aE '^#( |$)' "$0" | sed -E 's/^# ?//' | head -90
       exit 0 ;;
     *) usage_fail "unknown argument: $1" ;;
@@ -826,8 +827,10 @@ resolve_labels_via_gh() {
     case "$n" in ''|*[!0-9]*) continue ;; esac
     lbls="$(gh issue view "$n" --json labels --jq '[.labels[].name] | join(" ")' 2>/dev/null || true)"
     [ -n "$lbls" ] || continue
-    size="$(printf '%s' "$lbls" | grep -aoE 'size:(XS|S|M|L|XL)' | head -1 | cut -d: -f2)"
-    type="$(printf '%s' "$lbls" | grep -aoE 'type:[a-z-]+'      | head -1 | cut -d: -f2)"
+    # sigpipe-idiom: allow — `grep -o` emits N matches per LINE, so `-m1` (which counts LINES) would keep BOTH matches; `head -1` must stay. Writer converted to a here-string, so nothing is piped into the short-circuiting reader.
+    size="$(grep -aoE 'size:(XS|S|M|L|XL)' <<<"$lbls" | head -1 | cut -d: -f2)"
+    # sigpipe-idiom: allow — same `grep -o` line-vs-match divergence as the size probe above.
+    type="$(grep -aoE 'type:[a-z-]+' <<<"$lbls" | head -1 | cut -d: -f2)"
     [ -n "$size" ] || continue
     pts="$(size_to_points "$size")"
     out="$(printf '%s' "$out" | jq --arg k "$wi" --argjson p "$pts" --arg t "${type:-unknown}" \
@@ -1270,9 +1273,9 @@ self_test() {
       dcells="$(printf '%s\n' "$dsec" | grep -ac '^| (suppressed) | .* | (suppressed) | (suppressed) |' || true)"
       if [ "${dcells:-0}" -ne 1 ]; then
         bad "SE-11c rendered: expected exactly 1 fully-suppressed delta row, found ${dcells:-0}"
-      elif printf '%s\n' "$dsec" | grep -aqE '\| [-+][0-9]'; then
+      elif grep -aqE '\| [-+][0-9]' <<<"$dsec"; then
         bad "SE-11c rendered: the delta section still renders a signed numeral — the withheld figure is recoverable"
-      elif printf '%s\n' "$dsec" | grep -aq 'SUPPRESSED with the point figure'; then
+      elif grep -aq 'SUPPRESSED with the point figure' <<<"$dsec"; then
         ok "SE-11c NO-ARITHMETIC-RECOVERY: suppressed estimate (class $ds_sup) withholds delta AND % error in both shapes; the delta section renders actual=$ds_act and no signed numeral, so the figure is not recoverable"
       else
         bad "SE-11c rendered: the delta row is suppressed but the render does not say why"
@@ -1355,6 +1358,7 @@ self_test() {
       ok "SE-14 oracle (--json matches estimate.expected.json modulo estimated_utc)"
     else
       bad "SE-14 oracle: --json diverged from estimate.expected.json"
+      # sigpipe-idiom: allow — multi-line diagnostic preview after an already-recorded FAIL; `diff` has no bounded-output flag to fold `head` into.
       diff <(jq -S 'del(.estimated_utc, .generator_version)' "$oracle") \
            <(jq -S 'del(.estimated_utc, .generator_version)' "$JS") 2>/dev/null | head -20
     fi
@@ -1369,7 +1373,7 @@ self_test() {
     e3t="$(jq -r '.matching.tier' "$wd/e3.json")"
     e3c="$(jq -r '.confidence' "$wd/e3.json")"
     e3caps="$(jq -r '[.confidence_caps[].cap]|join(",")' "$wd/e3.json")"
-    if [ "$e3t" = "E3" ] && [ "$e3c" = "MEDIUM" ] && printf '%s' "$e3caps" | grep -aq 'C-RATE'; then
+    if [ "$e3t" = "E3" ] && [ "$e3c" = "MEDIUM" ] && grep -aq 'C-RATE' <<<"$e3caps"; then
       ok "SE-15 E3: a 2-member class falls through to the pooled tokens-per-point tier, capped MEDIUM by C-RATE"
     else
       bad "SE-15 E3: got tier=$e3t confidence=$e3c caps=[$e3caps] (want E3 / MEDIUM / C-RATE)"

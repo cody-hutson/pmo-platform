@@ -140,7 +140,7 @@ _audit_src_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd 
 AUDIT_REPO="${PMO_AUDIT_REPO:-}"
 if [ -z "$AUDIT_REPO" ] && [ -r "${_audit_cfg_root}/operator.toml" ]; then
   AUDIT_REPO="$(grep -E '^[[:space:]]*audit_repo[[:space:]]*=' "${_audit_cfg_root}/operator.toml" 2>/dev/null \
-    | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | tr -d '[:space:]' || true)"
+    | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | tr -d '[:space:]' || true)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; `|| true` discards the status, and upstream of `head` is a grep over operator.toml
 fi
 if [ -z "$AUDIT_REPO" ]; then
   AUDIT_REPO="$(git -C "${_audit_src_root:-.}" remote get-url origin 2>/dev/null \
@@ -594,7 +594,7 @@ _vf_resolve_candidate() {
       local _args=(--sha HEAD --bump "${PMO_VERSION_FREENESS_BUMP}" --dry-run)
       [[ -n "${PMO_VERSION_FREENESS_PATCH_BASE:-}" ]] && _args+=(--patch-base "${PMO_VERSION_FREENESS_PATCH_BASE}")
       local _derived
-      _derived="$(CLAIM_REPO="$repo" bash "$_claim" "${_args[@]}" 2>/dev/null | head -1 | tr -d '[:space:]' || true)"
+      _derived="$(CLAIM_REPO="$repo" bash "$_claim" "${_args[@]}" 2>/dev/null | head -1 | tr -d '[:space:]' || true)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; `|| true` discards the status; the claim tool emits one version line
       # Only return a value that LOOKS like a version (v<digit>...); else empty.
       if [[ "$_derived" =~ ^v[0-9]+\.[0-9]+ ]]; then
         printf '%s' "$_derived"
@@ -899,7 +899,10 @@ _cc_row_findings() {
       printf '%s: §3.2 note-content lint path-unresolved (exit 3; corpus unverifiable)\n' "$_ver"
     elif [[ $_lint_exit -ne 0 ]]; then
       local _note_rel="${_notes_dir}/${_ver}_RELEASE_NOTES.md"
-      if printf '%s' "$_lint_out" | /usr/bin/grep -qF "$_note_rel" 2>/dev/null; then
+      # U1 checked: `_note_rel` is "<dir>/<ver>_RELEASE_NOTES.md", never empty, so
+      # the fixed-string needle cannot match the empty line a here-string emits
+      # where `printf '%s'` emitted nothing.
+      if /usr/bin/grep -qF "$_note_rel" <<<"$_lint_out" 2>/dev/null; then
         printf '%s: §3.2 note-content finding for this version (lint_release_corpus.py)\n' "$_ver"
       fi
       # findings only for OTHER versions ⇒ out-of-scope legacy debt (audit-baseline)
@@ -1006,7 +1009,7 @@ _cc_row_findings() {
       _dl_dir="$(/usr/bin/dirname "$_log")"
       _segname="$(printf '%s\n' "$_hot_body" \
         | /usr/bin/sed -n 's/^_Archived: \[segment\](\([^)]*\))_.*$/\1/p' \
-        | /usr/bin/head -1)"
+        | /usr/bin/head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a `sed -n …p` emitting 0-1 archive lines, so nothing is left to write
       if [[ -n "$_segname" ]]; then
         _home="${_dl_dir}/${_segname}"
         if [[ ! -f "$_home" ]]; then
@@ -1025,7 +1028,7 @@ _cc_row_findings() {
       if [[ $_home_ok -eq 1 ]]; then
         local _body _vel_line
         _body="$(_cc_h4_block_body "$_home" "$_dl_head")"
-        _vel_line="$(printf '%s\n' "$_body" | /usr/bin/grep -m1 '^\*\*Velocity:\*\*' || true)"
+        _vel_line="$(printf '%s\n' "$_body" | /usr/bin/grep -m1 '^\*\*Velocity:\*\*' || true)"  # sigpipe-idiom: allow — `|| true` discards the pipeline status, so a broken-pipe 141/1 from the bounded grep never reaches the caller; measured, the captured value is correct at 2.6 MB and the same shape WITHOUT `|| true` returns 141 from 325 KB up
 
         # T4 CO-LOCATION. A field written into a segment while the body is still
         # live in the hot ledger (or vice versa) exits 0, passes a corpus-wide
@@ -1095,7 +1098,7 @@ _cc_row_findings() {
       _rl_body="$(_cc_h4_block_body "$_log" "$_rl_head")"
       for _fld in 'Synthesized at' 'Source events' 'Source-row anchors' \
                   'Surprise' 'Would-change' 'Watch-for'; do
-        if ! printf '%s\n' "$_rl_body" | /usr/bin/grep -q "^\*\*${_fld}:\*\*"; then
+        if ! /usr/bin/grep -q "^\*\*${_fld}:\*\*" <<<"$_rl_body"; then
           _rl_missing="${_rl_missing:+$_rl_missing, }${_fld}"
         fi
       done
@@ -1528,7 +1531,7 @@ _de_release_rows() {
   local _rows="$1" _slug="$2"
   local _r1 _r2="" _msnum
   _r1="$(printf '%s\n' "$_rows" | /usr/bin/awk -F ' \\| ' -v s="$_slug" '$2==s' 2>/dev/null)"
-  _msnum="$(printf '%s\n' "$_r1" | /usr/bin/grep -oE 'ms:#[0-9]+' 2>/dev/null | /usr/bin/head -1 | /usr/bin/sed 's/.*ms:#//')"
+  _msnum="$(printf '%s\n' "$_r1" | /usr/bin/grep -oE 'ms:#[0-9]+' 2>/dev/null | /usr/bin/head -1 | /usr/bin/sed 's/.*ms:#//')"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; U3: `grep -o | head -1` is not `grep -m1 -o` (-m counts lines, not matches); the -o output is a few tokens
   if [[ -n "$_msnum" ]]; then
     _r2="$(printf '%s\n' "$_rows" | /usr/bin/awk -F ' \\| ' -v m="milestone:#${_msnum}" '$7==m' 2>/dev/null)"
   fi
@@ -1699,9 +1702,9 @@ _c38_compute_verdict() {
   out=$(/usr/bin/python3 "$gen" --check 2>&1) || rc=$?
   case "$rc" in
     0) printf 'FRESH\n' ;;
-    1) printf '%s\n' "$out" | /usr/bin/head -20 | /usr/bin/sed 's/^/         /' >&2 || true
+    1) /usr/bin/head -20 <<<"$out" | /usr/bin/sed 's/^/         /' >&2 || true
        printf 'STALE\n' ;;
-    *) printf '%s\n' "$out" | /usr/bin/head -10 | /usr/bin/sed 's/^/         /' >&2 || true
+    *) /usr/bin/head -10 <<<"$out" | /usr/bin/sed 's/^/         /' >&2 || true
        printf 'ERROR generator-exit-%s (source-resolution failure or error)\n' "$rc" ;;
   esac
 }
@@ -2470,8 +2473,7 @@ resolve_platform_config() {
   _toml_field() {
     local _f="$1" _k="$2"
     [ -n "$_f" ] && [ -r "$_f" ] || return 0
-    /usr/bin/grep -E "^[[:space:]]*${_k}[[:space:]]*=" "$_f" 2>/dev/null \
-      | /usr/bin/head -1 \
+    /usr/bin/grep -m1 -E "^[[:space:]]*${_k}[[:space:]]*=" "$_f" 2>/dev/null \
       | /usr/bin/sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' \
       | /usr/bin/sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true
   }
@@ -2491,7 +2493,7 @@ resolve_platform_config() {
   # Rung 3 — program (program-config.toml under the project's program dir, if derivable).
   if [ -n "$project_path" ]; then
     local prog_cfg
-    prog_cfg="$(/usr/bin/find "$(dirname "$project_path")" -maxdepth 3 -name program-config.toml 2>/dev/null | /usr/bin/head -1 || true)"
+    prog_cfg="$(/usr/bin/find "$(dirname "$project_path")" -maxdepth 3 -name program-config.toml 2>/dev/null | /usr/bin/head -1 || true)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; `|| true` discards the status; a status-discarding member of the class Stage 8 measured
     if [ -n "$prog_cfg" ]; then
       hit="$(_toml_field "$prog_cfg" "$field")"
       [ -n "$hit" ] && val="$hit"
@@ -2787,7 +2789,7 @@ detect_install_path() {
   local cowork_base=""
   if [ -r "${_di_cfg_root}/operator.toml" ]; then
     cowork_base="$(grep -E '^[[:space:]]*cowork_install_path[[:space:]]*=' "${_di_cfg_root}/operator.toml" 2>/dev/null \
-      | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
+      | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; `|| true` discards the status, and upstream of `head` is a grep over operator.toml
   fi
   local search_base="$SEARCH_ROOT"
   if [[ -n "$cowork_base" ]]; then
@@ -2862,7 +2864,7 @@ detect_install_path() {
         log "Warning: Multiple $pool_desc sessions found (${#pool[@]}). Using fullest skill roster: $INSTALL_PATH"
       else
         # Rung 4 — logged mtime (non-authoritative last resort) on a skill-count tie.
-        INSTALL_PATH="$(ls -dt "${pool[@]}" 2>/dev/null | head -1 || true)"
+        INSTALL_PATH="$(ls -dt "${pool[@]}" 2>/dev/null | head -1 || true)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; `|| true` discards the status; `ls -dt` lists a handful of session dirs
         log "Warning: tiebreaker fell through to mtime (non-authoritative) among ${#pool[@]} $pool_desc sessions: $INSTALL_PATH"
       fi
     fi
@@ -3579,7 +3581,10 @@ cmd_check() {
   # Legacy duplicate paths — operator-instance state, not v2 source.
   # Retained for operators upgrading workspaces from older layouts.
   log "Check 3: Duplicate detection"
-  if find . -maxdepth 1 -name "Projects" -type d 2>/dev/null | grep -q .; then
+  # `find … | grep -q .` is the SIGPIPE idiom with a non-printf writer: grep exits
+  # on the first path and find takes the broken pipe. `-print -quit` asks find the
+  # same question directly — first hit, then stop — with no pipe to break.
+  if [ -n "$(find . -maxdepth 1 -name "Projects" -type d -print -quit 2>/dev/null)" ]; then
     log "  DUPLICATE: Projects/ (uppercase) still exists alongside projects/"
     ISSUES=$((ISSUES + 1))
   else
@@ -3930,7 +3935,7 @@ cmd_check() {
           # exactly one line (head -1 defensively). The registry is small; this
           # per-row re-read is deterministic and keeps the parse local.
           local _row_line_cache
-          _row_line_cache=$(/usr/bin/grep -E "^\| \[\`${_row}\`\]" "$REGISTRY_CATALOG" 2>/dev/null | /usr/bin/head -1) || _row_line_cache=""
+          _row_line_cache=$(/usr/bin/grep -m1 -E "^\| \[\`${_row}\`\]" "$REGISTRY_CATALOG" 2>/dev/null) || _row_line_cache=""
           local _row_kind
           _row_kind=$(printf '%s' "$_row_line_cache" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}') || _row_kind=""
           local _row_trig _row_modes _row_deps
@@ -3943,6 +3948,7 @@ cmd_check() {
             # SKILL.md side: text after `Modes:`/`Mode:` on its line, trimmed of
             # the trailing sentence (`. Use…`/`. Triggers…`/etc.) and any final dot.
             local _smd_modes _reg_modes_sorted _smd_modes_sorted
+            # sigpipe-idiom: allow — U3. `grep -o` emits N matches per LINE and `-m` counts LINES, so `-m1` would keep every match on the first line, not the first match.
             _smd_modes=$(/usr/bin/grep -oE 'Modes?:[^.]*' "$_row_skill_md" 2>/dev/null | /usr/bin/head -1 | /usr/bin/sed -E 's/^Modes?:[[:space:]]*//') || _smd_modes=""
             _reg_modes_sorted=$(printf '%s' "$_row_modes" | /usr/bin/tr '·' '\n' | /usr/bin/sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | /usr/bin/grep -v '^$' | /usr/bin/sort -u) || _reg_modes_sorted=""
             _smd_modes_sorted=$(printf '%s' "$_smd_modes" | /usr/bin/tr '·' '\n' | /usr/bin/sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | /usr/bin/grep -v '^$' | /usr/bin/sort -u) || _smd_modes_sorted=""
@@ -3964,7 +3970,10 @@ cmd_check() {
             if [[ -n "$_smd_comp_region" ]]; then
               local _cand
               for _cand in ${DEPLOYED_ROSTER[@]+"${DEPLOYED_ROSTER[@]}"}; do
-                if printf '%s' "$_smd_comp_region" | /usr/bin/grep -qF -- "$_cand"; then
+                # U1 checked twice over: `_cand` is a word-split roster entry and so
+                # is never empty, and the enclosing `[[ -n "$_smd_comp_region" ]]`
+                # already guarantees a non-empty haystack.
+                if /usr/bin/grep -qF -- "$_cand" <<<"$_smd_comp_region"; then
                   _smd_dep_names+="$_cand"$'\n'
                 fi
               done
@@ -4393,7 +4402,7 @@ cmd_check() {
       local c8_cowork_base=""
       if [[ -r "${c8_cfg_root}/operator.toml" ]]; then
         c8_cowork_base="$(grep -E '^[[:space:]]*cowork_install_path[[:space:]]*=' "${c8_cfg_root}/operator.toml" 2>/dev/null \
-          | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
+          | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; `|| true` discards the status, and upstream of `head` is a grep over operator.toml
       fi
       if [[ -z "$c8_cowork_base" ]]; then
         log "  SKIP:  cowork_install_path not configured (operator.toml [paths]) — no canonical base to validate against"
@@ -4471,6 +4480,7 @@ cmd_check() {
         flag_warn_or_issue "mirror-sync" "$c9_left ↔ $c9_right divergence"
         # `diff` exits 1 on divergence (the path we are in); guard the preview
         # pipeline so it cannot abort the check sweep under set -e + pipefail.
+        # sigpipe-idiom: allow — multi-line diagnostic preview whose exit status is discarded (`|| true`); `diff` has no bounded-output flag to fold `head` into.
         diff -u "$c9_left" "$c9_right" 2>/dev/null | head -20 | sed 's/^/         /' || true
       fi
     done
@@ -4496,7 +4506,8 @@ cmd_check() {
           log "  OK:    $c9_hook_src ↔ $c9_hook_mir (byte-identical)"
         else
           flag_warn_or_issue "mirror-sync" "$c9_hook_src ↔ $c9_hook_mir divergence"
-          diff -u "$c9_hook_src" "$c9_hook_mir" 2>/dev/null | head -20 | sed 's/^/         /' || true
+          # sigpipe-idiom: allow — same discarded-status diagnostic preview as the pair above.
+        diff -u "$c9_hook_src" "$c9_hook_mir" 2>/dev/null | head -20 | sed 's/^/         /' || true
         fi
       done
     fi
@@ -4976,18 +4987,18 @@ cmd_check() {
         --exclude-code-blocks 2>&1) || c14_exit=$?
       if [[ $c14_exit -eq 3 ]]; then
         # Path-resolution failure — never a silent PASS (per #459 fail-loud).
-        flag_warn_or_issue "doc-link-maintenance" "path-resolution failure (exit 3): $(echo "$c14_output" | head -1) — a declared glob in $c14_target_paths_file resolved to zero files (relocated/typo'd scan surface); fix the shared list"
+        flag_warn_or_issue "doc-link-maintenance" "path-resolution failure (exit 3): $(head -1 <<<"$c14_output") — a declared glob in $c14_target_paths_file resolved to zero files (relocated/typo'd scan surface); fix the shared list"
       elif [[ $c14_exit -eq 2 ]]; then
         # Config error (exit 2) — e.g. the shared target-paths file is empty, or
         # an invalid flag combination. Fail-loud rather than treat as findings.
-        flag_warn_or_issue "doc-link-maintenance" "primitive config error (exit 2): $(echo "$c14_output" | head -1)"
+        flag_warn_or_issue "doc-link-maintenance" "primitive config error (exit 2): $(head -1 <<<"$c14_output")"
       elif [[ $c14_exit -eq 0 ]]; then
         log "  OK:    no broken cross-refs in scope"
       else
         local c14_findings
         c14_findings=$(echo "$c14_output" | tail -n +2 | wc -l | tr -d ' ')
         flag_warn_or_issue "doc-link-maintenance" "$c14_findings broken cross-ref(s) — see protocol at core/standards/doc-link-maintenance-protocol.md"
-        echo "$c14_output" | head -10 | sed 's/^/         /' || true
+        head -10 <<<"$c14_output" | sed 's/^/         /' || true
         if [[ $c14_findings -gt 10 ]]; then
           log "         ... ($((c14_findings - 10)) more; rerun primitive directly for full output)"
         fi
@@ -5314,14 +5325,14 @@ cmd_check() {
       if [[ $c18_exit -eq 3 ]]; then
         # Path-resolution failure — the tool could not resolve its catalog
         # target. Never a silent PASS (per #459 fail-loud).
-        flag_warn_or_issue "framework-anchor-drift" "path-resolution failure (exit 3): $(echo "$c18_output" | head -1) — catalog target did not resolve"
+        flag_warn_or_issue "framework-anchor-drift" "path-resolution failure (exit 3): $(head -1 <<<"$c18_output") — catalog target did not resolve"
       elif [[ $c18_exit -eq 0 ]]; then
         log "  OK:    catalog complete, paths resolve, anchors consistent, no overdue reviews"
       else
         local c18_findings
         c18_findings=$(echo "$c18_output" | tail -n +2 | wc -l | tr -d ' ')
         flag_warn_or_issue "framework-anchor-drift" "$c18_findings framework-anchor finding(s) — see protocol at core/standards/framework-corpus-discipline.md"
-        echo "$c18_output" | head -10 | sed 's/^/         /' || true
+        head -10 <<<"$c18_output" | sed 's/^/         /' || true
         if [[ $c18_findings -gt 10 ]]; then
           log "         ... ($((c18_findings - 10)) more; rerun primitive directly for full output)"
         fi
@@ -5440,8 +5451,8 @@ cmd_check() {
         # is the exact vacuous-pass #83 fixes; surface it as FAIL/DRIFT, never an
         # OK (per #459 fail-loud).
         flag_warn_or_issue "note-content-lint" \
-          "path-resolution failure (exit 3): $(echo "$c20_output" | head -1) — corpus path misconfigured; Check 20 cannot lint"
-        echo "$c20_output" | head -10 | sed 's/^/         [6a]     /' || true
+          "path-resolution failure (exit 3): $(head -1 <<<"$c20_output") — corpus path misconfigured; Check 20 cannot lint"
+        head -10 <<<"$c20_output" | sed 's/^/         [6a]     /' || true
       else
         local c20_findings=0
         if [[ $c20_exit -ne 0 ]]; then
@@ -5452,7 +5463,7 @@ cmd_check() {
         else
           flag_warn_or_issue "note-content-lint" \
             "$c20_findings finding(s) in Section 6a content — see release-notes-standard.md §3.2"
-          echo "$c20_output" | head -10 | sed 's/^/         [6a]     /' || true
+          head -10 <<<"$c20_output" | sed 's/^/         [6a]     /' || true
         fi
       fi
     fi
@@ -5484,8 +5495,11 @@ cmd_check() {
     log "Check 21: Native-dep body↔native drift detection"
 
     # 21a — token scope check (non-fatal; mirror is non-gate-blocking)
-    local c21_scope_ok=true
-    if ! gh auth status --hostname github.com 2>&1 | /usr/bin/grep -qE '\brepo\b'; then
+    local c21_scope_ok=true c21_auth=""
+    # The pipefail semantics are preserved deliberately: this must stay false when
+    # `gh` ITSELF fails, not only when the scope is absent. The `&&` group is what
+    # the pipeline's status meant; the here-string removes the writer.
+    if ! { c21_auth="$(gh auth status --hostname github.com 2>&1)" && /usr/bin/grep -qE '\brepo\b' <<<"$c21_auth"; }; then
       flag_warn_or_issue "native-dep-drift" "gh auth scope missing 'repo' — cannot query native deps; native mirror degrades to body-only (run 'gh auth refresh -s repo')"
       c21_scope_ok=false
     fi
@@ -5876,19 +5890,19 @@ cmd_check() {
       return 0
     fi
 
-    if printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "open|${_cand}"; then
+    if /usr/bin/grep -Fxq "open|${_cand}" <<<"$_rows"; then
       printf 'RESOLVED %s - %s %s validated open in the milestone set\n' "$_src" "$_n" "$_cand"
       return 0
     fi
-    if [[ -n "$_alt" ]] && printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "open|${_alt}"; then
+    if [[ -n "$_alt" ]] && /usr/bin/grep -Fxq "open|${_alt}" <<<"$_rows"; then
       printf 'RESOLVED %s - %s %s validated open in the milestone set (version-prefixed branch form)\n' "$_src" "$_n" "$_alt"
       return 0
     fi
-    if printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "closed|${_cand}"; then
+    if /usr/bin/grep -Fxq "closed|${_cand}" <<<"$_rows"; then
       printf 'INVALID %s closed-milestone %s %s the milestone exists but is CLOSED; a closed milestone is not a gateable release scope\n' "$_src" "$_n" "$_cand"
       return 0
     fi
-    if [[ -n "$_alt" ]] && printf '%s\n' "$_rows" | /usr/bin/grep -Fxq "closed|${_alt}"; then
+    if [[ -n "$_alt" ]] && /usr/bin/grep -Fxq "closed|${_alt}" <<<"$_rows"; then
       printf 'INVALID %s closed-milestone %s %s the milestone exists but is CLOSED; a closed milestone is not a gateable release scope\n' "$_src" "$_n" "$_alt"
       return 0
     fi
@@ -5959,9 +5973,12 @@ cmd_check() {
     # 22a — gh auth scope check (issue list read requires `repo` for
     # private repos; this is non-fatal — check warns once and exits if
     # scope missing, since the check is non-gate-blocking detection)
-    local c22_scope_ok=true
+    local c22_scope_ok=true c22_auth=""
     if [[ "$c22_gate_run" == "true" ]]; then
-      if ! gh auth status --hostname github.com 2>&1 | /usr/bin/grep -qE '\brepo\b'; then
+      # Same shape as Check 21a: the `&&` group reproduces what the pipeline's
+      # status meant under pipefail — false when `gh` fails, not only when the
+      # scope is missing — while the here-string removes the writer.
+      if ! { c22_auth="$(gh auth status --hostname github.com 2>&1)" && /usr/bin/grep -qE '\brepo\b' <<<"$c22_auth"; }; then
         flag_g1_enforcement "g1-enforcement" "gh auth scope missing 'repo' — cannot iterate bundled issues (run 'gh auth refresh -s repo')"
         c22_scope_ok=false
       fi
@@ -6171,7 +6188,7 @@ sys.stdout.write("".join(out) + "|")
           --root "${_audit_src_root:-.}" --emit-kinds 2>&1) || c22_kinds_exit=$?
         if [[ "$c22_kinds_exit" -ne 0 ]]; then
           c22_kinds_ok=false
-          c22_kinds_diag=$(printf '%s\n' "$c22_kinds_out" | /usr/bin/grep -v '^[[:space:]]*$' | /usr/bin/head -1)
+          c22_kinds_diag=$(/usr/bin/grep -m1 -v '^[[:space:]]*$' <<<"$c22_kinds_out")
           flag_g1_enforcement "g1-enforcement" \
             "Step-0 form-family resolution NOT EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive failed (exit ${c22_kinds_exit}): ${c22_kinds_diag:-(no diagnostic on stdout or stderr)}"
           c22_finding_count=$((c22_finding_count + 1))
@@ -6363,9 +6380,9 @@ sys.stdout.write("".join(out) + "|")
           # Step 2 — infer template from unique body markers (pragmatic
           # variant; see leading comment for rationale)
           _bm_repro=0; _bm_obswhat=0; _bm_propchange=0
-          printf '%s' "$_body" | /usr/bin/grep -qE '^### Reproduction Steps[[:space:]]*$' && _bm_repro=1
-          printf '%s' "$_body" | /usr/bin/grep -qE '^### What is missing\?[[:space:]]*$' && _bm_obswhat=1
-          printf '%s' "$_body" | /usr/bin/grep -qE '^### Proposed Change[[:space:]]*$' && _bm_propchange=1
+          /usr/bin/grep -qE '^### Reproduction Steps[[:space:]]*$' <<<"$_body" && _bm_repro=1
+          /usr/bin/grep -qE '^### What is missing\?[[:space:]]*$' <<<"$_body" && _bm_obswhat=1
+          /usr/bin/grep -qE '^### Proposed Change[[:space:]]*$' <<<"$_body" && _bm_propchange=1
 
           _inferred="ambiguous"
           if [[ "$_bm_repro" -eq 1 ]]; then
@@ -6418,18 +6435,18 @@ sys.stdout.write("".join(out) + "|")
             [[ "$_template" == "bug" ]] && _prio_field="Severity"
           fi
         else
-          if printf '%s' "$_body" | /usr/bin/grep -qE '^### Evidence[[:space:]]*$'; then
+          if /usr/bin/grep -qE '^### Evidence[[:space:]]*$' <<<"$_body"; then
             _ap_evidence=true
           fi
-          if printf '%s' "$_body" | /usr/bin/grep -qE '^### Acceptance Criteria[[:space:]]*$'; then
+          if /usr/bin/grep -qE '^### Acceptance Criteria[[:space:]]*$' <<<"$_body"; then
             _ap_ac=true
           fi
           # Applicability keys on the declared FIELD SECTION; the P-level itself
           # is still resolved by the ADR-111 shared detector via c22_prio_map, so
           # this introduces no second priority grammar (CIAC-1).
-          if printf '%s' "$_body" | /usr/bin/grep -qE '^### Priority[[:space:]]*$'; then
+          if /usr/bin/grep -qE '^### Priority[[:space:]]*$' <<<"$_body"; then
             _ap_prio=true
-          elif printf '%s' "$_body" | /usr/bin/grep -qE '^### Severity[[:space:]]*$'; then
+          elif /usr/bin/grep -qE '^### Severity[[:space:]]*$' <<<"$_body"; then
             _ap_prio=true; _prio_field="Severity"
           fi
         fi
@@ -6445,10 +6462,10 @@ sys.stdout.write("".join(out) + "|")
         _title_ok=true
         _title_reason=""
         # F1 — no leading bracket type/category prefix
-        if printf '%s' "$_title" | /usr/bin/grep -qE '^[[:space:]]*\[[^]]+\]:[[:space:]]'; then
+        if /usr/bin/grep -qE '^[[:space:]]*\[[^]]+\]:[[:space:]]' <<<"$_title"; then
           _title_ok=false; _title_reason="leftover '[...]:' type prefix (type is on the label — drop it)"
         # F2/F3 — substance floor: bare slug (no internal whitespace) OR too short
-        elif ! printf '%s' "$_title" | /usr/bin/grep -qE '[^[:space:]]+[[:space:]]+[^[:space:]]+'; then
+        elif ! /usr/bin/grep -qE '[^[:space:]]+[[:space:]]+[^[:space:]]+' <<<"$_title"; then
           _title_ok=false; _title_reason="bare slug / single token (name the object + the change, >= 2 words)"
         elif [[ "${#_title}" -lt "${G1_TITLE_MIN_CHARS:-12}" ]]; then
           _title_ok=false; _title_reason="too short (${#_title} chars; informative summary expected)"
@@ -6464,7 +6481,7 @@ sys.stdout.write("".join(out) + "|")
         # demanding an evidence label of them would fail a card for omitting a
         # field its form never offered.
         if [[ "$_ap_evidence" == "true" ]]; then
-          if ! printf '%s' "$_body" | /usr/bin/grep -qE '\[(SOURCE|INFERRED|CONTEXT|RECOMMENDED|ASSUMPTION)' ; then
+          if ! /usr/bin/grep -qE '\[(SOURCE|INFERRED|CONTEXT|RECOMMENDED|ASSUMPTION)' <<<"$_body" ; then
             _c22_emit_structural \
               "issue #${_num} — G1-03 FAIL: no evidence-quality labels found in body ([SOURCE]/[INFERRED]/[CONTEXT]/[ASSUMPTION – CONFIRM]/[RECOMMENDED])"
           fi
@@ -6538,19 +6555,19 @@ sys.stdout.write("".join(out) + "|")
               _ac_norm=$(printf '%s' "$_ac_line" | /usr/bin/sed -E 's/^[0-9]+:[[:space:]]*-[[:space:]]*\[[ xX]?\][[:space:]]+//')
               _ac_ok=false
               # (a) verb-first (case-insensitive)
-              if printf '%s' "$_ac_norm" | /usr/bin/grep -qiE '^(verify|check|confirm|assert|ensure|validate)\b'; then
+              if /usr/bin/grep -qiE '^(verify|check|confirm|assert|ensure|validate)\b' <<<"$_ac_norm"; then
                 _ac_ok=true
               # (b) backtick-wrapped path/token AND a state verb
-              elif printf '%s' "$_ac_norm" | /usr/bin/grep -qE '`[^`]+`' \
-                && printf '%s' "$_ac_norm" | /usr/bin/grep -qiE '\b(contains|includes|has)\b'; then
+              elif /usr/bin/grep -qE '`[^`]+`' <<<"$_ac_norm" \
+                && /usr/bin/grep -qiE '\b(contains|includes|has)\b' <<<"$_ac_norm"; then
                 _ac_ok=true
               # (c) explicit predicate: prefix
-              elif printf '%s' "$_ac_norm" | /usr/bin/grep -qiE '^predicate:'; then
+              elif /usr/bin/grep -qiE '^predicate:' <<<"$_ac_norm"; then
                 _ac_ok=true
               fi
               # Adapter G1-05-Bug — bug-narrative AC phrase (bug bodies only)
               if [[ "$_ac_ok" != "true" && "$_template" == "bug" ]]; then
-                if printf '%s' "$_ac_norm" | /usr/bin/grep -qiE 'reproduction steps no longer trigger actual behavior|running reproduction steps produces expected behavior'; then
+                if /usr/bin/grep -qiE 'reproduction steps no longer trigger actual behavior|running reproduction steps produces expected behavior' <<<"$_ac_norm"; then
                   _ac_ok=true
                 fi
               fi
@@ -6582,12 +6599,12 @@ sys.stdout.write("".join(out) + "|")
 
         # G1-02 — description / bug-narrative actionable (presence proxy).
         if [[ "$_template" == "improvement" ]]; then
-          if ! printf '%s' "$_body" | /usr/bin/grep -qE '^### Description[[:space:]]*$'; then
+          if ! /usr/bin/grep -qE '^### Description[[:space:]]*$' <<<"$_body"; then
             recommend_g1_enforcement "g1-enforcement" \
               "issue #${_num} — G1-02 RECOMMEND: no '### Description' section detected — confirm the change is stated as an actionable WHAT (not just an observation)"
           fi
         elif [[ "$_template" == "bug" ]]; then
-          if ! printf '%s' "$_body" | /usr/bin/grep -qE '^### (Expected Behavior|Actual Behavior)[[:space:]]*$'; then
+          if ! /usr/bin/grep -qE '^### (Expected Behavior|Actual Behavior)[[:space:]]*$' <<<"$_body"; then
             recommend_g1_enforcement "g1-enforcement" \
               "issue #${_num} — G1-02 RECOMMEND: bug narrative incomplete — confirm Reproduction Steps + Expected + Actual are all present (reproduce-and-observe must be possible)"
           fi
@@ -6595,8 +6612,8 @@ sys.stdout.write("".join(out) + "|")
 
         # G1-04 — Proposed Change names a file or protocol (improvement only).
         if [[ "$_template" == "improvement" ]]; then
-          if printf '%s' "$_body" | /usr/bin/grep -qE '^### Proposed Change[[:space:]]*$' \
-            && ! printf '%s' "$_body" | /usr/bin/grep -qE '`[^`]+`|\.(md|sh|ya?ml|py|toml|json)\b|OPERATIONS\.md|CLAUDE\.md|SKILL\.md'; then
+          if /usr/bin/grep -qE '^### Proposed Change[[:space:]]*$' <<<"$_body" \
+            && ! /usr/bin/grep -qE '`[^`]+`|\.(md|sh|ya?ml|py|toml|json)\b|OPERATIONS\.md|CLAUDE\.md|SKILL\.md' <<<"$_body"; then
             recommend_g1_enforcement "g1-enforcement" \
               "issue #${_num} — G1-04 RECOMMEND: Proposed Change names no obvious file/protocol — confirm the WHAT identifies the affected file(s) or protocol(s)"
           fi
@@ -6607,12 +6624,12 @@ sys.stdout.write("".join(out) + "|")
         # bullets. Scoped to the AC checkbox lines captured for G1-05a.
         if [[ "$_template" == "improvement" || "$_template" == "bug" ]]; then
           if [[ -n "$_ac_lines" ]]; then
-            if printf '%s' "$_ac_lines" | /usr/bin/grep -qE '<[A-Za-z][^>]*>'; then
+            if /usr/bin/grep -qE '<[A-Za-z][^>]*>' <<<"$_ac_lines"; then
               recommend_g1_enforcement "g1-enforcement" \
                 "issue #${_num} — G1-05b RECOMMEND: AC bullet(s) contain unreplaced '<...>' placeholder slot(s) — fill the templated slots before bundling"
             fi
           fi
-          if printf '%s' "$_body" | /usr/bin/grep -qE '^[[:space:]]*<!--[[:space:]]*-[[:space:]]*\[[ xX]?\]'; then
+          if /usr/bin/grep -qE '^[[:space:]]*<!--[[:space:]]*-[[:space:]]*\[[ xX]?\]' <<<"$_body"; then
             recommend_g1_enforcement "g1-enforcement" \
               "issue #${_num} — G1-05b RECOMMEND: commented-out AC bullet(s) detected — un-comment or remove them"
           fi
@@ -6686,8 +6703,8 @@ sys.stdout.write("".join(out) + "|")
         # clean. Was the silent-pass that let Check 23 read OK on a path error
         # (#85/#459); surface as FAIL/DRIFT, never an OK.
         flag_warn_or_issue "release-log-index-consistency" \
-          "path-resolution failure (exit 3): $(echo "$c23_output" | head -1) — LOG/INDEX did not resolve or parsed zero rows"
-        echo "$c23_output" | head -10 | sed 's/^/         /' || true
+          "path-resolution failure (exit 3): $(head -1 <<<"$c23_output") — LOG/INDEX did not resolve or parsed zero rows"
+        head -10 <<<"$c23_output" | sed 's/^/         /' || true
       elif [[ $c23_exit -eq 0 ]]; then
         log "  OK:    LOG ↔ INDEX rows aligned (version/milestone/date/release-pr/notes-link)"
       else
@@ -6705,7 +6722,7 @@ sys.stdout.write("".join(out) + "|")
         # telling the operator to run the one action the design forbids.
         flag_warn_or_issue "release-log-index-consistency" \
           "$c23_findings LOG↔INDEX drift finding(s) — reconcile the named field IN PLACE (the LOG row is canonical for milestone/date/release-pr; the INDEX Theme cell has no LOG source and is never drift-checked), then confirm with the read-only 'python3 $c23_script --verify'. Do NOT run a bare 'python3 $c23_script' — that is a destructive full regenerate"
-        echo "$c23_output" | head -10 | sed 's/^/         /' || true
+        head -10 <<<"$c23_output" | sed 's/^/         /' || true
       fi
     fi
   fi
@@ -6951,7 +6968,7 @@ sys.stdout.write("".join(out) + "|")
         flag_warn_or_issue "universal-vs-localized-context" \
           "$_c23_other DC2-DC6 candidate signature(s) across ${#c23_files[@]} file(s) — signal-not-verdict; see core/standards/universal-vs-localized-context.md §7 + §10"
       fi
-      { printf '%s' "$c23_output" | head -10 | sed 's/^/         /' ; } || true
+      { head -10 <<<"$c23_output" | sed 's/^/         /' ; } || true
       if [[ $c23_findings -gt 10 ]]; then
         log "         ... ($((c23_findings - 10)) more; rerun directly for full output)"
       fi
@@ -7098,7 +7115,7 @@ sys.stdout.write("".join(out) + "|")
         # Format: one `<agent-name> <model>` entry per line; `#` introduces comments
         # grep exits 1 when the agent has no override line; guard so the empty
         # result is tolerated rather than aborting under set -e + pipefail.
-        _override=$(/usr/bin/grep -E "^[[:space:]]*${_agent_name}[[:space:]]+(sonnet|opus|haiku)" "$c26_overrides" 2>/dev/null | /usr/bin/awk '{print $2}' | /usr/bin/head -1) || _override=""
+        _override=$(/usr/bin/grep -m1 -E "^[[:space:]]*${_agent_name}[[:space:]]+(sonnet|opus|haiku)" "$c26_overrides" 2>/dev/null | /usr/bin/awk '{print $2}') || _override=""
       fi
       if [[ -n "$_override" ]]; then
         printf '%s' "$_override"
@@ -7119,7 +7136,7 @@ sys.stdout.write("".join(out) + "|")
         # grep exits 1 when the agent file carries no `model:` line; guard so the
         # empty result flows to the missing-field branch below instead of aborting
         # under set -e + pipefail.
-        _actual_model=$(/usr/bin/grep -E '^model:' "$_agent_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/awk '{print $2}') || _actual_model=""
+        _actual_model=$(/usr/bin/grep -m1 -E '^model:' "$_agent_file" 2>/dev/null | /usr/bin/awk '{print $2}') || _actual_model=""
         _expected_model=$(c26_expected_model "$_agent_name")
         if [[ -z "$_actual_model" ]]; then
           c26_output+="${_agent_file}: missing frontmatter \`model:\` field (expected: \`${_expected_model}\`)"$'\n'
@@ -7425,10 +7442,13 @@ sys.stdout.write("".join(out) + "|")
         # the negative assertion that bounds this defect — zero such pipelines in this
         # file — cannot match its own explanatory text and pass vacuously.)
         # Under this script's `set -euo pipefail` (line 2) a `grep -q` that matches EARLY
-        # exits before echo has finished writing; echo then takes SIGPIPE and pipefail
-        # promotes its 141 to the pipeline's status — so a SUCCESSFUL match reported
+        # exits before echo has finished writing; echo then fails on the broken pipe and
+        # pipefail promotes ITS status to the pipeline's — so a SUCCESSFUL match reported
         # FAILURE, the `&&` never fired, and the file's override marker was silently
-        # ignored. Every in-scope file whose fence-stripped body exceeds the 64 KB pipe
+        # ignored. WHICH non-zero status appears is a property of the SIGPIPE disposition,
+        # not of the defect: 141 where the signal is fatal (a developer shell), and 1 where
+        # it was inherited as SIG_IGN (a GitHub-hosted runner), which is indistinguishable
+        # from grep legitimately finding nothing. Do not hunt for 141 alone. Every in-scope file whose fence-stripped body exceeds the 64 KB pipe
         # capacity lost its marker deterministically (7 of 164 for Class L, 3 of 26 for
         # Class V); files near that boundary lost it as a race, which is what made the
         # reported Class-L count vary run-to-run on a byte-identical corpus. A herestring
@@ -7744,7 +7764,7 @@ sys.stdout.write("".join(out) + "|")
           2) # gh is confirmed up before this loop (gh-guard above), so exit 2 here
              # is a git capability absence (origin/main unresolvable / corrupt
              # object), NOT gh. Name it from the tool's stderr; never FAIL.
-             log "  N/A:   ${_v47} drift sub-check N/A at tool layer — required capability unavailable (git/origin-main; gh already confirmed up). $(/usr/bin/printf '%s' "$_d47_out" | /usr/bin/head -1)" ;;
+             log "  N/A:   ${_v47} drift sub-check N/A at tool layer — required capability unavailable (git/origin-main; gh already confirmed up). $(/usr/bin//usr/bin/head -1 <<<"$_d47_out")" ;;
           3) log "  N/A:   ${_v47} has no published Release or note to compare (Surface 1 absent — Check 32 owns existence)" ;;
           *) c47_output+="${_v47}: drift tool returned unexpected exit ${_d47_exit}"$'\n'; c47_findings=$((c47_findings + 1)) ;;
         esac
@@ -7755,7 +7775,7 @@ sys.stdout.write("".join(out) + "|")
       else
         flag_release_body_drift "release-body-drift" \
           "$c47_findings §5.1 body-drift finding(s) across $c47_targets logged release(s) — a published Release body diverged from its source-of-record note; re-emit per release-notes-standard.md §5.6"
-        printf '%s' "$c47_output" | head -10 | sed 's/^/         /'
+        head -10 <<<"$c47_output" | sed 's/^/         /'
         if [[ $c47_findings -gt 10 ]]; then
           log "         ... ($((c47_findings - 10)) more)"
         fi
@@ -8026,7 +8046,7 @@ sys.stdout.write("".join(out) + "|")
         if ! grep -qxF "## ${c34_sec}" "$c34_tmpl"; then
           c34_missing="${c34_missing:+$c34_missing, }${c34_sec}"
         fi
-        if ! printf '%s\n' "$c34_schema_block" | grep -qF "$c34_sec"; then
+        if ! grep -qF "$c34_sec" <<<"$c34_schema_block"; then
           c34_schema_drift="${c34_schema_drift:+$c34_schema_drift, }${c34_sec}"
         fi
       done
@@ -8105,7 +8125,7 @@ sys.stdout.write("".join(out) + "|")
                       | /usr/bin/grep -oE 'Mode [A-Z]' | /usr/bin/sort -u | /usr/bin/wc -l | /usr/bin/tr -d ' ') || c35_body_enum=0
       # (2) description-list arity — `Modes:` matched ANYWHERE on the line (folded
       #     YAML puts it mid-line); `·` counted on the substring after `Modes:`.
-      c35_desc_line=$(/usr/bin/grep -E 'Modes:' "$c35_skill_md" 2>/dev/null | /usr/bin/head -1) || c35_desc_line=""
+      c35_desc_line=$(/usr/bin/grep -m1 -E 'Modes:' "$c35_skill_md" 2>/dev/null) || c35_desc_line=""
       c35_desc_arity=0
       if [[ -n "$c35_desc_line" ]]; then
         c35_desc_after=$(printf '%s' "$c35_desc_line" | /usr/bin/sed -E 's/.*Modes:(.*)/\1/')
@@ -8205,7 +8225,8 @@ sys.stdout.write("".join(out) + "|")
         while IFS= read -r c36_file; do
           [[ -n "$c36_file" ]] || continue
           # First #N tie per memory file (the eviction-pointer / issue tie).
-          c36_n=$(/usr/bin/grep -oE '#[0-9]+' "$c36_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '#') || c36_n=""
+          # sigpipe-idiom: allow — U3. Same `grep -o` line-vs-match divergence as the Modes probe: `-m1` would keep every issue ref on the first matching line.
+      c36_n=$(/usr/bin/grep -oE '#[0-9]+' "$c36_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '#') || c36_n=""
           [[ -n "$c36_n" ]] || continue
           # dead-ref tie: probe resolution; NEVER compare magnitude.
           if ! gh issue view "$c36_n" --json number >/dev/null 2>&1; then
@@ -8357,7 +8378,7 @@ sys.stdout.write("".join(out) + "|")
         [[ -e "$c37_script" ]] || continue
         local c37_base; c37_base="$(basename "$c37_script" .sh)"
         local c37_owner
-        c37_owner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "$c37_script" | head -1)"
+        c37_owner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "$c37_script" | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a `sed -n …p` over one hook script, emitting 0-1 owner lines
         if [[ -z "$c37_owner" ]]; then
           # Script with NO ownership declaration — the 5/7/9 failure mode.
           flag_warn_or_issue "hook-registry-completeness" "$c37_base has no '# hook-owner:' declaration — add one to the hook source core/hooks/$c37_base.sh"
@@ -8404,7 +8425,7 @@ sys.stdout.write("".join(out) + "|")
         case "$c37_any" in core/hooks/block-*.sh) continue ;; esac   # covered by (a)
         local c37_abase; c37_abase="$(basename "$c37_any" .sh)"
         local c37_aowner
-        c37_aowner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "$c37_any" | head -1)"
+        c37_aowner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "$c37_any" | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a `sed -n …p` over one hook script, emitting 0-1 owner lines
         [[ -n "$c37_aowner" ]] || continue                            # not opted in
         if [[ ! -f "$c37_aowner" ]]; then
           flag_warn_or_issue "hook-registry-completeness" "$c37_abase declares owner '$c37_aowner', but that owner doc is missing on disk"
@@ -8424,7 +8445,7 @@ sys.stdout.write("".join(out) + "|")
           c37_violations=$((c37_violations + 1))
         else
           local c37_back_owner
-          c37_back_owner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "core/hooks/$c37_sbase.sh" | head -1)"
+          c37_back_owner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "core/hooks/$c37_sbase.sh" | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a `sed -n …p` over one hook script, emitting 0-1 owner lines
           if [[ "$c37_back_owner" != "$c37_src" ]]; then
             flag_warn_or_issue "hook-registry-completeness" "per-hook source $c37_src exists but backing script core/hooks/$c37_sbase.sh does not declare it as owner (declares '$c37_back_owner')"
             c37_violations=$((c37_violations + 1))
@@ -8631,7 +8652,7 @@ sys.stdout.write("".join(out) + "|")
       # P2: any current_phase / target_phase value must be in the #164 enum.
       # Flag a line that assigns a phase value outside {shadow,warn,enforce,removed}.
       local c40_badphase
-      c40_badphase=$(grep -inE '(current_phase|target_phase)[^A-Za-z0-9]+(dark|canary|ga|retired|sunset|live|active|on)\b' "$c40_file" 2>/dev/null | head -3 || true)
+      c40_badphase=$(grep -m3 -inE '(current_phase|target_phase)[^A-Za-z0-9]+(dark|canary|ga|retired|sunset|live|active|on)\b' "$c40_file" 2>/dev/null  || true)
       if [[ -n "$c40_badphase" ]]; then
         flag_warn_or_issue "touchpoint-schema" "current_phase/target_phase value outside the {shadow,warn,enforce,removed} enum in $c40_file"
         c40_problems=$((c40_problems + 1))
@@ -8787,18 +8808,18 @@ sys.stdout.write("".join(out) + "|")
       local c42_output c42_exit=0
       c42_output=$(/usr/bin/python3 "$c42_script" --target-paths "$c42_targets" --allowlist "$c42_allowlist" 2>&1) || c42_exit=$?
       if [[ $c42_exit -eq 3 ]]; then
-        flag_warn_or_issue "host-binding-leak" "path-resolution failure (exit 3): $(echo "$c42_output" | head -1) — a --target-paths glob resolved to zero files (relocated/typo'd scan surface); fix the glob list in this check"
+        flag_warn_or_issue "host-binding-leak" "path-resolution failure (exit 3): $(head -1 <<<"$c42_output") — a --target-paths glob resolved to zero files (relocated/typo'd scan surface); fix the glob list in this check"
       elif [[ $c42_exit -eq 0 ]]; then
         local c42_n
-        c42_n=$(echo "$c42_output" | head -1 | awk '{print $2}')
+        c42_n=$(head -1 <<<"$c42_output" | awk '{print $2}')
         if [[ "${c42_n:-0}" -gt 0 ]]; then
           flag_warn_or_issue "host-binding-leak" "$c42_n candidate host-binding leak(s) — gh/git prescribed as the canonical mechanism in K1 governance; lift to the [adapters] seam per core/disciplines/knowledge-architecture.md §4.1, or allowlist a legitimate reference-adapter/teaching file"
-          echo "$c42_output" | tail -n +2 | head -10 | sed 's/^/         /' || true
+          head -10 <<<"$(tail -n +2 <<<"$c42_output")" | sed 's/^/         /' || true
         else
           log "  OK:    no host-binding leak candidates in K1-tier governance"
         fi
       else
-        flag_warn_or_issue "host-binding-leak" "detector errored (exit $c42_exit): $(echo "$c42_output" | head -1)"
+        flag_warn_or_issue "host-binding-leak" "detector errored (exit $c42_exit): $(head -1 <<<"$c42_output")"
       fi
     fi
   fi
@@ -8843,7 +8864,7 @@ sys.stdout.write("".join(out) + "|")
       done
       if [[ "$c43_n" -gt 0 ]]; then
         flag_warn_or_issue "path-portability" "$c43_n path-portability leak(s) on the executable surface — an absolute machine path (/Users//home) or a bare personal/pmo-instance path; use \${CLAUDE_WORKSPACE_ROOT:-\$HOME/Claude}/... , mark the line 'path-leak: allow', or allowlist the file"
-        printf '%s' "$c43_findings" | head -10 | sed 's/^/         /'
+        head -10 <<<"$c43_findings" | sed 's/^/         /'
       else
         log "  OK:    no path-portability leaks on the executable surface"
       fi
@@ -8873,7 +8894,7 @@ sys.stdout.write("".join(out) + "|")
     # (a) PVT*-literal reintroduction (exempt the guide + marker lines)
     c44_pvt="$(grep -rEn 'PVT(SSF|F|I)?_[A-Za-z0-9]{4,}' --include='*.md' core release operations 2>/dev/null | grep -vE 'github-projects-guide\.md|depersonalization-token: allow' || true)"
     if [[ -n "$c44_pvt" ]]; then
-      flag_warn_or_issue "depersonalization-token" "literal GitHub Projects ID (PVT*) reintroduced outside the guide — tokenize to an [OPERATOR_PROJECT*] token: $(printf '%s' "$c44_pvt" | head -3 | tr '\n' ';')"
+      flag_warn_or_issue "depersonalization-token" "literal GitHub Projects ID (PVT*) reintroduced outside the guide — tokenize to an [OPERATOR_PROJECT*] token: $(head -3 <<<"$c44_pvt" | tr '\n' ';')"
     fi
     # (b) [OPERATOR_*] bracket-token conformance against the §1/§1.1 registry
     if [[ -f "$c44_spec" ]]; then
@@ -8881,7 +8902,7 @@ sys.stdout.write("".join(out) + "|")
       c44_reg="$(grep -ohE '\[OPERATOR_[A-Z0-9_]+\]' "$c44_spec" | sort -u)"
       while IFS= read -r c44_tok; do
         [[ -z "$c44_tok" ]] && continue
-        printf '%s\n' "$c44_reg" | grep -qxF "$c44_tok" || c44_unreg="${c44_unreg}${c44_tok} "
+        grep -qxF "$c44_tok" <<<"$c44_reg" || c44_unreg="${c44_unreg}${c44_tok} "
       done < <(grep -rEn '\[OPERATOR_[A-Z0-9_]+\]' --include='*.md' core release operations 2>/dev/null | grep -vE 'release/releases/' | grep -v 'depersonalization-token: allow' | grep -ohE '\[OPERATOR_[A-Z0-9_]+\]' | sort -u)
       if [[ -n "$c44_unreg" ]]; then
         flag_warn_or_issue "depersonalization-token" "unregistered [OPERATOR_*] token(s) in corpus, absent from depersonalization-spec.md §1: ${c44_unreg}— register them (with a config home) or mark an illustrative use 'depersonalization-token: allow'"
@@ -9011,7 +9032,7 @@ sys.stdout.write("".join(out) + "|")
       c45_defined="$(grep -E '^\| DP-[0-9]' "$c45_reg" | grep -oE 'DP-[0-9]+' | sort -u)"
       while IFS= read -r c45_ref; do
         [[ -z "$c45_ref" ]] && continue
-        if ! printf '%s\n' "$c45_defined" | grep -qxF "$c45_ref"; then
+        if ! grep -qxF "$c45_ref" <<<"$c45_defined"; then
           flag_warn_or_issue "design-principle-conformance" "DP-id '$c45_ref' is referenced in corpus but not defined in $c45_reg (dangling principle reference — define the entry or fix the reference)"
           c45_ok=0
         fi
@@ -9082,12 +9103,14 @@ sys.stdout.write("".join(out) + "|")
         _agent_name=$(/usr/bin/basename "$_agent_file" .md)
         # grep exits 1 when no `tools:` line exists; guard so the empty result
         # flows to finding (a) instead of aborting under set -e + pipefail.
-        _tools_line=$(/usr/bin/grep -E '^tools:' "$_agent_file" 2>/dev/null | /usr/bin/head -1) || _tools_line=""
+        _tools_line=$(/usr/bin/grep -m1 -E '^tools:' "$_agent_file" 2>/dev/null) || _tools_line=""
         if [[ -z "$_tools_line" ]]; then
           # Finding (a): missing tools: field
           c46_output+="${_agent_file}: missing frontmatter \`tools:\` field — an un-enumerated persona is an unbounded tool surface (subagent-security-posture.md § 3 Mechanism 1)"$'\n'
           c46_findings=$((c46_findings + 1))
-        elif /usr/bin/printf '%s' "$_tools_line" | /usr/bin/grep -qE "$c46_recursion_re"; then
+        # U1 checked: `c46_recursion_re` is the static alternation declared above and
+    # requires one of three literal tokens, so it cannot match an empty line.
+    elif /usr/bin/grep -qE "$c46_recursion_re" <<<"$_tools_line"; then
           # Finding (b): recursion surface in tools:
           c46_output+="${_agent_file}: \`tools:\` lists a recursion-surface tool (Agent / spawn_task / mcp__ccd_session__spawn_task) — spokes must NOT spawn sub-spokes (#189; subagent-security-posture.md § 3 Mechanism 1 uniform exclusions)"$'\n'
           c46_findings=$((c46_findings + 1))
@@ -9232,7 +9255,7 @@ sys.stdout.write("".join(out) + "|")
       local c50_out c50_exit=0
       c50_out=$(/usr/bin/python3 "$c50_script" --target-paths "$c50_targets" --allowlist "$c50_allowlist" --output-format tsv 2>&1) || c50_exit=$?
       if [[ $c50_exit -eq 3 ]]; then
-        flag_warn_or_issue "doc-frontmatter" "path-resolution failure (exit 3): $(echo "$c50_out" | head -1) — a --target-paths glob or --catalog-path resolved to zero files; fix the glob list in this check"
+        flag_warn_or_issue "doc-frontmatter" "path-resolution failure (exit 3): $(head -1 <<<"$c50_out") — a --target-paths glob or --catalog-path resolved to zero files; fix the glob list in this check"
       elif [[ $c50_exit -eq 0 || $c50_exit -eq 1 ]]; then
         # Partition findings on the tier column (TSV row 2 is the header;
         # data rows: file<TAB>tier<TAB>field<TAB>violation<TAB>severity).
@@ -9248,7 +9271,7 @@ sys.stdout.write("".join(out) + "|")
           # route to one hard FAIL. The split Tier-A-enforce / tier-other-warn
           # partition #2220 shipped has collapsed to a single global-enforce verdict.
           log "  FAIL:  doc-frontmatter — $c50_total frontmatter violation(s) (global enforce, #2221). Fix per core/standards/platform-doc-frontmatter-standard.md."
-          echo "$c50_out" | awk -F'\t' 'NR>2' | head -20 | sed 's/^/         /'
+          head -20 <<<"$(awk -F'\t' 'NR>2' <<<"$c50_out")" | sed 's/^/         /'
           ISSUES=$((ISSUES + 1))
         else
           # Retained warn dispatcher (the #2220 shakedown shape). Unreached while
@@ -9256,10 +9279,10 @@ sys.stdout.write("".join(out) + "|")
           # soften-to-warn is a one-line mode change, not a structural re-add.
           (( c50_a > 0 )) && flag_warn_or_issue "doc-frontmatter" "$c50_a Tier-A frontmatter violation(s) (warn-mode)"
           (( c50_o > 0 )) && flag_warn_or_issue "doc-frontmatter" "$c50_o non-Tier-A frontmatter violation(s) (warn-mode)"
-          echo "$c50_out" | awk -F'\t' 'NR>2' | head -20 | sed 's/^/         /'
+          head -20 <<<"$(awk -F'\t' 'NR>2' <<<"$c50_out")" | sed 's/^/         /'
         fi
       else
-        flag_warn_or_issue "doc-frontmatter" "check errored (exit $c50_exit): $(echo "$c50_out" | head -1)"
+        flag_warn_or_issue "doc-frontmatter" "check errored (exit $c50_exit): $(head -1 <<<"$c50_out")"
       fi
     fi
   fi
@@ -9310,7 +9333,7 @@ sys.stdout.write("".join(out) + "|")
       local c51_out c51_exit=0
       c51_out=$(/usr/bin/python3 "$c51_script" "${c51_source_args[@]}" --output-format tsv 2>&1) || c51_exit=$?
       if [[ $c51_exit -eq 3 ]]; then
-        flag_warn_or_issue "label-parity" "input failure (exit 3): $(echo "$c51_out" | head -1) — --source parsed to zero labels or the live set was unreadable; fix the source/parser"
+        flag_warn_or_issue "label-parity" "input failure (exit 3): $(head -1 <<<"$c51_out") — --source parsed to zero labels or the live set was unreadable; fix the source/parser"
       elif [[ $c51_exit -eq 0 || $c51_exit -eq 1 ]]; then
         local c51_missing c51_orphan
         c51_missing=$(echo "$c51_out" | awk -F'\t' '$1=="MISSING"{print $2}')
@@ -9332,7 +9355,7 @@ sys.stdout.write("".join(out) + "|")
           fi
         fi
       else
-        flag_warn_or_issue "label-parity" "check errored (exit $c51_exit): $(echo "$c51_out" | head -1)"
+        flag_warn_or_issue "label-parity" "check errored (exit $c51_exit): $(head -1 <<<"$c51_out")"
       fi
     fi
   fi
@@ -9373,7 +9396,7 @@ sys.stdout.write("".join(out) + "|")
       local c52_out c52_exit=0
       c52_out=$(/usr/bin/python3 "$c52_script" --check-drift --output-format tsv 2>&1) || c52_exit=$?
       if [[ $c52_exit -eq 3 ]]; then
-        flag_warn_or_issue "milestone-position" "input failure (exit 3): $(echo "$c52_out" | head -1) — the live milestone/issue set was unreadable; fix gh auth/connectivity"
+        flag_warn_or_issue "milestone-position" "input failure (exit 3): $(head -1 <<<"$c52_out") — the live milestone/issue set was unreadable; fix gh auth/connectivity"
       elif [[ $c52_exit -eq 0 ]]; then
         log "  OK:    all open milestone positions match the re-derived dep-graph order — no drift"
       elif [[ $c52_exit -eq 1 ]]; then
@@ -9388,7 +9411,7 @@ sys.stdout.write("".join(out) + "|")
           flag_warn_or_issue "milestone-position" "${c52_count} milestone(s) drift from the re-derived dep-graph order — run compute-milestone-positions.py --apply (warn-mode; flip milestone-position.mode to enforce after shakedown). drift: ${c52_drift:-(none)}"
         fi
       else
-        flag_warn_or_issue "milestone-position" "check errored (exit $c52_exit): $(echo "$c52_out" | head -1)"
+        flag_warn_or_issue "milestone-position" "check errored (exit $c52_exit): $(head -1 <<<"$c52_out")"
       fi
     fi
   fi
@@ -9433,7 +9456,7 @@ sys.stdout.write("".join(out) + "|")
       local c53_out c53_exit=0
       c53_out=$(/usr/bin/python3 "$c53_script" --threshold "$c53_threshold" --output-format tsv 2>&1) || c53_exit=$?
       if [[ $c53_exit -eq 3 ]]; then
-        flag_warn_or_issue "approved-queue-depth" "input failure (exit 3): $(echo "$c53_out" | head -1) — the live approved-unbundled queue was unreadable; fix gh auth/connectivity"
+        flag_warn_or_issue "approved-queue-depth" "input failure (exit 3): $(head -1 <<<"$c53_out") — the live approved-unbundled queue was unreadable; fix gh auth/connectivity"
       elif [[ $c53_exit -eq 0 ]]; then
         local c53_count
         c53_count=$(echo "$c53_out" | awk -F'\t' '$1=="COUNT"{print $2}')
@@ -9452,7 +9475,7 @@ sys.stdout.write("".join(out) + "|")
           flag_warn_or_issue "approved-queue-depth" "$c53_count approved-unbundled issue(s) >= threshold $c53_threshold — BUNDLE CANDIDATE (warn-mode; flip approved-queue-depth.mode to enforce after shakedown). themes: ${c53_themes:-(none)}; priorities: ${c53_prios:-(none)}"
         fi
       else
-        flag_warn_or_issue "approved-queue-depth" "check errored (exit $c53_exit): $(echo "$c53_out" | head -1)"
+        flag_warn_or_issue "approved-queue-depth" "check errored (exit $c53_exit): $(head -1 <<<"$c53_out")"
       fi
     fi
   fi
@@ -9486,7 +9509,7 @@ sys.stdout.write("".join(out) + "|")
       local c54_out c54_exit=0
       c54_out=$(/usr/bin/python3 "$c54_script" --output-format tsv 2>&1) || c54_exit=$?
       if [[ $c54_exit -eq 3 ]]; then
-        flag_warn_or_issue "ownership-collision" "input failure (exit 3): $(echo "$c54_out" | head -1) — a required corpus surface (§6 matrix / output-contracts / inventory) was missing or unparseable; fix the surface/parser"
+        flag_warn_or_issue "ownership-collision" "input failure (exit 3): $(head -1 <<<"$c54_out") — a required corpus surface (§6 matrix / output-contracts / inventory) was missing or unparseable; fix the surface/parser"
       elif [[ $c54_exit -eq 0 ]]; then
         local c54_ent
         c54_ent=$(echo "$c54_out" | awk -F'\t' '$1=="ENTITIES_CHECKED"{print $2}')
@@ -9502,7 +9525,7 @@ sys.stdout.write("".join(out) + "|")
           flag_warn_or_issue "ownership-collision" "$c54_count ownership collision(s) (warn-mode; flip ownership-collision.mode to enforce after shakedown): ${c54_detail:-(see detail)}"
         fi
       else
-        flag_warn_or_issue "ownership-collision" "check errored (exit $c54_exit): $(echo "$c54_out" | head -1)"
+        flag_warn_or_issue "ownership-collision" "check errored (exit $c54_exit): $(head -1 <<<"$c54_out")"
       fi
     fi
   fi
@@ -9560,7 +9583,7 @@ sys.stdout.write("".join(out) + "|")
       local c55_out c55_exit=0
       c55_out=$(/usr/bin/python3 "$c55_script" "${c55_args[@]}" 2>&1) || c55_exit=$?
       if [[ $c55_exit -eq 3 ]]; then
-        flag_warn_or_issue "work-hierarchy-drift" "input failure (exit 3): $(echo "$c55_out" | head -1) — the SSOT kind vocabulary was unreadable or the GraphQL parent scan failed; fix the pack corpus / gh auth"
+        flag_warn_or_issue "work-hierarchy-drift" "input failure (exit 3): $(head -1 <<<"$c55_out") — the SSOT kind vocabulary was unreadable or the GraphQL parent scan failed; fix the pack corpus / gh auth"
       elif [[ $c55_exit -eq 0 ]]; then
         local c55_scanned
         c55_scanned=$(echo "$c55_out" | awk -F'\t' '$1=="SCANNED"{print $2}')
@@ -9577,7 +9600,7 @@ sys.stdout.write("".join(out) + "|")
           [[ -n "$c55_h2" ]] && flag_warn_or_issue "work-hierarchy-drift" "H2 backlog invariant — epic-under-epic edge(s): $c55_h2 (warn-mode; re-parent or exempt)"
         fi
       else
-        flag_warn_or_issue "work-hierarchy-drift" "check errored (exit $c55_exit): $(echo "$c55_out" | head -1)"
+        flag_warn_or_issue "work-hierarchy-drift" "check errored (exit $c55_exit): $(head -1 <<<"$c55_out")"
       fi
     fi
   fi
@@ -9660,12 +9683,12 @@ sys.stdout.write("".join(out) + "|")
       # with awk exact field equality so COUNT_M2_NNM* cannot inflate it.
       c56_sentinel=$(echo "$c56_out" | awk -F'\t' '$1=="COUNT_M2"{n++} END{print n+0}')
       if [[ $c56_exit -eq 3 ]]; then
-        flag_warn_or_issue "milestone-epic-membership" "input failure (exit 3): $(echo "$c56_out" | head -1) — the live milestone/issue set was unreadable; fix gh auth/connectivity"
+        flag_warn_or_issue "milestone-epic-membership" "input failure (exit 3): $(head -1 <<<"$c56_out") — the live milestone/issue set was unreadable; fix gh auth/connectivity"
       elif [[ ( $c56_exit -eq 0 || $c56_exit -eq 1 ) && "$c56_sentinel" != "1" ]]; then
         # ONE finding naming the cause, and every leg gated behind it — the same
         # degraded posture the sibling checks on this file already state, not a
         # third shape. Nothing reports clean OR dirty from an unparseable emit.
-        flag_warn_or_issue "milestone-epic-membership" "NOT-EVALUATED — the primitive produced no parseable emit (exit $c56_exit; expected exactly 1 COUNT_M2 row, saw ${c56_sentinel:-0}). M1, M2 and M3 are ALL unevaluated — this is not a clean result: $(echo "$c56_out" | head -1)"
+        flag_warn_or_issue "milestone-epic-membership" "NOT-EVALUATED — the primitive produced no parseable emit (exit $c56_exit; expected exactly 1 COUNT_M2 row, saw ${c56_sentinel:-0}). M1, M2 and M3 are ALL unevaluated — this is not a clean result: $(head -1 <<<"$c56_out")"
       elif [[ $c56_exit -eq 0 || $c56_exit -eq 1 ]]; then
         local c56_declared c56_m1 c56_m2
         c56_declared=$(echo "$c56_out" | awk -F'\t' '$1=="DECLARED"{print $2}')
@@ -9738,7 +9761,7 @@ sys.stdout.write("".join(out) + "|")
           log "  OK:    milestone scaffold completeness (M3) — 0 load-bearing finding(s) (${c56_m3_adv:-0} advisory; marker adoption ${c56_marker:-none})"
         fi
       else
-        flag_warn_or_issue "milestone-epic-membership" "check errored (exit $c56_exit): $(echo "$c56_out" | head -1)"
+        flag_warn_or_issue "milestone-epic-membership" "check errored (exit $c56_exit): $(head -1 <<<"$c56_out")"
       fi
     fi
   fi
@@ -9776,7 +9799,7 @@ sys.stdout.write("".join(out) + "|")
       c57_mode=$(resolve_check_mode "extraction-contract")
       c57_out=$(/usr/bin/python3 "$c57_script" --root . --output-format tsv 2>&1) || c57_exit=$?
       if [[ $c57_exit -eq 3 ]]; then
-        flag_warn_or_issue "extraction-contract" "input failure (exit 3): $(echo "$c57_out" | head -1) — zero checks parsed; the '# Check N' / 'log \"Check N:\"' conventions may have moved, leaving the documented derive command unverifiable"
+        flag_warn_or_issue "extraction-contract" "input failure (exit 3): $(head -1 <<<"$c57_out") — zero checks parsed; the '# Check N' / 'log \"Check N:\"' conventions may have moved, leaving the documented derive command unverifiable"
       elif [[ $c57_exit -eq 0 ]]; then
         local c57_def c57_emit
         c57_def=$(echo "$c57_out" | awk -F'\t' '$1=="DEFBLOCKS"{print $2}')
@@ -9797,7 +9820,7 @@ sys.stdout.write("".join(out) + "|")
           [[ -n "$c57_re" ]] && flag_warn_or_issue "extraction-contract" "RETIRED number still emitting: Check(s) $c57_re (warn-mode; retire the emitter or un-reserve the number)"
         fi
       else
-        flag_warn_or_issue "extraction-contract" "check errored (exit $c57_exit): $(echo "$c57_out" | head -1)"
+        flag_warn_or_issue "extraction-contract" "check errored (exit $c57_exit): $(head -1 <<<"$c57_out")"
       fi
     fi
   fi
@@ -9841,9 +9864,9 @@ sys.stdout.write("".join(out) + "|")
       local c58_out c58_exit=0
       c58_out=$(/usr/bin/python3 "$c58_script" --root . --output-format tsv 2>&1) || c58_exit=$?
       if [[ $c58_exit -eq 3 ]]; then
-        flag_advisory_only "adr-flip-verify" "input failure (exit 3): $(echo "$c58_out" | head -1) — zero ADRs parsed; the ADR tree may have moved"
+        flag_advisory_only "adr-flip-verify" "input failure (exit 3): $(head -1 <<<"$c58_out") — zero ADRs parsed; the ADR tree may have moved"
       elif [[ $c58_exit -ne 0 ]]; then
-        flag_advisory_only "adr-flip-verify" "check errored (exit $c58_exit): $(echo "$c58_out" | head -1)"
+        flag_advisory_only "adr-flip-verify" "check errored (exit $c58_exit): $(head -1 <<<"$c58_out")"
       else
         local c58_proposed c58_count c58_oldest
         c58_proposed=$(echo "$c58_out" | awk -F'\t' '$1=="PROPOSED"{print $2}')
@@ -9852,7 +9875,7 @@ sys.stdout.write("".join(out) + "|")
           log "  OK:    adr-flip-verify — no Proposed ADR carries unresolved flip-promise wording (${c58_proposed:-0} Proposed)"
         else
           # Oldest promise first — the aging signal, not an alphabetical dump.
-          c58_oldest=$(echo "$c58_out" | awk -F'\t' '$1=="PROMISED" && $3 != "?" {print $3"\t"$2}' | sort -rn | head -3 | awk -F'\t' '{printf "%s (%sd) ", $2, $1}')
+          c58_oldest=$(head -3 <<<"$(awk -F'\t' '$1=="PROMISED" && $3 != "?" {print $3"\t"$2}' <<<"$c58_out" | sort -rn)" | awk -F'\t' '{printf "%s (%sd) ", $2, $1}')
           flag_advisory_only "adr-flip-verify" "${c58_count} of ${c58_proposed:-?} Proposed ADR(s) carry flip-promise wording; oldest: ${c58_oldest:-n/a}— confirm at release close whether each ratifying review has CLOSED (G-CL9); a still-pending review means Proposed is CORRECT"
         fi
       fi
@@ -9891,17 +9914,17 @@ sys.stdout.write("".join(out) + "|")
       c59_mode=$(resolve_check_mode "identity-conformance")
       c59_out=$(/usr/bin/python3 "$c59_script" --root . 2>&1) || c59_exit=$?
       if [[ $c59_exit -eq 3 ]]; then
-        flag_warn_or_issue "identity-conformance" "input failure (exit 3): $(echo "$c59_out" | head -1) — release-identity conformance is unverifiable (fetch origin/main)"
+        flag_warn_or_issue "identity-conformance" "input failure (exit 3): $(head -1 <<<"$c59_out") — release-identity conformance is unverifiable (fetch origin/main)"
       elif [[ $c59_exit -eq 0 ]]; then
-        log "  OK:    identity-conformance — $(echo "$c59_out" | head -1)"
+        log "  OK:    identity-conformance — $(head -1 <<<"$c59_out")"
       elif [[ $c59_exit -eq 1 ]]; then
         if [[ "$c59_mode" == "enforce" ]]; then
-          log "  FAIL:  identity-conformance — $(echo "$c59_out" | head -1)"; ISSUES=$((ISSUES + 1))
+          log "  FAIL:  identity-conformance — $(head -1 <<<"$c59_out")"; ISSUES=$((ISSUES + 1))
         else
-          flag_warn_or_issue "identity-conformance" "$(echo "$c59_out" | head -1) (warn-mode; flip identity-conformance.mode to 'enforce' after the >=3-day warn-log review)"
+          flag_warn_or_issue "identity-conformance" "$(head -1 <<<"$c59_out") (warn-mode; flip identity-conformance.mode to 'enforce' after the >=3-day warn-log review)"
         fi
       else
-        flag_warn_or_issue "identity-conformance" "check errored (exit $c59_exit): $(echo "$c59_out" | head -1)"
+        flag_warn_or_issue "identity-conformance" "check errored (exit $c59_exit): $(head -1 <<<"$c59_out")"
       fi
     fi
   fi
@@ -9937,7 +9960,7 @@ sys.stdout.write("".join(out) + "|")
         [[ -e "$c60_script" ]] || continue
         c60_seen=$((c60_seen + 1))
         local c60_base; c60_base="$(basename "$c60_script" .sh)"
-        local c60_class; c60_class="$(sed -n -E 's/^[[:space:]]*readonly[[:space:]]+MASTER_ENABLE_CLASS="?([a-z]+)"?.*/\1/p' "$c60_script" | head -1)"
+        local c60_class; c60_class="$(sed -n -E 's/^[[:space:]]*readonly[[:space:]]+MASTER_ENABLE_CLASS="?([a-z]+)"?.*/\1/p' "$c60_script" | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a `sed -n …p` emitting 0-1 class lines
         if [[ -z "$c60_class" ]]; then
           flag_warn_or_issue "master-enable-class" "$c60_base declares no MASTER_ENABLE_CLASS — every block-*.sh must declare its master-activation class (workflow|security) at the gate call site (#310)"
           c60_findings=$((c60_findings + 1)); continue
@@ -10183,7 +10206,7 @@ sys.stdout.write("".join(out) + "|")
       local c63_out c63_exit=0
       c63_out=$(/usr/bin/python3 "$c63_script" --root . --output-format tsv 2>&1) || c63_exit=$?
       if [[ $c63_exit -eq 3 ]]; then
-        log "  FAIL:  count-structure — input failure (exit 3): $(echo "$c63_out" | head -1). A clean zero over an empty population is exactly what this check must never report."
+        log "  FAIL:  count-structure — input failure (exit 3): $(head -1 <<<"$c63_out"). A clean zero over an empty population is exactly what this check must never report."
         ISSUES=$((ISSUES + 1))
       else
         # PV-1 / PV-5: report the denominator and BOTH control arms as fields, so a
@@ -10394,7 +10417,7 @@ sys.stdout.write("".join(out) + "|")
     else
       local c65_bytes c65_budget
       c65_bytes=$(/usr/bin/wc -c < "$c65_log" | /usr/bin/tr -d ' ')
-      c65_budget=$(/usr/bin/sed -n 's/^BUDGET_BYTES = \([0-9_]*\)$/\1/p' "$c65_tool" | /usr/bin/head -1 | /usr/bin/tr -d '_')
+      c65_budget=$(/usr/bin/head -1 <<<"$(/usr/bin/sed -n 's/^BUDGET_BYTES = \([0-9_]*\)$/\1/p' "$c65_tool")" | /usr/bin/tr -d '_')
       if [[ -z "$c65_budget" ]]; then
         flag_warn_or_issue "release-log-budget" "could not read BUDGET_BYTES from $c65_tool — the probe would otherwise compare against an invented figure"
       else
@@ -10915,16 +10938,16 @@ EOF
   _v="$(_cc_selftest_verdict "v9.9")"; _tok="${_v%% *}"
   [[ "$_tok" == "INCOMPLETE" || "$_tok" == "CLEAN" ]] || { echo "FAIL: a prefix-shortened cutoff must still verdict, got '$_v'"; failures=$((failures+1)); }
   _e="$(_cc_selftest_stderr "v9.9")"
-  printf '%s' "$_e" | /usr/bin/grep -q 'WARNING — cutoff v9.9 armed at LOG row v9.98' \
+  /usr/bin/grep -q 'WARNING — cutoff v9.9 armed at LOG row v9.98' <<<"$_e" \
     || { echo "FAIL: a prefix-shortened cutoff must WARN naming the armed row, got '$_e'"; failures=$((failures+1)); }
 
   # (6) an EXACT-row cutoff must NOT emit the mis-arm WARNING (no false-positive noise;
   #     without this, (5) could pass on a warning that fires unconditionally).
   _e="$(_cc_selftest_stderr "v9.98")"
-  if printf '%s' "$_e" | /usr/bin/grep -q 'WARNING — cutoff'; then
+  if /usr/bin/grep -q 'WARNING — cutoff' <<<"$_e"; then
     echo "FAIL: an exact-row cutoff must not emit the mis-arm WARNING, got '$_e'"; failures=$((failures+1))
   fi
-  printf '%s' "$_e" | /usr/bin/grep -q 'armed at LOG row v9.98' \
+  /usr/bin/grep -q 'armed at LOG row v9.98' <<<"$_e" \
     || { echo "FAIL: an exact-row cutoff must still name the armed row, got '$_e'"; failures=$((failures+1)); }
 
   # (7) a cutoff matching NO row asserts nothing and would report CLEAN 0 — vacuously
@@ -10937,7 +10960,7 @@ EOF
   #     emits is itself a vacuity, and the fixture pins the other two to __none__
   #     precisely so only one voice can answer here.
   _e="$(_cc_selftest_stderr "v0.01")"
-  printf '%s' "$_e" | /usr/bin/grep -q 'WARNING — cutoff v0.01 matched NO LOG row' \
+  /usr/bin/grep -q 'WARNING — cutoff v0.01 matched NO LOG row' <<<"$_e" \
     || { echo "FAIL: a no-match cutoff must WARN that zero rows were asserted, got '$_e'"; failures=$((failures+1)); }
 
   /bin/rm -rf "$_t" 2>/dev/null || true
@@ -11029,11 +11052,13 @@ STUB
     _cc_compute_verdict "lifecycle" 2>&1 >/dev/null
   }
   _os_must() {      # <label> <fixed-needle> <detail>
-    /usr/bin/printf '%s' "$3" | /usr/bin/grep -qF "$2" \
+    # U1 checked: every caller passes a non-empty literal needle, so the empty
+    # line a here-string emits (where `printf '%s'` emitted nothing) cannot match.
+    /usr/bin/grep -qF "$2" <<<"$3" \
       || { echo "FAIL: OS $1 — expected a finding containing '$2', got: $(/usr/bin/printf '%s' "$3" | /usr/bin/tr '\n' ';')"; failures=$((failures+1)); }
   }
   _os_must_not() {  # <label> <fixed-needle> <detail>
-    if /usr/bin/printf '%s' "$3" | /usr/bin/grep -qF "$2"; then
+    if /usr/bin/grep -qF "$2" <<<"$3"; then
       echo "FAIL: OS $1 — must NOT report '$2', got: $(/usr/bin/printf '%s' "$3" | /usr/bin/tr '\n' ';')"; failures=$((failures+1))
     fi
   }
@@ -11717,7 +11742,7 @@ cmd_check_close_completeness() {
   local cc_enforce_file="${CLOSE_COMPLETENESS_ENFORCE_FILE:-.github/close-completeness.enforce}"
   local cc_enforce="warn" _cc_tok_line
   if [[ -f "$cc_enforce_file" ]]; then
-    _cc_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$cc_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    _cc_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$cc_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a grep over a one-token .enforce file
     [[ "$_cc_tok_line" == "enforce" ]] && cc_enforce="enforce"
   fi
 
@@ -11779,7 +11804,7 @@ cmd_check_decision_emission() {
   local de_enforce_file="${DECISION_EMISSION_ENFORCE_FILE:-.github/decision-emission.enforce}"
   local de_enforce="warn" _de_tok_line
   if [[ -f "$de_enforce_file" ]]; then
-    _de_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$de_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    _de_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$de_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a grep over a one-token .enforce file
     [[ "$_de_tok_line" == "enforce" ]] && de_enforce="enforce"
   fi
 
@@ -11860,7 +11885,7 @@ cmd_check_required_subset() {
   local rs_enforce_file="${DEPLOY_CHECK_CI_ENFORCE_FILE:-.github/deploy-check-ci.enforce}"
   local rs_enforce="warn" _rs_tok_line
   if [[ -f "$rs_enforce_file" ]]; then
-    _rs_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$rs_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    _rs_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$rs_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a grep over a one-token .enforce file
     [[ "$_rs_tok_line" == "enforce" ]] && rs_enforce="enforce"
   fi
 
@@ -11934,7 +11959,7 @@ cmd_check_release_corpus() {
   local rc_enforce_file="${RELEASE_CORPUS_ENFORCE_FILE:-.github/release-corpus-completeness.enforce}"
   local rc_enforce="warn" _rc_tok_line
   if [[ -f "$rc_enforce_file" ]]; then
-    _rc_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$rc_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    _rc_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$rc_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a grep over a one-token .enforce file
     [[ "$_rc_tok_line" == "enforce" ]] && rc_enforce="enforce"
   fi
 
@@ -12000,7 +12025,7 @@ cmd_check_package_freshness() {
   local pf_enforce_file="${SKILL_PACKAGE_FRESHNESS_ENFORCE_FILE:-.github/skill-package-freshness.enforce}"
   local pf_enforce="warn" _pf_tok_line
   if [[ -f "$pf_enforce_file" ]]; then
-    _pf_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$pf_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    _pf_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$pf_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; upstream of `head` is a grep over a one-token .enforce file
     [[ "$_pf_tok_line" == "enforce" ]] && pf_enforce="enforce"
   fi
 
@@ -12164,7 +12189,10 @@ cmd_report() {
 
   # --- Duplicate Detection ---
   echo "--- Duplicate Detection ---"
-  if find . -maxdepth 1 -name "Projects" -type d 2>/dev/null | grep -q .; then
+  # `find … | grep -q .` is the SIGPIPE idiom with a non-printf writer: grep exits
+  # on the first path and find takes the broken pipe. `-print -quit` asks find the
+  # same question directly — first hit, then stop — with no pipe to break.
+  if [ -n "$(find . -maxdepth 1 -name "Projects" -type d -print -quit 2>/dev/null)" ]; then
     echo "[FAIL] Projects/ (uppercase) still exists"
     FAIL=$((FAIL + 1))
   else
@@ -12315,7 +12343,7 @@ cmd_report() {
       --catalog-path "$c18r_catalog" \
       --output-format tsv 2>&1) || c18r_exit=$?
     if [[ $c18r_exit -eq 3 ]]; then
-      echo "[FAIL] framework-anchor-drift — path-resolution failure (exit 3): $(echo "$c18r_output" | head -1)"
+      echo "[FAIL] framework-anchor-drift — path-resolution failure (exit 3): $(head -1 <<<"$c18r_output")"
       FAIL=$((FAIL + 1))
     elif [[ $c18r_exit -eq 0 ]]; then
       echo "[PASS] framework-anchor-drift — catalog complete, anchors consistent, no overdue reviews"
@@ -12325,7 +12353,7 @@ cmd_report() {
       c18r_findings=$(echo "$c18r_output" | tail -n +2 | wc -l | tr -d ' ')
       echo "[FAIL] framework-anchor-drift — ${c18r_findings} finding(s) — see core/standards/framework-corpus-discipline.md"
       FAIL=$((FAIL + 1))
-      echo "$c18r_output" | head -10 | sed 's/^/  /' || true
+      head -10 <<<"$c18r_output" | sed 's/^/  /' || true
       if [[ $c18r_findings -gt 10 ]]; then
         echo "  ... ($((c18r_findings - 10)) more; rerun primitive directly for full output)"
       fi
@@ -12350,7 +12378,7 @@ cmd_report() {
     [[ -f "$c35r_skill_md" ]] || continue
     c35r_body_enum=$(/usr/bin/grep -oE '^### Mode [A-Z][[:space:]]*[:—-]' "$c35r_skill_md" 2>/dev/null \
                      | /usr/bin/grep -oE 'Mode [A-Z]' | /usr/bin/sort -u | /usr/bin/wc -l | /usr/bin/tr -d ' ') || c35r_body_enum=0
-    c35r_desc_line=$(/usr/bin/grep -E 'Modes:' "$c35r_skill_md" 2>/dev/null | /usr/bin/head -1) || c35r_desc_line=""
+    c35r_desc_line=$(/usr/bin/grep -m1 -E 'Modes:' "$c35r_skill_md" 2>/dev/null) || c35r_desc_line=""
     c35r_desc_arity=0
     if [[ -n "$c35r_desc_line" ]]; then
       c35r_desc_after=$(printf '%s' "$c35r_desc_line" | /usr/bin/sed -E 's/.*Modes:(.*)/\1/')

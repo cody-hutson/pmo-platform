@@ -136,7 +136,7 @@ run_case() {
   out=$(HOME="${HOME_SBX}" PATH="${HOME_SBX}/bin:${PATH}" \
         bash "${hook_path}" 2>&1)
 
-  if printf '%s' "${out}" | grep -qE "${NOTICE_RE}"; then
+  if grep -qE "${NOTICE_RE}" <<<"${out}"; then
     if [ "${expect}" = "notice" ]; then
       report "${name}" 1
     else
@@ -173,7 +173,7 @@ trace_hook=$(stage_hook "${trace_root}" clone v1.00)
 write_cache "v9.99"
 trace=$(HOME="${HOME_SBX}" PATH="${HOME_SBX}/bin:${PATH}" \
         bash -x "${trace_hook}" 2>&1)
-if printf '%s' "${trace}" | grep -qE 'v1\.00.*!=.*v9\.99'; then
+if grep -qE 'v1\.00.*!=.*v9\.99' <<<"${trace}"; then
   report "reaches version comparison (bash -x trace shows v1.00 != v9.99)" 1
 else
   report "reaches version comparison (bash -x trace)" 0 \

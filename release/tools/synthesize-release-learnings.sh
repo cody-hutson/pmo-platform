@@ -100,8 +100,8 @@ PY=/usr/bin/python3
 # it via os.environ. Literal lives only in the gitignored operator.toml.
 REPO_SLUG="${REPO_SLUG:-}"
 if [[ -z "$REPO_SLUG" ]] && [[ -r "${HOME}/.config/pmo-platform/operator.toml" ]]; then
-  _gh=$(grep -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-  _repo=$(grep -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+  _gh=$(grep -m1 -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+  _repo=$(grep -m1 -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
   [[ -z "$_repo" ]] && _repo="pmo-platform"
   [[ -n "$_gh" ]] && REPO_SLUG="${_gh}/${_repo}"
 fi
@@ -759,17 +759,17 @@ run_self_test() {
   # Test 5: per-release block on a version with exactly one event (fixture v2.10)
   local block
   block="$(emit_per_release_block v2.10)" || die "self-test: per-release v2.10 emit failed"
-  echo "$block" | /usr/bin/grep -q "^#### Release Learnings v2.10$" || die "self-test: per-release header missing"
-  echo "$block" | /usr/bin/grep -q "Source events.* 1 " || die "self-test: per-release source-events count wrong"
-  echo "$block" | /usr/bin/grep -q "^\*\*Surprise:\*\*" || die "self-test: per-release Surprise field missing"
-  echo "$block" | /usr/bin/grep -q "^\*\*Would-change:\*\*" || die "self-test: per-release Would-change field missing"
-  echo "$block" | /usr/bin/grep -q "^\*\*Watch-for:\*\*" || die "self-test: per-release Watch-for field missing"
+  /usr/bin/grep -q "^#### Release Learnings v2.10$" <<<"$block" || die "self-test: per-release header missing"
+  /usr/bin/grep -q "Source events.* 1 " <<<"$block" || die "self-test: per-release source-events count wrong"
+  /usr/bin/grep -q "^\*\*Surprise:\*\*" <<<"$block" || die "self-test: per-release Surprise field missing"
+  /usr/bin/grep -q "^\*\*Would-change:\*\*" <<<"$block" || die "self-test: per-release Would-change field missing"
+  /usr/bin/grep -q "^\*\*Watch-for:\*\*" <<<"$block" || die "self-test: per-release Watch-for field missing"
 
   # Test 6: per-release block on a version with NO events (forward-compat fallback).
   # v999.999 is absent from the fixture, exercising the zero-rows N/A path.
   block="$(emit_per_release_block v999.999)" || die "self-test: per-release v999.999 emit failed"
-  echo "$block" | /usr/bin/grep -q "0 \`release-synthesis/learnings-triple\` row" || die "self-test: missing-version should emit 0-rows header"
-  echo "$block" | /usr/bin/grep -q "Surprise:\*\* N/A — no novel learning this release" || die "self-test: missing-version should emit N/A surprise"
+  /usr/bin/grep -q "0 \`release-synthesis/learnings-triple\` row" <<<"$block" || die "self-test: missing-version should emit 0-rows header"
+  /usr/bin/grep -q "Surprise:\*\* N/A — no novel learning this release" <<<"$block" || die "self-test: missing-version should emit N/A surprise"
 
   # Test 7: pattern-detect over the hermetic fixture set up above (the same in-tmp
   # log the per-release tests use). With cluster-min=3 and the default window=5
@@ -777,17 +777,17 @@ run_self_test() {
   # cluster; the test asserts the report renders without error.
   local report
   report="$(emit_pattern_detect_report 5 3 false false)" || die "self-test: pattern-detect emit failed"
-  echo "$report" | /usr/bin/grep -q "^## Pattern-Detect Report" || die "self-test: pattern-detect header missing"
-  echo "$report" | /usr/bin/grep -q "Events in window" || die "self-test: pattern-detect events-in-window line missing"
-  echo "$report" | /usr/bin/grep -q "Qualifying clusters" || die "self-test: pattern-detect qualifying-clusters line missing"
+  /usr/bin/grep -q "^## Pattern-Detect Report" <<<"$report" || die "self-test: pattern-detect header missing"
+  /usr/bin/grep -q "Events in window" <<<"$report" || die "self-test: pattern-detect events-in-window line missing"
+  /usr/bin/grep -q "Qualifying clusters" <<<"$report" || die "self-test: pattern-detect qualifying-clusters line missing"
 
   # Test 8: pattern-detect dry-run vs apply — branch on whether clusters exist
   local qualifying_count
-  qualifying_count="$(echo "$report" | /usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }')"
+  qualifying_count="$(/usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }' <<<"$report")"
   if [[ "$qualifying_count" == "0" ]]; then
-    echo "$report" | /usr/bin/grep -q "No clusters meet the auto-promotion criteria" || die "self-test: pattern-detect zero-cluster footer missing"
+    /usr/bin/grep -q "No clusters meet the auto-promotion criteria" <<<"$report" || die "self-test: pattern-detect zero-cluster footer missing"
   else
-    echo "$report" | /usr/bin/grep -q "Dry-run mode (default)" || die "self-test: pattern-detect dry-run footer missing"
+    /usr/bin/grep -q "Dry-run mode (default)" <<<"$report" || die "self-test: pattern-detect dry-run footer missing"
   fi
 
   # Test 9: --emit rate emits the cross_release_pattern_emergence_rate line with a
@@ -796,8 +796,8 @@ run_self_test() {
   # both paths emit the prefix + the `rate=` token. Rate is qualifying/events-in-window.
   local rate_out
   rate_out="$(emit_pattern_detect_report 5 3 false false rate)" || die "self-test: --emit rate failed"
-  echo "$rate_out" | /usr/bin/grep -q "^cross_release_pattern_emergence_rate:" || die "self-test: rate-emit prefix missing"
-  echo "$rate_out" | /usr/bin/grep -qE 'rate=([0-9]+\.[0-9]{2}|N/A)' || die "self-test: rate-emit machine token (rate=<2dp>|N/A) missing"
+  /usr/bin/grep -q "^cross_release_pattern_emergence_rate:" <<<"$rate_out" || die "self-test: rate-emit prefix missing"
+  /usr/bin/grep -qE 'rate=([0-9]+\.[0-9]{2}|N/A)' <<<"$rate_out" || die "self-test: rate-emit machine token (rate=<2dp>|N/A) missing"
   # The rate must be a ratio in [0.00, 1.00] when numeric (qualifying clusters cannot
   # exceed events-in-window): assert the numeric form never exceeds 1.00.
   local rate_val
@@ -816,15 +816,15 @@ run_self_test() {
   local sr_report
   sr_report="$(emit_pattern_detect_report 5 3 false false report session-retro)" \
     || die "self-test: session-retro pattern-detect emit failed"
-  echo "$sr_report" | /usr/bin/grep -q "^## Pattern-Detect Report" \
+  /usr/bin/grep -q "^## Pattern-Detect Report" <<<"$sr_report" \
     || die "self-test: session-retro pattern-detect header missing"
   local sr_qualifying
-  sr_qualifying="$(echo "$sr_report" | /usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }')"
+  sr_qualifying="$(/usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }' <<<"$sr_report")"
   [[ "$sr_qualifying" == "1" ]] \
     || die "self-test: session-retro fixture expected exactly 1 qualifying cluster, got '$sr_qualifying'"
-  echo "$sr_report" | /usr/bin/grep -q '^### Cluster: `over-building` (theme,' \
+  /usr/bin/grep -q '^### Cluster: `over-building` (theme,' <<<"$sr_report" \
     || die "self-test: session-retro cluster should be theme/over-building"
-  if echo "$sr_report" | /usr/bin/grep -q 'one-off-noise'; then
+  if /usr/bin/grep -q 'one-off-noise' <<<"$sr_report"; then
     die "self-test: sub-threshold theme one-off-noise must NOT qualify"
   fi
 
@@ -833,7 +833,7 @@ run_self_test() {
   # silently falling back to the release grain. The reject probe runs in a
   # SUBSHELL — die() exits, and an un-subshelled call would tear down the whole
   # self-test instead of being caught by the `if`.
-  if echo "$sr_report" | /usr/bin/grep -q 'trivial-session'; then
+  if /usr/bin/grep -q 'trivial-session' <<<"$sr_report"; then
     die "self-test: no-learning row must contribute no cluster signal"
   fi
   if ( emit_pattern_detect_report 5 3 false false report bogus-source ) >/dev/null 2>&1; then
@@ -856,10 +856,10 @@ run_self_test() {
   } > "$dt2_dir/pipeline-event-log.md" || die "self-test: could not write DT-2 fixture"
   dt2_report="$(EVALS_RESULTS_PATH="$dt2_dir" emit_pattern_detect_report 5 3 false false report session-retro)" \
     || die "self-test: DT-2 pattern-detect emit failed"
-  dt2_count="$(echo "$dt2_report" | /usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }')"
+  dt2_count="$(/usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }' <<<"$dt2_report")"
   [[ "$dt2_count" == "1" ]] \
     || die "self-test: an unrecognized label inflated the cluster count (expected 1, got '$dt2_count') — parse_triple containment regressed"
-  if echo "$dt2_report" | /usr/bin/grep -q 'excited'; then
+  if /usr/bin/grep -q 'excited' <<<"$dt2_report"; then
     die "self-test: unrecognized-label content leaked into a cluster token"
   fi
   /bin/rm -rf "$dt2_dir"
@@ -881,7 +881,7 @@ run_self_test() {
   } > "$pa5_dir/pipeline-event-log.md" || die "self-test: could not write PA-5 fixture"
   pa5_report="$(EVALS_RESULTS_PATH="$pa5_dir" emit_pattern_detect_report 5 3 false false report session-retro)" \
     || die "self-test: PA-5 pattern-detect emit failed"
-  pa5_count="$(echo "$pa5_report" | /usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }')"
+  pa5_count="$(/usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }' <<<"$pa5_report")"
   # Two real rows + one excluded zero-state = 2 < cluster-min 3 -> NO qualifying cluster.
   # If the no-learning row were counted it would reach 3 and qualify.
   [[ "$pa5_count" == "0" ]] \
@@ -925,11 +925,11 @@ run_self_test() {
     || die "self-test: #3121 near-threshold pattern-detect emit failed"
 
   # Test 14 (Arm A - sensitivity): the near-miss becomes VISIBLE.
-  echo "$nt_report" | /usr/bin/grep -q "^### Near-threshold (no promotion)$" \
+  /usr/bin/grep -q "^### Near-threshold (no promotion)$" <<<"$nt_report" \
     || die "self-test: near-threshold section heading missing (#3121 Arm A)"
-  echo "$nt_report" | /usr/bin/grep -q '^| `widget` | surprise | 2 | v9.01, v9.02 |$' \
+  /usr/bin/grep -q '^| `widget` | surprise | 2 | v9.01, v9.02 |$' <<<"$nt_report" \
     || die "self-test: near-threshold band must list widget as 2 events across v9.01, v9.02 (#3121 Arm A)"
-  echo "$nt_report" | /usr/bin/grep -q '^\*\*Near-threshold clusters (2 <= size < 3, spans >= 2 versions):\*\* 1$' \
+  /usr/bin/grep -q '^\*\*Near-threshold clusters (2 <= size < 3, spans >= 2 versions):\*\* 1$' <<<"$nt_report" \
     || die "self-test: near-threshold count line wrong (#3121 Arm A)"
 
   # Test 15 (Arm B - specificity): the band's >=2-DISTINCT-VERSION limb is enforced.
@@ -938,25 +938,25 @@ run_self_test() {
   # actually exercises the version filter. Dropping that filter makes this assertion
   # red; without this arm, Test 14 also passes an implementation that prints every
   # sub-threshold cluster regardless of version span.
-  if echo "$nt_report" | /usr/bin/grep -q 'flange'; then
+  if /usr/bin/grep -q 'flange' <<<"$nt_report"; then
     die "self-test: a 2-event SINGLE-version token entered the near-threshold band (#3121 Arm B) — the >=2-version filter is not enforced"
   fi
   # Test 15' (Arm B - the stated observable): a 3-event single-version token is
   # invisible to BOTH paths. It is excluded by the SIZE limb before the version
   # limb is reached, so it corroborates rather than isolates — recorded as such
   # instead of being counted as version-filter coverage it does not provide.
-  if echo "$nt_report" | /usr/bin/grep -q 'gizmo'; then
+  if /usr/bin/grep -q 'gizmo' <<<"$nt_report"; then
     die "self-test: a 3-event single-version token became visible (#3121 Arm B') — it must qualify for neither path"
   fi
 
   # Test 16 (Arm C - AC4 regression): the QUALIFYING path is byte-unchanged.
-  echo "$nt_report" | /usr/bin/grep -q '^\*\*Qualifying clusters (size >= 3, spans >= 2 versions):\*\* 1$' \
+  /usr/bin/grep -q '^\*\*Qualifying clusters (size >= 3, spans >= 2 versions):\*\* 1$' <<<"$nt_report" \
     || die "self-test: qualifying-cluster count changed (#3121 Arm C / AC4)"
-  echo "$nt_report" | /usr/bin/grep -q '^### Cluster: `sprocket` (would-change, 3 events across 3 versions)$' \
+  /usr/bin/grep -q '^### Cluster: `sprocket` (would-change, 3 events across 3 versions)$' <<<"$nt_report" \
     || die "self-test: qualifying cluster heading changed (#3121 Arm C / AC4)"
-  echo "$nt_report" | /usr/bin/grep -qF 'title: [Pattern]: Recurring `sprocket` across releases (would-change field, 3 events)' \
+  /usr/bin/grep -qF 'title: [Pattern]: Recurring `sprocket` across releases (would-change field, 3 events)' <<<"$nt_report" \
     || die "self-test: dry-run promotion title changed (#3121 Arm C / AC4)"
-  if echo "$nt_report" | /usr/bin/grep -q '^| `sprocket` | would-change |'; then
+  if /usr/bin/grep -q '^| `sprocket` | would-change |' <<<"$nt_report"; then
     die "self-test: a QUALIFYING cluster leaked into the near-threshold band (#3121 Arm C)"
   fi
 
@@ -969,11 +969,11 @@ run_self_test() {
     || die "self-test: could not write #3121 zero-qualifying fixture"
   ntz_report="$(EVALS_RESULTS_PATH="$ntz_dir" emit_pattern_detect_report 5 3 false false)" \
     || die "self-test: #3121 zero-qualifying pattern-detect emit failed"
-  echo "$ntz_report" | /usr/bin/grep -q '^\*\*Qualifying clusters (size >= 3, spans >= 2 versions):\*\* 0$' \
+  /usr/bin/grep -q '^\*\*Qualifying clusters (size >= 3, spans >= 2 versions):\*\* 0$' <<<"$ntz_report" \
     || die "self-test: #3121 zero-qualifying fixture should qualify nothing"
-  echo "$ntz_report" | /usr/bin/grep -q "^### Near-threshold (no promotion)$" \
+  /usr/bin/grep -q "^### Near-threshold (no promotion)$" <<<"$ntz_report" \
     || die "self-test: the near-threshold band did NOT render in the zero-qualifying case — the insertion point regressed below the early exit (#3121)"
-  echo "$ntz_report" | /usr/bin/grep -q "No clusters meet the auto-promotion criteria" \
+  /usr/bin/grep -q "No clusters meet the auto-promotion criteria" <<<"$ntz_report" \
     || die "self-test: the zero-cluster footer must still render after the band (#3121)"
   /bin/rm -rf "$nt_dir" "$ntz_dir"
 

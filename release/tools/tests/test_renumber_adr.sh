@@ -180,9 +180,9 @@ assert_eq "ACT2 origin main contiguous 001..004 after A merges" "$?" "0"
 echo "=== ACT 3 — the later claimant takes the tooled path ==="
 cd "$ROOT/wt-B" && G fetch -q origin
 DET="$(python3 release/tools/renumber-adr.py --detect 2>&1)"
-echo "$DET" | grep -q "DUPLICATE" && ok "--detect reports DUPLICATE at 004" \
+grep -q "DUPLICATE" <<<"$DET" && ok "--detect reports DUPLICATE at 004" \
   || bad "--detect reports DUPLICATE at 004" "$DET"
-echo "$DET" | grep -q "next=5" && ok "--detect computes next-free 005" \
+grep -q "next=5" <<<"$DET" && ok "--detect computes next-free 005" \
   || bad "--detect computes next-free 005" "$DET"
 
 # --- A11 --exclude-path narrows R3 scope (dry-run; zero mutation) ------------
@@ -291,7 +291,7 @@ G push -q origin feat/b
 ( cd "$ROOT/wt-A" && G fetch -q origin && G merge -q --no-edit origin/feat/b && G push -q origin main )
 A5_OUT="$(cd "$ROOT/wt-A" && python3 release/tools/check-adr-numbers.py 2>&1)"; A5_RC=$?
 assert_eq "A5 after BOTH merges check-adr-numbers exits 0" "$A5_RC" "0"
-echo "$A5_OUT" | grep -q 'contiguous 001..005' \
+grep -q 'contiguous 001..005' <<<"$A5_OUT" \
   && ok "A5 mainline contiguous 001..005, no duplicate" \
   || bad "A5 mainline contiguous 001..005, no duplicate" "$A5_OUT"
 
@@ -306,7 +306,7 @@ IDEM="$(python3 release/tools/renumber-adr.py --renumber 4 5 --apply 2>&1)"; ID_
 assert_eq "A8 re-running the completed move exits 0 (idempotent)" "$ID_RC" "0"
 assert_eq "A8 zero diff after the idempotent re-run" \
   "$(G status --porcelain | wc -l | tr -d ' ')" "0"
-echo "$IDEM" | grep -q "COMPLETION MODE" \
+grep -q "COMPLETION MODE" <<<"$IDEM" \
   && ok "A8 the re-run enters completion mode rather than refusing" \
   || bad "A8 the re-run enters completion mode rather than refusing" "$IDEM"
 
@@ -364,9 +364,9 @@ G clone -q "$ROOT/origin10" "$ROOT/wt-A10"
 author_B origin10 wt-B10 6     # B stepped PAST a visible claim — the gap-landing error
 cd "$ROOT/wt-B10" && G fetch -q origin
 D10="$(python3 release/tools/renumber-adr.py --detect 2>&1)"
-echo "$D10" | grep -q "WOULD-GAP" && ok "A10 --detect reports WOULD-GAP at 006" \
+grep -q "WOULD-GAP" <<<"$D10" && ok "A10 --detect reports WOULD-GAP at 006" \
   || bad "A10 --detect reports WOULD-GAP at 006" "$D10"
-echo "$D10" | grep -q "next=5" && ok "A10 --detect computes the DOWNWARD target 005" \
+grep -q "next=5" <<<"$D10" && ok "A10 --detect computes the DOWNWARD target 005" \
   || bad "A10 --detect computes the DOWNWARD target 005" "$D10"
 python3 release/tools/renumber-adr.py --renumber 6 5 --apply >/dev/null 2>&1
 assert_eq "A10 renumber DOWN 006 → 005 exits 0" "$?" "0"
@@ -445,7 +445,7 @@ assert_eq "A12 DEADLOCK ARM — the SECOND move exits 0" "$M2_RC" "0"
 # --- the end state -----------------------------------------------------------
 C12="$(python3 release/tools/check-adr-numbers.py 2>&1)"; C12_RC=$?
 assert_eq "A12 the reconciled tree PASSES check-adr-numbers" "$C12_RC" "0"
-printf '%s\n' "$C12" | grep -q 'contiguous 001..008' \
+grep -q 'contiguous 001..008' <<<"$C12" \
   && ok "A12 contiguous 001..008, no duplicates" \
   || bad "A12 contiguous 001..008, no duplicates" "$C12"
 assert_file "A12 the held record was NOT renumbered" "release/ADRs/ADR-006-bravo006.md"

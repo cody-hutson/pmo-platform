@@ -88,7 +88,7 @@ printf '\nCase 4: operator-edited hook preserved (not clobbered)\n'
 WS="${SBX}/ws2"; deploy_ws "${WS}"
 printf '\n# OPERATOR EDIT\n' >> "${WS}/.claude/hooks/block-egress.sh"   # diverge from recorded baseline
 OUT="$(refresh "${WS}")"
-if grep -q 'OPERATOR EDIT' "${WS}/.claude/hooks/block-egress.sh" && printf '%s' "${OUT}" | grep -q 'PRESERVED (operator-edited): block-egress.sh'; then
+if grep -q 'OPERATOR EDIT' "${WS}/.claude/hooks/block-egress.sh" && grep -q 'PRESERVED (operator-edited): block-egress.sh' <<<"${OUT}"; then
   report "operator-edited hook preserved + warned" 1
 else report "operator-edited hook preserved + warned" 0 "edit was clobbered or not warned"; fi
 

@@ -65,11 +65,11 @@ report() {
 
 # assert_line HAYSTACK REGEX NAME — pass when REGEX is present.
 assert_line() {
-  if printf '%s\n' "$1" | grep -qE "$2"; then report "$3" 1; else report "$3" 0 "expected /$2/ in report"; fi
+  if grep -qE "$2" <<<"$1"; then report "$3" 1; else report "$3" 0 "expected /$2/ in report"; fi
 }
 # assert_absent HAYSTACK REGEX NAME — pass when REGEX is absent.
 assert_absent() {
-  if printf '%s\n' "$1" | grep -qE "$2"; then report "$3" 0 "unexpected /$2/ in report"; else report "$3" 1; fi
+  if grep -qE "$2" <<<"$1"; then report "$3" 0 "unexpected /$2/ in report"; else report "$3" 1; fi
 }
 # assert_eq GOT WANT NAME
 assert_eq() {

@@ -43,18 +43,25 @@ bad() { FAIL=$((FAIL+1)); FAILURES+=("$1"); printf '  FAIL — %s\n' "$1"; }
 # verdict_of <json> <id> — pull the verdict for a given check id out of the
 # --format=json output using a portable grep/sed (no jq dependency). Isolates the
 # JSON object containing this id, then reads its verdict field.
+# Each stage reads a here-string rather than a pipe. `head -1` closes its input
+# on the first line, and under `pipefail` every producer still upstream inherits
+# the broken pipe — an intervening `sed` does not make that safe, it just puts
+# one more process in the blast radius. A here-string has no writer to signal,
+# so `head` is retained unchanged and only the writers are removed. All callers
+# take these through command substitution, which strips the trailing newline, so
+# the empty case is byte-identical to the previous form.
 verdict_of() {
-  local json="$1" id="$2"
-  printf '%s\n' "$json" \
-    | grep -oE "\{[^{}]*\"id\":\"$id\"[^{}]*\}" \
-    | sed -n 's/.*"verdict":"\([A-Z]*\)".*/\1/p' | head -1
+  local json="$1" id="$2" obj verdicts
+  obj="$(grep -oE "\{[^{}]*\"id\":\"$id\"[^{}]*\}" <<<"$json" || true)"
+  verdicts="$(sed -n 's/.*"verdict":"\([A-Z]*\)".*/\1/p' <<<"$obj")"
+  head -1 <<<"$verdicts"
 }
 
 family_of() {
-  local json="$1" id="$2"
-  printf '%s\n' "$json" \
-    | grep -oE "\{[^{}]*\"id\":\"$id\"[^{}]*\}" \
-    | sed -n 's/.*"family":"\([a-z-]*\)".*/\1/p' | head -1
+  local json="$1" id="$2" obj families
+  obj="$(grep -oE "\{[^{}]*\"id\":\"$id\"[^{}]*\}" <<<"$json" || true)"
+  families="$(sed -n 's/.*"family":"\([a-z-]*\)".*/\1/p' <<<"$obj")"
+  head -1 <<<"$families"
 }
 
 cd "$REPO_ROOT"
@@ -80,10 +87,12 @@ set -e
 # the deferred family is present and SKIPs.
 DEFERRED_FAMILY_PRESENT="$(printf '%s\n' "$CANON_JSON" | grep -c '"family":"deferred"')"
 [ "$DEFERRED_FAMILY_PRESENT" -ge 1 ] && ok "declared-deferred routes to deferred family (SKIP)" || bad "no deferred family found in canonical output"
-DEFERRED_VERDICT="$(printf '%s\n' "$CANON_JSON" | grep -oE '\{[^{}]*"family":"deferred"[^{}]*\}' | sed -n 's/.*"verdict":"\([A-Z]*\)".*/\1/p' | head -1)"
+# sigpipe-idiom: allow — `grep -o` (matches, not lines) with an intervening `sed -n`; `-m1` would cap grep's LINE count, not the extracted verdict list. Writer already converted to a here-string.
+DEFERRED_VERDICT="$(grep -oE '\{[^{}]*"family":"deferred"[^{}]*\}' <<<"$CANON_JSON" | sed -n 's/.*"verdict":"\([A-Z]*\)".*/\1/p' | head -1)"
 [ "$DEFERRED_VERDICT" = "SKIP" ] && ok "deferred verdict is SKIP (honest no-op)" || bad "deferred verdict expected SKIP, got '$DEFERRED_VERDICT'"
 
-RUNTIME_VERDICT="$(printf '%s\n' "$CANON_JSON" | grep -oE '\{[^{}]*"family":"runtime-suite"[^{}]*\}' | sed -n 's/.*"verdict":"\([A-Z]*\)".*/\1/p' | head -1)"
+# sigpipe-idiom: allow — same `grep -o` + intervening `sed -n` shape as the deferred probe above.
+RUNTIME_VERDICT="$(grep -oE '\{[^{}]*"family":"runtime-suite"[^{}]*\}' <<<"$CANON_JSON" | sed -n 's/.*"verdict":"\([A-Z]*\)".*/\1/p' | head -1)"
 [ "$RUNTIME_VERDICT" = "SKIP" ] && ok "runtime-suite no-match → suite-skip SKIP" || bad "runtime-suite verdict expected SKIP, got '$RUNTIME_VERDICT'"
 
 # ---------------------------------------------------------------------------
@@ -98,14 +107,14 @@ echo "G4 — CIAC integration execution"
 # ---------------------------------------------------------------------------
 echo "G2 — table-shape tolerance (m-5)"
 # Enriched form (canonical fixture): issue grouping from the #N subsection header.
-printf '%s\n' "$CANON_JSON" | grep -q '"issue":"#901"' && ok "enriched form: #901 grouping from subsection header" || bad "enriched form: #901 not grouped"
-printf '%s\n' "$CANON_JSON" | grep -q '"issue":"#902"' && ok "enriched form: #902 grouping from subsection header" || bad "enriched form: #902 not grouped"
+grep -q '"issue":"#901"' <<<"$CANON_JSON" && ok "enriched form: #901 grouping from subsection header" || bad "enriched form: #901 not grouped"
+grep -q '"issue":"#902"' <<<"$CANON_JSON" && ok "enriched form: #902 grouping from subsection header" || bad "enriched form: #902 not grouped"
 # Issue-column form.
 set +e
 ISSUECOL_JSON="$("$VERIFY" --format=json "$FIX_ISSUECOL" 2>/dev/null)"
 set -e
-printf '%s\n' "$ISSUECOL_JSON" | grep -q '"issue":"#801"' && ok "issue-column form: #801 grouped from Issue column" || bad "issue-column form: #801 not grouped"
-printf '%s\n' "$ISSUECOL_JSON" | grep -q '"issue":"#802"' && ok "issue-column form: #802 grouped from Issue column" || bad "issue-column form: #802 not grouped"
+grep -q '"issue":"#801"' <<<"$ISSUECOL_JSON" && ok "issue-column form: #801 grouped from Issue column" || bad "issue-column form: #801 not grouped"
+grep -q '"issue":"#802"' <<<"$ISSUECOL_JSON" && ok "issue-column form: #802 grouped from Issue column" || bad "issue-column form: #802 not grouped"
 
 # ---------------------------------------------------------------------------
 # G3 — exit-code + schema-version + clean-plan exit 0.
@@ -114,7 +123,7 @@ echo "G3 — exit code + schema version"
 [ "$CANON_RC" -eq 3 ] && ok "fixture carrying a FAIL exits 3" || bad "canonical fixture expected exit 3, got $CANON_RC"
 
 VER_OUT="$("$VERIFY" --version)"
-printf '%s\n' "$VER_OUT" | grep -q 'schema v1' && ok "--version prints SCHEMA_VERSION (schema v1)" || bad "--version missing schema version: '$VER_OUT'"
+grep -q 'schema v1' <<<"$VER_OUT" && ok "--version prints SCHEMA_VERSION (schema v1)" || bad "--version missing schema version: '$VER_OUT'"
 
 # Clean all-PASS/SKIP synthetic → exit 0.
 CLEAN_FIX="$(mktemp -t verify-plan-3175-clean.XXXXXX.md)"
@@ -164,7 +173,8 @@ DRIFT_JSON="$("$STUB_DIR/release/tools/verify-release-plan.sh" --format=json --r
 DRIFT_RC=$?
 set -e
 [ "$DRIFT_RC" -eq 3 ] && ok "deploy --check drift → overall exit 3 (not internal error)" || bad "deploy drift expected exit 3, got $DRIFT_RC"
-printf '%s\n' "$DRIFT_JSON" | grep -q '"family":"regression".*"verdict":"FAIL"\|"verdict":"FAIL".*"family":"regression"' && ok "regression family renders FAIL on drift" || { printf '%s\n' "$DRIFT_JSON" | grep -oE '\{[^{}]*regression[^{}]*\}' | grep -q '"verdict":"FAIL"' && ok "regression family renders FAIL on drift" || bad "regression family did not FAIL on drift"; }
+DRIFT_REGRESSION_OBJ="$(grep -oE '\{[^{}]*regression[^{}]*\}' <<<"$DRIFT_JSON" || true)"
+grep -q '"family":"regression".*"verdict":"FAIL"\|"verdict":"FAIL".*"family":"regression"' <<<"$DRIFT_JSON" && ok "regression family renders FAIL on drift" || { grep -q '"verdict":"FAIL"' <<<"$DRIFT_REGRESSION_OBJ" && ok "regression family renders FAIL on drift" || bad "regression family did not FAIL on drift"; }
 # Clean case: stub deploy exits 0.
 printf '#!/usr/bin/env bash\nexit 0\n' > "$STUB_DIR/core/deploy/deploy.sh"
 set +e
@@ -172,7 +182,8 @@ CLEANDEP_JSON="$("$STUB_DIR/release/tools/verify-release-plan.sh" --format=json 
 CLEANDEP_RC=$?
 set -e
 [ "$CLEANDEP_RC" -eq 0 ] && ok "deploy --check clean → overall exit 0" || bad "deploy clean expected exit 0, got $CLEANDEP_RC"
-printf '%s\n' "$CLEANDEP_JSON" | grep -oE '\{[^{}]*sync[^{}]*\}' | grep -q '"verdict":"PASS"' && ok "sync family renders PASS when clean" || bad "sync family did not PASS when clean"
+CLEANDEP_SYNC_OBJ="$(grep -oE '\{[^{}]*sync[^{}]*\}' <<<"$CLEANDEP_JSON" || true)"
+grep -q '"verdict":"PASS"' <<<"$CLEANDEP_SYNC_OBJ" && ok "sync family renders PASS when clean" || bad "sync family did not PASS when clean"
 rm -rf "$STUB_DIR"
 
 # ---------------------------------------------------------------------------

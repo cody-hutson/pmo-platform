@@ -210,8 +210,8 @@ schema_migrate() {
     return 0
   fi
 
-  local current_schema; current_schema=$(grep -E '^schema_version' "${OPERATOR_TOML}" | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-  local template_schema; template_schema=$(grep -E '^schema_version' "${template_path}" | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+  local current_schema; current_schema=$(grep -m1 -E '^schema_version' "${OPERATOR_TOML}" | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+  local template_schema; template_schema=$(grep -m1 -E '^schema_version' "${template_path}" | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
 
   if [ "${current_schema}" = "${template_schema}" ]; then
     info "Schema versions match (${current_schema}); no migration needed."
@@ -285,8 +285,8 @@ regenerate_managed_sections() {
     # regenerate on EVERY run forever — EX_NOCHANGE becomes unreachable.
     # `awk '{print $3}'` is field-correct for BOTH forms ($1 is the comment
     # opener, $2 the key, $3 the hex), so only the pattern changes.
-    local stored_managed_sha; stored_managed_sha=$(grep -E '^(# |<!-- )managed_sha:' "${target}" | head -1 | awk '{print $3}' || true)
-    local stored_installed_sha; stored_installed_sha=$(grep -E '^(# |<!-- )installed_sha:' "${target}" | head -1 | awk '{print $3}' || true)
+    local stored_managed_sha; stored_managed_sha=$(grep -m1 -E '^(# |<!-- )managed_sha:' "${target}" | awk '{print $3}' || true)
+    local stored_installed_sha; stored_installed_sha=$(grep -m1 -E '^(# |<!-- )installed_sha:' "${target}" | awk '{print $3}' || true)
     local live_body_sha; live_body_sha=$(lib_compose_installed_body_sha "${target}" || true)
 
     # --- Tamper detection (runs REGARDLESS of the source-SHA skip) ---

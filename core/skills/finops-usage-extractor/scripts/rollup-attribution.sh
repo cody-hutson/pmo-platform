@@ -63,7 +63,7 @@ preflight_deps() {
 # ── Generator version — read the skill's own version frontmatter (never hardcoded). ──
 generator_version() {
   local v=""
-  [ -r "$SKILL_MD" ] && v="$( { grep -E '^version:' "$SKILL_MD" 2>/dev/null || true; } | head -1 | awk '{print $2}')"
+  [ -r "$SKILL_MD" ] && v="$( { grep -m1 -E '^version:' "$SKILL_MD" 2>/dev/null || true; } | awk '{print $2}')"
   printf '%s' "${v:-unknown}"
 }
 
@@ -71,7 +71,7 @@ generator_version() {
 toml_val() {
   local key="$1" toml="${HOME}/.config/pmo-platform/operator.toml"
   [ -r "$toml" ] || return 0
-  { grep -E "^${key}" "$toml" 2>/dev/null || true; } | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}'
+  { grep -m1 -E "^${key}" "$toml" 2>/dev/null || true; } | awk -F= '{gsub(/[" ]/,"",$2); print $2}'
 }
 
 workspace_root() {
@@ -413,7 +413,7 @@ apply_pr_resolve() {
   while IFS= read -r line; do
     branch="$(printf '%s' "$line" | jq -r '.branch // empty')"
     if printf '%s' "$line" | jq -e 'select(.work_item_kind=="unattributed")' >/dev/null 2>&1 \
-       && printf '%s' "$branch" | grep -qE '^(fix|feat)/'; then
+       && grep -qE '^(fix|feat)/' <<<"$branch"; then
       if iss="$(resolve_pr "$branch")"; then
         printf '%s' "$line" | jq -c --arg iss "$iss" \
           '.work_item=$iss | .work_item_kind="issue" | .attribution_tier="pr-resolved"
@@ -470,8 +470,8 @@ do_emit() {
   # anything but a count, the store's shape is UNKNOWN — which is not the same as clean, and
   # the old `${n:-0}` default silently converted exactly that case into "no legacy records".
   if [ "$probe_rc" -ne 0 ] \
-     || ! printf '%s' "$n_sess"   | grep -qE '^[0-9]+$' \
-     || ! printf '%s' "$n_legacy" | grep -qE '^[0-9]+$'; then
+     || ! grep -qE '^[0-9]+$' <<<"$n_sess" \
+     || ! grep -qE '^[0-9]+$' <<<"$n_legacy"; then
     printf 'FATAL (exit 3): FinOps store shape could not be determined: %s\n' "$store_file" >&2
     printf 'The store-shape preflight could not read the store (jq probe failed, or returned a non-count).\n' >&2
     printf 'Refusing to roll up a store of unknown shape. The store is a derived cache; rebuild it,\n' >&2
@@ -524,8 +524,8 @@ do_emit() {
   local nroll ncov health overlap
   nroll="$(jq -s '[.[]|select(.record=="rollup")]|length' "$store_file" 2>/dev/null)"
   ncov="$(jq -s '[.[]|select(.record=="coverage")]|length' "$store_file" 2>/dev/null)"
-  health="$(jq -r 'select(.record=="coverage")|.health' "$store_file" 2>/dev/null | head -1)"
-  overlap="$(jq -r 'select(.record=="coverage")|.count_once_overlap' "$store_file" 2>/dev/null | head -1)"
+  health="$(jq -r 'select(.record=="coverage")|.health' "$store_file" 2>/dev/null | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; no `set -e` in this script; jq emits one coverage field and the value is consumed, not the status
+  overlap="$(jq -r 'select(.record=="coverage")|.count_once_overlap' "$store_file" 2>/dev/null | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; no `set -e` in this script; jq emits one coverage field and the value is consumed, not the status
   printf 'finops-usage-extractor rollup: %s (%s rollup record(s), %s coverage; health=%s; count-once-overlap=%s)\n' \
     "$store_file" "${nroll:-?}" "${ncov:-?}" "${health:-?}" "${overlap:-0}" >&2
 }
@@ -566,6 +566,7 @@ self_test() {
   want="$(jq -S 'sort_by(.session_id)' "$fx_oracle" 2>/dev/null)"
   if [ "$got" != "$want" ]; then
     echo "FAIL: CIAC-1 ground-truth — resolver did not reproduce the labeled oracle"
+    # sigpipe-idiom: allow — multi-line diagnostic preview after an already-recorded FAIL; `diff` has no bounded-output flag to fold `head` into.
     diff <(printf '%s\n' "$want") <(printf '%s\n' "$got") 2>/dev/null | head -30
     fail=1
   else
@@ -602,7 +603,7 @@ self_test() {
   # (C) Coverage emitted + health OK on the (majority-attributable) fixture.
   local ncov health cov_ok
   ncov="$(jq -s '[.[]|select(.record=="coverage")]|length' "$st/usage.jsonl")"
-  health="$(jq -r 'select(.record=="coverage")|.health' "$st/usage.jsonl" | head -1)"
+  health="$(jq -r 'select(.record=="coverage")|.health' "$st/usage.jsonl" | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; no `set -e` in this script; jq emits one coverage field and the value is consumed, not the status
   [ "${ncov:-0}" -eq 1 ] || { echo "FAIL: expected exactly 1 coverage record, got ${ncov:-0}"; fail=1; }
   if [ "$health" = "OK" ]; then echo "  PASS: coverage record emitted (health=OK)";
   else echo "FAIL: coverage health != OK (got '${health:-none}') on the majority-attributable fixture"; fail=1; fi
@@ -640,7 +641,7 @@ self_test() {
 
   # (H) meta bumped to 1.2.0.
   local sv
-  sv="$(jq -r 'select(.record=="meta")|.schema_version' "$st/usage.jsonl" | head -1)"
+  sv="$(jq -r 'select(.record=="meta")|.schema_version' "$st/usage.jsonl" | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; no `set -e` in this script; jq emits one meta field and the value is consumed, not the status
   [ "$sv" = "1.2.0" ] && echo "  PASS: meta.schema_version bumped to 1.2.0" || { echo "FAIL: meta.schema_version != 1.2.0 (got $sv)"; fail=1; }
 
   # (I) FM-2 count-once (hub<->spoke file boundary). A spoke that appears BOTH as an
@@ -762,6 +763,7 @@ while [ $# -gt 0 ]; do
     --resolve-prs) RESOLVE_PRS=1 ;;
     --self-test)   DO_SELFTEST=1 ;;
     -h|--help)
+      # sigpipe-idiom: allow — `head` truncates the RENDERED help text, not the match set; an intervening `sed` sits between grep and head, so `-m50` would cap the wrong stage.
       grep -E '^#( |$)' "$0" | sed -E 's/^# ?//' | head -50
       exit 0 ;;
     *)

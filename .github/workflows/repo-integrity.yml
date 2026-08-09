@@ -9,6 +9,22 @@ name: Repository integrity
 #                  red; add "#999999" outside a reference block -> issue-ref red;
 #                  add "[x](missing.md)" -> dead-file-ref red.
 # (Three gates, three checks; posture per core/standards/gate-efficacy-standard.md (b).)
+#
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"SIGPIPE-idiom gate" (no WARN_MODE — a finding turns the check RED)  always-reports=yes
+#   invariant: no added line in a changed *.sh / *.bash introduces a writer piped
+#              into a short-circuiting reader (any writer | grep -q, any grep | head)
+#              outside the three declared exemption tiers; a file whose git status is
+#              A or R is scanned WHOLE, closing the rename blind spot.
+#   falsification: add `printf '%s' "$x" | grep -q y` to any changed .sh -> the job
+#                  FAILS (exit 1); add the same line carrying
+#                  `# sigpipe-idiom: allow — <reason>` -> the job PASSES and the line
+#                  is listed in the SUPPRESSED block of the run summary.
+#   posture note: `advisory`, not `required`, is the HONEST declaration today —
+#                 Requirement (b') makes `required` unavailable until the context is
+#                 registered in branch protection, which a PR cannot do. The gate is
+#                 ENFORCING (it exits non-zero on a finding); it is not yet BLOCKING.
+#                 Registering "SIGPIPE-idiom gate" as a required check flips this row
+#                 to posture=required enforcement=branch-protection with no code change.
 
 # Three PR-time integrity gates as three named jobs on one workflow, on the
 # proven parser-clean scaffold (override-marker -> locate-anchor -> scan-changed-
@@ -1354,4 +1370,528 @@ jobs:
             echo "::warning::ADR durability gate (warn-mode): findings reported, not blocking. The enforce-flip is HARD-GATED on the ADR full-conformance pass landing a clean baseline first — do not flip WARN_MODE before then."
             exit 0
           fi
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # GATE 10 — SIGPIPE idiom (#3832). A writer piped into a SHORT-CIRCUITING
+  #           reader is a latent false-FAIL: `grep -q`, `grep -mN`, `head`, a
+  #           `sed` carrying `q`, an `awk` carrying `exit` and the `read` builtin
+  #           all stop reading early, the writer is still writing, its next
+  #           write fails on the broken pipe, and `pipefail` promotes ITS status
+  #           to the pipeline's — so a SUCCESSFUL match reports failure. Written
+  #           `if ! <pipeline>`, that inverts to "no match" and the gate silently
+  #           passes what it exists to catch. It is not theoretical: deploy.sh
+  #           Check 31 over-reported 5x (Class L 477 vs a true 93) on this shape.
+  #
+  #           THE FAILING STATUS IS NOT ALWAYS 141. Which non-zero code appears
+  #           is a property of the writer's SIGPIPE disposition, not of the
+  #           defect: 141 where the signal is fatal (a developer shell), and 1
+  #           where the shell inherited SIGPIPE as SIG_IGN — which is what a
+  #           GitHub-hosted runner hands the step. On CI the signature is
+  #           therefore rc=1, INDISTINGUISHABLE from grep legitimately finding
+  #           nothing. Anything downstream that hunts for "141" will miss the CI
+  #           case; hunt for a non-zero status on a short-circuiting pipeline.
+  #
+  #           FIRING CONDITIONS (measured, not assumed): pipefail + the status
+  #           consumed + a MULTI-LINE haystack + an early match + >~64 KiB of
+  #           residual after the matched line. Single-line does not fire at 1 MB;
+  #           multi-line fires between 61 KB (rc=0) and 92 KB (rc non-zero).
+  #
+  #           WHY IT GATES ADDED LINES AND NOT THE TREE: #3832 converts the whole
+  #           pinned population in the same PR, so there is no pre-existing corpus
+  #           left for a whole-tree scan to find — and a whole-tree arm would need
+  #           a file:line exemption roster on day one, which is the second,
+  #           drifting roster the design avoids. Added-lines-only is also the
+  #           posture 4 of the 9 gates above already use.
+  #
+  #           RENAME BLIND SPOT, CLOSED: a `git mv` of a file carrying a site
+  #           produces no added lines under a pure delta, so a file whose status
+  #           is A (added) or R (renamed) is scanned WHOLE. That is the one place
+  #           this job deliberately does not copy `projects-casing` verbatim.
+  #
+  #           EXEMPTIONS reuse the repo's existing THREE-TIER model — no new
+  #           roster, no new vocabulary:
+  #             T1 content-exempt  — the idiom lies entirely inside a single-quoted
+  #                                  string (a test payload / case label). Detected
+  #                                  by stripping quoted spans and re-testing the
+  #                                  residual, the same technique GATE 8 uses for
+  #                                  its schema literal. NOT applied where the
+  #                                  quoted span is a PROGRAM rather than an inert
+  #                                  fixture: `eval` / `sh -c` EXECUTE it, and a
+  #                                  `sed`/`awk` match is by construction made on
+  #                                  the script operand those commands run.
+  #                                  The re-test runs against the same string the
+  #                                  match was made on — for a continuation join
+  #                                  that is the PIPE-PREPENDED form, not the bare
+  #                                  line, which would never re-match.
+  #             T2 line-scoped     — `# sigpipe-idiom: allow — <reason>` on the
+  #                                  line, or anywhere ABOVE it within the same
+  #                                  statement: the lookback climbs continuation
+  #                                  lines — `|` and `\` ONLY — so a marker written
+  #                                  above a multi-line pipeline's HEAD counts, while
+  #                                  an `&&`-joined neighbour (a separate command, not
+  #                                  a continuation) does NOT inherit the exemption.
+  #                                  (One line of lookback was not enough — a
+  #                                  correctly-placed marker two continuations up read
+  #                                  as absent.) This is the SAME rationale #3832's
+  #                                  AC-3 already requires, so the string a reviewer
+  #                                  reads and the string this gate parses are one.
+  #             T3 file-scoped     — `repo-integrity: allow-sigpipe-idiom`
+  #                                  anywhere in the file.
+  #           T2 and T3 are REPORTED via the SUPPRESSED channel, never silent.
+  #
+  #           POSTURE: enforce day one — no WARN_MODE. The ADR-durability lint
+  #           above defers its flip because it would lock a clean baseline rather
+  #           than create one; this gate CREATES its baseline in the same PR, so
+  #           that deferral rationale does not apply. Warn-only here would exit 0
+  #           while printing findings — the exit-0-with-warnings shape this
+  #           release exists to eliminate.
+  #
+  #           Injection-safety: BASE_SHA/HEAD_SHA bound via env: and used as "$VAR".
+  # ---------------------------------------------------------------------------
+  sigpipe-idiom:
+    name: SIGPIPE-idiom gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # need the base commit for the added-lines delta
+
+      - name: Scan added shell lines for writer-into-short-circuiting-reader pipelines
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # WHAT THIS DETECTOR MATCHES — AN ENUMERATION WITH A STATED BOUNDARY.
+          #
+          # Read this block and you can tell whether YOUR line is caught without
+          # running the gate. Everything below is a LIST. Five successive rounds of
+          # this gate each declared some axis settled -- writer-agnostic, then
+          # stage-agnostic, then "the pipe axis is closed shell grammar" -- and each
+          # was defeated on the axis it had just called safe. So nothing here is
+          # described as closed or structural: what is written down is matched, what
+          # is not written down is NOT matched, and the not-matched set is written
+          # down too. Adding a form means editing this block AND the patterns below.
+          #
+          # It matches on WHAT FOLLOWS THE PIPE, and it names no producers, so any
+          # producer reaches it -- `printf`, `echo`, `cat`, `find`, `git`, a shell
+          # function -- through any number of intervening filter stages.
+          #
+          # (1) THE PIPE, AND WHAT MAY SIT BETWEEN IT AND THE READER'S NAME.
+          #     A single `|` (never the second half of `||`) or bash's `|&`, then:
+          #       a. FIRST, any group openers `(` or `{`, each optionally followed by
+          #          earlier commands of that group ahead of the reader, and those
+          #          earlier commands may precede the reader, but ONLY as plain
+          #          words: the span is `[^(){}]*`, so a parameter expansion or a
+          #          nested group in an earlier command ends the match and the
+          #          construct is NOT caught (measured; fails closed).
+          #            caught     ->  `| { :; grep -q x; }`
+          #            NOT caught ->  `| { echo "${a}"; grep -q x; }`
+          #       then any number of b/c/d, in any order:
+          #       b. a variable-assignment prefix whose VALUE is an unquoted word
+          #            caught     ->  `| LC_ALL=C grep -q x`
+          #            NOT caught ->  `| IFS=' ' grep -q x`   (quoted value)
+          #       c. a redirection prefix with NO space after the operator
+          #            caught     ->  `| 2>/dev/null grep -q x`
+          #            NOT caught ->  `| 2> /dev/null grep -q x`  (spaced)
+          #       d. a wrapper NAME FROM THIS LIST, with up to TWO operand words --
+          #          a word being a run of characters carrying no whitespace and no
+          #          shell metacharacter:
+          #          command builtin exec env nice stdbuf time timeout sudo doas
+          #          nohup setsid ionice chrt        ->  `| timeout 5 grep -q x`
+          #     ...then an optional path qualification ->  `| /usr/bin/grep -q x`
+          #     (b) and (c) are NARROWER than the POSIX simple-command prefix
+          #     grammar -- they match the common spellings above, not the class.
+          #     Do not read them as a grammar rule; every clause here is a list.
+          #     (d) is A LIST OF NAMES, not a rule: a wrapper not on it is not matched.
+          #
+          # (2) THE READER — also a list of names and flags. Whether a command stops
+          #     reading is a property of the PROGRAM it names and the FLAGS it carries,
+          #     so no regex over a line of shell can decide it and any script can join
+          #     the class tomorrow. Matched:
+          #       * grep / egrep / ggrep / ugrep / rg / pcregrep / pcre2grep / ag
+          #         carrying `-q` / `--quiet` / `--silent` / `-mN` / `--max-count`, in
+          #         any flag order or cluster, operand attached (`-q"$n"`) or detached.
+          #         A digit BEFORE the flag letter in one cluster is NOT matched
+          #            NOT caught ->  `| grep -1q x`   (measured; fails closed)
+          #       * `head`, including at the close of a `$(…)` substitution and with no
+          #         separating space (`| head|wc`)
+          #       * a `sed` whose script carries a `q` command
+          #       * an `awk` whose program carries an `exit` OUTSIDE an `END` block
+          #       * the `read` builtin
+          #
+          # (3) WHAT IS NOT MATCHED — the boundary, written down so that a sixth
+          #     vector is a documented exclusion rather than a defect. All of it fails
+          #     CLOSED (a miss, never a false alarm) except the two shapes in (4).
+          #       * A reader whose NAME is not literal on the line: quoted
+          #         (`| "grep" -q x`) or indirect (`| $GREP -q x`, `| "$AWK" …`).
+          #       * A wrapper name outside the list in (1d), or a listed wrapper
+          #         carrying more than two operand words before the reader.
+          #       * Any other program that stops reading early: a repo script, `perl`
+          #         with `last`/`exit`, `python -c` with a `break`, a `head`-alike.
+          #       * `while read … break` / `until read … break`: the loop drains its
+          #         input UNLESS the body breaks, which is a multi-line property a
+          #         line-oriented scan cannot see. A bare `| read` IS matched.
+          #       * A multi-line `sed`/`awk` program whose `q`/`exit` sits on a later
+          #         line than the pipe -- the scan is line-oriented.
+          #       * `| xargs <anything>` -- excluded deliberately; reason below.
+          #       * An `awk` `exit` inside an `END` block -- excluded because it is
+          #         SAFE, not because it is missed: END runs only after awk has
+          #         already drained its input.
+          #       * A `#` occurring anywhere BEFORE the pipe on a live code line:
+          #         `^[^#]*` is the trailing-comment guard, and a `#` inside a sed
+          #         script, inside a `grep -vE '^[[:space:]]*(#|$)'` pattern, inside a
+          #         quoted needle such as `'ms:#[0-9]+'`, or in `"${#arr[@]}"`, all
+          #         blind it.
+          #
+          #     WHY `xargs` IS EXCLUDED, STATED CORRECTLY. The reason this gate used
+          #     to give -- "xargs drains its own stdin" -- is FALSE, and as written it
+          #     generalised unsoundly to `| xargs <anything>`. Measured: xargs reads
+          #     INCREMENTALLY, and it DOES stop early when a child exits 255 or dies
+          #     on a signal, and the producer then takes 141. What actually makes
+          #     `| xargs grep -q` and `| xargs head` safe is narrower: the xargs
+          #     child's stdin is `/dev/null`, not the pipe, so a child's own
+          #     short-circuit never closes it -- AND `grep -q`/`head` never exit 255
+          #     and never die on a signal, so xargs itself never stops early either.
+          #     Neither half carries to an arbitrary xargs child.
+          #
+          # (4) FALSE ALARMS — the only shapes that fail LOUD, each resolved by a T2
+          #     marker: a `-q`/`-m` token inside a DOUBLE-quoted needle (the
+          #     single-quoted case is handled by T1), and a needle that merely looks
+          #     like a flag after `--` (`grep -- -m1 f`).
+          #
+          # Read `[^|]\|` as "a single pipe, not the second half of `||`". Each line
+          # is tested with a leading space prepended (see NORMALISED below), so that
+          # guard also admits a line that BEGINS with the pipe, which is how a
+          # backslash-continued pipeline breaks across lines.
+
+          # ---- (1) the pipe, and the prefix forms enumerated above -----------------
+          # Each fragment below is one bullet of (1). Adding a bullet means adding a
+          # fragment here and a line there; they are meant to be read side by side.
+          # The inner class admits a pipe, so an earlier command of the group may be
+          # a pipeline of its own (`| { foo | bar; grep -q x; }`). It only ever
+          # applies AFTER a literal `(`/`{` following the pipe, and it costs nothing:
+          # over all 150 tracked shell files the pipe-admitting and pipe-excluding
+          # forms return the identical 275 hits.
+          P_GROUP='([({][[:space:]]*([^(){}]*[;&][[:space:]]*)*)*'
+          P_ASSIGN='[A-Za-z_][A-Za-z0-9_]*=[^[:space:]|]*[[:space:]]+'
+          P_REDIR='[0-9]*[<>][<>&]?[^[:space:]|]*[[:space:]]+'
+          P_WRAP='(command|builtin|exec|env|nice|stdbuf|time|timeout|sudo|doas|nohup|setsid|ionice|chrt)[[:space:]]+([^|;&<>(){}[:space:]]+[[:space:]]+){0,2}'
+          PIPE="^[^#]*[^|]\\|&?[[:space:]]*${P_GROUP}(${P_ASSIGN}|${P_REDIR}|${P_WRAP})*([^|[:space:]]*/)?"
+          # ---- (2) the enumerated readers -----------------------------------------
+          GREPS='(e?grep|ggrep|ugrep|rg|pcre2?grep|ag)'
+          # `-m` belongs with the quiet flags: the sanctioned `| head -N` -> `-mN`
+          # rewrite only removes the hazard when the pipeline collapses to a SINGLE
+          # command; with a producer still upstream it merely relocates it (measured).
+          # The trailing class admits an ATTACHED operand (`-q"$n"`, `-qF"$n"`, `-m$k`)
+          # as well as a detached one, which is why `"`, `'` and `$` sit in it.
+          QFLAG="(-[A-Za-z]*[qm][A-Za-z]*([[:space:]0-9\"'\$]|\$)|--quiet|--silent|--max-count)"
+          IDIOM_Q="${PIPE}${GREPS}[[:space:]]([^|]*[[:space:]])?${QFLAG}"
+          # The trailing class closes the command-substitution form `$(… | head)`,
+          # where `head` is followed by `)`, and the no-space form `| head|wc -l`.
+          IDIOM_H="${PIPE}head([[:space:]]|\$|\)|;|&|\||\`)"
+          # `q` as a sed COMMAND, not a `q` inside an s/// pattern or replacement:
+          # bounded by script punctuation on the left, and never followed by `/`.
+          IDIOM_S="${PIPE}sed[[:space:]](.*[{;'\"[:space:],/0-9])?q([};'\"[:space:]]|\$|[0-9])"
+          # `exit` as an awk STATEMENT, not `"exit"` in a string or `/exit/` in a
+          # pattern -- hence the leading `[{;[:space:]]` rather than a bare word test.
+          IDIOM_A="${PIPE}[gmnb]?awk([[:space:]]|\$).*[{;[:space:]]exit([[:space:];}'\"]|\$|[0-9])"
+          IDIOM_R="${PIPE}read([[:space:]]|\$)"
+          # Stripped before an awk match is believed: see the END-block note above.
+          AWK_END='END[[:space:]]*\{[^}]*\}'
+          # The residual misses and the two false alarms are enumerated in (3) and (4)
+          # of the declaration above -- one list, not two that can drift apart.
+          # T2/T3 markers. Un-anchored comment form, matching GATE 8's precedent.
+          LINE_MARK='sigpipe-idiom:[[:space:]]*allow'
+          FILE_MARK='repo-integrity:[[:space:]]*allow-sigpipe-idiom'
+
+          # ONE matcher, THREE call sites: the initial detect, the continuation join,
+          # and the T1 re-test. A single definition is what makes the re-test provably
+          # symmetric with the detection it re-tests -- an asymmetry between those two
+          # is exactly what once swallowed every continuation-join finding (see T1).
+          #
+          # Sets MATCH_LABEL, and MATCH_PROG=1 when the short-circuit token lives
+          # inside the reader's own quoted PROGRAM operand. Globals rather than
+          # stdout: a command substitution would run this in a subshell and lose them.
+          idiom_match() {
+            local _s="$1"
+            MATCH_LABEL=""; MATCH_PROG=0
+            if grep -qE "$IDIOM_Q" <<<"$_s"; then MATCH_LABEL='writer | grep -q/-mN'; return 0; fi
+            if grep -qE "$IDIOM_H" <<<"$_s"; then MATCH_LABEL='writer | head'; return 0; fi
+            if grep -qE "$IDIOM_S" <<<"$_s"; then MATCH_LABEL='writer | sed (q)'; MATCH_PROG=1; return 0; fi
+            if grep -qE "$IDIOM_A" <<<"$_s"; then
+              if grep -qE "$IDIOM_A" <<<"$(sed -E "s/${AWK_END}//g" <<<"$_s")"; then
+                MATCH_LABEL='writer | awk (exit)'; MATCH_PROG=1; return 0
+              fi
+            fi
+            if grep -qE "$IDIOM_R" <<<"$_s"; then MATCH_LABEL='writer | read'; return 0; fi
+            return 1
+          }
+
+          # Scope: changed shell sources. Excluded: the ledger surface, build
+          # artifacts, and this workflow's own YAML (whose regexes would match
+          # themselves — the self-reference trap). The exclusion is deliberately
+          # narrowed to `*.yml`/`*.yaml`: a real shell script living under
+          # `.github/workflows/` used to be skipped along with them, which was a
+          # hole rather than a design.
+          #
+          # A shell script need not carry a `.sh` extension. A changed file with no
+          # recognised extension is admitted when its FIRST LINE is a shell shebang
+          # — the only reliable signal, and the one that closed the extensionless
+          # -script hole. `read` rather than `head` so the gate does not model the
+          # very idiom it forbids.
+          #
+          # NOTE: a `while read` loop, not `mapfile`. `mapfile` is bash 4+, which
+          # makes the gate body unrunnable on a bash-3.2 developer machine — and a
+          # gate that can only be exercised by a remote CI trigger can only be
+          # *proved* by re-implementing it, which is the shadow-source failure the
+          # deciders-carveout library was extracted to end. This form lets the
+          # both-direction proof run the SHIPPED body verbatim.
+          CHANGED_LIST="$(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" 2>/dev/null || true)"
+          FILES=()
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            [ -f "$f" ] || continue
+            case "$f" in
+              release/releases/*|packages/*) continue ;;
+              .github/workflows/*.yml|.github/workflows/*.yaml) continue ;;
+            esac
+            case "$f" in
+              *.sh|*.bash) FILES+=("$f"); continue ;;
+              *.md|*.py|*.yml|*.yaml|*.json|*.toml|*.txt|*.skill|*.sha256) continue ;;
+            esac
+            SHEBANG=""
+            IFS= read -r SHEBANG < "$f" 2>/dev/null || true
+            case "$SHEBANG" in
+              '#!'*sh|'#!'*sh[[:space:]]*|'#!'*"env "[bdkz]*sh*|'#!'*bash*|'#!'*zsh*|'#!'*ksh*|'#!'*dash*)
+                FILES+=("$f") ;;
+              *) : ;;
+            esac
+          done <<<"$CHANGED_LIST"
+
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo ":white_check_mark: SIGPIPE idiom — no in-scope changed shell files" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          FOUND=0
+          REPORT=""
+          SUPPRESSED=""
+          EXEMPT_CONTENT=0
+
+          for f in "${FILES[@]}"; do
+            # T3 whole-file override.
+            if grep -qE "$FILE_MARK" "$f"; then
+              SUPPRESSED="${SUPPRESSED}${f}: whole file (T3 repo-integrity: allow-sigpipe-idiom)"$'\n'
+              continue
+            fi
+
+            # A file that is ADDED or RENAMED carries no added-line delta for its
+            # pre-existing content, so scan it whole. Anything else: added lines only.
+            # First line, first field — with parameter expansion, NOT `| cut | head`.
+            # This gate forbids piping a writer into `head`; writing one into its own
+            # body 49 lines below the comment that forbids it is the declared-vs-shipped
+            # gap this release exists to close, and the `.github/workflows/*.yml`
+            # exclusion means no gate could ever have caught it.
+            STATUS_ALL="$(git diff --name-status "$BASE_SHA"..."$HEAD_SHA" -- "$f" 2>/dev/null || true)"
+            STATUS="${STATUS_ALL%%$'\n'*}"
+            STATUS="${STATUS%%$'\t'*}"
+            case "$STATUS" in
+              A*|R*)
+                SCAN="$(awk '{ print NR ":" $0 }' "$f")"
+                ;;
+              *)
+                SCAN="$(git diff --unified=0 "$BASE_SHA"..."$HEAD_SHA" -- "$f" \
+                  | awk '
+                    /^@@/ { plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next }
+                    /^\+\+\+/ { next }
+                    /^\+/ { print newln ":" substr($0, 2); newln++ ; next }
+                    /^-/ { next }
+                  ' || true)"
+                ;;
+            esac
+            [ -z "$SCAN" ] && continue
+
+            while IFS= read -r entry || [ -n "$entry" ]; do
+              [ -z "$entry" ] && continue
+              LN="${entry%%:*}"
+              line="${entry#*:}"
+
+              # NORMALISED: a leading space, so the `[^|]\|` guard that rejects `||`
+              # also admits a line that BEGINS with the pipe.
+              NORMALISED=" ${line}"
+
+              # Does any idiom appear at all?
+              MATCHED=""
+              MATCH_JOINED=0
+              if idiom_match "$NORMALISED"; then MATCHED="$MATCH_LABEL"; fi
+
+              # CONTINUATION JOIN. The other half of a broken pipeline: the WRITER
+              # line ends in `|` (or `\`) and the reader sits alone on this line
+              # with no pipe of its own. Only consulted when this line WOULD match
+              # were a pipe prepended, so the extra file read costs nothing on the
+              # overwhelming majority of lines.
+              if [ -z "$MATCHED" ] && [ "$LN" -gt 1 ] 2>/dev/null; then
+                if idiom_match " | ${line}"; then
+                  PREVJ="$(sed -n "$((LN - 1))p" "$f" 2>/dev/null || true)"
+                  # Right-trim first. Trailing whitespace after the continuation
+                  # operator is invisible in a diff and fatal to a suffix test:
+                  # `cat f | ` does not end in `|`, so the arm silently lapsed.
+                  PREVJ="${PREVJ%"${PREVJ##*[![:space:]]}"}"
+                  # Double-quoted patterns: `"\\"` is one literal backslash and
+                  # reads unambiguously to shellcheck, where `'\'` trips SC1003.
+                  # Equivalence asserted against all four inputs before the swap.
+                  case "$PREVJ" in
+                    *"|"|*"\\") MATCHED="${MATCH_LABEL} (continued pipeline)"; MATCH_JOINED=1 ;;
+                    *) : ;;
+                  esac
+                fi
+              fi
+              [ -z "$MATCHED" ] && continue
+
+              # T2 line-scoped marker: on this line, or on the line above it in the
+              # head file (the conventional placement for a multi-line statement).
+              if grep -qE "$LINE_MARK" <<<"$line"; then
+                SUPPRESSED="${SUPPRESSED}${f}:${LN}: ${MATCHED} (T2, marker on line)"$'\n'
+                continue
+              fi
+              # Walk UP through the statement, not just one line. A marker is
+              # conventionally written above the statement HEAD, and a multi-line
+              # pipeline can put several continuation lines between that head and the
+              # line the idiom actually matched on — in which case a correctly-placed
+              # marker read as absent and the site read as unmarked. Stop at the first
+              # line that does not continue into the next, and bound the walk so a
+              # pathological file cannot make it unbounded.
+              #
+              # `|` and `\` only. `&&` is a LIST OPERATOR joining separate commands,
+              # not a line continuation, so climbing it let a marker written for one
+              # command grant an exemption to an unrelated site up to ten lines below.
+              # An exemption must be scoped to the statement it was written on.
+              T2_HIT=""
+              K=$((LN - 1))
+              STEPS=0
+              while [ "$K" -ge 1 ] && [ "$STEPS" -lt 10 ]; do
+                PREV="$(sed -n "${K}p" "$f" 2>/dev/null || true)"
+                if grep -qE "$LINE_MARK" <<<"$PREV"; then T2_HIT="$K"; break; fi
+                PREVT="${PREV%"${PREV##*[![:space:]]}"}"
+                case "$PREVT" in
+                  *"|"|*"\\") : ;;   # continues into the line below it
+                  *) break ;;
+                esac
+                K=$((K - 1)); STEPS=$((STEPS + 1))
+              done
+              if [ -n "$T2_HIT" ]; then
+                SUPPRESSED="${SUPPRESSED}${f}:${LN}: ${MATCHED} (T2, marker on line ${T2_HIT})"$'\n'
+                continue
+              fi
+
+              # T1 content-exempt: strip single-quoted spans and re-test. If the
+              # idiom no longer matches the residual, it lived entirely inside a
+              # quoted payload — a fixture string, not executed code.
+              #
+              # T1's premise fails wherever the quoted span is a PROGRAM rather than
+              # an inert fixture. Two cases, one principle:
+              #   * `eval '…'` and `sh -c '…'` EXECUTE their quoted payload, so the
+              #     single quotes mark a shell program.
+              #   * a `sed`/`awk` match is BY CONSTRUCTION made on the script operand
+              #     those commands execute — `| sed -n '/x/{p;q}'` keeps its entire
+              #     short-circuit inside the quotes. Stripping would exempt every one
+              #     of them, and the reader-class widening would have shipped
+              #     detecting nothing at all (MATCH_PROG).
+              if [ "$MATCH_PROG" -eq 1 ] || grep -qE '(^|[^[:alnum:]_./-])(eval|[a-z]*sh[[:space:]]+-c)([[:space:]]|$)' <<<"$line"; then
+                RESIDUAL="$line"
+              else
+                RESIDUAL="$(sed -E "s/'[^']*'//g" <<<"$line")"
+              fi
+              # RE-TEST ON THE STRING THE MATCH WAS MADE ON. A continuation-join match
+              # was made on " | $line"; re-testing the UN-joined line can never
+              # re-match, because a reader alone on its own line has no pipe of its
+              # own. Every continuation finding was therefore reclassified as
+              # content-exempt and the job exited 0 on a real site, reporting an
+              # anonymous count with no file:line — the arm this gate advertises
+              # asserted nothing. Symmetry with the detection is the whole fix.
+              RETEST=" ${RESIDUAL}"
+              if [ "$MATCH_JOINED" -eq 1 ]; then RETEST=" | ${RESIDUAL}"; fi
+              if ! idiom_match "$RETEST"; then
+                EXEMPT_CONTENT=$((EXEMPT_CONTENT + 1))
+                continue
+              fi
+
+              FOUND=1
+              REPORT="${REPORT}${f}:${LN}: [${MATCHED}] ${line}"$'\n'
+            done <<< "$SCAN"
+          done
+
+          if [ -n "$SUPPRESSED" ]; then
+            {
+              echo "### SIGPIPE idiom — suppressed (declared exemptions, reported not silent)"
+              echo '```'
+              printf '%s' "$SUPPRESSED"
+              echo '```'
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          [ "$EXEMPT_CONTENT" -gt 0 ] && \
+            echo "::notice::SIGPIPE idiom: ${EXEMPT_CONTENT} occurrence(s) content-exempt (T1 — idiom inside a quoted payload)." | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$FOUND" -eq 0 ]; then
+            echo ":white_check_mark: SIGPIPE idiom — no writer-into-short-circuiting-reader pipeline on added shell lines" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## :x: SIGPIPE-idiom gate FAILED"
+            echo ""
+            echo "An added shell line pipes a writer into a **short-circuiting reader**"
+            echo "(\`grep -q\`, \`grep -mN\`, \`head\`, a \`sed\` carrying \`q\`, an \`awk\` carrying"
+            echo "\`exit\`, or \`read\`). Under \`pipefail\` the reader exits on"
+            echo "its first match, the writer's next write fails on the broken pipe, and its"
+            echo "non-zero status becomes the pipeline's — so a **successful match reports"
+            echo "failure**. Written \`if ! <pipeline>\`, that inverts to \"no match\" and the"
+            echo "check silently passes what it exists to catch."
+            echo ""
+            echo "The status is **141** where SIGPIPE is fatal and **1** where the shell"
+            echo "inherited it as \`SIG_IGN\` — which is what a GitHub-hosted runner hands the"
+            echo "step. On CI the signature is \`rc=1\`, indistinguishable from \"no match\"."
+            echo ""
+            echo "### Findings (file:line)"
+            echo '```'
+            printf '%s' "$REPORT"
+            echo '```'
+            echo ""
+            echo "### Fix — read from a here-string; there is then no writer to signal"
+            echo ""
+            echo '```sh'
+            echo "# before                                   # after"
+            echo "printf '%s' \"\$hay\" | grep -q -- \"\$n\"       grep -q -- \"\$n\" <<<\"\$hay\""
+            echo "grep -E p f | head -1                      grep -m1 -E p f"
+            echo "echo \"\$x\" | awk '/p/{print \$2; exit}'      awk '/p/{print \$2; exit}' <<<\"\$x\""
+            echo "echo \"\$x\" | sed -n '/p/{s/a/b/p;q}'        sed -n '/p/{s/a/b/p;q}' <<<\"\$x\""
+            echo '```'
+            echo ""
+            echo "**Three substitutions are NOT semantics-preserving — check before converting:**"
+            echo ""
+            echo "- \`printf '%s\\n' \"\${A[@]}\"\` emits one line per element; \`<<<\"\${A[@]}\"\`"
+            echo "  space-joins them onto ONE line, breaking any \`^\`-anchored match."
+            echo "- \`grep -o … | head -1\` is NOT \`grep -m1 -o\` — \`-m\` counts matching LINES,"
+            echo "  not matches, so every match on the first line survives."
+            echo "- \`grep A | grep -v B | head -1\` folds only into the LAST grep. Folding into"
+            echo "  the first discards the line the filter would have kept."
+            echo "- \`| head -N\` -> \`-mN\` only REMOVES the hazard when the pipeline collapses"
+            echo "  to a single command. With a producer still upstream, \`producer | grep -mN\`"
+            echo "  short-circuits exactly as \`| head\` did — the hazard moved, it did not go."
+            echo "- An empty haystack: \`printf '%s' \"\"\` emits ZERO lines, \`<<<\"\"\` emits ONE"
+            echo "  empty line. If the needle can match an empty line, guard with \`[ -n \"\$v\" ]\`."
+            echo ""
+            echo "### Exemptions"
+            echo ""
+            echo "- Keeping the form deliberately: add \`# sigpipe-idiom: allow — <one-line reason>\`"
+            echo "  on the line, or anywhere above it within the same statement (the lookback climbs"
+            echo "  a pipe or a line-continuation backslash — NOT \`&&\`, which joins separate commands)."
+            echo "  It is reported in the SUPPRESSED block, never silent."
+            echo "- Whole file: \`# repo-integrity: allow-sigpipe-idiom\`."
+            echo "- The idiom inside a single-quoted payload string is content-exempt automatically."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
           exit 1

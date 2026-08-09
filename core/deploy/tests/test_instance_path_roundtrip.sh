@@ -178,11 +178,11 @@ else
 fi
 
 # update.sh should explicitly report it PRESERVED the operator needle file.
-if printf '%s' "${upd1_out}" | grep -q "PRESERVED (operator data, never regenerated)"; then
+if grep -q "PRESERVED (operator data, never regenerated)" <<<"${upd1_out}"; then
   report "update reports needle file PRESERVED (never regenerated)" 1
 else
   report "update reports needle file PRESERVED (never regenerated)" 0 \
-    "$(printf '%s' "${upd1_out}" | grep -i needle | head -2 | tr '\n' '|')"
+    "$(grep -m2 -i needle <<<"${upd1_out}" | tr '\n' '|')"
 fi
 
 # --- Stage 4: second update → still byte-identical (idempotent) ---
@@ -200,14 +200,16 @@ fi
 
 # --- Stage 5: a pre-update instance backup was taken (#1830 Part 3) ---
 printf '\nStage 5: pre-update instance backup\n'
-if find "${SBX}/ws" -maxdepth 1 -type d -name '.backup-pre-update-instance-*' 2>/dev/null | grep -q .; then
+# `-print -quit` rather than `| grep -q .`: the pipe form lets grep close find's
+# output on the first path, and find inherits the broken pipe.
+if [ -n "$(find "${SBX}/ws" -maxdepth 1 -type d -name '.backup-pre-update-instance-*' -print -quit 2>/dev/null)" ]; then
   report "update took a pre-update instance backup" 1
 else
   report "update took a pre-update instance backup" 0 \
     "no .backup-pre-update-instance-* dir under ${SBX}/ws"
 fi
 # And the backup actually captured the needle file content.
-backup_needle="$(find "${SBX}/ws" -path '*.backup-pre-update-instance-*/localized-context-needles.txt' 2>/dev/null | head -1)"
+backup_needle="$(find "${SBX}/ws" -path '*.backup-pre-update-instance-*/localized-context-needles.txt' 2>/dev/null | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; no `set -e` in this suite, and the value is consumed, not the status
 if [ -n "${backup_needle}" ] && [ "$(sha_file "${backup_needle}")" = "${HASH_FILLED}" ]; then
   report "instance backup captured the filled needle file" 1
 else

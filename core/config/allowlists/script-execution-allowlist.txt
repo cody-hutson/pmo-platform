@@ -217,6 +217,18 @@ release/tools/claim-version.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-registry-currency.sh
 ./core/deploy/tools/check-registry-currency.sh
 core/deploy/tools/check-registry-currency.sh
+# test-status-label-invariant.sh — deploy.sh Check 16 status-label invariant fixture
+# self-test. Now a wired step of the shell-tests job in install-tests.yml AND invoked
+# agent-side at Stage 7 Dev Testing, plus by any operator re-running it locally. It
+# carried ZERO rows while all four peer .sh suites carried the full four, so the
+# agent-side invocation was the one BLOCK-DESTRUCTIVE-022 could block. All four
+# invocation forms per the per-tool form convention above. (CI itself runs no Claude
+# hooks, so these rows are for the agent-side path, not the workflow step.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/tests/test-status-label-invariant.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/tests/test-status-label-invariant.sh
+./core/deploy/tools/tests/test-status-label-invariant.sh
+core/deploy/tools/tests/test-status-label-invariant.sh
+
 # path-leak-patterns.sh — the shared path-leak detection primitive. It was
 # source-only until the `--scan-file` arm shipped; the release-hub pre-spawn
 # brief scan now EXECUTES it (`bash <path> --scan-file <rendered-brief>`) before

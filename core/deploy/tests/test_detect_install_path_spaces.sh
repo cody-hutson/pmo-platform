@@ -194,10 +194,10 @@ else
 fi
 
 # --- C. No silent degrade (COWORK_AVAILABLE became true) ---
-if printf '%s' "${deploy_log}" | grep -q "user-local only (no Cowork session)"; then
+if grep -q "user-local only (no Cowork session)" <<<"${deploy_log}"; then
   report "no silent degrade to user-local-only" 0 \
     "deploy reported 'user-local only' despite a valid pinned session"
-elif printf '%s' "${deploy_log}" | grep -q "No Cowork skills-plugin session found"; then
+elif grep -q "No Cowork skills-plugin session found" <<<"${deploy_log}"; then
   report "no silent degrade to user-local-only" 0 \
     "detect_install_path failed to find the session under the space-containing base"
 else

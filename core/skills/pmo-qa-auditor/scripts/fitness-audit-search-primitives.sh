@@ -105,7 +105,7 @@ check_cf1() {
 # check_cf2 <line> -> PASS/FAIL  (form: read-only command word + output marker)
 check_cf2() {
   local s="$1"
-  if printf '%s' "${s}" | grep -qE "${CF2_CMD_RE}" && printf '%s' "${s}" | grep -q '→'; then
+  if grep -qE "${CF2_CMD_RE}" <<<"${s}" && grep -q '→' <<<"${s}"; then
     printf 'PASS'
   else
     printf 'FAIL'
@@ -115,7 +115,7 @@ check_cf2() {
 # check_cf3 <token> -> PASS/FAIL/SKIP
 check_cf3() {
   local tok="$1" n
-  if printf '%s' "${tok}" | grep -qE "^${CF3_ISSUE_RE}\$"; then
+  if grep -qE "^${CF3_ISSUE_RE}\$" <<<"${tok}"; then
     command -v gh >/dev/null 2>&1 || { printf 'SKIP'; return; }
     n="${tok#\#}"
     if gh issue view "${n}" --json number >/dev/null 2>&1 || gh pr view "${n}" --json number >/dev/null 2>&1; then
@@ -123,7 +123,7 @@ check_cf3() {
     else
       printf 'FAIL'
     fi
-  elif printf '%s' "${tok}" | grep -qE "^${CF3_VER_RE}\$"; then
+  elif grep -qE "^${CF3_VER_RE}\$" <<<"${tok}"; then
     if [ -n "$(git -C "${SCRIPT_DIR}" tag -l "${tok}" 2>/dev/null)" ]; then printf 'PASS'; return; fi
     command -v gh >/dev/null 2>&1 || { printf 'SKIP'; return; }
     if gh release view "${tok}" --json tagName >/dev/null 2>&1; then printf 'PASS'; else printf 'FAIL'; fi
@@ -141,11 +141,11 @@ check_cf4() {
 # matches_any_form <string> -> 0 if any CF regex matches, 1 otherwise
 matches_any_form() {
   local s="$1"
-  printf '%s' "${s}" | grep -qE "${CF1_RE}" && return 0
-  { printf '%s' "${s}" | grep -qE "${CF2_CMD_RE}" && printf '%s' "${s}" | grep -q '→'; } && return 0
-  printf '%s' "${s}" | grep -qE "${CF3_ISSUE_RE}" && return 0
-  printf '%s' "${s}" | grep -qE "${CF3_VER_RE}" && return 0
-  { printf '%s' "${s}" | grep -qE "${CF4_RE}" && printf '%s' "${s}" | grep -qE '[a-f]' ; } && return 0
+  grep -qE "${CF1_RE}" <<<"${s}" && return 0
+  { grep -qE "${CF2_CMD_RE}" <<<"${s}" && grep -q '→' <<<"${s}"; } && return 0
+  grep -qE "${CF3_ISSUE_RE}" <<<"${s}" && return 0
+  grep -qE "${CF3_VER_RE}" <<<"${s}" && return 0
+  { grep -qE "${CF4_RE}" <<<"${s}" && grep -qE '[a-f]' <<<"${s}" ; } && return 0
   return 1
 }
 
@@ -185,8 +185,16 @@ cmd_validate_evidence() {
 
   # Seeded sample: N = 10 or all when fewer (mode-spec §4).
   local n=10; [ "${total}" -lt 10 ] && n="${total}"
-  local sample
-  sample="$(printf '%s\n' "${candidates}" | awk -v seed="${seed}" 'BEGIN{srand(seed)} {printf "%.9f\t%s\n", rand(), $0}' | sort -n | head -n "${n}" | cut -f2-)"
+  # RANK FIRST, then take the head from a here-string. `sort` drains its input, so
+  # when `head` closed the pipe early it was `sort` that took SIGPIPE and `pipefail`
+  # that promoted it — aborting this script under its own `set -euo pipefail`.
+  # Measured on this exact shape: clean to 500 candidates, aborting at 900 and above
+  # — the same order as blast-radius.sh's fan-out cap, not the "much lower
+  # reachability" it was once assumed to have. Split form: rc=0 to 20,000, sample
+  # byte-identical at 3 / 9 / 10 / 200 / 900 candidates.
+  local ranked sample
+  ranked="$(printf '%s\n' "${candidates}" | awk -v seed="${seed}" 'BEGIN{srand(seed)} {printf "%.9f\t%s\n", rand(), $0}' | sort -n)"
+  sample="$(head -n "${n}" <<<"${ranked}" | cut -f2-)"
 
   local pass=0 fail=0 skip=0 form tok verdict
   while IFS="$(printf '\t')" read -r form tok; do
@@ -226,7 +234,7 @@ resolve_live() {
       local t; t="$(gh release list --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || true)"
       case "${t}" in (v[0-9]*) printf '%s' "${t}";; (*) printf 'SKIP';; esac ;;
     LIVE:head-sha) git -C "${SCRIPT_DIR}" rev-parse --short HEAD 2>/dev/null || printf 'SKIP' ;;
-    LIVE:root-sha) git -C "${SCRIPT_DIR}" rev-list --max-parents=0 HEAD 2>/dev/null | head -1 | cut -c1-12 || printf 'SKIP' ;;
+    LIVE:root-sha) git -C "${SCRIPT_DIR}" rev-list --max-parents=0 -n 1 HEAD 2>/dev/null | cut -c1-12 || printf 'SKIP' ;;
     *) printf '%s' "$1" ;;
   esac
 }
@@ -292,7 +300,8 @@ EOF
       bdeep="$(printf '%s' "${bdeep}" | sed 's/^ *//;s/ *$//' | sed 's/\*\*//g')"
       [ -n "${brange}" ] || continue
       local lo hi
-      lo="$(printf '%s' "${brange}" | grep -oE '[0-9]+' | head -1)"
+      # sigpipe-idiom: allow — `grep -o` emits N matches per LINE, so `-m1` (which counts LINES) would keep both bounds; `head -1` must stay. Writer converted to a here-string.
+      lo="$(grep -oE '[0-9]+' <<<"${brange}" | head -1)"
       hi="$(printf '%s' "${brange}" | grep -oE '[0-9]+' | tail -1)"
       if [ "${pct}" -ge "${lo}" ] && { [ "${pct}" -lt "${hi}" ] || { [ "${hi}" -eq 100 ] && [ "${pct}" -le 100 ]; }; }; then
         gband="${brange}"; gclass="${bclass}"; gdeep="${bdeep}"; break

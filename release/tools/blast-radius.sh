@@ -889,7 +889,17 @@ compute_second_order() {
     fo_total="$(printf '%s\n' "$fo_paths" | grep -c . || true)"
     [ -z "$fo_total" ] && fo_total=0
     if [ "$fo_total" -gt "$ARG_MAX_EXPAND" ]; then
-      fo_paths="$(printf '%s\n' "$fo_paths" | head -n "$ARG_MAX_EXPAND")"
+      # HERE-STRING, not `printf … | head`: with no writer process there is nothing
+      # to take SIGPIPE. This is not a style preference — it was a live defect.
+      # Measured on this exact shape under this file's own `set -euo pipefail`, at
+      # the DEFAULT --max-expand=300: the piped form aborts the script
+      # INTERMITTENTLY from ~800 first-order referrers (~34 KB residual, 3/20 runs),
+      # ~30% at 900, ~60% at 1,000 and 20/20 by 5,000 — so it is probabilistic, not
+      # a clean threshold, and a single clean run below the knee proves nothing. It
+      # died precisely where this branch exists to emit PARTIAL RESULT, and it fired
+      # BELOW the 61–92 KiB band the class is usually argued to need. The here-string
+      # form: 0 aborts in 140 runs across the same range, value byte-identical.
+      fo_paths="$(head -n "$ARG_MAX_EXPAND" <<<"$fo_paths")"
       PARTIAL=1
       PARTIAL_REASON="second-order expansion capped at --max-expand=${ARG_MAX_EXPAND} of ${fo_total} first-order referrers"
       err "PARTIAL RESULT: ${PARTIAL_REASON}"
@@ -1332,8 +1342,8 @@ run_self_test() {
 
   reason="$(jq -r '.partial_reason // ""' "$out" 2>/dev/null || echo "")"
   rc=0
-  { printf '%s' "$reason" | grep -q -F -e '--max-expand=3' \
-    && printf '%s' "$reason" | grep -q -F -e 'of 12 first-order referrers'; } || rc=1
+  { grep -q -F -e '--max-expand=3' <<<"$reason" \
+    && grep -q -F -e 'of 12 first-order referrers' <<<"$reason"; } || rc=1
   st_true "$rc" "T3c partial_reason names BOTH the cap and the true total [${reason}]"
 
   fo="$(jq -r '.stats.first_order_count' "$out" 2>/dev/null || echo ERR)"

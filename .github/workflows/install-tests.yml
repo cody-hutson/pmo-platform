@@ -11,7 +11,9 @@ name: Install tests
 # Four jobs:
 #
 # shell-tests — runs the full deploy-test harness under core/deploy/tests/
-# against /tmp sandboxes (no writes outside the sandbox roots):
+# against /tmp sandboxes (no writes outside the sandbox roots), plus the
+# deploy.sh check-fixture self-tests that live beside their tool under
+# core/deploy/tools/tests/:
 #   - test_sandbox_roots.sh        --dry-run plumbing (CLI flag / env-var precedence)
 #   - test_install_end_to_end.sh   full real install + update flow (catches
 #                                  embedded-Python heredoc bugs the dry-run can't see)
@@ -49,6 +51,17 @@ name: Install tests
 #                                  the mis-pin, unresolvable and empty-name branches
 #                                  are distinguishable, reproduces the pre-fix silent
 #                                  pass, and drift-guards the live predicate (#4177)
+#   - core/deploy/tools/tests/test-status-label-invariant.sh  deploy.sh Check 16
+#                                  status-label invariant fixture self-test: the four
+#                                  arms (mutex / presence / proposed+milestone /
+#                                  orphaned bundle) MIRROR Check 16's inline jq filters
+#                                  and must stay in lockstep with them. Lives here, not
+#                                  in release-tooling-smoke.yml, because that workflow's
+#                                  paths: filter omits core/deploy/deploy.sh — the very
+#                                  file the suite mirrors — while this workflow has no
+#                                  paths: filter and so fires on every pull request. It
+#                                  also relies on the Ensure jq step: the suite's own jq
+#                                  guard exits 0 when jq is absent
 #
 # hook-tests — runs the core/hooks/tests/*.test.sh bypass-mode hook tests +
 # their test-runner.sh against a sandbox that materializes the DEPLOYED hook
@@ -333,6 +346,42 @@ jobs:
         # milestone: unreachable validator, empty read, unrecognized branch
         # form. Hermetic: no gh, no network. Consumes no workflow event input.
         run: bash core/deploy/tests/test_g1_release_resolver.sh
+
+      - name: Run Check 16 status-label invariant fixture self-test (test-status-label-invariant.sh)
+        # Invokes core/deploy/tools/tests/test-status-label-invariant.sh (4 fixture
+        # arms: I1 mutex, I2 presence, I3 proposed+milestone, I4 orphaned bundle).
+        #
+        # What rots without it: the suite MIRRORS deploy.sh Check 16's four inline jq
+        # filters, and its own header states the obligation — "the filters here MUST
+        # mirror deploy.sh Check 16 … if Check 16's filters change, update this test in
+        # lockstep." A mirror that nothing runs cannot report that it has fallen out of
+        # lockstep; it simply agrees with a Check 16 that has moved on.
+        #
+        # WHY THIS JOB and not the closeout-smoke job in release-tooling-smoke.yml,
+        # where the sibling release/tools/tests/ suites live. Three reasons, the third
+        # decisive:
+        #   1. Governed routing. The runtime suite-selection map routes core/deploy/**
+        #      to the deploy run: steps in THIS workflow. The narrower row that could
+        #      have claimed it globs core/deploy/tools/*.sh, and `*` does not cross `/`,
+        #      so it does not reach this tests/ subtree.
+        #   2. Genre. shell-tests is already the established home for deploy.sh
+        #      check-fixture-efficacy suites (Checks 22, 31, 36, 39, 45); this is the
+        #      Check 16 member of that family. "Close-out automation smoke" is not.
+        #   3. TRIGGER. release-tooling-smoke.yml is path-filtered and its filter does
+        #      NOT list core/deploy/deploy.sh — the very file this suite mirrors. Wiring
+        #      a Check 16 mirror-test there would bind it to a trigger blind to its own
+        #      subject: it would run when the MIRROR changed and never when the ORIGINAL
+        #      did, inverting its purpose. This workflow has no paths: filter at all, so
+        #      every pull request runs it.
+        #
+        # Depends on the "Ensure jq" step above, and that dependency is load-bearing:
+        # the suite's own jq guard exits 0 when jq is absent, so without a guaranteed jq
+        # it could report success while asserting nothing. This job installs jq
+        # defensively; closeout-smoke only assumes the image ships it.
+        #
+        # Hermetic: synthetic in-memory fixtures only; no gh, no network, no write to
+        # the checkout. Consumes no workflow event input. Gates on exit code.
+        run: bash core/deploy/tools/tests/test-status-label-invariant.sh
 
   hook-tests:
     name: Hook test harness (macOS)

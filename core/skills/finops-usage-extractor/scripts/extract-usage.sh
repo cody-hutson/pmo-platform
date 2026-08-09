@@ -22,7 +22,8 @@
 #     --self-test    run built-in assertions against the synthetic test-fixtures; no
 #                    source or operator-store access.
 #
-# Exit codes: 0 ok · 2 usage error · 3 source unreadable · 4 store-not-git-ignored
+# Exit codes: 0 ok · 2 usage error · 3 source unreadable, or incremental carry-forward
+#             read failure (store left unchanged) · 4 store-not-git-ignored
 #             (fail-closed public-repo exfil guard) · 5 missing dependency (jq/git).
 
 set -uo pipefail
@@ -350,10 +351,25 @@ do_incremental() {
   local drop_json
   drop_json="$(jq -R . "$ids" 2>/dev/null | jq -s -c '.' 2>/dev/null || echo '[]')"
   merged="$(mktemp "${TMPDIR:-/tmp}/finops-merge.XXXXXX")"
-  jq -c --argjson drop "$drop_json" \
-     'select(.record=="session" or .record=="subagent")
-      | select( ($drop | index(.session_id)) | not )' \
-     "$store_file" 2>/dev/null > "$merged" || true
+  local merged_err="${merged}.err"
+  # Carry-forward is a READ of an already-written store; there is no benign failure
+  # here. A non-zero means the filter is wrong or the store is corrupt, and in BOTH
+  # cases falling through to write_store silently TRUNCATES the store to just the
+  # re-extracted sessions. Fail closed and leave the existing store untouched.
+  # `.` is rebound to $drop inside the pipe, so the record MUST be bound first:
+  # `($drop | index(.session_id))` indexes an array with a string and errors on
+  # every record. Never `2>/dev/null || true` on this path.
+  if ! jq -c --argjson drop "$drop_json" \
+        'select(.record=="session" or .record=="subagent")
+         | . as $r | select( ($drop | index($r.session_id)) | not )' \
+        "$store_file" > "$merged" 2>"$merged_err"; then
+    printf 'FATAL (exit 3): incremental carry-forward could not read the store; it is left UNCHANGED at %s\n' "$store_file" >&2
+    sed 's/^/  jq: /' "$merged_err" >&2
+    printf 'Recover with: bash %s --rebuild\n' "${BASH_SOURCE[0]}" >&2
+    rm -f "$changed" "$body" "$ids" "$merged" "$merged_err"
+    return 3
+  fi
+  rm -f "$merged_err"
   cat "$body" >> "$merged"
   write_store "$store_dir" "$src_root" "$created" "$now" "$merged"
   rm -f "$changed" "$body" "$ids" "$merged"
@@ -510,6 +526,76 @@ self_test() {
   d2="$(jq -s -S '[.[] | select(.record=="session") | {session_id, tokens}] | sort_by(.session_id)' "$st_store/usage.jsonl" 2>/dev/null)"
   [ "$d1" = "$d2" ] || { echo "FAIL: incremental (no change) altered the session digest"; fail=1; }
 
+  # 9) Incremental CARRY-FORWARD branch. Step 8 exercises only the no-source-change
+  #    EARLY RETURN; the carry-forward filter it exits before is the branch that
+  #    silently truncated the store. Drives that branch on a THROWAWAY copy of the
+  #    fixtures (never the checked-in tree) with deterministic `touch -t` mtimes (no
+  #    sleep, no race), then asserts prior records SURVIVE. Every guard fails LOUD —
+  #    a sub-test that cannot set itself up is a FAILURE, never a silent skip.
+  #    INVARIANT: every failure message below contains the literal "carry-forward";
+  #    the carry-forward precision probe in the release-tooling smoke workflow greps
+  #    for it to confirm a non-zero exit came from THIS block, not an unrelated
+  #    regression. Keep this block AFTER the analysis-dimension block above, so that
+  #    probe's own marker is already emitted whatever this block does.
+  local cf_src cf_store cf_pick cf_file cf_base cf_after cf_err cf_rc cf_n cf_nsub
+  cf_src="$(mktemp -d "${TMPDIR:-/tmp}/finops-cfsrc.XXXXXX")"
+  cf_store="$(mktemp -d "${TMPDIR:-/tmp}/finops-cfstore.XXXXXX")"
+  cp -R "$FIXTURES_DIR/." "$cf_src/" 2>/dev/null
+  STORE="$cf_store" FINOPS_SOURCE_ROOT="$cf_src" do_rebuild "$cf_store" "$cf_src" 2>/dev/null
+  cf_n="$(jq -s '[.[] | select(.record=="session")] | length' "$cf_store/usage.jsonl" 2>/dev/null)"
+  cf_nsub="$(jq -s '[.[] | select(.record=="subagent")] | length' "$cf_store/usage.jsonl" 2>/dev/null)"
+  cf_base="$(jq -s -S '[.[] | select(.record=="session" or .record=="subagent")
+                        | {record, session_id, subagent_id, tokens, turns}]
+                       | sort_by(.session_id, .record, (.subagent_id // ""))' "$cf_store/usage.jsonl" 2>/dev/null)"
+  if [ "${cf_n:-0}" -lt 2 ]; then
+    echo "FAIL: carry-forward sub-test cannot run — needs >=2 fixture session records, got ${cf_n:-0}"; fail=1
+  else
+    # All sources OLD, store MIDDLE, exactly one source NEW. `touch -t` is the portable
+    # form across BSD (macOS) and GNU (CI runners); `touch -d` is not.
+    find "$cf_src" -type f -name '*.jsonl' -exec touch -t 202001010000 {} + 2>/dev/null
+    touch -t 202006010000 "$cf_store/usage.jsonl" 2>/dev/null
+    # `head` closes its input on the first line, and every producer still upstream
+    # inherits the broken pipe (#3832). `sort` has to consume the whole stream
+    # regardless, so it is snapshotted rather than bounded; `find` answers the
+    # first-hit question directly with `-print -quit`.
+    cf_pick="$(head -1 <<<"$( { jq -r 'select(.record=="session") | .session_id' "$cf_store/usage.jsonl" 2>/dev/null || true; } | sort)")"
+    cf_file="$(find "$cf_src" -type f -name "${cf_pick:-__none__}.jsonl" -print -quit 2>/dev/null || true)"
+    if [ -z "$cf_pick" ] || [ -z "$cf_file" ]; then
+      echo "FAIL: carry-forward sub-test cannot resolve a source file for session '${cf_pick:-}'"; fail=1
+    else
+      touch -t 202101010000 "$cf_file" 2>/dev/null
+      cf_err="$cf_store/incr.err"
+      STORE="$cf_store" FINOPS_SOURCE_ROOT="$cf_src" do_incremental "$cf_store" "$cf_src" 2>"$cf_err"; cf_rc=$?
+      if [ "$cf_rc" -ne 0 ]; then
+        echo "FAIL: carry-forward incremental run exited $cf_rc (fail-closed guard; store left unchanged):"
+        sed 's/^/       /' "$cf_err"
+        fail=1
+      else
+        # Branch-entry proof A (wording-independent): the early return never rewrites the
+        # store, so its mtime would still be the staged 2020 value.
+        [ "$cf_store/usage.jsonl" -nt "$cf_file" ] \
+          || { echo "FAIL: carry-forward branch not reached — store was not rewritten (mtime gate did not fire)"; fail=1; }
+        # Branch-entry proof B (redundant, marker-keyed): the carry-forward path's own
+        # message, not the early return's. Two independent proofs, because the defect
+        # class here is a check that silently stops evaluating.
+        grep -q 'incremental upsert complete' "$cf_err" \
+          || { echo "FAIL: carry-forward branch not reached — --incremental took the no-source-change early return"; fail=1; }
+        cf_after="$(jq -s '[.[] | select(.record=="session")] | length' "$cf_store/usage.jsonl" 2>/dev/null)"
+        [ "${cf_after:-0}" -eq "${cf_n:-0}" ] \
+          || { echo "FAIL: incremental carry-forward LOST session records (${cf_n} -> ${cf_after:-0})"; fail=1; }
+        cf_after="$(jq -s '[.[] | select(.record=="subagent")] | length' "$cf_store/usage.jsonl" 2>/dev/null)"
+        [ "${cf_after:-0}" -eq "${cf_nsub:-0}" ] \
+          || { echo "FAIL: incremental carry-forward LOST subagent records (${cf_nsub} -> ${cf_after:-0})"; fail=1; }
+        cf_after="$(jq -s -S '[.[] | select(.record=="session" or .record=="subagent")
+                               | {record, session_id, subagent_id, tokens, turns}]
+                              | sort_by(.session_id, .record, (.subagent_id // ""))' "$cf_store/usage.jsonl" 2>/dev/null)"
+        [ "$cf_after" = "$cf_base" ] \
+          || { echo "FAIL: incremental carry-forward changed the record set (expected identical modulo extraction time)"; fail=1; }
+      fi
+    fi
+  fi
+  rm -rf "$cf_src" "$cf_store"
+
   rm -rf "$st_store"
   if [ "$fail" -eq 0 ]; then
     echo "finops-usage-extractor --self-test: PASS"
@@ -558,4 +644,10 @@ case "$MODE" in
   rebuild)     do_rebuild     "$STORE_DIR" "$SOURCE_ROOT" ;;
   incremental) do_incremental "$STORE_DIR" "$SOURCE_ROOT" ;;
 esac
-exit 0
+# An unconditional `exit 0` here would swallow the mode function's return code, which
+# is exactly how the incremental carry-forward failure stayed silent: the fail-closed
+# guard above returns 3, and without this propagation the caller still sees 0. The
+# mode functions must `return` (never `exit`) for this to work — self_test() calls
+# do_incremental directly, and an `exit` there would bypass its FAIL reporting.
+MODE_RC=$?
+exit "$MODE_RC"

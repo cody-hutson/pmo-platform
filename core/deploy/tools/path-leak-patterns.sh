@@ -53,7 +53,7 @@ path_leak_line_is_exempt() {
     *'${'*':-'*'${HOME}/Claude'*'}'*)      return 0 ;;
   esac
   # A synthetic fixture username in a /Users//home path is not a real leak.
-  if printf '%s' "$line" | grep -qE "(/Users/|/home/)(${PATH_LEAK_FIXTURE_USERS})([^A-Za-z0-9]|$)"; then
+  if grep -qE "(/Users/|/home/)(${PATH_LEAK_FIXTURE_USERS})([^A-Za-z0-9]|$)" <<<"$line"; then
     return 0
   fi
   return 1
@@ -72,7 +72,7 @@ path_leak_line_is_exempt() {
 # defined for a surface that explicitly opts to flag raw-root usage.
 path_leak_scan_line() {
   local line="$1"
-  if printf '%s' "$line" | grep -qE "${PATH_LEAK_RE_MACHINE}|${PATH_LEAK_RE_INSTANCE_REL}"; then
+  if grep -qE "${PATH_LEAK_RE_MACHINE}|${PATH_LEAK_RE_INSTANCE_REL}" <<<"$line"; then
     path_leak_line_is_exempt "$line" && return 1
     return 0
   fi

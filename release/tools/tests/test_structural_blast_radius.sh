@@ -214,9 +214,15 @@ test_s4_mode_contract() {
 # ---------------------------------------------------------------------------
 test_s5_lc_all_coverage() {
   echo "[S5] CIAC-4 — every sort under the script-level LC_ALL=C export"
-  local export_line first_sort_line
-  export_line="$(grep -n '^export LC_ALL=C' "$BLAST_RADIUS" | head -1 | cut -d: -f1)"
-  first_sort_line="$(grep -nE '[^_-]sort ' "$BLAST_RADIUS" | grep -v '# ' | head -1 | cut -d: -f1 || true)"
+  local export_line first_sort_line sort_hits
+  export_line="$(grep -m1 -n '^export LC_ALL=C' "$BLAST_RADIUS" | cut -d: -f1)"
+  # `| head -1` -> `grep -m1` only removes the SIGPIPE hazard when the pipeline
+  # collapses to ONE command. Here a producer survived upstream, so the bounded
+  # reader still closes the pipe early and the hazard merely moved. Snapshot the
+  # producer first: with no writer process there is nothing left to signal. Same
+  # tool, same flags, same order — only the writer is gone.
+  sort_hits="$(grep -nE '[^_-]sort ' "$BLAST_RADIUS" || true)"
+  first_sort_line="$(grep -m1 -v '# ' <<<"$sort_hits" | cut -d: -f1 || true)"
   if [ -z "$export_line" ]; then
     bad "S5: no 'export LC_ALL=C' found in blast-radius.sh"
     return
