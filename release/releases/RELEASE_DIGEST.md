@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.19 (2026-08-09) — Work that ends in a document can now close without a deployment
+
 ### v4.17 (2026-08-08) — Security architecture and data engineering now have owners in the skill suite
 
 ### v4.18 (2026-08-08) — Background sessions get their own workspace and a capacity check

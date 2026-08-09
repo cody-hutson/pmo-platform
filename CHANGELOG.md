@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.19] - 2026-08-09
+
+Work whose result is a document can now be closed on that document being accepted, instead of having to pretend it deployed something.
+
+[Full notes](release/releases/notes/v4.19_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.19)
+
 ## [v4.17] - 2026-08-08
 
 Security architecture, security review, and hands-on data engineering now have named owners instead of the nearest general skill.
