@@ -367,9 +367,9 @@ test_case "off-mode: curl POST to attacker exits 0 (no log, no block)" \
 # the fail posture is mode-dependent: enforce must DENY (exit 2 — a control that
 # cannot parse its input must not allow), while warn/off DEGRADE to a stderr note
 # + exit 0 (missing jq must not block harder than a rule match would). A missing
-# helper LIBRARY is an install-integrity failure that fails CLOSED (exit 2) in any
-# mode. The sandbox carries its OWN .mode, so this block does not race the shared
-# core/hooks/.mode the rest of this suite mutates.
+# helper LIBRARY is now mode-coupled the same way: enforce denies, warn/off degrade
+# with the notice still emitted. The sandbox carries its OWN .mode, so this block
+# does not race the shared core/hooks/.mode the rest of this suite mutates.
 _sbx="$(/usr/bin/mktemp -d)"
 /bin/mkdir -p "$_sbx/lib"
 /bin/cp "$HOOK" "$_sbx/block-egress.sh"
@@ -401,15 +401,43 @@ else
   /usr/bin/printf 'FAIL: jq missing + warn → expected exit 0 + DEPENDENCY-DEGRADED, got exit=%s\n  stderr: %s\n' "$_jqwarn_exit" "$_jqwarn_err"; FAIL=$((FAIL + 1))
 fi
 
-# helper missing entirely → fail CLOSED (exit 2 + LIB-MISSING) regardless of mode
+# helper missing entirely → MODE-COUPLED, like the jq gate above it. enforce still
+# denies (a control that cannot evaluate its input must not allow), warn/off degrade
+# to a stderr note + exit 0 — an unusable helper must not block harder than a rule
+# match would, and in warn/off a match would not block at all. Both arms asserted;
+# the enforce arm is the load-bearing one.
 /bin/rm -f "$_sbx/lib/dep-resolve.sh"
-/usr/bin/printf 'off' > "$_sbx/.mode"
+/usr/bin/printf 'enforce' > "$_sbx/.mode"
 _libmiss_exit=0
 _libmiss_err="$(/usr/bin/printf '%s' "$_jqpayload" | /bin/bash "$_sbx/block-egress.sh" 2>&1 >/dev/null)" || _libmiss_exit="$?"
-if [ "$_libmiss_exit" = 2 ] && /usr/bin/printf '%s' "$_libmiss_err" | /usr/bin/grep -qE 'LIB-MISSING'; then
-  /usr/bin/printf 'PASS: helper missing → fail CLOSED (exit 2 + LIB-MISSING)\n'; PASS=$((PASS + 1))
+if [ "$_libmiss_exit" = 2 ] && /usr/bin/printf '%s' "$_libmiss_err" | /usr/bin/grep -qE 'LIB-MISSING.*fail-closed'; then
+  /usr/bin/printf 'PASS: helper missing + enforce → fail CLOSED (exit 2 + LIB-MISSING)\n'; PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: helper missing → expected exit 2 + LIB-MISSING, got exit=%s\n  stderr: %s\n' "$_libmiss_exit" "$_libmiss_err"; FAIL=$((FAIL + 1))
+  /usr/bin/printf 'FAIL: helper missing + enforce → expected exit 2 + LIB-MISSING fail-closed, got exit=%s\n  stderr: %s\n' "$_libmiss_exit" "$_libmiss_err"; FAIL=$((FAIL + 1))
+fi
+
+/usr/bin/printf 'off' > "$_sbx/.mode"
+_libmissoff_exit=0
+_libmissoff_err="$(/usr/bin/printf '%s' "$_jqpayload" | /bin/bash "$_sbx/block-egress.sh" 2>&1 >/dev/null)" || _libmissoff_exit="$?"
+if [ "$_libmissoff_exit" = 0 ] && /usr/bin/printf '%s' "$_libmissoff_err" | /usr/bin/grep -qE 'LIB-MISSING.*degraded'; then
+  /usr/bin/printf 'PASS: helper missing + off → degrade (exit 0 + LIB-MISSING notice still emitted)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: helper missing + off → expected exit 0 + LIB-MISSING degrade notice, got exit=%s\n  stderr: %s\n' "$_libmissoff_exit" "$_libmissoff_err"; FAIL=$((FAIL + 1))
+fi
+
+# A stale helper that ALSO redefines get_mode must not be able to pick the guard's own
+# verdict. The guard sources the helper inside its own condition, so the helper is in
+# the shell by the time the failure branch runs; the mode is snapshotted readonly above
+# the guard precisely so this cannot land. Disk says enforce → must still deny.
+/usr/bin/printf 'enforce' > "$_sbx/.mode"
+/usr/bin/head -78 "$HOOK_DIR/lib/dep-resolve.sh" > "$_sbx/lib/dep-resolve.sh"
+/usr/bin/printf 'get_mode() { /usr/bin/printf "off"; }\n' >> "$_sbx/lib/dep-resolve.sh"
+_hostile_exit=0
+_hostile_err="$(/usr/bin/printf '%s' "$_jqpayload" | /bin/bash "$_sbx/block-egress.sh" 2>&1 >/dev/null)" || _hostile_exit="$?"
+if [ "$_hostile_exit" = 2 ] && /usr/bin/printf '%s' "$_hostile_err" | /usr/bin/grep -qE 'LIB-MISSING.*fail-closed'; then
+  /usr/bin/printf 'PASS: stale helper redefining get_mode + .mode=enforce → still fail CLOSED (snapshot is readonly)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: stale helper redefining get_mode + .mode=enforce → expected exit 2 fail-closed, got exit=%s. The sourced helper selected the guard verdict.\n  stderr: %s\n' "$_hostile_exit" "$_hostile_err"; FAIL=$((FAIL + 1))
 fi
 /bin/rm -rf "$_sbx"
 

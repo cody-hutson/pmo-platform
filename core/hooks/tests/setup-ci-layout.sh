@@ -260,6 +260,27 @@ log "setup-ci-layout: materialized ${materialized} hook-tier allowlist(s)"
 #    it; the live ~/Claude/.claude/hooks/.mode is never touched (R-8).
 printf 'enforce' > "${HOOKS_DST}/.mode"
 
+# 4b) Sandbox .gh-path-leak-mode (enforce), so the layout mirrors the deployed shape
+#     for the one hook that reads its own mode file rather than the shared one. The
+#     seed is enforce for the same reason .mode is — the per-case tests set their own
+#     value — and it is deliberately NOT the hook's shipped default. The shipped
+#     default is exercised by REMOVING this file: with the shared .mode seeded at
+#     enforce and this file absent, an exclusive build resolves the in-script default
+#     and a build that had re-acquired a fallback would be promoted to enforce by the
+#     shared file. Seeding both at the shipped default would make that case agree with
+#     itself and prove nothing.
+printf 'enforce' > "${HOOKS_DST}/.gh-path-leak-mode"
+
+# 4c) Sandbox .autonomy-mode (enforce), for the same reason and by the same rule as
+#     4b: block-autonomy-ceiling.sh reads its own mode file, so the layout must carry
+#     one or the sandbox silently exercises the hook's in-script default instead of a
+#     seeded value. Leaving it absent is what let a real packaging defect hide — the
+#     template was tracked but had no install call site, so a fresh install never
+#     received it, and CI could not see the difference because CI reproduced the
+#     unseeded condition. A test layout that omits a file the deployed layout carries
+#     is not a smaller sandbox, it is a different one.
+printf 'enforce' > "${HOOKS_DST}/.autonomy-mode"
+
 log "setup-ci-layout: layout ready"
 log "  sandbox       : ${SANDBOX}"
 log "  hooks         : ${HOOKS_DST}"

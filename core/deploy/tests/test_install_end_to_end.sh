@@ -151,6 +151,34 @@ else
   report "hooks installed (>=10)" 0 "found ${hook_count}"
 fi
 
+# Dedicated per-hook mode files must actually LAND on a fresh install, not merely
+# have a call site. A hook whose own mode file is never installed falls through to
+# its in-script default, which is how block-autonomy-ceiling silently ran `enforce`
+# while its header declared WARN-MODE-INITIAL. Asserting the installed artifact
+# rather than the call site is deliberate: the call site is the mechanism, the
+# landed file with its expected content is the outcome, and only the outcome is
+# what a hook reads at runtime.
+#
+# `.verify-session-config-mode` is a KNOWN GAP with the same missing-call-site
+# defect and is intentionally absent from this list — it is not on this release's
+# path and is tracked separately, together with the durable remedy (an assertion
+# over every tracked mode template rather than this per-file enumeration).
+for mode_pair in ".autonomy-mode:warn" ".gh-path-leak-mode:warn" ".mode:warn"; do
+  mode_file="${mode_pair%%:*}"
+  mode_want="${mode_pair##*:}"
+  mode_path="${SBX}/ws/.claude/hooks/${mode_file}"
+  if [ ! -f "${mode_path}" ]; then
+    report "mode file ${mode_file} installed" 0 "absent after install: ${mode_path}"
+  else
+    mode_got=$(tr -d '[:space:]' < "${mode_path}")
+    if [ "${mode_got}" = "${mode_want}" ]; then
+      report "mode file ${mode_file} installed (= ${mode_want})" 1
+    else
+      report "mode file ${mode_file} installed (= ${mode_want})" 0 "content: ${mode_got}"
+    fi
+  fi
+done
+
 allowlist_count=$(find "${SBX}/ws/.claude" "$(pmo_instance_path_for "${SBX}/ws")" -maxdepth 1 -name "*.txt" 2>/dev/null | wc -l | tr -d ' ')
 if [ "${allowlist_count}" -ge 14 ]; then
   report "composition-surface files (>=14)" 1
