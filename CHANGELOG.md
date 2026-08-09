@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.21] - 2026-08-09
+
+A command that maintained your usage history had been deleting most of it and reporting success; that and two other silent failures are fixed.
+
+[Full notes](release/releases/notes/v4.21_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.21)
+
 ## [v4.20] - 2026-08-09
 
 A broken support library no longer hard-blocks every command, and there is now a written rule for what may be quoted onto a public page.
