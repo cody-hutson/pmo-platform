@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-129 — The dependency-helper guard is mode-coupled for the mode-capable cohort; the always-enforce floor stays unconditional"
+title: "ADR-130 — The dependency-helper guard is mode-coupled for the mode-capable cohort; the always-enforce floor stays unconditional"
 status: Proposed
 date: 2026-08-08
 release: hook-precision-and-boundaries
@@ -14,13 +14,15 @@ source_observations:
   - "The floor's unconditional deny is real for an absent, unreadable or truncated helper, and NOT real for a syntactically-valid helper whose top level runs `exit 0`: that terminates the hook before the guard can rule, and `bash -n` cannot detect it because the syntax is valid. Pre-existing; tracked as its own defect."
 ---
 
-# ADR-129 — The dependency-helper guard is mode-coupled for the mode-capable cohort
+# ADR-130 — The dependency-helper guard is mode-coupled for the mode-capable cohort
 
 ## Status
 
 **Proposed.** Authored at Engineering for the `hook-precision-and-boundaries` release; ratified at that release's plan-review gate.
 
 **Supersedes in part:** the *unconditional* fail-closed posture for the dependency-helper source guard recorded as D4 of [ADR-078](ADR-078-security-hook-dependency-resolution-posture.md). D4 remains the governing, unchanged record for hooks with no mode surface, and D4's body is deliberately not rewritten in place — it is the founding record of the posture, and the security patch it belongs to was reviewed against that text. ADR-078's D1, D2, D3, D5, D6, D7 and D8 are unaffected.
+
+**Numbering provenance — `129 → 130`.** Held **ADR-129** branch-local; renumbered to **ADR-130** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 129. In-release citations that read "ADR-129" denote this record.
 
 ## Context
 
