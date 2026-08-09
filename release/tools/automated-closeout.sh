@@ -6699,7 +6699,11 @@ DG3
   phase_assert_derived_surfaces >/dev/null 2>&1 || _sr_aprc=$?
   [[ "$_sr_aprc" -ne 0 ]] || { echo "FAIL: AC1-T7 anti-vacuity — under --apply the SAME absent-entry fixture MUST still fail; rc=0 means either the presence limb was gutted rather than made mode-aware, or the fixture is not actually missing the ${VERSION} entries it claims to omit"; failures=$((failures+1)); }
   [[ "$(get_phase assert_derived_surfaces | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: AC1-T7 must mark the phase FAIL under --apply, got '$(get_phase assert_derived_surfaces)'"; failures=$((failures+1)); }
-  get_phase assert_derived_surfaces | /usr/bin/grep -qF 'no v9.99 entry on the derived surface' || { echo "FAIL: AC1-T7 — the --apply presence message must be preserved verbatim (AC2: the apply limb is unchanged), got '$(get_phase assert_derived_surfaces)'"; failures=$((failures+1)); }
+  # Captured, then matched from a here-string: `writer | grep -q` would short-circuit
+  # and SIGPIPE get_phase, and on CI that rc=1 is indistinguishable from "no match" —
+  # the assertion would read as a clean fail rather than a broken probe.
+  local _sr_t7detail; _sr_t7detail="$(get_phase assert_derived_surfaces)"
+  /usr/bin/grep -qF 'no v9.99 entry on the derived surface' <<<"$_sr_t7detail" || { echo "FAIL: AC1-T7 — the --apply presence message must be preserved verbatim (AC2: the apply limb is unchanged), got '$_sr_t7detail'"; failures=$((failures+1)); }
 
   # (e) AC2 — preflight working-tree tolerance. Drives the shipped predicate with
   # synthetic porcelain text (no git, no network).
