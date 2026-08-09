@@ -271,6 +271,16 @@ printf 'enforce' > "${HOOKS_DST}/.mode"
 #     itself and prove nothing.
 printf 'enforce' > "${HOOKS_DST}/.gh-path-leak-mode"
 
+# 4c) Sandbox .autonomy-mode (enforce), for the same reason and by the same rule as
+#     4b: block-autonomy-ceiling.sh reads its own mode file, so the layout must carry
+#     one or the sandbox silently exercises the hook's in-script default instead of a
+#     seeded value. Leaving it absent is what let a real packaging defect hide — the
+#     template was tracked but had no install call site, so a fresh install never
+#     received it, and CI could not see the difference because CI reproduced the
+#     unseeded condition. A test layout that omits a file the deployed layout carries
+#     is not a smaller sandbox, it is a different one.
+printf 'enforce' > "${HOOKS_DST}/.autonomy-mode"
+
 log "setup-ci-layout: layout ready"
 log "  sandbox       : ${SANDBOX}"
 log "  hooks         : ${HOOKS_DST}"
