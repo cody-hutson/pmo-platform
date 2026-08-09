@@ -67,6 +67,99 @@ A1 Issue closure audit (auto-close via PR `Closes #N`, verify each issue CLOSED)
 
 *A7.2 cutover: Close-out learnings-register production applies to all releases going forward; the introducing release is exempt (reflexive-pipeline-loop discipline).*
 
+**Phase A7.5 — Close-class resolution + the artifact-acceptance branch:** Before Phase A8 binds the close-out output set, the Stage 13 spoke resolves the release's **close class** and routes to the matching branch. This runs *before* A8 deliberately: A8 binds an output set whose membership the class determines, so a class resolved after it would be resolved too late to change anything.
+
+**A7.5.1 — Resolve the class.** Read the three-rung ladder, first hit wins:
+
+```
+rung 1   release plan  domain_practice.domain        <- Stage-4 A1.5, mandatory on every plan
+rung 2   PROJECT.md    deliverable_type              <- the authoritative source rung 1 reads,
+                                                        where a project declares one
+rung 3   (unresolved)                                <- EXPLICIT NO-OP DEFAULT
+
+if  resolved value == `task-artifact`   ->  A7.5.3  TASK-ARTIFACT branch
+else                                    ->  A7.5.2  DEPLOYABLE branch  (base behavior, unchanged)
+```
+
+The branch fires **only** on the literal recognized value `task-artifact`. An unrecognized, misspelled, absent, or free-form value resolves **DEPLOYABLE** — today's exact behavior. A close class is something a release *declares*; it is never inferred from a file list, a label set, or a milestone name. Canonical criterion + the full per-gate disposition: [`gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md) § Close-Class Conditioning Disposition. The class value is registered in [`domain-token-registry.md`](../../../core/specs/domain-token-registry.md) §2 Concept 1, which is the one lookup a reader needs to resolve it.
+
+**A7.5.2 — DEPLOYABLE branch (the default).** Proceed to Phase A8 unchanged. `G-CL3` is satisfied by the RELEASE_LOG `DEPLOYED → VERIFIED` transition and `G-CL5` by the operational manifest, exactly as before this phase existed. **No new required step is added to this branch.**
+
+**Report the fall-through — do not take it silently.** When the class resolves through **rung 3** (unresolved), or resolves to a value that is neither `task-artifact` nor a guide-backed deliverable class, the spoke records one line in the close-out report:
+
+```
+Close class: DEPLOYABLE (fall-through) — resolved via rung <N>; declared value: <value | none>.
+```
+
+Routing to the default is correct. Routing there **quietly** is what turns a typo in a release plan's `domain_practice.domain` into a wrong close that nobody notices, so the N/A pathway is load-bearing rather than invisible. The line is **informational and blocks nothing** — it is a report entry, not a gate.
+
+**A7.5.3 — TASK-ARTIFACT branch.** The release closes on **artifact acceptance**:
+
+- **No RELEASE_LOG release row is written**, and none is manufactured to satisfy a gate. `G-CL3` is satisfied instead by the **Artifact-Acceptance Record** below.
+- **No user-facing release note is authored** for the class — there is no deployed capability to describe. The §3.2 note-content close gate (A8.1) has no note to lint and records `N/A — task-artifact class, no note authored` rather than a silent skip.
+- **The operational deployment manifest is empty**, and the release passes Phase B-OPS1 on the **existing** empty-manifest path (*"Empty manifest = skip to C1"*). No class branch is added there — the empty-set path already covers it, and a second route to the same verdict is a drift surface.
+- **Every other Phase A step runs unchanged.** Issue closure (A1), deferred-item disposition (A2), verification-evidence compilation (A3), invariant re-verification (A4), the learnings beats (A6–A7.2), goal attainment (A10), documentation impact (A11), and the audit-recommendation badge update (A12) are all class-independent and are not skipped.
+
+**A7.5.4 — The Artifact-Acceptance Record (AAR).** A block inside the release plan's existing `### Verification Evidence` section — **not a new file and not a new ledger.** The section is already mandated by `G-CL4`, four Phase-A steps already write per-check verdicts into it, and `G-CL7` already sets the precedent of appending a verdict plus narrative there; a new surface would need its own presence check, its own concurrent-merge invariant, and its own archival policy to cover ground an existing surface already covers.
+
+One row per declared task-artifact deliverable:
+
+| Field | Content | Verified by |
+|---|---|---|
+| `deliverable` | issue reference + human-readable name | — |
+| `canonical_path` | the artifact's governed home in the corpus | `git show origin/main:<path>` exits 0 |
+| `landing_commit` | the SHA that landed it, inside the release commit range | `git merge-base --is-ancestor <sha> <release-head>` |
+| `acceptance_verdict` | `ACCEPTED` / `ACCEPTED-WITH-RESIDUAL` / `NOT-ACCEPTED` | present and enum-valid |
+| `acceptor` | the operator, or the named review gate that accepted it | non-empty |
+
+**Two activation modes, plus the honest third state:**
+
+- **REQUIRED** when the resolved close class is `task-artifact`. `G-CL3` reads this block; **absent ⇒ FAIL, never N/A.** An unrecorded acceptance is an unclosed release, exactly as an unrecorded deployment is.
+- **ADDITIVE** when a *deployable*-class release nonetheless declares task-artifact deliverables. The release's own `G-CL3` takes the unchanged deployable path, and the AAR rides `G-CL4` to record per-deliverable acceptance alongside it. This is the mode that lets a deployable release ship and accept knowledge artifacts without pretending either one is the other.
+- **ABSENT** otherwise — an explicit no-op. A release with no task-artifact deliverable writes no empty block and performs no ceremony.
+
+**A7.5.5 — What this phase deliberately does not do.** It does **not** condition Stage 12. `G-EX4` / `G-EX5` still hard-require a RELEASE_LOG row with no class conditioning, so a genuine `task-artifact`-class *release* cannot complete Stage 12 today and would halt before ever reaching this phase. That is a known, bounded incompleteness rather than a latent trap: the branch is **declaration-gated**, so nothing that exists can route into the unfinished path, and the remaining Stage-12 surfaces are routed as follow-up. Stated here rather than discovered at a close.
+
+**Tier-A design artifact — close-class resolution + typed-branch decision flow (ASCII flow-block per [`design-artifact-standard.md § 6`](../../../core/standards/design-artifact-standard.md)):**
+<!-- design-artifact: flow-class=decision-tree; name=close-class-resolution-and-typed-branch; depicts=core/schemas/gate-criteria-spec.md,release/references/pipeline/stage-13-close.md -->
+
+```
+                          Stage 13 entry
+                                |
+                    resolve_close_class(release)
+                      rung 1: release plan  domain_practice.domain   (Stage-4 A1.5, mandatory)
+                      rung 2: PROJECT.md    deliverable_type         (authoritative source for rung 1)
+                      rung 3: unresolved -> EXPLICIT NO-OP DEFAULT
+                                |
+        +-----------------------+------------------------------------+
+        |                                                            |
+  value == `task-artifact`                     anything else / absent / unrecognized
+        |                                                            |  (fall-through is REPORTED, never silent)
+  TASK-ARTIFACT branch                                        DEPLOYABLE branch
+        |                                                            |
+  G-CL1  no-op    (issue close is class-independent)          ... identical ...
+  G-CL2  no-op    (milestone close is terminal for all)       ... identical ...
+  G-CL3  SUBSTITUTE -> Artifact-Acceptance Record             G-CL3  DEPLOYED -> VERIFIED  [BYTE-UNCHANGED]
+           no RELEASE_LOG release row written                          RELEASE_LOG row required
+           AAR absent => FAIL (never N/A)
+  G-CL4  ADDITIVE   -> AAR required                           G-CL4  base check            [BYTE-UNCHANGED]
+                                                                     (+ AAR additively, when the release
+                                                                      declares task-artifact deliverables)
+  G-CL5  no-op    (empty manifest -> skip to C1, EXISTING path)
+  G-CL6  no-op    [warn]  (keyed off the Tier-A declaration)
+  G-CL7  no-op    [warn]  (grep is an admitted evidence anchor)
+  G-CL8  no-op    [warn]  (derived body key; NO class exemption -- deliberate)
+  G-CL9  no-op    [warn]  (Stage 9 not waived => ratifying referent intact)
+        |                                                            |
+        +-----------------------+------------------------------------+
+                                |
+                          Milestone close
+```
+
+The flow-block stays embedded here (NOT centralized at `core/standards/_examples/`) because it is referenced only from this phase and from the `gate-criteria-spec.md` § Close-Class Conditioning Disposition block — below the ≥3-doc threshold for centralization per `design-artifact-standard.md § 6`.
+
+*A7.5 cutover: Close-class resolution and the artifact-acceptance branch apply to releases entering Stage 13 Close strictly after this change's introducing-release merge SHA recorded in the release log; the introducing release itself is exempt (reflexive-pipeline-loop discipline — it cannot fire its own new gate) **yet dogfoods the AAR's ADDITIVE mode**, recording acceptance for its own two knowledge artifacts while its own close takes the deployable path. It does **not** exercise the A7.5.3 branch, and this record says so rather than implying a demonstration that did not happen.*
+
 **Phase A8 — Close-out completeness (outcome-bound):** A release MUST close with its complete enumerated output set produced and verified on main — the canonical Stage 13 output set defined once by the Step 4 Verification table in `hub-spoke-bridge.md` Procedure 7 (the binding is on that output set, not on which mechanism produced it). The **mandated mechanism** — the default and expected path — is the automated close-out: the Stage 13 spoke invokes `automated-closeout.sh --pr <N> --version v<X.Y> --milestone <N> --dry-run --markdown` to enumerate the full Phase B + Phase C close-out plan (RELEASE_LOG `DEPLOYED → VERIFIED` transition + RELEASE_INDEX append + RELEASE_DIGEST append + RELEASE_NOTES scaffold-only + Stage 13 chore PR creation + Milestone close + auto-close-anomaly D-1 manual close + orphan-cleanup invocation). On operator approval at the dry-run review gate, re-invoke with `--apply` to execute the sequence per the script. release-executor Mode D wraps the script with input-collection + dry-run-review + AskUserQuestion approval gate + apply + report sequencing per `release/skills/release-executor/SKILL.md` Mode D. The script is idempotent per phase; the chore PR body uses safe phrasing throughout (lexical parser-clean discipline enforced by a pre-submit grep self-check inside the script per the PR-body close-keyword discipline, N=2 confirmed pattern). **Fallback:** the automated close-out's Phase 2 preflight hard-exits (exit 2) on exactly the merge-ahead conditions a close can legitimately hit — `gh auth` unavailable, tree not clean, the RELEASE_LOG row not yet landed, the tag absent. When preflight cannot pass, the operator MAY produce the same output set by hand via the Phase B chore-PR mechanism (below); the close is satisfied iff `deploy.sh --check` Check 32 and the Step 4 completion-verification table both pass. Binding the outcome rather than the tool keeps the close satisfiable even when the tool's preflight blocks.
 
 **Phase A8.1 — §3.2 note-content close gate (event-bound, every path).** The release-notes-standard.md §3.2 note-content lint runs on **every** Stage-13 close that authors a note — `release-executor` Mode E, the `automated-closeout.sh` close phase (`phase_lint_release_notes`, between scaffold and the chore commit), AND the pure-hub-direct / Phase-B chore-PR fallback (this very path, which runs **no** script). On the script path the phase blocks the close in-script (a finding for v<X.Y> → `mark_phase FAIL` → the runner aborts before `phase_post_close_milestone`). On the Phase-B chore-PR fallback — where the close is hand-assembled and no script runs — the gate is the `hub-spoke-bridge.md` Procedure 7 Step 4 completion-verification command 1b (`lint_release_corpus.py --check note-content`, version-scoped to v<X.Y>). The lint's exit contract is inherited: 0 clean → proceed; 1 finding naming v<X.Y>'s note → BLOCK close; 3 path-unresolved → BLOCK as unverifiable (fail-loud). A pre-existing legacy finding for **another** version does NOT block this close (audit-baseline discipline). This makes §3.2's "Lint failures block Milestone close" enforced as a **close-event gate**, not bound to a single skill path — the v2.26 RCA fix (Governance failure: the rule existed but was unenforced on the hub-direct path).
@@ -220,7 +313,14 @@ Stage 12 — Execute (per pipeline/stage-12-execute.md)
 
 Stage 13 — Close (per pipeline/stage-13-close.md — THIS FILE)
 ├── Phase A — Verification (QC4-01..06; G-CL6; G-CL7; G-CL8)
-├── Phase B — Stage 13 chore PR (atomic landing)
+│   └── Phase A7.5 — CLOSE-CLASS RESOLUTION (runs BEFORE A8 binds the output set)
+│          resolved class == `task-artifact` → artifact-acceptance branch:
+│            the Phase B surfaces below are NOT emitted (no RELEASE_LOG release
+│            row, no RELEASE_NOTES, hence no CHANGELOG extract); G-CL3 is
+│            satisfied by the Artifact-Acceptance Record in the release plan
+│          anything else / absent / unrecognized → DEPLOYABLE (the sequence
+│            below, unchanged) — and the fall-through is REPORTED, never silent
+├── Phase B — Stage 13 chore PR (atomic landing) — DEPLOYABLE branch
 │   ├── Phase B1   — Edit RELEASE_LOG.md: v<X.Y> row DEPLOYED → VERIFIED (Surface 3)
 │   ├── (existing) — Edit RELEASE_INDEX.md (chronological-recent-first row)
 │   ├── (existing) — Edit RELEASE_DIGEST.md (version-family H2 entry)
