@@ -502,8 +502,10 @@ if [[ "${1:-}" == "--self-test" ]]; then
   # go vacuous — which is precisely the failure class this arm exists to close. The sizing loop
   # IS the anti-vacuity control: it exits only once an exec with the payload as argv has
   # actually been refused, and it dies rather than continuing if it never is.
-  printf -v BIG_BODY '%*s' 32768 ''
-  BIG_BODY="${BIG_BODY// /X}"
+  # Built by DOUBLING, not by pattern substitution: bash 3.2's ${var// /X} is quadratic and
+  # would turn this arm into a multi-minute stall that reads as a hang rather than a test.
+  BIG_BODY="XXXXXXXXXXXXXXXX"
+  while [[ "${#BIG_BODY}" -lt 32768 ]]; do BIG_BODY="${BIG_BODY}${BIG_BODY}"; done
   BIG_N=40
   while :; do
     EVID_BIG="["
