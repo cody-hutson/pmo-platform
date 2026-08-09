@@ -138,7 +138,7 @@ if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
 fi
 
 # --- Master-activation gate (#310) — layer 2, AFTER CLAUDE_HOOK_BYPASS and BEFORE the
-# .mode read. CLASS=security (D-R9): master-OFF NEVER makes this hook inert — the
+# mode read (this hook's own `.gh-path-leak-mode`, never the shared `.mode`). CLASS=security (D-R9): master-OFF NEVER makes this hook inert — the
 # security/floor class always enforces (public-surface security is paramount; a silently
 # disabled guard -> an IRREVERSIBLE leaked commit/PR). It goes inert ONLY on the operator's
 # explicit, logged security_class_master_optout=true. Fail-toward-current-behavior: a
@@ -149,9 +149,15 @@ if [ -r "$MASTER_LIB" ]; then . "$MASTER_LIB" 2>/dev/null || true; fi
 if command -v master_enable_gate >/dev/null 2>&1; then master_enable_gate "$MASTER_ENABLE_CLASS"; fi
 
 # --- DEPENDENCY GATE (mode-gated posture — GHSA-9cjm-v22x-4x33). This hook ships
-# warn, so a missing jq must not block harder than a rule match would: only .mode=
-# enforce fails CLOSED (exit 2); warn/off degrade to a stderr note + exit 0. Runs
-# AFTER the bypass short-circuit. ---
+# warn, so a missing jq must not block harder than a rule match would: only a
+# resolved mode of `enforce` fails CLOSED (exit 2); warn/off degrade to a stderr
+# note + exit 0. Runs AFTER the bypass short-circuit.
+#
+# The mode read here is the EXCLUSIVE one defined above — this hook's own
+# `.gh-path-leak-mode`, never the shared `.mode`. This comment previously wrote
+# the resolved value as `.mode=enforce`, which named the shared file the hook
+# deliberately does not consult; a maintainer reading only this block could have
+# reintroduced the shared-file fallback the exclusive read exists to remove. ---
 if [ -z "$JQ" ]; then
   log_error "DEPENDENCY-MISSING: jq not found on the pinned tool path"
   _mode="$(get_mode)"
@@ -170,7 +176,9 @@ TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
 [ "$TOOL_NAME" = "Bash" ] || exit 0
 
 # --- Workspace-scope gate (#4436) — layer 3, AFTER the master-activation gate and
-# BEFORE the .mode / rule path. Precedence: bypass -> master -> SCOPE -> .mode -> rule.
+# BEFORE the mode / rule path. Precedence: bypass -> master -> SCOPE ->
+# `.gh-path-leak-mode` -> rule. Named explicitly: the shared `.mode` is not in this
+# hook's precedence chain at any position.
 # CWD is extracted here (this hook did not previously need it) purely to feed the guard.
 # Inverted fail direction on the cwd axis, NOT on the lib axis. See lib/scope-guard.sh. ---
 CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
