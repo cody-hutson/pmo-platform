@@ -308,6 +308,72 @@ else
   report "update.sh preflight passes against sandboxed operator.toml" 0
 fi
 
+# --- Stage 4: install-completeness gate (#4449) ---
+# update.sh refuses to refresh the security-hook bundle when a hook-tier composition
+# surface is absent. A hook-tier surface is an allowlist — the ESCAPE half of a hook
+# control — so shipping the enforcement half without it leaves the workspace strictly
+# MORE restrictive than either tool intends, and the run would otherwise report
+# success over that state.
+#
+# Asserted in BOTH directions on purpose. The negative arm proves the gate fires and
+# fires EARLY (before the hook refresh, not merely loudly at the end). The positive
+# arm proves it stays silent on the healthy workspace Stage 1 built — without it, a
+# gate that fired unconditionally would look identical to a gate that works.
+printf '\nStage 4: install-completeness gate (update.sh refuses a partial hook-tier install)\n'
+
+gate_surface="${SBX}/ws/.claude/scope-segregation-allowlist.txt"
+gate_stash="${SBX}/gate-stash-scope-segregation-allowlist.txt"
+
+if [ ! -f "${gate_surface}" ]; then
+  # Reported, not assumed: a fixture that never had the surface would make the
+  # negative arm below vacuous, and a vacuous arm must not read as a pass.
+  report "Stage 4 precondition: hook-tier surface present after install" 0 "absent: ${gate_surface}"
+else
+  report "Stage 4 precondition: hook-tier surface present after install" 1
+
+  # NEGATIVE ARM — remove one hook-tier surface, then run a real (non-dry-run) update.
+  mv "${gate_surface}" "${gate_stash}"
+  gate_out=$("${UPDATE}" \
+    --config-root "${SBX}/config" \
+    --workspace-root "${SBX}/ws" 2>&1)
+  gate_exit=$?
+
+  if [ "${gate_exit}" -eq 75 ]; then
+    report "update.sh exits 75 (EX_INCOMPLETE) when a hook-tier surface is absent" 1
+  else
+    tail_out=$(printf '%s' "${gate_out}" | tail -4 | tr '\n' '|')
+    report "update.sh exits 75 (EX_INCOMPLETE) when a hook-tier surface is absent" 0 \
+      "exit ${gate_exit}; last: ${tail_out}"
+  fi
+
+  # The ordering IS the contract: halting after the refresh would still have landed
+  # the asymmetric state, just noisily.
+  if grep -q 'REFRESHED:' <<<"${gate_out}"; then
+    report "the gate fires BEFORE the hook refresh (no REFRESHED emitted)" 0 "hook refresh ran anyway"
+  else
+    report "the gate fires BEFORE the hook refresh (no REFRESHED emitted)" 1
+  fi
+
+  if grep -q 'scope-segregation-allowlist.txt' <<<"${gate_out}"; then
+    report "the gate NAMES the absent surface" 1
+  else
+    report "the gate NAMES the absent surface" 0 "absent surface not named in output"
+  fi
+
+  # POSITIVE ARM — restore the surface; the gate must go quiet and the run complete.
+  mv "${gate_stash}" "${gate_surface}"
+  ok_out=$("${UPDATE}" \
+    --config-root "${SBX}/config" \
+    --workspace-root "${SBX}/ws" 2>&1)
+  ok_exit=$?
+  if [ "${ok_exit}" -eq 0 ] || [ "${ok_exit}" -eq 64 ]; then
+    report "healthy workspace: the gate does not fire (exit 0/64)" 1
+  else
+    tail_out=$(printf '%s' "${ok_out}" | tail -4 | tr '\n' '|')
+    report "healthy workspace: the gate does not fire (exit 0/64)" 0 "exit ${ok_exit}; last: ${tail_out}"
+  fi
+fi
+
 # --- Summary ---
 printf '\n======================================================================\n'
 printf 'test_install_end_to_end.sh: %d passed, %d failed (bash %s)\n' \

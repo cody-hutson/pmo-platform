@@ -48,6 +48,7 @@ readonly EX_NOCHANGE=64
 readonly EX_NOCONFIG=65
 readonly EX_USERABORT=66
 readonly EX_REGENFAIL=73
+readonly EX_INCOMPLETE=75
 readonly EX_INTERRUPT=130
 
 # --- Flags ---
@@ -68,6 +69,12 @@ WORKSPACE_ROOT_EXPLICIT=0
 
 # --- Phase 3 result (read by main to select the exit code; see EX_NOCHANGE) ---
 REGENERATED_COUNT=0
+
+# --- Phase 3 result: hook-tier composition surfaces found ABSENT (space-separated
+# basenames). A hook-tier surface is the "escape half" of a hook control; shipping a
+# hook refresh while one is missing puts the workspace in a strictly MORE restrictive
+# state than either tool intends. Consumed by assert_install_complete below (#4449).
+MISSING_HOOK_TIER_SURFACES=""
 
 # --- Phase 5 result (read by main to select the exit code; see EX_NOCHANGE) ---
 # Set to 1 by redeploy_skills ONLY when Phase 5 actually deployed >=1 new/changed
@@ -129,6 +136,8 @@ Exit codes:
   65   operator.toml missing or malformed
   66   Schema migration aborted (operator dismissed prompt)
   73   Regeneration failure (file write or verification error)
+  75   Install incomplete (a hook-tier composition surface is absent; the hook
+       refresh was refused. Run docs/scripts/setup-workspace.sh, then re-run)
   130  Interrupted (rollback applied)
 
 Prerequisites:
@@ -267,6 +276,9 @@ regenerate_managed_sections() {
 
     if [ ! -f "${target}" ]; then
       info "Target absent (${target_basename}); fresh install needed via setup-workspace.sh"
+      if [ "${tier}" = "hook" ]; then
+        MISSING_HOOK_TIER_SURFACES="${MISSING_HOOK_TIER_SURFACES:+${MISSING_HOOK_TIER_SURFACES} }${target_basename}"
+      fi
       continue
     fi
 
@@ -604,6 +616,41 @@ redeploy_skills() {
   fi
 }
 
+# --- Phase 5b0: Install-completeness gate (#4449) -----------------------------
+# Runs immediately BEFORE the hook refresh, and the ordering is the whole point.
+# Phase 5c installs hook SCRIPTS (the enforcement half). A hook-tier composition
+# surface is its allowlist (the escape half). Refreshing hooks while a hook-tier
+# surface is absent leaves the workspace strictly MORE restrictive than either tool
+# intends — enforcement with no escape — and the run would otherwise report success
+# over it. Gating here (not at end-of-run) means the asymmetric state never lands.
+#
+# Scope is deliberately hook-tier ONLY: instance-tier surfaces are operator data
+# with no paired enforcement half, so their absence is not an asymmetry.
+#
+# This CANNOT fire on a healthy workspace (every hook-tier surface present), so it
+# does not stand between a healthy install and a hook security fix. On an unhealthy
+# one, the correct remedy is setup-workspace.sh, which lands BOTH halves.
+#
+# DRY-RUN IS NOT EXEMPT, and that is deliberate rather than an oversight. Every other
+# phase here has a `[ "${DRY_RUN}" -eq 1 ]` branch, so the absence of one is worth
+# stating: a preview that reports "no update needed" over a MISSING security-control
+# allowlist is exactly the silent-approval failure this gate exists to remove. A
+# preview writes nothing, so nothing lands either way — but it must not report a
+# clean verdict it has not earned. The cost, named honestly: a --dry-run against an
+# incomplete workspace stops here and does not preview Phases 5c through 4.
+#
+# It also leaves .last-update unwritten, which is correct: the run did not complete.
+assert_install_complete() {
+  if [ -z "${MISSING_HOOK_TIER_SURFACES}" ]; then
+    return 0
+  fi
+  err "Install incomplete — hook-tier composition surface(s) absent: ${MISSING_HOOK_TIER_SURFACES}"
+  err "Refusing to refresh the security-hook bundle: installing an enforcement control"
+  err "whose allowlist is absent would leave this workspace MORE restrictive than intended."
+  err "Run docs/scripts/setup-workspace.sh to install the missing surface(s), then re-run ./update.sh."
+  exit "${EX_INCOMPLETE}"
+}
+
 # --- Phase 5c: Refresh the security-hook bundle (#3430) ---
 # deploy.sh (Phase 5) deploys skills + packages but NOT hooks — its harness-artifact path
 # reads harness/<name>/, which does not exist at the v2 repo root. So the deployed
@@ -786,6 +833,9 @@ else
   scaffold_settings_local
   regenerate_managed_sections
   redeploy_skills
+  # MUST precede refresh_hooks — see assert_install_complete's header. Not a member
+  # of surfaces_only_flow: that flow installs no hooks, so it creates no asymmetry.
+  assert_install_complete
   refresh_hooks
   # Phase 5d MUST follow Phase 5c: hook scripts land first, then the registrations that
   # name them. Reordering would wire events to scripts not yet on disk (ADR-121 §8).

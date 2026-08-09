@@ -477,21 +477,38 @@ check_a3_hooks_layout() {
       "re-run setup-workspace.sh (hook install incomplete)" "A"
     return
   fi
-  # Spot-check executable bit on a representative hook
+  # Executable-bit check over hook ENTRYPOINTS only.
   local executable_ok=1
+  local entrypoint_count=0
   for hook in "${hooks_dir}"/*.sh; do
     [ -f "${hook}" ] || continue
+    # Sourced-lib exemption — mirrors doctor.sh check_hooks_runnable (#302 / #1850),
+    # which is the SOURCE of this discriminator; this is a registered duplicate, not a
+    # second decision. setup-workspace.sh install_hooks co-deploys SOURCED primitives
+    # beside the hooks. Every consumer reads them with `. "$LIB"` under an
+    # `[ -r "$LIB" ]` guard — never `-x`, never a direct invocation — so they ship
+    # mode 644 BY DESIGN, and core/deploy/tests/test_doctor.sh pins that mode as
+    # correct by seeding its fixture at 644. Without this skip a HEALTHY install FAILs
+    # A3 with a misleading chmod remedy. Shebang is NOT a discriminator (sourced libs
+    # carry one), so match the co-deploy naming set.
+    case "$(basename "${hook}")" in
+      lib-*.sh|*-patterns.sh) continue ;;
+    esac
+    entrypoint_count=$((entrypoint_count + 1))
     if ! assert_executable "${hook}"; then
       executable_ok=0
-      verbose "A3: non-executable hook: ${hook}"
+      verbose "A3: non-executable hook entrypoint: ${hook}"
       break
     fi
   done
   if [ "${executable_ok}" -eq 0 ]; then
-    emit_fail "A3" "INSTALL-HOOKS-LAYOUT" "hook(s) missing +x bit" \
-      "chmod +x ${hooks_dir}/*.sh OR re-run setup-workspace.sh" "A"
+    # Remedy names the ENTRYPOINT set, not a blanket glob: a bare `chmod +x *.sh`
+    # would also mark the co-deployed sourced libs executable, undoing the very
+    # invariant the skip above encodes.
+    emit_fail "A3" "INSTALL-HOOKS-LAYOUT" "hook entrypoint(s) missing +x bit" \
+      "re-run setup-workspace.sh (it chmods entrypoints and leaves sourced libs at 644)" "A"
   else
-    emit_pass "A3" "INSTALL-HOOKS-LAYOUT" "${sh_count} hook(s) installed +x" "A"
+    emit_pass "A3" "INSTALL-HOOKS-LAYOUT" "${entrypoint_count} hook entrypoint(s) installed +x (sourced libs exempt per doctor.sh)" "A"
   fi
 }
 
