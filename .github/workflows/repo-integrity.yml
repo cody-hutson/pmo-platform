@@ -1374,8 +1374,9 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # GATE 10 — SIGPIPE idiom (#3832). A writer piped into a SHORT-CIRCUITING
-  #           reader is a latent false-FAIL: `grep -q`, `grep -mN` and `head`
-  #           exit on their first match, the writer is still writing, its next
+  #           reader is a latent false-FAIL: `grep -q`, `grep -mN`, `head`, a
+  #           `sed` carrying `q`, an `awk` carrying `exit` and the `read` builtin
+  #           all stop reading early, the writer is still writing, its next
   #           write fails on the broken pipe, and `pipefail` promotes ITS status
   #           to the pipeline's — so a SUCCESSFUL match reports failure. Written
   #           `if ! <pipeline>`, that inverts to "no match" and the gate silently
@@ -1414,10 +1415,15 @@ jobs:
   #                                  string (a test payload / case label). Detected
   #                                  by stripping quoted spans and re-testing the
   #                                  residual, the same technique GATE 8 uses for
-  #                                  its schema literal. NOT applied when the line
-  #                                  hands that string to `eval` or `sh -c`, which
-  #                                  EXECUTE it — there the quotes delimit a shell
-  #                                  program, not an inert fixture.
+  #                                  its schema literal. NOT applied where the
+  #                                  quoted span is a PROGRAM rather than an inert
+  #                                  fixture: `eval` / `sh -c` EXECUTE it, and a
+  #                                  `sed`/`awk` match is by construction made on
+  #                                  the script operand those commands run.
+  #                                  The re-test runs against the same string the
+  #                                  match was made on — for a continuation join
+  #                                  that is the PIPE-PREPENDED form, not the bare
+  #                                  line, which would never re-match.
   #             T2 line-scoped     — `# sigpipe-idiom: allow — <reason>` on the
   #                                  line or the line above. This is the SAME
   #                                  rationale #3832's AC-3 already requires, so
@@ -1465,30 +1471,100 @@ jobs:
           # reader is writer-agnostic in fact and not merely in claim, and it is
           # stage-agnostic for free -- an intervening filter is just another pipe.
           #
+          # BUT THE READER AXIS IS AN OPEN CLASS, AND THIS DETECTOR ENUMERATES IT.
+          # Said plainly rather than left to be discovered a third time. Whether a
+          # command stops reading is a property of the PROGRAM it names and the FLAGS
+          # it carries -- not of shell grammar -- so no regex over a line of shell can
+          # decide it, and any script can join the class tomorrow. The two axes are
+          # therefore separated below, and only ONE of them is closed:
+          #
+          #   PIPE   -- CLOSED. Shell grammar, not a list of names: the pipe itself
+          #             (`|`, and bash's `|&`), a subshell or brace group wrapping the
+          #             reader, the `command`/`builtin`/`exec`/`env`/`nice`/`stdbuf`
+          #             wrappers with their flags, and any path qualification.
+          #   READER -- OPEN, enumerated: a `grep` (also `egrep`/`ggrep`/`ugrep`/`rg`/
+          #             `pcregrep`/`ag`) carrying `-q`/`--quiet`/`--silent`/`-mN`/
+          #             `--max-count`; `head`; a `sed` whose script carries a `q`
+          #             command; an `awk` whose program carries an `exit` OUTSIDE an
+          #             `END` block; and the `read` builtin.
+          #
+          # WHAT THE ENUMERATION EXCLUDES -- the residual named, not implied. All of
+          # it fails CLOSED: a miss, never a false alarm.
+          #   * Any other program that closes stdin early: a repo script, `perl` with
+          #     `last`/`exit`, `python -c` with a `break`, a `head`-alike.
+          #   * `while read … break` / `until read … break`: the loop drains its input
+          #     UNLESS the body breaks, which is a multi-line property a line-oriented
+          #     scan cannot see. A bare `| read` IS detected.
+          #   * A multi-line `sed`/`awk` program whose `q`/`exit` sits on a later line
+          #     than the pipe -- the scan is line-oriented.
+          #   * `| xargs grep -q`: DELIBERATELY excluded, not missed. `xargs` drains
+          #     its own stdin and hands FILE arguments to the child, so the child's
+          #     short-circuit never closes the pipe.
+          #   * An `awk` `exit` inside an `END` block: excluded because it is SAFE --
+          #     END runs only after awk has already drained its input.
+          #
           # Read `[^|]\|` as "a single pipe, not the second half of `||`". Each line
           # is tested with a leading space prepended (see NORMALISED below), so that
           # guard also admits a line that BEGINS with the pipe, which is how a
           # backslash-continued pipeline breaks across lines.
-          # `([^|[:space:]]*/)?` is the path prefix. `e?grep` admits `egrep`.
-          #
-          # A: a pipe into a grep that STOPS EARLY -- `-q`/`--quiet`/`--silent`
-          #    (quiet) or `-mN`/`--max-count` (bounded). `-m` belongs here because
-          #    the sanctioned `| head -N` -> `-mN` rewrite only removes the hazard
-          #    when the pipeline collapses to a SINGLE command; with a producer
-          #    still upstream it merely relocates it (measured: rc non-zero).
-          IDIOM_Q='^[^#]*[^|]\|[[:space:]]*([^|[:space:]]*/)?e?grep[[:space:]]([^|]*[[:space:]])?(-[A-Za-z]*[qm][A-Za-z]*([[:space:]]|[0-9]|$)|--quiet|--silent|--max-count)'
-          # B: a pipe into head, from ANY producer. The trailing class closes the
-          #    command-substitution form `$(… | head)`, where `head` is followed by
-          #    `)` rather than by whitespace or end-of-line.
-          IDIOM_H='^[^#]*[^|]\|[[:space:]]*([^|[:space:]]*/)?head([[:space:]]|$|\)|;|&|`)'
-          # KNOWN RESIDUAL, stated rather than left to be discovered: `^[^#]*` is the
-          # trailing-comment guard, so a `#` appearing BEFORE the pipe in live code
-          # (`"${#arr[@]}" | grep -q x`) suppresses detection. It fails closed --
-          # a miss, never a false alarm -- and is the price of not flagging every
-          # comment that discusses the idiom.
+
+          # ---- the CLOSED half: the pipe, and everything structural after it ------
+          PIPE='^[^#]*[^|]\|&?[[:space:]]*([({][[:space:]]*)*((command|builtin|exec|env|nice|stdbuf)[[:space:]]+(-[^[:space:]]+[[:space:]]+)*)*([^|[:space:]]*/)?'
+          # ---- the OPEN half: the enumerated readers -------------------------------
+          GREPS='(e?grep|ggrep|ugrep|rg|pcre2?grep|ag)'
+          # `-m` belongs with the quiet flags: the sanctioned `| head -N` -> `-mN`
+          # rewrite only removes the hazard when the pipeline collapses to a SINGLE
+          # command; with a producer still upstream it merely relocates it (measured).
+          QFLAG='(-[A-Za-z]*[qm][A-Za-z]*([[:space:]]|[0-9]|$)|--quiet|--silent|--max-count)'
+          IDIOM_Q="${PIPE}${GREPS}[[:space:]]([^|]*[[:space:]])?${QFLAG}"
+          # The trailing class closes the command-substitution form `$(… | head)`,
+          # where `head` is followed by `)`, and the no-space form `| head|wc -l`.
+          IDIOM_H="${PIPE}head([[:space:]]|\$|\)|;|&|\||\`)"
+          # `q` as a sed COMMAND, not a `q` inside an s/// pattern or replacement:
+          # bounded by script punctuation on the left, and never followed by `/`.
+          IDIOM_S="${PIPE}sed[[:space:]](.*[{;'\"[:space:],/0-9])?q([};'\"[:space:]]|\$|[0-9])"
+          # `exit` as an awk STATEMENT, not `"exit"` in a string or `/exit/` in a
+          # pattern -- hence the leading `[{;[:space:]]` rather than a bare word test.
+          IDIOM_A="${PIPE}[gmnb]?awk([[:space:]]|\$).*[{;[:space:]]exit([[:space:];}'\"]|\$|[0-9])"
+          IDIOM_R="${PIPE}read([[:space:]]|\$)"
+          # Stripped before an awk match is believed: see the END-block note above.
+          AWK_END='END[[:space:]]*\{[^}]*\}'
+          # KNOWN RESIDUALS, stated rather than left to be discovered.
+          # MISSES (fail closed): `^[^#]*` is the trailing-comment guard, so a `#`
+          #   appearing BEFORE the pipe in live code suppresses detection. The exotic
+          #   `"${#arr[@]}"` case is NOT the common one -- ordinary shell dominates it:
+          #   a `#` inside a sed script (`sed -n 's/^# owner:…/p' … | head -1`), inside
+          #   a grep pattern (`grep -vE '^[[:space:]]*(#|$)' … | head -1`), or inside a
+          #   quoted needle (`grep -oE 'ms:#[0-9]+' … | head -1`) all blind it.
+          # FALSE ALARMS (a T2 marker resolves each): a needle that LOOKS like a
+          #   short-circuit flag -- `grep -- -m1 f`, or a `-q`/`-m` token inside a
+          #   DOUBLE-quoted needle. The single-quoted case is handled by T1.
           # T2/T3 markers. Un-anchored comment form, matching GATE 8's precedent.
           LINE_MARK='sigpipe-idiom:[[:space:]]*allow'
           FILE_MARK='repo-integrity:[[:space:]]*allow-sigpipe-idiom'
+
+          # ONE matcher, THREE call sites: the initial detect, the continuation join,
+          # and the T1 re-test. A single definition is what makes the re-test provably
+          # symmetric with the detection it re-tests -- an asymmetry between those two
+          # is exactly what once swallowed every continuation-join finding (see T1).
+          #
+          # Sets MATCH_LABEL, and MATCH_PROG=1 when the short-circuit token lives
+          # inside the reader's own quoted PROGRAM operand. Globals rather than
+          # stdout: a command substitution would run this in a subshell and lose them.
+          idiom_match() {
+            local _s="$1"
+            MATCH_LABEL=""; MATCH_PROG=0
+            if grep -qE "$IDIOM_Q" <<<"$_s"; then MATCH_LABEL='writer | grep -q/-mN'; return 0; fi
+            if grep -qE "$IDIOM_H" <<<"$_s"; then MATCH_LABEL='writer | head'; return 0; fi
+            if grep -qE "$IDIOM_S" <<<"$_s"; then MATCH_LABEL='writer | sed (q)'; MATCH_PROG=1; return 0; fi
+            if grep -qE "$IDIOM_A" <<<"$_s"; then
+              if grep -qE "$IDIOM_A" <<<"$(sed -E "s/${AWK_END}//g" <<<"$_s")"; then
+                MATCH_LABEL='writer | awk (exit)'; MATCH_PROG=1; return 0
+              fi
+            fi
+            if grep -qE "$IDIOM_R" <<<"$_s"; then MATCH_LABEL='writer | read'; return 0; fi
+            return 1
+          }
 
           # Scope: changed shell sources. Excluded: the ledger surface, build
           # artifacts, and this workflow's own YAML (whose regexes would match
@@ -1576,12 +1652,10 @@ jobs:
               # also admits a line that BEGINS with the pipe.
               NORMALISED=" ${line}"
 
-              # Does either idiom appear at all?
+              # Does any idiom appear at all?
               MATCHED=""
-              grep -qE "$IDIOM_Q" <<<"$NORMALISED" && MATCHED="writer | grep -q/-mN"
-              if [ -z "$MATCHED" ]; then
-                grep -qE "$IDIOM_H" <<<"$NORMALISED" && MATCHED="writer | head"
-              fi
+              MATCH_JOINED=0
+              if idiom_match "$NORMALISED"; then MATCHED="$MATCH_LABEL"; fi
 
               # CONTINUATION JOIN. The other half of a broken pipeline: the WRITER
               # line ends in `|` (or `\`) and the reader sits alone on this line
@@ -1589,13 +1663,17 @@ jobs:
               # were a pipe prepended, so the extra file read costs nothing on the
               # overwhelming majority of lines.
               if [ -z "$MATCHED" ] && [ "$LN" -gt 1 ] 2>/dev/null; then
-                if grep -qE "$IDIOM_Q" <<<" | ${line}" || grep -qE "$IDIOM_H" <<<" | ${line}"; then
+                if idiom_match " | ${line}"; then
                   PREVJ="$(sed -n "$((LN - 1))p" "$f" 2>/dev/null || true)"
+                  # Right-trim first. Trailing whitespace after the continuation
+                  # operator is invisible in a diff and fatal to a suffix test:
+                  # `cat f | ` does not end in `|`, so the arm silently lapsed.
+                  PREVJ="${PREVJ%"${PREVJ##*[![:space:]]}"}"
                   # Double-quoted patterns: `"\\"` is one literal backslash and
                   # reads unambiguously to shellcheck, where `'\'` trips SC1003.
                   # Equivalence asserted against all four inputs before the swap.
                   case "$PREVJ" in
-                    *"|"|*"\\") MATCHED="writer | reader (continued pipeline)" ;;
+                    *"|"|*"\\") MATCHED="${MATCH_LABEL} (continued pipeline)"; MATCH_JOINED=1 ;;
                     *) : ;;
                   esac
                 fi
@@ -1620,16 +1698,30 @@ jobs:
               # idiom no longer matches the residual, it lived entirely inside a
               # quoted payload — a fixture string, not executed code.
               #
-              # EXCEPT where the line hands that string to an evaluator. `eval '…'`
-              # and `sh -c '…'` EXECUTE their quoted payload, so the single quotes
-              # mark a shell program, not an inert fixture. Exempting those was the
-              # one place T1's own premise did not hold.
-              if grep -qE '(^|[^[:alnum:]_./-])(eval|[a-z]*sh[[:space:]]+-c)([[:space:]]|$)' <<<"$line"; then
+              # T1's premise fails wherever the quoted span is a PROGRAM rather than
+              # an inert fixture. Two cases, one principle:
+              #   * `eval '…'` and `sh -c '…'` EXECUTE their quoted payload, so the
+              #     single quotes mark a shell program.
+              #   * a `sed`/`awk` match is BY CONSTRUCTION made on the script operand
+              #     those commands execute — `| sed -n '/x/{p;q}'` keeps its entire
+              #     short-circuit inside the quotes. Stripping would exempt every one
+              #     of them, and the reader-class widening would have shipped
+              #     detecting nothing at all (MATCH_PROG).
+              if [ "$MATCH_PROG" -eq 1 ] || grep -qE '(^|[^[:alnum:]_./-])(eval|[a-z]*sh[[:space:]]+-c)([[:space:]]|$)' <<<"$line"; then
                 RESIDUAL="$line"
               else
                 RESIDUAL="$(sed -E "s/'[^']*'//g" <<<"$line")"
               fi
-              if ! grep -qE "$IDIOM_Q" <<<" ${RESIDUAL}" && ! grep -qE "$IDIOM_H" <<<" ${RESIDUAL}"; then
+              # RE-TEST ON THE STRING THE MATCH WAS MADE ON. A continuation-join match
+              # was made on " | $line"; re-testing the UN-joined line can never
+              # re-match, because a reader alone on its own line has no pipe of its
+              # own. Every continuation finding was therefore reclassified as
+              # content-exempt and the job exited 0 on a real site, reporting an
+              # anonymous count with no file:line — the arm this gate advertises
+              # asserted nothing. Symmetry with the detection is the whole fix.
+              RETEST=" ${RESIDUAL}"
+              if [ "$MATCH_JOINED" -eq 1 ]; then RETEST=" | ${RESIDUAL}"; fi
+              if ! idiom_match "$RETEST"; then
                 EXEMPT_CONTENT=$((EXEMPT_CONTENT + 1))
                 continue
               fi
@@ -1659,7 +1751,8 @@ jobs:
             echo "## :x: SIGPIPE-idiom gate FAILED"
             echo ""
             echo "An added shell line pipes a writer into a **short-circuiting reader**"
-            echo "(\`grep -q\`, \`grep -mN\` or \`head\`). Under \`pipefail\` the reader exits on"
+            echo "(\`grep -q\`, \`grep -mN\`, \`head\`, a \`sed\` carrying \`q\`, an \`awk\` carrying"
+            echo "\`exit\`, or \`read\`). Under \`pipefail\` the reader exits on"
             echo "its first match, the writer's next write fails on the broken pipe, and its"
             echo "non-zero status becomes the pipeline's — so a **successful match reports"
             echo "failure**. Written \`if ! <pipeline>\`, that inverts to \"no match\" and the"
@@ -1680,6 +1773,8 @@ jobs:
             echo "# before                                   # after"
             echo "printf '%s' \"\$hay\" | grep -q -- \"\$n\"       grep -q -- \"\$n\" <<<\"\$hay\""
             echo "grep -E p f | head -1                      grep -m1 -E p f"
+            echo "echo \"\$x\" | awk '/p/{print \$2; exit}'      awk '/p/{print \$2; exit}' <<<\"\$x\""
+            echo "echo \"\$x\" | sed -n '/p/{s/a/b/p;q}'        sed -n '/p/{s/a/b/p;q}' <<<\"\$x\""
             echo '```'
             echo ""
             echo "**Three substitutions are NOT semantics-preserving — check before converting:**"
