@@ -1480,13 +1480,17 @@ jobs:
           # function -- through any number of intervening filter stages.
           #
           # (1) THE PIPE, AND WHAT MAY SIT BETWEEN IT AND THE READER'S NAME.
-          #     A single `|` (never the second half of `||`) or bash's `|&`, then any
-          #     number of the following, in any order:
-          #       a. a group opener `(` or `{`, optionally with earlier commands of
-          #          that group ahead of the reader   ->  `| { :; grep -q x; }`
+          #     A single `|` (never the second half of `||`) or bash's `|&`, then:
+          #       a. FIRST, any group openers `(` or `{`, each optionally followed by
+          #          earlier commands of that group ahead of the reader, and those
+          #          earlier commands may be pipelines of their own
+          #                                            ->  `| { :; grep -q x; }`
+          #       then any number of b/c/d, in any order:
           #       b. a variable-assignment prefix     ->  `| LC_ALL=C grep -q x`
           #       c. a redirection prefix             ->  `| 2>/dev/null grep -q x`
-          #       d. a wrapper NAME FROM THIS LIST, with up to TWO operand words:
+          #       d. a wrapper NAME FROM THIS LIST, with up to TWO operand words --
+          #          a word being a run of characters carrying no whitespace and no
+          #          shell metacharacter:
           #          command builtin exec env nice stdbuf time timeout sudo doas
           #          nohup setsid ionice chrt        ->  `| timeout 5 grep -q x`
           #     ...then an optional path qualification ->  `| /usr/bin/grep -q x`
@@ -1554,7 +1558,12 @@ jobs:
           # ---- (1) the pipe, and the prefix forms enumerated above -----------------
           # Each fragment below is one bullet of (1). Adding a bullet means adding a
           # fragment here and a line there; they are meant to be read side by side.
-          P_GROUP='([({][[:space:]]*([^|(){}]*[;&][[:space:]]*)*)*'
+          # The inner class admits a pipe, so an earlier command of the group may be
+          # a pipeline of its own (`| { foo | bar; grep -q x; }`). It only ever
+          # applies AFTER a literal `(`/`{` following the pipe, and it costs nothing:
+          # over all 150 tracked shell files the pipe-admitting and pipe-excluding
+          # forms return the identical 275 hits.
+          P_GROUP='([({][[:space:]]*([^(){}]*[;&][[:space:]]*)*)*'
           P_ASSIGN='[A-Za-z_][A-Za-z0-9_]*=[^[:space:]|]*[[:space:]]+'
           P_REDIR='[0-9]*[<>][<>&]?[^[:space:]|]*[[:space:]]+'
           P_WRAP='(command|builtin|exec|env|nice|stdbuf|time|timeout|sudo|doas|nohup|setsid|ionice|chrt)[[:space:]]+([^|;&<>(){}[:space:]]+[[:space:]]+){0,2}'
