@@ -6981,6 +6981,60 @@ STUB
     fi
     [[ "$(get_phase publish_github_release | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: tag↔MERGE_SHA mismatch must mark publish FAIL"; failures=$((failures+1)); }
 
+    # (c)/(d) REACHABILITY OF THE DRY-RUN LIMB (#5142 F-01; #4765 convention).
+    # Phase 15.5's dry-run branch used to sit BELOW three `return 3` preflights, so
+    # every --dry-run aborted here before the mode was ever read and the phases after
+    # it never enumerated — the same defect class #4765 fixed at 9.55, with the same
+    # consequence for the dry-run review gate stage-13-close.md Phase A8 mandates.
+    #
+    # These arms assert REACHABILITY, not presence. A presence check (does a
+    # `MODE == dry-run` branch exist in this function?) passes on the DEFECTIVE code —
+    # the branch was always there, just stranded below the aborts. Each fixture is
+    # therefore driven through BOTH modes: the dry arm must reach the limb and return
+    # 0 with the literal outcome DRY-RUN, and the apply arm on the IDENTICAL fixture
+    # must still abort. Without the apply arm the dry arm is satisfiable by a gutted
+    # guard or by a fixture that does not actually omit what it claims to omit; without
+    # the literal-DRY-RUN assertion it is satisfiable by a vacuous PASS.
+    local _pg_saved_nomerge="$NO_MERGE"
+    NO_MERGE=0   # the deferral guard sits above the dry-run branch; keep it out of the way
+    local _pg_rc _pg_detail
+
+    # Fixture N — NOTES ABSENT. This is the artifact phase_scaffold_release_notes
+    # deliberately does not write under --dry-run, so on the real dry-run path this
+    # preflight fires on the script's own no-op. Tag present and at MERGE_SHA, so the
+    # two preflights above it pass and this one is provably the abort under test.
+    MERGE_SHA="$_ms_commit"; VERSION="v9.89"
+    RELEASE_NOTES_DIR="$_ms_tmp/empty-notes"; /bin/mkdir -p "$RELEASE_NOTES_DIR"
+
+    MODE="dry-run"; PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
+    phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
+    [[ "$_pg_rc" -eq 0 ]] || { echo "FAIL: F-01-N-dry — under --dry-run the phase must reach its mode branch and return 0 when the note is absent (it is absent by construction; phase_scaffold_release_notes wrote nothing), got rc=$_pg_rc"; failures=$((failures+1)); }
+    [[ "$(get_phase publish_github_release | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: F-01-N-dry — the outcome must be literally DRY-RUN (a vacuous PASS also returns 0 and must not count), got '$(get_phase publish_github_release)'"; failures=$((failures+1)); }
+
+    MODE="apply"; PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
+    phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
+    [[ "$_pg_rc" -ne 0 ]] || { echo "FAIL: F-01-N-apply anti-vacuity — the SAME notes-absent fixture MUST still abort under --apply; rc=0 means the preflight was gutted rather than mode-scoped, or the fixture is not actually missing the note"; failures=$((failures+1)); }
+    _pg_detail="$(get_phase publish_github_release)"
+    /usr/bin/grep -qF 'RELEASE_NOTES file not present' <<<"$_pg_detail" || { echo "FAIL: F-01-N-apply — the --apply preflight message must be preserved verbatim (the apply limb is unchanged), got '$_pg_detail'"; failures=$((failures+1)); }
+
+    # Fixture T — TAG ABSENT. The FIRST of the three preflights, and the one a genuine
+    # pre-close dry-run hits first: the tag is pushed at Stage 12 Phase B3, which has
+    # not run when the operator dry-runs the close. v9.87 was never tagged in the
+    # sandbox origin, so ls-remote returns an empty set with no network call.
+    VERSION="v9.87"
+
+    MODE="dry-run"; PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
+    phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
+    [[ "$_pg_rc" -eq 0 ]] || { echo "FAIL: F-01-T-dry — under --dry-run the phase must reach its mode branch and return 0 when the tag is not yet on origin (Stage 12 Phase B3 has not run at dry-run time), got rc=$_pg_rc"; failures=$((failures+1)); }
+    [[ "$(get_phase publish_github_release | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: F-01-T-dry — the outcome must be literally DRY-RUN, got '$(get_phase publish_github_release)'"; failures=$((failures+1)); }
+
+    MODE="apply"; PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
+    phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
+    [[ "$_pg_rc" -ne 0 ]] || { echo "FAIL: F-01-T-apply anti-vacuity — the SAME tag-absent fixture MUST still abort under --apply; rc=0 means the tag preflight was gutted, or v9.87 is unexpectedly present on the sandbox origin"; failures=$((failures+1)); }
+    _pg_detail="$(get_phase publish_github_release)"
+    /usr/bin/grep -qF 'not present on origin' <<<"$_pg_detail" || { echo "FAIL: F-01-T-apply — the --apply tag preflight must be the abort under test and its message preserved verbatim, got '$_pg_detail'"; failures=$((failures+1)); }
+
+    NO_MERGE="$_pg_saved_nomerge"
     REPO_ROOT="$_ms_saved_root"; MODE="$_ms_saved_mode"; VERSION="$_ms_saved_version"; RELEASE_NOTES_DIR="$_ms_saved_notesdir"
   else
     echo "  (skipped #1682 identity-assertion self-test — git not executable at $GIT)" >&2
