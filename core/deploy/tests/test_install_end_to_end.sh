@@ -59,6 +59,20 @@ trap cleanup EXIT
 
 SBX=$(mktemp -d -t install-e2e.XXXXXX)
 mkdir -p "${SBX}/config" "${SBX}/ws" "${SBX}/home"
+# The workspace-root `pmo-platform` child is the CLONE, not an installer artifact.
+# docs/INSTALL.md clones the repo to ${WORKSPACE_ROOT}/pmo-platform and only THEN
+# runs setup-workspace.sh, so a real workspace root always carries it — which is why
+# validate-install.sh check A2 lists it among the five required root dirs. This
+# sandbox instead passes the repo in via --source-repo from the real repo root, so
+# nothing here would ever create it, and A2 would FAIL unconditionally for a reason
+# unrelated to anything under test.
+#
+# That is not merely a red assertion. An A2 arm phrased "A2 FAILs when X is absent"
+# is satisfied by ANY A2 failure, so a permanently-failing A2 makes every such arm
+# pass whether or not X matters — an assertion that has never been shown capable of
+# failing. Restoring the clone directory is what keeps the Stage 5 arms attributable;
+# the Stage 5 baseline arm is the control that proves it worked.
+mkdir -p "${SBX}/ws/pmo-platform"
 
 report() {
   local name="$1" passed="$2" detail="${3:-}"
@@ -422,6 +436,25 @@ printf '\nStage 5: ambient-intake provisioning (absence detected; existing insta
 ambient_base="$(pmo_instance_path_for "${SBX}/ws")"
 ambient_probe="${ambient_base}/inbox"
 
+# Every A2 read below goes through this one helper, so the baseline, negative and
+# positive arms are provably the SAME command against the SAME workspace and differ
+# in exactly one variable: whether the drop-zone is on disk.
+#
+# --dry-run is deliberate and does not weaken any assertion here. A2 is dry-run
+# INVARIANT: check_a2_workspace_layout carries no DRY_RUN branch, and emit_pass /
+# emit_fail print the "[A2] …" line to stdout before record_step's dry-run
+# early-return, so the verdict these arms grep is byte-for-byte what a full run
+# emits. What --dry-run does drop is check A8, which shells out to
+# `deploy.sh --check --warn` — minutes of work against the real repo, irrelevant to
+# every assertion in this stage, and covered by its own suite. It also stops each
+# read persisting a .workspace-validation/ tree into the sandbox.
+a2_probe() {
+  bash "${REPO_ROOT}/docs/scripts/validate-install.sh" \
+    --workspace-root "${SBX}/ws" \
+    --source-repo "${REPO_ROOT}" \
+    --mode install --dry-run 2>&1 || true
+}
+
 if [ ! -d "${ambient_probe}" ]; then
   # Reported, not assumed. A fixture that never had the drop-zone would make
   # both arms below vacuous, and a vacuous arm must not read as a pass.
@@ -429,13 +462,27 @@ if [ ! -d "${ambient_probe}" ]; then
 else
   report "Stage 5 precondition: drop-zone present before the negative arm" 1
 
+  # BASELINE ARM (anti-vacuity) — the matched-pair control, following the pattern
+  # test_validate_install.sh arms 3/4 establish: two arms differing in exactly one
+  # variable. The negative arm below asserts A2 FAILs once the drop-zone is removed.
+  # That is evidence ONLY if A2 passes while the drop-zone is present; against a
+  # permanently-failing A2 the negative arm cannot fail and proves nothing. So run
+  # the identical probe first, drop-zone intact, and require the same strong verdict
+  # the positive arm requires — which also proves the ambient resolver actually
+  # loaded, rather than A2 passing on the five root dirs alone.
+  a2_base_out=$(a2_probe)
+  if grep -q '^\[A2\] PASS.*ambient-intake dirs present' <<<"${a2_base_out}"; then
+    report "Stage 5 baseline: A2 PASSes with the drop-zone present (so the negative arm can fail)" 1
+  else
+    a2_base_line=$(grep -m1 '^\[A2\]' <<<"${a2_base_out}" || printf '(no A2 line emitted)')
+    report "Stage 5 baseline: A2 PASSes with the drop-zone present (so the negative arm can fail)" 0 \
+      "observed: ${a2_base_line} — while this is red, every A2 verdict below is unattributable"
+  fi
+
   # NEGATIVE ARM — remove the drop-zone; the install validator's workspace-layout
   # check must FAIL and must NAME what is missing. Before this card it passed.
   rmdir "${ambient_probe}"
-  a2_out=$(bash "${REPO_ROOT}/docs/scripts/validate-install.sh" \
-    --workspace-root "${SBX}/ws" \
-    --source-repo "${REPO_ROOT}" \
-    --mode install 2>&1) || true
+  a2_out=$(a2_probe)
 
   if grep -q '^\[A2\] FAIL' <<<"${a2_out}"; then
     report "validate-install A2 FAILs when the drop-zone is absent" 1
@@ -469,12 +516,11 @@ else
       "still absent after update (exit ${update_backfill_exit}); last: ${tail_out}"
   fi
 
-  # POSITIVE ARM — with the directory restored, the check must go quiet. Without
-  # this the negative arm could be satisfied by a check that always fails.
-  a2_ok_out=$(bash "${REPO_ROOT}/docs/scripts/validate-install.sh" \
-    --workspace-root "${SBX}/ws" \
-    --source-repo "${REPO_ROOT}" \
-    --mode install 2>&1) || true
+  # POSITIVE ARM — with the directory restored, the check must go quiet. Together
+  # with the baseline arm this brackets the negative arm: PASS, remove, FAIL,
+  # restore, PASS. A check that always failed would break the two outer arms, and a
+  # check that never failed would break the inner one.
+  a2_ok_out=$(a2_probe)
   if grep -q '^\[A2\] PASS.*ambient-intake dirs present' <<<"${a2_ok_out}"; then
     report "A2 PASSes once the drop-zone is restored, and states the ambient denominator" 1
   else
