@@ -3232,18 +3232,48 @@ phase_ledger_guard() {
 # milestone). Placed downstream of ledger_guard so a guard FAIL (exit 3) aborts
 # before this phase mutates the packages/ working tree.
 #
-# Detection = union of two rules over the release diff:
-#   (a) direct source — any changed path matching ^(core|operations|release)/
-#       skills/<skill>/ → <skill> (covers SKILL.md, references/**, scripts/**,
-#       evals/** — everything build-skill-packages.sh's `cp -R` carries).
-#   (b) injected canonical — any changed path under core/standards/ or
-#       operations/templates/ whose basename is the middle field of a
-#       TEMPLATE_SYNC_MAP entry → every skill in field 1 of a matching entry.
-#       Load-bearing: template-*.md inject into a package at build time with no
-#       skills/ path of their own, so editing a canonical stales the package
-#       while touching zero skills/ path.
-# The TEMPLATE_SYNC_MAP is read from deploy.sh AT RUNTIME (never copied) via the
-# same awk window build-skill-packages.sh:34–36 uses — single-sourced.
+# DETECTION IS DELEGATED, NOT RESTATED (#4722). The affected-skill set is resolved
+# by `build-skill-packages.sh --skills-for-paths`, the package builder's own query
+# mode. This phase owns WHAT TO DO with the set; the builder owns WHAT THE SET IS.
+#
+# Why (the defect this closes): the detection used to live here as a local
+# `changed_skills_from_paths()` carrying a hand-written prefix `case` over
+# core/standards/ and operations/templates/. Canonicals do not all live under those
+# two prefixes — tracker-schemas.md homes to core/schemas/ (its own arm in
+# lib-template-sync-source.sh) — so a core/schemas/ canonical edit stales
+# tracker-manager's package while this phase resolved an EMPTY set and reported
+# green "nothing to rebuild". That is the last line of defence against a staled
+# package at release close, and it was 26/27 canonicals wide. The builder's query
+# decides rule (b) by CALLING resolve_template_sync_source() — the same resolver its
+# injection loop calls to find the file it copies — so query and injection agree by
+# construction and a future resolver arm is picked up here for free.
+# claim-version.sh:747-751 already consumes this same query for the same reason, and
+# records it: "A second copy here would be a shadow SSOT." This function WAS that
+# second copy.
+#
+# COUPLING, PRICED HONESTLY (do not restate this as "the narrowest coupling"). The
+# builder dispatches its query at build-skill-packages.sh:170, AFTER three hard
+# `exit 1` preconditions — TEMPLATE_SYNC_MAP non-empty, the per-module roster arrays
+# non-empty, and the shared resolver lib present. The roster precondition is
+# provably IRRELEVANT to this query (the query reads the map and the resolver, never
+# a roster array), so an unrelated deploy.sh roster reshape would hard-FAIL a release
+# close here. The delegation is still right, but on MINIMUM CONTENTION — one live
+# consumer, already proven by claim-version.sh — not on narrowest surface.
+#
+# WHAT THIS DOES NOT PROPAGATE TO (the "every consumer" claim is over-stated).
+# .github/workflows/skill-package-freshness.yml is the repo's only pre-merge package-
+# freshness gate, and its trigger `paths:` filter names NONE of the three canonical
+# trees. A canonical-only edit therefore does not fire it, with no compensating
+# coverage elsewhere. This phase is the close-time net, not a redundant one.
+#
+# RESIDUAL — TOTAL ABSENCE, NOT PARTIAL DEGRADATION (F3). The fail-loud guard below
+# catches "the builder could not answer at all" (absent, or non-zero exit). It does
+# NOT catch a map that silently degrades from 49 entries to a handful: the builder's
+# own precondition tests `-eq 0`, so a truncated map answers successfully and wrongly,
+# and this phase cannot second-guess it without re-deriving the very rules it just
+# delegated — which would reintroduce the shadow SSOT. A partial-degradation detector
+# belongs at the builder's precondition, not here. Named, not silently accepted: this
+# guard would NOT have caught the 26/27 defect it ships beside.
 #
 # R8 (zip non-determinism): the .skill archive embeds per-entry mtimes, so a
 # content-identical rebuild differs at the byte level. Stage a rebuilt package
@@ -3256,41 +3286,6 @@ phase_ledger_guard() {
 # --no-merge: pre-commit phase; does NOT defer (the chore PR is still created, so
 # the rebuild must ride its commit) — hence no NO_MERGE guard here and no entry
 # in either deferral list.
-
-# changed_skills_from_paths — pure function: read newline-separated changed paths
-# on stdin, emit the deduped candidate skill set (one per line) per rules (a)+(b).
-# Offline: its only external read is deploy.sh's TEMPLATE_SYNC_MAP.
-changed_skills_from_paths() {
-  local deploy_sh="$REPO_ROOT/core/deploy/deploy.sh"
-  # (b) reverse TEMPLATE_SYNC_MAP: canonical-basename -> skills. Read the map from
-  # deploy.sh at runtime — same awk window as build-skill-packages.sh:34–36.
-  local map=""
-  if [[ -f "$deploy_sh" ]]; then
-    map="$(/usr/bin/awk '/^TEMPLATE_SYNC_MAP=\(/,/^\)/' "$deploy_sh" 2>/dev/null \
-      | /usr/bin/grep -E '^[[:space:]]*"[^"]+:[^"]+:[^"]+"' \
-      | /usr/bin/sed 's/^[[:space:]]*"//; s/"$//; s/[[:space:]]*#.*//' || true)"
-  fi
-  local path base entry m_skill m_canonical
-  while IFS= read -r path; do
-    [[ -z "$path" ]] && continue
-    # (a) direct source
-    if [[ "$path" =~ ^(core|operations|release)/skills/([^/]+)/ ]]; then
-      /usr/bin/printf '%s\n' "${BASH_REMATCH[2]}"
-    fi
-    # (b) injected canonical
-    case "$path" in
-      core/standards/*|operations/templates/*)
-        base="$(/usr/bin/basename "$path")"
-        while IFS= read -r entry; do
-          [[ -z "$entry" ]] && continue
-          m_skill="${entry%%:*}"
-          m_canonical="${entry#*:}"; m_canonical="${m_canonical%%:*}"
-          [[ "$m_canonical" == "$base" ]] && /usr/bin/printf '%s\n' "$m_skill"
-        done <<< "$map"
-        ;;
-    esac
-  done | /usr/bin/sort -u | /usr/bin/grep -vE '^$' || true
-}
 
 phase_rebuild_skill_packages() {
   local builder="$REPO_ROOT/core/deploy/tools/build-skill-packages.sh"
@@ -3310,9 +3305,52 @@ phase_rebuild_skill_packages() {
     return 3
   fi
 
-  # Detection (rules a+b). || true keeps set -e safe on a zero-candidate diff.
-  local candidates
-  candidates="$(/usr/bin/printf '%s\n' "$changed" | changed_skills_from_paths || true)"
+  # ── Detection: DELEGATED to build-skill-packages.sh --skills-for-paths ──────
+  # Deliberately ABOVE the dry-run branch: the release diff is real in BOTH modes,
+  # so the set is genuinely computable at --dry-run and the operator must see the
+  # true "would rebuild" list at the review gate, not a mode-degraded one. Moving
+  # this below the dry-run return would make the dry-run preview vacuous.
+  #
+  # --root is NOT optional. The builder derives its own REPO_ROOT from its own file
+  # location, so a close-out running against any tree other than the builder's own
+  # (the --self-test sandbox below, and any future non-self-rooted invocation) would
+  # silently answer from the WRONG tree. Same reason claim-version.sh:747-751 passes
+  # it. Here-string, never `producer | builder`: a pipeline conflates the producer's
+  # status with the consumer's, and this call's exit code is the fail-loud signal.
+  #
+  # NO `|| true`. That idiom is the defect class this phase exists to close: it maps
+  # every delegation failure onto the same empty string as a legitimately-empty diff,
+  # and the N/A limb below then reports green "nothing to rebuild" over an
+  # undeterminable set. Failure and emptiness are now distinguishable.
+  local candidates="" detect_rc=0
+  if [[ ! -f "$builder" ]]; then
+    detect_rc=127
+  else
+    candidates="$(/bin/bash "$builder" --root "$REPO_ROOT" --skills-for-paths <<< "$changed" 2>/dev/null)" || detect_rc=$?
+    [[ $detect_rc -ne 0 ]] && candidates=""
+  fi
+
+  # Fail-loud guard on an UNDETERMINABLE set — mirrors the D-4d diff-base guard above.
+  #
+  # C1 (#4765 convention): ASSERT AT --apply, PREDICT AT --dry-run. #4765 established
+  # that a --dry-run must never abort a phase — its own abort at 9.55 cost the eleven
+  # phases after it, and an abort HERE would cost the thirteen after 9.95, taking the
+  # dry-run review gate with it. So the ABORT is scoped to --apply. The FINDING is
+  # not: --dry-run still reports it, as a non-blocking WARN (the outcome this file
+  # already uses at 15.6 for a real finding held outside its blocking scope), because
+  # a dry-run commits nothing and therefore cannot stale a package — it can only
+  # mislead. Silence here would be the same green-over-unknown this card closes.
+  if [[ $detect_rc -ne 0 ]]; then
+    local _d_why="build-skill-packages.sh --skills-for-paths exited ${detect_rc}"
+    [[ $detect_rc -eq 127 ]] && _d_why="package builder absent at core/deploy/tools/build-skill-packages.sh"
+    local _d_fix="affected-skill set UNDETERMINABLE, so .skill staleness cannot be ruled out. The builder exits 1 before answering when deploy.sh yields no TEMPLATE_SYNC_MAP, no per-module roster arrays (a precondition this query does not use — a roster reshape can trip it), or when core/deploy/lib-template-sync-source.sh is missing. Resolve the builder, then re-run; or rebuild + stage the affected package(s) per core/rules/skill-deployment.md before closing"
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "rebuild_skill_packages" "WARN" "${_d_why} — ${_d_fix}. NOT blocking under --dry-run (nothing is committed, so no package can be staled here); this same condition FAILS the close at --apply"
+      return 0
+    fi
+    mark_phase "rebuild_skill_packages" "FAIL" "${_d_why} — ${_d_fix}"
+    return 3
+  fi
 
   if [[ -z "$candidates" ]]; then
     mark_phase "rebuild_skill_packages" "N/A" "no skill source or injected canonical changed in the release diff — no package to rebuild (0 deferred)"
@@ -7071,28 +7109,143 @@ STUB
     echo "  (skipped #3108 union-merge self-test — git not executable at $GIT)" >&2
   fi
 
-  # Test 11: changed_skills_from_paths + files=() composition (#3322 — offline,
-  # hermetic; catches the P1 staging omission in CI before any live close).
-  local _csp_out
-  # (a) direct source — a references/ path stales the whole skill (cp -R), and a
-  #     non-skill path emits nothing.
-  _csp_out="$(/usr/bin/printf '%s\n' 'core/skills/eval-writer/references/release-notes-eval-rubric.md' 'release/releases/RELEASE_LOG.md' | changed_skills_from_paths || true)"
-  if ! /usr/bin/printf '%s\n' "$_csp_out" | /usr/bin/grep -qx 'eval-writer'; then
-    echo "FAIL: changed_skills_from_paths must detect eval-writer from a core/skills/eval-writer/ path (rule a direct-source)"; failures=$((failures+1))
+  # Test 11: phase_rebuild_skill_packages detection + files=() composition
+  # (#3322 staging omission; #4722 delegated detection). Offline, hermetic.
+  #
+  # THESE ARMS DRIVE THE REAL PHASE, NOT THE BUILDER (#4722 C2). Detection is now
+  # delegated, so any arm that pipes paths straight into
+  # build-skill-packages.sh --skills-for-paths would be testing the BUILDER and would
+  # pass green on an unmodified pre-fix close-out — the same
+  # cannot-fail-on-its-own-defect pattern this release exists to close. Every arm
+  # below therefore invokes phase_rebuild_skill_packages itself and reads the phase
+  # record, the Test 4g idiom; block (c) additionally pins the phase's structure, the
+  # Test 12-T1 idiom ("a detector derived from its own producer cannot silently
+  # diverge from it"). Falsification: on a pre-fix close-out — local
+  # changed_skills_from_paths with its core/standards + operations/templates prefix
+  # case — arm (a1) marks N/A instead of naming tracker-manager, and every arm in
+  # block (c) fails. git is REQUIRED; if absent the behavioural block self-skips and
+  # the structural block still runs.
+  if [[ -x "$GIT" ]]; then
+    local _rp_root="$REPO_ROOT" _rp_mode="$MODE" _rp_merge="$MERGE_SHA"
+    local _rp_tmp; _rp_tmp="$(/usr/bin/mktemp -d -t rebuildpkg-selftest.XXXXXX)"
+    local _rp_work="$_rp_tmp/work"
+    /bin/mkdir -p "$_rp_work/core/deploy/tools"
+    # Copy the REAL builder, the REAL deploy.sh (TEMPLATE_SYNC_MAP + roster arrays)
+    # and the REAL shared resolver into the sandbox, so the arms exercise the ACTUAL
+    # --skills-for-paths rules rather than a restatement of them — the fixture idiom
+    # claim-version.sh's package self-test uses for the same query.
+    /bin/cp "$_rp_root/core/deploy/tools/build-skill-packages.sh" "$_rp_work/core/deploy/tools/" 2>/dev/null || true
+    /bin/cp "$_rp_root/core/deploy/deploy.sh" "$_rp_work/core/deploy/" 2>/dev/null || true
+    /bin/cp "$_rp_root/core/deploy/lib-template-sync-source.sh" "$_rp_work/core/deploy/" 2>/dev/null || true
+    $GIT init -q -b main "$_rp_work" 2>/dev/null || { $GIT init -q "$_rp_work" 2>/dev/null; ( cd "$_rp_work" && $GIT checkout -q -b main 2>/dev/null ); }
+    ( cd "$_rp_work" && $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1 \
+      && $GIT -c user.email=t@t -c user.name=t commit -qm base >/dev/null 2>&1 ) || true
+
+    # _rp_touch <repo-rel-path> — commit a one-line change to that path and set
+    # MERGE_SHA to it, so the phase's own `diff --name-only SHA^1 SHA` yields exactly
+    # that path. The phase resolves its diff itself; nothing is stubbed.
+    _rp_touch() {
+      /bin/mkdir -p "$_rp_work/$(/usr/bin/dirname "$1")" 2>/dev/null || true
+      /usr/bin/printf 'fixture edit: %s\n' "$1" >> "$_rp_work/$1"
+      ( cd "$_rp_work" && $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1 \
+        && $GIT -c user.email=t@t -c user.name=t commit -qm "touch $1" >/dev/null 2>&1 ) || true
+      MERGE_SHA="$($GIT -C "$_rp_work" rev-parse HEAD 2>/dev/null)"
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    }
+    REPO_ROOT="$_rp_work"; MODE="dry-run"
+
+    # (a1) SENSITIVITY — THE DEFECT CASE. tracker-schemas.md homes to core/schemas/,
+    #      a tree no prefix-enumerated rule named. Pre-fix this marked N/A.
+    _rp_touch "core/schemas/tracker-schemas.md"
+    phase_rebuild_skill_packages >/dev/null 2>&1
+    if [[ "$(get_phase rebuild_skill_packages)" != DRY-RUN*tracker-manager* ]]; then
+      echo "FAIL: a core/schemas/ canonical edit MUST resolve tracker-manager (#4722 — the third canonical tree), got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+    # (a2) CONTROL — an already-covered tree. Distinguishes "the fix works" from
+    #      "the fixture resolves everything"; a2 passed pre-fix and must still pass.
+    _rp_touch "core/standards/template-taxonomy.md"
+    phase_rebuild_skill_packages >/dev/null 2>&1
+    if [[ "$(get_phase rebuild_skill_packages)" != DRY-RUN*eval-writer* ]]; then
+      echo "FAIL: core/standards/template-taxonomy.md MUST resolve eval-writer (rule b, already-covered tree), got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+    # (a3) rule (a) direct source — a references/ path stales the whole skill (cp -R).
+    _rp_touch "core/skills/eval-writer/references/release-notes-eval-rubric.md"
+    phase_rebuild_skill_packages >/dev/null 2>&1
+    if [[ "$(get_phase rebuild_skill_packages)" != DRY-RUN*eval-writer* ]]; then
+      echo "FAIL: a core/skills/eval-writer/ path MUST resolve eval-writer (rule a direct-source), got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+    # (a4) SPECIFICITY — an untouched skill is NOT rebuilt. Without this, an arm that
+    #      resolved every skill for every path would satisfy a1-a3.
+    _rp_touch "CHANGELOG.md"
+    phase_rebuild_skill_packages >/dev/null 2>&1
+    if [[ "$(get_phase rebuild_skill_packages | /usr/bin/cut -d'|' -f1)" != "N/A" ]]; then
+      echo "FAIL: a non-skill non-canonical diff MUST resolve no package (specificity), got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+
+    # (b) C1 — the fail-loud guard's MODE SCOPING (#4765 convention: assert at
+    #     --apply, predict at --dry-run). ONE fixture — the builder removed, so
+    #     delegation cannot answer — driven in BOTH modes, so the mode is provably
+    #     the variable under test. The dry-run arm is the #4765 regression guard: a
+    #     return 3 here would abort the run and the THIRTEEN phases after 9.95 would
+    #     never enumerate, re-breaking the dry-run review gate #4765 just restored.
+    #     The apply arm is the anti-vacuity half: it proves the fixture really is
+    #     broken and that the guard still blocks a real close.
+    /bin/rm -f "$_rp_work/core/deploy/tools/build-skill-packages.sh"
+    _rp_touch "core/schemas/tracker-schemas.md"
+    local _rp_rc=0
+    MODE="dry-run"; phase_rebuild_skill_packages >/dev/null 2>&1 || _rp_rc=$?
+    if [[ $_rp_rc -ne 0 ]]; then
+      echo "FAIL: C1 — an undeterminable set under --dry-run must NOT abort (rc $_rp_rc); the 13 phases after 9.95 would never enumerate (#4765)"; failures=$((failures+1))
+    fi
+    if [[ "$(get_phase rebuild_skill_packages | /usr/bin/cut -d'|' -f1)" != "WARN" ]]; then
+      echo "FAIL: C1 — an undeterminable set under --dry-run must mark WARN, not a green outcome, got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _rp_rc=0
+    MODE="apply"; phase_rebuild_skill_packages >/dev/null 2>&1 || _rp_rc=$?
+    if [[ $_rp_rc -ne 3 ]]; then
+      echo "FAIL: C1 — the SAME undeterminable set under --apply must return 3 (fail-loud), got rc $_rp_rc"; failures=$((failures+1))
+    fi
+    if [[ "$(get_phase rebuild_skill_packages | /usr/bin/cut -d'|' -f1)" != "FAIL" ]]; then
+      echo "FAIL: C1 — an undeterminable set under --apply must mark FAIL, got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+
+    unset -f _rp_touch
+    REPO_ROOT="$_rp_root"; MODE="$_rp_mode"; MERGE_SHA="$_rp_merge"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    /bin/rm -rf "$_rp_tmp" 2>/dev/null || true
+  else
+    echo "  (skipped #4722 rebuild-detection behavioural arms — git not executable at $GIT)" >&2
   fi
-  if /usr/bin/printf '%s\n' "$_csp_out" | /usr/bin/grep -qx 'RELEASE_LOG.md'; then
-    echo "FAIL: changed_skills_from_paths must NOT emit a non-skill path"; failures=$((failures+1))
+
+  # (c) STRUCTURAL anti-regression, asserted against the REAL function body. These
+  #     pin the three regressions C2 named as leaving a delegated suite green:
+  #     re-adding `|| true`, dropping --root, and moving the guard below the dry-run
+  #     return. (declare -f strips comments, so every anchor below is code.)
+  local _rp_body _rp_detect
+  _rp_body="$(declare -f phase_rebuild_skill_packages)"
+  _rp_detect="$(/usr/bin/printf '%s\n' "$_rp_body" | /usr/bin/grep -F -- '--skills-for-paths' | /usr/bin/head -1)"
+  # c1 — the shadow-SSOT copy must stay deleted (claim-version.sh:743-746 states the
+  #      rule; changed_skills_from_paths WAS the second copy it warns about).
+  if declare -F changed_skills_from_paths >/dev/null 2>&1; then
+    echo "FAIL: changed_skills_from_paths must NOT exist — detection is delegated to build-skill-packages.sh --skills-for-paths (#4722 shadow SSOT)"; failures=$((failures+1))
   fi
-  # (b) injected canonical — template-taxonomy.md maps to eval-writer per the
-  #     deploy.sh TEMPLATE_SYNC_MAP (read at runtime); stales it with zero skills/ path.
-  _csp_out="$(/usr/bin/printf '%s\n' 'core/standards/template-taxonomy.md' | changed_skills_from_paths || true)"
-  if ! /usr/bin/printf '%s\n' "$_csp_out" | /usr/bin/grep -qx 'eval-writer'; then
-    echo "FAIL: changed_skills_from_paths must detect eval-writer from core/standards/template-taxonomy.md (rule b reverse TEMPLATE_SYNC_MAP)"; failures=$((failures+1))
+  # c2 — --root is load-bearing: without it the builder answers from ITS OWN tree.
+  if [[ "$_rp_detect" != *'--root "$REPO_ROOT" --skills-for-paths'* ]]; then
+    echo "FAIL: detection must delegate as --root \"\$REPO_ROOT\" --skills-for-paths; dropping --root answers from the builder's own tree, got '$_rp_detect'"; failures=$((failures+1))
   fi
-  # negative — a non-skill, non-canonical path set yields nothing.
-  _csp_out="$(/usr/bin/printf '%s\n' 'CHANGELOG.md' 'core/disciplines/knowledge-architecture.md' | changed_skills_from_paths || true)"
-  if [[ -n "$_csp_out" ]]; then
-    echo "FAIL: changed_skills_from_paths must emit nothing for non-skill/non-canonical paths, got '$_csp_out'"; failures=$((failures+1))
+  # c3 — the delegation's exit code IS the fail-loud signal; `|| true` would map every
+  #      failure back onto the empty string and re-open the green-over-unknown gap.
+  if [[ "$_rp_detect" != *'detect_rc=$?'* || "$_rp_detect" == *'|| true'* ]]; then
+    echo "FAIL: the delegation must capture its exit code (|| detect_rc=\$?) and must NOT swallow it with '|| true', got '$_rp_detect'"; failures=$((failures+1))
+  fi
+  # c4 — ORDERING: the fail-loud guard must sit ABOVE the dry-run enumerate branch.
+  #      Below it, a dry-run reports a green "would rebuild 0" over an undeterminable
+  #      set — the exact silent-empty this card closes.
+  local _rp_ln_guard _rp_ln_dry
+  _rp_ln_guard="$(/usr/bin/printf '%s\n' "$_rp_body" | /usr/bin/grep -n '_d_fix=' | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  _rp_ln_dry="$(/usr/bin/printf '%s\n' "$_rp_body" | /usr/bin/grep -nF 'would rebuild' | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  if [[ -z "$_rp_ln_guard" || -z "$_rp_ln_dry" || "$_rp_ln_guard" -ge "$_rp_ln_dry" ]]; then
+    echo "FAIL: the undeterminable-set guard must precede the dry-run enumerate branch (guard line '$_rp_ln_guard', dry-run line '$_rp_ln_dry')"; failures=$((failures+1))
   fi
   # files=() composition (P1 regression guard) — the commit phase MUST expand
   # "${REBUILT_PACKAGES[@]:-}" in its files=() array, else a rebuilt package is
@@ -8103,7 +8256,7 @@ PY
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
-  echo "  changed_skills_from_paths + files=() composition validated (#3322 — rule a direct-source / rule b reverse-TEMPLATE_SYNC_MAP / non-skill negative / P1 staging-array guard)" >&2
+  echo "  phase_rebuild_skill_packages detection + files=() composition validated (#4722 — core/schemas sensitivity / core/standards control / rule-a direct-source / specificity negative / C1 dry-run WARN vs apply FAIL / delegation structure / P1 staging-array guard)" >&2
   echo "  release-anchor hygiene validated (AC4/AC5 — recorded divergences exempt / a NEW divergence reported in BOTH directions / EQUAL-COUNT-UNEQUAL-SET fixture still reported (the count-parity false negative) / non-noreply tagger flagged, noreply tagger not, recorded exemption suppressed, lightweight tag excluded by objecttype / guard is comm-based by construction)" >&2
   echo "  LEDGER-ROW-PARITY fail-open closed (#3113 F-QA-3 — present-but-empty INDEX vs 3-row LOG now FAILs naming both counts / equal populated ledgers still PASS / both-empty 0==0 correctly clean / missing INDEX still FAILs / grep_count single-integer contract on empty-file, missing-file, match and empty-stdin shapes / reintroduction blocked structurally, needle proven against a known-bad control)" >&2
   echo "  phase_sync_primary_checkout validated (AC7 — behind-primary-on-main fast-forwards and HEAD verifiably MOVES to origin/main / non-main primary SKIPPED and NOT moved / absent primary clean no-op (CI hermeticity) / dry-run no-write / source carries no reset-stash-checkout-push-force-cd)" >&2
