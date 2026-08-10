@@ -7221,9 +7221,15 @@ STUB
   #     pin the three regressions C2 named as leaving a delegated suite green:
   #     re-adding `|| true`, dropping --root, and moving the guard below the dry-run
   #     return. (declare -f strips comments, so every anchor below is code.)
+  #     Every grep below is `|| true`-terminated. This file runs set -euo pipefail,
+  #     so a no-match grep inside a command substitution would ABORT the suite rather
+  #     than report — and it would abort on exactly the regression the arm exists to
+  #     catch, turning a red into a crash with no verdict. (This is scaffold safety on
+  #     the TEST's own greps; it is unrelated to the production `|| true` c3 forbids,
+  #     which sits on the delegation's own exit code inside the phase.)
   local _rp_body _rp_detect
   _rp_body="$(declare -f phase_rebuild_skill_packages)"
-  _rp_detect="$(/usr/bin/printf '%s\n' "$_rp_body" | /usr/bin/grep -F -- '--skills-for-paths' | /usr/bin/head -1)"
+  _rp_detect="$(/usr/bin/printf '%s\n' "$_rp_body" | /usr/bin/grep -F -- '--skills-for-paths' | /usr/bin/head -1 || true)"
   # c1 — the shadow-SSOT copy must stay deleted (claim-version.sh:743-746 states the
   #      rule; changed_skills_from_paths WAS the second copy it warns about).
   if declare -F changed_skills_from_paths >/dev/null 2>&1; then
@@ -7242,8 +7248,8 @@ STUB
   #      Below it, a dry-run reports a green "would rebuild 0" over an undeterminable
   #      set — the exact silent-empty this card closes.
   local _rp_ln_guard _rp_ln_dry
-  _rp_ln_guard="$(/usr/bin/printf '%s\n' "$_rp_body" | /usr/bin/grep -n '_d_fix=' | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
-  _rp_ln_dry="$(/usr/bin/printf '%s\n' "$_rp_body" | /usr/bin/grep -nF 'would rebuild' | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  _rp_ln_guard="$(/usr/bin/printf '%s\n' "$_rp_body" | /usr/bin/grep -n '_d_fix=' | /usr/bin/head -1 | /usr/bin/cut -d: -f1 || true)"
+  _rp_ln_dry="$(/usr/bin/printf '%s\n' "$_rp_body" | /usr/bin/grep -nF 'would rebuild' | /usr/bin/head -1 | /usr/bin/cut -d: -f1 || true)"
   if [[ -z "$_rp_ln_guard" || -z "$_rp_ln_dry" || "$_rp_ln_guard" -ge "$_rp_ln_dry" ]]; then
     echo "FAIL: the undeterminable-set guard must precede the dry-run enumerate branch (guard line '$_rp_ln_guard', dry-run line '$_rp_ln_dry')"; failures=$((failures+1))
   fi
