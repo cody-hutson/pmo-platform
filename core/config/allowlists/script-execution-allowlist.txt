@@ -217,6 +217,23 @@ release/tools/claim-version.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-registry-currency.sh
 ./core/deploy/tools/check-registry-currency.sh
 core/deploy/tools/check-registry-currency.sh
+# check-issue-ref-validity.sh — the extracted Issue-reference validity gate.
+# CI WIRING, stated because this tool's wiring is unusual: the script IS
+# CI-executed — the `issue-ref` job in .github/workflows/repo-integrity.yml calls
+# it, and that job is a REQUIRED status check on main. It is deliberately NOT a
+# `deploy.sh --check` leg and should not become one: it needs a base/head SHA
+# pair and network issue resolution, neither of which a local --check run has.
+# Agent-side it is invoked as `bash <path> --self-test` (the 8-cell fixture
+# matrix) and `--equivalence <sha>` (the differential run against the
+# pre-extraction body), plus by the selftest-discovery engine. All four forms per
+# the per-tool convention above, so BLOCK-DESTRUCTIVE-022 does not block the
+# agent-side verification path — which is the ONLY path that can run the
+# equivalence proof, since CI never passes that flag. (CI itself runs no Claude
+# hooks, so these rows are for the agent-side path, not the workflow step.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-issue-ref-validity.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-issue-ref-validity.sh
+./core/deploy/tools/check-issue-ref-validity.sh
+core/deploy/tools/check-issue-ref-validity.sh
 # test-status-label-invariant.sh — deploy.sh Check 16 status-label invariant fixture
 # self-test. Now a wired step of the shell-tests job in install-tests.yml AND invoked
 # agent-side at Stage 7 Dev Testing, plus by any operator re-running it locally. It

@@ -30,6 +30,14 @@ Card index for this release. Every issue reference in this plan resolves against
 
 **File-surface reconciliation — the gate-posture card.** Its Stage-5 design deletes the path filter rather than widening it, which moved the card's file surface after the Stage-4 matrix was written. `core/deploy/lib-template-sync-source.sh` leaves the surface — the chosen design needs no derived filter, so the resolver is only *read* (by the new fixture), never modified. Two files join: the Requirement-(c) coverage register in `core/standards/gate-efficacy-standard.md`, which otherwise keeps asserting the posture the workflow no longer carries, and `core/deploy/tests/test_package_freshness_exit_codes.sh`, the gate's existing CI-executed test harness, extended rather than duplicated. Net: the card's matrix rows go 2 → 3 and the release path count 16 → 17. Two of the three rows sit in the File Change Matrix below and the third is stated immediately above; all 17 paths are in the machine-readable list, which is the contract Stage 7/8/9 extract.
 
+**File-surface reconciliation — the extraction card.** Its file surface grows by **two** paths, both declared rather than absorbed, taking the release path count **17 → 19**. Both are now in the machine-readable list above, which is the contract Stage 7/8/9 extract.
+
+The first was declared at Stage 5 and is unchanged: `core/rules/git-workflow.md`. The register row describing this gate understates the gate as shipped — it omits the third exemption arm (the release-tracking surface) and two of the seven recognized reference-block spellings. Reconcile-don't-annotate applies with unusual force here, because this card is rewriting the very gate the row describes; leaving the row stale while rewriting its subject would ship a declared-vs-shipped gap in the same change that exists to close one. The edit is confined to that row's two cells.
+
+The second was **discovered at Engineering and is a companion obligation, not scope**: `core/deploy/allowlists/selftest-coverage-manifest.txt`. The extracted checker carries its fixture suite as a `--self-test` dispatch, matching three sibling tools rather than adding a second tracked script. The self-test discovery gate treats a tool that advertises `--self-test` without a manifest entry as a hard failure — its Arm B(ii) named this exact path as unlisted before the row was added — so the row is the price of the `--self-test` shape, in the same way the four allowlist rows are the price of a new tracked executable. It is one generated line, produced by the manifest's own documented regeneration command rather than hand-edited, and it is what gives the fixture suite an automated caller at all; without it the suite would run only when a human typed the command, which is the precise failure that gate was built to end.
+
+**The extraction card's README work remains an APPEND**, and it is the only append in this release: the checker is a genuinely new basename, so the coverage rule's exactly-one-row-per-basename invariant is satisfied by adding a row, not by editing one. Verified on the merged surface: 32 rows and 32 distinct basenames before, 33 and 33 after, zero duplicates on either side.
+
 ## Release Identity — slug-primary, version unbound
 
 The plan file, the branch, and all hub state are keyed on the milestone **slug**, never a version. This file carries the literal token `{{RELEASE_VERSION}}` and **no baked version number anywhere**, per ADR-092: the version binds only at the Stage-12 atomic compare-and-swap, where git's ref CAS is the authority.
@@ -125,13 +133,14 @@ Consolidated from the six Stage-5 design specs, reconciled to the Stage-5 decisi
 | #4926 | `core/deploy/deploy.sh` | MODIFY — **Check 55 region only** (lines 9534–9608). No new check number |
 | — | `release/releases/plans/triage-and-backlog-instrumentation_RELEASE_PLAN.md` | This file — Engineering Commit 0, then accreted through the release |
 
-Machine-readable path list for deterministic Stage 7 / 8 / 9 chip extraction — **17 paths, one per line**:
+Machine-readable path list for deterministic Stage 7 / 8 / 9 chip extraction — **19 paths, one per line**:
 
 ```
 .github/ISSUE_TEMPLATE/improvement.yml
 .github/workflows/repo-integrity.yml
 .github/workflows/skill-package-freshness.yml
 core/config/allowlists/script-execution-allowlist.txt
+core/deploy/allowlists/selftest-coverage-manifest.txt
 core/deploy/deploy.sh
 core/deploy/tests/test_package_freshness_exit_codes.sh
 core/deploy/tools/README.md
@@ -139,6 +148,7 @@ core/deploy/tools/check-work-hierarchy.py
 core/deploy/tools/check-issue-ref-validity.sh
 core/deploy/tools/check-milestone-epic-membership.py
 core/deploy/tools/fixtures/issue-ref/
+core/rules/git-workflow.md
 core/schemas/gate-criteria-spec.md
 core/specs/label-taxonomy.md
 core/standards/gate-efficacy-standard.md
