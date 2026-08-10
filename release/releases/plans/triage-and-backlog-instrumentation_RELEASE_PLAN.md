@@ -1,3 +1,14 @@
+---
+title: Release Plan — triage-and-backlog-instrumentation (backlog instrumentation becomes queryable, and lint cards can express precision as well as capability)
+type: release-plan
+plan_type: release
+status: ACTIVE
+release: slug-only (ADR-092 — the concrete version binds at the Stage-12 atomic claim)
+milestone: triage-and-backlog-instrumentation
+release_class: novel
+domain_practice: { source: N/A — pipeline-internal release, date: 2026-08-10, domain: governance }
+reversibility: MODERATE / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 # Release Plan — triage-and-backlog-instrumentation
