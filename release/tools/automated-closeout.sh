@@ -63,7 +63,13 @@
 # Flags:
 #   REQUIRED:
 #     --pr <N>                 Release PR number
-#     --version v<X.Y>         Version key matching RELEASE_LOG row
+#     --version v<X.Y>         Version key matching RELEASE_LOG row. Canonical
+#                              vX.Y[.Z] ONLY — a version-less release is rejected
+#                              here, before any phase runs, and closes via the
+#                              Phase-B chore-PR mechanism per
+#                              release/references/pipeline/stage-13-close.md
+#                              Phase A8. That is the expected path for the
+#                              version-less identity mode, not a deviation.
 #     --milestone <N>          Milestone number
 #   MODE (one of, default --dry-run):
 #     --dry-run                Enumerate + preview; no state mutation (default)
@@ -384,7 +390,13 @@ PHASE_DETAILS=()
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
-  /usr/bin/sed -n '2,92p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  # Self-terminating on the header block's real end (the first line after the
+  # shebang that is not a comment) rather than a hardcoded line count. The old
+  # fixed `sed -n '2,92p'` window truncated mid-sentence and silently dropped the
+  # whole META section, so `--help` never mentioned --self-test — the flag the
+  # version-less REACHABILITY note depends on. A fixed window re-breaks every
+  # time the header grows; this one cannot.
+  /usr/bin/awk 'NR==1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "${BASH_SOURCE[0]}"
   exit 0
 }
 
@@ -480,6 +492,28 @@ validate_version() {
 # on what "version-less" means. Previously only bump_version branched on it; the
 # INDEX/DIGEST/CHANGELOG emits did not, so a version-less close produced entries
 # that diverged from the corpus convention (#2048 residual).
+#
+# REACHABILITY — read this before deleting any is_version_less branch.
+# These branches are NOT reachable through --apply or --dry-run. Main validates
+# --version against the canonical grammar and dies before phase dispatch, so a
+# version-less $VERSION exits 1 at the CLI boundary and no phase ever runs. They
+# are live and maintained for three reasons:
+#   1. --self-test dispatches BEFORE that gate and drives the branches directly.
+#      The ordering is the whole reason they are reachable, so it is ASSERTED,
+#      not merely documented: self-test arm VL-ORDER resolves both lines from
+#      this file's own text and fails if the dispatch stops preceding the gate.
+#      The VL-0..VL-7 arms are the branches' regression coverage, and CI runs
+#      --self-test on this file (core/deploy/allowlists/selftest-coverage-manifest.txt).
+#   2. They are the executable statement of the corpus convention that a
+#      hand-assembled Phase-B chore-PR close must follow for a version-less
+#      release — release/references/pipeline/stage-13-close.md, Phase A8, which
+#      states that scope once for every version-less N/A and SKIP rule in the
+#      stage. Shipped version-less releases in the RELEASE_LOG follow it.
+#   3. version-less is a live Stage-3 release-identity mode (stage-03-bundle.md,
+#      asserted at G3-19), so the convention cannot be retired from here.
+# Do NOT delete these branches without first retiring the identity mode at
+# Stage 3. Deleting them would leave the convention with no executable statement
+# while releases are still closing under it.
 is_version_less() { ! validate_version "$VERSION"; }
 
 # The notes path/link for this release — version-less notes live under
@@ -3047,10 +3081,13 @@ phase_assert_derived_surfaces() {
 # mirrors the phase_append_changelog pre-CHANGELOG SKIP idiom. There is nothing
 # to stamp for a version-less release, so the file is intentionally left untouched
 # and the no-op is made auditable rather than silent.
-#   NOTE: line ~1501 `validate_version "$VERSION" || die` means the script
-#   normally never reaches this phase with an invalid $VERSION; the in-phase SKIP
-#   guard is defensive + forward-compatible (and is what --self-test / the
-#   regression test exercise when invoking the phase directly).
+#   NOTE: main's `validate_version "$VERSION" || die` gate means the script never
+#   reaches this phase with an invalid $VERSION under --apply or --dry-run; the
+#   in-phase SKIP guard is the executable statement of the version-less rule and
+#   is what --self-test / the regression test exercise when invoking the phase
+#   directly. Full rationale in the REACHABILITY note above is_version_less —
+#   cited by name rather than by line number, which rots (this pointer read
+#   "line ~1501" against a file that has since more than quintupled).
 # Idempotent: no-op if .version already == $VERSION (re-run safe; satisfies AC-2).
 # Write mechanism: printf to a temp file + mv (atomic; single trailing-newline
 # line — the exact shape the hook's `head -1 | tr -d '[:space:]'` expects).
@@ -6993,10 +7030,16 @@ STUB
     fi
   fi
 
-  # Test 7: usage block extractable
-  if ! /usr/bin/sed -n '2,92p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
-    echo "FAIL: usage block extraction"; failures=$((failures+1))
-  fi
+  # Test 7: usage block extractable AND not truncated. The old arm ran its own
+  # copy of the fixed `sed -n '2,92p'` window and grepped only for "Usage:",
+  # which sits near the top — so it passed while the window silently evicted the
+  # META section. Drive the REAL renderer (no second copy to drift) and assert
+  # both ends of the block: the opening "Usage:" and the last META flag.
+  local _u7_out; _u7_out="$(usage || true)"
+  echo "$_u7_out" | /usr/bin/grep -q "Usage:" \
+    || { echo "FAIL: usage block extraction — 'Usage:' absent from the rendered help"; failures=$((failures+1)); }
+  echo "$_u7_out" | /usr/bin/grep -q -- "--self-test" \
+    || { echo "FAIL: usage block truncated — the META section (--self-test) is absent from the rendered help"; failures=$((failures+1)); }
 
   # Test 8: chore-PR body has zero parser-clean violations
   VERSION="v2.10"
@@ -7558,6 +7601,24 @@ VLSTUB
   # the release note never reaches the chore commit.
   local _sr_vlstage; _sr_vlstage="$(build_chore_pr_body 2>/dev/null | /usr/bin/grep -cF "release/releases/$(notes_rel_path) | NEW" || true)"
   [[ "$_sr_vlstage" -eq 1 ]] || { echo "FAIL: AC1/AC2-VL-7 — the chore-PR File Change Matrix must name the version-less note's real path (matches=$_sr_vlstage)"; failures=$((failures+1)); }
+
+  # VL-ORDER — the reachability property, ASSERTED rather than documented.
+  # Every VL-* arm above drives an is_version_less branch directly, which is only
+  # possible because main dispatches --self-test BEFORE the canonical-version
+  # gate. Move the dispatch below the gate and all of them become unreachable
+  # while still "passing" in the sense that they were never run. This arm reads
+  # both lines out of this file's own text and fails if the ordering inverts, so
+  # the REACHABILITY note above is_version_less cites an executable invariant
+  # instead of a line number. Both needles are column-1 anchored, so the indented
+  # copies inside this arm cannot match themselves.
+  local _vlo_dispatch _vlo_gate
+  _vlo_dispatch="$(/usr/bin/grep -nE '^\[\[ "\$SELF_TEST" -eq 1 \]\] && self_test$' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
+  _vlo_gate="$(/usr/bin/grep -nE '^validate_version "\$VERSION" \|\| die' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
+  if ! [[ "$_vlo_dispatch" =~ ^[0-9]+$ && "$_vlo_gate" =~ ^[0-9]+$ ]]; then
+    echo "FAIL: VL-ORDER anti-vacuity — a needle did not resolve to exactly one top-level line (dispatch='$_vlo_dispatch' gate='$_vlo_gate'); the arm would otherwise pass without asserting anything"; failures=$((failures+1))
+  elif [[ "$_vlo_dispatch" -ge "$_vlo_gate" ]]; then
+    echo "FAIL: VL-ORDER — the --self-test dispatch (line $_vlo_dispatch) must PRECEDE the canonical-version gate (line $_vlo_gate); below it, --self-test dies on the gate and every is_version_less branch becomes unreachable and untestable"; failures=$((failures+1))
+  fi
 
   VERSION="v9.99"
 
@@ -8273,7 +8334,7 @@ PY
   echo "  LEDGER-ROW-PARITY fail-open closed (#3113 F-QA-3 — present-but-empty INDEX vs 3-row LOG now FAILs naming both counts / equal populated ledgers still PASS / both-empty 0==0 correctly clean / missing INDEX still FAILs / grep_count single-integer contract on empty-file, missing-file, match and empty-stdin shapes / reintroduction blocked structurally, needle proven against a known-bad control)" >&2
   echo "  phase_sync_primary_checkout validated (AC7 — behind-primary-on-main fast-forwards and HEAD verifiably MOVES to origin/main / non-main primary SKIPPED and NOT moved / absent primary clean no-op (CI hermeticity) / dry-run no-write / source carries no reset-stash-checkout-push-force-cd)" >&2
   echo "  scaffold-residue detector + pre-authored-note tolerance validated (AC1/AC2 — T1 round-trip: the REAL scaffold trips the REAL token set (anti-drift) / T2 authored note clean / T4 this-version CHANGELOG+DIGEST residue FAILs naming surface:line / T3 audit-baseline control: another version's residue does NOT block / T6 mode-awareness: --dry-run over ABSENT entries returns 0 and marks literally DRY-RUN, never a vacuous PASS / T7 anti-vacuity: the SAME absent-entry fixture under --apply still returns non-zero, FAILs, and preserves the dropped-write message verbatim / AC2 tolerance: this-version untracked note passes, other-version + modified-tracked + unrelated-untracked all still block)" >&2
-  echo "  AC1/AC2 VERSION-LESS shape validated (#3113 Records 2+3 — VL-0 notes_abs_path()==notes_rel_path() in BOTH identity modes / VL-1 producer writes notes/_unversioned/ and creates the dir / VL-2 anti-vacuity: NOT written flat / VL-3 preflight (f) residue gate FIRES (no longer a silent no-op) / VL-4 preflight (b) tolerates the note this run produced (deadlock closed) / VL-5 controls: flat bucket + another version-less release still block / VL-6 §3.2 needle blocks this release, not another / VL-7 chore-PR File Change Matrix names the real path)" >&2
+  echo "  AC1/AC2 VERSION-LESS shape validated (#3113 Records 2+3 — VL-0 notes_abs_path()==notes_rel_path() in BOTH identity modes / VL-1 producer writes notes/_unversioned/ and creates the dir / VL-2 anti-vacuity: NOT written flat / VL-3 preflight (f) residue gate FIRES (no longer a silent no-op) / VL-4 preflight (b) tolerates the note this run produced (deadlock closed) / VL-5 controls: flat bucket + another version-less release still block / VL-6 §3.2 needle blocks this release, not another / VL-7 chore-PR File Change Matrix names the real path / VL-ORDER the --self-test dispatch verifiably PRECEDES the canonical-version gate, which is what makes every arm above reachable — asserted from source, with an anti-vacuity arm on both needles)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  close-out report phase set is RECORD-DERIVED validated (#4773 — every recorded phase renders against a denominator parsed from this file's own mark_phase subjects (pre-fix: 3 missing — inject_velocity_field / append_release_learnings / audit_epic_rollup) / a phase in NO enumeration still renders (AC-2) / an unmarked name does NOT render (anti-vacuity) / post_gate_passage_proof renders AND is asserted definition-less, so a definition-derived set cannot silently drop it / a double-marked name renders ONE row carrying the FIRST result / the halted marker fires on a FAIL-terminated run and is absent on a clean one / DISPATCH<->RECORD cross-check: every dispatched phase is a record subject, with vacuity floors on both parses plus sensitivity and specificity arms — the one invariant no seeded arm can reach / JSON twin carries the same de-duplicated set with pre-existing keys intact)" >&2
