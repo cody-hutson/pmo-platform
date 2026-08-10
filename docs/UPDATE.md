@@ -185,7 +185,9 @@ Check `~/Claude/.backup-pre-update-<timestamp>/` for the pre-attempt content. Re
 
 ### 6.3 `update.sh` exits 75 — install incomplete
 
-A **hook-tier composition surface** — an allowlist under `~/Claude/.claude/` — is absent, so `update.sh` refused to refresh the security-hook bundle and stopped. Every absent surface is named in the output.
+A deployed control is present but not operable. Two conditions produce this exit, and the output names the offending file either way.
+
+**6.3a — a hook-tier composition surface is absent.** An allowlist under `~/Claude/.claude/` is missing, so `update.sh` refused to refresh the security-hook bundle and stopped.
 
 `update.sh` regenerates composition surfaces that already exist; it does **not** install absent ones. That is `setup-workspace.sh`'s job. Refreshing hooks while an allowlist is missing would install an enforcement control with no matching escape hatch, leaving the workspace strictly **more** restrictive than either tool intends — so the run stops before the refresh rather than after it, and nothing lands in that asymmetric state.
 
@@ -194,7 +196,23 @@ A **hook-tier composition surface** — an allowlist under `~/Claude/.claude/` �
 ./update.sh                           # re-run; the gate goes quiet
 ```
 
-This exit also fires under `--dry-run`. A preview that reported "no update needed" over a missing security-control allowlist would be making a claim it has not earned; the preview writes nothing either way, but it stops at the same point and reports the same reason.
+This condition also fires under `--dry-run`. A preview that reported "no update needed" over a missing security-control allowlist would be making a claim it has not earned; the preview writes nothing either way, but it stops at the same point and reports the same reason.
+
+**6.3b — a deployed hook is not executable after the refresh.** A hook without its executable bit does not run, and does not report that it did not run: the control is silently disabled while everything around it looks healthy. That is why this is an error rather than a warning.
+
+The refresh restores a stripped executable bit by itself, including on a hook whose content is unchanged — so reaching this exit means the refresh tried and did not succeed. Re-running `update.sh` on its own is therefore unlikely to help. Reinstall the bundle, then check the named file:
+
+```bash
+./docs/scripts/setup-workspace.sh     # reinstalls the hook bundle
+ls -l ~/Claude/.claude/hooks/         # confirm the named hook now shows +x
+./update.sh                           # re-run
+```
+
+A file under `~/Claude/.claude/hooks/` that is **not** a platform hook — something added by hand — is the usual cause, because the refresh only ever reinstalls hooks the platform ships. Either make it executable or move it out of the hooks directory.
+
+Unlike 6.3a, this condition does **not** stop a `--dry-run`; it reports a warning and continues. A preview has not run the refresh that repairs the bit, so failing the preview would report a blocker that a real run resolves on its own.
+
+The two sourced primitives that ship alongside the hooks — `path-leak-patterns.sh` and `lib-instance-path.sh`, plus everything under `hooks/lib/` — are read, never invoked, and are correctly not executable. They are exempt from this check and do not need `chmod +x`.
 
 ### 6.4 An allowlist no longer respects an entry I added
 

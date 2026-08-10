@@ -423,6 +423,120 @@ else
   fi
 fi
 
+# --- Stage 4b: deployed-hook executability (#4449 AC-1 limb 1 / AC-3 limb 1) ---
+# AC #3 requires update.sh to exit non-zero when a deployed control is left
+# "non-executable OR list-less". Stage 4 above covers list-less. This covers the
+# other limb, and it covers the repair that has to exist underneath it: a gate whose
+# named remedy cannot work is a permanently-red gate, not a fix.
+#
+# Three arms, and the third is what keeps the second honest.
+#   REPAIR    — strip +x from a deployed platform hook. The refresh must restore it.
+#               This is the path that previously had no repair at all: the checksum
+#               comparison is over CONTENT, and a hook stripped of +x is
+#               byte-identical to a healthy one, so the refresh returned "unchanged"
+#               and left a hook that cannot run.
+#   DETECT    — plant a hook the refresh CANNOT repair, so the assertion has
+#               something real to catch. install_hooks only ever iterates the source
+#               hook set, so a file that is not in it is never touched; that is the
+#               genuinely unrepairable case, and it is the one the assertion exists
+#               for. update.sh must exit 75 and name the file.
+#   RECOVER   — remove it; the run must go back to 0/64. Without this arm a gate that
+#               fired unconditionally would be indistinguishable from one that works,
+#               and every later stage would inherit a workspace stuck at 75.
+printf '\nStage 4b: deployed-hook executability (update.sh refuses a hook that cannot run)\n'
+
+exec_hook="${SBX}/ws/.claude/hooks/block-destructive.sh"
+stray_hook="${SBX}/ws/.claude/hooks/zz-unrepairable-probe.sh"
+
+if [ ! -x "${exec_hook}" ]; then
+  # Reported, not assumed: if the fixture hook is already non-executable the repair
+  # arm proves nothing about a repair.
+  report "Stage 4b precondition: deployed hook is executable after install" 0 "not executable: ${exec_hook}"
+else
+  report "Stage 4b precondition: deployed hook is executable after install" 1
+
+  # REPAIR ARM
+  chmod -x "${exec_hook}"
+  if [ -x "${exec_hook}" ]; then
+    # The strip itself must be shown to have worked, or the arm below is vacuous.
+    report "Stage 4b precondition: +x strip took effect" 0 "still executable after chmod -x"
+  else
+    report "Stage 4b precondition: +x strip took effect" 1
+
+    repair_out=$("${UPDATE}" \
+      --config-root "${SBX}/config" \
+      --workspace-root "${SBX}/ws" 2>&1)
+    repair_exit=$?
+
+    if [ -x "${exec_hook}" ]; then
+      report "update.sh restores a stripped +x on a content-identical hook" 1
+    else
+      report "update.sh restores a stripped +x on a content-identical hook" 0 \
+        "still non-executable after update (exit ${repair_exit})"
+    fi
+
+    if [ "${repair_exit}" -eq 0 ] || [ "${repair_exit}" -eq 64 ]; then
+      report "the repaired run completes (exit 0/64)" 1
+    else
+      tail_out=$(printf '%s' "${repair_out}" | tail -4 | tr '\n' '|')
+      report "the repaired run completes (exit 0/64)" 0 "exit ${repair_exit}; last: ${tail_out}"
+    fi
+
+    # Reporting the repair is the point of the release, not a nicety: a run that
+    # changed a file mode must not describe itself as having changed nothing.
+    if grep -q 'MODE-REPAIRED:' <<<"${repair_out}"; then
+      report "the run NAMES the mode repair rather than reporting no change" 1
+    else
+      report "the run NAMES the mode repair rather than reporting no change" 0 \
+        "no MODE-REPAIRED line in output"
+    fi
+  fi
+
+  # DETECT ARM
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${stray_hook}"
+  chmod -x "${stray_hook}"
+  nonexec_out=$("${UPDATE}" \
+    --config-root "${SBX}/config" \
+    --workspace-root "${SBX}/ws" 2>&1)
+  nonexec_exit=$?
+
+  if [ "${nonexec_exit}" -eq 75 ]; then
+    report "update.sh exits 75 (EX_INCOMPLETE) when a deployed hook is not executable" 1
+  else
+    tail_out=$(printf '%s' "${nonexec_out}" | tail -4 | tr '\n' '|')
+    report "update.sh exits 75 (EX_INCOMPLETE) when a deployed hook is not executable" 0 \
+      "exit ${nonexec_exit}; last: ${tail_out}"
+  fi
+
+  if grep -q 'zz-unrepairable-probe.sh' <<<"${nonexec_out}"; then
+    report "the gate NAMES the non-executable hook" 1
+  else
+    report "the gate NAMES the non-executable hook" 0 "hook not named in output"
+  fi
+
+  # The registrations that name these scripts must not have been wired while one of
+  # them could not run — the same ordering contract Stage 4 asserts on the other limb.
+  if grep -q 'Phase 5d' <<<"${nonexec_out}"; then
+    report "the gate fires BEFORE the settings refresh (no Phase 5d emitted)" 0 "settings refresh ran anyway"
+  else
+    report "the gate fires BEFORE the settings refresh (no Phase 5d emitted)" 1
+  fi
+
+  # RECOVER ARM
+  rm -f "${stray_hook}"
+  recover_out=$("${UPDATE}" \
+    --config-root "${SBX}/config" \
+    --workspace-root "${SBX}/ws" 2>&1)
+  recover_exit=$?
+  if [ "${recover_exit}" -eq 0 ] || [ "${recover_exit}" -eq 64 ]; then
+    report "healthy workspace: the executability gate does not fire (exit 0/64)" 1
+  else
+    tail_out=$(printf '%s' "${recover_out}" | tail -4 | tr '\n' '|')
+    report "healthy workspace: the executability gate does not fire (exit 0/64)" 0 \
+      "exit ${recover_exit}; last: ${tail_out}"
+  fi
+fi
+
 # --- Stage 5: ambient-intake provisioning, both directions ---
 # Stage 2 proved the three directories land on a fresh install. This stage
 # proves the two things a landed-artifact assertion cannot: that their ABSENCE

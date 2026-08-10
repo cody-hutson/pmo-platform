@@ -824,7 +824,13 @@ refresh_hooks() {
   # plain `cp` on EVERY run (they log INSTALLED even when byte-identical), so keying off their
   # log lines would make every real update non-no-op and break the EX_NOCHANGE contract
   # (test_upgrade_config_durability Suite F). A genuine hook security fix always REFRESHES.
-  if grep -qE 'REFRESHED:' "${refresh_out}"; then
+  #
+  # MODE-REPAIRED counts for the same reason REFRESHED does: restoring a stripped +x
+  # changes the workspace, so a run that did it must not report "no changes". Unlike
+  # the primitives' INSTALLED lines this cannot fire on a healthy run — the repair
+  # branch is reached only when a deployed hook was actually found non-executable —
+  # so it cannot turn every update into a non-no-op.
+  if grep -qE 'REFRESHED:|MODE-REPAIRED:' "${refresh_out}"; then
     PHASE5_DEPLOYED=1
   fi
   rm -f "${refresh_out}"
