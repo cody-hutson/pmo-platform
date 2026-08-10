@@ -212,7 +212,7 @@ Re-derived against `origin/main` at Commit 0 — **not** against the worktree. `
 |---|---|---|
 | #4462 | file-content assertion on the disposition record and the residual-log entry | Exactly one disposition recorded with a date, a reversibility tier, and (if accepted-residual) a named bound, falsifying signal, and reopen trigger |
 | #4463 | file-content assertion on all three files; **mirror-parity diff** of the doctrine region across the exemption pair; cascade-closure grep; **plus** the CIAC-2 self-application check | `U5` present on both doctrine surfaces (control: a fabricated test ID returns 0 on both); mirrored rows byte-identical; `all four` and `Four conformance` return **0** post-change (sensitivity: 2 pre-change); the Check 22 verdict set byte-unchanged |
-| #4708 | re-run the structural `paths:` probe on the merged head; derive the tree set from the template-sync map and diff | Difference **empty** across all **3** trees; a skipped job no longer reports satisfied; the staling shape reproduced by a regression fixture and detected |
+| #4708 | run the line-anchored `paths:`/`paths-ignore:` probe against the gate workflow on the merged head, with its paired sensitivity arm against a workflow that does carry one; run the appended fixture arms | **Zero** `paths:` keys on the gate workflow and **≥1** on the sensitivity workflow — a zero on both arms is a broken probe, not a clean result. PF-6 (injected canonical staled, no rebuild) exits **2**; PF-7 (restored) exits **0**, so the detector is not unconditionally non-zero. The gate produces a check run on a PR touching none of the former filter paths, so skipped is no longer indistinguishable from passed |
 | #4891 | enumerate `.py`/`.sh` in `core/deploy/tools/`, assert each named in README; assert the rule text present | All named (re-derive at merge — the directory grows); rule stated; **no stored count or date** (ratified D-3); control basename absent |
 | #4899 | fixture test for the detection leg via `deploy.sh --check` | Fixture surfaced; conformant control **not** surfaced; no write call |
 | #4901 | run the fixture suite against the pre-extraction inline logic and the post-extraction checker | **Byte-identical** verdicts on every fixture; the must-fail fixture fails in **both**; the checker runs outside CI; the gate job holds no residual detection logic |
@@ -256,7 +256,7 @@ Backlog instrumentation becomes queryable, and the intake AC surface gains the h
 |---|---|---|
 | #4463 | yes | Conditional conformance test `U5` on both doctrine surfaces of the registered exemption pair, plus an anti-pattern that makes it falsifiable, plus an intake-form pointer. ADR-131 |
 | #4891 | pending | Coverage rule and residual-tool backfill in the deploy-tools README |
-| #4708 | pending | Workflow path filter widened to three canonical trees; absent-is-pass corrected |
+| #4708 | yes | Path filter deleted rather than widened, and the codified `always-reports` posture adopted; the Requirement-(c) coverage register reconciled to it; PF-6 / PF-7 / PF-8 appended to the gate's existing CI-executed suite |
 | #4899 | pending | Milestone-less stage-sub-task detection leg on Check 56 |
 | #4926 | pending | Initiative-is-not-an-epic assertion and lint on Check 55. ADR-132 |
 | #4901 | pending | Gate logic extracted to an invocable checker with a fixture suite |
