@@ -3564,7 +3564,11 @@ phase_commit_chore_pr() {
     done
     for _sfc in $_reported; do
       _sfc_re="${_sfc//./\\.}"
-      if /usr/bin/printf '%s\n' "$_committed" | /usr/bin/grep -qE "(^|/)${_sfc_re}\$"; then
+      # Here-string, not `printf … | grep -q`: the reader short-circuits on its
+      # first match and can SIGPIPE the writer. The empty-haystack difference is
+      # inert here — `<<<""` presents one empty line, and the needle is anchored
+      # on a basename ending in `.md`, so it cannot match an empty line.
+      if /usr/bin/grep -qE "(^|/)${_sfc_re}\$" <<<"$_committed"; then
         _rfound="${_rfound}${_sfc} "
       else
         _rmissing="${_rmissing}${_sfc} "
