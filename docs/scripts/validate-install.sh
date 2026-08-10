@@ -207,6 +207,14 @@ Modes:
                              install sub-mode, because a SKIP is still a record.
                              Aggregate verdict is per-mode unambiguous.
 
+Check A9 (INSTALL-SKILL-ROSTER) scope: the version: frontmatter convention is
+PLATFORM-ROSTER-SCOPED. A9 asserts it only over skills the source repo declares
+at <source-repo>/{core,operations,release}/skills/<name>/SKILL.md. An
+operator-authored skill deployed alongside the platform roster is reported INFO
+and excluded — the platform neither ships nor manages it, so the re-deploy
+remedy could not run for it. If NO deployed skill resolves to the roster, A9
+FAILs on roster resolution rather than passing over an empty set.
+
 Demo skill: prompt-builder (core/skills). Aligned with the
 GETTING_STARTED.md walkthrough so the operator exercises the same skill
 in both surfaces. Minimum-viable-artifact assertions tolerate skill-
@@ -386,6 +394,23 @@ emit_skip() {
     A) MODE_A_SKIP=$((MODE_A_SKIP + 1)) ;;
     B) MODE_B_SKIP=$((MODE_B_SKIP + 1)) ;;
   esac
+}
+
+# emit_info — a RECORD, not a step.
+#
+# Prints an informational line and appends a run.json record with verdict INFO,
+# but increments NO counter and sets NO fail flag. That asymmetry with its three
+# siblings is deliberate and load-bearing: the Mode A denominator (MODE_A_TOTAL)
+# counts emitted STEP records, so a check can report supplementary population
+# detail without moving the total or influencing any verdict.
+#
+# Use it where a check deliberately EXCLUDES something from its assertion. A
+# silently-excluded population is how a narrowed check turns into a vacuous one;
+# reporting the exclusion is what keeps the narrowing auditable.
+emit_info() {
+  local step="$1" check="$2" detail="$3" mode="$4"
+  printf '[%s] INFO — %s: %s\n' "${step}" "${check}" "${detail}"
+  record_step "${step}" "${check}" "INFO" "${detail}" "" "${mode}"
 }
 
 record_step() {
@@ -850,16 +875,56 @@ check_a9_skill_roster() {
     return
   fi
   local skill_count missing_skill_md=0 missing_version=0 first_missing=""
+  local platform_count=0 nonplatform_count=0 nonplatform_names=""
   skill_count=$(find "${skills_dir}" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
   if [ "${skill_count}" -lt 1 ]; then
     emit_fail "A9" "INSTALL-SKILL-ROSTER" "no skill subdirs under ${skills_dir}" \
       "run \`${SOURCE_REPO}/core/deploy/deploy.sh --deploy\` to populate" "A"
     return
   fi
-  # Spot-check: every skill dir has SKILL.md; frontmatter has version field
+  # Spot-check: every PLATFORM-MANAGED skill dir has SKILL.md; frontmatter has
+  # version field. The deployed mirror is a superset of the platform roster —
+  # operator-authored and third-party skills live beside it — so the assertion
+  # is narrowed to the population the platform actually owns.
   for skill_dir in "${skills_dir}"/*/; do
     [ -d "${skill_dir}" ] || continue
     local skill_md="${skill_dir}SKILL.md"
+
+    # --- Platform-roster membership: a DERIVED per-name lookup, not a list ---
+    # A deployed skill is platform-managed exactly when the source tree declares
+    # it: ${SOURCE_REPO}/<module>/skills/<name>/SKILL.md exists for <module> in
+    # {core, operations, release}. Structural membership per ADR-130 D6 — a skill
+    # added tomorrow is covered the day it is added, not the day someone
+    # remembers to add it to a list. SOURCE_REPO is guaranteed to resolve:
+    # check_source_repo hard-exits 66 before any check runs, so the oracle costs
+    # three `[ -f ]` tests and introduces no new dependency.
+    #
+    # LOAD-BEARING: this is an INTERSECTION FILTER, never a completeness
+    # assertion. The source roster legitimately carries skills that are not
+    # deployed, so asserting "every roster member is present in the mirror" here
+    # would FAIL a healthy install. The predicate only ever NARROWS the set the
+    # version assertion runs over; it never adds a requirement.
+    #
+    # The lookup form (rather than enumerate-and-collect) is also what excludes
+    # non-skill directories such as _shared / _templates with no special-casing:
+    # they carry no SKILL.md, so they simply never match.
+    local skill_name
+    skill_name="$(basename "${skill_dir}")"
+    if [ ! -f "${SOURCE_REPO}/core/skills/${skill_name}/SKILL.md" ] \
+       && [ ! -f "${SOURCE_REPO}/operations/skills/${skill_name}/SKILL.md" ] \
+       && [ ! -f "${SOURCE_REPO}/release/skills/${skill_name}/SKILL.md" ]; then
+      # Outside the platform roster. Excluded from BOTH assertions below and
+      # never failed on: the platform neither ships nor manages this skill, and
+      # `deploy.sh --deploy <name>` — the only remedy A9 knows — structurally
+      # cannot run for a skill absent from the source repo, so a FAIL here would
+      # send the operator down a path that cannot terminate. Reported as INFO at
+      # the end of the check so the exclusion is visible, never silent.
+      nonplatform_count=$((nonplatform_count + 1))
+      nonplatform_names="${nonplatform_names}${nonplatform_names:+, }${skill_name}"
+      continue
+    fi
+    platform_count=$((platform_count + 1))
+
     if [ ! -f "${skill_md}" ]; then
       missing_skill_md=$((missing_skill_md + 1))
       if [ -z "${first_missing}" ]; then first_missing="$(basename "${skill_dir}")/SKILL.md"; fi
@@ -881,7 +946,34 @@ check_a9_skill_roster() {
       "re-deploy via deploy.sh --deploy <skill>" "A"
     return
   fi
-  emit_pass "A9" "INSTALL-SKILL-ROSTER" "${skill_count} skill(s); all with SKILL.md + version" "A"
+  # Anti-vacuity guard — the failure mode the narrowing itself introduces.
+  #
+  # If the roster oracle resolves to nothing (wrong --source-repo, partial clone,
+  # a module path that moved) then EVERY deployed skill reads as non-platform,
+  # the version assertion runs over an empty set, and a wholly broken install
+  # PASSes. That is strictly worse than the false FAIL this check is fixing: a
+  # false FAIL is loud, a false PASS is silence indistinguishable from approval.
+  # Zero platform matches is therefore a FAIL, and its diagnostic names ROSTER
+  # RESOLUTION rather than skill health so the remedy points at the right thing.
+  #
+  # Disjoint from the `skill_count -lt 1` FAIL above: that one covers an EMPTY
+  # MIRROR (nothing deployed); this one covers an UNRESOLVABLE ROSTER (plenty
+  # deployed, nothing recognized). Different causes, different remedies.
+  if [ "${platform_count}" -eq 0 ]; then
+    emit_fail "A9" "INSTALL-SKILL-ROSTER" \
+      "no deployed skill resolved to the platform roster (${skill_count} deployed, 0 recognized); the roster oracle is unresolvable, so the version assertion ran over an empty set" \
+      "verify --source-repo points at a complete pmo-platform clone; expected ${SOURCE_REPO}/{core,operations,release}/skills/<name>/SKILL.md" "A"
+    return
+  fi
+  if [ "${nonplatform_count}" -gt 0 ]; then
+    emit_info "A9" "INSTALL-SKILL-ROSTER" \
+      "${nonplatform_count} non-platform skill(s) excluded from the version assertion: ${nonplatform_names}" "A"
+  fi
+  # The PASS states its own denominator. A pass that reports the population it
+  # asserted over — and the oracle it derived that population from — cannot
+  # silently degrade into a zero-denominator pass.
+  emit_pass "A9" "INSTALL-SKILL-ROSTER" \
+    "${platform_count} platform skill(s) with SKILL.md + version; ${nonplatform_count} non-platform excluded; ${skill_count} deployed total; roster oracle ${SOURCE_REPO}" "A"
 }
 
 check_a10_operator_toml() {
