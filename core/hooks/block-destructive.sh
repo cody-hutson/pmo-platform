@@ -195,6 +195,42 @@ is_script_allowlisted() {
   return 1
 }
 
+# Strip one leading and one trailing quote from a token, independently.
+# Quoting a path is ordinary usage, and an unstripped quote leaves the token not
+# ending in `.sh` — which silently disabled BLOCK-DESTRUCTIVE-022 altogether
+# (`bash "/tmp/evil.sh"` matched nothing and fell through to allow). The two ends
+# are stripped independently so a half-quoted token left by segment splitting
+# (`/tmp/evil.sh"`) normalizes too. A path legitimately containing a quote
+# normalizes to a string that will not be in the allowlist — i.e. it fails toward
+# blocking, never toward allowing.
+normalize_script_token() {
+  local t="$1"
+  t="${t#[\"\']}"
+  t="${t%[\"\']}"
+  "$PRINTF" '%s' "$t"
+}
+
+# Adjudicate one candidate script path against the allowlist. Blocks (exit 2) on
+# a non-allowlisted target, and blocks on an UNRESOLVABLE one: this hook sees
+# unexpanded argv, so a variable-bearing path cannot be resolved here. Denying is
+# the same fail-closed posture as the dependency gate above — a security control
+# that cannot evaluate its input must deny, never guess.
+check_script_target() {
+  local path="$1"
+  case "$path" in
+    *'$'*)
+      block "BLOCK-DESTRUCTIVE-022" \
+        "unresolvable script path (variable-bearing): $path — the hook sees unexpanded argv and cannot resolve it to an allowlist entry." \
+        "invoke with a literal path, or add the resolved path to .claude/script-execution-allowlist.txt, or set CLAUDE_HOOK_BYPASS=1"
+      ;;
+  esac
+  if ! is_script_allowlisted "$path"; then
+    block "BLOCK-DESTRUCTIVE-022" \
+      "subprocess script execution not in allowlist: $path (Red Team C1 — script-laundering mitigation)." \
+      "add to .claude/script-execution-allowlist.txt (glob patterns supported), or set CLAUDE_HOOK_BYPASS=1"
+  fi
+}
+
 # ==========================================================================
 # BRANCH BY TOOL NAME
 # ==========================================================================
@@ -377,18 +413,87 @@ case "$TOOL_NAME" in
     # ----- NEW-B: subprocess script ban (closes Red Team C1 — script laundering) -----
 
     # BLOCK-DESTRUCTIVE-022 — bash/sh/zsh <path.sh> or source/. <path> not in allowlist
-    # Detect script invocations and check allowlist
-    # Strategy: find the first token after bash|sh|zsh that looks like a script path (ends in .sh, or preceded by source/.)
-    script_invocation="$("$PRINTF" '%s' "$COMMAND" | "$GREP" -oE "${ANCHOR_PREFIX_BASH}"'(bash|sh|zsh)[[:space:]]+([^[:space:]]+[[:space:]]+)*[^[:space:];&|]+\.sh([[:space:]]|$|\b)' | head -1 || true)"
-    if [ -n "$script_invocation" ]; then
-      # Extract the script path (the .sh argument)
-      script_path="$("$PRINTF" '%s' "$script_invocation" | "$GREP" -oE '[^[:space:]]+\.sh' | tail -1 || true)"
-      if [ -n "$script_path" ] && ! is_script_allowlisted "$script_path"; then
-        block "BLOCK-DESTRUCTIVE-022" \
-          "subprocess script execution not in allowlist: $script_path (Red Team C1 — script-laundering mitigation)." \
-          "add to .claude/script-execution-allowlist.txt (glob patterns supported), or set CLAUDE_HOOK_BYPASS=1"
+    #
+    # STRATEGY: segment first, then match. A single ERE cannot model shell grammar,
+    # and the prior single-pass pattern failed on three independent axes:
+    #
+    #   (a) the argument span `([^[:space:]]+[[:space:]]+)*` admitted `;`, `&`, and
+    #       `|`, so several commands fused into ONE match. That forced a compensating
+    #       `tail -1` on the target extraction, which in turn checked the wrong token
+    #       whenever a script took a script as an argument — `bash tool.sh arg.sh`
+    #       adjudicated `arg.sh`, never the tool actually executed.
+    #   (b) the trailing boundary `([[:space:]]|$|\b)` does not honor `\b` inside an
+    #       alternation under BSD grep (it does standing alone). A `.sh` immediately
+    #       followed by `;` therefore satisfied no branch, the pattern failed, and the
+    #       invocation fell through to ALLOW without the allowlist being consulted.
+    #   (c) a quoted path does not end in `.sh`, so `bash "x.sh"` likewise matched
+    #       nothing and fell through to ALLOW.
+    #
+    # Splitting on separators makes each segment a single command whose head token is
+    # at command position, so the FIRST non-flag operand is the script actually
+    # executed — which is what this rule always intended to adjudicate. Every segment
+    # is evaluated, not just the first, so a laundered second command cannot hide
+    # behind an allowlisted first one.
+    #
+    # Bash 3.2-safe throughout (macOS system bash): parameter expansion only, no
+    # `tr`, no associative arrays, and the loop runs in the CURRENT shell (here-string,
+    # never a pipeline) so `block`'s exit 2 propagates rather than dying in a subshell.
+
+    script_segments="${COMMAND//;/$'\n'}"
+    script_segments="${script_segments//&/$'\n'}"
+    script_segments="${script_segments//|/$'\n'}"
+
+    while IFS= read -r script_seg; do
+      # trim leading whitespace (leaves the head token at index 0)
+      script_seg="${script_seg#"${script_seg%%[![:space:]]*}"}"
+      [ -n "$script_seg" ] || continue
+
+      # tokenize on whitespace with globbing OFF, so a literal `*` in the command
+      # is not expanded against the cwd before we can adjudicate it
+      set -f
+      # shellcheck disable=SC2206
+      script_tokens=( $script_seg )
+      set +f
+      [ "${#script_tokens[@]}" -ge 2 ] || continue
+
+      # interpreter at command position. Basename match subsumes every absolute
+      # form (/bin/bash, /usr/local/bin/zsh, ...) that ANCHOR_PREFIX_BASH enumerated
+      # explicitly, and is strictly tighter: an unlisted prefix no longer evades.
+      case "${script_tokens[0]##*/}" in
+        bash|sh|zsh) ;;
+        *) continue ;;
+      esac
+
+      # walk past interpreter flags to the first operand. `-c` takes a program
+      # STRING rather than a path, so every .sh-bearing token after it is a
+      # candidate instead of just one.
+      script_idx=1
+      script_cmode=0
+      while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
+        case "${script_tokens[$script_idx]}" in
+          --) script_idx=$(( script_idx + 1 )); break ;;
+          -c) script_cmode=1; script_idx=$(( script_idx + 1 )); break ;;
+          -*) script_idx=$(( script_idx + 1 )) ;;
+          *) break ;;
+        esac
+      done
+      [ "$script_idx" -lt "${#script_tokens[@]}" ] || continue
+
+      if [ "$script_cmode" -eq 1 ]; then
+        while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
+          script_cand="$(normalize_script_token "${script_tokens[$script_idx]}")"
+          case "$script_cand" in
+            *.sh) check_script_target "$script_cand" ;;
+          esac
+          script_idx=$(( script_idx + 1 ))
+        done
+      else
+        script_cand="$(normalize_script_token "${script_tokens[$script_idx]}")"
+        case "$script_cand" in
+          *.sh) check_script_target "$script_cand" ;;
+        esac
       fi
-    fi
+    done <<< "$script_segments"
 
     # Also detect source/. with explicit file argument
     source_invocation="$("$PRINTF" '%s' "$COMMAND" | "$GREP" -oE "${ANCHOR_PREFIX_BASH}"'(source|\.)[[:space:]]+[^[:space:];&|]+' | head -1 || true)"
