@@ -61,8 +61,12 @@
 set -euo pipefail
 
 TOOL_NAME="check-issue-ref-validity.sh"
-SCRIPT_PATH="${BASH_SOURCE[0]}"
-SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# ABSOLUTE, deliberately. The harness re-invokes this file from inside the
+# fixture repo, so a relative $0 captured from a relative invocation would stop
+# resolving the moment the working directory changes — the suite would fail with
+# "no such file" only for whoever happened to type a relative path.
+SCRIPT_PATH="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]}")"
 FIXTURE_DIR="${SCRIPT_DIR}/fixtures/issue-ref"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$SCRIPT_DIR")"
 
