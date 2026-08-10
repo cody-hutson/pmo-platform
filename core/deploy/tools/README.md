@@ -1,19 +1,55 @@
 ---
 title: core/deploy/tools/
-purpose: Inventory and usage reference for the stdlib-only Python primitives invoked by deploy.sh checks and available for ad-hoc operator invocation.
+purpose: Inventory and usage reference for the stdlib-only Python and bash primitives invoked by deploy.sh checks and their PR-time CI mirrors, and available for ad-hoc operator invocation.
 type: reference
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 ---
 # core/deploy/tools/
 
-Stdlib-only Python primitives invoked by `core/deploy/deploy.sh` checks AND
-available for ad-hoc operator invocation. All tools run under
-`/usr/bin/python3` (system Python 3.9+; no virtualenv, no external
-dependencies). Plus one bash wrapper (`cross-module-audit.sh`) that delegates
-to a Python helper.
+Stdlib-only primitives invoked by `core/deploy/deploy.sh` checks and by the
+PR-time CI gates that mirror them, AND available for ad-hoc operator
+invocation. The directory holds both Python tools and bash tools. The Python
+tools run under `/usr/bin/python3` (system Python 3.9+; no virtualenv, no
+external dependencies); the bash tools run under `bash`, and several are
+`source`d as shared primitives rather than executed standalone.
 
 ## Inventory
+
+**Coverage rule.** This inventory is **exhaustive**: every file matching
+`core/deploy/tools/*.py` or `core/deploy/tools/*.sh` (top level only) carries
+**exactly one** row below, keyed by its exact backticked basename. `tests/`
+holds fixtures and test harnesses for these tools and is out of scope, as are
+non-`.py`/`.sh` files. A tool added to this directory is not complete until its
+row lands in the same change. Every row names its invoking consumer in
+`Used by` — a tool with no automated caller records
+`operator-only (no automated caller)` rather than leaving the cell empty.
+
+**A new leg on an existing tool is an in-place cell edit, never a new row.**
+When a tool already in the table gains a check leg, an invariant, a mode, or a
+consumer, update that tool's existing `Used by` / `Mode(s)` / `Purpose` cells.
+A second row keyed to a basename the table already contains breaks the
+exactly-one-row invariant. Append a row **only** for a basename the table does
+not yet contain.
+
+**This file stores no tool count** — not in prose, not as an "as-of" figure,
+not as a baseline date. A stored count is a fact that goes stale on the next
+tool added; the rule is a fact that does not. Derive the count on demand
+instead, and re-derive coverage at any commit with:
+
+```bash
+comm -23 \
+  <(git ls-tree --name-only HEAD core/deploy/tools/ | grep -E '\.(py|sh)$' | xargs -n1 basename | sort) \
+  <(sed -n '/^| Tool | Used by/,/^$/p' core/deploy/tools/README.md \
+      | sed -nE 's/^\| `([^`]+)`.*/\1/p' | sort)
+```
+
+Empty output means coverage is complete; any line printed is an undocumented
+tool. Separately, every tool listed in
+`core/deploy/allowlists/selftest-coverage-manifest.txt` is run by the
+`selftest-discovery` job in `.github/workflows/release-tooling-smoke.yml` —
+that manifest is the authority for which tools that job reaches, so `Used by`
+names the self-test job only where it is a tool's sole automated caller.
 
 | Tool | Used by | Mode(s) | Purpose |
 |---|---|---|---|
