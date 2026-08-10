@@ -9533,7 +9533,7 @@ sys.stdout.write("".join(out) + "|")
 
   # Check 55 — Work-hierarchy drift gate (warn-mode initial) [#1039]
   #
-  # Two independent invariants, one check (the Check-16 multi-invariant shape):
+  # Three invariants, one check (the Check-16 multi-invariant shape):
   #   H1 DOC     — no normative governance doc ASSERTS a banned parent tier
   #                (`Initiative` / `Roadmap`, per ADR-049 §Decision 1/2) above a
   #                licensed work-item kind. The licensed kind vocabulary is DERIVED
@@ -9542,6 +9542,19 @@ sys.stdout.write("".join(out) + "|")
   #                ONE batched+paginated GraphQL query over the native sub-issue
   #                `parent` edge (never an N+1 per-epic loop — with ~39 open epics
   #                an N+1 shape would materially slow --check).
+  #   H3 COEXTENSION (ADVISORY) — no open `type:epic` issue is really an INITIATIVE
+  #                CONTAINER: an issue whose scope is coextensive with a whole
+  #                `project:` family rather than with one thrust inside it. An
+  #                initiative is a `project:` LABEL plus an operator-local roadmap,
+  #                never a standalone issue (ADR-049; label-taxonomy.md § Initiative
+  #                Labels). H2 cannot see this class — these containers carry no
+  #                epic-parent edge, which is exactly why they went uncaught. Rides
+  #                H2's single query (three fields added to the existing selection
+  #                set; no second call). Three-way conjunction — family shape AND
+  #                title coextension AND in-family fan-out — because the family
+  #                shape ALONE was measured at 39 of 42 open epics: the shape is
+  #                symmetric, so every leaf epic in a family matches it exactly as
+  #                its container does, and no threshold can separate them. ADR-132.
   # Predicate shape: closed-vocabulary membership inside a STRUCTURAL arrow-chain,
   # not prose similarity — falsifiable, no paraphrase false-positive tail. A
   # citation guard suppresses chains inside quotes/backticks (a CITED or NEGATED
@@ -9549,8 +9562,20 @@ sys.stdout.write("".join(out) + "|")
   # architecture-evaluative-lens.md:45). Matching is case-sensitive: Title-Case =
   # hierarchy tier, lowercase = label namespace (ADR-049's own `initiative->epic`
   # label-mapping title must not read as a hierarchy violation).
+  # H3 IS ADVISORY-ONLY, STRUCTURALLY. Its findings are excluded from the
+  # primitive's exit-code total, and this block routes them through
+  # flag_advisory_only — no mode case, no ISSUES increment — so the leg cannot gate
+  # in warn OR enforce mode, and cannot be flipped to FAIL when
+  # work-hierarchy-drift graduates. Precedent: Check 56's M3 leg. The reason is
+  # that H3's coextension conjunct is LEXICAL: it reads a title, and a legitimately
+  # renamed epic changes its verdict. A leg that cannot distinguish a violation
+  # from a correct record reports and never blocks. Contained further by the
+  # exemption form `#<issue> initiative-coextension` and by the row itself, which
+  # carries the matched slug tokens and in-family references so an operator can
+  # falsify a finding in one read.
   # Exemption: .claude/work-hierarchy-exemption-list.txt — lines of `<path> <token>`
-  # (H1) or `#<issue> type:epic` (H2), mirroring Check 16's exempt_pair shape; this
+  # (H1), `#<issue> type:epic` (H2) or `#<issue> initiative-coextension` (H3),
+  # mirroring Check 16's exempt_pair shape; this
   # is #1039's "allowlist-able during cutover" requirement. The H2 form is parsed
   # as an ENTRY, not a comment (`#` + digits + whitespace); the bare `<issue>
   # <token>` form is accepted too, since both normalize to one lookup key. The
@@ -9568,7 +9593,7 @@ sys.stdout.write("".join(out) + "|")
   # CHEAP (additive; `git revert`).
   # Primitive: core/deploy/tools/check-work-hierarchy.py (carries --self-test).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 55: Work-hierarchy drift (H1 doc + H2 backlog; warn-mode initial; enforce-flip deferred)"
+    log "Check 55: Work-hierarchy drift (H1 doc + H2 backlog + H3 coextension (advisory); warn-mode initial; enforce-flip deferred)"
     local c55_script="core/deploy/tools/check-work-hierarchy.py"
     if [[ ! -f "$c55_script" ]]; then
       flag_warn_or_issue "work-hierarchy-drift" "primitive script missing: $c55_script"
@@ -9587,7 +9612,12 @@ sys.stdout.write("".join(out) + "|")
       elif [[ $c55_exit -eq 0 ]]; then
         local c55_scanned
         c55_scanned=$(echo "$c55_out" | awk -F'\t' '$1=="SCANNED"{print $2}')
-        log "  OK:    work-hierarchy — 0 drift findings (${c55_scanned:-0} normative docs scanned; no banned parent tier, no epic-under-epic edge)"
+        # SCOPED TO H1+H2 DELIBERATELY. H3 is excluded from the exit code, so an
+        # H3-only run lands HERE, on exit 0 — a line claiming "no coextension
+        # advisory" would be false precisely when the advisory fired. H3 reports on
+        # its own always-emitted line below instead, which is the stronger form of
+        # the same guarantee: the leg can never read as never-run.
+        log "  OK:    work-hierarchy — 0 gating findings (${c55_scanned:-0} normative docs scanned; no banned parent tier, no epic-under-epic edge; H3 coextension advisory reported separately below)"
       elif [[ $c55_exit -eq 1 ]]; then
         local c55_h1 c55_h2
         c55_h1=$(echo "$c55_out" | awk -F'\t' '$1=="H1"{print $2}' | paste -sd, -)
@@ -9601,6 +9631,31 @@ sys.stdout.write("".join(out) + "|")
         fi
       else
         flag_warn_or_issue "work-hierarchy-drift" "check errored (exit $c55_exit): $(head -1 <<<"$c55_out")"
+      fi
+      # H3 — parsed OUTSIDE the exit-code branch chain above, and that placement is
+      # the load-bearing part. H3 findings are excluded from the primitive's total,
+      # so an H3-only run exits 0 and lands in the OK arm: a branch that read
+      # findings only on exit 1 would never see them. Evaluated on exit 0 AND 1.
+      #
+      # A line is emitted on EVERY evaluated run, finding or not, so a silent H3 can
+      # never be mistaken for a clean one. When the leg did not run the primitive
+      # emits `SKIP H3` and NO `COUNT_H3` row at all — that SKIP is surfaced here
+      # rather than defaulting to a zero, and the final else catches a primitive
+      # that emitted neither, which is a shape change and not a clean result.
+      if [[ $c55_exit -eq 0 || $c55_exit -eq 1 ]]; then
+        local c55_h3 c55_h3_count c55_h3_skip
+        c55_h3=$(echo "$c55_out" | awk -F'\t' '$1=="H3"{print "#"$2" ("$3"; matched "$4"; refs "$5")"}' | paste -sd'; ' -)
+        c55_h3_count=$(echo "$c55_out" | awk -F'\t' '$1=="COUNT_H3"{print $2}')
+        c55_h3_skip=$(echo "$c55_out" | awk -F'\t' '$1=="SKIP" && $2=="H3"{print $3}')
+        if [[ -n "$c55_h3" ]]; then
+          flag_advisory_only "work-hierarchy-coextension" "H3 initiative-coextension — open epic(s) reading as an initiative container (family shape + title coextension + in-family fan-out, all three): $c55_h3 — re-tier to a project: label plus an operator-local roadmap, or record the judgment as \`#<issue> initiative-coextension\` in .claude/work-hierarchy-exemption-list.txt"
+        elif [[ -n "$c55_h3_skip" ]]; then
+          log "  SKIP:  work-hierarchy H3 coextension advisory — $c55_h3_skip"
+        elif [[ -n "$c55_h3_count" ]]; then
+          log "  OK:    work-hierarchy H3 coextension advisory — ${c55_h3_count} finding(s); no open epic reads as an initiative container"
+        else
+          log "  SKIP:  work-hierarchy H3 coextension advisory — the primitive emitted neither a COUNT_H3 nor a SKIP H3 row, so the leg was NOT evaluated (treat as unmeasured, not clean)"
+        fi
       fi
     fi
   fi
