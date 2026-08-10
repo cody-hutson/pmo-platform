@@ -2969,8 +2969,8 @@ phase_append_changelog() {
 # The append phases at 8.x/9.5 deliberately write nothing under --dry-run, so by the
 # time control reaches here BOTH slices are empty BY CONSTRUCTION, and the presence
 # limb below fires on the script's own no-op. Since this phase returns 1 and the
-# runner exits 3 on it, the FIRST dry-run of any release aborted right here and the
-# eleven phases after it never enumerated — which made the dry-run review gate that
+# runner exits 3 on it, the FIRST dry-run of any release aborted right here and EVERY
+# phase after it never enumerated — which made the dry-run review gate that
 # stage-13-close.md Phase A8 mandates structurally unreachable for any release that
 # had not already closed. The presence limb is correct and is kept; only its
 # mode-blindness was the defect. So --dry-run PREDICTS the assertion and returns 0,
@@ -4166,6 +4166,30 @@ ${_body}" 2>&1)"; then
 # FM-4: headline extraction falls back to "Release Notes" if no H1 present
 # (avoids degraded "vX.Y — vX.Y" title surfacing publicly).
 #
+# ASSERT AT --apply, PREDICT AT --dry-run (#4765 convention, applied here by #5142).
+# All three preflights below used to run in BOTH modes, above the mode test. Their
+# inputs do not exist at dry-run time and cannot: the tag is pushed at Stage 12 Phase
+# B3, and phase_scaffold_release_notes deliberately writes no note under --dry-run. So
+# every dry-run aborted on this script's own no-op, the runner exited 3, and no phase
+# after this one enumerated — the identical defect #4765 fixed at 9.55, with the
+# identical consequence for the dry-run review gate stage-13-close.md Phase A8
+# mandates. The preflights are correct and are kept byte-for-byte; only their
+# mode-blindness was the defect. --dry-run PREDICTS them and returns 0.
+#
+# The prediction is STATIC. It states what --apply will assert; it does not
+# pre-evaluate any of it. Do NOT "improve" it by having the dry-run limb compute a
+# result — a dry-run that reaches a remote or stats the note is the mode-blindness
+# defect wearing a different shape.
+#
+# Residual, accepted and named: --dry-run no longer PREVIEWS a publish failure on the
+# case where the inputs DO exist (a close resumed after the tag and note landed). The
+# gate loses nothing — all three preflights still run at --apply, before anything is
+# published, and Phases 15.55/15.6 remain the post-emit detectors.
+#
+# ORDERING: the --no-merge deferral above stays ABOVE the mode test on purpose. Under
+# --no-merge the --apply behaviour is to defer, so predicting a publish there would be
+# a false prediction. The mode test belongs above the three ABORTING preflights, which
+# is where it now is — not at the literal first line.
 phase_publish_github_release() {
   # --no-merge (#2919): Surface 1 (the GitHub Release) is published from the
   # RELEASE_NOTES file, which lands on main only when the Stage 13 chore PR merges.
@@ -4175,6 +4199,14 @@ phase_publish_github_release() {
   # sequencing invariant; the operator re-runs --apply post-merge.
   if [[ "$NO_MERGE" -eq 1 ]]; then
     mark_phase "publish_github_release" "SKIPPED" "DEFERRED under --no-merge — RELEASE_NOTES land on main only when the chore PR merges; Surface 1 publish waits (re-run --apply after merge)"
+    return 0
+  fi
+
+  # DRY-RUN branch — deliberately above all three aborting preflights, so the apply
+  # path below is reached with exactly the control flow it had before. Detail carries
+  # no '|' so it cannot break the markdown phase table in --markdown reports.
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "publish_github_release" "DRY-RUN" "would invoke view-then-create-or-edit state machine: gh release view $VERSION → create OR edit OR no-op (per release-notes-standard.md § 5.5). Not evaluated under --dry-run: the tag-on-origin, tag↔merge-SHA and notes-file preflights. Their inputs do not exist yet — Stage 12 Phase B3 has not pushed the tag and the scaffold phase deliberately wrote no note — so checking them here would only fail on this script's own no-op. All three run for real at --apply, before anything is published"
     return 0
   fi
 
@@ -4206,11 +4238,6 @@ phase_publish_github_release() {
   if [[ ! -f "$notes_path" ]]; then
     mark_phase "publish_github_release" "FAIL" "RELEASE_NOTES file not present at $notes_path (Stage 13 chore PR may not have merged or scaffold step may not have run)"
     return 3
-  fi
-
-  if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "publish_github_release" "DRY-RUN" "would invoke view-then-create-or-edit state machine: gh release view $VERSION → create OR edit OR no-op (per release-notes-standard.md § 5.5)"
-    return 0
   fi
 
   # View-then-create-or-edit state machine
