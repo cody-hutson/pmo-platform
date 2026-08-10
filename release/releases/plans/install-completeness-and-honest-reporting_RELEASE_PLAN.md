@@ -391,6 +391,28 @@ So the check flips from failing to passing on real operator state, emits one inf
 
 ---
 
+### Dev-Testing return — Engineering
+
+**The baseline is restored and exceeded.** The standing install-regression suite returns **978 passed, 0 failed**, at the runner's own exit code **0** — read from a file written in the same command as the run, never through a pipe. The merge-base returns 908 / 0; the head Dev Testing reviewed returned 950 passed with **one** failure and exit code **1**. The arithmetic between those two closes exactly: eleven from the end-to-end suite (ten new assertions, plus the one previously-failing assertion flipping to a pass) and seventeen from the hook-test floor, which is what the base-branch merge brought in. **No failure remains that is attributable to this release.**
+
+Every other member is unchanged, including the two that matter most as pins: the upgrade-durability suite at 114 / 0, which is the no-change-exit-code contract the completeness gate could have broken, and the doctor suite at 42 / 0, which is the regression pin holding the struck acceptance limb's sourced-library modes at their correct value.
+
+**Executed.** The QA-as-code suite in read-only mode: **12 PASS / 0 FAIL**, exit 0. The validator regression suite standalone: **29 / 0**, exit 0. The deploy-check drift pass: **exit 0**, which also discharges doc-link integrity over the modified markdown. Static analysis on all three touched shell files, each compared against its own pre-change baseline: **zero new findings** — the update script reports the identical six, the installer the identical four, and the end-to-end suite none.
+
+**The three drift findings are the same three inherited ones**, re-attributed here rather than carried: the stale package for one unrelated skill, and the count-structure pair. Verified directly — this return's change set contains **zero** paths under any module's skills directory or the package tree, and neither count-structure file is among its nine changed files, against a control confirming the change set itself is non-empty.
+
+**The generated hook-registry index is now in sync.** The base-branch merge arrived carrying a per-hook source change whose index had not been regenerated; the index was regenerated and committed, and the deploy check's freshness assertion over that exact pair now reports in sync. Left alone it would have been a drift finding on this branch for a defect the branch did not cause.
+
+**The two returned defects, each proven rather than asserted.**
+
+*The executability limb.* The maintenance script now carries twelve executability constructs where it carried none, against a sensitivity control of twenty-four in the installer and a specificity control of zero — and the functional test is among the matched lines, not just the prose. End-to-end coverage runs three arms: the repair restores a bit stripped from a content-identical hook; a planted hook the refresh genuinely cannot repair proves the gate fires, names the file, and stops before the registrations that name these scripts are wired; and removing it returns the run to a clean exit, so a gate that fired unconditionally could not masquerade as one that works. **Checked against the operator's live install rather than assumed:** zero non-executable files in the population the gate scans, against a sensitivity control of twenty-three present and a specificity control of twenty-three executable — the arithmetic closes in both directions, so the gate will not fire on a healthy workspace.
+
+*The vacuous layout arms.* Proven by mutation, twice. Suppressing the directory removal turns **both** negative assertions red, so they discriminate. Suppressing the fixture fix — reproducing the pre-return sandbox exactly — turns the new baseline arm red **while both negative arms go green**: the vacuity itself, reproduced on demand and caught by the one arm added to catch it. Both mutations were reverted and the tree verified clean before the work continued.
+
+**A cost this release was carrying, now measured and mostly gone.** Dev Testing found that repairing the deploy script's executable bit made the validator's deploy check actually run, at roughly six minutes, and that the end-to-end suite paid it twice — taking that member from seconds to about fifteen minutes. Measured here: the deploy check itself takes **438 seconds**, confirming the estimate. The end-to-end member now completes in **27 seconds**. The three layout reads run in preview mode, where the layout assertion behaves identically — it carries no preview branch, and its verdict line is printed before the record-keeping step returns early — while the unrelated deploy invocation, which nothing in that stage asserts and which has its own suite, is skipped. The remaining cost is the operator-facing one: the required post-update validator run genuinely takes that time now, because the check has stopped silently skipping. That is the card working, not a regression, and it is left as an operator decision rather than absorbed here.
+
+---
+
 ## Deployment Execution Log
 
 *Populated at Stage 12.*
