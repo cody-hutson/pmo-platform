@@ -365,6 +365,8 @@ Nineteen deviations are logged above. The four an operator would most want surfa
 
 The close-out script gains one phase and loses one static list. The deploy script gains one check sub-assertion that asserts nothing until armed. The telemetry tool widens one slot's value domain and deprecates one flag. No JSON payload key is removed. No release-log row parser is affected, because the field line does not begin with a table delimiter.
 
+**Release-note rationale — why past releases stay blank (carry verbatim into the Stage 13 release note per D-5).** Close-quality telemetry starts with this release and is not backfilled onto the roughly thirty releases that closed without it. Their Deployment Log entries stay blank on purpose. Reconstructing a past release's numbers would mean measuring today's registers and today's issue state against a release that closed months ago — the registers may have been written after the fact, and deferred items have been re-triaged since — so the numbers would be assembled rather than measured, and they would then sit in the same column as the measured ones with nothing to tell them apart. A blank entry says "not measured", which is true. A reconstructed one would say "measured" about a reading nobody took.
+
 ### Cross-references
 
 Milestone 314, the planning sub-task #5093 carrying the approved Stage-4 plan and its amendment comments, the four Stage-5 design sub-tasks #5129, #5130, #5131 and #5132, the Stage-6 binding-constraints record #5137, the split-out successor issue #5188, and the four out-of-scope routing issues #5191, #5192, #5193 and #5194.
