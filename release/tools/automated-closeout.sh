@@ -3525,7 +3525,62 @@ phase_commit_chore_pr() {
       mark_phase "commit_chore_pr" "FAIL" "staging-completeness: rebuilt package(s) NOT in the chore commit — ${_missing% }; the chore PR would ship a stale package while every phase reported PASS"
       return 3
     fi
-    mark_phase "commit_chore_pr" "PASS" "committed: $commit_msg"
+
+    # Staging-completeness assertion, TOUCHED-SURFACE arm (#4710 AC-3). Reads the
+    # COMMIT, like the rebuilt-packages arm above — but that arm iterates
+    # REBUILT_PACKAGES only, so a resolver-routed write to any other surface was
+    # covered by nothing here. The empty-staged-set guard at the top of this phase
+    # does cover it in principle, but it sits behind `[[ -z "$(git diff --staged
+    # --name-only)" ]]` and can therefore fire ONLY when nothing at all is staged —
+    # a condition a real close-out never reaches, because RELEASE_LOG.md is always
+    # present. Between the two, an unrecorded segment write was dropped from the
+    # commit while this phase still reported PASS.
+    #
+    #   INDEPENDENCE (the binding Stage 5 constraint). The expected set is derived
+    # from the PHASE RECORD — the surface each inject_* phase NAMED in its own PASS
+    # detail — never from TOUCHED_ARCHIVE_SEGMENTS. A guard that consults the same
+    # recorder whose omission IS the defect goes vacuous the instant a future write
+    # site forgets to call _record_touched_archive_segment, which is exactly the
+    # regression this exists to catch. Same property the empty-set guard above was
+    # built on, and it is what makes this arm fail on a MISSING recorder call rather
+    # than agree with it.
+    #
+    #   Matched by basename against the committed path list, so a future surface
+    # that lands in a different directory is still adjudicated instead of silently
+    # excluded. The hot ledger is skipped — files=() names it unconditionally.
+    local _reported="" _rmissing="" _rfound="" _sfc _sfc_re _hot _i2 _tok
+    _hot="$(/usr/bin/basename "$RELEASE_LOG")"
+    for ((_i2=0; _i2<${#PHASE_NAMES[@]}; _i2++)); do
+      [[ "${PHASE_NAMES[$_i2]}" == inject_* && "${PHASE_RESULTS[$_i2]}" == "PASS" ]] || continue
+      # Parenthesized "(<surface>.md)" is the shape every inject_* PASS detail uses
+      # to name the surface it resolved to. Non-.md parentheticals (e.g. the
+      # "(+ **Outcome rationale:**)" suffix) do not match and are ignored.
+      for _tok in $(/usr/bin/printf '%s\n' "${PHASE_DETAILS[$_i2]}" \
+                      | /usr/bin/grep -oE '\([A-Za-z0-9._-]+\.md\)' | /usr/bin/tr -d '()' || true); do
+        [[ "$_tok" == "$_hot" ]] && continue
+        case " $_reported " in *" $_tok "*) continue ;; esac
+        _reported="${_reported}${_tok} "
+      done
+    done
+    for _sfc in $_reported; do
+      _sfc_re="${_sfc//./\\.}"
+      if /usr/bin/printf '%s\n' "$_committed" | /usr/bin/grep -qE "(^|/)${_sfc_re}\$"; then
+        _rfound="${_rfound}${_sfc} "
+      else
+        _rmissing="${_rmissing}${_sfc} "
+      fi
+    done
+    if [[ -n "$_rmissing" ]]; then
+      mark_phase "commit_chore_pr" "FAIL" "staging-completeness: surface(s) an inject_* phase reported writing into are NOT in the chore commit — ${_rmissing% }; the write landed on disk but files=() does not name it, so a mandated output would be dropped from the chore PR while every phase reported green"
+      return 3
+    fi
+
+    # Report the resolved write targets that were actually staged, so a surface
+    # outside the fixed files=() enumeration is visible in the phase log instead of
+    # vanishing into a green PASS.
+    local _detail="committed: $commit_msg"
+    [[ -n "$_rfound" ]] && _detail="$_detail; resolved write target(s) staged: ${_rfound% }"
+    mark_phase "commit_chore_pr" "PASS" "$_detail"
     return 0
   fi
   mark_phase "commit_chore_pr" "FAIL" "git commit failed"
@@ -7311,6 +7366,93 @@ STUB
   if ! declare -f phase_commit_chore_pr | /usr/bin/grep -qF '"${REBUILT_PACKAGES[@]:-}"'; then
     echo "FAIL: phase_commit_chore_pr files=() must expand \"\${REBUILT_PACKAGES[@]:-}\" (P1 staging-omission guard)"; failures=$((failures+1))
   fi
+
+  # Test 11d — TOUCHED-SURFACE staging completeness (#4710 AC-3), BEHAVIORAL.
+  #
+  # The P1 guard directly above is a `declare -f | grep`, and a grep cannot observe
+  # an assertion FAILING — it only observes that a string is present. An assertion
+  # never seen to fire is indistinguishable from one that cannot fire, which is the
+  # exact condition #4710 AC-3 was filed against: the empty-staged-set guard was
+  # unreachable on any real close-out and nothing noticed. So this arm drives the
+  # REAL phase_commit_chore_pr against a sandbox git repo in BOTH polarities:
+  # (a) recorded -> PASS and the resolved target is NAMED in the phase detail, and
+  # (b) recorder omitted -> FAIL. (b) is the sensitivity control; without it (a)
+  # proves only that the phase can say PASS.
+  #
+  # Hermetic + offline: `git init` and a local commit, no network and no gh token.
+  local _tsc_saved_root="$REPO_ROOT" _tsc_saved_mode="$MODE" _tsc_saved_version="$VERSION"
+  local _tsc_saved_log="$RELEASE_LOG"
+  local _tsc_tmp; _tsc_tmp="$(/usr/bin/mktemp -d -t touchedsurface-selftest.XXXXXX)"
+  /bin/mkdir -p "$_tsc_tmp/release/releases"
+  $GIT -C "$_tsc_tmp" init -q >/dev/null 2>&1
+  $GIT -C "$_tsc_tmp" config user.email "selftest@example.invalid" >/dev/null 2>&1
+  $GIT -C "$_tsc_tmp" config user.name "selftest" >/dev/null 2>&1
+  $GIT -C "$_tsc_tmp" config commit.gpgsign false >/dev/null 2>&1
+  local _tsc_ledger="$_tsc_tmp/release/releases/RELEASE_LOG.md"
+  local _tsc_seg="$_tsc_tmp/release/releases/RELEASE_LOG_ARCHIVE-v9.md"
+  /usr/bin/printf 'seed\n' > "$_tsc_ledger"
+  /usr/bin/printf 'seed\n' > "$_tsc_seg"
+  # A parent commit, so the chore commit is never a ROOT commit: `diff-tree -r HEAD`
+  # emits nothing for a root commit without --root, which would make BOTH polarities
+  # look identical and the arm vacuous.
+  $GIT -C "$_tsc_tmp" add -A >/dev/null 2>&1
+  $GIT -C "$_tsc_tmp" commit -q -m "seed" >/dev/null 2>&1
+
+  REPO_ROOT="$_tsc_tmp"; MODE="apply"; VERSION="v9.99"; RELEASE_LOG="$_tsc_ledger"
+
+  local _tsc_pol _tsc_rc _tsc_detail
+  for _tsc_pol in recorded omitted; do
+    /usr/bin/printf 'seed\n%s edit\n' "$_tsc_pol" > "$_tsc_ledger"
+    /usr/bin/printf 'seed\n%s segment write\n' "$_tsc_pol" > "$_tsc_seg"
+    # The phase record is the assertion's ONLY source for what was written — an
+    # inject_* phase that reported PASS and NAMED the segment it resolved to.
+    PHASE_NAMES=("inject_velocity_field"); PHASE_RESULTS=("PASS")
+    PHASE_DETAILS=("injected '**Velocity:** 1' after **Cycle-Time:** in the v9.99 Deployment Log block (RELEASE_LOG_ARCHIVE-v9.md)")
+    REBUILT_PACKAGES=()
+    if [[ "$_tsc_pol" == "recorded" ]]; then
+      TOUCHED_ARCHIVE_SEGMENTS=("release/releases/RELEASE_LOG_ARCHIVE-v9.md")
+    else
+      # The defect under test: the write site forgot to call
+      # _record_touched_archive_segment, so files=() never names the segment.
+      TOUCHED_ARCHIVE_SEGMENTS=()
+    fi
+    _tsc_rc=0
+    phase_commit_chore_pr >/dev/null 2>&1 || _tsc_rc=$?
+    _tsc_detail="$(get_phase commit_chore_pr)"
+    if [[ "$_tsc_pol" == "recorded" ]]; then
+      [[ "$_tsc_rc" -eq 0 ]] || { echo "FAIL: AC-3 recorded polarity must succeed, got rc=$_tsc_rc ('$_tsc_detail')"; failures=$((failures+1)); }
+      /usr/bin/grep -qF 'resolved write target(s) staged: RELEASE_LOG_ARCHIVE-v9.md' <<<"$_tsc_detail" \
+        || { echo "FAIL: AC-3 the PASS detail must NAME the resolved write target it staged, got '$_tsc_detail'"; failures=$((failures+1)); }
+    else
+      [[ "$_tsc_rc" -eq 3 ]] || { echo "FAIL: AC-3 SENSITIVITY — an unrecorded segment write must FAIL the phase (rc=3), got rc=$_tsc_rc ('$_tsc_detail')"; failures=$((failures+1)); }
+      /usr/bin/grep -qF 'RELEASE_LOG_ARCHIVE-v9.md' <<<"$_tsc_detail" \
+        || { echo "FAIL: AC-3 the failure must NAME the dropped surface, got '$_tsc_detail'"; failures=$((failures+1)); }
+    fi
+  done
+
+  # Independence guard: the assertion must NOT read TOUCHED_ARCHIVE_SEGMENTS to
+  # decide what to expect. It reads the phase record for exactly the reason the
+  # empty-staged-set guard does — a check sourced from the recorder whose omission
+  # IS the defect goes vacuous the moment a write site stops recording.
+  # The anchor is CODE, not a comment: `declare -f` renders a function body with
+  # comments stripped, so a comment anchor silently never matches and the guard
+  # reads the whole body — passing or failing for the wrong reason.
+  local _tsc_body; _tsc_body="$(declare -f phase_commit_chore_pr)"
+  local _tsc_anchor='local _reported='
+  if ! /usr/bin/grep -qF "$_tsc_anchor" <<<"$_tsc_body"; then
+    echo "FAIL: AC-3 independence guard lost its anchor ('$_tsc_anchor') — the guard cannot be evaluated"; failures=$((failures+1))
+  else
+    local _tsc_after; _tsc_after="${_tsc_body#*"$_tsc_anchor"}"
+    if /usr/bin/grep -qF 'TOUCHED_ARCHIVE_SEGMENTS' <<<"$_tsc_after"; then
+      echo "FAIL: AC-3 the touched-surface assertion must not consult TOUCHED_ARCHIVE_SEGMENTS — it is the recorder whose omission is the defect"; failures=$((failures+1))
+    fi
+  fi
+
+  REPO_ROOT="$_tsc_saved_root"; MODE="$_tsc_saved_mode"; VERSION="$_tsc_saved_version"
+  RELEASE_LOG="$_tsc_saved_log"
+  REBUILT_PACKAGES=(); TOUCHED_ARCHIVE_SEGMENTS=()
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  /bin/rm -rf "$_tsc_tmp"
 
   # Test 12: scaffold-residue detector (AC1) + pre-authored-note tolerance (AC2).
   # Offline, hermetic, credential-free — the CI smoke job runs --self-test with no
