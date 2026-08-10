@@ -115,10 +115,20 @@ readonly STATE_FILE_NAME=".workspace-setup.state"
 readonly STATE_SCHEMA_VERSION="1.0"
 readonly OPERATOR_TOML_PATH="${HOME}/.config/pmo-platform/operator.toml"
 
-# Mode A check count (11) is the upper bound; --mode operator-pre-existing
-# runs a subset that drops state-marker (A4) and operator.toml (A10). A6b
-# (hook-wiring re-home posture, #4436) runs in BOTH sub-modes.
-readonly MODE_A_TOTAL=11
+# Mode A counting convention — EMITTED STEP RECORDS. MODE_A_TOTAL counts one
+# record per emit_pass / emit_fail / emit_skip call, which is exactly the
+# quantity log_summary prints as "N PASS / N FAIL / N SKIP". emit_info records
+# are EXCLUDED by construction: an INFO is a record, not a step, and increments
+# no counter.
+#
+# Both Mode A sub-modes emit the SAME total. --mode install runs all twelve
+# checks. --mode operator-pre-existing runs nine (A1, A2, A3, A5, A6, A6b, A7,
+# A8, A9) and emits SKIP for the three whose surfaces postdate such a workspace
+# — A3b composition-surface manifest, A4 state marker, A10 operator.toml. A SKIP
+# is still an emitted record, so a single constant is correct for both sub-modes,
+# which is what stops this number drifting the next time a check is added or
+# dropped from one sub-mode only.
+readonly MODE_A_TOTAL=12
 readonly MODE_B_TOTAL=4
 
 # --- Section 3: Mutable state (scalars only; bash-3.2-compatible) ---
@@ -158,12 +168,13 @@ Verify pmo-platform install (Mode A) and first-task invocation (Mode B).
 Options:
   --mode {install,first-task,all,operator-pre-existing}
                           Select scope (default: all).
-                          - install: Mode A only (10 checks).
+                          - install: Mode A only (12 checks).
                           - first-task: Mode B only (4 checks).
                           - all: Mode A followed by Mode B.
                           - operator-pre-existing: subset of Mode A for
                             workspaces that predate setup-workspace.sh
-                            — drops A4 state-marker + A10 operator.toml.
+                            — SKIPs A3b composition-surface, A4 state-marker
+                            and A10 operator.toml.
   --source-repo PATH      Path to cloned pmo-platform (default: ${HOME}/Claude/pmo-platform).
   --workspace-root PATH   Workspace root (default: ${HOME}/Claude).
   --validation-dir PATH   Artifact directory override (default:
@@ -181,7 +192,7 @@ Output channels:
 
 Modes:
   - install                  Verifies setup-workspace.sh succeeded.
-                             10 checks, all read-only bash.
+                             12 checks, all read-only bash.
   - first-task               Verifies demo skill output parses correctly.
                              4 checks; B2 emits an operator hand-off block;
                              re-run with --continue after capturing the
@@ -189,9 +200,12 @@ Modes:
   - all (default)            Mode A then Mode B. If Mode A FAILs, Mode B is
                              skipped (install must verify first).
   - operator-pre-existing    Workspaces created before setup-workspace.sh
-                             shipped (no state-marker yet). Runs A1-A3, A5-A9
-                             (8 checks); aggregate verdict is per-mode
-                             unambiguous.
+                             shipped (no state-marker yet). Runs A1, A2, A3,
+                             A5, A6, A6b, A7, A8, A9; A3b, A4 and A10 emit SKIP
+                             because those surfaces postdate such a workspace.
+                             Emits 12 check records — the same total as the
+                             install sub-mode, because a SKIP is still a record.
+                             Aggregate verdict is per-mode unambiguous.
 
 Demo skill: prompt-builder (core/skills). Aligned with the
 GETTING_STARTED.md walkthrough so the operator exercises the same skill
@@ -909,11 +923,17 @@ mode_a_install_verify() {
 
 mode_a_operator_pre_existing() {
   # Subset of Mode A for workspaces created before setup-workspace.sh shipped:
-  # drops A4 (state-marker) and A10 (operator.toml) because those workspaces
-  # predate both mechanisms. Per CD-3A — modal sub-mode, not flag-skip.
+  # drops A3b (composition-surface manifest), A4 (state-marker) and A10
+  # (operator.toml) because those workspaces predate all three mechanisms.
+  # Per CD-3A — modal sub-mode, not flag-skip.
+  #
+  # Every dropped check emits SKIP rather than vanishing, so this sub-mode emits
+  # the same 12 step records as --mode install (see MODE_A_TOTAL). A3b was
+  # previously the one dropped check that left no trace in the record at all.
   check_a1_platform
   check_a2_workspace_layout
   check_a3_hooks_layout
+  emit_skip "A3b" "INSTALL-COMPOSITION-SURFACE" "operator-pre-existing mode (composition-surface manifest not expected)" "A"
   emit_skip "A4" "INSTALL-STATE-MARKER" "operator-pre-existing mode (state marker not expected)" "A"
   check_a5_claude_md
   check_a6_settings_json
