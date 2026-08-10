@@ -486,6 +486,25 @@ check_a1_platform() {
   emit_pass "A1" "INSTALL-PLATFORM" "$(uname -s) $(uname -r)" "A"
 }
 
+# A2 asserts the workspace layout: the five workspace-root children, plus the
+# three ambient-intake member directories under the operator-instance base.
+#
+# The ambient half is here rather than in a check of its own on purpose. A2 IS
+# the layout assertion and already emits the "missing dirs" shape this needs, so
+# extending it adds no Mode A emitter and therefore leaves MODE_A_TOTAL — a
+# constant two sibling cards in this release also touch — untouched.
+#
+# The ambient directories are resolved, never spelled as literals, so a
+# relocated instance base is validated where it actually lives. The resolver is
+# sourced HERE rather than at file scope because SOURCE_REPO is not populated
+# until argument parsing completes, well after the constants block; sourcing a
+# library from inside the function that needs it is the shipped idiom the
+# installer's own scaffold functions use.
+#
+# Degradation is three-state, not two. A validator run without a readable source
+# repo cannot resolve the instance base, so it reports the five root dirs alone
+# and says so — it must not claim eight dirs present when it checked five, which
+# would be the same dishonest reporting this release exists to remove.
 check_a2_workspace_layout() {
   local missing=""
   local required_dirs="pmo-platform projects knowledge personal .claude"
@@ -494,11 +513,43 @@ check_a2_workspace_layout() {
       missing="${missing} ${d}"
     fi
   done
-  if [ -n "${missing}" ]; then
-    emit_fail "A2" "INSTALL-WORKSPACE-LAYOUT" "missing dirs:${missing}" \
-      "re-run setup-workspace.sh" "A"
+  # Ambient-intake member directories. A missing drop-zone used to pass this
+  # check cleanly, which is precisely how the capability shipped dead: every
+  # tracked-file deliverable had a gate that could fail it, and the runtime
+  # provisioning had none.
+  local ambient_missing="" ambient_checked=0 ambient_lib
+  ambient_lib="${SOURCE_REPO}/core/deploy/lib-instance-path.sh"
+  if [ -r "${ambient_lib}" ]; then
+    # shellcheck source=../../core/deploy/lib-instance-path.sh disable=SC1091
+    . "${ambient_lib}"
+  fi
+  if command -v pmo_inbox_path_for > /dev/null 2>&1; then
+    ambient_checked=1
+    local ambient_pair ambient_label ambient_dir
+    for ambient_pair in \
+      "inbox:$(pmo_inbox_path_for "${WORKSPACE_ROOT}")" \
+      "ambient-intake:$(pmo_ambient_intake_path_for "${WORKSPACE_ROOT}")" \
+      "external-sync:$(pmo_external_sync_path_for "${WORKSPACE_ROOT}")"; do
+      ambient_label="${ambient_pair%%:*}"
+      ambient_dir="${ambient_pair#*:}"
+      if [ ! -d "${ambient_dir}" ]; then
+        ambient_missing="${ambient_missing} ${ambient_label}"
+      fi
+    done
+  fi
+
+  if [ -n "${missing}" ] || [ -n "${ambient_missing}" ]; then
+    emit_fail "A2" "INSTALL-WORKSPACE-LAYOUT" \
+      "missing dirs:${missing}${ambient_missing:+ ambient:${ambient_missing}}" \
+      "re-run setup-workspace.sh (or ./update.sh to back-fill the ambient dirs)" "A"
+  elif [ "${ambient_checked}" -eq 1 ]; then
+    emit_pass "A2" "INSTALL-WORKSPACE-LAYOUT" \
+      "5 required dirs + 3 ambient-intake dirs present" "A"
   else
-    emit_pass "A2" "INSTALL-WORKSPACE-LAYOUT" "5 required dirs present" "A"
+    # Say what was actually checked. Claiming the ambient dirs when the resolver
+    # never loaded would be a verdict the run did not earn.
+    emit_pass "A2" "INSTALL-WORKSPACE-LAYOUT" \
+      "5 required dirs present; ambient-intake dirs NOT checked (resolver unavailable at ${ambient_lib})" "A"
   fi
 }
 
