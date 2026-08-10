@@ -9608,7 +9608,10 @@ sys.stdout.write("".join(out) + "|")
 
   # Check 56 — Milestone↔epic membership (warn-mode initial) [#2219]
   #
-  # Two legs, DIFFERENT severities (the #749 asymmetric-severity precedent):
+  # Legs at DELIBERATELY DIFFERENT severities (the #749 asymmetric-severity
+  # precedent). The list below is the authority for which legs exist; no count is
+  # stated, because a stated count goes stale the next time a leg lands — this
+  # comment already read "Two legs" while three were live.
   #   M1 membership     — for each open milestone that DECLARES an epic
   #                       (`<!-- milestone-epic: #N -->` or `**Epic:** #N`), every
   #                       open non-sub-task child's parent-epic must equal it, unless
@@ -9619,6 +9622,19 @@ sys.stdout.write("".join(out) + "|")
   #                       WARN-ONLY, never enforce-capable. A description legitimately
   #                       lags membership mid-release; gating it would make it
   #                       chronically non-green. Emitted as its own sub-invariant.
+  #   M4 sub-task       — a pipeline sub-task carrying NO milestone at all, which
+  #      milestone         is invisible to every milestone-scoped query the
+  #      orphans          pipeline runs (including this check). WARN-capable with
+  #                       a real enforce path, on its OWN dial. NOT advisory:
+  #                       M2's and M3's advisory rationale is that each has a
+  #                       legitimate state its predicate cannot distinguish from
+  #                       a defect, and M4 has none — the creating procedure
+  #                       stamps the milestone in the SAME issue-create call as
+  #                       the label, so no correctly-created sub-task is ever
+  #                       momentarily milestone-less. Gates on the OPEN subset
+  #                       only; the closed population is history, belongs to the
+  #                       separate backfill work item, and gating it would make
+  #                       the leg permanently non-green on first landing.
   # M2 SUB-CLASS TOKENS: every `named-not-member` ref carries exactly ONE inline
   # bracketed token saying why it is not a member — [elsewhere:ms#N] (it sits in a
   # different milestone) · [no-milestone] (it sits in none) · [member-excluded:sub-task]
@@ -9663,7 +9679,7 @@ sys.stdout.write("".join(out) + "|")
   # reversibility CHEAP. Primitive: core/deploy/tools/check-milestone-epic-membership.py
   # (carries --self-test).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 56: Milestone↔issue-population invariants (M1 membership + M2 reconciliation + M3 scaffold-completeness (advisory); warn-mode initial; enforce-flip deferred)"
+    log "Check 56: Milestone↔issue-population invariants (M1 membership + M2 reconciliation + M3 scaffold-completeness (advisory) + M4 sub-task milestone orphans; warn-mode initial; enforce-flip deferred)"
     local c56_script="core/deploy/tools/check-milestone-epic-membership.py"
     if [[ ! -f "$c56_script" ]]; then
       flag_warn_or_issue "milestone-epic-membership" "primitive script missing: $c56_script"
@@ -9676,8 +9692,8 @@ sys.stdout.write("".join(out) + "|")
       # STRUCTURAL-VALIDITY SENTINEL — a broken measurement must not read clean.
       # exit 1 means TWO different things: "M1/M2 findings present" and "the
       # primitive raised". An unhandled traceback lands on this same captured
-      # stream (2>&1), parses as TSV with zero M1/M2/M3 rows, and the branches
-      # below then print OK on all three legs. Reproduced, not theorised.
+      # stream (2>&1), parses as TSV with zero M1/M2/M3/M4 rows, and the branches
+      # below would then print OK on every leg. Reproduced, not theorised.
       # COUNT_M2 is emitted unconditionally and after every M1/M2 row, so
       # exactly one such row is the evidence the emit ran to completion. Counted
       # with awk exact field equality so COUNT_M2_NNM* cannot inflate it.
@@ -9688,7 +9704,7 @@ sys.stdout.write("".join(out) + "|")
         # ONE finding naming the cause, and every leg gated behind it — the same
         # degraded posture the sibling checks on this file already state, not a
         # third shape. Nothing reports clean OR dirty from an unparseable emit.
-        flag_warn_or_issue "milestone-epic-membership" "NOT-EVALUATED — the primitive produced no parseable emit (exit $c56_exit; expected exactly 1 COUNT_M2 row, saw ${c56_sentinel:-0}). M1, M2 and M3 are ALL unevaluated — this is not a clean result: $(head -1 <<<"$c56_out")"
+        flag_warn_or_issue "milestone-epic-membership" "NOT-EVALUATED — the primitive produced no parseable emit (exit $c56_exit; expected exactly 1 COUNT_M2 row, saw ${c56_sentinel:-0}). M1, M2, M3 and M4 are ALL unevaluated — this is not a clean result: $(head -1 <<<"$c56_out")"
       elif [[ $c56_exit -eq 0 || $c56_exit -eq 1 ]]; then
         local c56_declared c56_m1 c56_m2
         c56_declared=$(echo "$c56_out" | awk -F'\t' '$1=="DECLARED"{print $2}')
@@ -9759,6 +9775,69 @@ sys.stdout.write("".join(out) + "|")
           flag_advisory_only "milestone-scaffold-completeness" "M3 scaffold completeness — load-bearing finding(s): $c56_m3 [advisory ${c56_m3_adv:-0}; marker adoption ${c56_marker:-none}]"
         else
           log "  OK:    milestone scaffold completeness (M3) — 0 load-bearing finding(s) (${c56_m3_adv:-0} advisory; marker adoption ${c56_marker:-none})"
+        fi
+        # M4 — sub-task milestone orphans. WARN-capable with a real enforce path,
+        # so it routes through flag_warn_or_issue behind an EXPLICIT mode branch
+        # (M1's shape), not through flag_advisory_only. M2 and M3 are advisory
+        # because each has a legitimate state its predicate cannot tell from a
+        # defect; M4 has none, and routing it through the structurally
+        # non-escalating emitter would forfeit its graduation path permanently.
+        #
+        # THE DIAL IS ITS OWN, and that is not a detail: `milestone-subtask-orphan`
+        # with a COMMITTED "warn" default, so M4 does NOT inherit the shared
+        # `milestone-epic-membership` cohort. Without it, flipping M1 to enforce
+        # after M1's shakedown would silently graduate an unshaken-down leg by
+        # side effect. Committed-default precedent is live on this file already
+        # (release-body-drift, decision-emission, register-runner-resolution,
+        # count-structure-baseline).
+        #
+        # BRANCH ORDER IS LOAD-BEARING — the scan status is read BEFORE any
+        # counter. A consumer that reads only the count consumes "the population
+        # was never examined" as "the population is clean", which is the exact
+        # defect this leg exists to detect. degraded and not-run legitimately
+        # carry NO counters at all (the primitive emits absence, not zeros), so
+        # they are dispositioned ahead of the missing-counter sentinel — that
+        # sentinel exists for an emit that BROKE, not for one that correctly
+        # declared it did not measure.
+        #
+        # awk EXACT field equality throughout: `grep COUNT_M4` prefix-collides
+        # with COUNT_M4_OPEN and COUNT_M4_CLOSED, which would silently report a
+        # sub-counter as the total — the same trap COUNT_M2_NNM documents above.
+        local c56_m4_scan c56_m4_total c56_m4_enum c56_m4 c56_m4_open c56_m4_closed c56_m4_rows
+        c56_m4_scan=$(echo   "$c56_out" | awk -F'\t' '$1=="M4_SCAN"{print $2}')
+        c56_m4_total=$(echo  "$c56_out" | awk -F'\t' '$1=="M4_SCAN"{print $3}')
+        c56_m4_enum=$(echo   "$c56_out" | awk -F'\t' '$1=="M4_SCAN"{print $4}')
+        c56_m4=$(echo        "$c56_out" | awk -F'\t' '$1=="COUNT_M4"{print $2}')
+        c56_m4_open=$(echo   "$c56_out" | awk -F'\t' '$1=="COUNT_M4_OPEN"{print $2}')
+        c56_m4_closed=$(echo "$c56_out" | awk -F'\t' '$1=="COUNT_M4_CLOSED"{print $2}')
+        # Joined by awk with an explicit ", ", NOT `paste -sd', '` — paste's -d
+        # takes a CYCLING LIST of delimiters, so a two-character argument
+        # alternates ',' and ' ' between records and renders as
+        # "#1,#2 #3,#4". Verified against the live emit, not assumed. printf
+        # also emits no trailing newline, which keeps the detail a SINGLE line:
+        # flag_warn_or_issue's jsonl writer escapes backslash and double-quote
+        # only, so an embedded newline would write malformed JSONL into the warn
+        # log the enforce-flip decision is read from.
+        c56_m4_rows=$(echo   "$c56_out" | awk -F'\t' '$1=="M4"{printf "%s#%s", (n++ ? ", " : ""), $2}')
+        if [[ -z "$c56_m4_scan" || "$c56_m4_scan" == "degraded" ]]; then
+          flag_warn_or_issue "milestone-subtask-orphan" "M4 NOT-EVALUATED — the milestone-less sub-task population is UNMEASURED (scan: ${c56_m4_scan:-absent}). This is not a clean result: no count was obtained, and none is being reported as zero"
+        elif [[ "$c56_m4_scan" == "not-run" ]]; then
+          log "  SKIP:  M4 sub-task milestone orphans — not run on this invocation (scan: not-run); M4 is repository-scoped and does not fire on the milestone-scoped path"
+        elif [[ -z "$c56_m4" ]]; then
+          flag_warn_or_issue "milestone-subtask-orphan" "M4 NOT-EVALUATED — scan reported '$c56_m4_scan' but no parseable COUNT_M4 row was emitted; treat the population as unmeasured"
+        elif [[ "${c56_m4_open:-0}" -gt 0 ]]; then
+          local c56_m4_mode
+          c56_m4_mode=$(resolve_check_mode "milestone-subtask-orphan" "warn")
+          if [[ "$c56_m4_mode" == "enforce" ]]; then
+            log "  FAIL:  milestone-epic M4 — ${c56_m4_open} open sub-task(s) carry no milestone: $c56_m4_rows"
+            ISSUES=$((ISSUES + 1))
+          else
+            flag_warn_or_issue "milestone-subtask-orphan" "M4 sub-task milestone orphans — ${c56_m4_open} OPEN sub-task(s) carry no milestone and are invisible to every milestone-scoped query (warn-mode; flip milestone-subtask-orphan.mode to enforce after shakedown): $c56_m4_rows [${c56_m4_closed:-0} closed also unattached — historical, owned by the backfill work item, never gated; scan: $c56_m4_scan ${c56_m4_enum:-0}/${c56_m4_total:-0} enumerated]"
+          fi
+        else
+          # The OK line states its own DENOMINATOR and SCAN STATUS, so a reader
+          # can tell "zero found" from "nothing examined" without leaving the log.
+          log "  OK:    milestone sub-task orphans (M4) — 0 open finding(s) of ${c56_m4:-0} examined (${c56_m4_closed:-0} closed, historical; scan: $c56_m4_scan ${c56_m4_enum:-0}/${c56_m4_total:-0} enumerated)"
         fi
       else
         flag_warn_or_issue "milestone-epic-membership" "check errored (exit $c56_exit): $(head -1 <<<"$c56_out")"
