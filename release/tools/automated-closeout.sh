@@ -7036,9 +7036,12 @@ STUB
   # META section. Drive the REAL renderer (no second copy to drift) and assert
   # both ends of the block: the opening "Usage:" and the last META flag.
   local _u7_out; _u7_out="$(usage || true)"
-  echo "$_u7_out" | /usr/bin/grep -q "Usage:" \
+  # Here-strings, not `echo … | grep -q`: grep -q short-circuits and SIGPIPEs the
+  # writer (SIGPIPE-idiom gate). Both needles are non-empty, so the `<<<""`
+  # one-empty-line degenerate case cannot produce a false match.
+  /usr/bin/grep -q "Usage:" <<<"$_u7_out" \
     || { echo "FAIL: usage block extraction — 'Usage:' absent from the rendered help"; failures=$((failures+1)); }
-  echo "$_u7_out" | /usr/bin/grep -q -- "--self-test" \
+  /usr/bin/grep -q -- "--self-test" <<<"$_u7_out" \
     || { echo "FAIL: usage block truncated — the META section (--self-test) is absent from the rendered help"; failures=$((failures+1)); }
 
   # Test 8: chore-PR body has zero parser-clean violations
