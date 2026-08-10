@@ -123,7 +123,7 @@ Consolidated from the six Stage-5 design specs, reconciled to the Stage-5 decisi
 | #4463 | `.github/ISSUE_TEMPLATE/improvement.yml` | MODIFY — one-line pointer on the AC field description. **Pointer only, no doctrine** — it does not join the co-edit set |
 | #4708 | `.github/workflows/skill-package-freshness.yml` | MODIFY — delete BOTH `paths:` blocks and adopt the codified `always-reports` posture; add the exemplar's `types:` list. Widening was falsified at Stage 5: a fourth input is uncovered too, and an earlier resolver arm had already reopened the gap once, unnoticed |
 | #4708 | `core/standards/gate-efficacy-standard.md` | MODIFY — the Requirement-(c) coverage-register row reconciled to the new posture (mechanism / surface / falsification cells). The generic advisory example elsewhere in that file is PRESERVED. **This card's third row — the fixture suite — is carried in the Issue References block above** |
-| #4891 | `core/deploy/tools/README.md` | MODIFY — state the coverage rule; backfill the residual tools; re-baseline the count with its measurement date |
+| #4891 | `core/deploy/tools/README.md` | MODIFY — state the coverage rule; backfill the residual tools. **Stores no count and no measurement date** — ratified Stage-5 decision D-3 forbids both; the rule plus an empty enumeration is the artifact, not a recorded figure |
 | #4899 | `core/deploy/tools/check-milestone-epic-membership.py` | MODIFY — the milestone-less stage-sub-task detection leg |
 | #4899 | `core/deploy/deploy.sh` | MODIFY — **Check 56 region only** (lines 9609–9769). No new check number |
 | #4901 | `.github/workflows/repo-integrity.yml` | MODIFY — the gate job invokes the checker; no residual detection logic left inline |
@@ -169,7 +169,7 @@ release/releases/plans/triage-and-backlog-instrumentation_RELEASE_PLAN.md
 
 | File | Claimed by | Class | Resolution |
 |---|---|---|---|
-| `core/deploy/tools/README.md` | **#4891, #4899, #4901, #4926** (4-way) | append-pattern after the coverage rule lands | **The README card is sequenced second and defines the coverage rule the other three append under.** That converts three would-be conflicting edits into three appends. Under D-C SINGLE they still serialize at push, but the *semantic* conflict is gone. This is the load-bearing sequencing decision in the plan |
+| `core/deploy/tools/README.md` | **#4891, #4899, #4901, #4926** (4-way) | append-pattern after the coverage rule lands | **The README card is sequenced second and defines the coverage rule the other three append under.** That converts a four-way conflicting edit into one append plus two in-place cell edits — the rule states which shape each takes, so no card has to decide. Under D-C SINGLE they still serialize at push, but the *semantic* conflict is gone. This is the load-bearing sequencing decision in the plan |
 | `core/deploy/deploy.sh` | **#4899, #4926** (2-way) | **non-overlapping regions** | The detection leg edits the **Check 56** region (9609–9769); the tiering lint edits the **Check 55** region (9534–9608). Disjoint line ranges in a 12,606-line file, and neither card takes a new check number. Sequence per the implementation order; a textual conflict is not expected, and a *reported* one is the signal that a region boundary moved — not a routine resolve |
 | `core/config/allowlists/script-execution-allowlist.txt` | **#4901** only | append-pattern | Single edit — the tiering lint stayed `.py`, so the two-way contention the Stage-4 plan anticipated did not materialize |
 
