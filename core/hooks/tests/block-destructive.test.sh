@@ -495,6 +495,121 @@ test_case "BLOCK-022 control: unregistered sibling in the same directory blocks"
   "$(bash_payload 'bash release/tools/tests/zz_unregistered_control.sh')" \
   2 "BLOCK-DESTRUCTIVE-022"
 
+# --------------------------------------------------------------------------
+# BLOCK-022 target resolution
+#
+# The matcher must adjudicate the script the interpreter EXECUTES, and must not
+# fall through to allow on quoting or on separator adjacency. Four defects are
+# covered here, three of which were fail-OPEN:
+#
+#   A  a .sh passed as an ARGUMENT was adjudicated instead of the executed
+#      script (`tail -1` took the last .sh token) — a false BLOCK that made
+#      the Stage-5-mandated blast-radius.sh unusable.
+#   B  a .sh immediately followed by `;` matched nothing, because `\b` is not
+#      honored inside an alternation by BSD grep — fail-OPEN.
+#   C  only the FIRST invocation on a command line was evaluated — fail-OPEN.
+#   D  a quoted path did not end in `.sh`, so it matched nothing — fail-OPEN.
+#
+# Plus the unresolvable-path (variable-bearing) case, which must fail CLOSED.
+#
+# WHY EACH ARM CARRIES A CONTROL: same reason as the registration block above —
+# an allows-only fixture cannot tell a correct matcher from one that permits
+# everything, and a blocks-only fixture cannot tell a correct matcher from one
+# that permits nothing. Defect A is a false-block and defects B/C/D are
+# false-allows, so BOTH directions have to be pinned or a fix in one direction
+# can silently regress the other. Measured: reverting the matcher turns the
+# A-arm red; widening the allowlist to `*` turns the B/C/D controls red.
+# --------------------------------------------------------------------------
+
+echo ""
+echo "BLOCK-022 target resolution"
+echo "---"
+
+# --- Defect A: a script path passed as an ARGUMENT ---
+test_case "BLOCK-022 argform: allowlisted tool with a .sh ARGUMENT allows" \
+  "$(bash_payload 'bash release/tools/blast-radius.sh update.sh')" \
+  0
+
+test_case "BLOCK-022 argform: allowlisted tool with an allowlisted .sh argument allows" \
+  "$(bash_payload 'bash release/tools/blast-radius.sh core/deploy/deploy.sh')" \
+  0
+
+# must-flag control -- the EXECUTED script is adjudicated, so a non-allowlisted
+# tool blocks even when the argument it is handed IS allowlisted. This is the
+# case that fails if the target selection ever inverts again.
+test_case "BLOCK-022 argform control: non-allowlisted tool with allowlisted argument blocks" \
+  "$(bash_payload 'bash release/tools/zz_unregistered_control.sh core/deploy/deploy.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# --- Defect B: separator adjacency ---
+test_case "BLOCK-022 sep: non-allowlisted script followed by ';' blocks" \
+  "$(bash_payload 'bash /tmp/evil.sh; echo done')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 sep control: allowlisted script followed by ';' allows" \
+  "$(bash_payload 'bash core/deploy/deploy.sh; echo done')" \
+  0
+
+# --- Defect C: every invocation is evaluated, not only the first ---
+test_case "BLOCK-022 chain: ';' laundering behind an allowlisted first command blocks" \
+  "$(bash_payload 'bash core/deploy/deploy.sh; bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 chain: '&&' laundering blocks" \
+  "$(bash_payload 'bash core/deploy/deploy.sh && bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 chain: '|' laundering blocks" \
+  "$(bash_payload 'bash core/deploy/deploy.sh | bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# must-not-flag control -- chaining itself is not what blocks; two allowlisted
+# commands chained still allow.
+test_case "BLOCK-022 chain control: two allowlisted commands chained allow" \
+  "$(bash_payload 'bash core/deploy/deploy.sh && bash release/tools/blast-radius.sh')" \
+  0
+
+# --- Defect D: quoted path ---
+test_case "BLOCK-022 quote: double-quoted non-allowlisted path blocks" \
+  "$(bash_payload 'bash "/tmp/evil.sh"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 quote: single-quoted non-allowlisted path blocks" \
+  "$(bash_payload "bash '/tmp/evil.sh'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 quote: -c with a quoted non-allowlisted path blocks" \
+  "$(bash_payload 'bash -c "/tmp/evil.sh"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# must-not-flag control -- quote-stripping must not break the ALLOW path.
+test_case "BLOCK-022 quote control: double-quoted allowlisted path allows" \
+  "$(bash_payload 'bash "core/deploy/deploy.sh"')" \
+  0
+
+# --- Unresolvable (variable-bearing) path must fail CLOSED ---
+# The hook sees unexpanded argv and cannot resolve the path to an allowlist
+# entry, so it denies rather than guessing -- the same posture as the
+# dependency gate.
+test_case "BLOCK-022 var: variable-bearing script path blocks (fail-closed)" \
+  "$(bash_payload 'bash "$W/not-allowlisted.sh"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# must-not-flag control -- a quoted LITERAL path still allows, so the case
+# above is the unresolvable variable and not the quoting.
+test_case "BLOCK-022 var control: quoted literal allowlisted path allows" \
+  "$(bash_payload 'bash "release/tools/blast-radius.sh"')" \
+  0
+
+# --- flag walking must still reach the operand ---
+test_case "BLOCK-022 flags: -x before an allowlisted script allows" \
+  "$(bash_payload 'bash -x core/deploy/deploy.sh')" \
+  0
+
+test_case "BLOCK-022 flags control: -x before a non-allowlisted script blocks" \
+  "$(bash_payload 'bash -x /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
 # ==========================================================================
 # NEW-B: Write/Edit primary-write guard
 # ==========================================================================
