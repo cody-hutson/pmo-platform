@@ -917,8 +917,9 @@ check_a9_skill_roster() {
       # never failed on: the platform neither ships nor manages this skill, and
       # `deploy.sh --deploy <name>` — the only remedy A9 knows — structurally
       # cannot run for a skill absent from the source repo, so a FAIL here would
-      # send the operator down a path that cannot terminate. Reported as INFO at
-      # the end of the check so the exclusion is visible, never silent.
+      # send the operator down a path that cannot terminate. Reported as INFO as
+      # soon as the scan completes — on the FAIL paths as well as the PASS one —
+      # so the exclusion is visible, never silent.
       nonplatform_count=$((nonplatform_count + 1))
       nonplatform_names="${nonplatform_names}${nonplatform_names:+, }${skill_name}"
       continue
@@ -936,16 +937,16 @@ check_a9_skill_roster() {
       if [ -z "${first_missing}" ]; then first_missing="$(basename "${skill_dir}") (missing version field)"; fi
     fi
   done
-  if [ "${missing_skill_md}" -gt 0 ]; then
-    emit_fail "A9" "INSTALL-SKILL-ROSTER" "${missing_skill_md} skill(s) missing SKILL.md; first: ${first_missing}" \
-      "run \`${SOURCE_REPO}/core/deploy/deploy.sh --deploy <skill>\` to re-deploy" "A"
-    return
+
+  # Report the exclusion BEFORE any verdict, so it is emitted on the FAIL paths
+  # too. Which skills a narrowed check declined to assert over is a property of
+  # the population scan, not of the outcome — and a reader debugging an A9 FAIL
+  # needs the exclusion list more, not less, than a reader seeing it pass.
+  if [ "${nonplatform_count}" -gt 0 ]; then
+    emit_info "A9" "INSTALL-SKILL-ROSTER" \
+      "${nonplatform_count} non-platform skill(s) excluded from the version assertion: ${nonplatform_names}" "A"
   fi
-  if [ "${missing_version}" -gt 0 ]; then
-    emit_fail "A9" "INSTALL-SKILL-ROSTER" "${missing_version} skill(s) missing version field; first: ${first_missing}" \
-      "re-deploy via deploy.sh --deploy <skill>" "A"
-    return
-  fi
+
   # Anti-vacuity guard — the failure mode the narrowing itself introduces.
   #
   # If the roster oracle resolves to nothing (wrong --source-repo, partial clone,
@@ -965,9 +966,19 @@ check_a9_skill_roster() {
       "verify --source-repo points at a complete pmo-platform clone; expected ${SOURCE_REPO}/{core,operations,release}/skills/<name>/SKILL.md" "A"
     return
   fi
-  if [ "${nonplatform_count}" -gt 0 ]; then
-    emit_info "A9" "INSTALL-SKILL-ROSTER" \
-      "${nonplatform_count} non-platform skill(s) excluded from the version assertion: ${nonplatform_names}" "A"
+  # Both FAIL diagnostics state the same denominator the PASS does, so a reader
+  # can tell a 2-of-50 defect from a 2-of-2 one without re-running the check.
+  if [ "${missing_skill_md}" -gt 0 ]; then
+    emit_fail "A9" "INSTALL-SKILL-ROSTER" \
+      "${missing_skill_md} of ${platform_count} platform skill(s) missing SKILL.md (${nonplatform_count} non-platform excluded); first: ${first_missing}" \
+      "run \`${SOURCE_REPO}/core/deploy/deploy.sh --deploy <skill>\` to re-deploy" "A"
+    return
+  fi
+  if [ "${missing_version}" -gt 0 ]; then
+    emit_fail "A9" "INSTALL-SKILL-ROSTER" \
+      "${missing_version} of ${platform_count} platform skill(s) missing version field (${nonplatform_count} non-platform excluded); first: ${first_missing}" \
+      "re-deploy via \`${SOURCE_REPO}/core/deploy/deploy.sh --deploy <skill>\`" "A"
+    return
   fi
   # The PASS states its own denominator. A pass that reports the population it
   # asserted over — and the oracle it derived that population from — cannot
