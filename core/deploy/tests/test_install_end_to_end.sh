@@ -179,6 +179,41 @@ for mode_pair in ".autonomy-mode:warn" ".gh-path-leak-mode:warn" ".mode:warn"; d
   fi
 done
 
+# The ambient-intake capability's three member directories must LAND on a fresh
+# install. Asserted HERE, in the post-install block, rather than at the tail of
+# the file: by the tail a real update.sh has run, and the update path scaffolds
+# these directories too, so a tail assertion could pass on the update's work
+# while the installer still created nothing. Nothing but setup-workspace.sh has
+# run at this point, so a pass here is attributable to the installer alone.
+#
+# Asserting the landed directory rather than the mkdir call site is deliberate,
+# for the same reason the mode-file loop above asserts the landed file: the call
+# site is the mechanism, the directory on disk is the outcome, and the outcome is
+# the only thing the sweep reads at runtime. A call-site assertion is exactly
+# what would have passed while this capability shipped inert.
+ambient_base="$(pmo_instance_path_for "${SBX}/ws")"
+for ambient_dir in inbox ambient-intake external-sync; do
+  if [ -d "${ambient_base}/${ambient_dir}" ]; then
+    report "ambient-intake dir ${ambient_dir} installed" 1
+  else
+    report "ambient-intake dir ${ambient_dir} installed" 0 \
+      "absent after install: ${ambient_base}/${ambient_dir}"
+  fi
+done
+
+# The automation ceiling must be discoverable in the GENERATED operator.toml.
+# Presence in core/config/operator.toml.template does not count and is why this
+# assertion exists: write_operator_toml generates from a fixed schema and never
+# reads that template, so a default documented only there reached no install.
+gen_toml="${SBX}/config/operator.toml"
+gen_level=$(grep -E '^automation_level[[:space:]]*=' "${gen_toml}" 2>/dev/null | wc -l | tr -d ' ')
+if grep -q '^\[automation\]' "${gen_toml}" 2>/dev/null && [ "${gen_level}" -eq 1 ]; then
+  report "generated operator.toml carries the [automation] dial (exactly once)" 1
+else
+  report "generated operator.toml carries the [automation] dial (exactly once)" 0 \
+    "section present=$(grep -c '^\[automation\]' "${gen_toml}" 2>/dev/null || printf '0'); automation_level lines=${gen_level}"
+fi
+
 allowlist_count=$(find "${SBX}/ws/.claude" "$(pmo_instance_path_for "${SBX}/ws")" -maxdepth 1 -name "*.txt" 2>/dev/null | wc -l | tr -d ' ')
 if [ "${allowlist_count}" -ge 14 ]; then
   report "composition-surface files (>=14)" 1
@@ -371,6 +406,81 @@ else
   else
     tail_out=$(printf '%s' "${ok_out}" | tail -4 | tr '\n' '|')
     report "healthy workspace: the gate does not fire (exit 0/64)" 0 "exit ${ok_exit}; last: ${tail_out}"
+  fi
+fi
+
+# --- Stage 5: ambient-intake provisioning, both directions ---
+# Stage 2 proved the three directories land on a fresh install. This stage
+# proves the two things a landed-artifact assertion cannot: that their ABSENCE
+# is detected, and that an already-installed workspace gets them back-filled.
+#
+# Without the negative arm the Stage 2 assertions could pass vacuously — a check
+# that has never been shown capable of failing is not yet evidence, which is the
+# defect class this whole release exists to close.
+printf '\nStage 5: ambient-intake provisioning (absence detected; existing installs back-filled)\n'
+
+ambient_base="$(pmo_instance_path_for "${SBX}/ws")"
+ambient_probe="${ambient_base}/inbox"
+
+if [ ! -d "${ambient_probe}" ]; then
+  # Reported, not assumed. A fixture that never had the drop-zone would make
+  # both arms below vacuous, and a vacuous arm must not read as a pass.
+  report "Stage 5 precondition: drop-zone present before the negative arm" 0 "absent: ${ambient_probe}"
+else
+  report "Stage 5 precondition: drop-zone present before the negative arm" 1
+
+  # NEGATIVE ARM — remove the drop-zone; the install validator's workspace-layout
+  # check must FAIL and must NAME what is missing. Before this card it passed.
+  rmdir "${ambient_probe}"
+  a2_out=$(bash "${REPO_ROOT}/docs/scripts/validate-install.sh" \
+    --workspace-root "${SBX}/ws" \
+    --source-repo "${REPO_ROOT}" \
+    --mode install 2>&1) || true
+
+  if grep -q '^\[A2\] FAIL' <<<"${a2_out}"; then
+    report "validate-install A2 FAILs when the drop-zone is absent" 1
+  else
+    a2_line=$(grep -m1 '^\[A2\]' <<<"${a2_out}" || printf '(no A2 line emitted)')
+    report "validate-install A2 FAILs when the drop-zone is absent" 0 "observed: ${a2_line}"
+  fi
+
+  # Naming it is the contract, not merely failing: a layout failure that does not
+  # say which directory is missing sends the operator hunting.
+  if grep -q 'ambient:.*inbox' <<<"${a2_out}"; then
+    report "A2 NAMES the absent ambient directory" 1
+  else
+    report "A2 NAMES the absent ambient directory" 0 "no 'ambient:' clause naming inbox in A2 output"
+  fi
+
+  # BACK-FILL ARM — the update path must restore it on an already-installed
+  # workspace. This is the only coverage the update-side scaffold phase has, and
+  # it is what makes the capability reach workspaces that predate this release
+  # rather than fresh installs only.
+  update_backfill_out=$("${UPDATE}" \
+    --config-root "${SBX}/config" \
+    --workspace-root "${SBX}/ws" 2>&1)
+  update_backfill_exit=$?
+
+  if [ -d "${ambient_probe}" ]; then
+    report "update.sh back-fills the ambient drop-zone onto an existing install" 1
+  else
+    tail_out=$(printf '%s' "${update_backfill_out}" | tail -4 | tr '\n' '|')
+    report "update.sh back-fills the ambient drop-zone onto an existing install" 0 \
+      "still absent after update (exit ${update_backfill_exit}); last: ${tail_out}"
+  fi
+
+  # POSITIVE ARM — with the directory restored, the check must go quiet. Without
+  # this the negative arm could be satisfied by a check that always fails.
+  a2_ok_out=$(bash "${REPO_ROOT}/docs/scripts/validate-install.sh" \
+    --workspace-root "${SBX}/ws" \
+    --source-repo "${REPO_ROOT}" \
+    --mode install 2>&1) || true
+  if grep -q '^\[A2\] PASS.*ambient-intake dirs present' <<<"${a2_ok_out}"; then
+    report "A2 PASSes once the drop-zone is restored, and states the ambient denominator" 1
+  else
+    a2_ok_line=$(grep -m1 '^\[A2\]' <<<"${a2_ok_out}" || printf '(no A2 line emitted)')
+    report "A2 PASSes once the drop-zone is restored, and states the ambient denominator" 0 \
+      "observed: ${a2_ok_line}"
   fi
 fi
 
