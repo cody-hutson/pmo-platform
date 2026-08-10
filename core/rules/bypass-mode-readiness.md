@@ -94,6 +94,12 @@ This hook is Read-tool-matched, not Bash-verb-anchored — the absolute-path-pre
 >
 > **The specific over-claim this exists to stop:** describing `script-execution-allowlist.txt` as a *control* on a path where condition 1 does not hold. Where the wiring is not loaded, the allowlist is a convention — it governs review, not execution.
 
+> **What BLOCK-DESTRUCTIVE-022 resolves, and what it cannot.** Given all four conditions above, the rule adjudicates **the script the interpreter executes** — the first non-flag operand of each `bash`/`sh`/`zsh` command on the line. It resolves: an absolute or relative path, a path in single or double quotes, a path behind interpreter flags (`bash -x <script>`), and a `.sh` passed as an *argument* to another script (the argument is not what executes, so the executed script is what is checked). It evaluates **every** command on a line, so an allowlisted first command does not shield a later one across `;`, `&&`, `||`, or `|`.
+>
+> It **cannot** resolve a **variable-bearing path** — a PreToolUse hook sees unexpanded argv, so `bash "$DIR/x.sh"` has no resolvable target. That case **fails closed** (denied), consistent with the dependency gate's posture that a control which cannot evaluate its input must deny rather than guess. Invoke with a literal path, or register the resolved path.
+>
+> Two forms are **out of this rule's scope** by construction, not by defect: direct execution of an executable script (`./x.sh`, no interpreter token) is not an interpreter invocation, and a script fetched or generated at runtime is not visible as a path at PreToolUse time.
+
 ### Rule registry
 
 | Rule ID | Description |
