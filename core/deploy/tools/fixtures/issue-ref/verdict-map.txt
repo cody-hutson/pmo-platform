@@ -1,0 +1,27 @@
+# Static verdict map consumed by `--resolver fixture`, and by the `gh` test
+# double that lets `--resolver gh` run against the same corpus.
+#
+# Format: <number> <verdict>. Verdicts are the four the gate can reach:
+#   valid | unresolvable | transferred | pr-number
+# A number this map does not name resolves as `unresolvable`, which is the same
+# posture the live resolver takes on a 404.
+#
+# These numbers are SYNTHETIC and deliberately outside any real range. They
+# appear in the tracked fixtures only in sentinel form, never as a literal
+# reference token — see README.md.
+
+909001 unresolvable
+909002 transferred
+909003 pr-number
+909005 valid
+909006 valid
+909007 valid
+909100 valid
+909200 valid
+909300 unresolvable
+909400 unresolvable
+909500 valid
+909501 unresolvable
+909600 unresolvable
+909601 unresolvable
+909602 unresolvable
