@@ -111,7 +111,7 @@ Consolidated from the six Stage-5 design specs. **16 distinct paths.**
 | #4901 | `core/deploy/tools/fixtures/issue-ref/` | **ADD** — fixture suite (reference blocks, inline provenance, fences, overrides, exemptions, legacy identifiers, unresolvable references) |
 | #4901 | `core/config/allowlists/script-execution-allowlist.txt` | MODIFY — **companion obligation**, four invocation-form rows for the added `.sh` |
 | #4926 | `core/specs/label-taxonomy.md` | MODIFY — initiative-is-not-an-epic as an enforceable assertion naming the label-family signal |
-| #4926 | `core/deploy/tools/check-initiative-tiering.py` | **ADD** — the lint |
+| #4926 | `core/deploy/tools/check-work-hierarchy.py` | MODIFY — third invariant `H3` on the **existing** Check-55 primitive. **No new file**: that primitive already owns epic-tiering (`BANNED_PARENT_TIERS`, H1 doc + H2 backlog, the same GraphQL population, an exemption loader, a self-test), and a sibling would stand up a second authority |
 | #4926 | `core/deploy/deploy.sh` | MODIFY — **Check 55 region only** (lines 9534–9608). No new check number |
 | — | `release/releases/plans/triage-and-backlog-instrumentation_RELEASE_PLAN.md` | This file — Engineering Commit 0, then accreted through the release |
 
@@ -125,7 +125,7 @@ core/config/allowlists/script-execution-allowlist.txt
 core/deploy/deploy.sh
 core/deploy/lib-template-sync-source.sh
 core/deploy/tools/README.md
-core/deploy/tools/check-initiative-tiering.py
+core/deploy/tools/check-work-hierarchy.py
 core/deploy/tools/check-issue-ref-validity.sh
 core/deploy/tools/check-milestone-epic-membership.py
 core/deploy/tools/fixtures/issue-ref/
@@ -188,10 +188,10 @@ Re-derived against `origin/main` at Commit 0 — **not** against the worktree. `
 
 ## Cross-Issue Acceptance Criteria
 
-- [ ] **CIAC-1 (#4891 × #4899 × #4901 × #4926 on `core/deploy/tools/README.md`):** after all four land, **every** `.py`/`.sh` in `core/deploy/tools/` is named in `README.md` — including the tools this release adds — and the README states the coverage rule that makes the file exhaustive, with its measurement baseline date. *Method:* enumerate `.py`/`.sh` on the merged head, assert each basename appears; assert the rule text is present. *Control:* a fabricated basename must be absent. *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-1 (#4891 × #4899 × #4901 × #4926 on `core/deploy/tools/README.md`):** after all four land, **every** `.py`/`.sh` in `core/deploy/tools/` is named in `README.md` — including the tools this release adds — and the README states the coverage rule that makes the file exhaustive. *Method:* enumerate `.py`/`.sh` on the merged head, assert each basename appears; assert the rule text is present. **The rule stores no count and no baseline date** — ratified Stage-5 decision D-3 forbids both, because this card's own stored count went stale twice and a stored date is the same failure. Grade the rule's presence and an empty enumeration, never a recorded date. *Control:* a fabricated basename must be absent. *Graded at Stage 9 QC3.5 on the merged PR.*
 - [ ] **CIAC-2 (#4463 × #4708 × #4901 × #4926):** the precision obligation authored by the first card is **satisfied by this release's own three check-shipping cards** — each names a concrete near-miss input and an expected zero, exercised at each declared invocation parameter that narrows the examined population or changes the comparison set. *Method:* read the three cards' final AC sets plus their Stage-8 per-criterion verdicts. *Control:* **#4462 must NOT carry one** — it ships no check and is correctly exempt (E5, spike/decision-record). A precision criterion appearing there is the signal that the obligation leaked into universal boilerplate, which is exactly what the card's own AC-2 forbids. *Graded at Stage 9 QC3.5.*
 - [ ] **CIAC-3 (#4901 on `core/config/allowlists/script-execution-allowlist.txt`):** every tracked `*.sh` this release adds under `core/deploy/tools/` carries **all four** invocation-form rows. *Method:* for each added `.sh`, grep the four forms; assert count = 4. *Control:* a fabricated script path yields 0. *Graded at Stage 9 QC3.5.*
-- [ ] **CIAC-4 (#4899 × #4926 on `deploy.sh --check`):** both extended check legs are reachable from `deploy.sh --check` and each **fails on a purpose-built fixture** and **passes on a conformant control** — the conjunction, never one arm. *Method:* run `deploy.sh --check` against both fixtures and both controls. *Graded at Stage 9 QC3.5.*
+- [ ] **CIAC-4 (#4899 × #4926 on `deploy.sh --check`):** both extended check legs are reachable from `deploy.sh --check` and each **emits a finding on a purpose-built fixture** and **emits none on a conformant control** — the conjunction, never one arm. *(Re-worded at the Stage-5 batch-2 gate: both legs are deliberately advisory and never move the exit code, so "fails" was unsatisfiable by a correct implementation. "Emits a finding" is the observable an advisory and an enforcing leg both produce, and matches the milestone's own Success Indicator.)* *Method:* run `deploy.sh --check` against both fixtures and both controls. *Graded at Stage 9 QC3.5.*
 
 **Integration ACs (`INT-N`) — the upstream half of the precision-obligation contract**, pre-authored so the downstream spokes adopt them verbatim. This is what makes the release its own first test of the obligation.
 
@@ -208,7 +208,7 @@ Re-derived against `origin/main` at Commit 0 — **not** against the worktree. `
 | #4462 | file-content assertion on the disposition record and the residual-log entry | Exactly one disposition recorded with a date, a reversibility tier, and (if accepted-residual) a named bound, falsifying signal, and reopen trigger |
 | #4463 | file-content assertion on all three files; **mirror-parity diff** of the doctrine region across the exemption pair; cascade-closure grep; **plus** the CIAC-2 self-application check | `U5` present on both doctrine surfaces (control: a fabricated test ID returns 0 on both); mirrored rows byte-identical; `all four` and `Four conformance` return **0** post-change (sensitivity: 2 pre-change); the Check 22 verdict set byte-unchanged |
 | #4708 | re-run the structural `paths:` probe on the merged head; derive the tree set from the template-sync map and diff | Difference **empty** across all **3** trees; a skipped job no longer reports satisfied; the staling shape reproduced by a regression fixture and detected |
-| #4891 | enumerate `.py`/`.sh` in `core/deploy/tools/`, assert each named in README; assert the rule text and its baseline date present | All named (re-baseline the count at merge — the directory grows); rule stated; control basename absent |
+| #4891 | enumerate `.py`/`.sh` in `core/deploy/tools/`, assert each named in README; assert the rule text present | All named (re-derive at merge — the directory grows); rule stated; **no stored count or date** (ratified D-3); control basename absent |
 | #4899 | fixture test for the detection leg via `deploy.sh --check` | Fixture surfaced; conformant control **not** surfaced; no write call |
 | #4901 | run the fixture suite against the pre-extraction inline logic and the post-extraction checker | **Byte-identical** verdicts on every fixture; the must-fail fixture fails in **both**; the checker runs outside CI; the gate job holds no residual detection logic |
 | #4926 | locate the rule in `label-taxonomy.md`; run the lint against the live tracker; inspect exit and report behaviour | Rule names the label-family signal; lint surfaces the known-open cases and does **not** flag a genuine leaf epic; **no write call** |
