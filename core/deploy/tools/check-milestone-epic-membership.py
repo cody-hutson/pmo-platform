@@ -1976,15 +1976,20 @@ def self_test():
             item["milestone"] = {"number": ms}
         return item
 
+    # Fixture titles carry NO issue reference, deliberately: a fabricated `#N`
+    # in durable test data is a reference the issue-reference validity gate must
+    # either resolve or fail on, and this leg reads labels and the milestone
+    # field only — the title is illustrative and is never parsed by M4.
+    #
     # TRUE POSITIVE — a milestone-less stage sub-task, the subject of the leg.
-    fx_m4_hit = _m4_node(_m4_item(9001, "Stage 6 Engineering — #0000 (a-release-slug)"))
+    fx_m4_hit = _m4_node(_m4_item(9001, "Stage 6 Engineering — a-release-slug"))
     check("M4 flags a milestone-less stage sub-task", m4_qualifies(fx_m4_hit))
 
     # CONTROL 1 — differs in EXACTLY ONE property: it HAS a milestone. This is
     # the shape of a correctly-created sub-task, and it isolates the milestone
     # property from the sub-task-shape property.
     fx_m4_milestoned = _m4_node(
-        _m4_item(9002, "Stage 5 Solutioning — #0000 (a-release-slug)", ms=42))
+        _m4_item(9002, "Stage 5 Solutioning — a-release-slug", ms=42))
     check("M4 control: a correctly-milestoned sub-task is NOT flagged",
           not m4_qualifies(fx_m4_milestoned))
 
@@ -1993,7 +1998,7 @@ def self_test():
     # substring predicate WOULD flag it. That is what makes it a discriminating
     # near-miss rather than a decorative one.
     fx_m4_titled = _m4_node(_m4_item(
-        9003, "278 sub-task issues carry no milestone — backfill the owning release",
+        9003, "sub-task issues carry no milestone — backfill the owning release",
         labels=("improvement", "size:L")))
     check("M4 control: a milestone-less NON-sub-task naming 'sub-task' in its "
           "title is NOT flagged", not m4_qualifies(fx_m4_titled))

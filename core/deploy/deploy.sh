@@ -9611,7 +9611,7 @@ sys.stdout.write("".join(out) + "|")
   # Legs at DELIBERATELY DIFFERENT severities (the #749 asymmetric-severity
   # precedent). The list below is the authority for which legs exist; no count is
   # stated, because a stated count goes stale the next time a leg lands — this
-  # comment already read "Two legs" while three were live.
+  # header already carried a stale one, undercounting the legs live beneath it.
   #   M1 membership     — for each open milestone that DECLARES an epic
   #                       (`<!-- milestone-epic: #N -->` or `**Epic:** #N`), every
   #                       open non-sub-task child's parent-epic must equal it, unless
