@@ -23,6 +23,21 @@ path token `<OPERATOR_INSTANCE_INBOX_PATH>` (per core/standards/depersonalizatio
 Transcripts and emails land here for ambient ingest. The directory is operator content
 (OPERATOR-INSTANCE class) and is never git-tracked.
 
+**The drop-zone is provisioned at install; it is not self-activating.** This spec declares
+the directory, it does not create it. Creation is an install-time step: `create_dir_layout`
+in `docs/scripts/setup-workspace.sh` creates it (together with the C2 run-log directory and
+the C3 external-sync directory) on a fresh install, and `update.sh` back-fills all three onto
+an already-installed workspace. Both resolve the path through `pmo_inbox_path_for` in
+`core/deploy/lib-instance-path.sh` rather than a literal, so an override or a relocation of
+the operator-instance family provisions in the right place. `validate-install.sh` check A2
+asserts the three directories exist and FAILs naming any that do not. Read this section as a
+declaration whose provisioning lives in those four surfaces — not as a directory that appears
+because this document says it should.
+
+The **cursor** inside the drop-zone is deliberately NOT provisioned: it stays lazily created
+on first ingest per §2, because an empty cursor file and an absent one are the same state and
+creating one would assert an ingest that never happened.
+
 ## 2. Dedup cursor
 - Runtime instance: `<OPERATOR_INSTANCE_INBOX_PATH>/.cursor.json` (gitignored; created lazily on first ingest).
 - Format: a single JSON object, keyed by file identity. One record per ingested file.

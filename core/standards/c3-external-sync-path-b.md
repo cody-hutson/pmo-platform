@@ -210,6 +210,21 @@ via the allowlist-add tool. That is explicitly out of C3 scope — recorded so t
 silently crossed.
 
 ## 10. Scheduler surface + thin-bootstrap registration
+
+> **Who performs the registration, and where the step is written down.** The registration
+> below is **operator-performed**, and its documented home is the activation subsection of
+> `docs/INSTALL.md` § 3 — which names this section as the source of the bootstrap prompt,
+> states the cadence and notification settings, and states the reversal. No installer,
+> deploy or update script performs it, and none can: the scheduled-task surface is an
+> agent-runtime surface, and every one of those scripts is bash, which has no path to it.
+> This is not a gap awaiting automation. It matches the precedent the platform already set
+> for the `platform-health` sentinels — sentinel registration is an operator-instance build
+> step, not committed corpus, because a registration carries an instance-local path and is
+> not portable; the tracked document states the policy and the instance owns the
+> registration. What install DOES perform is the directory provisioning (see C1 §1): the
+> external-sync directory holding the §3 snapshot and the §5 run-log exists on any workspace
+> that has run the installer or the update path, so this sweep has somewhere to persist
+> poll-state from its first run.
 - **Scheduler:** C3 declares the sweep as a scheduled invocation on the platform's existing
   scheduled-task surface (the same operator-instance, Layer-2, git-ignored mechanism the
   `platform-health` scheduled tasks use). C3 introduces no new scheduler primitive. Cadence is

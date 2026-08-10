@@ -237,6 +237,20 @@ write verb against any external system — so the MCP write-gate (`block-mcp-wri
 to it. This is the same governed-ingest constraint C1 and the C3 sweep confirmed.
 
 ## 9. Scheduler surface + thin-bootstrap registration
+
+> **Who performs the registration, and where the step is written down.** The registration
+> below is **operator-performed**, and its documented home is the activation subsection of
+> `docs/INSTALL.md` § 3 — which names this section as the source of the bootstrap prompt,
+> states the cadence and notification settings, and states the reversal. No installer,
+> deploy or update script performs it, and none can: `mcp__scheduled-tasks` is an
+> agent-runtime surface, and every one of those scripts is bash, which has no path to it.
+> This is not a gap awaiting automation. It matches the precedent the platform already set
+> for the `platform-health` sentinels — sentinel registration is an operator-instance build
+> step, not committed corpus, because a registration carries an instance-local path and is
+> not portable; the tracked document states the policy and the instance owns the
+> registration. What install DOES perform is the directory provisioning (see C1 §1): the
+> run-log directory named in §5 exists on any workspace that has run the installer or the
+> update path, so this sweep has somewhere to write from its first run.
 - **Scheduler:** C2 registers a scheduled task named `ambient-intake-sweep` on the platform's
   existing `mcp__scheduled-tasks` surface — the same agent-runtime scheduler the operator.toml
   `[adapters] ai_tool` designates, and the SAME mechanism the two `platform-health-*` scheduled tasks
