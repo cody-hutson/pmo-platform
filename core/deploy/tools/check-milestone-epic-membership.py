@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """check-milestone-epic-membership.py — milestone↔issue-population invariants (Check 56).
 
-Three legs with DELIBERATELY DIFFERENT severities. The subject is the milestone's
-issue population: which epic its cards sit under (M1), whether its description
-matches its membership (M2), and whether its pipeline scaffold is complete (M3).
+Legs with DELIBERATELY DIFFERENT severities. The enumeration below is the
+authority for which legs exist; no count is stated here, because a stated count
+goes stale the next time a leg lands and re-arms the same drift it documents.
+The subject is the milestone's issue population: which epic its cards sit under
+(M1), whether its description matches its membership (M2), whether its pipeline
+scaffold is complete (M3), and whether a pipeline sub-task escaped milestone
+attachment altogether (M4).
 
   M1 MEMBERSHIP (FAIL-capable)
       For each open milestone that DECLARES an epic, every open non-sub-task child
@@ -76,6 +80,69 @@ phantom `named-not-member`, so it must never be silently accepted.
       late-add rule fires — a gate that fails a legitimate state gets routed
       around, which is how a gate becomes a no-op.
 
+  M4 SUB-TASK MILESTONE ORPHANS (WARN-capable, on its OWN mode dial)
+      A pipeline sub-task carrying NO milestone at all. Such an issue is
+      invisible to every milestone-scoped query the pipeline runs — routing,
+      close-out enumeration, gate-passage-proof lookup and this very check —
+      so the release that created it silently loses part of its own scaffold
+      while every surface still reports green.
+
+      WHY THIS IS NOT AN EXTENSION OF M3. M3's orphan class asks a
+      milestone-RELATIVE question: "does this stage title name slug X while
+      sitting in some milestone other than X's?" It is evaluated by iterating
+      milestones and matching the slug inside the title. A sub-task attached to
+      NO milestone and naming NO slug is unreachable from every per-milestone
+      iteration — measured over the full milestone set, the live cases match
+      zero times, while a slug-bearing control title matches. This is the same
+      structural argument this file already makes for M3's own limbs: a limb
+      gated on the attribute its class destroys can never fire. M4 is therefore
+      REPOSITORY-scoped, not milestone-scoped, and that is its whole reason to
+      exist as a separate leg.
+
+      WHY IT IS WARN-CAPABLE RATHER THAN STRUCTURALLY ADVISORY. M2 and M3 are
+      advisory because each has a legitimate state its predicate cannot tell
+      from a defect — a description that lags membership, a milestone that
+      gained a card after scaffolding. M4 has no such state: the creating
+      procedure stamps the milestone in the SAME issue-create call as the label
+      and the scope marker, so a correctly-created sub-task is never
+      momentarily milestone-less. The leg therefore takes M1's shape — routed
+      through deploy.sh's `flag_warn_or_issue` behind an explicit mode branch,
+      shipped in WARN so it cannot gate before shakedown, but keeping a real
+      enforce path. Routing it through the structurally-non-escalating emitter
+      would forfeit that graduation permanently.
+
+      Its dial is its OWN (`milestone-subtask-orphan`, committed default
+      `warn`), NOT the shared cohort dial. Sharing M1's would mean that
+      flipping M1 to enforce after M1's shakedown silently graduates an
+      unshaken-down leg by side effect.
+
+      GATING SCOPE IS THE OPEN SUBSET. COUNT_M4_OPEN is the gate-eligible
+      number; COUNT_M4_CLOSED is reported and never gated. A closed sub-task's
+      missing milestone is history, not drift — M1's scope rule, adopted with
+      M1's reason — and the historical backlog is owned by a separate backfill
+      work item. Gating on it would make the leg permanently non-green on first
+      landing, which is exactly how M3's docstring says a gate becomes a no-op.
+
+      M4 NEVER MOVES THIS SCRIPT'S EXIT CODE. Severity lives entirely in
+      deploy.sh's mode branch, as M3's does.
+
+WHY M4 DOES NOT REUSE THE STAGE-TITLE FETCHER
+---------------------------------------------
+`fetch_stage_titled()` reads through `gh issue list --search`, and the GitHub
+SEARCH API caps retrieval at 1,000 results regardless of the requested limit —
+asking for more returns the same 1,000. Against this repository's stage-title
+population that cap is live, not hypothetical, and a leg built on that fetcher
+reports the milestone-less count it can SEE rather than the count that exists:
+measured, an order of magnitude and change below the truth, with nothing in the
+output saying so. That defect is disclosed and separately tracked against the
+existing fetcher; M4 does not inherit it.
+
+M4 therefore counts with `search/issues` `total_count`, which is EXACT and
+uncapped — only the *item* pagination is capped, and when it binds, M4_SCAN
+says `truncated` rather than letting a sampled finding list read as complete.
+Counting and enumerating are separated deliberately: the counter stays correct
+even when the finding list cannot be.
+
 WHY SUB-TASKS ARE EXCLUDED FROM THE M1 AND M2 LEGS
 --------------------------------------------------
 Pipeline sub-tasks (`sub-task` label) are Stage-6 scaffolding created AFTER the
@@ -146,10 +213,55 @@ OUTPUT (TSV) / EXIT CODES
   SCAFFOLD_MARKER <ms> <marked>/<total>
   COUNT_M3   <n>                              load-bearing scaffold findings
   COUNT_M3_ADV <n>                            advisory scaffold findings
+  M4         <issue>  <title>                 OPEN milestone-less sub-task. Rows
+                                              are the GATE-ELIGIBLE subset only;
+                                              the closed population is counted,
+                                              never listed — it is history, and
+                                              271-odd rows per run is noise that
+                                              buries the live ones.
+  M4-INFO    non-qualifying-rows-dropped <n>  rows the search returned that the
+                                              in-process predicate rejected —
+                                              non-zero means the QUERY drifted
+                                              from the predicate, which is a
+                                              defect in this file, not in the data
+  COUNT_M4   <n>                              \  always emitted together, zeros
+  COUNT_M4_OPEN   <n>                          > included; OPEN + CLOSED sum to
+  COUNT_M4_CLOSED <n>                         /  COUNT_M4. Read with awk EXACT
+                                              field equality — a grep for
+                                              COUNT_M4 prefix-collides with both
+                                              sub-counters, the same trap
+                                              COUNT_M2_NNM already documents.
+  M4_SCAN <status> <total> <enumerated> [<note>]
+                                              status ∈ {fetched, truncated,
+                                              degraded, fixture, not-run}.
+                                                fetched   — counted and fully
+                                                            enumerated
+                                                truncated — count EXACT, finding
+                                                            list is a SAMPLE
+                                                            (item pagination hit
+                                                            the search cap)
+                                                degraded  — the call FAILED. The
+                                                            population is
+                                                            UNMEASURED, never 0
+                                                not-run   — the --milestone /
+                                                            --leg M3 short-circuit
+                                                            did not reach M4
+                                              `total` and `enumerated` are `-`
+                                              whenever the population was not
+                                              measured, and the COUNT_M4* rows
+                                              are then ABSENT rather than zero:
+                                              absence from a source is
+                                              information, not a value. A
+                                              consumer MUST branch on this row
+                                              before reading any COUNT_M4* —
+                                              reading the count alone consumes
+                                              "nothing was examined" as "nothing
+                                              was found".
 
   exit 0 — no findings on M1 or M2
-  exit 1 — M1/M2 findings present (deploy.sh splits severity by leg). M3 NEVER
-           moves the exit code: it is advisory by construction.
+  exit 1 — M1/M2 findings present (deploy.sh splits severity by leg). M3 and M4
+           NEVER move the exit code: M3 is advisory by construction, and M4's
+           severity lives entirely in deploy.sh's own mode branch.
   exit 3 — input failure (API unreadable / malformed fixture)
 
 Python 3.9-compatible — matches /usr/bin/python3 on the operator baseline.
@@ -174,6 +286,14 @@ SCOPE_SECTION = re.compile(
 SUB_TASK_LABEL = "sub-task"
 SUB_TASK_LEGACY_LABEL = "type:subtask"
 EPIC_LABEL = "type:epic"
+
+# GitHub's search API returns at most this many RESULTS regardless of the
+# requested page size or limit — a request for more silently yields the same
+# ceiling. `total_count` is NOT subject to it, which is the whole reason M4
+# counts with the count field and enumerates separately. When the ceiling binds,
+# say so (`M4_SCAN truncated`) rather than letting a sample read as a census.
+SEARCH_RESULT_CAP = 1000
+SEARCH_PAGE_SIZE = 100
 
 # ── M2 SUB-CLASS VOCABULARY ─────────────────────────────────────────────────
 # The enum models the OUTCOME OF RESOLVING the ref, not the ref's milestone
@@ -585,6 +705,142 @@ def fetch_stage_titled(repo):
     return out
 
 
+def m4_query(repo):
+    """The M4 population query. ONE definition, shared by the count and the
+    enumeration, so the number and the list can never be answered by two
+    different predicates."""
+    return ("repo:%s is:issue no:milestone label:%s,%s"
+            % (repo, SUB_TASK_LABEL, SUB_TASK_LEGACY_LABEL))
+
+
+def _m4_node(item):
+    """Normalise a REST `search/issues` item into this file's internal node shape.
+
+    The search endpoint returns `labels` as a FLAT LIST and the GraphQL fetchers
+    return `{nodes: [...]}`. Normalising here is what lets `is_sub_task_family`
+    — one predicate, one definition — serve both transports.
+    """
+    return {
+        "number": item.get("number"),
+        "title": item.get("title") or "",
+        "state": str(item.get("state") or "").lower(),
+        "labels": {"nodes": [{"name": l.get("name", "")}
+                             for l in (item.get("labels") or [])]},
+        "milestone": (item.get("milestone") or {}).get("number"),
+    }
+
+
+def _search_page(query, page):
+    """One `search/issues` page. Returns the decoded payload, or None on failure.
+
+    NEVER RAISES, deliberately. M4 reports its own degradation through M4_SCAN
+    rather than aborting the run: a search outage must not take the M1 and M2
+    legs down with it, and a leg that cannot report its own failure reports it
+    as clean. Routed through `_gh_partial` for the same reason — the rc is not
+    the signal here; the presence of a decodable payload carrying `total_count`
+    is.
+    """
+    raw = _gh_partial(["gh", "api", "-X", "GET", "search/issues",
+                       "-f", "q=" + query,
+                       "-f", "per_page=" + str(SEARCH_PAGE_SIZE),
+                       "-f", "page=" + str(page)])
+    if not (raw or "").strip():
+        return None
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        return None
+    if not isinstance(payload, dict) or "total_count" not in payload:
+        return None
+    return payload
+
+
+def fetch_m4(repo):
+    """Milestone-less sub-task-family population. Returns
+    (status, total, open_total, items).
+
+    COUNTED by `total_count`, ENUMERATED separately — see the module docstring
+    for why the stage-title fetcher is not reused. Both sub-counters come from
+    their own exact counts rather than from the enumeration, so they stay
+    correct (and keep summing to the total) even when the item pagination is
+    truncated.
+
+    On any failure the status is `degraded` and the counts are NOT returned as
+    zeros — the caller emits no COUNT_M4* rows at all in that case, because a
+    zero here is indistinguishable from a genuinely empty population and that
+    confusion is the exact defect this leg exists to detect.
+    """
+    query = m4_query(repo)
+    first = _search_page(query, 1)
+    if first is None:
+        return ("degraded", None, None, [])
+    total = int(first.get("total_count") or 0)
+    items = list(first.get("items") or [])
+    page = 2
+    while len(items) < min(total, SEARCH_RESULT_CAP):
+        payload = _search_page(query, page)
+        if payload is None:
+            return ("degraded", None, None, [])
+        batch = list(payload.get("items") or [])
+        if not batch:
+            break
+        items.extend(batch)
+        page += 1
+    open_payload = _search_page(query + " is:open", 1)
+    if open_payload is None:
+        return ("degraded", None, None, [])
+    open_total = int(open_payload.get("total_count") or 0)
+    status = "fetched" if len(items) >= total else "truncated"
+    return (status, total, open_total, [_m4_node(i) for i in items])
+
+
+def analyse_m4(total, open_total, items):
+    """Pure join. Returns (open_rows, counts, dropped).
+
+    Rows are the OPEN subset ONLY — the gate-eligible set. A closed sub-task's
+    missing milestone is history rather than drift (M1's scope rule, adopted
+    with M1's reason), and the historical population belongs to the separate
+    backfill work item, not to this leg's finding list.
+
+    `dropped` counts rows the search returned that the in-process predicate
+    rejected. It should always be 0; a non-zero value means the query and the
+    predicate have drifted apart, which is a defect in this file. It is emitted
+    rather than swallowed.
+    """
+    qualifying = [n for n in items if m4_qualifies(n)]
+    dropped = len(items) - len(qualifying)
+    open_rows = [(str(n.get("number")), n.get("title") or "")
+                 for n in qualifying if n.get("state") == "open"]
+    open_rows.sort(key=lambda r: int(r[0]) if r[0].isdigit() else 0)
+    closed_total = total - open_total
+    return open_rows, (total, open_total, closed_total), dropped
+
+
+def emit_m4(status, rows, counts, dropped, enumerated, note=""):
+    """M4's TSV block.
+
+    When the population was NOT measured (`degraded` / `not-run`), the counters
+    are OMITTED and the scan row carries `-` in both numeric fields. Emitting
+    `COUNT_M4 0` there would render an unmeasured population as an empty one —
+    the false-green this leg exists to eliminate, reproduced inside the catcher.
+    """
+    out = []
+    if counts is None:
+        out.append("M4_SCAN\t%s\t-\t-%s" % (status, ("\t" + note) if note else ""))
+        return out
+    total, open_total, closed_total = counts
+    for num, title in rows:
+        out.append("M4\t" + num + "\t" + title)
+    if dropped:
+        out.append("M4-INFO\tnon-qualifying-rows-dropped\t" + str(dropped))
+    out.append("COUNT_M4\t" + str(total))
+    out.append("COUNT_M4_OPEN\t" + str(open_total))
+    out.append("COUNT_M4_CLOSED\t" + str(closed_total))
+    out.append("M4_SCAN\t%s\t%d\t%d%s"
+               % (status, total, enumerated, ("\t" + note) if note else ""))
+    return out
+
+
 def orphans_for(slug, ms_number, stage_titled):
     """Stage-titled issues naming this slug whose milestone is NOT this one."""
     if not slug:
@@ -650,6 +906,35 @@ def is_sub_task_family(node):
     """
     names = label_names(node)
     return SUB_TASK_LABEL in names or SUB_TASK_LEGACY_LABEL in names
+
+
+def m4_qualifies(node):
+    """M4's population predicate: sub-task family AND no milestone.
+
+    The search query already carries both clauses, so re-asserting them here
+    looks redundant. It is not, for two reasons.
+
+    It makes the leg's PRECISION testable offline. Without a predicate in
+    process, the only thing separating a near-miss from a finding is a query
+    string, and no self-test can reach a query string. With it, the two
+    discriminating near-misses are exercisable as data: a sub-task that DOES
+    carry a milestone (differs in exactly the milestone property), and a
+    milestone-less issue that is NOT a sub-task but whose TITLE contains the
+    words "sub-task" (differs in exactly the shape property, and is precisely
+    what a substring predicate would wrongly flag).
+
+    And it fails CLOSED against query drift. If the query is ever widened or
+    mistyped, a milestoned sub-task or a milestone-less work item is dropped
+    here rather than promoted to a finding — and the drop is COUNTED and
+    emitted, because a silently-filtered row would hide the very drift this
+    guard exists to catch.
+
+    Reads the milestone field with an explicit `is None` test. A milestone
+    number of 0 is not a real GitHub milestone, but a falsiness test would also
+    swallow it, and this leg's entire subject is the difference between "has no
+    milestone" and "has a milestone I failed to read".
+    """
+    return is_sub_task_family(node) and node.get("milestone") is None
 
 
 def stage_tokens(title):
@@ -1674,6 +1959,103 @@ def self_test():
     check("M3 UNMARKED sub-tasks are reported as unmarked, not coerced",
           mk_unm == [("266", "0/1")])
 
+    # ── M4 sub-task milestone orphans ────────────────────────────────────
+    # The fixture is SYNTHETIC and constructed inline. It is deliberately NOT a
+    # live issue: a live fixture would enter the very population COUNT_M4
+    # counts (the check would be measuring its own test), would mutate a public
+    # repository to manufacture the exact defect this leg exists to eliminate,
+    # and would not survive the backfill that drains the population — it would
+    # have to be either fixed (killing the test) or exempted forever. Synthetic
+    # data makes the guard outlive every instance it was built to catch.
+    def _m4_item(num, title, labels=("sub-task",), state="open", ms=None):
+        """RAW `search/issues` item shape — flat `labels`, so the arms exercise
+        the transport normaliser rather than starting downstream of it."""
+        item = {"number": num, "title": title, "state": state,
+                "labels": [{"name": l} for l in labels]}
+        if ms is not None:
+            item["milestone"] = {"number": ms}
+        return item
+
+    # TRUE POSITIVE — a milestone-less stage sub-task, the subject of the leg.
+    fx_m4_hit = _m4_node(_m4_item(9001, "Stage 6 Engineering — #0000 (a-release-slug)"))
+    check("M4 flags a milestone-less stage sub-task", m4_qualifies(fx_m4_hit))
+
+    # CONTROL 1 — differs in EXACTLY ONE property: it HAS a milestone. This is
+    # the shape of a correctly-created sub-task, and it isolates the milestone
+    # property from the sub-task-shape property.
+    fx_m4_milestoned = _m4_node(
+        _m4_item(9002, "Stage 5 Solutioning — #0000 (a-release-slug)", ms=42))
+    check("M4 control: a correctly-milestoned sub-task is NOT flagged",
+          not m4_qualifies(fx_m4_milestoned))
+
+    # CONTROL 2 — differs in EXACTLY ONE property: it is not a sub-task. It
+    # carries NO milestone and its TITLE contains the words "sub-task", so a
+    # substring predicate WOULD flag it. That is what makes it a discriminating
+    # near-miss rather than a decorative one.
+    fx_m4_titled = _m4_node(_m4_item(
+        9003, "278 sub-task issues carry no milestone — backfill the owning release",
+        labels=("improvement", "size:L")))
+    check("M4 control: a milestone-less NON-sub-task naming 'sub-task' in its "
+          "title is NOT flagged", not m4_qualifies(fx_m4_titled))
+    check("M4 control 2 is discriminating: a substring predicate WOULD flag it",
+          "sub-task" in fx_m4_titled["title"])
+
+    # The legacy alias counts — M4 uses the WIDER family predicate, as M3 does,
+    # because the scaffold is its subject.
+    check("M4 counts the legacy `type:subtask` alias",
+          m4_qualifies(_m4_node(_m4_item(9004, "Stage 7 Dev Testing — x",
+                                         labels=("type:subtask",)))))
+
+    # Rows are the OPEN subset; closed members are counted, never listed.
+    m4_items = [fx_m4_hit, fx_m4_milestoned, fx_m4_titled,
+                _m4_node(_m4_item(9005, "Stage 9 Plan Review — x", state="closed"))]
+    m4_rows, m4_counts, m4_dropped = analyse_m4(10, 4, m4_items)
+    check("M4 emits rows for the OPEN subset only",
+          [r[0] for r in m4_rows] == ["9001"])
+    check("M4 drops the two near-misses and COUNTS the drop", m4_dropped == 2)
+    check("M4 sub-counters sum to COUNT_M4",
+          m4_counts[1] + m4_counts[2] == m4_counts[0])
+
+    # Precision probe: without it, "the controls are clean" is satisfied by a
+    # predicate that finds nothing ever.
+    check("M4 precision probe: the population is non-empty when it should be",
+          len(m4_rows) > 0)
+
+    m4_emit = emit_m4("fetched", m4_rows, m4_counts, m4_dropped, 4)
+    check("M4 emits all three counters, zeros included",
+          all(any(r.split("\t")[0] == k for r in m4_emit)
+              for k in ("COUNT_M4", "COUNT_M4_OPEN", "COUNT_M4_CLOSED")))
+    check("M4_SCAN reports status, total and enumerated",
+          "M4_SCAN\tfetched\t10\t4" in m4_emit)
+    check("M4-INFO surfaces the non-qualifying drop rather than swallowing it",
+          any(r.startswith("M4-INFO\tnon-qualifying-rows-dropped\t2")
+              for r in m4_emit))
+
+    # awk EXACT-field-equality trap, asserted rather than merely documented: a
+    # PREFIX match on COUNT_M4 hits all three counters, so a consumer reading
+    # the total with `grep COUNT_M4` would silently read a sub-counter.
+    check("M4 counter names prefix-collide (why consumers must use awk $1==)",
+          len([r for r in m4_emit if r.startswith("COUNT_M4")]) == 3
+          and len([r for r in m4_emit if r.split("\t")[0] == "COUNT_M4"]) == 1)
+
+    # DEGRADED is a positively-emitted unknown: no counters at all, and `-` in
+    # the numeric fields. A `COUNT_M4 0` here would render an unmeasured
+    # population as an empty one — the exact false-green the leg exists to kill.
+    m4_deg = emit_m4("degraded", [], None, 0, 0)
+    check("M4 degraded emits NO counters and never a zero",
+          m4_deg == ["M4_SCAN\tdegraded\t-\t-"])
+    m4_nr = emit_m4("not-run", [], None, 0, 0, note="scope:m3-only")
+    check("M4 not-run is positively emitted with its scope",
+          m4_nr == ["M4_SCAN\tnot-run\t-\t-\tscope:m3-only"])
+
+    # TRUNCATION: the count stays exact while the finding list becomes a sample,
+    # and the status says so. This is the property that makes the counter safe
+    # to trust when the search API's result cap binds.
+    check("M4 status is truncated when enumeration falls short of the count",
+          emit_m4("truncated", m4_rows, (3352, 7, 3345), 0,
+                  SEARCH_RESULT_CAP)[-1]
+          == "M4_SCAN\ttruncated\t3352\t1000")
+
     failed = [n for n, ok in results if not ok]
     for name, ok in results:
         print(("  PASS  " if ok else "  FAIL  ") + name)
@@ -1772,11 +2154,75 @@ def run_m3_only(args):
             print("ERROR\t" + str(exc), file=sys.stderr)
             return 3
 
-    print("\n".join(emit_m3(*analyse_m3(m3_input))))
+    rows = emit_m3(*analyse_m3(m3_input))
+    # M4 IS POSITIVELY REPORTED AS NOT RUN ON THIS PATH, never silently absent.
+    # This is the Procedure 1 Step 6.5 invocation — the single moment in the
+    # pipeline when a milestone-less sub-task is most likely to have JUST been
+    # created — and it is milestone-scoped, so the repository-scoped M4 leg does
+    # not fire here. A reader who saw no M4 rows and inferred "no findings"
+    # would be consuming the absence of a measurement as a clean result, which
+    # is the precise defect M4 exists to catch, reproduced inside the catcher.
+    rows.extend(emit_m4("not-run", [], None, 0, 0, note="scope:m3-only"))
+    print("\n".join(rows))
     # M3 NEVER drives the exit code. It routes through deploy.sh's
     # `flag_advisory_only` emitter, which is structurally incapable of enforcement
     # (no mode case, no enforce branch, no ISSUES increment) — an exit-1 here would
     # smuggle enforcement back in through the one door that is supposed to have none.
+    return 0
+
+
+def _m4_from_fixture(data):
+    """(status, total, open_total, items) from a fixture's `m4` key.
+
+    Accepts the same triple the live fetcher returns so the offline arm
+    exercises `analyse_m4` and `emit_m4` on the identical shape — a fixture that
+    feeds a different shape than production tests a function that does not ship.
+    """
+    block = data.get("m4")
+    if block is None:
+        return None
+    # Items are supplied in RAW `search/issues` shape (flat `labels` list) and
+    # run through the same normaliser the live path uses, so the offline arm
+    # covers the transport adapter too rather than starting downstream of it.
+    return ("fixture", int(block.get("total", 0)),
+            int(block.get("open_total", 0)),
+            [_m4_node(i) for i in block.get("items", [])])
+
+
+def run_m4_only(args):
+    """The `--leg M4` path. Repository-scoped; M1, M2 and M3 are not run.
+
+    M4 is a property of the repository's issue population, not of any one
+    milestone, so `--milestone` does not narrow it and this branch is taken
+    ahead of the milestone short-circuit when `--leg M4` is explicit.
+    """
+    if args.fixture:
+        try:
+            with open(args.fixture, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            fetched = _m4_from_fixture(data)
+            if fetched is None:
+                raise KeyError("m4")
+        except (OSError, ValueError, KeyError) as exc:
+            print("ERROR\tM4 fixture unreadable: " + str(exc), file=sys.stderr)
+            return 3
+    else:
+        repo = _derive_repo(args.repo)
+        if not repo:
+            print("ERROR\t--repo not supplied and git remote origin unresolved",
+                  file=sys.stderr)
+            return 3
+        fetched = fetch_m4(repo)
+
+    status, total, open_total, items = fetched
+    if total is None:
+        print("\n".join(emit_m4(status, [], None, 0, 0)))
+        return 0
+    rows, counts, dropped = analyse_m4(total, open_total, items)
+    print("\n".join(emit_m4(status, rows, counts, dropped, len(items))))
+    # M4 never drives the exit code: its severity lives entirely in deploy.sh's
+    # own mode branch, exactly as M3's does. Returning 1 here would smuggle
+    # enforcement past the dial that is supposed to own it.
     return 0
 
 
@@ -1790,18 +2236,25 @@ def main():
     ap.add_argument("--milestone",
                     help="slug or number — scope M3 to ONE milestone, any state "
                          "(the Procedure 1 Step 6.5 invocation)")
-    ap.add_argument("--leg", choices=("M1", "M2", "M3", "all"), default="all",
-                    help="which leg(s) to run; default all")
+    ap.add_argument("--leg", choices=("M1", "M2", "M3", "M4", "all"), default="all",
+                    help="which leg(s) to run; default all. M4 is REPOSITORY-scoped, "
+                         "so --milestone does not narrow it")
     args = ap.parse_args()
 
     if args.self_test:
         return self_test()
+
+    # M4 is tested BEFORE the milestone short-circuit: an explicit `--leg M4`
+    # names a repository-scoped leg, and `--milestone` cannot narrow it.
+    if args.leg == "M4":
+        return run_m4_only(args)
 
     if args.milestone or args.leg == "M3":
         return run_m3_only(args)
 
     members_all = None
     m3_input = None
+    m4_fetched = None
     ref_milestone = None
     ref_resolution = ("not-needed", 0, 0)
     if args.fixture:
@@ -1818,6 +2271,7 @@ def main():
             if ref_milestone is not None:
                 ref_resolution = ("fixture", len(ref_milestone), len(ref_milestone))
             m3_input = data.get("m3")
+            m4_fetched = _m4_from_fixture(data)
         except (OSError, ValueError, KeyError) as exc:
             print("ERROR\tfixture unreadable: " + str(exc), file=sys.stderr)
             return 3
@@ -1835,6 +2289,11 @@ def main():
         except RuntimeError as exc:
             print("ERROR\t" + str(exc), file=sys.stderr)
             return 3
+        # OUTSIDE the RuntimeError guard deliberately: fetch_m4 cannot raise. It
+        # reports its own failure as `degraded` so that a search outage costs
+        # this run its M4 measurement and nothing else — the M1 and M2 legs above
+        # have already been computed and must still be emitted.
+        m4_fetched = fetch_m4(repo)
         # Deferred ref→milestone overlay. The candidate set comes from the SAME
         # m2_divergence() binding the join consumes, and the call fires ONLY when
         # that set is non-empty — a clean M2 leg costs zero extra calls. The
@@ -1860,6 +2319,7 @@ def main():
         m1 = []
     if args.leg in ("M1", "M2"):
         m3_input = None
+        m4_fetched = None
 
     out = ["MILESTONES\t" + str(len(milestones)), "DECLARED\t" + str(declared)]
     for ms_num in skipped:
@@ -1888,9 +2348,23 @@ def main():
     out.append("M2_REF_RESOLUTION\t%s\t%d\t%d" % ref_resolution)
     if m3_input is not None:
         out.extend(emit_m3(*analyse_m3(m3_input)))
+    # M4 emits on EVERY path, including the ones that do not run it: a leg whose
+    # absence has to be inferred from missing rows is a leg whose "no findings"
+    # and "never looked" render identically.
+    if m4_fetched is None:
+        out.extend(emit_m4("not-run", [], None, 0, 0, note="scope:leg-" + args.leg))
+    else:
+        m4_status, m4_total, m4_open, m4_items = m4_fetched
+        if m4_total is None:
+            out.extend(emit_m4(m4_status, [], None, 0, 0))
+        else:
+            m4_rows, m4_counts, m4_dropped = analyse_m4(m4_total, m4_open, m4_items)
+            out.extend(emit_m4(m4_status, m4_rows, m4_counts, m4_dropped,
+                               len(m4_items)))
     print("\n".join(out))
-    # M3 is deliberately absent from this expression: it is advisory by
-    # construction and must not move the exit code M1/M2's severity split reads.
+    # M3 and M4 are deliberately absent from this expression. M3 is advisory by
+    # construction; M4's severity lives entirely in deploy.sh's own mode branch.
+    # Neither may move the exit code M1/M2's severity split reads.
     return 1 if (m1 or m2) else 0
 
 
