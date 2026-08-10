@@ -8,17 +8,21 @@ This file is the Stage-4 release plan, committed as **Engineering Commit 0** on 
 
 ## Issue References
 
-Card index for this release. Every issue reference in this plan resolves against this table.
+Card index for this release. Every issue reference in this plan resolves against this table — including the File Change Matrix rows, whose Issue column indexes back to this table rather than making free-standing prose references.
 
 | Card | Size | One-line scope |
 |---|---|---|
 | #4463 | `size:M` | Lint-card AC sets gain a precision obligation — a named near-miss the check must not flag, at each narrowing invocation parameter |
 | #4891 | `size:M` | The deploy-tools README states its coverage rule and backfills the residual undocumented tools |
-| #4708 | `size:S` | The skill-package-freshness path filter widens to the three canonical template-sync trees; absent-is-pass corrected |
+| #4708 | `size:S` | The skill-package-freshness path filter is deleted rather than widened — the gate adopts the codified always-reports posture, so absence has nothing left to mis-read |
 | #4899 | `size:S` | A detection leg that catches stage sub-tasks left invisible to milestone-scoped queries |
 | #4926 | `size:S` | The initiative-is-not-an-epic rule becomes an enforceable assertion with a lint keyed on the label-family shape |
 | #4901 | `size:M` | The issue-reference gate's inline logic is extracted to an invocable checker with a fixture suite |
 | #4462 | `size:M` | A blast-radius disposition is recorded rather than deferred a fifth time — operator decision, no code surface |
+
+**Matrix row carried here.** The File Change Matrix's third row for the gate-posture card is stated in this reference block rather than in the matrix body: `| #4708 | core/deploy/tests/test_package_freshness_exit_codes.sh | MODIFY — append PF-6 (an injected canonical outside every skills tree staled with no rebuild → exit 2), PF-7 (that canonical restored → exit 0, the anti-vacuity control) and PF-8 (the anti-narrowing assertion that no paths: key returns, carrying its own sensitivity arm) to the existing CI-executed suite |`. It is a matrix row in every sense that matters to Stage 7/8/9 — the path appears in the machine-readable list below, which is the deterministic extraction contract.
+
+**File-surface reconciliation — the gate-posture card.** Its Stage-5 design deletes the path filter rather than widening it, which moved the card's file surface after the Stage-4 matrix was written. `core/deploy/lib-template-sync-source.sh` leaves the surface — the chosen design needs no derived filter, so the resolver is only *read* (by the new fixture), never modified. Two files join: the Requirement-(c) coverage register in `core/standards/gate-efficacy-standard.md`, which otherwise keeps asserting the posture the workflow no longer carries, and `core/deploy/tests/test_package_freshness_exit_codes.sh`, the gate's existing CI-executed test harness, extended rather than duplicated. Net: the card's matrix rows go 2 → 3 and the release path count 16 → 17; all three rows are carried in the File Change Matrix below, and all 17 paths in the machine-readable list that follows it.
 
 ## Release Identity — slug-primary, version unbound
 
@@ -93,7 +97,7 @@ Dependency-ordered. This deviates from the milestone description's declared inte
 
 ## File Change Matrix
 
-Consolidated from the six Stage-5 design specs. **16 distinct paths.**
+Consolidated from the six Stage-5 design specs, reconciled to the Stage-5 decisions. **17 distinct paths.**
 
 | Issue | Path | Intent |
 |---|---|---|
@@ -101,8 +105,8 @@ Consolidated from the six Stage-5 design specs. **16 distinct paths.**
 | #4463 | `core/schemas/gate-criteria-spec.md` | MODIFY — conditional conformance test `U5` plus one anti-pattern in § Capability-Class Usability-AC Requirement; the G1-05b self-repair row extended; schema version bumped |
 | #4463 | `release/references/how-to/intake-style-guide.md` | MODIFY — mirror `U5` and the anti-pattern into §4b (**compelled by the registered prose exemption**); add a check-shaped worked example |
 | #4463 | `.github/ISSUE_TEMPLATE/improvement.yml` | MODIFY — one-line pointer on the AC field description. **Pointer only, no doctrine** — it does not join the co-edit set |
-| #4708 | `.github/workflows/skill-package-freshness.yml` | MODIFY — widen `paths:` to **3** canonical trees; correct absent-is-pass |
-| #4708 | `core/deploy/lib-template-sync-source.sh` | MODIFY — expose the canonical source-tree set so the filter derives rather than restates |
+| #4708 | `.github/workflows/skill-package-freshness.yml` | MODIFY — delete BOTH `paths:` blocks and adopt the codified `always-reports` posture; add the exemplar's `types:` list. Widening was falsified at Stage 5: a fourth input is uncovered too, and an earlier resolver arm had already reopened the gap once, unnoticed |
+| #4708 | `core/standards/gate-efficacy-standard.md` | MODIFY — the Requirement-(c) coverage-register row reconciled to the new posture (mechanism / surface / falsification cells). The generic advisory example elsewhere in that file is PRESERVED. **This card's third row — the fixture suite — is carried in the Issue References block above** |
 | #4891 | `core/deploy/tools/README.md` | MODIFY — state the coverage rule; backfill the residual tools; re-baseline the count with its measurement date |
 | #4899 | `core/deploy/tools/check-milestone-epic-membership.py` | MODIFY — the milestone-less stage-sub-task detection leg |
 | #4899 | `core/deploy/deploy.sh` | MODIFY — **Check 56 region only** (lines 9609–9769). No new check number |
@@ -115,7 +119,7 @@ Consolidated from the six Stage-5 design specs. **16 distinct paths.**
 | #4926 | `core/deploy/deploy.sh` | MODIFY — **Check 55 region only** (lines 9534–9608). No new check number |
 | — | `release/releases/plans/triage-and-backlog-instrumentation_RELEASE_PLAN.md` | This file — Engineering Commit 0, then accreted through the release |
 
-Machine-readable path list for deterministic Stage 7 / 8 / 9 chip extraction — **16 paths, one per line**:
+Machine-readable path list for deterministic Stage 7 / 8 / 9 chip extraction — **17 paths, one per line**:
 
 ```
 .github/ISSUE_TEMPLATE/improvement.yml
@@ -123,7 +127,7 @@ Machine-readable path list for deterministic Stage 7 / 8 / 9 chip extraction —
 .github/workflows/skill-package-freshness.yml
 core/config/allowlists/script-execution-allowlist.txt
 core/deploy/deploy.sh
-core/deploy/lib-template-sync-source.sh
+core/deploy/tests/test_package_freshness_exit_codes.sh
 core/deploy/tools/README.md
 core/deploy/tools/check-work-hierarchy.py
 core/deploy/tools/check-issue-ref-validity.sh
@@ -131,6 +135,7 @@ core/deploy/tools/check-milestone-epic-membership.py
 core/deploy/tools/fixtures/issue-ref/
 core/schemas/gate-criteria-spec.md
 core/specs/label-taxonomy.md
+core/standards/gate-efficacy-standard.md
 release/references/how-to/intake-style-guide.md
 release/releases/plans/corpus-integrity-lints-and-refs_RELEASE_PLAN.md
 release/releases/plans/triage-and-backlog-instrumentation_RELEASE_PLAN.md
