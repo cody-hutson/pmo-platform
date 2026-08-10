@@ -7186,7 +7186,7 @@ STUB
     #     --apply, predict at --dry-run). ONE fixture — the builder removed, so
     #     delegation cannot answer — driven in BOTH modes, so the mode is provably
     #     the variable under test. The dry-run arm is the #4765 regression guard: a
-    #     return 3 here would abort the run and the THIRTEEN phases after 9.95 would
+    #     return 3 here would abort the run and the FOURTEEN phases after 9.95 would
     #     never enumerate, re-breaking the dry-run review gate #4765 just restored.
     #     The apply arm is the anti-vacuity half: it proves the fixture really is
     #     broken and that the guard still blocks a real close.
@@ -7195,7 +7195,7 @@ STUB
     local _rp_rc=0
     MODE="dry-run"; phase_rebuild_skill_packages >/dev/null 2>&1 || _rp_rc=$?
     if [[ $_rp_rc -ne 0 ]]; then
-      echo "FAIL: C1 — an undeterminable set under --dry-run must NOT abort (rc $_rp_rc); the 13 phases after 9.95 would never enumerate (#4765)"; failures=$((failures+1))
+      echo "FAIL: C1 — an undeterminable set under --dry-run must NOT abort (rc $_rp_rc); the 14 phases after 9.95 would never enumerate (#4765)"; failures=$((failures+1))
     fi
     if [[ "$(get_phase rebuild_skill_packages | /usr/bin/cut -d'|' -f1)" != "WARN" ]]; then
       echo "FAIL: C1 — an undeterminable set under --dry-run must mark WARN, not a green outcome, got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
