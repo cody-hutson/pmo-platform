@@ -1770,6 +1770,32 @@ install_hook_with_checksum() {
   local target_sha
   target_sha=$(shasum -a 256 "${target}" | awk '{print $1}')
   if [ "${source_sha}" = "${target_sha}" ]; then
+    # Content matches — which is NOT the same as the install being correct. The
+    # checksum above is a CONTENT sha; a hook stripped of its executable bit is
+    # byte-identical to a healthy one and does not run. A hook that does not run
+    # enforces nothing and says nothing, so the drift is invisible by construction.
+    #
+    # Every other branch of this function copies and then chmods. This branch
+    # copies nothing, so before this repair it was the ONE path that could observe
+    # a deployed hook and leave it non-executable — mode-only drift was repaired by
+    # no code path anywhere in the installer, and `update.sh` then reported success
+    # over it. Repairing here (rather than in update.sh) keeps hook deployment in
+    # the one function that owns it; update.sh asserts the invariant, it does not
+    # re-implement the fix.
+    #
+    # This is the entrypoint population by construction: install_hooks iterates
+    # ${SOURCE_REPO}/core/hooks/*.sh, which holds entrypoints only. The sourced
+    # primitives (path-leak-patterns.sh, lib-instance-path.sh, lib/dep-resolve.sh)
+    # are co-deployed further down by plain `cp` and correctly stay 644 — they are
+    # read with `. "$LIB"` under an `[ -r ]` guard and never invoked.
+    if [ ! -x "${target}" ]; then
+      if [ "${DRY_RUN}" -eq 1 ]; then
+        info "[dry-run] would restore +x: ${basename} (content unchanged; executable bit missing)"
+      else
+        chmod +x "${target}"
+        info "MODE-REPAIRED: ${basename} (content unchanged; +x restored)"
+      fi
+    fi
     json_set "${CHECKSUMS_FILE}" "${basename}" "${source_sha}"
     info "SYNC: ${basename} (unchanged)"
     return 0

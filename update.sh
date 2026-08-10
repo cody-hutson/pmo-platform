@@ -136,8 +136,12 @@ Exit codes:
   65   operator.toml missing or malformed
   66   Schema migration aborted (operator dismissed prompt)
   73   Regeneration failure (file write or verification error)
-  75   Install incomplete (a hook-tier composition surface is absent; the hook
-       refresh was refused. Run docs/scripts/setup-workspace.sh, then re-run)
+  75   Install incomplete — a deployed control is present but not operable.
+       Either a hook-tier composition surface is absent (the hook refresh was
+       refused before it could ship enforcement with no escape hatch), or a
+       deployed hook entrypoint is not executable after the refresh (a hook
+       without +x does not run, and does not say so). Both name the offending
+       file. Run docs/scripts/setup-workspace.sh, then re-run.
   130  Interrupted (rollback applied)
 
 Prerequisites:
@@ -706,6 +710,82 @@ assert_install_complete() {
   exit "${EX_INCOMPLETE}"
 }
 
+# --- Phase 5c0: Deployed-hook executability assertion (#4449 AC-1 / AC-3) -----
+# The SIBLING of assert_install_complete above, and the two together are the whole
+# of AC #3: exit non-zero when a deployed control is left "list-less OR
+# non-executable". assert_install_complete owns the list-less half and must run
+# BEFORE the refresh, because its job is to stop the refresh happening. This half
+# is the opposite: it can only be judged AFTER the refresh, because the refresh is
+# what installs and (per install_hook_with_checksum's mode repair) restores the bit.
+#
+# Why an assertion and not a repair. The bit is set in exactly one place —
+# install_hook_with_checksum, which owns hook deployment — and this function does
+# not duplicate that. It is the self-check AC #5 asks for: something that makes it
+# impossible for update.sh to report success over a hook that will not run. If it
+# ever fires, the repair path failed and the operator needs to know, not have it
+# quietly patched over by a second mechanism whose disagreement with the first
+# would be undetectable.
+#
+# It sits before refresh_settings deliberately, mirroring the ordering argument in
+# assert_install_complete's header: Phase 5d wires settings.json registrations that
+# NAME these hook scripts. Wiring events to a script that cannot execute is the
+# same asymmetry class — an enforcement registration with no enforcement behind it
+# — so the run stops before creating it. Exiting here also leaves .last-update
+# unwritten, which is correct: the run did not complete.
+#
+# POPULATION AND DISCRIMINATOR — a registered duplicate, not a second decision.
+# The rule is doctor.sh check_hooks_runnable's (#302 / #1850), the same one
+# validate-install.sh A3 consumes: a deployed hook ENTRYPOINT must be executable; a
+# co-deployed SOURCED primitive need only be readable. Sourced libs are matched by
+# the co-deploy naming set (lib-*.sh, *-patterns.sh) plus everything under
+# hooks/lib/, which the flat *.sh glob below does not reach. A shebang is NOT a
+# discriminator — sourced libs carry one.
+#
+# EXIT CODE — EX_INCOMPLETE (75), shared with the list-less half rather than a new
+# member. Both limbs are one operator-facing condition ("a deployed control is
+# present but not operable"), both are named by one sentence of AC #3, and both
+# take the same remedy. A second code would split one condition across two values
+# for no diagnostic gain. This is why 75's banner text is phrased over both.
+#
+# DRY-RUN IS EXEMPT HERE, and the asymmetry with assert_install_complete is the
+# point rather than an inconsistency. That gate fires under --dry-run because
+# update.sh can NEVER repair a missing composition surface, so a clean preview
+# would be a verdict no real run could earn. This condition is the opposite: a real
+# run DOES repair it. Exiting 75 on a preview of a repair that is about to happen
+# would report a blocker that does not exist. So a preview names the condition and
+# says what a real run will do about it, and does not stop.
+assert_hooks_executable() {
+  local hooks_dir="${WORKSPACE_ROOT}/.claude/hooks"
+  [ -d "${hooks_dir}" ] || return 0
+
+  local hook basename nonexec=""
+  for hook in "${hooks_dir}"/*.sh; do
+    [ -f "${hook}" ] || continue
+    basename=$(basename "${hook}")
+    case "${basename}" in
+      lib-*.sh|*-patterns.sh) continue ;;
+    esac
+    [ -x "${hook}" ] || nonexec="${nonexec:+${nonexec} }${basename}"
+  done
+
+  if [ -z "${nonexec}" ]; then
+    return 0
+  fi
+
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    warn "Deployed hook entrypoint(s) not executable: ${nonexec}"
+    warn "[dry-run] a real ./update.sh run restores the executable bit; re-run without --dry-run."
+    return 0
+  fi
+
+  err "Install incomplete — deployed hook entrypoint(s) not executable: ${nonexec}"
+  err "A hook without the executable bit does not run, and does not report that it"
+  err "did not run: the control is silently disabled while this run reports success."
+  err "The hook refresh did not restore the bit, so this needs a look rather than a re-run."
+  err "Run docs/scripts/setup-workspace.sh to reinstall the hook bundle, then re-run ./update.sh."
+  exit "${EX_INCOMPLETE}"
+}
+
 # --- Phase 5c: Refresh the security-hook bundle (#3430) ---
 # deploy.sh (Phase 5) deploys skills + packages but NOT hooks — its harness-artifact path
 # reads harness/<name>/, which does not exist at the v2 repo root. So the deployed
@@ -896,6 +976,12 @@ else
   # of surfaces_only_flow: that flow installs no hooks, so it creates no asymmetry.
   assert_install_complete
   refresh_hooks
+  # MUST follow refresh_hooks and precede refresh_settings — see
+  # assert_hooks_executable's header. The refresh is what sets the bit, so the
+  # assertion is meaningless before it; Phase 5d wires registrations naming these
+  # scripts, so the assertion is too late after it. Not a member of
+  # surfaces_only_flow: that flow refreshes no hooks, so it can change no hook mode.
+  assert_hooks_executable
   # Phase 5d MUST follow Phase 5c: hook scripts land first, then the registrations that
   # name them. Reordering would wire events to scripts not yet on disk (ADR-121 §8).
   refresh_settings
