@@ -23,6 +23,7 @@
 #   6.5 inject_outcome_field  **Outcome:** field on the visible-H4 Deployment Log block (#37; default SUCCESS, --outcome overrides)
 #   6.6 inject_velocity_field **Velocity:** field after **Cycle-Time:** in that block (stage-13-close.md Phase B-velocity; surface-resolved)
 #   6.7 append_release_learnings  sibling H4 `#### Release Learnings v<X.Y>` after the Deployment Log block (stage-13-close.md Phase A7; hot ledger only)
+#   6.8 inject_close_class_telemetry_field  **Close-Class-Telemetry:** field after **Outcome rationale:**/**Outcome:** in that block (close-class-telemetry.md § 3.2; surface-resolved)
 #   7  append_release_index    new row in RELEASE_INDEX.md
 #   8  append_release_digest   new entry under v<MAJOR>.* H2 in RELEASE_DIGEST.md
 #   8.5 append_reversions   append re-version row(s) to RELEASE_REVERSIONS.md (#1679; N/A on the common no-collision path)
@@ -220,6 +221,11 @@ AUDIT_EPIC_ROLLUP="$SCRIPT_DIR/audit-epic-rollup-close.sh"
 # the precedent PROJECTOR below already sets (an `[[ ! -f ]]` guard inside
 # emit_derived_entry rather than a fifth check_paths row).
 COMPUTE_VELOCITY="$SCRIPT_DIR/compute-release-velocity.sh"
+# Close-class telemetry producer for the Phase 6.8 `**Close-Class-Telemetry:**`
+# field. Same form factor and same non-registration rationale as COMPUTE_VELOCITY
+# above — a TOOL dependency guarded inline by its consuming phase, not a fifth
+# check_paths() row (that probe enumerates the four CORPUS paths).
+COMPUTE_CLOSE_CLASS_TELEMETRY="$SCRIPT_DIR/compute-close-class-telemetry.sh"
 # Scaffold-residue token source (AC1 single-source seam). The token set has exactly
 # ONE definition — SCAFFOLD_RESIDUE_TOKENS in lint_release_corpus.py — and the shell
 # anchors read it from there via --print-scaffold-tokens. Retyping the literals in
@@ -1980,6 +1986,231 @@ PY
   fi
 
   mark_phase "append_release_learnings" "PASS" "appended the '#### Release Learnings $VERSION' sibling H4 immediately after the $VERSION Deployment Log block ($_log_name)"
+  return 0
+}
+
+# ─── Phase 6.8: inject_close_class_telemetry_field (close-class-telemetry.md) ──
+#
+# Emits the `**Close-Class-Telemetry:**` field into the version's Deployment Log
+# block, after `**Outcome rationale:**` (falling back to `**Outcome:**`) — the
+# close-quality read-model sits BELOW the verdict fields it summarises, which is
+# why this phase is seated after 6.5 rather than beside the instrument fields.
+#
+# WHY THIS PHASE EXISTS. close-class-telemetry.md § 3.2 has mandated this field
+# on every post-cutover release since the standard merged, and until now the
+# mandate had no mechanism: no close-out phase produced it and no check asserted
+# it. Zero of the ~30 post-cutover releases that closed carried it; the two rows
+# that do were hand-emitted, and the more recent of those records the mandated
+# tool ABORTING rather than a value. That is the same producer/gate gap #4329
+# records for `**Velocity:**` — a codified field with no writer.
+#
+# THREE PROPERTIES THIS PHASE OWES.
+#
+#  (1) THE RIGHT SURFACE. Resolved through _resolve_deployment_log_target,
+#      exactly as 6.5 and 6.6 resolve theirs, and the idempotency probe reads
+#      that SAME resolved answer. A `$RELEASE_LOG`-hardcoded write on an ARCHIVED
+#      release splits the record across two files at exit 0, and both a
+#      corpus-wide grep and the field grammar read identical on the split.
+#
+#  (2) A MEASURED VALUE OR NOTHING — NEVER A PLAUSIBLE ONE. The value comes from
+#      compute-close-class-telemetry.sh and from nowhere else. If that tool is
+#      absent or non-executable this phase SKIPs rather than composing a field:
+#      the field carries a literal `mechanism: compute-close-class-telemetry.sh`
+#      claim, so writing one the mechanism did not produce would be precisely the
+#      declaration-vs-behaviour divergence the field exists to measure. (The
+#      corpus already records a release that refused to hand-fill it for exactly
+#      this reason; that judgement is encoded here rather than left to the next
+#      operator's memory.)
+#
+#      The tool's exit contract, stated against its MEASURED behaviour and relied
+#      on here: 0 = success INCLUDING every degraded path (absent register,
+#      unavailable gh, unresolvable repo each set an N/A reason and still emit a
+#      conformant eight-slot line); 1 = argument validation ONLY; 2 = a register
+#      that exists but is UNREADABLE — a source-integrity condition, escalated
+#      rather than degraded. A CALLER CANNOT DISTINGUISH THE gh-LESS PATH BY EXIT
+#      CODE and must not try: that disposition is readable only from the emitted
+#      line, which is what the measuredness arm below reads.
+#
+#  (3) A FIELD THE SHIPPED CONSUMERS CAN READ, PLUS A VISIBLE DISPOSITION. Two
+#      separate assertions, deliberately with two different severities:
+#
+#      GRAMMAR (fatal). The eight slots in order per § 3.2. A malformed field is
+#      never written — the same prevention-only posture 6.6 takes.
+#
+#      MEASUREDNESS (diagnostic, NOT fatal). All four rate slots can be `N/A`
+#      simultaneously on a lawful run: no gh degrades Indicators 3 and 6, no
+#      register degrades 1 and 2, and those conditions co-occur. Such a line is
+#      structurally perfect and asserts nothing. FAILING on it would convert a
+#      degraded ENVIRONMENT into a close-out failure, so this phase writes the
+#      field and says so in its own outcome detail instead. The gate-side twin
+#      (deploy.sh Check 48 sub-check l-3a) is where the same reading IS a
+#      finding — a gate may fail a row for carrying no measurement; a producer
+#      may not refuse to record one honestly.
+
+# Schema predicate for a composed `**Close-Class-Telemetry:**` line, expressed as
+# ONE ordered pattern over the eight § 3.2 slots rather than eight independent
+# presence tests: eight unordered tests accept a scrambled line, and the field's
+# consumers read it positionally. `grep` reads a HERE-STRING, never `producer |
+# grep -q`: under `set -euo pipefail` grep -q exits at the first match and
+# SIGPIPEs the writer, so pipefail promotes a SUCCESSFUL match to a non-zero
+# pipeline status and the assert silently inverts.
+# Returns 0 conformant, 1 non-conformant.
+_close_class_line_conformant() {
+  local _l="$1"
+  /usr/bin/grep -qE '^\*\*Close-Class-Telemetry:\*\* retro-conformance .+; lessons-population .+; carry-forward-closure .+; pattern-emergence .+; rollup-presence .+; evidence-preservation .+; evidence-close-gate .+; mechanism: .+$' <<<"$_l"
+}
+
+# Measuredness (anti-vacuity) predicate — a SUPPLEMENT to the schema predicate
+# above, never a replacement. Schema conformance is satisfied by a line whose
+# every rate slot reads `N/A`, which is a reachable and lawful emission; this
+# predicate asks the different question of whether the line carries at least one
+# COMPUTED ratio (`<n>/<d> (<r>)`). Note the property this does NOT have: its
+# freedom from false positives is conditional on the cutover anchor admitting no
+# pre-mechanism row, and it is asserted here as a diagnostic precisely because
+# that condition is not something a producer can establish.
+# Returns 0 measured, 1 vacuous.
+_close_class_line_measured() {
+  local _l="$1"
+  /usr/bin/grep -qE '[0-9]+/[0-9]+ \([01]\.[0-9]{2}\)' <<<"$_l"
+}
+
+phase_inject_close_class_telemetry_field() {
+  # LOOKUP SITE 1 of 2 — resolve the surface first; probe and write consume this
+  # ONE answer so they cannot disagree about which file they mean.
+  local target_log _surfaces
+  target_log="$(_resolve_deployment_log_target "$VERSION" || true)"
+  _surfaces="$(_deployment_log_surfaces_desc)"
+
+  if [[ -z "$target_log" ]]; then
+    # Near-unreachable in the sequenced runner (6.5 hard-FAILs on this exact
+    # condition three phases earlier), implemented anyway: the phase has to be
+    # correct when driven standalone, and a guard whose correctness depends on
+    # its caller is not a guard.
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "inject_close_class_telemetry_field" "DRY-RUN" "would FAIL: no **Result:** line in the $VERSION Deployment Log block on any surface, so the write target is unresolvable (searched: $_surfaces)"
+      return 0
+    fi
+    mark_phase "inject_close_class_telemetry_field" "FAIL" "write target unresolvable — no **Result:** line in the $VERSION Deployment Log block on any surface (searched: $_surfaces)"
+    return 3
+  fi
+  local target_name; target_name="$(/usr/bin/basename "$target_log")"
+
+  # LOOKUP SITE 2 of 2 — idempotent, block-scoped, ON THE RESOLVED SURFACE.
+  if /usr/bin/awk -v ver="$VERSION" '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { inblk = 1; next }
+      inblk && line ~ /^#### / { inblk = 0 }
+      inblk && line ~ /^\*\*Close-Class-Telemetry:\*\*/ { found = 1 }
+      END { exit(found ? 0 : 1) }
+    ' "$target_log" 2>/dev/null; then
+    mark_phase "inject_close_class_telemetry_field" "SKIPPED" "**Close-Class-Telemetry:** already present in the $VERSION Deployment Log block ($target_name)"
+    return 0
+  fi
+
+  # ── Value. Resolved BEFORE the dry-run branch so a dry run prints the exact
+  # bytes --apply will write. Under the Indicator-5 fix those bytes no longer
+  # depend on anything an earlier phase in THIS run wrote, so dry-run and apply
+  # resolve identically by construction rather than by convention.
+  if [[ ! -x "$COMPUTE_CLOSE_CLASS_TELEMETRY" ]]; then
+    mark_phase "inject_close_class_telemetry_field" "SKIPPED" "compute-close-class-telemetry.sh not executable — no field written. The field asserts 'mechanism: compute-close-class-telemetry.sh'; composing one without that mechanism would fabricate the claim the field exists to measure."
+    return 0
+  fi
+
+  local _cct_args=( "$VERSION" --milestone "$MILESTONE" )
+  # Sentinel-preserved capture with explicit status propagation — the
+  # emit_derived_entry / 6.6 idiom, for the same two reasons: `$( )` strips
+  # trailing newlines, and `$?` after a pipeline reports the wrong status.
+  local _out _rc=0
+  _out="$("$COMPUTE_CLOSE_CLASS_TELEMETRY" "${_cct_args[@]}" 2>/dev/null; _prc=$?; /usr/bin/printf 'X'; exit "$_prc")" || _rc=$?
+  _out="${_out%X}"
+  local _stripped
+  _stripped="$(/usr/bin/printf '%s' "$_out" | /usr/bin/tr -d '[:space:]')"
+
+  if [[ "$_rc" -eq 2 ]]; then
+    # Source integrity, not a degraded environment: a register that exists but
+    # cannot be read. Escalate rather than record an N/A that would misreport a
+    # permissions fault as an absent artifact.
+    local _e2="compute-close-class-telemetry.sh exited 2 — a register exists but is UNREADABLE (source-integrity condition, not an absent register). No field written; fix the register's readability and re-run."
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "inject_close_class_telemetry_field" "DRY-RUN" "would FAIL: $_e2"
+      return 0
+    fi
+    mark_phase "inject_close_class_telemetry_field" "FAIL" "$_e2"
+    return 3
+  fi
+  if [[ "$_rc" -ne 0 || -z "$_stripped" ]]; then
+    # rc 1 is argument validation — a defect in THIS call site, not a condition
+    # of the release. Exit-0-with-empty-stdout is a real failure mode of a
+    # captured producer and is NOT covered by an exit-code check.
+    local _e1="compute-close-class-telemetry.sh failed (exit $_rc) or returned no value — no field written. Exit 1 is argument validation, i.e. a defect in this invocation rather than a property of the release; every degraded environment (no gh, no register) exits 0 with an N/A-bearing line instead."
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "inject_close_class_telemetry_field" "DRY-RUN" "would FAIL: $_e1"
+      return 0
+    fi
+    mark_phase "inject_close_class_telemetry_field" "FAIL" "$_e1"
+    return 3
+  fi
+
+  # The field is ONE line by contract (close-class-telemetry.md § 3.2). Take the
+  # first; a producer that emitted more is caught by the grammar assert below
+  # rather than smuggled into the ledger.
+  local _line="**Close-Class-Telemetry:** ${_out%%$'\n'*}"
+
+  # ── Grammar self-assert, BEFORE any write. FATAL.
+  if ! _close_class_line_conformant "$_line"; then
+    local _why="does not carry the eight § 3.2 slots in order (retro-conformance; lessons-population; carry-forward-closure; pattern-emergence; rollup-presence; evidence-preservation; evidence-close-gate; mechanism:)"
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "inject_close_class_telemetry_field" "DRY-RUN" "would FAIL: the composed **Close-Class-Telemetry:** field is not schema-conformant — it $_why: '$_line'"
+      return 0
+    fi
+    mark_phase "inject_close_class_telemetry_field" "FAIL" "the composed **Close-Class-Telemetry:** field is not schema-conformant — it $_why: '$_line'"
+    return 3
+  fi
+
+  # ── Measuredness arm. DIAGNOSTIC, not fatal (see property 3 above). The
+  # disposition is read from the emitted LINE because the exit code cannot carry
+  # it — the tool exits 0 on the gh-less path exactly as it does on a fully
+  # measured one.
+  local _vac=""
+  if ! _close_class_line_measured "$_line"; then
+    _vac=" — WARNING: this field carries NO computed ratio (every rate slot resolved N/A), so it records that the release closed without a measurable close-quality reading rather than a reading itself."
+    if /usr/bin/grep -qF 'gh unavailable' <<<"$_line"; then
+      _vac="$_vac Disposition read from the emitted line: gh was unavailable, which degrades Indicators 3 and 6 together."
+    fi
+    if /usr/bin/grep -qF 'no retro register found' <<<"$_line"; then
+      _vac="$_vac Disposition read from the emitted line: no retro register resolved, which degrades Indicators 1, 2 and 5 together."
+    fi
+    _vac="$_vac Written as measured — an honest N/A is the mandated form; deploy.sh Check 48 sub-check (l) is where the same reading becomes a finding."
+  fi
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "inject_close_class_telemetry_field" "DRY-RUN" "would insert '$_line' after **Outcome rationale:** in the $VERSION Deployment Log block ($target_name)${_vac}"
+    return 0
+  fi
+
+  # ── Insert after `**Outcome rationale:**`, falling back to `**Outcome:**` when
+  # the block carries no rationale line (exit 4 = block present, anchor absent —
+  # distinguishable from exit 3 = block absent, which stays fatal). TWO live
+  # limbs, not more: _resolve_deployment_log_target only resolves blocks carrying
+  # `**Result:**`, and 6.5 has already placed `**Outcome:**` in the same block, so
+  # a third fallback would be unreachable code.
+  local _irc=0 _anchor_desc="after **Outcome rationale:**"
+  _insert_field_after_in_block "$target_log" "$VERSION" '**Outcome rationale:**' "$_line" || _irc=$?
+  if [[ "$_irc" -eq 4 ]]; then
+    _irc=0
+    _anchor_desc="after **Outcome:** (the block carries no **Outcome rationale:** field)"
+    _insert_field_after_in_block "$target_log" "$VERSION" '**Outcome:**' "$_line" || _irc=$?
+  fi
+  if [[ "$_irc" -ne 0 ]]; then
+    mark_phase "inject_close_class_telemetry_field" "FAIL" "could not insert **Close-Class-Telemetry:** into the $VERSION Deployment Log block (block or **Outcome:** anchor not found in $target_name; searched: $_surfaces)"
+    return 3
+  fi
+
+  # Same registration as 6.5/6.6 — this phase resolves the same target and is
+  # subject to the same staging omission (#4710).
+  _record_touched_archive_segment "$target_log"
+
+  mark_phase "inject_close_class_telemetry_field" "PASS" "injected the **Close-Class-Telemetry:** field $_anchor_desc in the $VERSION Deployment Log block ($target_name): '$_line'${_vac}"
   return 0
 }
 
@@ -5566,6 +5797,249 @@ EOF
   MILESTONE="$_vl_saved_ms"; MERGE_SHA="$_vl_saved_sha"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # ── Test 4c.6: phase_inject_close_class_telemetry_field (6.8) — offline, hermetic.
+  #
+  # The producer is STUBBED (the real one reaches `gh` and the operator-instance
+  # registers) but every stub emits the REAL § 3.2 shape, so the grammar and
+  # measuredness asserts run against realistic bytes.
+  #
+  # THE ARM THAT MATTERS IS THE VACUITY PAIR. A structurally perfect line whose
+  # every rate slot reads `N/A` is REACHABLE at exit 0 (no gh degrades Indicators
+  # 3 and 6; no register degrades 1, 2 and 5; the conditions co-occur), and it
+  # satisfies the grammar assert completely. Two runs identical except for that
+  # property must produce DIFFERENT outcome details — a fixture whose two arms
+  # agree would be measuring nothing, which is the same broken-probe shape the
+  # Indicator-5 fix exists to remove. Note the deliberate severity asymmetry:
+  # producer-side the vacuity reading is a WARNING on a written field, gate-side
+  # (deploy.sh Check 48 sub-check l-3a) the same reading is a finding.
+  #
+  # Indicator 5's own bivalence (marker present -> present / absent -> absent /
+  # no register -> N/A) is NOT re-tested here: it is a property of
+  # compute-close-class-telemetry.sh and is asserted in that tool's own
+  # --self-test (its Tests 5b-5d, including the substring-vs-whole-line control).
+  # Re-driving it through a stub here would assert the stub, not the tool.
+  local _cc_saved_log="$RELEASE_LOG" _cc_saved_ver="$VERSION" _cc_saved_mode="$MODE"
+  local _cc_saved_tool="$COMPUTE_CLOSE_CLASS_TELEMETRY" _cc_saved_ms="$MILESTONE"
+  local _cc_tmp; _cc_tmp="$(/usr/bin/mktemp -d -t closeclass-selftest.XXXXXX)"
+  MODE="apply"; MILESTONE="999"
+  RELEASE_LOG="$_cc_tmp/RELEASE_LOG.md"
+
+  local _cc_ok="$_cc_tmp/cct-ok.sh" _cc_vac="$_cc_tmp/cct-vac.sh" _cc_bad="$_cc_tmp/cct-bad.sh"
+  local _cc_empty="$_cc_tmp/cct-empty.sh" _cc_e2="$_cc_tmp/cct-e2.sh" _cc_noexec="$_cc_tmp/cct-noexec.sh"
+  /bin/cat > "$_cc_ok" <<'EOF'
+#!/bin/sh
+echo "retro-conformance 10/10 (1.00); lessons-population 8/10 (0.80); carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 12/13 (0.92); evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh"
+EOF
+  # Conformant AND vacuous: the reachable gh-less + no-register shape.
+  /bin/cat > "$_cc_vac" <<'EOF'
+#!/bin/sh
+echo "retro-conformance N/A — no retro register found for v9.96; lessons-population N/A — no lessons register found; carry-forward-closure N/A — gh unavailable — carry-forward closure not computed; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence N/A — no retro register found; evidence-preservation N/A — gh unavailable — phase-evidence preservation not computed; evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh"
+EOF
+  /bin/cat > "$_cc_bad" <<'EOF'
+#!/bin/sh
+echo "retro-conformance 10/10 (1.00); rollup-presence present; mechanism: compute-close-class-telemetry.sh"
+EOF
+  /bin/cat > "$_cc_empty" <<'EOF'
+#!/bin/sh
+printf '  \n'
+exit 0
+EOF
+  /bin/cat > "$_cc_e2" <<'EOF'
+#!/bin/sh
+echo "ERROR: retro register exists but is unreadable" >&2
+exit 2
+EOF
+  /bin/cat > "$_cc_noexec" <<'EOF'
+#!/bin/sh
+echo "this stub is deliberately NOT chmod +x"
+EOF
+  /bin/chmod +x "$_cc_ok" "$_cc_vac" "$_cc_bad" "$_cc_empty" "$_cc_e2"
+
+  # v9.96 carries **Outcome rationale:** (primary anchor); v9.97 carries only
+  # **Outcome:** (fallback anchor); v9.98 is an untouched sibling.
+  local _cc_write
+  _cc_write() {
+    /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+
+#### Deployment Log v9.96
+**Cycle-Time:** 3d 4h.
+**Result:** SUCCESS — green CI.
+**Outcome:** SUCCESS
+**Outcome rationale:** every declared limb landed.
+
+#### Deployment Log v9.97
+**Cycle-Time:** 1d 0h.
+**Result:** SUCCESS — no rationale line.
+**Outcome:** SUCCESS
+
+#### Deployment Log v9.98
+**Cycle-Time:** 2d 0h.
+**Result:** SUCCESS — untouched sibling.
+**Outcome:** SUCCESS
+EOF
+  }
+  # Count `**Close-Class-Telemetry:**` lines inside ONE version's block on ONE file.
+  local _cc_count
+  _cc_count() {
+    /usr/bin/awk -v ver="$2" '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { inblk = 1; next }
+      inblk && line ~ /^#### / { inblk = 0 }
+      inblk && line ~ /^\*\*Close-Class-Telemetry:\*\*/ { n++ }
+      END { print n + 0 }
+    ' "$1" 2>/dev/null || echo 0
+  }
+  # Field-name sequence inside a version's block — proves POSITION, not presence.
+  # The field-name class admits a SPACE: `**Outcome rationale:**` is a real field
+  # in this block and the space-less class used elsewhere silently drops it,
+  # which would collapse the primary-anchor arm and the fallback-anchor arm onto
+  # the same expected string and make the pair unfalsifiable.
+  local _cc_seq
+  _cc_seq() {
+    /usr/bin/awk -v ver="$2" '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { inblk = 1; next }
+      inblk && line ~ /^#### / { inblk = 0 }
+      inblk && line ~ /^\*\*[A-Za-z][A-Za-z -]*:\*\*/ {
+        n = line; sub(/:\*\*.*$/, "", n); sub(/^\*\*/, "", n); printf "%s ", n
+      }
+    ' "$1" 2>/dev/null || true
+  }
+
+  COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_ok"
+
+  # (a) clean block, primary anchor — PASS, positioned after **Outcome rationale:**.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; VERSION="v9.96"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field)" == PASS\|* ]] || { echo "FAIL: close-class inject on a clean block should PASS, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  local _cc_s; _cc_s="$(_cc_seq "$RELEASE_LOG" v9.96)"
+  [[ "$_cc_s" == "Cycle-Time Result Outcome Outcome rationale Close-Class-Telemetry " ]] || { echo "FAIL: field order must place Close-Class-Telemetry after 'Outcome rationale', got '$_cc_s'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.98)" -eq 0 ]] || { echo "FAIL: the field leaked into the sibling v9.98 block"; failures=$((failures+1)); }
+
+  # (b) idempotent re-run — SKIPPED, no duplicate.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field)" == SKIPPED\|* ]] || { echo "FAIL: close-class re-run must SKIP, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 1 ]] || { echo "FAIL: re-run must not duplicate the **Close-Class-Telemetry:** line"; failures=$((failures+1)); }
+
+  # (c) FALLBACK ANCHOR — a block with **Outcome:** but no rationale line still
+  # lands the field, immediately after **Outcome:**.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; VERSION="v9.97"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field)" == PASS\|* ]] || { echo "FAIL: fallback-anchor inject should PASS, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  _cc_s="$(_cc_seq "$RELEASE_LOG" v9.97)"
+  [[ "$_cc_s" == "Cycle-Time Result Outcome Close-Class-Telemetry " ]] || { echo "FAIL: fallback anchor must place the field after **Outcome:**, got '$_cc_s'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'carries no **Outcome rationale:** field' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: the fallback path must name which anchor it used, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+
+  # (d) THE VACUITY PAIR — the arm this phase exists to make observable. Both
+  # lines are grammar-conformant; only one carries a computed ratio. The two
+  # arms MUST disagree.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; VERSION="v9.96"; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_vac"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field)" == PASS\|* ]] || { echo "FAIL: an all-N/A but conformant field must still be WRITTEN (an honest N/A is the mandated form; a degraded environment is not a close-out failure), got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 1 ]] || { echo "FAIL: the vacuous-but-conformant field must be written exactly once"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'carries NO computed ratio' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: a field with no computed ratio must say so — silence here is how a vacuous row reads as a measured one; got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'gh was unavailable' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: the disposition must be read from the emitted LINE (the exit code cannot carry it — the gh-less path exits 0), got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  # CONTROL — the measured line must NOT carry the vacuity warning. Without this
+  # arm the assert above is satisfied by a phase that always warns.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_ok"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  if /usr/bin/grep -qF 'carries NO computed ratio' <<<"$(get_phase inject_close_class_telemetry_field)"; then
+    echo "FAIL: control — a MEASURED field must NOT carry the vacuity warning (the arm above would be vacuous)"; failures=$((failures+1))
+  fi
+
+  # (e) non-conformant producer output — FAIL, and nothing is written.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_bad"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: a line missing § 3.2 slots must FAIL the grammar self-assert, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 0 ]] || { echo "FAIL: a grammar failure must write nothing"; failures=$((failures+1)); }
+
+  # (f) empty capture at exit 0 — FAIL, writes nothing. A `$( )` capture can be
+  # EMPTY at exit 0, which an exit-code check alone cannot see.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_empty"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: an empty producer capture at exit 0 must FAIL, never write a bare field, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 0 ]] || { echo "FAIL: an empty capture must write nothing"; failures=$((failures+1)); }
+
+  # (g) exit 2 — SOURCE INTEGRITY, escalated with its own diagnostic rather than
+  # folded into the generic failure. Exit 2 means a register EXISTS but is
+  # UNREADABLE; recording an N/A here would misreport a permissions fault as an
+  # absent artifact.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_e2"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: producer exit 2 must FAIL, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'UNREADABLE' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: exit 2 must be reported as a source-integrity condition, not a generic producer failure, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 0 ]] || { echo "FAIL: a source-integrity abort must write nothing"; failures=$((failures+1)); }
+
+  # (h) producer NOT executable — SKIP, write nothing. The field asserts
+  # `mechanism: compute-close-class-telemetry.sh`; composing one without that
+  # mechanism fabricates the claim the field exists to measure.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_noexec"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field)" == SKIPPED\|* ]] || { echo "FAIL: a non-executable producer must SKIP, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 0 ]] || { echo "FAIL: a missing producer must write nothing — a hand-composed field would fabricate its own mechanism claim"; failures=$((failures+1)); }
+
+  # (i) dry-run — marks DRY-RUN, prints the RESOLVED bytes, writes nothing. Under
+  # the Indicator-5 fix the resolved value reads nothing an earlier phase in this
+  # run wrote, so dry-run and apply resolve the same bytes by construction.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_ok"; MODE="dry-run"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: dry-run must mark DRY-RUN, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'retro-conformance 10/10 (1.00)' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: dry-run must print the RESOLVED bytes, not a predicted string, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 0 ]] || { echo "FAIL: dry-run must not write"; failures=$((failures+1)); }
+  MODE="apply"
+
+  # (j) CO-LOCATION over an ARCHIVED block. The field must land in the SEGMENT,
+  # beside its own **Result:**, with the hot stub left at zero. A hot-ledger write
+  # exits 0, passes a corpus-wide grep AND passes the grammar assert — co-location
+  # is the only observable that separates the two, and it is the producer-side
+  # twin of Check 48 sub-check l-1.
+  local _cc_atmp; _cc_atmp="$(/usr/bin/mktemp -d -t closeclass-arch.XXXXXX)"
+  local _cc_aseg="$_cc_atmp/RELEASE_LOG_ARCHIVE-v9.md"
+  RELEASE_LOG="$_cc_atmp/RELEASE_LOG.md"
+  /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+
+#### Deployment Log v9.96
+_Archived: [segment](RELEASE_LOG_ARCHIVE-v9.md)_
+EOF
+  /bin/cat > "$_cc_aseg" <<'EOF'
+# RELEASE_LOG_ARCHIVE-v9
+
+#### Deployment Log v9.96
+**Cycle-Time:** 5d 0h.
+**Result:** SUCCESS — archived body.
+**Outcome:** SUCCESS
+EOF
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  VERSION="v9.96"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field)" == PASS\|* ]] || { echo "FAIL: archived-block close-class inject should PASS, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$_cc_aseg" v9.96)" -eq 1 ]] || { echo "FAIL: the close-class field must land in the ARCHIVE SEGMENT for an archived block"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 0 ]] || { echo "FAIL: nothing may be written into the hot stub when the body is archived (split record: parses fine, still broken)"; failures=$((failures+1)); }
+  # cross-surface idempotency — the probe must read the SEGMENT, not the stub.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field)" == SKIPPED\|* ]] || { echo "FAIL: archived-block re-run must SKIP (cross-surface idempotency), got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$_cc_aseg" v9.96)" -eq 1 ]] || { echo "FAIL: archived-block re-run must not duplicate the field in the segment"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_cc_atmp" 2>/dev/null || true
+  /bin/rm -rf "$_cc_tmp" 2>/dev/null || true
+  unset -f _cc_write _cc_count _cc_seq
+  RELEASE_LOG="$_cc_saved_log"; VERSION="$_cc_saved_ver"; MODE="$_cc_saved_mode"
+  COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_saved_tool"; MILESTONE="$_cc_saved_ms"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # Test 4d: phase_detect_open_issues exclude filter (#38, #3665) — offline, hermetic.
   # Stubs $GH so `gh issue list … --json number,title,labels --jq …` returns a fixed
   # `<number>\t<labels-csv>\t<title>` fixture (gh applies --jq server-side, so the
@@ -7622,6 +8096,7 @@ PY
   echo "  phase_append_release_digest + phase_append_release_index + phase_append_changelog validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency; #2048 — version-less marker + _unversioned notes link + marker-aware idempotency + CHANGELOG SKIP; #4455 — all three entries PROJECTED by generate_release_index.py, versioned CHANGELOG block lands above the prior entry WITH its separating blank line intact, re-run SKIPs, and a non-owner/repo-shaped REPO_SLUG FAILs before writing a broken Release URL)" >&2
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped; #3715 two-surface — archived body resolves to its segment and the hot ledger is left untouched / cross-surface idempotency re-run SKIPs without duplicating / a genuine **Result:** absence still hard-FAILs naming every surface searched / no sibling leak within a segment)" >&2
   echo "  phase_inject_velocity_field + phase_append_release_learnings validated (velocity — field ORDER 'Cycle-Time Velocity Result' on a clean block / no sibling leak / idempotent re-run / bolded-numeral value REJECTED writing nothing / empty capture at exit 0 degrades to an explicit N/A never a bare field / non-conformant existing field SKIPs WITH the warning, conformant control WITHOUT it; CO-LOCATION — an archived block's field lands in the SEGMENT beside its own **Result:** and the hot stub stays at 0, cross-surface re-run SKIPs, dry-run names the segment and prints the RESOLVED bytes. learnings — sibling H4 placed IMMEDIATELY after its Deployment Log block / body intact through the sentinel capture / idempotent re-run / whitespace-only render at exit 0 FAILs writing nothing / D-1 zero-source-events BLOCKS the close and prints the capture remedy, >0-events control PASSes / over an ARCHIVED block the block still lands in the HOT ledger and every segment stays at 0 Release Learnings — RECORDS_POLICY KEEP_CLASS)" >&2
+  echo "  phase_inject_close_class_telemetry_field validated (#4437 — clean block PASSes with the field positioned after **Outcome rationale:** and no sibling leak / idempotent re-run SKIPs / fallback anchor lands after **Outcome:** and names which anchor it used / VACUITY PAIR: an all-N/A-but-conformant line is WRITTEN and carries the no-computed-ratio warning WITH the disposition read from the emitted line, measured-line control carries NO warning / a line missing § 3.2 slots FAILs writing nothing / an empty capture at exit 0 FAILs writing nothing / producer exit 2 escalates as a source-integrity condition writing nothing / a non-executable producer SKIPs rather than hand-composing a field that would fabricate its own mechanism claim / dry-run prints the RESOLVED bytes and writes nothing / CO-LOCATION: an archived block's field lands in the SEGMENT beside its own **Result:** with the hot stub at 0, and the cross-surface re-run SKIPs)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache)" >&2
   echo "  post_gate_passage_proof three-rung target ladder validated (#3819 — T-13 rung 1 resolves a CLOSED Stage-13 sub-task via --state all and does NOT fall through to the PR / rung 2 posts to the release PR naming the OBSERVED rung-1 reason / rung 3 MANUAL names BOTH attempted targets; T-14 two collect_open_release_issues calls in one run keep EXCLUDED_DETAIL undoubled, COLLECTED_OPEN_ISSUES identical and resolve_stage13_subtask stable, with a non-empty-exclusion anti-vacuity control)" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
@@ -7764,6 +8239,7 @@ phase_transition_release_log || { generate_report; exit 3; }
 phase_inject_outcome_field || { generate_report; exit 3; }            # Phase 6.5 — **Outcome:** field on the visible-H4 Deployment Log block (#37)
 phase_inject_velocity_field || { generate_report; exit 3; }           # Phase 6.6 — **Velocity:** field after **Cycle-Time:** (stage-13-close.md Phase B-velocity); ordered AFTER 6.5 so the write surface is already proven to resolve
 phase_append_release_learnings || { generate_report; exit 3; }        # Phase 6.7 — `#### Release Learnings v<X.Y>` sibling H4 (stage-13-close.md Phase A7); hot ledger only per RECORDS_POLICY KEEP_CLASS
+phase_inject_close_class_telemetry_field || { generate_report; exit 3; }  # Phase 6.8 — **Close-Class-Telemetry:** field (close-class-telemetry.md § 3.2); ordered AFTER 6.5 so the **Outcome:** insert anchor already exists
 phase_append_release_index || { generate_report; exit 3; }
 phase_append_release_digest || { generate_report; exit 3; }
 phase_append_reversions || { generate_report; exit 3; }                # Phase 8.5 — re-version ledger (#1679; N/A on the common no-collision path)
