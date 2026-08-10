@@ -477,6 +477,61 @@ scaffold_roster() {
   info "Scaffolded people-roster → ${roster_file}"
 }
 
+# --- Phase 2.5e: ambient-intake directory scaffold (the drop-zone back-fill) ---
+# Create-once ONLY: the ambient-intake capability's three operator-instance
+# directories. Mirrors scaffold_needles / scaffold_roster exactly — an existing
+# directory is PRESERVED and its contents are never regenerated, because these
+# hold operator content: dropped transcripts and emails, the dedup cursor, the
+# two sweep run-logs, and the external-sync poll snapshot.
+#
+# Scaffolding them HERE, on the update path, is what delivers the capability to
+# workspaces that already exist. Installing them only at fresh install would
+# leave every deployed workspace inert — which is the whole defect: the
+# capability shipped specification-complete and activation-incomplete, and no
+# installer, deploy or update path ever created a single one of its directories.
+#
+# Resolved through the instance-path resolver, never a literal, so a relocated
+# instance base — an operator.toml override, an instance-path environment
+# override, or a future relocation of the operator-instance family — provisions
+# in the right place by construction rather than by a second list needing the
+# same edit.
+#
+# This phase provisions directories and nothing else. Registering the scheduled
+# sweep is an operator step on an agent-runtime surface this script cannot
+# reach, documented in docs/INSTALL.md; an empty directory has no behavior, so
+# creating one on an existing workspace changes nothing the operator did not ask
+# for.
+scaffold_ambient_dirs() {
+  info "Phase 2.5e: ambient-intake directory scaffold (create-once; never regenerated)"
+  resolve_instance_dir
+  if [ -z "${INSTANCE_DIR}" ]; then
+    warn "Instance dir unresolved; skipping ambient-intake scaffold"
+    return 0
+  fi
+  if ! command -v pmo_inbox_path_for >/dev/null 2>&1; then
+    warn "Ambient-intake resolvers unavailable; skipping ambient-intake scaffold"
+    return 0
+  fi
+  local d
+  for d in "$(pmo_inbox_path_for "${WORKSPACE_ROOT}")" \
+           "$(pmo_ambient_intake_path_for "${WORKSPACE_ROOT}")" \
+           "$(pmo_external_sync_path_for "${WORKSPACE_ROOT}")"; do
+    if [ -d "${d}" ]; then
+      info "PRESERVED (operator data, never regenerated): ${d}"
+      continue
+    fi
+    if [ "${DRY_RUN}" -eq 1 ]; then
+      info "[dry-run] would scaffold ambient-intake dir → ${d}"
+      continue
+    fi
+    if mkdir -p "${d}"; then
+      info "Scaffolded ambient-intake dir → ${d}"
+    else
+      warn "Could not create ambient-intake dir (continuing): ${d}"
+    fi
+  done
+}
+
 # --- Phase 2.5d: operator settings-overlay scaffold (ADR-121 §Decision 7) ---
 # Create-once ONLY: write an empty {} to <ws>/.claude/settings.local.json if and only
 # if it does NOT already exist. update.sh must NEVER regenerate this file (it is pure
@@ -830,6 +885,10 @@ else
   backup_instance_dir
   scaffold_needles
   scaffold_roster
+  # Not a member of surfaces_only_flow — that flow omits scaffold_needles and
+  # scaffold_roster for the same reason: --surfaces-only regenerates composition
+  # surfaces, it does not scaffold operator-instance state.
+  scaffold_ambient_dirs
   scaffold_settings_local
   regenerate_managed_sections
   redeploy_skills
