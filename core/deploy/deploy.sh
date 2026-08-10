@@ -12129,9 +12129,9 @@ cmd_check_release_corpus() {
 # ─── Mode: --check-package-freshness (the CI .skill content-freshness probe) — #2656 ─
 #
 # Runs ONLY Check 7's package content-freshness verdict — the FULL rostered-skill
-# content-hash comparison, no per-skill diff-scoping (the WORKFLOW path-filters the
-# TRIGGER, so no parallel scoping logic lives here; a stale package for ANY skill
-# correctly blocks) — and maps the verdict to an EXIT CODE for the CI gate.
+# content-hash comparison, no per-skill diff-scoping (the workflow runs filter-free under the
+# always-reports posture, so no parallel scoping logic lives here; a stale package
+# for ANY skill correctly blocks) — and maps the verdict to an EXIT CODE for the CI gate.
 # Warn-vs-enforce at the CI surface is decided by the committed
 # .github/skill-package-freshness.enforce sentinel. Mirrors cmd_check_close_completeness.
 #
