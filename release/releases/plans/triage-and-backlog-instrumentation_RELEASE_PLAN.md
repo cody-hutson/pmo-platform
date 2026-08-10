@@ -10,6 +10,8 @@ This file is the Stage-4 release plan, committed as **Engineering Commit 0** on 
 
 Card index for this release. Every issue reference in this plan resolves against this table — including the File Change Matrix rows, whose Issue column indexes back to this table rather than making free-standing prose references.
 
+**File-surface reconciliation — the detection-leg card.** Its Stage-5 design carries three files where the Stage-4 matrix showed two. `core/deploy/deploy.sh` joined the surface because a leg with no consumer branch emits output nobody reads and its severity posture is unassertable; the Stage-4 Contention Map anticipated exactly that, and the edit is confined to the Check 56 region it names. The third file is `core/deploy/tools/README.md`, whose matrix row is claimed by the README-coverage card sequenced immediately before this one. Per the coverage rule that card establishes, this card **edits the existing row's cells in place and never appends a second row** — so the two cards share one row rather than contending for it, and the exactly-one-row-per-basename invariant holds. The row is stated here rather than duplicated in the matrix body: `| core/deploy/tools/README.md | MODIFY — the existing row's Mode(s) and Purpose cells extended in place to name the new leg, its counters and its scan states; never a second row |`. **The release path count is unchanged at 17** — that path was already in the machine-readable list, which is the contract Stage 7/8/9 extract.
+
 | Card | Size | One-line scope |
 |---|---|---|
 | #4463 | `size:M` | Lint-card AC sets gain a precision obligation — a named near-miss the check must not flag, at each narrowing invocation parameter |
