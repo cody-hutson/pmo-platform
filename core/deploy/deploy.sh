@@ -9644,7 +9644,15 @@ sys.stdout.write("".join(out) + "|")
       # that emitted neither, which is a shape change and not a clean result.
       if [[ $c55_exit -eq 0 || $c55_exit -eq 1 ]]; then
         local c55_h3 c55_h3_count c55_h3_skip
-        c55_h3=$(echo "$c55_out" | awk -F'\t' '$1=="H3"{print "#"$2" ("$3"; matched "$4"; refs "$5")"}' | paste -sd'; ' -)
+        # Joined by awk with an explicit "; ", NOT `paste -sd'; '` — paste's -d
+        # takes a CYCLING LIST of delimiters, so a two-character argument spends
+        # ';' on one boundary and a bare ' ' on the next. At three or more
+        # findings that alternation makes the record boundary ambiguous, because
+        # every H3 record already contains both a ';' and spaces of its own: a
+        # 4-row emit renders "…);#575 …) #900 …);#901", where the middle
+        # boundary is indistinguishable from an intra-record space. Verified on a
+        # 4-row emit, not inferred. Same form Check 56's M2 and M4 joins use.
+        c55_h3=$(echo "$c55_out" | awk -F'\t' '$1=="H3"{printf "%s#%s (%s; matched %s; refs %s)", (n++ ? "; " : ""), $2, $3, $4, $5}')
         c55_h3_count=$(echo "$c55_out" | awk -F'\t' '$1=="COUNT_H3"{print $2}')
         c55_h3_skip=$(echo "$c55_out" | awk -F'\t' '$1=="SKIP" && $2=="H3"{print $3}')
         if [[ -n "$c55_h3" ]]; then
