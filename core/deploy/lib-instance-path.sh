@@ -170,16 +170,29 @@ pmo_evals_results_path() {
 # Usage: pmo_<member>_path_for <workspace-root>
 
 # Private. Read one key from the canonical operator.toml, else empty. Mirrors
-# pmo_evals_results_path()'s read verbatim — same canonical XDG location, same
-# `|| true` tolerance for an absent key under `set -euo pipefail`, same
-# first-match-wins. Factored so the three resolvers below share one reader
-# rather than triplicating it; a fourth ambient member costs one more one-line
-# public function and no new logic.
+# pmo_evals_results_path()'s read in every observable respect — same canonical
+# XDG location, same `|| true` tolerance for an absent key under
+# `set -euo pipefail`, same first-match-wins. Factored so the three resolvers
+# below share one reader rather than triplicating it; a fourth ambient member
+# costs one more one-line public function and no new logic.
+#
+# ONE deliberate departure from that reader's literal form: first-match-wins is
+# taken with `grep -m1` rather than by piping an unbounded grep into `head -1`.
+# The two are equivalent on the value returned and differ on the exit status. In
+# the `| head -1` form the reader closes the pipe at its first line while the
+# writer still has output to push; the writer's next write then fails on the
+# broken pipe, and under `pipefail` that failure becomes the pipeline's status —
+# so a SUCCESSFUL key read can report failure to a `set -e` caller. Where SIGPIPE
+# is fatal that surfaces as 141; where the shell inherited it as SIG_IGN (what a
+# GitHub-hosted runner hands a workflow step) it surfaces as a bare 1,
+# indistinguishable from the key legitimately being absent. `-m1` removes the
+# short-circuiting reader entirely: grep reads a FILE, stops itself at one match,
+# and awk consumes to EOF, so no writer is ever signalled.
 _pmo_instance_toml_key() {
   local _toml="${HOME}/.config/pmo-platform/operator.toml"
   [[ -r "$_toml" ]] || return 0
-  { grep -E "^$1" "$_toml" 2>/dev/null || true; } \
-    | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}'
+  { grep -m1 -E "^$1" "$_toml" 2>/dev/null || true; } \
+    | awk -F= '{gsub(/[" ]/,"",$2); print $2}'
 }
 
 # Private. Resolve one instance-member directory: operator.toml override key,

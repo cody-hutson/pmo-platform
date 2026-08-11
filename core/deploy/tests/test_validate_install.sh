@@ -81,18 +81,44 @@ report() {
   fi
 }
 
+# All three helpers below feed the haystack to grep through a HERE-STRING, never
+# through a pipe, and the choice is load-bearing rather than stylistic.
+#
+# `grep -q` stops reading at its first match. Piped (`printf … | grep -q …`) that
+# makes grep a short-circuiting reader: it closes the pipe while printf may still
+# have output to push, printf's next write fails on the broken pipe, and under the
+# `pipefail` this suite sets (line 51) printf's non-zero status becomes the
+# PIPELINE's. The predicate then reads the opposite of the truth — a SUCCESSFUL
+# match reports failure. It is a size-dependent latch, not a constant one: it can
+# only fire once the haystack exceeds the pipe capacity, so a suite whose fixtures
+# stay under it passes for years and then inverts the first time an arm's output
+# grows. Where SIGPIPE is fatal it surfaces as 141; where the shell inherited it
+# as SIG_IGN — what a GitHub-hosted runner hands a workflow step — it surfaces as
+# a bare 1, indistinguishable from grep legitimately finding nothing.
+#
+# assert_absent is where that would do real damage, and it is worth naming because
+# the damage is silent. Its arms are `match -> FAIL / no-match -> PASS`; an
+# inverted status sends a genuine match down the no-match arm, so it would report
+# PASS while the forbidden pattern sat in the output. That is a vacuous assertion
+# inside the four-arm anti-vacuity control this suite exists to be.
+#
+# A here-string has no writer to signal. grep's own exit status IS the predicate,
+# at every haystack size. `<<<"$1"` also reproduces `printf '%s\n'` exactly — it
+# appends the same single trailing newline — so the substitution changes the
+# failure mode and nothing else.
+
 # assert_line HAYSTACK REGEX NAME — pass when REGEX is present.
 assert_line() {
-  if printf '%s\n' "$1" | grep -qE "$2"; then report "$3" 1; else report "$3" 0 "expected /$2/ in output"; fi
+  if grep -qE -- "$2" <<<"$1"; then report "$3" 1; else report "$3" 0 "expected /$2/ in output"; fi
 }
 # assert_absent HAYSTACK REGEX NAME — pass when REGEX is absent.
 assert_absent() {
-  if printf '%s\n' "$1" | grep -qE "$2"; then report "$3" 0 "unexpected /$2/ in output"; else report "$3" 1; fi
+  if grep -qE -- "$2" <<<"$1"; then report "$3" 0 "unexpected /$2/ in output"; else report "$3" 1; fi
 }
 # assert_contains HAYSTACK LITERAL NAME — fixed-string form, for asserting on
 # sandbox paths whose '.' and '/' would otherwise be read as regex.
 assert_contains() {
-  if printf '%s\n' "$1" | grep -qF -- "$2"; then report "$3" 1; else report "$3" 0 "expected literal '$2' in output"; fi
+  if grep -qF -- "$2" <<<"$1"; then report "$3" 1; else report "$3" 0 "expected literal '$2' in output"; fi
 }
 # assert_eq GOT WANT NAME
 assert_eq() {
