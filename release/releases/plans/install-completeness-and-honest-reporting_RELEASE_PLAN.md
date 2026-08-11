@@ -267,7 +267,7 @@ Run the install regression suite in full and record pass and fail counts. Run th
 
 **First-parent revert of the release merge commit.** This requires a true two-parent merge commit; a squash merge would break it.
 
-All sixteen source paths revert cleanly. The mode change reverts with the tree entry — no data migration, no deploy reversal, no operator-instance state touched. The only non-git residue after a revert is the set of empty inert directories the Ambient-intake installer creates on any workspace that ran the shipped installer before the revert; they hold no data and removing them is optional.
+All seventeen source paths revert cleanly. The mode change reverts with the tree entry — no data migration, no deploy reversal, no operator-instance state touched. The only non-git residue after a revert is the set of empty inert directories the Ambient-intake installer creates on any workspace that ran the shipped installer before the revert; they hold no data and removing them is optional.
 
 **Reversibility: CHEAP · Confidence HIGH.**
 

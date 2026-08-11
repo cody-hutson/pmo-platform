@@ -27,10 +27,22 @@ Transcripts and emails land here for ambient ingest. The directory is operator c
 the directory, it does not create it. Creation is an install-time step: `create_dir_layout`
 in `docs/scripts/setup-workspace.sh` creates it (together with the C2 run-log directory and
 the C3 external-sync directory) on a fresh install, and `update.sh` back-fills all three onto
-an already-installed workspace. Both resolve the path through `pmo_inbox_path_for` in
-`core/deploy/lib-instance-path.sh` rather than a literal, so an override or a relocation of
-the operator-instance family provisions in the right place. `validate-install.sh` check A2
-asserts the three directories exist and FAILs naming any that do not. Read this section as a
+an already-installed workspace. **The two resolve the path differently, and the difference
+is load-bearing.** `update.sh` and `validate-install.sh` check A2 both resolve through
+`pmo_inbox_path_for` in `core/deploy/lib-instance-path.sh`, so they follow an override or a
+relocation of the operator-instance family. `create_dir_layout` does **not**: it uses
+`${WORKSPACE_ROOT}`-relative literals, deliberately and for a stated reason — that function
+runs before the resolver is sourced, and every sibling entry in the same layout list is
+already a workspace-relative literal (`docs/scripts/setup-workspace.sh` § Directory layout
+creation records this in full).
+
+**The consequence, stated rather than implied:** on a workspace whose operator-instance
+family has been relocated, a fresh install provisions at the default path while A2 reads the
+relocated one, so A2 FAILs naming the directories it expected. `update.sh` back-fills at the
+resolved path and clears it. Relocation-proofing therefore holds for the back-fill and
+assertion surfaces, and **not** for fresh install — do not read this section as claiming
+otherwise. `validate-install.sh` check A2 asserts the three directories exist and FAILs
+naming any that do not. Read this section as a
 declaration whose provisioning lives in those four surfaces — not as a directory that appears
 because this document says it should.
 
