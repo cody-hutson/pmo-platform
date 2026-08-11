@@ -9728,14 +9728,36 @@ sys.stdout.write("".join(out) + "|")
         # cannot be flipped to FAIL when the shared cohort graduates — the
         # constraint is a property of the emitter, not a default someone can flip.
         # No new check number and no new mode dial: M3 is a leg of Check 56.
-        local c56_m3 c56_m3_adv c56_marker
+        # `COUNT_M3 0` — and equivalently an empty M3 row set — is emitted by two
+        # OPPOSITE states: a milestone that was evaluated and is clean, and one carrying
+        # no scaffold at all (which emits `SKIP_MS <ms> not-yet-scaffolded` instead of
+        # M3_DENOM/SCAFFOLD_MARKER). Branching on the findings alone reports "no scaffold
+        # exists" as "scaffold is complete". The evaluated-vs-skipped split below is
+        # REPORTING fidelity only — a skipped milestone stays non-gating, because most
+        # open milestones legitimately have not started their release — but "0 findings"
+        # must never read as "every milestone was checked".
+        #
+        # NOTE the `$3` filter: SKIP_MS is emitted by BOTH legs, and field 3 is the only
+        # thing separating M1's `no-declared-epic` from M3's `not-yet-scaffolded`. A bare
+        # `$1=="SKIP_MS"` count silently folds the M1 skips into this denominator —
+        # measured live, that is 75 rows instead of 34.
+        #
+        # CAVEAT: both counts inherit the primitive's stage-title fetch, which reads
+        # against a 1000-result search cap with no truncation guard (measured population
+        # 3677), so the split is currently APPROXIMATE and varies run to run. Reporting an
+        # approximate denominator is still strictly better than reporting none — the
+        # failure this replaces was silence, not imprecision — but the numbers firm up
+        # only when that fetch paginates.
+        local c56_m3 c56_m3_adv c56_marker c56_m3_skipped c56_m3_eval
         c56_m3=$(echo "$c56_out" | awk -F'\t' '$1=="M3"{print "ms#"$2":"$3" "$4}' | paste -sd'; ' -)
         c56_m3_adv=$(echo "$c56_out" | awk -F'\t' '$1=="COUNT_M3_ADV"{print $2}')
         c56_marker=$(echo "$c56_out" | awk -F'\t' '$1=="SCAFFOLD_MARKER"{print "ms#"$2" "$3}' | paste -sd', ' -)
+        c56_m3_skipped=$(echo "$c56_out" | awk -F'\t' '$1=="SKIP_MS" && $3=="not-yet-scaffolded"{n++} END{print n+0}')
+        c56_m3_eval=$(echo "$c56_out" | awk -F'\t' '$1=="M3_DENOM"{n++} END{print n+0}')
         if [[ -n "$c56_m3" ]]; then
-          flag_advisory_only "milestone-scaffold-completeness" "M3 scaffold completeness — load-bearing finding(s): $c56_m3 [advisory ${c56_m3_adv:-0}; marker adoption ${c56_marker:-none}]"
+          flag_advisory_only "milestone-scaffold-completeness" "M3 scaffold completeness — load-bearing finding(s): $c56_m3 [${c56_m3_eval} evaluated, ${c56_m3_skipped} not-yet-scaffolded; advisory ${c56_m3_adv:-0}; marker adoption ${c56_marker:-none}]"
         else
-          log "  OK:    milestone scaffold completeness (M3) — 0 load-bearing finding(s) (${c56_m3_adv:-0} advisory; marker adoption ${c56_marker:-none})"
+          log "  OK:    milestone scaffold completeness (M3) — 0 load-bearing finding(s) over ${c56_m3_eval} evaluated milestone(s); ${c56_m3_skipped} not-yet-scaffolded (NOT evaluated, non-gating) (${c56_m3_adv:-0} advisory; marker adoption ${c56_marker:-none})"
         fi
       else
         flag_warn_or_issue "milestone-epic-membership" "check errored (exit $c56_exit): $(echo "$c56_out" | head -1)"
