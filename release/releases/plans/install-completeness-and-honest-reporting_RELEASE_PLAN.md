@@ -209,6 +209,7 @@ The pre-split cross-issue criteria were authored at a twelve-card scope and do n
 | 14 | `core/standards/c1-ambient-inbox-cursor.md` | Ambient intake | MODIFY — note the install-provisioning dependency | CHEAP |
 | 15 | `core/standards/c2-intake-sweep-path-a.md` | Ambient intake | MODIFY — pointer to the documented registration home | CHEAP |
 | 16 | `core/standards/c3-external-sync-path-b.md` | Ambient intake | MODIFY — same pointer | CHEAP |
+| 17 | `core/config/allowlists/script-execution-allowlist.txt` | Dev-Testing enablement (own intake item; see D-18) | MODIFY — twelve rows plus rationale comments admitting three install-test scripts for agent-side execution | CHEAP |
 
 **Machine-readable path list.** One repository-relative path per line, no annotations, so a downstream stage extracts the set deterministically without parsing the table above.
 
@@ -229,6 +230,7 @@ core/config/operator.toml.template
 core/standards/c1-ambient-inbox-cursor.md
 core/standards/c2-intake-sweep-path-a.md
 core/standards/c3-external-sync-path-b.md
+core/config/allowlists/script-execution-allowlist.txt
 release/releases/plans/install-completeness-and-honest-reporting_RELEASE_PLAN.md
 ```
 
