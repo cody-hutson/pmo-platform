@@ -9846,6 +9846,25 @@ sys.stdout.write("".join(out) + "|")
         # (release-body-drift, decision-emission, register-runner-resolution,
         # count-structure-baseline).
         #
+        # AND THE COMMITTED DEFAULT IS CONSUMED INLINE, NEVER DELEGATED. This is
+        # the other half of the dial and it is not optional: flag_warn_or_issue
+        # RE-RESOLVES the mode itself, via `resolve_check_mode "$check_id"` with
+        # NO second argument, so it falls back to the SHARED $DEPLOY_CHECK_MODE
+        # and the committed "warn" above is silently discarded. Routing an M4
+        # finding through that helper therefore emits FAIL and increments ISSUES
+        # under a shared `enforce` with no per-check mode file — which is exactly
+        # the state this check SHIPS in, because mode files are operator-instance
+        # runtime state and none is committed. Two things break when that
+        # happens, and both are load-bearing: M4 MOVES THE EXIT CODE, which the
+        # design forbids until the leg is trusted, and the enforce arm writes NO
+        # jsonl row, destroying the shakedown record the enforce-flip decision is
+        # read from. So the mode is resolved ONCE here, with its committed
+        # default, and every M4 emit switches on THAT variable — the pattern
+        # decision-emission (Check 61), register-runner-resolution (Check 62) and
+        # count-structure-baseline (Check 63) already use. The `case` mirrors
+        # flag_warn_or_issue's own: enforce FAILs, warn WARNs and records, and
+        # `off` is silent. Do NOT "simplify" these back into that helper.
+        #
         # BRANCH ORDER IS LOAD-BEARING — the scan status is read BEFORE any
         # counter. A consumer that reads only the count consumes "the population
         # was never examined" as "the population is clean", which is the exact
@@ -9859,6 +9878,9 @@ sys.stdout.write("".join(out) + "|")
         # with COUNT_M4_OPEN and COUNT_M4_CLOSED, which would silently report a
         # sub-counter as the total — the same trap COUNT_M2_NNM documents above.
         local c56_m4_scan c56_m4_total c56_m4_enum c56_m4 c56_m4_open c56_m4_closed c56_m4_rows
+        local c56_m4_mode c56_m4_detail
+        c56_m4_mode=$(resolve_check_mode "milestone-subtask-orphan" "warn")
+        c56_m4_detail=""
         c56_m4_scan=$(echo   "$c56_out" | awk -F'\t' '$1=="M4_SCAN"{print $2}')
         c56_m4_total=$(echo  "$c56_out" | awk -F'\t' '$1=="M4_SCAN"{print $3}')
         c56_m4_enum=$(echo   "$c56_out" | awk -F'\t' '$1=="M4_SCAN"{print $4}')
@@ -9874,25 +9896,41 @@ sys.stdout.write("".join(out) + "|")
         # only, so an embedded newline would write malformed JSONL into the warn
         # log the enforce-flip decision is read from.
         c56_m4_rows=$(echo   "$c56_out" | awk -F'\t' '$1=="M4"{printf "%s#%s", (n++ ? ", " : ""), $2}')
+        # Each arm SETS the detail; the single emit below applies the severity.
+        # The two NOT-EVALUATED arms carry the dial too — a search OUTAGE says
+        # nothing about the repository's state, so it must never be the thing
+        # that fails the deploy check.
         if [[ -z "$c56_m4_scan" || "$c56_m4_scan" == "degraded" ]]; then
-          flag_warn_or_issue "milestone-subtask-orphan" "M4 NOT-EVALUATED — the milestone-less sub-task population is UNMEASURED (scan: ${c56_m4_scan:-absent}). This is not a clean result: no count was obtained, and none is being reported as zero"
+          c56_m4_detail="M4 NOT-EVALUATED — the milestone-less sub-task population is UNMEASURED (scan: ${c56_m4_scan:-absent}). This is not a clean result: no count was obtained, and none is being reported as zero"
         elif [[ "$c56_m4_scan" == "not-run" ]]; then
           log "  SKIP:  M4 sub-task milestone orphans — not run on this invocation (scan: not-run); M4 is repository-scoped and does not fire on the milestone-scoped path"
         elif [[ -z "$c56_m4" ]]; then
-          flag_warn_or_issue "milestone-subtask-orphan" "M4 NOT-EVALUATED — scan reported '$c56_m4_scan' but no parseable COUNT_M4 row was emitted; treat the population as unmeasured"
+          c56_m4_detail="M4 NOT-EVALUATED — scan reported '$c56_m4_scan' but no parseable COUNT_M4 row was emitted; treat the population as unmeasured"
         elif [[ "${c56_m4_open:-0}" -gt 0 ]]; then
-          local c56_m4_mode
-          c56_m4_mode=$(resolve_check_mode "milestone-subtask-orphan" "warn")
-          if [[ "$c56_m4_mode" == "enforce" ]]; then
-            log "  FAIL:  milestone-epic M4 — ${c56_m4_open} open sub-task(s) carry no milestone: $c56_m4_rows"
-            ISSUES=$((ISSUES + 1))
-          else
-            flag_warn_or_issue "milestone-subtask-orphan" "M4 sub-task milestone orphans — ${c56_m4_open} OPEN sub-task(s) carry no milestone and are invisible to every milestone-scoped query (warn-mode; flip milestone-subtask-orphan.mode to enforce after shakedown): $c56_m4_rows [${c56_m4_closed:-0} closed also unattached — historical, owned by the backfill work item, never gated; scan: $c56_m4_scan ${c56_m4_enum:-0}/${c56_m4_total:-0} enumerated]"
-          fi
+          c56_m4_detail="M4 sub-task milestone orphans — ${c56_m4_open} OPEN sub-task(s) carry no milestone and are invisible to every milestone-scoped query: $c56_m4_rows [${c56_m4_closed:-0} closed also unattached — historical, owned by the backfill work item, never gated; scan: $c56_m4_scan ${c56_m4_enum:-0}/${c56_m4_total:-0} enumerated]"
         else
           # The OK line states its own DENOMINATOR and SCAN STATUS, so a reader
           # can tell "zero found" from "nothing examined" without leaving the log.
           log "  OK:    milestone sub-task orphans (M4) — 0 open finding(s) of ${c56_m4:-0} examined (${c56_m4_closed:-0} closed, historical; scan: $c56_m4_scan ${c56_m4_enum:-0}/${c56_m4_total:-0} enumerated)"
+        fi
+        if [[ -n "$c56_m4_detail" ]]; then
+          case "$c56_m4_mode" in
+            enforce)
+              log "  FAIL:  milestone-subtask-orphan — $c56_m4_detail"
+              ISSUES=$((ISSUES + 1))
+              ;;
+            warn)
+              log "  WARN:  milestone-subtask-orphan — $c56_m4_detail (warn-mode; flip milestone-subtask-orphan.mode to 'enforce' after shakedown — NOT the shared deploy-check.mode, which this leg deliberately does not follow)"
+              # Same escaping contract as flag_warn_or_issue's writer: backslash
+              # then double-quote, so the row stays parseable JSONL.
+              local _c56_m4_ts _c56_m4_esc
+              _c56_m4_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              _c56_m4_esc="${c56_m4_detail//\\/\\\\}"
+              _c56_m4_esc="${_c56_m4_esc//\"/\\\"}"
+              printf '{"ts":"%s","check":"%s","detail":"%s"}\n' \
+                "$_c56_m4_ts" "milestone-subtask-orphan" "$_c56_m4_esc" >> "$WARN_LOG" 2>/dev/null || true
+              ;;
+          esac
         fi
       else
         flag_warn_or_issue "milestone-epic-membership" "check errored (exit $c56_exit): $(head -1 <<<"$c56_out")"
