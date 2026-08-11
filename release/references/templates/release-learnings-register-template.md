@@ -17,6 +17,7 @@ Fill order:
 3. Run the **Kerth Retrospective** block (Prime Directive recited first; then the 3-question framework; then the ritual of closure).
 4. Run the **PMBOK 7 Lessons-Learned** block (Situation → Outcome → Lessons → Next-cycle Actions).
 5. Record the **Triple Linkage** subsection (which triple field seeded which register section).
+6. Roll up the Stage 13 Phase **A7.1 recommendation↔choice deltas** (§ 4). This section's header is machine-read: `rollup-presence` in the `**Close-Class-Telemetry:**` field is `present` iff that header appears here verbatim, so leaving the section out is a measured absence, not a silent one.
 
 | When | Who | Output |
 |---|---|---|
@@ -107,3 +108,36 @@ This register coexists with — and consumes — the machine-generated `#### Rel
 | `Watch-for` | <…> | 2.4 Next-cycle Actions (carry-forward watch) |
 
 (If the triple block rendered `N/A — no novel learning this release`, record that here; the register's reflective sections may still carry operator-authored content that the machine triple did not capture.)
+
+---
+
+## 4. Recommendation↔choice delta roll-up (Stage 13 A7.1)
+
+*Keep this header VERBATIM.* It is the read-model's only handle on this section:
+[`compute-close-class-telemetry.sh`](../../tools/compute-close-class-telemetry.sh)
+Indicator 5 (`rollup-presence`) matches it as an **exact whole line**, so a header that
+differs by a single character — spacing, the arrow glyph, the parenthetical — reads as
+`absent` rather than failing loudly. The marker is held in that tool's own `ROLLUP_MARKERS`
+array, deliberately separate from its `CANONICAL_MARKERS` array: the latter is the
+denominator of the retro-conformance rate, and adding an eleventh entry to it would move
+every existing register from /10 to /11 and retroactively depress the calibration baseline.
+
+Roll up this release's Stage 13 Phase A7.1 `recommendation-choice-delta` rows here —
+[`query-pipeline-event.sh --event-subtype recommendation-choice-delta --release <milestone-slug>`](../../tools/query-pipeline-event.sh),
+`--release` and NOT `--version` (the release join key is the milestone slug; a raw version
+filter returns zero rows at exit 0 and the roll-up would silently report no deltas for a
+release that emitted them). `diverged` rows first. One line per delta:
+
+- `rec:` <what was recommended> — `chose:` <what was chosen> — `why:` <the reason for the divergence>
+
+A **zero-delta release records its `aligned` rows explicitly** rather than omitting the
+roll-up — an omitted section and a release with no divergences are different facts, and only
+the explicit form distinguishes them.
+
+Signal-only: the roll-up is detective. Three or more same-pattern `diverged` rows across the
+trailing window promote to an `improvement.yml` CANDIDATE through the governance gate (issue
+→ plan → PR), never an auto-change.
+
+| # | `rec:` | `chose:` | `why:` | Delta (diverged / aligned) |
+|---|---|---|---|---|
+| D1 | <…> | <…> | <…> | <…> |

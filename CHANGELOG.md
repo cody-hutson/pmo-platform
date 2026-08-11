@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.22] - 2026-08-11
+
+Release close-out stops silently dropping outputs — telemetry, velocity and learnings now reach the audit trail every time.
+
+[Full notes](release/releases/notes/v4.22_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.22)
+
 ## [v4.21] - 2026-08-09
 
 A command that maintained your usage history had been deleting most of it and reporting success; that and two other silent failures are fixed.
