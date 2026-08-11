@@ -41,7 +41,16 @@ name: Release tooling smoke
 #              narrows the priority detector's level class in a throwaway copy and
 #              requires the T-13 liveness guard to fire; the suite previously had
 #              ZERO executors, so ADR-111's "protected against regressing to
-#              silence" claim rested on a guard nothing ran), AND the ADR `deciders:`
+#              silence" claim rested on a guard nothing ran), AND the close-class
+#              telemetry regression suite (test_close_class_telemetry.sh — 17 arms
+#              over compute-close-class-telemetry.sh, the Stage 13 Phase B producer
+#              of the **Close-Class-Telemetry:** field; mutation-graded, so it asserts
+#              the tool's own --self-test arms DISCRIMINATE rather than restating that
+#              they pass, each mutation gated by an extraction control that proves the
+#              edit landed. Wired here for the same reason as the parser suite above:
+#              it shipped with ZERO executors and the Arm D TEST-SUITE COVERAGE
+#              detector that flagged it is warn-only, so its PR read green with
+#              nothing running it), AND the ADR `deciders:`
 #              carve-out two-gate agreement suite (test_deciders_carveout.sh — asserts
 #              that the depersonalization gate and the ADR durability lint return the
 #              SAME verdict on their shared subject, the operator handle, over seven
@@ -442,6 +451,34 @@ jobs:
         # is interpolated — the step is a fixed command, so there is no
         # untrusted-data path into the shell. Gates on exit code.
         run: bash release/tools/tests/test_spoke_run_directory.sh
+
+      - name: close-class-telemetry regression suite (17 arms; mutation-graded)
+        # Wires a suite that shipped with ZERO executors — the same class as the
+        # bundle-issues-parser step below, and found the same way: the platform's own
+        # Arm D TEST-SUITE COVERAGE detector flagged it as an UNWIRED SUITE, but that
+        # detector is warn-only, so the PR that introduced the suite read fully green
+        # with nothing running it.
+        # The suite grades compute-close-class-telemetry.sh, the Stage 13 Phase B
+        # producer of the **Close-Class-Telemetry:** field. It exists because that
+        # tool's own --self-test reported PASS throughout a period when the tool could
+        # not run on ANY live milestone: the whole `gh issue list` payload was passed as
+        # one argv operand and a real release exceeded the platform argument limit, so
+        # the interpreter never started. Every self-test arm fed a few hundred bytes, so
+        # the suite was STRUCTURALLY INCAPABLE of reaching the defect — leaving it
+        # unwired would have left that same green-that-cannot-go-red unguarded.
+        # It does not restate --self-test; it grades whether those arms DISCRIMINATE.
+        # Each group carries a mutation arm that mechanically reverts the shipped
+        # script to its pre-fix shape and MUST fail, and each mutation is gated by an
+        # extraction control asserting the anchor was replaced exactly once — so a
+        # silently no-op mutation reports a broken instrument rather than a clean run.
+        # Groups: (A) payload transport / over-argv, with an independent over-bound
+        # control on this host; (B) Indicator-5 bivalence, sensitivity against a
+        # predicate pinned to one answer; (C) the downstream interface contract.
+        # Offline + deterministic (all fixtures under one mktemp dir; no network, no
+        # gh, no writes into the checkout or any operator-instance path). No workflow
+        # input is interpolated — the step is a fixed command, so there is no
+        # untrusted-data path into the shell. Gates on exit code.
+        run: bash release/tools/tests/test_close_class_telemetry.sh
 
       - name: bundle-issues-parser regression suite (13 legs + 5 rank/sort assertions)
         # Wires a suite that shipped with ZERO executors. The release plan names

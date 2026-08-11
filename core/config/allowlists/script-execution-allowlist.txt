@@ -122,6 +122,20 @@ release/tools/query-pipeline-event.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/automated-closeout.sh
 ./release/tools/automated-closeout.sh
 release/tools/automated-closeout.sh
+# compute-close-class-telemetry.sh — Stage 13 Phase B close-class telemetry producer
+# (emits the **Close-Class-Telemetry:** field value for the visible-H4 Deployment Log
+# block). It is chained from the close-out AND invoked agent-side by the Stage 13 spoke,
+# by the § 7 manual-fill fallback, and by the Stage 7 regression arm that verifies it can
+# run at all — and it carried ZERO rows, so every agent-side path was
+# BLOCK-DESTRUCTIVE-022-blocked (observed live: a Stage 5 spoke hit the block invoking it).
+# The generic suffix glob covers a hub whose checkout is a downstream clone or a
+# differently-named directory, which is the situation the release spokes actually run in.
+# (CI runs no Claude hooks; these rows are for the agent-side path, not the workflow.)
+[PMO_PLATFORM_ROOT]/release/tools/compute-close-class-telemetry.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/compute-close-class-telemetry.sh
+./release/tools/compute-close-class-telemetry.sh
+release/tools/compute-close-class-telemetry.sh
+*/release/tools/compute-close-class-telemetry.sh
 # audit-epic-rollup-close.sh — epic rollup-close detective audit (report-only).
 # Invoked agent-side by the Stage 13 spoke AND chained from automated-closeout.sh
 # phase 16.7, so all four invocation forms per the per-tool form convention above
@@ -157,6 +171,18 @@ release/tools/tests/test_corpus_home_tolerance.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_action_item_gate_predicate.sh
 ./release/tools/tests/test_action_item_gate_predicate.sh
 release/tools/tests/test_action_item_gate_predicate.sh
+# test_close_class_telemetry.sh — regression suite for compute-close-class-telemetry.sh
+# (over-argv payload transport + Indicator-5 bivalence + the interface contract). It runs
+# in CI and is invoked agent-side at Stage 6 self-verification and Stage 7 Dev Testing; the
+# suite spawns mutated copies of the tool as its sensitivity arms, so a blocked agent-side
+# invocation would leave the ONE arm that proves the fix works unrunnable. It carries the
+# generic suffix glob for the same downstream-clone / differently-named-checkout case as
+# the tool it grades — the two must be reachable from the same session or the arm is dead.
+[PMO_PLATFORM_ROOT]/release/tools/tests/test_close_class_telemetry.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_close_class_telemetry.sh
+./release/tools/tests/test_close_class_telemetry.sh
+release/tools/tests/test_close_class_telemetry.sh
+*/release/tools/tests/test_close_class_telemetry.sh
 [PMO_PLATFORM_ROOT]/release/tools/tests/test_deciders_carveout.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_deciders_carveout.sh
 ./release/tools/tests/test_deciders_carveout.sh

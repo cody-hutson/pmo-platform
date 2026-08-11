@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.22 (2026-08-11) — Release close-out now records every output it is meant to record
+
 ### v4.21 (2026-08-09) — The tooling that guards this platform stops failing silently
 
 ### v4.20 (2026-08-09) — Security hooks stop blocking work they were never guarding

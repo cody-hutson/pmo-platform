@@ -23,6 +23,7 @@
 #   6.5 inject_outcome_field  **Outcome:** field on the visible-H4 Deployment Log block (#37; default SUCCESS, --outcome overrides)
 #   6.6 inject_velocity_field **Velocity:** field after **Cycle-Time:** in that block (stage-13-close.md Phase B-velocity; surface-resolved)
 #   6.7 append_release_learnings  sibling H4 `#### Release Learnings v<X.Y>` after the Deployment Log block (stage-13-close.md Phase A7; hot ledger only)
+#   6.8 inject_close_class_telemetry_field  **Close-Class-Telemetry:** field after **Outcome rationale:**/**Outcome:** in that block (close-class-telemetry.md § 3.2; surface-resolved)
 #   7  append_release_index    new row in RELEASE_INDEX.md
 #   8  append_release_digest   new entry under v<MAJOR>.* H2 in RELEASE_DIGEST.md
 #   8.5 append_reversions   append re-version row(s) to RELEASE_REVERSIONS.md (#1679; N/A on the common no-collision path)
@@ -62,7 +63,13 @@
 # Flags:
 #   REQUIRED:
 #     --pr <N>                 Release PR number
-#     --version v<X.Y>         Version key matching RELEASE_LOG row
+#     --version v<X.Y>         Version key matching RELEASE_LOG row. Canonical
+#                              vX.Y[.Z] ONLY — a version-less release is rejected
+#                              here, before any phase runs, and closes via the
+#                              Phase-B chore-PR mechanism per
+#                              release/references/pipeline/stage-13-close.md
+#                              Phase A8. That is the expected path for the
+#                              version-less identity mode, not a deviation.
 #     --milestone <N>          Milestone number
 #   MODE (one of, default --dry-run):
 #     --dry-run                Enumerate + preview; no state mutation (default)
@@ -220,6 +227,11 @@ AUDIT_EPIC_ROLLUP="$SCRIPT_DIR/audit-epic-rollup-close.sh"
 # the precedent PROJECTOR below already sets (an `[[ ! -f ]]` guard inside
 # emit_derived_entry rather than a fifth check_paths row).
 COMPUTE_VELOCITY="$SCRIPT_DIR/compute-release-velocity.sh"
+# Close-class telemetry producer for the Phase 6.8 `**Close-Class-Telemetry:**`
+# field. Same form factor and same non-registration rationale as COMPUTE_VELOCITY
+# above — a TOOL dependency guarded inline by its consuming phase, not a fifth
+# check_paths() row (that probe enumerates the four CORPUS paths).
+COMPUTE_CLOSE_CLASS_TELEMETRY="$SCRIPT_DIR/compute-close-class-telemetry.sh"
 # Scaffold-residue token source (AC1 single-source seam). The token set has exactly
 # ONE definition — SCAFFOLD_RESIDUE_TOKENS in lint_release_corpus.py — and the shell
 # anchors read it from there via --print-scaffold-tokens. Retyping the literals in
@@ -364,7 +376,13 @@ TOUCHED_ARCHIVE_SEGMENTS=()
 
 # Phase outcomes (PASS / FAIL / SKIPPED / N/A / DRY-RUN / MANUAL)
 # Bash 3.2 (macOS default) lacks associative arrays — use parallel indexed arrays
-# keyed by phase name. Lookup is O(n) but phase count is small (<20).
+# keyed by phase name. Lookup is O(n) over a small, dispatch-bounded set (one
+# entry per mark_phase call, so the bound is the dispatch block's length — no
+# pinned count here, because a pinned count is false the next time a phase lands).
+#
+# This record is the ONLY in-file surface that observes EXECUTION rather than
+# declaration, which is why generate_markdown_report and generate_json_report
+# both DERIVE their phase set from it instead of carrying a parallel enumeration.
 PHASE_NAMES=()
 PHASE_RESULTS=()
 PHASE_DETAILS=()
@@ -372,7 +390,13 @@ PHASE_DETAILS=()
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
-  /usr/bin/sed -n '2,92p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  # Self-terminating on the header block's real end (the first line after the
+  # shebang that is not a comment) rather than a hardcoded line count. The old
+  # fixed `sed -n '2,92p'` window truncated mid-sentence and silently dropped the
+  # whole META section, so `--help` never mentioned --self-test — the flag the
+  # version-less REACHABILITY note depends on. A fixed window re-breaks every
+  # time the header grows; this one cannot.
+  /usr/bin/awk 'NR==1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "${BASH_SOURCE[0]}"
   exit 0
 }
 
@@ -468,6 +492,28 @@ validate_version() {
 # on what "version-less" means. Previously only bump_version branched on it; the
 # INDEX/DIGEST/CHANGELOG emits did not, so a version-less close produced entries
 # that diverged from the corpus convention (#2048 residual).
+#
+# REACHABILITY — read this before deleting any is_version_less branch.
+# These branches are NOT reachable through --apply or --dry-run. Main validates
+# --version against the canonical grammar and dies before phase dispatch, so a
+# version-less $VERSION exits 1 at the CLI boundary and no phase ever runs. They
+# are live and maintained for three reasons:
+#   1. --self-test dispatches BEFORE that gate and drives the branches directly.
+#      The ordering is the whole reason they are reachable, so it is ASSERTED,
+#      not merely documented: self-test arm VL-ORDER resolves both lines from
+#      this file's own text and fails if the dispatch stops preceding the gate.
+#      The VL-0..VL-7 arms are the branches' regression coverage, and CI runs
+#      --self-test on this file (core/deploy/allowlists/selftest-coverage-manifest.txt).
+#   2. They are the executable statement of the corpus convention that a
+#      hand-assembled Phase-B chore-PR close must follow for a version-less
+#      release — release/references/pipeline/stage-13-close.md, Phase A8, which
+#      states that scope once for every version-less N/A and SKIP rule in the
+#      stage. Shipped version-less releases in the RELEASE_LOG follow it.
+#   3. version-less is a live Stage-3 release-identity mode (stage-03-bundle.md,
+#      asserted at G3-19), so the convention cannot be retired from here.
+# Do NOT delete these branches without first retiring the identity mode at
+# Stage 3. Deleting them would leave the convention with no executable statement
+# while releases are still closing under it.
 is_version_less() { ! validate_version "$VERSION"; }
 
 # The notes path/link for this release — version-less notes live under
@@ -886,6 +932,23 @@ get_phase() {
     fi
   done
   /usr/bin/printf '—|—\n'
+}
+
+# True when phase-record index $1 holds the FIRST occurrence of its phase name.
+# Both report renderers walk the record through this predicate, so a name marked
+# more than once emits exactly ONE row carrying its FIRST result — the semantics
+# get_phase already has (its lookup returns on the first name hit above), which
+# is what makes the derived render provably additive: the row SET grows by the
+# previously-omitted phases and no existing row changes.
+#
+# Deliberately NOT named phase_* — that prefix is the dispatchable-phase
+# namespace, and `grep '^phase_'` over this file is a live survey/self-test form.
+is_first_phase_occurrence() {
+  local i="$1" j
+  for ((j=0; j<i; j++)); do
+    if [[ "${PHASE_NAMES[$j]}" == "${PHASE_NAMES[$i]}" ]]; then return 1; fi
+  done
+  return 0
 }
 
 # ─── Phase 2: preflight ──────────────────────────────────────────────────────
@@ -1960,6 +2023,231 @@ PY
   return 0
 }
 
+# ─── Phase 6.8: inject_close_class_telemetry_field (close-class-telemetry.md) ──
+#
+# Emits the `**Close-Class-Telemetry:**` field into the version's Deployment Log
+# block, after `**Outcome rationale:**` (falling back to `**Outcome:**`) — the
+# close-quality read-model sits BELOW the verdict fields it summarises, which is
+# why this phase is seated after 6.5 rather than beside the instrument fields.
+#
+# WHY THIS PHASE EXISTS. close-class-telemetry.md § 3.2 has mandated this field
+# on every post-cutover release since the standard merged, and until now the
+# mandate had no mechanism: no close-out phase produced it and no check asserted
+# it. Zero of the ~30 post-cutover releases that closed carried it; the two rows
+# that do were hand-emitted, and the more recent of those records the mandated
+# tool ABORTING rather than a value. That is the same producer/gate gap #4329
+# records for `**Velocity:**` — a codified field with no writer.
+#
+# THREE PROPERTIES THIS PHASE OWES.
+#
+#  (1) THE RIGHT SURFACE. Resolved through _resolve_deployment_log_target,
+#      exactly as 6.5 and 6.6 resolve theirs, and the idempotency probe reads
+#      that SAME resolved answer. A `$RELEASE_LOG`-hardcoded write on an ARCHIVED
+#      release splits the record across two files at exit 0, and both a
+#      corpus-wide grep and the field grammar read identical on the split.
+#
+#  (2) A MEASURED VALUE OR NOTHING — NEVER A PLAUSIBLE ONE. The value comes from
+#      compute-close-class-telemetry.sh and from nowhere else. If that tool is
+#      absent or non-executable this phase SKIPs rather than composing a field:
+#      the field carries a literal `mechanism: compute-close-class-telemetry.sh`
+#      claim, so writing one the mechanism did not produce would be precisely the
+#      declaration-vs-behaviour divergence the field exists to measure. (The
+#      corpus already records a release that refused to hand-fill it for exactly
+#      this reason; that judgement is encoded here rather than left to the next
+#      operator's memory.)
+#
+#      The tool's exit contract, stated against its MEASURED behaviour and relied
+#      on here: 0 = success INCLUDING every degraded path (absent register,
+#      unavailable gh, unresolvable repo each set an N/A reason and still emit a
+#      conformant eight-slot line); 1 = argument validation ONLY; 2 = a register
+#      that exists but is UNREADABLE — a source-integrity condition, escalated
+#      rather than degraded. A CALLER CANNOT DISTINGUISH THE gh-LESS PATH BY EXIT
+#      CODE and must not try: that disposition is readable only from the emitted
+#      line, which is what the measuredness arm below reads.
+#
+#  (3) A FIELD THE SHIPPED CONSUMERS CAN READ, PLUS A VISIBLE DISPOSITION. Two
+#      separate assertions, deliberately with two different severities:
+#
+#      GRAMMAR (fatal). The eight slots in order per § 3.2. A malformed field is
+#      never written — the same prevention-only posture 6.6 takes.
+#
+#      MEASUREDNESS (diagnostic, NOT fatal). All four rate slots can be `N/A`
+#      simultaneously on a lawful run: no gh degrades Indicators 3 and 6, no
+#      register degrades 1 and 2, and those conditions co-occur. Such a line is
+#      structurally perfect and asserts nothing. FAILING on it would convert a
+#      degraded ENVIRONMENT into a close-out failure, so this phase writes the
+#      field and says so in its own outcome detail instead. The gate-side twin
+#      (deploy.sh Check 48 sub-check l-3a) is where the same reading IS a
+#      finding — a gate may fail a row for carrying no measurement; a producer
+#      may not refuse to record one honestly.
+
+# Schema predicate for a composed `**Close-Class-Telemetry:**` line, expressed as
+# ONE ordered pattern over the eight § 3.2 slots rather than eight independent
+# presence tests: eight unordered tests accept a scrambled line, and the field's
+# consumers read it positionally. `grep` reads a HERE-STRING, never `producer |
+# grep -q`: under `set -euo pipefail` grep -q exits at the first match and
+# SIGPIPEs the writer, so pipefail promotes a SUCCESSFUL match to a non-zero
+# pipeline status and the assert silently inverts.
+# Returns 0 conformant, 1 non-conformant.
+_close_class_line_conformant() {
+  local _l="$1"
+  /usr/bin/grep -qE '^\*\*Close-Class-Telemetry:\*\* retro-conformance .+; lessons-population .+; carry-forward-closure .+; pattern-emergence .+; rollup-presence .+; evidence-preservation .+; evidence-close-gate .+; mechanism: .+$' <<<"$_l"
+}
+
+# Measuredness (anti-vacuity) predicate — a SUPPLEMENT to the schema predicate
+# above, never a replacement. Schema conformance is satisfied by a line whose
+# every rate slot reads `N/A`, which is a reachable and lawful emission; this
+# predicate asks the different question of whether the line carries at least one
+# COMPUTED ratio (`<n>/<d> (<r>)`). Note the property this does NOT have: its
+# freedom from false positives is conditional on the cutover anchor admitting no
+# pre-mechanism row, and it is asserted here as a diagnostic precisely because
+# that condition is not something a producer can establish.
+# Returns 0 measured, 1 vacuous.
+_close_class_line_measured() {
+  local _l="$1"
+  /usr/bin/grep -qE '[0-9]+/[0-9]+ \([01]\.[0-9]{2}\)' <<<"$_l"
+}
+
+phase_inject_close_class_telemetry_field() {
+  # LOOKUP SITE 1 of 2 — resolve the surface first; probe and write consume this
+  # ONE answer so they cannot disagree about which file they mean.
+  local target_log _surfaces
+  target_log="$(_resolve_deployment_log_target "$VERSION" || true)"
+  _surfaces="$(_deployment_log_surfaces_desc)"
+
+  if [[ -z "$target_log" ]]; then
+    # Near-unreachable in the sequenced runner (6.5 hard-FAILs on this exact
+    # condition three phases earlier), implemented anyway: the phase has to be
+    # correct when driven standalone, and a guard whose correctness depends on
+    # its caller is not a guard.
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "inject_close_class_telemetry_field" "DRY-RUN" "would FAIL: no **Result:** line in the $VERSION Deployment Log block on any surface, so the write target is unresolvable (searched: $_surfaces)"
+      return 0
+    fi
+    mark_phase "inject_close_class_telemetry_field" "FAIL" "write target unresolvable — no **Result:** line in the $VERSION Deployment Log block on any surface (searched: $_surfaces)"
+    return 3
+  fi
+  local target_name; target_name="$(/usr/bin/basename "$target_log")"
+
+  # LOOKUP SITE 2 of 2 — idempotent, block-scoped, ON THE RESOLVED SURFACE.
+  if /usr/bin/awk -v ver="$VERSION" '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { inblk = 1; next }
+      inblk && line ~ /^#### / { inblk = 0 }
+      inblk && line ~ /^\*\*Close-Class-Telemetry:\*\*/ { found = 1 }
+      END { exit(found ? 0 : 1) }
+    ' "$target_log" 2>/dev/null; then
+    mark_phase "inject_close_class_telemetry_field" "SKIPPED" "**Close-Class-Telemetry:** already present in the $VERSION Deployment Log block ($target_name)"
+    return 0
+  fi
+
+  # ── Value. Resolved BEFORE the dry-run branch so a dry run prints the exact
+  # bytes --apply will write. Under the Indicator-5 fix those bytes no longer
+  # depend on anything an earlier phase in THIS run wrote, so dry-run and apply
+  # resolve identically by construction rather than by convention.
+  if [[ ! -x "$COMPUTE_CLOSE_CLASS_TELEMETRY" ]]; then
+    mark_phase "inject_close_class_telemetry_field" "SKIPPED" "compute-close-class-telemetry.sh not executable — no field written. The field asserts 'mechanism: compute-close-class-telemetry.sh'; composing one without that mechanism would fabricate the claim the field exists to measure."
+    return 0
+  fi
+
+  local _cct_args=( "$VERSION" --milestone "$MILESTONE" )
+  # Sentinel-preserved capture with explicit status propagation — the
+  # emit_derived_entry / 6.6 idiom, for the same two reasons: `$( )` strips
+  # trailing newlines, and `$?` after a pipeline reports the wrong status.
+  local _out _rc=0
+  _out="$("$COMPUTE_CLOSE_CLASS_TELEMETRY" "${_cct_args[@]}" 2>/dev/null; _prc=$?; /usr/bin/printf 'X'; exit "$_prc")" || _rc=$?
+  _out="${_out%X}"
+  local _stripped
+  _stripped="$(/usr/bin/printf '%s' "$_out" | /usr/bin/tr -d '[:space:]')"
+
+  if [[ "$_rc" -eq 2 ]]; then
+    # Source integrity, not a degraded environment: a register that exists but
+    # cannot be read. Escalate rather than record an N/A that would misreport a
+    # permissions fault as an absent artifact.
+    local _e2="compute-close-class-telemetry.sh exited 2 — a register exists but is UNREADABLE (source-integrity condition, not an absent register). No field written; fix the register's readability and re-run."
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "inject_close_class_telemetry_field" "DRY-RUN" "would FAIL: $_e2"
+      return 0
+    fi
+    mark_phase "inject_close_class_telemetry_field" "FAIL" "$_e2"
+    return 3
+  fi
+  if [[ "$_rc" -ne 0 || -z "$_stripped" ]]; then
+    # rc 1 is argument validation — a defect in THIS call site, not a condition
+    # of the release. Exit-0-with-empty-stdout is a real failure mode of a
+    # captured producer and is NOT covered by an exit-code check.
+    local _e1="compute-close-class-telemetry.sh failed (exit $_rc) or returned no value — no field written. Exit 1 is argument validation, i.e. a defect in this invocation rather than a property of the release; every degraded environment (no gh, no register) exits 0 with an N/A-bearing line instead."
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "inject_close_class_telemetry_field" "DRY-RUN" "would FAIL: $_e1"
+      return 0
+    fi
+    mark_phase "inject_close_class_telemetry_field" "FAIL" "$_e1"
+    return 3
+  fi
+
+  # The field is ONE line by contract (close-class-telemetry.md § 3.2). Take the
+  # first; a producer that emitted more is caught by the grammar assert below
+  # rather than smuggled into the ledger.
+  local _line="**Close-Class-Telemetry:** ${_out%%$'\n'*}"
+
+  # ── Grammar self-assert, BEFORE any write. FATAL.
+  if ! _close_class_line_conformant "$_line"; then
+    local _why="does not carry the eight § 3.2 slots in order (retro-conformance; lessons-population; carry-forward-closure; pattern-emergence; rollup-presence; evidence-preservation; evidence-close-gate; mechanism:)"
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "inject_close_class_telemetry_field" "DRY-RUN" "would FAIL: the composed **Close-Class-Telemetry:** field is not schema-conformant — it $_why: '$_line'"
+      return 0
+    fi
+    mark_phase "inject_close_class_telemetry_field" "FAIL" "the composed **Close-Class-Telemetry:** field is not schema-conformant — it $_why: '$_line'"
+    return 3
+  fi
+
+  # ── Measuredness arm. DIAGNOSTIC, not fatal (see property 3 above). The
+  # disposition is read from the emitted LINE because the exit code cannot carry
+  # it — the tool exits 0 on the gh-less path exactly as it does on a fully
+  # measured one.
+  local _vac=""
+  if ! _close_class_line_measured "$_line"; then
+    _vac=" — WARNING: this field carries NO computed ratio (every rate slot resolved N/A), so it records that the release closed without a measurable close-quality reading rather than a reading itself."
+    if /usr/bin/grep -qF 'gh unavailable' <<<"$_line"; then
+      _vac="$_vac Disposition read from the emitted line: gh was unavailable, which degrades Indicators 3 and 6 together."
+    fi
+    if /usr/bin/grep -qF 'no retro register found' <<<"$_line"; then
+      _vac="$_vac Disposition read from the emitted line: no retro register resolved, which degrades Indicators 1, 2 and 5 together."
+    fi
+    _vac="$_vac Written as measured — an honest N/A is the mandated form; deploy.sh Check 48 sub-check (l) is where the same reading becomes a finding."
+  fi
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "inject_close_class_telemetry_field" "DRY-RUN" "would insert '$_line' after **Outcome rationale:** in the $VERSION Deployment Log block ($target_name)${_vac}"
+    return 0
+  fi
+
+  # ── Insert after `**Outcome rationale:**`, falling back to `**Outcome:**` when
+  # the block carries no rationale line (exit 4 = block present, anchor absent —
+  # distinguishable from exit 3 = block absent, which stays fatal). TWO live
+  # limbs, not more: _resolve_deployment_log_target only resolves blocks carrying
+  # `**Result:**`, and 6.5 has already placed `**Outcome:**` in the same block, so
+  # a third fallback would be unreachable code.
+  local _irc=0 _anchor_desc="after **Outcome rationale:**"
+  _insert_field_after_in_block "$target_log" "$VERSION" '**Outcome rationale:**' "$_line" || _irc=$?
+  if [[ "$_irc" -eq 4 ]]; then
+    _irc=0
+    _anchor_desc="after **Outcome:** (the block carries no **Outcome rationale:** field)"
+    _insert_field_after_in_block "$target_log" "$VERSION" '**Outcome:**' "$_line" || _irc=$?
+  fi
+  if [[ "$_irc" -ne 0 ]]; then
+    mark_phase "inject_close_class_telemetry_field" "FAIL" "could not insert **Close-Class-Telemetry:** into the $VERSION Deployment Log block (block or **Outcome:** anchor not found in $target_name; searched: $_surfaces)"
+    return 3
+  fi
+
+  # Same registration as 6.5/6.6 — this phase resolves the same target and is
+  # subject to the same staging omission (#4710).
+  _record_touched_archive_segment "$target_log"
+
+  mark_phase "inject_close_class_telemetry_field" "PASS" "injected the **Close-Class-Telemetry:** field $_anchor_desc in the $VERSION Deployment Log block ($target_name): '$_line'${_vac}"
+  return 0
+}
+
 # ─── Phase 7: append_release_index (#667 Finding 6 — 6-col single-row insert) ─
 #
 # Emits ONE row in the LIVE 6-column RELEASE_INDEX schema:
@@ -2674,14 +2962,43 @@ phase_append_changelog() {
 # phase_lint_release_notes applies when it greps its findings for THIS version's path.
 #
 # Read-only and idempotent — it asserts, never mutates, so a resumed close re-runs it
-# safely. Dry-run RUNS it (side-effect-free) so the operator sees findings at the
-# review gate rather than after the commit, mirroring phase_lint_release_notes.
+# safely.
+#
+# ASSERT AT --apply, PREDICT AT --dry-run (#4765). This phase used to run in BOTH
+# modes, on the theory that a read-only check is always free to run early. It is not.
+# The append phases at 8.x/9.5 deliberately write nothing under --dry-run, so by the
+# time control reaches here BOTH slices are empty BY CONSTRUCTION, and the presence
+# limb below fires on the script's own no-op. Since this phase returns 1 and the
+# runner exits 3 on it, the FIRST dry-run of any release aborted right here and EVERY
+# phase after it never enumerated — which made the dry-run review gate that
+# stage-13-close.md Phase A8 mandates structurally unreachable for any release that
+# had not already closed. The presence limb is correct and is kept; only its
+# mode-blindness was the defect. So --dry-run PREDICTS the assertion and returns 0,
+# and --apply runs it byte-for-byte unchanged.
+#
+# Residual, accepted and named: --dry-run no longer PREVIEWS a residue finding on an
+# idempotent re-run (a close resumed after the entries already landed). The gate
+# itself loses nothing — the assertion still runs at --apply at 9.55, which is BEFORE
+# the chore commit at 9.95, so residue is still caught loud before anything is
+# committed, and Checks 32 + 48 remain the corpus-wide detector. What is lost is the
+# preview, and only in the re-run case. Do NOT "fix" that by moving the mode test
+# down into the loop: the presence limb and the two N/A limbs below are co-tenanted
+# and the mode test does not belong inside either.
 #
 # Version-less releases: CHANGELOG is SKIPPED (there is no `## [vX.Y]` key to slice —
 # mirrors phase_append_changelog step (0)); the DIGEST assertion still runs, because
 # phase_append_release_digest writes an H3 for a version-less release too.
 phase_assert_derived_surfaces() {
   local changelog_path="$REPO_ROOT/CHANGELOG.md"
+
+  # DRY-RUN branch — deliberately the FIRST statement in the body, above all three
+  # is_version_less guards and outside the presence loop, so the apply path below is
+  # reached with exactly the control flow it had before. Detail carries no '|' so it
+  # cannot break the markdown phase table in --markdown reports.
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "assert_derived_surfaces" "DRY-RUN" "would assert that the ${VERSION} entries on CHANGELOG.md and release/releases/RELEASE_DIGEST.md are present and carry no unfilled scaffold residue. Not evaluated under --dry-run: the append phases wrote nothing, so both slices are absent by construction and a presence check here would only fail on this script's own no-op. The assertion runs for real at --apply, after the appends land and before the chore commit"
+    return 0
+  fi
 
   # Slice extractors emit "<file-line-number><TAB><line>" so a finding can name the
   # real line in the real file. Header matching is literal (index()==1), not regex,
@@ -2764,10 +3081,13 @@ phase_assert_derived_surfaces() {
 # mirrors the phase_append_changelog pre-CHANGELOG SKIP idiom. There is nothing
 # to stamp for a version-less release, so the file is intentionally left untouched
 # and the no-op is made auditable rather than silent.
-#   NOTE: line ~1501 `validate_version "$VERSION" || die` means the script
-#   normally never reaches this phase with an invalid $VERSION; the in-phase SKIP
-#   guard is defensive + forward-compatible (and is what --self-test / the
-#   regression test exercise when invoking the phase directly).
+#   NOTE: main's `validate_version "$VERSION" || die` gate means the script never
+#   reaches this phase with an invalid $VERSION under --apply or --dry-run; the
+#   in-phase SKIP guard is the executable statement of the version-less rule and
+#   is what --self-test / the regression test exercise when invoking the phase
+#   directly. Full rationale in the REACHABILITY note above is_version_less —
+#   cited by name rather than by line number, which rots (this pointer read
+#   "line ~1501" against a file that has since more than quintupled).
 # Idempotent: no-op if .version already == $VERSION (re-run safe; satisfies AC-2).
 # Write mechanism: printf to a temp file + mv (atomic; single trailing-newline
 # line — the exact shape the hook's `head -1 | tr -d '[:space:]'` expects).
@@ -2949,18 +3269,48 @@ phase_ledger_guard() {
 # milestone). Placed downstream of ledger_guard so a guard FAIL (exit 3) aborts
 # before this phase mutates the packages/ working tree.
 #
-# Detection = union of two rules over the release diff:
-#   (a) direct source — any changed path matching ^(core|operations|release)/
-#       skills/<skill>/ → <skill> (covers SKILL.md, references/**, scripts/**,
-#       evals/** — everything build-skill-packages.sh's `cp -R` carries).
-#   (b) injected canonical — any changed path under core/standards/ or
-#       operations/templates/ whose basename is the middle field of a
-#       TEMPLATE_SYNC_MAP entry → every skill in field 1 of a matching entry.
-#       Load-bearing: template-*.md inject into a package at build time with no
-#       skills/ path of their own, so editing a canonical stales the package
-#       while touching zero skills/ path.
-# The TEMPLATE_SYNC_MAP is read from deploy.sh AT RUNTIME (never copied) via the
-# same awk window build-skill-packages.sh:34–36 uses — single-sourced.
+# DETECTION IS DELEGATED, NOT RESTATED (#4722). The affected-skill set is resolved
+# by `build-skill-packages.sh --skills-for-paths`, the package builder's own query
+# mode. This phase owns WHAT TO DO with the set; the builder owns WHAT THE SET IS.
+#
+# Why (the defect this closes): the detection used to live here as a local
+# `changed_skills_from_paths()` carrying a hand-written prefix `case` over
+# core/standards/ and operations/templates/. Canonicals do not all live under those
+# two prefixes — tracker-schemas.md homes to core/schemas/ (its own arm in
+# lib-template-sync-source.sh) — so a core/schemas/ canonical edit stales
+# tracker-manager's package while this phase resolved an EMPTY set and reported
+# green "nothing to rebuild". That is the last line of defence against a staled
+# package at release close, and it was 26/27 canonicals wide. The builder's query
+# decides rule (b) by CALLING resolve_template_sync_source() — the same resolver its
+# injection loop calls to find the file it copies — so query and injection agree by
+# construction and a future resolver arm is picked up here for free.
+# claim-version.sh:747-751 already consumes this same query for the same reason, and
+# records it: "A second copy here would be a shadow SSOT." This function WAS that
+# second copy.
+#
+# COUPLING, PRICED HONESTLY (do not restate this as "the narrowest coupling"). The
+# builder dispatches its query at build-skill-packages.sh:170, AFTER three hard
+# `exit 1` preconditions — TEMPLATE_SYNC_MAP non-empty, the per-module roster arrays
+# non-empty, and the shared resolver lib present. The roster precondition is
+# provably IRRELEVANT to this query (the query reads the map and the resolver, never
+# a roster array), so an unrelated deploy.sh roster reshape would hard-FAIL a release
+# close here. The delegation is still right, but on MINIMUM CONTENTION — one live
+# consumer, already proven by claim-version.sh — not on narrowest surface.
+#
+# WHAT THIS DOES NOT PROPAGATE TO (the "every consumer" claim is over-stated).
+# .github/workflows/skill-package-freshness.yml is the repo's only pre-merge package-
+# freshness gate, and its trigger `paths:` filter names NONE of the three canonical
+# trees. A canonical-only edit therefore does not fire it, with no compensating
+# coverage elsewhere. This phase is the close-time net, not a redundant one.
+#
+# RESIDUAL — TOTAL ABSENCE, NOT PARTIAL DEGRADATION (F3). The fail-loud guard below
+# catches "the builder could not answer at all" (absent, or non-zero exit). It does
+# NOT catch a map that silently degrades from 49 entries to a handful: the builder's
+# own precondition tests `-eq 0`, so a truncated map answers successfully and wrongly,
+# and this phase cannot second-guess it without re-deriving the very rules it just
+# delegated — which would reintroduce the shadow SSOT. A partial-degradation detector
+# belongs at the builder's precondition, not here. Named, not silently accepted: this
+# guard would NOT have caught the 26/27 defect it ships beside.
 #
 # R8 (zip non-determinism): the .skill archive embeds per-entry mtimes, so a
 # content-identical rebuild differs at the byte level. Stage a rebuilt package
@@ -2973,41 +3323,6 @@ phase_ledger_guard() {
 # --no-merge: pre-commit phase; does NOT defer (the chore PR is still created, so
 # the rebuild must ride its commit) — hence no NO_MERGE guard here and no entry
 # in either deferral list.
-
-# changed_skills_from_paths — pure function: read newline-separated changed paths
-# on stdin, emit the deduped candidate skill set (one per line) per rules (a)+(b).
-# Offline: its only external read is deploy.sh's TEMPLATE_SYNC_MAP.
-changed_skills_from_paths() {
-  local deploy_sh="$REPO_ROOT/core/deploy/deploy.sh"
-  # (b) reverse TEMPLATE_SYNC_MAP: canonical-basename -> skills. Read the map from
-  # deploy.sh at runtime — same awk window as build-skill-packages.sh:34–36.
-  local map=""
-  if [[ -f "$deploy_sh" ]]; then
-    map="$(/usr/bin/awk '/^TEMPLATE_SYNC_MAP=\(/,/^\)/' "$deploy_sh" 2>/dev/null \
-      | /usr/bin/grep -E '^[[:space:]]*"[^"]+:[^"]+:[^"]+"' \
-      | /usr/bin/sed 's/^[[:space:]]*"//; s/"$//; s/[[:space:]]*#.*//' || true)"
-  fi
-  local path base entry m_skill m_canonical
-  while IFS= read -r path; do
-    [[ -z "$path" ]] && continue
-    # (a) direct source
-    if [[ "$path" =~ ^(core|operations|release)/skills/([^/]+)/ ]]; then
-      /usr/bin/printf '%s\n' "${BASH_REMATCH[2]}"
-    fi
-    # (b) injected canonical
-    case "$path" in
-      core/standards/*|operations/templates/*)
-        base="$(/usr/bin/basename "$path")"
-        while IFS= read -r entry; do
-          [[ -z "$entry" ]] && continue
-          m_skill="${entry%%:*}"
-          m_canonical="${entry#*:}"; m_canonical="${m_canonical%%:*}"
-          [[ "$m_canonical" == "$base" ]] && /usr/bin/printf '%s\n' "$m_skill"
-        done <<< "$map"
-        ;;
-    esac
-  done | /usr/bin/sort -u | /usr/bin/grep -vE '^$' || true
-}
 
 phase_rebuild_skill_packages() {
   local builder="$REPO_ROOT/core/deploy/tools/build-skill-packages.sh"
@@ -3027,9 +3342,52 @@ phase_rebuild_skill_packages() {
     return 3
   fi
 
-  # Detection (rules a+b). || true keeps set -e safe on a zero-candidate diff.
-  local candidates
-  candidates="$(/usr/bin/printf '%s\n' "$changed" | changed_skills_from_paths || true)"
+  # ── Detection: DELEGATED to build-skill-packages.sh --skills-for-paths ──────
+  # Deliberately ABOVE the dry-run branch: the release diff is real in BOTH modes,
+  # so the set is genuinely computable at --dry-run and the operator must see the
+  # true "would rebuild" list at the review gate, not a mode-degraded one. Moving
+  # this below the dry-run return would make the dry-run preview vacuous.
+  #
+  # --root is NOT optional. The builder derives its own REPO_ROOT from its own file
+  # location, so a close-out running against any tree other than the builder's own
+  # (the --self-test sandbox below, and any future non-self-rooted invocation) would
+  # silently answer from the WRONG tree. Same reason claim-version.sh:747-751 passes
+  # it. Here-string, never `producer | builder`: a pipeline conflates the producer's
+  # status with the consumer's, and this call's exit code is the fail-loud signal.
+  #
+  # NO `|| true`. That idiom is the defect class this phase exists to close: it maps
+  # every delegation failure onto the same empty string as a legitimately-empty diff,
+  # and the N/A limb below then reports green "nothing to rebuild" over an
+  # undeterminable set. Failure and emptiness are now distinguishable.
+  local candidates="" detect_rc=0
+  if [[ ! -f "$builder" ]]; then
+    detect_rc=127
+  else
+    candidates="$(/bin/bash "$builder" --root "$REPO_ROOT" --skills-for-paths <<< "$changed" 2>/dev/null)" || detect_rc=$?
+    [[ $detect_rc -ne 0 ]] && candidates=""
+  fi
+
+  # Fail-loud guard on an UNDETERMINABLE set — mirrors the D-4d diff-base guard above.
+  #
+  # C1 (#4765 convention): ASSERT AT --apply, PREDICT AT --dry-run. #4765 established
+  # that a --dry-run must never abort a phase — its own abort at 9.55 cost every phase
+  # after it, and an abort HERE would cost the fourteen after 9.95, taking the
+  # dry-run review gate with it. So the ABORT is scoped to --apply. The FINDING is
+  # not: --dry-run still reports it, as a non-blocking WARN (the outcome this file
+  # already uses at 15.6 for a real finding held outside its blocking scope), because
+  # a dry-run commits nothing and therefore cannot stale a package — it can only
+  # mislead. Silence here would be the same green-over-unknown this card closes.
+  if [[ $detect_rc -ne 0 ]]; then
+    local _d_why="build-skill-packages.sh --skills-for-paths exited ${detect_rc}"
+    [[ $detect_rc -eq 127 ]] && _d_why="package builder absent at core/deploy/tools/build-skill-packages.sh"
+    local _d_fix="affected-skill set UNDETERMINABLE, so .skill staleness cannot be ruled out. The builder exits 1 before answering when deploy.sh yields no TEMPLATE_SYNC_MAP, no per-module roster arrays (a precondition this query does not use — a roster reshape can trip it), or when core/deploy/lib-template-sync-source.sh is missing. Resolve the builder, then re-run; or rebuild + stage the affected package(s) per core/rules/skill-deployment.md before closing"
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "rebuild_skill_packages" "WARN" "${_d_why} — ${_d_fix}. NOT blocking under --dry-run (nothing is committed, so no package can be staled here); this same condition FAILS the close at --apply"
+      return 0
+    fi
+    mark_phase "rebuild_skill_packages" "FAIL" "${_d_why} — ${_d_fix}"
+    return 3
+  fi
 
   if [[ -z "$candidates" ]]; then
     mark_phase "rebuild_skill_packages" "N/A" "no skill source or injected canonical changed in the release diff — no package to rebuild (0 deferred)"
@@ -3167,7 +3525,66 @@ phase_commit_chore_pr() {
       mark_phase "commit_chore_pr" "FAIL" "staging-completeness: rebuilt package(s) NOT in the chore commit — ${_missing% }; the chore PR would ship a stale package while every phase reported PASS"
       return 3
     fi
-    mark_phase "commit_chore_pr" "PASS" "committed: $commit_msg"
+
+    # Staging-completeness assertion, TOUCHED-SURFACE arm (#4710 AC-3). Reads the
+    # COMMIT, like the rebuilt-packages arm above — but that arm iterates
+    # REBUILT_PACKAGES only, so a resolver-routed write to any other surface was
+    # covered by nothing here. The empty-staged-set guard at the top of this phase
+    # does cover it in principle, but it sits behind `[[ -z "$(git diff --staged
+    # --name-only)" ]]` and can therefore fire ONLY when nothing at all is staged —
+    # a condition a real close-out never reaches, because RELEASE_LOG.md is always
+    # present. Between the two, an unrecorded segment write was dropped from the
+    # commit while this phase still reported PASS.
+    #
+    #   INDEPENDENCE (the binding Stage 5 constraint). The expected set is derived
+    # from the PHASE RECORD — the surface each inject_* phase NAMED in its own PASS
+    # detail — never from TOUCHED_ARCHIVE_SEGMENTS. A guard that consults the same
+    # recorder whose omission IS the defect goes vacuous the instant a future write
+    # site forgets to call _record_touched_archive_segment, which is exactly the
+    # regression this exists to catch. Same property the empty-set guard above was
+    # built on, and it is what makes this arm fail on a MISSING recorder call rather
+    # than agree with it.
+    #
+    #   Matched by basename against the committed path list, so a future surface
+    # that lands in a different directory is still adjudicated instead of silently
+    # excluded. The hot ledger is skipped — files=() names it unconditionally.
+    local _reported="" _rmissing="" _rfound="" _sfc _sfc_re _hot _i2 _tok
+    _hot="$(/usr/bin/basename "$RELEASE_LOG")"
+    for ((_i2=0; _i2<${#PHASE_NAMES[@]}; _i2++)); do
+      [[ "${PHASE_NAMES[$_i2]}" == inject_* && "${PHASE_RESULTS[$_i2]}" == "PASS" ]] || continue
+      # Parenthesized "(<surface>.md)" is the shape every inject_* PASS detail uses
+      # to name the surface it resolved to. Non-.md parentheticals (e.g. the
+      # "(+ **Outcome rationale:**)" suffix) do not match and are ignored.
+      for _tok in $(/usr/bin/printf '%s\n' "${PHASE_DETAILS[$_i2]}" \
+                      | /usr/bin/grep -oE '\([A-Za-z0-9._-]+\.md\)' | /usr/bin/tr -d '()' || true); do
+        [[ "$_tok" == "$_hot" ]] && continue
+        case " $_reported " in *" $_tok "*) continue ;; esac
+        _reported="${_reported}${_tok} "
+      done
+    done
+    for _sfc in $_reported; do
+      _sfc_re="${_sfc//./\\.}"
+      # Here-string, not `printf … | grep -q`: the reader short-circuits on its
+      # first match and can SIGPIPE the writer. The empty-haystack difference is
+      # inert here — `<<<""` presents one empty line, and the needle is anchored
+      # on a basename ending in `.md`, so it cannot match an empty line.
+      if /usr/bin/grep -qE "(^|/)${_sfc_re}\$" <<<"$_committed"; then
+        _rfound="${_rfound}${_sfc} "
+      else
+        _rmissing="${_rmissing}${_sfc} "
+      fi
+    done
+    if [[ -n "$_rmissing" ]]; then
+      mark_phase "commit_chore_pr" "FAIL" "staging-completeness: surface(s) an inject_* phase reported writing into are NOT in the chore commit — ${_rmissing% }; the write landed on disk but files=() does not name it, so a mandated output would be dropped from the chore PR while every phase reported green"
+      return 3
+    fi
+
+    # Report the resolved write targets that were actually staged, so a surface
+    # outside the fixed files=() enumeration is visible in the phase log instead of
+    # vanishing into a green PASS.
+    local _detail="committed: $commit_msg"
+    [[ -n "$_rfound" ]] && _detail="$_detail; resolved write target(s) staged: ${_rfound% }"
+    mark_phase "commit_chore_pr" "PASS" "$_detail"
     return 0
   fi
   mark_phase "commit_chore_pr" "FAIL" "git commit failed"
@@ -3749,6 +4166,30 @@ ${_body}" 2>&1)"; then
 # FM-4: headline extraction falls back to "Release Notes" if no H1 present
 # (avoids degraded "vX.Y — vX.Y" title surfacing publicly).
 #
+# ASSERT AT --apply, PREDICT AT --dry-run (#4765 convention, applied here by #5142).
+# All three preflights below used to run in BOTH modes, above the mode test. Their
+# inputs do not exist at dry-run time and cannot: the tag is pushed at Stage 12 Phase
+# B3, and phase_scaffold_release_notes deliberately writes no note under --dry-run. So
+# every dry-run aborted on this script's own no-op, the runner exited 3, and no phase
+# after this one enumerated — the identical defect #4765 fixed at 9.55, with the
+# identical consequence for the dry-run review gate stage-13-close.md Phase A8
+# mandates. The preflights are correct and are kept byte-for-byte; only their
+# mode-blindness was the defect. --dry-run PREDICTS them and returns 0.
+#
+# The prediction is STATIC. It states what --apply will assert; it does not
+# pre-evaluate any of it. Do NOT "improve" it by having the dry-run limb compute a
+# result — a dry-run that reaches a remote or stats the note is the mode-blindness
+# defect wearing a different shape.
+#
+# Residual, accepted and named: --dry-run no longer PREVIEWS a publish failure on the
+# case where the inputs DO exist (a close resumed after the tag and note landed). The
+# gate loses nothing — all three preflights still run at --apply, before anything is
+# published, and Phases 15.55/15.6 remain the post-emit detectors.
+#
+# ORDERING: the --no-merge deferral above stays ABOVE the mode test on purpose. Under
+# --no-merge the --apply behaviour is to defer, so predicting a publish there would be
+# a false prediction. The mode test belongs above the three ABORTING preflights, which
+# is where it now is — not at the literal first line.
 phase_publish_github_release() {
   # --no-merge (#2919): Surface 1 (the GitHub Release) is published from the
   # RELEASE_NOTES file, which lands on main only when the Stage 13 chore PR merges.
@@ -3758,6 +4199,14 @@ phase_publish_github_release() {
   # sequencing invariant; the operator re-runs --apply post-merge.
   if [[ "$NO_MERGE" -eq 1 ]]; then
     mark_phase "publish_github_release" "SKIPPED" "DEFERRED under --no-merge — RELEASE_NOTES land on main only when the chore PR merges; Surface 1 publish waits (re-run --apply after merge)"
+    return 0
+  fi
+
+  # DRY-RUN branch — deliberately above all three aborting preflights, so the apply
+  # path below is reached with exactly the control flow it had before. Detail carries
+  # no '|' so it cannot break the markdown phase table in --markdown reports.
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "publish_github_release" "DRY-RUN" "would invoke view-then-create-or-edit state machine: gh release view $VERSION → create OR edit OR no-op (per release-notes-standard.md § 5.5). Not evaluated under --dry-run: the tag-on-origin, tag↔merge-SHA and notes-file preflights. Their inputs do not exist yet — Stage 12 Phase B3 has not pushed the tag and the scaffold phase deliberately wrote no note — so checking them here would only fail on this script's own no-op. All three run for real at --apply, before anything is published"
     return 0
   fi
 
@@ -3789,11 +4238,6 @@ phase_publish_github_release() {
   if [[ ! -f "$notes_path" ]]; then
     mark_phase "publish_github_release" "FAIL" "RELEASE_NOTES file not present at $notes_path (Stage 13 chore PR may not have merged or scaffold step may not have run)"
     return 3
-  fi
-
-  if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "publish_github_release" "DRY-RUN" "would invoke view-then-create-or-edit state machine: gh release view $VERSION → create OR edit OR no-op (per release-notes-standard.md § 5.5)"
-    return 0
   fi
 
   # View-then-create-or-edit state machine
@@ -4271,14 +4715,63 @@ generate_markdown_report() {
 | Phase | Result | Detail |
 |-------|--------|--------|
 EOF
-  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog assert_derived_surfaces bump_version ledger_guard rebuild_skill_packages commit_chore_pr create_chore_pr await_merge_chore_pr sync_primary_checkout reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release assert_anchor_hygiene check_release_body_drift invoke_orphan_cleanup pattern_scan)
-  local p rd r d
-  for p in "${phases[@]}"; do
-    rd="$(get_phase "$p")"
-    r="${rd%|*}"
-    d="${rd#*|}"
-    /usr/bin/printf '| %s | %s | %s |\n' "$p" "$r" "$d"
+  # ── Phase-outcomes rows: DERIVED from the phase record, never enumerated ─────
+  # Rows come from PHASE_NAMES/PHASE_RESULTS/PHASE_DETAILS, which mark_phase
+  # writes at execution time. A phase added to the dispatch self-reports here with
+  # no edit to this function. This replaced a hand-maintained `phases=()` array
+  # that drifted twice (v4.12's 6.6/6.7, then 16.7) and was silently omitting
+  # three recorded phases: inject_velocity_field, append_release_learnings,
+  # audit_epic_rollup.
+  #
+  # SCOPE OF THAT CONTRACT — narrow on purpose. It holds for THIS table, not for
+  # the report as a whole. Two partial phase enumerations remain hardcoded and DO
+  # need hand-editing when a phase joins the --no-merge deferred set: the
+  # "Deferred Under --no-merge" bullets further down in this function, and the
+  # `deferred` literal in generate_json_report. Do NOT read this as "there is no
+  # report list to edit" — there is; it is simply not this one.
+  #
+  # WHY THE RECORD AND NOT THE phase_*() DEFINITIONS: the record is the only
+  # in-file surface that observes EXECUTION rather than declaration. A definition
+  # scan silently drops post_gate_passage_proof, which is marked inside
+  # phase_run_verification and has no phase_*() function of its own — which would
+  # turn a three-phase omission into a one-phase omission that reads as fixed.
+  #
+  # WHERE THE CROSS-CHECK LIVES: deriving makes the record the sole input to this
+  # audit table, so a dispatched phase that never calls mark_phase is silently
+  # ABSENT. The dispatch<->record cross-check that catches that is a self_test arm,
+  # and that placement is forced, not stylistic: the dispatch block sits BELOW the
+  # "# ─── Argument parsing" banner and is therefore absent from the function-only
+  # slice core/deploy/tests/test_version_stamping.sh sources, so a render-path
+  # self-parse of the dispatch would read zero phases and go vacuous under exactly
+  # the harness that exercises this file.
+  #
+  # Index-loop form is required: under bash 3.2 + set -u, "${PHASE_NAMES[@]}" on
+  # an empty array yields one empty element. Arrays are read directly rather than
+  # through get_phase, whose "RESULT|DETAIL" round-trip mis-splits any detail
+  # containing a literal pipe.
+  local _pr_i
+  for ((_pr_i=0; _pr_i<${#PHASE_NAMES[@]}; _pr_i++)); do
+    is_first_phase_occurrence "$_pr_i" || continue
+    /usr/bin/printf '| %s | %s | %s |\n' \
+      "${PHASE_NAMES[$_pr_i]}" "${PHASE_RESULTS[$_pr_i]}" "${PHASE_DETAILS[$_pr_i]}"
   done
+  echo
+  echo "Rows are the phases this run executed, in execution order. A phase absent from the table did not run — the table is a record of execution, not a declaration of the planned sequence. The full declared sequence is in \`--help\`."
+  # A halted run states the fact of truncation, not just the semantics of absence.
+  # 32 of the 33 in-run generate_report call sites are abort paths
+  # (`phase_X || { generate_report; exit N; }`), so the truncated run is the
+  # DOMINANT artifact a reader sees, and a derived table alone cannot separate
+  # "did not run" from "does not exist". Derived purely from the record — no
+  # second enumeration, no dispatch coupling. Honest bound: this fires only on a
+  # FAIL-terminated run; a signal kill or a die() never reaches generate_report at
+  # all, and no marker helps there.
+  local _pr_last=$(( ${#PHASE_NAMES[@]} - 1 ))
+  if [[ "$_pr_last" -ge 0 ]]; then
+    if [[ "${PHASE_RESULTS[$_pr_last]}" == "FAIL" ]]; then
+      echo
+      echo "**Run halted** at \`${PHASE_NAMES[$_pr_last]}\` — phases after it did not execute."
+    fi
+  fi
   echo
   echo "## Verification"
   echo
@@ -4356,12 +4849,39 @@ EOF
 generate_json_report() {
   local slug="$STATE_MILESTONE_SLUG"
   [[ -z "$slug" ]] && slug="$VERSION"
+  # Phase outcomes for the JSON consumer, derived from the SAME phase record and
+  # the SAME first-occurrence rule the markdown table uses — a `--json` reader had
+  # zero phase visibility before this. Passed as flat argv triples rather than a
+  # delimited blob so a detail containing a pipe, a tab or a newline cannot
+  # desync the fields. argv[15] carries the triple COUNT, which (a) lets python
+  # validate the operand count instead of trusting it and (b) keeps this array
+  # non-empty, so no `"${ARR[@]}"`-on-empty guard is owed under set -u
+  # (ADR-008 Rule 2 — explicit gate over the bash 4.2 `:+` substitution).
+  local _pj_i _pj_n=0
+  for ((_pj_i=0; _pj_i<${#PHASE_NAMES[@]}; _pj_i++)); do
+    is_first_phase_occurrence "$_pj_i" || continue
+    _pj_n=$((_pj_n+1))
+  done
+  local _pj_rec=("$_pj_n")
+  for ((_pj_i=0; _pj_i<${#PHASE_NAMES[@]}; _pj_i++)); do
+    is_first_phase_occurrence "$_pj_i" || continue
+    _pj_rec+=("${PHASE_NAMES[$_pj_i]}" "${PHASE_RESULTS[$_pj_i]}" "${PHASE_DETAILS[$_pj_i]}")
+  done
   /usr/bin/python3 - "$RUN_TS" "$MODE" "$PR_NUMBER" "$VERSION" "$MILESTONE" "$slug" \
     "$STATE_LOG_ROW_STATE" "$STATE_MILESTONE_STATE" "$STATE_TAG_EXISTS" \
-    "$STATE_CYCLE_TIME" "$OPEN_ISSUE_COUNT" "$CHORE_PR_NUMBER" "$OPEN_ISSUE_LIST" "$NO_MERGE" <<'PY'
+    "$STATE_CYCLE_TIME" "$OPEN_ISSUE_COUNT" "$CHORE_PR_NUMBER" "$OPEN_ISSUE_LIST" "$NO_MERGE" \
+    "${_pj_rec[@]}" <<'PY'
 import sys, json
 ts, mode, pr, version, milestone, slug, log_state, ms_state, tag, cycle, open_n, chore_pr, open_list, no_merge = sys.argv[1:15]
 issues = [int(x) for x in open_list.split("\n") if x.strip()]
+# Phase outcomes: argv[15] is the triple count, then flat (name, result, detail)
+# triples. Fail loud on a count mismatch rather than emitting a truncated audit
+# record that reads as complete.
+_pn = int(sys.argv[15])
+_pf = sys.argv[16:]
+if len(_pf) != 3 * _pn:
+    raise SystemExit("phase-record argv mismatch: declared %d triples, got %d operands" % (_pn, len(_pf)))
+phases = [{"name": _pf[i], "result": _pf[i + 1], "detail": _pf[i + 2]} for i in range(0, len(_pf), 3)]
 # --no-merge (#2919): the post-merge-dependent phases defer; surface which ones so a
 # JSON consumer sees the same deferral the markdown report's "Deferred Under --no-merge"
 # section shows. Empty list on the normal (merge) path.
@@ -4377,6 +4897,7 @@ payload = {
     "chore_pr": int(chore_pr) if chore_pr.isdigit() else None,
     "d1_manual_close_candidates": {"count": int(open_n), "issues": issues},
     "deferred_under_no_merge": deferred,
+    "phases": phases,
 }
 print(json.dumps(payload, indent=2))
 PY
@@ -5437,6 +5958,249 @@ EOF
   MILESTONE="$_vl_saved_ms"; MERGE_SHA="$_vl_saved_sha"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # ── Test 4c.6: phase_inject_close_class_telemetry_field (6.8) — offline, hermetic.
+  #
+  # The producer is STUBBED (the real one reaches `gh` and the operator-instance
+  # registers) but every stub emits the REAL § 3.2 shape, so the grammar and
+  # measuredness asserts run against realistic bytes.
+  #
+  # THE ARM THAT MATTERS IS THE VACUITY PAIR. A structurally perfect line whose
+  # every rate slot reads `N/A` is REACHABLE at exit 0 (no gh degrades Indicators
+  # 3 and 6; no register degrades 1, 2 and 5; the conditions co-occur), and it
+  # satisfies the grammar assert completely. Two runs identical except for that
+  # property must produce DIFFERENT outcome details — a fixture whose two arms
+  # agree would be measuring nothing, which is the same broken-probe shape the
+  # Indicator-5 fix exists to remove. Note the deliberate severity asymmetry:
+  # producer-side the vacuity reading is a WARNING on a written field, gate-side
+  # (deploy.sh Check 48 sub-check l-3a) the same reading is a finding.
+  #
+  # Indicator 5's own bivalence (marker present -> present / absent -> absent /
+  # no register -> N/A) is NOT re-tested here: it is a property of
+  # compute-close-class-telemetry.sh and is asserted in that tool's own
+  # --self-test (its Tests 5b-5d, including the substring-vs-whole-line control).
+  # Re-driving it through a stub here would assert the stub, not the tool.
+  local _cc_saved_log="$RELEASE_LOG" _cc_saved_ver="$VERSION" _cc_saved_mode="$MODE"
+  local _cc_saved_tool="$COMPUTE_CLOSE_CLASS_TELEMETRY" _cc_saved_ms="$MILESTONE"
+  local _cc_tmp; _cc_tmp="$(/usr/bin/mktemp -d -t closeclass-selftest.XXXXXX)"
+  MODE="apply"; MILESTONE="999"
+  RELEASE_LOG="$_cc_tmp/RELEASE_LOG.md"
+
+  local _cc_ok="$_cc_tmp/cct-ok.sh" _cc_vac="$_cc_tmp/cct-vac.sh" _cc_bad="$_cc_tmp/cct-bad.sh"
+  local _cc_empty="$_cc_tmp/cct-empty.sh" _cc_e2="$_cc_tmp/cct-e2.sh" _cc_noexec="$_cc_tmp/cct-noexec.sh"
+  /bin/cat > "$_cc_ok" <<'EOF'
+#!/bin/sh
+echo "retro-conformance 10/10 (1.00); lessons-population 8/10 (0.80); carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 12/13 (0.92); evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh"
+EOF
+  # Conformant AND vacuous: the reachable gh-less + no-register shape.
+  /bin/cat > "$_cc_vac" <<'EOF'
+#!/bin/sh
+echo "retro-conformance N/A — no retro register found for v9.96; lessons-population N/A — no lessons register found; carry-forward-closure N/A — gh unavailable — carry-forward closure not computed; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence N/A — no retro register found; evidence-preservation N/A — gh unavailable — phase-evidence preservation not computed; evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh"
+EOF
+  /bin/cat > "$_cc_bad" <<'EOF'
+#!/bin/sh
+echo "retro-conformance 10/10 (1.00); rollup-presence present; mechanism: compute-close-class-telemetry.sh"
+EOF
+  /bin/cat > "$_cc_empty" <<'EOF'
+#!/bin/sh
+printf '  \n'
+exit 0
+EOF
+  /bin/cat > "$_cc_e2" <<'EOF'
+#!/bin/sh
+echo "ERROR: retro register exists but is unreadable" >&2
+exit 2
+EOF
+  /bin/cat > "$_cc_noexec" <<'EOF'
+#!/bin/sh
+echo "this stub is deliberately NOT chmod +x"
+EOF
+  /bin/chmod +x "$_cc_ok" "$_cc_vac" "$_cc_bad" "$_cc_empty" "$_cc_e2"
+
+  # v9.96 carries **Outcome rationale:** (primary anchor); v9.97 carries only
+  # **Outcome:** (fallback anchor); v9.98 is an untouched sibling.
+  local _cc_write
+  _cc_write() {
+    /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+
+#### Deployment Log v9.96
+**Cycle-Time:** 3d 4h.
+**Result:** SUCCESS — green CI.
+**Outcome:** SUCCESS
+**Outcome rationale:** every declared limb landed.
+
+#### Deployment Log v9.97
+**Cycle-Time:** 1d 0h.
+**Result:** SUCCESS — no rationale line.
+**Outcome:** SUCCESS
+
+#### Deployment Log v9.98
+**Cycle-Time:** 2d 0h.
+**Result:** SUCCESS — untouched sibling.
+**Outcome:** SUCCESS
+EOF
+  }
+  # Count `**Close-Class-Telemetry:**` lines inside ONE version's block on ONE file.
+  local _cc_count
+  _cc_count() {
+    /usr/bin/awk -v ver="$2" '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { inblk = 1; next }
+      inblk && line ~ /^#### / { inblk = 0 }
+      inblk && line ~ /^\*\*Close-Class-Telemetry:\*\*/ { n++ }
+      END { print n + 0 }
+    ' "$1" 2>/dev/null || echo 0
+  }
+  # Field-name sequence inside a version's block — proves POSITION, not presence.
+  # The field-name class admits a SPACE: `**Outcome rationale:**` is a real field
+  # in this block and the space-less class used elsewhere silently drops it,
+  # which would collapse the primary-anchor arm and the fallback-anchor arm onto
+  # the same expected string and make the pair unfalsifiable.
+  local _cc_seq
+  _cc_seq() {
+    /usr/bin/awk -v ver="$2" '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { inblk = 1; next }
+      inblk && line ~ /^#### / { inblk = 0 }
+      inblk && line ~ /^\*\*[A-Za-z][A-Za-z -]*:\*\*/ {
+        n = line; sub(/:\*\*.*$/, "", n); sub(/^\*\*/, "", n); printf "%s ", n
+      }
+    ' "$1" 2>/dev/null || true
+  }
+
+  COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_ok"
+
+  # (a) clean block, primary anchor — PASS, positioned after **Outcome rationale:**.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; VERSION="v9.96"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field)" == PASS\|* ]] || { echo "FAIL: close-class inject on a clean block should PASS, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  local _cc_s; _cc_s="$(_cc_seq "$RELEASE_LOG" v9.96)"
+  [[ "$_cc_s" == "Cycle-Time Result Outcome Outcome rationale Close-Class-Telemetry " ]] || { echo "FAIL: field order must place Close-Class-Telemetry after 'Outcome rationale', got '$_cc_s'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.98)" -eq 0 ]] || { echo "FAIL: the field leaked into the sibling v9.98 block"; failures=$((failures+1)); }
+
+  # (b) idempotent re-run — SKIPPED, no duplicate.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field)" == SKIPPED\|* ]] || { echo "FAIL: close-class re-run must SKIP, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 1 ]] || { echo "FAIL: re-run must not duplicate the **Close-Class-Telemetry:** line"; failures=$((failures+1)); }
+
+  # (c) FALLBACK ANCHOR — a block with **Outcome:** but no rationale line still
+  # lands the field, immediately after **Outcome:**.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; VERSION="v9.97"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field)" == PASS\|* ]] || { echo "FAIL: fallback-anchor inject should PASS, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  _cc_s="$(_cc_seq "$RELEASE_LOG" v9.97)"
+  [[ "$_cc_s" == "Cycle-Time Result Outcome Close-Class-Telemetry " ]] || { echo "FAIL: fallback anchor must place the field after **Outcome:**, got '$_cc_s'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'carries no **Outcome rationale:** field' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: the fallback path must name which anchor it used, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+
+  # (d) THE VACUITY PAIR — the arm this phase exists to make observable. Both
+  # lines are grammar-conformant; only one carries a computed ratio. The two
+  # arms MUST disagree.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; VERSION="v9.96"; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_vac"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field)" == PASS\|* ]] || { echo "FAIL: an all-N/A but conformant field must still be WRITTEN (an honest N/A is the mandated form; a degraded environment is not a close-out failure), got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 1 ]] || { echo "FAIL: the vacuous-but-conformant field must be written exactly once"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'carries NO computed ratio' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: a field with no computed ratio must say so — silence here is how a vacuous row reads as a measured one; got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'gh was unavailable' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: the disposition must be read from the emitted LINE (the exit code cannot carry it — the gh-less path exits 0), got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  # CONTROL — the measured line must NOT carry the vacuity warning. Without this
+  # arm the assert above is satisfied by a phase that always warns.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_ok"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  if /usr/bin/grep -qF 'carries NO computed ratio' <<<"$(get_phase inject_close_class_telemetry_field)"; then
+    echo "FAIL: control — a MEASURED field must NOT carry the vacuity warning (the arm above would be vacuous)"; failures=$((failures+1))
+  fi
+
+  # (e) non-conformant producer output — FAIL, and nothing is written.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_bad"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: a line missing § 3.2 slots must FAIL the grammar self-assert, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 0 ]] || { echo "FAIL: a grammar failure must write nothing"; failures=$((failures+1)); }
+
+  # (f) empty capture at exit 0 — FAIL, writes nothing. A `$( )` capture can be
+  # EMPTY at exit 0, which an exit-code check alone cannot see.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_empty"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: an empty producer capture at exit 0 must FAIL, never write a bare field, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 0 ]] || { echo "FAIL: an empty capture must write nothing"; failures=$((failures+1)); }
+
+  # (g) exit 2 — SOURCE INTEGRITY, escalated with its own diagnostic rather than
+  # folded into the generic failure. Exit 2 means a register EXISTS but is
+  # UNREADABLE; recording an N/A here would misreport a permissions fault as an
+  # absent artifact.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_e2"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: producer exit 2 must FAIL, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'UNREADABLE' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: exit 2 must be reported as a source-integrity condition, not a generic producer failure, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 0 ]] || { echo "FAIL: a source-integrity abort must write nothing"; failures=$((failures+1)); }
+
+  # (h) producer NOT executable — SKIP, write nothing. The field asserts
+  # `mechanism: compute-close-class-telemetry.sh`; composing one without that
+  # mechanism fabricates the claim the field exists to measure.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_noexec"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field)" == SKIPPED\|* ]] || { echo "FAIL: a non-executable producer must SKIP, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 0 ]] || { echo "FAIL: a missing producer must write nothing — a hand-composed field would fabricate its own mechanism claim"; failures=$((failures+1)); }
+
+  # (i) dry-run — marks DRY-RUN, prints the RESOLVED bytes, writes nothing. Under
+  # the Indicator-5 fix the resolved value reads nothing an earlier phase in this
+  # run wrote, so dry-run and apply resolve the same bytes by construction.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_ok"; MODE="dry-run"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: dry-run must mark DRY-RUN, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'retro-conformance 10/10 (1.00)' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: dry-run must print the RESOLVED bytes, not a predicted string, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 0 ]] || { echo "FAIL: dry-run must not write"; failures=$((failures+1)); }
+  MODE="apply"
+
+  # (j) CO-LOCATION over an ARCHIVED block. The field must land in the SEGMENT,
+  # beside its own **Result:**, with the hot stub left at zero. A hot-ledger write
+  # exits 0, passes a corpus-wide grep AND passes the grammar assert — co-location
+  # is the only observable that separates the two, and it is the producer-side
+  # twin of Check 48 sub-check l-1.
+  local _cc_atmp; _cc_atmp="$(/usr/bin/mktemp -d -t closeclass-arch.XXXXXX)"
+  local _cc_aseg="$_cc_atmp/RELEASE_LOG_ARCHIVE-v9.md"
+  RELEASE_LOG="$_cc_atmp/RELEASE_LOG.md"
+  /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+
+#### Deployment Log v9.96
+_Archived: [segment](RELEASE_LOG_ARCHIVE-v9.md)_
+EOF
+  /bin/cat > "$_cc_aseg" <<'EOF'
+# RELEASE_LOG_ARCHIVE-v9
+
+#### Deployment Log v9.96
+**Cycle-Time:** 5d 0h.
+**Result:** SUCCESS — archived body.
+**Outcome:** SUCCESS
+EOF
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  VERSION="v9.96"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field)" == PASS\|* ]] || { echo "FAIL: archived-block close-class inject should PASS, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$_cc_aseg" v9.96)" -eq 1 ]] || { echo "FAIL: the close-class field must land in the ARCHIVE SEGMENT for an archived block"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 0 ]] || { echo "FAIL: nothing may be written into the hot stub when the body is archived (split record: parses fine, still broken)"; failures=$((failures+1)); }
+  # cross-surface idempotency — the probe must read the SEGMENT, not the stub.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field)" == SKIPPED\|* ]] || { echo "FAIL: archived-block re-run must SKIP (cross-surface idempotency), got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$_cc_aseg" v9.96)" -eq 1 ]] || { echo "FAIL: archived-block re-run must not duplicate the field in the segment"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_cc_atmp" 2>/dev/null || true
+  /bin/rm -rf "$_cc_tmp" 2>/dev/null || true
+  unset -f _cc_write _cc_count _cc_seq
+  RELEASE_LOG="$_cc_saved_log"; VERSION="$_cc_saved_ver"; MODE="$_cc_saved_mode"
+  COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_saved_tool"; MILESTONE="$_cc_saved_ms"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # Test 4d: phase_detect_open_issues exclude filter (#38, #3665) — offline, hermetic.
   # Stubs $GH so `gh issue list … --json number,title,labels --jq …` returns a fixed
   # `<number>\t<labels-csv>\t<title>` fixture (gh applies --jq server-side, so the
@@ -6244,6 +7008,60 @@ STUB
     fi
     [[ "$(get_phase publish_github_release | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: tag↔MERGE_SHA mismatch must mark publish FAIL"; failures=$((failures+1)); }
 
+    # (c)/(d) REACHABILITY OF THE DRY-RUN LIMB (#5142 F-01; #4765 convention).
+    # Phase 15.5's dry-run branch used to sit BELOW three `return 3` preflights, so
+    # every --dry-run aborted here before the mode was ever read and the phases after
+    # it never enumerated — the same defect class #4765 fixed at 9.55, with the same
+    # consequence for the dry-run review gate stage-13-close.md Phase A8 mandates.
+    #
+    # These arms assert REACHABILITY, not presence. A presence check (does a
+    # `MODE == dry-run` branch exist in this function?) passes on the DEFECTIVE code —
+    # the branch was always there, just stranded below the aborts. Each fixture is
+    # therefore driven through BOTH modes: the dry arm must reach the limb and return
+    # 0 with the literal outcome DRY-RUN, and the apply arm on the IDENTICAL fixture
+    # must still abort. Without the apply arm the dry arm is satisfiable by a gutted
+    # guard or by a fixture that does not actually omit what it claims to omit; without
+    # the literal-DRY-RUN assertion it is satisfiable by a vacuous PASS.
+    local _pg_saved_nomerge="$NO_MERGE"
+    NO_MERGE=0   # the deferral guard sits above the dry-run branch; keep it out of the way
+    local _pg_rc _pg_detail
+
+    # Fixture N — NOTES ABSENT. This is the artifact phase_scaffold_release_notes
+    # deliberately does not write under --dry-run, so on the real dry-run path this
+    # preflight fires on the script's own no-op. Tag present and at MERGE_SHA, so the
+    # two preflights above it pass and this one is provably the abort under test.
+    MERGE_SHA="$_ms_commit"; VERSION="v9.89"
+    RELEASE_NOTES_DIR="$_ms_tmp/empty-notes"; /bin/mkdir -p "$RELEASE_NOTES_DIR"
+
+    MODE="dry-run"; PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
+    phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
+    [[ "$_pg_rc" -eq 0 ]] || { echo "FAIL: F-01-N-dry — under --dry-run the phase must reach its mode branch and return 0 when the note is absent (it is absent by construction; phase_scaffold_release_notes wrote nothing), got rc=$_pg_rc"; failures=$((failures+1)); }
+    [[ "$(get_phase publish_github_release | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: F-01-N-dry — the outcome must be literally DRY-RUN (a vacuous PASS also returns 0 and must not count), got '$(get_phase publish_github_release)'"; failures=$((failures+1)); }
+
+    MODE="apply"; PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
+    phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
+    [[ "$_pg_rc" -ne 0 ]] || { echo "FAIL: F-01-N-apply anti-vacuity — the SAME notes-absent fixture MUST still abort under --apply; rc=0 means the preflight was gutted rather than mode-scoped, or the fixture is not actually missing the note"; failures=$((failures+1)); }
+    _pg_detail="$(get_phase publish_github_release)"
+    /usr/bin/grep -qF 'RELEASE_NOTES file not present' <<<"$_pg_detail" || { echo "FAIL: F-01-N-apply — the --apply preflight message must be preserved verbatim (the apply limb is unchanged), got '$_pg_detail'"; failures=$((failures+1)); }
+
+    # Fixture T — TAG ABSENT. The FIRST of the three preflights, and the one a genuine
+    # pre-close dry-run hits first: the tag is pushed at Stage 12 Phase B3, which has
+    # not run when the operator dry-runs the close. v9.87 was never tagged in the
+    # sandbox origin, so ls-remote returns an empty set with no network call.
+    VERSION="v9.87"
+
+    MODE="dry-run"; PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
+    phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
+    [[ "$_pg_rc" -eq 0 ]] || { echo "FAIL: F-01-T-dry — under --dry-run the phase must reach its mode branch and return 0 when the tag is not yet on origin (Stage 12 Phase B3 has not run at dry-run time), got rc=$_pg_rc"; failures=$((failures+1)); }
+    [[ "$(get_phase publish_github_release | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: F-01-T-dry — the outcome must be literally DRY-RUN, got '$(get_phase publish_github_release)'"; failures=$((failures+1)); }
+
+    MODE="apply"; PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
+    phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
+    [[ "$_pg_rc" -ne 0 ]] || { echo "FAIL: F-01-T-apply anti-vacuity — the SAME tag-absent fixture MUST still abort under --apply; rc=0 means the tag preflight was gutted, or v9.87 is unexpectedly present on the sandbox origin"; failures=$((failures+1)); }
+    _pg_detail="$(get_phase publish_github_release)"
+    /usr/bin/grep -qF 'not present on origin' <<<"$_pg_detail" || { echo "FAIL: F-01-T-apply — the --apply tag preflight must be the abort under test and its message preserved verbatim, got '$_pg_detail'"; failures=$((failures+1)); }
+
+    NO_MERGE="$_pg_saved_nomerge"
     REPO_ROOT="$_ms_saved_root"; MODE="$_ms_saved_mode"; VERSION="$_ms_saved_version"; RELEASE_NOTES_DIR="$_ms_saved_notesdir"
   else
     echo "  (skipped #1682 identity-assertion self-test — git not executable at $GIT)" >&2
@@ -6352,10 +7170,19 @@ STUB
     fi
   fi
 
-  # Test 7: usage block extractable
-  if ! /usr/bin/sed -n '2,92p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
-    echo "FAIL: usage block extraction"; failures=$((failures+1))
-  fi
+  # Test 7: usage block extractable AND not truncated. The old arm ran its own
+  # copy of the fixed `sed -n '2,92p'` window and grepped only for "Usage:",
+  # which sits near the top — so it passed while the window silently evicted the
+  # META section. Drive the REAL renderer (no second copy to drift) and assert
+  # both ends of the block: the opening "Usage:" and the last META flag.
+  local _u7_out; _u7_out="$(usage || true)"
+  # Here-strings, not `echo … | grep -q`: grep -q short-circuits and SIGPIPEs the
+  # writer (SIGPIPE-idiom gate). Both needles are non-empty, so the `<<<""`
+  # one-empty-line degenerate case cannot produce a false match.
+  /usr/bin/grep -q "Usage:" <<<"$_u7_out" \
+    || { echo "FAIL: usage block extraction — 'Usage:' absent from the rendered help"; failures=$((failures+1)); }
+  /usr/bin/grep -q -- "--self-test" <<<"$_u7_out" \
+    || { echo "FAIL: usage block truncated — the META section (--self-test) is absent from the rendered help"; failures=$((failures+1)); }
 
   # Test 8: chore-PR body has zero parser-clean violations
   VERSION="v2.10"
@@ -6468,28 +7295,155 @@ STUB
     echo "  (skipped #3108 union-merge self-test — git not executable at $GIT)" >&2
   fi
 
-  # Test 11: changed_skills_from_paths + files=() composition (#3322 — offline,
-  # hermetic; catches the P1 staging omission in CI before any live close).
-  local _csp_out
-  # (a) direct source — a references/ path stales the whole skill (cp -R), and a
-  #     non-skill path emits nothing.
-  _csp_out="$(/usr/bin/printf '%s\n' 'core/skills/eval-writer/references/release-notes-eval-rubric.md' 'release/releases/RELEASE_LOG.md' | changed_skills_from_paths || true)"
-  if ! /usr/bin/printf '%s\n' "$_csp_out" | /usr/bin/grep -qx 'eval-writer'; then
-    echo "FAIL: changed_skills_from_paths must detect eval-writer from a core/skills/eval-writer/ path (rule a direct-source)"; failures=$((failures+1))
+  # Test 11: phase_rebuild_skill_packages detection + files=() composition
+  # (#3322 staging omission; #4722 delegated detection). Offline, hermetic.
+  #
+  # THESE ARMS DRIVE THE REAL PHASE, NOT THE BUILDER (#4722 C2). Detection is now
+  # delegated, so any arm that pipes paths straight into
+  # build-skill-packages.sh --skills-for-paths would be testing the BUILDER and would
+  # pass green on an unmodified pre-fix close-out — the same
+  # cannot-fail-on-its-own-defect pattern this release exists to close. Every arm
+  # below therefore invokes phase_rebuild_skill_packages itself and reads the phase
+  # record, the Test 4g idiom; block (c) additionally pins the phase's structure, the
+  # Test 12-T1 idiom ("a detector derived from its own producer cannot silently
+  # diverge from it"). Falsification: on a pre-fix close-out — local
+  # changed_skills_from_paths with its core/standards + operations/templates prefix
+  # case — arm (a1) marks N/A instead of naming tracker-manager, and every arm in
+  # block (c) fails. git is REQUIRED; if absent the behavioural block self-skips and
+  # the structural block still runs.
+  if [[ -x "$GIT" ]]; then
+    local _rp_root="$REPO_ROOT" _rp_mode="$MODE" _rp_merge="$MERGE_SHA"
+    local _rp_tmp; _rp_tmp="$(/usr/bin/mktemp -d -t rebuildpkg-selftest.XXXXXX)"
+    local _rp_work="$_rp_tmp/work"
+    /bin/mkdir -p "$_rp_work/core/deploy/tools"
+    # Copy the REAL builder, the REAL deploy.sh (TEMPLATE_SYNC_MAP + roster arrays)
+    # and the REAL shared resolver into the sandbox, so the arms exercise the ACTUAL
+    # --skills-for-paths rules rather than a restatement of them — the fixture idiom
+    # claim-version.sh's package self-test uses for the same query.
+    /bin/cp "$_rp_root/core/deploy/tools/build-skill-packages.sh" "$_rp_work/core/deploy/tools/" 2>/dev/null || true
+    /bin/cp "$_rp_root/core/deploy/deploy.sh" "$_rp_work/core/deploy/" 2>/dev/null || true
+    /bin/cp "$_rp_root/core/deploy/lib-template-sync-source.sh" "$_rp_work/core/deploy/" 2>/dev/null || true
+    $GIT init -q -b main "$_rp_work" 2>/dev/null || { $GIT init -q "$_rp_work" 2>/dev/null; ( cd "$_rp_work" && $GIT checkout -q -b main 2>/dev/null ); }
+    ( cd "$_rp_work" && $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1 \
+      && $GIT -c user.email=t@t -c user.name=t commit -qm base >/dev/null 2>&1 ) || true
+
+    # _rp_touch <repo-rel-path> — commit a one-line change to that path and set
+    # MERGE_SHA to it, so the phase's own `diff --name-only SHA^1 SHA` yields exactly
+    # that path. The phase resolves its diff itself; nothing is stubbed.
+    _rp_touch() {
+      /bin/mkdir -p "$_rp_work/$(/usr/bin/dirname "$1")" 2>/dev/null || true
+      /usr/bin/printf 'fixture edit: %s\n' "$1" >> "$_rp_work/$1"
+      ( cd "$_rp_work" && $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1 \
+        && $GIT -c user.email=t@t -c user.name=t commit -qm "touch $1" >/dev/null 2>&1 ) || true
+      MERGE_SHA="$($GIT -C "$_rp_work" rev-parse HEAD 2>/dev/null)"
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    }
+    REPO_ROOT="$_rp_work"; MODE="dry-run"
+
+    # (a1) SENSITIVITY — THE DEFECT CASE. tracker-schemas.md homes to core/schemas/,
+    #      a tree no prefix-enumerated rule named. Pre-fix this marked N/A.
+    _rp_touch "core/schemas/tracker-schemas.md"
+    phase_rebuild_skill_packages >/dev/null 2>&1
+    if [[ "$(get_phase rebuild_skill_packages)" != DRY-RUN*tracker-manager* ]]; then
+      echo "FAIL: a core/schemas/ canonical edit MUST resolve tracker-manager (#4722 — the third canonical tree), got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+    # (a2) CONTROL — an already-covered tree. Distinguishes "the fix works" from
+    #      "the fixture resolves everything"; a2 passed pre-fix and must still pass.
+    _rp_touch "core/standards/template-taxonomy.md"
+    phase_rebuild_skill_packages >/dev/null 2>&1
+    if [[ "$(get_phase rebuild_skill_packages)" != DRY-RUN*eval-writer* ]]; then
+      echo "FAIL: core/standards/template-taxonomy.md MUST resolve eval-writer (rule b, already-covered tree), got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+    # (a3) rule (a) direct source — a references/ path stales the whole skill (cp -R).
+    _rp_touch "core/skills/eval-writer/references/release-notes-eval-rubric.md"
+    phase_rebuild_skill_packages >/dev/null 2>&1
+    if [[ "$(get_phase rebuild_skill_packages)" != DRY-RUN*eval-writer* ]]; then
+      echo "FAIL: a core/skills/eval-writer/ path MUST resolve eval-writer (rule a direct-source), got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+    # (a4) SPECIFICITY — an untouched skill is NOT rebuilt. Without this, an arm that
+    #      resolved every skill for every path would satisfy a1-a3.
+    _rp_touch "CHANGELOG.md"
+    phase_rebuild_skill_packages >/dev/null 2>&1
+    if [[ "$(get_phase rebuild_skill_packages | /usr/bin/cut -d'|' -f1)" != "N/A" ]]; then
+      echo "FAIL: a non-skill non-canonical diff MUST resolve no package (specificity), got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+
+    # (b) C1 — the fail-loud guard's MODE SCOPING (#4765 convention: assert at
+    #     --apply, predict at --dry-run). ONE fixture — the builder removed, so
+    #     delegation cannot answer — driven in BOTH modes, so the mode is provably
+    #     the variable under test. The dry-run arm is the #4765 regression guard: a
+    #     return 3 here would abort the run and the FOURTEEN phases after 9.95 would
+    #     never enumerate, re-breaking the dry-run review gate #4765 just restored.
+    #     The apply arm is the anti-vacuity half: it proves the fixture really is
+    #     broken and that the guard still blocks a real close.
+    /bin/rm -f "$_rp_work/core/deploy/tools/build-skill-packages.sh"
+    _rp_touch "core/schemas/tracker-schemas.md"
+    local _rp_rc=0
+    MODE="dry-run"; phase_rebuild_skill_packages >/dev/null 2>&1 || _rp_rc=$?
+    if [[ $_rp_rc -ne 0 ]]; then
+      echo "FAIL: C1 — an undeterminable set under --dry-run must NOT abort (rc $_rp_rc); the 14 phases after 9.95 would never enumerate (#4765)"; failures=$((failures+1))
+    fi
+    if [[ "$(get_phase rebuild_skill_packages | /usr/bin/cut -d'|' -f1)" != "WARN" ]]; then
+      echo "FAIL: C1 — an undeterminable set under --dry-run must mark WARN, not a green outcome, got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _rp_rc=0
+    MODE="apply"; phase_rebuild_skill_packages >/dev/null 2>&1 || _rp_rc=$?
+    if [[ $_rp_rc -ne 3 ]]; then
+      echo "FAIL: C1 — the SAME undeterminable set under --apply must return 3 (fail-loud), got rc $_rp_rc"; failures=$((failures+1))
+    fi
+    if [[ "$(get_phase rebuild_skill_packages | /usr/bin/cut -d'|' -f1)" != "FAIL" ]]; then
+      echo "FAIL: C1 — an undeterminable set under --apply must mark FAIL, got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+
+    unset -f _rp_touch
+    REPO_ROOT="$_rp_root"; MODE="$_rp_mode"; MERGE_SHA="$_rp_merge"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    /bin/rm -rf "$_rp_tmp" 2>/dev/null || true
+  else
+    echo "  (skipped #4722 rebuild-detection behavioural arms — git not executable at $GIT)" >&2
   fi
-  if /usr/bin/printf '%s\n' "$_csp_out" | /usr/bin/grep -qx 'RELEASE_LOG.md'; then
-    echo "FAIL: changed_skills_from_paths must NOT emit a non-skill path"; failures=$((failures+1))
+
+  # (c) STRUCTURAL anti-regression, asserted against the REAL function body. These
+  #     pin the three regressions C2 named as leaving a delegated suite green:
+  #     re-adding `|| true`, dropping --root, and moving the guard below the dry-run
+  #     return. (declare -f strips comments, so every anchor below is code.)
+  #     Every grep below reads a HERE-STRING and is `|| true`-terminated. The
+  #     here-string is the SIGPIPE-idiom gate's prescribed form: `writer | head` lets
+  #     the reader short-circuit and SIGPIPE the writer, making rc=1 indistinguishable
+  #     from "no match"; with no writer upstream there is nothing to signal. The
+  #     `|| true` is the set -euo pipefail half — a no-match grep inside a command
+  #     substitution would ABORT the suite rather than report, and it would abort on
+  #     exactly the regression the arm exists to catch, turning a red into a crash
+  #     with no verdict. (Scaffold safety on the TEST's own greps; unrelated to the
+  #     production `|| true` c3 forbids, which sits on the delegation's exit code.)
+  local _rp_body _rp_detect
+  _rp_body="$(declare -f phase_rebuild_skill_packages)"
+  _rp_detect="$(/usr/bin/grep -F -m1 -- '--skills-for-paths' <<< "$_rp_body" || true)"
+  # c1 — the shadow-SSOT copy must stay deleted (claim-version.sh:743-746 states the
+  #      rule; changed_skills_from_paths WAS the second copy it warns about).
+  if declare -F changed_skills_from_paths >/dev/null 2>&1; then
+    echo "FAIL: changed_skills_from_paths must NOT exist — detection is delegated to build-skill-packages.sh --skills-for-paths (#4722 shadow SSOT)"; failures=$((failures+1))
   fi
-  # (b) injected canonical — template-taxonomy.md maps to eval-writer per the
-  #     deploy.sh TEMPLATE_SYNC_MAP (read at runtime); stales it with zero skills/ path.
-  _csp_out="$(/usr/bin/printf '%s\n' 'core/standards/template-taxonomy.md' | changed_skills_from_paths || true)"
-  if ! /usr/bin/printf '%s\n' "$_csp_out" | /usr/bin/grep -qx 'eval-writer'; then
-    echo "FAIL: changed_skills_from_paths must detect eval-writer from core/standards/template-taxonomy.md (rule b reverse TEMPLATE_SYNC_MAP)"; failures=$((failures+1))
+  # c2 — --root is load-bearing: without it the builder answers from ITS OWN tree.
+  if [[ "$_rp_detect" != *'--root "$REPO_ROOT" --skills-for-paths'* ]]; then
+    echo "FAIL: detection must delegate as --root \"\$REPO_ROOT\" --skills-for-paths; dropping --root answers from the builder's own tree, got '$_rp_detect'"; failures=$((failures+1))
   fi
-  # negative — a non-skill, non-canonical path set yields nothing.
-  _csp_out="$(/usr/bin/printf '%s\n' 'CHANGELOG.md' 'core/disciplines/knowledge-architecture.md' | changed_skills_from_paths || true)"
-  if [[ -n "$_csp_out" ]]; then
-    echo "FAIL: changed_skills_from_paths must emit nothing for non-skill/non-canonical paths, got '$_csp_out'"; failures=$((failures+1))
+  # c3 — the delegation's exit code IS the fail-loud signal; `|| true` would map every
+  #      failure back onto the empty string and re-open the green-over-unknown gap.
+  if [[ "$_rp_detect" != *'detect_rc=$?'* || "$_rp_detect" == *'|| true'* ]]; then
+    echo "FAIL: the delegation must capture its exit code (|| detect_rc=\$?) and must NOT swallow it with '|| true', got '$_rp_detect'"; failures=$((failures+1))
+  fi
+  # c4 — ORDERING: the fail-loud guard must sit ABOVE the dry-run enumerate branch.
+  #      Below it, a dry-run reports a green "would rebuild 0" over an undeterminable
+  #      set — the exact silent-empty this card closes.
+  #      grep -n -m1 over a here-string, then `%%:*` to take the line number — pure
+  #      parameter expansion rather than a `| cut`, so the statement carries no
+  #      pipeline at all and cannot be a SIGPIPE-idiom finding.
+  local _rp_ln_guard _rp_ln_dry
+  _rp_ln_guard="$(/usr/bin/grep -n -m1 '_d_fix=' <<< "$_rp_body" || true)"; _rp_ln_guard="${_rp_ln_guard%%:*}"
+  _rp_ln_dry="$(/usr/bin/grep -nF -m1 'would rebuild' <<< "$_rp_body" || true)"; _rp_ln_dry="${_rp_ln_dry%%:*}"
+  if [[ -z "$_rp_ln_guard" || -z "$_rp_ln_dry" || "$_rp_ln_guard" -ge "$_rp_ln_dry" ]]; then
+    echo "FAIL: the undeterminable-set guard must precede the dry-run enumerate branch (guard line '$_rp_ln_guard', dry-run line '$_rp_ln_dry')"; failures=$((failures+1))
   fi
   # files=() composition (P1 regression guard) — the commit phase MUST expand
   # "${REBUILT_PACKAGES[@]:-}" in its files=() array, else a rebuilt package is
@@ -6497,6 +7451,93 @@ STUB
   if ! declare -f phase_commit_chore_pr | /usr/bin/grep -qF '"${REBUILT_PACKAGES[@]:-}"'; then
     echo "FAIL: phase_commit_chore_pr files=() must expand \"\${REBUILT_PACKAGES[@]:-}\" (P1 staging-omission guard)"; failures=$((failures+1))
   fi
+
+  # Test 11d — TOUCHED-SURFACE staging completeness (#4710 AC-3), BEHAVIORAL.
+  #
+  # The P1 guard directly above is a `declare -f | grep`, and a grep cannot observe
+  # an assertion FAILING — it only observes that a string is present. An assertion
+  # never seen to fire is indistinguishable from one that cannot fire, which is the
+  # exact condition #4710 AC-3 was filed against: the empty-staged-set guard was
+  # unreachable on any real close-out and nothing noticed. So this arm drives the
+  # REAL phase_commit_chore_pr against a sandbox git repo in BOTH polarities:
+  # (a) recorded -> PASS and the resolved target is NAMED in the phase detail, and
+  # (b) recorder omitted -> FAIL. (b) is the sensitivity control; without it (a)
+  # proves only that the phase can say PASS.
+  #
+  # Hermetic + offline: `git init` and a local commit, no network and no gh token.
+  local _tsc_saved_root="$REPO_ROOT" _tsc_saved_mode="$MODE" _tsc_saved_version="$VERSION"
+  local _tsc_saved_log="$RELEASE_LOG"
+  local _tsc_tmp; _tsc_tmp="$(/usr/bin/mktemp -d -t touchedsurface-selftest.XXXXXX)"
+  /bin/mkdir -p "$_tsc_tmp/release/releases"
+  $GIT -C "$_tsc_tmp" init -q >/dev/null 2>&1
+  $GIT -C "$_tsc_tmp" config user.email "selftest@example.invalid" >/dev/null 2>&1
+  $GIT -C "$_tsc_tmp" config user.name "selftest" >/dev/null 2>&1
+  $GIT -C "$_tsc_tmp" config commit.gpgsign false >/dev/null 2>&1
+  local _tsc_ledger="$_tsc_tmp/release/releases/RELEASE_LOG.md"
+  local _tsc_seg="$_tsc_tmp/release/releases/RELEASE_LOG_ARCHIVE-v9.md"
+  /usr/bin/printf 'seed\n' > "$_tsc_ledger"
+  /usr/bin/printf 'seed\n' > "$_tsc_seg"
+  # A parent commit, so the chore commit is never a ROOT commit: `diff-tree -r HEAD`
+  # emits nothing for a root commit without --root, which would make BOTH polarities
+  # look identical and the arm vacuous.
+  $GIT -C "$_tsc_tmp" add -A >/dev/null 2>&1
+  $GIT -C "$_tsc_tmp" commit -q -m "seed" >/dev/null 2>&1
+
+  REPO_ROOT="$_tsc_tmp"; MODE="apply"; VERSION="v9.99"; RELEASE_LOG="$_tsc_ledger"
+
+  local _tsc_pol _tsc_rc _tsc_detail
+  for _tsc_pol in recorded omitted; do
+    /usr/bin/printf 'seed\n%s edit\n' "$_tsc_pol" > "$_tsc_ledger"
+    /usr/bin/printf 'seed\n%s segment write\n' "$_tsc_pol" > "$_tsc_seg"
+    # The phase record is the assertion's ONLY source for what was written — an
+    # inject_* phase that reported PASS and NAMED the segment it resolved to.
+    PHASE_NAMES=("inject_velocity_field"); PHASE_RESULTS=("PASS")
+    PHASE_DETAILS=("injected '**Velocity:** 1' after **Cycle-Time:** in the v9.99 Deployment Log block (RELEASE_LOG_ARCHIVE-v9.md)")
+    REBUILT_PACKAGES=()
+    if [[ "$_tsc_pol" == "recorded" ]]; then
+      TOUCHED_ARCHIVE_SEGMENTS=("release/releases/RELEASE_LOG_ARCHIVE-v9.md")
+    else
+      # The defect under test: the write site forgot to call
+      # _record_touched_archive_segment, so files=() never names the segment.
+      TOUCHED_ARCHIVE_SEGMENTS=()
+    fi
+    _tsc_rc=0
+    phase_commit_chore_pr >/dev/null 2>&1 || _tsc_rc=$?
+    _tsc_detail="$(get_phase commit_chore_pr)"
+    if [[ "$_tsc_pol" == "recorded" ]]; then
+      [[ "$_tsc_rc" -eq 0 ]] || { echo "FAIL: AC-3 recorded polarity must succeed, got rc=$_tsc_rc ('$_tsc_detail')"; failures=$((failures+1)); }
+      /usr/bin/grep -qF 'resolved write target(s) staged: RELEASE_LOG_ARCHIVE-v9.md' <<<"$_tsc_detail" \
+        || { echo "FAIL: AC-3 the PASS detail must NAME the resolved write target it staged, got '$_tsc_detail'"; failures=$((failures+1)); }
+    else
+      [[ "$_tsc_rc" -eq 3 ]] || { echo "FAIL: AC-3 SENSITIVITY — an unrecorded segment write must FAIL the phase (rc=3), got rc=$_tsc_rc ('$_tsc_detail')"; failures=$((failures+1)); }
+      /usr/bin/grep -qF 'RELEASE_LOG_ARCHIVE-v9.md' <<<"$_tsc_detail" \
+        || { echo "FAIL: AC-3 the failure must NAME the dropped surface, got '$_tsc_detail'"; failures=$((failures+1)); }
+    fi
+  done
+
+  # Independence guard: the assertion must NOT read TOUCHED_ARCHIVE_SEGMENTS to
+  # decide what to expect. It reads the phase record for exactly the reason the
+  # empty-staged-set guard does — a check sourced from the recorder whose omission
+  # IS the defect goes vacuous the moment a write site stops recording.
+  # The anchor is CODE, not a comment: `declare -f` renders a function body with
+  # comments stripped, so a comment anchor silently never matches and the guard
+  # reads the whole body — passing or failing for the wrong reason.
+  local _tsc_body; _tsc_body="$(declare -f phase_commit_chore_pr)"
+  local _tsc_anchor='local _reported='
+  if ! /usr/bin/grep -qF "$_tsc_anchor" <<<"$_tsc_body"; then
+    echo "FAIL: AC-3 independence guard lost its anchor ('$_tsc_anchor') — the guard cannot be evaluated"; failures=$((failures+1))
+  else
+    local _tsc_after; _tsc_after="${_tsc_body#*"$_tsc_anchor"}"
+    if /usr/bin/grep -qF 'TOUCHED_ARCHIVE_SEGMENTS' <<<"$_tsc_after"; then
+      echo "FAIL: AC-3 the touched-surface assertion must not consult TOUCHED_ARCHIVE_SEGMENTS — it is the recorder whose omission is the defect"; failures=$((failures+1))
+    fi
+  fi
+
+  REPO_ROOT="$_tsc_saved_root"; MODE="$_tsc_saved_mode"; VERSION="$_tsc_saved_version"
+  RELEASE_LOG="$_tsc_saved_log"
+  REBUILT_PACKAGES=(); TOUCHED_ARCHIVE_SEGMENTS=()
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  /bin/rm -rf "$_tsc_tmp"
 
   # Test 12: scaffold-residue detector (AC1) + pre-authored-note tolerance (AC2).
   # Offline, hermetic, credential-free — the CI smoke job runs --self-test with no
@@ -6624,6 +7665,58 @@ DG2
   phase_assert_derived_surfaces >/dev/null 2>&1 || { echo "FAIL: AC1-T3 — another version's pre-existing residue must NOT block this close (audit-baseline discipline)"; failures=$((failures+1)); }
   [[ "$(get_phase assert_derived_surfaces | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: AC1-T3 must mark PASS, got '$(get_phase assert_derived_surfaces)'"; failures=$((failures+1)); }
 
+  # (d1) AC1-T6/T7 — MODE-AWARENESS OF THE PRESENCE LIMB (#4765). Two arms over ONE
+  # fixture, differing only in $MODE, so the mode is provably the variable under test
+  # and not the fixture.
+  #
+  # The fixture is the real defect state: a release whose entries are ABSENT from both
+  # derived surfaces. That is what every first --dry-run of a release looks like, because
+  # the append phases at 8.x/9.5 deliberately wrote nothing. Pre-fix, BOTH arms below
+  # returned non-zero, the runner exited 3, and the phases after this one never
+  # enumerated — so the dry-run review gate could not be produced for any release that
+  # had not already closed.
+  #
+  # T7 is the anti-vacuity arm. Without it, T6 is satisfiable by a phase that has been
+  # gutted (presence limb deleted) rather than made mode-aware, and by a fixture that
+  # accidentally contains the v9.99 entries it claims to omit. T7 observes non-zero on
+  # the identical bytes, which proves the fixture really does omit them AND that the
+  # apply-mode limb still fires. T6's outcome assertion is the specificity half: it
+  # demands the literal string DRY-RUN, so a phase that returns 0 by PASSing vacuously
+  # is caught rather than counted as a pass.
+  /bin/cat > "$_sr_tmp/CHANGELOG.md" <<'CL3'
+# Changelog
+
+## [v9.98] - 2026-07-01
+
+A properly authored earlier entry.
+CL3
+  /bin/cat > "$RELEASE_DIGEST" <<'DG3'
+## v9.x
+
+### v9.98 (2026-07-01) — A properly authored earlier headline
+DG3
+  # T6 (must-not-fail arm) — dry-run over absent entries: rc 0, outcome DRY-RUN.
+  MODE="dry-run"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  local _sr_drrc=0
+  phase_assert_derived_surfaces >/dev/null 2>&1 || _sr_drrc=$?
+  [[ "$_sr_drrc" -eq 0 ]] || { echo "FAIL: AC1-T6 — under --dry-run the phase must NOT return non-zero when the ${VERSION} entries are absent (they are absent by construction; the append phases wrote nothing), got rc=$_sr_drrc"; failures=$((failures+1)); }
+  [[ "$(get_phase assert_derived_surfaces | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: AC1-T6 — under --dry-run the outcome must be literally DRY-RUN (a vacuous PASS would also return 0 and must not count), got '$(get_phase assert_derived_surfaces)'"; failures=$((failures+1)); }
+
+  # T7 (must-fail arm / anti-vacuity control) — SAME fixture under --apply: rc non-zero,
+  # outcome FAIL, and the original dropped-write message preserved verbatim.
+  MODE="apply"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  local _sr_aprc=0
+  phase_assert_derived_surfaces >/dev/null 2>&1 || _sr_aprc=$?
+  [[ "$_sr_aprc" -ne 0 ]] || { echo "FAIL: AC1-T7 anti-vacuity — under --apply the SAME absent-entry fixture MUST still fail; rc=0 means either the presence limb was gutted rather than made mode-aware, or the fixture is not actually missing the ${VERSION} entries it claims to omit"; failures=$((failures+1)); }
+  [[ "$(get_phase assert_derived_surfaces | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: AC1-T7 must mark the phase FAIL under --apply, got '$(get_phase assert_derived_surfaces)'"; failures=$((failures+1)); }
+  # Captured, then matched from a here-string: `writer | grep -q` would short-circuit
+  # and SIGPIPE get_phase, and on CI that rc=1 is indistinguishable from "no match" —
+  # the assertion would read as a clean fail rather than a broken probe.
+  local _sr_t7detail; _sr_t7detail="$(get_phase assert_derived_surfaces)"
+  /usr/bin/grep -qF 'no v9.99 entry on the derived surface' <<<"$_sr_t7detail" || { echo "FAIL: AC1-T7 — the --apply presence message must be preserved verbatim (AC2: the apply limb is unchanged), got '$_sr_t7detail'"; failures=$((failures+1)); }
+
   # (e) AC2 — preflight working-tree tolerance. Drives the shipped predicate with
   # synthetic porcelain text (no git, no network).
   local _sr_tol
@@ -6738,6 +7831,24 @@ VLSTUB
   # the release note never reaches the chore commit.
   local _sr_vlstage; _sr_vlstage="$(build_chore_pr_body 2>/dev/null | /usr/bin/grep -cF "release/releases/$(notes_rel_path) | NEW" || true)"
   [[ "$_sr_vlstage" -eq 1 ]] || { echo "FAIL: AC1/AC2-VL-7 — the chore-PR File Change Matrix must name the version-less note's real path (matches=$_sr_vlstage)"; failures=$((failures+1)); }
+
+  # VL-ORDER — the reachability property, ASSERTED rather than documented.
+  # Every VL-* arm above drives an is_version_less branch directly, which is only
+  # possible because main dispatches --self-test BEFORE the canonical-version
+  # gate. Move the dispatch below the gate and all of them become unreachable
+  # while still "passing" in the sense that they were never run. This arm reads
+  # both lines out of this file's own text and fails if the ordering inverts, so
+  # the REACHABILITY note above is_version_less cites an executable invariant
+  # instead of a line number. Both needles are column-1 anchored, so the indented
+  # copies inside this arm cannot match themselves.
+  local _vlo_dispatch _vlo_gate
+  _vlo_dispatch="$(/usr/bin/grep -nE '^\[\[ "\$SELF_TEST" -eq 1 \]\] && self_test$' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
+  _vlo_gate="$(/usr/bin/grep -nE '^validate_version "\$VERSION" \|\| die' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
+  if ! [[ "$_vlo_dispatch" =~ ^[0-9]+$ && "$_vlo_gate" =~ ^[0-9]+$ ]]; then
+    echo "FAIL: VL-ORDER anti-vacuity — a needle did not resolve to exactly one top-level line (dispatch='$_vlo_dispatch' gate='$_vlo_gate'); the arm would otherwise pass without asserting anything"; failures=$((failures+1))
+  elif [[ "$_vlo_dispatch" -ge "$_vlo_gate" ]]; then
+    echo "FAIL: VL-ORDER — the --self-test dispatch (line $_vlo_dispatch) must PRECEDE the canonical-version gate (line $_vlo_gate); below it, --self-test dies on the gate and every is_version_less branch becomes unreachable and untestable"; failures=$((failures+1))
+  fi
 
   VERSION="v9.99"
 
@@ -7244,6 +8355,189 @@ exit 4' > "$_ea_tmp/audit.sh"
   /bin/rm -rf "$_ps_tmp" 2>/dev/null || true
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # ── #4773: the close-out report's phase set is DERIVED from the phase record ──
+  # Every assertion below reads the rendered report, never an enumeration, so the
+  # suite cannot be satisfied by re-declaring the answer. Arms (a)-(f) cover
+  # render<->record; arm (g) covers dispatch<->record, which is the invariant the
+  # derivation newly makes load-bearing and which NO seeded arm can reach.
+  # `grep` reads a here-string throughout, never `echo … | grep -q`: under this
+  # script's `set -euo pipefail`, grep -q exits on first match and SIGPIPEs the
+  # writer, so pipefail promotes a SUCCESSFUL match to a non-zero pipeline status.
+  local _dr_saved_out="$OUTPUT"; OUTPUT="markdown"
+  local _dr_report _dr_name _dr_missing="" _dr_n=0
+  # `|| true` is load-bearing, not defensive noise: under `set -euo pipefail` a
+  # grep that matches NOTHING fails the pipeline and kills the shell inside the
+  # command substitution — which would abort the whole suite silently and leave
+  # the vacuity floor below unreachable. Absorb the status here so an empty parse
+  # reaches the floor and is REPORTED rather than crashing the run.
+  local _dr_subjects
+  _dr_subjects="$(/usr/bin/grep -oE 'mark_phase "[a-z0-9_]+"' "${BASH_SOURCE[0]}" \
+    | /usr/bin/sed 's/mark_phase "//;s/"$//' | /usr/bin/sort -u || true)"
+
+  # (a) COMPLETENESS — every recorded phase renders. The denominator is parsed
+  #     from this file's own mark_phase subjects, so it grows with the file rather
+  #     than pinning a count that rots. Pre-fix this arm reports exactly three
+  #     missing (inject_velocity_field, append_release_learnings,
+  #     audit_epic_rollup) — the measured defect, not a predicted one.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  while IFS= read -r _dr_name; do
+    [[ -z "$_dr_name" ]] && continue
+    mark_phase "$_dr_name" "PASS" "seeded by self-test"
+    _dr_n=$((_dr_n+1))
+  done <<< "$_dr_subjects"
+  # Anti-vacuity floor: if the subject parse ever returns a near-empty set (a
+  # mark_phase reformat, or the function-only slice), the arms below would pass on
+  # an empty denominator. Fail loudly instead of going green on nothing.
+  if [[ "$_dr_n" -lt 25 ]]; then
+    echo "FAIL: #4773 — mark_phase subject parse found only ${_dr_n} phases; the completeness arm would be vacuous"
+    failures=$((failures+1))
+  fi
+  _dr_report="$(generate_markdown_report 2>/dev/null)"
+  while IFS= read -r _dr_name; do
+    [[ -z "$_dr_name" ]] && continue
+    /usr/bin/grep -qE "^\| ${_dr_name} \|" <<< "$_dr_report" || _dr_missing="${_dr_missing}${_dr_name} "
+  done <<< "$_dr_subjects"
+  if [[ -n "$_dr_missing" ]]; then
+    echo "FAIL: #4773 — recorded phases absent from the close-out report: ${_dr_missing}"
+    failures=$((failures+1))
+  fi
+
+  # (b) THE AC-2 ARM — a phase name in NO enumeration anywhere still renders. This
+  #     is the arm that fails if the derivation is ever replaced by a list.
+  #     Every synthetic probe name below is passed through a VARIABLE, never as a
+  #     quoted string literal in the mark_phase call, so these test fixtures stay
+  #     out of the production record-subject census that arm (a) and the dispatch
+  #     cross-check parse out of this file's own text. (Prose in this file is part
+  #     of that census's denominator too — spelling the literal form here would
+  #     itself register a phantom subject.)
+  local _dr_probe="zz_synthetic_probe_phase"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "$_dr_probe" "PASS" "synthetic — declared in no enumeration"
+  _dr_report="$(generate_markdown_report 2>/dev/null)"
+  /usr/bin/grep -qE '^\| zz_synthetic_probe_phase \| PASS \|' <<< "$_dr_report" \
+    || { echo "FAIL: #4773 — a recorded phase in no enumeration must still render (the derivation regressed to a list)"; failures=$((failures+1)); }
+
+  # (c) ANTI-VACUITY CONTROL — a name never marked must NOT render. Without this,
+  #     arms (a) and (b) would be satisfied by a renderer that emits everything.
+  if /usr/bin/grep -qE '^\| zz_never_marked_probe \|' <<< "$_dr_report"; then
+    echo "FAIL: #4773 — an unmarked phase name rendered; the table is not record-derived"
+    failures=$((failures+1))
+  fi
+
+  # (d) SUB-PHASE RETENTION (specificity) — post_gate_passage_proof is recorded by
+  #     mark_phase inside phase_run_verification and has NO phase_*() function, so
+  #     any future "simplification" to a definition scan silently drops it. Assert
+  #     both halves: that it really is definition-less, and that it renders.
+  if /usr/bin/grep -qE '^phase_post_gate_passage_proof\(\)' "${BASH_SOURCE[0]}"; then
+    echo "FAIL: #4773 — post_gate_passage_proof now HAS a phase_*() function; this arm's premise is stale, re-derive it"
+    failures=$((failures+1))
+  fi
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "post_gate_passage_proof" "PASS" "sub-phase of run_verification"
+  /usr/bin/grep -qE '^\| post_gate_passage_proof \|' <<< "$(generate_markdown_report 2>/dev/null)" \
+    || { echo "FAIL: #4773 — post_gate_passage_proof must render; a definition-derived set would drop it"; failures=$((failures+1)); }
+
+  # (e) DUPLICATE SAFETY — a name marked twice renders ONCE, carrying the FIRST
+  #     result, matching get_phase's first-match lookup. This is what makes the
+  #     change provably additive rather than a silent output change.
+  local _dr_dup="zz_dup_probe"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "$_dr_dup" "PASS" "first mark"
+  mark_phase "$_dr_dup" "FAIL" "second mark"
+  _dr_report="$(generate_markdown_report 2>/dev/null)"
+  local _dr_dups
+  _dr_dups="$(/usr/bin/grep -cE '^\| zz_dup_probe \|' <<< "$_dr_report" || true)"
+  [[ "$_dr_dups" -eq 1 ]] \
+    || { echo "FAIL: #4773 — a double-marked phase must render exactly one row, got ${_dr_dups}"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| zz_dup_probe \| PASS \| first mark \|' <<< "$_dr_report" \
+    || { echo "FAIL: #4773 — the surviving duplicate row must carry the FIRST result (get_phase semantics)"; failures=$((failures+1)); }
+
+  # (f) HALTED MARKER — a FAIL-terminated run states the fact of truncation, and a
+  #     clean run does NOT. Both directions asserted on the SAME record, one mark
+  #     apart, because a marker that always prints carries no information.
+  local _dr_ok="zz_ok_probe" _dr_halt="zz_halt_probe"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "$_dr_ok" "PASS" "ran"
+  if /usr/bin/grep -qF 'Run halted' <<< "$(generate_markdown_report 2>/dev/null)"; then
+    echo "FAIL: #4773 — the halted marker must NOT appear when the last recorded result is not FAIL"
+    failures=$((failures+1))
+  fi
+  mark_phase "$_dr_halt" "FAIL" "blew up"
+  /usr/bin/grep -qF '**Run halted** at `zz_halt_probe`' <<< "$(generate_markdown_report 2>/dev/null)" \
+    || { echo "FAIL: #4773 — a FAIL-terminated run must name the phase it halted at"; failures=$((failures+1)); }
+
+  # (g) DISPATCH <-> RECORD CROSS-CHECK — the arm every other arm structurally
+  #     cannot be. Arms (a)-(f) SEED the record, so they verify render<->record and
+  #     are green by construction against the failure this derivation newly makes
+  #     silent: a phase added to the dispatch that never calls mark_phase is absent
+  #     from the record, therefore absent from the report, and no seeded arm
+  #     notices. This arm reads the DISPATCH from the file's own text — a second,
+  #     independent recorder — and asserts every dispatched phase is a record
+  #     subject. Two recorders, cross-checked, per the staging guard's own
+  #     rationale: a guard that consults the same recorder whose omission IS the
+  #     defect cannot catch that omission.
+  #
+  #     It lives in the TEST path by necessity, not preference: the dispatch block
+  #     sits BELOW the "# ─── Argument parsing" banner, so it is absent from the
+  #     function-only slice core/deploy/tests/test_version_stamping.sh sources. A
+  #     render-path self-parse would read zero dispatched phases under exactly that
+  #     harness and go vacuous.
+  #     The record side is read from the PRODUCTION region only (everything above
+  #     the self_test definition). Searching the whole file would let a self-test
+  #     arm that happens to mark a phase by string literal satisfy this check on
+  #     the production code's behalf — the test vouching for the code it tests.
+  local _dr_dispatched _dr_dn=0 _dr_unrecorded="" _dr_prod
+  _dr_prod="$(/usr/bin/sed -n '1,/^self_test() {/p' "${BASH_SOURCE[0]}" || true)"
+  # See the note on the subject parse above — an empty dispatch parse must reach
+  # the vacuity floor, not kill the suite.
+  _dr_dispatched="$(/usr/bin/grep -oE '^phase_[a-z0-9_]+ \|\|' "${BASH_SOURCE[0]}" \
+    | /usr/bin/sed 's/^phase_//;s/ ||$//' | /usr/bin/sort -u || true)"
+  while IFS= read -r _dr_name; do
+    [[ -z "$_dr_name" ]] && continue
+    _dr_dn=$((_dr_dn+1))
+    /usr/bin/grep -qF "mark_phase \"${_dr_name}\"" <<< "$_dr_prod" \
+      || _dr_unrecorded="${_dr_unrecorded}${_dr_name} "
+  done <<< "$_dr_dispatched"
+  if [[ "$_dr_dn" -lt 25 ]]; then
+    echo "FAIL: #4773 — dispatch parse found only ${_dr_dn} dispatched phases; the cross-check would be vacuous"
+    failures=$((failures+1))
+  fi
+  if [[ -n "$_dr_unrecorded" ]]; then
+    echo "FAIL: #4773 — dispatched phases that never call mark_phase (they would be silently ABSENT from the close-out report): ${_dr_unrecorded}"
+    failures=$((failures+1))
+  fi
+  # Sensitivity + specificity on the dispatch parse itself: a phase known to be
+  # dispatched must appear in the parsed set, and a fabricated name must not.
+  /usr/bin/grep -qx 'audit_epic_rollup' <<< "$_dr_dispatched" \
+    || { echo "FAIL: #4773 — the dispatch parse missed a known dispatched phase; the cross-check is not reading the dispatch"; failures=$((failures+1)); }
+  if /usr/bin/grep -qx 'zz_not_a_dispatched_phase' <<< "$_dr_dispatched"; then
+    echo "FAIL: #4773 — the dispatch parse matched a fabricated name; it is matching indiscriminately"
+    failures=$((failures+1))
+  fi
+
+  # (h) JSON TWIN — the machine-readable report carries the same derived set, so a
+  #     `--json` consumer is not blind to phase outcomes. Additive key only.
+  local _dr_jprobe="zz_json_probe"
+  OUTPUT="json"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "$_dr_jprobe" "PASS" "detail with a | pipe and a \"quote\""
+  mark_phase "$_dr_jprobe" "FAIL" "duplicate, must not appear"
+  local _dr_json; _dr_json="$(generate_json_report)"
+  /usr/bin/python3 - "$_dr_json" <<'PY' || { echo "FAIL: #4773 — JSON report phase set malformed"; failures=$((failures+1)); }
+import sys, json
+d = json.loads(sys.argv[1])
+p = d.get("phases")
+assert isinstance(p, list) and len(p) == 1, "expected exactly one de-duplicated phase, got %r" % (p,)
+assert p[0]["name"] == "zz_json_probe", p[0]
+assert p[0]["result"] == "PASS", "first-occurrence-wins violated: %r" % (p[0],)
+assert "|" in p[0]["detail"] and '"' in p[0]["detail"], "detail round-trip lost characters: %r" % (p[0],)
+for k in ("timestamp", "mode", "release_pr", "version", "milestone", "release_log",
+          "cycle_time", "chore_pr", "d1_manual_close_candidates", "deferred_under_no_merge"):
+    assert k in d, "pre-existing key %s was dropped — the phases key must be ADDITIVE" % k
+PY
+  OUTPUT="$_dr_saved_out"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failures)" >&2
     exit 1
@@ -7258,20 +8552,22 @@ exit 4' > "$_ea_tmp/audit.sh"
   echo "  phase_append_release_digest + phase_append_release_index + phase_append_changelog validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency; #2048 — version-less marker + _unversioned notes link + marker-aware idempotency + CHANGELOG SKIP; #4455 — all three entries PROJECTED by generate_release_index.py, versioned CHANGELOG block lands above the prior entry WITH its separating blank line intact, re-run SKIPs, and a non-owner/repo-shaped REPO_SLUG FAILs before writing a broken Release URL)" >&2
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped; #3715 two-surface — archived body resolves to its segment and the hot ledger is left untouched / cross-surface idempotency re-run SKIPs without duplicating / a genuine **Result:** absence still hard-FAILs naming every surface searched / no sibling leak within a segment)" >&2
   echo "  phase_inject_velocity_field + phase_append_release_learnings validated (velocity — field ORDER 'Cycle-Time Velocity Result' on a clean block / no sibling leak / idempotent re-run / bolded-numeral value REJECTED writing nothing / empty capture at exit 0 degrades to an explicit N/A never a bare field / non-conformant existing field SKIPs WITH the warning, conformant control WITHOUT it; CO-LOCATION — an archived block's field lands in the SEGMENT beside its own **Result:** and the hot stub stays at 0, cross-surface re-run SKIPs, dry-run names the segment and prints the RESOLVED bytes. learnings — sibling H4 placed IMMEDIATELY after its Deployment Log block / body intact through the sentinel capture / idempotent re-run / whitespace-only render at exit 0 FAILs writing nothing / D-1 zero-source-events BLOCKS the close and prints the capture remedy, >0-events control PASSes / over an ARCHIVED block the block still lands in the HOT ledger and every segment stays at 0 Release Learnings — RECORDS_POLICY KEEP_CLASS)" >&2
+  echo "  phase_inject_close_class_telemetry_field validated (#4437 — clean block PASSes with the field positioned after **Outcome rationale:** and no sibling leak / idempotent re-run SKIPs / fallback anchor lands after **Outcome:** and names which anchor it used / VACUITY PAIR: an all-N/A-but-conformant line is WRITTEN and carries the no-computed-ratio warning WITH the disposition read from the emitted line, measured-line control carries NO warning / a line missing § 3.2 slots FAILs writing nothing / an empty capture at exit 0 FAILs writing nothing / producer exit 2 escalates as a source-integrity condition writing nothing / a non-executable producer SKIPs rather than hand-composing a field that would fabricate its own mechanism claim / dry-run prints the RESOLVED bytes and writes nothing / CO-LOCATION: an archived block's field lands in the SEGMENT beside its own **Result:** with the hot stub at 0, and the cross-surface re-run SKIPs)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache)" >&2
   echo "  post_gate_passage_proof three-rung target ladder validated (#3819 — T-13 rung 1 resolves a CLOSED Stage-13 sub-task via --state all and does NOT fall through to the PR / rung 2 posts to the release PR naming the OBSERVED rung-1 reason / rung 3 MANUAL names BOTH attempted targets; T-14 two collect_open_release_issues calls in one run keep EXCLUDED_DETAIL undoubled, COLLECTED_OPEN_ISSUES identical and resolve_stage13_subtask stable, with a non-empty-exclusion anti-vacuity control)" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
-  echo "  changed_skills_from_paths + files=() composition validated (#3322 — rule a direct-source / rule b reverse-TEMPLATE_SYNC_MAP / non-skill negative / P1 staging-array guard)" >&2
+  echo "  phase_rebuild_skill_packages detection + files=() composition validated (#4722 — core/schemas sensitivity / core/standards control / rule-a direct-source / specificity negative / C1 dry-run WARN vs apply FAIL / delegation structure / P1 staging-array guard)" >&2
   echo "  release-anchor hygiene validated (AC4/AC5 — recorded divergences exempt / a NEW divergence reported in BOTH directions / EQUAL-COUNT-UNEQUAL-SET fixture still reported (the count-parity false negative) / non-noreply tagger flagged, noreply tagger not, recorded exemption suppressed, lightweight tag excluded by objecttype / guard is comm-based by construction)" >&2
   echo "  LEDGER-ROW-PARITY fail-open closed (#3113 F-QA-3 — present-but-empty INDEX vs 3-row LOG now FAILs naming both counts / equal populated ledgers still PASS / both-empty 0==0 correctly clean / missing INDEX still FAILs / grep_count single-integer contract on empty-file, missing-file, match and empty-stdin shapes / reintroduction blocked structurally, needle proven against a known-bad control)" >&2
   echo "  phase_sync_primary_checkout validated (AC7 — behind-primary-on-main fast-forwards and HEAD verifiably MOVES to origin/main / non-main primary SKIPPED and NOT moved / absent primary clean no-op (CI hermeticity) / dry-run no-write / source carries no reset-stash-checkout-push-force-cd)" >&2
-  echo "  scaffold-residue detector + pre-authored-note tolerance validated (AC1/AC2 — T1 round-trip: the REAL scaffold trips the REAL token set (anti-drift) / T2 authored note clean / T4 this-version CHANGELOG+DIGEST residue FAILs naming surface:line / T3 audit-baseline control: another version's residue does NOT block / AC2 tolerance: this-version untracked note passes, other-version + modified-tracked + unrelated-untracked all still block)" >&2
-  echo "  AC1/AC2 VERSION-LESS shape validated (#3113 Records 2+3 — VL-0 notes_abs_path()==notes_rel_path() in BOTH identity modes / VL-1 producer writes notes/_unversioned/ and creates the dir / VL-2 anti-vacuity: NOT written flat / VL-3 preflight (f) residue gate FIRES (no longer a silent no-op) / VL-4 preflight (b) tolerates the note this run produced (deadlock closed) / VL-5 controls: flat bucket + another version-less release still block / VL-6 §3.2 needle blocks this release, not another / VL-7 chore-PR File Change Matrix names the real path)" >&2
+  echo "  scaffold-residue detector + pre-authored-note tolerance validated (AC1/AC2 — T1 round-trip: the REAL scaffold trips the REAL token set (anti-drift) / T2 authored note clean / T4 this-version CHANGELOG+DIGEST residue FAILs naming surface:line / T3 audit-baseline control: another version's residue does NOT block / T6 mode-awareness: --dry-run over ABSENT entries returns 0 and marks literally DRY-RUN, never a vacuous PASS / T7 anti-vacuity: the SAME absent-entry fixture under --apply still returns non-zero, FAILs, and preserves the dropped-write message verbatim / AC2 tolerance: this-version untracked note passes, other-version + modified-tracked + unrelated-untracked all still block)" >&2
+  echo "  AC1/AC2 VERSION-LESS shape validated (#3113 Records 2+3 — VL-0 notes_abs_path()==notes_rel_path() in BOTH identity modes / VL-1 producer writes notes/_unversioned/ and creates the dir / VL-2 anti-vacuity: NOT written flat / VL-3 preflight (f) residue gate FIRES (no longer a silent no-op) / VL-4 preflight (b) tolerates the note this run produced (deadlock closed) / VL-5 controls: flat bucket + another version-less release still block / VL-6 §3.2 needle blocks this release, not another / VL-7 chore-PR File Change Matrix names the real path / VL-ORDER the --self-test dispatch verifiably PRECEDES the canonical-version gate, which is what makes every arm above reachable — asserted from source, with an anti-vacuity arm on both needles)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
+  echo "  close-out report phase set is RECORD-DERIVED validated (#4773 — every recorded phase renders against a denominator parsed from this file's own mark_phase subjects (pre-fix: 3 missing — inject_velocity_field / append_release_learnings / audit_epic_rollup) / a phase in NO enumeration still renders (AC-2) / an unmarked name does NOT render (anti-vacuity) / post_gate_passage_proof renders AND is asserted definition-less, so a definition-derived set cannot silently drop it / a double-marked name renders ONE row carrying the FIRST result / the halted marker fires on a FAIL-terminated run and is absent on a clean one / DISPATCH<->RECORD cross-check: every dispatched phase is a record subject, with vacuity floors on both parses plus sensitivity and specificity arms — the one invariant no seeded arm can reach / JSON twin carries the same de-duplicated set with pre-existing keys intact)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
   echo "  usage block extractable" >&2
@@ -7399,6 +8695,7 @@ phase_transition_release_log || { generate_report; exit 3; }
 phase_inject_outcome_field || { generate_report; exit 3; }            # Phase 6.5 — **Outcome:** field on the visible-H4 Deployment Log block (#37)
 phase_inject_velocity_field || { generate_report; exit 3; }           # Phase 6.6 — **Velocity:** field after **Cycle-Time:** (stage-13-close.md Phase B-velocity); ordered AFTER 6.5 so the write surface is already proven to resolve
 phase_append_release_learnings || { generate_report; exit 3; }        # Phase 6.7 — `#### Release Learnings v<X.Y>` sibling H4 (stage-13-close.md Phase A7); hot ledger only per RECORDS_POLICY KEEP_CLASS
+phase_inject_close_class_telemetry_field || { generate_report; exit 3; }  # Phase 6.8 — **Close-Class-Telemetry:** field (close-class-telemetry.md § 3.2); ordered AFTER 6.5 so the **Outcome:** insert anchor already exists
 phase_append_release_index || { generate_report; exit 3; }
 phase_append_release_digest || { generate_report; exit 3; }
 phase_append_reversions || { generate_report; exit 3; }                # Phase 8.5 — re-version ledger (#1679; N/A on the common no-collision path)
