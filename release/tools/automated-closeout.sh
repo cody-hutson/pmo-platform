@@ -3370,8 +3370,8 @@ phase_rebuild_skill_packages() {
   # Fail-loud guard on an UNDETERMINABLE set — mirrors the D-4d diff-base guard above.
   #
   # C1 (#4765 convention): ASSERT AT --apply, PREDICT AT --dry-run. #4765 established
-  # that a --dry-run must never abort a phase — its own abort at 9.55 cost the eleven
-  # phases after it, and an abort HERE would cost the fourteen after 9.95, taking the
+  # that a --dry-run must never abort a phase — its own abort at 9.55 cost every phase
+  # after it, and an abort HERE would cost the fourteen after 9.95, taking the
   # dry-run review gate with it. So the ABORT is scoped to --apply. The FINDING is
   # not: --dry-run still reports it, as a non-blocking WARN (the outcome this file
   # already uses at 15.6 for a real finding held outside its blocking scope), because
@@ -7672,7 +7672,7 @@ DG2
   # The fixture is the real defect state: a release whose entries are ABSENT from both
   # derived surfaces. That is what every first --dry-run of a release looks like, because
   # the append phases at 8.x/9.5 deliberately wrote nothing. Pre-fix, BOTH arms below
-  # returned non-zero, the runner exited 3, and the eleven phases after this one never
+  # returned non-zero, the runner exited 3, and the phases after this one never
   # enumerated — so the dry-run review gate could not be produced for any release that
   # had not already closed.
   #
