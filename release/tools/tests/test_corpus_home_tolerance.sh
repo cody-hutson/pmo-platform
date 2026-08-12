@@ -99,8 +99,17 @@
 #   R4  ARMED && b == 0 && fixture B's capture
 #       lacks a per-path N/A record for any
 #       corpus label                             -> FAIL  tolerance is silent          (CH-4)
-#       ARMED   && no failure                    -> PASS-SEAM-LANDED  exit 0 + retire-notice
-#       !ARMED  && no failure                    -> PENDING-SEAM      exit 0 + notice
+#   R8  declared posture != observed posture,
+#       declared in .github/corpus-home-tolerance.arming,
+#       observed from ARMED:
+#         declared armed,   observed pending     -> FAIL  COVERAGE LOST: the seam was
+#                                                         reverted and nothing recorded it
+#         declared pending, observed armed       -> FAIL  seam landed; flip the sentinel
+#                                                         in that same change
+#         absent / empty / unrecognised token    -> FAIL  fail-closed: an undeclared
+#                                                         posture is unassertable
+#       ARMED  && posture aligned && no failure  -> PASS-SEAM-LANDED  exit 0 + retire-notice
+#       !ARMED && posture aligned && no failure  -> PENDING-SEAM      exit 0 + notice
 #
 # R1/R2/R5/R6 gate from day one. R3/R4/R7 arm on the structural detector, so the
 # PR that makes resolution instance-aware is graded on that PR — no cutoff date,
@@ -158,6 +167,52 @@
 # is PENDING-SEAM and the suite exits 0. It CANNOT redden a PR before the seam
 # lands.
 #
+# ─── Arming posture: committed, not inferred ─────────────────────────────────
+#
+# Everything above grades a single run. This block is about the TRANSITION
+# between runs, which is a different property and was unobservable by construction.
+#
+# The suite derives its whole verdict from live state and persists nothing, so it
+# has no representation of WHICH POSTURE THE REPOSITORY ASSERTS. Both of its
+# terminal states are green: PENDING-SEAM means "not applicable yet",
+# PASS-SEAM-LANDED means "applicable and satisfied". A conformant seam therefore
+# reaches PASS-SEAM-LANDED exit 0, and reverting that seam returns PENDING-SEAM
+# exit 0 — green to green, with R3/R4/R7 quietly dormant again and nothing on any
+# surface recording that CH-1/CH-2/CH-4 stopped being graded. The suite is not
+# WRONG in either state; its verdict is correct both times. The defect is that
+# correctness-per-run is the wrong granularity for a property meant to RATCHET,
+# which is why a louder log or a better message could not have closed it.
+#
+# The discriminator is a committed sentinel: .github/corpus-home-tolerance.arming,
+# one token, first non-comment non-blank line, from exactly {pending, armed}.
+# The suite DECLARES its posture there and OBSERVES its own from ARMED, and R8
+# fails on divergence in BOTH directions:
+#
+#   declared armed / observed pending    the seam was lost. Restore it, or flip
+#                                        the token in the same change. An un-arm
+#                                        is permitted; an unrecorded one is not.
+#   declared pending / observed armed    the seam landed undeclared. Flip the
+#                                        token in THAT change.
+#
+# The second direction is the forcing function, and it is load-bearing rather
+# than tidy: without it the declaration would never advance past `pending`, and
+# the coverage-lost branch above would be unreachable forever. Absent, empty, or
+# unrecognised declarations FAIL CLOSED — if absence defaulted to `pending`,
+# deleting the sentinel would silently restore the defect.
+#
+# The enum holds exactly the two states the suite can OBSERVE. A third token such
+# as `retired` is deliberately absent: retirement deletes the PENDING branch AND
+# this sentinel together, so a declared state with no observable counterpart
+# would be a control whose silence reads as approval — the vacuity trap at the
+# top of this file, re-introduced at the vocabulary layer.
+#
+# COVERAGE BOUNDARY, stated because it is real: R8 grades declared-versus-observed,
+# and `observed` comes from ARMED. It therefore INHERITS the needle residue named
+# in the block above and does not widen it. A seam the detector never sees leaves
+# observed at `pending`, so a genuinely-landed-but-undetected seam reads as
+# aligned-with-`pending` and R8 says nothing. R8 closes the TRANSITION gap, not
+# the DETECTION gap; the needle still bounds what can be detected at all.
+#
 # ─── Hermeticity contract ────────────────────────────────────────────────────
 #
 # mktemp fixtures only. No network, no `gh`, no git remote, and no write outside
@@ -169,8 +224,9 @@
 #
 # CLOSEOUT_SH_UNDER_TEST overrides the script under test. Without it the
 # PENDING-SEAM branch would be unfalsifiable — nobody could distinguish this
-# suite from a stub. Two named negative controls, and the second exists because
-# the coverage discriminator must not be able to turn a red into a green:
+# suite from a stub. Three named negative controls: the second exists because the
+# coverage discriminator must not be able to turn a red into a green, and the
+# third because the arming-posture sentinel must not be silently removable.
 #
 #   (1) patch a throwaway copy of automated-closeout.sh with an instance-aware
 #       resolver that HARD-FAILs on absence, then
@@ -183,6 +239,13 @@
 #       same way. It MUST exit 1 citing R5 / CH-2 — the discriminator re-asks with
 #       the resolver's own declared world present and grades the second answer, so
 #       a resolver that cannot resolve what it named is still caught.
+#
+#   (3) delete or blank the arming-posture sentinel — or point the suite at an
+#       empty one — then run it:
+#         CORPUS_HOME_ARMING_FILE=/dev/null bash release/tools/tests/test_corpus_home_tolerance.sh
+#       It MUST exit 1 citing R8. A suite that stays green with no posture
+#       declared has a sentinel that can be deleted to silence the very rule it
+#       exists to make unavoidable.
 #
 # Usage: bash release/tools/tests/test_corpus_home_tolerance.sh [--help]
 
@@ -227,6 +290,17 @@ ARMING_NEEDLE='instance[_-]?(path|root|dir|home|corpus|aware)|(corpus|operator|p
 # cannot be derived from the in-tree baseline's own output (P12).
 CANONICAL_LABELS="RELEASE_LOG RELEASE_INDEX RELEASE_DIGEST RELEASE_NOTES_DIR"
 
+# The committed arming-posture sentinel. POSTURE_FILE is where the repository
+# DECLARES which posture it asserts; the suite OBSERVES its own posture from
+# ARMED further down, and R8 compares the two.
+#
+# The env override exists so P16/P17 — and an external negative control — can
+# point the reader at a synthetic file without touching the real sentinel.
+# Nothing in CI sets it: the default IS the committed sentinel, which is the
+# whole point of the mechanism.
+POSTURE_FILE="${CORPUS_HOME_ARMING_FILE:-$REPO_ROOT/.github/corpus-home-tolerance.arming}"
+POSTURE_ENUM="pending armed"
+
 if [[ "${1:-}" == "--help" ]]; then
   # The header block runs from line 3 to the Usage line; keep this range in sync
   # if the block grows (the trailing PENDING-SEAM/boundary paragraphs are the part
@@ -237,7 +311,7 @@ if [[ "${1:-}" == "--help" ]]; then
   # a human reads the help text and finds it cut off mid-paragraph. Derive it with:
   #   grep -n '^# Usage: bash release/tools/tests/test_corpus_home_tolerance.sh' <this file>
   # and use that line number as the range end.
-  sed -n '3,187p' "${BASH_SOURCE[0]}"
+  sed -n '3,250p' "${BASH_SOURCE[0]}"
   exit 0
 fi
 
@@ -270,6 +344,50 @@ echo
 # controls rather than a parallel re-implementation.
 detect_arming() {
   grep -niE "$ARMING_NEEDLE" "$1" 2>/dev/null | grep -vE '^[0-9]+:[[:space:]]*#' || true
+}
+
+# ─── Arming-posture reader and comparator ────────────────────────────────────
+#
+# Both REPORT ONLY. They echo what they observe and decide nothing; every verdict
+# decision stays in the caller (R8, at the bottom of the verdict-rule block).
+# That is the same contract detect_arming() carries above, and for the same
+# reason: P16/P17/P18 can then exercise THESE EXACT code paths against synthetic
+# controls, rather than a parallel re-implementation free to drift from the one
+# that actually grades the run.
+
+# read_posture <file> — echoes the declared posture token: the first
+# non-comment, non-blank line with all whitespace stripped. Echoes nothing when
+# the file is absent, or carries no such line. The caller decides what an empty
+# answer means; this function does not.
+#
+# The first-line selection is parameter expansion rather than a pipe into
+# `head -1`, for the reason declared_path() states below: under `pipefail` a
+# reader that stops early makes a SUCCESSFUL match report a non-zero pipeline
+# status, and the repo's sigpipe-idiom gate flags that shape. Same result, no pipe.
+read_posture() {
+  local _all _first
+  [[ -f "$1" ]] || return 0
+  _all="$(grep -vE '^[[:space:]]*(#|$)' "$1" 2>/dev/null || true)"
+  _first="${_all%%$'\n'*}"
+  printf '%s\n' "${_first//[[:space:]]/}"
+}
+
+# posture_divergence <declared> <observed> — echoes exactly one status word:
+#   aligned        the declaration matches what this run observes
+#   un-armed       declared armed, observed pending — coverage was LOST
+#   unflipped      declared pending, observed armed — the transition is undeclared
+#   undeclared     no declaration at all (absent or empty sentinel)
+#   unknown-token  a declaration outside POSTURE_ENUM
+# The last three are the fail-closed limbs: an unreadable declaration is never
+# resolved by guessing.
+posture_divergence() {
+  local d="$1" o="$2"
+  if [[ -z "$d" ]]; then echo undeclared; return 0; fi
+  case " $POSTURE_ENUM " in *" $d "*) : ;; *) echo unknown-token; return 0 ;; esac
+  if [[ "$d" == "$o" ]]; then echo aligned; return 0; fi
+  if [[ "$d" == "armed" && "$o" == "pending" ]]; then echo un-armed; return 0; fi
+  if [[ "$d" == "pending" && "$o" == "armed" ]]; then echo unflipped; return 0; fi
+  echo unknown-token
 }
 
 # The corpus-path RESOLUTION SURFACE of the script under test: the four corpus
@@ -554,6 +672,59 @@ else
   fail "P15 containment guard FAILED case(s):$_p15_bad. Two consequences and both are real: the adaptive seed could write outside the temp tree (hermeticity contract broken), and a resolver declaring repo-homed or escaping paths would read as a fixture coverage gap instead of the CH-2 violation it is."
 fi
 
+# P16/P17/P18 — the arming-posture mechanism's own non-vacuity controls.
+#
+# R8 is the only rule here that grades a TRANSITION rather than a run, and the
+# transition it exists to catch — a landed seam being reverted — will not occur
+# in real state for months. A control that cannot be exercised until the thing it
+# guards against happens is not a control. So the reader and the comparator are
+# asserted against planted inputs on EVERY run, exactly as P9/P10/P11 assert
+# detect_arming() and P13/P14/P15 assert the discriminator primitives.
+#
+# P18 is the load-bearing one: it drives the comparator through the
+# (armed, pending) cell — the coverage-lost cell — on a run whose own posture is
+# aligned and green. A comparator that quietly lost that limb would otherwise be
+# discovered only by the regression it was built to catch.
+_pos_full="$TMP/posture-full.arming"
+printf '%s\n' '# header comment' '#' '' 'armed' 'trailing-junk-ignored' > "$_pos_full"
+_pos_empty="$TMP/posture-comment-only.arming"
+printf '%s\n' '# nothing but prose' '#' '' > "$_pos_empty"
+_pos_absent="$TMP/posture-no-such-file.arming"
+
+_p16_got="$(read_posture "$_pos_full")"
+if [[ "$_p16_got" == "armed" ]]; then
+  pass "P16 posture reader returns the first non-comment non-blank token, ignoring header prose and trailing lines ($_p16_got)"
+else
+  fail "P16 posture reader is MISREADING the sentinel — expected 'armed', got '${_p16_got:-<empty>}'. Both failure directions are live: a reader returning the comment or the trailing junk yields an unknown-token FAIL on every run (R8 reddens CI permanently), and a reader returning empty yields undeclared on every run (same). Either way R8 stops grading the posture it exists to grade."
+fi
+
+_p17_bad=""
+[[ -z "$(read_posture "$_pos_empty")" ]]  || _p17_bad="$_p17_bad comment-only-file"
+[[ -z "$(read_posture "$_pos_absent")" ]] || _p17_bad="$_p17_bad nonexistent-path"
+if [[ -z "$_p17_bad" ]]; then
+  pass "P17 posture reader returns empty for a comment-only sentinel AND for a nonexistent path (the undeclared branch is reachable)"
+else
+  fail "P17 posture reader invented a token for:$_p17_bad. R8's fail-closed 'undeclared' branch would be UNREACHABLE, so deleting or blanking the sentinel would read as a valid posture — the exact silent-restoration hole the sentinel exists to close."
+fi
+
+_p18_bad=""
+_p18_check() {
+  local _want="$3" _got
+  _got="$(posture_divergence "$1" "$2")"
+  [[ "$_got" == "$_want" ]] || _p18_bad="$_p18_bad (declared='$1',observed='$2': want $_want got $_got)"
+}
+_p18_check pending pending aligned
+_p18_check armed   armed   aligned
+_p18_check armed   pending un-armed
+_p18_check pending armed   unflipped
+_p18_check ""      pending undeclared
+_p18_check retired armed   unknown-token
+if [[ -z "$_p18_bad" ]]; then
+  pass "P18 posture comparator grades all six divergence cells correctly (including the (armed,pending) coverage-lost cell real state will not reach for months)"
+else
+  fail "P18 posture comparator MISGRADES:$_p18_bad. A comparator returning 'aligned' for the (armed,pending) cell is a check whose silence reads as approval — the suite would report green while the tolerance coverage it declares is gone, which is precisely the defect R8 was added to make impossible."
+fi
+
 echo
 
 # ─── Fixture execution ───────────────────────────────────────────────────────
@@ -641,6 +812,17 @@ if [[ "$ARMED" -eq 1 ]]; then
 else
   echo "  ARMING: not armed  (0 instance-resolution tokens outside comments; fixture A exit $a)"
 fi
+
+# The posture this run OBSERVES is derived from ARMED and from nothing else —
+# there is no second arming derivation in this file, and none outside it. The
+# DECLARED posture is read from the committed sentinel. R8 compares them.
+OBSERVED_POSTURE="pending"
+if [[ "$ARMED" -eq 1 ]]; then
+  OBSERVED_POSTURE="armed"
+fi
+DECLARED_POSTURE="$(read_posture "$POSTURE_FILE")"
+POSTURE_STATUS="$(posture_divergence "$DECLARED_POSTURE" "$OBSERVED_POSTURE")"
+echo "  POSTURE: declared=${DECLARED_POSTURE:-<none>}  observed=$OBSERVED_POSTURE  -> $POSTURE_STATUS"
 echo
 
 # ─── Derived per-path record vocabulary ──────────────────────────────────────
@@ -897,6 +1079,35 @@ if [[ "$ARMED" -eq 0 ]]; then
   pass "R3/R4/R7 dormant — no instance-aware resolution detected (0 tokens outside comments, fixture A exit $a)"
 fi
 
+# R8 — the arming-posture binding. Every rule above grades THIS RUN; R8 is the
+# only one that grades a TRANSITION.
+#
+# The suite derives its entire verdict from live state and persists nothing, so
+# it has no representation of which posture the repository asserts. Its two
+# terminal states are both green — PENDING-SEAM ("not applicable yet") and
+# PASS-SEAM-LANDED ("applicable and satisfied") — which makes a regression from
+# the second back to the first indistinguishable from never having reached it.
+# Correctness-per-run is the wrong granularity for a property that is supposed to
+# ratchet. The committed sentinel is the discriminator that was missing, and R8
+# is what reads it.
+case "$POSTURE_STATUS" in
+  aligned)
+    pass "R8 arming posture binding — the committed sentinel declares '$DECLARED_POSTURE' and this run observes '$OBSERVED_POSTURE'"
+    ;;
+  un-armed)
+    fail "R8 COVERAGE LOST — $POSTURE_FILE declares 'armed', but this run observes 'pending': no instance-aware corpus-path resolution is detected in the script under test. The seam this repository declared has been reverted or lost, and R3/R4/R7 have gone dormant with it — CH-1/CH-2/CH-4 are no longer being graded by anything. Before this rule existed that regression produced a second green and no signal at all. Two lawful remedies, and only two: restore the seam, OR flip the token in $POSTURE_FILE back to 'pending' in the SAME change that removes it. An un-arm is permitted; an UNRECORDED un-arm is not."
+    ;;
+  unflipped)
+    fail "R8 SEAM LANDED, POSTURE UNDECLARED — this run observes instance-aware corpus-path resolution ($ARM_WHY), but $POSTURE_FILE still declares 'pending'. Flip its token to 'armed' in THIS change. This is a one-line edit, not a re-design, and it is what makes the reverse failure reachable: while the declaration stays 'pending', a later revert returns the suite to PENDING-SEAM exit 0 with nothing anywhere recording that the tolerance coverage was lost."
+    ;;
+  undeclared)
+    fail "R8 ARMING POSTURE SENTINEL MISSING OR EMPTY — $POSTURE_FILE carries no posture token. Expected exactly one of: $POSTURE_ENUM, as the first non-comment non-blank line. This fails CLOSED deliberately: if an absent declaration defaulted to 'pending', deleting the sentinel would silently restore the very defect it exists to close — R8 could then never fire, and its silence would read as approval."
+    ;;
+  *)
+    fail "R8 ARMING POSTURE UNRECOGNISED TOKEN '$DECLARED_POSTURE' in $POSTURE_FILE — expected exactly one of: $POSTURE_ENUM. This fails closed rather than guessing. The enum holds only postures this suite can OBSERVE, so it has exactly two members; a declared state with no observable counterpart would be a control whose silence reads as approval, re-introduced at the vocabulary layer."
+    ;;
+esac
+
 echo
 
 # ─── Terminal verdict ────────────────────────────────────────────────────────
@@ -914,6 +1125,9 @@ if [[ "$ARMED" -eq 0 ]]; then
   echo "  R1/R2/R5/R6 gated and passed. This suite cannot redden a PR until the"
   echo "  corpus-home seam lands — and it grades the PR that lands it, armed by a"
   echo "  structural read of the resolver rather than by a fixture exit code."
+  echo "  This posture is DECLARED, not merely observed: .github/corpus-home-tolerance.arming"
+  echo "  carries the token 'pending', and the change that lands the seam must flip it to"
+  echo "  'armed' in that same change or R8 fails it."
   exit 0
 fi
 
