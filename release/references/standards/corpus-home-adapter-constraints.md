@@ -59,7 +59,7 @@ Two grounds, both already established in the platform — no new vocabulary is i
 
 ## 5. How the constraint is enforced
 
-`release/tools/tests/test_corpus_home_tolerance.sh` runs four hermetic fixtures against the real `--check-paths` probe in throwaway temp trees, and grades the **exit-code vector**, not any single fixture.
+`release/tools/tests/test_corpus_home_tolerance.sh` runs four hermetic fixtures against the real `--check-paths` probe in throwaway temp trees — plus a conditional fifth, **A′**, constructed only when the coverage discriminator fires — and grades the **exit-code vector**, not any single fixture.
 
 | Fixture | Repo tree | Instance root | Asserts |
 |---|---|---|---|
@@ -67,6 +67,9 @@ Two grounds, both already established in the platform — no new vocabulary is i
 | **B** | corpus **absent** in-tree | **absent** | CH-1, CH-4 |
 | **C** | corpus in-tree, `RELEASE_LOG.md` **omitted** | not used | CH-3 |
 | **D** | corpus in-tree, all four present | not used | CH-3 (baseline) |
+| **A′** | corpus **absent** in-tree | **present**, seeded with the resolver's **own declared layout** | CH-2 (coverage discriminator) |
+
+A′ is not a fifth channel guess. Its layout is read out of the resolver's own per-path output, so the suite never has to enumerate candidate layouts to keep pace with an adapter it has not seen.
 
 Let `a b c d` be the four exit codes, and let **ARMED** mean *the suite has evidence that corpus-path resolution is instance-aware.* The verdict rules:
 
@@ -80,10 +83,19 @@ R2  c == 0                                -> FAIL   probe blind: a broken corpus
 R3  ARMED && b != 0                       -> FAIL   SEAM LANDED, TOLERANCE VIOLATED  (CH-1)
 R4  ARMED && b == 0 && B lacks a per-path N/A record for any corpus label
                                           -> FAIL   tolerance is silent              (CH-4)
-R5  a != 0 && (ARMED || b == 0)           -> FAIL   present corpus does not resolve  (CH-2)
-R7  ARMED && a == 0 && A lacks a per-path record for any corpus label,
-                       or A carries the N/A token
+R5  a != 0 && (ARMED || b == 0)           -> run the COVERAGE DISCRIMINATOR on
+                                             fixture A's declared per-path records:
+      records incomplete                  -> FAIL   ungradable                       (CH-2)
+      a declared path is outside
+        fixture A's instance root         -> FAIL   not routed through the home      (CH-2)
+      seed the declared layout into
+        A' and re-run:   a' != 0          -> FAIL   present corpus does not resolve  (CH-2)
+                         a' == 0          -> PASS   fixture-coverage gap + ACTION notice
+R7  ARMED && (a == 0 || R5 passed via A') && the GRADED capture lacks a per-path
+                       record for any corpus label, or carries the N/A token
                                           -> FAIL   CH-2 assumed, not resolved       (CH-2)
+    (the graded capture is A's normally, and A''s on the coverage-gap path —
+     R5 passing via A' is never sufficient on its own)
 R6  a CH-id claimed by the suite is absent from this file, or the claimed-id
     list holds fewer than 4 DISTINCT ids   -> FAIL   doc<->test binding broken
     !ARMED  && no failure                 -> PENDING-SEAM      exit 0 + notice
@@ -95,6 +107,10 @@ R6  a CH-id claimed by the suite is absent from this file, or the claimed-id
 **Arming is structural because the behavioural proxy was not sound.** The rules originally armed on `a == 0` — fixture A passing — as a stand-in for "resolution is instance-aware". The two diverge in both directions. A seam can be fully instance-aware and leave `a != 0` (it reads a channel the fixture does not seed, resolves a layout the fixture does not model, or crashes), and every such seam read `PENDING-SEAM` green; conversely a resolver that resolves *nothing* can reach `a == 0` by exiting 0 unconditionally. `core/standards/gate-efficacy-standard.md` Requirement (a) forbids exactly that shape — a proxy signal as the sole verdict-bearing assertion — so the suite now asserts the content: it greps the comment-stripped text of the script under test for instance-corpus resolution vocabulary, and asserts that needle's own non-vacuity against planted / clean / comment-only controls on every run.
 
 **The residue is bounded and named.** Arming is a token match, so a resolver that names none of that vocabulary *and* leaves fixture A non-zero is not detected. That residue is bounded by the needle — a one-line extension in the suite — rather than by how many channels the fixture seeds. Widening the fixture's channel set is deliberately *not* the remedy: a seam can read the right channel at the right layout and still escape by crashing, which is why the structural read, not enumeration, is the mechanism.
+
+**There are two residues, and they must not be read as one.** The paragraph above is about the **arming** residue — a resolver the detector never sees — and it remains open, bounded by the needle. The **layout** residue is a different thing and is now **closed**: a resolver that *is* detected but reads a layout fixture A does not seed used to fail R5 as though it had violated CH-2, when the only thing established was that the fixture never exercised the constraint. A gate's failure has to be distinguishable from its blind spot. The coverage discriminator closes that by deriving the layout from the resolver's own per-path output and re-asking — enumeration is still not the mechanism, in either case.
+
+**The discriminator does not soften the rule.** It re-asks it. A resolver whose records are incomplete is ungradable and fails; one declaring a path outside the instance root it was handed is not routing through the active corpus home and fails; one that still fails when its own declared layout is constructed for it fails. Only the resolver that conforms on the re-ask passes, and it passes with a loud non-blocking notice telling the seam author to seed that layout directly. Because the discriminator's own primitives could themselves go blind, they carry in-suite non-vacuity controls on every run, on the same pattern the arming detector uses.
 
 **Today's posture is `PENDING-SEAM`.** No instance-aware resolution exists — the vocabulary appears in this repo's `check_paths()` header prose and nowhere in its code — so the suite is not armed, `a = 1` and `b = 1`, R3/R4/R7 do not fire, and the suite exits 0. It cannot redden a PR before the seam lands.
 

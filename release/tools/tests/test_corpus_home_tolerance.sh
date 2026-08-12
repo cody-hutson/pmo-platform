@@ -31,6 +31,15 @@
 #      B    | ABSENT                | ABSENT                | CH-1/4  |   1
 #      C    | present, LOG omitted  | (pinned absent)       | CH-3    |   1
 #      D    | present, all four     | (pinned absent)       | CH-3    |   0
+#      A'   | ABSENT                | PRESENT, seeded with  | CH-2    |  n/a
+#           |                       | the resolver's OWN    |(coverage|
+#           |                       | declared layout       | gap)    |
+#
+# A-prime is CONDITIONAL. The four fixtures above are built on every run; A' is
+# constructed ONLY when the coverage discriminator fires (see below), which
+# requires an R5 trigger and therefore never happens on today's posture. It is
+# not a fifth channel guess — its layout is read out of the resolver's own
+# per-path output, so the suite never has to enumerate layouts to keep up.
 #
 # ─── How the suite ARMS: a structural detector, not an exit-code proxy ───────
 #
@@ -70,11 +79,23 @@
 #   R2  c == 0                                   -> FAIL  probe blind to a broken path (CH-3)
 #   R6  claimed CH-id set is not >=4 DISTINCT,
 #       or an id is absent from the standard     -> FAIL  doc<->test binding broken
-#   R5  a != 0 && (ARMED || b == 0)              -> FAIL  present corpus does not resolve (CH-2)
+#   R5  a != 0 && (ARMED || b == 0)              -> run the COVERAGE DISCRIMINATOR
+#       over fixture A's own declared per-path records:
+#         records incomplete                     -> FAIL  ungradable                    (CH-2)
+#         a declared path lies outside fixture
+#           A's instance root                    -> FAIL  not routed through the home   (CH-2)
+#         seed the declared layout into A' and re-run:
+#             a' != 0                            -> FAIL  present corpus does not
+#                                                         resolve                       (CH-2)
+#             a' == 0                            -> PASS  fixture-coverage gap
+#                                                         + non-blocking ACTION notice
 #   R3  ARMED && b != 0                          -> FAIL  SEAM LANDED, TOLERANCE VIOLATED (CH-1)
-#   R7  ARMED && a == 0 && fixture A's capture
-#       lacks a per-path record for any corpus
-#       label, or carries the N/A token          -> FAIL  CH-2 assumed, not resolved   (CH-2)
+#   R7  ARMED && (a == 0 || R5 passed via A')
+#       && the GRADED capture lacks a per-path
+#       record for any corpus label, or carries
+#       the N/A token                            -> FAIL  CH-2 assumed, not resolved   (CH-2)
+#       (the graded capture is fixture A's normally, and fixture A-PRIME's on the
+#        coverage-gap path — R5 passing via A' is never sufficient on its own)
 #   R4  ARMED && b == 0 && fixture B's capture
 #       lacks a per-path N/A record for any
 #       corpus label                             -> FAIL  tolerance is silent          (CH-4)
@@ -92,15 +113,46 @@
 # and CH-4's needle is per-path rather than a bare `N/A` anywhere in the capture
 # (all four paths downgraded to OK plus one unrelated N/A banner cannot pass).
 #
+# ─── A gate's FAILURE must be distinguishable from its BLIND SPOT ────────────
+#
+# R5's antecedent (`a != 0`) is an observation about THIS FIXTURE; its consequent
+# ("a present instance corpus does not resolve") is a claim about THE RESOLVER.
+# Nothing bridged the two, so a fully conformant resolver reading a layout
+# fixture A does not seed rendered identically to a resolver that genuinely
+# violates CH-2 — both as `FAIL R5`. The verdict was about the fixture's
+# coverage, not the resolver's conformance: absence of evidence reported as
+# evidence of violation.
+#
+# The COVERAGE DISCRIMINATOR closes that gap using the resolver's OWN output.
+# check_paths() prints `<marker> <LABEL> -> <path>` per label, so fixture A's
+# capture already states which paths the resolver tried. Inside R5's trigger —
+# and nowhere else — three gates run in order: COMPLETENESS (a resolver emitting
+# no per-path record is ungradable), CONTAINMENT (a declared path outside fixture
+# A's own instance root is not routed through the active corpus home at all), and
+# FALSIFICATION (seed exactly the declared paths into a fresh instance root and
+# re-ask as fixture A'). Falsification is what makes this a discriminator rather
+# than a relaxation: the suite constructs exactly the world the resolver asked
+# for and grades it again. Conformant on re-ask -> PASS with a loud ACTION
+# notice; still failing -> FAIL. The discriminator's own primitives carry
+# non-vacuity controls (P13/P14/P15), on the P9/P10/P11 precedent.
+#
 # ─── Coverage boundary — stated, because it is real ──────────────────────────
 #
 # Arming is a token match over the script's text. A seam that expresses instance
 # resolution in vocabulary ARMING_NEEDLE does not carry, AND whose fixture-A exit
 # code is non-zero, is NOT detected — the suite reports PENDING-SEAM and the PR
-# stays green. That residue is bounded by the needle, not by the fixture channel
-# set, and extending the needle is a one-line change. The suite does not claim to
-# arm on every conceivable resolver; it claims to arm on any resolver that names
-# the platform's instance-corpus vocabulary anywhere in its uncommented text.
+# stays green. That residue is bounded by the NEEDLE, and extending the needle is
+# a one-line change. The suite does not claim to arm on every conceivable
+# resolver; it claims to arm on any resolver that names the platform's
+# instance-corpus vocabulary anywhere in its uncommented text.
+#
+# The sibling residue — a resolver that IS detected but reads a LAYOUT fixture A
+# does not seed — is closed, and the two must not be read as one. It is closed by
+# the discriminator above, which derives the layout from the resolver's own
+# output rather than by enumerating channels in build_instance_corpus(). Widening
+# that channel set is still deliberately NOT the remedy for the needle residue: a
+# seam can read the right channel at the right layout and still escape by
+# crashing, which is why arming stays structural.
 #
 # TODAY the detector matches nothing outside comments, a=1 and b=1, so the verdict
 # is PENDING-SEAM and the suite exits 0. It CANNOT redden a PR before the seam
@@ -117,12 +169,20 @@
 #
 # CLOSEOUT_SH_UNDER_TEST overrides the script under test. Without it the
 # PENDING-SEAM branch would be unfalsifiable — nobody could distinguish this
-# suite from a stub. The negative control is:
+# suite from a stub. Two named negative controls, and the second exists because
+# the coverage discriminator must not be able to turn a red into a green:
 #
-#   patch a throwaway copy of automated-closeout.sh with an instance-aware
-#   resolver that HARD-FAILs on absence, then
-#     CLOSEOUT_SH_UNDER_TEST=<copy> bash release/tools/tests/test_corpus_home_tolerance.sh
-#   MUST exit 1 citing R3 / CH-1.
+#   (1) patch a throwaway copy of automated-closeout.sh with an instance-aware
+#       resolver that HARD-FAILs on absence, then
+#         CLOSEOUT_SH_UNDER_TEST=<copy> bash release/tools/tests/test_corpus_home_tolerance.sh
+#       MUST exit 1 citing R3 / CH-1.
+#
+#   (2) patch a copy with an instance-aware resolver that DECLARES its own
+#       per-path layout and still fails when those exact paths exist (or that
+#       declares paths outside the instance root it was handed), then run it the
+#       same way. It MUST exit 1 citing R5 / CH-2 — the discriminator re-asks with
+#       the resolver's own declared world present and grades the second answer, so
+#       a resolver that cannot resolve what it named is still caught.
 #
 # Usage: bash release/tools/tests/test_corpus_home_tolerance.sh [--help]
 
@@ -171,7 +231,13 @@ if [[ "${1:-}" == "--help" ]]; then
   # The header block runs from line 3 to the Usage line; keep this range in sync
   # if the block grows (the trailing PENDING-SEAM/boundary paragraphs are the part
   # a seam author most needs).
-  sed -n '3,127p' "${BASH_SOURCE[0]}"
+  #
+  # RE-DERIVE the end line rather than adjusting it by eye — a wrong value here
+  # truncates --help with NOTHING failing: no check, no test, no CI signal, until
+  # a human reads the help text and finds it cut off mid-paragraph. Derive it with:
+  #   grep -n '^# Usage: bash release/tools/tests/test_corpus_home_tolerance.sh' <this file>
+  # and use that line number as the range end.
+  sed -n '3,187p' "${BASH_SOURCE[0]}"
   exit 0
 fi
 
@@ -227,6 +293,44 @@ RES_SURFACE="$TMP/res-surface.txt"
 # regex to the in-tree baseline's own capture, so a script that changes its record
 # format fails P12 loudly instead of making R4/R7 pass for free.
 record_re() { printf '^[[:space:]]*[A-Za-z/]+[[:space:]]+%s[[:space:]]*->[[:space:]]*[^[:space:]]' "$1"; }
+
+# ─── Coverage-discriminator primitives ───────────────────────────────────────
+#
+# Both REPORT ONLY. They echo (or answer) what they observe and decide nothing;
+# every decision stays in the discriminator block below. That is the same
+# contract detect_arming() carries, and for the same reason: P13/P14/P15 can
+# then exercise these exact code paths against synthetic controls rather than a
+# parallel re-implementation that could drift from the real one.
+
+# declared_path <capture> <label> — echoes the path the script under test
+# DECLARED it would use for <label>, read out of its own per-path record
+# ("  FAIL RELEASE_LOG -> /some/path (expected file, not found)"). Echoes nothing
+# when the capture carries no record for that label. The first record wins.
+#
+# The first-record selection is done by parameter expansion rather than by piping
+# into `head -1`: under `pipefail` (set at the top of this file) a reader that
+# stops early makes a SUCCESSFUL match report a non-zero pipeline status, which
+# is why the repo's sigpipe-idiom gate flags that shape. Same result, no pipe.
+declared_path() {
+  local _all
+  _all="$(sed -nE "s|^[[:space:]]*[A-Za-z/]+[[:space:]]+$2[[:space:]]*->[[:space:]]*([^[:space:]]+).*|\1|p" "$1" 2>/dev/null)"
+  printf '%s\n' "${_all%%$'\n'*}"
+}
+
+# under_root <path> <root> — true ONLY when <path> lies strictly inside <root>
+# and carries no `..` component.
+#
+# This is the hermeticity guard for the adaptive seed: the discriminator creates
+# files ONLY at paths this accepts, rebased under $TMP, so no discriminator write
+# can escape the temp tree. The "$2"/* form also rejects the prefix collision a
+# bare string-prefix test admits (/planted/rootless is NOT under /planted/root).
+under_root() {
+  case "$1" in
+    *..*)   return 1 ;;
+    "$2"/*) return 0 ;;
+    *)      return 1 ;;
+  esac
+}
 
 # ─── Fixture construction ────────────────────────────────────────────────────
 
@@ -407,6 +511,49 @@ else
   fail "P11 arming detector arms on a COMMENT — check_paths()'s prose header names the constraint, so this would arm the suite against a repo-homed resolver."
 fi
 
+# P13/P14/P15 — the coverage discriminator's own non-vacuity controls.
+#
+# The discriminator decides whether an R5 trigger is a resolver VIOLATION or a
+# fixture COVERAGE GAP, and it decides it with two primitives. A blind
+# declared_path() would read every armed resolver as emitting no per-path record
+# and fail it — re-introducing the very false red the discriminator exists to
+# remove. A permissive under_root() is worse in two directions at once: the
+# adaptive seed could write outside the temp tree, and a resolver declaring
+# repo-homed or escaping paths would read as a coverage gap instead of the CH-2
+# violation it is. Both primitives are therefore asserted against planted
+# controls on every run, exactly as P9/P10/P11 assert detect_arming().
+_disc_cap="$TMP/disc-planted-capture.txt"
+printf '%s\n' \
+  'check-paths: resolving corpus paths under /planted/root' \
+  '  FAIL RELEASE_LOG -> /planted/root/RELEASE_LOG.md (expected file, not found)' \
+  '  OK   RELEASE_NOTES_DIR -> /planted/root/releases/notes (dir)' \
+  > "$_disc_cap"
+
+_p13_got="$(declared_path "$_disc_cap" RELEASE_LOG)"
+if [[ "$_p13_got" == "/planted/root/RELEASE_LOG.md" ]]; then
+  pass "P13 declared-path extractor reads the declared path out of a per-path record ($_p13_got)"
+else
+  fail "P13 declared-path extractor is BLIND — expected '/planted/root/RELEASE_LOG.md', got '${_p13_got:-<empty>}'. The coverage discriminator would read every armed resolver as record-less and fail it as ungradable, re-introducing the false red it exists to remove."
+fi
+
+_p14_got="$(declared_path "$_disc_cap" RELEASE_INDEX)"
+if [[ -z "$_p14_got" ]]; then
+  pass "P14 declared-path extractor returns empty for a label the capture omits (the completeness gate can fire)"
+else
+  fail "P14 declared-path extractor invented a path for a label absent from the capture: '$_p14_got'. The discriminator's completeness gate would never fire, so an incomplete record set would be seeded and graded as though it were whole."
+fi
+
+_p15_bad=""
+under_root "/planted/root/RELEASE_LOG.md" "/planted/root" || _p15_bad="$_p15_bad accept-inside"
+under_root "/elsewhere/RELEASE_LOG.md"    "/planted/root" && _p15_bad="$_p15_bad reject-outside"
+under_root "/planted/root/../escape"      "/planted/root" && _p15_bad="$_p15_bad reject-dotdot-traversal"
+under_root "/planted/rootless/x"          "/planted/root" && _p15_bad="$_p15_bad reject-prefix-collision"
+if [[ -z "$_p15_bad" ]]; then
+  pass "P15 containment guard accepts an inside path and rejects outside / .. traversal / prefix-collision"
+else
+  fail "P15 containment guard FAILED case(s):$_p15_bad. Two consequences and both are real: the adaptive seed could write outside the temp tree (hermeticity contract broken), and a resolver declaring repo-homed or escaping paths would read as a fixture coverage gap instead of the CH-2 violation it is."
+fi
+
 echo
 
 # ─── Fixture execution ───────────────────────────────────────────────────────
@@ -520,6 +667,105 @@ fi
 
 echo
 
+# ─── Coverage discriminator ──────────────────────────────────────────────────
+#
+# R5's antecedent (`a != 0`) is a FIXTURE-RELATIVE observation; its consequent
+# ("a present instance corpus does not resolve") is a RESOLVER-RELATIVE claim.
+# This block is what bridges them, and it runs ONLY inside R5's existing trigger
+# condition — the guard below is byte-identical to R5's. Everywhere else the
+# suite behaves exactly as before.
+#
+# Three gates, in order:
+#
+#   1. COMPLETENESS  — a resolver emitting no per-path record for some corpus
+#                      label declared no path to falsify.        -> indeterminate
+#   2. CONTAINMENT   — a declared path OUTSIDE fixture A's own instance root is
+#                      not routed through the active corpus home at all. That is
+#                      a genuine CH-2 violation, not a coverage gap. -> violation
+#   3. FALSIFICATION — seed EXACTLY the paths the resolver declared into a fresh
+#                      instance root and re-run fixture A as A'. Conformant on
+#                      re-ask -> coverage-gap; still failing -> violation.
+#
+# Gate 3 is why this is a discriminator and not a relaxation: the suite builds
+# exactly the world the resolver asked for and grades it again. A mechanism that
+# only REPORTS the ambiguity leaves the false red in place; one that trusts the
+# declaration WITHOUT re-asking is a false green waiting to happen.
+#
+# The status vocabulary is deliberately lower-case and hyphenated — outside both
+# the PASS/FAIL per-check register and the PENDING-SEAM/PASS-SEAM-LANDED terminal
+# register — so a discriminator status can never be misread as a suite verdict.
+# The suite still ends in exactly the two documented terminal states.
+APRIME="$TMP/instance-adaptive"
+CAP_AP="$TMP/cap.a-prime"
+aprime=""
+A_PRIME_STATUS="n/a"
+A_PRIME_WHY=""
+A_PRIME_LAYOUT=""
+
+if [[ "$a" -ne 0 ]] && { [[ "$ARMED" -eq 1 ]] || [[ "$b" -eq 0 ]]; }; then
+  if [[ "$d" -ne 0 ]]; then
+    # The in-tree baseline is broken, so P12 fell back to the canonical labels and
+    # the record-KIND derivation below has no filesystem truth to read. R1 already
+    # fails the suite for this; a discriminator verdict computed on a degenerate
+    # baseline would only add a confidently wrong reason to a run that is already
+    # red for the right one.
+    A_PRIME_STATUS="indeterminate"
+    A_PRIME_WHY="the in-tree baseline itself fails (fixture D exit $d — see R1), so neither the per-path record vocabulary nor the record kinds can be derived; the coverage question cannot be decided until R1 is green"
+  else
+    _disc_missing=""
+    _disc_outside=""
+    _disc_seeds=""
+    for _lab in $CORPUS_LABELS; do
+      _dp="$(declared_path "$CAP_A" "$_lab")"
+      if [[ -z "$_dp" ]]; then
+        _disc_missing="$_disc_missing $_lab"
+      elif ! under_root "$_dp" "$INSTANCE"; then
+        _disc_outside="$_disc_outside $_lab=$_dp"
+      else
+        _disc_seeds="$_disc_seeds $_lab|$_dp"
+        A_PRIME_LAYOUT="$A_PRIME_LAYOUT ${_dp#$INSTANCE/}"
+      fi
+    done
+    A_PRIME_LAYOUT="${A_PRIME_LAYOUT# }"
+
+    if [[ -n "$_disc_missing" ]]; then
+      A_PRIME_STATUS="indeterminate"
+      A_PRIME_WHY="fixture A emits no per-path record for:$_disc_missing — the resolver declared no path there, so there is nothing to falsify and its conformance cannot be decided from its own output"
+    elif [[ -n "$_disc_outside" ]]; then
+      A_PRIME_STATUS="violation"
+      A_PRIME_WHY="the resolver declared path(s) OUTSIDE fixture A's instance corpus home ($INSTANCE):$_disc_outside — a present instance corpus is not being routed through the active corpus home (CH-2)"
+    else
+      mkdir -p "$APRIME"
+      for _seed in $_disc_seeds; do
+        _s_lab="${_seed%%|*}"
+        _s_path="${_seed#*|}"
+        _s_rel="${_s_path#$INSTANCE/}"
+        # Derive the record KIND (file vs dir) from fixture D's declared path on
+        # the live filesystem — never from a hardcoded label->kind map, and never
+        # parsed out of the record's trailing prose. A hardcoded map would
+        # re-introduce exactly the vocabulary-drift class P12 exists to catch.
+        _d_declared="$(declared_path "$CAP_D" "$_s_lab")"
+        if [[ -n "$_d_declared" ]] && [[ -d "$_d_declared" ]]; then
+          mkdir -p "$APRIME/$_s_rel"
+        else
+          mkdir -p "$(dirname "$APRIME/$_s_rel")"
+          : > "$APRIME/$_s_rel"
+        fi
+      done
+      aprime="$(run_fixture Aprime "$AB_REPO" "$APRIME" "$CAP_AP")"
+      if [[ "$aprime" -eq 0 ]]; then
+        A_PRIME_STATUS="coverage-gap"
+        A_PRIME_WHY="fixture A does not seed the layout this resolver reads; seeding the resolver's OWN declared layout ($A_PRIME_LAYOUT) into a fresh instance root and re-running exits 0 — the resolver conforms, the fixture never exercised it"
+      else
+        A_PRIME_STATUS="violation"
+        A_PRIME_WHY="the suite seeded the resolver's OWN declared layout ($A_PRIME_LAYOUT) into a fresh instance root and the resolver STILL exits $aprime — a corpus present at the paths it named does not resolve (CH-2)"
+      fi
+    fi
+  fi
+  echo "  DISCRIMINATOR: $A_PRIME_STATUS — $A_PRIME_WHY"
+  echo
+fi
+
 # ─── Verdict rules ───────────────────────────────────────────────────────────
 
 echo "Verdict rules"
@@ -570,8 +816,12 @@ fi
 # shape (b == 0 with a != 0: absence tolerated while presence resolves nothing),
 # and additionally whenever the suite is ARMED — because an armed resolver that
 # leaves fixture A failing has not demonstrated CH-2 at all.
-if [[ "$a" -ne 0 ]] && { [[ "$ARMED" -eq 1 ]] || [[ "$b" -eq 0 ]]; }; then
-  fail "R5 CH-2 NOT DEMONSTRATED — a PRESENT instance corpus does not resolve (fixture A exit $a) while the suite is armed ($ARM_WHY). Two causes, and they need different fixes: (i) the resolver tolerates absence without resolving presence — the degenerate answer CH-2 forbids; or (ii) the resolver reads a corpus-home channel or layout fixture A does not seed (it seeds PMO_INSTANCE_PATH at <inst>/releases/ and <inst>/release/releases/). If (ii), seed your channel in build_instance_corpus() in this file — do NOT relax the rule."
+if [[ "$a" -ne 0 ]] && { [[ "$ARMED" -eq 1 ]] || [[ "$b" -eq 0 ]]; } \
+   && [[ "$A_PRIME_STATUS" == "coverage-gap" ]]; then
+  pass "R5 CH-2 exit limb (via fixture A-prime) — $A_PRIME_WHY
+        ACTION (non-blocking): add this layout to build_instance_corpus() in this file so CH-2 is asserted DIRECTLY on fixture A rather than adaptively on A-prime — seed: $A_PRIME_LAYOUT"
+elif [[ "$a" -ne 0 ]] && { [[ "$ARMED" -eq 1 ]] || [[ "$b" -eq 0 ]]; }; then
+  fail "R5 CH-2 NOT DEMONSTRATED [$A_PRIME_STATUS] — a PRESENT instance corpus does not resolve (fixture A exit $a) while the suite is armed ($ARM_WHY). Two causes, and they need different fixes: (i) the resolver tolerates absence without resolving presence — the degenerate answer CH-2 forbids; or (ii) the resolver reads a corpus-home channel or layout fixture A does not seed (it seeds PMO_INSTANCE_PATH at <inst>/releases/ and <inst>/release/releases/). The coverage discriminator decided WHICH, and this is what it observed: $A_PRIME_WHY. A 'violation' status means the resolver was re-asked with its own declared layout present and STILL failed — fix the resolver, do NOT relax the rule. An 'indeterminate' status means the resolver's output could not be graded at all — make check_paths() emit a per-path record for every corpus label (or fix R1's baseline), then re-run."
 elif [[ "$ARMED" -eq 1 ]]; then
   pass "R5 CH-2 exit limb — a present instance corpus resolves (fixture A exit 0)"
 else
@@ -587,22 +837,37 @@ elif [[ "$ARMED" -eq 1 ]]; then
 fi
 
 # R7 — CH-2's CONTENT limb (the assertion whose absence let a resolver that
-# resolves NOTHING reach PASS-SEAM-LANDED). Fixture A's capture is READ here: an
+# resolves NOTHING reach PASS-SEAM-LANDED). The graded capture is READ here: an
 # exit code alone cannot distinguish "resolved four paths through the instance
 # corpus" from "printed one N/A and returned 0".
-if [[ "$ARMED" -eq 1 ]] && [[ "$a" -eq 0 ]]; then
+#
+# On the coverage-gap path R7 grades fixture A-PRIME's capture rather than
+# fixture A's, and THAT is what stops the discriminator converting a false red
+# into a false green. R5 passing via A' is never sufficient on its own: the
+# resolver must ALSO have emitted a real per-path record for every corpus label,
+# with no N/A token, in the very run that produced its exit 0.
+R7_CAP="$CAP_A"
+R7_NA="$A_HAS_NA"
+R7_SRC="fixture A"
+if [[ "$A_PRIME_STATUS" == "coverage-gap" ]]; then
+  R7_CAP="$CAP_AP"
+  R7_SRC="fixture A-prime"
+  R7_NA=0
+  grep -qE "$NA_NEEDLE" "$CAP_AP" && R7_NA=1
+fi
+if [[ "$ARMED" -eq 1 ]] && { [[ "$a" -eq 0 ]] || [[ "$A_PRIME_STATUS" == "coverage-gap" ]]; }; then
   _r7_missing=""
   _r7_hits="$TMP/r7-hits.txt"
   for _lab in $CORPUS_LABELS; do
-    grep -E "$(record_re "$_lab")" "$CAP_A" > "$_r7_hits" 2>/dev/null || : > "$_r7_hits"
+    grep -E "$(record_re "$_lab")" "$R7_CAP" > "$_r7_hits" 2>/dev/null || : > "$_r7_hits"
     [[ -s "$_r7_hits" ]] || _r7_missing="$_r7_missing $_lab"
   done
   if [[ -n "$_r7_missing" ]]; then
-    fail "R7 CH-2 ASSUMED, NOT RESOLVED — fixture A exits 0 but its output carries no per-path resolution record for:$_r7_missing. A present instance corpus MUST resolve all four corpus paths through the active corpus home (CH-2); an unconditional exit 0 satisfies the letter of CH-1 while resolving nothing at all, which is exactly the degenerate answer the standard's §3 says CH-2 exists to forbid."
-  elif [[ "$A_HAS_NA" -eq 1 ]]; then
-    fail "R7 CH-2 VIOLATED — fixture A exits 0 but its output carries the N/A token. Fixture A's instance corpus is PRESENT and complete (P2), so nothing in it is legitimately N/A; a resolver reporting N/A here is tolerating absence it should be resolving."
+    fail "R7 CH-2 ASSUMED, NOT RESOLVED — $R7_SRC exits 0 but its output carries no per-path resolution record for:$_r7_missing. A present instance corpus MUST resolve all four corpus paths through the active corpus home (CH-2); an unconditional exit 0 satisfies the letter of CH-1 while resolving nothing at all, which is exactly the degenerate answer the standard's §3 says CH-2 exists to forbid."
+  elif [[ "$R7_NA" -eq 1 ]]; then
+    fail "R7 CH-2 VIOLATED — $R7_SRC exits 0 but its output carries the N/A token. That fixture's instance corpus is PRESENT and complete, so nothing in it is legitimately N/A; a resolver reporting N/A here is tolerating absence it should be resolving."
   else
-    pass "R7 CH-2 content limb — fixture A resolves a per-path record for every corpus label ($CORPUS_LABELS) and reports no N/A"
+    pass "R7 CH-2 content limb — $R7_SRC resolves a per-path record for every corpus label ($CORPUS_LABELS) and reports no N/A"
   fi
 fi
 
@@ -657,6 +922,14 @@ echo "  The corpus-home seam has landed CONFORMANTLY: a present instance corpus"
 echo "  resolves with a per-path record for every corpus label (CH-2), an absent"
 echo "  one is tolerated with a per-path N/A record (CH-1, CH-4), and the in-tree"
 echo "  baseline still detects a genuine resolution defect (CH-3)."
+if [[ "$A_PRIME_STATUS" == "coverage-gap" ]]; then
+  echo "  COVERAGE NOTE — CH-2 was demonstrated against fixture A-PRIME, not fixture A."
+  echo "  This resolver reads a layout fixture A does not seed, so the suite seeded the"
+  echo "  resolver's own declared layout and re-asked: $A_PRIME_LAYOUT"
+  echo "  ACTION — add that layout to build_instance_corpus() in this file, so CH-2 is"
+  echo "  asserted DIRECTLY on fixture A rather than adaptively on A-prime. Adaptive is"
+  echo "  the safety net; direct seeding stays the goal."
+fi
 echo "  ACTION — retire the PENDING-SEAM branch of this suite. Replace it with a"
 echo "  hard 'not ARMED -> FAIL' so the tolerance property gates unconditionally"
 echo "  and cannot silently regress to the pre-seam state."
