@@ -421,3 +421,43 @@ core/skills/context-budget-auditor/scripts/measure-context-budget.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/skills/skill-compliance-auditor/scripts/measure-skill-compliance.sh
 ./core/skills/skill-compliance-auditor/scripts/measure-skill-compliance.sh
 core/skills/skill-compliance-auditor/scripts/measure-skill-compliance.sh
+
+# validate-install Mode A regression (test_validate_install.sh) — in-tree bash
+# CLI. Asserts the A9 platform-roster predicate via a four-arm positive control:
+# sensitivity (a fixture skill missing version: must FAIL by name), specificity,
+# a healthy mirror, and anti-vacuity (source-repo repointed at a skill-less tree
+# must FAIL citing roster resolution, never PASS). Executed agent-side at Stage 6
+# self-verification and Stage 7 Dev Testing, and by the install-tests shell-tests
+# job; all four invocation forms so BLOCK-DESTRUCTIVE-022 does not block the
+# agent-side path. (CI runs no Claude hooks, so this entry is for the agent-side
+# path, not the workflow.) Named row rather than a core/deploy/tests/* glob: a
+# pattern would auto-admit any future file dropped in that directory.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_validate_install.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_validate_install.sh
+./core/deploy/tests/test_validate_install.sh
+core/deploy/tests/test_validate_install.sh
+
+# Install regression suite runner (run-install-regression.sh) — in-tree bash CLI.
+# Runs the enrolled REGRESSION_MEMBERS set end to end; membership resolution is
+# itself asserted by qa.sh R2. Executed agent-side at Stage 6 self-verification
+# and Stage 7 Dev Testing, and by the install-tests shell-tests job; all four
+# invocation forms so BLOCK-DESTRUCTIVE-022 does not block the agent-side path.
+# (CI runs no Claude hooks, so this entry is for the agent-side path, not the
+# workflow.) Named row rather than a glob, per the entry above.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/run-install-regression.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/run-install-regression.sh
+./core/deploy/tests/run-install-regression.sh
+core/deploy/tests/run-install-regression.sh
+
+# Install end-to-end regression (test_install_end_to_end.sh) — in-tree bash CLI.
+# Asserts a clean-room install lands complete: hook executability, the dedicated
+# mode files resolving to their documented posture, and the ambient-intake
+# directory provisioning. Executed agent-side at Stage 6 self-verification and
+# Stage 7 Dev Testing, and by the install-tests shell-tests job; all four
+# invocation forms so BLOCK-DESTRUCTIVE-022 does not block the agent-side path.
+# (CI runs no Claude hooks, so this entry is for the agent-side path, not the
+# workflow.) Named row rather than a glob, per the entries above.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_install_end_to_end.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_install_end_to_end.sh
+./core/deploy/tests/test_install_end_to_end.sh
+core/deploy/tests/test_install_end_to_end.sh

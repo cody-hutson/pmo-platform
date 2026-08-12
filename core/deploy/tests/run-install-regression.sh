@@ -81,6 +81,7 @@ REGRESSION_MEMBERS=(
   "test_qa_module.py"                      # QA-as-code registry: import smoke + finding->check 1:1 coverage
   "test_doctor.sh"                         # #302 doctor.sh: two-layer install self-diagnosis + read-only + fault-injection
   "test_refresh_surfaces.sh"               # update.sh --surfaces-only targeted composition-surface refresh + leakage backstop
+  "test_validate_install.sh"               # validate-install.sh A9 platform-roster predicate + anti-vacuity control
 )
 
 SUITE_PASS=0

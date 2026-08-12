@@ -589,11 +589,39 @@ jobs:
         # Asserts it completes from a NON-repo-root cwd (exit 0/64) with the
         # repo-root guard SILENT — the #382 cross-OS assertion. PMO_ALLOW_NON_DARWIN
         # (job env) relaxes the Phase-5c setup-workspace.sh platform gate.
+        #
+        # THE SANDBOX IS INSTALLED BEFORE IT IS UPDATED, and that is a precondition
+        # rather than a convenience. update.sh is a MAINTENANCE tool: it regenerates
+        # and refreshes an existing install and can never create one — Phase 3 says so
+        # itself, once per absent target ("fresh install needed via setup-workspace.sh").
+        # Pointing it at a bare `mkdir` directory asks it to maintain a workspace that
+        # was never installed, and the verdict it returns is about that, not about cwd.
+        # The macOS sibling for this same #382 property
+        # (core/deploy/tests/test_update_nonrepo_root_cwd.sh) has always run a real
+        # setup-workspace.sh first, in a step whose own comment gives the reason —
+        # "so update.sh reaches Phase 5 with real targets". This leg was written as an
+        # inline shortcut that skipped it, and nothing observed the omission until the
+        # install-completeness gate started reporting an incomplete install as
+        # incomplete. The gate is right; the fixture was not.
+        #
+        # It seeds the HOOK-TIER composition surfaces specifically, because those are
+        # what the completeness gate is scoped to: a hook-tier surface is the escape
+        # half of a security control whose enforcement half Phase 5c installs, so an
+        # absent one is a real asymmetry. Instance-tier surfaces are operator data with
+        # no paired enforcement half and are correctly out of that scope. Seeding stays
+        # inside the portable tier this leg is declared to be — it does NOT run the
+        # macOS-only installer, which is the OS-portability work deferred to #342 / #44.
+        #
+        # The seed is DERIVED FROM THE MANIFEST, never a copied list of filenames. The
+        # manifest's own contract is that adding a surface costs one row and no other
+        # code change; a hardcoded list here would break that quietly, by under-seeding
+        # a surface added later and reddening this leg for a reason that has nothing to
+        # do with what it tests.
         if: runner.os == 'Linux'
         run: |
           set -uo pipefail
           sbx="$(mktemp -d)"
-          mkdir -p "$sbx/ws" "$sbx/cfg" "$sbx/home" "$sbx/nonrepo"
+          mkdir -p "$sbx/ws/.claude" "$sbx/cfg" "$sbx/home" "$sbx/nonrepo"
           {
             printf '%s\n' '[meta]' 'schema_version = 1' 'managed_by = "pmo-platform"'
             printf '%s\n' '[identity]' 'operator_name = "CI Operator"'
@@ -607,6 +635,31 @@ jobs:
             printf '%s\n' '[platform]' 'work_board = "github"' 'comms_platform = ""'
           } > "$sbx/cfg/operator.toml"
           chmod 600 "$sbx/cfg/operator.toml"
+          # Seed the hook-tier composition surfaces from the shared manifest — the
+          # same array update.sh and setup-workspace.sh both source, so this fixture
+          # cannot drift from the population the completeness gate reads. Copying the
+          # real source file rather than touching an empty one keeps Phase 3's
+          # regeneration comparison meaningful.
+          . "$GITHUB_WORKSPACE/core/deploy/composition-surface-manifest.sh"
+          seeded=0
+          for entry in "${COMPOSITION_SURFACE_FILES[@]}"; do
+            src="${entry%%|*}"
+            rest="${entry#*|}"
+            [ "${rest%%|*}" = "hook" ] || continue
+            cp "$GITHUB_WORKSPACE/$src" "$sbx/ws/.claude/$(basename "$src")" || {
+              echo "::error::could not seed hook-tier surface $src into the sandbox"
+              exit 1
+            }
+            seeded=$((seeded + 1))
+          done
+          # Anti-vacuity: a manifest that sourced to nothing would seed nothing, and
+          # the step would then fail at the completeness gate for a reason that looks
+          # like a product defect. Fail here instead, where the cause is legible.
+          if [ "$seeded" -eq 0 ]; then
+            echo "::error::seeded 0 hook-tier composition surfaces; the manifest resolved to an empty population, so this leg would assert nothing about the update flow"
+            exit 1
+          fi
+          echo "Seeded $seeded hook-tier composition surface(s) into the sandbox."
           cd "$sbx/nonrepo" || exit 1
           set +e
           out="$(bash "$GITHUB_WORKSPACE/update.sh" --dry-run --workspace-root "$sbx/ws" --config-root "$sbx/cfg" 2>&1)"
@@ -616,7 +669,14 @@ jobs:
             echo "::error::update.sh --dry-run from a non-repo-root cwd exited $rc (expected 0 or 64) on $(uname -s)"
             exit 1
           fi
-          if printf '%s' "$out" | grep -qF "Must run from pmo-platform repo root"; then
+          # Here-string, not `printf | grep -qF`: grep -q stops at its first match, so
+          # piped it is a short-circuiting reader whose early exit breaks the writer's
+          # pipe, and under pipefail the writer's failure becomes the pipeline's — a
+          # MATCH would report non-zero and this guard would read "guard silent" while
+          # the guard had in fact fired. It is a size latch that only closes once $out
+          # exceeds pipe capacity, and seeding the sandbox grows $out, so this moves
+          # toward it rather than away. A here-string has no writer to signal.
+          if grep -qF -- "Must run from pmo-platform repo root" <<<"$out"; then
             echo "::error::repo-root guard fired from a non-repo-root cwd -- #382 partial-update regression on $(uname -s)"
             exit 1
           fi

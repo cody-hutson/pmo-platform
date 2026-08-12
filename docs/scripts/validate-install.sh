@@ -115,10 +115,20 @@ readonly STATE_FILE_NAME=".workspace-setup.state"
 readonly STATE_SCHEMA_VERSION="1.0"
 readonly OPERATOR_TOML_PATH="${HOME}/.config/pmo-platform/operator.toml"
 
-# Mode A check count (11) is the upper bound; --mode operator-pre-existing
-# runs a subset that drops state-marker (A4) and operator.toml (A10). A6b
-# (hook-wiring re-home posture, #4436) runs in BOTH sub-modes.
-readonly MODE_A_TOTAL=11
+# Mode A counting convention — EMITTED STEP RECORDS. MODE_A_TOTAL counts one
+# record per emit_pass / emit_fail / emit_skip call, which is exactly the
+# quantity log_summary prints as "N PASS / N FAIL / N SKIP". emit_info records
+# are EXCLUDED by construction: an INFO is a record, not a step, and increments
+# no counter.
+#
+# Both Mode A sub-modes emit the SAME total. --mode install runs all twelve
+# checks. --mode operator-pre-existing runs nine (A1, A2, A3, A5, A6, A6b, A7,
+# A8, A9) and emits SKIP for the three whose surfaces postdate such a workspace
+# — A3b composition-surface manifest, A4 state marker, A10 operator.toml. A SKIP
+# is still an emitted record, so a single constant is correct for both sub-modes,
+# which is what stops this number drifting the next time a check is added or
+# dropped from one sub-mode only.
+readonly MODE_A_TOTAL=12
 readonly MODE_B_TOTAL=4
 
 # --- Section 3: Mutable state (scalars only; bash-3.2-compatible) ---
@@ -158,12 +168,13 @@ Verify pmo-platform install (Mode A) and first-task invocation (Mode B).
 Options:
   --mode {install,first-task,all,operator-pre-existing}
                           Select scope (default: all).
-                          - install: Mode A only (10 checks).
+                          - install: Mode A only (12 checks).
                           - first-task: Mode B only (4 checks).
                           - all: Mode A followed by Mode B.
                           - operator-pre-existing: subset of Mode A for
                             workspaces that predate setup-workspace.sh
-                            — drops A4 state-marker + A10 operator.toml.
+                            — SKIPs A3b composition-surface, A4 state-marker
+                            and A10 operator.toml.
   --source-repo PATH      Path to cloned pmo-platform (default: ${HOME}/Claude/pmo-platform).
   --workspace-root PATH   Workspace root (default: ${HOME}/Claude).
   --validation-dir PATH   Artifact directory override (default:
@@ -181,7 +192,7 @@ Output channels:
 
 Modes:
   - install                  Verifies setup-workspace.sh succeeded.
-                             10 checks, all read-only bash.
+                             12 checks, all read-only bash.
   - first-task               Verifies demo skill output parses correctly.
                              4 checks; B2 emits an operator hand-off block;
                              re-run with --continue after capturing the
@@ -189,9 +200,20 @@ Modes:
   - all (default)            Mode A then Mode B. If Mode A FAILs, Mode B is
                              skipped (install must verify first).
   - operator-pre-existing    Workspaces created before setup-workspace.sh
-                             shipped (no state-marker yet). Runs A1-A3, A5-A9
-                             (8 checks); aggregate verdict is per-mode
-                             unambiguous.
+                             shipped (no state-marker yet). Runs A1, A2, A3,
+                             A5, A6, A6b, A7, A8, A9; A3b, A4 and A10 emit SKIP
+                             because those surfaces postdate such a workspace.
+                             Emits 12 check records — the same total as the
+                             install sub-mode, because a SKIP is still a record.
+                             Aggregate verdict is per-mode unambiguous.
+
+Check A9 (INSTALL-SKILL-ROSTER) scope: the version: frontmatter convention is
+PLATFORM-ROSTER-SCOPED. A9 asserts it only over skills the source repo declares
+at <source-repo>/{core,operations,release}/skills/<name>/SKILL.md. An
+operator-authored skill deployed alongside the platform roster is reported INFO
+and excluded — the platform neither ships nor manages it, so the re-deploy
+remedy could not run for it. If NO deployed skill resolves to the roster, A9
+FAILs on roster resolution rather than passing over an empty set.
 
 Demo skill: prompt-builder (core/skills). Aligned with the
 GETTING_STARTED.md walkthrough so the operator exercises the same skill
@@ -374,6 +396,23 @@ emit_skip() {
   esac
 }
 
+# emit_info — a RECORD, not a step.
+#
+# Prints an informational line and appends a run.json record with verdict INFO,
+# but increments NO counter and sets NO fail flag. That asymmetry with its three
+# siblings is deliberate and load-bearing: the Mode A denominator (MODE_A_TOTAL)
+# counts emitted STEP records, so a check can report supplementary population
+# detail without moving the total or influencing any verdict.
+#
+# Use it where a check deliberately EXCLUDES something from its assertion. A
+# silently-excluded population is how a narrowed check turns into a vacuous one;
+# reporting the exclusion is what keeps the narrowing auditable.
+emit_info() {
+  local step="$1" check="$2" detail="$3" mode="$4"
+  printf '[%s] INFO — %s: %s\n' "${step}" "${check}" "${detail}"
+  record_step "${step}" "${check}" "INFO" "${detail}" "" "${mode}"
+}
+
 record_step() {
   # Append one JSONL record per step. Compose into run.json at log_summary.
   local step="$1" check="$2" verdict="$3" diagnostic="$4" hint="$5" mode="$6"
@@ -447,6 +486,25 @@ check_a1_platform() {
   emit_pass "A1" "INSTALL-PLATFORM" "$(uname -s) $(uname -r)" "A"
 }
 
+# A2 asserts the workspace layout: the five workspace-root children, plus the
+# three ambient-intake member directories under the operator-instance base.
+#
+# The ambient half is here rather than in a check of its own on purpose. A2 IS
+# the layout assertion and already emits the "missing dirs" shape this needs, so
+# extending it adds no Mode A emitter and therefore leaves MODE_A_TOTAL — a
+# constant two sibling cards in this release also touch — untouched.
+#
+# The ambient directories are resolved, never spelled as literals, so a
+# relocated instance base is validated where it actually lives. The resolver is
+# sourced HERE rather than at file scope because SOURCE_REPO is not populated
+# until argument parsing completes, well after the constants block; sourcing a
+# library from inside the function that needs it is the shipped idiom the
+# installer's own scaffold functions use.
+#
+# Degradation is three-state, not two. A validator run without a readable source
+# repo cannot resolve the instance base, so it reports the five root dirs alone
+# and says so — it must not claim eight dirs present when it checked five, which
+# would be the same dishonest reporting this release exists to remove.
 check_a2_workspace_layout() {
   local missing=""
   local required_dirs="pmo-platform projects knowledge personal .claude"
@@ -455,11 +513,43 @@ check_a2_workspace_layout() {
       missing="${missing} ${d}"
     fi
   done
-  if [ -n "${missing}" ]; then
-    emit_fail "A2" "INSTALL-WORKSPACE-LAYOUT" "missing dirs:${missing}" \
-      "re-run setup-workspace.sh" "A"
+  # Ambient-intake member directories. A missing drop-zone used to pass this
+  # check cleanly, which is precisely how the capability shipped dead: every
+  # tracked-file deliverable had a gate that could fail it, and the runtime
+  # provisioning had none.
+  local ambient_missing="" ambient_checked=0 ambient_lib
+  ambient_lib="${SOURCE_REPO}/core/deploy/lib-instance-path.sh"
+  if [ -r "${ambient_lib}" ]; then
+    # shellcheck source=../../core/deploy/lib-instance-path.sh disable=SC1091
+    . "${ambient_lib}"
+  fi
+  if command -v pmo_inbox_path_for > /dev/null 2>&1; then
+    ambient_checked=1
+    local ambient_pair ambient_label ambient_dir
+    for ambient_pair in \
+      "inbox:$(pmo_inbox_path_for "${WORKSPACE_ROOT}")" \
+      "ambient-intake:$(pmo_ambient_intake_path_for "${WORKSPACE_ROOT}")" \
+      "external-sync:$(pmo_external_sync_path_for "${WORKSPACE_ROOT}")"; do
+      ambient_label="${ambient_pair%%:*}"
+      ambient_dir="${ambient_pair#*:}"
+      if [ ! -d "${ambient_dir}" ]; then
+        ambient_missing="${ambient_missing} ${ambient_label}"
+      fi
+    done
+  fi
+
+  if [ -n "${missing}" ] || [ -n "${ambient_missing}" ]; then
+    emit_fail "A2" "INSTALL-WORKSPACE-LAYOUT" \
+      "missing dirs:${missing}${ambient_missing:+ ambient:${ambient_missing}}" \
+      "re-run setup-workspace.sh (or ./update.sh to back-fill the ambient dirs)" "A"
+  elif [ "${ambient_checked}" -eq 1 ]; then
+    emit_pass "A2" "INSTALL-WORKSPACE-LAYOUT" \
+      "5 required dirs + 3 ambient-intake dirs present" "A"
   else
-    emit_pass "A2" "INSTALL-WORKSPACE-LAYOUT" "5 required dirs present" "A"
+    # Say what was actually checked. Claiming the ambient dirs when the resolver
+    # never loaded would be a verdict the run did not earn.
+    emit_pass "A2" "INSTALL-WORKSPACE-LAYOUT" \
+      "5 required dirs present; ambient-intake dirs NOT checked (resolver unavailable at ${ambient_lib})" "A"
   fi
 }
 
@@ -477,21 +567,38 @@ check_a3_hooks_layout() {
       "re-run setup-workspace.sh (hook install incomplete)" "A"
     return
   fi
-  # Spot-check executable bit on a representative hook
+  # Executable-bit check over hook ENTRYPOINTS only.
   local executable_ok=1
+  local entrypoint_count=0
   for hook in "${hooks_dir}"/*.sh; do
     [ -f "${hook}" ] || continue
+    # Sourced-lib exemption — mirrors doctor.sh check_hooks_runnable (#302 / #1850),
+    # which is the SOURCE of this discriminator; this is a registered duplicate, not a
+    # second decision. setup-workspace.sh install_hooks co-deploys SOURCED primitives
+    # beside the hooks. Every consumer reads them with `. "$LIB"` under an
+    # `[ -r "$LIB" ]` guard — never `-x`, never a direct invocation — so they ship
+    # mode 644 BY DESIGN, and core/deploy/tests/test_doctor.sh pins that mode as
+    # correct by seeding its fixture at 644. Without this skip a HEALTHY install FAILs
+    # A3 with a misleading chmod remedy. Shebang is NOT a discriminator (sourced libs
+    # carry one), so match the co-deploy naming set.
+    case "$(basename "${hook}")" in
+      lib-*.sh|*-patterns.sh) continue ;;
+    esac
+    entrypoint_count=$((entrypoint_count + 1))
     if ! assert_executable "${hook}"; then
       executable_ok=0
-      verbose "A3: non-executable hook: ${hook}"
+      verbose "A3: non-executable hook entrypoint: ${hook}"
       break
     fi
   done
   if [ "${executable_ok}" -eq 0 ]; then
-    emit_fail "A3" "INSTALL-HOOKS-LAYOUT" "hook(s) missing +x bit" \
-      "chmod +x ${hooks_dir}/*.sh OR re-run setup-workspace.sh" "A"
+    # Remedy names the ENTRYPOINT set, not a blanket glob: a bare `chmod +x *.sh`
+    # would also mark the co-deployed sourced libs executable, undoing the very
+    # invariant the skip above encodes.
+    emit_fail "A3" "INSTALL-HOOKS-LAYOUT" "hook entrypoint(s) missing +x bit" \
+      "re-run setup-workspace.sh (it chmods entrypoints and leaves sourced libs at 644)" "A"
   else
-    emit_pass "A3" "INSTALL-HOOKS-LAYOUT" "${sh_count} hook(s) installed +x" "A"
+    emit_pass "A3" "INSTALL-HOOKS-LAYOUT" "${entrypoint_count} hook entrypoint(s) installed +x (sourced libs exempt per doctor.sh)" "A"
   fi
 }
 
@@ -819,16 +926,57 @@ check_a9_skill_roster() {
     return
   fi
   local skill_count missing_skill_md=0 missing_version=0 first_missing=""
+  local platform_count=0 nonplatform_count=0 nonplatform_names=""
   skill_count=$(find "${skills_dir}" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
   if [ "${skill_count}" -lt 1 ]; then
     emit_fail "A9" "INSTALL-SKILL-ROSTER" "no skill subdirs under ${skills_dir}" \
       "run \`${SOURCE_REPO}/core/deploy/deploy.sh --deploy\` to populate" "A"
     return
   fi
-  # Spot-check: every skill dir has SKILL.md; frontmatter has version field
+  # Spot-check: every PLATFORM-MANAGED skill dir has SKILL.md; frontmatter has
+  # version field. The deployed mirror is a superset of the platform roster —
+  # operator-authored and third-party skills live beside it — so the assertion
+  # is narrowed to the population the platform actually owns.
   for skill_dir in "${skills_dir}"/*/; do
     [ -d "${skill_dir}" ] || continue
     local skill_md="${skill_dir}SKILL.md"
+
+    # --- Platform-roster membership: a DERIVED per-name lookup, not a list ---
+    # A deployed skill is platform-managed exactly when the source tree declares
+    # it: ${SOURCE_REPO}/<module>/skills/<name>/SKILL.md exists for <module> in
+    # {core, operations, release}. Structural membership per ADR-130 D6 — a skill
+    # added tomorrow is covered the day it is added, not the day someone
+    # remembers to add it to a list. SOURCE_REPO is guaranteed to resolve:
+    # check_source_repo hard-exits 66 before any check runs, so the oracle costs
+    # three `[ -f ]` tests and introduces no new dependency.
+    #
+    # LOAD-BEARING: this is an INTERSECTION FILTER, never a completeness
+    # assertion. The source roster legitimately carries skills that are not
+    # deployed, so asserting "every roster member is present in the mirror" here
+    # would FAIL a healthy install. The predicate only ever NARROWS the set the
+    # version assertion runs over; it never adds a requirement.
+    #
+    # The lookup form (rather than enumerate-and-collect) is also what excludes
+    # non-skill directories such as _shared / _templates with no special-casing:
+    # they carry no SKILL.md, so they simply never match.
+    local skill_name
+    skill_name="$(basename "${skill_dir}")"
+    if [ ! -f "${SOURCE_REPO}/core/skills/${skill_name}/SKILL.md" ] \
+       && [ ! -f "${SOURCE_REPO}/operations/skills/${skill_name}/SKILL.md" ] \
+       && [ ! -f "${SOURCE_REPO}/release/skills/${skill_name}/SKILL.md" ]; then
+      # Outside the platform roster. Excluded from BOTH assertions below and
+      # never failed on: the platform neither ships nor manages this skill, and
+      # `deploy.sh --deploy <name>` — the only remedy A9 knows — structurally
+      # cannot run for a skill absent from the source repo, so a FAIL here would
+      # send the operator down a path that cannot terminate. Reported as INFO as
+      # soon as the scan completes — on the FAIL paths as well as the PASS one —
+      # so the exclusion is visible, never silent.
+      nonplatform_count=$((nonplatform_count + 1))
+      nonplatform_names="${nonplatform_names}${nonplatform_names:+, }${skill_name}"
+      continue
+    fi
+    platform_count=$((platform_count + 1))
+
     if [ ! -f "${skill_md}" ]; then
       missing_skill_md=$((missing_skill_md + 1))
       if [ -z "${first_missing}" ]; then first_missing="$(basename "${skill_dir}")/SKILL.md"; fi
@@ -840,17 +988,54 @@ check_a9_skill_roster() {
       if [ -z "${first_missing}" ]; then first_missing="$(basename "${skill_dir}") (missing version field)"; fi
     fi
   done
+
+  # Report the exclusion BEFORE any verdict, so it is emitted on the FAIL paths
+  # too. Which skills a narrowed check declined to assert over is a property of
+  # the population scan, not of the outcome — and a reader debugging an A9 FAIL
+  # needs the exclusion list more, not less, than a reader seeing it pass.
+  if [ "${nonplatform_count}" -gt 0 ]; then
+    emit_info "A9" "INSTALL-SKILL-ROSTER" \
+      "${nonplatform_count} non-platform skill(s) excluded from the version assertion: ${nonplatform_names}" "A"
+  fi
+
+  # Anti-vacuity guard — the failure mode the narrowing itself introduces.
+  #
+  # If the roster oracle resolves to nothing (wrong --source-repo, partial clone,
+  # a module path that moved) then EVERY deployed skill reads as non-platform,
+  # the version assertion runs over an empty set, and a wholly broken install
+  # PASSes. That is strictly worse than the false FAIL this check is fixing: a
+  # false FAIL is loud, a false PASS is silence indistinguishable from approval.
+  # Zero platform matches is therefore a FAIL, and its diagnostic names ROSTER
+  # RESOLUTION rather than skill health so the remedy points at the right thing.
+  #
+  # Disjoint from the `skill_count -lt 1` FAIL above: that one covers an EMPTY
+  # MIRROR (nothing deployed); this one covers an UNRESOLVABLE ROSTER (plenty
+  # deployed, nothing recognized). Different causes, different remedies.
+  if [ "${platform_count}" -eq 0 ]; then
+    emit_fail "A9" "INSTALL-SKILL-ROSTER" \
+      "no deployed skill resolved to the platform roster (${skill_count} deployed, 0 recognized); the roster oracle is unresolvable, so the version assertion ran over an empty set" \
+      "verify --source-repo points at a complete pmo-platform clone; expected ${SOURCE_REPO}/{core,operations,release}/skills/<name>/SKILL.md" "A"
+    return
+  fi
+  # Both FAIL diagnostics state the same denominator the PASS does, so a reader
+  # can tell a 2-of-50 defect from a 2-of-2 one without re-running the check.
   if [ "${missing_skill_md}" -gt 0 ]; then
-    emit_fail "A9" "INSTALL-SKILL-ROSTER" "${missing_skill_md} skill(s) missing SKILL.md; first: ${first_missing}" \
+    emit_fail "A9" "INSTALL-SKILL-ROSTER" \
+      "${missing_skill_md} of ${platform_count} platform skill(s) missing SKILL.md (${nonplatform_count} non-platform excluded); first: ${first_missing}" \
       "run \`${SOURCE_REPO}/core/deploy/deploy.sh --deploy <skill>\` to re-deploy" "A"
     return
   fi
   if [ "${missing_version}" -gt 0 ]; then
-    emit_fail "A9" "INSTALL-SKILL-ROSTER" "${missing_version} skill(s) missing version field; first: ${first_missing}" \
-      "re-deploy via deploy.sh --deploy <skill>" "A"
+    emit_fail "A9" "INSTALL-SKILL-ROSTER" \
+      "${missing_version} of ${platform_count} platform skill(s) missing version field (${nonplatform_count} non-platform excluded); first: ${first_missing}" \
+      "re-deploy via \`${SOURCE_REPO}/core/deploy/deploy.sh --deploy <skill>\`" "A"
     return
   fi
-  emit_pass "A9" "INSTALL-SKILL-ROSTER" "${skill_count} skill(s); all with SKILL.md + version" "A"
+  # The PASS states its own denominator. A pass that reports the population it
+  # asserted over — and the oracle it derived that population from — cannot
+  # silently degrade into a zero-denominator pass.
+  emit_pass "A9" "INSTALL-SKILL-ROSTER" \
+    "${platform_count} platform skill(s) with SKILL.md + version; ${nonplatform_count} non-platform excluded; ${skill_count} deployed total; roster oracle ${SOURCE_REPO}" "A"
 }
 
 check_a10_operator_toml() {
@@ -892,11 +1077,17 @@ mode_a_install_verify() {
 
 mode_a_operator_pre_existing() {
   # Subset of Mode A for workspaces created before setup-workspace.sh shipped:
-  # drops A4 (state-marker) and A10 (operator.toml) because those workspaces
-  # predate both mechanisms. Per CD-3A — modal sub-mode, not flag-skip.
+  # drops A3b (composition-surface manifest), A4 (state-marker) and A10
+  # (operator.toml) because those workspaces predate all three mechanisms.
+  # Per CD-3A — modal sub-mode, not flag-skip.
+  #
+  # Every dropped check emits SKIP rather than vanishing, so this sub-mode emits
+  # the same 12 step records as --mode install (see MODE_A_TOTAL). A3b was
+  # previously the one dropped check that left no trace in the record at all.
   check_a1_platform
   check_a2_workspace_layout
   check_a3_hooks_layout
+  emit_skip "A3b" "INSTALL-COMPOSITION-SURFACE" "operator-pre-existing mode (composition-surface manifest not expected)" "A"
   emit_skip "A4" "INSTALL-STATE-MARKER" "operator-pre-existing mode (state marker not expected)" "A"
   check_a5_claude_md
   check_a6_settings_json

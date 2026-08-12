@@ -17,6 +17,9 @@
 #      contract is not broken by the hook phase)
 #   6. --dry-run mutates nothing
 #   7. a non-existent workspace fails closed (exit non-zero) rather than scaffolding
+#   8. every deployed hook ENTRYPOINT carries +x, while a co-deployed SOURCED lib needs
+#      only to be readable — the #4449 acceptance criterion as reframed and ratified
+#      (entrypoint implies executable; sourced library implies readable)
 #
 # Self-contained: builds throwaway workspaces under an mktemp sandbox; never touches the
 # operator's live ~/.claude. bash 3.2-safe.
@@ -109,6 +112,68 @@ after="$(sha "${WS}/.claude/hooks/block-egress.sh")"
 printf '\nCase 7: non-existent workspace fails closed\n'
 rc=0; bash "${SETUP}" --refresh-hooks --workspace-root "${SBX}/nonexistent" --source-repo "${REPO_ROOT}" >/dev/null 2>&1 || rc=$?
 [ "${rc}" -ne 0 ] && report "missing workspace exits non-zero" 1 || report "missing workspace exits non-zero" 0 "exit ${rc}"
+
+printf '\nCase 8: entrypoints carry +x; sourced libs need only be readable (#4449 AC-1 reframed)\n'
+# The discriminator is doctor.sh check_hooks_runnable's (#302 / #1850): a co-deployed
+# sourced lib (lib-*.sh, *-patterns.sh) is consumed with `. "$LIB"` under an
+# `[ -r "$LIB" ]` guard — never executed — so it ships mode 644 BY DESIGN, and
+# test_doctor.sh pins that mode as correct by seeding its fixture at 644. Asserting
+# +x over a naive *.sh glob would FAIL a healthy install; that false positive is the
+# defect #4449 actually carries.
+WS="${SBX}/ws5"; deploy_ws "${WS}"
+refresh "${WS}" >/dev/null 2>&1
+
+# Shared detector: names every deployed hook ENTRYPOINT lacking +x, sourced libs exempt.
+nonexec_entrypoints() {
+  local d="$1" h out=""
+  for h in "${d}"/*.sh; do
+    [ -f "${h}" ] || continue
+    case "$(basename "${h}")" in lib-*.sh|*-patterns.sh) continue ;; esac
+    [ -x "${h}" ] || out="${out} $(basename "${h}")"
+  done
+  printf '%s' "${out}"
+}
+
+# POSITIVE ARM — after a refresh, every entrypoint carries +x.
+ne="$(nonexec_entrypoints "${WS}/.claude/hooks")"
+[ -z "${ne}" ] \
+  && report "every deployed hook ENTRYPOINT carries +x after a refresh" 1 \
+  || report "every deployed hook ENTRYPOINT carries +x after a refresh" 0 "non-exec:${ne}"
+
+# SPECIFICITY ARM — a sourced lib really IS deployed at 644 here. Without this the
+# positive arm could be passing because nothing is 644 at all, which would prove
+# nothing about the exemption; the exemption would be untested, not satisfied.
+if [ -f "${WS}/.claude/hooks/path-leak-patterns.sh" ] && [ ! -x "${WS}/.claude/hooks/path-leak-patterns.sh" ]; then
+  report "specificity: a co-deployed sourced lib IS present at 644 (exemption is exercised)" 1
+else
+  report "specificity: a co-deployed sourced lib IS present at 644 (exemption is exercised)" 0 \
+    "no non-executable sourced lib deployed — the exemption above is untested, not satisfied"
+fi
+
+# ANTI-VACUITY ARM — strip +x from one entrypoint; the detector MUST name it. An
+# assertion never shown capable of failing is not evidence of anything.
+chmod -x "${WS}/.claude/hooks/block-destructive.sh"
+ne="$(nonexec_entrypoints "${WS}/.claude/hooks")"
+case " ${ne} " in
+  *" block-destructive.sh "*)
+    report "anti-vacuity: the +x assertion DETECTS a stripped entrypoint bit" 1 ;;
+  *)
+    report "anti-vacuity: the +x assertion DETECTS a stripped entrypoint bit" 0 \
+      "detector stayed silent on a stripped bit — the assertion above is vacuous" ;;
+esac
+chmod +x "${WS}/.claude/hooks/block-destructive.sh"
+
+# READABILITY ARM — sourced libs carry no +x requirement, but they DO fail closed when
+# unreadable (block-fragile-refs reads every pattern from one of them), so readability
+# is the property that actually matters for this class.
+unreadable=""
+for l in "${WS}/.claude/hooks/lib/"*; do
+  [ -f "${l}" ] || continue
+  [ -r "${l}" ] || unreadable="${unreadable} $(basename "${l}")"
+done
+[ -z "${unreadable}" ] \
+  && report "every sourced lib under hooks/lib/ is readable" 1 \
+  || report "every sourced lib under hooks/lib/ is readable" 0 "unreadable:${unreadable}"
 
 printf '\n======================================================================\n'
 printf 'test_refresh_hooks.sh: %d passed, %d failed (bash %s)\n' "${PASS}" "${FAIL}" "${BASH_VERSION}"
