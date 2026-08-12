@@ -753,8 +753,16 @@ MANAGED = {
     ("paths", "claude_workspace_root"), ("paths", "operator_homedir_path"),
     ("paths", "cowork_install_path"), ("paths", "pmo_platform_repo_name"),
     ("platform", "work_board"), ("platform", "comms_platform"),
+    ("automation", "automation_level"),
 }
-MANAGED_SECTIONS = {"meta", "identity", "paths", "platform"}
+MANAGED_SECTIONS = {"meta", "identity", "paths", "platform", "automation"}
+# MANAGED is the ALREADY-EMITTED set the passthrough below skips, not an
+# overwrite set. Membership does NOT mean "re-emitted from tokens": three of its
+# rows (pmo_platform_repo_name, work_board, comms_platform) are emitted through
+# ovd() and keep whatever the operator set. automation_level joins them on
+# exactly that footing -- listed so passthrough does not echo it a second time
+# and produce a duplicate key, emitted through ovd() so a deliberate "off" is
+# never reset by a re-bootstrap.
 
 def passthrough(section):
     # operator-added keys in a managed section (not in MANAGED) — preserve verbatim
@@ -796,6 +804,19 @@ out.append("[platform]")
 out.append("work_board = \"{}\"".format(esc(ovd("platform", "work_board", "github"))))
 out.append("comms_platform = \"{}\"".format(esc(ovd("platform", "comms_platform", ""))))
 passthrough("platform")
+out.append("")
+# The ambient-intake automation ceiling. Seeded so the dial is DISCOVERABLE in
+# the generated file rather than findable only by reading operator.toml.template
+# -- which this generator never reads, so a template-only default reached nobody.
+#
+# Seeding it changes discoverability, not behavior: the dial is advisory today
+# (skills read it and self-limit), and a skill finding the key absent falls back
+# to the same "recommend" documented here. An install with the key and one
+# without behave identically. It is emitted through ovd() so re-running setup on
+# a workspace whose operator deliberately set "off" preserves that choice.
+out.append("[automation]")
+out.append("automation_level = \"{}\"".format(esc(ovd("automation", "automation_level", "recommend"))))
+passthrough("automation")
 out.append("")
 # pass-through ALL operator-added sections verbatim (adapters, automation,
 # methodology, projects, and any unknown section) in original file order
@@ -1058,13 +1079,33 @@ resolve_all_tokens() {
 }
 
 # --- Section 13: Directory layout creation ---
+# The last three entries are the ambient-intake capability's member directories.
+# They are listed HERE, as ${WORKSPACE_ROOT}-relative literals, rather than
+# resolved through lib-instance-path.sh: this function runs before the resolver
+# is sourced (the needle and roster scaffolds source it later in the same flow),
+# every sibling entry in this list is already a workspace-relative literal, and
+# the list-driven loop below is the one creation path that honors all three
+# guarantees an operator-data directory needs -- skip-if-exists, dry-run, and a
+# rollback op. Consistency inside the function wins here; the resolver is
+# authoritative everywhere else this capability touches a path, so a relocation
+# of the operator-instance family rewrites this list and nothing more.
+#
+# Empty directories are the whole of what install provisions for ambient intake.
+# Nothing is registered and nothing runs: the scheduled sweep is an operator-
+# performed registration on an agent-runtime surface this script cannot reach,
+# and it is documented as an activation step in docs/INSTALL.md rather than
+# performed here. A directory has no behavior, which is what makes provisioning
+# them safe to do unprompted.
 create_dir_layout() {
   local dirs
   dirs="${WORKSPACE_ROOT}/.claude
 ${WORKSPACE_ROOT}/.claude/hooks
 ${WORKSPACE_ROOT}/projects
 ${WORKSPACE_ROOT}/knowledge
-${WORKSPACE_ROOT}/personal/pmo-instance"
+${WORKSPACE_ROOT}/personal/pmo-instance
+${WORKSPACE_ROOT}/personal/pmo-instance/inbox
+${WORKSPACE_ROOT}/personal/pmo-instance/ambient-intake
+${WORKSPACE_ROOT}/personal/pmo-instance/external-sync"
 
   local d
   while IFS= read -r d; do
@@ -1729,6 +1770,32 @@ install_hook_with_checksum() {
   local target_sha
   target_sha=$(shasum -a 256 "${target}" | awk '{print $1}')
   if [ "${source_sha}" = "${target_sha}" ]; then
+    # Content matches — which is NOT the same as the install being correct. The
+    # checksum above is a CONTENT sha; a hook stripped of its executable bit is
+    # byte-identical to a healthy one and does not run. A hook that does not run
+    # enforces nothing and says nothing, so the drift is invisible by construction.
+    #
+    # Every other branch of this function copies and then chmods. This branch
+    # copies nothing, so before this repair it was the ONE path that could observe
+    # a deployed hook and leave it non-executable — mode-only drift was repaired by
+    # no code path anywhere in the installer, and `update.sh` then reported success
+    # over it. Repairing here (rather than in update.sh) keeps hook deployment in
+    # the one function that owns it; update.sh asserts the invariant, it does not
+    # re-implement the fix.
+    #
+    # This is the entrypoint population by construction: install_hooks iterates
+    # ${SOURCE_REPO}/core/hooks/*.sh, which holds entrypoints only. The sourced
+    # primitives (path-leak-patterns.sh, lib-instance-path.sh, lib/dep-resolve.sh)
+    # are co-deployed further down by plain `cp` and correctly stay 644 — they are
+    # read with `. "$LIB"` under an `[ -r ]` guard and never invoked.
+    if [ ! -x "${target}" ]; then
+      if [ "${DRY_RUN}" -eq 1 ]; then
+        info "[dry-run] would restore +x: ${basename} (content unchanged; executable bit missing)"
+      else
+        chmod +x "${target}"
+        info "MODE-REPAIRED: ${basename} (content unchanged; +x restored)"
+      fi
+    fi
     json_set "${CHECKSUMS_FILE}" "${basename}" "${source_sha}"
     info "SYNC: ${basename} (unchanged)"
     return 0

@@ -182,6 +182,22 @@ Fill the roster once, point your tier owners at it, and these four skills resolv
 
 ---
 
+## 7.5 Ambient intake — the inbox you can drop work into
+
+Alongside the skills you invoke, the platform can watch a **drop-zone** for you. Drop a transcript or an email into your instance `inbox/` directory and, on a schedule, the platform classifies it, routes it, and registers it — so intake happens without you starting a session for it. A second sweep polls your external tracker for changes and proposes reconciliations.
+
+Install created the drop-zone and seeded the dial that governs how much the sweeps may do unattended. It stopped there on purpose: **nothing runs until you register the two scheduled tasks yourself**, because those live on a surface the installer cannot reach. Until you do, the directory is just an empty folder.
+
+Find your drop-zone:
+
+```bash
+ls -d "${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"/personal/pmo-instance/inbox
+```
+
+The activation step — which tasks to register, with which prompts and cadence, how the automation ceiling limits them, and how to reverse it — is in [INSTALL.md](INSTALL.md) § 3a.
+
+---
+
 ## 8. Where to go next
 
 Now that you've seen one composition, the rest of the platform is yours to explore.

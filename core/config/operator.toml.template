@@ -358,6 +358,15 @@ default_delivery_approach = "Scrum"
 #
 # Valid: "off" | "recommend" | "bounded_auto"
 # Default: "recommend" (on — drafts/surfaces for your review; nothing auto-written).
+#
+# WHERE THE DEFAULT ACTUALLY COMES FROM: setup-workspace.sh seeds this key into
+# the generated operator.toml at install with the default below, and preserves
+# whatever you have set across a re-run or re-bootstrap. It does NOT read this
+# template to do it — the generator emits a fixed schema — so this file
+# documents the dial, it does not deliver it. Before the seed existed the key
+# was absent from every generated config and was findable only by reading this
+# template, which is why the ambient-intake capability was invisible on install.
+# Change your value in ~/.config/pmo-platform/operator.toml, not here.
 automation_level = "recommend"
 
 [session_retro]

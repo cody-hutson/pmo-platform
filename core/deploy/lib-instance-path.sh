@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # lib-instance-path.sh — single resolver for the operator-instance directory, the
-# localized-context needle file, the people-roster file, and the evals-results
-# directory (home of the pipeline event log).
+# localized-context needle file, the people-roster file, the evals-results
+# directory (home of the pipeline event log), and the three ambient-intake member
+# directories (inbox drop-zone, Path-A intake-sweep run-log dir, Path-B
+# external-sync dir).
 #
 # Design rationale (applies existing ADRs — NO standalone ADR):
 #   - The default base CANONICALIZES on the ADR-032 idiom
@@ -27,6 +29,17 @@
 #                              ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/evals/results
 #                              (3 tiers — deliberately NOT expressible as one
 #                              ${VAR:-default} expansion like the three above)
+#   pmo_inbox_path_for()           → operator.toml operator_instance_inbox_path,
+#                                    else $(pmo_instance_path_for <root>)/inbox
+#   pmo_ambient_intake_path_for()  → dirname of operator.toml
+#                                    operator_instance_intake_sweep_runlog_path,
+#                                    else $(pmo_instance_path_for <root>)/ambient-intake
+#   pmo_external_sync_path_for()   → dirname of operator.toml
+#                                    operator_instance_external_sync_snapshot_path
+#                                    (else its run-log sibling), else
+#                                    $(pmo_instance_path_for <root>)/external-sync
+#                              (2 declared tiers each — see the block above them
+#                              for why there is no env tier)
 #
 # All are pure stdout-echoing functions (no side effects, no mutation); safe to
 # call under `set -euo pipefail`. Sourceable AND idempotent: re-sourcing is a
@@ -119,4 +132,108 @@ pmo_evals_results_path() {
     fi
   fi
   printf '%s\n' "${_erp:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/evals/results}"
+}
+
+# --- Ambient-intake member directories -------------------------------------
+#
+# The three directories the ambient-intake capability runs on. Each is already
+# a registered operator-instance path token with a declared operator.toml
+# override field (core/standards/depersonalization-spec.md §4); until now none
+# of them had a resolver, so nothing could resolve them programmatically and the
+# installer provisioned none of them. These close that gap and are the single
+# resolution site for all three — the installer, the update path, the install
+# validator, and the end-to-end regression all call them instead of inlining a
+# leaf (ADR-017 § operator-instance surface convergence).
+#
+# Resolving rather than inlining is what makes provisioning survive a relocation
+# of the operator-instance family: whichever lands first, the relocation and this
+# provisioning agree, because both read the same resolver.
+#
+# TWO declared tiers, not three — deliberately, and this is the one place the
+# shape departs from pmo_evals_results_path() above:
+#   1. the operator.toml override key the token declares
+#   2. <pmo_instance_path_for "<workspace-root>">/<leaf>
+# The evals resolver carries a third, env-variable tier because its WRITER
+# already honored $EVALS_RESULTS_PATH — a resolver that ignored it would read
+# where the writer does not write. No such variable exists for these three, and
+# ADR-032 § "invent no new variable" forbids minting one to fill a symmetry that
+# buys nothing. PMO_INSTANCE_PATH still relocates all three, because
+# pmo_instance_path_for honors it — so an env-tier relocation is available, one
+# level up, through the mechanism that already owns it.
+#
+# Each returns the DIRECTORY. Two of the four registered tokens name a FILE
+# inside one of these directories (the external-sync snapshot and its run-log,
+# and the intake-sweep run-log); the file leaf stays the consumer's concern,
+# exactly as pmo_evals_results_path() returns the results directory rather than
+# the event log inside it.
+#
+# Usage: pmo_<member>_path_for <workspace-root>
+
+# Private. Read one key from the canonical operator.toml, else empty. Mirrors
+# pmo_evals_results_path()'s read in every observable respect — same canonical
+# XDG location, same `|| true` tolerance for an absent key under
+# `set -euo pipefail`, same first-match-wins. Factored so the three resolvers
+# below share one reader rather than triplicating it; a fourth ambient member
+# costs one more one-line public function and no new logic.
+#
+# ONE deliberate departure from that reader's literal form: first-match-wins is
+# taken with `grep -m1` rather than by piping an unbounded grep into `head -1`.
+# The two are equivalent on the value returned and differ on the exit status. In
+# the `| head -1` form the reader closes the pipe at its first line while the
+# writer still has output to push; the writer's next write then fails on the
+# broken pipe, and under `pipefail` that failure becomes the pipeline's status —
+# so a SUCCESSFUL key read can report failure to a `set -e` caller. Where SIGPIPE
+# is fatal that surfaces as 141; where the shell inherited it as SIG_IGN (what a
+# GitHub-hosted runner hands a workflow step) it surfaces as a bare 1,
+# indistinguishable from the key legitimately being absent. `-m1` removes the
+# short-circuiting reader entirely: grep reads a FILE, stops itself at one match,
+# and awk consumes to EOF, so no writer is ever signalled.
+_pmo_instance_toml_key() {
+  local _toml="${HOME}/.config/pmo-platform/operator.toml"
+  [[ -r "$_toml" ]] || return 0
+  { grep -m1 -E "^$1" "$_toml" 2>/dev/null || true; } \
+    | awk -F= '{gsub(/[" ]/,"",$2); print $2}'
+}
+
+# Private. Resolve one instance-member directory: operator.toml override key,
+# else the leaf appended to the instance base for the given workspace root.
+# Usage: _pmo_instance_member_path <workspace-root> <toml-key> <leaf>
+_pmo_instance_member_path() {
+  local _root="$1" _key="$2" _leaf="$3" _val
+  _val="$(_pmo_instance_toml_key "$_key")"
+  printf '%s\n' "${_val:-$(pmo_instance_path_for "${_root}")/${_leaf}}"
+}
+
+# Echo the ambient inbox drop-zone (no trailing slash) —
+# <OPERATOR_INSTANCE_INBOX_PATH>. Transcripts and emails land here for ambient
+# ingest; the dedup cursor lives inside it and is still created lazily on first
+# ingest, not provisioned.
+pmo_inbox_path_for() {
+  _pmo_instance_member_path "$1" "operator_instance_inbox_path" "inbox"
+}
+
+# Echo the Path-A intake-sweep run-log directory (no trailing slash) — the
+# parent of <OPERATOR_INSTANCE_INTAKE_SWEEP_RUNLOG_PATH>. The override key names
+# the run-log FILE, so its directory part is what a provisioning caller needs;
+# when the key is set, its value is the directory the caller resolved it to.
+pmo_ambient_intake_path_for() {
+  local _root="$1" _val
+  _val="$(_pmo_instance_toml_key "operator_instance_intake_sweep_runlog_path")"
+  if [[ -n "$_val" ]]; then printf '%s\n' "$(dirname "$_val")"; return 0; fi
+  printf '%s\n' "$(pmo_instance_path_for "${_root}")/ambient-intake"
+}
+
+# Echo the Path-B external-sync directory (no trailing slash) — the parent of
+# <OPERATOR_INSTANCE_EXTERNAL_SYNC_SNAPSHOT_PATH> and of its sibling run-log.
+# Same file-vs-directory reasoning as pmo_ambient_intake_path_for; the snapshot
+# key is read first because it is the token C3 §3 declares as the primary
+# artifact, with the run-log key as its sibling under the same directory.
+pmo_external_sync_path_for() {
+  local _root="$1" _val
+  _val="$(_pmo_instance_toml_key "operator_instance_external_sync_snapshot_path")"
+  if [[ -z "$_val" ]]; then
+    _val="$(_pmo_instance_toml_key "operator_instance_external_sync_runlog_path")"
+  fi
+  if [[ -n "$_val" ]]; then printf '%s\n' "$(dirname "$_val")"; return 0; fi
+  printf '%s\n' "$(pmo_instance_path_for "${_root}")/external-sync"
 }

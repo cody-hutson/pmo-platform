@@ -210,6 +210,27 @@ via the allowlist-add tool. That is explicitly out of C3 scope — recorded so t
 silently crossed.
 
 ## 10. Scheduler surface + thin-bootstrap registration
+
+> **Who performs the registration, and where the step is written down.** The registration
+> below is **operator-performed**, and its documented home is the activation subsection of
+> `docs/INSTALL.md` § 3 — which names this section as the source of the bootstrap prompt,
+> states the cadence and notification settings, and states the reversal. No installer,
+> deploy or update script performs it, and none can: the scheduled-task surface is an
+> agent-runtime surface, and every one of those scripts is bash, which has no path to it.
+> This is not a gap awaiting automation. It matches the precedent the platform already set
+> for the `platform-health` sentinels — sentinel registration is an operator-instance build
+> step, not committed corpus, because a registration carries an instance-local path and is
+> not portable; the tracked document states the policy and the instance owns the
+> registration. What install DOES perform is the directory provisioning (see C1 §1): the
+> external-sync directory holding the §3 snapshot and the §5 run-log exists on any workspace
+> that has run the update path, and on any workspace whose install ran against a
+> **default-located** operator-instance family, so this sweep has somewhere to persist
+> poll-state from its first run. **The installer limb is conditional and the condition is
+> load-bearing:** install provisions at `${WORKSPACE_ROOT}`-relative literals rather than
+> through the resolver, so on a **relocated** instance family a fresh install writes to the
+> default path while the sweep reads the relocated one. The update path back-fills at the
+> resolved location and closes the gap. C1 §1 records the mechanism and why the installer
+> behaves that way.
 - **Scheduler:** C3 declares the sweep as a scheduled invocation on the platform's existing
   scheduled-task surface (the same operator-instance, Layer-2, git-ignored mechanism the
   `platform-health` scheduled tasks use). C3 introduces no new scheduler primitive. Cadence is
