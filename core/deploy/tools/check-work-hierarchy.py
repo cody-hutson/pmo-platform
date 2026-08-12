@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """check-work-hierarchy.py — work-hierarchy drift detector (#1039, deploy.sh Check 55).
 
-Asserts two independent invariants that together keep the work hierarchy from
-silently re-fragmenting after the T1/T2 SSOT cutover:
+Asserts three invariants that together keep the work hierarchy from silently
+re-fragmenting after the T1/T2 SSOT cutover:
 
   H1 — DOC invariant (offline; always runs)
        No normative governance doc ASSERTS a work-item parent tier naming a token
@@ -16,6 +16,55 @@ silently re-fragmenting after the T1/T2 SSOT cutover:
        Resolved via ONE batched+paginated GraphQL query over the native sub-issue
        `parent` edge — never an N+1 per-epic loop (with ~39 open epics an N+1 shape
        would materially slow `deploy.sh --check`).
+
+  H3 — INITIATIVE-COEXTENSION invariant (ADVISORY; rides H2's fetch)
+       No open `type:epic` issue is really an INITIATIVE CONTAINER — an issue whose
+       scope is coextensive with a whole `project:` family rather than with one
+       thrust inside it. An initiative is a `project:` LABEL plus an operator-local
+       roadmap, never a standalone issue (ADR-049; label-taxonomy.md § Initiative
+       Labels), so a container materialized as an epic has no correct tier to sit at.
+       H2 cannot see this class: these containers carry NO epic-parent edge — that
+       is exactly why they were never caught.
+
+       REPORT-ONLY, ALWAYS. H3 findings are EXCLUDED from the exit-code total and
+       can never fail `deploy.sh --check` in any mode. See ADR-132.
+
+WHY H3 IS A CONJUNCTION, AND WHY NO LIMB MAY BE DROPPED
+------------------------------------------------------
+The obvious predicate — "an epic sharing a `project:` label with N other open epics
+that are not its children" — was implemented and MEASURED against the live tracker:
+it flags 39 of 42 open epics (92.9%). The reason is structural, not a threshold to
+tune: the family shape is SYMMETRIC. A leaf epic inside a family shares its label
+with the same non-children the container does, so every leaf is a false positive by
+construction. Raising N cannot fix a symmetric predicate.
+
+H3 is therefore a three-way conjunction over that family shape:
+
+  C3 family     |F| >= 2, where F = { OPEN type:epic carrying the same `project:` P }
+                minus E itself minus E's native sub-issue children.
+  C4 coextension  every token of P's slug appears in E's normalized TITLE HEAD
+                (lowercased, a leading `[Epic]` stripped, truncated at the first
+                em-dash or ` - `, tokenized on non-alphanumerics). A container names
+                the whole domain; a thrust names its own thrust.
+  C5 fan-out    E's BODY references at least 2 distinct members of F. A container
+                enumerates its family; a sibling cites one or two neighbours.
+
+Measured on the live population at design time: C3 alone 39 flagged, C4 alone 4,
+C5 alone 6 — the conjunction, 2, with ZERO false positives across seven named
+near-miss classes. No limb is decorative; dropping any one restores an over-fire.
+
+THE LEXICAL LIMB IS A KNOWN, CONTAINED EXCEPTION
+------------------------------------------------
+C4 is LEXICAL, which is a partial exception to this file's stated predicate-design
+principle below ("structural membership, not prose similarity"). It was accepted
+deliberately, on three containments that are part of the decision and must not be
+removed independently of it:
+  (i)   the leg is ADVISORY — it cannot gate, in warn OR enforce mode;
+  (ii)  the exemption file takes an H3 entry form (`#<issue> initiative-coextension`);
+  (iii) every H3 row EMITS ITS OWN EVIDENCE — the matched slug tokens and the
+        in-family references — so an operator can falsify a finding in one read.
+Renaming an epic changes C4's verdict, and a single-token slug weakens it. Both are
+tolerable precisely because the leg reports and never blocks.
 
 PREDICATE DESIGN (why this shape, not prose similarity)
 ------------------------------------------------------
@@ -76,6 +125,12 @@ guard does not cover (e.g. a superseded ADR narrating an old hierarchy), and
   H1   <path> <token>         e.g. `core/disciplines/foo.md initiative`
   H2   #<issue> <token>       e.g. `#242 type:epic`   (bare `242 type:epic`
                               is accepted too — both normalize to one key)
+  H3   #<issue> initiative-coextension
+                              e.g. `#160 initiative-coextension` — the operator's
+                              "reviewed, this container is intentional" record. The
+                              token is FIXED (not the issue's `project:` label), so
+                              an exemption survives a relabel; the bare form
+                              normalizes identically to H2's.
 
 `#` still starts a comment EXCEPT when it is immediately followed by digits and
 then whitespace, which is the H2 entry shape. Both must hold: with a blanket
@@ -91,16 +146,38 @@ OUTPUT (TSV) / EXIT CODES
   SCANNED   <n>                   normative .md files scanned by H1
   H1        <path>:<line>  <text> a doc asserting an unlicensed parent tier
   H2        <issue>  <parent>     an epic whose parent is also an epic
+  H3        <issue>  <project-label>  <slug-tokens>  <refs-into-family>
+                                  an epic reading as an initiative container, WITH
+                                  the evidence that fired it (advisory)
   EXEMPT    <leg>  <detail>       suppressed by the exemption list
   SKIP      H1  <reason>          a configured scan surface that does not resolve
   SKIP      H2  <reason>          gh unavailable / unauthenticated
-  COUNT     <n>                   total non-exempt findings
+  SKIP      H3  <reason>          the coextension leg was not evaluated
+  COUNT_H3  <n>                   H3 findings — emitted ONLY when the leg actually
+                                  ran, and DELIBERATELY separate from COUNT. A
+                                  skipped leg emits `SKIP H3` and NO COUNT_H3 row,
+                                  so "not evaluated" can never be read as "zero".
+  COUNT     <n>                   total non-exempt findings — H1 + H2 ONLY. H3 is
+                                  excluded BY CONSTRUCTION: an advisory leg that
+                                  moved the exit code would gate.
 
-  exit 0 — clean (no findings)
-  exit 1 — findings present
+  exit 0 — clean (no H1/H2 findings; H3 findings may still be present and reported)
+  exit 1 — H1/H2 findings present
   exit 3 — input failure (SSOT vocabulary unreadable / zero kinds / PARTIALLY parsed
            — fewer kind_id rows read than the packs declare; GraphQL error;
-           EVERY configured H1 scan surface unresolved — an empty scan population)
+           EVERY configured H1 scan surface unresolved — an empty scan population;
+           an epic node set that lacks H3's field triple — see below)
+
+THE H3 ANTI-VACUITY CONTROL (why a missing field is exit 3, not zero findings)
+-----------------------------------------------------------------------------
+H2 reads only `node["parent"]`, so a `--fixture-parent-map` file written for H2
+legitimately carries nothing else. H3 reads `labels`, `title` and `body`. Run H3
+against such a fixture and its population is STRUCTURALLY EMPTY: every specificity
+assertion returns a VACUOUS zero and passes for the wrong reason — the same shape as
+a scan whose baseline silently resolved to `{}`. So a node set missing the H3 field
+triple is an INPUT FAILURE (exit 3) with the missing fields named, never `COUNT_H3 0`.
+A genuinely EMPTY node set is different — a repo may legitimately have no open epics
+— and emits `SKIP H3` rather than a zero, for the same reason.
 
 Python 3.9-compatible (no tomllib, no 3.10+ syntax) — matches /usr/bin/python3 on
 the operator baseline.
@@ -208,6 +285,43 @@ EXCLUDED_PREFIXES = (os.path.join("release", "releases"),)
 EXTRA_SCAN_FILES = (os.path.join("core", "CLAUDE.md.template"),)
 
 EXEMPT_FILE_DEFAULT = os.path.join(".claude", "work-hierarchy-exemption-list.txt")
+
+# ── H3: initiative-coextension ──────────────────────────────────────────────
+# The initiative namespace. `epic:*` is DELIBERATELY not included: per
+# label-taxonomy.md § Initiative Labels it groups thrusts *inside* one project
+# family, so an `epic:` label is evidence of the leaf tier this leg must not flag.
+PROJECT_LABEL_RE = re.compile(r'^project:(.+)$')
+
+# A body reference. Deliberately the same bare `#\d+` shape the corpus writes —
+# H3 intersects these against the family set, so a reference to anything outside
+# the family (a PR, an unrelated issue, a closed one) is discarded by the
+# intersection and never needs to be recognised as such here.
+ISSUE_REF_BODY_RE = re.compile(r'#(\d+)')
+
+# TITLE HEAD normalization, in the order it is applied.
+# `[Epic]` / `[Epic]:` is a corpus title prefix, not scope, so it is stripped
+# before tokenizing. The head is the segment BEFORE the first em-dash or ` - `:
+# corpus titles put the subject first and the elaboration after the dash, and
+# including the elaboration would let an incidental word satisfy C4.
+H3_EPIC_PREFIX_RE = re.compile(r'^\s*\[epic\]\s*:?\s*')
+H3_HEAD_SPLIT_RE = re.compile(r'—| - ')
+H3_TOKEN_RE = re.compile(r'[^a-z0-9]+')
+
+# The FIXED exemption token for H3. Fixed rather than the issue's `project:` label
+# so an exemption survives a relabel — the operator's judgment was about the ISSUE,
+# not about which family it was in that week.
+H3_EXEMPT_TOKEN = "initiative-coextension"
+
+# The node fields H3 requires. H2 needs only `parent`, so this triple is exactly
+# the set a fixture written for H2 will lack — which is why its absence is an
+# input failure rather than a finding of zero. See the module docstring.
+H3_REQUIRED_FIELDS = ("labels", "title", "body")
+
+# C3 / C5 thresholds. Both are 2 and both are the SAME kind of claim — "more than
+# one other" — but they count different things (family members; in-family
+# references), so they are named separately rather than shared.
+H3_MIN_FAMILY = 2
+H3_MIN_FAN_OUT = 2
 
 
 def load_licensed_kinds_checked(root):
@@ -443,12 +557,26 @@ def run_h1(root, kinds, exemptions, scan_roots, extra_files):
     return findings, exempted, scanned
 
 
+# ONE query serves BOTH backlog legs. H3's fields (`title`, `body`, the node's own
+# `labels`) are ADDED TO THE EXISTING SELECTION SET rather than fetched by a second
+# call — the no-N+1 contract in the H2 note above is a property of this query, and
+# a separate H3 fetch would double the call count to gain nothing.
+#
+# H3's family exclusion needs no extra field either: E's native children WITHIN the
+# open-epic population are exactly the nodes whose own `parent.number` is E's, and
+# `parent{number}` is already selected for H2.
 GRAPHQL_EPIC_PARENTS = """
 query($owner:String!,$name:String!,$endCursor:String){
   repository(owner:$owner,name:$name){
     issues(first:100, states:OPEN, labels:["type:epic"], after:$endCursor){
       pageInfo{hasNextPage endCursor}
-      nodes{ number parent{ number labels(first:30){nodes{name}} } }
+      nodes{
+        number
+        title
+        body
+        labels(first:30){nodes{name}}
+        parent{ number labels(first:30){nodes{name}} }
+      }
     }
   }
 }
@@ -514,6 +642,114 @@ def run_h2(nodes, exemptions):
             exempted.append(("H2", "#" + num))
             continue
         findings.append((num, str(parent.get("number"))))
+    return findings, exempted
+
+
+def node_labels(node):
+    """Label names on a node, tolerant of GraphQL's null-vs-absent distinction."""
+    return [n.get("name", "") for n in (node.get("labels") or {}).get("nodes", [])]
+
+
+def title_head_tokens(title):
+    """C4's `head()` — the token set of a title's SUBJECT segment.
+
+    Lowercase, strip a leading `[Epic]`/`[Epic]:`, truncate at the first em-dash or
+    ` - `, tokenize on non-alphanumerics. Returned as a set: C4 asks whether each
+    slug token is PRESENT, never in what order or how often.
+    """
+    text = H3_EPIC_PREFIX_RE.sub("", (title or "").lower())
+    head = H3_HEAD_SPLIT_RE.split(text)[0]
+    return set(tok for tok in H3_TOKEN_RE.split(head) if tok)
+
+
+def h3_missing_fields(nodes):
+    """Which of H3's required fields the node set does not carry.
+
+    Returns a sorted list; empty means the population is evaluable. This is the
+    ANTI-VACUITY control, not a convenience: a node set missing these fields yields
+    zero H3 findings BY CONSTRUCTION, which is indistinguishable from a clean
+    result. Its caller turns a non-empty return into exit 3.
+
+    An EMPTY node set returns empty here — it is not field-deficient, it is simply
+    an empty population, and the caller reports that as `SKIP H3`. The two are
+    different failures and are deliberately not collapsed.
+    """
+    missing = set()
+    for node in nodes:
+        for field in H3_REQUIRED_FIELDS:
+            if field not in node:
+                missing.add(field)
+    return sorted(missing)
+
+
+def run_h3(nodes, exemptions):
+    """Advisory invariant: an open epic that is really an INITIATIVE CONTAINER.
+
+    Returns (findings, exempted). A finding is
+    `(issue, project-label, matched-slug-tokens, in-family-refs)` — the evidence
+    travels WITH the finding, because C4 is lexical and an operator must be able to
+    falsify a row without re-deriving the predicate.
+
+    The three conjuncts (C3 family / C4 coextension / C5 fan-out) are documented in
+    the module docstring together with the measurement that made each of them
+    load-bearing. Read that before deleting one for simplicity.
+    """
+    # E's native children WITHIN this population — derived from the parent edges the
+    # H2 leg already needs, so C3's "not its native children" costs no extra fetch.
+    children = {}
+    for node in nodes:
+        parent = node.get("parent")
+        if parent and parent.get("number") is not None:
+            children.setdefault(str(parent["number"]), set()).add(str(node.get("number")))
+
+    # project-label -> the whole open-epic membership of that family.
+    families = {}
+    for node in nodes:
+        num = str(node.get("number"))
+        for label in node_labels(node):
+            if PROJECT_LABEL_RE.match(label):
+                families.setdefault(label, set()).add(num)
+
+    findings, exempted = [], []
+    for node in nodes:
+        num = str(node.get("number"))
+        head_tokens = title_head_tokens(node.get("title"))
+        body_refs = set(ISSUE_REF_BODY_RE.findall(node.get("body") or ""))
+        own_children = children.get(num, set())
+
+        hit = None
+        # Sorted so a multi-`project:` issue resolves to the same family on every
+        # run — an unordered "first match" would make the emitted evidence vary
+        # between runs on identical input.
+        for label in sorted(node_labels(node)):
+            m = PROJECT_LABEL_RE.match(label)
+            if not m:
+                continue
+            family = families.get(label, set()) - {num} - own_children
+            if len(family) < H3_MIN_FAMILY:                       # C3
+                continue
+            slug_tokens = [t for t in H3_TOKEN_RE.split(m.group(1).lower()) if t]
+            if not slug_tokens:
+                continue
+            if not all(t in head_tokens for t in slug_tokens):    # C4
+                continue
+            in_family = sorted(body_refs & family, key=int)       # C5
+            if len(in_family) < H3_MIN_FAN_OUT:
+                continue
+            hit = (label, slug_tokens, in_family)
+            break
+
+        if hit is None:
+            continue
+        # Exempted AFTER the predicate, never before: the exemption suppresses a
+        # REPORT, and a check that skipped the evaluation could not tell an
+        # exemption that is still needed from one that has gone stale.
+        if (num, H3_EXEMPT_TOKEN) in exemptions:
+            exempted.append(("H3", "#" + num))
+            continue
+        label, slug_tokens, in_family = hit
+        findings.append((num, label, ",".join(slug_tokens),
+                         ",".join("#" + n for n in in_family)))
     return findings, exempted
 
 
@@ -836,6 +1072,220 @@ def self_test():
         check("loader keeps H1 path keys verbatim alongside H2 issue keys",
               loaded == {("core/doc.md", "initiative"), (LIVE_CHILD, "type:epic")})
 
+    # ── H3: initiative-coextension ──────────────────────────────────────────
+    # ONE fixture population drives every H3 arm below, because the discrimination
+    # claim is about a POPULATION, not about isolated inputs: each near-miss must
+    # stay unflagged while sitting in the SAME family as a true positive. Seven
+    # near-miss classes, each failing EXACTLY ONE conjunct — that is what makes
+    # them near-misses rather than unrelated negatives.
+    #
+    #   900 TRUE POSITIVE   family 3, title coextensive, 2 in-family refs
+    #   901 SP-1  sibling leaf epic in the family      → fails C4 (coextension)
+    #   902 SP-2  title carries the slug, 1 ref only   → fails C5 (fan-out)
+    #   903 SP-3  2 in-family refs, unrelated title    → fails C4 (coextension)
+    #   910 TRUE POSITIVE #2 — a SECOND family, so the exemption arm can show that
+    #                          exempting one finding does not mute the other
+    #   911 filler leaf                                 → fails C4
+    #   912 SP-4  coextensive title, no refs at all     → fails C5
+    #   920 SP-5  sole member of its family             → fails C3 (family size)
+    #   930 SP-6  no `project:` label at all            → fails C2 (population)
+    #   940 SP-8  container whose family members ARE its native children → fails C3
+    #   941,942   those native children                 → fail C4
+    #
+    # SP-7 (a CLOSED epic that would otherwise match) cannot be expressed as a node,
+    # because closed issues never enter the population — it is asserted structurally
+    # against the query itself, below.
+    h3_nodes = [
+        {"number": 900, "title": "Widget Forge — the umbrella", "parent": None,
+         "body": "Decomposed into #901 and #902.",
+         "labels": {"nodes": [{"name": "type:epic"}, {"name": "project:widget-forge"}]}},
+        {"number": 901, "title": "Forge CI drift detection", "parent": None,
+         "body": "Related: #902, #903.",
+         "labels": {"nodes": [{"name": "type:epic"}, {"name": "project:widget-forge"}]}},
+        {"number": 902, "title": "Widget Forge packaging", "parent": None,
+         "body": "Follows #903.",
+         "labels": {"nodes": [{"name": "type:epic"}, {"name": "project:widget-forge"}]}},
+        {"number": 903, "title": "Anvil hardening", "parent": None,
+         "body": "Blocked by #900 and #901.",
+         "labels": {"nodes": [{"name": "type:epic"}, {"name": "project:widget-forge"}]}},
+        {"number": 910, "title": "Anvil Line — the programme", "parent": None,
+         "body": "Covers #911 and #912.",
+         "labels": {"nodes": [{"name": "type:epic"}, {"name": "project:anvil-line"}]}},
+        {"number": 911, "title": "Throughput instrumentation", "parent": None,
+         "body": "", "labels": {"nodes": [{"name": "type:epic"},
+                                          {"name": "project:anvil-line"}]}},
+        {"number": 912, "title": "Anvil Line tooling", "parent": None,
+         "body": "", "labels": {"nodes": [{"name": "type:epic"},
+                                          {"name": "project:anvil-line"}]}},
+        {"number": 920, "title": "Solo Shop — everything", "parent": None,
+         "body": "See #900 and #901.",
+         "labels": {"nodes": [{"name": "type:epic"}, {"name": "project:solo-shop"}]}},
+        {"number": 930, "title": "Widget Forge — unlabelled twin", "parent": None,
+         "body": "Covers #901 and #902.",
+         "labels": {"nodes": [{"name": "type:epic"}]}},
+        {"number": 940, "title": "Kiln Run", "parent": None,
+         "body": "Covers #941 and #942.",
+         "labels": {"nodes": [{"name": "type:epic"}, {"name": "project:kiln-run"}]}},
+        {"number": 941, "title": "Firing schedule", "parent": {"number": 940},
+         "body": "", "labels": {"nodes": [{"name": "type:epic"},
+                                          {"name": "project:kiln-run"}]}},
+        {"number": 942, "title": "Kiln maintenance", "parent": {"number": 940},
+         "body": "", "labels": {"nodes": [{"name": "type:epic"},
+                                          {"name": "project:kiln-run"}]}},
+    ]
+
+    # SENSITIVITY. Without this the specificity assertions below would all be
+    # vacuously true against a predicate that flags nothing.
+    f, ex = run_h3(h3_nodes, set())
+    check("H3 fires on both seeded initiative containers",
+          [row[0] for row in f] == ["900", "910"] and len(ex) == 0)
+
+    # The row carries ITS OWN EVIDENCE — the matched slug tokens and the in-family
+    # references. C4 is lexical, so a finding an operator cannot falsify in one read
+    # would be an accusation rather than a signal.
+    check("H3 row emits the project label, matched slug tokens and in-family refs",
+          f[0] == ("900", "project:widget-forge", "widget,forge", "#901,#902"))
+
+    # SPECIFICITY, one arm per near-miss class. Asserted INDIVIDUALLY rather than as
+    # one aggregate count so a failure names the class that broke.
+    flagged = {row[0] for row in f}
+    for tag, num in (
+        ("SP-1 sibling leaf epic (fails coextension)", "901"),
+        ("SP-2 slug in title but no fan-out (fails fan-out)", "902"),
+        ("SP-3 fan-out without coextension (fails coextension)", "903"),
+        ("SP-4 coextensive title with no in-family refs (fails fan-out)", "912"),
+        ("SP-5 sole member of its family (fails family size)", "920"),
+        ("SP-6 no project: label (outside the population)", "930"),
+        ("SP-8 container whose family IS its native children (fails family size)", "940"),
+    ):
+        check("H3 does NOT flag " + tag, num not in flagged)
+
+    # SP-7 — a CLOSED epic that WOULD match. Not expressible as a node, because the
+    # population is scoped by the query. Asserted there instead: without OPEN
+    # scoping H3 would resurrect every container a grooming sweep already resolved
+    # by closing it. This is the arm that fails if someone widens the query.
+    check("SP-7 the epic population is OPEN-scoped in the query itself",
+          "states:OPEN" in GRAPHQL_EPIC_PARENTS)
+
+    # THE CONJUNCTION PROOF — the family conjunct ALONE over-fires on this very
+    # fixture. This is the measured defect the card's literal predicate carried
+    # (39 of 42 open epics), reproduced in miniature so a future "simplify H3 to
+    # the family shape" edit fails here instead of shipping.
+    c3_alone = set()
+    for node in h3_nodes:
+        num = str(node["number"])
+        kids = set(str(n["number"]) for n in h3_nodes
+                   if (n.get("parent") or {}).get("number") == node["number"])
+        for label in node_labels(node):
+            if not PROJECT_LABEL_RE.match(label):
+                continue
+            fam = set(str(n["number"]) for n in h3_nodes
+                      if label in node_labels(n)) - set([num]) - kids
+            if len(fam) >= H3_MIN_FAMILY:
+                c3_alone.add(num)
+    check("H3 the family conjunct ALONE over-fires (the conjunction discriminates)",
+          len(c3_alone) > len(flagged) and flagged < c3_alone)
+
+    # Exemption: suppresses the named finding ONLY. A blanket mute would pass a
+    # "the exemption worked" assertion just as well, which is why the second
+    # container must still fire here.
+    f, ex = run_h3(h3_nodes, set([("900", H3_EXEMPT_TOKEN)]))
+    check("H3 exemption suppresses only the exempted container",
+          [row[0] for row in f] == ["910"] and ex == [("H3", "#900")])
+
+    # NEGATIVE: the H2 token must not suppress an H3 finding. The two legs share one
+    # exemption file, and a loader that ignored the token would make every H2
+    # exemption silently mute H3 as well.
+    f, ex = run_h3(h3_nodes, set([("900", "type:epic")]))
+    check("H3 is not suppressed by an H2-token exemption on the same issue",
+          [row[0] for row in f] == ["900", "910"] and len(ex) == 0)
+
+    # Title-head normalization, asserted directly — C4's verdict turns on it.
+    check("H3 title head strips an [Epic] prefix and truncates at the dash",
+          title_head_tokens("[Epic]: Widget Forge — packaging and release")
+          == set(["widget", "forge"]))
+    check("H3 title head truncates at a spaced hyphen too",
+          title_head_tokens("Anvil Line - the programme") == set(["anvil", "line"]))
+
+    # ── THE ANTI-VACUITY CONTROL ────────────────────────────────────────────
+    # An H2-era node set carries `parent` and nothing else. Run H3 over it and every
+    # specificity arm above returns ZERO — passing for the wrong reason. That is the
+    # `--fixture × --skip` combination trap, and it is why a missing field triple is
+    # an INPUT FAILURE rather than a clean result.
+    check("H3 names every missing field on an H2-era node set",
+          h3_missing_fields([{"number": 11, "parent": None}])
+          == ["body", "labels", "title"])
+    check("H3 reports no missing field on a complete node set",
+          h3_missing_fields(h3_nodes) == [])
+    # An EMPTY population is NOT field-deficient — a different failure, handled by
+    # main() as a SKIP. Collapsing the two would fail loud on a legitimately
+    # epic-less repo.
+    check("H3 treats an empty population as evaluable, not field-deficient",
+          h3_missing_fields([]) == [])
+
+    # ── H3 THROUGH THE CLI, at every invocation form that narrows the population ──
+    # The arms above drive the library. These drive the SHIPPED command line — the
+    # surface deploy.sh actually executes — because the field-deficiency guard, the
+    # SKIP rows and the COUNT_H3 emission all live in main(), not in run_h3.
+    def _h3_cli(root_dir, extra_args):
+        cp = subprocess.run([sys.executable, os.path.abspath(__file__),
+                             "--root", root_dir] + list(extra_args),
+                            capture_output=True, text=True)
+        return cp.returncode, cp.stdout, cp.stderr
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _mkroot(tmp, "nothing is asserted on this line\n")
+        full_fixture = os.path.join(tmp, "h3-nodes.json")
+        with open(full_fixture, "w", encoding="utf-8") as fh:
+            json.dump(h3_nodes, fh)
+        h2_era_fixture = os.path.join(tmp, "h2-era-nodes.json")
+        with open(h2_era_fixture, "w", encoding="utf-8") as fh:
+            json.dump([{"number": 11, "parent": None}], fh)
+        exempt_file = "h3-exempt.txt"
+        with open(os.path.join(tmp, exempt_file), "w", encoding="utf-8") as fh:
+            fh.write("#900 " + H3_EXEMPT_TOKEN + "\n")
+
+        # F2 — the fixture form. Both containers reported, no near-miss reported,
+        # and the count is a MEASURED 2.
+        rc, out_s, _err = _h3_cli(root, ("--fixture-parent-map", full_fixture))
+        h3_rows = [ln for ln in out_s.split("\n") if ln.startswith("H3\t")]
+        check("F2 fixture form reports exactly the two containers, COUNT_H3 2",
+              rc == 0
+              and [ln.split("\t")[1] for ln in h3_rows] == ["900", "910"]
+              and "COUNT_H3\t2" in out_s)
+        check("F2 fixture form reports ZERO of the seven near-miss classes",
+              not any(ln.split("\t")[1] in ("901", "902", "903", "912",
+                                            "920", "930", "940")
+                      for ln in h3_rows))
+
+        # F2-neg — THE cell that matters. A field-deficient fixture must exit 3 and
+        # must NOT emit a zero. Both halves are asserted: an exit-3 that still
+        # printed `COUNT_H3 0` would leave the vacuous zero in the operator's output.
+        rc, out_s, err_s = _h3_cli(root, ("--fixture-parent-map", h2_era_fixture))
+        check("F2-neg field-deficient fixture exits 3 and emits NO COUNT_H3",
+              rc == 3 and "COUNT_H3" not in out_s and "H3 population lacks" in err_s)
+
+        # F3 — `--skip-backlog`. A skipped leg says so; it never reports a zero.
+        rc, out_s, _err = _h3_cli(root, ("--skip-backlog",))
+        check("F3 --skip-backlog emits SKIP H3 and NO COUNT_H3",
+              rc == 0 and "SKIP\tH3\t" in out_s and "COUNT_H3" not in out_s)
+
+        # F5 — the exemption file, end to end through the real loader. The
+        # unexempted container must still fire, or a blanket mute would pass.
+        rc, out_s, _err = _h3_cli(root, ("--fixture-parent-map", full_fixture,
+                                         "--exempt-file", exempt_file))
+        check("F5 exemption file suppresses one container and keeps the other",
+              "EXEMPT\tH3\t#900" in out_s and "COUNT_H3\t1" in out_s
+              and [ln.split("\t")[1] for ln in out_s.split("\n")
+                   if ln.startswith("H3\t")] == ["910"])
+
+        # THE ADVISORY CONTRACT, asserted on the observable deploy.sh reads. Two
+        # containers are reported and the process STILL exits 0 — H3 cannot move
+        # the exit code, and therefore cannot gate, in any mode.
+        rc, out_s, _err = _h3_cli(root, ("--fixture-parent-map", full_fixture))
+        check("H3 findings do NOT move the exit code (the advisory contract)",
+              rc == 0 and "COUNT\t0" in out_s and "COUNT_H3\t2" in out_s)
+
     # PAGINATION: `gh --paginate` concatenates page documents with NO separator.
     # A newline-split parse silently yields ZERO nodes past page 1 — a FALSE-GREEN
     # on a >100-epic repo. Regression guard for that bug.
@@ -1049,6 +1499,9 @@ def main():
         out.append("H1\t" + loc + "\t" + text)
 
     h2, h2_ex = [], []
+    h3, h3_ex = [], []
+    h3_ran = False
+    nodes = None
     if args.fixture_parent_map:
         try:
             with open(args.fixture_parent_map, "r", encoding="utf-8") as fh:
@@ -1059,6 +1512,11 @@ def main():
         h2, h2_ex = run_h2(nodes, exemptions)
     elif args.skip_backlog:
         out.append("SKIP\tH2\tbacklog leg skipped by request")
+        # H3 rides H2's node set, so skipping the backlog skips it too — and it says
+        # so EXPLICITLY. Falling through to `COUNT_H3 0` would report an unevaluated
+        # leg as a clean one, which is the failure this file exists to detect.
+        out.append("SKIP\tH3\tbacklog leg skipped by request — the coextension "
+                   "advisory rides the same fetch and was not evaluated")
     else:
         repo = _derive_repo(args.repo)
         if not repo:
@@ -1072,11 +1530,43 @@ def main():
             return 3
         h2, h2_ex = run_h2(nodes, exemptions)
 
+    if nodes is not None:
+        missing = h3_missing_fields(nodes)
+        if missing:
+            # FAIL LOUD. See the module docstring's anti-vacuity note: H3 over a
+            # field-deficient node set finds nothing BY CONSTRUCTION, so reporting
+            # zero here would pass for the wrong reason. Named inline on ONE line
+            # because deploy.sh reports `head -1` of this stream on exit 3.
+            print("ERROR\tH3 population lacks the required field(s) "
+                  + ", ".join(missing)
+                  + " — an H2-era node set cannot evaluate the coextension leg; "
+                    "a zero here would be vacuous. Extend the fixture or drop "
+                    "--fixture-parent-map.", file=sys.stderr)
+            return 3
+        if not nodes:
+            out.append("SKIP\tH3\tempty epic population — the coextension advisory "
+                       "had nothing to evaluate")
+        else:
+            h3, h3_ex = run_h3(nodes, exemptions)
+            h3_ran = True
+
     for num, parent in h2:
         out.append("H2\t" + num + "\t" + parent)
-    for leg, detail in h1_ex + h2_ex:
+    for num, label, slug_tokens, refs in h3:
+        out.append("H3\t" + num + "\t" + label + "\t" + slug_tokens + "\t" + refs)
+    for leg, detail in h1_ex + h2_ex + h3_ex:
         out.append("EXEMPT\t" + leg + "\t" + detail)
 
+    # COUNT_H3 is emitted ONLY when the leg ran. Its presence is the consumer's
+    # signal that the zero it may carry is a MEASURED zero; its absence (paired
+    # with a SKIP H3 row) is the signal that nothing was measured at all.
+    if h3_ran:
+        out.append("COUNT_H3\t" + str(len(h3)))
+
+    # H3 IS DELIBERATELY ABSENT FROM THIS TOTAL, and from the return below. The
+    # advisory contract is a property of this arithmetic — not of a default some
+    # later edit could flip — so an H3-only run exits 0 and `deploy.sh --check`
+    # is byte-unchanged by it in warn AND enforce mode. See ADR-132.
     total = len(h1) + len(h2)
     out.append("COUNT\t" + str(total))
     print("\n".join(out))

@@ -1,6 +1,6 @@
 name: Skill package content-freshness (pre-merge gate)
 
-# gate-efficacy: posture=required(warn-mode-initial)  enforcement=path-filtered  skip-semantics=absent-is-pass
+# gate-efficacy: posture=required(warn-mode-initial)  enforcement=branch-protection:"Pre-merge .skill package content-freshness gate"  always-reports=yes
 #   invariant: every rostered skill's compiled .skill package reflects current source
 #              content (the committed package == what source would build now) — asserted
 #              PRE-MERGE so a PR that edits a skill's SKILL.md or references/ cannot
@@ -13,9 +13,42 @@ name: Skill package content-freshness (pre-merge gate)
 #                  job green with a ::warning:: annotation) or 1 (enforce: job red).
 #                  It never exits 0 on STALE. Rebuild via build-skill-packages.sh
 #                  and commit the package + .sha256 sidecar -> FRESH, exit 0, green.
-# Path-filtered to skill sources + packages, so ADVISORY by skip-semantics: absence on
-# an unrelated PR MUST NOT block. Ships warn-mode-initial. Dep #2159 (Check 7's
-# non-reproducible-archive false-positives) is CLOSED, so mirroring the content-hash
+#                  Second arm, on the OTHER input vector: edit a TEMPLATE_SYNC_MAP
+#                  canonical that lives outside any skills tree (e.g.
+#                  core/standards/output-format.md) without rebuilding the packages it
+#                  injects into -> the probe likewise reports STALE. Asserted by PF-6 in
+#                  core/deploy/tests/test_package_freshness_exit_codes.sh, with PF-7 as
+#                  its restore-and-pass control.
+#
+# NO PATH FILTER, BY DESIGN. The verdict this gate publishes is the whole-roster Check-7
+# content hash — a global property of every rostered package, not a property of the files
+# a given PR happened to touch. A `paths:` roster is only ever an APPROXIMATION of that
+# verdict's real input surface, and the moment it under-approximates, skip-semantics turn
+# the miss into a false statement: GitHub creates no check run at all, absence reads as a
+# pass, and a partial check is reported as a full one. A roster authored as a COST control
+# then silently functions as a CORRECTNESS control, which is the defect this file used to
+# carry.
+#
+# The input surface such a roster would have to over-approximate spans FIVE heterogeneous
+# classes: (1) the three skills trees (core/, operations/, release/); (2) every
+# TEMPLATE_SYNC_MAP canonical, resolved through core/deploy/lib-template-sync-source.sh,
+# which homes canonicals into core/standards/, operations/templates/ AND core/schemas/;
+# (3) that resolver file itself, whose case arms decide which canonical is injected;
+# (4) core/deploy/deploy.sh, where the map and the staging path live; and (5) the packager
+# under release/skills/pmo-skill-refiner/scripts/. The roster this file used to carry
+# covered class (1) and a subset of class (4) — classes (2), (3) and (5) were never in it,
+# and every new resolver arm widened the gap without anyone noticing.
+#
+# THE FAILURE THIS CLOSES IS NOT HYPOTHETICAL. A pull request whose only changes were to
+# an injected canonical outside the skills trees staled three committed .skill packages and
+# merged green with this gate never having run — the injected-canonical vector, invisible
+# precisely because a non-matching path filter produces no check run to read.
+#
+# always-reports=yes is ALSO A PREREQUISITE for the enforce flip, not a nicety: a required
+# status check that is path-filtered leaves every non-matching PR permanently pending
+# ("Expected — waiting for status"), so the graduation path stated below is broken by
+# construction for as long as a filter exists. Ships warn-mode-initial. Check 7's
+# non-reproducible-archive false-positive class is CLOSED, so mirroring the content-hash
 # verdict into CI does not yield false-positive failures. Flips when the committed
 # .github/skill-package-freshness.enforce token -> `enforce` AND the job is added to
 # required_status_checks (branch protection, out-of-tree — R3).
@@ -24,9 +57,10 @@ name: Skill package content-freshness (pre-merge gate)
 #
 # THIN caller of the single engine. --check-package-freshness runs Check 7's FULL
 # rostered-skill content-hash verdict via the shared _c7_compute_verdict "gate" body —
-# NO per-skill diff-scoping logic lives here (the path filter is on the TRIGGER only,
-# satisfying "no parallel logic"; a stale package for ANY skill correctly blocks). NO
-# predicate is re-encoded in this YAML (single-engine, CIAC-2).
+# NO per-skill diff-scoping logic lives here, and with the trigger filter removed there is
+# no scoping of any kind left in this file (satisfying "no parallel logic"; a stale package
+# for ANY skill correctly blocks). NO predicate is re-encoded in this YAML (single-engine,
+# CIAC-2).
 #
 # Platform: macos-latest — the content-hash verdict needs python3 + unzip (both on the
 # macOS image) and deploy.sh uses BSD `stat -f`/`md5` (mirrors version-freeness.yml).
@@ -36,22 +70,9 @@ name: Skill package content-freshness (pre-merge gate)
 
 on:
   pull_request:
-    paths:
-      - 'operations/skills/**'
-      - 'release/skills/**'
-      - 'core/skills/**'
-      - 'packages/*.skill'
-      - 'packages/*.skill.sha256'
-      - 'core/deploy/deploy.sh'
-      - '.github/workflows/skill-package-freshness.yml'
-      - '.github/skill-package-freshness.enforce'
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
-    paths:
-      - 'operations/skills/**'
-      - 'release/skills/**'
-      - 'core/skills/**'
-      - 'packages/*.skill'
 
 permissions:
   contents: read

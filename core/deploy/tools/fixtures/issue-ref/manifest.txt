@@ -1,0 +1,36 @@
+# Fixture manifest for check-issue-ref-validity.sh --self-test
+#
+# Format, pipe-separated:
+#   class | source file under cases/ | destination path in the fixture repo | expect in delta mode | expect in path mode
+#
+# `flag` = the file MUST appear in the report. `zero` = it MUST NOT.
+#
+# WHY TWO EXPECTATION COLUMNS. Delta mode scans only the lines ADDED between the
+# two fixture commits; path mode scans every line of the file. Z-6 is the class
+# where those genuinely differ, and collapsing them into one column would force
+# that class to be dropped rather than asserted.
+#
+# A source that also exists under base/ is written at the BASE commit and MODIFIED
+# at HEAD, so its pre-existing content sits outside the added-line delta. Every
+# other source is ADDED at HEAD.
+#
+# The destination path is load-bearing for Z-2: the two path-exemption arms are
+# only reachable from a file that actually LIVES at the exempt path.
+#
+# ---- MUST-FLAG (sensitivity) -------------------------------------------------
+S-1|s1-unresolvable.md|docs/s1-unresolvable.md|flag|flag
+S-2|s2-transferred.md|docs/s2-transferred.md|flag|flag
+S-3|s3-pr-number.md|docs/s3-pr-number.md|flag|flag
+S-4|s4-legacy-id.md|docs/s4-legacy-id.md|flag|flag
+S-5|s5-placement.md|docs/s5-placement.md|flag|flag
+S-6|s6-no-block.md|docs/s6-no-block.md|flag|flag
+S-7|s7-related-adrs.md|docs/s7-related-adrs.md|flag|flag
+# ---- MUST-NOT-FLAG (specificity) ---------------------------------------------
+Z-1|z1-override.md|docs/z1-override.md|zero|zero
+Z-2a|z2a-releases-path.md|release/releases/z2a-releases-path.md|zero|zero
+Z-2b|z2b-self-doc-rules.md|core/rules/git-workflow.md|zero|zero
+Z-2c|z2c-self-doc-template.md|.github/PULL_REQUEST_TEMPLATE.md|zero|zero
+Z-3|z3-fenced.md|docs/z3-fenced.md|zero|zero
+Z-4|z4-inline-provenance.md|docs/z4-inline-provenance.md|zero|zero
+Z-6|z6-preexisting.md|docs/z6-preexisting.md|zero|flag
+Z-7|z7-near-miss.md|docs/z7-near-miss.md|zero|zero

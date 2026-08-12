@@ -9674,7 +9674,7 @@ sys.stdout.write("".join(out) + "|")
 
   # Check 55 — Work-hierarchy drift gate (warn-mode initial) [#1039]
   #
-  # Two independent invariants, one check (the Check-16 multi-invariant shape):
+  # Three invariants, one check (the Check-16 multi-invariant shape):
   #   H1 DOC     — no normative governance doc ASSERTS a banned parent tier
   #                (`Initiative` / `Roadmap`, per ADR-049 §Decision 1/2) above a
   #                licensed work-item kind. The licensed kind vocabulary is DERIVED
@@ -9683,6 +9683,19 @@ sys.stdout.write("".join(out) + "|")
   #                ONE batched+paginated GraphQL query over the native sub-issue
   #                `parent` edge (never an N+1 per-epic loop — with ~39 open epics
   #                an N+1 shape would materially slow --check).
+  #   H3 COEXTENSION (ADVISORY) — no open `type:epic` issue is really an INITIATIVE
+  #                CONTAINER: an issue whose scope is coextensive with a whole
+  #                `project:` family rather than with one thrust inside it. An
+  #                initiative is a `project:` LABEL plus an operator-local roadmap,
+  #                never a standalone issue (ADR-049; label-taxonomy.md § Initiative
+  #                Labels). H2 cannot see this class — these containers carry no
+  #                epic-parent edge, which is exactly why they went uncaught. Rides
+  #                H2's single query (three fields added to the existing selection
+  #                set; no second call). Three-way conjunction — family shape AND
+  #                title coextension AND in-family fan-out — because the family
+  #                shape ALONE was measured at 39 of 42 open epics: the shape is
+  #                symmetric, so every leaf epic in a family matches it exactly as
+  #                its container does, and no threshold can separate them. ADR-132.
   # Predicate shape: closed-vocabulary membership inside a STRUCTURAL arrow-chain,
   # not prose similarity — falsifiable, no paraphrase false-positive tail. A
   # citation guard suppresses chains inside quotes/backticks (a CITED or NEGATED
@@ -9690,8 +9703,20 @@ sys.stdout.write("".join(out) + "|")
   # architecture-evaluative-lens.md:45). Matching is case-sensitive: Title-Case =
   # hierarchy tier, lowercase = label namespace (ADR-049's own `initiative->epic`
   # label-mapping title must not read as a hierarchy violation).
+  # H3 IS ADVISORY-ONLY, STRUCTURALLY. Its findings are excluded from the
+  # primitive's exit-code total, and this block routes them through
+  # flag_advisory_only — no mode case, no ISSUES increment — so the leg cannot gate
+  # in warn OR enforce mode, and cannot be flipped to FAIL when
+  # work-hierarchy-drift graduates. Precedent: Check 56's M3 leg. The reason is
+  # that H3's coextension conjunct is LEXICAL: it reads a title, and a legitimately
+  # renamed epic changes its verdict. A leg that cannot distinguish a violation
+  # from a correct record reports and never blocks. Contained further by the
+  # exemption form `#<issue> initiative-coextension` and by the row itself, which
+  # carries the matched slug tokens and in-family references so an operator can
+  # falsify a finding in one read.
   # Exemption: .claude/work-hierarchy-exemption-list.txt — lines of `<path> <token>`
-  # (H1) or `#<issue> type:epic` (H2), mirroring Check 16's exempt_pair shape; this
+  # (H1), `#<issue> type:epic` (H2) or `#<issue> initiative-coextension` (H3),
+  # mirroring Check 16's exempt_pair shape; this
   # is #1039's "allowlist-able during cutover" requirement. The H2 form is parsed
   # as an ENTRY, not a comment (`#` + digits + whitespace); the bare `<issue>
   # <token>` form is accepted too, since both normalize to one lookup key. The
@@ -9709,7 +9734,7 @@ sys.stdout.write("".join(out) + "|")
   # CHEAP (additive; `git revert`).
   # Primitive: core/deploy/tools/check-work-hierarchy.py (carries --self-test).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 55: Work-hierarchy drift (H1 doc + H2 backlog; warn-mode initial; enforce-flip deferred)"
+    log "Check 55: Work-hierarchy drift (H1 doc + H2 backlog + H3 coextension (advisory); warn-mode initial; enforce-flip deferred)"
     local c55_script="core/deploy/tools/check-work-hierarchy.py"
     if [[ ! -f "$c55_script" ]]; then
       flag_warn_or_issue "work-hierarchy-drift" "primitive script missing: $c55_script"
@@ -9728,7 +9753,12 @@ sys.stdout.write("".join(out) + "|")
       elif [[ $c55_exit -eq 0 ]]; then
         local c55_scanned
         c55_scanned=$(echo "$c55_out" | awk -F'\t' '$1=="SCANNED"{print $2}')
-        log "  OK:    work-hierarchy — 0 drift findings (${c55_scanned:-0} normative docs scanned; no banned parent tier, no epic-under-epic edge)"
+        # SCOPED TO H1+H2 DELIBERATELY. H3 is excluded from the exit code, so an
+        # H3-only run lands HERE, on exit 0 — a line claiming "no coextension
+        # advisory" would be false precisely when the advisory fired. H3 reports on
+        # its own always-emitted line below instead, which is the stronger form of
+        # the same guarantee: the leg can never read as never-run.
+        log "  OK:    work-hierarchy — 0 gating findings (${c55_scanned:-0} normative docs scanned; no banned parent tier, no epic-under-epic edge; H3 coextension advisory reported separately below)"
       elif [[ $c55_exit -eq 1 ]]; then
         local c55_h1 c55_h2
         c55_h1=$(echo "$c55_out" | awk -F'\t' '$1=="H1"{print $2}' | paste -sd, -)
@@ -9743,13 +9773,49 @@ sys.stdout.write("".join(out) + "|")
       else
         flag_warn_or_issue "work-hierarchy-drift" "check errored (exit $c55_exit): $(head -1 <<<"$c55_out")"
       fi
+      # H3 — parsed OUTSIDE the exit-code branch chain above, and that placement is
+      # the load-bearing part. H3 findings are excluded from the primitive's total,
+      # so an H3-only run exits 0 and lands in the OK arm: a branch that read
+      # findings only on exit 1 would never see them. Evaluated on exit 0 AND 1.
+      #
+      # A line is emitted on EVERY evaluated run, finding or not, so a silent H3 can
+      # never be mistaken for a clean one. When the leg did not run the primitive
+      # emits `SKIP H3` and NO `COUNT_H3` row at all — that SKIP is surfaced here
+      # rather than defaulting to a zero, and the final else catches a primitive
+      # that emitted neither, which is a shape change and not a clean result.
+      if [[ $c55_exit -eq 0 || $c55_exit -eq 1 ]]; then
+        local c55_h3 c55_h3_count c55_h3_skip
+        # Joined by awk with an explicit "; ", NOT `paste -sd'; '` — paste's -d
+        # takes a CYCLING LIST of delimiters, so a two-character argument spends
+        # ';' on one boundary and a bare ' ' on the next. At three or more
+        # findings that alternation makes the record boundary ambiguous, because
+        # every H3 record already contains both a ';' and spaces of its own: a
+        # 4-row emit renders "…);#575 …) #900 …);#901", where the middle
+        # boundary is indistinguishable from an intra-record space. Verified on a
+        # 4-row emit, not inferred. Same form Check 56's M2 and M4 joins use.
+        c55_h3=$(echo "$c55_out" | awk -F'\t' '$1=="H3"{printf "%s#%s (%s; matched %s; refs %s)", (n++ ? "; " : ""), $2, $3, $4, $5}')
+        c55_h3_count=$(echo "$c55_out" | awk -F'\t' '$1=="COUNT_H3"{print $2}')
+        c55_h3_skip=$(echo "$c55_out" | awk -F'\t' '$1=="SKIP" && $2=="H3"{print $3}')
+        if [[ -n "$c55_h3" ]]; then
+          flag_advisory_only "work-hierarchy-coextension" "H3 initiative-coextension — open epic(s) reading as an initiative container (family shape + title coextension + in-family fan-out, all three): $c55_h3 — re-tier to a project: label plus an operator-local roadmap, or record the judgment as \`#<issue> initiative-coextension\` in .claude/work-hierarchy-exemption-list.txt"
+        elif [[ -n "$c55_h3_skip" ]]; then
+          log "  SKIP:  work-hierarchy H3 coextension advisory — $c55_h3_skip"
+        elif [[ -n "$c55_h3_count" ]]; then
+          log "  OK:    work-hierarchy H3 coextension advisory — ${c55_h3_count} finding(s); no open epic reads as an initiative container"
+        else
+          log "  SKIP:  work-hierarchy H3 coextension advisory — the primitive emitted neither a COUNT_H3 nor a SKIP H3 row, so the leg was NOT evaluated (treat as unmeasured, not clean)"
+        fi
+      fi
     fi
   fi
 
 
   # Check 56 — Milestone↔epic membership (warn-mode initial) [#2219]
   #
-  # Two legs, DIFFERENT severities (the #749 asymmetric-severity precedent):
+  # Legs at DELIBERATELY DIFFERENT severities (the #749 asymmetric-severity
+  # precedent). The list below is the authority for which legs exist; no count is
+  # stated, because a stated count goes stale the next time a leg lands — this
+  # header already carried a stale one, undercounting the legs live beneath it.
   #   M1 membership     — for each open milestone that DECLARES an epic
   #                       (`<!-- milestone-epic: #N -->` or `**Epic:** #N`), every
   #                       open non-sub-task child's parent-epic must equal it, unless
@@ -9760,6 +9826,19 @@ sys.stdout.write("".join(out) + "|")
   #                       WARN-ONLY, never enforce-capable. A description legitimately
   #                       lags membership mid-release; gating it would make it
   #                       chronically non-green. Emitted as its own sub-invariant.
+  #   M4 sub-task       — a pipeline sub-task carrying NO milestone at all, which
+  #      milestone         is invisible to every milestone-scoped query the
+  #      orphans          pipeline runs (including this check). WARN-capable with
+  #                       a real enforce path, on its OWN dial. NOT advisory:
+  #                       M2's and M3's advisory rationale is that each has a
+  #                       legitimate state its predicate cannot distinguish from
+  #                       a defect, and M4 has none — the creating procedure
+  #                       stamps the milestone in the SAME issue-create call as
+  #                       the label, so no correctly-created sub-task is ever
+  #                       momentarily milestone-less. Gates on the OPEN subset
+  #                       only; the closed population is history, belongs to the
+  #                       separate backfill work item, and gating it would make
+  #                       the leg permanently non-green on first landing.
   # M2 SUB-CLASS TOKENS: every `named-not-member` ref carries exactly ONE inline
   # bracketed token saying why it is not a member — [elsewhere:ms#N] (it sits in a
   # different milestone) · [no-milestone] (it sits in none) · [member-excluded:sub-task]
@@ -9804,7 +9883,7 @@ sys.stdout.write("".join(out) + "|")
   # reversibility CHEAP. Primitive: core/deploy/tools/check-milestone-epic-membership.py
   # (carries --self-test).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 56: Milestone↔issue-population invariants (M1 membership + M2 reconciliation + M3 scaffold-completeness (advisory); warn-mode initial; enforce-flip deferred)"
+    log "Check 56: Milestone↔issue-population invariants (M1 membership + M2 reconciliation + M3 scaffold-completeness (advisory) + M4 sub-task milestone orphans; warn-mode initial; enforce-flip deferred)"
     local c56_script="core/deploy/tools/check-milestone-epic-membership.py"
     if [[ ! -f "$c56_script" ]]; then
       flag_warn_or_issue "milestone-epic-membership" "primitive script missing: $c56_script"
@@ -9817,8 +9896,8 @@ sys.stdout.write("".join(out) + "|")
       # STRUCTURAL-VALIDITY SENTINEL — a broken measurement must not read clean.
       # exit 1 means TWO different things: "M1/M2 findings present" and "the
       # primitive raised". An unhandled traceback lands on this same captured
-      # stream (2>&1), parses as TSV with zero M1/M2/M3 rows, and the branches
-      # below then print OK on all three legs. Reproduced, not theorised.
+      # stream (2>&1), parses as TSV with zero M1/M2/M3/M4 rows, and the branches
+      # below would then print OK on every leg. Reproduced, not theorised.
       # COUNT_M2 is emitted unconditionally and after every M1/M2 row, so
       # exactly one such row is the evidence the emit ran to completion. Counted
       # with awk exact field equality so COUNT_M2_NNM* cannot inflate it.
@@ -9829,7 +9908,7 @@ sys.stdout.write("".join(out) + "|")
         # ONE finding naming the cause, and every leg gated behind it — the same
         # degraded posture the sibling checks on this file already state, not a
         # third shape. Nothing reports clean OR dirty from an unparseable emit.
-        flag_warn_or_issue "milestone-epic-membership" "NOT-EVALUATED — the primitive produced no parseable emit (exit $c56_exit; expected exactly 1 COUNT_M2 row, saw ${c56_sentinel:-0}). M1, M2 and M3 are ALL unevaluated — this is not a clean result: $(head -1 <<<"$c56_out")"
+        flag_warn_or_issue "milestone-epic-membership" "NOT-EVALUATED — the primitive produced no parseable emit (exit $c56_exit; expected exactly 1 COUNT_M2 row, saw ${c56_sentinel:-0}). M1, M2, M3 and M4 are ALL unevaluated — this is not a clean result: $(head -1 <<<"$c56_out")"
       elif [[ $c56_exit -eq 0 || $c56_exit -eq 1 ]]; then
         local c56_declared c56_m1 c56_m2
         c56_declared=$(echo "$c56_out" | awk -F'\t' '$1=="DECLARED"{print $2}')
@@ -9922,6 +10001,107 @@ sys.stdout.write("".join(out) + "|")
           flag_advisory_only "milestone-scaffold-completeness" "M3 scaffold completeness — load-bearing finding(s): $c56_m3 [${c56_m3_eval} evaluated, ${c56_m3_skipped} not-yet-scaffolded; advisory ${c56_m3_adv:-0}; marker adoption ${c56_marker:-none}]"
         else
           log "  OK:    milestone scaffold completeness (M3) — 0 load-bearing finding(s) over ${c56_m3_eval} evaluated milestone(s); ${c56_m3_skipped} not-yet-scaffolded (NOT evaluated, non-gating) (${c56_m3_adv:-0} advisory; marker adoption ${c56_marker:-none})"
+        fi
+        # M4 — sub-task milestone orphans. WARN-capable with a real enforce path,
+        # so it routes through flag_warn_or_issue behind an EXPLICIT mode branch
+        # (M1's shape), not through flag_advisory_only. M2 and M3 are advisory
+        # because each has a legitimate state its predicate cannot tell from a
+        # defect; M4 has none, and routing it through the structurally
+        # non-escalating emitter would forfeit its graduation path permanently.
+        #
+        # THE DIAL IS ITS OWN, and that is not a detail: `milestone-subtask-orphan`
+        # with a COMMITTED "warn" default, so M4 does NOT inherit the shared
+        # `milestone-epic-membership` cohort. Without it, flipping M1 to enforce
+        # after M1's shakedown would silently graduate an unshaken-down leg by
+        # side effect. Committed-default precedent is live on this file already
+        # (release-body-drift, decision-emission, register-runner-resolution,
+        # count-structure-baseline).
+        #
+        # AND THE COMMITTED DEFAULT IS CONSUMED INLINE, NEVER DELEGATED. This is
+        # the other half of the dial and it is not optional: flag_warn_or_issue
+        # RE-RESOLVES the mode itself, via `resolve_check_mode "$check_id"` with
+        # NO second argument, so it falls back to the SHARED $DEPLOY_CHECK_MODE
+        # and the committed "warn" above is silently discarded. Routing an M4
+        # finding through that helper therefore emits FAIL and increments ISSUES
+        # under a shared `enforce` with no per-check mode file — which is exactly
+        # the state this check SHIPS in, because mode files are operator-instance
+        # runtime state and none is committed. Two things break when that
+        # happens, and both are load-bearing: M4 MOVES THE EXIT CODE, which the
+        # design forbids until the leg is trusted, and the enforce arm writes NO
+        # jsonl row, destroying the shakedown record the enforce-flip decision is
+        # read from. So the mode is resolved ONCE here, with its committed
+        # default, and every M4 emit switches on THAT variable — the pattern
+        # decision-emission (Check 61), register-runner-resolution (Check 62) and
+        # count-structure-baseline (Check 63) already use. The `case` mirrors
+        # flag_warn_or_issue's own: enforce FAILs, warn WARNs and records, and
+        # `off` is silent. Do NOT "simplify" these back into that helper.
+        #
+        # BRANCH ORDER IS LOAD-BEARING — the scan status is read BEFORE any
+        # counter. A consumer that reads only the count consumes "the population
+        # was never examined" as "the population is clean", which is the exact
+        # defect this leg exists to detect. degraded and not-run legitimately
+        # carry NO counters at all (the primitive emits absence, not zeros), so
+        # they are dispositioned ahead of the missing-counter sentinel — that
+        # sentinel exists for an emit that BROKE, not for one that correctly
+        # declared it did not measure.
+        #
+        # awk EXACT field equality throughout: `grep COUNT_M4` prefix-collides
+        # with COUNT_M4_OPEN and COUNT_M4_CLOSED, which would silently report a
+        # sub-counter as the total — the same trap COUNT_M2_NNM documents above.
+        local c56_m4_scan c56_m4_total c56_m4_enum c56_m4 c56_m4_open c56_m4_closed c56_m4_rows
+        local c56_m4_mode c56_m4_detail
+        c56_m4_mode=$(resolve_check_mode "milestone-subtask-orphan" "warn")
+        c56_m4_detail=""
+        c56_m4_scan=$(echo   "$c56_out" | awk -F'\t' '$1=="M4_SCAN"{print $2}')
+        c56_m4_total=$(echo  "$c56_out" | awk -F'\t' '$1=="M4_SCAN"{print $3}')
+        c56_m4_enum=$(echo   "$c56_out" | awk -F'\t' '$1=="M4_SCAN"{print $4}')
+        c56_m4=$(echo        "$c56_out" | awk -F'\t' '$1=="COUNT_M4"{print $2}')
+        c56_m4_open=$(echo   "$c56_out" | awk -F'\t' '$1=="COUNT_M4_OPEN"{print $2}')
+        c56_m4_closed=$(echo "$c56_out" | awk -F'\t' '$1=="COUNT_M4_CLOSED"{print $2}')
+        # Joined by awk with an explicit ", ", NOT `paste -sd', '` — paste's -d
+        # takes a CYCLING LIST of delimiters, so a two-character argument
+        # alternates ',' and ' ' between records and renders as
+        # "#1,#2 #3,#4". Verified against the live emit, not assumed. printf
+        # also emits no trailing newline, which keeps the detail a SINGLE line:
+        # flag_warn_or_issue's jsonl writer escapes backslash and double-quote
+        # only, so an embedded newline would write malformed JSONL into the warn
+        # log the enforce-flip decision is read from.
+        c56_m4_rows=$(echo   "$c56_out" | awk -F'\t' '$1=="M4"{printf "%s#%s", (n++ ? ", " : ""), $2}')
+        # Each arm SETS the detail; the single emit below applies the severity.
+        # The two NOT-EVALUATED arms carry the dial too — a search OUTAGE says
+        # nothing about the repository's state, so it must never be the thing
+        # that fails the deploy check.
+        if [[ -z "$c56_m4_scan" || "$c56_m4_scan" == "degraded" ]]; then
+          c56_m4_detail="M4 NOT-EVALUATED — the milestone-less sub-task population is UNMEASURED (scan: ${c56_m4_scan:-absent}). This is not a clean result: no count was obtained, and none is being reported as zero"
+        elif [[ "$c56_m4_scan" == "not-run" ]]; then
+          log "  SKIP:  M4 sub-task milestone orphans — not run on this invocation (scan: not-run); M4 is repository-scoped and does not fire on the milestone-scoped path"
+        elif [[ -z "$c56_m4" ]]; then
+          c56_m4_detail="M4 NOT-EVALUATED — scan reported '$c56_m4_scan' but no parseable COUNT_M4 row was emitted; treat the population as unmeasured"
+        elif [[ "${c56_m4_open:-0}" -gt 0 ]]; then
+          c56_m4_detail="M4 sub-task milestone orphans — ${c56_m4_open} OPEN sub-task(s) carry no milestone and are invisible to every milestone-scoped query: $c56_m4_rows [${c56_m4_closed:-0} closed also unattached — historical, owned by the backfill work item, never gated; scan: $c56_m4_scan ${c56_m4_enum:-0}/${c56_m4_total:-0} enumerated]"
+        else
+          # The OK line states its own DENOMINATOR and SCAN STATUS, so a reader
+          # can tell "zero found" from "nothing examined" without leaving the log.
+          log "  OK:    milestone sub-task orphans (M4) — 0 open finding(s) of ${c56_m4:-0} examined (${c56_m4_closed:-0} closed, historical; scan: $c56_m4_scan ${c56_m4_enum:-0}/${c56_m4_total:-0} enumerated)"
+        fi
+        if [[ -n "$c56_m4_detail" ]]; then
+          case "$c56_m4_mode" in
+            enforce)
+              log "  FAIL:  milestone-subtask-orphan — $c56_m4_detail"
+              ISSUES=$((ISSUES + 1))
+              ;;
+            warn)
+              log "  WARN:  milestone-subtask-orphan — $c56_m4_detail (warn-mode; flip milestone-subtask-orphan.mode to 'enforce' after shakedown — NOT the shared deploy-check.mode, which this leg deliberately does not follow)"
+              # Same escaping contract as flag_warn_or_issue's writer: backslash
+              # then double-quote, so the row stays parseable JSONL.
+              local _c56_m4_ts _c56_m4_esc
+              _c56_m4_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              _c56_m4_esc="${c56_m4_detail//\\/\\\\}"
+              _c56_m4_esc="${_c56_m4_esc//\"/\\\"}"
+              printf '{"ts":"%s","check":"%s","detail":"%s"}\n' \
+                "$_c56_m4_ts" "milestone-subtask-orphan" "$_c56_m4_esc" >> "$WARN_LOG" 2>/dev/null || true
+              ;;
+          esac
         fi
       else
         flag_warn_or_issue "milestone-epic-membership" "check errored (exit $c56_exit): $(head -1 <<<"$c56_out")"
@@ -12243,9 +12423,9 @@ cmd_check_release_corpus() {
 # ─── Mode: --check-package-freshness (the CI .skill content-freshness probe) — #2656 ─
 #
 # Runs ONLY Check 7's package content-freshness verdict — the FULL rostered-skill
-# content-hash comparison, no per-skill diff-scoping (the WORKFLOW path-filters the
-# TRIGGER, so no parallel scoping logic lives here; a stale package for ANY skill
-# correctly blocks) — and maps the verdict to an EXIT CODE for the CI gate.
+# content-hash comparison, no per-skill diff-scoping (the workflow runs filter-free under the
+# always-reports posture, so no parallel scoping logic lives here; a stale package
+# for ANY skill correctly blocks) — and maps the verdict to an EXIT CODE for the CI gate.
 # Warn-vs-enforce at the CI surface is decided by the committed
 # .github/skill-package-freshness.enforce sentinel. Mirrors cmd_check_close_completeness.
 #

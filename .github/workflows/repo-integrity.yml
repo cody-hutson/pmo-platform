@@ -343,197 +343,24 @@ jobs:
         run: |
           set -euo pipefail
 
-          OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-issue-ref[[:space:]]*-->'
-          # Designated reference-block headers (reuse the parser-clean anchor family).
-          # The `Source(s)` arm is explicit: `[Ss]ources?` matches `Source` and
-          # `Sources` but NOT `Source(s)`, whose parenthetical then hit the `$` anchor
-          # and failed — while this gate's own failure message, core/ADRs/README.md,
-          # and reference-durability-standard.md all NAME `### Source(s)` as
-          # recognized. That was a specification-versus-implementation defect, not a
-          # policy choice, so the implementation is corrected to the stated set.
+          # THIN CALLER. The detection logic lives in
+          # core/deploy/tools/check-issue-ref-validity.sh — one implementation,
+          # fixture-backed, and invocable outside CI. It used to sit inline in this
+          # block, where nothing outside this workflow could call it and no fixture
+          # could exercise it: any consumer wanting the same determination had to
+          # either read this check's verdict after a push, or re-implement the logic
+          # and drift from it.
           #
-          # `Related ADRs` is deliberately NOT recognized. It is a cross-ADR-link
-          # section, where core/standards/adr-authoring-guide.md § Issue references in
-          # ADRs forbids a bare #N outright (zone 1) — recognizing it would move the
-          # placement cut point ABOVE that section and make this gate accept exactly
-          # the placement the authoring guide prohibits.
-          REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Rr]elated|[Pp]rovenance|[Ss]ources?|[Ss]ource\(s\))[[:space:]]*:?[[:space:]]*$'
-
-          # SCOPE: every changed .md MINUS the self-doc files that necessarily
-          # quote worked-example #N (they carry a file-top allow-issue-ref).
-          mapfile -t ALL_CHANGED < <(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- '*.md' 2>/dev/null || true)
-
-          # Per-run resolution cache for #N (path under /tmp).
-          CACHE_DIR="$(mktemp -d)"
-          # resolve_issue: prints "valid" or a reason token. NO -L (a 3xx is
-          # unresolvable-in-this-repo). The gh exit code is the precise signal:
-          #   non-zero (404, or a 3xx redirect that gh will NOT follow) -> the
-          #   number does not resolve to a 200 issue in this repo -> unresolvable.
-          # On a genuine 200 (exit 0), the payload is then branched:
-          #   .pull_request != null -> pr-number (the issues endpoint 200s for PRs);
-          #   .repository_url not ending in this repo -> transferred (a transfer
-          #   that returns the destination payload — the NF-2 belt-and-suspenders);
-          #   otherwise -> valid.
-          # gh prints a JSON error body to STDOUT on 404 (with .status "404"), so
-          # branching on the exit code — not on body emptiness — is what keeps a
-          # 404 from being mis-labeled transferred.
-          resolve_issue() {
-            local n="$1" cf="$CACHE_DIR/$1"
-            if [ -f "$cf" ]; then cat "$cf"; return; fi
-            local body rc verdict repo_url is_pr
-            set +e
-            body="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${n}" 2>/dev/null)"
-            rc=$?
-            set -e
-            if [ "$rc" -ne 0 ]; then
-              verdict="unresolvable"   # 404 or un-followed 3xx
-            else
-              repo_url="$(printf '%s' "$body" | jq -r '.repository_url // ""' 2>/dev/null || true)"
-              is_pr="$(printf '%s' "$body" | jq -r 'if .pull_request == null then "issue" else "pr" end' 2>/dev/null || echo "issue")"
-              if [ "$is_pr" = "pr" ]; then
-                verdict="pr-number"
-              elif ! printf '%s' "$repo_url" | grep -qE "/${GITHUB_REPOSITORY}\$"; then
-                verdict="transferred"
-              else
-                verdict="valid"
-              fi
-            fi
-            printf '%s' "$verdict" > "$cf"
-            printf '%s' "$verdict"
-          }
-
-          FOUND=0
-          REPORT=""
-          for f in "${ALL_CHANGED[@]}"; do
-            [ -z "$f" ] && continue
-            [ -f "$f" ] || continue
-            case "$f" in
-              core/rules/git-workflow.md|.github/PULL_REQUEST_TEMPLATE.md) continue ;;  # self-doc (file-top allow-issue-ref)
-              release/releases/*) continue ;;  # tracking surface (RELEASE_LOG/INDEX/DIGEST/NOTES/plans) — #N + PR-refs are native provenance; exempt, mirroring the reference-durability gate
-            esac
-            # whole-file override
-            if grep -qE "$OVERRIDE" "$f"; then
-              echo "::notice::repo-integrity issue-ref: a changed file carries allow-issue-ref — skipped." | tee -a "$GITHUB_STEP_SUMMARY"
-              continue
-            fi
-
-            # locate a designated reference block (first occurrence)
-            REFBLOCK_LINE="$(grep -nE "$REFBLOCK_RE" "$f" | head -1 | cut -d: -f1 || true)"
-            [ -z "$REFBLOCK_LINE" ] && REFBLOCK_LINE=0
-
-            # NET-NEW DELTA: scan only lines ADDED since the base (the same
-            # added-lines posture the reference-durability gate uses), so a
-            # pre-existing reference in a file the PR touched for unrelated
-            # reasons is never re-flagged. The added text is keyed by its
-            # head-file line number.
-            ADDED_LINES="$(git diff --unified=0 "$BASE_SHA"..."$HEAD_SHA" -- "$f" \
-              | awk '
-                /^@@/ {
-                  # @@ -a,b +c,d @@ -> new-file hunk starts at c
-                  plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next
-                }
-                /^\+\+\+/ { next }
-                /^\+/ { print newln ":" substr($0, 2); newln++ ; next }
-                /^-/ { next }
-              ' || true)"
-            [ -z "$ADDED_LINES" ] && continue
-
-            IN_FENCE=0
-            while IFS= read -r entry || [ -n "$entry" ]; do
-              [ -z "$entry" ] && continue
-              LN="${entry%%:*}"
-              line="${entry#*:}"
-              # fenced code: a ``` on an added line toggles fence state.
-              case "$line" in
-                '```'*) IN_FENCE=$((1 - IN_FENCE)); continue ;;
-              esac
-              [ "$IN_FENCE" -eq 1 ] && continue
-
-              # IMP-NNN is always invalid in file content (deprecated).
-              if printf '%s' "$line" | grep -qE '\bIMP-[0-9]+\b'; then
-                IMPS="$(printf '%s' "$line" | grep -oE '\bIMP-[0-9]+\b' || true)"
-                for imp in $IMPS; do
-                  FOUND=1
-                  REPORT="${REPORT}${f}:${LN}: ${imp} — deprecated IMP-NNN reference (use a GitHub issue number)"$'\n'
-                done
-              fi
-
-              # A #N rendered as a markdown link (e.g. [#N](...) or any
-              # [text](...N...) whose target is an issue URL) carries an INLINE
-              # PROVENANCE MARKER and is exempt from the reference-block placement
-              # rule (per the placement spec's inline-marker alternative). The
-              # link form is still validity-checked below.
-              HAS_PROVENANCE=0
-              printf '%s' "$line" | grep -qE '\]\([^)]*\)' && HAS_PROVENANCE=1
-
-              # #NNNN tokens on this line.
-              NUMS="$(printf '%s' "$line" | grep -oE '#[0-9]+' | tr -d '#' || true)"
-              [ -z "$NUMS" ] && continue
-              for n in $NUMS; do
-                V="$(resolve_issue "$n")"
-                case "$V" in
-                  valid)
-                    # placement: a valid #N must sit inside a designated
-                    # reference block OR carry an inline provenance marker
-                    # (a markdown link on the same line).
-                    if [ "$HAS_PROVENANCE" -eq 0 ] && { [ "$REFBLOCK_LINE" -eq 0 ] || [ "$LN" -lt "$REFBLOCK_LINE" ]; }; then
-                      FOUND=1
-                      REPORT="${REPORT}${f}:${LN}: #${n} resolves but is placed outside a designated reference block and carries no inline provenance marker"$'\n'
-                    fi
-                    ;;
-                  unresolvable)
-                    FOUND=1
-                    REPORT="${REPORT}${f}:${LN}: #${n} does not resolve to an issue in this repo (404 or redirect)"$'\n'
-                    ;;
-                  transferred)
-                    FOUND=1
-                    REPORT="${REPORT}${f}:${LN}: #${n} resolves to a DIFFERENT repository (transferred issue)"$'\n'
-                    ;;
-                  pr-number)
-                    FOUND=1
-                    REPORT="${REPORT}${f}:${LN}: #${n} is a pull-request number, not an issue"$'\n'
-                    ;;
-                esac
-              done
-            done <<< "$ADDED_LINES"
-          done
-          rm -rf "$CACHE_DIR"
-
-          if [ "$FOUND" -eq 0 ]; then
-            echo ":white_check_mark: Issue-reference validity — all #N in changed markdown resolve in-repo and sit in reference blocks" | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          {
-            echo "## :x: Issue-reference validity gate FAILED"
-            echo ""
-            echo "A changed markdown file references an issue that does not resolve to a real"
-            echo "issue IN THIS REPO, or a resolving reference sits outside a designated reference block."
-            echo ""
-            echo "### Findings (file:line):"
-            echo '```'
-            printf '%s' "$REPORT"
-            echo '```'
-            echo ""
-            echo "### Categories"
-            echo ""
-            echo "- **does not resolve / redirect** — a 404 or a redirect to another repo (a transferred issue does not resolve here)."
-            echo "- **different repository** — the number resolves to a TRANSFERRED issue now living in another repo."
-            echo "- **pull-request number** — the number is a PR, not an issue."
-            echo "- **deprecated IMP-NNN** — the legacy improvement id; use a GitHub issue \`#N\`."
-            echo "- **placed outside a reference block** — a valid \`#N\` must sit under a recognized heading, at any level: \`Issue References\` / \`References\` / \`Related\` / \`Provenance\` / \`Source\` / \`Sources\` / \`Source(s)\`. In an ADR the designated block is \`## References\`; \`## Related ADRs\` is NOT recognized, because a bare \`#N\` is prohibited there outright."
-            echo ""
-            echo "See [\`core/rules/git-workflow.md\` § Repository-Integrity Gates](../blob/main/core/rules/git-workflow.md) and [\`core/standards/adr-authoring-guide.md\` § Issue references in ADRs](../blob/main/core/standards/adr-authoring-guide.md)."
-            echo ""
-            echo "### Override — a RARE exception, not the default remedy"
-            echo ""
-            echo 'Adding the marker `repo-integrity: allow-issue-ref` (wrapped in an HTML comment) anywhere in a file skips this gate for the WHOLE file — placement AND validity, so a 404, a redirect, a transferred issue and a PR number all pass unexamined.'
-            echo ""
-            echo 'It is warranted only when BOTH limbs hold: (1) the file DISPLAYS an issue-reference construct as its subject matter — self-documentation, a template, a worked example, a test fixture — or its numbers are synthetic / out-of-repo and cannot resolve by construction; AND (2) neither remedy is available — the reference cannot be relocated into a designated reference block, and it cannot be replaced by an inline summary without destroying what the file is for.'
-            echo ""
-            echo 'A marker declared under this criterion carries a trailing rationale INSIDE the comment naming which limb applies. A bare marker is a silenced warning, not a declaration. Carrying provenance is not demonstration: move the reference into a reference block with a summary noun phrase instead.'
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-          exit 1
+          # This step therefore holds NO reference-block pattern, NO resolver and NO
+          # identifier literal. There is nothing here left to drift from the thing
+          # that actually runs, which is the property the extraction exists to buy.
+          #
+          # The job's `name:` above is UNCHANGED and must stay so: that string IS the
+          # required-status-check context registered in branch protection. Renaming
+          # the job would orphan the context — GitHub would wait forever on a check
+          # no job produces — so this edit is confined to the `run:` body.
+          bash core/deploy/tools/check-issue-ref-validity.sh \
+            --base "$BASE_SHA" --head "$HEAD_SHA" --resolver gh
 
   # ---------------------------------------------------------------------------
   # GATE 3 — Dead-file-reference (PRESERVED design: generalized link checker +
