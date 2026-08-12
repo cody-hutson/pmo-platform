@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.23 | install-completeness-and-honest-reporting | 2026-08-12 | — | #5266 | [notes/v4.23_RELEASE_NOTES.md](notes/v4.23_RELEASE_NOTES.md) |
 | v4.22 | closeout-output-completeness | 2026-08-11 | — | #5246 | [notes/v4.22_RELEASE_NOTES.md](notes/v4.22_RELEASE_NOTES.md) |
 | v4.21 | ci-wiring-and-flake-elimination | 2026-08-09 | — | #5085 | [notes/v4.21_RELEASE_NOTES.md](notes/v4.21_RELEASE_NOTES.md) |
 | v4.20 | hook-precision-and-boundaries | 2026-08-09 | — | #5081 | [notes/v4.20_RELEASE_NOTES.md](notes/v4.20_RELEASE_NOTES.md) |

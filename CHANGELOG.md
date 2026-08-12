@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.23] - 2026-08-12
+
+Installing and updating the platform now fails loudly on a partial install instead of reporting success over it.
+
+[Full notes](release/releases/notes/v4.23_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.23)
+
 ## [v4.22] - 2026-08-11
 
 Release close-out stops silently dropping outputs — telemetry, velocity and learnings now reach the audit trail every time.
