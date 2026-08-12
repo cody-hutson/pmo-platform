@@ -223,8 +223,14 @@ silently crossed.
 > not portable; the tracked document states the policy and the instance owns the
 > registration. What install DOES perform is the directory provisioning (see C1 §1): the
 > external-sync directory holding the §3 snapshot and the §5 run-log exists on any workspace
-> that has run the installer or the update path, so this sweep has somewhere to persist
-> poll-state from its first run.
+> that has run the update path, and on any workspace whose install ran against a
+> **default-located** operator-instance family, so this sweep has somewhere to persist
+> poll-state from its first run. **The installer limb is conditional and the condition is
+> load-bearing:** install provisions at `${WORKSPACE_ROOT}`-relative literals rather than
+> through the resolver, so on a **relocated** instance family a fresh install writes to the
+> default path while the sweep reads the relocated one. The update path back-fills at the
+> resolved location and closes the gap. C1 §1 records the mechanism and why the installer
+> behaves that way.
 - **Scheduler:** C3 declares the sweep as a scheduled invocation on the platform's existing
   scheduled-task surface (the same operator-instance, Layer-2, git-ignored mechanism the
   `platform-health` scheduled tasks use). C3 introduces no new scheduler primitive. Cadence is
