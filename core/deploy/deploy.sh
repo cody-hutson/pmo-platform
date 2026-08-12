@@ -5782,6 +5782,15 @@ cmd_check() {
   # ENFORCES the 5 structural (FAIL-capable) + RECOMMEND-FLAGS the 4 judgment
   # (advisory, never FAIL).
   #
+  # G1-05a is evaluated on TWO INDEPENDENT ARMS: (1) PRESENCE — the card carries
+  # an Acceptance Criteria section with >=1 criterion, matched at any heading
+  # depth and in any criterion list form, delegated to the shared detector; and
+  # (2) SHAPE — each checkbox criterion matches a G1-05a structural pattern. The
+  # arms answer different questions and are kept separable on purpose. This adds
+  # NO criterion ID: the counts above enumerate criterion IDs, and the ID set is
+  # unchanged, so the Gate 1→2 structural_pass_rate denominator and the Gate-1
+  # criterion count are untouched (extend the criterion body, do not add an ID).
+  #
   # SCOPE — which cards each criterion reads (Template Detection Logic Step 0).
   # The population is partitioned into four form families before any criterion
   # runs, so no card class is undefined:
@@ -6276,6 +6285,112 @@ sys.stdout.write("".join(out) + "|")
         fi
       fi
 
+      # ── G1-05a AC-PRESENCE resolution — DELEGATED, never re-implemented ──
+      # The criterion this feeds is G1-05a's PRESENCE arm (#4232): does the card
+      # carry an Acceptance Criteria section with at least one criterion? The
+      # shape arm below it — does each criterion match a G1-05a pattern — is a
+      # different question with a different answer set, and the two are kept
+      # apart deliberately (see the two-arm verdict in the G1-05a branch).
+      #
+      # The hole this closes is EMPTINESS, not heading depth. For F1 the AC
+      # applicability flag is set from the applies-to triple and never from a
+      # heading, so the check already reached every improvement/bug card; what it
+      # did with them was count non-conforming BULLETS and emit only when that
+      # count exceeded zero. A body with no AC bullets at all yields zero
+      # non-conforming bullets, so the criterion FAILED OPEN on exactly the cards
+      # that carried no acceptance criteria whatsoever. It had never once emitted
+      # an AC-absence finding, for any body, of any template era.
+      #
+      # This block therefore holds NO heading grammar of its own — ADR-111
+      # § Decision binds a consumer of an issue-body field to read it through the
+      # shared detector rather than author a parallel matcher, and authoring an
+      # AC-heading regex here would re-create precisely the divergence ADR-111
+      # closed. It resolves the whole population once through
+      # release/tools/bundle-issues-parser.py parse_acceptance_criteria and looks
+      # the answer up per issue. Map shape mirrors the priority map exactly:
+      # `|<number>:<value>` repeated with a trailing `|`, where value is the
+      # criterion COUNT, or `-` when the section is absent. Absent and empty are
+      # kept distinct because they need different remediation sentences.
+      #
+      # Same primitive file as the priority delegate above, resolved into its own
+      # variable rather than sharing that one: the two delegates degrade
+      # independently, and a shared handle would tempt a later edit to make one
+      # block's availability speak for the other's.
+      #
+      # Cost model, stated the same way the priority block states its own: ONE
+      # python process for the whole population — not one per issue — plus an
+      # in-process parameter-expansion lookup per issue that forks nothing. The
+      # check still holds exactly one issue-list read (CIAC-1 preserved); no
+      # per-issue API call is added, which is what makes a label-application
+      # timestamp unavailable here and is why the cutover posture is inheritance
+      # of g1-enforcement.mode rather than a merge-SHA anchor.
+      #
+      # DEGRADED-STATE CONTRACT — the posture the two preceding delegate blocks
+      # name, BOUND rather than re-invented. Primitive missing, interpreter
+      # unrunnable, non-zero exit, or a partial extraction ⇒ EXACTLY ONE
+      # population-wide finding naming the cause, c22_ac_ok=false, and the
+      # per-issue presence arm is then SKIPPED: the criterion reads
+      # NOT-EVALUATED, never FAILED. An empty map is indistinguishable from a
+      # population in which every card is AC-less, so letting the per-issue arm
+      # run would turn ONE root cause into one spurious FAIL per issue.
+      local c22_ac_tool="${_audit_src_root:-.}/release/tools/bundle-issues-parser.py"
+      local c22_ac_map="" c22_ac_ok=true c22_ac_exit=0
+      local c22_ac_rows=0 c22_ac_colons="" c22_ac_diag=""
+      if [[ ! -f "$c22_ac_tool" ]]; then
+        c22_ac_ok=false
+        flag_g1_enforcement "g1-enforcement" \
+          "G1-05a presence NOT EVALUATED across ${c22_issue_count} bundled issue(s) — AC primitive missing: $c22_ac_tool (deploy the release module or restore the tool)"
+        c22_finding_count=$((c22_finding_count + 1))
+      elif [[ ! -x "/usr/bin/python3" ]]; then
+        c22_ac_ok=false
+        flag_g1_enforcement "g1-enforcement" \
+          "G1-05a presence NOT EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot run the AC primitive"
+        c22_finding_count=$((c22_finding_count + 1))
+      else
+        # >>> G1-05A-DELEGATE-BEGIN — the AC-presence glue. stderr is CAPTURED
+        #     (2>&1), never discarded: an absent interpreter, a syntax error and
+        #     a data-shape change are three different failures with three
+        #     different fixes, and a message naming only the tool path
+        #     distinguishes none of them.
+        c22_ac_map=$(printf '%s' "$c22_issues_json" | /usr/bin/python3 -c '
+import importlib.util, json, pathlib, sys
+spec = importlib.util.spec_from_file_location("bundle_issues_parser", pathlib.Path(sys.argv[1]))
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+out = []
+for i in json.load(sys.stdin):
+    present, count = mod.parse_acceptance_criteria(i.get("body") or "")
+    out.append("|%s:%s" % (i["number"], count if present else "-"))
+sys.stdout.write("".join(out) + "|")
+' "$c22_ac_tool" 2>&1) || c22_ac_exit=$?
+        # >>> G1-05A-DELEGATE-END
+        if [[ "$c22_ac_exit" -ne 0 ]]; then
+          c22_ac_ok=false
+          c22_ac_diag=$(printf '%s\n' "$c22_ac_map" | /usr/bin/grep -v '^[[:space:]]*$' | /usr/bin/tail -1)
+          flag_g1_enforcement "g1-enforcement" \
+            "G1-05a presence NOT EVALUATED across ${c22_issue_count} bundled issue(s) — AC primitive failed (exit ${c22_ac_exit}): ${c22_ac_diag:-(no diagnostic on stdout or stderr)}"
+          c22_finding_count=$((c22_finding_count + 1))
+          c22_ac_map=""
+        else
+          # Extraction-ran assertion — SCOPE-INVARIANT, the priority block's
+          # idiom adopted rather than re-derived. It asserts that every queried
+          # issue produced a row, NOT that any row reported a section: "zero
+          # sections present" is a legitimate (if alarming) result, whereas a
+          # short map is a broken probe. Rows are the ':' count — no issue
+          # number, count or '-' marker contains one — computed by pattern
+          # removal so it forks nothing.
+          c22_ac_colons="${c22_ac_map//[^:]/}"
+          c22_ac_rows=${#c22_ac_colons}
+          if [[ "$c22_ac_rows" -ne "$c22_issue_count" ]]; then
+            c22_ac_ok=false
+            flag_g1_enforcement "g1-enforcement" \
+              "G1-05a presence NOT EVALUATED — AC extraction returned ${c22_ac_rows} row(s) for ${c22_issue_count} bundled issue(s); a partial extraction is a broken probe, not a clean population"
+            c22_finding_count=$((c22_finding_count + 1))
+            c22_ac_map=""
+          fi
+        fi
+      fi
+
       # ── Step-0 kind vocabulary — DELEGATED, never re-implemented ──────────
       # Template Detection Logic Step 0 (gate-criteria-spec.md § Gate 1)
       # partitions the population into FOUR form families before any criterion
@@ -6375,6 +6490,7 @@ sys.stdout.write("".join(out) + "|")
       local _has_imp _has_bug _has_obs _label_total
       local _bm_repro _bm_obswhat _bm_propchange _title_ok _title_reason
       local _ac_lines _ac_total _ac_bad _ac_line _ac_norm _ac_ok
+      local _ac_needle _ac_seen
       local _prio _prio_field _prio_needle
       local _family _kind _kind_rest _kind_one
       local _ap_evidence _ap_ac _ap_prio
@@ -6393,6 +6509,10 @@ sys.stdout.write("".join(out) + "|")
         # that assigns it), but the F2 path below has a different applicability
         # predicate, so the latent leak is closed rather than relied upon.
         _ac_lines=""
+        # Same latent-leak closure for the presence lookup: assigned only inside
+        # the G1-05a branch, so without this reset an issue whose branch does not
+        # run would leave the PREVIOUS card's value visible to a later reader.
+        _ac_seen=""
 
         # ── Step 0 — form-family resolution ───────────────────────────────────
         # Four families, evaluated in precedence order; every issue lands in
@@ -6682,6 +6802,49 @@ sys.stdout.write("".join(out) + "|")
         # silent blanket exemption this scope rule exists to prevent, on the
         # criterion where the forms already agree with the gate.
         if [[ "$_ap_ac" == "true" ]]; then
+          # ── ARM 1 — PRESENCE (#4232). Fires when the AC section is ABSENT, or
+          # present but carrying zero criteria. Delegated predicate; this file
+          # authors no heading grammar and no criterion grammar.
+          #
+          # This arm is deliberately INDEPENDENT of arm 2 rather than folded into
+          # it. Merging them would route every criterion form through the shape
+          # patterns, and the shape check counts only checkbox bullets — so
+          # ordered-list criteria, which are template-correct and which live
+          # cards carry, would flip from unchecked to mass-FAIL in the same
+          # commit. Presence and shape are different questions; keep the answers
+          # separable, so an absence finding is never confused for a wording one.
+          #
+          # Gated on c22_ac_ok per the degraded-state contract above: when the
+          # primitive degraded, presence is NOT-EVALUATED (one population-wide
+          # finding, already emitted at block start), never a per-issue FAIL.
+          #
+          # POSTURE: this arm adds no mode machinery. It routes through
+          # _c22_emit_structural like every other structural finding, which
+          # switches on the check-wide $G1_ENFORCEMENT_MODE resolved from the
+          # dedicated `g1-enforcement.mode` file — warn with no file present. So
+          # a violation WARNS and the run continues; it does not block a deploy.
+          # That inheritance is the implementable form of the grandfathering the
+          # ticket asked for: no per-card bundling timestamp is readable inside
+          # this check's one-issue-list-read budget, so a merge-SHA cutover
+          # anchor could be written but never evaluated. The flip lever is the
+          # mode file, not an edit here.
+          if [[ "$c22_ac_ok" == "true" ]]; then
+            _ac_needle="|${_num}:"
+            _ac_seen="${c22_ac_map##*"$_ac_needle"}"
+            _ac_seen="${_ac_seen%%|*}"
+            # An empty lookup means the card produced no row. The rows-equals-
+            # issues assertion above makes that unreachable; if it ever happens,
+            # stay SILENT rather than reporting an absence we did not measure.
+            if [[ "$_ac_seen" == "-" ]]; then
+              _c22_emit_structural \
+                "issue #${_num} — G1-05a FAIL (presence): no Acceptance Criteria section found (matched at any heading depth H2-H4, case- and suffix-tolerant, any criterion list form) — author an 'Acceptance Criteria' section with >=1 criterion before bundling; see gate-criteria-spec.md § Gate 3 body-compliance precondition"
+            elif [[ "$_ac_seen" == "0" ]]; then
+              _c22_emit_structural \
+                "issue #${_num} — G1-05a FAIL (presence): Acceptance Criteria section present but carries zero criteria — the assertion is on section presence AND non-emptiness, not on template-field presence; add >=1 criterion (checkbox, bullet or ordered) before bundling"
+            fi
+          fi
+          # ── ARM 2 — SHAPE (pre-existing; byte-unchanged). Still checkbox-scoped
+          # by design: widening its criterion form is a different card's scope.
           # Pull AC checkbox bullets. Match leading `- [ ]` / `- [x]` / `- [X]`
           # (any indentation). This is the gateable AC surface; non-checkbox
           # prose in the AC section is not a bullet and is not checked.

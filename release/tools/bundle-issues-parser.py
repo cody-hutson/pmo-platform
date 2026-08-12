@@ -71,6 +71,11 @@ class IssueRecord:
     parse_status: str  # one of: clean, deferred, failed
     affected_files: List[FileRecord]
     dependencies: List[int]  # sorted ascending
+    # #4232 — AC presence axis. Additive and DEFAULTED, so every positional
+    # constructor already in the tree keeps working unchanged. Absence is data,
+    # never a parse failure: neither field feeds parse_status.
+    ac_present: bool = False
+    ac_count: int = 0
 
 
 # ---- Parsing functions --------------------------------------------------------
@@ -314,6 +319,54 @@ def parse_priority_body(body: str) -> Optional[str]:
     return f"P{m.group('level')}" if m else None
 
 
+# ---- Acceptance-Criteria presence (#4232) -------------------------------------
+#
+# A CRITERION is any markdown list item inside the AC section, in ANY of the three
+# forms the live corpus uses: GitHub task-list checkbox (`- [ ]` / `- [x]`), plain
+# bullet (`-` / `*` / `+`), or ordered (`1.` / `1)`). Counting only checkboxes is a
+# measured blindness, not a hypothetical one: gated cards carry template-correct
+# ordered-list AC that a checkbox-only counter reads as zero criteria, which is
+# indistinguishable from having none.
+#
+# The marker must be followed by WHITESPACE. That is what keeps a thematic break
+# (`---`), a bold run (`**Note:**`) and an em-dash rule from being counted as
+# criteria — each of which starts with a bullet character but is not a list item.
+AC_CRITERION_RE = re.compile(
+    r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]?\][ \t]+)?\S", re.MULTILINE
+)
+
+
+def parse_acceptance_criteria(body: str) -> Tuple[bool, int]:
+    """Return (section_present, criterion_count) for the body's AC section.
+
+    PRESENCE + NON-EMPTINESS only. This says nothing about whether a criterion is
+    well-shaped (G1-05a's job), measurable (G3-05's judgment check), or adequate in
+    content — those have their own owners, and widening this predicate into any of
+    them would make an absent-AC finding indistinguishable from a badly-worded one.
+
+    Heading matching is DELEGATED to extract_section() — the DS-1 (#291) convention
+    `^#{2,4}\\s+<heading>\\b[^\\n]*$` with IGNORECASE — so this function introduces
+    NO second heading grammar (ADR-111 § Decision: a consumer of an issue-body field
+    reads it through the shared detector rather than authoring its own). That
+    delegation is what makes the result independent of heading depth (an H2
+    pre-template body and an H3 template body match alike) and of template era.
+
+    Prefix-anchoring is load-bearing in the negative direction too: the sub-task
+    scaffold heading `### Cross-Issue Acceptance Criteria` and the stage heading
+    `## Stage 8 QA / Acceptance` both correctly return absent, because the first is
+    not prefix-anchored on the heading and the second carries no `Criteria` token.
+
+    Absence is DATA, never a parse failure — it must not contribute to parse_status.
+    ADR-111 §2 settles the identical question for priority: routing a field's absence
+    to parse_status depresses the gated parse rate on conformant bodies and silently
+    drops records from the contention map.
+    """
+    section = extract_section(body, "Acceptance Criteria")
+    if section is None:
+        return (False, 0)
+    return (True, len(AC_CRITERION_RE.findall(section)))
+
+
 # ---- API surface --------------------------------------------------------------
 
 def gh_issue_view(number: int) -> Dict:
@@ -357,6 +410,7 @@ def build_issue_record(raw: Dict) -> IssueRecord:
         else "deferred" if "deferred" in (aff_status, dep_status)
         else "clean"
     )
+    ac_present, ac_count = parse_acceptance_criteria(body)
     milestone = raw.get("milestone") or {}
     return IssueRecord(
         number=raw["number"],
@@ -368,6 +422,8 @@ def build_issue_record(raw: Dict) -> IssueRecord:
         parse_status=parse_status,
         affected_files=affected,
         dependencies=sorted(deps),
+        ac_present=ac_present,
+        ac_count=ac_count,
     )
 
 
@@ -783,6 +839,99 @@ Stuff.
     full_order = sorted(["P4", None, "P1", "P3", "P2"], key=priority_rank)
     if full_order != ["P1", "P2", "P3", "P4", None]:
         failures.append(f"tie-breaker full order: got {full_order}")
+
+    # ---- AC-presence detector (#4232) — AC-P1..AC-P12 ---------------------------
+    # Scored on BOTH axes. Sensitivity alone would pass a predicate that returns
+    # "present" for every body, which is precisely the shape of the defect this
+    # closes (a check that never once emitted an absence finding), so every
+    # sensitivity arm below is paired with a specificity arm that must return absent.
+    _AC_BULLETS = "- [ ] Verify that `core/deploy/deploy.sh` carries the presence arm\n"
+
+    # AC-P1..AC-P3 — SENSITIVITY across heading depth. The pre-template H2 body is
+    # the era the card exists to protect; a depth-keyed predicate scores 0 here.
+    for _depth, _tag in (("##", "AC-P1 H2 pre-template"),
+                         ("###", "AC-P2 H3 template"),
+                         ("####", "AC-P3 H4")):
+        _present, _count = parse_acceptance_criteria(
+            f"### Description\n\nStuff.\n\n{_depth} Acceptance Criteria\n\n{_AC_BULLETS}"
+        )
+        if not _present or _count != 1:
+            failures.append(f"{_tag}: got present={_present} count={_count}, want True/1")
+
+    # AC-P4 — case + suffix tolerance, inherited from extract_section (DS-1 #291).
+    _present, _count = parse_acceptance_criteria(
+        f"## Acceptance criteria (proposed)\n\n{_AC_BULLETS}"
+    )
+    if not _present or _count != 1:
+        failures.append(f"AC-P4 case+suffix heading: got present={_present} count={_count}")
+
+    # AC-P5 — SPECIFICITY: the sub-task scaffold heading is NOT the card's own AC.
+    # extract_section is prefix-anchored, so this must not match.
+    _present, _count = parse_acceptance_criteria(
+        f"### Cross-Issue Acceptance Criteria\n\n{_AC_BULLETS}"
+    )
+    if _present:
+        failures.append(f"AC-P5 'Cross-Issue Acceptance Criteria' matched: count={_count}")
+
+    # AC-P6 — SPECIFICITY: a stage heading carrying 'Acceptance' but no 'Criteria'.
+    _present, _ = parse_acceptance_criteria(f"## Stage 8 QA / Acceptance\n\n{_AC_BULLETS}")
+    if _present:
+        failures.append("AC-P6 'Stage 8 QA / Acceptance' matched as an AC section")
+
+    # AC-P7 — THE DEFECT ITSELF: heading present, zero criteria beneath it. This is
+    # the empty-set case the shipped shape check fails open on, so it must resolve
+    # present-but-empty and be distinguishable from both absent and satisfied.
+    _present, _count = parse_acceptance_criteria(
+        "### Acceptance Criteria\n\nTo be authored during planning.\n"
+    )
+    if not _present or _count != 0:
+        failures.append(f"AC-P7 heading with zero criteria: got present={_present} count={_count}")
+
+    # AC-P8 — ordered-list criteria. Template-correct bodies use these; a
+    # checkbox-only counter reads them as zero and calls a complete card AC-less.
+    _present, _count = parse_acceptance_criteria(
+        "### Acceptance Criteria\n\n1. Verify the row renders.\n2. Confirm the control fails.\n"
+    )
+    if not _present or _count != 2:
+        failures.append(f"AC-P8 ordered-list criteria: got present={_present} count={_count}")
+
+    # AC-P9 — plain (non-checkbox) bullets.
+    _present, _count = parse_acceptance_criteria(
+        "### Acceptance Criteria\n\n- Verify the row renders.\n* Confirm the control fails.\n"
+    )
+    if not _present or _count != 2:
+        failures.append(f"AC-P9 plain-bullet criteria: got present={_present} count={_count}")
+
+    # AC-P10 — SPECIFICITY: a thematic break and a bold run both begin with a bullet
+    # character and are NOT criteria. Without the required whitespace after the
+    # marker, `---` alone would satisfy a presence check on an empty section.
+    _present, _count = parse_acceptance_criteria(
+        "### Acceptance Criteria\n\n---\n**Note:** none yet.\n"
+    )
+    if not _present or _count != 0:
+        failures.append(f"AC-P10 rule/bold not counted: got present={_present} count={_count}")
+
+    # AC-P11 — MUTATION CONTROL. Remove the section from a body that passes and
+    # assert the verdict flips. Without this, every arm above could be a constant.
+    _ac_body = f"### Description\n\nStuff.\n\n### Acceptance Criteria\n\n{_AC_BULLETS}"
+    _before = parse_acceptance_criteria(_ac_body)
+    _mutated = _ac_body.split("### Acceptance Criteria")[0]
+    _after = parse_acceptance_criteria(_mutated)
+    if _before != (True, 1) or _after != (False, 0):
+        failures.append(f"AC-P11 mutation control: before={_before} after={_after}")
+
+    # AC-P12 — AC absence must NOT contribute to parse_status (ADR-111 §2). A body
+    # with clean Affected Files and no AC section stays `clean`; routing absence to
+    # parse_status would drop conformant records out of the contention map.
+    _rec = build_issue_record({
+        "number": 4232, "title": "t", "state": "open", "labels": [],
+        "body": "### Affected Files\n- `core/foo.md` (edit — fix)\n",
+    })
+    if _rec.parse_status != "clean" or _rec.ac_present or _rec.ac_count != 0:
+        failures.append(
+            f"AC-P12 absence-is-data: parse_status={_rec.parse_status} "
+            f"ac_present={_rec.ac_present} ac_count={_rec.ac_count}"
+        )
 
     if failures:
         print("SELF-TEST FAIL:", file=sys.stderr)
