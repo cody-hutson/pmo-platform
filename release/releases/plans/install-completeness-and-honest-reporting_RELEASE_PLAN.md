@@ -1,0 +1,425 @@
+<!-- reference-durability: allow-link -->
+<!-- reference-durability: allow-version-ref -->
+<!-- repo-integrity: allow-issue-ref -->
+---
+title: Release Plan — install-completeness-and-honest-reporting (a maintenance run that reports success has actually finished, and the tools that check it stop lying about a healthy install)
+type: release-plan
+plan_type: release
+status: ACTIVE
+release: slug-only (ADR-092 — the concrete version binds at the Stage-12 atomic claim)
+milestone: install-completeness-and-honest-reporting
+release_class: novel
+domain_practice: { source: N/A — in-repo precedent governs; no external practice consulted, date: 2026-08-09, domain: software }
+reversibility: CHEAP / Confidence HIGH
+---
+# Release Plan — `install-completeness-and-honest-reporting`
+
+**Milestone:** `install-completeness-and-honest-reporting` (milestone 330). Four members — three build cards and one verify-only card — on one branch, one pull request, one merge.
+**Version identity:** **slug-only** per **ADR-092**. This file is `install-completeness-and-honest-reporting_RELEASE_PLAN.md` and the branch is `release/install-completeness-and-honest-reporting`; no version stem appears in the filename, in the branch name, or in this plan's identity prose. Bump class is `minor`. The concrete number binds at the **Stage-12 atomic compare-and-swap**, which renames this file into its major-version bucket.
+**Topology:** **SINGLE** — one release branch, one pull request, one merge gate; this plan lands as **Engineering Commit 0**.
+**Concurrency posture:** **P0 fully-serial** (undeclared at Stage 4, so the codified default applies). Stage-6 work routes one card at a time in the approved sequence on the shared branch. Force-push, including the lease-guarded form, is prohibited on the shared branch under any multi-chip activity.
+**Release class:** **`novel`** — trigger (a): one member introduces new install-time artifacts. Posture: engagement density **Standard** · Stage-9 review depth **Deep** · Stage-5 activation bias `ALL`, activated on 4 of 4 · Stage-13 outcome window **30-day**.
+
+---
+
+## Provenance
+
+This file transcribes the **Stage-4 Release Planning** analysis relayed onto this milestone's release-scoped planning sub-task, reconciled forward through the mid-pipeline divergence re-measurement, the four **Stage-5 Solutioning** designs, and the **Collective Review scope-lock** that ratified them. Where a later measurement superseded a Stage-4 figure, **this file carries the decided state** and § Deviation Log records the delta. The Stage-4 and Stage-5 output comments are the historical record and are not edited. Authored at Engineering Commit 0 by the first Stage-6 Engineering spoke.
+
+Every issue reference below sits inside the reference block at the end of this section and is accompanied by the summary that makes it readable without opening the ticket. Elsewhere in this plan the four cards are named by their short labels — **Partial install**, **Roster false-positive**, **Ambient intake**, and **Autonomy default** — so every table reads correctly even if the numbers rot.
+
+### Issue References
+
+- **#4449 — "Partial install."** `update.sh` reports "Update complete." at exit 0 while leaving a partial install: hook-tier composition surfaces absent, and `core/deploy/deploy.sh` non-executable. First card in the sequence.
+- **#4450 — "Roster false-positive."** `validate-install.sh` check A9 flags operator-authored personal skills as platform-roster failures, which suppresses all of Mode B. Depends on the Partial-install card for evidence.
+- **#4721 — "Ambient intake."** Ambient intake never activates on install: no inbox drop-zone, no sweep registration, no automation dial. Depends on the Partial-install card for exit semantics and on the Autonomy-default card for install-time surface precedence.
+- **#1864 — "Autonomy default."** `setup-workspace.sh` did not install the autonomy-mode artifact, so the autonomy-ceiling hook defaulted to `enforce` rather than the documented `warn` on fresh installs. **Verify-only** in this release: the artifact already landed in a prior release; Stages 6, 7 and 8 verify it rather than author it.
+- **#2250** — a sibling milestone owns a content widening of `core/deploy/deploy.sh`. Named here only to record that it does not contend with this release's mode-only change to the same path.
+- **#302 and #1850** — the origin of the sourced-library executability exemption that `doctor.sh` already ships and that this release propagates to the second validator.
+
+---
+
+## Release Outcome Statement
+
+**AFTER** — A maintenance run that reports success has actually finished, and the tools that check an install stop reporting failures that are not there.
+
+**BEFORE** — `update.sh` exits 0 announcing "Update complete." over a workspace it left half-configured; the shipped `core/deploy/deploy.sh` carries no executable bit, so the documented operator invocation fails and the validator check that would have caught it early-returns without running; and `validate-install.sh` fails a *healthy* install because one of its checks disagrees with the exemption its sibling validator already ships.
+
+**Success Indicator:** every ticket below closes with its acceptance criteria verified, and each new gate or assertion demonstrates a **real failure on a fixture** before it is trusted.
+
+---
+
+## Header
+
+| Field | Value |
+|-------|-------|
+| **Version** | slug-only pre-claim per ADR-092; bump class `minor`; recorded determination **v4.22** |
+| **Date Created** | 2026-08-08 (Saturday) — Stage-4 planning, relayed |
+| **Commit 0 authored** | 2026-08-09 (Sunday) |
+| **Release Manager** | Agent-assisted, release-hub Mode O |
+| **Status** | Executing — Stage 6 Engineering |
+| **Branch** | `release/install-completeness-and-honest-reporting` |
+| **Base commit** | `db0293de`, equal to `origin/main` at branch cut on 2026-08-09 |
+| **Pull request** | populated at PR creation, Stage 6 — one PR across all four cards |
+| **Milestone** | `install-completeness-and-honest-reporting`, milestone 330 |
+| **Release class** | `novel` |
+| **Topology and posture** | SINGLE topology, P0 fully-serial posture |
+
+**Commit-0 version re-verify (detect-and-HALT, executed 2026-08-09): PROCEED.** After `git fetch --tags origin && git fetch origin main`, the allocator dry-run `claim-version.sh --bump minor --sha db0293de --dry-run` returned **`v4.22`**, matching the value this release carried into Stage 6. All three freeness arms agree: the highest tag on the remote is `v4.21`, the highest release-ledger row read at the remote tip is `v4.21`, and the highest published release is `v4.21`.
+
+**A concurrent release carries the same recorded determination.** The in-flight sibling on branch `release/closeout-output-completeness` recorded `v4.22` at its own Commit 0 earlier the same day, against the same baseline. This is **not** a defect and **not** a reason to halt: under ADR-092 the number is a recorded determination rather than a reservation, and it binds only at the Stage-12 compare-and-swap, which the two releases reach at different times. Whichever merges first claims `v4.22`; the other recomputes and claims the next free slot. The structural protection is that **no version literal is written into any artifact this release ships** — not the branch name, not this filename, not any code or frontmatter — so a recomputation costs nothing but a re-read.
+
+---
+
+## Scope
+
+Four cards, scope **LOCKED** at the Collective Review gate. No card was added, removed, or resized at that gate.
+
+| Card | Problem | Class | Stage 6 authorship |
+|---|---|---|---|
+| Partial install | A maintenance run exits 0 over a half-configured workspace | bug, P2 Material | 6 MODIFY, 0 NEW |
+| Roster false-positive | A validator check flags personal skills as platform failures, suppressing a whole mode | bug | 2 MODIFY, 1 NEW |
+| Ambient intake | A shipped capability never activates on install | bug | 11 MODIFY, 0 NEW |
+| Autonomy default | Fresh installs defaulted an enforcement ceiling above its documented level | observation | **verify-only — 0 files authored** |
+
+### Approved implementation sequence
+
+**Partial install → Roster false-positive → Ambient intake**, with **Autonomy default** verified at any point in the wave.
+
+The order is rule-determined by the contention analysis rather than chosen: both downstream cards state the dependency in their own bodies. The Roster card consumes the Partial-install card's evidence — specifically, the mode fix changes what validator check A8 *does*, so the Roster card's residual failure count must be derived after the Partial-install card lands, never inherited from the pre-fix observation. The Ambient-intake card depends on the Partial-install card's exit semantics to fail loudly, and on the Autonomy-default card's install-time surface precedence. Hunks were verified disjoint function-by-function; this is ordering on one branch, not conflict.
+
+---
+
+## Release Class
+
+`novel`, on trigger (a) — the Ambient-intake card introduces new install-time artifacts (an inbox drop-zone and the directories around it) that did not previously exist on any installed workspace.
+
+The pre-split Stage-4 matrix was computed under class `cross-cutting`, which sets Stage-5 activation bias `ALL`. Re-classifying to `novel` **also** sets bias `ALL`, so the applicability matrix carries forward unchanged. The real delta is engagement density, which moved from Tight to **Standard**; Stage-9 review depth stays **Deep**.
+
+---
+
+## Dependency Graph
+
+Three directional edges, all internal to this release. The three-way split that produced this milestone severed none of them.
+
+- **Partial install → Roster false-positive** — evidence dependency. The Roster card's target figures are derived from the post-fix validator state.
+- **Autonomy default → Ambient intake** — surface precedence. Both write install-time state; the autonomy-mode artifact must exist before ambient intake registers against it.
+- **Partial install → Ambient intake** — surface precedence. The new install-time artifacts rely on the partial-install exit semantics to fail loudly rather than silently.
+
+Zero cycles. The Partial-install and Autonomy-default cards are independently startable; Partial install is sequenced first because two cards wait on it.
+
+---
+
+## Stage Applicability Matrix
+
+| Stage | Partial install | Roster false-positive | Ambient intake | Autonomy default |
+|---|---|---|---|---|
+| 5 Solutioning | APPLY | APPLY | APPLY | APPLY |
+| 6 Engineering | APPLY | APPLY | APPLY | APPLY (verify-only) |
+| 7 Dev Testing | APPLY | APPLY | APPLY | APPLY |
+| 8 QA Testing | APPLY | APPLY | APPLY | APPLY |
+
+No skips in this release. Stages 10 and 11 are closed as platform-satisfied under the codified stage-compression rule rather than by the applicability matrix; the rationale is recorded on their own release-scoped sub-tasks.
+
+The Autonomy-default row carried a pre-split annotation reading "would SKIP — trivial" under a `DEFAULT` activation bias. That bias does not apply to a `novel` release, and the card changes fresh-install enforcement posture from `enforce` to `warn`, which is functional rather than cosmetic. It is verify-only here because the artifact already shipped, not because it is trivial.
+
+---
+
+## Contention Map
+
+### Within-release — `docs/scripts/validate-install.sh`
+
+Three cards touch this file. The contention is **DISSOLVED**, not merely sequenced, and the finding is recorded because a spoke resolved it rather than escalating a scope change nobody needed:
+
+| Card | Region it edits | Shared lines with the other two |
+|---|---|---|
+| Partial install | check A3, hook layout — the sourced-library exemption | zero |
+| Roster false-positive | check A9, skill roster, plus the Mode A denominator constant and the A3b skip | zero |
+| Ambient intake | check A2, workspace layout — extends an existing check | zero |
+
+The Ambient-intake design extends an existing check rather than adding one, which is what leaves the Mode A denominator untouched and produces no overlap with either sibling. Build order still applies for readability of the diff, but no merge conflict is possible between these three hunks.
+
+### Within-release — `update.sh` and `core/deploy/tests/test_install_end_to_end.sh`
+
+The Partial-install and Ambient-intake cards both touch both files. In `update.sh` the two edits land in disjoint regions: Partial install inserts a completeness gate between the skill redeploy and the hook refresh, Ambient intake adds a directory-scaffold phase in the earlier scaffold band. In the end-to-end test both cards **append a new stage after the last existing stage**, so the later card rebases onto the earlier card's stage rather than replacing it. Whichever spoke runs second re-reads the file's tail before appending.
+
+### Cross-release — `core/deploy/deploy.sh`
+
+The sibling milestone `path-and-citation-reconciliation` owns a content widening of this same file. **No collision.** This release changes only the git index **mode** attribute and zero content bytes; the sibling changes blob content. Git merges a mode change and a content change to the same path independently and conflicts only when both change the *mode*. The mitigation carried from the Stage-4 risk register is retained: the mode change ships in its **own isolated commit**, so a rebase cannot silently absorb it into a content hunk.
+
+### Structural blast radius
+
+`update.sh` classifies **Structural** (six or more first-order consumers requiring awareness). `docs/scripts/validate-install.sh` and `core/deploy/tests/test_install_end_to_end.sh` classify Structural by the same measure once all three build cards land. The `core/deploy/deploy.sh` change classifies **Cosmetic at the content layer** — zero bytes — with a precisely enumerated four-row invocation-form radius recorded under § Risk Register R14.
+
+---
+
+## Risk Register
+
+| # | Risk | Severity | Mitigation | State at Commit 0 |
+|---|---|---|---|---|
+| R2 | The Autonomy-default card's target region sat inside an unmerged sibling's hunk, so its plan-time line numbers are stale | **HIGH** | Re-derive every target against current `main`; anchor on strings, never line numbers | **Materialized.** The sibling merged during the planning halt, so those line numbers have moved. The string-anchor constraint is load-bearing, not precautionary. The card is verify-only, which further reduces exposure to zero authored lines. |
+| R14 | The `core/deploy/deploy.sh` mode change conflicts differently from a content change and is easy to lose in a rebase | LOW | Isolate it in its own commit; verify with a tree-entry read at Stage 7 | Mitigation applied at Commit 1. |
+| R9 | The Ambient-intake rollback is not revert-able if registration and install-root state are written | MEDIUM | Record deregistration steps explicitly in the Stage 12 deploy log | **Exposure dropped to zero** at the scope-lock: the ratified posture performs no registration, so there is nothing to deregister. The non-git residue is three empty inert directories. |
+| R10 | The Ambient-intake default posture — a fresh install landing with ambient intake active — changes what a new install does unprompted | MEDIUM | Explicit operator decision at the review gate | **Resolved** at the scope-lock: the installer scaffolds directories and seeds the dial; registration stays operator-owned and documented. |
+| R8 | The Roster card's predicate could mask a platform skill that genuinely lacks a version field | MEDIUM | The card's acceptance criteria already require a positive control; graded at Stage 8 as must-pass | Open, carried to Stage 8. |
+| R5 | The mode fix makes validator check A8 stop early-returning and start actually invoking the deploy check. Its verdict is **unpredicted** | MEDIUM | Capture the observed A8 verdict as Stage 7 evidence; do not inherit a pre-fix figure | Open, carried to Stage 7. If A8 fails, Mode B is suppressed again — by a genuine actionable cause rather than a false positive, which is the gate working correctly, but this release's Success Indicator would then not be met by these cards alone. |
+| R15 | A concurrent in-flight release recorded the same provisional version | LOW | Ship no version literal in any artifact; let the Stage-12 compare-and-swap arbitrate | Open by construction; costs a re-read, not a rollback. |
+
+### Carried forward, not a release gate
+
+The destructive-command guard selects the **last** shell-script token in a command as its allowlist target, so a tool invoked with a script path as an *argument* is checked against the argument rather than the executed script. Four spokes across this release have now hit the rule. The allowlist lookup is correct; the target selection is inverted. This is governed runtime harness tooling, so it needs its own bug ticket and an approved plan — it is **not** fixed here, and it is not a gate on this release.
+
+---
+
+## Cross-Issue Acceptance Criteria
+
+The pre-split cross-issue criteria were authored at a twelve-card scope and do not transfer. These are derived against this release's actual membership.
+
+| # | Criterion | Method | Owner stage |
+|---|---|---|---|
+| X1 | After all cards land, a full `update.sh` against a healthy sandboxed workspace still exits 0 or 64 — the new gate never fires on a healthy install | Run the install end-to-end suite; assert the healthy-workspace arm | Stage 7 |
+| X2 | After all cards land, `validate-install.sh` Mode A against a healthy sandboxed install reports zero FAIL rows attributable to a false positive | Run the validator against the end-to-end sandbox; classify each FAIL as true or false positive | Stage 8 |
+| X3 | The Mode A pass/fail denominator the validator reports equals the number of check emitters it actually runs | Compare the declared total against the emitter count in the Mode A routing function | Stage 8 |
+| X4 | Every new gate and assertion this release adds has demonstrated a real failure on a fixture — no assertion is trusted that has not been shown capable of failing | Each card's own anti-vacuity arm, collected | Stage 8 |
+| X5 | `core/deploy/deploy.sh` is executable in the git index at the merge commit, and the sibling milestone's content change to the same file merges without conflict | Tree-entry read at the merge SHA; merge result | Stage 12 |
+
+---
+
+## File Change Matrix
+
+**Release total: 17 distinct source paths — 16 MODIFY, 1 NEW, 0 DELETE, 0 new executables**, plus this plan file. The one new file is a regression-suite member invoked as `bash <path>` by the aggregating runner, exactly as its twelve siblings are — not a new command-line entry point — so **no allowlist row is owed on the new-executable ground**. See D-9 for that basis.
+
+**A script-execution allowlist change nevertheless ships in this release, on a different ground, and the count above includes it.** Twelve rows plus their rationale comments were added to `core/config/allowlists/script-execution-allowlist.txt` so Dev Testing could execute the install-test suites at all — enabling work, not new-executable admission. It is governed under its own intake item and is recorded at **D-18**. The distinction D-9 draws remains correct on its own terms: no row is owed *because a new executable ships*. What changed is that rows became necessary for a different reason, after D-9 was written.
+
+| # | Path | Card | Intent | Reversibility |
+|---|---|---|---|---|
+| 1 | `core/deploy/deploy.sh` | Partial install | MODIFY — git index **mode only**, zero content bytes | CHEAP |
+| 2 | `docs/scripts/validate-install.sh` | all three build cards | MODIFY — A3 sourced-library exemption; A9 predicate plus denominator reconciliation and the A3b skip; A2 layout extension | CHEAP |
+| 3 | `update.sh` | Partial install, Ambient intake | MODIFY — completeness gate and new exit code; ambient-directory scaffold phase | CHEAP |
+| 4 | `core/deploy/tests/test_install_end_to_end.sh` | Partial install, Ambient intake | MODIFY — gate regression and positive control; ambient-artifact regression | CHEAP |
+| 5 | `core/deploy/tests/test_refresh_hooks.sh` | Partial install | MODIFY — entrypoint executability assertion plus anti-vacuity arm | CHEAP |
+| 6 | `docs/UPDATE.md` | Partial install | MODIFY — new exit-code troubleshooting section and the documented gap | CHEAP |
+| 7 | `core/deploy/tests/test_validate_install.sh` | Roster false-positive | **NEW** — the positive control, four arms | CHEAP |
+| 8 | `core/deploy/tests/run-install-regression.sh` | Roster false-positive | MODIFY — one regression-member row | CHEAP |
+| 9 | `docs/scripts/setup-workspace.sh` | Ambient intake | MODIFY — directory layout plus automation-dial seed | CHEAP |
+| 10 | `core/deploy/lib-instance-path.sh` | Ambient intake | MODIFY — three new path resolvers | CHEAP |
+| 11 | `docs/INSTALL.md` | Ambient intake | MODIFY — the activation step's documented home | CHEAP |
+| 12 | `docs/GETTING_STARTED.md` | Ambient intake | MODIFY — capability discoverability | CHEAP |
+| 13 | `core/config/operator.toml.template` | Ambient intake | MODIFY — comment accuracy on the seeded dial | CHEAP |
+| 14 | `core/standards/c1-ambient-inbox-cursor.md` | Ambient intake | MODIFY — note the install-provisioning dependency | CHEAP |
+| 15 | `core/standards/c2-intake-sweep-path-a.md` | Ambient intake | MODIFY — pointer to the documented registration home | CHEAP |
+| 16 | `core/standards/c3-external-sync-path-b.md` | Ambient intake | MODIFY — same pointer | CHEAP |
+| 17 | `core/config/allowlists/script-execution-allowlist.txt` | Dev-Testing enablement (own intake item; see D-18) | MODIFY — twelve rows plus rationale comments admitting three install-test scripts for agent-side execution | CHEAP |
+
+**Machine-readable path list.** One repository-relative path per line, no annotations, so a downstream stage extracts the set deterministically without parsing the table above.
+
+```
+core/deploy/deploy.sh
+docs/scripts/validate-install.sh
+update.sh
+core/deploy/tests/test_install_end_to_end.sh
+core/deploy/tests/test_refresh_hooks.sh
+docs/UPDATE.md
+core/deploy/tests/test_validate_install.sh
+core/deploy/tests/run-install-regression.sh
+docs/scripts/setup-workspace.sh
+core/deploy/lib-instance-path.sh
+docs/INSTALL.md
+docs/GETTING_STARTED.md
+core/config/operator.toml.template
+core/standards/c1-ambient-inbox-cursor.md
+core/standards/c2-intake-sweep-path-a.md
+core/standards/c3-external-sync-path-b.md
+core/config/allowlists/script-execution-allowlist.txt
+release/releases/plans/install-completeness-and-honest-reporting_RELEASE_PLAN.md
+```
+
+**Dropped from the cards' stated Affected Files, with reason.** `core/deploy/composition-surface-manifest.sh` — named on the Partial-install card but data-only; both allowlists it would need are already correctly rowed, so no change is required. `docs/scripts/setup-workspace.sh` is **not** dropped: the Partial-install card requires no change to it, but the Ambient-intake card does.
+
+**Schema-level impact:** none. No file under `core/schemas/` is touched by any card.
+
+**This plan file supersedes every card's own Affected Files block.** Where a card body and this matrix disagree, the matrix governs.
+
+---
+
+## Verification Plan
+
+### Per-issue
+
+| Card | Check | Method |
+|---|---|---|
+| Partial install | The completeness gate fires on an incomplete workspace and stays silent on a healthy one | End-to-end suite: remove one hook-tier surface, assert the new exit code and that the hook refresh did not run; restore, assert 0 or 64 |
+| Partial install | Hook entrypoints carry the executable bit; sourced libraries need only be readable | Refresh-hooks suite: entrypoint assertion with the sourced-library discriminator, plus an anti-vacuity arm proving the assertion can fail and a specificity arm proving the exemption fires |
+| Partial install | `core/deploy/deploy.sh` is executable in the index | Tree-entry read at HEAD against two sibling control arms known to be executable |
+| Roster false-positive | A9 no longer misclassifies operator-authored personal skills, and still catches a platform skill genuinely missing its version field | New four-arm positive control, registered as a regression member |
+| Ambient intake | The install lands the ambient directories and seeds the dial; nothing registers unprompted | End-to-end suite: assert the landed directories and dial plus a negative arm |
+| Autonomy default | The autonomy-mode artifact lands on a fresh install with the documented default | Existing per-hook mode-file assertion in the end-to-end suite — verify-only, no new code |
+
+### Release-level
+
+Run the install regression suite in full and record pass and fail counts. Run the deploy-check drift pass. Confirm the doc-link integrity check over every modified markdown file. Confirm the skill-package freshness gate reports nothing owed — no card in this release edits a rostered skill's definition.
+
+**Sandbox discipline:** every suite runs under a temporary-directory `HOME` override so the operator's live configuration is never a test target. Two of the suites additionally capture a before-and-after manifest of the live skills mirror as their own safety assertion.
+
+---
+
+## Rollback Strategy
+
+**First-parent revert of the release merge commit.** This requires a true two-parent merge commit; a squash merge would break it.
+
+All seventeen source paths revert cleanly. The mode change reverts with the tree entry — no data migration, no deploy reversal, no operator-instance state touched. The only non-git residue after a revert is the set of empty inert directories the Ambient-intake installer creates on any workspace that ran the shipped installer before the revert; they hold no data and removing them is optional.
+
+**Reversibility: CHEAP · Confidence HIGH.**
+
+---
+
+## Domain Practice Provenance
+
+No external domain practice was consulted. Every design decision in this release rests on **in-repo precedent** rather than an outside standard, and the precedent is cited at each decision point:
+
+- The sourced-library executability invariant is not a new decision. `doctor.sh` already implements it, states its rationale in full, and a regression test pins it by deliberately seeding those libraries at a non-executable mode. This release propagates that shipped decision to the one validator that silently disagreed with it.
+- The extend-before-create structural rule governed three of the four cards and resolved to `extend` on every surface. No card creates a net-new mechanism where an existing one could be extended.
+- The exit-code choice sits in the installer family's own custom numbering scheme. No mapping to a POSIX convention is claimed, and none is implied.
+
+---
+
+## Deviation Log
+
+| # | Deviation | Rationale | Disposition |
+|---|---|---|---|
+| D-1 | The Partial-install card's first acceptance criterion had a second limb requiring the executable bit on every file under the deployed hook library directory. That limb is **struck**. | Those files are sourced libraries consumed under a readability guard, never executed. They are correct at their shipped mode, and a regression test pins that mode as correct. Implementing the limb literally would have contradicted regression-pinned precedent and likely broken that test. | **Ratified by the operator** at the Collective Review scope-lock. The adopted invariant is: entrypoint implies executable; sourced library implies readable. |
+| D-2 | Fixing the **tracked** mode bit of `core/deploy/deploy.sh` is treated as in scope, though the card frames the defect as an `update.sh` symptom. | The deployed copy inherits its mode from the source through a plain copy, and the source has carried a non-executable mode since a single accidental transition. No clone has ever had the bit, so there is nothing for `update.sh` to "retain" — the card's fourth acceptance criterion is otherwise unsatisfiable. Verified as the only such transition in the repository's entire history against a non-empty control. | **Ratified.** Shipped in an isolated commit per R14. |
+| D-3 | The Ambient-intake default posture ships **inert and discoverable** rather than active. Two of its acceptance criteria consequently grade as requiring operator activation. | The reframing that decided it: only registration makes the platform act unprompted, and the installer's language cannot reach that surface at all. Active-on-install would require net-new auto-registration machinery, which the extend-before-create rule gates. | **Ratified**, with the counter-argument — that the capability ships dormant again — stated rather than suppressed, and accepted as the cost. |
+| D-4 | The Roster card fixes the Mode A denominator constant and unifies the sub-modes, but the self-asserting drift check it proposed is **declined**. | Extend-before-create sets the bar at *necessary*, not *plausible*. The constant is read nowhere — one occurrence, the declaration itself — so this is a source-honesty defect, not a behavioral one. Killing the drift class remains a legitimate goal and is routed as separate intake. | **Ratified.** |
+| D-5 | The Partial-install design specified an anti-vacuity arm asserting that the hook refresh **restores** an executable bit stripped from a content-identical entrypoint. Implemented instead as an arm asserting that the **assertion detects** the stripped bit, plus a specificity arm proving the sourced-library exemption fires. | The specified form cannot pass against live code. The refresh compares source and target by **content** hash; stripping the executable bit changes no content, so the run takes the unchanged-file path and returns before reaching any of the four sites that set the bit. The design's own testability table specifies the implemented form — strip the bit, the case fails — so the two halves of the design disagreed and the achievable half was taken. | Recorded at Commit 2. The underlying gap — a mode-only drift on a content-identical hook is never repaired — is a **real finding**, routed as separate intake rather than absorbed. |
+| D-6 | The completeness gate fires under `--dry-run` as well as on a real run. | The design is silent on the preview path. Two readings were available: skip the gate under preview, since nothing lands and no asymmetry is created; or fire it, because a preview that reports "no update needed" over a missing security-control allowlist is precisely the dishonest-reporting pattern this release exists to remove. The literal reading of the card's own criteria — exit non-zero when a deployed control is left list-less, and never report success over a partial install — selects firing. Verified non-breaking: every existing non-preview test arm runs against a fully-installed sandbox, and the sparse preview arms in the sibling durability suite assert on output text rather than exit code. | Recorded at Commit 2; named as a Stage-7 verification point. |
+| D-7 | The `docs/UPDATE.md` cross-reference edit lands in the "Verify" subsection of the procedure section rather than the section the design named. | The design named a section that does not contain the anchor line; the anchor lives one section earlier, in the subsection that already tells the operator to run the validator. That is the intended location by content. | Recorded at Commit 3. |
+| D-8 | The Roster card's design places the roster-exclusion INFO record between the check's failure branches and its terminal pass, so an excluded skill is announced only when the check otherwise passes. Implemented instead with the INFO emitted as soon as the population scan completes — ahead of every verdict — and the anti-vacuity guard moved ahead of the two skill-health failure branches. Both failure diagnostics also gained the denominator the pass already stated. | The design was **internally inconsistent**: its testability table specifies an arm whose fixture carries both a platform skill missing its version field *and* an excluded operator-authored skill, and requires that run to emit an INFO naming the exclusion — a run in which the check fails and returns before reaching the INFO under the specified ordering. The two halves cannot both hold. Reconciled toward the testability table, which is the half carrying the reason: which skills a narrowed check declined to assert over is a property of the scan, not of the outcome, and a reader debugging a failure needs the exclusion list more than one watching a pass. An exclusion visible only on success is the silent narrowing the guard exists to prevent. No behaviour changes on the pass path. | Recorded at Commit 6. |
+| D-9 | This plan states that no script-execution allowlist companion row is owed **on the new-executable ground**. **The conclusion stands; one supporting premise does not.** (Scope note added at the Dev-Testing return: rows were later added for a different reason — see **D-18**. This row's finding is unaffected, and its original wording is preserved below.) The Roster card's design asserted that no existing member of the install regression suite carries an allowlist row. One does — the most recently added member. | Verified directly against the allowlist: six files under the deploy-test directory carry rows, and one of them is a standing regression member (its row was added in the commit that created the script, not in the later commit that enrolled it — so the row travels with script creation, not with suite enrolment). The conclusion is unaffected on the mechanism: the allowlist governs whether an **agent session** may execute a script, not whether the platform or CI can. The new member runs correctly under the runner and in CI without a row, and eleven of the now-thirteen members — including the direct analogue this file is modelled on — carry none. **The practical consequence is real and is not a code defect:** without a row, neither Engineering nor Dev Testing can execute the new suite from an agent session. Not acted on here — the allowlist is a security control under a separate governed change. | Recorded at Commit 7. Surfaced to Dev Testing with the exact command. |
+| D-10 | The Ambient-intake design instructed that the automation key be added to the generator's managed-section set **only**, and explicitly NOT to its managed-key set, reasoning that key membership would re-emit the value from a token and reset a deliberate operator choice. Implemented the opposite: the key IS added to the managed-key set. | **The stated reasoning is falsified by the generator's own code.** That set is a duplicate-suppression list consulted by the section passthrough, not an overwrite list — three of its existing rows are likewise emitted through the operator-value-or-default helper and likewise keep the operator's value. Following the design literally emits the key twice, once from the helper and once from the passthrough, which is a duplicate key in a format that forbids one. Reproduced by executing the generator's embedded emitter against a prior config carrying a deliberate `off`: the design's form emits the key twice, the implemented form once. The design's *intent* — never reset an operator's deliberate value — is honored exactly, and by the mechanism that actually delivers it. | Recorded at Commit 9. Eleven assertions across two fixtures pass, including that an operator-added sibling key inside the section and an unrelated operator-added section both survive. |
+| D-11 | The three new path resolvers carry **two** declared tiers (operator.toml override, then the resolved default), not the three the design specified. | The three-tier shape the design named is copied from the evals resolver, which carries an environment-variable tier **because its writer already honored that variable** — a resolver ignoring it would read where the writer never writes. No such variable exists for any of these three tokens, verified against a control that returns forty-three hits for the evals variable on the same corpus. Minting three new variables to complete a symmetry that buys nothing is what the platform's no-new-variable rule forbids. Relocation by environment remains available one level up, through the instance-base resolver that already honors it — so nothing is lost. | Recorded at Commit 8. |
+| D-12 | The install validator's resolver is sourced **inside** the layout check rather than immediately before the constants block, where the design placed it. | The design's anchor cannot work: neither the source-repo variable nor its default exists at that point — both are declared *inside* the block the insertion would have preceded — so the library path would have resolved to a bare suffix and silently loaded nothing, leaving the new assertion permanently inert. That is the same silent-no-op class this release exists to remove. Sourcing a library from inside the function that needs it is the shipped idiom the installer's own scaffold functions already use, and the source-repo value is populated by the time the check runs. | Recorded at Commit 10. |
+| D-13 | The layout check degrades in **three** states, not the two the design specified. | The design's two-state form prints, on a run where the resolver could not load, a pass claiming eight directories present after checking five. A validator that reports a verdict it did not earn is precisely this release's subject; the third state reports the five it did check and says the ambient ones were not checked, naming why. | Recorded at Commit 10. |
+| D-14 | The Ambient-intake regression is **split across two locations** rather than appended as one stage at the tail, and it gains one arm the design did not specify. Three variable and mode names in the design's snippet were also corrected. | *Split:* by the tail of that suite a real update has already run, and the update path scaffolds the same directories — so a tail assertion could have passed on the update's work while the installer still created nothing. The landed-artifact assertions therefore sit in the post-install block, where nothing but the installer has run and a pass is attributable to it alone; the absence-detection and back-fill arms stay at the tail, where the validator and a second update run belong. *Added arm:* the update-side scaffold phase is new code with no other coverage, and it is what carries this capability to workspaces predating the release rather than to fresh installs only; leaving it unarmed would contradict this release's own success indicator. *Corrections:* the sandbox-config and repo-root variables the snippet named do not exist under those spellings, and the validator mode it named is not one of the four the validator accepts — it would have exited on an invalid-mode error rather than asserting anything. | Recorded at Commit 11. The pre-state control confirms all six new assertions fail at the pre-change baseline and pass after. **Reconciled at the Dev-Testing return:** one of the six did not in fact pass when run, for a fixture reason unrelated to the capability — see D-15, which fixes it. All six pass as shipped. |
+| D-15 | The Ambient-intake regression's sandbox now creates the workspace-root child that represents the platform clone, the stage gains a **baseline arm**, and its three validator reads run in preview mode. | Returned by Dev Testing. The layout check requires five workspace-root directories, one of them the clone itself; the documented install clones the repository into the workspace root and only then runs the installer, but this sandbox passes the repository in by flag from wherever it already lives, so that directory never existed and the check failed **unconditionally**. The consequence was worse than the one red assertion that exposed it: an arm phrased "the check fails when this directory is absent" is satisfied by *any* failure of that check, so the negative arm passed whether or not the capability worked — **an assertion never shown capable of failing**, which is this release's own subject reproduced inside a test written to enforce it. The fix restores the missing directory, and adds a baseline arm requiring the check to **pass** before the negative arm removes anything, so the two arms differ in exactly one variable. Preview mode is used for the three reads because the layout check behaves identically under it while the unrelated deploy-invocation check — minutes of work, asserted by nothing here, covered by its own suite — is skipped. | Recorded at the Dev-Testing return. Proven by mutation rather than asserted: suppressing the removal turns both negative assertions red, and suppressing the restored directory turns the new baseline arm red while the negative arms go green — the vacuity, reproduced and then caught. |
+| D-16 | The Partial-install card's third acceptance criterion — exit non-zero when a deployed control is left **non-executable or** list-less — shipped with only its list-less half. The executability half is now implemented, as a **sibling gate** rather than an extension of the existing one, reusing the same exit code; and the repair it depends on is added to the **installer**, inside the gap D-5 routed. | Returned by Dev Testing, which measured zero occurrences of any executability construct in the maintenance script against a control of eighteen in the installer. Composed with the D-5 hole, a hook could still be left non-executable while the run reported success — verbatim the defect the card exists to close. Three judgments, each argued rather than assumed. **Sibling, not extension:** the existing gate must run *before* the hook refresh because its job is to prevent it; this one can only be judged *after*, because the refresh is what sets the bit. **Same exit code:** both limbs are one operator-facing condition — a deployed control present but not operable — named by one sentence of one criterion, with one remedy; a second code would split one condition for no diagnostic gain. **Repair in the installer:** detection alone would have produced a permanently-red gate whose named remedy could not work, which is the inversion this release exists to remove — so the content-match branch of the hook installer, the one path that copied nothing and therefore chmod'ed nothing, now restores a missing bit. The two files stay in their own lanes: the installer owns deployment and repair, the maintenance script asserts the invariant and does not re-implement the fix. | Recorded at the Dev-Testing return. Covered end-to-end by three arms — the repair, a planted hook the refresh genuinely cannot repair so the gate has something real to catch, and a recovery arm proving the gate goes quiet again. A run that restores a bit now reports itself as having changed something rather than reporting no change. |
+| D-17 | The base branch is brought forward by a **merge**, not a rebase, and the generated hook-registry index is regenerated in the same pass. | Returned by Dev Testing: one base commit had become unreachable from the branch head. Rebasing would have rewritten nineteen commits and broken the declared rollback form, which is a first-parent revert of the release merge and therefore requires the branch's own history to stay intact. The merge is clean and the isolated mode-only commit survives it, verified against controls at a known-executable and a known-non-executable file. The index regeneration is a consequence rather than a choice: the merged commit changed a per-hook source without regenerating the index the deploy check asserts is fresh against it, so the index arrived stale — confirmed with controls in both directions — and the first deploy pass regenerated it. The regenerated output is mechanically derived from committed sources with zero authored content. | Recorded at the Dev-Testing return. |
+| D-18 | Twelve script-execution allowlist rows, plus their rationale comments, ship in this release — an addition to a bundle whose scope was locked at four cards. | Dev Testing could not execute any install-test suite: three committed test scripts carried no allowlist row, so the destructive-action guard correctly refused them, and the stage whose job is running suites could run none of them. Four alternatives were weighed with the operator — fix the guard first, proceed on reduced coverage, have the operator run the suites by hand, or add the rows — and the rows were selected as the narrowest change that unblocks the stage. **Named rows, not a directory glob:** a pattern would auto-admit any future file dropped in that directory, which is a materially weaker control than three named scripts. **This extends an existing convention rather than minting one** — the same directory already carried a four-form entry, and the new entries match its shape exactly, so the extend-before-create gate is satisfied. **The addition does not contradict D-9.** D-9 concluded no row is owed *because a new executable ships*, and that remains true; these rows are owed for a different reason that arose after D-9 was written — an agent session cannot execute an unrowed script regardless of who created it. **Governed rather than absorbed:** the change carries its own intake item and its own acceptance criteria, and it landed on this branch rather than a separate pull request so the release keeps one branch and one merge. | Recorded late, and the lateness is the finding. The rows were committed before this row existed, so for one Dev-Testing cycle the plan asserted twice that no allowlist row was owed or added while forty lines of allowlist sat on the branch — a plan actively contradicting its own diff. Dev Testing caught it on the Roster card. Recorded here at that return, together with the File Change Matrix correction the same omission required. |
+| D-19 | Four occurrences of the short-circuiting-reader pipeline are rewritten — one in the instance-path resolver, three in the roster suite's assertion helpers — plus a fifth in the cross-platform workflow's repo-root-guard check. | Returned by the repository-integrity SIGPIPE-idiom gate, which no review stage before it could execute. Under `pipefail` a reader that stops at its first match breaks the writer's pipe, and the writer's failing status becomes the pipeline's, so a *successful* match reports failure; on a hosted runner the signal disposition makes that a bare `1`, indistinguishable from no match. The consequential site is the roster suite's absence assertion, whose arms are match-to-FAIL and no-match-to-PASS: an inverted status routes a genuine match down the no-match arm and reports PASS while the forbidden pattern sits in the output — a vacuous assertion inside the four-arm anti-vacuity control this release built. **The control's prior evidence is nonetheless valid, and that was established rather than assumed.** The inversion is a size latch, not a constant: the writer completes its single write into the pipe buffer before the reader can exit, and only takes a broken pipe on a *subsequent* write. A size sweep puts the piped form correct through 33,507 bytes and inverted at 67,007 — the 64 KiB pipe capacity — while the measured payload at the real call sites is 3,464 bytes. The sibling presence-assertion shares the pipeline byte-for-byte and passed on the hosted runner, which it can only do at a zero pipeline status; the absence assertion therefore discriminated too. What shipped was a latent latch that would have closed silently the first time an arm's output grew, not a control that was never live. **Reader removed rather than tolerated:** the resolver takes first-match with `grep -m1` so no writer exists to signal, and the assertion helpers read from a here-string, which reproduces the prior writer byte-for-byte and leaves the reader's own status as the predicate at any size. | Recorded at the CI return. The fifth site is a reconciliation inside a block being edited for D-20 rather than a gate finding: it is the same idiom guarding a required check, where an inversion would report the repo-root guard silent while it had fired, and seeding that sandbox grows the captured output toward the latch rather than away from it. |
+| D-20 | The cross-platform matrix's Linux leg installs its sandbox's hook-tier composition surfaces before invoking the maintenance script, where it previously passed a bare empty directory. | Returned by CI, which carried an arm no earlier stage had: the leg asserts on an **exit code** against a workspace that was never installed, and D-6's non-breaking verification had surveyed only arms that assert on output text or run against a complete sandbox. Three readings were open and the evidence separates them cleanly. The maintenance script regenerates and refreshes an existing install and can never create one — its own phase output says so once per absent target — so a bare directory asks it to maintain something that does not exist, and the verdict it returns is about that, not about the working directory the leg exists to test. The macOS sibling covering the identical property has always run a real installer first, in a step whose comment states the reason outright: so the maintenance run reaches its later phases with real targets. This leg was an inline shortcut that skipped that precondition, and the workflow has been green on the mainline throughout, so the fixture was always incomplete and the gate merely made it observable. **D-6 is therefore not reversed:** firing under preview stays correct on its own argument, since a missing composition surface is one the maintenance script can never repair, and the sibling executability gate stays preview-exempt for the opposite and equally deliberate reason. The two keep their opposite preview behaviour. **Seed derived from the shared manifest, never a copied list of filenames** — the manifest's stated contract is that a new surface costs one row and no other code change, and a hardcoded list would break that quietly by under-seeding a later addition. An anti-vacuity guard fails the step outright if the manifest ever resolves to an empty population. | Recorded at the CI return. Verified against a faithful local copy of the leg's sandbox: unseeded reproduces the incomplete-install exit with the CI banner byte-for-byte, seeded exits zero and runs through the hook-refresh, settings-refresh and version-snapshot phases to completion. The leg now covers more of the maintenance flow than it did before — it previously stopped at the skill-redeploy phase and never exercised the hook or settings refresh at all. |
+
+---
+
+## Change Description
+
+*Operator-facing. Authored at Engineering Commit 0 for the release as scope-locked; each card's Engineering spoke extends the per-card detail as its work lands.*
+
+### Outcome
+
+Three tools stop lying about the state of an install. The maintenance command stops announcing success over a workspace it left half-configured — it now refuses to install a security control whose escape hatch is missing, names what is absent, and exits with a dedicated code. The deploy script ships executable again, so the invocation the documentation has always told operators to run actually works, and the validator check that exists to run it stops silently skipping. And the install validator stops failing a healthy install over a class of file that is correct exactly as it ships.
+
+### Issues resolved (4)
+
+Three build cards and one verify-only card, listed in § Scope and enumerated with their numbers in § Provenance. The verify-only card confirms an artifact that shipped in a prior release actually lands on a fresh install.
+
+### Key decisions
+
+Two premises stated in the tickets were rejected and the rejections ratified by the operator before any code was written. The first: a set of deployed files flagged as "hooks that can never run" are not hooks — they are libraries other hooks read, and they are correct without an executable bit. The real defect was one validator disagreeing with its sibling. The second: a capability that "never activates on install" ships scaffolded and documented rather than auto-registered, because the installer structurally cannot reach the surface that would register it.
+
+### Reversibility
+
+**CHEAP.** First-parent revert of the release merge restores every file. No data migration, no deployment to reverse, no operator data touched.
+
+### Downstream impact
+
+One validator check changes *kind* rather than merely verdict: it stops early-returning and starts actually invoking the deploy check. Its outcome is deliberately not predicted here and is captured as evidence at Dev Testing.
+
+### Cross-references
+
+A sibling milestone changes the content of one file this release changes the mode of. The two merge independently; the mode change ships isolated so a rebase cannot absorb it.
+
+---
+
+## Verification Evidence
+
+*Populated by each card's Engineering spoke as its work lands, and consolidated before the review gate.*
+
+### Roster false-positive — Engineering
+
+**Executed.** The QA-as-code suite in read-only mode: **12 PASS / 0 FAIL**. Its member-integrity check independently confirms the suite enrolment landed — it reports all **thirteen** regression members resolving to real test files, where the prior run reported twelve. The deploy-check drift pass: **exit 0**, which also discharges the doc-link integrity check over the modified markdown. Parse checks and static analysis on all three touched shell files: clean, with **no new static-analysis findings**; the two findings the validator carries are present identically at the pre-change baseline and are themselves the corroboration that the Mode A total was a dead constant. Skill-package freshness: **nothing owed by this card** — its four changed paths include none under any module's skills directory.
+
+**One inherited condition, surfaced because it is a likely pre-merge blocker and this release did not cause it.** The drift pass reports three findings. Two are the count-structure pair the upstream card already recorded as pre-existing, in files no card here touches. The third is new since that run and is more consequential: the packaged artifact for one skill is **stale against its own source**, and package freshness is a **hard pre-merge gate**, not a warn-mode advisory. Attribution is unambiguous — the branch is byte-identical to the mainline for both that skill's source and its package, so nothing here introduced it; the source was last changed by an automated dependency bump to a lockfile under that skill's evaluation-viewer tests, two days *after* its package was last rebuilt, and no rebuild followed. The remedy is a single package-rebuild invocation, but the skill is unrelated to this release and rebuilding it here would widen the change set beyond the locked scope. **Routed to the review gate as an operator call rather than absorbed.**
+
+**Residual, re-derived rather than inherited.** The card predicted a post-upstream state of ten passes and one failure. That prediction is superseded and was not carried. Measured against the live deployed mirror at the branch tip, by two independent methods that agree:
+
+| Quantity | Observed | Method |
+|---|---|---|
+| Deployed skills in the mirror | 54 | directory enumeration |
+| Declared in the source roster | 56 | source-tree enumeration |
+| Recognised as platform-managed | 52 | set intersection — **non-zero, so the anti-vacuity guard correctly does not fire** |
+| Excluded as non-platform | 2 | set difference — exactly the two operator-authored skills the card names |
+| In the roster but not deployed | 4 | set difference the other way — correctly ignored, which is the intersection-filter invariant holding on live data |
+| Deployed skills lacking a version field, whole mirror | 2 | independent field grep — the same two names, by a different method |
+| **Platform-managed skills lacking a version field** | **0** | intersection of the two above |
+
+So the check flips from failing to passing on real operator state, emits one informational record naming the two excluded skills, and stops suppressing the first-task validations. The arithmetic closes in both directions (52 + 2 = 54 deployed; 52 + 4 = 56 declared), and the pass now states that denominator itself.
+
+**What the mode-A total resolves to.** Both sub-modes emit twelve step records, counted directly from each routing function against a control that discriminates. The informational record is excluded by construction, so it does not move the total.
+
+**Not executed, and why.** The four-arm control could not be run from the Engineering session: the destructive-action guard blocks subprocess execution of any script without an allowlist row, and neither the new suite nor the validator it drives carries one. The stdin-redirect and guard-bypass workarounds were declined as evasion of a security control rather than compliance with it, matching the upstream card's call. What was verified instead: both directions of the version-field predicate the arms pivot on were evaluated directly and return one and zero as designed. The runtime command is handed to Dev Testing, which owns the authoritative run.
+
+**Contention held.** Zero shared lines with the upstream card's edit to the same file, verified at line-content level rather than by hunk range: the intersection of the lines that card added with the lines this card removed is empty, against a positive control that returns non-empty when a shared line is deliberately planted, and all twenty-two of its added lines remain present in the merged file.
+
+---
+
+### Ambient intake — Engineering
+
+**Shape held exactly: 11 MODIFY, 0 NEW, 0 DELETE, 0 new executables**, across seven commits. Verified structurally rather than by eye — no file changed mode, no file became executable, and every changed path is a member of the release-level matrix above. No script-execution allowlist companion row is owed, and none was added.
+
+**Executed.** The QA-as-code suite in read-only mode: **12 PASS / 0 FAIL**. The deploy-check drift pass: **exit 0**, which also discharges the doc-link integrity check over the four modified markdown files. Static analysis on all four touched shell files: **zero new findings** — each file was compared against its own pre-change baseline and reports the identical finding set at the identical lines (four in the installer, six in the update script, two in the validator, none in the end-to-end suite).
+
+**The three drift findings are all inherited.** The stale package for one skill and the count-structure pair are the same three the two upstream cards attributed to the mainline. Attribution re-derived independently here rather than inherited: none of this card's eleven paths lies under any module's skills directory, none is a package artifact, and neither count-structure file is in the change set.
+
+**Both directions of the regression, proven without running it.** The suite could not be executed from this session (see § Not executed). The pre-state control the acceptance criteria require was therefore established by extracting the **shipped** generator and installer from the pre-change branch tip and evaluating each new assertion's own predicate against them. All six new assertions **fail** before this card and **pass** after, with a specificity arm for a condition neither side satisfies. A regression that passes before the fix is not a regression, and this one does not.
+
+**The automation dial, verified against the real generator.** The generator's embedded emitter was extracted from the installer and executed against two fixtures — a fresh install with no prior config, and a re-bootstrap over a workspace whose operator had deliberately set the ceiling to `off`. Eleven assertions pass: the section and the key each appear exactly once, the deliberate `off` survives, an operator-added sibling key inside the section survives, and an unrelated operator-added section is untouched. This is what falsified the design's managed-set instruction (D-10).
+
+**Discoverability, measured.** The search across the onboarding documents that returned zero files now returns two, against a fabricated-token control that returns zero.
+
+**Contention held, and was verified function-by-function rather than by hunk range.** Exactly one function body in the shared validator changed, and it is the layout check. The upstream card's hook-layout check is byte-identical, its hook-count floor is undisturbed, and its sourced-library exemption is not duplicated. The sibling card's roster check, its informational-record helper, and both mode routers are byte-identical. In the update script, the completeness gate, the hook-refresh flow and the hook installer are all byte-identical to the pre-change tip.
+
+**On the mode denominator, stated plainly because the sibling card's handoff asks for it.** The layout check now carries three emit call sites where it carried two. They are the three mutually exclusive branches of one chain and the function has no early return, so it emits exactly one record per run as before — **three call sites, zero new emitters**. Measured at the routers, where one line is one emitted record, both sub-modes still count twelve, and the constant is untouched.
+
+**Two acceptance criteria grade `N/A — requires operator activation`,** as granted at the scope-lock gate. Both require the sweep to execute, which requires an operator-performed registration and an executor that does not exist. Nothing in this card was contorted to satisfy them.
+
+**Rollback.** All eleven files revert with a first-parent revert of the release merge. The non-git residue is three empty directories on any workspace that ran the shipped installer before the revert; they hold no data and removing them is optional. **There is nothing to deregister** — the ratified posture performs no registration, so the one part of this card a revert could not have restored does not exist.
+
+**Not executed, and why.** The end-to-end suite and the regression runner could not be run: the destructive-command guard refuses subprocess execution of any script with no allowlist row, and neither carries one. The parse-only check on one library was refused on the separate argument-selection path. Neither refusal was worked around — no redirect, no wrapper, no bypass — and the allowlist was not touched. The runtime commands are handed to Dev Testing.
+
+---
+
+### Dev-Testing return — Engineering
+
+**The baseline is restored and exceeded.** The standing install-regression suite returns **978 passed, 0 failed**, at the runner's own exit code **0** — read from a file written in the same command as the run, never through a pipe. The merge-base returns 908 / 0; the head Dev Testing reviewed returned 950 passed with **one** failure and exit code **1**. The arithmetic between those two closes exactly: eleven from the end-to-end suite (ten new assertions, plus the one previously-failing assertion flipping to a pass) and seventeen from the hook-test floor, which is what the base-branch merge brought in. **No failure remains that is attributable to this release.**
+
+Every other member is unchanged, including the two that matter most as pins: the upgrade-durability suite at 114 / 0, which is the no-change-exit-code contract the completeness gate could have broken, and the doctor suite at 42 / 0, which is the regression pin holding the struck acceptance limb's sourced-library modes at their correct value.
+
+**Executed.** The QA-as-code suite in read-only mode: **12 PASS / 0 FAIL**, exit 0. The validator regression suite standalone: **29 / 0**, exit 0. The deploy-check drift pass: **exit 0**, which also discharges doc-link integrity over the modified markdown. Static analysis on all three touched shell files, each compared against its own pre-change baseline: **zero new findings** — the update script reports the identical six, the installer the identical four, and the end-to-end suite none.
+
+**The three drift findings are the same three inherited ones**, re-attributed here rather than carried: the stale package for one unrelated skill, and the count-structure pair. Verified directly — this return's change set contains **zero** paths under any module's skills directory or the package tree, and neither count-structure file is among its nine changed files, against a control confirming the change set itself is non-empty.
+
+**The generated hook-registry index is now in sync.** The base-branch merge arrived carrying a per-hook source change whose index had not been regenerated; the index was regenerated and committed, and the deploy check's freshness assertion over that exact pair now reports in sync. Left alone it would have been a drift finding on this branch for a defect the branch did not cause.
+
+**The two returned defects, each proven rather than asserted.**
+
+*The executability limb.* The maintenance script now carries twelve executability constructs where it carried none, against a sensitivity control of twenty-four in the installer and a specificity control of zero — and the functional test is among the matched lines, not just the prose. End-to-end coverage runs three arms: the repair restores a bit stripped from a content-identical hook; a planted hook the refresh genuinely cannot repair proves the gate fires, names the file, and stops before the registrations that name these scripts are wired; and removing it returns the run to a clean exit, so a gate that fired unconditionally could not masquerade as one that works. **Checked against the operator's live install rather than assumed:** zero non-executable files in the population the gate scans, against a sensitivity control of twenty-three present and a specificity control of twenty-three executable — the arithmetic closes in both directions, so the gate will not fire on a healthy workspace.
+
+*The vacuous layout arms.* Proven by mutation, twice. Suppressing the directory removal turns **both** negative assertions red, so they discriminate. Suppressing the fixture fix — reproducing the pre-return sandbox exactly — turns the new baseline arm red **while both negative arms go green**: the vacuity itself, reproduced on demand and caught by the one arm added to catch it. Both mutations were reverted and the tree verified clean before the work continued.
+
+**A cost this release was carrying, now measured and mostly gone.** Dev Testing found that repairing the deploy script's executable bit made the validator's deploy check actually run, at roughly six minutes, and that the end-to-end suite paid it twice — taking that member from seconds to about fifteen minutes. Measured here: the deploy check itself takes **438 seconds**, confirming the estimate. The end-to-end member now completes in **27 seconds**. The three layout reads run in preview mode, where the layout assertion behaves identically — it carries no preview branch, and its verdict line is printed before the record-keeping step returns early — while the unrelated deploy invocation, which nothing in that stage asserts and which has its own suite, is skipped. The remaining cost is the operator-facing one: the required post-update validator run genuinely takes that time now, because the check has stopped silently skipping. That is the card working, not a regression, and it is left as an operator decision rather than absorbed here.
+
+---
+
+## Deployment Execution Log
+
+*Populated at Stage 12.*

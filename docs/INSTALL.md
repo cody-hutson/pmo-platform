@@ -157,6 +157,34 @@ The script prints a per-check status line and exits 0 on success. If any check f
 
 For deeper reference on what setup did and why, see [workspace-setup.md](workspace-setup.md).
 
+### 3a. Activate ambient intake (optional, operator-performed)
+
+**Ambient intake** watches a drop-zone directory for transcripts and emails, classifies and registers what appears there on a schedule, and — separately — polls your external tracker for changes. Install lays the groundwork for it; it does not switch it on.
+
+**What install already did.** Setup created three directories under your operator-instance folder — `inbox/` (the drop-zone), `ambient-intake/` (the sweep's run-log), and `external-sync/` (the tracker-poll snapshot and its run-log) — and seeded `automation_level` in your `operator.toml`. Resolve where they landed:
+
+```bash
+grep -A1 '^\[automation\]' ~/.config/pmo-platform/operator.toml
+ls -d "${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"/personal/pmo-instance/{inbox,ambient-intake,external-sync}
+```
+
+**Nothing runs until you register the scheduled tasks.** This is deliberate, and it is the one step the installer cannot perform for you: the tasks live on the agent-runtime scheduled-task surface, which a shell script has no way to reach. The same rule already governs the platform-health sentinels — the platform ships the specification, your instance owns the registration, because a registration carries an instance-local path and is not portable.
+
+To activate, register two scheduled tasks on the `mcp__scheduled-tasks` surface from an agent session:
+
+| Task name | What it does | Prompt to register it with |
+|---|---|---|
+| `ambient-intake-sweep` | Enumerates the drop-zone, skips files already ingested, and drives the daily intake steps | The thin-bootstrap prompt in [`core/standards/c2-intake-sweep-path-a.md`](../core/standards/c2-intake-sweep-path-a.md) § 9 |
+| `external-sync-path-b` | Polls your configured tracker adapters, diffs against the snapshot, and proposes reconciliations | The thin-bootstrap prompt in [`core/standards/c3-external-sync-path-b.md`](../core/standards/c3-external-sync-path-b.md) § 10 |
+
+Both prompts are deliberately thin: they point at the tracked specification rather than copying it, so the registration cannot drift away from the source. Register them with a once-daily cadence at an early-morning local hour, and with completion notification on — every run pings and writes a run-record, which is what makes a silent failure visible.
+
+**How much the sweeps may do on their own** is governed by `automation_level` in your `operator.toml`. The seeded default, `recommend`, means the platform drafts and surfaces but writes nothing without your approval. The other values are `off` and `bounded_auto`; the template at `core/config/operator.toml.template` documents what each one permits.
+
+**To reverse any of this:** delete a scheduled task or set it to `enabled:false` — that is the reversal for the registration half, which no revert can undo because it is not a tracked file. To keep a registered sweep quiet without deregistering it, set `automation_level = "off"`. The three directories are inert when empty and can be left in place or removed with `rmdir`.
+
+**One operational caveat:** scheduled tasks run only while the agent application is open. A task whose window passes while the app is closed defers to the next launch. That is a property of the scheduler, not a fault in the sweep.
+
 ---
 
 ## 4. Next steps
