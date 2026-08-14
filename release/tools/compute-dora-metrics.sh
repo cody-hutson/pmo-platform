@@ -175,8 +175,8 @@ rollbacks = []  # (ts_iso, version)
 # Versions carrying at least one FAILED deploy-target row (#4215). A failed deploy is
 # a change failure, and before this set existed it entered the change_failure_rate
 # DENOMINATOR ONLY — the numerator was keyed exclusively to a self-repair/rollback
-# event — so a release whose every target failed reported 0.0% (0/1). The platform's
-# change-failure rate IMPROVED as its deploys failed, permanently, in an append-only
+# event — so a release whose every target failed reported 0.0% (0/1). The change-failure
+# rate of the platform IMPROVED as its deploys failed, permanently, in an append-only
 # log. Occasion MEMBERSHIP deliberately still counts a failed deploy: a deploy that ran
 # and failed is a deployment event, so it belongs in the denominator too. What changed
 # is that it now also reaches the numerator.
@@ -264,8 +264,14 @@ lead = {"value_seconds": lead_median, "n": len(lead_secs), "na_reason": lead_na}
 # union rather than either one alone: a rollback says the deploy landed and was then
 # undone; a failed deploy-target row says it never landed at all. Both are change
 # failures. Keying the numerator only on rollback — the pre-#4215 behaviour — made a
-# totally-failed deploy read as a clean one. `occasions` is already window-sliced, so
-# the membership test below applies the window to both signals.
+# totally-failed deploy read as a clean one. The occasions list is already
+# window-sliced, so the membership test below applies the window to both signals.
+#
+# EDITOR NOTE: keep this heredoc body free of apostrophes and backticks. The body is a
+# quoted heredoc nested inside a command substitution, and an unpaired apostrophe here
+# opens a quote context in the scanner of the OUTER shell that never closes — the file
+# then fails to parse hundreds of lines later, at the first parenthesis inside a string.
+# shellcheck does not catch it; only bash does.
 failed_versions = {ver for _, ver in win_rollbacks} | failed_deploy_versions
 failed_occ = sum(1 for ver, _ in occasions if ver in failed_versions)
 if freq_n == 0:
@@ -374,8 +380,8 @@ ROWS
 
   # Test 6: CFR real-zero vs N/A discriminator — zero failures WITH occasions -> 0.0%
   #         (a real clean-window value, NOT N/A); zero occasions -> N/A.
-  ZERO_JSON="$(/usr/bin/printf '%s\n' "| 2026-01-05T10:00:00Z | v2.00 | 12 | deployment-status | deploy-skill | hub | s | CHEAP | resolved | p |" \
-    | "$PY" -c "$AGG_PY" "" "30" "" "$ST_NOW")"
+  ZERO_ROW="| 2026-01-05T10:00:00Z | v2.00 | 12 | deployment-status | deploy-skill | hub | s | CHEAP | resolved | p |"
+  ZERO_JSON="$(/usr/bin/printf '%s\n' "$ZERO_ROW" | "$PY" -c "$AGG_PY" "" "30" "" "$ST_NOW")"
   ZFREQ="$(_dora_field "$ZERO_JSON" deployment_frequency value)"
   ZCFR="$(_dora_field "$ZERO_JSON" change_failure_rate value_permille)"
   [[ "$ZFREQ" == "1" ]] || die "self-test: zero-failure window occasions = $ZFREQ, expected 1"
@@ -437,9 +443,8 @@ ROWS
 
   # DF-4 — the two failure signals UNION rather than double-count. A release carrying
   #        BOTH a failed deploy row and a rollback is one failed occasion, not two.
-  DF_JSON="$(/usr/bin/printf '%s\n%s\n' "$DF_FAIL_ROWS" \
-    "| 2026-01-08T13:00:00Z | slug-allfail | 13 | self-repair | rollback | operator | s | MODERATE | resolved | p |" \
-    | "$PY" -c "$AGG_PY" "" "30" "" "$ST_NOW")"
+  DF_RB_ROW="| 2026-01-08T13:00:00Z | slug-allfail | 13 | self-repair | rollback | operator | s | MODERATE | resolved | p |"
+  DF_JSON="$(/usr/bin/printf '%s\n%s\n' "$DF_FAIL_ROWS" "$DF_RB_ROW" | "$PY" -c "$AGG_PY" "" "30" "" "$ST_NOW")"
   R="$(_dora_field "$DF_JSON" change_failure_rate failed)"
   [[ "$R" == "1" ]] || die "self-test: DF-4 rollback + failed-deploy on one release is ONE failed occasion, got $R"
 
@@ -447,9 +452,8 @@ ROWS
   #        occasion failed, because deploy-package is not part of the occasion set at
   #        all; without this arm the numerator could be keyed on any deployment-status
   #        row and DF-1 would still pass.
-  DF_JSON="$(/usr/bin/printf '%s\n%s\n' "$DF_OK_ROWS" \
-    "| 2026-01-08T11:30:02Z | slug-allok | 12 | deployment-status | deploy-package | hub | package:p | CHEAP | escalated | result:FAIL |" \
-    | "$PY" -c "$AGG_PY" "" "30" "" "$ST_NOW")"
+  DF_PKG_ROW="| 2026-01-08T11:30:02Z | slug-allok | 12 | deployment-status | deploy-package | hub | package:p | CHEAP | escalated | result:FAIL |"
+  DF_JSON="$(/usr/bin/printf '%s\n%s\n' "$DF_OK_ROWS" "$DF_PKG_ROW" | "$PY" -c "$AGG_PY" "" "30" "" "$ST_NOW")"
   R="$(_dora_field "$DF_JSON" change_failure_rate value_permille)"
   [[ "$R" == "0" ]] || die "self-test: DF-5 SPECIFICITY — a failed deploy-package row is not an anchor and must not mark the occasion failed, got ${R}permille"
 
