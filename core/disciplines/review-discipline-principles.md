@@ -269,9 +269,9 @@ Section 1 vs. Section 7 is the output-vs-posture boundary. If a failure shows up
 
 Section 1 Rule 15 forbids reporting a zero, clean, absent, or N-of-M result the probe has not been shown to produce validly. Section 8 defines the record format, the arm-selection rule, the verdict rule, the declared coverage boundary, and the rejection threshold.
 
-Element IDs `PV-0` through `PV-6` are stable and citable individually. Consuming surfaces cite them by identifier; they do not restate them.
+Element IDs `PV-0` through `PV-7` are stable and citable individually. Consuming surfaces cite them by identifier; they do not restate them.
 
-### § 8.1 — The obligations (PV-0 … PV-6), the riders, and the verdict rule
+### § 8.1 — The obligations (PV-0 … PV-7), the riders, and the verdict rule
 
 ```
 PV-0  INVOCATION.   Cite the exact command, query, or read that produced the result,
@@ -363,6 +363,55 @@ PV-6  INSTRUMENT FORM.
                     from "nothing examined." The § 8.2 record form is the shape; a
                     mechanized check may render it as structured output.
 
+PV-7  MEASUREMENT STATE.
+                    A check must be able to report its own degradation. Its emitted
+                    state set carries a DISTINCT member for every reachable state of
+                    its predicate; a degraded or unmeasured state NEVER shares a
+                    member with the clean state. Three obligations follow:
+
+      PV-7a  VOCABULARY. The state is named from the closed set below, in whichever
+             of the two registers the surface emits.
+               Register A - machine-readable status field, read by a caller:
+                 fetched    the population was examined in full
+                 truncated  examined, but the enumeration is a SAMPLE
+                 degraded   the read FAILED; the population is UNMEASURED, never 0
+                 not-run    deliberately not attempted on this path
+                 fixture    self-test input, not live state
+               Register B - the human-readable emitted token:
+                 NOT-EVALUATED   the whole leg or indicator was not measured
+                 DEGRADED        measured, but partial or via a fallback
+             A NOT-EVALUATED emit carries the clause "this is not a clean result".
+             No third spelling. A surface that needs a state this set cannot express
+             amends this rider; it does not coin a local token.
+
+      PV-7b  ABSENCE, NOT ZERO. On a non-measuring status the counters are ABSENT
+             from the emit, not zero. Absence from a source is information; a zero
+             is a measurement. A CONSUMER MUST BRANCH ON THE STATUS FIELD BEFORE
+             READING ANY COUNTER - reading the count alone consumes "nothing was
+             examined" as "nothing was found".
+
+      PV-7c  FAN IN, NEVER OUT, AND NEVER GATE. A degraded measurement emits EXACTLY
+             ONE finding naming the cause; per-item verdicts are WITHHELD, never
+             guessed. The emit routes through an emitter that is STRUCTURALLY
+             incapable of escalating - no mode branch and no failure-counter
+             increment in its body - so a measurement outage can never gate. One
+             root cause must not become one finding per item.
+
+      PV-7 vs the VERDICT RULE below. PV-7 states whether the MEASUREMENT occurred.
+      INDETERMINATE states whether the PROBE is valid. They are different registers
+      and neither is a spelling of the other.
+
+      SANCTIONED IMPLEMENTATIONS (each answers a different question; they compose,
+      they do not compete):
+        emitter     a structurally non-escalating emitter - no mode branch, no
+                    failure-counter increment; the guarantee is in the shape, not
+                    in a default some future edit can flip
+        transport   a distinct input-failure exit code, so the state survives a
+                    process boundary
+        terminal    the NOT-EVALUATED token - the whole leg was not measured
+        partial     the DEGRADED marker - an inline annotation on an otherwise
+                    normal emit
+
 VERDICT RULE
   (every line names an arm; the bare word "control" is not a verdict input)
 
@@ -417,11 +466,13 @@ MAPPING INTO A CONSUMING VERDICT ENUM
                            (or: NOT TRIGGERED — <which PV-2c condition fails>)
 **Extraction:** <bytes or lines read> for the subject; <same> for each control arm
 **Result:** <N>
+**Measurement state:** <Register A status> / <Register B token, if emitted>
+                       (or: MEASURED - full population examined)
 **Verdict:** CLEAN | INDETERMINATE (<missing element>) | BROKEN PROBE |
              OVER-MATCHING PROBE
 ```
 
-### § 8.3 — Coverage map: the 12 observed shapes against the catching clause
+### § 8.3 — Coverage map: the 13 observed shapes against the catching clause
 
 ```
  #  Shape (as observed)                                        Class                        Clause      Caught
@@ -445,28 +496,31 @@ MAPPING INTO A CONSUMING VERDICT ENUM
     text does not carry (a false ALARM)                        wrong pattern                PV-4        yes
 12  Predicted instead of measured — state reasoned about
     rather than read                                           no probe at all              PV-0        yes
+13  Instrument emits the same output for a degraded measurement
+    and for a clean result                                     unrepresentable
+                                                               degraded state               PV-7        yes
 
-Verdict: 10 of 12 shapes are caught by a self-executable clause; 2 are not (shapes 5, 9).
+Verdict: 11 of 13 shapes are caught by a self-executable clause; 2 are not (shapes 5, 9).
 ```
 
 ### § 8.4 — Declared coverage boundary (state this; do not imply more)
 
 ```
-COVERED — 10 of the 12 observed shapes, across 6 classes:
+COVERED — 11 of the 13 observed shapes, across 7 classes:
   wrong-denominator (2 shapes) . truncated-or-empty-extraction (3) .
   non-discriminating-predicate (2) . wrong-scope (1) . no-probe (1) .
-  wrong-pattern-false-alarm (1).
+  wrong-pattern-false-alarm (1) . unrepresentable-degraded-state (1).
 The class names are the unit of this list and the shape count is the unit of the
 numeral; both are stated so the two can be reconciled against Section 8.3 in one
 read rather than inferred.
 
-NOT COVERED — SHAPE BOUNDARY: wrong subject (a 7th class, 1 shape). When the probe
+NOT COVERED — SHAPE BOUNDARY: wrong subject (an 8th class, 1 shape). When the probe
 examines a different artifact than the claim is about, both control arms behave
 correctly and the record looks healthy. No self-check detects it. It is caught only
 by a reviewer comparing the artifact named in PV-1 against the artifact the claim
 concerns. Stated as a residual risk, not implied as covered.
 
-NOT COVERED — MATCH-UNIT BOUNDARY: match unit != semantic unit (an 8th class, 1
+NOT COVERED — MATCH-UNIT BOUNDARY: match unit != semantic unit (a 9th class, 1
 shape — shape 9). A line-anchored probe over hard-wrapped text returns zero on a
 clause spanning a line break while PV-3 is satisfied: the extraction was whole and
 untruncated, so no clause fires and the verdict rule returns CLEAN on a false zero.
