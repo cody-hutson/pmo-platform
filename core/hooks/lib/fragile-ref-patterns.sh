@@ -34,6 +34,41 @@
 #   per surface, in the form:
 #       - <path>:<line>  <local name> — <the different question this surface answers>
 #
+#       - core/deploy/deploy.sh:6997  c23_dc6 — CONTENT AUTHORITY, not reference durability.
+#         Check 25's DC6 asks whether a citation's load-bearing content lives OUTSIDE the
+#         repository (core/standards/universal-vs-localized-context.md §7/§10); the constants
+#         here ask whether a reference will still RESOLVE. That standard states the two
+#         dimensions are independent. DC6 is also a one-shot grep with no downstream stage,
+#         so its leading (^|[^A-Za-z0-9]) guard does discrimination work ISSUEREF_RE defers
+#         to the hex mask and positional-issueref.awk — the two are not interchangeable at
+#         the constant level, and every absorb variant was measured to change DC6's match
+#         behaviour. The c23_ prefix is VESTIGIAL: the family lives in Check 25, renamed at
+#         Stage 9 after a pre-merge number collision, and the prefix survived the rename.
+#         The reason is repeated at the declaration itself, so it is reachable from
+#         either end.
+#       - core/skills/pmo-qa-auditor/scripts/fitness-audit-search-primitives.sh:92
+#         CF3_ISSUE_RE — EVIDENCE-BAR RESOLVABILITY, not durability. One of a CF1-CF4 family
+#         (core/skills/pmo-qa-auditor/references/fitness-audit-mode-spec.md:89) that extracts
+#         citation tokens to score whether an audit claim carries resolvable evidence. It is
+#         a token extractor for a metric, not a detector of fragile references, and it is
+#         specified in that mode spec rather than by reference-durability-standard.md.
+#       - core/deploy/deploy.sh:7569-7570  c31_link_re / c31_cutover_re — KNOWN-UNCOVERED,
+#         and deliberately NOT admitted under the different-question rule above. These are
+#         BYTE-IDENTICAL copies of LINK_RE and CUTOVER_RE answering the SAME question, held
+#         to this file only by an adjacent comment asserting that identity. They are named
+#         here so the population below is complete and gradable; the honest disposition is
+#         to source them, which no card in this release owns. A row admitted on a real
+#         different-question reason and a row recording an open duplication are different
+#         things, and collapsing them would make this registry a laundering surface.
+#
+#   POPULATION — measured, not asserted: 3 non-sourcing declaration families across the 284
+#   tracked shell/YAML/Python/awk files, found by a VALUE-shaped census. A NAME-shaped one
+#   returns zero for all three: each carries a different variable name, which is exactly the
+#   class that escaped the earlier consolidation and the reason the runner's second arm
+#   searches by shape. Separately, the identity runner's advisory arm reports inline copies
+#   of the reference-block shape that declare no constant; those are named on every run
+#   rather than listed here, because a row form keyed on a local name cannot hold them.
+#
 # core/hooks/lib/positional-issueref.awk is NOT a consumer of this file — it declares
 # nothing and receives ISSUEREF_RE / HEXCOLOR_RE / MIN_SELFDESCRIBE_WORDS as `awk -v`
 # parameters from whichever surface invokes it. Because every invoker sources this file,
