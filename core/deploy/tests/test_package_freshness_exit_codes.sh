@@ -30,6 +30,12 @@
 #         rebuild) -> exit 0. Conditional: reported as a NAMED SKIP with its
 #         reason, and counted in the summary, on a runner whose python3 cannot
 #         run the packager. Never silently absent, never counted as a pass.
+#   PF-6  a TEMPLATE_SYNC_MAP canonical OUTSIDE every skills tree staled with no
+#         rebuild -> exit 2   (the injected-canonical vector)
+#   PF-7  that same canonical restored from its pristine snapshot -> exit 0
+#         (PF-6's anti-vacuity control; restores, never rebuilds)
+#   PF-8  the skill-package-freshness workflow declares NO `paths:` key
+#         (the anti-narrowing floor; carries its own sensitivity arm)
 #
 # PF-1 and PF-4 are not optional garnish. Without them PF-2 and PF-3 would pass
 # against a probe that returned non-zero unconditionally, which is the vacuity
@@ -37,6 +43,42 @@
 # rather than by rebuilding, so the anti-vacuity control never depends on the
 # packager; PF-5 is the packager-dependent remedy proof, kept separate for
 # exactly that reason.
+#
+# THE SECOND INPUT VECTOR (PF-6 / PF-7)
+# A skill's package is built from two kinds of source: the skill's own files
+# under a skills tree (PF-2's vector) and the TEMPLATE_SYNC_MAP canonicals
+# injected into it from core/standards/, operations/templates/ and core/schemas/.
+# The second vector is the one that shipped a real defect: a pull request whose
+# only changes were to an injected canonical staled three committed .skill
+# packages and merged green, because the CI gate's path filter did not name those
+# trees and a non-matching path filter produces no check run at all. PF-6
+# reproduces that edit shape and asserts the same verdict->exit contract PF-2
+# asserts on the other vector. PF-7 clears it by RESTORING the canonical rather
+# than rebuilding, for the same reason PF-4 restores: an anti-vacuity control
+# that depends on the packager is not a control.
+#
+# PF-6 NEVER HARDCODES ITS TARGET. It extracts TEMPLATE_SYNC_MAP with the same
+# production extractor build-skill-packages.sh uses, resolves each canonical
+# through resolve_template_sync_source() SOURCED from
+# core/deploy/lib-template-sync-source.sh, and takes the first resolved source
+# that is markdown and lives outside every skills tree. Re-implementing the
+# resolver here would assert against a copy of the rule instead of the rule --
+# the exact divergence that lib exists to make impossible -- and a hardcoded
+# filename would silently stop exercising this vector the day the map is
+# re-homed. An empty selection is a LOUD FAILURE, never a skip: it would mean the
+# map no longer injects anything from outside the skills trees, which is a fact
+# this suite must announce rather than swallow.
+#
+# THE ANTI-NARROWING FLOOR (PF-8)
+# PF-6 proves the gate DETECTS this vector; PF-8 proves CI still RUNS on it. The
+# gate's verdict is the whole-roster content hash -- a global property -- so its
+# only sound trigger is "always", and the failure above was a trigger filter, not
+# a detector bug. PF-8 asserts that no `paths:` key has been reintroduced. The
+# predicate is LINE-ANCHORED: a substring test for `paths` would match the word
+# in the workflow's own prose and pass vacuously. And it carries its own
+# sensitivity arm -- the identical predicate is run against a workflow that DOES
+# carry a `paths:` key and must report it PRESENT, because a probe that cannot
+# see a paths: key would report the population clean while asserting nothing.
 #
 # WHY IT NORMALIZES THE SANDBOX FIRST
 # The contract under test is the verdict->exit MAPPING, not the freshness of the
@@ -278,6 +320,116 @@ else
     report "PF-5 rebuild -> exit 0 (documented remedy clears the gate)" 0 \
       "expected 0, observed ${RC5}"
   fi
+fi
+
+# --- Re-normalize before the injected-canonical arm ---
+# PF-5 either rebuilt the probe skill's package against an appended source, or was
+# skipped with that append still in place. Either way the sandbox's freshness is
+# whatever PF-5 left behind, and PF-6 asserts a STALE verdict -- so without a
+# CONFIRMED-fresh baseline PF-6 could report exit 2 for the previous arm's reason
+# and PF-7 would then fail for a reason that has nothing to do with its subject.
+printf '\nRe-normalizing the sandbox to FRESH before the injected-canonical arm\n'
+cp "${PRISTINE_COPY}" "${STALE_TARGET}" || die_loud "could not restore the stale target before PF-6"
+RC_RENORM=$(probe_rc)
+if [ "${RC_RENORM}" != "0" ]; then
+  if [ "$(sandbox_build)" != "0" ]; then
+    printf '%s\n' "${BUILD_LOG}" | tail -20 >&2
+    die_loud "sandbox rebuild failed before PF-6 — cannot establish the FRESH baseline"
+  fi
+  RC_RENORM=$(probe_rc)
+  [ "${RC_RENORM}" = "0" ] \
+    || die_loud "sandbox still not fresh before PF-6 (rc=${RC_RENORM}) — the injected-canonical arm would assert nothing"
+fi
+printf '  baseline confirmed FRESH (rc=0)\n'
+
+# --- Derive PF-6's target: DERIVED, never hardcoded (see the header rationale) ---
+# The resolver is SOURCED, not replicated: replicating it here would assert
+# against a copy of the rule rather than the rule itself.
+# shellcheck source=core/deploy/lib-template-sync-source.sh
+. "${SBX}/core/deploy/lib-template-sync-source.sh" 2>/dev/null \
+  || die_loud "could not source core/deploy/lib-template-sync-source.sh — PF-6 must resolve through the real resolver, never a copy of it"
+command -v resolve_template_sync_source >/dev/null 2>&1 \
+  || die_loud "resolve_template_sync_source undefined after sourcing the resolver lib — the map cannot be resolved"
+
+# Same awk-window + grep + sed extractor build-skill-packages.sh uses. The grep is
+# deliberately the three-field form: a looser quoted-string match also captures a
+# quoted phrase inside the map's own comment block and yields a phantom entry.
+CANONICAL_REL=""
+while IFS= read -r map_entry; do
+  [ -n "${map_entry}" ] || continue
+  cand_name="$(printf '%s' "${map_entry}" | cut -d: -f2)"
+  [ -n "${cand_name}" ] || continue
+  cand_src="$(resolve_template_sync_source "${cand_name}")"
+  case "${cand_src}" in
+    core/skills/*|operations/skills/*|release/skills/*) continue ;;
+    *.md)                                              ;;
+    *)                                                 continue ;;
+  esac
+  [ -f "${SBX}/${cand_src}" ] || continue
+  CANONICAL_REL="${cand_src}"
+  break
+done < <(awk '/^TEMPLATE_SYNC_MAP=\(/,/^\)/' "${SBX}/core/deploy/deploy.sh" \
+         | grep -E '^[[:space:]]*"[^"]+:[^"]+:[^"]+"' \
+         | sed 's/^[[:space:]]*"//; s/"$//; s/[[:space:]]*#.*//')
+
+[ -n "${CANONICAL_REL}" ] \
+  || die_loud "no TEMPLATE_SYNC_MAP canonical resolves to a markdown source outside every skills tree — the injected-canonical vector appears not to exist, which this suite announces rather than swallows"
+
+CANONICAL_TARGET="${SBX}/${CANONICAL_REL}"
+CANONICAL_PRISTINE="${SBX_HOME}/pristine-canonical.bak"
+cp "${CANONICAL_TARGET}" "${CANONICAL_PRISTINE}" \
+  || die_loud "could not snapshot the injected canonical ${CANONICAL_REL}"
+
+# --- PF-6: injected canonical staled, no rebuild -> exit 2 (the v4.06 shape) ---
+printf '\nPF-6: injected canonical %s staled (no rebuild) -> expect exit 2\n' "${CANONICAL_REL}"
+printf '\n<!-- package-freshness injected-canonical regression fixture -->\n' >> "${CANONICAL_TARGET}" \
+  || die_loud "could not append to the injected canonical ${CANONICAL_REL}"
+RC6=$(probe_rc)
+if [ "${RC6}" = "2" ]; then
+  report "PF-6 injected canonical STALE + warn -> exit 2 (the injected-canonical vector)" 1
+elif [ "${RC6}" = "0" ]; then
+  report "PF-6 injected canonical STALE + warn -> exit 2 (the injected-canonical vector)" 0 \
+    "observed 0 — a canonical outside every skills tree (${CANONICAL_REL}) staled a package and the probe reported success. This is the shape that merged green while staling three packages."
+else
+  report "PF-6 injected canonical STALE + warn -> exit 2 (the injected-canonical vector)" 0 \
+    "expected 2, observed ${RC6} (target: ${CANONICAL_REL})"
+fi
+
+# --- PF-7: restore the canonical -> exit 0 (PF-6's anti-vacuity control) ---
+printf '\nPF-7: injected canonical restored (restore, not rebuild) -> expect exit 0\n'
+cp "${CANONICAL_PRISTINE}" "${CANONICAL_TARGET}" \
+  || die_loud "could not restore the injected canonical ${CANONICAL_REL}"
+RC7=$(probe_rc)
+if [ "${RC7}" = "0" ]; then
+  report "PF-7 injected canonical restored -> exit 0 (PF-6 is not unconditionally non-zero)" 1
+else
+  report "PF-7 injected canonical restored -> exit 0 (PF-6 is not unconditionally non-zero)" 0 \
+    "expected 0, observed ${RC7} (target: ${CANONICAL_REL})"
+fi
+
+# --- PF-8: anti-narrowing floor — the gate workflow declares no `paths:` key ---
+printf '\nPF-8: skill-package-freshness declares no paths: key -> expect ABSENT\n'
+PF8_GATE_WF="${REPO_ROOT}/.github/workflows/skill-package-freshness.yml"
+PF8_SENSITIVITY_WF="${REPO_ROOT}/.github/workflows/release-link-check.yml"
+PF8_PATHS_RE='^[[:space:]]+paths(-ignore)?:'
+
+[ -f "${PF8_GATE_WF}" ] \
+  || die_loud "gate workflow missing: .github/workflows/skill-package-freshness.yml"
+[ -f "${PF8_SENSITIVITY_WF}" ] \
+  || die_loud "PF-8 sensitivity arm missing: .github/workflows/release-link-check.yml — without a workflow known to carry a paths: key, the predicate cannot be shown to work and a clean result would be unfalsifiable"
+
+if grep -qE "${PF8_PATHS_RE}" "${PF8_SENSITIVITY_WF}"; then
+  report "PF-8 sensitivity: the anchored paths: predicate sees a key where one exists" 1
+else
+  report "PF-8 sensitivity: the anchored paths: predicate sees a key where one exists" 0 \
+    "release-link-check.yml carries a paths: key and the predicate did not see it — PF-8 is a BROKEN PROBE, not a clean population"
+fi
+
+if grep -qE "${PF8_PATHS_RE}" "${PF8_GATE_WF}"; then
+  report "PF-8 anti-narrowing: no paths: key on the package-freshness gate" 0 \
+    "a \`paths:\` filter was reintroduced — this gate's verdict is whole-roster; re-read the always-reports rationale in the workflow header before re-adding one"
+else
+  report "PF-8 anti-narrowing: no paths: key on the package-freshness gate" 1
 fi
 
 # --- Summary ---

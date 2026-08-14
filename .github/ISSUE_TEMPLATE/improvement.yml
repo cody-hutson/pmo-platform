@@ -189,6 +189,11 @@ body:
         OR name a specific file/section/output AND a specific observable state.
         Avoid vague goals ("works correctly", "handles gracefully", "improves flow").
         Include a verification method per AC where non-obvious.
+        If this item ships a mechanical check (script, lint, hook, gate, or CI job),
+        its AC set additionally owes a discrimination arm — a named near-miss input
+        the check must NOT flag, with an expected zero, at each invocation parameter
+        that narrows what the check examines. See
+        `release/references/how-to/intake-style-guide.md` §4b (U5).
       placeholder: |
         - [ ] Verify that <file/section/output> contains <observable state> (method: <how>)
         - [ ] <file/section/output> contains <observable state> (method: <how>)
