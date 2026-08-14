@@ -1,0 +1,329 @@
+---
+title: Release Plan — reference-constant-integrity (reference constants declared once; citations resolve to what they name)
+type: release-plan
+plan_type: release
+status: ACTIVE
+release: slug-only (ADR-092 — the concrete version binds at the Stage-12 atomic claim)
+milestone: reference-constant-integrity
+release_class: novel
+domain_practice: { source: N/A — pipeline-internal release, date: 2026-08-14, domain: governance }
+reversibility: CHEAP / Confidence HIGH (release-level rollback; two individual risks carry MODERATE — see § Risk Register)
+---
+<!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-issue-ref -->
+# Release Plan — reference-constant-integrity
+
+> **Milestone:** `reference-constant-integrity` (320) · **Release Class:** `novel` (Standard engagement / **Deep** Stage-9 review / Stage-5 bias ALL / 30-day outcome window) · **Version:** `{{RELEASE_VERSION}}` — **unbound through Stages 4–11; bound at the Stage-12 atomic claim (ADR-092)**. The durable declaration is the **bump-class `minor`** off anchor `v4.24`, not a number · **Scope:** 6 issues, `effective_pts` 23 (inside the 15–25 band) · **Topology:** D-C `SINGLE` · **Concurrency posture:** P0 fully-serial · One release branch, one PR, one merge gate · **Branch:** `release/reference-constant-integrity` (slug-primary, no version stem).
+
+This file is the Stage-4 release plan, written to disk as **Engineering Commit 0** by the first Stage-6 spoke per the D-C SINGLE topology. It transcribes the Stage-4 planning output as approved at the Procedure 0 operator gate on 2026-08-14 (Friday), with the four decisions rendered at that gate and the two `[ADJUST]` card amendments folded in where they land rather than appended as errata.
+
+**Version is NOT bound in this plan.** A concurrent sibling release is in flight with the same bump-class off the same anchor, so both recompute to the same next-free slot; whichever merges first takes it and the other re-binds at its own Stage-12 claim. This release ships as `{{RELEASE_VERSION}}`. Until the Stage-12 stamp pass resolves it, that unresolved placeholder is itself the claim-state oracle the release-identity check window-gates on — so baking a digit here would both blind that check and commit exactly the drift class this milestone exists to fix.
+
+## Issue References
+
+Card index for this release. Every issue reference in this plan — including the File Change Matrix rows, the Risk Register and the cross-issue criteria — resolves against this table rather than standing free.
+
+| Card | Subject |
+|---|---|
+| **#4459** | The reference-identifier regex diverges between the canonical reference-durability library and a non-sourcing shell consumer. |
+| **#4460** | A further reference-constant surface in the deploy check sits outside the shared regex library. |
+| **#4461** | Gate-3 range citations are stale at seven sites, including a bound-count metric in the gate-evaluation schema. |
+| **#4465** | The autonomy-tiers spec cites a numeric mode range for a letter-keyed skill. |
+| **#4900** | The label taxonomy does not document the tolerated legacy alias the membership tool depends on. |
+| **#4902** | The Stage-7 Phase A count label states a partition its own enumeration contradicts. |
+
+## Summary (30 seconds)
+
+Six cards, one theme: **a reference constant is declared once, and a citation resolves to what it names.** All six repros were re-run live against the pinned baseline at planning time — **6 of 6 still reproduce**; none was silently fixed upstream, and none re-scoped. The bundle's theme is load-bearing rather than a label, and it yields three real cross-issue acceptance criteria.
+
+The plan diverges from the bundle-time sequence in one place and corrected the declared Release Class in another:
+
+1. **Only one dependency edge exists** — the divergent-copy card before the uncovered-surface card, and it is real (shared canonical library, shared header comment block, and a disposition that changes what the other decides against). The other four members are mutually independent with **zero** shared files across the full pairwise set. The bundle-time sequence is therefore compatible but over-constrained; the adopted sequence front-loads the zero-contention cards.
+2. **Release Class `routine` did not hold** and was corrected to `novel` at the Stage-4 gate. The `routine` trigger requiring zero new D-class decisions in the release plan fails, because this plan records two; the trigger requiring no added files also fails, because the release adds a fixture. The `novel` decision-record trigger fires. The `cross-cutting` class fires on none of its three triggers.
+3. **The divergent-copy card was under-scoped and its default remediation was wrong.** The regex divergence is not a consumer that drifted — it is a **three-way specification split** in which the *canonical* library is the surface out of conformance with the ADR README's recognized-set statement. Forcing byte-identity toward the canonical value would regress a correction the tool documents in-code. That card's Affected Files gained a doc surface at the gate.
+
+Top risk is not merge conflict — it is **the two coupled cards each passing individually while the release as a whole stays incoherent** on the very claim it exists to fix. CIAC-1 and CIAC-2 exist to catch exactly that.
+
+## Dependency Graph
+
+**Native GitHub dependency edges: zero, and the probe that measured it is reported as unusable.** All six members return HTTP 200 with a well-formed empty array on both dependency endpoints — not a 404 masquerading as empty. But the sensitivity arm did **not** fire: a ten-issue control sample surfaced no non-empty response anywhere on this repository, so the probe cannot be shown to return non-empty when an edge exists. A zero whose control arm also returned zero is not a clean result, so the graph below rests on **body-declared dependency prose plus file-level evidence** — the stronger substrate, and the one this repository actually uses.
+
+```
+divergent-copy card ──(HARD, directional)──> uncovered-surface card
+   │
+   └─ shared: core/hooks/lib/fragile-ref-patterns.sh  (canonical REFBLOCK_RE + header)
+      shared: core/deploy/deploy.sh                   (identity-assertion surface / c23_dc block)
+
+range-citation card    (independent)
+mode-range card        (independent)
+label-alias card       (independent)
+partition-label card   (independent)
+```
+
+**The one edge, with evidence — not "these are independent" by assertion:**
+
+- The edge from #4459 to #4460 is HARD and directional. The first card's AC-2 disposition mutates the canonical reference-identifier regex in the shared library; the second asks whether the deploy check's reference-identifier subset *sources* that library. Deciding the second against a pre-change canonical means re-deciding it afterward. The second card's own body states it: both describe non-sourcing consumers of the same library, so their remediations should be designed together. Both also edit the same header block — the `Sourced by:` list and the "SOLE declaration" claim.
+- The independence of #4461, #4465, #4900 and #4902 is verified, not assumed. Pairwise file-set intersection over the full pairwise set found exactly one contended pair, the coupled pair above. Sensitivity arm: a synthetic member sharing a file with an existing member was **DETECTED**. Specificity arm: the label-alias and partition-label pair returned empty, correctly. Both arms fired, so the zero is a measurement.
+- Zero circular chains, structurally rather than by traversal. With exactly one directed edge over six nodes a cycle is impossible; a cycle requires at least two edges.
+- External dependencies are both satisfied and verified closed. The backfill card related to #4900 closed on 2026-08-07, and the card blocking #4902 closed the same day — which also resolved that card's first sub-item and is why it is now single-file.
+
+## Implementation Sequence
+
+**Adopted at the Stage-4 gate (decision D-4), authoritative for scaffolding:**
+
+```
+label-alias → partition-label → mode-range → range-citation → divergent-copy → uncovered-surface
+```
+
+In card terms that is #4900, then #4902, then #4465, then #4461, then #4459, then #4460.
+
+**Agreement and divergence with the bundle-time sequence**, which ran the coupled pair first and the four independent cards after, treated as a directional input and verified against the edges actually found:
+
+| Aspect | Verdict |
+|---|---|
+| The divergent-copy card before the uncovered-surface card | **AGREE.** This is the only real edge and the bundle-time sequence has it right, in the right direction. Retained adjacent and in order. |
+| Position of the four independent cards | **DIVERGE.** The bundle-time order places them *after* the coupled pair. No edge requires that. |
+
+**Rationale for the divergence — three grounds, all evidence-backed:**
+
+1. **Zero-contention cards first drains risk early.** The label-alias, partition-label and mode-range cards each touch exactly one file that no other member and no in-flight sibling touches. Landing them first produces early, independently-verifiable commits and shrinks the surface still open when the coupled pair starts.
+2. **The range-citation card must precede the coupled pair because of a live cross-PR interaction.** It edits the Stage-3 bundle pipeline doc, which the concurrent sibling release also edits. Sequencing it early maximises the chance it lands first; if the sibling merges first, its two sites shift by one line each — content unchanged, line anchors only. Doing it early keeps the rebase small and the anchors fresh.
+3. **The coupled pair goes last, together, with the design decision made once.** The two share two files and one canonical value. Under D-C SINGLE they serialize at commit anyway; running them adjacently and last means the header block is edited twice in immediate succession by an author holding both dispositions, rather than twice separated by four unrelated commits.
+
+**Both sequences are valid** — no edge is violated by either. The reordering is a risk-ordering improvement, not a correction of an error.
+
+## Stage Applicability Matrix
+
+No blanket verdict: the executable-surface cards and the doc/citation cards are assessed separately.
+
+| Card | Surface class | S5 Solutioning | S6 Eng | S7 DevTest | S8 QA | S9/12/13 | Rationale for any SKIP |
+|---|---|---|---|---|---|---|---|
+| divergent-copy (#4459) | Executable — shell tool, shared lib, assertion, fixture | **YES** | YES | **YES** | **YES** | YES | The two-alternative disposition is D-class; assertion and fixture must be designed |
+| uncovered-surface (#4460) | Executable — deploy-check block | **YES** | YES | **YES** | **YES** | YES | Absorb-versus-declare-separate is D-class; its AC-5 demands a before/after match-behaviour run |
+| range-citation (#4461) | Doc cascade over six sites **plus one metric definition** | **YES** | YES | **YES** | **YES** | YES | The seventh site redefines a gate-evaluation metric — functional, not prose. The PRESERVE-class hazard needs a designed probe |
+| mode-range (#4465) | Doc, single-site prose | **SKIP** | YES | YES-light | **YES** | YES | Trivial: one line; the card already specifies the durable form and forbids the snapshot fix. No design uncertainty |
+| label-alias (#4900) | Doc, single-file taxonomy entry | **SKIP** | YES | YES-light | **YES** | YES | Trivial: the Proposed Change fully specifies the entry including its consumer set. No design uncertainty |
+| partition-label (#4902) | Doc, single-line label | **SKIP** | YES | YES-light | **YES** | YES | Trivial: reconcile one label to its adjacent enumeration |
+
+**No card skips Stage 8.** Every one of the six carries acceptance criteria demanding a probe with a stated denominator and both control arms — that is per-criterion verification work, which is precisely Stage 8's object, and it is independent of whether the change is functional.
+
+**Stage 7 "YES-light"** means the Phase A structural checks apply, as they do to any PR, but no functional regression surface exists for those three.
+
+**Class-conditional note.** The matrix above is the `routine` shape, whose Stage-5 bias is skip-where-trivial. Under the operator-confirmed `novel` class the bias is **ALL**, and the three SKIPs become borderline-activate with thin design specs. The operator retained the three SKIPs at the gate for the trivial cards. The Quota Budget is sized on the worst batch either way, so the class decision does not change the budget verdict.
+
+## Contention Map
+
+**Within-release** — the full pairwise set was tested and **one** pair is contended; the denominator and both control arms are recorded in § Evidence.
+
+| File | Claimed by | Class | Mitigation |
+|---|---|---|---|
+| `core/hooks/lib/fragile-ref-patterns.sh` | divergent-copy (value and header), uncovered-surface (header) | **line-range-overlap** — both edit the same header comment block | Sequence adjacent, divergent-copy first, already the adopted order. **CIAC-1** grades the combined result |
+| `core/deploy/deploy.sh` | divergent-copy (identity assertion), uncovered-surface (`c23_dc` block) | **append-pattern** — different regions of a large file; the second card's zone is the Check-23 block, the first card's assertion lands with the existing identity machinery | Serialize per D-C SINGLE, automatic. Low merge risk; **CIAC-2** grades population coherence |
+
+The other four members share **no file with any other member**.
+
+### File Change Matrix
+
+```
+core/hooks/lib/fragile-ref-patterns.sh
+core/deploy/tools/check-issue-ref-validity.sh
+core/deploy/deploy.sh
+core/standards/reference-durability-standard.md
+core/ADRs/README.md
+core/hooks/testdata/refblock-identity-fixtures.txt
+core/schemas/gate-evaluation-spec.md
+core/standards/review-composition-framework.md
+release/governance/release-process.md
+release/references/pipeline/stage-03-bundle.md
+release/references/specs/release-personas.md
+core/specs/autonomy-tiers.md
+core/specs/label-taxonomy.md
+release/references/pipeline/stage-07-dev-testing.md
+```
+
+| Path | Intent | Owner card |
+|---|---|---|
+| `core/hooks/lib/fragile-ref-patterns.sh` | edit — the canonical reference-identifier regex, conditional on the AC-2 disposition, plus the header consumer list and the "SOLE declaration" claim | divergent-copy, uncovered-surface |
+| `core/deploy/tools/check-issue-ref-validity.sh` | edit — reconcile the inline regex copy per the recorded disposition | divergent-copy |
+| `core/deploy/deploy.sh` | edit — identity assertion over non-sourcing declaration sites, plus the constant-family disposition | divergent-copy, uncovered-surface |
+| `core/standards/reference-durability-standard.md` | edit — **added at the Stage-4 gate, not in the card's original Affected Files**; carries the narrower recognized-set statement that must move | divergent-copy |
+| `core/ADRs/README.md` | edit — **added at the gate, conditional**; carries the wider recognized-set statement | divergent-copy |
+| `core/hooks/testdata/refblock-identity-fixtures.txt` | **add** — the control-armed fixture, sensitivity and specificity, required by both coupled cards | divergent-copy, uncovered-surface |
+| `core/schemas/gate-evaluation-spec.md` | edit — reconcile the structural-pass-rate metric | range-citation |
+| `core/standards/review-composition-framework.md` | edit, two sites | range-citation |
+| `release/governance/release-process.md` | edit, one site | range-citation |
+| `release/references/pipeline/stage-03-bundle.md` | edit, two sites | range-citation |
+| `release/references/specs/release-personas.md` | edit, one site | range-citation |
+| `core/specs/autonomy-tiers.md` | edit — the mode-range citation | mode-range |
+| `core/specs/label-taxonomy.md` | edit — add the tolerated-legacy-alias entry | label-alias |
+| `release/references/pipeline/stage-07-dev-testing.md` | edit — the Phase A partition label | partition-label |
+
+**READ-ONLY / must NOT be edited:** the gate-criteria schema, which carries PRESERVE rows · this plans directory, likewise · the release-readiness scan spec, out of scope for the partition-label card · the QA-auditor skill file, which is authority only for the mode-range card.
+
+**No `add` row for a tracked executable script**, so the script-execution-allowlist companion obligation does **not** fire. The one `add` is a fixture data file, not an invoked script.
+
+**Deploy-mirror note, not a matrix row.** The release-process governance file is byte-identity mirrored to its deployed rules copy by the deploy check. The mirror target lives **outside** the source tree, so it adds no repository file — but `./deploy.sh --check` will report mirror drift after the range-citation edit until `--deploy` runs. That is expected local drift, never a CI failure.
+
+### Cross-PR Overlap Audit
+
+**Baseline SHA:** `8f48357fe5f687f569d2e069f234cfdbedb9cf10`, pinned at planning entry 2026-08-14. `origin/main` and `HEAD` agreed at that SHA, the milestone's re-verification is stamped at the same SHA, and the commit range between them is **empty** — zero mainline movement between re-verification and this audit.
+
+**Overlap with the concurrent sibling release PR** — two of the matrix paths intersect its editset. Specificity holds: the great majority of the sibling's files are correctly unclaimed by this release, so the intersection is non-vacuous.
+
+| Path | Owner card | `overlap_class` | Measured interaction | Disposition |
+|---|---|---|---|---|
+| `core/deploy/deploy.sh` | the coupled pair | **append-pattern** | The sibling's hunks are all pure insertions sitting *above* the constant-family zone, with zero overlap into it | **Informational.** No merge conflict. If the sibling merges first, the constant-family anchors shift downward. The card already mandates *locate by symbol, not line number* — that mitigation is correct and load-bearing |
+| `release/references/pipeline/stage-03-bundle.md` | range-citation | **line-range-overlap**, non-conflicting | The sibling adds one line above the two target sites and modifies one line between them; both sites survive with content byte-unchanged, shifted by one | **Sequencing.** Whichever merges second rebases. The card is placed early in the sequence to reduce the window |
+
+**Non-overlap that matters — the gate-criteria schema.** The sibling edits that file, and it is the range-citation card's **PRESERVE-class** surface. Measured: the sibling's schema bump is a criterion-body refinement adding **no** new range citations, so the PRESERVE row set is identical on both heads. The card's original count-based acceptance criterion would have survived *this* PR — see risk R2, which is why the criterion was restated as a predicate anyway.
+
+### In-Flight Release Roster
+
+**Measured at** the pinned baseline SHA on 2026-08-14 at planning entry. **Population:** one sibling.
+
+| Slug | Bump-class | Carried label | Recomputed next-free | Editset ∩ matrix |
+|---|---|---|---|---|
+| `corpus-tolerance-and-hygiene` | minor | version-less; slug-primary in flight | the same slot as this release | `core/deploy/deploy.sh`, `release/references/pipeline/stage-03-bundle.md` |
+
+**Version-slot collision — the `minor` slot is contended by both.** The sibling is a `minor` bump off the same anchor, so its recomputed next-free is the same slot as this release's. Whichever merges first takes it; the other re-binds at its own Stage-12 atomic claim. This is the expected two-phase allocation behaviour, not a defect — but it is a serialization edge on the version axis and is carried as risk **R1**. The roster is a **pinned measurement and carries no verdict**; the verdict is rendered fresh at the Stage-9 re-check.
+
+## Risk Register
+
+| # | Risk | Sev | Evidence | Owner stage | Mitigation | Reversibility |
+|---|---|---|---|---|---|---|
+| **R1** | **Version-slot collision with the concurrent sibling release.** Both are `minor` off the same anchor, so both recompute to the same next-free slot | **High** | In-Flight Roster above; the sibling PR is open and mergeable | S12 Execute | Two-phase allocation already handles it: whichever merges first claims the tag, and the other re-verifies at Commit 0 and re-binds at the atomic claim. Do **not** hardcode a concrete version anywhere durable before the claim | CHEAP (HIGH conf) |
+| **R2** | **The range-citation card's AC-5 originally hardcoded a transient count.** Any *additive* schema bump to the gate-criteria spec emits a new range row, so a count-based criterion fails on a correct release | **High** | Measured: several prior additive bumps each emitted a range row. The sibling's current bump is criterion-body-only, so the count would have held *this time* | S5 | **Applied at the gate (D-3):** the criterion is restated as a **diff-to-zero predicate** — PRESERVE paths diff to zero changes — not a count. This is the same drift class the card exists to fix, recurring inside its own criterion | CHEAP (HIGH conf) |
+| **R3** | **The divergent-copy card's default remediation would regress a documented correction.** Making the consumer byte-identical to the canonical would strip an alternative that the ADR README and the tool's own failure message both name as recognized | **High** | Three-way divergence measured: the canonical value does not match the parenthetical spelling, the consumer does | S5 | Record the disposition **direction-first** — the canonical is the non-conformant surface — and ship the doc surface in the same release. **Applied at the gate (D-3):** the Affected Files gained the doc surface and the body records the three-way split | MODERATE (HIGH conf) |
+| **R4** | **A `./`-anchored exclusion post-filter silently no-ops.** `grep` resolves here to ugrep, which emits bare relative paths | **Med** | Measured live during planning: a `./`-anchored post-filter returned the unfiltered population while the PRESERVE census returned a self-contradictory zero. Hub re-measurement relocated the hazard precisely — `--exclude-dir` is anchor-insensitive and safe; the **post-filter anchored on `^./`** is the failing form | S5/S7 | The card's AC-4 mandates the exclusion predicate appear in the probe command; it must be written **without a `./` anchor** and must run both control arms every time. **Carried constraint — this form must reach the Engineering spoke, not just the card** | CHEAP (HIGH conf) |
+| **R5** | **The two coupled cards each pass individually while the release stays incoherent** on the "SOLE declaration" claim — each reconciles the header for its own surface only | **Med** | Both independently target the same header block; neither's criteria reference the other's surface | S9 (CIAC) | **CIAC-1** and **CIAC-2** exist precisely for this; graded on the merged PR | CHEAP (HIGH conf) |
+| **R6** | **The absorb option changes the deploy check's match behaviour** if the two constant families are not in fact equivalent | **Med** | The card's own Risks section; the two families answer different questions — issue-reference matching versus heading matching | S7 | Its AC-5 already requires a before/after corpus run, not inspection. Hold that line — the declare-separate option is legitimate and documentation-only | MODERATE (MED conf) |
+| **R7** | **The divergent-copy card's file surface was under-scoped** — two doc surfaces carry the recognized-set statement and neither was in its original Affected Files | **Med** | Measured three-way divergence | S5 | The matrix above carries them. **Applied at the gate (D-3):** the card body was amended before Engineering | CHEAP (HIGH conf) |
+| **R8** | **Rebase on the Stage-3 bundle doc** if the sibling release merges first | **Low** | Measured: content byte-unchanged, anchors shift by one | S6 | Locate by content, not line number — already the card's stated discipline | CHEAP (HIGH conf) |
+| **R9** | **Rollback complexity.** Single PR, single merge; thirteen edits and one add, no file moves, renames or deletes, no schema-ID changes | **Low** | The matrix declares zero movers | S12 | `git revert` of the merge commit is complete and sufficient. The one `add` is a fixture nothing depends on. **No rollback-infeasibility condition exists** | CHEAP (HIGH conf) |
+
+**Rollback strategy.** Single release branch, single PR, single merge, so rollback is `git revert` of the merge commit plus a re-run of `./deploy.sh --deploy` to restore the mirrored rules copy. No data migration, no external state, and no version tag to unwind if rollback precedes the Stage-12 atomic claim. If rollback follows the tag, the tag is left in place and a follow-up patch release supersedes — never a tag deletion.
+
+## Cross-Issue Acceptance Criteria
+
+Three declared. The release's stated theme is a genuine cohesion claim spanning multiple members, so this section is non-empty by construction rather than by ceremony.
+
+- [ ] **CIAC-1 — the coupled pair on the shared library header.** After both land, the header's `Sourced by:` list **and** its "SOLE declaration" claim account for **both** non-sourcing surfaces — the issue-reference validity tool and the deploy check — each either listed as a consumer or named as an explicit, reasoned exclusion. The claim is true as written, with no surface silently unaccounted for. *Shared surface:* the header comment block of `core/hooks/lib/fragile-ref-patterns.sh`. *Method:* a grep for each surface's name in that file returns at least one line for **each**, plus a read of the claim sentence confirming it is qualified consistently with those lines. *Graded at the Stage-9 release-integration check on the merged PR.*
+
+- [ ] **CIAC-2 — the coupled pair on the asserted declaration-site population.** The identity assertion built by the first card and the absorb-versus-declare-separate disposition recorded by the second **agree on the same population**. Every reference-identifier regex declaration site outside the canonical library is either covered by the assertion **or** explicitly excluded with recorded rationale — **none is both, and none is neither**. The population is reported with its denominator, not asserted. *Shared surface:* the whole-repository reference-identifier declaration-site set, plus the deploy check's own constant family. *Method:* run the whole-repository declaration-site probe **with both control arms**, then diff its result against the union of the assertion-covered set and the documented-exclusion set — the diff must be empty in both directions. *Graded at the Stage-9 release-integration check on the merged PR.*
+
+- [ ] **CIAC-3 — the range-citation, mode-range and partition-label cards on the count/range durable form.** No member re-introduces a hardcoded count, ID range, or partition adjacent to the enumeration it describes. Each of the three fixes a stated count that drifted from what it counts, and each card's Proposed Change explicitly forbids the corrected-snapshot fix — the release must not commit the defect it is repairing. *Shared surface:* the count-claim discipline across the gate-evaluation spec, the autonomy-tiers spec, and the Stage-7 dev-testing pipeline doc. *Method:* for each changed file, grep the changed lines for a numeric count or an ID range adjacent to an enumeration; each hit must be justified in the PR body as a deliberate retained enumeration, or the criterion is NOT MET. *Graded at the Stage-9 release-integration check on the merged PR.*
+
+## Quota Budget
+
+**Verdict:** **WARN** at Checkpoint A.
+**Parallel-eligible spokes per parallel stage:** Stage 5 — three under the retained skips; Stage 7 — six; Stage 8 — six.
+**Per-spoke cost estimate:** size-bucket ordinal band — four `size:M` at low-to-moderate and two `size:S` at the lowest. Source: **heuristic** ordinal band. No telemetry median is available, because no size bucket satisfies the cutover predicate, so every bucket retains its ordinal-band floor.
+**Assumed remaining usage-window envelope:** **`UNSTATED`** — no operator quota state was captured at hub start. Under the refuse-to-synthesize rule the conservative default applies and **no draw figure is synthesized**.
+**Estimated cumulative draw:** **not rendered as a number.** The basis is `UNSTATED`; a percentage here would be a projection of a band nobody stated, presented as a measurement. `[ASSUMPTION – CONFIRM]`
+**Routing:** **WARN → window-aware launch timing and split batches recommended.** The worst parallel batch is six spokes at Stage 7 and again at Stage 8 — the largest concurrent draw this release will make, and most of them are `size:M`. Under the conservative default envelope a six-wide `M`-dominant batch lands in the WARN band. **Recommendation:** split Stage 7 and Stage 8 into two waves of three along the natural cleave — the three doc-only cards in one wave, the three heavier cards in the other — and launch each wave window-aware.
+
+This Checkpoint A estimate is **advisory**. The load-bearing gate is **Checkpoint B**, which re-validates at **every spoke launch — wave or singleton, every stage** against the *remaining* envelope at that moment: the full PROCEED / SERIALIZE / DEFER / REDUCE-scope set for a wave, and the reduced PROCEED / DEFER form for a singleton. This is a **usage-window cumulative-draw** constraint, **not** a rate limit — staggering is a rate-limit-only defence and is never the mitigation for an envelope overrun. Bands are `[CALIBRATE-AFTER-3]`, MEDIUM confidence.
+
+## Release Class
+
+**`novel`** — reclassified from `routine` at the Stage-4 operator gate (decision D-2), per the re-classification protocol in the release-class taxonomy.
+
+| Class | Trigger evaluation |
+|---|---|
+| `routine` | The all-low-priority trigger cannot be affirmed — the divergent-copy card is a bug carrying Severity Major and no Priority field, so it is unverifiable absent a severity-to-priority mapping. The no-added-files trigger FAILS, because the release adds a fixture. The zero-D-class-decisions trigger FAILS, because this plan records two. The remaining trigger is plausible but not established for all paths. |
+| `novel` | **FIRES** — at least one D-class decision is recorded in the release plan. |
+| `cross-cutting` | Does **not** fire. Two pipeline stage docs, below the threshold. One named governance surface, below the threshold. One in-bundle compositional edge, below the threshold. |
+| `hotfix` | N/A — not corrective against a deployed release. |
+
+Multi-trigger resolution resolves to **`novel`**. `effective_pts = round_half_up(20 × 1.15) = 23`, at or below the band ceiling, so the reclassification does not force a re-bundle. Cheaper-to-stricter, so **CHEAP** reversibility at **HIGH** confidence.
+
+**Differentiation posture under `novel`:** engagement density **Standard** · Stage-9 review depth **Deep** · Stage-5 activation bias **ALL** · Stage-13 outcome window **30 days**.
+
+*Pattern signal:* the concurrent sibling release made this identical `routine → novel` correction at its own Stage 4 six days prior — same repository, same stage, same trigger. Two independent instances in the same domain and theme within the emergence window, which meets the bar for promoting this from an observation to a pattern: Stage 3 under-classifies as `routine` when the plan will record D-decisions.
+
+## Recorded Determinations and Operator Decisions
+
+**Decisions rendered at the Procedure 0 plan-approval gate, 2026-08-14 (Friday). Plan APPROVED.**
+
+| ID | Decision | Verdict | Reversibility / Confidence |
+|---|---|---|---|
+| D-1 | Remediation of a path-form defect in the initial plan comment | Re-render in sanctioned repo-relative form; replace rather than edit in place | MODERATE / HIGH |
+| D-2 | Release Class | `routine` → `novel` | CHEAP / HIGH |
+| D-3 | Two Tier-1 `[ADJUST]` card amendments | Both approved and applied | CHEAP / HIGH |
+| D-4 | Implementation sequence | Spoke order adopted over bundle-time order | CHEAP / MEDIUM |
+
+**Recorded determinations, not gates:**
+
+- **D-Version — bump-class `minor`** from anchor `v4.24`. Rule-computed against authoritative host state fetched 2026-08-14 (Friday). **This is a recorded determination, not an operator click-gate.** The slot is contested by the concurrent sibling release, which recomputes to the same slot — see R1. Binding happens at the Stage-12 atomic claim, not here, and this file carries the placeholder rather than a digit.
+- **D-C Branch Topology — SINGLE**, the default. Single release branch, single PR, single merge.
+- **D-Concurrency Posture — P0 fully-serial**, the default when undeclared, and justified independently: the contention map has one contended pair, that pair is the executable surface, so serial Stage-6 dispatch costs nothing and preserves the safe-by-construction guarantee.
+
+**Genuine operator decisions, deferred to Stage 5 and framed here:**
+
+1. **The divergent-copy card — disposition on both divergent alternatives.** The evidence points to different answers for the two. The parenthetical spelling is a **canonical-side defect**: the consumer already agrees with the ADR README and with the tool's own failure message. The other alternative is a **genuine open policy call** with no governance surface currently settling it. Hub verification refined the framing further — both extra alternatives are named by **both** documenting surfaces, so they are settled the same way rather than differently, and the canonical library is the surface out of conformance. Deciding one and not the other is explicitly not a pass under that card's AC-2.
+2. **The uncovered-surface card — absorb versus declare-separate.** The declare-separate option is legitimate and documentation-only; the absorb option requires the before/after corpus match-behaviour run that its AC-5 mandates.
+
+**Amendments applied at the gate (D-3):**
+
+- The divergent-copy card's Affected Files gained the reference-durability standard and, conditionally, the ADR README; an `[ADJUST]` block records the three-way specification split so the wrong default is not taken.
+- The range-citation card's AC-5 was restated from a hardcoded PRESERVE count to a **diff-to-zero predicate**, and its AC-4 exclusion-predicate mandate was corrected, with the hazard relocated by hub measurement to the `^./`-anchored post-filter rather than to `--exclude-dir`.
+
+**Carried constraints — must survive to later stages:**
+
+1. **No durable artifact may hardcode a concrete version before the Stage-12 atomic claim.** The concurrent release computes to the same next-free slot; whichever merges first takes it. Bump-class `minor` is the durable declaration.
+2. **The exclusion-predicate form in the range-citation card's probe is load-bearing** and must reach the Engineering spoke, not just the card.
+
+**Merge and split recommendations: none. Do not merge the coupled pair.** They share two files and one canonical value, which is a *sequencing* fact, not a merge argument. They answer different questions — a divergent copy versus an uncovered surface — carry separate acceptance criteria with separate control-armed fixtures, and merging them would make the combined card's criteria unverifiable per-defect. The coupling is correctly expressed as a dependency edge plus CIAC-1 and CIAC-2, which is exactly what that mechanism is for. Splitting is likewise unwarranted: every card is single-concern and already right-sized.
+
+**Out-of-scope discoveries, noted and not actioned:**
+
+- The in-code justification in the issue-reference validity tool cites the reference-durability standard as naming a spelling that file does not contain at the pinned baseline. The comment's cited authority does not hold as written — worth a separate observation-tier intake, independent of this release's outcome.
+- An open observation records the same defect class at a different governance surface and appears satisfied on its own evidence. It is correctly **not** an acceptance criterion of the range-citation card and must not become one — a card's definition of done cannot depend on mutating a non-member issue.
+
+**Closure phrasing.** Every member is **marked as closed at Stage 13** via the automated close-out path. No close-family verb is paired with a bare issue number anywhere in this plan's prose, so transcription into a PR body cannot trip the host's auto-close parser.
+
+## Evidence
+
+**Baseline pin.** `origin/main` and `HEAD` both at `8f48357fe5f687f569d2e069f234cfdbedb9cf10` at planning entry; the commit range from that SHA to `origin/main` was empty at planning time and again at Engineering Commit 0. Planning ran read-only in an isolated session worktree — not the primary checkout — and made no commits.
+
+**Probe records.** Each carries its invocation, denominator, sensitivity arm with its observed non-zero result, and specificity arm.
+
+- **PV-1 — the range-citation EDIT-class population.** A whole-repository range-citation grep piped through a **non-`./`-anchored** PRESERVE filter. *Denominator:* the full unrestricted hit set across eight files. *Sensitivity:* PRESERVE changelog rows still flagged, non-zero. *Specificity:* the correct live range inside an EDIT-class site returned zero, and a bogus range returned zero. *Result:* the EDIT-class subject set, with the PRESERVE set subtracted.
+- **PV-2 — BROKEN PROBE, detected and repaired.** The first PRESERVE filter was anchored on `^./`. It returned the unrestricted population as EDIT-class while the PRESERVE census returned zero — a self-contradiction. Root cause: `grep` resolves here to ugrep, which emits **bare relative paths with no `./` prefix**, so the anchor matched nothing. It was reported as unusable and re-run; the corrected filter is PV-1. This is the mechanism behind risk R4, and hub re-measurement narrowed it further: `--exclude-dir` is anchor-insensitive and safe, and only the post-filter form fails.
+- **PV-3 — the divergence measurement.** A whole-repository declaration-site grep plus a byte-length and alternative-set comparison. *Denominator:* the complete declaration-site population. *Sensitivity:* the constant-family probe returns a non-zero hit set. *Specificity:* a bogus constant name returned zero, and the self-comparison arm reported identical with an empty delta. *Result:* two declaration sites differing in byte length, with two extra alternatives on the consumer side. The match-behaviour arm read both regex values as text — **no script was sourced** — and found they diverge on two headings, agree on three, and both correctly reject a near-miss heading.
+- **PV-4 — the constant-family census.** *Denominator:* the deploy check's constant family, enumerated with a gap in its numbering. *Sensitivity:* byte-identity anchors elsewhere in the same file returned non-zero, so the probe finds identity machinery where it exists. *Specificity:* the same anchor inside the Check-23 block returned zero. *Corroborating:* the shared library is referenced zero times in that file, so it is genuinely not sourced there.
+- **PV-5 — the contention map.** *Denominator:* the full pairwise set over six members. *Sensitivity:* a synthetic seventh member sharing a file was DETECTED. *Specificity:* the label-alias and partition-label pair returned empty, correctly. *Result:* one contended pair. Cross-PR arm: the matrix intersected the sibling's editset on two paths, with the sibling's remaining files correctly unclaimed.
+- **PV-6 — the partition measurement.** The first parse was contaminated by splitting at the wrong delimiter, which merged the label clause into the first item and produced a false partition. It was re-parsed correctly. *Result:* the stated partition does not match the measured one, while the totals do. *Specificity:* a synthetic correctly-labelled control line evaluates as conformant, so the predicate does not flag conformant labels.
+- **PV-7 — native dependency edges: SHAPE-VALID, SENSITIVITY UNCONFIRMED.** All six members return HTTP 200 with an empty array on both dependency endpoints, so this is not a 404 masquerading as empty. *The sensitivity arm did not fire:* a ten-issue control sample surfaced no non-empty response anywhere on this repository. A zero whose control arm also returned zero is not a clean result, so this probe is reported as **unusable for asserting the absence of edges**, and the dependency graph rests on body-declared prose plus file-level evidence instead.
+- **PV-8 — the library consumer set: a hypothesis falsified by its own control.** A loose name-mention grep suggested the header's `Sourced by:` list was under-stated. The same-line source-plus-filename predicate then returned zero — but its sensitivity arm also returned zero, marking it broken: the library is sourced through **variable indirection**, which no same-line substring probe can see. A corrected two-step probe — find the path assignment, then test whether that variable is sourced — returns exactly the set the header declares. Specificity: two files that merely copy the library were correctly classified as references rather than consumers. **The header's consumer list is accurate; the suspicion was wrong, and the control arm is what caught it.**
+
+**Canonical-checklist attestation — Stage 4.** Every codified Phase step in the Stage-4 planning pipeline spec ran, or is recorded N/A with reason.
+
+| Step | Status |
+|---|---|
+| Mode R cache-read | **RAN** — MISS, because the planning sub-task carried no prior comments; the pre-flight checks ran in full and the MISS reason is recorded |
+| Phase A0 Triage→Design re-review | **RAN** — header and per-requirement rows; two C2 clusters, zero C3, no Tier-0 premise rejection |
+| Ticket-architecture reconciliation | **RAN** — no member touches an ADR, registry, charter or roadmap surface; ticket-age staleness reconciled via the freshness re-runs |
+| Architecture evaluative lens (advisory) | **N/A** — no component is introduced or reshaped; all six are corrective edits to shipped surfaces |
+| Acceptance-criteria currency check | **RAN** — all cited paths and anchors verified live; two currency findings routed Tier-1 `[ADJUST]` |
+| Pre-plan crisping | **RAN** — all six bodies pass the intake-completeness criteria at Stage-4 entry; no crisping pre-gate required |
+| Placement forward-check | **SKIP** — empty mover set over the baseline-to-tip range, which is the correct non-ceremony signal |
+| Bundle-entry freshness | **RAN** — all six are drift-class, so the re-run was mandatory and no-skip; six of six admit still-valid |
+| Parallelization-map currency | **RAN** — map re-derived; the soft-coupling row is moot as written and superseded by the In-Flight Roster; the structural re-derivation contributes no edge because this release declares no mover; outcome = amend |
+| Currency-decision confidence gate | **RAN** — corroborated-and-grounded; CHEAP; proceeds at existing authorization |
+| Milestone validation | **RAN** — six members, all `status: bundled`, milestone assigned, `effective_pts` recomputed |
+| Domain-best-practice sourcing | **RAN** — the pipeline-internal exemption applies; see the `domain_practice` frontmatter field |
+| Dependency-ordered sequencing | **RAN** — one edge; sequence recommended with the divergence stated |
+| Per-issue change specification | **RAN** — File Change Matrix above, with the machine-readable path block |
+| Deliverable-domain classification | **RAN** — see the `domain_practice` frontmatter field |
+| File contention and Cross-PR Overlap Audit | **RAN** — one within-release pair; two cross-PR paths; In-Flight Roster with one sibling |
+| Structural blast-radius sub-audit | **RAN** — this release declares no mover, so the mover axis is empty; the **version axis** does fire and is carried as R1 |
+| Release-plan assembly | **RAN** — all required sections present |
+| Quota-budget pre-check | **RAN** — WARN; basis `UNSTATED`; no figure synthesized |
+| Verification-plan criterion-to-method mapping | **RAN** — all six cards' criteria are file-path-plus-state or explicit-predicate class; none requires a declared-but-unbuilt executor |
+| Cross-Issue Acceptance Criteria | **RAN** — three declared |
+| In-Flight Release Roster | **RAN** — one sibling, measured at the pinned SHA |
+
+**Control firings during Stage-4 planning: one.** The destructive-action hook blocked sourcing the shared pattern library, which is not in the script-execution allowlist, during an attempt to empirically test which headings the canonical regex matches. The block was **not** bypassed and no bypass variable was set. Planning proceeded on a genuinely different action — reading the two regex values as *text* and testing them with a separate grep — which reaches a different act rather than routing around the denial. The control fired correctly: sourcing an un-allowlisted repository script is exactly what it exists to prevent.
+
+**`domain_practice`.** The entire File Change Matrix consists of internal platform artifacts — governance, pipeline specs, schemas, and hook/deploy tooling — so the external-sourcing step does not fire. The deliverable is still domain-classified: dominant domain **governance**, with most matrix paths being corpus, spec or schema surfaces; secondary **software** for the deploy script, the issue-reference validity tool, the shared pattern library, and the fixture.
