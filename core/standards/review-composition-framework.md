@@ -107,7 +107,7 @@ Every review the platform composes is classifiable against these 7 dimensions. T
 | WHO/POSTURE | peer | Performed by the Stage 3 Bundle spoke (peer to the operator who approves; not the operator). |
 | DETAIL | structural | Verifies declared dependencies are in compatible states; verifies no circular cycles; verifies version assignment + bundle rationale present. |
 | FOCUS | capacity + ordering | Are file contentions resolvable through sequencing? Is the bundle size within capacity heuristics? |
-| OUTPUT | scorecard | Produces a per-criterion PASS/FAIL row (G3-01 through G3-09) plus an aggregated capacity score. |
+| OUTPUT | scorecard | Produces a per-criterion PASS/FAIL row (one row per Gate-3 criterion in `gate-criteria-spec.md` § Gate 3) plus an aggregated capacity score. |
 | AUTHORITY | gating | Operator approval required before Stage 4 Planning may begin; gate failure blocks transition without override. |
 
 The same probe (a real platform review) classifies cleanly against all 7 dimensions — confirming the taxonomy is COMPLETE for routine reviews. Reviews that fail to classify against one or more dimensions are flagged as candidates for either (a) refinement of the review's design, or (b) extension of the dimension enum (governance-mediated; not unilateral by a spoke).
@@ -367,7 +367,7 @@ The Agent-Correction Layer inherits the anti-laziness rules from [`review-discip
 | Composed-with doc | What this framework references | What the other doc references |
 |---|---|---|
 | [`review-discipline-principles.md`](../disciplines/review-discipline-principles.md) | § 8.4 cites ≥ 6 of the anti-laziness rules from § 1 of that doc. | "See also" pointer added at doc end → this framework § 8 Agent-Correction Layer. |
-| [`gate-criteria-spec.md`](../schemas/gate-criteria-spec.md) | § 3 Catalog references gate IDs as sub-components of composed reviews (e.g., RC-3-bundle-capacity inherits G3-01 through G3-09). § 4 Map cell at Stage 3 × Peer references RC-3-bundle-capacity. | "See also" pointer added in preamble → this framework § 3 Review Catalog + § 4 Review Map. |
+| [`gate-criteria-spec.md`](../schemas/gate-criteria-spec.md) | § 3 Catalog references gate IDs as sub-components of composed reviews (e.g., RC-3-bundle-capacity inherits the Gate-3 criterion set). § 4 Map cell at Stage 3 × Peer references RC-3-bundle-capacity. | "See also" pointer added in preamble → this framework § 3 Review Catalog + § 4 Review Map. |
 | [`gate-evaluation-spec.md`](../schemas/gate-evaluation-spec.md) | § 6 Calibration Ledger EXTENDS Layer 3 (Calibration) with per-dimension granularity. | "See also" pointer added in preamble → this framework § 6 Calibration Ledger. |
 
 ### §9.3 Registry references
