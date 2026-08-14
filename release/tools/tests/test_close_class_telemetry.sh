@@ -33,6 +33,10 @@ set -uo pipefail
 #       plus the denominator-isolation guard on the marker arrays.
 #   (C) INTERFACE CONTRACT — the clauses a downstream caller is entitled to rely on:
 #       no new required flag, single-line stdout, and an un-truncated --help.
+#   (D) DENOMINATOR INTEGRITY — Indicator 6 must not fail open. Arm presence for the
+#       denominator-integrity fixtures, and sensitivity against a mutant that collapses the
+#       unmeasurable-denominator limb back into the clean-absence limb — the verbatim pre-fix
+#       behaviour, in which a true zero and a total label gap emitted the identical 21 bytes.
 #
 # Offline + deterministic: no network, no gh, no writes to any operator-instance path, no
 # writes into the repo. All fixtures live under one mktemp dir.
@@ -96,6 +100,16 @@ except (ValueError, TypeError) as e:"""),
   return 1""",
          """  local file="$1" m
   return 0"""),
+    ],
+    # Collapse the unmeasurable-denominator limb back into the clean-absence limb. This is
+    # the verbatim pre-fix behaviour: a true zero and a milestone whose stage sub-tasks are
+    # unlabelled both render `N/A - no stage sub-tasks scaffolded`, and a reader has no
+    # signal that anything is wrong. The guard's own DZ/DU inequality MUST catch it.
+    "collapsed-denominator": [
+        ("""    elif [[ "$u" -gt 0 ]]; then
+      ra="truncated"; rb="NOT-EVALUATED\"""",
+         """    elif [[ "$u" -gt 999999 ]]; then
+      ra="truncated"; rb="NOT-EVALUATED\""""),
     ],
 }
 
@@ -315,6 +329,51 @@ if /usr/bin/grep -q 'Diagnostics go to stderr' "$HELP_OUT"; then
 else
   bad "C4 help completeness — --help is truncated before the final header line; usage()'s line range is stale"
 fi
+
+echo
+
+# ---------------------------------------------------------------------------
+# GROUP D — denominator integrity
+# ---------------------------------------------------------------------------
+echo "GROUP D — Indicator 6's denominator must not fail open"
+
+# D1 — arm presence. A2 alone would still pass if the denominator-integrity fixtures were
+#      deleted, so assert the shipped self-test REPORTED them. This is the arm that catches
+#      a suite that is green on a path it never exercised.
+if /usr/bin/grep -q 'denominator-integrity validated' "$SELFTEST_OUT"; then
+  ok "D1 arm presence — $(/usr/bin/grep 'denominator-integrity validated' "$SELFTEST_OUT" | /usr/bin/sed 's/^ *//')"
+else
+  bad "D1 arm presence — shipped --self-test passed WITHOUT reporting the denominator-integrity arm; it is green on a path it never exercised"
+fi
+
+# D2 — SENSITIVITY. Collapse the unmeasurable-denominator limb into the clean-absence limb,
+#      which is exactly what the tool did before this guard: a true zero and a total label
+#      gap emitted the identical 21 bytes. The suite MUST go red, and for that reason.
+MUT_DEN="$WORK/mutant-denominator.sh"
+MUT_DEN_RESULT="$(mutate "$TOOL" "$MUT_DEN" collapsed-denominator)"
+case "$MUT_DEN_RESULT" in
+  "OK 1")
+    ok "D2a mutation-extraction control — the unmeasurable-denominator limb was replaced exactly once"
+    chmod +x "$MUT_DEN"
+    MUT_DEN_OUT="$WORK/mutant-denominator-out.txt"
+    if "$MUT_DEN" --self-test >"$MUT_DEN_OUT" 2>&1; then
+      bad "D2b sensitivity — the collapsed-denominator mutant PASSED its own suite; the guard is decorative and an unmeasurable denominator still reads as a clean zero"
+    else
+      # "For the right reason" means the DU arm — the unlabelled-sub-task fixture — is what
+      # went red. The collapse is observable at two assertions (DU's own state shape, then
+      # the DZ/DU string inequality) and the mutant trips whichever comes first; pinning the
+      # predicate to only the second would report a working sensitivity arm as broken.
+      if /usr/bin/grep -qE 'denominator-integrity\(DU\)|IDENTICAL state' "$MUT_DEN_OUT"; then
+        ok "D2b sensitivity — collapsed-denominator mutant fails on the DU arm, which is where a true zero and an unmeasurable denominator become indistinguishable: $(/usr/bin/tail -1 "$MUT_DEN_OUT" | /usr/bin/sed 's/^ERROR: self-test: //')"
+      else
+        bad "D2b sensitivity — mutant failed, but not on the denominator-integrity arms: $(/usr/bin/tail -1 "$MUT_DEN_OUT")"
+      fi
+    fi
+    ;;
+  *)
+    bad "D2a mutation-extraction control — $MUT_DEN_RESULT (instrument broken; no sensitivity verdict is reportable)"
+    ;;
+esac
 
 echo
 echo "----------------------------------------------------------------------"
