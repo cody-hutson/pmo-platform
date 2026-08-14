@@ -9290,10 +9290,18 @@ sys.stdout.write("".join(out) + "|")
   #
   # Findings route through flag_warn_or_issue (warn-mode-initial per
   # bypass-mode-readiness.md): in warn-mode they annotate + jsonl-log without
-  # incrementing ISSUES; flip core/hooks/check-convention.mode (or the shared
-  # deploy-check.mode) to 'enforce' after the shakedown window. A non-zero exit
-  # with no parsed FAIL (scan-surface error, exit 3) still flags so a broken
-  # predicate run never reads green.
+  # incrementing ISSUES; flip $(pmo_instance_path)/check-convention.mode or
+  # .claude/hooks/check-convention.mode — the two tiers resolve_check_mode reads,
+  # in that order — to 'enforce' after the shakedown window (or the shared
+  # deploy-check.mode, to move every check at once). A non-zero exit with no
+  # parsed FAIL (scan-surface error, exit 3) still flags so a broken predicate
+  # run never reads green.
+  #
+  # RETIRED IDENTIFIER: this check formerly emitted findings under
+  # `convention-linter` while resolving its mode under `check-convention` — two
+  # mode knobs for one check, neither covering all of it. Every site now uses
+  # `check-convention`; a `convention-linter.mode` file no longer binds and
+  # should be renamed to `check-convention.mode`.
   #
   # Cutover discipline: applies to ./deploy.sh --check on or after this release's
   # merge SHA in RELEASE_LOG.md.
@@ -9303,14 +9311,14 @@ sys.stdout.write("".join(out) + "|")
     c49_mode=$(resolve_check_mode "check-convention")
     local c49_script="core/deploy/tools/check-convention.sh"
     if [[ ! -f "$c49_script" ]]; then
-      flag_warn_or_issue "convention-linter" "predicate script missing: $c49_script"
+      flag_warn_or_issue "check-convention" "predicate script missing: $c49_script"
     else
       local c49_out c49_rc
       c49_out=$(bash "$c49_script" 2>&1)
       c49_rc=$?
       if [[ $c49_rc -eq 3 ]]; then
         # scan-surface error — fail-loud independent of warn-mode
-        log "  FAIL:  Check 49 — convention-linter scan-surface error (exit 3)"
+        log "  FAIL:  Check 49 — check-convention scan-surface error (exit 3)"
         ISSUES=$((ISSUES + 1))
         printf '%s\n' "$c49_out" | grep -E '^(FAIL|SUMMARY):' | sed 's/^/         /'
       else
