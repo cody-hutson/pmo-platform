@@ -1,14 +1,38 @@
 #!/bin/bash
 # fragile-ref-patterns.sh — the reference-durability detector constants
 #
-# This file is the SOLE declaration of the seven constants the reference-durability
-# detectors evaluate. It is sourced (not executed) by every surface that runs them, so
-# the values cannot differ between surfaces: there is one set of bytes, read by all.
+# This file is the CANONICAL declaration of the seven constants the reference-durability
+# detectors evaluate. Every surface named under `Sourced by:` reads it (sourced, never
+# executed) at run time, so those surfaces cannot differ: there is one set of bytes, read
+# by all of them.
+#
+# THAT CLAIM IS ABOUT AN ENUMERATED SET, NOT ABOUT THE WHOLE REPOSITORY. A surface that
+# declares its own copy sits outside the sourcing set by construction, so "canonical" is
+# only as true as the two lists below are complete. For REFBLOCK_RE that completeness is
+# asserted mechanically rather than promised here: the identity scan in
+# core/hooks/run-fragile-ref-fixtures.sh DISCOVERS declaration sites across the tracked tree
+# instead of reading a list of them, and fails the run on any whose value has drifted from
+# these bytes; a companion advisory arm reports the same pattern shape carried under a
+# different variable name, which is the class a name-anchored probe structurally cannot see.
+# The other six constants are covered only by that runner's three-file redeclaration scan,
+# so for those the lists below remain a hand-maintained claim. A header asserting sole
+# declaration while an unlisted divergent copy existed is exactly the state the identity
+# scan now prevents, and it is why the exclusion set below is written down rather than left
+# implied.
 #
 # Sourced by:
 #   - core/hooks/block-fragile-refs.sh          (PreToolUse hook)
 #   - core/hooks/run-fragile-ref-fixtures.sh    (fixture self-test; deploy.sh Check 31)
 #   - .github/workflows/reference-durability.yml (PR-time CI)
+#   - core/deploy/tools/check-issue-ref-validity.sh (Issue-reference validity gate, a
+#     REQUIRED status check; sources REFBLOCK_RE and fails closed when it is unset)
+#
+# Deliberately NOT sourced:
+#   A surface belongs here only when it answers a DIFFERENT question than the constant it
+#   resembles — never because sourcing was merely inconvenient. Each row carries its own
+#   reason; a row without one is a defect, not an exemption. Rows are appended below, one
+#   per surface, in the form:
+#       - <path>:<line>  <local name> — <the different question this surface answers>
 #
 # core/hooks/lib/positional-issueref.awk is NOT a consumer of this file — it declares
 # nothing and receives ISSUEREF_RE / HEXCOLOR_RE / MIN_SELFDESCRIBE_WORDS as `awk -v`
@@ -59,7 +83,24 @@ CUTOVER_RE='v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?[^.\n]{0,40}merge SHA|v[0-9]+\.[0
 URL_RE='github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(issues|pull|milestone)s?([/#?]|$)'
 
 # Reference-block header (reuses the parser-clean anchor-regex shape; H1-H6, lenient colon).
-REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
+# Seven recognized spellings: Issue References / References / Related / Provenance /
+# Source / Sources / Source(s).
+#
+# The `Source(s)` arm is spelled out because `[Ss]ources?` matches `Source` and `Sources`
+# but NOT `Source(s)`, whose parenthetical then hit the `$` anchor and failed — while the
+# issue-ref gate's own failure message, core/ADRs/README.md, and
+# core/standards/reference-durability-standard.md all NAME `### Source(s)` as recognized.
+# That was a specification-versus-implementation defect, not a policy choice, so the
+# implementation is corrected to the stated set.
+#
+# `Related` is recognized; `Related ADRs` is NOT, and the exclusion is structural rather
+# than a promise. `Related ADRs` is a cross-ADR-link section where
+# core/standards/adr-authoring-guide.md § Issue references in ADRs forbids a bare issue
+# number outright (zone 1); recognizing it would move the placement cut point ABOVE that
+# section and make the gates accept exactly the placement the authoring guide prohibits.
+# The terminating `$` anchor is what excludes it — the pattern ends immediately after the
+# heading word, so `### Related ADRs` cannot match however `Related` is spelled.
+REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Rr]elated|[Pp]rovenance|[Ss]ources?|[Ss]ource\(s\))[[:space:]]*:?[[:space:]]*$'
 
 # A bare issue reference: a # followed by digits, optionally bracketed (matches #42, #[42]).
 ISSUEREF_RE='#\[?[0-9]+\]?'
