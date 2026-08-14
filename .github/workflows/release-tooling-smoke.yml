@@ -254,6 +254,15 @@ on:
       # that catches it — the library itself is already covered by 'release/tools/**'.
       - '.github/workflows/repo-integrity.yml'
       - '.github/workflows/release-tooling-smoke.yml'
+      # R8 arming-declaration input: 'release/tools/**' above covers the tolerance
+      # suite, which is the CODE rule R8 grades — but the sentinel is the
+      # DECLARATION it grades that code against. Without this entry a PR that flips
+      # the token from 'armed' back to 'pending', or deletes the sentinel outright,
+      # would not trigger the job that runs R8: the one change most able to defeat
+      # the gate would merge un-graded, which is the exact reversibility the
+      # sentinel exists to close. Same residual-path-filter reasoning as the CIAC-3
+      # and selftest-discovery entries above, and closed here rather than deferred.
+      - '.github/corpus-home-tolerance.arming'
   push:
     branches: [main]
     paths:
@@ -277,6 +286,8 @@ on:
       - 'core/schemas/finops-usage-store-schema.md'
       # deciders carve-out input — see the pull_request block above.
       - '.github/workflows/repo-integrity.yml'
+      # R8 arming-declaration input — see the pull_request block above.
+      - '.github/corpus-home-tolerance.arming'
 
 permissions:
   contents: read
