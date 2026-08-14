@@ -3289,13 +3289,26 @@ phase_ledger_guard() {
 # second copy.
 #
 # COUPLING, PRICED HONESTLY (do not restate this as "the narrowest coupling"). The
-# builder dispatches its query at build-skill-packages.sh:170, AFTER three hard
-# `exit 1` preconditions — TEMPLATE_SYNC_MAP non-empty, the per-module roster arrays
-# non-empty, and the shared resolver lib present. The roster precondition is
-# provably IRRELEVANT to this query (the query reads the map and the resolver, never
-# a roster array), so an unrelated deploy.sh roster reshape would hard-FAIL a release
-# close here. The delegation is still right, but on MINIMUM CONTENTION — one live
-# consumer, already proven by claim-version.sh — not on narrowest surface.
+# builder dispatches its query AFTER three hard `exit 1` preconditions —
+# TEMPLATE_SYNC_MAP non-empty, the per-module roster arrays non-empty, and the shared
+# resolver lib present — so a deploy.sh reshape that empties any of them hard-FAILs a
+# release close here.
+#
+# The roster precondition USED TO BE provably irrelevant to this query, and this
+# comment used to say so in those words. That is no longer true and the claim is
+# retired rather than left standing: query rule (a) now gates each candidate on
+# resolve_skill_module(), so the query READS the roster arrays. The coupling is real
+# on all three preconditions, not two. A roster reshape no longer trips this query
+# only through an unrelated guard — it changes the query's own answer.
+#
+# That is the price of making "the query emits it" and "the build accepts it" a
+# biconditional rather than an agreement, and it is the right trade: the alternative
+# is a query that emits arguments no consumer can build, which is precisely what fed
+# this phase an unbuildable candidate and failed a whole batch on it.
+#
+# The delegation is still right, but on MINIMUM CONTENTION — the resolution rules
+# live in ONE place and both live consumers (this phase and claim-version.sh) get the
+# same answer from it — not on narrowest surface.
 #
 # WHAT THIS DOES NOT PROPAGATE TO (the "every consumer" claim is over-stated).
 # .github/workflows/skill-package-freshness.yml is the repo's only pre-merge package-
@@ -3380,7 +3393,7 @@ phase_rebuild_skill_packages() {
   if [[ $detect_rc -ne 0 ]]; then
     local _d_why="build-skill-packages.sh --skills-for-paths exited ${detect_rc}"
     [[ $detect_rc -eq 127 ]] && _d_why="package builder absent at core/deploy/tools/build-skill-packages.sh"
-    local _d_fix="affected-skill set UNDETERMINABLE, so .skill staleness cannot be ruled out. The builder exits 1 before answering when deploy.sh yields no TEMPLATE_SYNC_MAP, no per-module roster arrays (a precondition this query does not use — a roster reshape can trip it), or when core/deploy/lib-template-sync-source.sh is missing. Resolve the builder, then re-run; or rebuild + stage the affected package(s) per core/rules/skill-deployment.md before closing"
+    local _d_fix="affected-skill set UNDETERMINABLE, so .skill staleness cannot be ruled out. The builder exits 1 before answering when deploy.sh yields no TEMPLATE_SYNC_MAP, no per-module roster arrays (which this query now READS, to filter out path segments that are not packageable skills — so a roster reshape changes this query's own answer), or when core/deploy/lib-template-sync-source.sh is missing. Resolve the builder, then re-run; or rebuild + stage the affected package(s) per core/rules/skill-deployment.md before closing"
     if [[ "$MODE" == "dry-run" ]]; then
       mark_phase "rebuild_skill_packages" "WARN" "${_d_why} — ${_d_fix}. NOT blocking under --dry-run (nothing is committed, so no package can be staled here); this same condition FAILS the close at --apply"
       return 0
@@ -3410,11 +3423,38 @@ phase_rebuild_skill_packages() {
     return 3
   fi
 
-  # Guarded call (M3-3): the builder runs set -euo pipefail + exit 1 on failure;
-  # the subshell isolates its set -e so its exit does not abort this script
-  # before mark_phase runs. Word-split $candidates into per-skill args.
-  if ! ( /bin/bash "$builder" $candidates ) >/dev/null 2>&1; then
-    mark_phase "rebuild_skill_packages" "FAIL" "build-skill-packages.sh failed for one of: ${names} — package(s) not rebuilt; close blocked (re-run after resolving the build error)"
+  # PER-SKILL INVOCATION, not one batched call. A batched build collapses every
+  # skill's outcome onto ONE exit code, so this phase could only ever name the whole
+  # candidate set — "failed for one of: <21 skills>" — and a single unresolvable
+  # argument discarded twenty-one rebuilds that had already succeeded. Looping makes
+  # each skill's exit code its own: failures accumulate BY NAME, successes survive.
+  #
+  # THE LOUD STOP IS DELIBERATELY KEPT. A genuinely unbuildable skill still marks
+  # FAIL and returns 3. What changes is attribution, not tolerance. The tempting
+  # alternative — re-derive the rebuilt set from the working tree instead of trusting
+  # exit codes — is a SILENT PASS and was rejected for that reason: the R8 sidecar
+  # gate immediately below means a successful content-identical rebuild produces NO
+  # working-tree change, which is byte-for-byte indistinguishable from a skill that
+  # never built at all. Observed state cannot tell those two apart; exit codes can.
+  #
+  # --root is passed here for the same reason the detection call above passes it, and
+  # with more force: the builder derives its own REPO_ROOT from its own file location.
+  # Answering from the wrong tree is a wrong answer; BUILDING into the wrong tree
+  # writes packages there. Today $builder is resolved under $REPO_ROOT so the two
+  # coincide by construction, but that is a coincidence, not a guarantee — and the
+  # self-test sandbox below is exactly the case where they do not.
+  #
+  # Guarded per-skill subshell (M3-3): the builder runs set -euo pipefail + exit 1 on
+  # failure; the subshell isolates its set -e so its exit does not abort this script
+  # before mark_phase runs.
+  local _rb_skill _rb_failed=""
+  for _rb_skill in $candidates; do
+    if ! ( /bin/bash "$builder" --root "$REPO_ROOT" "$_rb_skill" ) >/dev/null 2>&1; then
+      _rb_failed="${_rb_failed:+$_rb_failed }$_rb_skill"
+    fi
+  done
+  if [[ -n "$_rb_failed" ]]; then
+    mark_phase "rebuild_skill_packages" "FAIL" "build-skill-packages.sh failed for: ${_rb_failed} — package(s) not rebuilt; close blocked (re-run after resolving the build error). Other candidates in this release's set (${names}) are not implicated"
     return 3
   fi
 
@@ -7323,18 +7363,33 @@ STUB
     /bin/cp "$_rp_root/core/deploy/tools/build-skill-packages.sh" "$_rp_work/core/deploy/tools/" 2>/dev/null || true
     /bin/cp "$_rp_root/core/deploy/deploy.sh" "$_rp_work/core/deploy/" 2>/dev/null || true
     /bin/cp "$_rp_root/core/deploy/lib-template-sync-source.sh" "$_rp_work/core/deploy/" 2>/dev/null || true
+    # The --apply arms (d1/d2) drive the builder's BUILD path, which fails CLOSED on an
+    # absent complementary-pair registry BEFORE it dispatches any skill. So the sandbox
+    # needs the real registry. Inert for the --dry-run arms: the query mode dispatches
+    # and exits ABOVE that guard, so those arms never read it.
+    /bin/mkdir -p "$_rp_work/core/deploy/allowlists"
+    /bin/cp "$_rp_root/core/deploy/allowlists/complementary-reference-pairs.txt" "$_rp_work/core/deploy/allowlists/" 2>/dev/null || true
+    # The apply path tests `[[ ! -x "$builder" ]]` before invoking it, and cp's mode
+    # preservation is not worth depending on across platforms.
+    /bin/chmod +x "$_rp_work/core/deploy/tools/build-skill-packages.sh" 2>/dev/null || true
     $GIT init -q -b main "$_rp_work" 2>/dev/null || { $GIT init -q "$_rp_work" 2>/dev/null; ( cd "$_rp_work" && $GIT checkout -q -b main 2>/dev/null ); }
     ( cd "$_rp_work" && $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1 \
       && $GIT -c user.email=t@t -c user.name=t commit -qm base >/dev/null 2>&1 ) || true
 
-    # _rp_touch <repo-rel-path> — commit a one-line change to that path and set
-    # MERGE_SHA to it, so the phase's own `diff --name-only SHA^1 SHA` yields exactly
-    # that path. The phase resolves its diff itself; nothing is stubbed.
+    # _rp_touch <repo-rel-path>... — commit a one-line change to EVERY given path in ONE
+    # commit and set MERGE_SHA to it, so the phase's own `diff --name-only SHA^1 SHA`
+    # yields exactly those paths. The phase resolves its diff itself; nothing is stubbed.
+    # Multi-path support exists for the mixed-set arm (a7), which needs one commit
+    # touching a buildable and an unbuildable path together — the shape the real defect
+    # took. Existing single-path callers are unaffected.
     _rp_touch() {
-      /bin/mkdir -p "$_rp_work/$(/usr/bin/dirname "$1")" 2>/dev/null || true
-      /usr/bin/printf 'fixture edit: %s\n' "$1" >> "$_rp_work/$1"
+      local _p
+      for _p in "$@"; do
+        /bin/mkdir -p "$_rp_work/$(/usr/bin/dirname "$_p")" 2>/dev/null || true
+        /usr/bin/printf 'fixture edit: %s\n' "$_p" >> "$_rp_work/$_p"
+      done
       ( cd "$_rp_work" && $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1 \
-        && $GIT -c user.email=t@t -c user.name=t commit -qm "touch $1" >/dev/null 2>&1 ) || true
+        && $GIT -c user.email=t@t -c user.name=t commit -qm "touch $*" >/dev/null 2>&1 ) || true
       MERGE_SHA="$($GIT -C "$_rp_work" rev-parse HEAD 2>/dev/null)"
       PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
     }
@@ -7367,6 +7422,83 @@ STUB
     if [[ "$(get_phase rebuild_skill_packages | /usr/bin/cut -d'|' -f1)" != "N/A" ]]; then
       echo "FAIL: a non-skill non-canonical diff MUST resolve no package (specificity), got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
     fi
+
+    # (a5) SENSITIVITY — a NON-SKILL directory under a skills/ root. Rule (a) is a
+    #      regex capture over changed paths, so it yields whatever segment sits under
+    #      the root: here `_shared`, a directory of behavioral markers with no SKILL.md
+    #      that is in no deploy.sh roster and cannot be built. Emitting it hands this
+    #      phase an argument that CANNOT succeed. Pre-fix this marked
+    #      "DRY-RUN|would rebuild 1 package(s): _shared".
+    _rp_touch "operations/skills/_shared/behavioral-markers.md"
+    phase_rebuild_skill_packages >/dev/null 2>&1
+    if [[ "$(get_phase rebuild_skill_packages | /usr/bin/cut -d'|' -f1)" != "N/A" ]]; then
+      echo "FAIL: a path under operations/skills/_shared/ MUST NOT resolve a rebuild candidate — _shared is in no deploy.sh roster and cannot be built, got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+    # (a6) SECOND-DIRECTORY — proves the filter is a ROSTER-RESOLVABILITY TEST and not
+    #      a hardcoded `_shared` exclusion. operations/skills/_templates/ is a LIVE
+    #      second non-skill directory: it holds skill TEMPLATES whose own SKILL.md files
+    #      sit one level deeper, so rule (a) captures `_templates`, which is in no
+    #      roster. A hardcoded `_shared` exclusion would ship already broken against it,
+    #      and this arm is what says so.
+    _rp_touch "operations/skills/_templates/system-specialist/SKILL.md"
+    phase_rebuild_skill_packages >/dev/null 2>&1
+    if [[ "$(get_phase rebuild_skill_packages | /usr/bin/cut -d'|' -f1)" != "N/A" ]]; then
+      echo "FAIL: a path under operations/skills/_templates/ MUST NOT resolve a rebuild candidate — the filter must test roster resolvability, not exclude a hardcoded _shared, got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+    # (a7) MIXED SET — the shape the real defect took. ONE commit touching an
+    #      unbuildable path AND a real skill: the phase must KEEP the buildable
+    #      candidate and DROP the unbuildable one. This is the anti-over-filtering
+    #      arm — a filter that dropped everything would still satisfy a5 and a6.
+    _rp_touch "operations/skills/_shared/behavioral-markers.md" "operations/skills/comms-writer/SKILL.md"
+    phase_rebuild_skill_packages >/dev/null 2>&1
+    if [[ "$(get_phase rebuild_skill_packages)" != *comms-writer* ]]; then
+      echo "FAIL: a mixed commit MUST still resolve the real skill (comms-writer) — dropping every candidate is over-filtering, got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+    if [[ "$(get_phase rebuild_skill_packages)" == *_shared* ]]; then
+      echo "FAIL: a mixed commit MUST drop the unbuildable candidate (_shared) while keeping the real skill, got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+
+    # (d) ANTI-REGRESSION PAIR, --apply. The fix changes WHICH skill a build failure is
+    #     attributed to; it must NOT change WHETHER a real build failure stops the close.
+    #     d1 and d2 share one sandbox, one mode, and one rule — rule (a), a path under a
+    #     skills/ root — and differ in EXACTLY ONE variable: whether the captured segment
+    #     is in the deploy.sh rosters. That is what makes roster-resolvability provably
+    #     the variable under test rather than an assumed one.
+    local _rp_rc=0
+    MODE="apply"
+    # (d1) A roster-RESOLVABLE skill that cannot build MUST still FAIL, BY NAME. This
+    #      arm passes both pre- and post-fix BY DESIGN: its job is to fail if the fix
+    #      ever over-filters a real skill or swallows a genuine build failure.
+    #      Hermetic — `comms-writer` resolves, so the builder proceeds, and its
+    #      canonical injection then returns 1 because the sandbox carries no canonical
+    #      source tree. It returns before the complementary-pair post-condition and
+    #      before any packager, so nothing is written to packages/ and python3 is never
+    #      invoked. (The source dir itself DOES exist here — _rp_touch creates every
+    #      path it commits — so the early `! -d` guard is not the one that fires.)
+    _rp_touch "operations/skills/comms-writer/SKILL.md"
+    phase_rebuild_skill_packages >/dev/null 2>&1 || _rp_rc=$?
+    if [[ $_rp_rc -ne 3 ]]; then
+      echo "FAIL: a roster-resolvable skill that cannot build MUST still return 3 under --apply — the loud stop is kept, only its attribution changes, got rc $_rp_rc"; failures=$((failures+1))
+    fi
+    if [[ "$(get_phase rebuild_skill_packages | /usr/bin/cut -d'|' -f1)" != "FAIL" ]]; then
+      echo "FAIL: a real build failure MUST mark FAIL, not a green outcome, got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+    if [[ "$(get_phase rebuild_skill_packages)" != *comms-writer* ]]; then
+      echo "FAIL: the FAIL detail MUST name the skill that actually failed, not the whole candidate set, got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+    # (d2) THE CONVERSE, same sandbox and same mode: an unbuildable-BY-FILTER path must
+    #      reach the N/A limb and return 0, never the FAIL limb. Pre-fix this returned 3
+    #      and marked FAIL, because `_shared` was handed to a real build.
+    _rp_rc=0
+    _rp_touch "operations/skills/_shared/behavioral-markers.md"
+    phase_rebuild_skill_packages >/dev/null 2>&1 || _rp_rc=$?
+    if [[ $_rp_rc -ne 0 ]]; then
+      echo "FAIL: a non-skill directory under a skills/ root must NOT reach the builder under --apply (pre-fix this returned 3), got rc $_rp_rc"; failures=$((failures+1))
+    fi
+    if [[ "$(get_phase rebuild_skill_packages | /usr/bin/cut -d'|' -f1)" != "N/A" ]]; then
+      echo "FAIL: a filtered-out candidate must mark N/A, not FAIL, got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
+    fi
+    MODE="dry-run"
 
     # (b) C1 — the fail-loud guard's MODE SCOPING (#4765 convention: assert at
     #     --apply, predict at --dry-run). ONE fixture — the builder removed, so
@@ -7444,6 +7576,25 @@ STUB
   _rp_ln_dry="$(/usr/bin/grep -nF -m1 'would rebuild' <<< "$_rp_body" || true)"; _rp_ln_dry="${_rp_ln_dry%%:*}"
   if [[ -z "$_rp_ln_guard" || -z "$_rp_ln_dry" || "$_rp_ln_guard" -ge "$_rp_ln_dry" ]]; then
     echo "FAIL: the undeterminable-set guard must precede the dry-run enumerate branch (guard line '$_rp_ln_guard', dry-run line '$_rp_ln_dry')"; failures=$((failures+1))
+  fi
+  # c5 — BUILD-INVOCATION SHAPE. The build call must sit inside a PER-SKILL loop that
+  #      accumulates failures by name, not a single batched call over $candidates. A
+  #      batched call collapses every skill's outcome onto one exit code, so the phase
+  #      can only ever name the whole candidate set — which IS the defect. It must also
+  #      pass --root, for the same reason c2 requires it on the detection call and with
+  #      more force: detection answering from the wrong tree is a wrong answer, but
+  #      BUILDING into the wrong tree writes packages there. Anchored on code, since
+  #      declare -f strips comments.
+  local _rp_build
+  _rp_build="$(/usr/bin/grep -F -m1 -- '"$builder" --root "$REPO_ROOT" "$_rb_skill"' <<< "$_rp_body" || true)"
+  if [[ -z "$_rp_build" ]]; then
+    echo "FAIL: the BUILD invocation must run per skill as \"\$builder\" --root \"\$REPO_ROOT\" \"\$_rb_skill\" — a batched call cannot attribute a failure, and without --root the builder builds into its OWN tree"; failures=$((failures+1))
+  fi
+  if [[ "$_rp_body" != *'for _rb_skill in $candidates'* ]]; then
+    echo "FAIL: the build invocation must sit inside a 'for _rb_skill in \$candidates' loop; a single batched call re-opens the whole-set attribution defect"; failures=$((failures+1))
+  fi
+  if [[ "$_rp_body" != *'_rb_failed='* ]]; then
+    echo "FAIL: the build loop must accumulate failures in _rb_failed so the FAIL detail names only the skills that actually failed"; failures=$((failures+1))
   fi
   # files=() composition (P1 regression guard) — the commit phase MUST expand
   # "${REBUILT_PACKAGES[@]:-}" in its files=() array, else a rebuilt package is
