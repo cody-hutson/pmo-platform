@@ -419,6 +419,21 @@ core/deploy/tests/test_g1_form_family.sh
 ./core/deploy/tests/test_g1_release_resolver.sh
 core/deploy/tests/test_g1_release_resolver.sh
 
+# Check 56 M2 advisory-class regression — the dynamic proof that the M2
+# reconciliation leg is STRUCTURALLY unable to gate: it extracts the real
+# emitter bodies and the real M1/M2 emit region from deploy.sh and executes
+# them against a real failure counter, with a sensitivity arm that drives an M1
+# finding through the same region at the same enforce mode so the M2 zero is a
+# measured zero rather than an untested one. Same four invocation forms, for the
+# same reason as the three siblings above: it is run by the install-tests
+# shell-tests job AND agent-side at Stage 6/7 dev testing, and a delivered test
+# whose allowlist rows never landed is blocked and therefore unrunnable
+# agent-side on arrival.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_check56_m2_advisory.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_check56_m2_advisory.sh
+./core/deploy/tests/test_check56_m2_advisory.sh
+core/deploy/tests/test_check56_m2_advisory.sh
+
 # context-budget-auditor Measure-mode scanner — read-only per-component token-cost
 # scan across the loadable-component surface, plus a --self-test mode. Invoked
 # agent-side by the skill's Measure mode, so all four invocation forms per the

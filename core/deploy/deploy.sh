@@ -9963,6 +9963,11 @@ sys.stdout.write("".join(out) + "|")
         # otherwise produce identical counters. The primitive reports which, so
         # the warn line says which.
         [[ "$c56_m2_res" == "degraded" ]] && c56_m2_degraded=" [ref resolution DEGRADED — tokens fell back to the free indices; treat unresolved counts as unmeasured]"
+        # >>> C56-EMIT-BEGIN — core/deploy/tests/test_check56_m2_advisory.sh
+        # extracts the M1/M2 emit region between these sentinels and EXECUTES
+        # it against the real emitters, so a green run means the shipped path
+        # cannot gate — not that a copy of it cannot. Moving or renaming a
+        # sentinel makes extraction fail LOUDLY (harness Arm A), never silently.
         if [[ -z "$c56_m1" && -z "$c56_m2" ]]; then
           log "  OK:    milestone↔epic membership — no drift (${c56_declared:-0} milestone(s) declare an epic; M2 reconciliation clean)"
         else
@@ -9975,20 +9980,36 @@ sys.stdout.write("".join(out) + "|")
               flag_warn_or_issue "milestone-epic-membership" "M1 membership — cross-epic child(ren) (warn-mode; flip milestone-epic-membership.mode to enforce after shakedown): $c56_m1"
             fi
           fi
-          # M2 — warn-only ALWAYS (never gates, independent of mode)
-          # KNOWN, TRACKED, AND NOT FIXED HERE: this call is UNGUARDED, while M1
-          # above guards with an explicit mode branch. flag_warn_or_issue carries
-          # an enforce case that emits FAIL and increments the issue counter, so
-          # flipping milestone-epic-membership.mode to enforce WOULD make M2 gate
-          # — contradicting the "warn-only ALWAYS" this comment asserts. The fix
-          # is to route M2 through flag_advisory_only, as M3 already is; it is out
-          # of scope here because the governing card's acceptance criterion
-          # requires M2 to keep routing through the WARN emitter unconditionally,
-          # and it is tracked as its own defect. Do not take it opportunistically.
+          # M2 — the ADVISORY emitter class (review-discipline-principles.md § 8
+          # PV-7; ADR-133): M2 MEASURES, but its predicate cannot separate a
+          # description that legitimately lags membership mid-release from a
+          # genuine divergence. That is the ADVISORY predicate, so it routes
+          # through flag_advisory_only — which has no mode `case` and no ISSUES
+          # increment, making non-escalation a property of the emitter's SHAPE
+          # rather than a convention this comment asserts. There is deliberately
+          # NO local mode guard here: adding one would re-implement, per leg,
+          # the guarantee the emitter already provides.
+          #
+          # THE check_id IS ITS OWN, and that is not a detail — the same reason
+          # M4 carries `milestone-subtask-orphan`. flag_advisory_only's line
+          # states "this check is never enforce-capable"; that is TRUE of
+          # `milestone-description-reconciliation` and FALSE of
+          # `milestone-epic-membership`, which M1 graduates through a live dial.
+          # Emitting the shared id here would write a false claim into the warn
+          # log the M1 enforce-flip decision is READ FROM, and would leave M2's
+          # rows polluting M1's shakedown record. With its own id and an emitter
+          # that never calls resolve_check_mode, M2 is non-gating twice over:
+          # by emitter shape, and by dial disjunction.
+          #
+          # The constraint that previously held this call on the warn emitter was
+          # an acceptance criterion of the card that split the named-not-member
+          # sub-classes; that card CLOSED 2026-08-07 and the constraint is
+          # discharged.
           if [[ -n "$c56_m2" ]]; then
-            flag_warn_or_issue "milestone-epic-membership" "M2 reconciliation (warn-only; advisory) — description↔membership divergence on: $c56_m2 [named-not-member ${c56_m2_nnm:-0}: ${c56_m2_else:-0} in another milestone, ${c56_m2_none:-0} in no milestone, ${c56_m2_mex:-0} member-excluded, ${c56_m2_unres:-0} unresolved]${c56_m2_degraded} — $c56_m2_detail"
+            flag_advisory_only "milestone-description-reconciliation" "M2 reconciliation (advisory-only; structurally non-gating) — description↔membership divergence on: $c56_m2 [named-not-member ${c56_m2_nnm:-0}: ${c56_m2_else:-0} in another milestone, ${c56_m2_none:-0} in no milestone, ${c56_m2_mex:-0} member-excluded, ${c56_m2_unres:-0} unresolved]${c56_m2_degraded} — $c56_m2_detail"
           fi
         fi
+        # >>> C56-EMIT-END
         # M3 — scaffold completeness. Routed through flag_advisory_only, NOT
         # flag_warn_or_issue: this leg's predicate cannot distinguish a genuine
         # scaffold gap from a milestone that legitimately gained a card after
