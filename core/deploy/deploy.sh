@@ -4401,6 +4401,31 @@ cmd_check() {
     printf '{"ts":"%s","check":"%s","advisory":true,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
   }
 
+  # flag_not_evaluated — the NOT-EVALUATED class emitter: the measurement DID NOT
+  # HAPPEN. Same structural guarantee as flag_advisory_only above — no `case` on
+  # any mode, no enforce branch, no ISSUES increment — for the same reason: a
+  # measurement outage must never move the exit code. It is a SEPARATE function,
+  # not a parameter on that one, because the two say OPPOSITE things. ADVISORY
+  # means "I measured and this signal cannot gate"; NOT-EVALUATED means "I did not
+  # measure." flag_advisory_only's line asserts "this check is never
+  # enforce-capable", which is FALSE of an enforce-capable check that merely could
+  # not read its input this run — and its ADVISORY: prefix is the greppable
+  # discriminator, so two classes under one prefix re-creates the very conflation
+  # this emitter exists to remove.
+  #
+  # Per review-discipline-principles.md § 8 PV-7. The detail SHOULD name the
+  # Register A status and MUST carry "this is not a clean result".
+  flag_not_evaluated() {
+    local check_id="$1"
+    local detail="$2"
+    log "  NOT-EVAL: $check_id — $detail (not-evaluated; the measurement did not run — this is a withheld verdict, never a clean one)"
+    local _ts
+    _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    local _detail_escaped="${detail//\\/\\\\}"
+    _detail_escaped="${_detail_escaped//\"/\\\"}"
+    printf '{"ts":"%s","check":"%s","evaluated":false,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
+  }
+
   # resolve_check_mode — per-check mode resolver (decouples a single check from
   # the shared deploy-check.mode cohort). Reads a CHECK-SPECIFIC mode file
   # "<check_id>.mode" from the same operator-instance base (and legacy
@@ -6103,7 +6128,7 @@ cmd_check() {
         c22_gate_run=false
         if [[ "$c22_vsrc" == "env" ]]; then
           flag_g1_enforcement "g1-enforcement" \
-            "G1 enforce scope NOT DETERMINED — release identity '${c22_ms}' asserted via PMO_G1_ENFORCE_MILESTONE but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. Refusing to gate on a population that could not be identified — correct the assertion or unset it"
+            "G1 enforce scope NOT-EVALUATED — release identity '${c22_ms}' asserted via PMO_G1_ENFORCE_MILESTONE but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. Refusing to gate on a population that could not be identified — correct the assertion or unset it"
         else
           flag_advisory_only "g1-enforcement-scope" \
             "release identity detected from the checked-out branch but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. A DETECTED candidate never blocks — set PMO_G1_ENFORCE_MILESTONE to assert a scope and make this fail-closed"
@@ -6221,12 +6246,12 @@ cmd_check() {
       if [[ ! -f "$c22_prio_tool" ]]; then
         c22_prio_ok=false
         flag_g1_enforcement "g1-enforcement" \
-          "G1-06 NOT EVALUATED across ${c22_issue_count} bundled issue(s) — priority primitive missing: $c22_prio_tool (deploy the release module or restore the tool)"
+          "G1-06 NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — priority primitive missing: $c22_prio_tool (deploy the release module or restore the tool)"
         c22_finding_count=$((c22_finding_count + 1))
       elif [[ ! -x "/usr/bin/python3" ]]; then
         c22_prio_ok=false
         flag_g1_enforcement "g1-enforcement" \
-          "G1-06 NOT EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot run the priority primitive"
+          "G1-06 NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot run the priority primitive"
         c22_finding_count=$((c22_finding_count + 1))
       else
         # >>> G1-06-DELEGATE-BEGIN — core/deploy/tests/test_g1_06_priority_carrier.sh
@@ -6252,7 +6277,7 @@ sys.stdout.write("".join(out) + "|")
           c22_prio_ok=false
           c22_prio_diag=$(printf '%s\n' "$c22_prio_map" | /usr/bin/grep -v '^[[:space:]]*$' | /usr/bin/tail -1)
           flag_g1_enforcement "g1-enforcement" \
-            "G1-06 NOT EVALUATED across ${c22_issue_count} bundled issue(s) — priority primitive failed (exit ${c22_prio_exit}): ${c22_prio_diag:-(no diagnostic on stdout or stderr)}"
+            "G1-06 NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — priority primitive failed (exit ${c22_prio_exit}): ${c22_prio_diag:-(no diagnostic on stdout or stderr)}"
           c22_finding_count=$((c22_finding_count + 1))
           c22_prio_map=""
         else
@@ -6269,7 +6294,7 @@ sys.stdout.write("".join(out) + "|")
           if [[ "$c22_prio_rows" -ne "$c22_issue_count" ]]; then
             c22_prio_ok=false
             flag_g1_enforcement "g1-enforcement" \
-              "G1-06 NOT EVALUATED — priority extraction returned ${c22_prio_rows} row(s) for ${c22_issue_count} bundled issue(s); a partial extraction is a broken probe, not a clean population"
+              "G1-06 NOT-EVALUATED — priority extraction returned ${c22_prio_rows} row(s) for ${c22_issue_count} bundled issue(s); a partial extraction is a broken probe, not a clean population"
             c22_finding_count=$((c22_finding_count + 1))
             c22_prio_map=""
           fi
@@ -6313,12 +6338,12 @@ sys.stdout.write("".join(out) + "|")
       if [[ ! -f "$c22_kinds_tool" ]]; then
         c22_kinds_ok=false
         flag_g1_enforcement "g1-enforcement" \
-          "Step-0 form-family resolution NOT EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive missing: $c22_kinds_tool (restore the tool; G1-09 kind-form verdicts are withheld, never guessed)"
+          "Step-0 form-family resolution NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive missing: $c22_kinds_tool (restore the tool; G1-09 kind-form verdicts are withheld, never guessed)"
         c22_finding_count=$((c22_finding_count + 1))
       elif [[ ! -x "/usr/bin/python3" ]]; then
         c22_kinds_ok=false
         flag_g1_enforcement "g1-enforcement" \
-          "Step-0 form-family resolution NOT EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot resolve the licensed kind vocabulary"
+          "Step-0 form-family resolution NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot resolve the licensed kind vocabulary"
         c22_finding_count=$((c22_finding_count + 1))
       else
         # stderr CAPTURED (2>&1), never discarded — an absent interpreter, a
@@ -6331,7 +6356,7 @@ sys.stdout.write("".join(out) + "|")
           c22_kinds_ok=false
           c22_kinds_diag=$(/usr/bin/grep -m1 -v '^[[:space:]]*$' <<<"$c22_kinds_out")
           flag_g1_enforcement "g1-enforcement" \
-            "Step-0 form-family resolution NOT EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive failed (exit ${c22_kinds_exit}): ${c22_kinds_diag:-(no diagnostic on stdout or stderr)}"
+            "Step-0 form-family resolution NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive failed (exit ${c22_kinds_exit}): ${c22_kinds_diag:-(no diagnostic on stdout or stderr)}"
           c22_finding_count=$((c22_finding_count + 1))
         else
           # Comma-delimited with a sentinel on BOTH ends, so a membership test is
@@ -6354,7 +6379,7 @@ sys.stdout.write("".join(out) + "|")
             # every kind-form card as F3 and hand it an unresolved-form finding.
             c22_kinds_ok=false
             flag_g1_enforcement "g1-enforcement" \
-              "Step-0 form-family resolution NOT EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive exited 0 with an empty vocabulary; an empty kind set is a broken probe, not a pack corpus with no kinds"
+              "Step-0 form-family resolution NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive exited 0 with an empty vocabulary; an empty kind set is a broken probe, not a pack corpus with no kinds"
             c22_finding_count=$((c22_finding_count + 1))
           fi
         fi
@@ -9850,12 +9875,13 @@ sys.stdout.write("".join(out) + "|")
   # M2 read took field $2 only and DISCARDED the refs entirely.
   # READ THOSE COUNTERS WITH awk EXACT FIELD EQUALITY. `grep COUNT_M2_NNM`
   # prefix-collides with all four sub-counters; `awk '$1=="..."'` does not.
-  # M2's EMITTER IS DELIBERATELY UNCHANGED. Routing it through flag_advisory_only —
-  # the structurally-non-escalating helper M3 uses, and the correct fix for the
-  # enforce-leak recorded below — would violate the governing card's acceptance
-  # criterion, which asserts in as many words that M2 still routes through the WARN
-  # emitter unconditionally. The fix is right and is tracked separately; taking it
-  # here would trade a latent defect for a failed criterion.
+  # M2's emitter class is ADVISORY per review-discipline-principles.md § 8 PV-7:
+  # M2 measures, and its predicate legitimately cannot distinguish a description
+  # that lags membership from a genuine divergence. The ADVISORY class routes
+  # through flag_advisory_only, which cannot escalate by construction. The
+  # constraint that previously held this call on the warn emitter was #3711's
+  # acceptance criterion; that card CLOSED 2026-08-07 and the constraint is
+  # discharged.
   # The two legs read DIFFERENT membership sets, deliberately. M1 is OPEN-scoped: it
   # asks a live-drift question, and a completed card's parent-epic is history. M2's
   # set spans ALL issue states, because an OPEN-only set cannot tell "the Scope names

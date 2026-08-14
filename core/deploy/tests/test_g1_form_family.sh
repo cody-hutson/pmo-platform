@@ -349,7 +349,7 @@ mkdir -p "$DEGRADED_ROOT/release/tools" "$DEGRADED_ROOT/core/deploy/tools"
 cp "${SRC_ROOT}/release/tools/bundle-issues-parser.py" "$DEGRADED_ROOT/release/tools/" 2>/dev/null || true
 DEG_OUT="$TMPD/degraded.txt"
 FIXTURE_SRC_ROOT="$DEGRADED_ROOT" bash "$RUNNER" "$FIX" > "$DEG_OUT" 2>"$TMPD/deg.err"
-_deg_block=$(/usr/bin/grep -c 'Step-0 form-family resolution NOT EVALUATED' "$DEG_OUT" || true)
+_deg_block=$(/usr/bin/grep -c 'Step-0 form-family resolution NOT-EVALUATED' "$DEG_OUT" || true)
 _deg_perissue=$(/usr/bin/grep -c "issue #${N_F3} " "$DEG_OUT" || true)
 _deg_f1=$(/usr/bin/grep -c "issue #${N_F1_BAD} " "$DEG_OUT" || true)
 if [[ "$_deg_block" -eq 1 ]]; then
