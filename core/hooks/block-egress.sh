@@ -502,7 +502,11 @@ log_would_fire() {
   local cause="$3"
   local path="$4"
   local ts; ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-  "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
+  # `-c` — one entry per LINE, which is what the .jsonl extension claims and what a
+  # shakedown reading needs. The older writers in this file emit jq's default
+  # pretty form, so their entries span several lines each; that is pre-existing and
+  # is not changed here, because their consumers count lines as a growth signal.
+  "$JQ" -nc --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
     --arg tool "$TOOL_NAME" --arg phase "$phase" --arg cause "$cause" --arg path "$path" \
     '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, phase:$phase, reason:"would-fire", cause:$cause, path:$path}' \
     >> "$WARN_LOG" 2>/dev/null || true
