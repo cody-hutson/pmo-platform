@@ -2933,7 +2933,7 @@ PKGSTUB
   #      restatement of the commit-message format appears in this fixture.
   _t_label="U-18n both commit/push limbs are entered and carry opposite instructions"
   {
-    local _sb18nA _sb18nB _save18n _msg18n
+    local _sb18nA _sb18nB _save18n _msg18n _post18n
     _save18n="$CLAIM_REPO_ROOT"
 
     # ---- Leg A: the commit was NOT created (HEAD's subject is still "seed") ----
@@ -2985,7 +2985,8 @@ PKGSTUB
     # announcement also names this branch, so a whole-buffer match is satisfied
     # whether or not the recovery message ever reads HEAD. Measured inert before
     # this was narrowed.
-    grep '^claim-version: stamp — ' <<< "$err" | grep -qF "$_ST_SANDBOX_BRANCH" \
+    _post18n="$(grep '^claim-version: stamp — ' <<< "$err" || true)"
+    grep -qF "$_ST_SANDBOX_BRANCH" <<< "$_post18n" \
       || _ct_fail "U-18n/B the STEP line must print the branch it READ, not assert a location"
     rm -rf "$_sb18nB"
   }
@@ -3002,7 +3003,7 @@ PKGSTUB
   #      into the fixture, so no version literal is transcribed here either.
   _t_label="U-18o the post-CAS envelope names the bound tag and rides WITH its step line"
   {
-    local _sb18o _save18o _won18o
+    local _sb18o _save18o _won18o _env18o
     _sb18o="$(_st_pkg_sandbox "widget-halt")"
     _save18o="$CLAIM_REPO_ROOT"
     _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" plan="ok"
@@ -3024,7 +3025,8 @@ PKGSTUB
     # trailer also names the tag, so a whole-buffer match would be satisfied by the
     # step line alone and would say nothing about the envelope. Measured inert
     # before this was narrowed.
-    grep '^claim-version: HALT — ' <<< "$err" | grep -qF "$_won18o" \
+    _env18o="$(grep '^claim-version: HALT — ' <<< "$err" || true)"
+    grep -qF "$_won18o" <<< "$_env18o" \
       || _ct_fail "U-18o the ENVELOPE must name the identifier that was actually claimed"
     grep -qF 'cannot be un-claimed' <<< "$err" \
       || _ct_fail "U-18o the envelope must state the identifier is bound and cannot be un-claimed"
