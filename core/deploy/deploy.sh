@@ -6364,12 +6364,12 @@ sys.stdout.write("".join(out) + "|")
       if [[ ! -f "$c22_ac_tool" ]]; then
         c22_ac_ok=false
         flag_g1_enforcement "g1-enforcement" \
-          "G1-05a presence NOT EVALUATED across ${c22_issue_count} bundled issue(s) — AC primitive missing: $c22_ac_tool (deploy the release module or restore the tool)"
+          "G1-05a presence NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — AC primitive missing: $c22_ac_tool (deploy the release module or restore the tool)"
         c22_finding_count=$((c22_finding_count + 1))
       elif [[ ! -x "/usr/bin/python3" ]]; then
         c22_ac_ok=false
         flag_g1_enforcement "g1-enforcement" \
-          "G1-05a presence NOT EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot run the AC primitive"
+          "G1-05a presence NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot run the AC primitive"
         c22_finding_count=$((c22_finding_count + 1))
       else
         # >>> G1-05A-DELEGATE-BEGIN — the AC-presence glue. stderr is CAPTURED
@@ -6393,7 +6393,7 @@ sys.stdout.write("".join(out) + "|")
           c22_ac_ok=false
           c22_ac_diag=$(printf '%s\n' "$c22_ac_map" | /usr/bin/grep -v '^[[:space:]]*$' | /usr/bin/tail -1)
           flag_g1_enforcement "g1-enforcement" \
-            "G1-05a presence NOT EVALUATED across ${c22_issue_count} bundled issue(s) — AC primitive failed (exit ${c22_ac_exit}): ${c22_ac_diag:-(no diagnostic on stdout or stderr)}"
+            "G1-05a presence NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — AC primitive failed (exit ${c22_ac_exit}): ${c22_ac_diag:-(no diagnostic on stdout or stderr)}"
           c22_finding_count=$((c22_finding_count + 1))
           c22_ac_map=""
         else
@@ -6409,7 +6409,7 @@ sys.stdout.write("".join(out) + "|")
           if [[ "$c22_ac_rows" -ne "$c22_issue_count" ]]; then
             c22_ac_ok=false
             flag_g1_enforcement "g1-enforcement" \
-              "G1-05a presence NOT EVALUATED — AC extraction returned ${c22_ac_rows} row(s) for ${c22_issue_count} bundled issue(s); a partial extraction is a broken probe, not a clean population"
+              "G1-05a presence NOT-EVALUATED — AC extraction returned ${c22_ac_rows} row(s) for ${c22_issue_count} bundled issue(s); a partial extraction is a broken probe, not a clean population"
             c22_finding_count=$((c22_finding_count + 1))
             c22_ac_map=""
           fi
