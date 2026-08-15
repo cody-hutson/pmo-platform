@@ -27,7 +27,10 @@
 # Run directly with --self-test to verify the patterns + predicate.
 
 # Absolute machine path with a username segment. NO username is exempt: a home path is
-# flagged whatever account name it carries, on BOTH the /Users/ and /home/ forms. A
+# flagged whatever account name it carries, on BOTH the /Users/ and /home/ forms — within
+# the segment shape the MACHINE pattern matches: a lowercase initial followed by at least
+# one more character. A capitalised, single-character or non-alpha-initial segment is NOT
+# matched. That boundary is a property of the pattern, not of the exemption. A
 # username can never distinguish a fixture from a real path, because the two are the
 # same string — so a line that legitimately must carry a flagged form (a worked example
 # of the leak itself, a test payload) declares the per-line 'path-leak: allow' marker.

@@ -217,3 +217,5 @@ fixture from a real path, because the two are the same string. So a test fixture
 brief, or a `gh` body that must embed a home path carries the marker on that line; there is no
 file-scope escape on the runtime surfaces, and the deploy check's path-portability allowlist is
 reserved for files that *define* the detection, never extended for fixture convenience.
+
+**One boundary, stated so the claim above is not over-read.** "Whatever account name it carries" holds within the segment shape the detector matches — a lowercase initial followed by at least one further character. A capitalised, single-character or non-alpha-initial segment is not matched. That is a property of the pattern rather than of the exemption, and it predates the removal of the username allowlist.
