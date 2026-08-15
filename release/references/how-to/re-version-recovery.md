@@ -94,8 +94,29 @@ Restamp the canonical version across every surface the abandoned row touches:
 - the RELEASE_INDEX row,
 - the RELEASE_DIGEST entry,
 - the release-note and release-plan frontmatter,
+- **the release-plan FILENAME — rename the plan to the canonical version and move it to
+  `release/releases/plans/v<MAJOR>/<CANONICAL>_RELEASE_PLAN.md`,**
 - CHANGELOG,
 - `.version`.
+
+**Why the plan FILENAME is on this list, and what happens if you skip it.** The plan
+filename is neither an R-2 history surface (R-2 covers the immutable branch name, PR
+title and commit-message labels — Step 3 enumerates them, and the filename is not among
+them) nor one of R-3's six named corpus *rows*. Its authority is **ADR-092**, which binds
+a plan's version identity at the Stage-12 claim: a filename naming a version the release
+did not ship as is a defect under that decision regardless of which residue class it
+falls in. The empirical record agrees — of the four re-version rows in
+`../../releases/RELEASE_REVERSIONS.md` that mention the plan file, **three renamed it and
+one did not**; the rename is the convention and the retention is the outlier. It was
+simply never written down, which is how the one retention arose.
+
+Skipping it is not cosmetic. Rolling the plan's *frontmatter* forward while leaving its
+*filename* at the abandoned version is exactly the shape the ADR-092 plan-identity close
+gate refuses: at Stage 13 the placement limb finds no plan at the canonical home and
+**blocks the close of the very release performing this recovery** (`stage-13-close.md`
+Phase A8.3). Doing the rename here is what keeps a conformant recovery from deadlocking
+on its own close. A re-version ledger row that *records* a retained filename records
+what was done; it does not authorize it.
 
 Self-document the abandoned version in the row's note so the provenance survives. The
 exemplar is the v1.03 release note

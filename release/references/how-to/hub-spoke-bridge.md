@@ -2169,6 +2169,32 @@ This mandate is consistent with — and bounded by — the **operator-agency car
      echo "§3.2 note-content conformant for v<X.Y> (clean, or only legacy other-version findings — out of scope)"
    fi
 
+   # 1c. ADR-092 PLAN-FILE IDENTITY + PLACEMENT (the plan-identity lint runs on EVERY
+   # Stage-13 close of a versioned release, not only the automated-closeout.sh path).
+   # This is the runbook gate for the pure-hub-direct / Phase-B chore-PR close that does
+   # NOT run automated-closeout.sh (the script path is gated in-script by its Phase 9.3
+   # phase_lint_plan_identity). Inherited exit contract: 0 clean / 1 finding /
+   # 3 path-unresolved — BOTH non-zero outcomes BLOCK. Scoped to THIS release by two
+   # needles, because one is not enough: the plan's EXPECTED path catches a missing or
+   # misplaced plan, but a plan NAMED FOR THE WRONG VERSION emits its ACTUAL path, which
+   # the expected path by definition is not. The second needle is version-keyed and
+   # catches exactly that case — this card's canonical defect. ADVISORY lines are
+   # filtered first: the two known pre-existing mis-named plans are printed residuals
+   # and must not block anyone's close. N/A for a version-less release (no concrete
+   # Version cell for a filename to disagree with) — record N/A, do not skip silently.
+   # It is a conformance assertion on the release's own plan file, NOT a new output row
+   # in the canonical Step 4 table.
+   plan_lint_out=$(/usr/bin/python3 core/deploy/tools/lint_release_corpus.py --check plan-identity 2>&1); plan_lint_rc=$?
+   plan_blocking=$(echo "$plan_lint_out" | grep -v '^ADVISORY')
+   if [ $plan_lint_rc -eq 3 ]; then
+     echo "plan-identity lint path-unresolved (exit 3) — plan corpus unverifiable; BLOCK closure (fail-loud)"
+   elif [ $plan_lint_rc -ne 0 ] && { echo "$plan_blocking" | grep -qF "release/releases/plans/v<MAJOR>/v<X.Y>_RELEASE_PLAN.md" \
+        || echo "$plan_blocking" | grep -qE "^PLAN-[A-Z-]+:.*[^0-9.]v<X\.Y>([^0-9.]|$)"; }; then
+     echo "ADR-092 plan-identity finding for v<X.Y> — BLOCK closure (the plan filename or its nested home disagrees with the RELEASE_LOG row)"
+   else
+     echo "plan-identity conformant for v<X.Y> (clean, or only advisory residuals / other-version findings — out of scope)"
+   fi
+
    # 2. Version tag exists on origin
    gh api repos/{REPO}/git/refs/tags/v<X.Y> \
      --jq '.ref' || echo "MISSING tag — block closure"
@@ -2233,6 +2259,7 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    | Output | Verification | Result |
    |---|---|---|
    | User-facing release note | `git show origin/main:.../v<X.Y>_RELEASE_NOTES.md` (presence, cmd #1) **+ §3.2 note-content conformance (cmd #1b: `lint_release_corpus.py --check note-content`, version-scoped — a finding for v<X.Y> BLOCKS)** | PASS/FAIL |
+   | Release plan identity + placement (ADR-092) | **cmd #1c: `lint_release_corpus.py --check plan-identity`, scoped to v<X.Y> by expected-plan-path OR version-keyed needle — a blocking finding for v<X.Y> BLOCKS; advisories never block**; N/A for a version-less release | PASS/FAIL/N/A |
    | Version tag | `gh api .../git/refs/tags/v<X.Y>` | PASS/FAIL |
    | Milestone closed | `gh api .../milestones/<N>` | PASS/FAIL |
    | RELEASE_LOG entry | `git log --grep ...` | PASS/FAIL |

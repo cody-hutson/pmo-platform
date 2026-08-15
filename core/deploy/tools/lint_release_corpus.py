@@ -61,6 +61,24 @@ Validates:
       ("all", …) would run in its own acceptance test and nowhere else.
       Emits one ADVISORY tally line per run carrying BOTH limbs' denominators,
       so a zero finding count is distinguishable from an unrun check.
+  (g) Plan-file identity + placement (ADR-092). Two limbs over one ledger read,
+      in opposite directions, shipped together because their reaches are
+      complements:
+        - IDENTITY (file -> ledger): for every plan whose FILENAME declares a
+          version, the version it declares must be the one the ledger says that
+          release shipped as. Resolved by a ledger-row identity join (filename
+          slug / frontmatter issues / links.log_anchor / frontmatter milestone),
+          each oracle accepted only on a unique match. NO era floor — a plan
+          named for a version it did not ship as was never correct.
+        - PLACEMENT (ledger -> file): every concrete-version ledger row must
+          have a plan at plans/v<MAJOR>/<VERSION>_RELEASE_PLAN.md. Floored at
+          PLAN_IDENTITY_CUTOVER, because ADR-092 is what made that the home.
+          NOT filtered by State — State is transient, and a VERIFIED-only
+          antecedent is blind over the window a misplaced plan is created in.
+      The RELEASE_LOG is the comparison source; no version->plan mapping is
+      restated anywhere in this module. Emits a DENOM line every run carrying
+      the glob expression and every denominator, and itemises the UNVERIFIABLE
+      set at/above the floor rather than reducing it to a count.
 
 This validator handles the schema/structural checks that go beyond link
 resolution. (The doc-link primitive `check-doc-links.py` covers cross-link
@@ -80,6 +98,8 @@ Usage:
     python3 core/deploy/tools/lint_release_corpus.py --check note-content
     python3 core/deploy/tools/lint_release_corpus.py --check note-content \
         --sample-block-advisory v<version>
+    python3 core/deploy/tools/lint_release_corpus.py --check plan-identity
+    python3 core/deploy/tools/lint_release_corpus.py --self-test
 
 Exit codes: 0 = pass, 1 = content findings (one or more checks failed),
 3 = path-resolution failure (a required corpus dir/file did not resolve —
@@ -265,6 +285,61 @@ NOTE_LINK_EXEMPT_VERSIONS: set[str] = {"v3.20"}
 # slug-keyed (version-less) note, which sorts below this floor, so version-less
 # notes route to the advisory count with no special-casing.
 PLAN_LINK_CUTOVER = (4, 0, "", 0)
+
+# ─── Plan-identity floor + machinery (sub-check (g); ADR-092) ────────────────
+#
+# SAME TUPLE VALUE AND SAME ADR-092 RATIONALE as PLAN_LINK_CUTOVER above — the
+# two are siblings, not a coincidence, and the comment says so because a reader
+# who finds two identical tuples ten lines apart will otherwise assume one is a
+# copy-paste. ADR-092 is what made plans/v<MAJOR>/ the claim-time home; before
+# it a flat plan was CORRECT when written.
+#
+# IT FLOORS ONLY THE PLACEMENT LIMB (and the UNVERIFIABLE itemisation). The
+# identity limbs carry NO floor: a plan named for a version it did not ship as
+# was never correct in any era, so flooring them would suppress both live
+# defects and reduce the check to a fixture-only assertion.
+PLAN_IDENTITY_CUTOVER = (4, 0, "", 0)
+
+# The re-version ledger. Read ONLY to EXPLAIN an advisory residual — it never
+# downgrades a verdict, and a missing file is not an error (see the reader).
+REVERSIONS_PATH = WORKSPACE_ROOT / "release" / "releases" / "RELEASE_REVERSIONS.md"
+
+# The identity limbs' ANTECEDENT: the filename's stem IS a version (optionally
+# carrying a `-<slug>` tail). Full-match, deliberately — "the filename declares a
+# version" is the antecedent, never "the file sits at a versioned home", and the
+# full match is what makes the three non-declaring layout forms (nested
+# slug-named, _unversioned/, flat slug-primary pre-claim) pass BY CONSTRUCTION
+# rather than by three special cases. A home-based antecedent would flag every
+# in-flight plan the moment it was authored, including this release's own.
+PLAN_STEM_VERSION_RE = re.compile(
+    r"^(v[0-9]+\.[0-9]+(?:\.[0-9]+)?[a-z]?(?:-[0-9]+)?)(?:-([0-9a-z][-0-9a-z]*))?$"
+)
+
+# A RELEASE_LOG Version cell. The `(version-less)` exclusion is realised by the
+# SHAPE OF THIS CELL and by nothing else — never by a filename denylist. That is
+# the structural exclusion #4707's P-AC4 hand-off requires: a denylist would have
+# to be maintained per-release and would silently stop excluding the moment a new
+# version-less release landed.
+LEDGER_VCELL_RE = re.compile(r"^`?(v[0-9]+\.[0-9]+(?:\.[0-9]+)?[a-z]?(?:-[0-9]+)?)`?$")
+
+# The two live mis-named plans, shipped as a PRINTED advisory residual per the
+# operator's rendered E-1 disposition. Repair is routed to its follow-on card;
+# suppressing them into a constant was explicitly REJECTED, because a suppressed
+# finding cannot serve as the control AC4 asks for.
+#
+# KEYED BY THE FULL TRIPLE (path, declared, ledger), never by path alone, and the
+# key shape is the whole point:
+#   • a correct repair drops the advisory to 0 (the control moves);
+#   • a RE-mis-naming changes the triple and becomes BLOCKING;
+#   • a brand-new mis-named plan is blocking on day one.
+KNOWN_IDENTITY_RESIDUALS: set[tuple[str, str, str]] = {
+    ("release/releases/plans/v2/v2.42_RELEASE_PLAN.md", "v2.42", "v3.21"),
+    (
+        "release/releases/plans/v2/v2.39-per-project-processing-orchestration_RELEASE_PLAN.md",
+        "v2.39",
+        "v2.40",
+    ),
+}
 
 # Check 13 regexes. INLINE_LINK_RE captures a markdown link target (group 1).
 # REPO_RELATIVE_TARGET_RE flags targets that render broken on the Release page;
@@ -991,9 +1066,663 @@ def check_sample_block(version: str) -> list[str]:
     return []
 
 
+# ─── Sub-check (g) — plan-file identity + placement (ADR-092) ────────────────
+
+
+def _norm_slug(value: str) -> str:
+    """Normalise a milestone slug for the ledger join.
+
+    The quote-stripping is NOT cosmetic. A `links.log_anchor` value ships quoted
+    (`"#v1-01-intake"`); omitting the quote from the strip set silently zeroes
+    that oracle while its three siblings keep firing, which reads as "this oracle
+    has no coverage" rather than "this probe is broken".
+    """
+    s = (value or "").strip().strip("`").strip('"').strip("'").strip()
+    s = re.sub(r"\s*\([^)]*\)\s*$", "", s)   # drop a trailing parenthetical
+    s = re.sub(r"^[0-9]+-", "", s)           # drop a leading NN- milestone number
+    return s.strip().lower()
+
+
+def _issue_set(value) -> frozenset:
+    """The issue-number set of a ledger `Issues` cell or a frontmatter `issues:`."""
+    if not isinstance(value, str):
+        return frozenset()
+    return frozenset(re.findall(r"[0-9]+", value))
+
+
+def parse_release_log(log_path: Path = LOG_PATH) -> tuple[list[dict], list[str]]:
+    """Parse the RELEASE_LOG pipe table into rows. Returns (rows, findings).
+
+    THE LEDGER IS THE COMPARISON SOURCE (the card's AC3), and this is where that
+    is discharged: the only mapping from a plan to a version is the one parsed
+    here. No version->plan table exists anywhere in this module, because a
+    restated mapping is a second source that drifts — and, measured, a
+    filename-vs-frontmatter restatement scores 0 of the 2 live defects, since
+    both mis-named plans carry frontmatter agreeing with their own stale name.
+
+    COLUMN POSITIONS ARE RESOLVED FROM THE HEADER LINE, never counted from
+    memory. `State` is column 6 and `Date` is column 7; reading index 7 as State
+    yields a plausible-looking distribution of calendar dates rather than an
+    error, so the mistake survives a casual glance. The shipped
+    `_c32_compute_verdict` awk in deploy.sh reads the same header and is the
+    reference.
+
+    ARCHIVES ARE DELIBERATELY NOT READ. The four RELEASE_LOG_ARCHIVE-*.md
+    segments carry narrative H4 blocks, not table rows; parsing a narrative
+    surface as a table is how a denominator silently doubles.
+
+    ANTI-VACUITY: a parse yielding ZERO rows returns a CORPUS-PATH-UNRESOLVED
+    finding, which main() maps to exit 3. It is never a clean zero. A check whose
+    denominator can silently reach zero is the same failure class as a glob that
+    matches no files.
+    """
+    if not log_path.is_file():
+        return [], [
+            f"{CORPUS_PATH_UNRESOLVED_PREFIX}: release ledger does not resolve at "
+            f"{_rel(log_path)} — plan-identity is unverifiable, not clean"
+        ]
+
+    lines = log_path.read_text(encoding="utf-8").splitlines()
+    header_idx = None
+    cols: list[str] = []
+    for i, line in enumerate(lines):
+        if line.startswith("| Version |"):
+            header_idx = i
+            cols = [c.strip() for c in line.strip().strip("|").split("|")]
+            break
+    if header_idx is None:
+        return [], [
+            f"{CORPUS_PATH_UNRESOLVED_PREFIX}: {_rel(log_path)} carries no '| Version |' table "
+            f"header — the ledger table shape changed; plan-identity is unverifiable, not clean"
+        ]
+
+    idx = {name: n for n, name in enumerate(cols)}
+    need = {"Version", "Milestone", "Issues", "State"}
+    missing = need - set(idx)
+    if missing:
+        return [], [
+            f"{CORPUS_PATH_UNRESOLVED_PREFIX}: {_rel(log_path)} ledger header lacks column(s) "
+            f"{sorted(missing)} — plan-identity is unverifiable, not clean"
+        ]
+
+    rows: list[dict] = []
+    for i, line in enumerate(lines):
+        if i <= header_idx or not line.startswith("| "):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < len(cols):
+            continue
+        if set(cells[0]) <= set("-: "):        # the |---| separator row
+            continue
+        vcell = cells[idx["Version"]]
+        m = LEDGER_VCELL_RE.match(vcell)
+        rows.append({
+            "line": i + 1,
+            "version": m.group(1) if m else None,
+            # Version-less classified by CELL SHAPE — the structural exclusion
+            # P-AC4 requires. Never a filename denylist.
+            "versionless": m is None and "(version-less)" in vcell,
+            "milestone": _norm_slug(cells[idx["Milestone"]]),
+            "issues": _issue_set(cells[idx["Issues"]]),
+            # State is CARRIED but never filtered on — see check_plan_identity().
+            "state": cells[idx["State"]],
+        })
+
+    if not rows:
+        return [], [
+            f"{CORPUS_PATH_UNRESOLVED_PREFIX}: {_rel(log_path)} parsed 0 ledger rows — the ledger "
+            f"is unreadable or its table shape changed; plan-identity is unverifiable, not clean"
+        ]
+    return rows, []
+
+
+def _fm_for_identity(text: str) -> dict:
+    """Comment-tolerant frontmatter read, used ONLY by resolve_plan_identity().
+
+    parse_frontmatter() returns None whenever line 1 is not the `---` fence, and
+    the corpus carries plans that open with `<!-- reference-durability: … -->`
+    marker comments ABOVE the fence. Nothing governs that ordering, so whether a
+    plan's join keys are readable is a coin flip on author habit — measured, it
+    lands on both sides within a single release family, and the class is GROWING
+    rather than legacy.
+
+    A version-declaring plan whose join keys are unreadable does not fail loudly;
+    it falls to the UNVERIFIABLE bucket. The escape shape is exactly the defect
+    class this check exists to catch — a plan naming a version that DOES exist in
+    the ledger but belongs to another release.
+
+    parse_frontmatter() itself is deliberately NOT modified: it is shared with
+    check_schema_validity() / check_type_coherence(), and widening it would newly
+    expose files to those semantics in a file whose ownership is an open
+    decision. This reader is private, additive, and used by one caller.
+    """
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines) and (not lines[i].strip() or lines[i].lstrip().startswith("<!--")):
+        i += 1
+    return parse_frontmatter("\n".join(lines[i:])) or {}
+
+
+def resolve_plan_identity(text: str, stem_slug: str, rows: list[dict]) -> tuple[dict | None, bool]:
+    """Resolve a plan to its ledger row. Returns (row, ambiguous).
+
+    FOUR ORACLES, each accepted ONLY on a UNIQUE ledger match — it refuses rather
+    than guesses. Two oracles resolving to DIFFERENT rows returns ambiguous=True
+    (blocking) rather than silently picking one.
+
+      J1  filename slug component after the version stem  -> Milestone
+      J2  frontmatter `issues:`  (set equality)           -> Issues
+      J3  frontmatter `links.log_anchor` (strip #vN-NN-)  -> Milestone
+      J4  frontmatter `milestone:`                        -> Milestone
+
+    J4 is the forward-going oracle: it survives the Stage-12 rename, which
+    changes only the filename. Its availability across the current release family
+    is a RATIO, not a property evidenced from the newest file — that single-
+    exemplar reading is what the marker-comment ordering falsifies.
+    """
+    fm = _fm_for_identity(text)
+    candidates: dict[str, dict] = {}
+
+    def _unique(pred) -> dict | None:
+        hits = [r for r in rows if pred(r)]
+        return hits[0] if len(hits) == 1 else None
+
+    j1 = _norm_slug(stem_slug)
+    if j1:
+        hit = _unique(lambda r: r["milestone"] == j1)
+        if hit:
+            candidates["J1"] = hit
+
+    issues = _issue_set(fm.get("issues"))
+    if issues:
+        hit = _unique(lambda r: r["issues"] == issues)
+        if hit:
+            candidates["J2"] = hit
+
+    links = fm.get("links")
+    anchor = links.get("log_anchor", "") if isinstance(links, dict) else ""
+    anchor = re.sub(r"^#?v[0-9]+-[0-9]+-", "", _norm_slug(anchor))
+    if anchor:
+        hit = _unique(lambda r: r["milestone"] == anchor)
+        if hit:
+            candidates["J4-anchor"] = hit
+
+    milestone = fm.get("milestone")
+    j4 = _norm_slug(milestone) if isinstance(milestone, str) else ""
+    if j4:
+        hit = _unique(lambda r: r["milestone"] == j4)
+        if hit:
+            candidates["J4"] = hit
+
+    if not candidates:
+        return None, False
+    lines_hit = {c["line"] for c in candidates.values()}
+    if len(lines_hit) > 1:
+        return None, True
+    return next(iter(candidates.values())), False
+
+
+def _reversion_pairs(reversions_path: Path = REVERSIONS_PATH) -> set[tuple[str, str]]:
+    """The (abandoned_version, final_version) pairs from the re-version ledger.
+
+    Read STRUCTURALLY — two named columns — not by prose-matching the
+    `residual_labels` cell. It is used to EXPLAIN an advisory line and never to
+    downgrade a verdict: the ledger RECORDS that a filename was left as-authored,
+    it does not AUTHORIZE it. An absent or unparseable file yields an empty set
+    and no finding; the explanation is simply omitted.
+    """
+    pairs: set[tuple[str, str]] = set()
+    if not reversions_path.is_file():
+        return pairs
+    lines = reversions_path.read_text(encoding="utf-8").splitlines()
+    idx = None
+    for line in lines:
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if idx is None:
+            if line.startswith("| slug |") and "abandoned_version" in cells:
+                idx = (cells.index("abandoned_version"), cells.index("final_version"))
+            continue
+        if not line.startswith("| ") or len(cells) <= max(idx):
+            continue
+        if set(cells[0]) <= set("-: "):
+            continue
+        pairs.add((cells[idx[0]], cells[idx[1]]))
+    return pairs
+
+
+def check_plan_identity(
+    plans_dir: Path = PLANS_DIR,
+    log_path: Path = LOG_PATH,
+    reversions_path: Path = REVERSIONS_PATH,
+) -> list[str]:
+    """Assert a plan filename names the version it shipped as, and sits at its home.
+
+    TWO LIMBS, ONE LEDGER, TWO DIRECTIONS — and they must ship together because
+    their REACHES are complements, not overlaps:
+
+      • IDENTITY (file -> ledger, truthfulness). Antecedent: the filename
+        declares a version. FILE-KEYED, and deliberately so — it is a
+        CONDITIONAL assertion over declaring files, and every non-declaring case
+        is covered from the other side.
+      • PLACEMENT (ledger -> file, existence). This is #4707 AC4, absorbed here
+        per the operator's rendered mechanism decision. LEDGER-KEYED: the
+        expected path is derived from the ledger ROW, never from the plan's own
+        name, so a plan named ANYTHING AT ALL — wrong version, slug-only, still
+        un-renamed because its Stage-12 stamp never fired — is caught by "the
+        expected path is absent". Its reach is INDEPENDENT of the property under
+        test, which is the anti-circularity property.
+
+    THE PARAMETERS ARE DEFAULTED so every existing call site stays byte-identical
+    while --self-test can hand it a temp corpus and never read the live tree.
+    """
+    if not plans_dir.exists():
+        return [
+            f"{CORPUS_PATH_UNRESOLVED_PREFIX}: plans dir does not resolve at {_rel(plans_dir)} "
+            f"— plan-identity is unverifiable, not clean"
+        ]
+
+    rows, log_findings = parse_release_log(log_path)
+    if log_findings:
+        return log_findings
+
+    concrete_versions = {r["version"] for r in rows if r["version"]}
+    findings: list[str] = []
+    advisories: list[str] = []
+    reversions = _reversion_pairs(reversions_path)
+
+    n_plans = n_declaring = n_joined = n_unverifiable = 0
+    unverifiable_above_floor: list[str] = []
+    declared_seen: dict[str, list[str]] = {}
+
+    # ITS OWN LIVE ITERATION, keyed on the _RELEASE_PLAN.md type discriminator —
+    # the same reasoning check_note_content() records for its own pattern, and
+    # layout-independent by construction (no major-version segment and no
+    # _unversioned segment appears in it). It must NOT be homed inside
+    # check_schema_validity() or check_type_coherence(): both iterate a pattern
+    # matching zero files, so a check placed there is dead on arrival and its
+    # green run vacuous — the exact outcome this card's own AC forbids.
+    for path in sorted(plans_dir.rglob("*_RELEASE_PLAN.md")):
+        n_plans += 1
+        rel = _rel(path)
+        stem = path.name[: -len("_RELEASE_PLAN.md")]
+        m = PLAN_STEM_VERSION_RE.match(stem)
+        if not m:
+            # Antecedent vacuous — the filename declares no version. Nested
+            # slug-named, _unversioned/ and flat pre-claim plans all land here
+            # and pass BY CONSTRUCTION, with no per-form rule.
+            continue
+        n_declaring += 1
+        declared, slug_tail = m.group(1), (m.group(2) or "")
+        declared_seen.setdefault(declared, []).append(rel)
+
+        ver = version_tuple(declared)
+        text = path.read_text(encoding="utf-8")
+        row, ambiguous = resolve_plan_identity(text, slug_tail, rows)
+
+        if ambiguous:
+            findings.append(
+                f"PLAN-IDENTITY-AMBIGUOUS: {rel} resolves to two different {_rel(log_path)} rows "
+                f"— the join refuses rather than guessing (ADR-092)"
+            )
+            continue
+
+        if row is None:
+            n_unverifiable += 1
+            # PLAN-VERSION-UNKNOWN is the O1 limb and fires HERE, where the join
+            # could say nothing. On a JOINED file the MISMATCH below is strictly
+            # more informative, so emitting both would double-report one defect.
+            if declared not in concrete_versions:
+                findings.append(
+                    f"PLAN-VERSION-UNKNOWN: {rel} declares {declared}, which is not any concrete "
+                    f"Version cell in {_rel(log_path)} — no release shipped as {declared} (ADR-092)"
+                )
+            elif ver >= PLAN_IDENTITY_CUTOVER:
+                # ITEMISED above the floor, tallied below it. A bare count of the
+                # unexamined is the same fail-open one level in: a member of this
+                # bucket can BE the defect under test, and a count cannot say so.
+                unverifiable_above_floor.append(rel)
+        else:
+            n_joined += 1
+            if row["versionless"]:
+                findings.append(
+                    f"PLAN-VERSION-VERSIONLESS-ROW: {rel} declares {declared} but its identity "
+                    f"resolves to a version-less {_rel(log_path)} row at line {row['line']} "
+                    f"— a version-less release claims no version (ADR-092)"
+                )
+            elif row["version"] != declared:
+                line = (
+                    f"PLAN-VERSION-MISMATCH: {rel} declares {declared}; {_rel(log_path)}:"
+                    f"{row['line']} records {row['version']} — the filename names a version the "
+                    f"release did not ship as (ADR-092)"
+                )
+                triple = (rel, declared, row["version"])
+                if triple in KNOWN_IDENTITY_RESIDUALS:
+                    explain = ""
+                    if (declared, row["version"]) in reversions:
+                        explain = (
+                            f" {_rel(reversions_path)} records the re-version "
+                            f"({declared} -> {row['version']}); the ledger RECORDS the retained "
+                            f"filename, it does not authorize it."
+                        )
+                    advisories.append(
+                        f"{ADVISORY_PREFIX}: {line} [KNOWN RESIDUAL — repair routed to the "
+                        f"follow-on card].{explain}"
+                    )
+                else:
+                    findings.append(line)
+
+        # Major-directory coherence. Only meaningful for a file that declares a
+        # major to compare — a nested SLUG-named plan declares none and is
+        # already outside the antecedent, so it can never reach here.
+        parts = path.relative_to(plans_dir).parts
+        if len(parts) > 1 and re.fullmatch(r"v[0-9]+", parts[0]):
+            if parts[0] != f"v{version_tuple(declared)[0]}":
+                findings.append(
+                    f"PLAN-MAJOR-DIR-MISMATCH: {rel} declares {declared} but sits under "
+                    f"{parts[0]}/ — the major-version folder disagrees with the filename (ADR-092)"
+                )
+
+    for declared, paths in sorted(declared_seen.items()):
+        if len(paths) > 1:
+            findings.append(
+                f"PLAN-VERSION-DUPLICATE: {len(paths)} plan files declare {declared}: "
+                f"{', '.join(sorted(paths))} — a version is claimed once (ADR-092)"
+            )
+
+    # ── Placement limb (#4707 AC4, absorbed) ─────────────────────────────────
+    #
+    # NOT FILTERED BY State, and the omission is load-bearing rather than an
+    # oversight. State is TRANSIENT — the same ledger reads a different State
+    # distribution at two instants hours apart — so a `VERIFIED`-only antecedent
+    # is blind over exactly the window in which a misplaced plan is created.
+    # State is parsed and carried; it is never used as a filter. Do not re-add it.
+    place_blocking = place_advisory = 0
+    for row in rows:
+        if not row["version"]:
+            continue
+        major = f"v{version_tuple(row['version'])[0]}"
+        expected_abs = plans_dir / major / f"{row['version']}_RELEASE_PLAN.md"
+        if expected_abs.is_file():
+            continue
+        expected = _rel(expected_abs)
+        text = (
+            f"PLAN-MISSING-FOR-LEDGER-ROW: {row['version']} ({_rel(log_path)}:{row['line']}) "
+            f"has no plan at {expected}"
+        )
+        if version_tuple(row["version"]) >= PLAN_IDENTITY_CUTOVER:
+            place_blocking += 1
+            findings.append(f"{text} (ADR-092 claim-time home)")
+        else:
+            place_advisory += 1
+
+    if place_advisory:
+        advisories.append(
+            f"{ADVISORY_PREFIX}: PLAN-PLACEMENT-TALLY — {place_advisory} concrete ledger row(s) "
+            f"below the ADR-092 floor have no plan at their nested home (inherited pre-ADR-092 "
+            f"corpus debt, tracked separately); {place_blocking} at/above the floor"
+        )
+    if unverifiable_above_floor:
+        advisories.append(
+            f"{ADVISORY_PREFIX}: PLAN-IDENTITY-UNVERIFIABLE — {len(unverifiable_above_floor)} "
+            f"version-declaring plan(s) at/above the ADR-092 floor resolve to no ledger row: "
+            f"{', '.join(sorted(unverifiable_above_floor))}"
+        )
+
+    # ── The DENOM line, emitted EVERY run ────────────────────────────────────
+    #
+    # Not a finding — carried under ADVISORY_PREFIX so it never contributes to
+    # the exit status, and printed unconditionally so a green run is
+    # INTERPRETABLE. It states the glob expression and the denominators, because
+    # a zero over a collapsed denominator is not a pass and the output is the
+    # only place a reader can tell the two apart.
+    advisories.append(
+        f'{ADVISORY_PREFIX}: PLAN-IDENTITY-DENOM — {n_plans} plan file(s) walked via '
+        f'plans_dir.rglob("*_RELEASE_PLAN.md") under {_rel(plans_dir)}; {n_declaring} declare a '
+        f"version, {n_joined} identity-joined, {n_unverifiable} unverifiable; ledger "
+        f"{len(rows)} row(s) ({len(concrete_versions)} concrete / "
+        f"{sum(1 for r in rows if r['versionless'])} version-less) from {_rel(log_path)}"
+    )
+
+    return findings + advisories
+
+
+# ─── --self-test for sub-check (g) ───────────────────────────────────────────
+#
+# HERMETIC BY CONSTRUCTION. Every arm hands check_plan_identity() a temp corpus
+# through its defaulted parameters and never reads the live repository tree, so
+# the suite cannot pass or fail because of what the corpus happens to contain
+# today. That is the direct fix for the non-hermeticity class flagged as a latent
+# flake in the sibling tooling.
+#
+# THE VERDICT-BEARING OBSERVABLE IS THE FINDING TEXT, never the exit code: each
+# must-flag arm asserts its fixture's path appears verbatim in the findings, and
+# each must-not-flag arm asserts it appears zero times. The exit code is a
+# secondary consistency check. A suite graded on exit codes alone cannot tell
+# "flagged the right file" from "flagged something".
+
+_LEDGER_HEADER = (
+    "| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |\n"
+    "|---|---|---|---|---|---|---|---|\n"
+)
+
+
+def _fixture_ledger(rows: list[tuple[str, str, str]]) -> str:
+    """Render a fixture ledger. Each row is (version-cell, milestone, state).
+
+    THE `State` COLUMN IS POPULATED, and that is the point of its being here:
+    with every fixture row left at one state, the placement limb returns
+    identically whether or not it filters on `State == VERIFIED`, so the
+    contract the operator pre-decided has no executable lock. One DEPLOYED row
+    whose plan is absent converts an unfalsifiable criterion into a regression
+    lock — it FAILS on a VERIFIED-filtered implementation and PASSES on a
+    conformant one.
+    """
+    body = "".join(
+        f"| {v} | {m} | #1 | #2 | abc1234 | v-tag | {s} | 2026-01-01 |\n" for v, m, s in rows
+    )
+    return "# Fixture ledger\n\n## Releases\n\n" + _LEDGER_HEADER + body
+
+
+def _write_ledger(path: Path, rows: list[tuple[str, str, str]]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_fixture_ledger(rows), encoding="utf-8")
+    return path
+
+
+def _write(root: Path, rel: str, milestone: str | None = None, lead: str = "") -> Path:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fm = "---\ntype: plan\n"
+    if milestone is not None:
+        fm += f"milestone: {milestone}\n"
+    fm += "---\n"
+    path.write_text(lead + fm + "\n# Fixture plan\n", encoding="utf-8")
+    return path
+
+
+def _self_test() -> int:
+    import tempfile
+
+    failures: list[str] = []
+    checked = 0
+
+    def arm(name: str, ok: bool, detail: str) -> None:
+        nonlocal checked
+        checked += 1
+        status = "PASS" if ok else "FAIL"
+        print(f"  [{status}] {name}: {detail}")
+        if not ok:
+            failures.append(name)
+
+    def names(findings: list[str], needle: str) -> int:
+        return sum(1 for f in findings if needle in f)
+
+    def blocking(findings: list[str]) -> list[str]:
+        return [f for f in findings if not f.startswith(ADVISORY_PREFIX)]
+
+    def fires(findings: list[str], prefix: str, needle: str) -> int:
+        """Count BLOCKING findings of `prefix` naming `needle`.
+
+        Sensitivity arms grade through this rather than through names(), and the
+        difference is the whole point: a build that emits every finding under
+        ADVISORY_PREFIX still produces matching finding TEXT while blocking
+        nothing. Grading on text alone passes such a build — measured, it did.
+        Posture is part of the assertion, not a separate concern.
+        """
+        return sum(1 for f in blocking(findings) if f.startswith(prefix) and needle in f)
+
+    print("lint_release_corpus.py --self-test — sub-check (g) plan-identity")
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+
+        # ── Scenario A — the main sensitivity/specificity corpus ─────────────
+        a = root / "A"
+        plans = a / "plans"
+        log = _write_ledger(a / "RELEASE_LOG.md", [
+            ("v9.01", "widget-one", "VERIFIED"),
+            ("v9.02", "widget-two", "VERIFIED"),
+            ("v9.04", "widget-four", "VERIFIED"),
+            ("widget-three (version-less)", "widget-three", "VERIFIED"),
+        ])
+        f_s1 = _write(plans, "v9/v9.01_RELEASE_PLAN.md", "widget-two")
+        f_s2 = _write(plans, "v9/v9.77_RELEASE_PLAN.md")
+        f_s3 = _write(plans, "v9/v9.03_RELEASE_PLAN.md", "widget-three")
+        f_s7 = _write(plans, "v9/v9.02_RELEASE_PLAN.md", "widget-two")
+        f_s8 = _write(plans, "widget-five_RELEASE_PLAN.md")
+        f_s9 = _write(plans, "_unversioned/widget-three_RELEASE_PLAN.md")
+        f_s10 = _write(plans, "v9/widget-six_RELEASE_PLAN.md")
+        fa = check_plan_identity(plans_dir=plans, log_path=log, reversions_path=root / "none.md")
+
+        arm("S-1 sensitivity — filename names a version it did not ship as",
+            fires(fa, "PLAN-VERSION-MISMATCH", str(f_s1)) == 1
+            and "v9.02" in " ".join(f for f in fa if str(f_s1) in f),
+            "BLOCKING PLAN-VERSION-MISMATCH names the fixture and cites ledger version v9.02")
+        arm("S-2 sensitivity — declared version is in no ledger row",
+            fires(fa, "PLAN-VERSION-UNKNOWN", str(f_s2)) == 1,
+            "BLOCKING PLAN-VERSION-UNKNOWN names the fixture")
+        arm("S-3 sensitivity — identity resolves to a version-less row",
+            fires(fa, "PLAN-VERSION-VERSIONLESS-ROW", str(f_s3)) == 1,
+            "BLOCKING PLAN-VERSION-VERSIONLESS-ROW names the fixture")
+        arm("S-6 sensitivity — ledger row with no plan (the absorbed AC4 arm)",
+            fires(fa, "PLAN-MISSING-FOR-LEDGER-ROW", "v9.04") == 1,
+            "BLOCKING PLAN-MISSING-FOR-LEDGER-ROW names v9.04's expected home")
+        arm("S-7 specificity — correctly-named plan",
+            names(fa, str(f_s7)) == 0, "zero findings name the conformant fixture")
+        arm("S-8 specificity — layout form 3 (flat slug-primary, pre-claim)",
+            names(fa, str(f_s8)) == 0, "zero findings name it (antecedent vacuous)")
+        arm("S-9 specificity — layout form 2 (_unversioned/)",
+            names(fa, str(f_s9)) == 0, "zero findings name it (antecedent vacuous)")
+        arm("S-10 specificity — layout form 1c (nested, slug-named)",
+            names(fa, str(f_s10)) == 0
+            and names([f for f in fa if "PLAN-MAJOR-DIR-MISMATCH" in f], str(f_s10)) == 0,
+            "zero findings, and specifically no MAJOR-DIR — it declares no major")
+        arm("S-1/S-7 pairing — the suite DISCRIMINATES",
+            names(fa, str(f_s1)) > 0 and names(fa, str(f_s7)) == 0,
+            "must-flag non-zero AND must-not-flag zero on one run")
+        arm("DENOM line present and non-collapsed",
+            any("PLAN-IDENTITY-DENOM" in f and "7 plan file(s) walked" in f for f in fa),
+            "the denominator is stated, so a zero would be interpretable")
+
+        # ── Scenario B — duplicate version claim ─────────────────────────────
+        b = root / "B"
+        bp = b / "plans"
+        blog = _write_ledger(b / "RELEASE_LOG.md", [("v9.02", "widget-two", "VERIFIED")])
+        _write(bp, "v9/v9.02_RELEASE_PLAN.md", "widget-two")
+        _write(bp, "v9/v9.02-alt_RELEASE_PLAN.md")
+        fb = check_plan_identity(plans_dir=bp, log_path=blog, reversions_path=root / "none.md")
+        arm("S-4 sensitivity — two plans declare one version",
+            fires(fb, "PLAN-VERSION-DUPLICATE", "v9.02") == 1,
+            "BLOCKING PLAN-VERSION-DUPLICATE fires once naming both paths")
+
+        # ── Scenario C — major-directory mismatch ────────────────────────────
+        c = root / "C"
+        cp = c / "plans"
+        clog = _write_ledger(c / "RELEASE_LOG.md", [("v9.02", "widget-two", "VERIFIED")])
+        f_s5 = _write(cp, "v8/v9.02_RELEASE_PLAN.md", "widget-two")
+        fc = check_plan_identity(plans_dir=cp, log_path=clog, reversions_path=root / "none.md")
+        arm("S-5 sensitivity — nested under the wrong major",
+            fires(fc, "PLAN-MAJOR-DIR-MISMATCH", str(f_s5)) == 1,
+            "BLOCKING PLAN-MAJOR-DIR-MISMATCH names the fixture")
+
+        # ── Scenario D — anti-vacuity ────────────────────────────────────────
+        d = root / "D"
+        dp, dlog = d / "plans", d / "RELEASE_LOG.md"
+        dp.mkdir(parents=True)
+        dlog.write_text("# Fixture ledger\n\n" + _LEDGER_HEADER, encoding="utf-8")
+        fd = check_plan_identity(plans_dir=dp, log_path=dlog, reversions_path=root / "none.md")
+        arm("S-11 anti-vacuity — header present, zero data rows",
+            len(fd) == 1 and fd[0].startswith(CORPUS_PATH_UNRESOLVED_PREFIX),
+            "CORPUS-PATH-UNRESOLVED (main() maps it to exit 3), never a clean 0")
+        # The ledger handed to S-11b is the VALID scenario-A one, deliberately.
+        # Pointing it at scenario D's empty ledger would satisfy the arm from the
+        # ledger guard one branch earlier, and the arm would pass on a build with
+        # no plans-dir guard at all — a fixture green for the wrong reason.
+        arm("S-11b anti-vacuity — plans dir absent (valid ledger, so only this guard can fire)",
+            check_plan_identity(plans_dir=d / "nope", log_path=log)[0]
+            .startswith(CORPUS_PATH_UNRESOLVED_PREFIX),
+            "a missing plans dir is unverifiable, not clean")
+
+        # ── Scenario E — parser tolerance (the regression lock) ──────────────
+        e = root / "E"
+        ep = e / "plans"
+        elog = _write_ledger(e / "RELEASE_LOG.md", [("v9.01", "widget-one", "VERIFIED"),
+                                                   ("v9.02", "widget-two", "VERIFIED")])
+        lead = ("<!-- reference-durability: allow-link -->\n"
+                "<!-- reference-durability: allow-version-ref -->\n"
+                "<!-- repo-integrity: allow-issue-ref -->\n")
+        f_s13 = _write(ep, "v9/v9.01_RELEASE_PLAN.md", "widget-two", lead=lead)
+        _write(ep, "v9/v9.02_RELEASE_PLAN.md", "widget-two")
+        raw = f_s13.read_text(encoding="utf-8")
+        fe = check_plan_identity(plans_dir=ep, log_path=elog, reversions_path=root / "none.md")
+        arm("S-13 parser tolerance — frontmatter behind leading marker comments",
+            fires(fe, "PLAN-VERSION-MISMATCH", str(f_s13)) == 1,
+            "BLOCKING MISMATCH still fires when the `---` fence is not line 1")
+        arm("S-13b the arm is NOT vacuous — the strict parser really is blind here",
+            parse_frontmatter(raw) is None and "milestone" in _fm_for_identity(raw),
+            "parse_frontmatter -> None while _fm_for_identity recovers `milestone`")
+
+        # ── Scenario F — the State column (the pre-decided contract's lock) ──
+        f_ = root / "F"
+        fp = f_ / "plans"
+        fp.mkdir(parents=True)
+        flog = _write_ledger(f_ / "RELEASE_LOG.md", [("v9.01", "widget-one", "VERIFIED"),
+                                                     ("v9.05", "widget-five", "DEPLOYED")])
+        _write(fp, "v9/v9.01_RELEASE_PLAN.md", "widget-one")
+        ff = check_plan_identity(plans_dir=fp, log_path=flog, reversions_path=root / "none.md")
+        arm("S-16 contract lock — a DEPLOYED row's missing plan still blocks",
+            fires(ff, "PLAN-MISSING-FOR-LEDGER-ROW", "v9.05") == 1,
+            "blocks on a non-VERIFIED row — FAILS on a State==VERIFIED-filtered build")
+        arm("S-16b specificity — the conformant VERIFIED row does not fire",
+            names([f for f in ff if "PLAN-MISSING-FOR-LEDGER-ROW" in f], "v9.01") == 0,
+            "the placement limb discriminates rather than flagging every row")
+        rows_f, _ = parse_release_log(flog)
+        arm("S-17 ledger columns resolved BY NAME, not by index",
+            {r["state"] for r in rows_f} == {"VERIFIED", "DEPLOYED"},
+            "State is read from column 6 per the header; index-counting yields dates")
+
+        # ── Scenario G — advisory is non-blocking ────────────────────────────
+        g = root / "G"
+        gp = g / "plans"
+        glog = _write_ledger(g / "RELEASE_LOG.md", [("v3.01", "widget-old", "VERIFIED")])
+        _write(gp, "v9/v9.01_RELEASE_PLAN.md", "widget-one")
+        fg = check_plan_identity(plans_dir=gp, log_path=glog, reversions_path=root / "none.md")
+        arm("S-12 advisory non-blocking — below-floor placement debt does not block",
+            any("PLAN-PLACEMENT-TALLY" in f for f in fg)
+            and not any("PLAN-MISSING-FOR-LEDGER-ROW" in f for f in blocking(fg)),
+            "the pre-ADR-092 row is tallied under ADVISORY, never blocking")
+        arm("S-12b the same run still blocks on a real identity defect",
+            any("PLAN-VERSION-UNKNOWN" in f for f in blocking(fg)),
+            "advisory routing did not swallow the blocking limb")
+
+    print(f"\n{checked} arm(s) run, {len(failures)} failure(s)"
+          + (f": {failures}" if failures else ""))
+    return 1 if failures else 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--check", choices=["all", "filename", "schema", "index", "type-coherence", "note-content"], default="all", help="Which check(s) to run")
+    p.add_argument("--check", choices=["all", "filename", "schema", "index", "type-coherence", "note-content", "plan-identity"], default="all", help="Which check(s) to run")
     p.add_argument(
         "--sample-block-advisory",
         metavar="VERSION",
@@ -1015,7 +1744,21 @@ def main() -> int:
             "Runs no checks and touches no corpus path."
         ),
     )
+    p.add_argument(
+        "--self-test",
+        action="store_true",
+        help=(
+            "Run the hermetic sub-check (g) fixture suite and exit. Builds temp corpora and "
+            "calls check_plan_identity() through its defaulted parameters — it never reads the "
+            "live repository tree, so a corpus change cannot turn the suite green or red."
+        ),
+    )
     args = p.parse_args()
+
+    # Hermetic fixture suite. Short-circuits BEFORE any corpus read, exactly as
+    # --print-scaffold-tokens does, so it runs where the corpus does not resolve.
+    if args.self_test:
+        return _self_test()
 
     # Token-set query short-circuits before any corpus read: it must succeed even
     # where the corpus does not resolve (the shell anchors call it from sandboxes).
@@ -1039,6 +1782,14 @@ def main() -> int:
         findings.extend(check_type_coherence())
     if args.check in ("all", "note-content"):
         findings.extend(check_note_content())
+    # Sub-check (g). Dispatched under ("all", "plan-identity") — and unlike the
+    # four values that reach no runtime invoker, this one HAS an executable
+    # caller in the same change: automated-closeout.sh Phase 9.3 passes
+    # `--check plan-identity` explicitly and blocks the Stage-13 close on a
+    # finding for the closing release. A value reachable only under ("all", …)
+    # would run inside its own acceptance test and nowhere else.
+    if args.check in ("all", "plan-identity"):
+        findings.extend(check_plan_identity())
     # Check 14 is flag-gated: absent --sample-block-advisory this branch never
     # runs, so every existing call site is byte-identically unaffected.
     if args.sample_block_advisory and args.check in ("all", "note-content"):

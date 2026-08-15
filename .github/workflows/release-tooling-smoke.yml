@@ -224,6 +224,9 @@ on:
     paths:
       - 'release/tools/**'
       - 'release/releases/RELEASE_LOG.md'
+      # The plans corpus is what the plan-identity check READS. Without it a PR
+      # that adds a mis-named plan would not trigger the gate built to catch it.
+      - 'release/releases/plans/**'
       - 'core/deploy/tools/**'
       # CIAC-3 inputs: the playbook owns the INSTRUCTED set, the allowlist file owns
       # the ASSERTED set. Without these two entries a PR that edits only the contract
@@ -268,6 +271,9 @@ on:
     paths:
       - 'release/tools/**'
       - 'release/releases/RELEASE_LOG.md'
+      # The plans corpus is what the plan-identity check READS. Without it a PR
+      # that adds a mis-named plan would not trigger the gate built to catch it.
+      - 'release/releases/plans/**'
       - 'core/deploy/tools/**'
       # CIAC-3 inputs: the playbook owns the INSTRUCTED set, the allowlist file owns
       # the ASSERTED set. Without these two entries a PR that edits only the contract
@@ -816,6 +822,35 @@ jobs:
         # Arm D relationship: warn-only. Arm D annotates an unwired suite and exits 0;
         # it does not gate. This step is what actually runs the suite.
         run: bash release/tools/tests/test_lint_release_corpus_versionless.sh
+
+      - name: Plan-file identity vs the release ledger (ADR-092; offline)
+        # Invokes lint_release_corpus.py --check plan-identity over the live corpus.
+        # No workflow-context interpolation: the command is a fixed literal, so no
+        # untrusted event input can reach the shell.
+        #
+        # POSTURE, DECLARED RATHER THAN INHERITED — this workflow's header reads
+        # `posture=advisory  enforcement=path-filtered  skip-semantics=absent-is-pass`,
+        # and that applies to this step: a red run here is a FAST SIGNAL, it does not
+        # block a merge, and no job in this workflow is a branch-protection context.
+        # The ENFORCING surface for this assertion is automated-closeout.sh Phase 9.3,
+        # which halts the Stage-13 close before the chore PR is created, plus the
+        # event-bound Step 4 command that covers the close paths running no script
+        # (stage-13-close.md Phase A8.3). Stated explicitly because a check whose own
+        # design vocabulary says "blocking" otherwise silently inherits a posture that
+        # contradicts it, and the reader cannot tell from the step alone.
+        #
+        # What rots without it: the corpus lint validates a plan filename's SHAPE and
+        # has never validated its TRUTHFULNESS — a plan named for a version the release
+        # did not ship as matches the canonical regex perfectly. That defect class
+        # shipped twice past the gate and was caught both times by human reading. This
+        # step is the fast signal on the PR that introduces one; the close-out phase is
+        # what actually stops it.
+        #
+        # Exit contract: 0 clean / 1 blocking finding / 3 corpus unverifiable (fail-loud).
+        # The two known pre-existing mis-named plans are printed ADVISORY residuals and
+        # do NOT affect the exit code, so this step is green today and goes red on a NEW
+        # defect — which is the property that makes it a signal rather than noise.
+        run: /usr/bin/python3 core/deploy/tools/lint_release_corpus.py --check plan-identity
 
       - name: verify-release-plan family dispatch + honesty contract
         # Invokes release/tools/tests/test_verify_release_plan.sh (26 assertions,

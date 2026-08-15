@@ -29,6 +29,7 @@
 #   8.5 append_reversions   append re-version row(s) to RELEASE_REVERSIONS.md (#1679; N/A on the common no-collision path)
 #   9  scaffold_release_notes  frontmatter + section H2 placeholders (SCAFFOLD-ONLY)
 #   9.2 lint_release_notes  §3.2 note-content close gate — a finding for THIS version BLOCKS close
+#   9.3 lint_plan_identity  ADR-092 plan-file identity/placement close gate — a finding for THIS version BLOCKS close (SKIP version-less)
 #   9.5 append_changelog   prepend ## [vX.Y] section to CHANGELOG.md (Layer-1 dual-write Surface 2)
 #   9.55 assert_derived_surfaces  version-scoped scaffold-residue assert on the CHANGELOG + DIGEST entries for THIS version (read-only)
 #   9.6 bump_version       write .version=$VERSION (versioned releases; SKIP version-less)
@@ -2941,6 +2942,104 @@ phase_lint_release_notes() {
   fi
 
   mark_phase "lint_release_notes" "PASS" "§3.2 note-content clean for ${VERSION}"
+  return 0
+}
+
+# ─── Phase 9.3: lint_plan_identity (ADR-092 plan-file identity close gate) ────
+#
+# WHY A DEDICATED PHASE RATHER THAN A LIMB INSIDE check_note_content(). Homing a
+# plan assertion inside the note-content check is reachable and INERT: Phase 9.2
+# blocks on `grep -F "$note_rel"`, a `release/releases/notes/…` needle, and a
+# finding naming a `release/releases/plans/…` path structurally cannot contain
+# it — so the caller takes its explicit "no finding for THIS version" PASS branch
+# and the close proceeds with the finding sitting unread in its own output.
+# Measured before this phase was written; the arms PI-6/PI-7 below re-assert it.
+# "Already blocking" is a property of a CALLER PLUS A PREDICATE, never of a
+# function. Recorded here so the co-location is not re-proposed.
+#
+# TWO NEEDLES, ORed, AND THE SECOND ONE IS NOT OPTIONAL. The obvious needle is
+# the plan's EXPECTED path. It reaches the placement limb — whose finding names
+# that path by construction — and it reaches the two identity sub-cases where the
+# offending file already sits there. It does NOT reach this card's canonical
+# defect: a plan NAMED FOR THE WRONG VERSION emits its ACTUAL path, which is by
+# definition not the expected one, and neither does PLAN-MAJOR-DIR-MISMATCH.
+# Measured: 2 of 5 identity findings reachable on the path needle alone. The
+# second needle is version-keyed and closes that gap directly, so the identity
+# limb has a blocking predicate of its own rather than depending on the placement
+# limb it absorbed. Arm PI-4 is the arm that distinguishes the two.
+#
+# ADVISORY LINES ARE FILTERED OUT BEFORE EITHER NEEDLE RUNS. The lint's plan
+# advisories legitimately carry `release/releases/plans/…` paths (unlike the note
+# advisories, which may not, per the lint's ADVISORY_PREFIX invariant 2). An
+# advisory is by definition not a blocking finding, so letting one reach the
+# needle would false-block a close on a known residual. Arm PI-8 asserts it.
+phase_lint_plan_identity() {
+  local lint_script="${REPO_ROOT}/core/deploy/tools/lint_release_corpus.py"
+
+  # A version-less release claims no concrete Version cell, so both limbs are
+  # structurally N/A. This branch is NOT where the version-less exclusion is
+  # obtained — that is the Version-cell SHAPE classification inside the lint's
+  # ledger parser, which is what makes the exclusion structural rather than a
+  # special case. It is also not reachable through --apply/--dry-run (main
+  # validates --version and dies first, per the REACHABILITY note above
+  # is_version_less); it is kept and driven by --self-test arm PI-5 for the same
+  # three reasons that note gives. The close gate for a version-less release is
+  # the event-bound Step 4 command, not this phase — see stage-13-close.md Phase
+  # A8.3, which binds plan-identity to the close EVENT across every close path.
+  if is_version_less; then
+    mark_phase "lint_plan_identity" "SKIP" "version-less release — no concrete Version cell to bind a plan filename to; the plan-identity close gate for this path is the Step 4 completion-verification command (stage-13-close.md Phase A8.3)"
+    return 0
+  fi
+
+  # The EXPECTED home, repo-root-relative — the form the lint prints. Derived
+  # from plan_rel_path_expected() rather than retyped, so this needle and the
+  # emitters cannot express two different layouts.
+  local plan_rel; plan_rel="$(plan_rel_path_expected)"
+  # The version-keyed needle. Dots are escaped so `v4.28` cannot match `v4028`,
+  # and both boundaries exclude digits and dots so `v4.2` does not match inside
+  # `v4.28` and `v4.28` does not match inside `v14.28`.
+  local v_esc; v_esc="$(printf '%s' "$VERSION" | /usr/bin/sed 's/\./\\./g')"
+  local ver_needle="^PLAN-[A-Z-]+:.*[^0-9.]${v_esc}([^0-9.]|\$)"
+
+  if [[ ! -f "$lint_script" ]]; then
+    mark_phase "lint_plan_identity" "FAIL" "lint tooling missing: ${lint_script} — cannot enforce the ADR-092 plan-identity close gate"
+    return 1
+  fi
+  if [[ ! -x "/usr/bin/python3" ]]; then
+    mark_phase "lint_plan_identity" "FAIL" "/usr/bin/python3 not executable; cannot run the plan-identity lint"
+    return 1
+  fi
+
+  local out exit_code=0
+  out="$(/usr/bin/python3 "$lint_script" --check plan-identity 2>&1)" || exit_code=$?
+
+  if [[ $exit_code -eq 3 ]]; then
+    mark_phase "lint_plan_identity" "FAIL" "path-resolution failure (exit 3): $(echo "$out" | /usr/bin/head -1) — plan corpus unverifiable; close BLOCKED (fail-loud)"
+    echo "$out" | /usr/bin/head -20 >&2
+    return 1
+  fi
+
+  if [[ $exit_code -ne 0 ]]; then
+    local blocking v_findings
+    blocking="$(echo "$out" | /usr/bin/grep -v '^ADVISORY' || true)"
+    v_findings="$(echo "$blocking" | /usr/bin/grep -F "$plan_rel" || true)"
+    v_findings="${v_findings}$(echo "$blocking" | /usr/bin/grep -E "$ver_needle" || true)"
+    if [[ -n "$v_findings" ]]; then
+      mark_phase "lint_plan_identity" "FAIL" "ADR-092 plan-identity finding(s) for ${VERSION} — close BLOCKED (the release plan's filename or its nested home disagrees with the RELEASE_LOG row)"
+      echo "$blocking" | /usr/bin/grep -F "$plan_rel" >&2 || true
+      echo "$blocking" | /usr/bin/grep -E "$ver_needle" >&2 || true
+      return 1
+    fi
+    # Findings exist but none for THIS release → pre-existing debt for another
+    # version; do NOT block this close on it (audit-baseline discipline, the
+    # same contract Phase 9.2 carries).
+    local legacy_count
+    legacy_count="$(echo "$blocking" | /usr/bin/grep -c . || true)"
+    mark_phase "lint_plan_identity" "PASS" "no plan-identity finding for ${VERSION} (${legacy_count} pre-existing finding(s) for other versions — out of scope for this close)"
+    return 0
+  fi
+
+  mark_phase "lint_plan_identity" "PASS" "plan-identity clean for ${VERSION} (filename and nested home agree with the RELEASE_LOG row)"
   return 0
 }
 
@@ -7268,6 +7367,162 @@ STUB
 
   /bin/rm -rf "$_ln_tmp" 2>/dev/null || true
   REPO_ROOT="$_ln_saved_root"; VERSION="$_ln_saved_version"
+
+  # ── Test 5.6: phase_lint_plan_identity — the ADR-092 plan-identity close gate ──
+  #
+  # Same stub seam as Test 5.5, and the same reason: these arms grade the CALLER's
+  # needle logic. The lint's own limbs are graded by its `--self-test`.
+  #
+  # PI-4 IS THE ARM THAT EARNS THIS BLOCK. A suite that only ever stubs a finding
+  # whose path EQUALS the caller's needle is green by construction on the one
+  # sub-case that matches and blind to the ones that do not — it proves the needle
+  # reaches paths equal to itself, which is not the claim. PI-4 stubs the card's
+  # CANONICAL defect: a plan named for the WRONG version, whose finding therefore
+  # names a path the expected-path needle cannot match. It fails on a
+  # single-needle implementation and passes on the shipped two-needle one.
+  local _pi_saved_root="$REPO_ROOT" _pi_saved_version="$VERSION" _pi_saved_plansdir="$RELEASE_PLANS_DIR"
+  local _pi_tmp; _pi_tmp="$(/usr/bin/mktemp -d -t lintplanid-selftest.XXXXXX)"
+  /bin/mkdir -p "$_pi_tmp/core/deploy/tools" "$_pi_tmp/release/releases/plans"
+  local _pi_stub="$_pi_tmp/core/deploy/tools/lint_release_corpus.py"
+  /bin/cat > "$_pi_stub" <<'STUB'
+import os, sys
+sys.stdout.write(os.environ.get("LN_OUT", ""))
+sys.exit(int(os.environ.get("LN_EXIT", "0")))
+STUB
+  REPO_ROOT="$_pi_tmp"; VERSION="v9.99"; RELEASE_PLANS_DIR="$_pi_tmp/release/releases/plans"
+  local _pi_expected; _pi_expected="$(plan_rel_path_expected)"
+
+  # PI-0 — clean (exit 0) → PASS.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=0 LN_OUT="" phase_lint_plan_identity >/dev/null 2>&1 || true
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: PI-0 — a clean plan corpus (exit 0) must PASS"; failures=$((failures+1)); }
+
+  # PI-1 — the placement finding (names the EXPECTED path) BLOCKS. This is the
+  # absorbed #4707 AC4 limb reaching the caller.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=1 LN_OUT="PLAN-MISSING-FOR-LEDGER-ROW: v9.99 (release/releases/RELEASE_LOG.md:5) has no plan at ${_pi_expected} (ADR-092 claim-time home)" phase_lint_plan_identity >/dev/null 2>&1; then
+    echo "FAIL: PI-1 — a placement finding naming this release's expected plan path must BLOCK the close"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: PI-1 — the phase must mark FAIL on a this-version placement finding"; failures=$((failures+1)); }
+
+  # PI-1b — the expected-path needle carries INDEPENDENT reach. Measured while
+  # building this suite: every finding class the check emits today also names the
+  # version, so PI-1 alone is satisfied by the version needle and proves nothing
+  # about the path needle. This arm stubs a finding that names this release's plan
+  # path under a prefix the version needle's `^PLAN-` anchor does not admit — the
+  # shape a future finding class added by a sibling would have. Both needles are
+  # kept because they fail independently: the path needle survives a
+  # finding-vocabulary change, the version needle survives a path-rendering change.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=1 LN_OUT="PLANFILE-FUTURE-CLASS: ${_pi_expected} is malformed" phase_lint_plan_identity >/dev/null 2>&1; then
+    echo "FAIL: PI-1b — a blocking finding naming this release's plan path must BLOCK even when its prefix is outside the version needle's anchor; the path needle is dead"; failures=$((failures+1))
+  fi
+
+  # PI-2 — CONTROL: another release's finding must NOT block (audit-baseline).
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=1 LN_OUT="PLAN-VERSION-MISMATCH: release/releases/plans/v2/v2.42_RELEASE_PLAN.md declares v2.42; release/releases/RELEASE_LOG.md:93 records v3.21 (ADR-092)" phase_lint_plan_identity >/dev/null 2>&1 || { echo "FAIL: PI-2 — a finding naming neither this release's plan path nor this version must NOT block"; failures=$((failures+1)); }
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: PI-2 — another release's finding must resolve to PASS (audit-baseline discipline)"; failures=$((failures+1)); }
+
+  # PI-3 — exit 3 → FAIL, fail-loud. Never a vacuous pass.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=3 LN_OUT="CORPUS-PATH-UNRESOLVED: release ledger does not resolve" phase_lint_plan_identity >/dev/null 2>&1; then
+    echo "FAIL: PI-3 — exit-3 (corpus unverifiable) must BLOCK the close"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: PI-3 — exit 3 must mark FAIL (fail-loud, not a vacuous pass)"; failures=$((failures+1)); }
+
+  # PI-4 — THE UNMASKING ARM. The card's canonical defect: this release's plan is
+  # named for the WRONG version, so the finding names `…/v9.98_RELEASE_PLAN.md`
+  # while the expected-path needle is `…/v9.99_RELEASE_PLAN.md`. The path needle
+  # CANNOT match it; only the version-keyed needle can. This arm fails on a
+  # single-needle caller — which is the whole reason the second needle exists.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=1 LN_OUT="PLAN-VERSION-MISMATCH: release/releases/plans/v9/v9.98_RELEASE_PLAN.md declares v9.98; release/releases/RELEASE_LOG.md:7 records v9.99 — the filename names a version the release did not ship as (ADR-092)" phase_lint_plan_identity >/dev/null 2>&1; then
+    echo "FAIL: PI-4 — a plan NAMED FOR THE WRONG VERSION emits its ACTUAL path, which the expected-path needle cannot match. The version-keyed needle must catch it and BLOCK; it did not, so the identity limb has no blocking predicate."; failures=$((failures+1))
+  fi
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: PI-4 — the wrong-version-named plan must mark the phase FAIL"; failures=$((failures+1)); }
+
+  # PI-4b — the same shape for PLAN-MAJOR-DIR-MISMATCH (the second finding class
+  # the path needle misses: right version, wrong major folder).
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=1 LN_OUT="PLAN-MAJOR-DIR-MISMATCH: release/releases/plans/v8/v9.99_RELEASE_PLAN.md declares v9.99 but sits under v8/ (ADR-092)" phase_lint_plan_identity >/dev/null 2>&1; then
+    echo "FAIL: PI-4b — a MAJOR-DIR finding for this version names a path under the WRONG major, which the expected-path needle cannot match; the version-keyed needle must catch it"; failures=$((failures+1))
+  fi
+
+  # PI-4c — SPECIFICITY for the version-keyed needle. A neighbouring version must
+  # not match: `v9.9` is a prefix of `v9.99`, and `v19.99` contains it. Without
+  # the boundary guards this arm goes red, so the needle is a real predicate
+  # rather than a substring search.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=1 LN_OUT="PLAN-VERSION-MISMATCH: release/releases/plans/v9/v9.999_RELEASE_PLAN.md declares v9.999; release/releases/RELEASE_LOG.md:3 records v19.99 (ADR-092)" phase_lint_plan_identity >/dev/null 2>&1 || { echo "FAIL: PI-4c — the version needle must not match v9.999 (trailing guard) or v19.99 (leading guard) when closing v9.99; without both guards this is a substring search, not a predicate"; failures=$((failures+1)); }
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: PI-4c — a neighbouring-version finding must resolve to PASS"; failures=$((failures+1)); }
+
+  # PI-5 — version-less → SKIP with PASS. Driven here because --self-test
+  # dispatches BEFORE main()'s version-grammar gate; production cannot reach it.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  local _pi_savedv2="$VERSION"; VERSION="widget-three"
+  LN_EXIT=1 LN_OUT="PLAN-MISSING-FOR-LEDGER-ROW: v9.99 has no plan at ${_pi_expected}" phase_lint_plan_identity >/dev/null 2>&1 || { echo "FAIL: PI-5 — a version-less release must SKIP the phase, not block"; failures=$((failures+1)); }
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "SKIP" ]] || { echo "FAIL: PI-5 — a version-less release must mark SKIP, got '$(get_phase lint_plan_identity)'"; failures=$((failures+1)); }
+  VERSION="$_pi_savedv2"
+
+  # PI-6 — NEEDLE INDEPENDENCE, this direction: a NOTE finding must not block the
+  # plan phase. The two gates own disjoint predicates; either one capturing the
+  # other's findings means a §3.2 defect could red-line the plan gate (or mask it).
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=1 LN_OUT="NOTE-6A-MISSING: release/releases/notes/v9.99_RELEASE_NOTES.md lacks section" phase_lint_plan_identity >/dev/null 2>&1 || { echo "FAIL: PI-6 — a NOTE-path finding must not block the plan-identity phase; the two needles are independent"; failures=$((failures+1)); }
+
+  # PI-7 — NEEDLE INDEPENDENCE, the other direction, and the measurement that
+  # produced this whole phase: a PLANS-path finding provably does NOT reach
+  # phase_lint_release_notes' note-path needle. If this arm ever goes red the
+  # co-location counter-design has become viable and this phase can be revisited;
+  # while it is green, homing a plan limb inside check_note_content() is fail-open.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  local _pi_saved_notesdir="${RELEASE_NOTES_DIR:-}"
+  LN_EXIT=1 LN_OUT="PLAN-VERSION-MISMATCH: release/releases/plans/v9/v9.98_RELEASE_PLAN.md declares v9.98; records v9.99" phase_lint_release_notes >/dev/null 2>&1 || { echo "FAIL: PI-7 — a plans-path finding must NOT match the note-path needle. It did, which means the fail-open measurement this phase is built on no longer holds."; failures=$((failures+1)); }
+  [[ "$(get_phase lint_release_notes | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: PI-7 — phase_lint_release_notes must take its PASS branch on a plans-path finding (the fail-open property)"; failures=$((failures+1)); }
+  RELEASE_NOTES_DIR="$_pi_saved_notesdir"
+
+  # PI-8 — an ADVISORY line naming this release's expected path must NOT block.
+  # The lint's plan advisories legitimately carry plans paths; a caller that fed
+  # them to the needle would false-block every close on a known residual.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=1 LN_OUT="ADVISORY: PLAN-VERSION-MISMATCH: ${_pi_expected} declares v9.99 [KNOWN RESIDUAL]
+PLAN-VERSION-UNKNOWN: release/releases/plans/v2/v2.98_RELEASE_PLAN.md declares v2.98" phase_lint_plan_identity >/dev/null 2>&1 || { echo "FAIL: PI-8 — an ADVISORY line naming this release's plan path must not block; advisories are filtered before the needles run"; failures=$((failures+1)); }
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: PI-8 — the advisory-only case must resolve to PASS"; failures=$((failures+1)); }
+
+  # PI-9 — missing lint tooling → FAIL. A gate that cannot run is not a passing gate.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  /bin/rm -f "$_pi_stub"
+  if phase_lint_plan_identity >/dev/null 2>&1; then
+    echo "FAIL: PI-9 — the phase must FAIL when the lint tooling is missing, never silently skip"; failures=$((failures+1))
+  fi
+
+  # PI-10 — the phase is DISPATCHED, and dispatched in the right window: after
+  # phase_transition_release_log and BEFORE phase_commit_chore_pr, so a finding
+  # halts before the chore branch is committed, PR'd, or merged. A phase function
+  # that exists but is never dispatched is the dead-check class one level up.
+  local _pi_prod; _pi_prod="$(/usr/bin/sed -n '/^phase_preflight || {/,/^phase_audit_epic_rollup/p' "${BASH_SOURCE[0]}" || true)"
+  /usr/bin/grep -qE '^phase_lint_plan_identity \|\|' <<<"$_pi_prod" || { echo "FAIL: PI-10 — phase_lint_plan_identity is not in the production dispatch ladder"; failures=$((failures+1)); }
+  local _pi_n_id _pi_n_log _pi_n_commit
+  _pi_n_id="$(/usr/bin/grep -n '^phase_lint_plan_identity ||' <<<"$_pi_prod" | /usr/bin/cut -d: -f1)"
+  _pi_n_log="$(/usr/bin/grep -n '^phase_transition_release_log ||' <<<"$_pi_prod" | /usr/bin/cut -d: -f1)"
+  _pi_n_commit="$(/usr/bin/grep -n '^phase_commit_chore_pr ||' <<<"$_pi_prod" | /usr/bin/cut -d: -f1)"
+  [[ -n "$_pi_n_id" && -n "$_pi_n_log" && -n "$_pi_n_commit" && "$_pi_n_log" -lt "$_pi_n_id" && "$_pi_n_id" -lt "$_pi_n_commit" ]] || { echo "FAIL: PI-10 — dispatch order must be transition_release_log < lint_plan_identity < commit_chore_pr (got $_pi_n_log / $_pi_n_id / $_pi_n_commit)"; failures=$((failures+1)); }
+  # Control: the same extraction finds a phase that is genuinely absent → nothing.
+  ! /usr/bin/grep -qE '^phase_nonexistent_control \|\|' <<<"$_pi_prod" || { echo "FAIL: PI-10 control — the dispatch extractor matched a fabricated phase name"; failures=$((failures+1)); }
+
+  # PI-11 — the hand-maintained `usage()` phase roster carries a 9.3 row. That
+  # roster IS the --help output (usage() prints the header comment block
+  # verbatim), and nothing asserts roster<->dispatch parity, so a phase added to
+  # the ladder is silently absent from --help. Reading the "the table is derived"
+  # comment answers a different question: the DERIVED table is the runtime Phase
+  # Outcomes report, not this one.
+  local _pi_help; _pi_help="$(usage 2>&1 || true)"
+  /usr/bin/grep -qE '^[[:space:]]*9\.3 lint_plan_identity' <<<"$_pi_help" || { echo "FAIL: PI-11 — the usage()/--help phase roster has no 9.3 lint_plan_identity row"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^[[:space:]]*9\.2 lint_release_notes' <<<"$_pi_help" || { echo "FAIL: PI-11 control — the roster extractor cannot see the shipped 9.2 row, so its 9.3 result is not interpretable"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_pi_tmp" 2>/dev/null || true
+  REPO_ROOT="$_pi_saved_root"; VERSION="$_pi_saved_version"; RELEASE_PLANS_DIR="$_pi_saved_plansdir"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   PHASE_NAMES=("${_ln_saved_names[@]:-}"); PHASE_RESULTS=("${_ln_saved_results[@]:-}"); PHASE_DETAILS=("${_ln_saved_details[@]:-}")
 
   # Test 6: corpus-path resolution — HARD assertion (not a soft WARN).
@@ -8899,6 +9154,7 @@ PY
   echo "  scaffold-residue detector + pre-authored-note tolerance validated (AC1/AC2 — T1 round-trip: the REAL scaffold trips the REAL token set (anti-drift) / T2 authored note clean / T4 this-version CHANGELOG+DIGEST residue FAILs naming surface:line / T3 audit-baseline control: another version's residue does NOT block / T6 mode-awareness: --dry-run over ABSENT entries returns 0 and marks literally DRY-RUN, never a vacuous PASS / T7 anti-vacuity: the SAME absent-entry fixture under --apply still returns non-zero, FAILs, and preserves the dropped-write message verbatim / AC2 tolerance: this-version untracked note passes, other-version + modified-tracked + unrelated-untracked all still block)" >&2
   echo "  AC1/AC2 VERSION-LESS shape validated (#3113 Records 2+3 — VL-0 notes_abs_path()==notes_rel_path() in BOTH identity modes / VL-1 producer writes notes/_unversioned/ and creates the dir / VL-2 anti-vacuity: NOT written flat / VL-3 preflight (f) residue gate FIRES (no longer a silent no-op) / VL-4 preflight (b) tolerates the note this run produced (deadlock closed) / VL-5 controls: flat bucket + another version-less release still block / VL-6 §3.2 needle blocks this release, not another / VL-7 chore-PR File Change Matrix names the real path / VL-ORDER the --self-test dispatch verifiably PRECEDES the canonical-version gate, which is what makes every arm above reachable — asserted from source, with an anti-vacuity arm on both needles)" >&2
   echo "  plan-path resolver validated (#4706 — PL-0 specificity: no plan anywhere returns non-zero AND prints nothing / PL-1 rule 1 nested version-named / PL-2 precedence: rule 1 beats a lingering flat copy / PL-3 rule 0 flat slug-primary / PL-4 the nested SLUG-named form a three-valued reading omits / PL-5 rule 2 _unversioned with an anti-vacuity twin that it is NOT the flat form / PL-6 an unresolvable plan ANNOTATES and the note is still written — no new abort path in a phase that has never had one / PL-7 --dry-run never fails and writes nothing / PL-8 all three emitters carry the SAME resolved string / PL-9 the caller PLUS its predicate: a note-path finding blocks, another release does not, and a plans-path-only finding provably does NOT reach the needle / PL-10 end-to-end: the REAL linter finding piped into the REAL phase_lint_release_notes blocks the close)" >&2
+  echo "  plan-identity close gate validated (ADR-092 Phase 9.3 — PI-0 clean PASS / PI-1 a this-version placement finding BLOCKS / PI-1b the expected-path needle carries INDEPENDENT reach (every finding class today also names the version, so PI-1 alone proves nothing about it) / PI-2 audit-baseline control: another release does NOT block / PI-3 exit-3 fails loud / PI-4 THE UNMASKING ARM: a plan NAMED FOR THE WRONG VERSION emits its ACTUAL path, which the expected-path needle cannot match — only the version-keyed needle catches it, so a single-needle caller fails here / PI-4b same shape for MAJOR-DIR / PI-4c both version-needle boundary guards / PI-5 version-less SKIPs / PI-6 + PI-7 needle INDEPENDENCE in both directions — and PI-7 is the standing measurement this phase exists for: a plans-path finding provably does NOT reach the note-path needle, so homing a plan limb inside check_note_content() is fail-open / PI-8 advisories are filtered before the needles, so a known residual cannot false-block / PI-9 missing tooling FAILs / PI-10 the phase is DISPATCHED and in the right window (transition_release_log < 9.3 < commit_chore_pr), with a fabricated-name control / PI-11 the hand-maintained usage()/--help phase roster carries the 9.3 row, with the shipped 9.2 row as its control)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  close-out report phase set is RECORD-DERIVED validated (#4773 — every recorded phase renders against a denominator parsed from this file's own mark_phase subjects (pre-fix: 3 missing — inject_velocity_field / append_release_learnings / audit_epic_rollup) / a phase in NO enumeration still renders (AC-2) / an unmarked name does NOT render (anti-vacuity) / post_gate_passage_proof renders AND is asserted definition-less, so a definition-derived set cannot silently drop it / a double-marked name renders ONE row carrying the FIRST result / the halted marker fires on a FAIL-terminated run and is absent on a clean one / DISPATCH<->RECORD cross-check: every dispatched phase is a record subject, with vacuity floors on both parses plus sensitivity and specificity arms — the one invariant no seeded arm can reach / JSON twin carries the same de-duplicated set with pre-existing keys intact)" >&2
@@ -9035,6 +9291,7 @@ phase_append_release_digest || { generate_report; exit 3; }
 phase_append_reversions || { generate_report; exit 3; }                # Phase 8.5 — re-version ledger (#1679; N/A on the common no-collision path)
 phase_scaffold_release_notes || { generate_report; exit 3; }
 phase_lint_release_notes || { generate_report; exit 3; }              # Phase 9.2 — §3.2 note-content close gate; a finding for THIS version BLOCKS close
+phase_lint_plan_identity || { generate_report; exit 3; }              # Phase 9.3 — ADR-092 plan-file identity/placement close gate; a finding for THIS version BLOCKS close (before the chore branch is committed)
 phase_append_changelog || { generate_report; exit 3; }                # Phase 9.5 — Layer-1 dual-write Surface 2
 phase_assert_derived_surfaces || { generate_report; exit 3; }         # Phase 9.55 — AC1 anchor A3: version-scoped scaffold-residue assert on CHANGELOG + DIGEST
 phase_bump_version || { generate_report; exit 3; }                    # Phase 9.6 — stamp .version (versioned releases; SKIP version-less)
