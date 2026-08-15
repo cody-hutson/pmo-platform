@@ -206,7 +206,7 @@ consumer, may treat "agent-authored" as a reason to skip review or auto-approve.
 Two facts about Mode C's safety envelope must be stated plainly; neither is a reason
 not to ship, but both bound what the clamp actually guarantees:
 
-1. **Substituting the confirm gate is a genuine reduction of the line-239 invariant,
+1. **Substituting the confirm gate is a genuine reduction of the § Mode detection per-item-confirm invariant,
    not a "no-op reconciliation."** The interactive modes require a **per-item**
    human confirm (a human approves *this specific* item before it is filed). Mode C
    replaces that, for the ambient path only, with a **standing** `automation_level`

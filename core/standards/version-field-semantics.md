@@ -47,7 +47,8 @@ Disallowed: `v1.2.1` (no patch level — skills sync with platform minor version
 
 Version bumps on **material edit**:
 
-- Frontmatter changes (description, name, other metadata fields)
+- Addressability changes (a `name:` or `description:` edit that changes which requests reach
+  this skill, or which skill a request reaches)
 - Behavior changes (trigger phrases, mode definitions, process steps, failure modes)
 - Output contract changes (sections, required elements, validation checks)
 - Cross-reference changes (dependency-graph node, principal-standard target, shared contracts)
@@ -58,6 +59,26 @@ Version DOES NOT bump on:
 - Typo fixes in prose that don't change meaning
 - Whitespace / formatting-only changes
 - Comment-only changes (e.g., clarifying an inline comment)
+- A frontmatter edit that changes no addressability — trimming a `description:` to fit a
+  length limit, rewording it without altering which requests match, or editing a metadata
+  field no router reads
+
+**Why the first bullet names an effect rather than a field.** It previously read
+"Frontmatter changes (description, name, other metadata fields)", which named a *location*
+where every sibling bullet names a *consequence*. That made it simultaneously too broad and
+too narrow: a pure length-trim of a `description:` violated it while changing nothing a
+router sees, and it invited the reading that a trigger rewrite is material *because it sits
+in frontmatter* rather than because of what it does.
+
+A trigger rewrite is material, and the bullet that captures it is **Behavior changes** —
+"trigger phrases" is named there explicitly. That is the correct home: a trigger rewrite
+changes routing behaviour, and would remain material if the phrases moved out of frontmatter
+tomorrow. Addressability and Behavior can both fire on one edit; that is expected and not a
+double-count, since the bump is per-edit rather than per-bullet.
+
+The practical test for a frontmatter edit: **would a request that previously reached this
+skill now reach a different one, or vice versa?** If yes, it is material. If the only
+observable difference is character count or phrasing, it is cosmetic.
 
 **Determination mechanism.** The bump / no-bump decision is held by `pmo-skill-editor` during a sanctioned editing session — not by a commit-message marker. The PreToolUse hook gates the edit attempt: direct Write/Edit on a migrated skill's SKILL.md or reference files is rejected unless a valid `pmo-skill-editor` session sentinel is present at `{core,operations,release}/skills/<skill>/.editor-session` (target-skill-matched, within 30-min TTL). Inside the sanctioned session, `pmo-skill-editor` is responsible for classifying the change as material vs cosmetic and bumping the `version:` field per § Bump Rules. That rejection holds only within the hook's coverage boundary — see § Maintenance Protocol, *Gate 2 coverage boundary*: the hook is `workflow` class and master activation ships OFF, so on a default instance it rejects nothing and the bump decision rests on editor protocol alone.
 
@@ -133,6 +154,39 @@ version: v1.3
 
 **NEW skill creation is non-enforced** through PMO tooling per D-Creator. New skills are scaffolded via Anthropic built-in `skill-creator` and adopt this contract on first commit. The forcing function applies to existing-skill modifications, not net-new creation.
 
+## Conformance Probe
+
+Answers *"did this release's material `SKILL.md` edits bump their `version:` fields?"* — the question this standard exists to make answerable, recorded as a **method** because a stored result goes stale on the next `SKILL.md` commit, which is the drift class the probe detects.
+
+For a release's integration merge `<merge>`, cross-tabulate two independent predicates over the `SKILL.md` files that merge changed:
+
+- **DESC-CHANGED** — the frontmatter `description:` block differs between `<merge>^1` and `<merge>`
+- **BUMPED** — the `version:` field differs across the same pair
+
+```
+git diff --name-only <merge>^1 <merge> -- '*/SKILL.md'
+```
+
+| Cell | Meaning |
+|---|---|
+| DESC-CHANGED + BUMPED | Correct, if the description edit changed addressability |
+| **DESC-CHANGED + no-bump** | **The defect class** — candidates, not yet defects |
+| desc-same + BUMPED | Correct — a body-only material edit |
+| desc-same + no-bump | Correct — cosmetic or no material change |
+
+**Report all four cells.** A lone zero in the defect cell is indistinguishable from a probe that examined nothing; the other three are what prove the extraction ran.
+
+**A populated defect cell is a candidate list, not a defect list.** Per § Bump Rules a `description:` edit is material only when it changes addressability. A length trim sits in that cell looking like a defect and is correctly not bumped. Apply the § Bump Rules test to each member before acting.
+
+**Do not substitute "carries an old `version:`" for "was materially edited in this release without a bump."** Different predicates over different populations; only the second is a defect. A skill the release never touched correctly carries its older value. The membership test is the changed-file set of the release's own merge, nothing else.
+
+**Two extraction traps**, both of which produced false readings in practice:
+
+- Read `version:` with a first-match `^version:` extraction and `description:` as the span to the next top-level key — a `description:` is often multi-line, and a single-line read silently truncates it.
+- Resolve blobs as `git show "${rev}:path"`, **braced**. Unbraced `$rev:core/...` is mangled by zsh's `:c` history modifier: the command errors, the extraction is empty, and a count of it reads zero — a failed command presenting as a clean result.
+
+**Specimen**, run at merge `e323b0e8` and its first parent, denominator **20** changed `SKILL.md` files: cells **1 / 13 / 4 / 2**. All four non-degenerate, so neither predicate is dead. Illustrative only — re-run rather than cite, and re-measure against live state before acting, since the population moves between measurement and remediation.
+
 ## Consumer References
 
 Tools and rules that reference this semantics doc:
@@ -156,6 +210,7 @@ This contract governs every SKILL.md edit going forward. Reverting the contract 
 |---|---|---|
 | 1.0 | 2026-04-22 | Initial release per the Skill Discipline. Defines field semantics, format regex, bump rules, dual-gate maintenance protocol, backfill policy. |
 | 1.1 | 2026-06-21 | Adds the § Format chronological caveat: a skill's `version:` marks the release it was validated against, not a chronological ordinal, because release tags are allocated at claim time and may ship out of numeric order under parallel releases. Names the Bundle Composition Doctrine numbering convention + parallel-release sequencing rules as the homes for allocation and ship-order semantics. Prose-only, additive; the field, regex, and dual-gate are unchanged (Check 6 unaffected). |
+| 1.2 | 2026-08-15 | Reframes the first § Bump Rules bullet from a LOCATION to a CONSEQUENCE — "Frontmatter changes (description, name, other metadata fields)" becomes "Addressability changes", because every sibling bullet named an effect while this one named a field, making it simultaneously too broad (a length-trim violated it while changing nothing a router sees) and too narrow (it invited reading a trigger rewrite as material *because it sits in frontmatter*). Adds the cosmetic frontmatter case to the does-not-bump list, and states why a trigger rewrite belongs to the Behavior bullet rather than this one. Adds § Conformance Probe — the cross-tabulation method that makes "did this release bump what it should have?" answerable without re-deriving it, recorded as a method rather than a stored result. Twelve skills whose triggers were rewritten in a measured routing change without a bump were corrected in the same release. |
 
 ---
 

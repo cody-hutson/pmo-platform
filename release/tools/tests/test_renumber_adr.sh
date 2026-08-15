@@ -181,6 +181,33 @@ stage_builder() {
   ( cd "$w" && G add -A >/dev/null && G commit -qm "stage the package-builder closure" )
 }
 
+# roster_add <worktree> <skill> — register a fixture skill in the STAGED deploy.sh's
+# CORE_SKILLS array.
+#
+# Required because the builder's --skills-for-paths query resolves a candidate against
+# the real roster arrays before emitting it: a directory that looks like a skill but is
+# absent from every roster is correctly rejected as "not a packageable skill". That is
+# deliberate product behaviour — an unrostered directory has no package, so there is no
+# staleness for R7 to disclose — and it is what makes the A13a scenario constructible
+# only for a skill the roster actually knows.
+#
+# The edit is confined to the staged copy inside the fixture's throwaway worktree. The
+# real roster is never touched, so this registers a test double rather than widening the
+# platform's own skill set.
+roster_add() {
+  local w="$ROOT/$1" skill="$2"
+  python3 - "$w/core/deploy/deploy.sh" "$skill" <<'PY'
+import re, sys
+path, skill = sys.argv[1], sys.argv[2]
+s = open(path).read()
+m = re.search(r"^CORE_SKILLS=\(\n", s, re.M)
+if not m:
+    sys.exit("FATAL: CORE_SKILLS array not found in the staged deploy.sh")
+open(path, "w").write(s[:m.end()] + f"  {skill}\n" + s[m.end():])
+PY
+  ( cd "$w" && G add -A >/dev/null && G commit -qm "register ${skill} in the staged roster" )
+}
+
 echo "=== ACT 1 — the race (both claimants correct) ==="
 seed_origin origin1
 G clone -q "$ROOT/origin1" "$ROOT/wt-A"
@@ -513,6 +540,7 @@ G clone -q "$ROOT/origin13" "$ROOT/wt-A13"
 # --- A13a the packaged skill's source is swept, and the package is NAMED ------
 author_B origin13 wt-B13a 4
 stage_builder wt-B13a
+roster_add wt-B13a fixture-skill
 ( cd "$ROOT/wt-B13a"
   mkdir -p core/skills/fixture-skill
   printf -- '---\nname: fixture-skill\n---\n\n# fixture-skill\n\nThe body cites ADR-004.\n' \
@@ -545,6 +573,34 @@ assert_eq "A13b R7 reports 'none affected' rather than staying silent" \
   "$(printf '%s\n' "$R7B" | grep -c 'R7 packages: none affected')" "1"
 assert_eq "A13b R7 names NO package when the sweep staled none" \
   "$(printf '%s\n' "$R7B" | grep -c 'R7 packages: .*\.skill')" "0"
+
+# --- A13d UNROSTERED — a skill-shaped directory the roster does not know -------
+# The arm that keeps A13a's roster_add honest. A13a registers its fixture skill so the
+# scenario is constructible at all; without this arm, a reader could reasonably suspect
+# the registration was papering over a product regression rather than modelling reality.
+#
+# It does not. An unrostered directory has no package, so there is no staleness to
+# disclose, and R7 must stay silent about it — the same behaviour that made A13a fail
+# before the registration was added. Here the skill source IS swept (sensitivity below),
+# so silence cannot be explained away as the sweep never reaching it.
+#
+# This arm fails if the resolvability filter is ever removed: R7 would name a package
+# that does not exist and cannot be built, sending a reader to a rebuild command that
+# errors.
+author_B origin13 wt-B13d 4
+stage_builder wt-B13d
+( cd "$ROOT/wt-B13d"
+  mkdir -p core/skills/unrostered-skill
+  printf -- '---\nname: unrostered-skill\n---\n\n# unrostered-skill\n\nThe body cites ADR-004.\n' \
+    > core/skills/unrostered-skill/SKILL.md
+  G add -A >/dev/null && G commit -qm "author unrostered-skill citing ADR-004" )
+cd "$ROOT/wt-B13d" && G fetch -q origin
+R7C="$(python3 release/tools/renumber-adr.py --renumber 4 5 --apply 2>&1)"; R7C_RC=$?
+assert_eq "A13d the renumber exits 0 with an unrostered skill in the sweep" "$R7C_RC" "0"
+assert_eq "A13d SENSITIVITY — the unrostered skill's source WAS swept" \
+  "$(cite_count core/skills/unrostered-skill/SKILL.md 5)" "1"
+assert_eq "A13d R7 does NOT name a package for an unrostered skill" \
+  "$(printf '%s\n' "$R7C" | grep -c 'R7 packages: .*unrostered-skill\.skill')" "0"
 
 # --- A13c DEGRADATION — the resolver is unreachable; the run STILL succeeds ---
 # The highest-value arm. R7 runs AFTER R6 verified and `git add -A` staged, so a

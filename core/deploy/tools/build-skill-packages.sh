@@ -122,6 +122,28 @@ if [[ ${#OPERATIONS_SKILLS[@]} -eq 0 || ${#RELEASE_SKILLS[@]} -eq 0 || ${#CORE_S
   exit 1
 fi
 
+# Skill → module resolver — iterates the per-module arrays extracted from deploy.sh
+# above (mirrors deploy.sh resolve_skill_module). CANARY_SKILLS classifies to
+# release/. Bash 3.2 portable: explicit per-array loops + `${#ARR[@]} -gt 0`
+# empty-guards; no `local -n` nameref (4.3+). Returns non-zero on miss — the
+# build_one call site handles that as a per-skill failure (this script runs
+# `set -e`, so the call is guarded to avoid a silent whole-script abort per
+# ADR-008 Rule 3; deploy.sh die()s there, but this tool has no die()).
+#
+# DEFINED HERE, ADJACENT TO THE ARRAYS IT READS — and, load-bearingly, ABOVE the
+# query-mode dispatch below, which now calls it. It used to sit further down, next
+# to build_one(); a function must be defined before the first statement that calls
+# it, and the query dispatch exits the script before ever reaching that old site.
+# Keep it above the dispatch. (Pure placement: the body is unchanged.)
+resolve_skill_module() {
+  local skill="$1" s
+  if [[ ${#OPERATIONS_SKILLS[@]} -gt 0 ]]; then for s in "${OPERATIONS_SKILLS[@]}"; do [[ "$s" == "$skill" ]] && { echo "operations"; return 0; }; done; fi
+  if [[ ${#RELEASE_SKILLS[@]}    -gt 0 ]]; then for s in "${RELEASE_SKILLS[@]}";    do [[ "$s" == "$skill" ]] && { echo "release";    return 0; }; done; fi
+  if [[ ${#CORE_SKILLS[@]}       -gt 0 ]]; then for s in "${CORE_SKILLS[@]}";       do [[ "$s" == "$skill" ]] && { echo "core";       return 0; }; done; fi
+  if [[ ${#CANARY_SKILLS[@]}     -gt 0 ]]; then for s in "${CANARY_SKILLS[@]}";     do [[ "$s" == "$skill" ]] && { echo "release";    return 0; }; done; fi
+  return 1
+}
+
 # Canonical-source resolver — single-sourced from the shared lib fragment
 # (core/deploy/lib-template-sync-source.sh), the SAME definition deploy.sh
 # sources. #2158 eliminated the former hand-synced resolve_canonical_source()
@@ -141,10 +163,38 @@ source "$LIB_TEMPLATE_SYNC_SOURCE"
 # Reverse-resolve changed repo-relative paths (stdin) to the set of skills whose
 # .skill packages those paths feed. Two rules:
 #
-#   (a) direct source      — ^(core|operations|release)/skills/<skill>/…  ->  <skill>
+#   (a) direct source      — ^(core|operations|release)/skills/<skill>/…  ->  <skill>,
+#                            but ONLY when <skill> resolves in the deploy.sh module
+#                            rosters. See "RULE (a) IS ROSTER-FILTERED" below.
 #   (b) injected canonical — the path IS the canonical source that some
 #                            TEMPLATE_SYNC_MAP entry injects  ->  every skill
 #                            named in field 1 of each matching entry.
+#
+# RULE (a) IS ROSTER-FILTERED; RULE (b) IS DELIBERATELY NOT. This asymmetry is
+# intentional and must not be "tidied" away — the two rules have different inputs
+# and an unresolvable name means the opposite thing in each.
+#
+# Rule (a)'s input is a REGEX CAPTURE over arbitrary changed paths, so its second
+# path segment is whatever happens to sit under a skills/ root. Not every such
+# directory is a packageable skill: operations/skills/_shared/ holds behavioral
+# markers with no SKILL.md, and operations/skills/_templates/ holds skill
+# TEMPLATES whose own SKILL.md files sit one level deeper, so the capture yields
+# `_templates`. Neither is in any roster and neither can be built. Emitting them
+# hands every consumer an argument that CANNOT succeed: the close-out's rebuild
+# phase fails the whole batch on it, and the version-claim tool feeds it straight
+# into a real build. Gating the emit on resolve_skill_module() — the SAME resolver
+# build_one() uses to accept or reject a skill — makes "the query emits it" and
+# "the build accepts it" a biconditional by construction rather than by agreement.
+# The filter only ever REMOVES candidates no consumer could have used, so it
+# cannot hide a real staleness.
+#
+# Rule (b)'s input is CURATED data: TEMPLATE_SYNC_MAP field 1, hand-maintained in
+# deploy.sh. Every entry there is an assertion that a named skill injects a named
+# canonical. A map entry naming a skill that no longer exists is a genuine deploy.sh
+# inconsistency, and the loud build failure it produces is the CORRECT signal.
+# Silently dropping it would convert that signal into a green "nothing to rebuild"
+# — the same silent-pass this query mode exists to prevent, applied to the other
+# limb. So rule (b) stays unfiltered on purpose.
 #
 # Rule (b) is the load-bearing half and the reason this query lives HERE rather
 # than in the caller. A TEMPLATE_SYNC_MAP canonical has no skills/ path of its
@@ -171,11 +221,25 @@ if [[ $QUERY_SKILLS_FOR_PATHS -eq 1 ]]; then
   _q_path=""; _q_entry=""; _q_m_skill=""; _q_m_canonical=""
   while IFS= read -r _q_path; do
     if [[ -z "$_q_path" ]]; then continue; fi
-    # (a) direct source
+    # (a) direct source — emitted ONLY if the captured segment resolves to a
+    #     packageable skill in the deploy.sh rosters (see the header block above
+    #     for why this arm is filtered and rule (b) is not). The resolver call is
+    #     GUARDED: this script runs `set -e`, and resolve_skill_module returns
+    #     non-zero on a miss, so an unguarded call would abort the whole query
+    #     instead of filtering one candidate. stdout is the machine contract for
+    #     both consumers, so the resolver's own output is discarded here and the
+    #     rejection notice goes to stderr — the close-out reads this query with
+    #     stderr suppressed and the version-claim tool captures stdout only, so
+    #     neither can mistake the notice for a candidate.
     if [[ "$_q_path" =~ ^(core|operations|release)/skills/([^/]+)/ ]]; then
-      printf '%s\n' "${BASH_REMATCH[2]}"
+      if resolve_skill_module "${BASH_REMATCH[2]}" >/dev/null 2>&1; then
+        printf '%s\n' "${BASH_REMATCH[2]}"
+      else
+        printf 'note: %s is not a packageable skill (not in the deploy.sh OPERATIONS/RELEASE/CORE/CANARY rosters) — not a rebuild candidate\n' \
+          "${BASH_REMATCH[2]}" >&2
+      fi
     fi
-    # (b) injected canonical
+    # (b) injected canonical — deliberately UNFILTERED; see the header block.
     for _q_entry in "${TEMPLATE_SYNC_MAP[@]}"; do
       _q_m_skill="${_q_entry%%:*}"
       _q_m_canonical="${_q_entry#*:}"; _q_m_canonical="${_q_m_canonical%%:*}"
@@ -235,22 +299,6 @@ for entry in "${COMPLEMENTARY_PAIRS[@]}"; do
     exit 1
   fi
 done
-
-# Skill → module resolver — iterates the per-module arrays extracted from deploy.sh
-# above (mirrors deploy.sh resolve_skill_module). CANARY_SKILLS classifies to
-# release/. Bash 3.2 portable: explicit per-array loops + `${#ARR[@]} -gt 0`
-# empty-guards; no `local -n` nameref (4.3+). Returns non-zero on miss — the
-# build_one call site handles that as a per-skill failure (this script runs
-# `set -e`, so the call is guarded to avoid a silent whole-script abort per
-# ADR-008 Rule 3; deploy.sh die()s there, but this tool has no die()).
-resolve_skill_module() {
-  local skill="$1" s
-  if [[ ${#OPERATIONS_SKILLS[@]} -gt 0 ]]; then for s in "${OPERATIONS_SKILLS[@]}"; do [[ "$s" == "$skill" ]] && { echo "operations"; return 0; }; done; fi
-  if [[ ${#RELEASE_SKILLS[@]}    -gt 0 ]]; then for s in "${RELEASE_SKILLS[@]}";    do [[ "$s" == "$skill" ]] && { echo "release";    return 0; }; done; fi
-  if [[ ${#CORE_SKILLS[@]}       -gt 0 ]]; then for s in "${CORE_SKILLS[@]}";       do [[ "$s" == "$skill" ]] && { echo "core";       return 0; }; done; fi
-  if [[ ${#CANARY_SKILLS[@]}     -gt 0 ]]; then for s in "${CANARY_SKILLS[@]}";     do [[ "$s" == "$skill" ]] && { echo "release";    return 0; }; done; fi
-  return 1
-}
 
 # Rebuild-stable content-manifest hash of a .skill archive (BYTE-ALIGNED with
 # deploy.sh skill_content_hash). Per the gate-efficacy standard Requirement (a):
