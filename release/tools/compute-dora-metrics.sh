@@ -457,6 +457,26 @@ ROWS
   R="$(_dora_field "$DF_JSON" change_failure_rate value_permille)"
   [[ "$R" == "0" ]] || die "self-test: DF-5 SPECIFICITY — a failed deploy-package row is not an anchor and must not mark the occasion failed, got ${R}permille"
 
+  # DF-6 — DF-5's NEGATIVE CONTROL, and what turns DF-5 from an assertion into a
+  #        demonstration. DF-5 alone only ever PASSES: its 0permille is equally
+  #        consistent with a live subtype narrowing and with an engine that had no
+  #        deploy-package row to reject in the first place. Stage 8 graded DF-5
+  #        conformant-arm-only for exactly that reason.
+  #
+  #        The widened engine is DERIVED FROM THE SHIPPED $AGG_PY BY AN ASSERTED
+  #        TRANSFORM, never transcribed — the transcription this file already warns
+  #        about above is a shadow source of truth, and a hand-copied mutant is the
+  #        same defect wearing a control's clothes. An unbitten substitution ABORTS
+  #        rather than reading green for the wrong reason.
+  _df_widened_py="$(/usr/bin/printf '%s\n' "$AGG_PY" \
+    | /usr/bin/sed -e 's/("deploy-skill", "deploy-harness")/("deploy-skill", "deploy-harness", "deploy-package")/')"
+  if [[ "$_df_widened_py" == "$AGG_PY" ]]; then
+    die "self-test: DF-6 the anchor-subtype widening did not bite \$AGG_PY — the arm is inert and must be repaired, never silenced"
+  fi
+  DF_JSON="$(/usr/bin/printf '%s\n%s\n' "$DF_OK_ROWS" "$DF_PKG_ROW" | "$PY" -c "$_df_widened_py" "" "30" "" "$ST_NOW")"
+  R="$(_dora_field "$DF_JSON" change_failure_rate value_permille)"
+  [[ "$R" == "1000" ]] || die "self-test: DF-6 NEGATIVE CONTROL — with deploy-package admitted to the anchor set the SAME fixture must read 1000permille (expected 1000, got ${R}permille); if it does not, DF-5's zero is uninformative and proves nothing about the narrowing"
+
   echo "self-test: PASS"
   echo "  duration formatter validated (sub-hour / over-hour / multi-day / zero)"
   echo "  cadence label thresholds validated"
@@ -465,7 +485,7 @@ ROWS
   echo "  query-pipeline-event.sh dependency validated"
   echo "  every arm above ran through the LIVE \$AGG_PY engine, not a transcription of it"
   echo "  failed deploys reach the CFR NUMERATOR validated (#4215, group DF):"
-  echo "    DF-1 an all-targets-failed release reads CFR 100% (it used to read 0.0% — failed deploys entered the denominator ALONE, so the platform's change-failure rate improved as its deploys failed, permanently) / DF-1b and it STAYS in the denominator, because a deploy that ran and failed is still a deployment event / DF-2 CONTROL an all-targets-succeeded release reads 0% / DF-3 a PARTIAL failure is a failure / DF-4 rollback + failed-deploy on one release is ONE failed occasion, not two (union, not sum) / DF-5 SPECIFICITY a failed deploy-package row is not an anchor and does not mark the occasion failed"
+  echo "    DF-1 an all-targets-failed release reads CFR 100% (it used to read 0.0% — failed deploys entered the denominator ALONE, so the platform's change-failure rate improved as its deploys failed, permanently) / DF-1b and it STAYS in the denominator, because a deploy that ran and failed is still a deployment event / DF-2 CONTROL an all-targets-succeeded release reads 0% / DF-3 a PARTIAL failure is a failure / DF-4 rollback + failed-deploy on one release is ONE failed occasion, not two (union, not sum) / DF-5 SPECIFICITY a failed deploy-package row is not an anchor and does not mark the occasion failed / DF-6 NEGATIVE CONTROL the SAME fixture through an engine widened to admit deploy-package — derived from the shipped \$AGG_PY by an asserted transform, never transcribed — DOES read 1000permille, so DF-5's zero is the narrowing biting rather than an inert probe"
   exit 0
 fi
 

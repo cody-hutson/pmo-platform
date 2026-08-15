@@ -1126,6 +1126,21 @@ def run_self_test() -> int:
                      "defective=ADMITTED" % rc_e8)
 
         # E9 -- the empty-map classifier guard.
+        #
+        # The DEFECTIVE value is COMPUTED, never printed. It used to be a literal
+        # in the note string below: correct, and no code computed it -- "true but
+        # unearned", which is this release's own defect class (a claim with no
+        # observing step) wearing an evidence line's clothes.
+        #
+        # The observing step here is the emptiness guard, and it is removed the
+        # narrowest way there is: a dict subclass that is EMPTY but TRUTHY passes
+        # `if not member_to_ranges` and falls through to the SHIPPED classification
+        # path. Nothing is transcribed and no source is rewritten -- the value below
+        # is produced by the function under test.
+        #
+        # `non-empty extraction` is N/A for this arm BY CONSTRUCTION: its subject IS
+        # the empty input, so manufacturing an extraction would satisfy the clause by
+        # changing the subject.
         e9_raised = False
         try:
             classify_overlap_class({})
@@ -1133,8 +1148,30 @@ def run_self_test() -> int:
             e9_raised = True
         check(e9_raised,
               "E9 CONFORMANT: an empty member map still returns a verdict")
+
+        class _TruthyEmptyMap(dict):
+            """Empty, but passes the emptiness guard -- that guard removed, nothing else."""
+
+            def __bool__(self) -> bool:
+                return True
+
+        e9_bypass = _TruthyEmptyMap()
+        check(len(e9_bypass) == 0 and bool(e9_bypass),
+              "E9 DEFECTIVE arm's bypass map is not empty-and-truthy, so it is not "
+              "exercising the guard")
+        try:
+            defective_e9 = classify_overlap_class(e9_bypass)
+        except ValueError:
+            defective_e9 = "GUARD-NOT-BYPASSED"
+        check(defective_e9 == "append-pattern",
+              "E9 DEFECTIVE: the guard-bypassed classifier returned %r rather than "
+              "the benign verdict the guard exists to prevent. GUARD-NOT-BYPASSED "
+              "means this arm has gone inert and must be repaired, never silenced"
+              % defective_e9)
         notes.append("  E9 empty-map guard   conformant=ValueError  "
-                     "defective=append-pattern (benign verdict from no data)")
+                     "defective=%s (benign verdict COMPUTED from no data; "
+                     "non-empty extraction N/A -- the subject is the empty input)"
+                     % defective_e9)
 
         # E10 -- the PR-refresh guard: a local `refs/pull/<N>/head` that is
         # PRESENT but STALE. The pre-fix resolver gated its bounded fetch on

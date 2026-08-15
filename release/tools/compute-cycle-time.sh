@@ -229,6 +229,34 @@ ROWS
     die "self-test: CT-3 deploy-package must NOT be anchor-eligible (declared narrowing), got $RESULT"
   fi
 
+  # CT-3b — CT-3's NEGATIVE CONTROL, and the reason CT-3 is now a demonstration
+  #         rather than an assertion. CT-3 alone only ever PASSES: its zero is
+  #         equally consistent with a live narrowing and with a selector that
+  #         never had `deploy-package` to reject. Stage 8 measured exactly that —
+  #         the CT-1 mutation (delete the `resolved` conjunct) moves rows-kept
+  #         2 → 4 while CT-3 stays 0 → 0, so CT-3 observed nothing the rest of
+  #         the group had not already observed.
+  #
+  #         This arm removes the observing step and shows the zero move. The
+  #         widened selector is DERIVED FROM THE SHIPPED FUNCTION'S OWN SOURCE by
+  #         an asserted transform — never transcribed — so it cannot drift into a
+  #         shadow copy that keeps passing after the real predicate changes. An
+  #         unbitten substitution ABORTS the arm rather than letting it read green
+  #         for the wrong reason.
+  _ct_src="$(declare -f select_deploy_anchor_rows)"
+  _ct_widened="$(/usr/bin/printf '%s\n' "$_ct_src" \
+    | /usr/bin/sed -e 's/select_deploy_anchor_rows/_ct_widened_selector/' \
+                   -e 's/\$5 == "deploy-harness"/$5 == "deploy-harness" || $5 == "deploy-package"/')"
+  if [[ "$_ct_widened" == "$_ct_src" ]] || ! /usr/bin/grep -q 'deploy-package' <<<"$_ct_widened"; then
+    die "self-test: CT-3b the widening transform did not bite the shipped selector source — the arm is inert and must be repaired, never silenced"
+  fi
+  eval "$_ct_widened"
+  RESULT="$(printf '%s\n' "$CT_ROWS" | _ct_widened_selector | /usr/bin/grep -c 'deploy-package' || true)"
+  if [[ "$RESULT" != "1" ]]; then
+    die "self-test: CT-3b NEGATIVE CONTROL — the widened selector must ADMIT the deploy-package row (expected 1, got $RESULT); if it does not, CT-3's zero is uninformative and proves nothing about the narrowing"
+  fi
+  unset -f _ct_widened_selector
+
   # CT-4 — outcome=pending is not a terminal success either. The conjunct is an
   #        ALLOWLIST on `resolved`, not a denylist on `escalated`, and this arm is what
   #        makes that difference observable.
@@ -260,7 +288,7 @@ ROWS
   echo "  malformed-input rejection validated"
   echo "  query-pipeline-event.sh dependency validated"
   echo "  T_DEPLOY anchor eligibility validated (#4215, group CT):"
-  echo "    CT-1 SENSITIVITY the selector keeps 2 resolved target rows / CT-2 an escalated deploy row is NOT an anchor (the defect: a totally-failed deploy used to yield a measured duration) / CT-3 deploy-package is audit-only, never an anchor (declared narrowing) / CT-4 outcome=pending is excluded — the conjunct is an allowlist on resolved, not a denylist on escalated / CT-5 MAX is taken over the ELIGIBLE set, so a later ineligible row cannot move the anchor forward / CT-6 SPECIFICITY a non-eligible-only population selects nothing"
+  echo "    CT-1 SENSITIVITY the selector keeps 2 resolved target rows / CT-2 an escalated deploy row is NOT an anchor (the defect: a totally-failed deploy used to yield a measured duration) / CT-3 deploy-package is audit-only, never an anchor (declared narrowing) / CT-3b NEGATIVE CONTROL a selector widened to admit deploy-package — derived from the shipped source by an asserted transform, never transcribed — DOES keep that row, so CT-3's zero is the narrowing biting rather than an inert probe / CT-4 outcome=pending is excluded — the conjunct is an allowlist on resolved, not a denylist on escalated / CT-5 MAX is taken over the ELIGIBLE set, so a later ineligible row cannot move the anchor forward / CT-6 SPECIFICITY a non-eligible-only population selects nothing"
   exit 0
 fi
 
