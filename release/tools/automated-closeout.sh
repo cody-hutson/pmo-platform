@@ -230,12 +230,66 @@ if [[ -z "$REPO_SLUG" ]] && [[ -r "${HOME}/.config/pmo-platform/operator.toml" ]
   [[ -n "$_gh" ]] && REPO_SLUG="${_gh}/${_repo}"
 fi
 [[ -z "$REPO_SLUG" ]] && REPO_SLUG="pmo-platform"
-RELEASE_LOG="$REPO_ROOT/release/releases/RELEASE_LOG.md"
-RELEASE_INDEX="$REPO_ROOT/release/releases/RELEASE_INDEX.md"
-RELEASE_DIGEST="$REPO_ROOT/release/releases/RELEASE_DIGEST.md"
-RELEASE_REVERSIONS="$REPO_ROOT/release/releases/RELEASE_REVERSIONS.md"
-RELEASE_NOTES_DIR="$REPO_ROOT/release/releases/notes"
-RELEASE_PLANS_DIR="$REPO_ROOT/release/releases/plans"
+# ─── Corpus home resolution — the corpus-home adapter seam ───────────────────
+#
+# Implements CH-1..CH-4 of
+# release/references/standards/corpus-home-adapter-constraints.md, which
+# release/tools/tests/test_corpus_home_tolerance.sh asserts executably.
+#
+# Three states, resolved in this precedence order:
+#
+#   1. IN-TREE corpus PRESENT  -> repo-homed. Byte-identical to the pre-adapter
+#      behaviour, so every ordinary checkout and every CI runner is unaffected
+#      by this seam. This tier is deliberately FIRST: the adapter exists for the
+#      post-split world in which the corpus has been REMOVED from the tree
+#      (ADR-032), not to re-home a corpus that is sitting right here. Putting
+#      the instance tier first would change the resolved path on machines that
+#      happen to carry an instance corpus, for no constraint's benefit.
+#   2. in-tree ABSENT, instance corpus PRESENT -> instance-homed (CH-2). A
+#      present instance corpus MUST resolve THROUGH the active corpus home; a
+#      resolver that tolerates absence without resolving presence is the
+#      degenerate answer CH-2 exists to forbid. Both published layouts are
+#      probed because both are in use.
+#   3. NEITHER present -> no corpus home resolves (CH-1). check_paths() records
+#      a per-path N/A and exits 0. Absence is TOLERATED, never hard-failed, and
+#      never silently downgraded to OK (CH-4).
+#
+# An EMPTY $CORPUS_HOME is the one and only signal check_paths() reads for the
+# tolerance branch, so the three states cannot drift apart into two encodings.
+#
+# The instance root honors PMO_INSTANCE_PATH and otherwise appends the canonical
+# `personal/pmo-instance` leaf to the already-resolved $WORKSPACE_ROOT — the same
+# contract core/deploy/lib-instance-path.sh's pmo_instance_path_for() carries,
+# and the same inline form HUB_STATE_PATH below already uses in this file. The
+# library is deliberately NOT sourced here: the tolerance suite's fixtures copy
+# ONLY this script into their fixture repos, so a `source` of a sibling under
+# core/deploy/ would abort the script under `set -euo pipefail` in exactly the
+# hermetic runs that grade these constraints.
+CORPUS_INSTANCE_ROOT="${PMO_INSTANCE_PATH:-${WORKSPACE_ROOT}/personal/pmo-instance}"
+CORPUS_HOME=""
+CORPUS_HOME_KIND="none"
+if [[ -d "$REPO_ROOT/release/releases" ]]; then
+  CORPUS_HOME="$REPO_ROOT/release/releases"
+  CORPUS_HOME_KIND="repo"
+else
+  for _corpus_cand in "$CORPUS_INSTANCE_ROOT/release/releases" "$CORPUS_INSTANCE_ROOT/releases"; do
+    [[ -d "$_corpus_cand" ]] || continue
+    CORPUS_HOME="$_corpus_cand"
+    CORPUS_HOME_KIND="instance"
+    break
+  done
+fi
+# Where the corpus WOULD live when nothing resolved. The CH-4 N/A records name
+# this rather than a bare leaf, so a tolerated absence still says which location
+# was consulted instead of emitting a rootless path.
+CORPUS_HOME_EFFECTIVE="${CORPUS_HOME:-$CORPUS_INSTANCE_ROOT/release/releases}"
+
+RELEASE_LOG="$CORPUS_HOME_EFFECTIVE/RELEASE_LOG.md"
+RELEASE_INDEX="$CORPUS_HOME_EFFECTIVE/RELEASE_INDEX.md"
+RELEASE_DIGEST="$CORPUS_HOME_EFFECTIVE/RELEASE_DIGEST.md"
+RELEASE_REVERSIONS="$CORPUS_HOME_EFFECTIVE/RELEASE_REVERSIONS.md"
+RELEASE_NOTES_DIR="$CORPUS_HOME_EFFECTIVE/notes"
+RELEASE_PLANS_DIR="$CORPUS_HOME_EFFECTIVE/plans"
 CLEANUP_TOOL="$SCRIPT_DIR/cleanup-orphan-state.sh"
 COMPUTE_CYCLE_TIME="$SCRIPT_DIR/compute-cycle-time.sh"
 SYNTHESIZE_LEARNINGS="$SCRIPT_DIR/synthesize-release-learnings.sh"
@@ -9517,8 +9571,26 @@ check_paths() {
     "RELEASE_DIGEST|$RELEASE_DIGEST|file"
     "RELEASE_NOTES_DIR|$RELEASE_NOTES_DIR|dir"
   )
-  echo "check-paths: resolving corpus paths under $REPO_ROOT" >&2
   local entry
+  # CH-1 + CH-4 — the tolerance branch. No corpus home resolved: the in-tree
+  # corpus is absent AND no instance corpus exists under the operator-instance
+  # root. Absence is TOLERATED (exit 0), and it is recorded as a DISTINGUISHABLE
+  # per-path N/A record for every corpus label rather than an undifferentiated
+  # OK. The per-path form is the load-bearing part: a single N/A banner beside
+  # four OK rows would satisfy the letter of CH-1 while making a genuine
+  # resolution defect indistinguishable from a tolerated absence, which is
+  # exactly what CH-4 closes and what would defeat CH-3.
+  if [[ -z "$CORPUS_HOME" ]]; then
+    echo "check-paths: no corpus home resolves — in-tree corpus absent at $REPO_ROOT/release/releases, and no instance corpus under $CORPUS_INSTANCE_ROOT" >&2
+    for entry in "${checks[@]}"; do
+      label="${entry%%|*}"
+      path="${entry#*|}"; path="${path%|*}"
+      echo "  N/A  $label -> $path (instance-corpus root absent — tolerated, not resolved)" >&2
+    done
+    echo "check-paths: PASS (instance-corpus root absent; every corpus path recorded N/A, nothing downgraded to OK)" >&2
+    exit 0
+  fi
+  echo "check-paths: resolving corpus paths under $CORPUS_HOME ($CORPUS_HOME_KIND-homed)" >&2
   for entry in "${checks[@]}"; do
     label="${entry%%|*}"
     path="${entry#*|}"; path="${path%|*}"

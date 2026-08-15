@@ -32,4 +32,4 @@
 # Retiring the suite's PENDING-SEAM branch (see the "Retirement condition" in
 # release/references/standards/corpus-home-adapter-constraints.md section 5)
 # removes this file and rule R8 together. Neither outlives the other.
-pending
+armed
