@@ -151,7 +151,8 @@ if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
 fi
 
 # --- Master-activation gate (#310) — layer 2, AFTER CLAUDE_HOOK_BYPASS and BEFORE the
-# .mode read. CLASS=security (D-R9): master-OFF NEVER makes this hook inert — the
+# SCOPE gate. (There is no `.mode` read in this hook; see the scope-gate comment
+# below.) CLASS=security (D-R9): master-OFF NEVER makes this hook inert — the
 # security/floor class always enforces (public-surface security is paramount; a silently
 # disabled guard -> an IRREVERSIBLE leaked commit/PR). It goes inert ONLY on the operator's
 # explicit, logged security_class_master_optout=true. Fail-toward-current-behavior: a
@@ -180,7 +181,17 @@ TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
 CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
 
 # --- Workspace-scope gate (#4436) — layer 3, AFTER the master-activation gate and
-# BEFORE the .mode / rule path. Precedence: bypass -> master -> SCOPE -> .mode -> rule.
+# BEFORE the rule path. Precedence AS IMPLEMENTED IN THIS FILE:
+#   dependency guard -> bypass -> master -> SCOPE -> rule
+# This hook is MODE-INDEPENDENT: there is no `.mode` layer. It declares no MODE_FILE and
+# reads no mode file of any name — it is one of the three always-enforce hooks, and that
+# unconditional posture is the basis on which the mode-capable cohort was permitted to
+# degrade (ADR-130 D4). The chain above previously read `... SCOPE -> .mode -> rule`,
+# which advertised a warn dial this hook has never had — on precisely the hooks whose
+# tightenings land hardest at deploy. A reader planning a rollback for a change to this
+# file could reasonably have concluded a mode flip was available; it is not. The coverage
+# boundary is stated at core/rules/bypass-mode-readiness/block-destructive.md, condition
+# (4), and canonically at core/standards/subagent-security-posture.md section 3.1.
 # The PreToolUse wiring is re-homed out of workspace-project scope so repo- and
 # worktree-rooted sessions resolve it at all; this bounds that reach to the governed
 # workspace root, so hooks do not begin firing in unrelated repositories. The fail
