@@ -509,3 +509,15 @@ core/deploy/tests/run-install-regression.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_install_end_to_end.sh
 ./core/deploy/tests/test_install_end_to_end.sh
 core/deploy/tests/test_install_end_to_end.sh
+
+# start-skill-editor-session.sh — mints the pmo-skill-editor session sentinel that
+# block-skill-direct-edit.sh (Gate 2) requires. Allowlisted because the gate's own deny
+# message instructs an agent to start a session, and an unrunnable minter reproduces the
+# #5515 defect one layer down: an advertised path that nothing can take. Minting a
+# sentinel is not a bypass — Gate 2 still enforces migration-marker scoping, target
+# matching, future-timestamp rejection and the 30-minute TTL against it.
+[PMO_PLATFORM_ROOT]/core/deploy/tools/start-skill-editor-session.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/start-skill-editor-session.sh
+./core/deploy/tools/start-skill-editor-session.sh
+core/deploy/tools/start-skill-editor-session.sh
+*/core/deploy/tools/start-skill-editor-session.sh

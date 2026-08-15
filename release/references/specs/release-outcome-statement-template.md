@@ -282,7 +282,7 @@ Non-blocking for milestone close — routing options per Stage 13 Phase A goal-a
 
 ### 7.4 Stage 13 G-CL7 (verdict-presence gate, warn-mode initial)
 
-Goal-attainment verification recorded (QC4-06 verdict present in release plan Verification Evidence section). Initial warn-mode posture per [`bypass-mode-readiness.md`](../../../core/rules/bypass-mode-readiness.md) Shakedown → Enforce Transition Checklist precedent — per-release FAIL logs to `core/hooks/qc4-06-warn-log.jsonl` and Milestone close proceeds. Flip to enforce after 2-3 release shakedown. See [`gate-criteria-spec.md` Gate 13](../../../core/schemas/gate-criteria-spec.md#gate-13-close-readiness) row G-CL7.
+Goal-attainment verification recorded (QC4-06 verdict present in release plan Verification Evidence section). Initial warn-mode posture per [`bypass-mode-readiness.md`](../../../core/rules/bypass-mode-readiness.md) Shakedown → Enforce Transition Checklist precedent — per-release FAIL logs to the shared deploy-check warn log (`$(pmo_instance_path)/deploy-check-warn-log.jsonl`) and Milestone close proceeds — **specified, not yet emitting**: no check emits this gate's FAIL row. Flip to enforce after 2-3 release shakedown. See [`gate-criteria-spec.md` Gate 13](../../../core/schemas/gate-criteria-spec.md#gate-13-close-readiness) row G-CL7.
 
 ## 8. Composition with paired artifacts
 

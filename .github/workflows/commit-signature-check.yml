@@ -1,0 +1,158 @@
+name: Commit-signature verification
+
+# gate-efficacy: posture=advisory  enforcement=ci-enforce (no warn-mode — a real finding turns the check RED, exit 1)  always-reports=yes
+#   invariant: every commit in the PR range BASE_SHA..HEAD_SHA carries a
+#              GitHub-verified signature (commit.verification.verified == true),
+#              asserted against the GitHub API verification object.
+#   falsification: push a commit created with `git commit --no-gpg-sign` onto a PR
+#                  branch -> this gate turns RED naming that SHA and reason=unsigned.
+#                  Amend it (commit.gpgsign=true signs automatically) and
+#                  force-push-with-lease -> green.
+# (Posture realized per core/standards/gate-efficacy-standard.md Requirements (b) + (b').)
+#
+# WHY THE ORACLE IS THE API AND NOT LOCAL GIT. This repo carries TWO signature
+# formats: operator commits are SSH-signed (gpg.format=ssh, verified against a local
+# allowed_signers file), and GitHub's own squash/merge commits are PGP-signed by the
+# web-flow key. A GitHub-hosted runner has neither an allowed_signers file nor a GPG
+# keyring, so `git log --format=%G?` returns N for EVERY commit there — and even on a
+# machine with the operator's SSH signer configured it returns N for every GitHub
+# merge commit. The GitHub API verification object is computed server-side against
+# both key sets and is the only oracle that can see the whole population.
+#
+# WHY THIS IS DELIBERATELY NOT A REQUIRED CONTEXT — DO NOT REGISTER IT.
+# Branch protection already sets required_signatures: true, which blocks 100% of
+# unsigned merges at the merge boundary. This gate adds no enforcement; it adds
+# LEGIBILITY — it turns an unexplained mergeStateStatus=BLOCKED (zero failing checks,
+# indistinguishable in the UI from a broken build) into a named finding that cites the
+# offending SHA. Registering it in required_status_checks would layer a second,
+# network-dependent copy of a working enforcement and would let one transient API
+# state block every PR in the repository — the failure class already open against the
+# full-history secret scan. A red-but-unblocked check honours the never-merge-red
+# practice as a read-and-justify step, which is the same posture and the same
+# rationale skill-registry-currency-check.yml carries.
+#
+# Security: the only external inputs are the base/head SHAs and the PR number, passed
+# via env: and referenced as quoted shell vars — never interpolated into run:.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  commit-signature:
+    name: Commit-signature verification gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      - name: Assert every PR-range commit is GitHub-verified
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # (1) AUTHORITATIVE POPULATION: git, which is uncapped. The API commit list
+          # caps at 250 and is used only for the verification field it alone carries.
+          GIT_N="$(git rev-list --count "$BASE_SHA".."$HEAD_SHA")"
+
+          # (2) VERIFICATION FIELD, from the only oracle that sees both key sets.
+          ROWS="$(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/commits?per_page=100" \
+            --jq '.[] | [.sha, (.commit.verification.verified|tostring), .commit.verification.reason] | @tsv')"
+          API_N="$(printf '%s\n' "$ROWS" | grep -c . || true)"
+
+          # (3) COMPLETENESS GUARD — fail closed. A count mismatch means the API view
+          # is truncated or the range moved; assert nothing rather than claim clean.
+          if [ "$API_N" -ne "$GIT_N" ]; then
+            {
+              echo "## :x: Commit-signature verification — POPULATION MISMATCH (inconclusive)"
+              echo ""
+              echo "git rev-list counted ${GIT_N} commit(s) in ${BASE_SHA}..${HEAD_SHA};"
+              echo "the API commit list returned ${API_N}. The gate asserts nothing on a"
+              echo "population it cannot fully enumerate, and fails closed rather than"
+              echo "reporting a clean it did not establish."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          # (4) CLASSIFY. verified=false is not one thing: an author-side failure is a
+          # finding with a real remedy; a transient GitHub-side verification state has
+          # no author-side remedy and must not turn the check red.
+          TRANSIENT='gpgverify_unavailable gpgverify_error ocsp_pending'
+          FINDINGS=""; UNRESOLVED=""; NF=0; NU=0
+          while IFS=$'\t' read -r sha verified reason; do
+            [ -z "$sha" ] && continue
+            if [ "$verified" = "true" ]; then
+              continue
+            fi
+            IS_TRANSIENT=0
+            for t in $TRANSIENT; do
+              if [ "$reason" = "$t" ]; then IS_TRANSIENT=1; fi
+            done
+            if [ "$IS_TRANSIENT" -eq 1 ]; then
+              NU=$((NU + 1))
+              UNRESOLVED="${UNRESOLVED}${sha}  reason=${reason}"$'\n'
+              echo "::warning::commit ${sha} verification is transiently unresolved (reason=${reason}) — not asserted"
+            else
+              NF=$((NF + 1))
+              FINDINGS="${FINDINGS}${sha}  reason=${reason}"$'\n'
+            fi
+          done <<< "$ROWS"
+
+          # (5) VERDICT. The clean headline's numerator is the count actually
+          # ASSERTED — the population MINUS the unresolved, never the population
+          # itself — and the unresolved count is always printed beside it. Both
+          # halves are needed for the gate to never report a clean over a commit
+          # it did not actually assert: on the green path step (3) has already
+          # established API_N == GIT_N and NF is 0, so every row is either
+          # verified or unresolved and GIT_N - NU is exactly the verified count.
+          # With NF=0 and NU=3 the headline reads "0/3", not "3/3".
+          if [ "$NF" -eq 0 ]; then
+            {
+              echo ":white_check_mark: Commit-signature verification — $((GIT_N - NU))/${GIT_N} PR-range commits GitHub-verified"
+              if [ "$NU" -gt 0 ]; then
+                echo ""
+                echo "${NU} commit(s) UNRESOLVED (transient GitHub verification state) — reported, not asserted:"
+                echo '```'
+                printf '%s' "$UNRESOLVED"
+                echo '```'
+              fi
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## :x: Commit-signature verification FAILED — ${NF} unsigned/unverifiable commit(s)"
+            echo ""
+            echo "### Commits:"
+            echo '```'
+            printf '%s' "$FINDINGS"
+            echo '```'
+            echo "### Remedy — re-sign the commit(s). Do NOT merge with \`--admin\`."
+            echo ""
+            echo "For the most recent commit:"
+            echo '```bash'
+            echo "git commit --amend --no-edit          # commit.gpgsign=true signs automatically"
+            echo "git push --force-with-lease"
+            echo '```'
+            echo "For an earlier commit in the range:"
+            echo '```bash'
+            echo "git rebase --exec 'git commit --amend --no-edit' ${BASE_SHA}"
+            echo "git push --force-with-lease"
+            echo '```'
+            echo ""
+            echo "\`gh pr merge --admin\` BYPASSES branch protection's required_signatures"
+            echo "rather than fixing the commit, and leaves an unsigned commit permanently"
+            echo "on main. The repository's signing policy is never-bypass. Re-signing is"
+            echo "one amend and one CI cycle; the merge state goes BLOCKED -> CLEAN and a"
+            echo "plain \`gh pr merge\` is accepted."
+            if [ "$NU" -gt 0 ]; then
+              echo ""
+              echo "Additionally, ${NU} commit(s) are UNRESOLVED (transient GitHub state) and were not asserted."
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1

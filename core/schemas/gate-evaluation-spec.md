@@ -149,15 +149,15 @@ The evaluator routes gate-criteria-spec.md criteria by the `Check` column:
 | Scope coherence | `shared_affected_files / total_unique_files` | Parse Affected Files from issue bodies, compute cross-issue overlap. | Report only (informational density metric, no threshold) |
 | Capacity utilization | `bundle_size / capacity_heuristic` | bundle_size = Milestone issue count. capacity_heuristic = rolling max of last 5 releases. | ≤ 1.2 |
 | Contention density | `files_with_2+_issues / total_unique_files` | Cross-issue affected-files analysis. | ≤ 0.5 |
-| Structural pass rate | `gate_criteria_structural_passes / total_structural_criteria` | gate-criteria-spec.md G3-01 through G3-06 `Check=structural` criteria (G3-01, G3-02, G3-03, G3-06 = 4 structural). | = 1.0 |
+| Structural pass rate | `gate_criteria_structural_passes / total_structural_criteria` | Every gate-criteria-spec.md § Gate 3 row whose `Check` column is `structural` — the selector, not a snapshot: no range and no count, so the denominator tracks the criterion set automatically (per the general rule stated above under Layer 1). The RETIRED G3-13 tombstone carries `Check = -` and is excluded by the predicate. | = 1.0 |
 
 **capacity_heuristic computation:** Rolling max of last 5 releases (Milestone issue counts). When fewer than 5 releases exist, use max of all available releases.
 
 ### Gates 1→2, 2→3
 
 These boundaries use `structural_pass_rate` as the sole metrics-layer input:
-- Gate 1→2: `structural_pass_rate` from gate-criteria-spec.md Gate 1 `Check=structural` criteria (G1-01, G1-03, G1-05a, G1-06, G1-07 = 5 structural). Threshold: = 1.0.
-- Gate 2→3: `structural_pass_rate` from gate-criteria-spec.md Gate 2 `Check=structural` criteria (G2-03, G2-04, G2-05, G2-06, G2-07 = 5 structural). Threshold: = 1.0.
+- Gate 1→2: `structural_pass_rate` over every gate-criteria-spec.md § Gate 1 row whose `Check` column is `structural`. Threshold: = 1.0.
+- Gate 2→3: `structural_pass_rate` over every gate-criteria-spec.md § Gate 2 row whose `Check` column is `structural`. Threshold: = 1.0.
 
 Per-boundary computed metrics for these gates are future enhancement material.
 

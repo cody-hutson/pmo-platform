@@ -59,7 +59,7 @@ Two grounds, both already established in the platform — no new vocabulary is i
 
 ## 5. How the constraint is enforced
 
-`release/tools/tests/test_corpus_home_tolerance.sh` runs four hermetic fixtures against the real `--check-paths` probe in throwaway temp trees, and grades the **exit-code vector**, not any single fixture.
+`release/tools/tests/test_corpus_home_tolerance.sh` runs four hermetic fixtures against the real `--check-paths` probe in throwaway temp trees — plus a conditional fifth, **A′**, constructed only when the coverage discriminator fires — and grades the **exit-code vector**, not any single fixture.
 
 | Fixture | Repo tree | Instance root | Asserts |
 |---|---|---|---|
@@ -67,6 +67,9 @@ Two grounds, both already established in the platform — no new vocabulary is i
 | **B** | corpus **absent** in-tree | **absent** | CH-1, CH-4 |
 | **C** | corpus in-tree, `RELEASE_LOG.md` **omitted** | not used | CH-3 |
 | **D** | corpus in-tree, all four present | not used | CH-3 (baseline) |
+| **A′** | corpus **absent** in-tree | **present**, seeded with the resolver's **own declared layout** | CH-2 (coverage discriminator) |
+
+A′ is not a fifth channel guess. Its layout is read out of the resolver's own per-path output, so the suite never has to enumerate candidate layouts to keep pace with an adapter it has not seen.
 
 Let `a b c d` be the four exit codes, and let **ARMED** mean *the suite has evidence that corpus-path resolution is instance-aware.* The verdict rules:
 
@@ -80,14 +83,33 @@ R2  c == 0                                -> FAIL   probe blind: a broken corpus
 R3  ARMED && b != 0                       -> FAIL   SEAM LANDED, TOLERANCE VIOLATED  (CH-1)
 R4  ARMED && b == 0 && B lacks a per-path N/A record for any corpus label
                                           -> FAIL   tolerance is silent              (CH-4)
-R5  a != 0 && (ARMED || b == 0)           -> FAIL   present corpus does not resolve  (CH-2)
-R7  ARMED && a == 0 && A lacks a per-path record for any corpus label,
-                       or A carries the N/A token
+R5  a != 0 && (ARMED || b == 0)           -> run the COVERAGE DISCRIMINATOR on
+                                             fixture A's declared per-path records:
+      records incomplete                  -> FAIL   ungradable                       (CH-2)
+      a declared path is outside
+        fixture A's instance root         -> FAIL   not routed through the home      (CH-2)
+      seed the declared layout into
+        A' and re-run:   a' != 0          -> FAIL   present corpus does not resolve  (CH-2)
+                         a' == 0          -> PASS   fixture-coverage gap + ACTION notice
+R7  ARMED && (a == 0 || R5 passed via A') && the GRADED capture lacks a per-path
+                       record for any corpus label, or carries the N/A token
                                           -> FAIL   CH-2 assumed, not resolved       (CH-2)
+    (the graded capture is A's normally, and A''s on the coverage-gap path —
+     R5 passing via A' is never sufficient on its own)
 R6  a CH-id claimed by the suite is absent from this file, or the claimed-id
     list holds fewer than 4 DISTINCT ids   -> FAIL   doc<->test binding broken
-    !ARMED  && no failure                 -> PENDING-SEAM      exit 0 + notice
-    ARMED   && no failure                 -> PASS-SEAM-LANDED  exit 0 + retire-notice
+R8  the posture DECLARED in .github/corpus-home-tolerance.arming diverges from
+    the posture OBSERVED (derived from ARMED):
+      declared armed,   observed pending  -> FAIL   COVERAGE LOST: the seam was
+                                                    reverted and nothing recorded it
+      declared pending, observed armed    -> FAIL   seam landed; flip the sentinel
+                                                    in that same change
+      sentinel absent / empty / unknown   -> FAIL   fail-closed: an undeclared
+                                                    posture is unassertable
+    !ARMED  && posture aligned
+            && no failure                 -> PENDING-SEAM      exit 0 + notice
+    ARMED   && posture aligned
+            && no failure                 -> PASS-SEAM-LANDED  exit 0 + retire-notice
 ```
 
 **The teeth are a divergence rule, not a pass rule — and that is the design.** R1/R2/R5/R6 gate from day one. R3/R4/R7 **arm on the structural fact**, so the PR that makes `--check-paths` instance-aware is the PR that gets graded. There is no cutoff date to set, no flag to flip, and no human who has to remember this document exists.
@@ -96,9 +118,17 @@ R6  a CH-id claimed by the suite is absent from this file, or the claimed-id
 
 **The residue is bounded and named.** Arming is a token match, so a resolver that names none of that vocabulary *and* leaves fixture A non-zero is not detected. That residue is bounded by the needle — a one-line extension in the suite — rather than by how many channels the fixture seeds. Widening the fixture's channel set is deliberately *not* the remedy: a seam can read the right channel at the right layout and still escape by crashing, which is why the structural read, not enumeration, is the mechanism.
 
-**Today's posture is `PENDING-SEAM`.** No instance-aware resolution exists — the vocabulary appears in this repo's `check_paths()` header prose and nowhere in its code — so the suite is not armed, `a = 1` and `b = 1`, R3/R4/R7 do not fire, and the suite exits 0. It cannot redden a PR before the seam lands.
+**There are two residues, and they must not be read as one.** The paragraph above is about the **arming** residue — a resolver the detector never sees — and it remains open, bounded by the needle. The **layout** residue is a different thing and is now **closed**: a resolver that *is* detected but reads a layout fixture A does not seed used to fail R5 as though it had violated CH-2, when the only thing established was that the fixture never exercised the constraint. A gate's failure has to be distinguishable from its blind spot. The coverage discriminator closes that by deriving the layout from the resolver's own per-path output and re-asking — enumeration is still not the mechanism, in either case.
+
+**The discriminator does not soften the rule.** It re-asks it. A resolver whose records are incomplete is ungradable and fails; one declaring a path outside the instance root it was handed is not routing through the active corpus home and fails; one that still fails when its own declared layout is constructed for it fails. Only the resolver that conforms on the re-ask passes, and it passes with a loud non-blocking notice telling the seam author to seed that layout directly. Because the discriminator's own primitives could themselves go blind, they carry in-suite non-vacuity controls on every run, on the same pattern the arming detector uses.
+
+**Today's posture is `PENDING-SEAM`, and it is now DECLARED rather than merely observed.** No instance-aware resolution exists — the vocabulary appears in this repo's `check_paths()` header prose and nowhere in its code — so the suite is not armed, `a = 1` and `b = 1`, R3/R4/R7 do not fire, and the suite exits 0. It cannot redden a PR before the seam lands.
+
+What changed is that the posture is now written down. `.github/corpus-home-tolerance.arming` carries a single token — `pending` today — and R8 asserts it against what the suite observes. Before that sentinel existed the suite was stateless: both of its terminal states are green, so a landed seam that was later reverted returned the suite to `PENDING-SEAM` exit 0 with nothing recording that CH-1/CH-2/CH-4 had stopped being graded. Green to green, coverage silently lost. The arming transition is now a one-line committed diff on a file outside the suite's own authoring surfaces, and reverting a seam without that diff line reddens CI instead of passing twice. R8 grades the *transition*; it inherits the arming detector's coverage boundary and does not widen it — a seam the detector never sees still reads as aligned-with-`pending`.
 
 **Retirement condition — state it plainly, because a dormant branch that is never retired is debt.** When the suite reaches `PASS-SEAM-LANDED`, the seam has landed conformantly. At that point the `PENDING-SEAM` branch has no remaining purpose: replace it with a hard `!ARMED -> FAIL`, so the suite gates the tolerance property unconditionally rather than tolerating a regression back to the pre-seam state. The suite prints this instruction itself when it reaches `PASS-SEAM-LANDED`.
+
+**Retirement removes three things together, not one.** The `PENDING-SEAM` branch, rule R8, and the `.github/corpus-home-tolerance.arming` sentinel exist for each other, and none of them outlives the others. Once `!ARMED -> FAIL` gates unconditionally, there is no second green terminal state for a posture declaration to discriminate between, so the sentinel has nothing left to assert and R8 has nothing left to compare. Retiring the branch while leaving the sentinel behind would leave a committed declaration that no rule reads — a file whose silence reads as approval, which is the class this whole mechanism exists to close. The suite's own `PASS-SEAM-LANDED` notice names the branch retirement only; this document is where the full three-part removal is recorded.
 
 ## 6. Composition boundary
 
