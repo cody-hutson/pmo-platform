@@ -413,7 +413,7 @@ The algorithm is **idempotent** — re-running with the same body state produces
 1. Reads every open issue's body Dependencies field; parses typed schema; computes expected `FS+0d` native-mirror set
 2. Reads native dependencies via GraphQL per issue (paginated; honors 50-cap)
 3. Computes diff: body→native missing entries (auto-resolvable at next Stage 2 trigger), native→body orphans (drift flag for operator)
-4. Initial posture: **warn-mode** (per [`bypass-mode-readiness.md`](../../../core/rules/bypass-mode-readiness.md) Shakedown → Enforce Transition Checklist precedent); logs to `core/hooks/deploy-check-warn-log.jsonl` via the standard `flag_warn_or_issue` helper
+4. Initial posture: **warn-mode** (per [`bypass-mode-readiness.md`](../../../core/rules/bypass-mode-readiness.md) Shakedown → Enforce Transition Checklist precedent); logs to `$(pmo_instance_path)/deploy-check-warn-log.jsonl` via the standard `flag_warn_or_issue` helper
 5. Flip-to-enforce: operator-driven after 2-3 release shakedown (matches Check 14/15/18 precedent)
 
 ### Native API — Token Scope + Invocation Pattern

@@ -290,9 +290,9 @@ When any requirement is classified C3, the Stage 4/5 spoke STOPS work on the aff
 
 ### Operator decision options (verbatim authority list)
 
-- **(A) Return to Triage** — Issue Status → Triage; Stage 4/5 sub-task closed with `Returned to Triage per Tier 0 — Premise Rejection` comment + link to the re-review artifact; Triage re-runs with re-review evidence as Triage input. Issue may re-bundle into the same Milestone if Triage outcome supports, or be excluded from the Milestone (operator decision at re-bundle time).
+- **(A) Return to Triage** — the issue moves to the awaiting-triage lifecycle position, `status: proposed`, **replacing** its current status label (one status label per issue), and its Milestone is removed (`gh issue edit N --remove-milestone`) so re-bundling is a fresh Stage-3 assignment and the issue never sits at `status: proposed` with a Milestone still attached. The value and its lifecycle meaning resolve against `core/specs/label-taxonomy.md` § Status Labels; the live `status:*` rows are pack-contributed per that document's § Instance Model, so this option names a lifecycle position and never restates the set. Stage 4/5 sub-task closed with `Returned to Triage per Tier 0 — Premise Rejection` comment + link to the re-review artifact; Triage re-runs with re-review evidence as Triage input. The issue may re-bundle into the same Milestone if the Triage outcome supports, or be excluded from it (operator decision at re-bundle time).
 - **(B) Override + proceed with deviation log** — operator records the override decision with rationale on the issue; Stage proceeds; deviation log entry appended to release plan's "Deviation Log" section. Sub-task continues.
-- **(C) Defer to next release** — Issue Status → Approved; issue removed from current Milestone via `gh issue edit --remove-milestone`; Stage 4/5 sub-task closed with `Deferred to next release per Tier 0 — Premise Rejection`.
+- **(C) Defer to next release** — the issue moves to the deferred lifecycle position, `status: deferred`, **replacing** its current status label (one status label per issue), and is removed from the current Milestone via `gh issue edit --remove-milestone`; the issue stays OPEN. The value and its lifecycle meaning resolve against `core/specs/label-taxonomy.md` § Status Labels, which is where the Stage-2 Defer verdict lands the same issue — one authority for both surfaces, no restated value set. Stage 4/5 sub-task closed with `Deferred to next release per Tier 0 — Premise Rejection`.
 
 ---
 
@@ -350,7 +350,9 @@ Reversion fires when ANY of:
 
 Premise-problem types with crisp, objectively-verifiable citations: PT-1 cites a specific commit SHA / merged-PR # / file move with date; PT-2 cites a closed ADR # or release version. The agent CAN verify these citations programmatically (`gh issue view`, `git log`, `grep` file existence) — judgment is not load-bearing. Autonomous action is appropriate.
 
-**Tier 0a action:** spoke posts the Tier 0 escalation block as a notification on the operator's project board (not on the parent issue), executes Action (A) Return to Triage autonomously, and proceeds to close the sub-task with `Returned to Triage per Tier 0a — autonomous` comment.
+**Tier 0a action:** spoke posts the Tier 0 escalation block as a notification on the operator's project board (not on the parent issue), executes Action (A) Return to Triage autonomously — **including the Milestone removal Action (A) mandates** — and proceeds to close the sub-task with `Returned to Triage per Tier 0a — autonomous` comment.
+
+**Scope of the autonomous mutation (stated here, not inherited).** Action (A) as defined in § 9 carries two state mutations — the status-label transition to the awaiting-triage position and Milestone removal — and **both** are in scope for the Tier 0a autonomous path. They are not separable: performing the transition without the removal leaves the issue at the awaiting-triage position with a Milestone still attached, which is the contradictory state § 9's wording exists to prevent. The control on this autonomy is the Phase 1 → Phase 2 graduation gate above (operator-approved cutover against the R-Met / Q-Met thresholds); under the Phase 1 default no Tier 0a action executes at all, so this scope is **latent** until that cutover is approved. It is stated at the granting site so the scope of what Tier 0a may mutate is reviewable here rather than reconstructed from § 9.
 
 **Tier 0a citation discipline (REQUIRED — strict):**
 
