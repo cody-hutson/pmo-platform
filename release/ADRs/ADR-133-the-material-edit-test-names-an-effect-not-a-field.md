@@ -34,7 +34,7 @@ The first names a **field**: *frontmatter changes (description, name, other meta
 
 A skill's `description:` is the field that carries its trigger phrases. So a `description:` edit is caught by both bullets — once for touching the field, once for changing routing. When the two agree, nothing is visible. When they disagree, the field-naming bullet wins by construction, and it is wrong.
 
-**Both halves of the originating question turned out to be true, which the card's framing excluded.** The card asserted the twelve skills were either genuinely stale or correctly unbumped, one of the two. The commit record establishes both propositions about different bullets:
+**Both halves of the originating question turned out to be true, which the card's framing excluded.** The card asserted that the affected skills were either genuinely stale or correctly unbumped, one of the two. The commit record establishes both propositions about different bullets:
 
 - The twelve **were** stale — but under the Behavior bullet. The v4.10 rewrite landed as a single commit that removed and added trigger phrases and rewrote `Modes:` lists, and whose own message records the routing measurement: maximum Jaccard across 1485 pairs falling from 0.733 to 0.188. That is a deliberate, measured change to which requests reach which skill. It is not cosmetic, and the no-bump was not a considered cosmetic call.
 - The standard **is** independently defective — in the frontmatter bullet. A v3.69 commit trimmed two descriptions to fit a 1024-character bound. It changed no routing and was correctly not bumped. Under the bullet as written, that correct call is a violation.
