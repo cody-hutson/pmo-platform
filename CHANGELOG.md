@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.29] - 2026-08-15
+
+Checks that could not run now say so instead of reporting clean, so a green result means the check actually ran.
+
+[Full notes](release/releases/notes/v4.29_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.29)
+
 ## [v4.28] - 2026-08-15
 
 Skill checks now measure the whole corpus they claim to cover, and a non-skill folder no longer stops a release from closing.
