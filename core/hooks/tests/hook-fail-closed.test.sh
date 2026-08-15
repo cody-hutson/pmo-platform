@@ -290,21 +290,29 @@ done
 #     arm has verified the regression, not the invariant. Non-empty stderr in BOTH warn
 #     and off is a requirement, not a nicety — a silent degrade leaves an operator
 #     nothing to notice and nothing to report.
-#   always-enforce, lib absent / truncated: exit 2, with ALL THREE mode files PRESENT
-#     and set to `off`. Present-and-off rather than absent, so the assertion proves
-#     mode-INDEPENDENCE instead of accidentally re-testing an enforce absent-file
-#     default. This is the arm that covers block-credential-reads and
-#     block-rm-prefer-trash, which carried no LIB-MISSING coverage at all before this.
+#   always-enforce, seven lib states: exit 2 AND a readable LIB-MISSING block message,
+#     with ALL THREE mode files PRESENT and set to `off`. Present-and-off rather than
+#     absent, so the assertion proves mode-INDEPENDENCE instead of accidentally
+#     re-testing an enforce absent-file default. This is the arm that covers
+#     block-credential-reads and block-rm-prefer-trash, which carried no LIB-MISSING
+#     coverage at all before this.
 #
-# NOT asserted, and stated rather than omitted — see the RESIDUAL probe below. A
-# syntactically-valid lib whose top level runs `exit 0` makes the floor hooks exit 0
-# silently: `.` executes the file in the hook's own shell from inside the guard's `if`
-# condition, so a top-level exit terminates the hook before the guard can rule, and
-# `bash -n` cannot catch it because that is a syntax check and the syntax is valid.
-# Pre-existing, tracked as its own defect, and deliberately out of scope for the
-# mode-coupling work, which leaves these three hooks untouched. The probe RUNS every
-# invocation and PRINTS what it observes, so a green suite can never be read as proof
-# that the floor denies under every lib state.
+#     The corrupt-but-valid arms were a print-only RESIDUAL probe here until #5071.
+#     They are ASSERTIONS now, and the set is wider than the one fixture the card
+#     named: `selfexit` (top level runs `exit 0`), `defexit` (every symbol present and
+#     the contract satisfied, THEN exit), `symbolless`, `stalecontract` (version skew),
+#     and `swapmidguard` (attests out of process, then exits on the real in-process
+#     source). `bash -n` PASSES four of those five, which is why it is not the control:
+#     a syntax check verifies that the helper parses, never that it means what the hook
+#     expects (ADR-133).
+#
+#   always-enforce, healthy lib: BOTH a negative control (benign payload -> exit 0) and
+#     a positive control (violating payload -> exit 2 on the hook's OWN rule, not on the
+#     dependency guard). These are not optional. The dependency guard is evaluated
+#     BEFORE the CLAUDE_HOOK_BYPASS check, so a guard that over-triggers denies every
+#     matching tool call across the whole floor with no bypass available — recoverable
+#     only by reinstalling the hook bundle from the operator's own terminal. A matrix
+#     that proves only denial would pass a guard that denies unconditionally.
 echo ""
 echo "LIB-MISSING x mode matrix — dependency-guard posture per hook"
 echo "---"
@@ -326,11 +334,73 @@ lib_sandbox() {
   write_all_modes "$_lsb" "$2"
   case "$3" in
     absent)    : ;;                                                   # no lib written
-    truncated) /usr/bin/head -40 "$DEP_LIB" > "$_lsb/lib/dep-resolve.sh" ;;
+    # truncated — cut mid-function so the file genuinely does NOT parse (the
+    # interrupted-cp / disk-full class). Anchored on the first resolver definition
+    # rather than a line count: a fixed `head -N` silently stops meaning "truncated"
+    # the moment the lib grows past N, which is exactly what happened when the contract
+    # block was added and turned this arm into a comments-only file by accident.
+    truncated) /usr/bin/sed -n '1,/^resolve_jq() {/p' "$DEP_LIB" > "$_lsb/lib/dep-resolve.sh" ;;
     selfexit)  /usr/bin/printf 'exit 0\n' > "$_lsb/lib/dep-resolve.sh" ;;
+    # defexit — the shape the originating card did NOT name: every symbol present and
+    # the contract satisfied, THEN a top-level exit. Proves the class is broader than
+    # the one-line fixture, and that presence checks alone cannot see it.
+    defexit)   { /usr/bin/printf 'DEP_RESOLVE_CONTRACT="dep-resolve/v1"\n'
+                 /usr/bin/printf 'resolve_jq() { /usr/bin/printf %%s /usr/bin/jq; }\n'
+                 /usr/bin/printf 'resolve_python3() { /usr/bin/printf %%s /usr/bin/python3; }\n'
+                 /usr/bin/printf 'deny_missing_dep() { exit 2; }\n'
+                 /usr/bin/printf 'deny_missing_primitive() { exit 2; }\n'
+                 /usr/bin/printf 'exit 0\n'; } > "$_lsb/lib/dep-resolve.sh" ;;
+    # symbolless — valid syntax, correct contract token, no resolver symbols.
+    symbolless) /usr/bin/printf 'DEP_RESOLVE_CONTRACT="dep-resolve/v1"\n' > "$_lsb/lib/dep-resolve.sh" ;;
+    # stalecontract — the version-skew arm: a complete, healthy helper carrying the
+    # WRONG contract token. This is the arm no presence check can catch, and it is the
+    # detection the token exists to buy (its cost is the lockout vector CHECK-6 gates).
+    stalecontract) /usr/bin/sed 's|^DEP_RESOLVE_CONTRACT=.*|DEP_RESOLVE_CONTRACT="dep-resolve/v0"|' \
+                     "$DEP_LIB" > "$_lsb/lib/dep-resolve.sh" ;;
+    # swapmidguard — passes the out-of-process attestation, then exits on the REAL
+    # in-process source, simulating a reinstall landing between the two evaluations.
+    # This is the ONLY arm that exercises the EXIT-trap interceptor and the fd-9
+    # message channel: with the trap removed it returns exit 0 (a silent allow), and
+    # with the trap writing to plain stderr instead of fd 9 it returns exit 2 with an
+    # EMPTY stderr, which the message assertions below catch as a FAIL.
+    swapmidguard) { /usr/bin/printf '_dr_seen="${BASH_SOURCE[0]}.seen"\n'
+                    /usr/bin/printf 'if [ -f "$_dr_seen" ]; then exit 0; fi\n'
+                    /usr/bin/printf ': > "$_dr_seen"\n'
+                    /usr/bin/printf 'DEP_RESOLVE_CONTRACT="dep-resolve/v1"\n'
+                    /usr/bin/printf 'resolve_jq() { /usr/bin/printf %%s /usr/bin/jq; }\n'
+                    /usr/bin/printf 'resolve_python3() { /usr/bin/printf %%s /usr/bin/python3; }\n'
+                    /usr/bin/printf 'deny_missing_dep() { exit 2; }\n'
+                    /usr/bin/printf 'deny_missing_primitive() { exit 2; }\n'; } \
+                    > "$_lsb/lib/dep-resolve.sh" ;;
     good)      /bin/cp "$DEP_LIB" "$_lsb/lib/dep-resolve.sh" ;;
   esac
   /usr/bin/printf '%s' "$_lsb"
+}
+
+# floor_payload BASENAME KIND SANDBOX — a matcher-appropriate payload per floor hook.
+#   block = an input the hook's OWN rules genuinely deny under a healthy lib
+#   allow = an input that matches no rule at all
+# Both are needed: a corruption arm alone proves the hook denies, never that it denies
+# for the right reason. Paths are sandbox-relative (mktemp), so no fixture embeds a home
+# path and the #5075 path-leak convention needs no per-line exemption here.
+floor_payload() {
+  case "$1" in
+    block-credential-reads.sh)
+      case "$2" in
+        block) /usr/bin/printf '{"tool_name":"Read","tool_input":{"file_path":"%s/.ssh/id_rsa"},"cwd":"%s"}' "$3" "$3" ;;
+        *)     /usr/bin/printf '{"tool_name":"Read","tool_input":{"file_path":"%s/notes.md"},"cwd":"%s"}' "$3" "$3" ;;
+      esac ;;
+    block-rm-prefer-trash.sh)
+      case "$2" in
+        block) /usr/bin/printf '{"tool_name":"Bash","tool_input":{"command":"rm -rf /var/tmp/pmo-5071-probe"},"cwd":"%s"}' "$3" ;;
+        *)     /usr/bin/printf '{"tool_name":"Bash","tool_input":{"command":"echo hello"},"cwd":"%s"}' "$3" ;;
+      esac ;;
+    *)
+      case "$2" in
+        block) /usr/bin/printf '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main"},"cwd":"%s"}' "$3" ;;
+        *)     /usr/bin/printf '{"tool_name":"Bash","tool_input":{"command":"echo hello"},"cwd":"%s"}' "$3" ;;
+      esac ;;
+  esac
 }
 
 # The workspace-scope layer runs after the payload parse and exits 0 when the cwd is
@@ -373,38 +443,75 @@ echo "always-enforce floor — mode-INDEPENDENT deny (every mode file present an
 echo "---"
 for h in $FLOOR_HOOKS; do
   base="$(/usr/bin/basename "$h")"
-  for st in absent truncated; do
+  for st in absent truncated selfexit defexit symbolless stalecontract swapmidguard; do
     sbox="$(lib_sandbox "$h" off "$st")"
     PMO_SCOPE_GUARD_ROOT="$sbox"
-    payload="$(/usr/bin/printf '{"tool_name":"Bash","tool_input":{"command":"cat /tmp/foo"},"cwd":"%s"}' "$sbox")"
+    payload="$(floor_payload "$base" block "$sbox")"
     rc=0
     err="$(/usr/bin/printf '%s' "$payload" | /bin/bash "$sbox/$base" 2>&1 >/dev/null)" || rc=$?
     /bin/rm -rf "$sbox"
-    if [ "$rc" = 2 ]; then
-      pass "$base [every mode file = off]: lib $st -> exit 2 (deny is mode-independent)"
+    ok=1
+    [ "$rc" = 2 ] || ok=0
+    # A deny nobody can read is materially worse than a loud one, so the message is
+    # asserted alongside the code. This is what catches a trap that writes to plain
+    # stderr: the source's 2>/dev/null is still in effect when the trap body runs and
+    # would swallow it, yielding exit 2 with EMPTY stderr.
+    [ -n "$err" ] || ok=0
+    /usr/bin/printf '%s' "$err" | /usr/bin/grep -qE 'LIB-MISSING' || ok=0
+    /usr/bin/printf '%s' "$err" | /usr/bin/grep -qF 'BLOCKED (fail-closed)' || ok=0
+    if [ "$ok" = 1 ]; then
+      pass "$base [every mode file = off]: lib $st -> exit 2 + readable LIB-MISSING (deny is mode-independent)"
     else
-      /usr/bin/printf 'FAIL: %s: lib %s with every mode file set off -> expected exit 2, got %s. The mode-capable cohort is allowed to degrade only because this floor still denies.\n  stderr: %s\n' "$base" "$st" "$rc" "$err"
+      /usr/bin/printf 'FAIL: %s: lib %s with every mode file set off -> expected exit 2 with a readable LIB-MISSING block, got exit %s. The mode-capable cohort is allowed to degrade only because this floor still denies.\n  stderr: %s\n' "$base" "$st" "$rc" "$err"
       FAIL=$((FAIL + 1))
     fi
   done
 done
 
 echo ""
-echo "RESIDUAL probe — corrupt-but-valid lib against the always-enforce floor"
+echo "always-enforce floor — healthy-lib CONTROLS (the guard must not over-trigger)"
 echo "---"
-echo "Not an assertion. Printed every run so a green suite is never mistaken for proof"
-echo "that the floor denies under every lib state. Tracked as a separate defect."
+echo "Paired with every corruption arm above. Without these a guard that denies"
+echo "unconditionally passes the whole matrix, and a total-lockout regression ships green."
 for h in $FLOOR_HOOKS; do
   base="$(/usr/bin/basename "$h")"
-  sbox="$(lib_sandbox "$h" off selfexit)"
+
+  # NEGATIVE control — real lib, payload matching no rule: the hook must ALLOW.
+  sbox="$(lib_sandbox "$h" off good)"
   PMO_SCOPE_GUARD_ROOT="$sbox"
-  payload="$(/usr/bin/printf '{"tool_name":"Bash","tool_input":{"command":"cat /tmp/foo"},"cwd":"%s"}' "$sbox")"
+  payload="$(floor_payload "$base" allow "$sbox")"
   rc=0
   err="$(/usr/bin/printf '%s' "$payload" | /bin/bash "$sbox/$base" 2>&1 >/dev/null)" || rc=$?
   /bin/rm -rf "$sbox"
-  mark="$(/usr/bin/printf '%s' "$err" | /usr/bin/grep -oE 'CLAUDE-HOOK:[a-z-]+:[A-Z0-9-]+' | /usr/bin/head -1)"
-  /usr/bin/printf 'RESIDUAL: %s: lib = single line "exit 0" (passes bash -n) -> exit=%s marker=%s\n' \
-    "$base" "$rc" "${mark:-<none>}"
+  ok=1
+  [ "$rc" = 0 ] || ok=0
+  /usr/bin/printf '%s' "$err" | /usr/bin/grep -qE 'LIB-MISSING' && ok=0
+  if [ "$ok" = 1 ]; then
+    pass "$base: healthy lib + benign payload -> exit 0 (guard is additive on the healthy path)"
+  else
+    /usr/bin/printf 'FAIL: %s: healthy lib + benign payload -> expected exit 0 with no LIB-MISSING, got exit %s. The dependency guard is OVER-triggering: every matching tool call across the floor is now denied and CLAUDE_HOOK_BYPASS cannot clear it.\n  stderr: %s\n' "$base" "$rc" "$err"
+    FAIL=$((FAIL + 1))
+  fi
+
+  # POSITIVE control — real lib, payload the hook's own rules deny: rule eval survived.
+  sbox="$(lib_sandbox "$h" off good)"
+  PMO_SCOPE_GUARD_ROOT="$sbox"
+  payload="$(floor_payload "$base" block "$sbox")"
+  rc=0
+  err="$(/usr/bin/printf '%s' "$payload" | /bin/bash "$sbox/$base" 2>&1 >/dev/null)" || rc=$?
+  /bin/rm -rf "$sbox"
+  ok=1
+  [ "$rc" = 2 ] || ok=0
+  /usr/bin/printf '%s' "$err" | /usr/bin/grep -qF 'BLOCKED' || ok=0
+  # It must deny on its OWN rule, not on the dependency guard — otherwise this arm
+  # would agree with itself for a guard that denies everything.
+  /usr/bin/printf '%s' "$err" | /usr/bin/grep -qE 'LIB-MISSING' && ok=0
+  if [ "$ok" = 1 ]; then
+    pass "$base: healthy lib + violating payload -> exit 2 on its OWN rule (rule eval intact)"
+  else
+    /usr/bin/printf 'FAIL: %s: healthy lib + violating payload -> expected exit 2 from a rule (not LIB-MISSING), got exit %s\n  stderr: %s\n' "$base" "$rc" "$err"
+    FAIL=$((FAIL + 1))
+  fi
 done
 
 summary_and_exit
