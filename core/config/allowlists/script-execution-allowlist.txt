@@ -493,3 +493,19 @@ core/deploy/tests/run-install-regression.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_install_end_to_end.sh
 ./core/deploy/tests/test_install_end_to_end.sh
 core/deploy/tests/test_install_end_to_end.sh
+
+# Version-freeness injection arms (test_version_freeness_injection.sh) — in-tree
+# bash CLI. Executes the merge gate's independent-candidate resolution branch and
+# asserts all three outcomes it can produce: an injection-off control that SKIPs,
+# a sensitivity arm whose already-claimed candidate returns a collision at exit 1,
+# and a specificity arm whose out-of-lineage candidate returns free at exit 0.
+# Read-only against the live corpus and the origin tag surface. Executed agent-side
+# at Stage 6 self-verification and Stage 7 Dev Testing, and by the version-freeness
+# workflow job; all four invocation forms so BLOCK-DESTRUCTIVE-022 does not block
+# the agent-side path. (CI runs no Claude hooks, so this entry is for the
+# agent-side path, not the workflow.) Named row rather than a glob, per the
+# entries above.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_version_freeness_injection.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_version_freeness_injection.sh
+./core/deploy/tests/test_version_freeness_injection.sh
+core/deploy/tests/test_version_freeness_injection.sh

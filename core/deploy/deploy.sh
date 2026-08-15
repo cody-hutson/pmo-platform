@@ -11893,6 +11893,53 @@ EOF
             _vf_compute_verdict gate 2>/dev/null)"
     [[ "${_vfv%% *}" == "UNDECIDABLE" ]] || { echo "FAIL: VF-7c the merge gate must also fail closed on an unreadable schema, got '$_vfv'"; failures=$((failures+1)); }
 
+    # VF-10 / VF-10b / VF-10c — the branch-(1) WITNESS TRIPLE. Hermetic twin of
+    # core/deploy/tests/test_version_freeness_injection.sh, which runs the same
+    # three arms against the LIVE claimed set on the CI surface.
+    #
+    # Why this triple exists: until it landed, the COLLISION verdict was asserted
+    # nowhere in this group. The five branch-(1) injections above assert FREE once
+    # and UNDECIDABLE four times, so a regression that made NOT_FREE unreachable
+    # would have passed every one of them — the group could confirm the resolver
+    # fails closed and still never confirm it can report a collision at all.
+    #
+    # Stub discipline: the `gh` shadow installed for VF-7 (authenticates, returns
+    # an empty releases list) is inherited AS IS and left exactly as VF-8 expects.
+    # No stub is installed or torn down here, so the following arms are unchanged.
+    /bin/cat > "$_vflog" <<'EOF'
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.98 | m-claimed | #5 | #6 | `ccc` | `v9.98` | DEPLOYED | 2026-07-30 |
+EOF
+
+    # VF-10c BRANCH WITNESS, runs FIRST: with NEITHER resolution variable set the
+    # resolver returns empty and the verdict is SKIP. This is what makes VF-10
+    # non-vacuous — without it, a NOT_FREE could have been produced by the derived
+    # path rather than by the injection, which is exactly the attribution error
+    # this triple exists to foreclose.
+    _vfv="$( unset PMO_VERSION_FREENESS_CANDIDATE PMO_VERSION_FREENESS_BUMP
+             _audit_src_root="$_vft" AUDIT_REPO="acme/widget" _vf_compute_verdict gate 2>/dev/null )"
+    [[ "${_vfv%% *}" == "SKIP" ]] || { echo "FAIL: VF-10c with neither resolution variable set the verdict must be SKIP, got '$_vfv' — VF-10's collision could not then be attributed to branch (1)"; failures=$((failures+1)); }
+
+    # VF-10: inject a candidate that IS in the claimed set -> NOT_FREE, and the
+    # verdict must ECHO the injected candidate. The bump-class variable is never
+    # set, so branch (2) structurally cannot run.
+    _vfv="$( unset PMO_VERSION_FREENESS_BUMP
+             _audit_src_root="$_vft" AUDIT_REPO="acme/widget" PMO_VERSION_FREENESS_CANDIDATE="v9.98" \
+             _vf_compute_verdict gate 2>/dev/null )"
+    [[ "${_vfv%% *}" == "NOT_FREE" ]] || { echo "FAIL: VF-10 an injected already-claimed candidate must verdict NOT_FREE, got '$_vfv' — this group asserted the collision verdict nowhere before this arm"; failures=$((failures+1)); }
+    local _vfcand="${_vfv#NOT_FREE }"; _vfcand="${_vfcand%% *}"
+    [[ "$_vfcand" == "v9.98" ]] || { echo "FAIL: VF-10 the NOT_FREE verdict must echo the INJECTED candidate v9.98, got '$_vfcand' — a verdict that does not echo its own input cannot be attributed to the injection"; failures=$((failures+1)); }
+
+    # VF-10b SPECIFICITY CONTROL: same corpus, a candidate that is NOT claimed ->
+    # FREE. Without this leg VF-10 would pass against a body hardwired to report
+    # collisions, and the triple would assert an instrument that is stuck rather
+    # than one that discriminates.
+    _vfv="$( unset PMO_VERSION_FREENESS_BUMP
+             _audit_src_root="$_vft" AUDIT_REPO="acme/widget" PMO_VERSION_FREENESS_CANDIDATE="v9.99" \
+             _vf_compute_verdict gate 2>/dev/null )"
+    [[ "${_vfv%% *}" == "FREE" ]] || { echo "FAIL: VF-10b control — an unclaimed candidate must verdict FREE, got '$_vfv' — VF-10 would be vacuous"; failures=$((failures+1)); }
+
     unset -f gh
 
     # VF-8 / VF-9 — #4339 residual A: arms (1) and (2) must fail closed too.
