@@ -47,8 +47,28 @@ BASELINE
     baselined preamble itself re-keys its sha1 and the pair FAILs, which is correct:
     editing a count preamble is exactly the moment to re-verify its count.
 
+    RECONCILIATION IS SCOPE-RELATIVE. A baseline entry whose file lies OUTSIDE the
+    requested scope is EXCLUDED — reported in neither the KNOWN nor the STALE
+    population. INSIDE the scope an entry is STALE when its file is absent from the
+    corpus (the ratchet: the row points at something that is gone) or when the file
+    was read and its pair no longer appears. An in-scope entry whose file could not
+    be read is UNMEASURED and is never STALE — we did not measure it, so we cannot
+    assert its pair is gone.
+
+SCOPE (--path / --paths-from are polymorphic)
+    An argument naming an existing directory — or written with a trailing slash — is
+    a SUBTREE PREFIX resolved against the corpus enumeration. Anything else names a
+    single file. Every reporting run emits a SCOPE record carrying Register A
+    `status=` (fetched / degraded / not-run) and Register B `state=` (- / DEGRADED /
+    NOT-EVALUATED); a consumer must branch on it BEFORE reading any counter.
+
 EXIT CODES (Check 59 contract)
-    0 clean · 1 finding · 3 input failure
+    0 clean · 1 finding · 3 input failure — where a requested scope that resolves to
+    ZERO READABLE FILES is an input failure. That condition is a malformed
+    invocation, not a measurement outage, which is why it gates. A PARTIAL read
+    (some files resolved but unreadable) stays IN-BAND: it reports `degraded` /
+    DEGRADED and does NOT move the exit code, because a measurement outage must
+    never gate — core/disciplines/review-discipline-principles.md § 8 PV-7c.
 """
 
 from __future__ import annotations
@@ -522,20 +542,72 @@ def load_baseline(path):
 
 # ── Driver ───────────────────────────────────────────────────────────────────
 
+def corpus_paths(root):
+    """Every markdown file the corpus tracks, relative to `root`."""
+    import subprocess
+    out = subprocess.run(
+        ["git", "ls-files", "*.md"], cwd=root, capture_output=True, text=True
+    )
+    return [p for p in out.stdout.split("\n") if p.strip()]
+
+
 def collect_paths(root, explicit, paths_from, apply_exempt=True):
-    paths = list(explicit or [])
+    """Resolve the requested scope. Returns (paths, in_scope, requested).
+
+    `--path` / `--paths-from` are POLYMORPHIC: an argument naming an existing
+    directory — or written with a trailing slash — is a SUBTREE PREFIX resolved
+    against the corpus enumeration; anything else names a single file. Before this,
+    the arguments were a bare path-list ACCUMULATOR: handing one a directory
+    produced a one-element list, open() raised IsADirectoryError, the read loop
+    swallowed it, and the run reported a clean summary over an empty scan.
+
+    `in_scope(rel) -> bool` is returned ALONGSIDE the list because the two answer
+    different questions. The list is what will be READ; the predicate is what the
+    requested scope CONTAINS — and a baseline row naming a DELETED file is in scope
+    while appearing in no list. Reconciling on the list instead of the predicate
+    would silently stop reporting a baseline row whose file was removed, which is
+    the ratchet's whole purpose.
+
+    A directory argument is normalized to exactly one trailing slash, so `core` and
+    `core/` behave identically and neither ever matches `corelib/`.
+    """
+    args = list(explicit or [])
     if paths_from:
         with open(paths_from, "r", encoding="utf-8") as fh:
-            paths += [ln.strip() for ln in fh if ln.strip()]
-    if not paths:
-        import subprocess
-        out = subprocess.run(
-            ["git", "ls-files", "*.md"], cwd=root, capture_output=True, text=True
-        )
-        paths = [p for p in out.stdout.split("\n") if p.strip()]
+            args += [ln.strip() for ln in fh if ln.strip()]
+
+    dir_args, file_args = [], []
+    for a in args:
+        if a.endswith("/") or os.path.isdir(os.path.join(root, a)):
+            dir_args.append(a.rstrip("/") + "/")
+        else:
+            file_args.append(a)
+
+    # The corpus enumeration runs only when a subtree must be expanded (or when no
+    # argument was given at all). A pure file-argument invocation therefore stays on
+    # exactly the pre-change code path — which is what keeps the fixture harness's
+    # `--root /` form, where a corpus enumeration is meaningless, working unchanged.
+    if not args:
+        paths = corpus_paths(root)
+    else:
+        paths = list(file_args)
+        if dir_args:
+            paths += [p for p in corpus_paths(root)
+                      if p.startswith(tuple(dir_args))]
+
+    file_set = set(file_args)
+    dir_tuple = tuple(dir_args)
+
+    def in_scope(rel):
+        if apply_exempt and rel.startswith(EXEMPT_PREFIXES):
+            return False
+        if not args:
+            return True
+        return rel in file_set or rel.startswith(dir_tuple)
+
     if apply_exempt:
         paths = [p for p in paths if not p.startswith(EXEMPT_PREFIXES)]
-    return sorted(set(paths))
+    return sorted(set(paths)), in_scope, len(args)
 
 
 def main(argv=None):
@@ -561,15 +633,16 @@ def main(argv=None):
 
     root = os.path.abspath(args.root)
     try:
-        paths = collect_paths(root, args.path, args.paths_from,
-                              apply_exempt=not args.no_exempt)
+        paths, in_scope, requested = collect_paths(
+            root, args.path, args.paths_from, apply_exempt=not args.no_exempt)
     except OSError as exc:
         print(f"INPUT-FAILURE: {exc}", file=sys.stderr)
         return 3
-    if not paths:
-        print("INPUT-FAILURE: zero candidate paths — refusing to report a clean zero "
-              "over an empty population (Rule 15)", file=sys.stderr)
-        return 3
+    # The zero-population guard USED to sit here and tested the path LIST rather than
+    # the READS — so a directory argument, which produced a non-empty list and zero
+    # reads, walked straight past it. It now sits below the read loop, where it can
+    # test what was actually measured. That is the deeper check it was always meant
+    # to be.
 
     baseline = {} if args.no_baseline else load_baseline(
         os.path.join(root, args.baseline) if not os.path.isabs(args.baseline) else args.baseline
@@ -579,14 +652,20 @@ def main(argv=None):
 
     files_read = chars_read = pairs_examined = 0
     flags, knowns, seen_keys = [], [], set()
+    read_paths, unreadable = set(), []
     for rel in paths:
         full = os.path.join(root, rel)
         try:
             with open(full, "r", encoding="utf-8", errors="replace") as fh:
                 text = fh.read()
         except OSError:
+            # A read failure is RECORDED, never discarded. The bare `continue` that
+            # used to sit here is what let a directory argument's IsADirectoryError
+            # vanish and the run report a clean zero.
+            unreadable.append(rel)
             continue
         files_read += 1
+        read_paths.add(rel)
         chars_read += len(text)
         for pair in scan_text(text, rel, include_inline=args.include_inline):
             pairs_examined += 1
@@ -599,7 +678,71 @@ def main(argv=None):
             else:
                 flags.append(pair)
 
-    stale = [k for k in baseline if k not in seen_keys]
+    # ── Baseline reconciliation — SCOPE-RELATIVE. ────────────────────────────────
+    # This used to be `[k for k in baseline if k not in seen_keys]`: the WHOLE
+    # baseline reconciled against whatever this run happened to see, so every entry
+    # outside the requested scope was looked for, not found, and reported STALE.
+    # Four states now, and the load-bearing distinction is EXCLUDED vs STALE-by-
+    # absence: a naive "STALE only for files we actually read" rule would silently
+    # stop reporting a baseline row whose file was DELETED, which is the one thing
+    # the ratchet exists to catch.
+    stale, excluded, unmeasured = [], 0, 0
+    for key in baseline:
+        rel = key[0]
+        if not in_scope(rel):
+            excluded += 1                       # EXCLUDED — outside the request
+        elif not os.path.exists(os.path.join(root, rel)):
+            stale.append(key)                   # STALE — the row's file is gone
+        elif rel in read_paths:
+            if key not in seen_keys:
+                stale.append(key)               # STALE — pair removed or reconciles
+        else:
+            unmeasured += 1                     # UNMEASURED — never STALE
+    baseline_in_scope = len(baseline) - excluded
+
+    # ── Register A / Register B — consumed FROZEN from the degraded-state emit
+    # contract (core/ADRs/ADR-133). No token is coined here. `truncated` and
+    # `fixture` are deliberately unused rather than accidentally omitted: the reader
+    # is an unbounded fh.read(), so no truncation state exists to report, and the
+    # fixture harness drives real files through the ordinary path, so it has no
+    # distinct provenance to declare.
+    if files_read == 0:
+        status, state = "not-run", "NOT-EVALUATED"
+    elif unreadable:
+        status, state = "degraded", "DEGRADED"
+    else:
+        status, state = "fetched", "-"
+
+    scope_fields = (f"requested={requested} resolved={len(paths)} read={files_read} "
+                    f"unreadable={len(unreadable)} unmeasured={unmeasured} "
+                    f"baseline_in_scope={baseline_in_scope}")
+
+    def emit_scope():
+        """The SCOPE record, emitted BEFORE any counter so a consumer branches on
+        whether the measurement HAPPENED before it reads a number. No `; ` appears in
+        any state string — the human fields are ` — `-separated."""
+        if args.output_format == "tsv":
+            print(f"SCOPE\tstatus={status}\tstate={state}\trequested={requested}\t"
+                  f"resolved={len(paths)}\tread={files_read}\t"
+                  f"unreadable={len(unreadable)}\tunmeasured={unmeasured}\t"
+                  f"baseline_in_scope={baseline_in_scope}")
+        elif state == "-":
+            print(f"scope:       status={status} — {scope_fields}")
+        else:
+            print(f"scope:       {state} — this is not a clean result — "
+                  f"status={status} — {scope_fields}")
+
+    # The zero-population guard, relocated from the path-list to the READS. A scope
+    # that resolved to zero readable files is a malformed invocation — an INPUT
+    # FAILURE, not a measurement outage — so it gates, and it emits a withheld
+    # verdict instead of a clean summary.
+    if status == "not-run":
+        emit_scope()
+        sys.stdout.flush()
+        print("INPUT-FAILURE: the requested scope resolved to zero readable files — "
+              "refusing to report a clean zero over an empty population (Rule 15)",
+              file=sys.stderr)
+        return 3
 
     if args.emit_baseline:
         rows = sorted({(p.path, p.sha1, f"pre-existing:{p.kind}") for p in flags} |
@@ -608,6 +751,7 @@ def main(argv=None):
             print("\t".join(r))
         return 0
 
+    emit_scope()
     if args.output_format == "tsv":
         print(f"DENOM\tfiles={files_read}\tchars={chars_read}\tpairs={pairs_examined}")
         print(f"CONTROL\t{'PASS' if controls_ok else 'FAIL'}\t{controls_detail}")

@@ -10599,6 +10599,20 @@ sys.stdout.write("".join(out) + "|")
         log "  FAIL:  count-structure — input failure (exit 3): $(head -1 <<<"$c63_out"). A clean zero over an empty population is exactly what this check must never report."
         ISSUES=$((ISSUES + 1))
       else
+        # ── Branch the SCOPE record BEFORE reading any counter. ──────────────────
+        # Register A (status=) says whether the measurement HAPPENED; every counter
+        # below is meaningless until that is known. `not-run` / NOT-EVALUATED never
+        # reaches here — it is an INPUT FAILURE and gates via the exit-3 branch
+        # above. `degraded` / DEGRADED is a PARTIAL read, and it crosses IN-BAND: it
+        # routes through the never-escalating emitter so a measurement outage cannot
+        # move the exit code (§ 8 PV-7c), while still refusing to read as clean.
+        local c63_scope_status c63_scope_state
+        c63_scope_status=$(echo "$c63_out" | awk -F'\t' '$1=="SCOPE"{for(i=2;i<=NF;i++) if($i ~ /^status=/) {sub("status=","",$i); print $i}}')
+        c63_scope_state=$(echo "$c63_out" | awk -F'\t' '$1=="SCOPE"{for(i=2;i<=NF;i++) if($i ~ /^state=/) {sub("state=","",$i); print $i}}')
+        if [[ "$c63_scope_state" == "DEGRADED" ]]; then
+          flag_not_evaluated "count-structure" "scope partially measured (status=${c63_scope_status}) — this is not a clean result"
+        fi
+
         # PV-1 / PV-5: report the denominator and BOTH control arms as fields, so a
         # reader can always distinguish "zero found" from "nothing examined".
         local c63_denom c63_control c63_ctl_verdict
