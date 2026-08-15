@@ -14,6 +14,7 @@ This template defines the standard structure for PMO platform release plans. The
 | Field | Value |
 |-------|-------|
 | **Version** | {{RELEASE_VERSION}} |
+| **Bump Class** | major / minor / patch — the durable determination. The concrete number binds only at the Stage-12 atomic claim (ADR-092). |
 | **Date Created** | YYYY-MM-DD (Day) |
 | **Release Manager** | [Name or "Agent-assisted"] |
 | **Status** | Draft / In Review / Approved / Executing / Completed / Rolled Back |
@@ -295,3 +296,4 @@ Layer 2 file propagation targets for Stage 12/13:
 4. **Deployment Execution Log** is blank at creation and populated during execution.
 5. **File committed on release branch** at Stage 4 (Planning) and updated through Stage 13 (Close).
 6. **Change Description section** is appended by the Stage 6 release-engineering spoke as part of PR creation per [`release/governance/RELEASE_PROTOCOL.md`](../../../governance/RELEASE_PROTOCOL.md) § Change Description Protocol — ~60 lines, operator-facing voice, 6 sub-sections (Outcome / Issues resolved / Key decisions [conditional] / Reversibility / Downstream impact / Cross-references). Distinct artifact from the user-facing release note at `release/releases/notes/vX.Y_RELEASE_NOTES.md` (authored at Stage 13 per [`release/references/standards/release-notes-standard.md`](../../../references/standards/release-notes-standard.md)).
+7. **The Version cell is a machine-read stamp manifest, not prose.** The `**Version**` value contains the literal `{{RELEASE_VERSION}}` token and no other text. Bump class, provisional-versus-claimed status, and any determination narrative belong in the `**Bump Class**` row. `claim-version.sh` resolves this token at the Stage-12 claim and renames the file into `plans/v<MAJOR>/`; a cell without it silently disables both.
