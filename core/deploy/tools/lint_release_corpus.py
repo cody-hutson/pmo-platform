@@ -1540,6 +1540,36 @@ def _write(root: Path, rel: str, milestone: str | None = None, lead: str = "") -
     return path
 
 
+def _write_note(root: Path, rel: str, plan_link: str | None = None, lead: str = "") -> Path:
+    """Fixture release note carrying a Tier-1 `links.plan` pointer.
+
+    `lead` places bytes ABOVE the `---` fence, which is the whole reason this
+    helper exists separately from _write(): parse_frontmatter() keys on line 1
+    being the fence, so a leading marker comment makes the frontmatter
+    UNREADABLE to the strict parser while the note still carries a real
+    links.plan value. That is not a synthetic shape — it is the corpus shape
+    that produced the A6.5 census undercount, and it is the only way to reach
+    the NOTE-PLAN-LINK-NO-FRONTMATTER limb.
+
+    The body is deliberately §3.2-conformant (a Section 6a bullet carrying the
+    'Why it matters' beat, no links, no banned jargon, no raw repo path), so
+    every finding a Scenario-H arm sees comes from the links.plan limb under
+    test rather than from content checks the fixture happened to trip.
+    """
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fm = "---\ntype: release-notes\nlinks:\n"
+    fm += f"  plan: {plan_link}\n" if plan_link is not None else "  plan: null\n"
+    fm += "---\n"
+    body = (
+        "\n# Fixture note\n\n"
+        "## What changed for everyone\n\n"
+        "- A fixture thing changed. Why it matters: the arm needs a conformant body.\n"
+    )
+    path.write_text(lead + fm + body, encoding="utf-8")
+    return path
+
+
 def _self_test() -> int:
     import tempfile
 
@@ -1714,6 +1744,106 @@ def _self_test() -> int:
         arm("S-12b the same run still blocks on a real identity defect",
             any("PLAN-VERSION-UNKNOWN" in f for f in blocking(fg)),
             "advisory routing did not swallow the blocking limb")
+
+        # ── Scenario H — check_note_content()'s Tier-1 links.plan limb ───────
+        #
+        # THE FIRST ARMS THIS SUITE HAS OVER check_note_content(). Everything
+        # above drives check_plan_identity(); the two surfaces below shipped with
+        # NO executor anywhere, and a 7-mutation campaign measured it rather than
+        # inferred it — stripping the note path out of the NO-FRONTMATTER finding,
+        # and lowering PLAN_LINK_CUTOVER far enough to convert every inherited
+        # below-floor dangle into a blocking finding, each left this suite AND the
+        # shell suite green. Both are missing guards on working code, which is the
+        # "reachable and inert" shape moved up a level: from the code to the tests
+        # watching it.
+        #
+        # WHY THE GLOBALS ARE REBOUND. check_note_content() takes no parameters
+        # and reads module-level corpus paths, so binding a fixture corpus means
+        # rebinding those three names for the duration of the call and restoring
+        # them in a `finally`. That buys a hermetic drive of the REAL function.
+        # The alternative — asserting over the emitter's source text — would grade
+        # the shape of a string literal rather than the behaviour of the limb, and
+        # this release has already been bitten twice by assertions that graded
+        # finding TEXT while nothing checked whether anything blocked.
+        #
+        # The restore is in a `finally` because a failure inside the window would
+        # otherwise leave the module pointed at a deleted temp tree and turn every
+        # later live-corpus call in the same process into a path-resolution error.
+        h = root / "H"
+        h_notes = h / "release" / "releases" / "notes"
+        h_plans = h / "release" / "releases" / "plans"
+        h_plans.mkdir(parents=True, exist_ok=True)
+        _write(h_plans, "v4/v4.02_RELEASE_PLAN.md", "widget-two")
+        real_link = "release/releases/plans/v4/v4.02_RELEASE_PLAN.md"
+        dead_link = "release/releases/plans/v4/v4.99_RELEASE_PLAN.md"
+        marker = "<!-- reference-durability: allow-link -->\n"
+        # F-01 fixtures — the marker-before-fence shape, one each side of the floor.
+        n_nofm_hi = _write_note(h_notes, "v4/v4.01_RELEASE_NOTES.md", real_link, lead=marker)
+        n_nofm_lo = _write_note(h_notes, "v3/v3.99_RELEASE_NOTES.md", real_link, lead=marker)
+        # F-02 fixtures — readable frontmatter, pointer dangles, one each side.
+        n_dead_hi = _write_note(h_notes, "v4/v4.03_RELEASE_NOTES.md", dead_link)
+        n_dead_lo = _write_note(h_notes, "v3/v3.98_RELEASE_NOTES.md", dead_link)
+        # Specificity fixture — at/above the floor and RESOLVING; fires neither limb.
+        n_ok_hi = _write_note(h_notes, "v4/v4.04_RELEASE_NOTES.md", real_link)
+
+        _h_saved = {k: globals()[k] for k in ("WORKSPACE_ROOT", "NOTES_DIR", "PLANS_DIR")}
+        try:
+            globals().update(WORKSPACE_ROOT=h, NOTES_DIR=h_notes, PLANS_DIR=h_plans)
+            fh = check_note_content()
+            # Resolved INSIDE the window — _rel() renders against WORKSPACE_ROOT.
+            r_nofm_hi, r_nofm_lo = _rel(n_nofm_hi), _rel(n_nofm_lo)
+            r_dead_hi, r_dead_lo = _rel(n_dead_hi), _rel(n_dead_lo)
+            r_ok_hi = _rel(n_ok_hi)
+        finally:
+            globals().update(_h_saved)
+
+        h_tally = next((f for f in fh if "NOTE-PLAN-LINK-TALLY" in f), "")
+
+        arm("S-18 anti-vacuity — the marker-lead fixture really IS unreadable to the strict parser",
+            parse_frontmatter(n_nofm_hi.read_text(encoding="utf-8")) is None
+            and _plan_link_state(n_nofm_hi.read_text(encoding="utf-8")) == ("unreadable", ""),
+            "parse_frontmatter -> None and the limb classifies it 'unreadable'; without this "
+            "S-19 could pass on a shape the corpus never produces")
+
+        # S-19 — F-01. THE FAIL-OPEN GUARD, and the reason it is not optional.
+        # Phase 9.2 scopes the lint to the closing release by grepping the output
+        # for THAT release's repo-root-relative NOTE path
+        # (automated-closeout.sh phase_lint_release_notes). A NO-FRONTMATTER
+        # finding that did not carry the note path would be blocking in name and
+        # fail-open in fact — the caller would take its "no finding for this
+        # version" PASS branch. That is the identical exposure PL-9/PL-10 guard
+        # for the other finding classes; this class had nothing.
+        arm("S-19 sensitivity — NO-FRONTMATTER blocks AND carries the note path the caller greps",
+            fires(fh, "NOTE-PLAN-LINK-NO-FRONTMATTER", r_nofm_hi) == 1,
+            f"exactly one BLOCKING finding, and it names {r_nofm_hi}")
+        arm("S-19b specificity — the same unreadable shape BELOW the floor does not block",
+            fires(fh, "NOTE-PLAN-LINK-NO-FRONTMATTER", r_nofm_lo) == 0,
+            "a pre-ADR-092 note with unreadable frontmatter is inherited debt, not a block")
+
+        # S-20 — F-02. THE CUTOVER GUARD. PLAN_LINK_CUTOVER is the operator-
+        # rendered decision this card ships: a dangling links.plan pointer BLOCKS
+        # at or above the ADR-092 floor and is inherited debt below it. It had no
+        # arm of any kind, so lowering it — which converts the whole below-floor
+        # dangle population into blocking findings — left --self-test PASSing.
+        # The three arms are TWO-SIDED on purpose: lowering the floor reddens
+        # S-20b and S-20c, raising it reddens S-20 and S-20c, so neither direction
+        # of drift is silent.
+        arm("S-20 sensitivity — a dangling links.plan AT/ABOVE the floor blocks",
+            fires(fh, "NOTE-PLAN-LINK-UNRESOLVED", r_dead_hi) == 1,
+            f"exactly one BLOCKING NOTE-PLAN-LINK-UNRESOLVED naming {r_dead_hi}")
+        arm("S-20b specificity — the SAME dangle BELOW the floor never blocks",
+            fires(fh, "NOTE-PLAN-LINK-UNRESOLVED", r_dead_lo) == 0
+            and names(blocking(fh), r_ok_hi) == 0,
+            "the pre-ADR-092 dangle stays advisory, and the resolving pointer fires nothing")
+        # S-20c grades the DENOMINATORS, not just the findings. A limb that
+        # examined nothing and a limb that found nothing read identically from a
+        # finding count alone, and the partition these numbers express IS the
+        # cutover: move the floor and the two denominators move with it.
+        arm("S-20c denominator — the tally reports the partition the floor actually produced",
+            "blocking limb 1 unresolved of 2 pointer(s) examined" in h_tally
+            and "advisory limb 1 unresolved of 1 examined below it" in h_tally
+            and "2 note(s) with unreadable frontmatter" in h_tally,
+            "2 pointers at/above the floor (1 dangling), 1 below it (dangling), 2 unreadable")
 
     print(f"\n{checked} arm(s) run, {len(failures)} failure(s)"
           + (f": {failures}" if failures else ""))
