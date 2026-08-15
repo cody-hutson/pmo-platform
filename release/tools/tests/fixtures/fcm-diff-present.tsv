@@ -1,0 +1,4 @@
+A	core/does-not-exist.md
+M	release/tools/verify-release-plan.sh
+A	release/tools/tests/fixtures/fcm-conformant.md
+A	core/ADRs/ADR-142-some-allocated-slug.md

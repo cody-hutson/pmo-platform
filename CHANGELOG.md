@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.30] - 2026-08-15
+
+Six release checks that always passed because they never looked now examine what they guard, each proven able to fail first.
+
+[Full notes](release/releases/notes/v4.30_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.30)
+
 ## [v4.29] - 2026-08-15
 
 Checks that could not run now say so instead of reporting clean, so a green result means the check actually ran.

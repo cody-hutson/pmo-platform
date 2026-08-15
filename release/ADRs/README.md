@@ -63,6 +63,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-129](ADR-129-close-class-is-a-declared-deliverable-value-conditioning-one-gate-spec.md) | The close class is a declared deliverable-type value that conditions one gate spec, never a parallel close path | Proposed | 2026-08-07 | 58-task-artifact-lifecycle-and-knowledge |
 | [ADR-131](ADR-131-precision-binds-to-the-checks-declared-parameter-surface.md) | A precision obligation binds to the check's declared parameter surface, never to the ACs' self-reported scopes | Proposed | 2026-08-09 | triage-and-backlog-instrumentation |
 | [ADR-133](ADR-133-the-material-edit-test-names-an-effect-not-a-field.md) | The material-edit test names an effect, not a field | Proposed | 2026-08-15 | skill-suite-conformance |
+| [ADR-135](ADR-135-a-gate-ships-armed-by-a-committed-default.md) | A gate ships armed by a committed default; arming is never deferred to a later step that can be forgotten | Proposed | 2026-08-14 | stage9-gate-integrity |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.

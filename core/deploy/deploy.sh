@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # deploy.sh — PMO Platform deployment and validation tool
-# Usage: ./deploy.sh [--init | --deploy [skill...] | --check [--warn] | --report]
+# Usage: ./deploy.sh [--init | --deploy [skill...] [--release <milestone-slug>] | --check [--warn] | --report]
 # Exit codes: 0 = success/clean, 1 = issues found or failure
 
 # ─── Constants ───────────────────────────────────────────────────────────────
@@ -340,6 +340,161 @@ die() {
 # emission instant MUST be resolvable to one.
 log() {
   echo "[$(date +%H:%M:%S%z)] $1"
+}
+
+# ─── deployment-status emitter (--deploy) — #4215 ────────────────────────────
+#
+# WHY THIS EXISTS. Nothing in this script emitted a `deployment-status` event, so
+# `release/tools/compute-cycle-time.sh` had no T_DEPLOY anchor for ANY release and
+# the Cycle-Time field read `N/A` corpus-wide. Rows DID exist in the live log —
+# hand-written by hub sessions at their own discretion — so the defect was never
+# an absent CLASS, it was an absent PRODUCER. This is that producer.
+#
+# THE EMITTING SUBTYPE SET IS THREE, NOT FIVE, and each exclusion is a different
+# fact rather than one rule applied twice:
+#   deploy-skill    EMIT — the per-skill loop in cmd_deploy
+#   deploy-harness  EMIT — the harness loop (dormant until a harness artifact ships)
+#   deploy-package  EMIT — the packages loop; audit-trail only, see the consumer note
+#   deploy-helper   DO NOT EMIT — genuinely producer-less AND target-less. The token
+#                   appears only in enum declarations; no directory, no path, no check.
+#   deploy-rules-mirror
+#                   DO NOT EMIT — but this is a COVERAGE HOLE, not a cleanup, and the
+#                   distinction matters. The target set is real and enumerated: Check 9
+#                   asserts an 11-path rules mirror under $DEPLOY_ROOT/.claude/rules/,
+#                   `release/tools/blast-radius.sh` carries the identical pair set, and
+#                   `.claude/rules` is NOT git-tracked — so the mirror can only exist by
+#                   being deployed. What is missing is the PRODUCER: no file in this
+#                   repository writes that mirror, which is why Check 9's advertised
+#                   "re-run --deploy to restore" remedy cannot work. Excluding the
+#                   subtype is correct TODAY because emitting a row for a deploy this
+#                   script does not perform would be fabricated telemetry in an
+#                   append-only log. When the producer ships, RE-EVALUATE this exclusion
+#                   rather than leaving the subtype silently dark.
+#
+# EMITS NOTHING ABSENT `--release <slug>`. deploy.sh is also the fresh-install path
+# (install.sh -> orchestrate.sh -> deploy.sh --deploy) and the operator's ad-hoc
+# redeploy; neither carries a release identity. Emitting `(none)`-keyed rows instead
+# would inject a phantom deployment occasion into the global DORA deployment_frequency,
+# permanently, because the log is append-only Vital-retention. Silence is the correct
+# default — and because a silent default is indistinguishable from a forgotten flag,
+# _ds_warn_unstamped below makes the omission OBSERVABLE rather than merely documented.
+
+# The release join key for this invocation — the milestone SLUG, never a version.
+# Empty means "not a Stage-12 deploy"; every emit is gated on it being non-empty.
+DEPLOY_RELEASE_SLUG=""
+
+# _ds_validate_slug <slug> — SHAPE guard on the --release value. Pure; echoes exactly
+#   one token: OK, or `BAD:<reason>`.
+#
+#   This is a shape guard and NOT a proof the slug names a real release. The event
+#   writer's own guard is NEGATIVE by construction — it rejects the version grammar
+#   (`v4.25` is refused) precisely because asserting a positive slug grammar would
+#   reject real slugs. Rejecting the wrong SHAPE is not the same as accepting only the
+#   right VALUE: a plausible single-character typo passes both guards and becomes a
+#   permanent, unresolvable DORA occasion. That residual is named in the release plan's
+#   risk register; what IS closed here is the row-corrupting set — an empty key, a key
+#   carrying whitespace (which would break the " | " column split), and a key carrying a
+#   bare pipe (which would forge extra columns in the log row).
+_ds_validate_slug() {
+  local s="${1-}"
+  if [[ -z "$s" ]]; then printf 'BAD:empty\n'; return 0; fi
+  if [[ "$s" == *"|"* ]]; then printf 'BAD:contains-pipe\n'; return 0; fi
+  if [[ "$s" =~ [[:space:]] ]]; then printf 'BAD:contains-whitespace\n'; return 0; fi
+  printf 'OK\n'
+}
+
+# _ds_outcome <failures_before> <failures_after> <degraded> — per-target terminal state.
+#   Pure; echoes `resolved` or `escalated`.
+#
+#   `failures_*` are ${#FAILURES[@]} snapshots taken around one loop iteration: the array
+#   grew ⇒ that target failed. `degraded` is the union term, and it is load-bearing.
+#   FAILURES is the EXIT-CODE oracle (it gates the terminal `die`), not the deploy-HEALTH
+#   oracle: the skills loop carries eight per-target failure signals and only seven append
+#   to FAILURES. The eighth — a supplementary-content copy failure — logs a WARNING and
+#   sets a function-local flag that never touches the array. Deriving the row's outcome
+#   from the array alone would assert `resolved` for a demonstrably degraded target, so
+#   the caller passes that flag in here as `degraded` and the union decides.
+_ds_outcome() {
+  local before="${1:-0}" after="${2:-0}" degraded="${3:-false}"
+  if [[ "$after" -gt "$before" ]] || [[ "$degraded" == "true" ]]; then
+    printf 'escalated\n'
+  else
+    printf 'resolved\n'
+  fi
+}
+
+# _ds_payload <target> <module> <result> <detail> — the payload cell. Pure.
+#   Bare pipes are translated to '/' because a bare pipe inside a cell forges an extra
+#   column; newlines are folded for the same reason (one row is one physical line).
+#   Truncated to 300 chars per the schema's payload bound.
+_ds_payload() {
+  local target="${1-}" module="${2-}" result="${3-}" detail="${4-}"
+  local p="target:${target}; module:${module}; mech:deploy.sh --deploy; result:${result}; detail:${detail}"
+  p="${p//|//}"
+  p="$(printf '%s' "$p" | /usr/bin/tr '\n\r\t' '   ')"
+  printf '%.300s\n' "$p"
+}
+
+# _emit_deployment_status <subtype> <class> <artifact> <outcome> <detail>
+#   One row per affected target, written THROUGH release/tools/append-pipeline-event.sh
+#   (never a direct append) so Check 19's row-count parity invariant between the log and
+#   its write journal is preserved — a direct writer would silently break that check.
+#
+#   NO-OP when --release is absent or its shape is bad. HARD-GUARDED against aborting the
+#   deploy: this script runs `set -euo pipefail`, so a non-zero from the writer would kill
+#   the run mid-loop. A telemetry write must never fail a deploy, so the rc is captured
+#   and reported, never propagated.
+_emit_deployment_status() {
+  local subtype="$1" cls="$2" artifact="$3" outcome="$4" detail="${5-}"
+  [[ -n "$DEPLOY_RELEASE_SLUG" ]] || return 0
+  [[ "$(_ds_validate_slug "$DEPLOY_RELEASE_SLUG")" == "OK" ]] || return 0
+
+  # DS_WRITER is a TEST SEAM, not a configuration knob: the self-test points it at a
+  # stub in a temp dir so no assertion can ever append to the real append-only Vital
+  # log (a row written there can be redacted but never deleted). Production callers
+  # never set it and get the canonical writer.
+  local writer="${DS_WRITER:-release/tools/append-pipeline-event.sh}"
+  [[ -x "$writer" ]] || { log "  WARN: deployment-status not emitted for $artifact — $writer missing or not executable."; return 0; }
+
+  local result="SUCCESS"
+  [[ "$outcome" == "resolved" ]] || result="FAIL"
+  local module="${DS_MODULE:-n/a}"
+  local payload; payload="$(_ds_payload "$artifact" "$module" "$result" "${detail:-none}")"
+
+  local rc=0
+  "$writer" \
+    --version "$DEPLOY_RELEASE_SLUG" \
+    --stage 12 \
+    --event-type deployment-status \
+    --event-subtype "$subtype" \
+    --actor hub \
+    --subject "${cls}:${artifact}" \
+    --reversibility CHEAP \
+    --outcome "$outcome" \
+    --payload "$payload" >/dev/null 2>&1 || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    log "  WARN: deployment-status emit failed for ${cls}:${artifact} (writer rc=$rc) — deploy continues; telemetry never fails a deploy."
+  fi
+  return 0
+}
+
+# _ds_warn_unstamped <targets_deployed> — THE OBSERVING STEP for the --release flag.
+#   Pure; echoes `WARN` or `OK`.
+#
+#   Without this, a forgotten flag is INVISIBLE: real targets deploy, zero rows are
+#   written, the script exits 0, and Cycle-Time later reads `N/A` — byte-identical to the
+#   honest `N/A` of a release that legitimately deployed nothing. Two different states,
+#   one observable. Relocating the discretionary act from "remember to hand-write a row"
+#   to "remember to type a flag" does not remove it unless something notices when it is
+#   not typed. This is that something, and its two arms are graded by the release's
+#   CIAC-6: removing this predicate makes the self-test group DS arm DS-7 fail.
+_ds_warn_unstamped() {
+  local deployed="${1:-0}"
+  if [[ "$deployed" -gt 0 ]] && [[ -z "$DEPLOY_RELEASE_SLUG" ]]; then
+    printf 'WARN\n'
+  else
+    printf 'OK\n'
+  fi
 }
 
 # ─── Version-freeness (Check 41 / --check-version-freeness) — #1677 ───────────
@@ -3260,6 +3415,42 @@ cmd_deploy() {
 
   local -a FAILURES=()
 
+  # ─── --release <slug> flag-strip (#4215) ───────────────────────────────────
+  # MUST run before the artifact-classification loop below, which treats every
+  # remaining argument as an artifact name and would `die "Unknown artifact:
+  # --release"`. main() forwards "$@" verbatim (`--deploy) shift; cmd_deploy "$@"`),
+  # so the flag is consumed HERE — no main() change, and the --all branch (which
+  # calls cmd_deploy with no args) is untouched and correctly emits nothing.
+  DEPLOY_RELEASE_SLUG=""
+  local -a _deploy_args=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --release)
+        [[ $# -ge 2 ]] || die "--release requires a milestone-slug argument (the release join key; never a version)"
+        DEPLOY_RELEASE_SLUG="$2"
+        shift 2
+        ;;
+      --release=*)
+        DEPLOY_RELEASE_SLUG="${1#--release=}"
+        shift
+        ;;
+      *)
+        _deploy_args+=("$1")
+        shift
+        ;;
+    esac
+  done
+  set -- ${_deploy_args[@]+"${_deploy_args[@]}"}
+
+  if [[ -n "$DEPLOY_RELEASE_SLUG" ]]; then
+    local _slug_verdict
+    _slug_verdict="$(_ds_validate_slug "$DEPLOY_RELEASE_SLUG")"
+    if [[ "$_slug_verdict" != "OK" ]]; then
+      die "--release value rejected (${_slug_verdict#BAD:}): a release join key is a milestone slug — non-empty, no whitespace, no '|'. Rows are append-only and cannot be deleted, so a malformed key is refused at the boundary rather than written."
+    fi
+    log "Release-stamped deploy: deployment-status rows will be emitted for release '$DEPLOY_RELEASE_SLUG'."
+  fi
+
   # Argument handling: manual vs auto-detect
   if [[ $# -gt 0 ]]; then
     # E-08: Validate manual artifact names; route each into skills or harness.
@@ -3364,6 +3555,15 @@ cmd_deploy() {
   local skills_changed=0
   for skill in ${CHANGED_SKILLS[@]+"${CHANGED_SKILLS[@]}"}; do
     local module __before_fp __after_fp
+    # #4215 CS-1 per-target emit state. __fail_before snapshots the FAILURES array
+    # so growth across THIS iteration identifies THIS skill's failure; __degraded is
+    # the eighth failure signal (supplementary-content copy) that never appends to
+    # FAILURES and would otherwise be reported as a successful deploy. Both are reset
+    # per iteration deliberately — a `local` declared inside the supplementary branch
+    # below persists across iterations and would leak the prior skill's state.
+    local __fail_before=${#FAILURES[@]}
+    local __degraded=false
+    local __detail="none"
     __before_fp=$(deployed_skill_footprint "$skill")
     module=$(resolve_skill_module "$skill")
     local source_dir="$module/skills/$skill"
@@ -3417,6 +3617,11 @@ cmd_deploy() {
           fi
         done
         if [[ "$supp_failures" == "true" ]]; then
+          # #4215 FM-1: this signal never appends to FAILURES, so without the union
+          # term the emitted row would read `resolved` for a target whose own deploy
+          # transcript says otherwise.
+          __degraded=true
+          __detail="supplementary-content-copy-failed:${supp_failed_item}"
           log "  WARNING:  $skill — supplementary content copy failed (first failure: $supp_failed_item)"
           log "            cause: ${supp_cause}"
           log "            remediation: chmod -R u+w \"$INSTALL_PATH/$skill\" && ./deploy.sh --deploy $skill  (read-only install target; derived mirror — safe to chmod)"
@@ -3480,6 +3685,18 @@ cmd_deploy() {
     if [[ "$__before_fp" != "$__after_fp" ]]; then
       skills_changed=$((skills_changed + 1))
     fi
+
+    # #4215 CS-1 — emit INSIDE the loop, never after it. The terminal
+    # `die "Deployment failures: …"` below makes any post-loop emit unreachable on a
+    # failed deploy, which is exactly the silent-omission-of-failures hazard this card
+    # exists to close. In-loop, a failed target's row is already written by the time
+    # the die fires.
+    local __outcome
+    __outcome="$(_ds_outcome "$__fail_before" "${#FAILURES[@]}" "$__degraded")"
+    if [[ "$__outcome" == "escalated" && "$__detail" == "none" ]]; then
+      __detail="deploy-step-failed"
+    fi
+    DS_MODULE="$module" _emit_deployment_status "deploy-skill" "skill" "$skill" "$__outcome" "$__detail"
   done
 
   # Deploy packages (packages/ at v2 root; no module nesting per the v2 root
@@ -3492,6 +3709,7 @@ cmd_deploy() {
     for pkg in ${CHANGED_PACKAGES[@]+"${CHANGED_PACKAGES[@]}"}; do
       local source="packages/$pkg.skill"
       local target="$pkg_dir/$pkg.skill"
+      local __pkg_fail_before=${#FAILURES[@]}
 
       mkdir -p "$pkg_dir"
 
@@ -3506,6 +3724,20 @@ cmd_deploy() {
         log "  FAILED:   $pkg.skill — copy failed"
         FAILURES+=("$pkg.skill")
       fi
+
+      # #4215 CS-2. `deploy-package` is emitted despite having NO consumer: it is an
+      # honest per-target audit row, and because both read-models filter their anchor
+      # set to deploy-skill|deploy-harness it provably cannot perturb T_DEPLOY or the
+      # DORA occasion set. That exclusion is a DECLARED narrowing, not an oversight —
+      # a package deploy is not evidence that the release's skills reached the install
+      # path, so anchoring cycle-time on one would overstate what was observed. The
+      # bounded consequence is that a package-ONLY deploy yields no T_DEPLOY; that is
+      # structurally near-impossible here, because CHANGED_PACKAGES is populated only
+      # alongside skills and is hard-reset to () when the manual skill list is empty.
+      local __pkg_outcome __pkg_detail="none"
+      __pkg_outcome="$(_ds_outcome "$__pkg_fail_before" "${#FAILURES[@]}" "false")"
+      [[ "$__pkg_outcome" == "resolved" ]] || __pkg_detail="package-copy-or-verify-failed"
+      DS_MODULE="packages" _emit_deployment_status "deploy-package" "package" "$pkg" "$__pkg_outcome" "$__pkg_detail"
     done
   fi
 
@@ -3514,7 +3746,23 @@ cmd_deploy() {
   # artifacts at harness/<name>/). Harness targets ~/.claude/<name>/, not the
   # Cowork session path, so it stays unconditional.
   for harness_name in ${CHANGED_HARNESS[@]+"${CHANGED_HARNESS[@]}"}; do
+    # #4215 CS-3. Dormant today (HARNESS_LIST is empty), wired now so the row is
+    # correct on the day a harness artifact ships rather than discovered missing then.
+    # deploy_harness_artifact signals failure by APPENDING to FAILURES (it does not
+    # report through its return code), so the same snapshot idiom as CS-1/CS-2 applies
+    # and the bare call's semantics are unchanged.
+    #
+    # DECLARED NARROWING (the harness-side sibling of the supplementary-content gap):
+    # that function's "unexpected subdir" branch logs a WARNING without setting its
+    # copy_failures flag, so a harness artifact carrying an unhandled subdirectory
+    # emits `resolved`. Teaching it to fail would change the deploy's EXIT CODE, which
+    # is outside this card. The narrowing is stated here rather than left silent.
+    local __harness_fail_before=${#FAILURES[@]}
     deploy_harness_artifact "$harness_name"
+    local __harness_outcome __harness_detail="none"
+    __harness_outcome="$(_ds_outcome "$__harness_fail_before" "${#FAILURES[@]}" "false")"
+    [[ "$__harness_outcome" == "resolved" ]] || __harness_detail="harness-deploy-step-failed"
+    DS_MODULE="harness" _emit_deployment_status "deploy-harness" "harness" "$harness_name" "$__harness_outcome" "$__harness_detail"
   done
 
   # E-03: Deleted skills warning (Cowork-target — the stale copy lives under the
@@ -3532,6 +3780,44 @@ cmd_deploy() {
   local pkg_count=${#CHANGED_PACKAGES[@]:-0}
   local harness_count=${#CHANGED_HARNESS[@]:-0}
   log "Deployed: ${skills_changed} skills, $pkg_count packages, $harness_count harness artifacts"
+
+  # ─── #4215: the observing step for --release ───────────────────────────────
+  # Placed BEFORE the terminal die so it fires on the failed-deploy path too — an
+  # operator who omitted the flag needs to know regardless of how the deploy ended.
+  # The target count is the ATTEMPTED set, not skills_changed: a re-run that
+  # re-mirrors byte-identical content reports 0 changed skills but did address real
+  # targets, and a release-stamped deploy is owed rows for those targets.
+  local __attempted=$(( ${#CHANGED_SKILLS[@]} + pkg_count + harness_count ))
+  if [[ "$(_ds_warn_unstamped "$__attempted")" == "WARN" ]]; then
+    log "WARN: deployed ${__attempted} target(s) with no --release <slug> — ZERO deployment-status rows were emitted."
+    log "      Cycle-Time and the DORA deployment-frequency read N/A for this deploy, which is"
+    log "      byte-identical to a release that legitimately deployed nothing. The two states are"
+    log "      indistinguishable downstream, so this line is the only place the difference is visible."
+    log "      Stage-12 invocation form: ./deploy.sh --deploy --release <milestone-slug>"
+    log "      A fresh install or an ad-hoc redeploy carries no release identity — for those this"
+    log "      warning is expected and correct, and no row should be written."
+  fi
+
+  # ─── #4215: deliberate non-emission points (the complete inventory) ────────
+  # Recorded so the absences read as decisions. NOTHING is emitted when:
+  #   validate_workspace fails           — aborts before any target is known
+  #   die "Unknown artifact"             — argument validation; no deploy attempted
+  #   die "Ambiguous artifact name"      — same
+  #   the E-02 "No changes" exit 0       — nothing was deployed. This is the mechanism
+  #                                        behind the HONEST N/A on a content-only
+  #                                        release; it is not a defect.
+  #   any `set -e` exit inside a loop    — NOT one of the die points above, and easy to
+  #                                        miss. This script runs `set -euo pipefail`,
+  #                                        so an unguarded non-zero (a bare mkdir -p, a
+  #                                        die-on-miss module resolution) exits the shell
+  #                                        mid-iteration and skips both the remaining
+  #                                        targets' emits AND the summary/die below.
+  #                                        Every emitted row stays truthful; the emitted
+  #                                        SET is silently partial. Named, not mitigated
+  #                                        — a pending-row-plus-EXIT-trap design was
+  #                                        weighed and is out of this card's scope.
+  # By the time the terminal die fires, every per-target row (including escalated ones)
+  # is already written.
   if [[ ${#FAILURES[@]} -gt 0 ]]; then
     die "Deployment failures: ${FAILURES[*]}"
   fi
@@ -12069,6 +12355,19 @@ EOF
   _v="$(_de_selftest_verdict)"
   [[ "$_v" == "INCOMPLETE 1 1" ]] || { echo "FAIL: DE-4 partial set (2 of 3 classes) must report exactly 1 missing class ('INCOMPLETE 1 1'), got '$_v'"; failures=$((failures+1)); }
 
+  # DE-4b — ANTI-VACUITY, MUTATION-DIRECTED: omit a `decision`-typed class while its
+  # SIBLING `decision`-typed class stays present. This is the only arm in the group that
+  # kills the subtype-conjunct mutant (`$4==t && $5==s` -> `$4==t`): the asserted set
+  # partitions as 2 x `decision` + 1 x `gate-outcome`, so every OTHER arm omits a class
+  # whose event_type is unique, and a type-only predicate reproduces the real verdict on
+  # it. Measured before this arm existed: DE-2/3/4/5/8/9 ALL survived that mutation, so
+  # the group could not detect deletion of Check 61 own subtype check. Path coverage is
+  # not mutation coverage — DE-4 executes the same lines and still cannot separate the
+  # two predicates.
+  _de_seed_log "de-postcutover" "milestone:#900" decision/d-class gate-outcome/plan-review-go
+  _v="$(_de_selftest_verdict)"
+  [[ "$_v" == "INCOMPLETE 1 1" ]] || { echo "FAIL: DE-4b omitting decision/scope-lock while its sibling decision-typed class remains must report exactly 1 missing class ('INCOMPLETE 1 1'), got '$_v'"; failures=$((failures+1)); }
+
   # DE-5 — ANTI-VACUITY: rows keyed on the LEGACY version form with the slug absent ⇒
   # INCOMPLETE. The gate asserts the § 2a canonical key (rung 1/2), never an ambiguous
   # rung-3 legacy match. Subject is deliberately non-milestone so rung 2 cannot rescue it.
@@ -12571,6 +12870,204 @@ EOF
 
   /bin/rm -rf "$_r" 2>/dev/null || true
 
+  # ─── Assertion group DS — deployment-status emitter (#4215) ─────────────────
+  #
+  # Hermetic and offline. Every arm that writes anything routes through a STUB writer
+  # in a temp dir via the DS_WRITER seam, so no assertion can append to the real
+  # append-only Vital log — a row written there can be redacted but never deleted, and
+  # a test that pollutes it is worse than no test.
+  #
+  # WHY THESE ARMS AND NOT CHEAPER ONES. This release exists to eliminate controls that
+  # cannot fail, so each arm below is paired with the mutation that must turn it red:
+  #   DS-3c  delete the `degraded` term from _ds_outcome            -> RED
+  #   DS-4   delete the empty-slug guard from _emit_deployment_status -> RED
+  #   DS-7a  delete the predicate body of _ds_warn_unstamped        -> RED
+  #   DS-9   swap the stub writer for one that rejects everything   -> RED
+  # An arm whose mutation leaves it green is theatre; these were run both ways.
+  echo "self-test: starting assertion group DS (deployment-status emitter, #4215)" >&2
+  local _d; _d="$(/usr/bin/mktemp -d -t deploystatus-selftest.XXXXXX)"
+  local _dcap="$_d/emitted.tsv"
+  : > "$_dcap"
+
+  # Stub writer: records the flags it was handed, one row per invocation. Exits 0.
+  local _dstub="$_d/stub-writer.sh"
+  /bin/cat > "$_dstub" <<STUB
+#!/usr/bin/env bash
+_out="$_dcap"
+_ver=""; _sub=""; _subj=""; _outc=""; _pay=""; _stage=""; _etype=""; _actor=""; _rev=""
+while [[ \$# -gt 0 ]]; do
+  case "\$1" in
+    --version) _ver="\$2"; shift 2 ;;
+    --stage) _stage="\$2"; shift 2 ;;
+    --event-type) _etype="\$2"; shift 2 ;;
+    --event-subtype) _sub="\$2"; shift 2 ;;
+    --actor) _actor="\$2"; shift 2 ;;
+    --subject) _subj="\$2"; shift 2 ;;
+    --reversibility) _rev="\$2"; shift 2 ;;
+    --outcome) _outc="\$2"; shift 2 ;;
+    --payload) _pay="\$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "\$_ver" "\$_stage" "\$_etype" "\$_sub" "\$_actor" "\$_subj" "\$_rev" "\$_outc" "\$_pay" >> "\$_out"
+exit 0
+STUB
+  /bin/chmod +x "$_dstub"
+
+  local _ds_saved_slug="$DEPLOY_RELEASE_SLUG"
+  local _r1 _n1 _n2
+
+  # DS-1 — slug SHAPE guard accepts a real milestone slug.
+  _r1="$(_ds_validate_slug "stage9-gate-integrity")"
+  [[ "$_r1" == "OK" ]] || { echo "FAIL: DS-1 a well-formed milestone slug must validate OK, got '$_r1'"; failures=$((failures+1)); }
+
+  # DS-2 — and rejects each row-corrupting shape. A bare pipe would forge an extra
+  #        column in the log row; whitespace would break the ' | ' column split.
+  _r1="$(_ds_validate_slug "")"
+  [[ "$_r1" == "BAD:empty" ]] || { echo "FAIL: DS-2a empty slug must be rejected, got '$_r1'"; failures=$((failures+1)); }
+  _r1="$(_ds_validate_slug "bad|slug")"
+  [[ "$_r1" == "BAD:contains-pipe" ]] || { echo "FAIL: DS-2b pipe-bearing slug must be rejected, got '$_r1'"; failures=$((failures+1)); }
+  _r1="$(_ds_validate_slug "bad slug")"
+  [[ "$_r1" == "BAD:contains-whitespace" ]] || { echo "FAIL: DS-2c whitespace-bearing slug must be rejected, got '$_r1'"; failures=$((failures+1)); }
+
+  # DS-3 — per-target outcome derivation, including the union term.
+  _r1="$(_ds_outcome 0 0 false)"
+  [[ "$_r1" == "resolved" ]] || { echo "FAIL: DS-3a clean target must be resolved, got '$_r1'"; failures=$((failures+1)); }
+  _r1="$(_ds_outcome 0 1 false)"
+  [[ "$_r1" == "escalated" ]] || { echo "FAIL: DS-3b a target that appended to FAILURES must be escalated, got '$_r1'"; failures=$((failures+1)); }
+  # DS-3c is the FM-1 arm and the reason _ds_outcome takes three arguments rather than
+  # two: the supplementary-content copy failure logs a WARNING and never appends to
+  # FAILURES, so a two-argument derivation reports SUCCESS for a demonstrably degraded
+  # target. FAILURES is the exit-code oracle; it is not the deploy-health oracle.
+  _r1="$(_ds_outcome 0 0 true)"
+  [[ "$_r1" == "escalated" ]] || { echo "FAIL: DS-3c a degraded target that never appended to FAILURES must STILL be escalated, got '$_r1'"; failures=$((failures+1)); }
+
+  # DS-4 — SILENCE DEFAULT. With no --release, the emitter writes nothing at all.
+  #        This is the arm that proves the fresh-install and ad-hoc-redeploy paths
+  #        cannot inject a phantom deployment occasion into the global DORA frequency.
+  DEPLOY_RELEASE_SLUG=""
+  DS_WRITER="$_dstub" _emit_deployment_status "deploy-skill" "skill" "no-release-skill" "resolved" "none"
+  _n1="$(/usr/bin/wc -l < "$_dcap" | /usr/bin/tr -d ' ')"
+  [[ "$_n1" == "0" ]] || { echo "FAIL: DS-4 absent --release must emit ZERO rows, got $_n1"; failures=$((failures+1)); }
+
+  # DS-4b — a malformed slug is likewise silent at the emitter (belt-and-braces behind
+  #         the cmd_deploy-level die, which is the primary refusal point).
+  DEPLOY_RELEASE_SLUG="bad|slug"
+  DS_WRITER="$_dstub" _emit_deployment_status "deploy-skill" "skill" "bad-slug-skill" "resolved" "none"
+  _n1="$(/usr/bin/wc -l < "$_dcap" | /usr/bin/tr -d ' ')"
+  [[ "$_n1" == "0" ]] || { echo "FAIL: DS-4b a malformed slug must emit ZERO rows, got $_n1"; failures=$((failures+1)); }
+
+  # DS-5 — CONTROL for DS-4: the same call WITH a slug emits exactly one row carrying
+  #        the full fixed column contract. Without this arm, DS-4's zero could mean the
+  #        emitter is simply broken.
+  DEPLOY_RELEASE_SLUG="stage9-gate-integrity"
+  DS_MODULE="release" DS_WRITER="$_dstub" _emit_deployment_status "deploy-skill" "skill" "release-hub" "resolved" "none"
+  _n1="$(/usr/bin/wc -l < "$_dcap" | /usr/bin/tr -d ' ')"
+  [[ "$_n1" == "1" ]] || { echo "FAIL: DS-5 a release-stamped emit must write exactly 1 row, got $_n1"; failures=$((failures+1)); }
+  _r1="$(/usr/bin/tail -1 "$_dcap")"
+  /usr/bin/grep -q '^stage9-gate-integrity	12	deployment-status	deploy-skill	hub	skill:release-hub	CHEAP	resolved	' <<<"$_r1" \
+    || { echo "FAIL: DS-5b emitted row must carry the fixed column contract (slug/12/deployment-status/deploy-skill/hub/skill:<name>/CHEAP/resolved), got '$_r1'"; failures=$((failures+1)); }
+  /usr/bin/grep -q 'result:SUCCESS' <<<"$_r1" \
+    || { echo "FAIL: DS-5c a resolved row's payload must carry result:SUCCESS, got '$_r1'"; failures=$((failures+1)); }
+
+  # DS-6 — the escalated row is the one that must survive: it is the failure signal the
+  #        pre-change pipeline could not represent at all (37 of 37 live rows read
+  #        'resolved'; no deploy failure has ever been recorded).
+  DS_MODULE="release" DS_WRITER="$_dstub" _emit_deployment_status "deploy-skill" "skill" "broken-skill" "escalated" "copy-failed"
+  _r1="$(/usr/bin/tail -1 "$_dcap")"
+  /usr/bin/grep -q '	escalated	' <<<"$_r1" \
+    || { echo "FAIL: DS-6a a failed target must emit outcome=escalated, got '$_r1'"; failures=$((failures+1)); }
+  /usr/bin/grep -q 'result:FAIL' <<<"$_r1" \
+    || { echo "FAIL: DS-6b an escalated row's payload must carry result:FAIL, got '$_r1'"; failures=$((failures+1)); }
+
+  # DS-6c — PAYLOAD PIPE-FORGING GUARD. A bare '|' inside the payload cell forges an
+  #         extra column, which silently shifts every downstream field index. The
+  #         translation is asserted on an input that actually contains one.
+  _r1="$(_ds_payload "sk|ill" "core" "FAIL" "de|tail")"
+  [[ "$_r1" != *"|"* ]] || { echo "FAIL: DS-6c payload must contain no bare pipe after translation, got '$_r1'"; failures=$((failures+1)); }
+  [[ "${#_r1}" -le 300 ]] || { echo "FAIL: DS-6d payload must be <=300 chars, got ${#_r1}"; failures=$((failures+1)); }
+
+  # DS-7 — THE OBSERVING STEP for --release. Three arms, because the interesting case
+  #        is the one where silence is WRONG, and it is only distinguishable from the
+  #        two cases where silence is RIGHT if the predicate reads both inputs.
+  DEPLOY_RELEASE_SLUG=""
+  _r1="$(_ds_warn_unstamped 3)"
+  [[ "$_r1" == "WARN" ]] || { echo "FAIL: DS-7a targets deployed with NO --release must WARN (this is the forgotten-flag state), got '$_r1'"; failures=$((failures+1)); }
+  _r1="$(_ds_warn_unstamped 0)"
+  [[ "$_r1" == "OK" ]] || { echo "FAIL: DS-7b zero targets and no --release is the HONEST no-op and must NOT warn, got '$_r1'"; failures=$((failures+1)); }
+  DEPLOY_RELEASE_SLUG="stage9-gate-integrity"
+  _r1="$(_ds_warn_unstamped 3)"
+  [[ "$_r1" == "OK" ]] || { echo "FAIL: DS-7c a release-stamped deploy must NOT warn, got '$_r1'"; failures=$((failures+1)); }
+
+  # DS-8 — three subtypes emit, and each maps to its own target class. The emitting set
+  #        is deliberately THREE: deploy-rules-mirror and deploy-helper are excluded
+  #        because this script contains no code path that performs either deploy, and a
+  #        row asserting a deploy that never happened is fabricated telemetry in a log
+  #        that cannot be rewritten.
+  : > "$_dcap"
+  DS_WRITER="$_dstub" _emit_deployment_status "deploy-skill"   "skill"   "s1" "resolved" "none"
+  DS_WRITER="$_dstub" _emit_deployment_status "deploy-package" "package" "p1" "resolved" "none"
+  DS_WRITER="$_dstub" _emit_deployment_status "deploy-harness" "harness" "h1" "resolved" "none"
+  _n1="$(/usr/bin/awk -F'\t' '{print $4}' "$_dcap" | /usr/bin/sort -u | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+  [[ "$_n1" == "3" ]] || { echo "FAIL: DS-8a the emitting subtype set must be exactly 3 distinct subtypes, got $_n1"; failures=$((failures+1)); }
+  _n2="$(/usr/bin/grep -cE '	(deploy-rules-mirror|deploy-helper)	' "$_dcap" || true)"
+  [[ "$_n2" == "0" ]] || { echo "FAIL: DS-8b producer-less subtypes must never be emitted, got $_n2 row(s)"; failures=$((failures+1)); }
+  # SPECIFICITY control for DS-8b: the arm above must be capable of counting a match,
+  # or its zero proves nothing. Feed it the shape it is looking for, in isolation.
+  _n2="$(/usr/bin/printf 'v\t12\tdeployment-status\tdeploy-helper\thub\ts\tCHEAP\tresolved\tp\n' | /usr/bin/grep -cE '	(deploy-rules-mirror|deploy-helper)	' || true)"
+  [[ "$_n2" == "1" ]] || { echo "FAIL: DS-8c the producer-less-subtype detector must be able to FIRE (control arm), got $_n2"; failures=$((failures+1)); }
+
+  # DS-9 — a writer that fails must NOT fail the deploy. deploy.sh runs
+  #        `set -euo pipefail`, so an unguarded non-zero from the writer would abort the
+  #        run mid-loop; telemetry must never take a deploy down.
+  local _dfail="$_d/failing-writer.sh"
+  /usr/bin/printf '#!/usr/bin/env bash\nexit 7\n' > "$_dfail"
+  /bin/chmod +x "$_dfail"
+  local _drc=0
+  DS_WRITER="$_dfail" _emit_deployment_status "deploy-skill" "skill" "s1" "resolved" "none" >/dev/null 2>&1 || _drc=$?
+  [[ "$_drc" == "0" ]] || { echo "FAIL: DS-9 a failing event writer must not propagate a non-zero (telemetry never fails a deploy), got rc=$_drc"; failures=$((failures+1)); }
+
+  # DS-10 — CONTRACT arm against the REAL writer, via --dry-run so nothing is appended.
+  #         DS-1..DS-9 all run against a stub; without this arm they would prove only
+  #         that the emitter is self-consistent, not that the row it builds is one the
+  #         canonical writer accepts.
+  if [[ -x release/tools/append-pipeline-event.sh ]]; then
+    local _sub
+    for _sub in deploy-skill deploy-package deploy-harness; do
+      if ! release/tools/append-pipeline-event.sh --dry-run --version "stage9-gate-integrity" --stage 12 \
+           --event-type deployment-status --event-subtype "$_sub" --actor hub --subject "skill:x" \
+           --reversibility CHEAP --outcome resolved --payload 'target:x; module:core; mech:deploy.sh --deploy; result:SUCCESS; detail:none' >/dev/null 2>&1; then
+        echo "FAIL: DS-10a the canonical writer must accept an emitted $_sub row"; failures=$((failures+1))
+      fi
+    done
+    # SPECIFICITY control: the same call with an out-of-enum subtype must be REJECTED,
+    # or DS-10a's three passes would be consistent with a writer that accepts anything.
+    if release/tools/append-pipeline-event.sh --dry-run --version "stage9-gate-integrity" --stage 12 \
+         --event-type deployment-status --event-subtype "deploy-zzz" --actor hub --subject "skill:x" \
+         --reversibility CHEAP --outcome resolved --payload 'p' >/dev/null 2>&1; then
+      echo "FAIL: DS-10b the canonical writer must REJECT an out-of-enum subtype (control arm)"; failures=$((failures+1))
+    fi
+    # And a VERSION-shaped join key must be rejected: the release key is a milestone
+    # slug, and a version there would key rows no read-model can resolve.
+    #
+    # The literal is the suite's reserved fixture version, NOT a real slot. A fixture
+    # that borrows a live version number reads as a claim on it, and it goes stale the
+    # moment that version ships — this arm tests the version GRAMMAR, so the value only
+    # has to be version-SHAPED, and a shape that can never be a real release is the one
+    # that stays true.
+    if release/tools/append-pipeline-event.sh --dry-run --version "v9.99" --stage 12 \
+         --event-type deployment-status --event-subtype "deploy-skill" --actor hub --subject "skill:x" \
+         --reversibility CHEAP --outcome resolved --payload 'p' >/dev/null 2>&1; then
+      echo "FAIL: DS-10c the canonical writer must REJECT a version-shaped release key (control arm)"; failures=$((failures+1))
+    fi
+  else
+    echo "self-test: DS-10 SKIP — release/tools/append-pipeline-event.sh not executable" >&2
+  fi
+
+  DEPLOY_RELEASE_SLUG="$_ds_saved_slug"
+  unset DS_MODULE
+  /bin/rm -rf "$_d" 2>/dev/null || true
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failure(s))" >&2
     return 1
@@ -12585,11 +13082,13 @@ EOF
   echo "    OS-1 suppressed -> BOTH findings / OS-2 emitted -> zero / OS-3 bolded numerals -> grammar finding / OS-4 explicit-N/A conformant / OS-5 archived+co-located -> zero / OS-6 T4 wrong-surface write -> split-record / OS-7 field on both surfaces -> split-record / OS-8 dangling segment pointer -> finding / OS-9 learnings mis-placed names the heading found / OS-10 short field-set / OS-11 duplicate heading / OS-12 no-match outputs cutoff WARNs vacuous / OS-13 __none__ re-dormants (j)+(k) only. Every arm graded on the FINDING LINE — exit code, corpus-wide grep and 'the field parses' are all identical on OS-4/OS-5 and OS-6.
     Close-Class-Telemetry sub-check (l) (#4437): OS-14 GENUINE FAILURE — a row with velocity+learnings and no telemetry field fires (l) alone / OS-15 control — the same fixture with a measured field raises nothing / OS-16 slot-short field fails the ordered eight-slot grammar while presence passes / OS-17 ANTI-VACUITY — a byte-perfect all-N/A field is a finding, with OS-15 as its control / OS-18 split record (field in the hot stub, body in the segment) / OS-19 __none__ re-dormants (l) and ONLY (l) — the SHIPPED configuration / OS-20 no-match telemetry cutoff WARNs vacuous in its own voice / OS-21 prefix mis-arm WARNs naming the row it actually armed at." >&2
   echo "  decision-emission minimum set validated (#4026, group DE):" >&2
-  echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET" >&2
+  echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-4b sibling-typed omission INCOMPLETE (kills the subtype-conjunct mutant) / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET" >&2
   echo "  complementary-pair ownership validated (#4178, group CP):" >&2
   echo "    CP-4 absent registry NOSET / CP-1 intact pair PASS / CP-2 leaked owned-section OWNERSHIP-DRIFT / CP-5 missing shared-section OWNERSHIP-DRIFT / CP-6 divergent shared-section SHARED-DIVERGENCE / CP-3 unregistered cross-tree pair UNREGISTERED-PAIR / CP-3b named README.md exclusion holds / CP-7 malformed record MALFORMED" >&2
   echo "  register runner-resolution validated (#4208, group RR):" >&2
   echo "    RR-5 absent standard NOSET / RR-1 all pointers resolve CLEAN|2 / RR-2 runner no longer carries its anchor UNRESOLVED|1|2 (the shipped defect, in fixture form) / RR-3 absent runner-definition file UNRESOLVED|2|2 / RR-4 zero pointers NOSET / RR-6 prose-only token mentions parse to zero (parser control)" >&2
+  echo "  deployment-status emitter validated (#4215, group DS):" >&2
+  echo "    DS-1 well-formed slug OK / DS-2 empty + pipe-bearing + whitespace-bearing slugs rejected / DS-3 outcome derivation incl. DS-3c the degraded-but-not-in-FAILURES union term (FAILURES is the exit-code oracle, not the deploy-health oracle) / DS-4 SILENCE DEFAULT — absent --release emits ZERO rows, DS-4b malformed slug likewise / DS-5 CONTROL — the same call WITH a slug emits exactly 1 row carrying the fixed 10-column contract / DS-6 escalated row survives with result:FAIL + DS-6c payload pipe-forging guard + DS-6d 300-char bound / DS-7 THE OBSERVING STEP — targets-with-no-flag WARNs, zero-targets does NOT (honest no-op), release-stamped does NOT / DS-8 exactly 3 emitting subtypes, producer-less subtypes never emitted, with a firing control arm / DS-9 a failing event writer must not fail the deploy / DS-10 the CANONICAL writer accepts all three subtypes via --dry-run, and rejects an out-of-enum subtype and a version-shaped release key (two control arms). Every write in this group routes through the DS_WRITER stub seam — no assertion can append to the real append-only log." >&2
   return 0
 }
 
@@ -13464,6 +13963,12 @@ main() {
       echo ""
       echo "Modes:"
       echo "  --deploy [skill...]          Deploy changed skills to Cowork install path (auto-detect or manual)"
+      echo "     --release <slug>          Stamp this deploy with a release join key (the MILESTONE SLUG, never a version)."
+      echo "                               Emits one deployment-status row per affected target, which is what gives"
+      echo "                               Cycle-Time and the DORA metrics a T_DEPLOY anchor. Omit it for a fresh install"
+      echo "                               or an ad-hoc redeploy: with no slug, NOTHING is emitted (deliberately — a"
+      echo "                               release-less row would inflate deployment-frequency permanently). Omitting it"
+      echo "                               on a Stage-12 deploy is warned about at the end of the run."
       echo "  --all                        Deploy the full skill roster + all packages (explicit bootstrap / redeploy-everything)"
       echo "  --check [--warn]             Validate platform health (--warn exits 0 even with issues)"
       echo "  --check-lifecycle            List retired/dormant checks + dispositions + reactivation anchors"

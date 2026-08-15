@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.30 | stage9-gate-integrity | 2026-08-15 | — | #5551 | [notes/v4.30_RELEASE_NOTES.md](notes/v4.30_RELEASE_NOTES.md) |
 | v4.29 | check-fail-open-elimination | 2026-08-15 | — | #5509 | [notes/v4.29_RELEASE_NOTES.md](notes/v4.29_RELEASE_NOTES.md) |
 | v4.28 | skill-suite-conformance | 2026-08-15 | — | #5507 | [notes/v4.28_RELEASE_NOTES.md](notes/v4.28_RELEASE_NOTES.md) |
 | v4.27 | path-and-citation-reconciliation | 2026-08-14 | — | #5506 | [notes/v4.27_RELEASE_NOTES.md](notes/v4.27_RELEASE_NOTES.md) |
