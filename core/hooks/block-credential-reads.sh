@@ -28,7 +28,7 @@ readonly BLOCK_LOG="${HOOK_DIR}/block-log.jsonl"
 readonly BYPASS_LOG="${HOOK_DIR}/bypass-log.jsonl"
 
 # --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
-# Two properties this guard must have that the prior shape did not (#5071, ADR-133):
+# Two properties this guard must have that the prior shape did not (#5071, ADR-134):
 #
 #  1. A helper whose top level runs `exit 0` is SYNTACTICALLY VALID and terminates this
 #     hook from inside the guard's own condition — before the guard can rule. `bash -n`
