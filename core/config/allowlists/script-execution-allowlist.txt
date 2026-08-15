@@ -79,6 +79,57 @@ core/deploy/deploy.sh
 ./.claude/hooks/tests/*.test.sh
 .claude/hooks/tests/*.test.sh
 
+# --- Hook test suites, SOURCE-TREE forms (core/hooks/tests/) ---
+#
+# The four `.claude/hooks/tests/...` rows immediately above address the DEPLOYED
+# layout. That layout is materialized only inside the CI sandbox by
+# core/hooks/tests/setup-ci-layout.sh: docs/scripts/setup-workspace.sh declares the
+# hooks `tests/` subdirectory OUT-OF-SCOPE for deployment (source-tree only; NOT
+# installed to the workspace `.claude/hooks/`), so `.claude/hooks/tests/` does not
+# exist on a workspace and those four rows resolve to nothing there.
+#
+# The suites actually live in the source tree, at core/hooks/tests/. Without the
+# rows below, `bash core/hooks/tests/<suite>.test.sh` from a repo checkout or a
+# worktree is BLOCK-DESTRUCTIVE-022-blocked, and the regression suite for the hooks
+# themselves cannot be run locally at all — which is exactly what happened during
+# this release: an engineering wave could not execute its designed local arm matrix
+# and CI became the sole verification arm for the highest-risk change in the bundle.
+#
+# The deployed-layout rows are retained rather than replaced: they are what the CI
+# sandbox matches, and both layouts are legitimate invocation sites.
+#
+# Existence was never the question — the deployed-layout rows above exist too. The
+# question is whether a row RESOLVES to a file on the layout the invocation runs on,
+# and on a source checkout only these do. All four per-tool invocation forms are
+# required per the form convention documented above; a missing form is a silent
+# block from an unexpected cwd.
+[PMO_PLATFORM_ROOT]/core/hooks/tests/*.test.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/hooks/tests/*.test.sh
+./core/hooks/tests/*.test.sh
+core/hooks/tests/*.test.sh
+
+# Hook test runner, source-tree form (auto-discovers and runs every *.test.sh above)
+[PMO_PLATFORM_ROOT]/core/hooks/tests/test-runner.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/hooks/tests/test-runner.sh
+./core/hooks/tests/test-runner.sh
+core/hooks/tests/test-runner.sh
+
+# Hook dependency-hardening conformance gate (GHSA-9cjm). Named row rather than a
+# core/hooks/tests/* glob: this file does NOT carry the `.test.sh` suffix, so the
+# suite glob above does not reach it, and a blanket glob over the directory would
+# also admit any future non-suite executable dropped there.
+[PMO_PLATFORM_ROOT]/core/hooks/tests/check-hook-dep-hardening.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/hooks/tests/check-hook-dep-hardening.sh
+./core/hooks/tests/check-hook-dep-hardening.sh
+core/hooks/tests/check-hook-dep-hardening.sh
+
+# CI-layout materializer — builds the deployed `.claude/hooks/` tree the suites run
+# against. Same naming rationale as the row above: no `.test.sh` suffix.
+[PMO_PLATFORM_ROOT]/core/hooks/tests/setup-ci-layout.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/hooks/tests/setup-ci-layout.sh
+./core/hooks/tests/setup-ci-layout.sh
+core/hooks/tests/setup-ci-layout.sh
+
 # Release-pipeline tools (Stage 5 Solutioning + Stage 6 Engineering tooling)
 [PMO_PLATFORM_ROOT]/release/tools/blast-radius.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/blast-radius.sh
@@ -243,6 +294,37 @@ release/tools/claim-version.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-registry-currency.sh
 ./core/deploy/tools/check-registry-currency.sh
 core/deploy/tools/check-registry-currency.sh
+# check-citation-anchors.sh — the Check 66 citation-anchor predicate. It is a
+# deploy-time-only check invoked by deploy.sh, AND it is executed directly
+# agent-side as the two-arm demonstration a citation-predicate change owes:
+# the SAME predicate is run once before the change (expect zero findings on the
+# sensitivity fixture) and once after (expect non-zero), because a single-arm
+# result cannot distinguish a working widening from a dead probe. It carried
+# ZERO rows, so that agent-side demonstration was BLOCK-DESTRUCTIVE-022-blocked
+# and the arm that proves the widening works was unrunnable. All four invocation
+# forms per the per-tool form convention above. (CI runs no Claude hooks, so
+# these rows are for the agent-side path, not the workflow step.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-citation-anchors.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-citation-anchors.sh
+./core/deploy/tools/check-citation-anchors.sh
+core/deploy/tools/check-citation-anchors.sh
+# build-skill-packages.sh — the .skill package builder. Both of its modes are
+# invoked agent-side and both were blocked: the read-only `--skills-for-paths`
+# query (the delegated package-staleness detection that the release close-out
+# and the version-claim tool both consume, and that a release must be able to
+# run directly to measure its own candidate set), and the build mode itself,
+# which Stage 6 self-verification runs to rebuild a rostered skill's package
+# after editing its SKILL.md or references/ — a rebuild the package-freshness
+# CI gate then requires in the same PR. It carried ZERO rows, so an agent asked
+# to verify either behaviour hit BLOCK-DESTRUCTIVE-022 instead (observed live:
+# both a hub and a Solutioning spoke were blocked invoking the query mode, and
+# the measurement had to be deferred to Dev Testing). All four invocation forms
+# per the per-tool form convention above. (CI runs no Claude hooks, so these
+# rows are for the agent-side path, not the workflow step.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/build-skill-packages.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/build-skill-packages.sh
+./core/deploy/tools/build-skill-packages.sh
+core/deploy/tools/build-skill-packages.sh
 # check-issue-ref-validity.sh — the extracted Issue-reference validity gate.
 # CI WIRING, stated because this tool's wiring is unusual: the script IS
 # CI-executed — the `issue-ref` job in .github/workflows/repo-integrity.yml calls
@@ -260,6 +342,18 @@ core/deploy/tools/check-registry-currency.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-issue-ref-validity.sh
 ./core/deploy/tools/check-issue-ref-validity.sh
 core/deploy/tools/check-issue-ref-validity.sh
+# check-pv7-vocabulary.sh — the PV-7a Register B spelling gate (deploy.sh Check 69 +
+# the `pv7-vocabulary` job in .github/workflows/repo-integrity.yml). Executed
+# agent-side as `bash <path> --self-test` (the 5-case fixture set), bare (the corpus
+# scan), and `--no-exempt` (to price the exemptions), plus by the selftest-discovery
+# engine. All four forms per the per-tool convention above, so BLOCK-DESTRUCTIVE-022
+# does not block the agent-side verification path — the path that runs the
+# sensitivity arm. (CI itself runs no Claude hooks, so these rows are for the
+# agent-side path, not the workflow step.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-pv7-vocabulary.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-pv7-vocabulary.sh
+./core/deploy/tools/check-pv7-vocabulary.sh
+core/deploy/tools/check-pv7-vocabulary.sh
 # test-status-label-invariant.sh — deploy.sh Check 16 status-label invariant fixture
 # self-test. Now a wired step of the shell-tests job in install-tests.yml AND invoked
 # agent-side at Stage 7 Dev Testing, plus by any operator re-running it locally. It
@@ -419,6 +513,21 @@ core/deploy/tests/test_g1_form_family.sh
 ./core/deploy/tests/test_g1_release_resolver.sh
 core/deploy/tests/test_g1_release_resolver.sh
 
+# Check 56 M2 advisory-class regression — the dynamic proof that the M2
+# reconciliation leg is STRUCTURALLY unable to gate: it extracts the real
+# emitter bodies and the real M1/M2 emit region from deploy.sh and executes
+# them against a real failure counter, with a sensitivity arm that drives an M1
+# finding through the same region at the same enforce mode so the M2 zero is a
+# measured zero rather than an untested one. Same four invocation forms, for the
+# same reason as the three siblings above: it is run by the install-tests
+# shell-tests job AND agent-side at Stage 6/7 dev testing, and a delivered test
+# whose allowlist rows never landed is blocked and therefore unrunnable
+# agent-side on arrival.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_check56_m2_advisory.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_check56_m2_advisory.sh
+./core/deploy/tests/test_check56_m2_advisory.sh
+core/deploy/tests/test_check56_m2_advisory.sh
+
 # context-budget-auditor Measure-mode scanner — read-only per-component token-cost
 # scan across the loadable-component surface, plus a --self-test mode. Invoked
 # agent-side by the skill's Measure mode, so all four invocation forms per the
@@ -479,6 +588,21 @@ core/deploy/tests/run-install-regression.sh
 ./core/deploy/tests/test_install_end_to_end.sh
 core/deploy/tests/test_install_end_to_end.sh
 
+# Version-freeness injection arms (test_version_freeness_injection.sh) — in-tree
+# bash CLI. Executes the merge gate's independent-candidate resolution branch and
+# asserts all three outcomes it can produce: an injection-off control that SKIPs,
+# a sensitivity arm whose already-claimed candidate returns a collision at exit 1,
+# and a specificity arm whose out-of-lineage candidate returns free at exit 0.
+# Read-only against the live corpus and the origin tag surface. Executed agent-side
+# at Stage 6 self-verification and Stage 7 Dev Testing, and by the version-freeness
+# workflow job; all four invocation forms so BLOCK-DESTRUCTIVE-022 does not block
+# the agent-side path. (CI runs no Claude hooks, so this entry is for the
+# agent-side path, not the workflow.) Named row rather than a glob, per the
+# entries above.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_version_freeness_injection.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_version_freeness_injection.sh
+./core/deploy/tests/test_version_freeness_injection.sh
+core/deploy/tests/test_version_freeness_injection.sh
 # start-skill-editor-session.sh — mints the pmo-skill-editor session sentinel that
 # block-skill-direct-edit.sh (Gate 2) requires. Allowlisted because the gate's own deny
 # message instructs an agent to start a session, and an unrunnable minter reproduces the

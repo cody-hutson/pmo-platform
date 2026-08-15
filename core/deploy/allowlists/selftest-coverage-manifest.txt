@@ -75,6 +75,7 @@ core/deploy/tools/check-citation-anchors.sh
 core/deploy/tools/check-convention.sh
 core/deploy/tools/check-enum-parity.sh
 core/deploy/tools/check-issue-ref-validity.sh
+core/deploy/tools/check-pv7-vocabulary.sh
 core/deploy/tools/check-registry-currency.sh
 core/deploy/tools/path-leak-patterns.sh
 core/deploy/tools/start-skill-editor-session.sh

@@ -8,6 +8,10 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.29 (2026-08-15) — Checks now tell you when they could not measure
+
+### v4.28 (2026-08-15) — Checks now measure everything they claim to cover
+
 ### v4.27 (2026-08-15) — Citations now point at files that exist, and say when nothing writes them
 
 ### v4.26 (2026-08-15) — Checks stop failing correct work, and say when they are switched off

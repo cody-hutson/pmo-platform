@@ -359,7 +359,7 @@ Section 1 Rule 15 and Section 8 Probe Validity: the invocation, the denominator
 searched, the sensitivity arm with its observed non-zero result, the specificity
 arm with its observed zero wherever Section 8 triggers it, and evidence the
 extraction was non-empty for the subject AND for each arm. Cite the elements by
-ID (PV-0 through PV-6); do not restate the section. A zero whose control arm
+ID (PV-0 through PV-7); do not restate the section. A zero whose control arm
 also returned zero is a BROKEN PROBE, not a clean contention map — report the
 probe unusable rather than the population empty.
 
@@ -1603,7 +1603,7 @@ AFTER a state change).
 Every claim in your output of the form "0 occurrences" / "no findings" /
 "CLEAN" / "absent" / "N of M" carries a probe record. The rule is canonical at
 `core/disciplines/review-discipline-principles.md` Section 1 Rule 15 (the
-obligation) and Section 8 Probe Validity (elements PV-0 through PV-6, the
+obligation) and Section 8 Probe Validity (elements PV-0 through PV-7, the
 arm-selection rule, the verdict rule, and the mapping into a consuming verdict
 enum). Read that section; cite it by element ID. Do NOT restate it here or in
 your output — this block reproduces only the record form.

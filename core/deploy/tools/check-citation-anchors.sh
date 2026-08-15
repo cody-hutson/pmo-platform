@@ -17,10 +17,24 @@
 # converting a silent failure mode into a detectable one.
 #
 # TWO LEXICAL FORMS, because narrowing to one was measured to miss real carriers:
-#   F1  SKILL.md:NNN        filename-qualified line anchor
+#   F1  <basename>.md:NNN   filename-qualified line anchor, ANY markdown basename
 #   F2  `:NNN`              backticked bare line number, no filename
 # A predicate covering only F1 misses 3 live anchors inside a file it already flags, and
-# misses an entire third carrier file whose 9 anchors are all F2.
+# misses an entire third carrier file whose 9 anchors are all F2. F1 was itself once
+# narrowed to the single basename SKILL.md, which missed the most common carrier shape of
+# all: a cross-skill citation naming some OTHER reference document plus a line number.
+# Measured: the 49 residual occurrences cleared across 18 lines in 2 files resolved to 6
+# distinct targets, and NONE of them was a SKILL.md. The widened arm is a strict superset
+# of the narrow one, so nothing the narrow form caught can now be missed.
+#
+# USE vs MENTION — the boundary that keeps the widened F1 honest, declared rather than
+# exempted. A citation is matched only when a LITERAL DIGIT RUN immediately follows the
+# colon. Prose that DOCUMENTS this convention by describing the forbidden form uses a
+# metasyntactic placeholder (`<other-file>.md:NNN`) or plain prose, and is therefore
+# structurally invisible to this predicate — no marker vocabulary, no exemption list, no
+# second source of truth for what counts as a citation. Content that genuinely needs a
+# literal digit run as its SUBJECT (negative controls, characterization fixtures) lives
+# in the fixture / eval / testdata path classes that are already exempt below.
 #
 # SCOPE — tracked *.md under the three skill roots. NOT the whole corpus: every one of
 # the 38 out-of-scope lines a corpus-wide predicate returns is a LEGITIMATE use — frozen
@@ -46,7 +60,26 @@
 #       incapable of seeing it. A renumbered step therefore still fails open. Declared
 #       here so the residual is on the face of the gate rather than implied away;
 #   (c) non-.md files — tool output strings legitimately print file:line;
-#   (d) citations to non-SKILL.md targets.
+#   (d) citations whose TARGET is not a .md file — a deploy.sh:NNN or foo.py:NNN pin,
+#       where tool output legitimately prints file:line and the canonical `§`-anchor
+#       form does not exist for a non-markdown target; and line-number references that
+#       name no file and carry no backticks (a bare prose "line 206 of the contract"),
+#       which this predicate is lexically incapable of seeing, exactly as (b)'s prose
+#       sub-referent is. MEASURED population — a point-in-time census, not a standing
+#       invariant — over this check's own reported denominator (238 in-scope files at
+#       measurement): non-.md-target pins — 0. Bare-prose line references — 0, having
+#       been 4 across 3 files when this census was first taken, all four of which had
+#       ALREADY DRIFTED onto the wrong content. They were converted to section-name
+#       anchors in the same release that measured them; the zero is the result of that
+#       repair, not of the class being empty by nature. Counting rule, so the figure is
+#       reproducible: a member LOCATES a referent by line number. A mandated structural
+#       position ("the line-1 `allow-link` marker", 3 occurrences) specifies where a
+#       marker must live rather than pointing at content, and worked-example,
+#       fenced-sample and quoted-specimen line numbers cite no corpus file; neither is
+#       counted. BOTH sub-classes now measure zero — but this remains a census, not an
+#       invariant, and the second one has been non-zero before. Re-measure before
+#       relying on it; a blanket zero asserted as standing truth is the defect this
+#       comment previously carried.
 #
 # POSIX-portable (BSD + GNU): no \b, no GNU-only flags, LC_ALL=C. The \b form silently
 # returns zero on this platform's grep — a live hazard, not a hypothetical.
@@ -64,7 +97,13 @@ export LC_ALL=C
 GREP=/usr/bin/grep
 
 # The match predicate. Both forms, POSIX ERE, no \b.
-CITATION_RE='(SKILL\.md:[0-9]+)|(`:[0-9]+`)'
+# The F1 character class deliberately EXCLUDES `/`: a path-qualified citation still
+# matches on its basename segment, so the reported token stays basename+line and the
+# `-oE` extraction contract (and the `FAIL: <path>:<line>: <text>` output shape) is
+# preserved. The `[0-9]+` immediately after the colon is load-bearing — it is the entire
+# mechanism behind the USE vs MENTION rule above; without it this arm would match every
+# markdown filename in the corpus.
+CITATION_RE='([A-Za-z0-9._-]+\.md:[0-9]+)|(`:[0-9]+`)'
 
 # is_in_scope <path> — tree + file-type predicate; fixture trees exempt.
 is_in_scope() {
@@ -91,7 +130,7 @@ citation_findings() {
   done < <("$GREP" -nE "$CITATION_RE" "$f" 2>/dev/null)
 }
 
-# ─── --self-test: SIX committed cases, THREE verdict classes ──────────────────
+# ─── --self-test: NINE committed cases, THREE verdict classes ─────────────────
 #
 # FLAG and CLEAN are the sensitivity and specificity arms. SCOPE-OUT is a third,
 # separate class because "not flagged" and "not examined" are different results, and a
@@ -107,6 +146,14 @@ citation_findings() {
 # defect rather than the topic. The em dash below is U+2014 and is load-bearing: the
 # target headings carry it, so a build that normalised it to a hyphen would break the
 # verbatim rule this convention rests on. CLEAN-1 guards that byte.
+#
+# FLAG-3 / CLEAN-3 / CLEAN-4 are the widened-F1 arms. FLAG-3 is the sensitivity case the
+# narrow predicate returned ZERO for and the widened one returns two findings for; its
+# body is verbatim from the measured live defect, per the FLAG-1/FLAG-2 discipline.
+# CLEAN-3 differs from FLAG-3 ONLY in the property under test — same skill, same target
+# file, same link syntax, a NAME locator instead of a LINE one — so it fails loudly if the
+# widened arm is ever written without its `:[0-9]+` tail. CLEAN-4 makes the declared
+# USE vs MENTION boundary testable: without it that rule is prose with no probe behind it.
 self_test() {
   local root rc=0 parsed=0 pass=0
   local flag_pass=0 flag_findings=0 clean_pass=0 scope_pass=0
@@ -117,8 +164,11 @@ self_test() {
 
   mkdir -p "$root/core/skills/fx-flag-1" \
            "$root/core/skills/fx-flag-2/references" \
+           "$root/core/skills/fx-flag-3/references" \
            "$root/core/skills/fx-clean-1" \
            "$root/core/skills/fx-clean-2/references" \
+           "$root/core/skills/fx-clean-3/references" \
+           "$root/core/skills/fx-clean-4" \
            "$root/core/standards" \
            "$root/core/skills/fx-scope-2/tests"
 
@@ -128,12 +178,24 @@ self_test() {
   # FLAG-2 — F2, verbatim from the live defect.
   printf '%s\n' 'Risk Register (`:206`), Cross-Milestone Validation (`:171`)' \
     > "$root/core/skills/fx-flag-2/references/contract.md"
+  # FLAG-3 — widened F1, verbatim from the measured live defect. The NARROW predicate
+  # returns zero here; the widened one returns two.
+  printf '%s\n' 'Commitment-reliability bands: see `backlog-health.md:20` and `capacity-model.md:274`.' \
+    > "$root/core/skills/fx-flag-3/references/registry.md"
   # CLEAN-1 — the near-miss: name locator instead of line locator. Carries U+2014.
   printf '%s\n' '[`release-planner` § Mode A — Backlog Analysis](../release-planner/SKILL.md)' \
     > "$root/core/skills/fx-clean-1/SKILL.md"
   # CLEAN-2 — the sibling-contract form: mode named, no locator at all.
   printf '%s\n' '`release-executor` **Mode A (Execute Release)**' \
     > "$root/core/skills/fx-clean-2/references/contract.md"
+  # CLEAN-3 — FLAG-3's near-miss: same skill, same target file, same link syntax, a NAME
+  # locator instead of a LINE one. Fails loudly if the widened arm loses its digit tail.
+  printf '%s\n' 'bands: see [`delivery-engine` § Commitment reliability](../delivery-engine/references/backlog-health.md).' \
+    > "$root/core/skills/fx-clean-3/references/registry.md"
+  # CLEAN-4 — the USE vs MENTION boundary: prose DOCUMENTING the forbidden form via a
+  # metasyntactic placeholder, which carries no literal digit run and so cannot match.
+  printf '%s\n' 'Never locate a referent as `<other-file>.md:NNN` — cite the section by name.' \
+    > "$root/core/skills/fx-clean-4/SKILL.md"
   # SCOPE-OUT-1 — external-upstream pin, correct by design; outside the skill tree.
   printf '%s\n' 'upstream_citation: an exact pin, e.g. skill-creator/SKILL.md:1' \
     > "$root/core/standards/fx-upstream.md"
@@ -144,10 +206,13 @@ self_test() {
   local -a flag_cases=(
     "core/skills/fx-flag-1/SKILL.md"
     "core/skills/fx-flag-2/references/contract.md"
+    "core/skills/fx-flag-3/references/registry.md"
   )
   local -a clean_cases=(
     "core/skills/fx-clean-1/SKILL.md"
     "core/skills/fx-clean-2/references/contract.md"
+    "core/skills/fx-clean-3/references/registry.md"
+    "core/skills/fx-clean-4/SKILL.md"
   )
   local -a scope_cases=(
     "core/standards/fx-upstream.md"
@@ -201,7 +266,10 @@ self_test() {
     rc=1
   fi
 
-  echo "SELF-TEST: ${pass}/${parsed} cases pass — must-flag arm ${flag_pass}/2 observed NON-ZERO (${flag_findings} finding(s)); must-not-flag arm ${clean_pass}/2 observed ZERO; scope-out arm ${scope_pass}/2 excluded from the denominator"
+  # Arm denominators are DERIVED from the case arrays, never restated as literals: a
+  # hardcoded /2 beside three cases would silently under-report the arm the CTRL emission
+  # binds, which is the exact fail-open shape this check exists to prevent.
+  echo "SELF-TEST: ${pass}/${parsed} cases pass — must-flag arm ${flag_pass}/${#flag_cases[@]} observed NON-ZERO (${flag_findings} finding(s)); must-not-flag arm ${clean_pass}/${#clean_cases[@]} observed ZERO; scope-out arm ${scope_pass}/${#scope_cases[@]} excluded from the denominator"
   return $rc
 }
 

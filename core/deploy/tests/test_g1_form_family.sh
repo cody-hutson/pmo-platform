@@ -427,7 +427,7 @@ mkdir -p "$DEGRADED_ROOT/release/tools" "$DEGRADED_ROOT/core/deploy/tools"
 cp "${SRC_ROOT}/release/tools/bundle-issues-parser.py" "$DEGRADED_ROOT/release/tools/" 2>/dev/null || true
 DEG_OUT="$TMPD/degraded.txt"
 FIXTURE_SRC_ROOT="$DEGRADED_ROOT" bash "$RUNNER" "$FIX" > "$DEG_OUT" 2>"$TMPD/deg.err"
-_deg_block=$(/usr/bin/grep -c 'Step-0 form-family resolution NOT EVALUATED' "$DEG_OUT" || true)
+_deg_block=$(/usr/bin/grep -c 'Step-0 form-family resolution NOT-EVALUATED' "$DEG_OUT" || true)
 _deg_perissue=$(/usr/bin/grep -c "issue #${N_F3} " "$DEG_OUT" || true)
 _deg_f1=$(/usr/bin/grep -c "issue #${N_F1_BAD} " "$DEG_OUT" || true)
 if [[ "$_deg_block" -eq 1 ]]; then
@@ -523,7 +523,7 @@ cp "$KIND_TOOL" "$AC_DEGRADED_ROOT/core/deploy/tools/" 2>/dev/null || true
 cp -R "${SRC_ROOT}/core/deploy/packs" "$AC_DEGRADED_ROOT/core/deploy/" 2>/dev/null || true
 AC_DEG_OUT="$TMPD/ac_degraded.txt"
 FIXTURE_SRC_ROOT="$AC_DEGRADED_ROOT" bash "$RUNNER" "$FIX" > "$AC_DEG_OUT" 2>"$TMPD/ac_deg.err"
-_acdeg_block=$(/usr/bin/grep -c 'G1-05a presence NOT EVALUATED' "$AC_DEG_OUT" || true)
+_acdeg_block=$(/usr/bin/grep -c 'G1-05a presence NOT-EVALUATED' "$AC_DEG_OUT" || true)
 _acdeg_perissue=$(/usr/bin/grep -c 'G1-05a FAIL (presence)' "$AC_DEG_OUT" || true)
 if [[ "$_acdeg_block" -eq 1 ]]; then
   pass "J missing AC primitive emits EXACTLY ONE population-wide NOT-EVALUATED finding (no fan-out)"
