@@ -80,7 +80,7 @@ Both authorities agree at the anchor. Recomputed next-free for bump-class `minor
 | 13 | #4908 obligation trigger | AC-2's method quotes one of the card's two Proposed-Change sentences | **Two-limb trigger.** Under the first limb alone, recall against the three known instances is 2 of 3 — the Wave-1 transport claim changes no set membership and would not have fired. With both limbs, recall is 3 of 3 | Stage-5 Tier 1 [ADJUST] |
 | 14 | #4908 gate authority | Spoke recommended gate-blocking; hub counter-proposed a shadow → warn → enforce ladder | **GATE-BLOCKING**, operator-rendered. The hub's counter-case — a new obligation landing gate-blocking on day one carries no drain evidence behind it — is preserved as a recorded tradeoff, not re-argued | Collective Review decision D2 |
 | 15 | #4458 root cause | The card named one leg | **Two independent legs.** A path-scoped invocation was measured returning `KNOWN=0 STALE=71` at both scopes tested, which the card's single named root cause does not explain. Fixing one leg alone could leave the other producing a different false clean | Stage-4 risk R-8, confirmed at Stage 5 |
-| 16 | ADRs | None allocated | **ADR-133** allocated to #4907, re-derived against `origin/main` at Commit 0. **The other five cards each recorded a negative determination with rationale** — none is a skip | Stage-5 designs + § ADR Allocation |
+| 16 | ADRs | None allocated | **ADR-134** allocated to #4907, re-derived against `origin/main` at Commit 0. **The other five cards each recorded a negative determination with rationale** — none is a skip | Stage-5 designs + § ADR Allocation |
 | 17 | Scope | Six cards, unlocked | **LOCKED** — six cards as designed. No merge, split or drop; all File Change Matrices frozen. **Every card required correction; none required dropping** | Collective Review decision D1 |
 
 **What Stage 5 established about this bundle, carried forward because it changes how Stage 8 must grade.** The premises held; the *proposed mechanisms and the acceptance criteria* repeatedly did not. Three cards carried acceptance criteria that would have certified the very defect they were written to eliminate — one unrunnable as written (a control arm over a population of zero), one whose proposed discriminator produced four false positives at the release base, one satisfiable by a still-broken tool. **A criterion is a measurement too.** Stage 8 grades against criteria; on this release the criteria themselves are part of what is under test.
@@ -147,7 +147,7 @@ Consolidated from the six Stage-5 design specs, reconciled to the Stage-5 and Co
 | #4907 | `core/deploy/tests/test_g1_form_family.sh` | MODIFY — **coordinated edit, declared not absorbed.** The harness extracts a `deploy.sh` region verbatim and executes it; its assertion matches the space-form token and must be re-spelled in the same commit |
 | #4907 | `core/deploy/tools/README.md` | MODIFY — three tool rows restate the degraded state in the frozen vocabulary, replacing three divergent prose renderings. **Row 67 is shared with #4890 — see the Contention Map** |
 | #4907 | `release/references/how-to/hub-spoke-bridge.md` | MODIFY — cascade only: two literal element-series enumerations extend to the new rider |
-| #4907 | `core/ADRs/ADR-133-degraded-state-emit-contract.md` | **ADD** — the D-1 primitive selection and the rejected-alternative grounds |
+| #4907 | `core/ADRs/ADR-134-degraded-state-emit-contract.md` | **ADD** — the D-1 primitive selection and the rejected-alternative grounds |
 | #4890 | `core/deploy/deploy.sh` | MODIFY — the M2 call site and its adjacent call-site comment; two extraction sentinels |
 | #4890 | `core/deploy/tests/test_check56_m2_advisory.sh` | **ADD** — the AC-2 dynamic proof, six arms, emitters deliberately **not** stubbed |
 | #4890 | `.github/workflows/install-tests.yml` | MODIFY — one named step; the suite is invoked by explicit named step, not by glob |
@@ -177,7 +177,7 @@ Machine-readable path list for deterministic Stage 7 / 8 / 9 chip extraction —
 .github/workflows/install-tests.yml
 .github/workflows/release-tooling-smoke.yml
 .github/workflows/version-freeness.yml
-core/ADRs/ADR-133-degraded-state-emit-contract.md
+core/ADRs/ADR-134-degraded-state-emit-contract.md
 core/config/allowlists/script-execution-allowlist.txt
 core/deploy/deploy.sh
 core/deploy/tests/fixtures/count-structure-fixtures.txt
@@ -234,7 +234,7 @@ Re-derived against `origin/main` at Commit 0 — **not** against the worktree, a
 
 | ADR | Card | Home | Subject |
 |---|---|---|---|
-| **ADR-133** | #4907 | `core/ADRs/` | The degraded-state emit contract: a check's emitted state set carries a distinct member for every reachable state of its predicate, degraded and clean never share a member, and the degraded member never gates |
+| **ADR-134** | #4907 | `core/ADRs/` | The degraded-state emit contract: a check's emitted state set carries a distinct member for every reachable state of its predicate, degraded and clean never share a member, and the degraded member never gates |
 | 134 | — | — | Free at Commit 0 |
 
 **The other five cards each recorded a negative ADR determination with rationale** — a threshold evaluated, not a step skipped. The most instructive is #4890's: once the umbrella's ADR lands, its own decision is no longer non-obvious, because that card *applies* the contract rather than deciding it. **Numbering is global across both directories in one sequence.**
@@ -276,7 +276,7 @@ Four release-scoped cohesion constraints. Each spans ≥2 cards, requires no dep
 | #4908 | Replay each of the three known instances against the obligation **as originally authored**; run the control | Recall 3 of 3 under the two-limb trigger; the explicit does-NOT-fire set returns zero |
 | #4458 | Run the check path-scoped and unscoped; assert the scope record is branched before any counter is read | The false-STALE population goes to zero under path scope; an input-deficient population **exits 3** rather than reporting a vacuous clean |
 | #4705 | Run the injected-candidate arm live and the hermetic witness triple | The gate reports a collision on a colliding candidate and passes on a free one. **A passing run alone is not evidence** — the sensitivity arm is the card |
-| Release-wide | `bash core/deploy/deploy.sh --check`; `python3 release/tools/check-adr-numbers.py` | Zero genuine `FAIL:` lines (operator-instance drift in the instance-path checks is not a release failure); ADR numbering contiguous with ADR-133 present |
+| Release-wide | `bash core/deploy/deploy.sh --check`; `python3 release/tools/check-adr-numbers.py` | Zero genuine `FAIL:` lines (operator-instance drift in the instance-path checks is not a release failure); ADR numbering contiguous with ADR-134 present |
 
 **Regression arms (#4907 AC-3) — three already-fixed instances, none a build target.** Assert the terminal-state path still fires on a malformed primitive emit; that an unreadable pack and a vocabulary shortfall each still surface as a recorded degradation rather than a silent exit 0, **and that an absent pack still does not**; and that the release resolver still separates *no release in flight* from *in flight but unidentified* from *identified but wrong*. For all three, assert the wording conforms to the recorded convention rather than merely predating it.
 

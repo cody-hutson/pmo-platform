@@ -701,7 +701,7 @@ def main(argv=None):
     baseline_in_scope = len(baseline) - excluded
 
     # ── Register A / Register B — consumed FROZEN from the degraded-state emit
-    # contract (core/ADRs/ADR-133). No token is coined here. `truncated` and
+    # contract (core/ADRs/ADR-134). No token is coined here. `truncated` and
     # `fixture` are deliberately unused rather than accidentally omitted: the reader
     # is an unbounded fh.read(), so no truncation state exists to report, and the
     # fixture harness drives real files through the ordinary path, so it has no

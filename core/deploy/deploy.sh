@@ -10172,7 +10172,7 @@ sys.stdout.write("".join(out) + "|")
             fi
           fi
           # M2 — the ADVISORY emitter class (review-discipline-principles.md § 8
-          # PV-7; ADR-133): M2 MEASURES, but its predicate cannot separate a
+          # PV-7; ADR-134): M2 MEASURES, but its predicate cannot separate a
           # description that legitimately lags membership mid-release from a
           # genuine divergence. That is the ADVISORY predicate, so it routes
           # through flag_advisory_only — which has no mode `case` and no ISSUES
@@ -11355,7 +11355,7 @@ sys.stdout.write("".join(out) + "|")
   #
   # WHAT IT ASSERTS. review-discipline-principles.md § 8.1 PV-7a freezes the
   # human-readable degraded-state register at two members and adds "No third
-  # spelling"; ADR-133 D2 reconciles every divergent rendering of the TERMINAL
+  # spelling"; ADR-134 D2 reconciles every divergent rendering of the TERMINAL
   # member to the hyphenated form. This check asserts that reconciliation holds
   # across the tracked corpus.
   #

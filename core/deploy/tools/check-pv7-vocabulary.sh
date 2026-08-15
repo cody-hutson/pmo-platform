@@ -4,7 +4,7 @@
 #
 # WHAT IT ASSERTS. review-discipline-principles.md § 8.1 PV-7a freezes Register B —
 # the human-readable degraded-state token — at two members and adds "No third
-# spelling." ADR-133 D2 reconciles every divergent rendering of the TERMINAL member
+# spelling." ADR-134 D2 reconciles every divergent rendering of the TERMINAL member
 # to the hyphenated form. This gate asserts that reconciliation holds: an all-caps
 # rendering of the terminal token separated by anything OTHER than a single hyphen
 # is an unsanctioned third spelling and FAILs.
@@ -16,7 +16,7 @@
 # convention's own defect class arriving through the front door, undetected. A rule
 # with no falsifier is a comment.
 #
-# WHY ALL-CAPS IS THE DISCRIMINATOR, AND WHY THAT IS THE WHOLE POINT. ADR-133 D2
+# WHY ALL-CAPS IS THE DISCRIMINATOR, AND WHY THAT IS THE WHOLE POINT. ADR-134 D2
 # chose the hyphenated form for one stated reason: the space-separated variant "is
 # not a greppable token: it matches ordinary prose, and the grading probe for this
 # convention is a grep." That is measurably true here — the corpus carries ~30
@@ -71,7 +71,7 @@
 # merge broke, and it is asserted rather than assumed.
 #
 # EXIT CODES (the corpus's three-value contract; no fourth member — roughly thirty
-# call sites branch on three, and ADR-133 rejected widening it):
+# call sites branch on three, and ADR-134 rejected widening it):
 #   0  clean — every all-caps rendering is the sanctioned spelling
 #   1  one or more unsanctioned spellings (one FAIL line each)
 #   3  input failure / broken probe — not a git work tree, zero files enumerated,
@@ -202,7 +202,7 @@ pv7_scan() {
         ln=$(printf '%s' "$vl" | awk -F: '{print $(NF-2)}')
         detail=$(printf '%s' "$vl" | sed 's/.*:VIOLATION://')
         violations=$((violations + 1))
-        findings="${findings}FAIL: ${f}:${ln} — unsanctioned spelling of the PV-7a Register B terminal token (${detail}). Reconcile to ${PV7_SANCTIONED} (review-discipline-principles.md § 8.1 PV-7a; ADR-133 D2). No third spelling.
+        findings="${findings}FAIL: ${f}:${ln} — unsanctioned spelling of the PV-7a Register B terminal token (${detail}). Reconcile to ${PV7_SANCTIONED} (review-discipline-principles.md § 8.1 PV-7a; ADR-134 D2). No third spelling.
 "
       done <<EOF
 $v_lines

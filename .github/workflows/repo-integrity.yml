@@ -1802,7 +1802,7 @@ jobs:
             echo "### Why this is gated"
             echo ""
             echo "\`review-discipline-principles.md\` § 8.1 **PV-7a** closes Register B at two"
-            echo "members and states **\"No third spelling.\"** \`ADR-133\` **D2** reconciles every"
+            echo "members and states **\"No third spelling.\"** \`ADR-134\` **D2** reconciles every"
             echo "divergent rendering of the terminal member to the hyphenated form — not"
             echo "because it was the majority spelling (it was not), but because a"
             echo "space-separated variant is **not a greppable token**: it matches ordinary"

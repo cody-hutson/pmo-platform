@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-133 — Degraded-state emit contract: a check reports its own measurement status"
+title: "ADR-134 — Degraded-state emit contract: a check reports its own measurement status"
 status: Proposed
 date: 2026-08-14
 release: check-fail-open-elimination
@@ -16,11 +16,13 @@ source_observations:
   - "A standalone tool on another module never sources the deploy surface (subject 0; the zero is usable — the extraction is 781 lines and a generic-token control arm returns 76). An emitter-only primitive therefore cannot reach one of the two live instances."
 ---
 
-# ADR-133 — Degraded-state emit contract: a check reports its own measurement status
+# ADR-134 — Degraded-state emit contract: a check reports its own measurement status
 
 ## Status
 
 **Proposed.** Authored at Engineering for the `check-fail-open-elimination` release; ratified at that release's plan-review gate.
+
+**Numbering provenance — `133 → 134`.** Held **ADR-133** branch-local; renumbered to **ADR-134** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 133. In-release citations that read "ADR-133" denote this record.
 
 ## Context
 
