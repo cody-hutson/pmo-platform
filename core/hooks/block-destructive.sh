@@ -464,8 +464,9 @@ case "$TOOL_NAME" in
 
     # BLOCK-DESTRUCTIVE-022 — bash/sh/zsh <path.sh> or source/. <path> not in allowlist
     #
-    # STRATEGY: segment first, then match. A single ERE cannot model shell grammar,
-    # and the prior single-pass pattern failed on three independent axes:
+    # STRATEGY: segment first, then match — for BOTH verbs, through ONE matcher.
+    # A single ERE cannot model shell grammar, and the prior single-pass pattern
+    # failed on five independent axes:
     #
     #   (a) the argument span `([^[:space:]]+[[:space:]]+)*` admitted `;`, `&`, and
     #       `|`, so several commands fused into ONE match. That forced a compensating
@@ -478,12 +479,24 @@ case "$TOOL_NAME" in
     #       invocation fell through to ALLOW without the allowlist being consulted.
     #   (c) a quoted path does not end in `.sh`, so `bash "x.sh"` likewise matched
     #       nothing and fell through to ALLOW.
+    #   (d) an assignment ahead of the verb moved the verb off index 0, so the whole
+    #       invocation was skipped — in BOTH directions, so it did not fail safe.
+    #       Closed by the command-position walk below.
+    #   (e) `source`/`.` ran through a SECOND, older mechanism — a `grep -oE` anchored
+    #       at line-start-or-separator, plus `head -1` — which carried (c) unfixed,
+    #       evaluated only the FIRST invocation on the line, and was evaded entirely
+    #       by (d) because its anchor could not admit a prefix at all. That mechanism
+    #       is deleted, not patched: keeping two matchers is what let the arms drift
+    #       apart, and patching would have required writing the fix twice.
     #
-    # Splitting on separators makes each segment a single command whose head token is
-    # at command position, so the FIRST non-flag operand is the script actually
-    # executed — which is what this rule always intended to adjudicate. Every segment
-    # is evaluated, not just the first, so a laundered second command cannot hide
-    # behind an allowlisted first one.
+    # Splitting on separators makes each segment a single command whose command word
+    # is resolvable, so the FIRST non-flag operand is the script actually executed —
+    # which is what this rule always intended to adjudicate. Every segment is
+    # evaluated, not just the first, so a laundered second command cannot hide behind
+    # an allowlisted first one. Both verbs share the command-position walk, the quote
+    # normalization and `check_script_target` as the single adjudicator; only the
+    # operand FILTER differs per verb, because an interpreter takes a script and
+    # `source` takes any file.
     #
     # Bash 3.2-safe throughout (macOS system bash): parameter expansion only, no
     # `tr`, no associative arrays, and the loop runs in the CURRENT shell (here-string,
@@ -506,23 +519,70 @@ case "$TOOL_NAME" in
       set +f
       [ "${#script_tokens[@]}" -ge 2 ] || continue
 
-      # interpreter at command position. Basename match subsumes every absolute
-      # form (/bin/bash, /usr/local/bin/zsh, ...) that ANCHOR_PREFIX_BASH enumerated
+      # Resolve COMMAND POSITION before reading the verb. POSIX Shell Command
+      # Language 2.9.1 defines a simple command as `prefix* word suffix*`, where a
+      # prefix is a variable assignment (or redirection) and the command word is the
+      # FIRST token that is not one. Walking the assignment run resolves command
+      # position the way the shell resolves it, instead of assuming index 0.
+      #
+      # Without this the verdict flips on a token that does not change the operation:
+      # an assignment ahead of the verb presented that assignment as the head token,
+      # matched no verb, and was never adjudicated — in BOTH directions, so it did
+      # not even fail safe.
+      #
+      # A token is a prefix assignment IFF it contains `=` AND its NAME part
+      # (everything before the FIRST `=`) is a valid shell name. Anything else
+      # TERMINATES the run and is the command word — so `a-b=1` and `--body=x` both
+      # stop the walk, and the skip cannot degrade into a general "advance past any
+      # token containing `=`". The two tests are ordered: `${tok%%=*}` returns the
+      # whole token when there is no `=`, so the pattern test must gate it.
+      #
+      # NOT skipped, by construction: `env`, `command`, `exec`, `nohup`, `timeout`,
+      # `xargs`, `eval`. Under the same grammar their head token IS a real command
+      # word, not a prefix. Covering them requires a denylist of evaluating verbs,
+      # and a denylist inside a fail-closed control is itself a fail-open surface
+      # (miss one and the evasion is silent). Deliberate, recorded residual.
+      script_hidx=0
+      while [ "$script_hidx" -lt "${#script_tokens[@]}" ]; do
+        case "${script_tokens[$script_hidx]}" in
+          [A-Za-z_]*=*)
+            case "${script_tokens[$script_hidx]%%=*}" in
+              *[!A-Za-z0-9_]*) break ;;
+            esac
+            script_hidx=$(( script_hidx + 1 ))
+            ;;
+          *) break ;;
+        esac
+      done
+      # need a verb AND at least one operand after it
+      [ $(( script_hidx + 1 )) -lt "${#script_tokens[@]}" ] || continue
+
+      # Verb at command position. Basename match subsumes every absolute form
+      # (/bin/bash, /usr/local/bin/zsh, /bin/.) that ANCHOR_PREFIX_BASH enumerated
       # explicitly, and is strictly tighter: an unlisted prefix no longer evades.
-      case "${script_tokens[0]##*/}" in
-        bash|sh|zsh) ;;
+      # `source`/`.` are adjudicated HERE rather than by a second mechanism —
+      # sourcing executes the file's contents in the current shell, which is the
+      # same execution capability the interpreter arm guards, not a lesser one.
+      script_verb=""
+      case "${script_tokens[$script_hidx]##*/}" in
+        bash|sh|zsh) script_verb="interp" ;;
+        source|.)    script_verb="source" ;;
         *) continue ;;
       esac
 
-      # walk past interpreter flags to the first operand. `-c` takes a program
-      # STRING rather than a path, so every .sh-bearing token after it is a
-      # candidate instead of just one.
-      script_idx=1
+      # walk past flags to the first operand. `-c` takes a program STRING rather
+      # than a path, so every .sh-bearing token after it is a candidate instead of
+      # just one — and `-c` is meaningless for `source`, so cmode is gated on the
+      # interpreter verb. Walking `-*` on the source arm is strictly TIGHTER than
+      # not walking it: otherwise `. -x <path>` presents `-x` as the operand.
+      script_idx=$(( script_hidx + 1 ))
       script_cmode=0
       while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
         case "${script_tokens[$script_idx]}" in
           --) script_idx=$(( script_idx + 1 )); break ;;
-          -c) script_cmode=1; script_idx=$(( script_idx + 1 )); break ;;
+          -c)
+            if [ "$script_verb" = "interp" ]; then script_cmode=1; fi
+            script_idx=$(( script_idx + 1 )); break ;;
           -*) script_idx=$(( script_idx + 1 )) ;;
           *) break ;;
         esac
@@ -538,28 +598,26 @@ case "$TOOL_NAME" in
           script_idx=$(( script_idx + 1 ))
         done
       else
+        # normalize BEFORE the filter on both verbs — a quoted path does not end in
+        # `.sh` and does not start with `/`, so an unstripped quote matches no
+        # pattern and falls through to ALLOW without the allowlist being consulted.
         script_cand="$(normalize_script_token "${script_tokens[$script_idx]}")"
-        case "$script_cand" in
-          *.sh) check_script_target "$script_cand" ;;
-        esac
+        if [ "$script_verb" = "source" ]; then
+          # `source`/`.` take ANY file, not only a script suffix. This filter is
+          # preserved verbatim from the mechanism it replaces. Do NOT unify it with
+          # the interpreter arm's `*.sh`: narrowing silently drops `/*`, `~/*` and
+          # `*.bash` coverage, and widening the interpreter arm to `/*` opens a
+          # false-positive surface with no defect behind it.
+          case "$script_cand" in
+            /*|./*|../*|~/*|*.sh|*.bash) check_script_target "$script_cand" ;;
+          esac
+        else
+          case "$script_cand" in
+            *.sh) check_script_target "$script_cand" ;;
+          esac
+        fi
       fi
     done <<< "$script_segments"
-
-    # Also detect source/. with explicit file argument
-    source_invocation="$("$PRINTF" '%s' "$COMMAND" | "$GREP" -oE "${ANCHOR_PREFIX_BASH}"'(source|\.)[[:space:]]+[^[:space:];&|]+' | head -1 || true)"
-    if [ -n "$source_invocation" ]; then
-      sourced_path="$("$PRINTF" '%s' "$source_invocation" | "$GREP" -oE '[^[:space:]]+$' || true)"
-      # Only block paths that look like files (contain / or start with ~ or end with common extensions)
-      case "$sourced_path" in
-        /*|./*|../*|~/*|*.sh|*.bash)
-          if ! is_script_allowlisted "$sourced_path"; then
-            block "BLOCK-DESTRUCTIVE-022" \
-              "source/. of script not in allowlist: $sourced_path" \
-              "add to .claude/script-execution-allowlist.txt, or set CLAUDE_HOOK_BYPASS=1"
-          fi
-          ;;
-      esac
-    fi
 
     # No Bash rule matched — allow
     exit 0
