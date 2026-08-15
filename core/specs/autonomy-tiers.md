@@ -228,7 +228,7 @@ SKILL.md frontmatter SHOULD include `autonomy_tier: <tier>` once the frontmatter
 
 ### Multi-mode skills with per-mode tiers
 
-Skills with multiple modes (e.g., pmo-qa-auditor's Modes 1-4, comms-writer's draft vs send) MAY have different tiers per mode. Declare per-mode in the mode-definition section; surface in the skill output by labeling the mode + tier inline.
+Skills with multiple modes (e.g., pmo-qa-auditor, whose mode set is enumerated in its own SKILL.md; comms-writer's draft vs send) MAY have different tiers per mode. Declare per-mode in the mode-definition section; surface in the skill output by labeling the mode + tier inline.
 
 ### Skill tier vs action tier
 

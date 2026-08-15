@@ -1,0 +1,103 @@
+# refblock-identity-fixtures.txt — committed arms for the REFBLOCK_RE identity scan
+#
+# WHY THIS FILE EXISTS. The seven detector constants are declared once, in
+# core/hooks/lib/fragile-ref-patterns.sh, and read by every surface listed in that file's
+# `Sourced by:` block. cutover-fixtures.txt already proves the PATTERNDECL detector can
+# tell a declaration from a line that merely names one. What no fixture proved is the
+# property that actually failed in practice: a surface OUTSIDE the runner's hardcoded
+# target list declared its own REFBLOCK_RE, the value drifted from the canonical one, and
+# nothing measured it — REFBLOCK_RE had zero behavioural coverage, so the scan could only
+# assert the constant was SET, never that a copy of it still AGREED.
+#
+# These are the committed arms for the discovered-population identity scan that closes
+# that hole. The scan runs over every tracked shell / YAML / Python / awk file, so the next
+# copy is caught wherever it lands rather than only in three named files.
+#
+# FORMAT (one test case per non-comment line) — the cutover-fixtures.txt schema, verbatim:
+#   <EXPECT>\t<CLASS>\t<content>
+# where
+#   <EXPECT>  = FLAG  (the arm MUST report this site)
+#             | CLEAN (the arm MUST NOT report this site)
+#   <CLASS>   = REFBLOCK-DECL  | REFBLOCK-SHAPE
+#   <content> = "<relpath>|<line content>" — the pipe-delimited idiom ISSUEREF-POS uses.
+#               Split on the FIRST '|' (a relative path never contains one); the line
+#               content may contain as many more as it likes.
+#
+# The runner materialises every row as a one-line file at <relpath> under a throwaway
+# root, ENUMERATES that root from the filesystem (not from this list), and runs the real
+# scan over it. So a row exercises discovery, the path guard, the detector and the value
+# comparison together — not just a regex.
+#
+# THE TWO ARMS ARE DIFFERENT QUESTIONS AND CARRY DIFFERENT AUTHORITY.
+#   REFBLOCK-DECL  — name-anchored. Finds sites that DECLARE `REFBLOCK_RE`. A site whose
+#                    value is byte-identical to the canonical one is accounted for, not
+#                    reported: byte-identity is one of the two states the contract allows
+#                    (the other being sourcing). A site whose value DIVERGES is a finding
+#                    and FAILS the run. Precise, so it is allowed to block.
+#   REFBLOCK-SHAPE — value-shaped. Finds the reference-block anchor shape under ANY
+#                    variable name, which is what a name-anchored probe structurally
+#                    cannot see. It matches on a CONJUNCTION — the heading-level anchor AND
+#                    the bracketed spelling — which is also what stops it reporting its own
+#                    declaration, since each half is declared on its own line. It
+#                    over-includes by construction — an independent surface may legitimately
+#                    carry an ancestor of this shape while answering a different question —
+#                    so it REPORTS and never fails.
+#
+# @@CANONICAL@@ expands to the live value of REFBLOCK_RE at run time. It is a sentinel and
+# not a literal on purpose: writing the canonical bytes into this file would create a THIRD
+# copy of the value, which is the exact defect class the scan exists to prevent. The
+# identical-value rows therefore stay correct across any future widening of the canonical
+# set, and they test the comparison rather than pinning the value.
+
+# ─── REFBLOCK-DECL — sensitivity: a divergent declaration MUST be reported ────
+# Each carries a genuinely different recognized-spelling set, and each uses one of the
+# three declaration syntaxes that have appeared in this repo (plain, `readonly`-prefixed,
+# and indented inside a YAML block scalar) — a detector that parsed only one of them would
+# pass a fixture that tested only one.
+FLAG	REFBLOCK-DECL	core/deploy/tools/divergent-plain.sh|REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences)[[:space:]]*:?[[:space:]]*$'
+FLAG	REFBLOCK-DECL	core/hooks/divergent-readonly.sh|readonly REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Pp]rovenance)[[:space:]]*:?[[:space:]]*$'
+FLAG	REFBLOCK-DECL	.github/workflows/divergent-indented.yml|          REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
+
+# ─── REFBLOCK-DECL — specificity: true near-misses that MUST NOT be reported ──
+# (a) A byte-identical declaration. It is a redeclaration, but identity holds, so it is
+#     accounted for rather than reported — the contract permits byte-identity as well as
+#     sourcing, and reporting it would make the arm fire on a state the contract allows.
+CLEAN	REFBLOCK-DECL	core/deploy/tools/identical-plain.sh|REFBLOCK_RE='@@CANONICAL@@'
+CLEAN	REFBLOCK-DECL	core/hooks/identical-readonly.sh|readonly REFBLOCK_RE='@@CANONICAL@@'
+# (b) A line that NAMES the constant and declares nothing. It differs from the positives
+#     only in the property under test — a declaration anchored at line start — so it is a
+#     real near-miss rather than an unrelated line that would pass vacuously.
+CLEAN	REFBLOCK-DECL	core/deploy/tools/names-only.sh|  REFBLOCK_HIT="$(grep -m1 -nE "$REFBLOCK_RE" "$f" 2>/dev/null || true)"
+# (c) The ancestor anchor shape under a different variable name. The name arm must stay
+#     silent on it; the shape arm below is the one that speaks.
+CLEAN	REFBLOCK-DECL	.github/workflows/decl-ancestor-anchor.yml|            | grep -nE '^#{1,6}[[:space:]]+[Ii]ssue [Rr]eferences[[:space:]]*:?[[:space:]]*$' \
+# (d) THE PATH GUARD, armed. Both rows carry a divergent value that WOULD be reported at
+#     any other path, so a zero here measures the guard rather than the content. The
+#     canonical library is excluded because it IS the declaration; the fixture directory is
+#     excluded because its rows are data, not a consuming surface. Both exclusions are path
+#     guards in the scan loop — not entries in an exemption list a later edit could widen.
+CLEAN	REFBLOCK-DECL	core/hooks/lib/fragile-ref-patterns.sh|REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences)[[:space:]]*:?[[:space:]]*$'
+CLEAN	REFBLOCK-DECL	core/hooks/testdata/decoy-decl-fixtures.txt|REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences)[[:space:]]*:?[[:space:]]*$'
+
+# ─── REFBLOCK-SHAPE — sensitivity: the shape under any name MUST be reported ──
+# This is the arm that sees what a name-anchored probe cannot. The renamed-copy row is the
+# live class it exists for: this repo already carries constants re-declared under prefixed
+# local names, so a probe searching for the canonical NAME returns zero on them.
+FLAG	REFBLOCK-SHAPE	core/deploy/tools/shape-renamed.sh|c99_refblock_re='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences)[[:space:]]*:?[[:space:]]*$'
+FLAG	REFBLOCK-SHAPE	.github/workflows/shape-ancestor-anchor.yml|            | grep -nE '^#{1,6}[[:space:]]+[Ii]ssue [Rr]eferences[[:space:]]*:?[[:space:]]*$' \
+
+# ─── REFBLOCK-SHAPE — specificity: near-misses that MUST NOT be reported ──────
+# The shape probe is a CONJUNCTION — the heading-level anchor AND the bracketed spelling —
+# so these rows split the pair and assert that neither half alone is a copy.
+# (a) Anchor without the spelling: a heading anchor of the same GRAMMAR carrying a different
+#     heading word. It differs only in the reference-block vocabulary under test.
+CLEAN	REFBLOCK-SHAPE	core/deploy/tools/shape-absent.sh|CHANGELOG_RE='^#{1,6}[[:space:]]+[Cc]hangelog[[:space:]]*:?[[:space:]]*$'
+# (a2) Spelling without the anchor: the shape a DETECTOR's own search literal takes. This is
+#     the row that keeps the probe from reporting itself — the scan declares this exact
+#     fragment, and a probe that flags its own declaration cannot be read.
+CLEAN	REFBLOCK-SHAPE	core/deploy/tools/shape-spelling-only.sh|SPELLING_FRAGMENT='[Ii]ssue [Rr]eferences'
+# (b) Prose naming the recognized headings without carrying the pattern shape — the form
+#     the gate's own user-facing failure message and its fixture generator both take.
+CLEAN	REFBLOCK-SHAPE	core/deploy/tools/shape-prose.sh|  echo "a valid reference must sit under Issue References / References / Related / Provenance / Source / Sources / Source(s)"
+# (c) The path guard again, on this arm's own detector.
+CLEAN	REFBLOCK-SHAPE	core/hooks/testdata/decoy-shape-fixtures.txt|SOME_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences)[[:space:]]*:?[[:space:]]*$'

@@ -7137,6 +7137,26 @@ sys.stdout.write("".join(out) + "|")
     # core/standards/universal-vs-localized-context.md §10.
     # Warn-mode initial; the introducing release is itself exempt per
     # reflexive-pipeline-loop discipline (a rule cannot fire on its own deploy).
+    #
+    # DELIBERATELY NOT SOURCED from core/hooks/lib/fragile-ref-patterns.sh. The
+    # exclusion is recorded in that library's registry too, so the reason is
+    # reachable from either end rather than only from the side that noticed.
+    # The resemblance to its ISSUEREF_RE / URL_RE is real, and the question is
+    # still not the same one: core/standards/universal-vs-localized-context.md
+    # states that DC1-DC5 detect localized VALUES while DC6 detects CONTENT
+    # AUTHORITY, and that the dimensions are independent. Two properties make
+    # the values non-interchangeable at the constant level. First, the leading
+    # (^|[^A-Za-z0-9]) guard is load-bearing HERE and absent there by design:
+    # DC6 is a one-shot grep with no downstream stage, so it must carry its own
+    # discrimination, whereas the library's constants are pipeline components
+    # whose discrimination arrives later (hex mask, fenced-code strip,
+    # positional-issueref.awk). Second, this is a signal-not-verdict detector
+    # governed by §7/§10 of that standard, while the library implements
+    # reference-durability-standard.md — sourcing it here would place a
+    # detector under a constant owned by a standard that does not govern it.
+    # Every absorb variant was measured against this check's own file
+    # population and every one of them changed its match behaviour.
+    # Keep the two in step by REASON, not by bytes.
     local c23_dc6='(^|[^A-Za-z0-9])#[0-9]+|github\.com/[^/]+/[^/]+/(issues|milestone|pull)/[0-9]+'
 
     # Allowlist filter — returns 0 (true) if file path matches an allowlist
