@@ -153,7 +153,7 @@ if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
 fi
 
 # --- Master-activation gate (#310) — layer 2, AFTER CLAUDE_HOOK_BYPASS and BEFORE the
-# .mode read. CLASS=security (D-R9): master-OFF NEVER makes this hook inert — the
+# rule path. CLASS=security (D-R9): master-OFF NEVER makes this hook inert — the
 # security/floor class always enforces (public-surface security is paramount; a silently
 # disabled guard -> an IRREVERSIBLE leaked commit/PR). It goes inert ONLY on the operator's
 # explicit, logged security_class_master_optout=true. Fail-toward-current-behavior: a
@@ -181,7 +181,14 @@ TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
 CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
 
 # --- Workspace-scope gate (#4436) — layer 3, AFTER the master-activation gate and
-# BEFORE the rule path. Precedence: bypass -> master -> SCOPE -> .mode -> rule.
+# BEFORE the rule path. Precedence AS IMPLEMENTED IN THIS FILE:
+#   dependency guard -> bypass -> master -> SCOPE -> rule
+# This hook is MODE-INDEPENDENT: there is no `.mode` layer. It declares no MODE_FILE and
+# reads no mode file of any name — it is one of the three always-enforce hooks, and that
+# unconditional posture is the basis on which the mode-capable cohort was permitted to
+# degrade (ADR-130 D4). check-hook-dep-hardening.sh CHECK-4 goes red if a mode reference
+# appears in the dependency-guard block. Note also that the dependency guard is the FIRST
+# gate, ahead of bypass: CLAUDE_HOOK_BYPASS cannot clear a LIB-MISSING block.
 # Inverted fail direction on the cwd axis, NOT on the lib axis. See lib/scope-guard.sh. ---
 readonly SCOPE_GUARD_LIB="${HOOK_DIR}/lib/scope-guard.sh"
 if [ -r "$SCOPE_GUARD_LIB" ]; then . "$SCOPE_GUARD_LIB" 2>/dev/null || true; fi
