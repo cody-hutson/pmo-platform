@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-135 — A sourced dependency must attest its contract out of process; a guard that its own subject can terminate is not a guard"
+title: "ADR-136 — A sourced dependency must attest its contract out of process; a guard that its own subject can terminate is not a guard"
 status: Proposed
 date: 2026-08-15
 release: hooks-enforce-under-adversity
@@ -17,7 +17,7 @@ source_observations:
   - "A checksum manifest measures ~9.9 ms per hash — roughly 2.7x the attestation probe — and converts every un-regenerated helper edit into total agent lockout, which is the release's highest-severity risk rather than a mitigation of it."
 ---
 
-# ADR-135 — A sourced dependency must attest its contract out of process
+# ADR-136 — A sourced dependency must attest its contract out of process
 
 ## Status
 
@@ -26,6 +26,8 @@ source_observations:
 **Supersedes in part:** D5 of [ADR-130](ADR-130-lib-missing-guard-is-mode-coupled.md), which stated the always-enforce floor's guarantee at its true — narrower — scope and named the valid-syntax `exit 0` residual as pre-existing and tracked separately. That residual is closed here. D5's *reasoning* stands unchanged and is not rewritten in place: it was correct when written, and the mode-coupling it justified was argued on independent grounds. ADR-130's D1-D4 and D6-D8 are unaffected, and the mode-capable cohort is not touched.
 
 **Numbering provenance — `134 → 135`.** Held **ADR-134** branch-local; renumbered to **ADR-135** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 134. In-release citations that read "ADR-134" denote this record.
+
+**Numbering provenance — `135 → 136`.** Held **ADR-135** branch-local; renumbered to **ADR-136** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 135. In-release citations that read "ADR-135" denote this record.
 
 ## Context
 
@@ -101,7 +103,7 @@ The question this record answers is not "how do we detect a corrupt helper" — 
 
 ## Numbering note
 
-This record is **ADR-135**, not the ADR-133 its design specified. The design allocated 133 as `anchor(origin/main) + 1` when the mainline anchor was 132, and accepted a deliberate collision with two unmerged sibling claims on the recorded rule that *a gap blocks the repository whereas a duplicate is tooled*, and that an unmerged branch claim is advisory rather than binding.
+This record is **ADR-136**, not the ADR-133 its design specified. The design allocated 133 as `anchor(origin/main) + 1` when the mainline anchor was 132, and accepted a deliberate collision with two unmerged sibling claims on the recorded rule that *a gap blocks the repository whereas a duplicate is tooled*, and that an unmerged branch claim is advisory rather than binding.
 
 Between that allocation and this authoring, **133 merged to mainline** under an unrelated subject (the material-edit test record, in the release ADR directory). A merged claim is binding, not advisory, so the rule that permits colliding with unmerged siblings does not reach it: taking 133 here would not be a tooled duplicate, it would be a genuine conflict with mainline. The anchor is therefore 133 and next-free is 134, which `release/tools/renumber-adr.py --next-free` independently returns.
 

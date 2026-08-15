@@ -42,7 +42,7 @@ readonly BYPASS_LOG="${HOOK_DIR}/bypass-log.jsonl"
 readonly WORKSPACE_ROOT="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"
 
 # --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
-# Two properties this guard must have that the prior shape did not (#5071, ADR-135):
+# Two properties this guard must have that the prior shape did not (#5071, ADR-136):
 #
 #  1. A helper whose top level runs `exit 0` is SYNTACTICALLY VALID and terminates this
 #     hook from inside the guard's own condition — before the guard can rule. `bash -n`

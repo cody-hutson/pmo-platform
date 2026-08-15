@@ -142,7 +142,7 @@ done
 #
 #    CHECK-4 greps guard text for what must NOT be there. This asserts what MUST be
 #    there: the four structural properties the attestation design rests on (#5071,
-#    ADR-135). One of them is a lockout gate rather than a correctness gate.
+#    ADR-136). One of them is a lockout gate rather than a correctness gate.
 #
 #    THE SKEW GATE (why this check is load-bearing and not ceremony). The floor denies
 #    when the helper's contract token does not match the value the hook captured. That
