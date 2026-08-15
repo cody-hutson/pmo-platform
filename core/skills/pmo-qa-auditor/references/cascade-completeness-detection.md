@@ -86,7 +86,8 @@ membership test**" — it is NOT a claim that the table carries the regex.
 
 **Resolution: G8-03 DERIVES its grep regex from the OLD-value string itself.** For each
 `(file, OLD-value)` pair, G8 constructs the match pattern from the OLD-value as a regex-escaped
-literal, expanded by the § 5.6 **value-scope derivative rule** (line 213): a value `20` sweeps
+literal, expanded by the value-scope derivative rule at § 5.6 Cascade-Completeness Sweep
+(Phase A4.1) → **Sweep scope (narrow — by design)** → **Value-scope**: a value `20` sweeps
 `20`, `(20)`, `20 custom`, and `twenty` if narratively used — NOT "all numbers anywhere in the
 file." The author's free-text "Sweep command(s)" line is **advisory** (a human-readable record of
 what was run); G8-03's join is computed from `(file, derived-regex)`, so it does not depend on
@@ -153,8 +154,10 @@ swept-table row suppresses the G8-03 flag), so it adds coverage without re-count
   incomplete; L5 is the layer that catches exactly that gap. Orthogonal properties of the same
   artifact at different pipeline times.
 - **L1/L2 vs L5:** L1/L2 are prevention within the matrix (narrow file-scope, by §5.6 design). L5
-  is detection across the changed-file set (the "whole-changed-file-set territory" §5.6 line 212
-  hands off). L5 fires on the occurrence L1's file-scope structurally excludes.
+  is detection across the changed-file set — the territory § 5.6 Cascade-Completeness Sweep
+  (Phase A4.1) → **Sweep scope (narrow — by design)** → **File-scope** hands to L5 when it rules
+  the matrix in and "the whole codebase" out. L5 fires on the occurrence L1's file-scope
+  structurally excludes.
 
 ---
 

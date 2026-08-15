@@ -10842,10 +10842,14 @@ sys.stdout.write("".join(out) + "|")
   # is lexically incapable of seeing, exactly as the prose sub-referent above is. MEASURED
   # population — a point-in-time census, not a standing invariant — over this check's own
   # reported denominator (238 in-scope files at measurement): non-.md-target pins — 0;
-  # bare-prose line references — 4, across 3 files, every one of them ALREADY DRIFTED onto
-  # the wrong content. A member LOCATES a referent by line number; a mandated structural
-  # position and a worked-example / fenced-sample / quoted-specimen line number are not
-  # counted. The second sub-class is real AND POPULATED — the blanket zero was false.
+  # bare-prose line references — 0, having been 4 across 3 files when first measured, all
+  # four ALREADY DRIFTED onto the wrong content. They were converted to section-name
+  # anchors in the same release that measured them, so this zero is the result of that
+  # repair rather than the class being empty by nature. A member LOCATES a referent by
+  # line number; a mandated structural position and a worked-example / fenced-sample /
+  # quoted-specimen line number are not counted. BOTH sub-classes now measure zero — still
+  # a census, not an invariant, and the second has been non-zero before. Re-measure before
+  # relying on it.
   #
   # WARN-MODE INITIAL via resolve_check_mode "citation-anchor" — the Check 51-65
   # deploy-check precedent, NOT the PreToolUse-hook .mode surface. Flip to enforce with

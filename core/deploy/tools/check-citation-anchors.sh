@@ -67,15 +67,19 @@
 #       which this predicate is lexically incapable of seeing, exactly as (b)'s prose
 #       sub-referent is. MEASURED population — a point-in-time census, not a standing
 #       invariant — over this check's own reported denominator (238 in-scope files at
-#       measurement): non-.md-target pins — 0. Bare-prose line references — 4, across 3
-#       files, and every one has ALREADY DRIFTED onto the wrong content, which is this
-#       residual behaving exactly as the paragraph above predicts. Counting rule, so the
-#       figure is reproducible: a member LOCATES a referent by line number. A mandated
-#       structural position ("the line-1 `allow-link` marker", 3 occurrences) specifies
-#       where a marker must live rather than pointing at content, and worked-example,
+#       measurement): non-.md-target pins — 0. Bare-prose line references — 0, having
+#       been 4 across 3 files when this census was first taken, all four of which had
+#       ALREADY DRIFTED onto the wrong content. They were converted to section-name
+#       anchors in the same release that measured them; the zero is the result of that
+#       repair, not of the class being empty by nature. Counting rule, so the figure is
+#       reproducible: a member LOCATES a referent by line number. A mandated structural
+#       position ("the line-1 `allow-link` marker", 3 occurrences) specifies where a
+#       marker must live rather than pointing at content, and worked-example,
 #       fenced-sample and quoted-specimen line numbers cite no corpus file; neither is
-#       counted. The second sub-class is real AND POPULATED — the blanket zero this
-#       comment used to carry was false about the very defect class the check names.
+#       counted. BOTH sub-classes now measure zero — but this remains a census, not an
+#       invariant, and the second one has been non-zero before. Re-measure before
+#       relying on it; a blanket zero asserted as standing truth is the defect this
+#       comment previously carried.
 #
 # POSIX-portable (BSD + GNU): no \b, no GNU-only flags, LC_ALL=C. The \b form silently
 # returns zero on this platform's grep — a live hazard, not a hypothetical.
