@@ -772,7 +772,24 @@ _preflight_push_target() {
 # _preflight_stamp <slug>  — read-only PRE-CAS validation (the "before the CAS"
 #   checkable half). Mutates NOTHING. Fails — so the caller HALTs BEFORE claiming a
 #   number it cannot stamp — when the stamp manifest is broken: the pre-claim plan
-#   must resolve, carry >=1 {{RELEASE_VERSION}} token, and plans/ must be writable.
+#   must resolve and carry >=1 {{RELEASE_VERSION}} token, plans/ must be writable,
+#   every --stamp-file must exist and be in CANONICAL repo-relative form, no
+#   SKILL.md version: line may carry the token, and the manifest's package
+#   consequence must be determinable.
+#
+#   THE EXPECTED REBUILD COUNT IS A STOP CONDITION, NOT A SILENT SUCCESS. Once the
+#   manifest's paths are validated, the count is announced on every path THROUGH
+#   THAT STAGE INCLUDING ZERO, and a --stamp-file manifest that stales zero
+#   packages is refused HERE — pre-CAS, where refusing costs nothing and creates
+#   no state to undo.
+#
+#   WHAT THE ABSENCE OF A COUNT LINE MEANS. An EARLIER manifest defect (no plan,
+#   no token, plans/ unwritable, a missing --stamp-file, a cross-grammar token)
+#   refuses with its own named diagnostic and NO count line, because those guards
+#   sit above the package-consequence resolution. Absence of a count therefore
+#   reads "refused before the package consequence was reached" — never "no
+#   refusal occurred". A caller keying a stop condition off this function reads
+#   the RETURN CODE; the count line tells it WHICH stage answered.
 _preflight_stamp() {
   local slug="$1" plan
   plan="$(_resolve_preclaim_plan "$slug")" || {
@@ -789,13 +806,31 @@ _preflight_stamp() {
     return 1
   }
 
-  # A plan-only manifest cannot stale a package and cannot cross a version
-  # grammar: the plan lives under release/releases/plans/, which is neither a
-  # skills/ source path nor a TEMPLATE_SYNC_MAP canonical, and its own frontmatter
-  # version IS the release version. Returning here keeps every existing plan-only
-  # caller byte-unaffected by the checks below — which is the whole invocation
-  # population in the release log to date.
-  [[ ${#STAMP_FILES[@]} -eq 0 ]] && return 0
+  # ANNOUNCE (A0), THEN PROCEED. A plan-only manifest cannot stale a package and
+  # cannot cross a version grammar: the plan lives under release/releases/plans/,
+  # which is neither a skills/ source path nor a TEMPLATE_SYNC_MAP canonical, and
+  # its own frontmatter version IS the release version. A zero package
+  # consequence here is CORRECT, not a manifest error — so it is ANNOUNCED rather
+  # than left silent (a caller must be able to read the count on every stamp path,
+  # not only on the paths that happen to resolve something), and it is NOT
+  # refused.
+  #
+  # WHY IT IS NOT REFUSED — the shipped-population argument, and that argument
+  # alone. --stamp-file has exactly ONE production intake (the argv parser below)
+  # and no shipped invocation has ever passed it: every claim in the release log
+  # to date reaches this branch. A "zero packages implies refuse" predicate would
+  # therefore break 100% of shipped invocations, which is decisive on its own.
+  #
+  # This rationale is deliberately NOT propped on the adjacent derived-slug
+  # invariant that this path "can never create a new HALT". That claim does not
+  # hold — _stamp_release_identity retains post-CAS failure returns reachable
+  # from this very branch — so what follows the announcement is a measured
+  # statement of what this pre-flight examined, never a clearance for what runs
+  # after the CAS.
+  if [[ ${#STAMP_FILES[@]} -eq 0 ]]; then
+    printf 'claim-version: stamp pre-flight — manifest stales 0 package(s): plan-only manifest (no --stamp-file entries; release/releases/plans/ is neither a skills/ source path nor a TEMPLATE_SYNC_MAP canonical). Proceeding.\n' >&2
+    return 0
+  fi
 
   # --- Everything below extends this function's stated doctrine from "can I
   #     substitute?" to "can I complete the stamp INCLUDING its package
@@ -803,13 +838,57 @@ _preflight_stamp() {
   #     where it must run: post-CAS, _stamp_release_identity NEVER un-claims the
   #     tag, so the same failure discovered late strands a half-applied stamp AND
   #     a stale package instead of simply declining to claim.
-  local f abs
+  local f abs phys_dir canon_rel
+  local noncanon=()
+
+  # BOTH SIDES PHYSICAL. pwd -P resolves symlinks, and the self-test sandboxes
+  # live under ${TMPDIR:-/tmp}, which is itself a symlink on macOS — comparing a
+  # physically-resolved child against a logical root would declare every fixture
+  # non-canonical. Resolved once, outside the loop, and only after the plan-only
+  # return above, so no shipped invocation pays for it.
+  local root_phys
+  root_phys="$(cd -- "$CLAIM_REPO_ROOT" && pwd -P)" || {
+    printf 'claim-version: stamp pre-flight — cannot resolve the physical repo root %s; the canonical form of a --stamp-file path is not decidable\n' "$CLAIM_REPO_ROOT" >&2
+    return 1
+  }
+
   for f in "${STAMP_FILES[@]}"; do
     abs="${CLAIM_REPO_ROOT}/${f}"
     [[ -f "$abs" ]] || {
       printf 'claim-version: stamp pre-flight — --stamp-file %s not found under repo root %s\n' "$f" "$CLAIM_REPO_ROOT" >&2
       return 1
     }
+
+    # PATH CANONICALITY — COLLECTED here, refused after the announcement (G7).
+    #
+    # FORM-AGNOSTIC BY CONSTRUCTION: it enumerates no path shapes. It asks the OS
+    # for the one physical form and requires the manifest to already be in it, so
+    # a leading slash, an embedded /./ (including a repeated one the intake sed
+    # cannot collapse, because sed's g flag does not rescan replacement text), a
+    # ..-traversal, a repo-escaping traversal, and any shape nobody has imagined
+    # are all covered by ONE predicate.
+    #
+    # IT REFUSES RATHER THAN NORMALISES, and that is the load-bearing half.
+    # Extending the intake normalisation was recommended against by the
+    # acceptance review this guard answers, and it is worse than merely
+    # incomplete: a ..-traversing form is MATCHED by the affected-skill resolver
+    # with the traversal segment ITSELF returned as the skill name, so the count
+    # guard below sees a non-zero count and waves it through. Normalising would
+    # quietly repair a malformed manifest into a green run; leaving it alone
+    # sends a garbage skill name to _host_rebuild_packages and HALTs AFTER the
+    # tag is bound. Refusing pre-CAS is the only option that neither guesses nor
+    # strands a claimed tag.
+    phys_dir="$(cd -- "$(dirname "$abs")" 2>/dev/null && pwd -P)" || phys_dir=""
+    if [[ -z "$phys_dir" ]]; then
+      # Practically unreachable — the -f guard above already resolved this path.
+      # Collected rather than returned so the ordering invariant holds: every
+      # refusal from here down is preceded by the count announcement.
+      noncanon+=("${f}|<unresolvable>")
+    else
+      canon_rel="${phys_dir}/$(basename "$abs")"
+      canon_rel="${canon_rel#"${root_phys}/"}"
+      [[ "$canon_rel" == "$f" ]] || noncanon+=("${f}|${canon_rel}")
+    fi
 
     # CROSS-GRAMMAR GUARD. {{RELEASE_VERSION}} resolves to the WON RELEASE TAG
     # verbatim, and the release-tag grammar and the skill version:-field grammar
@@ -846,10 +925,46 @@ _preflight_stamp() {
     printf 'claim-version: stamp pre-flight — cannot determine the package consequence of this manifest: core/deploy/tools/build-skill-packages.sh is missing or failed under %s. Not claiming a number whose stamp could silently stale a package.\n' "$CLAIM_REPO_ROOT" >&2
     return 1
   fi
-  if [[ -n "$affected" ]]; then
+  # ANNOUNCE (A1) — UNCONDITIONAL. The count IS this function's contract: the
+  # caller sees the expected rebuild count BEFORE the CAS, where refusing is
+  # free. Previously this line sat inside `if [[ -n "$affected" ]]`, so a zero
+  # resolution printed nothing and returned 0 into the compare-and-swap — the
+  # whole defect.
+  #
+  # Counted with awk, NOT `grep -c`: this file's own self-test comment states the
+  # rule ("no grep -c double-output / non-zero-on-empty pitfalls") and un-guarding
+  # a count over possibly-empty input under `set -e` is exactly the case that
+  # walks into it. awk always exits 0, so it is safe in command substitution.
+  local n_aff
+  n_aff="$(awk 'NF{n++} END{print n+0}' <<<"$affected")"
+  if [[ "$n_aff" -gt 0 ]]; then
     printf 'claim-version: stamp pre-flight — manifest stales %s package(s): %s (they will be rebuilt into the stamp commit)\n' \
-      "$(grep -c . <<<"$affected")" "$(tr '\n' ' ' <<<"$affected")" >&2
+      "$n_aff" "$(tr '\n' ' ' <<<"$affected")" >&2
+  else
+    printf 'claim-version: stamp pre-flight — manifest stales 0 package(s): %s --stamp-file path(s) resolve to no .skill package\n' \
+      "${#STAMP_FILES[@]}" >&2
   fi
+
+  # REFUSE — TWO INDEPENDENT LIMBS, both AFTER the announcement, both evaluated.
+  # They catch different, both-real classes and neither subsumes the other: G7
+  # catches a non-canonical path that the resolver nonetheless MATCHES (count
+  # non-zero, skill name garbage); G8 catches a canonical manifest whose package
+  # set is genuinely empty. A path that is both — the leading-slash form —
+  # emits both diagnoses. The announcement precedes both so that every refusal
+  # from this stage carries the count that motivated it.
+  local refuse=0 nc
+  if [[ ${#noncanon[@]} -gt 0 ]]; then
+    for nc in "${noncanon[@]}"; do
+      printf 'claim-version: stamp pre-flight — --stamp-file %s is not in canonical repo-relative form (canonical: %s). The affected-skill resolver anchors on the canonical form and git add rejects or misreads the rest, so this path either rebuilds nothing or fails AFTER the tag is claimed. Pass the canonical form; the pre-flight refuses rather than rewriting it.\n' \
+        "${nc%%|*}" "${nc#*|}" >&2
+    done
+    refuse=1
+  fi
+  if [[ "$n_aff" -eq 0 ]]; then
+    printf 'claim-version: stamp pre-flight — a --stamp-file manifest that stales 0 package(s) rebuilds nothing. Refusing pre-CAS, where refusing costs nothing; the same manifest discovered post-claim strands a bound tag with a half-applied stamp. Correct the manifest, or drop --stamp-file if only the plan is being stamped.\n' >&2
+    refuse=1
+  fi
+  [[ "$refuse" -eq 0 ]] || return 1
   return 0
 }
 
@@ -1145,6 +1260,10 @@ On success prints the claimed tag to stdout; non-zero exit on HALT.
     is announced on stderr and refused, never guessed).
 --stamp-file <path>  Optional, repeatable. Additional repo-relative token-bearing
     file(s) whose {{RELEASE_VERSION}} is resolved in the same stamp commit.
+    Paths must be in CANONICAL repo-relative form. The pre-flight announces the
+    expected rebuild count before the claim and refuses pre-CAS when the manifest
+    stales zero packages or names a non-canonical path — it never rewrites a path
+    for you.
 --stamp-branch <name>  Optional. DECLARES the branch the stamp's follow-on commit
     will publish to; the claim refuses PRE-CAS when it does not match HEAD. Not
     required: the pre-CAS precondition already refuses a detached HEAD and the
@@ -2401,6 +2520,195 @@ PKGSTUB
     rm -rf "$_sb18d"
   }
 
+  # =========================================================================
+  # U-18f..U-18l — THE PRE-CAS REBUILD-COUNT ANNOUNCEMENT and its two refusal
+  # limbs. The defect: the count was computed pre-CAS and then announced only
+  # when non-empty, so a ZERO resolution printed nothing and returned 0 into the
+  # compare-and-swap — the one number an operator needed was visible only from
+  # the outcome, after the version was irreversibly bound.
+  #
+  # THE PAIRING IS THE EVIDENCE. f/g are rc-0 controls and h/i/j are rc-1
+  # sensitivity arms; either half alone is unfalsifiable — a guard that refused
+  # every manifest would satisfy h/i/j, and one that refused none would satisfy
+  # f/g. k is the regression guard on the ONLY invocation form that has ever
+  # shipped.
+  #
+  # i IS THE FIXTURE THAT DISTINGUISHES THE TWO LIMBS. Its form is not missed by
+  # the affected-skill resolver — it is MATCHED, with the traversal segment
+  # returned as the skill name — so it announces a NON-ZERO count and is caught
+  # only by the canonicality limb. A count-only design passes f/g/h/j/k and fails
+  # exactly here, which is why the count assertion is deliberately absent from i.
+  # =========================================================================
+
+  # ---- U-18f: SPECIFICITY / CONTROL. A canonical manifest announces its
+  #      non-zero count pre-CAS and is NOT refused.
+  _t_label="U-18f a canonical manifest announces its non-zero count and passes"
+  {
+    local _sb18f; _sb18f="$(_st_pkg_sandbox "widget-count")"
+    local _save18f="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb18f"; STAMP_FILES=("operations/skills/fixtureops/SKILL.md")
+    _ct_run_err _preflight_stamp "widget-count"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save18f"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "0" "U-18f a canonical manifest passes pre-flight"
+    grep -qF 'manifest stales 1 package(s)' <<< "$err" \
+      || _ct_fail "U-18f the expected rebuild count must be announced PRE-CAS"
+    grep -qF 'fixtureops' <<< "$err" \
+      || _ct_fail "U-18f the announcement must name the skill that will be rebuilt"
+    grep -qF 'Refusing pre-CAS' <<< "$err" \
+      && _ct_fail "U-18f a resolvable canonical manifest must NOT be refused"
+    rm -rf "$_sb18f"
+  }
+
+  # ---- U-18g: COUNT-VS-REBUILD PARITY. The announced count must equal the set
+  #      that is actually rebuilt, not merely be non-zero. This manifest is the
+  #      injected-canonical vector whose real rebuild set U-18b pins at exactly
+  #      {fixtureops, fixturerel} — so asserting 2 HERE proves the announcement
+  #      is the same answer the post-CAS rebuild acts on, from the same resolver.
+  _t_label="U-18g the announced count equals the set U-18b proves is rebuilt"
+  {
+    local _sb18g; _sb18g="$(_st_pkg_sandbox "widget-parity")"
+    local _save18g="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb18g"; STAMP_FILES=("core/standards/output-format.md")
+    _ct_run_err _preflight_stamp "widget-parity"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save18g"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "0" "U-18g an injected canonical passes pre-flight"
+    grep -qF 'manifest stales 2 package(s)' <<< "$err" \
+      || _ct_fail "U-18g the count must be 2 — the same set U-18b asserts is rebuilt"
+    grep -qF 'fixtureops' <<< "$err" \
+      || _ct_fail "U-18g the announcement must name the first injected skill"
+    grep -qF 'fixturerel' <<< "$err" \
+      || _ct_fail "U-18g the announcement must name the second injected skill"
+    rm -rf "$_sb18g"
+  }
+
+  # ---- U-18h: SENSITIVITY, form 1 — the LEADING-SLASH residue. The intake sed
+  #      collapses an embedded "//" but leaves the leading slash, the resolver's
+  #      anchored regex misses it, and post-CAS `git add -- /core/...` reads it as
+  #      absolute and fails with the tag already bound. Both limbs fire here.
+  #      The claim_version leg is the load-bearing one: rc alone cannot tell a
+  #      pre-CAS stop from a post-claim HALT — ZERO PUSH ATTEMPTS can.
+  _t_label="U-18h a leading-slash path announces zero and stops PRE-CAS, no tag pushed"
+  {
+    local _sb18h; _sb18h="$(_st_pkg_sandbox "widget-slash")"
+    local _save18h="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb18h"; STAMP_FILES=("/operations/skills/fixtureops/SKILL.md")
+    _ct_run_err _preflight_stamp "widget-slash"; err="$REPLY"
+    _ct_eq "$REPLY_RC" "1" "U-18h a leading-slash --stamp-file is refused"
+    grep -qF 'manifest stales 0 package(s)' <<< "$err" \
+      || _ct_fail "U-18h the zero count must be ANNOUNCED, not merely acted on"
+    grep -qF 'not in canonical repo-relative form' <<< "$err" \
+      || _ct_fail "U-18h the refusal must name the non-canonical form"
+    grep -qF 'operations/skills/fixtureops/SKILL.md' <<< "$err" \
+      || _ct_fail "U-18h the refusal must state the canonical form the caller should pass"
+
+    # Whole-claim leg: THE assertion that the stop is pre-CAS.
+    _ct_setup latest="v3.98" published="v3.98" origin="v3.98" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    STAMP_SLUG="widget-slash"
+    _ct_run claim_version "deadbeefcafe" "minor" "" ""; rc="$REPLY_RC"
+    STAMP_SLUG=""; CLAIM_REPO_ROOT="$_save18h"; STAMP_FILES=()
+    [[ "$rc" -ne 0 ]] || _ct_fail "U-18h the claim must HALT on a broken manifest"
+    _ct_eq "$(_ct_push_idx)" "0" "U-18h ZERO push attempts — the stop is PRE-CAS, not a post-claim HALT"
+    _ct_eq "$(_ct_pushed_n)" "0" "U-18h no tag reached origin"
+    _ct_eq "$(_st_stamp_n)" "0" "U-18h no stamp commit"
+    rm -rf "$_sb18h"
+  }
+
+  # ---- U-18i: SENSITIVITY, form 2 — THE TRAVERSAL THE RESOLVER MATCHES. This is
+  #      the form the card's original premise missed: rule (a) captures ".." as
+  #      the skill NAME, so the count is 1, the count limb is satisfied, and the
+  #      garbage name reaches the package rebuilder POST-CAS. Only the
+  #      canonicality limb catches it. No count assertion here BY DESIGN.
+  _t_label="U-18i a ..-traversal is MATCHED by the resolver and caught by canonicality alone"
+  {
+    local _sb18i; _sb18i="$(_st_pkg_sandbox "widget-trav")"
+    local _save18i="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb18i"; STAMP_FILES=("operations/skills/../skills/fixtureops/SKILL.md")
+    _ct_run_err _preflight_stamp "widget-trav"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save18i"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "1" "U-18i a ..-traversing --stamp-file is refused pre-CAS"
+    grep -qF 'not in canonical repo-relative form' <<< "$err" \
+      || _ct_fail "U-18i the canonicality limb must be the one that fires"
+    grep -qF 'operations/skills/../skills/fixtureops/SKILL.md' <<< "$err" \
+      || _ct_fail "U-18i the refusal must name the path as supplied"
+    grep -qF 'stales 0 package(s)' <<< "$err" \
+      && _ct_fail "U-18i this form resolves NON-zero — a green here on a count-only guard would be the fail-open"
+    rm -rf "$_sb18i"
+  }
+
+  # ---- U-18j: SENSITIVITY, form 3 — an embedded "/./". A third structurally
+  #      distinct shape, so the guard is exercised across three forms rather than
+  #      one form twice.
+  _t_label="U-18j an embedded /./ path announces zero and is refused pre-CAS"
+  {
+    local _sb18j; _sb18j="$(_st_pkg_sandbox "widget-dot")"
+    local _save18j="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb18j"; STAMP_FILES=("operations/./skills/fixtureops/SKILL.md")
+    _ct_run_err _preflight_stamp "widget-dot"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save18j"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "1" "U-18j an embedded /./ --stamp-file is refused pre-CAS"
+    grep -qF 'manifest stales 0 package(s)' <<< "$err" \
+      || _ct_fail "U-18j the zero count must be announced for this form too"
+    grep -qF 'not in canonical repo-relative form' <<< "$err" \
+      || _ct_fail "U-18j the refusal must name the non-canonical form"
+    rm -rf "$_sb18j"
+  }
+
+  # ---- U-18k: NO-REGRESSION on the ONLY form that has ever shipped. A plan-only
+  #      manifest announces zero and PROCEEDS — it is not refused. --stamp-file
+  #      has one production intake and no shipped invocation has passed it, so a
+  #      "zero implies refuse" predicate would break 100% of them. This fixture
+  #      is what keeps the count limb from swallowing the shipped population.
+  _t_label="U-18k a plan-only manifest announces zero and PROCEEDS (never refused)"
+  {
+    local _sb18k; _sb18k="$(_st_pkg_sandbox "widget-planonly")"
+    local _save18k="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb18k"; STAMP_FILES=()
+    _ct_run_err _preflight_stamp "widget-planonly"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save18k"
+    _ct_eq "$REPLY_RC" "0" "U-18k a plan-only manifest passes pre-flight"
+    grep -qF 'manifest stales 0 package(s)' <<< "$err" \
+      || _ct_fail "U-18k the zero count must be announced on the plan-only path too"
+    grep -qF 'plan-only manifest' <<< "$err" \
+      || _ct_fail "U-18k the announcement must say WHY the count is zero"
+    grep -qF 'Refusing pre-CAS' <<< "$err" \
+      && _ct_fail "U-18k the plan-only branch must NEVER refuse — it is the whole shipped population"
+    rm -rf "$_sb18k"
+  }
+
+  # ---- U-18l: THE COUNT LIMB'S OWN DISCRIMINATING ARM. Added because the limb
+  #      had none: h and j are refused by the CANONICALITY limb as well, so
+  #      deleting the count check outright left the whole suite green — a limb
+  #      whose denominator is empty is a limb that cannot be shown to work.
+  #      This manifest is CANONICAL in form and genuinely feeds no .skill
+  #      package, so the count limb is the only thing that can refuse it.
+  #
+  #      It also pins the design's ONE ACCEPTED FALSE POSITIVE as a tested
+  #      contract rather than an unstated tradeoff: a stamp target that is
+  #      legitimately unpackaged IS refused here. That population is currently
+  #      empty in production, and the refusal message names the condition, so the
+  #      day it becomes non-empty the tool says so instead of failing silently.
+  _t_label="U-18l a canonical manifest staling zero packages is refused by the COUNT limb alone"
+  {
+    local _sb18l; _sb18l="$(_st_pkg_sandbox "widget-unpackaged")"
+    local _save18l="$CLAIM_REPO_ROOT"
+    # Canonical repo-relative, exists, under no skills/ path and in no
+    # TEMPLATE_SYNC_MAP entry -> resolves to zero packages.
+    printf '%s\n' '# Unmapped standard {{RELEASE_VERSION}}' \
+      > "$_sb18l/core/standards/unmapped.md"
+    CLAIM_REPO_ROOT="$_sb18l"; STAMP_FILES=("core/standards/unmapped.md")
+    _ct_run_err _preflight_stamp "widget-unpackaged"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save18l"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "1" "U-18l a canonical manifest that stales nothing is refused pre-CAS"
+    grep -qF 'manifest stales 0 package(s)' <<< "$err" \
+      || _ct_fail "U-18l the zero count must be announced"
+    grep -qF 'Refusing pre-CAS' <<< "$err" \
+      || _ct_fail "U-18l the COUNT limb must be the one that fires"
+    grep -qF 'not in canonical repo-relative form' <<< "$err" \
+      && _ct_fail "U-18l the canonicality limb must NOT fire — this path IS canonical, which is what makes the count limb falsifiable"
+    rm -rf "$_sb18l"
+  }
+
   # ---- U-19 series: the --verify-stamp verb, the Commit-0 rung's invocation.
   #      These drive _main, NOT _preflight_stamp directly. Driving the function
   #      alone would verify the predicate while leaving the WIRING untested —
@@ -2704,7 +3012,7 @@ PKGSTUB
   rm -rf "$_ST_NEUTRAL_ROOT"
 
   if [[ $failures -eq 0 ]]; then
-    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-20h incl. real-RELEASE_LOG-parser(header-name-pinned + shifted-column control), real-origin-tags-rc-contract(U-0b: failed-read vs tagless-repo + probe/healthy controls), real-seam-rc-contract-on-unresolvable-identity(U-14a), all-three-claimed_set-arms-fail-closed + their controls(U-17), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, never-bypass-signing + its detector-negative-control(U-6/U-6b), fail-closed-on-unresolvable-repo-identity + its detector-negative-control(U-14/U-14b), arm-unavailable-is-not-arm-empty(U-15), anchor-rc-checks-claimed-set-and-greenfield-fallback + their controls(U-16), claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once, post-CAS-package-rebuild-rides-the-same-commit(U-18) + injected-canonical-vector(U-18b) + cross-grammar-guard-with-control(U-18c) + missing-stamp-file-halts-pre-CAS-with-control(U-18e) + fail-loud-rebuild-error-path(U-18d), verify-stamp-verb-wired-through-_main: token-less-HALT-names-the-token(U-19a) + token-bearing-control-states-its-manifest-scope(U-19b) + arg-independence-with-required-arg-control(U-19c), derived-stamp-slug: sensitivity+specificity-pair(U-20a/U-20b) + ambiguity-refuses-naming-both-candidates(U-20c) + explicit-flag-precedence(U-20d), pre-CAS-push-target-precondition-each-asserting-no-tag-pushed: default-branch-with-chore-branch-control(U-20e) + detached-HEAD(U-20f) + untracked-plan-with-re-add-control(U-20g) + --stamp-branch-parsed-from-argv-with-matching-declaration-control(U-20h))"
+    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-20h incl. real-RELEASE_LOG-parser(header-name-pinned + shifted-column control), real-origin-tags-rc-contract(U-0b: failed-read vs tagless-repo + probe/healthy controls), real-seam-rc-contract-on-unresolvable-identity(U-14a), all-three-claimed_set-arms-fail-closed + their controls(U-17), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, never-bypass-signing + its detector-negative-control(U-6/U-6b), fail-closed-on-unresolvable-repo-identity + its detector-negative-control(U-14/U-14b), arm-unavailable-is-not-arm-empty(U-15), anchor-rc-checks-claimed-set-and-greenfield-fallback + their controls(U-16), claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once, post-CAS-package-rebuild-rides-the-same-commit(U-18) + injected-canonical-vector(U-18b) + cross-grammar-guard-with-control(U-18c) + missing-stamp-file-halts-pre-CAS-with-control(U-18e) + fail-loud-rebuild-error-path(U-18d), pre-CAS-rebuild-count-announced-on-every-path-through-the-package-stage-including-zero: canonical-control(U-18f) + count-equals-the-U-18b-rebuild-set(U-18g) + leading-slash-announces-zero-and-stops-with-ZERO-push-attempts(U-18h) + ..-traversal-the-resolver-MATCHES-caught-by-canonicality-alone(U-18i) + embedded-slash-dot-slash(U-18j) + plan-only-announces-zero-and-PROCEEDS(U-18k) + canonical-manifest-staling-zero-refused-by-the-COUNT-limb-alone(U-18l), verify-stamp-verb-wired-through-_main: token-less-HALT-names-the-token(U-19a) + token-bearing-control-states-its-manifest-scope(U-19b) + arg-independence-with-required-arg-control(U-19c), derived-stamp-slug: sensitivity+specificity-pair(U-20a/U-20b) + ambiguity-refuses-naming-both-candidates(U-20c) + explicit-flag-precedence(U-20d), pre-CAS-push-target-precondition-each-asserting-no-tag-pushed: default-branch-with-chore-branch-control(U-20e) + detached-HEAD(U-20f) + untracked-plan-with-re-add-control(U-20g) + --stamp-branch-parsed-from-argv-with-matching-declaration-control(U-20h))"
     return 0
   else
     echo "claim-version.sh --self-test: FAIL ($failures failing fixture(s))"
