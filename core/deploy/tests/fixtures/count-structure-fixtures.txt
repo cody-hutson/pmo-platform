@@ -38,7 +38,10 @@
 # point of the SCOPE-OUT expectation existing as a separate verdict: "not flagged"
 # and "not examined" are different results and this harness refuses to conflate them.
 #
-# Arms: 2 FLAG · 3 CLEAN · 2 SCOPE-OUT — 7 cases total.
+# Block-case arms: 2 FLAG · 3 CLEAN · 2 SCOPE-OUT — 7 block cases total. The
+# SCOPE-BODY section at the end of this file is read by a DIFFERENT reader (the
+# harness's scope arm) and is deliberately not counted here — its delimiters do not
+# begin `--- `, so the block-case parser above skips those lines entirely.
 
 --- FLAG COUNT probe-validity-coverage-boundary-defect
 COVERED — 11 of the 12 observed shapes, across these classes:
@@ -124,3 +127,52 @@ COVERED (11 of the 12 observed shapes): wrong denominator; truncated extraction;
 --- SCOPE-OUT COUNT inline-original-clean-arm
 COVERED - 11 of the 12 observed shapes, across 6 classes: wrong-denominator (2 shapes); truncated-or-empty-extraction (4); non-discriminating-predicate (2); wrong-scope (1); no-probe (1); wrong-pattern-false-alarm (1).
 --- END
+
+# ── SCOPE-ARM BODIES ─────────────────────────────────────────────────────────
+# Read by run_scope_arm() in core/deploy/tools/run-count-structure-fixtures.sh, NOT
+# by the block-case parser above: these delimiters do not begin `--- `, so the
+# parser's case-opening test never matches them and the block-case count is unmoved.
+#
+# WHY A SEPARATE READER. Every block case above drives a single-file `--no-baseline`
+# invocation. A scope question cannot be asked in that form at all — it needs a
+# synthetic mini-corpus AND a synthetic baseline, so that "this baseline row is
+# outside the requested scope" is a state the harness can actually construct. The
+# bodies live HERE rather than as string literals inside the harness so the corpus
+# under test is committed and reviewable.
+#
+# The two non-reconciling bodies are planted at in/a.md and out/b.md; the reconciling
+# twin is the MUTATION CONTROL — swapped over in/a.md so its baselined pair stops
+# appearing, which must still be reported STALE because the row is IN scope. The twin
+# differs from its original by exactly one numeral, so the mutation is auditable.
+#
+# THE HEAD NOUN IS LOAD-BEARING — do not "simplify" it. The cardinal must bind to a
+# plural head noun, and the predicate's NP_STOP list treats third-person-singular
+# verb forms as phrase-closers. `4 scope states` binds `4` to `states`, which NP_STOP
+# reads as a VERB, so the cardinal is discarded and the pair is never EXAMINED — the
+# body silently produces no baseline row at all. `entries` and `rows` are nouns in no
+# stop list. The harness's generated-baseline row count is the guard that catches
+# this: it fails loudly rather than letting every arm below assert against a baseline
+# that does not describe the corpus.
+
+#SCOPE-BODY non-reconciling-in
+The 4 scope entries are enumerated here:
+
+- alpha
+- beta
+- gamma
+#SCOPE-BODY-END
+
+#SCOPE-BODY non-reconciling-out
+The 5 excluded rows are enumerated here:
+
+- delta
+- epsilon
+#SCOPE-BODY-END
+
+#SCOPE-BODY reconciling-in
+The 3 scope entries are enumerated here:
+
+- alpha
+- beta
+- gamma
+#SCOPE-BODY-END

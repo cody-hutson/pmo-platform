@@ -358,6 +358,24 @@ jobs:
         # form. Hermetic: no gh, no network. Consumes no workflow event input.
         run: bash core/deploy/tests/test_g1_release_resolver.sh
 
+      - name: Run Check 56 M2 advisory-class regression (test_check56_m2_advisory.sh)
+        # Check 56's M2 leg is documented as unable to gate. A static read of the
+        # call site cannot demonstrate the ABSENCE of gating, so this test proves
+        # it by running it: it extracts the real emitter bodies, the real mode
+        # resolver, the real input-building block and the M1/M2 emit region from
+        # deploy.sh between the C56-EMIT sentinels, and executes them against a
+        # real failure counter — deliberately WITHOUT stubbing the emitters,
+        # because here the emitter's escalation behaviour IS the assertion and a
+        # stub would make "M2 did not gate" trivially true. The arms that make
+        # the zero usable are the controls: an M1 finding driven through the same
+        # region at the same enforce mode must raise the counter and print a
+        # failure line (sensitivity), and the same fixture at warn mode must
+        # resolve `warn` and raise nothing (specificity), so the M2 zero cannot
+        # be an artefact of a mode file that was never read. Hermetic: no gh, no
+        # network — the TSV under test is produced by the primitive's own
+        # --fixture path. Consumes no workflow event input.
+        run: bash core/deploy/tests/test_check56_m2_advisory.sh
+
       - name: Run Check 16 status-label invariant fixture self-test (test-status-label-invariant.sh)
         # Invokes core/deploy/tools/tests/test-status-label-invariant.sh (4 fixture
         # arms: I1 mutex, I2 presence, I3 proposed+milestone, I4 orphaned bundle).

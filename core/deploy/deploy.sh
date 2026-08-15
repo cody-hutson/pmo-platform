@@ -19,7 +19,7 @@ set -euo pipefail
 #   * Deployed roster  = OPERATIONS_SKILLS + RELEASE_SKILLS + CORE_SKILLS.
 #                        Each member has a packages/<name>.skill (Check 7), so the
 #                        package count equals the deployed-roster size.
-#   * Directory listing = deployed roster + CANARY_SKILLS (source-only, ADR-04;
+#   * Directory listing = deployed roster + CANARY_SKILLS (source-only, ADR-006;
 #                        no package). One directory more than the package total.
 #   * SUPPLEMENTARY_SKILLS is a SUBSET annotation of the arrays (full-tree-copy
 #                        flag), NOT an independent registry — never summed into a
@@ -90,7 +90,7 @@ CORE_SKILLS=(
   skill-compliance-auditor
 )
 
-# Canary skills (source-only per ADR-04; not in SUPPLEMENTARY). Lives with
+# Canary skills (source-only per ADR-006; not in SUPPLEMENTARY). Lives with
 # parent module (release/) per release-skills classification — pmo-skill-refiner-
 # selftest-canary is the canary for the release-side pmo-skill-refiner.
 CANARY_SKILLS=(
@@ -2815,7 +2815,7 @@ build_full_roster_skills() {
   # FULL_ROSTER_SKILLS. Single source of truth: the same OPERATIONS/RELEASE/CORE
   # arrays resolve_skill_module() and Check-1 already iterate — NO hardcoded name
   # list (that would drift, the very class of count-drift the roster-drift check
-  # guards against). CANARY_SKILLS is EXCLUDED (source-only per ADR-04; it has no
+  # guards against). CANARY_SKILLS is EXCLUDED (source-only per ADR-006; it has no
   # package and is not a deploy target). bash 3.2 portable: explicit iteration,
   # empty-array `+` guards per ADR-008 Rule 2 (set -euo pipefail).
   FULL_ROSTER_SKILLS=()
@@ -2839,7 +2839,7 @@ populate_full_roster_packages() {
   #     skill's package and nothing else.
   # The `-f "packages/<name>.skill"` guard is the canary guard:
   # pmo-skill-refiner-selftest-canary is a valid skill name with NO package
-  # (source-only per ADR-04); it is never appended (it has no package file), so
+  # (source-only per ADR-006); it is never appended (it has no package file), so
   # the package-deploy loop can never record a phantom FAILURE → die. In the
   # no-arg case the canary is excluded for the same reason — iterating
   # packages/ never yields it (the package set is 1:1 with the non-canary
@@ -3889,9 +3889,28 @@ cmd_check() {
 
   local ISSUES=0
 
-  # Check 1 — Skill sync (module-aware iteration over 4 per-module arrays).
+  # Check 1 — Skill sync (module-aware iteration over the 3 DEPLOYED module arrays).
+  #
+  # CANARY_SKILLS is EXCLUDED. This check asserts install-parity — that a source
+  # SKILL.md has a matching installed copy — which is a DEPLOY-TARGET assertion,
+  # and the canary is source-only per ADR-006 ("lives in release/ as canary-
+  # source-only; NOT part of release's Public API"). It is excluded from
+  # build_full_roster_skills(), from Check 5(d)'s roster, and from the 5(d)
+  # deployed roster for the same reason; this loop was the sole outlier.
+  #
+  # Including it made the canary structurally unable to pass: never deployed, so
+  # a clean instance took the "not installed" branch, and an instance carrying a
+  # stale copy from a historical deploy took the "differs from repo" branch as
+  # soon as source moved. Neither branch was clearable by any deploy, so the
+  # canary contributed a permanent non-zero count that trained readers to treat
+  # a non-zero --check total as normal.
+  #
+  # This does NOT weaken canary coverage: the canary's SOURCE-DIRECTORY presence
+  # is still asserted by Check 5's EXPECTED_ROSTER, which deliberately DOES
+  # include it (see the note at the 5(d) roster block). Directory presence is
+  # asserted; install-parity is not, because it is not a deploy target.
   log "Check 1: Skill sync"
-  for skill in "${OPERATIONS_SKILLS[@]}" "${RELEASE_SKILLS[@]}" "${CORE_SKILLS[@]}" "${CANARY_SKILLS[@]}"; do
+  for skill in "${OPERATIONS_SKILLS[@]}" "${RELEASE_SKILLS[@]}" "${CORE_SKILLS[@]}"; do
     local module
     module=$(resolve_skill_module "$skill")
     local source="$module/skills/$skill/SKILL.md"
@@ -4158,7 +4177,7 @@ cmd_check() {
   #   (ii)  every deployed-roster member ∈ the registry rows   (FAIL on asymmetry, BOTH directions)
   #   (iii) every registry row name resolves to a live SKILL.md
   #
-  # Canary exclusion (ADR-04 / source-only canary; registry § Configuration
+  # Canary exclusion (ADR-006 / source-only canary; registry § Configuration
   # Items states the source-only canary is NOT a CI): the roster for 5(d) is
   # OPERATIONS_SKILLS + RELEASE_SKILLS + CORE_SKILLS ONLY — CANARY_SKILLS is
   # NOT unioned in. This is the deliberate divergence from Check 5's
@@ -4242,7 +4261,7 @@ cmd_check() {
       esac
     }
 
-    # Deployed roster for 5(d): the 3 module arrays, canary EXCLUDED (ADR-04).
+    # Deployed roster for 5(d): the 3 module arrays, canary EXCLUDED (ADR-006).
     # set -u guard: ${ARR[@]+...} expands to nothing for an unset/empty array.
     local -a DEPLOYED_ROSTER=()
     local _dr_line
@@ -4685,6 +4704,31 @@ cmd_check() {
     local _detail_escaped="${detail//\\/\\\\}"
     _detail_escaped="${_detail_escaped//\"/\\\"}"
     printf '{"ts":"%s","check":"%s","advisory":true,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
+  }
+
+  # flag_not_evaluated — the NOT-EVALUATED class emitter: the measurement DID NOT
+  # HAPPEN. Same structural guarantee as flag_advisory_only above — no `case` on
+  # any mode, no enforce branch, no ISSUES increment — for the same reason: a
+  # measurement outage must never move the exit code. It is a SEPARATE function,
+  # not a parameter on that one, because the two say OPPOSITE things. ADVISORY
+  # means "I measured and this signal cannot gate"; NOT-EVALUATED means "I did not
+  # measure." flag_advisory_only's line asserts "this check is never
+  # enforce-capable", which is FALSE of an enforce-capable check that merely could
+  # not read its input this run — and its ADVISORY: prefix is the greppable
+  # discriminator, so two classes under one prefix re-creates the very conflation
+  # this emitter exists to remove.
+  #
+  # Per review-discipline-principles.md § 8 PV-7. The detail SHOULD name the
+  # Register A status and MUST carry "this is not a clean result".
+  flag_not_evaluated() {
+    local check_id="$1"
+    local detail="$2"
+    log "  NOT-EVAL: $check_id — $detail (not-evaluated; the measurement did not run — this is a withheld verdict, never a clean one)"
+    local _ts
+    _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    local _detail_escaped="${detail//\\/\\\\}"
+    _detail_escaped="${_detail_escaped//\"/\\\"}"
+    printf '{"ts":"%s","check":"%s","evaluated":false,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
   }
 
   # resolve_check_mode — per-check mode resolver (decouples a single check from
@@ -6398,7 +6442,7 @@ cmd_check() {
         c22_gate_run=false
         if [[ "$c22_vsrc" == "env" ]]; then
           flag_g1_enforcement "g1-enforcement" \
-            "G1 enforce scope NOT DETERMINED — release identity '${c22_ms}' asserted via PMO_G1_ENFORCE_MILESTONE but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. Refusing to gate on a population that could not be identified — correct the assertion or unset it"
+            "G1 enforce scope NOT-EVALUATED — release identity '${c22_ms}' asserted via PMO_G1_ENFORCE_MILESTONE but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. Refusing to gate on a population that could not be identified — correct the assertion or unset it"
         else
           flag_advisory_only "g1-enforcement-scope" \
             "release identity detected from the checked-out branch but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. A DETECTED candidate never blocks — set PMO_G1_ENFORCE_MILESTONE to assert a scope and make this fail-closed"
@@ -6516,12 +6560,12 @@ cmd_check() {
       if [[ ! -f "$c22_prio_tool" ]]; then
         c22_prio_ok=false
         flag_g1_enforcement "g1-enforcement" \
-          "G1-06 NOT EVALUATED across ${c22_issue_count} bundled issue(s) — priority primitive missing: $c22_prio_tool (deploy the release module or restore the tool)"
+          "G1-06 NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — priority primitive missing: $c22_prio_tool (deploy the release module or restore the tool)"
         c22_finding_count=$((c22_finding_count + 1))
       elif [[ ! -x "/usr/bin/python3" ]]; then
         c22_prio_ok=false
         flag_g1_enforcement "g1-enforcement" \
-          "G1-06 NOT EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot run the priority primitive"
+          "G1-06 NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot run the priority primitive"
         c22_finding_count=$((c22_finding_count + 1))
       else
         # >>> G1-06-DELEGATE-BEGIN — core/deploy/tests/test_g1_06_priority_carrier.sh
@@ -6547,7 +6591,7 @@ sys.stdout.write("".join(out) + "|")
           c22_prio_ok=false
           c22_prio_diag=$(printf '%s\n' "$c22_prio_map" | /usr/bin/grep -v '^[[:space:]]*$' | /usr/bin/tail -1)
           flag_g1_enforcement "g1-enforcement" \
-            "G1-06 NOT EVALUATED across ${c22_issue_count} bundled issue(s) — priority primitive failed (exit ${c22_prio_exit}): ${c22_prio_diag:-(no diagnostic on stdout or stderr)}"
+            "G1-06 NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — priority primitive failed (exit ${c22_prio_exit}): ${c22_prio_diag:-(no diagnostic on stdout or stderr)}"
           c22_finding_count=$((c22_finding_count + 1))
           c22_prio_map=""
         else
@@ -6564,7 +6608,7 @@ sys.stdout.write("".join(out) + "|")
           if [[ "$c22_prio_rows" -ne "$c22_issue_count" ]]; then
             c22_prio_ok=false
             flag_g1_enforcement "g1-enforcement" \
-              "G1-06 NOT EVALUATED — priority extraction returned ${c22_prio_rows} row(s) for ${c22_issue_count} bundled issue(s); a partial extraction is a broken probe, not a clean population"
+              "G1-06 NOT-EVALUATED — priority extraction returned ${c22_prio_rows} row(s) for ${c22_issue_count} bundled issue(s); a partial extraction is a broken probe, not a clean population"
             c22_finding_count=$((c22_finding_count + 1))
             c22_prio_map=""
           fi
@@ -6625,12 +6669,12 @@ sys.stdout.write("".join(out) + "|")
       if [[ ! -f "$c22_ac_tool" ]]; then
         c22_ac_ok=false
         flag_g1_enforcement "g1-enforcement" \
-          "G1-05a presence NOT EVALUATED across ${c22_issue_count} bundled issue(s) — AC primitive missing: $c22_ac_tool (deploy the release module or restore the tool)"
+          "G1-05a presence NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — AC primitive missing: $c22_ac_tool (deploy the release module or restore the tool)"
         c22_finding_count=$((c22_finding_count + 1))
       elif [[ ! -x "/usr/bin/python3" ]]; then
         c22_ac_ok=false
         flag_g1_enforcement "g1-enforcement" \
-          "G1-05a presence NOT EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot run the AC primitive"
+          "G1-05a presence NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot run the AC primitive"
         c22_finding_count=$((c22_finding_count + 1))
       else
         # >>> G1-05A-DELEGATE-BEGIN — the AC-presence glue. stderr is CAPTURED
@@ -6654,7 +6698,7 @@ sys.stdout.write("".join(out) + "|")
           c22_ac_ok=false
           c22_ac_diag=$(printf '%s\n' "$c22_ac_map" | /usr/bin/grep -v '^[[:space:]]*$' | /usr/bin/tail -1)
           flag_g1_enforcement "g1-enforcement" \
-            "G1-05a presence NOT EVALUATED across ${c22_issue_count} bundled issue(s) — AC primitive failed (exit ${c22_ac_exit}): ${c22_ac_diag:-(no diagnostic on stdout or stderr)}"
+            "G1-05a presence NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — AC primitive failed (exit ${c22_ac_exit}): ${c22_ac_diag:-(no diagnostic on stdout or stderr)}"
           c22_finding_count=$((c22_finding_count + 1))
           c22_ac_map=""
         else
@@ -6670,7 +6714,7 @@ sys.stdout.write("".join(out) + "|")
           if [[ "$c22_ac_rows" -ne "$c22_issue_count" ]]; then
             c22_ac_ok=false
             flag_g1_enforcement "g1-enforcement" \
-              "G1-05a presence NOT EVALUATED — AC extraction returned ${c22_ac_rows} row(s) for ${c22_issue_count} bundled issue(s); a partial extraction is a broken probe, not a clean population"
+              "G1-05a presence NOT-EVALUATED — AC extraction returned ${c22_ac_rows} row(s) for ${c22_issue_count} bundled issue(s); a partial extraction is a broken probe, not a clean population"
             c22_finding_count=$((c22_finding_count + 1))
             c22_ac_map=""
           fi
@@ -6714,12 +6758,12 @@ sys.stdout.write("".join(out) + "|")
       if [[ ! -f "$c22_kinds_tool" ]]; then
         c22_kinds_ok=false
         flag_g1_enforcement "g1-enforcement" \
-          "Step-0 form-family resolution NOT EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive missing: $c22_kinds_tool (restore the tool; G1-09 kind-form verdicts are withheld, never guessed)"
+          "Step-0 form-family resolution NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive missing: $c22_kinds_tool (restore the tool; G1-09 kind-form verdicts are withheld, never guessed)"
         c22_finding_count=$((c22_finding_count + 1))
       elif [[ ! -x "/usr/bin/python3" ]]; then
         c22_kinds_ok=false
         flag_g1_enforcement "g1-enforcement" \
-          "Step-0 form-family resolution NOT EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot resolve the licensed kind vocabulary"
+          "Step-0 form-family resolution NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — /usr/bin/python3 not executable; cannot resolve the licensed kind vocabulary"
         c22_finding_count=$((c22_finding_count + 1))
       else
         # stderr CAPTURED (2>&1), never discarded — an absent interpreter, a
@@ -6732,7 +6776,7 @@ sys.stdout.write("".join(out) + "|")
           c22_kinds_ok=false
           c22_kinds_diag=$(/usr/bin/grep -m1 -v '^[[:space:]]*$' <<<"$c22_kinds_out")
           flag_g1_enforcement "g1-enforcement" \
-            "Step-0 form-family resolution NOT EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive failed (exit ${c22_kinds_exit}): ${c22_kinds_diag:-(no diagnostic on stdout or stderr)}"
+            "Step-0 form-family resolution NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive failed (exit ${c22_kinds_exit}): ${c22_kinds_diag:-(no diagnostic on stdout or stderr)}"
           c22_finding_count=$((c22_finding_count + 1))
         else
           # Comma-delimited with a sentinel on BOTH ends, so a membership test is
@@ -6755,7 +6799,7 @@ sys.stdout.write("".join(out) + "|")
             # every kind-form card as F3 and hand it an unresolved-form finding.
             c22_kinds_ok=false
             flag_g1_enforcement "g1-enforcement" \
-              "Step-0 form-family resolution NOT EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive exited 0 with an empty vocabulary; an empty kind set is a broken probe, not a pack corpus with no kinds"
+              "Step-0 form-family resolution NOT-EVALUATED across ${c22_issue_count} bundled issue(s) — kind-vocabulary primitive exited 0 with an empty vocabulary; an empty kind set is a broken probe, not a pack corpus with no kinds"
             c22_finding_count=$((c22_finding_count + 1))
           fi
         fi
@@ -10327,12 +10371,13 @@ sys.stdout.write("".join(out) + "|")
   # M2 read took field $2 only and DISCARDED the refs entirely.
   # READ THOSE COUNTERS WITH awk EXACT FIELD EQUALITY. `grep COUNT_M2_NNM`
   # prefix-collides with all four sub-counters; `awk '$1=="..."'` does not.
-  # M2's EMITTER IS DELIBERATELY UNCHANGED. Routing it through flag_advisory_only —
-  # the structurally-non-escalating helper M3 uses, and the correct fix for the
-  # enforce-leak recorded below — would violate the governing card's acceptance
-  # criterion, which asserts in as many words that M2 still routes through the WARN
-  # emitter unconditionally. The fix is right and is tracked separately; taking it
-  # here would trade a latent defect for a failed criterion.
+  # M2's emitter class is ADVISORY per review-discipline-principles.md § 8 PV-7:
+  # M2 measures, and its predicate legitimately cannot distinguish a description
+  # that lags membership from a genuine divergence. The ADVISORY class routes
+  # through flag_advisory_only, which cannot escalate by construction. The
+  # constraint that previously held this call on the warn emitter was #3711's
+  # acceptance criterion; that card CLOSED 2026-08-07 and the constraint is
+  # discharged.
   # The two legs read DIFFERENT membership sets, deliberately. M1 is OPEN-scoped: it
   # asks a live-drift question, and a completed card's parent-epic is history. M2's
   # set spans ALL issue states, because an OPEN-only set cannot tell "the Scope names
@@ -10414,6 +10459,11 @@ sys.stdout.write("".join(out) + "|")
         # otherwise produce identical counters. The primitive reports which, so
         # the warn line says which.
         [[ "$c56_m2_res" == "degraded" ]] && c56_m2_degraded=" [ref resolution DEGRADED — tokens fell back to the free indices; treat unresolved counts as unmeasured]"
+        # >>> C56-EMIT-BEGIN — core/deploy/tests/test_check56_m2_advisory.sh
+        # extracts the M1/M2 emit region between these sentinels and EXECUTES
+        # it against the real emitters, so a green run means the shipped path
+        # cannot gate — not that a copy of it cannot. Moving or renaming a
+        # sentinel makes extraction fail LOUDLY (harness Arm A), never silently.
         if [[ -z "$c56_m1" && -z "$c56_m2" ]]; then
           log "  OK:    milestone↔epic membership — no drift (${c56_declared:-0} milestone(s) declare an epic; M2 reconciliation clean)"
         else
@@ -10426,20 +10476,36 @@ sys.stdout.write("".join(out) + "|")
               flag_warn_or_issue "milestone-epic-membership" "M1 membership — cross-epic child(ren) (warn-mode; flip milestone-epic-membership.mode to enforce after shakedown): $c56_m1"
             fi
           fi
-          # M2 — warn-only ALWAYS (never gates, independent of mode)
-          # KNOWN, TRACKED, AND NOT FIXED HERE: this call is UNGUARDED, while M1
-          # above guards with an explicit mode branch. flag_warn_or_issue carries
-          # an enforce case that emits FAIL and increments the issue counter, so
-          # flipping milestone-epic-membership.mode to enforce WOULD make M2 gate
-          # — contradicting the "warn-only ALWAYS" this comment asserts. The fix
-          # is to route M2 through flag_advisory_only, as M3 already is; it is out
-          # of scope here because the governing card's acceptance criterion
-          # requires M2 to keep routing through the WARN emitter unconditionally,
-          # and it is tracked as its own defect. Do not take it opportunistically.
+          # M2 — the ADVISORY emitter class (review-discipline-principles.md § 8
+          # PV-7; ADR-134): M2 MEASURES, but its predicate cannot separate a
+          # description that legitimately lags membership mid-release from a
+          # genuine divergence. That is the ADVISORY predicate, so it routes
+          # through flag_advisory_only — which has no mode `case` and no ISSUES
+          # increment, making non-escalation a property of the emitter's SHAPE
+          # rather than a convention this comment asserts. There is deliberately
+          # NO local mode guard here: adding one would re-implement, per leg,
+          # the guarantee the emitter already provides.
+          #
+          # THE check_id IS ITS OWN, and that is not a detail — the same reason
+          # M4 carries `milestone-subtask-orphan`. flag_advisory_only's line
+          # states "this check is never enforce-capable"; that is TRUE of
+          # `milestone-description-reconciliation` and FALSE of
+          # `milestone-epic-membership`, which M1 graduates through a live dial.
+          # Emitting the shared id here would write a false claim into the warn
+          # log the M1 enforce-flip decision is READ FROM, and would leave M2's
+          # rows polluting M1's shakedown record. With its own id and an emitter
+          # that never calls resolve_check_mode, M2 is non-gating twice over:
+          # by emitter shape, and by dial disjunction.
+          #
+          # The constraint that previously held this call on the warn emitter was
+          # an acceptance criterion of the card that split the named-not-member
+          # sub-classes; that card CLOSED 2026-08-07 and the constraint is
+          # discharged.
           if [[ -n "$c56_m2" ]]; then
-            flag_warn_or_issue "milestone-epic-membership" "M2 reconciliation (warn-only; advisory) — description↔membership divergence on: $c56_m2 [named-not-member ${c56_m2_nnm:-0}: ${c56_m2_else:-0} in another milestone, ${c56_m2_none:-0} in no milestone, ${c56_m2_mex:-0} member-excluded, ${c56_m2_unres:-0} unresolved]${c56_m2_degraded} — $c56_m2_detail"
+            flag_advisory_only "milestone-description-reconciliation" "M2 reconciliation (advisory-only; structurally non-gating) — description↔membership divergence on: $c56_m2 [named-not-member ${c56_m2_nnm:-0}: ${c56_m2_else:-0} in another milestone, ${c56_m2_none:-0} in no milestone, ${c56_m2_mex:-0} member-excluded, ${c56_m2_unres:-0} unresolved]${c56_m2_degraded} — $c56_m2_detail"
           fi
         fi
+        # >>> C56-EMIT-END
         # M3 — scaffold completeness. Routed through flag_advisory_only, NOT
         # flag_warn_or_issue: this leg's predicate cannot distinguish a genuine
         # scaffold gap from a milestone that legitimately gained a card after
@@ -11029,6 +11095,20 @@ sys.stdout.write("".join(out) + "|")
         log "  FAIL:  count-structure — input failure (exit 3): $(head -1 <<<"$c63_out"). A clean zero over an empty population is exactly what this check must never report."
         ISSUES=$((ISSUES + 1))
       else
+        # ── Branch the SCOPE record BEFORE reading any counter. ──────────────────
+        # Register A (status=) says whether the measurement HAPPENED; every counter
+        # below is meaningless until that is known. `not-run` / NOT-EVALUATED never
+        # reaches here — it is an INPUT FAILURE and gates via the exit-3 branch
+        # above. `degraded` / DEGRADED is a PARTIAL read, and it crosses IN-BAND: it
+        # routes through the never-escalating emitter so a measurement outage cannot
+        # move the exit code (§ 8 PV-7c), while still refusing to read as clean.
+        local c63_scope_status c63_scope_state
+        c63_scope_status=$(echo "$c63_out" | awk -F'\t' '$1=="SCOPE"{for(i=2;i<=NF;i++) if($i ~ /^status=/) {sub("status=","",$i); print $i}}')
+        c63_scope_state=$(echo "$c63_out" | awk -F'\t' '$1=="SCOPE"{for(i=2;i<=NF;i++) if($i ~ /^state=/) {sub("state=","",$i); print $i}}')
+        if [[ "$c63_scope_state" == "DEGRADED" ]]; then
+          flag_not_evaluated "count-structure" "scope partially measured (status=${c63_scope_status}) — this is not a clean result"
+        fi
+
         # PV-1 / PV-5: report the denominator and BOTH control arms as fields, so a
         # reader can always distinguish "zero found" from "nothing examined".
         local c63_denom c63_control c63_ctl_verdict
@@ -11572,6 +11652,104 @@ sys.stdout.write("".join(out) + "|")
         else
           log "  OK:    enum-parity — every registered derived surface declares its standard's value set, and every declared cardinality matches"
         fi
+      fi
+    fi
+  fi
+
+  # Check 69 — PV-7a Register B spelling conformance (ENFORCING) [#5550]
+  #
+  # WHAT IT ASSERTS. review-discipline-principles.md § 8.1 PV-7a freezes the
+  # human-readable degraded-state register at two members and adds "No third
+  # spelling"; ADR-134 D2 reconciles every divergent rendering of the TERMINAL
+  # member to the hyphenated form. This check asserts that reconciliation holds
+  # across the tracked corpus.
+  #
+  # WHY IT EXISTS, AND WHY THE CONVENTION ALONE WAS NOT ENOUGH. PV-7 shipped as
+  # six cards of documentation with FOUR comment citations, ZERO predicates and
+  # ZERO workflows. The first merge after it shipped reintroduced four
+  # space-separated emits into the G1-05a leg of this very file, and CI passed
+  # 47/47 green — because nothing in the repository could tell the two spellings
+  # apart. That is the convention's own defect class arriving through the front
+  # door, undetected, in the first merge after the build. A rule with no
+  # falsifier is a comment; this is the falsifier.
+  #
+  # WHY WHOLE-CORPUS RATHER THAN CHANGED-FILES. This is the load-bearing scope
+  # decision and it is grounded in the actual event, not in a preference. The
+  # four reintroduced emits arrived by MERGING origin/main into a release branch:
+  # relative to the PR's base they are UNCHANGED lines, so a changed-file gate —
+  # the shape every repo-integrity sibling uses — would have returned green on
+  # the exact event that motivated this check. Whole-corpus is what makes the
+  # gate able to see a reintroduction that travels in on a merge.
+  #
+  # ENFORCING BY THE CODE'S SHAPE, NOT BY A DEFAULT. Note what is absent from the
+  # FAIL arms below: no `case` on any mode, no resolve_check_mode call, no mode
+  # gate of any kind. The live population is clean at this pin (the five sites
+  # are fixed in the same change that adds this check), so there is no
+  # pre-existing debt to baseline and no red-wall vector to hedge against — the
+  # conditions that forced Check 63 to ship a committed baseline do not hold
+  # here, and Check 64's precedent applies instead. A new unsanctioned spelling
+  # increments ISSUES on every run.
+  #
+  # THE CONTROL ARM IS INSIDE THE PRIMITIVE, NOT BESIDE IT. The tool counts
+  # SANCTIONED occurrences on every run and exits 3 if that count is zero: a
+  # zero-violation verdict is only readable if the extractor demonstrably reaches
+  # the token at all. That is this check's most likely rot path — a refactor
+  # moves the token behind a variable, the extractor matches nothing, and the
+  # gate goes permanently and vacuously green. It cannot; the control fails loud
+  # first, and this block treats exit 3 as a FAIL.
+  #
+  # NOT THE ONLY LOCUS, AND DELIBERATELY SO. `deploy.sh --check` runs at deploy
+  # time on an operator machine, POST-merge — which is precisely how the four
+  # emits landed unseen. The same primitive is wired as the `pv7-vocabulary` job
+  # in .github/workflows/repo-integrity.yml, which runs PRE-merge on every pull
+  # request. That job is the load-bearing leg; this one is the deploy-time
+  # companion, single-sourced on the same predicate (CIAC-2: no predicate is
+  # re-encoded in either caller).
+  #
+  # DECLARED COVERAGE BOUNDARY. Spelling only. It does NOT assert PV-7c's
+  # non-escalating-emitter obligation, PV-7a's "this is not a clean result"
+  # discriminator clause, PV-7b's absent-not-zero counter rule, or a token
+  # assembled at run time with no literal in the source. Four separate
+  # invariants; this one is the spelling, which is the one the merge broke.
+  #
+  # Primitive: core/deploy/tools/check-pv7-vocabulary.sh (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 69: PV-7a Register B spelling conformance (one sanctioned spelling of the degraded-state terminal token; enforcing; whole-corpus; frozen artifacts and fixture trees exempt)"
+    local c69_script="core/deploy/tools/check-pv7-vocabulary.sh"
+    if [[ ! -f "$c69_script" ]]; then
+      log "  FAIL:  pv7-vocabulary — primitive script missing: $c69_script (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
+      ISSUES=$((ISSUES + 1))
+    else
+      # ── control arms FIRST: a probe that cannot be shown to detect proves nothing ──
+      local c69_fx_out c69_fx_rc=0
+      c69_fx_out=$(bash "$c69_script" --self-test 2>&1) || c69_fx_rc=$?
+      log "  CTRL:  pv7-vocabulary — $(echo "$c69_fx_out" | tail -1)"
+      if [[ $c69_fx_rc -ne 0 ]]; then
+        log "  FAIL:  pv7-vocabulary-fixtures — fixture regression (hard-fail on every mode). A probe that can no longer be shown to detect AND to discriminate proves nothing by returning zero."
+        echo "$c69_fx_out" | sed 's/^/         /'
+        ISSUES=$((ISSUES + 1))
+      else
+        # ── the scan: denominator first, then findings ──────────────────────────
+        local c69_out c69_rc=0
+        c69_out=$(bash "$c69_script" 2>&1) || c69_rc=$?
+        log "  DENOM: pv7-vocabulary — $(echo "$c69_out" | sed -n 's/^DENOM: //p' | tail -1)"
+        case "$c69_rc" in
+          0)
+            log "  OK:    pv7-vocabulary — every all-caps rendering of the terminal token is the sanctioned spelling"
+            ;;
+          1)
+            local _c69_hit
+            while IFS= read -r _c69_hit; do
+              [[ -z "$_c69_hit" ]] && continue
+              log "  FAIL:  pv7-vocabulary — ${_c69_hit#FAIL: }"
+              ISSUES=$((ISSUES + 1))
+            done < <(echo "$c69_out" | grep '^FAIL: ' || true)
+            ;;
+          *)
+            log "  FAIL:  pv7-vocabulary — $(echo "$c69_out" | grep '^SCAN-ERROR: ' | sed 's/^SCAN-ERROR: //' | paste -sd'; ' -)"
+            ISSUES=$((ISSUES + 1))
+            ;;
+        esac
       fi
     fi
   fi
@@ -12344,6 +12522,53 @@ EOF
     _vfv="$(_audit_src_root="$_vft" AUDIT_REPO="acme/widget" PMO_VERSION_FREENESS_CANDIDATE="v9.99" \
             _vf_compute_verdict gate 2>/dev/null)"
     [[ "${_vfv%% *}" == "UNDECIDABLE" ]] || { echo "FAIL: VF-7c the merge gate must also fail closed on an unreadable schema, got '$_vfv'"; failures=$((failures+1)); }
+
+    # VF-10 / VF-10b / VF-10c — the branch-(1) WITNESS TRIPLE. Hermetic twin of
+    # core/deploy/tests/test_version_freeness_injection.sh, which runs the same
+    # three arms against the LIVE claimed set on the CI surface.
+    #
+    # Why this triple exists: until it landed, the COLLISION verdict was asserted
+    # nowhere in this group. The five branch-(1) injections above assert FREE once
+    # and UNDECIDABLE four times, so a regression that made NOT_FREE unreachable
+    # would have passed every one of them — the group could confirm the resolver
+    # fails closed and still never confirm it can report a collision at all.
+    #
+    # Stub discipline: the `gh` shadow installed for VF-7 (authenticates, returns
+    # an empty releases list) is inherited AS IS and left exactly as VF-8 expects.
+    # No stub is installed or torn down here, so the following arms are unchanged.
+    /bin/cat > "$_vflog" <<'EOF'
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.98 | m-claimed | #5 | #6 | `ccc` | `v9.98` | DEPLOYED | 2026-07-30 |
+EOF
+
+    # VF-10c BRANCH WITNESS, runs FIRST: with NEITHER resolution variable set the
+    # resolver returns empty and the verdict is SKIP. This is what makes VF-10
+    # non-vacuous — without it, a NOT_FREE could have been produced by the derived
+    # path rather than by the injection, which is exactly the attribution error
+    # this triple exists to foreclose.
+    _vfv="$( unset PMO_VERSION_FREENESS_CANDIDATE PMO_VERSION_FREENESS_BUMP
+             _audit_src_root="$_vft" AUDIT_REPO="acme/widget" _vf_compute_verdict gate 2>/dev/null )"
+    [[ "${_vfv%% *}" == "SKIP" ]] || { echo "FAIL: VF-10c with neither resolution variable set the verdict must be SKIP, got '$_vfv' — VF-10's collision could not then be attributed to branch (1)"; failures=$((failures+1)); }
+
+    # VF-10: inject a candidate that IS in the claimed set -> NOT_FREE, and the
+    # verdict must ECHO the injected candidate. The bump-class variable is never
+    # set, so branch (2) structurally cannot run.
+    _vfv="$( unset PMO_VERSION_FREENESS_BUMP
+             _audit_src_root="$_vft" AUDIT_REPO="acme/widget" PMO_VERSION_FREENESS_CANDIDATE="v9.98" \
+             _vf_compute_verdict gate 2>/dev/null )"
+    [[ "${_vfv%% *}" == "NOT_FREE" ]] || { echo "FAIL: VF-10 an injected already-claimed candidate must verdict NOT_FREE, got '$_vfv' — this group asserted the collision verdict nowhere before this arm"; failures=$((failures+1)); }
+    local _vfcand="${_vfv#NOT_FREE }"; _vfcand="${_vfcand%% *}"
+    [[ "$_vfcand" == "v9.98" ]] || { echo "FAIL: VF-10 the NOT_FREE verdict must echo the INJECTED candidate v9.98, got '$_vfcand' — a verdict that does not echo its own input cannot be attributed to the injection"; failures=$((failures+1)); }
+
+    # VF-10b SPECIFICITY CONTROL: same corpus, a candidate that is NOT claimed ->
+    # FREE. Without this leg VF-10 would pass against a body hardwired to report
+    # collisions, and the triple would assert an instrument that is stuck rather
+    # than one that discriminates.
+    _vfv="$( unset PMO_VERSION_FREENESS_BUMP
+             _audit_src_root="$_vft" AUDIT_REPO="acme/widget" PMO_VERSION_FREENESS_CANDIDATE="v9.99" \
+             _vf_compute_verdict gate 2>/dev/null )"
+    [[ "${_vfv%% *}" == "FREE" ]] || { echo "FAIL: VF-10b control — an unclaimed candidate must verdict FREE, got '$_vfv' — VF-10 would be vacuous"; failures=$((failures+1)); }
 
     unset -f gh
 

@@ -9,8 +9,8 @@ name: Version freeness (pre-merge collision gate)
 #              Phase B3 reactive tag-push rejection.
 #   predicate actually asserted ON A REAL RUN (stated honestly, because the
 #              invariant above is the general contract and this workflow exercises
-#              only part of it): this job sets PMO_VERSION_FREENESS_BUMP and does
-#              NOT set PMO_VERSION_FREENESS_CANDIDATE, so the candidate is DERIVED
+#              only part of it): the DERIVED run sets PMO_VERSION_FREENESS_BUMP and
+#              not PMO_VERSION_FREENESS_CANDIDATE, so its candidate is DERIVED
 #              by running the allocator's dry-run — which returns next-free, i.e.
 #              the lowest version NOT in claimed_set — and is then compared against
 #              a claimed_set built HERE. Those two sets are NOT identical: the
@@ -25,15 +25,27 @@ name: Version freeness (pre-merge collision gate)
 #              that no existing tag is non-canonical (the fail-closed UNDECIDABLE
 #              arms). It does NOT compare the PR's carried provisional-display
 #              version against next-free; that comparison is the manual rungs' job
-#              (Stage-9 Phase A6.5 and Stage-12 Phase A.5.6a). Closing this gap —
-#              by passing the plan's provisional-display version as
-#              PMO_VERSION_FREENESS_CANDIDATE, which is resolution branch (1)
-#              below — is tracked as an open bug and is a PRECONDITION on any
-#              future reconsideration of the enforce flip.
-#   falsification: on a PR whose candidate equals a published Release tag (inject
-#                  PMO_VERSION_FREENESS_CANDIDATE=<a published tag>) -> this gate
-#                  reports the collision (warn-mode: summary + exit 0; enforce:
-#                  red + exit 1). A free candidate, or no claim context -> green.
+#              (Stage-9 Phase A6.5 and Stage-12 Phase A.5.6a). That comparison is
+#              now recorded as PERMANENTLY unavailable rather than tracked as an
+#              open gap: the plan's provisional-display version does not exist to
+#              be passed. Under core/ADRs/ADR-092-plan-file-claim-time-stamping.md
+#              the plan file is slug-primary and its Version field carries a token
+#              or prose, so injecting it would hand the resolver a non-canonical
+#              string and red-exit this probe on every release PR — trading a gap
+#              for a wrong answer. What the job DOES now do is ASSIGN
+#              PMO_VERSION_FREENESS_CANDIDATE on every run, through the committed
+#              falsification arms below, so resolution branch (1) is exercised and
+#              the gate's sensitivity to an externally-supplied colliding candidate
+#              is TESTED rather than assumed. The carried-version comparison stays
+#              with the manual rungs by design, not by omission.
+#   falsification: EXECUTED ON EVERY RUN — no longer a recipe a human could run.
+#                  The falsification-arms step below injects a candidate that is
+#                  already claimed -> this gate reports the collision at exit 1,
+#                  injects an out-of-lineage candidate -> free at exit 0, and runs
+#                  once with no claim context -> skip at exit 0. A WRONG ARM
+#                  verdict fails the job. A real collision on the derived run is a
+#                  different thing entirely and still routes through the
+#                  gate-decision step below, which stays non-blocking in warn mode.
 # Path-filtered, so ADVISORY by skip-semantics: absence on an unrelated PR MUST NOT
 # block. This gate is ADVISORY BY DESIGN — ratified 2026-08-04, not warn-mode-initial
 # awaiting a graduation. The enforce sentinel (.github/version-freeness.enforce) is
@@ -157,3 +169,46 @@ jobs:
           if [ "$ENFORCE" = "true" ]; then exit 1; fi
           echo "::warning::version-freeness collision reported in WARN mode — not blocking (add .github/version-freeness.enforce to enforce)"
           exit 0
+
+      - name: Resolve the injected collider (repo-root .version)
+        id: collider
+        # .version is stamped at release close, AFTER the Stage-12 atomic claim that
+        # binds a version, so it can LAG the claimed set but can never LEAD it —
+        # which makes its value always-already-claimed and therefore a valid
+        # collider, sourced from a committed file with no hardcoded literal and no
+        # network read. It advances on its own with every release, so there is no
+        # fixture to age. No version parser lives here (the THIN-caller rule holds):
+        # the value is read verbatim, and canonicality plus tag-surface membership
+        # are witnessed by the arm suite before any verdict is trusted.
+        run: |
+          set -euo pipefail
+          CANDIDATE="$(tr -d '[:space:]' < .version || true)"
+          echo "candidate=${CANDIDATE}" >> "$GITHUB_OUTPUT"
+          echo "::notice::version-freeness falsification collider resolved from the repo-root .version"
+
+      - name: Falsification arms (branch-1 injection — sensitivity, specificity, injection-off control)
+        # THIS STEP MUST NOT SET PMO_VERSION_FREENESS_BUMP. Its absence is the
+        # STRUCTURAL WITNESS that every verdict below is produced by resolution
+        # branch (1) and not by the allocator-derived path: with the bump-class
+        # variable unset, branch (2) cannot run at all. The arm suite additionally
+        # clears both resolution variables at start-up and re-exports only the one
+        # each arm needs, so an inherited value cannot re-enter branch (2) silently.
+        #
+        # The suite exits NON-ZERO only on a WRONG ARM VERDICT — the instrument has
+        # lost sensitivity or specificity. A measurement outage (an unresolvable
+        # fixture, an unreadable tag surface, an undecidable gate result) exits 0
+        # carrying an explicit unevaluated marker, because this step's consumer
+        # escalates ANY non-zero step exit to a failed job, and an outage must never
+        # gate a merge. The suite never re-decides the VERSION verdict: a real
+        # collision on the derived run routes through the gate-decision step above
+        # and stays non-blocking in warn mode.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PMO_VERSION_FREENESS_CANDIDATE: ${{ steps.collider.outputs.candidate }}
+        run: |
+          set -uo pipefail
+          set +e
+          OUT="$(bash core/deploy/tests/test_version_freeness_injection.sh 2>&1)"; RC=$?
+          set -e
+          printf '%s\n' "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "$RC"

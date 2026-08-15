@@ -25,6 +25,28 @@ name: Repository integrity
 #                 ENFORCING (it exits non-zero on a finding); it is not yet BLOCKING.
 #                 Registering "SIGPIPE-idiom gate" as a required check flips this row
 #                 to posture=required enforcement=branch-protection with no code change.
+#
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"PV-7 vocabulary gate" (no WARN_MODE — a finding turns the check RED)  always-reports=yes
+#   invariant: every all-caps rendering of the PV-7a Register B TERMINAL token in a
+#              tracked file uses the one sanctioned hyphenated spelling; the scan is
+#              WHOLE-CORPUS rather than changed-files, and its own control arm (the
+#              count of sanctioned occurrences) must be non-zero or the run fails
+#              loud rather than reporting a clean zero.
+#   falsification: respell any sanctioned occurrence with a space or an underscore
+#                  -> the job FAILS (exit 1) naming file:line and the separator;
+#                  restore the hyphen -> green. The committed --self-test carries the
+#                  two sensitivity arms, the two specificity arms (sanctioned-only,
+#                  and lowercase prose / snake_case identifiers) and the fail-loud
+#                  dead-control arm, and hard-fails ahead of the scan.
+#   scope note: WHOLE-CORPUS is load-bearing, not incidental. The four emits that
+#               motivated this gate arrived by merging main into a release branch, so
+#               relative to the PR base they were UNCHANGED lines — the changed-file
+#               shape every sibling gate on this workflow uses would have returned
+#               green on the exact event the gate exists to catch.
+#   posture note: `advisory`, not `required`, is the HONEST declaration today —
+#                 Requirement (b') makes `required` unavailable until the context is
+#                 registered in branch protection, which a PR cannot do. The gate is
+#                 ENFORCING (it exits non-zero on a finding); it is not yet BLOCKING.
 
 # Three PR-time integrity gates as three named jobs on one workflow, on the
 # proven parser-clean scaffold (override-marker -> locate-anchor -> scan-changed-
@@ -1719,6 +1741,87 @@ jobs:
             echo "  It is reported in the SUPPRESSED block, never silent."
             echo "- Whole file: \`# repo-integrity: allow-sigpipe-idiom\`."
             echo "- The idiom inside a single-quoted payload string is content-exempt automatically."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # PV-7 degraded-state vocabulary gate — the falsifier for a convention that
+  # shipped without one. Consumes NO github.event.* input: every step is a static
+  # invocation against workspace files (the workflow-wide injection-safety rule).
+  # ---------------------------------------------------------------------------
+  pv7-vocabulary:
+    name: PV-7 vocabulary gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Assert the PV-7a Register B terminal token has ONE spelling
+        run: |
+          set -euo pipefail
+
+          # Self-test FIRST — the fixture set proves the probe can DETECT and can
+          # DISCRIMINATE. A scan whose probe cannot be shown to do both proves
+          # nothing by returning zero. Hard-fails unconditionally.
+          bash core/deploy/tools/check-pv7-vocabulary.sh --self-test \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+          set +e
+          bash core/deploy/tools/check-pv7-vocabulary.sh | tee /tmp/pv7.out
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "### PV-7 vocabulary scan"
+            echo '```'
+            cat /tmp/pv7.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # exit 3 = broken probe (not a work tree, zero files, or a DEAD CONTROL
+          # ARM). Fail loud: a zero whose control arm also returned zero is never
+          # an empty population.
+          if [ "$RC" -eq 3 ]; then
+            echo "::error::PV-7 vocabulary gate could not establish a readable denominator — the scan is unusable, not clean."
+            exit 1
+          fi
+
+          if [ "$RC" -eq 0 ]; then
+            echo ":white_check_mark: PV-7 vocabulary — every all-caps rendering of the terminal token is the sanctioned spelling" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## :x: PV-7 vocabulary gate FAILED"
+            echo ""
+            echo "An all-caps rendering of the PV-7a Register B **terminal** token is spelled"
+            echo "some way other than the one sanctioned form. See the scan output above for"
+            echo "\`file:line\` and the separator that was found."
+            echo ""
+            echo "### Why this is gated"
+            echo ""
+            echo "\`review-discipline-principles.md\` § 8.1 **PV-7a** closes Register B at two"
+            echo "members and states **\"No third spelling.\"** \`ADR-134\` **D2** reconciles every"
+            echo "divergent rendering of the terminal member to the hyphenated form — not"
+            echo "because it was the majority spelling (it was not), but because a"
+            echo "space-separated variant is **not a greppable token**: it matches ordinary"
+            echo "prose, and the grading probe for this convention is a grep."
+            echo ""
+            echo "### The fix"
+            echo ""
+            echo "Reconcile the flagged site to the hyphenated form. Do **not** widen the"
+            echo "exemption list, and do **not** coin a new token — a surface that needs a"
+            echo "state this register cannot express **amends the rider**, it does not spell"
+            echo "its way around it."
+            echo ""
+            echo "### Scope note"
+            echo ""
+            echo "This gate is **whole-corpus**, not changed-files, and that is deliberate."
+            echo "The four emits that motivated it arrived by **merging \`main\` into a release"
+            echo "branch**: relative to the PR base they were unchanged lines, so a"
+            echo "changed-file gate would have gone green on the exact event it exists to"
+            echo "catch."
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
           exit 1
