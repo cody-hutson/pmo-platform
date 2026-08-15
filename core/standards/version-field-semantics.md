@@ -47,7 +47,8 @@ Disallowed: `v1.2.1` (no patch level — skills sync with platform minor version
 
 Version bumps on **material edit**:
 
-- Frontmatter changes (description, name, other metadata fields)
+- Addressability changes (a `name:` or `description:` edit that changes which requests reach
+  this skill, or which skill a request reaches)
 - Behavior changes (trigger phrases, mode definitions, process steps, failure modes)
 - Output contract changes (sections, required elements, validation checks)
 - Cross-reference changes (dependency-graph node, principal-standard target, shared contracts)
@@ -58,6 +59,26 @@ Version DOES NOT bump on:
 - Typo fixes in prose that don't change meaning
 - Whitespace / formatting-only changes
 - Comment-only changes (e.g., clarifying an inline comment)
+- A frontmatter edit that changes no addressability — trimming a `description:` to fit a
+  length limit, rewording it without altering which requests match, or editing a metadata
+  field no router reads
+
+**Why the first bullet names an effect rather than a field.** It previously read
+"Frontmatter changes (description, name, other metadata fields)", which named a *location*
+where every sibling bullet names a *consequence*. That made it simultaneously too broad and
+too narrow: a pure length-trim of a `description:` violated it while changing nothing a
+router sees, and it invited the reading that a trigger rewrite is material *because it sits
+in frontmatter* rather than because of what it does.
+
+A trigger rewrite is material, and the bullet that captures it is **Behavior changes** —
+"trigger phrases" is named there explicitly. That is the correct home: a trigger rewrite
+changes routing behaviour, and would remain material if the phrases moved out of frontmatter
+tomorrow. Addressability and Behavior can both fire on one edit; that is expected and not a
+double-count, since the bump is per-edit rather than per-bullet.
+
+The practical test for a frontmatter edit: **would a request that previously reached this
+skill now reach a different one, or vice versa?** If yes, it is material. If the only
+observable difference is character count or phrasing, it is cosmetic.
 
 **Determination mechanism.** The bump / no-bump decision is held by `pmo-skill-editor` during a sanctioned editing session — not by a commit-message marker. The PreToolUse hook gates the edit attempt: direct Write/Edit on a migrated skill's SKILL.md or reference files is rejected unless a valid `pmo-skill-editor` session sentinel is present at `{core,operations,release}/skills/<skill>/.editor-session` (target-skill-matched, within 30-min TTL). Inside the sanctioned session, `pmo-skill-editor` is responsible for classifying the change as material vs cosmetic and bumping the `version:` field per § Bump Rules. That rejection holds only within the hook's coverage boundary — see § Maintenance Protocol, *Gate 2 coverage boundary*: the hook is `workflow` class and master activation ships OFF, so on a default instance it rejects nothing and the bump decision rests on editor protocol alone.
 
