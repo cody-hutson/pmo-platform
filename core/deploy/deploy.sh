@@ -19,7 +19,7 @@ set -euo pipefail
 #   * Deployed roster  = OPERATIONS_SKILLS + RELEASE_SKILLS + CORE_SKILLS.
 #                        Each member has a packages/<name>.skill (Check 7), so the
 #                        package count equals the deployed-roster size.
-#   * Directory listing = deployed roster + CANARY_SKILLS (source-only, ADR-04;
+#   * Directory listing = deployed roster + CANARY_SKILLS (source-only, ADR-006;
 #                        no package). One directory more than the package total.
 #   * SUPPLEMENTARY_SKILLS is a SUBSET annotation of the arrays (full-tree-copy
 #                        flag), NOT an independent registry — never summed into a
@@ -90,7 +90,7 @@ CORE_SKILLS=(
   skill-compliance-auditor
 )
 
-# Canary skills (source-only per ADR-04; not in SUPPLEMENTARY). Lives with
+# Canary skills (source-only per ADR-006; not in SUPPLEMENTARY). Lives with
 # parent module (release/) per release-skills classification — pmo-skill-refiner-
 # selftest-canary is the canary for the release-side pmo-skill-refiner.
 CANARY_SKILLS=(
@@ -2660,7 +2660,7 @@ build_full_roster_skills() {
   # FULL_ROSTER_SKILLS. Single source of truth: the same OPERATIONS/RELEASE/CORE
   # arrays resolve_skill_module() and Check-1 already iterate — NO hardcoded name
   # list (that would drift, the very class of count-drift the roster-drift check
-  # guards against). CANARY_SKILLS is EXCLUDED (source-only per ADR-04; it has no
+  # guards against). CANARY_SKILLS is EXCLUDED (source-only per ADR-006; it has no
   # package and is not a deploy target). bash 3.2 portable: explicit iteration,
   # empty-array `+` guards per ADR-008 Rule 2 (set -euo pipefail).
   FULL_ROSTER_SKILLS=()
@@ -2684,7 +2684,7 @@ populate_full_roster_packages() {
   #     skill's package and nothing else.
   # The `-f "packages/<name>.skill"` guard is the canary guard:
   # pmo-skill-refiner-selftest-canary is a valid skill name with NO package
-  # (source-only per ADR-04); it is never appended (it has no package file), so
+  # (source-only per ADR-006); it is never appended (it has no package file), so
   # the package-deploy loop can never record a phantom FAILURE → die. In the
   # no-arg case the canary is excluded for the same reason — iterating
   # packages/ never yields it (the package set is 1:1 with the non-canary
@@ -3603,9 +3603,28 @@ cmd_check() {
 
   local ISSUES=0
 
-  # Check 1 — Skill sync (module-aware iteration over 4 per-module arrays).
+  # Check 1 — Skill sync (module-aware iteration over the 3 DEPLOYED module arrays).
+  #
+  # CANARY_SKILLS is EXCLUDED. This check asserts install-parity — that a source
+  # SKILL.md has a matching installed copy — which is a DEPLOY-TARGET assertion,
+  # and the canary is source-only per ADR-006 ("lives in release/ as canary-
+  # source-only; NOT part of release's Public API"). It is excluded from
+  # build_full_roster_skills(), from Check 5(d)'s roster, and from the 5(d)
+  # deployed roster for the same reason; this loop was the sole outlier.
+  #
+  # Including it made the canary structurally unable to pass: never deployed, so
+  # a clean instance took the "not installed" branch, and an instance carrying a
+  # stale copy from a historical deploy took the "differs from repo" branch as
+  # soon as source moved. Neither branch was clearable by any deploy, so the
+  # canary contributed a permanent non-zero count that trained readers to treat
+  # a non-zero --check total as normal.
+  #
+  # This does NOT weaken canary coverage: the canary's SOURCE-DIRECTORY presence
+  # is still asserted by Check 5's EXPECTED_ROSTER, which deliberately DOES
+  # include it (see the note at the 5(d) roster block). Directory presence is
+  # asserted; install-parity is not, because it is not a deploy target.
   log "Check 1: Skill sync"
-  for skill in "${OPERATIONS_SKILLS[@]}" "${RELEASE_SKILLS[@]}" "${CORE_SKILLS[@]}" "${CANARY_SKILLS[@]}"; do
+  for skill in "${OPERATIONS_SKILLS[@]}" "${RELEASE_SKILLS[@]}" "${CORE_SKILLS[@]}"; do
     local module
     module=$(resolve_skill_module "$skill")
     local source="$module/skills/$skill/SKILL.md"
@@ -3872,7 +3891,7 @@ cmd_check() {
   #   (ii)  every deployed-roster member ∈ the registry rows   (FAIL on asymmetry, BOTH directions)
   #   (iii) every registry row name resolves to a live SKILL.md
   #
-  # Canary exclusion (ADR-04 / source-only canary; registry § Configuration
+  # Canary exclusion (ADR-006 / source-only canary; registry § Configuration
   # Items states the source-only canary is NOT a CI): the roster for 5(d) is
   # OPERATIONS_SKILLS + RELEASE_SKILLS + CORE_SKILLS ONLY — CANARY_SKILLS is
   # NOT unioned in. This is the deliberate divergence from Check 5's
@@ -3956,7 +3975,7 @@ cmd_check() {
       esac
     }
 
-    # Deployed roster for 5(d): the 3 module arrays, canary EXCLUDED (ADR-04).
+    # Deployed roster for 5(d): the 3 module arrays, canary EXCLUDED (ADR-006).
     # set -u guard: ${ARR[@]+...} expands to nothing for an unset/empty array.
     local -a DEPLOYED_ROSTER=()
     local _dr_line
