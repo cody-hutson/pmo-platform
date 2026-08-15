@@ -53,7 +53,7 @@ Every issue reference below sits inside this reference block and is accompanied 
 
 | Field | Value |
 |-------|-------|
-| **Version** | slug-only pre-claim per ADR-092; recorded determination **v4.25**, **PROVISIONAL** — see the note below |
+| **Version** | slug-only pre-claim per ADR-092; recorded determination **v4.27**, **PROVISIONAL** — re-rendered at Stage 6; see the note below |
 | **Date Created** | 2026-08-14 (Friday) — Stage-4 planning |
 | **Scope-lock / Collective Review** | 2026-08-14 (Friday) |
 | **Commit 0 authored** | 2026-08-14 (Friday) |
@@ -67,7 +67,13 @@ Every issue reference below sits inside this reference block and is accompanied 
 | **Release class** | `novel` |
 | **Topology and posture** | D-C SINGLE topology, P0 fully-serial posture |
 
-**D-Version is `v4.25` and is PROVISIONAL.** It is a *recorded determination*, not a reservation: it binds only at the Stage-12 atomic compare-and-swap per ADR-092, and the plan file, the branch, and all hub state key on the **milestone slug**, never on the version. The determination was **re-verified at Engineering Commit 0** against freshly-fetched refs, on three independent claimed-set arms each carrying a live sensitivity and specificity control — origin tags, published GitHub Releases, and the mainline release ledger read at the remote tip. All three place the anchor at `v4.24` and `v4.25` free. One sibling release is in flight — the corpus-tolerance-and-hygiene release, draft pull request #5269 — and it is **slug-only per ADR-092 and claims no slot**, so it cannot collide at determination time. A further re-determination at Stage 12 is expected, not exceptional, and **no version literal ships in this release's code**.
+**D-Version is `v4.27` and is PROVISIONAL. It read `v4.25` at Engineering Commit 0 and was re-rendered at the final Engineering commit.** It is a *recorded determination*, not a reservation: it binds only at the Stage-12 atomic compare-and-swap per ADR-092, and the plan file, the branch, and all hub state key on the **milestone slug**, never on the version. **Nothing renamed** — that is the property slug-primary identity exists to deliver, and this re-render is precisely the case it was designed for.
+
+**Why it moved: two sibling releases claimed and shipped while this one was in Engineering.** The reference-constant-integrity release took **`v4.25`** and the corpus-tolerance-and-hygiene release — the in-flight sibling this plan's contention map already names — took **`v4.26`**. Both are tagged and both carry a mainline release-ledger row. **The Commit-0 note recorded that the corpus-tolerance-and-hygiene sibling "claims no slot"; that was true when written and is false now**, and it is corrected here rather than annotated, because a plan carrying a superseded freeness claim is indistinguishable from one whose claim still holds.
+
+**Re-verified at the final Engineering commit** against freshly-fetched refs, on the same three independent claimed-set arms — each carrying a live sensitivity control that returned non-zero on a known-taken slot, and a specificity control proving the probe is exact rather than prefix-matching. **Origin tags:** subject `v4.27` → 0; sensitivity `v4.26` → 1; specificity — the exact pattern `v4.2` matches nothing while the glob `v4.2*` matches 7, so the probe is exact and the instrument is demonstrably live. **Published GitHub Releases:** subject 0 of 168; sensitivity `v4.26` → 1. **Mainline release ledger at the remote tip:** subject 0 of 27 `v4.x` rows; sensitivity `v4.26` → 1 and `v4.25` → 1. All three place the anchor at **`v4.26`** and **`v4.27` free**.
+
+**One sibling holds an advisory claim on the same slot, and this plan deliberately does not step around it.** The path-and-citation-reconciliation release has re-rendered its own provisional determination to `v4.27` on an unmerged branch. Per **ADR-115** an unmerged branch claim is **advisory, not binding**: next-free is `anchor(origin/main) + 1`, never `max(claimed_set) + 1`. Reserving `v4.28` to dodge the sibling would leave a permanent hole in the version sequence — and a gap blocks the repository, whereas a duplicate inconveniences one branch and is resolved mechanically at the Stage-12 atomic claim. The collision is therefore **recorded, not avoided**; whichever release reaches the compare-and-swap second re-derives there. A further re-determination at Stage 12 is expected, not exceptional, and **no version literal ships in this release's code**.
 
 ---
 

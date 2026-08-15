@@ -12591,7 +12591,13 @@ STUB
     fi
     # And a VERSION-shaped join key must be rejected: the release key is a milestone
     # slug, and a version there would key rows no read-model can resolve.
-    if release/tools/append-pipeline-event.sh --dry-run --version "v4.25" --stage 12 \
+    #
+    # The literal is the suite's reserved fixture version, NOT a real slot. A fixture
+    # that borrows a live version number reads as a claim on it, and it goes stale the
+    # moment that version ships — this arm tests the version GRAMMAR, so the value only
+    # has to be version-SHAPED, and a shape that can never be a real release is the one
+    # that stays true.
+    if release/tools/append-pipeline-event.sh --dry-run --version "v9.99" --stage 12 \
          --event-type deployment-status --event-subtype "deploy-skill" --actor hub --subject "skill:x" \
          --reversibility CHEAP --outcome resolved --payload 'p' >/dev/null 2>&1; then
       echo "FAIL: DS-10c the canonical writer must REJECT a version-shaped release key (control arm)"; failures=$((failures+1))
