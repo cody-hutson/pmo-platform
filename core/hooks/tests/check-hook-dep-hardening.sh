@@ -55,19 +55,21 @@ guard_block() {
 #    someone "makes it uniform" and couples one of them.
 #
 #    WHAT THIS CHECK DOES NOT COVER — read this before trusting a green result.
-#    It greps guard TEXT. The ways the floor actually stops denying at runtime are not
-#    textual, and this check is green in every one of them:
-#      - a syntactically-valid lib/dep-resolve.sh whose top level runs `exit 0`
-#        terminates the hook from inside the guard's own `if` condition, before the
-#        guard can rule. Guard text unchanged, hook silently allows. Tracked as a
-#        separate defect; NOT closed by this check and NOT closed by the mode-coupling
-#        work, which deliberately leaves these three hooks untouched.
-#      - a version-skewed lib still defines resolve_jq, so the floor's guard shape
-#        passes it and the hook proceeds on a stale helper.
+#    It greps guard TEXT. Guard text is not runtime behavior, so green HERE means
+#    "no one text-coupled the floor" and nothing more. Both of the runtime holes this
+#    comment used to name are now closed, and by other instruments than this one:
+#      - a syntactically-valid lib/dep-resolve.sh whose top level runs `exit 0` used to
+#        terminate the hook from inside the guard's own `if` condition, before the guard
+#        could rule — guard text unchanged, hook silently allows. Closed by #5071: the
+#        helper is now attested OUT OF PROCESS before it is admitted to the hook's shell,
+#        and an EXIT trap covers the in-process source. CHECK-6 below asserts the
+#        structure; hook-fail-closed.test.sh section (6) asserts the behavior.
+#      - a version-skewed lib still defines resolve_jq, so the floor's guard shape passed
+#        it and the hook proceeded on a stale helper. Closed by the contract token, whose
+#        agreement across the lib and every carrier CHECK-6 gates.
 #    The runtime arm lives in core/hooks/tests/hook-fail-closed.test.sh section (6),
-#    which executes each floor hook against absent and truncated libs and prints the
-#    corrupt-lib residual on every run. Green HERE means "no one text-coupled the
-#    floor" and nothing more.
+#    which executes each floor hook against seven lib states AND a healthy-lib control
+#    pair. Those are assertions now, not the print-only residual they used to be.
 BACKSTOP_HOOKS="block-credential-reads block-destructive block-rm-prefer-trash"
 for b in $BACKSTOP_HOOKS; do
   f="$HOOKS_GLOB/$b.sh"
@@ -136,7 +138,98 @@ for f in "$HOOKS_GLOB"/block-*.sh; do
   fi
 done
 
+# 6. Dependency-contract integrity — the floor attests its helper OUT OF PROCESS.
+#
+#    CHECK-4 greps guard text for what must NOT be there. This asserts what MUST be
+#    there: the four structural properties the attestation design rests on (#5071,
+#    ADR-133). One of them is a lockout gate rather than a correctness gate.
+#
+#    THE SKEW GATE (why this check is load-bearing and not ceremony). The floor denies
+#    when the helper's contract token does not match the value the hook captured. That
+#    detection is what makes a stale or partially-written helper visible — and it is
+#    equally a way to deny EVERY matching tool call across the floor, because the
+#    dependency guard is evaluated BEFORE the CLAUDE_HOOK_BYPASS check in all three
+#    hooks (ADR-130 Alternative 9 considered moving it and rejected that). Bumping the
+#    token in the lib without bumping every carrier, or the reverse, ships exactly that
+#    lockout. Disagreement fails the build here, so skew introduced IN THIS REPOSITORY
+#    cannot reach a deploy.
+#
+#    WHAT THIS CHECK DOES NOT COVER, stated plainly: a hand-edited or partially-
+#    installed DEPLOYED bundle. This reads the repository, never the operator's
+#    installed hooks, so a deploy that lands a new lib beside old hooks is outside its
+#    reach. That residual is accepted knowingly rather than papered over; recovery is
+#    `bash docs/scripts/setup-workspace.sh` from the operator's own terminal, which the
+#    hooks do not gate. Verify any hook redeploy by HASH, never by exit status.
+DEP_LIB_SRC="$HOOKS_GLOB/lib/dep-resolve.sh"
+LIB_CONTRACT="$(grep -E '^DEP_RESOLVE_CONTRACT=' "$DEP_LIB_SRC" 2>/dev/null | head -1 \
+                 | sed -E 's/^DEP_RESOLVE_CONTRACT=//; s/^"//; s/"$//')"
+if [ -z "$LIB_CONTRACT" ]; then
+  echo "FAIL(6): $DEP_LIB_SRC declares no DEP_RESOLVE_CONTRACT token. Every floor hook captures that value readonly before sourcing and requires it back afterwards; without it the guard cannot distinguish a healthy helper from a stale or self-exiting one." >&2
+  fail=1
+fi
+
+for b in $BACKSTOP_HOOKS; do
+  f="$HOOKS_GLOB/$b.sh"
+  [ -f "$f" ] || continue
+
+  dl_line="$(grep -nE '^readonly DEP_LIB=' "$f" | head -1 | cut -d: -f1)"
+  ct_line="$(grep -nE '^readonly DEP_LIB_CONTRACT=' "$f" | head -1 | cut -d: -f1)"
+  vd_line="$(grep -nF 'DEP_GUARD_VERDICT="pending"' "$f" | head -1 | cut -d: -f1)"
+  fd_line="$(grep -nF 'exec 9>&2' "$f" | head -1 | cut -d: -f1)"
+  tr_line="$(grep -nE '^trap .*DEP_GUARD_VERDICT' "$f" | head -1 | cut -d: -f1)"
+  un_line="$(grep -nF 'trap - EXIT' "$f" | head -1 | cut -d: -f1)"
+  blk="$(guard_block "$f")"
+
+  # (a) the expected contract is captured, and it AGREES with the lib.
+  if [ -z "$ct_line" ]; then
+    echo "FAIL(6): $f does not capture a readonly DEP_LIB_CONTRACT. The guard's verdict depends on that value, so it must be held where the sourced file cannot write it." >&2
+    fail=1
+  else
+    hook_contract="$(sed -n "${ct_line}p" "$f" \
+                      | sed -E 's/^readonly DEP_LIB_CONTRACT=//; s/^"//; s/"$//')"
+    if [ -n "$LIB_CONTRACT" ] && [ "$hook_contract" != "$LIB_CONTRACT" ]; then
+      echo "FAIL(6): $f expects contract '$hook_contract' but $DEP_LIB_SRC declares '$LIB_CONTRACT'. This is the version-skew LOCKOUT: every matching tool call on the always-enforce floor would be denied, and CLAUDE_HOOK_BYPASS cannot clear a LIB-MISSING block. Bump the token in the lib and in EVERY carrier in the same commit." >&2
+      fail=1
+    fi
+  fi
+
+  # (b) immutability ordering — capture ABOVE the guard, never below it.
+  if [ -n "$ct_line" ] && [ -n "$dl_line" ] && [ "$ct_line" -ge "$dl_line" ]; then
+    echo "FAIL(6): $f captures DEP_LIB_CONTRACT at or below its DEP_LIB guard (contract:$ct_line guard:$dl_line). It must precede the guard: the control is immutability, not ordering — a sourced file cannot overwrite a readonly, but it CAN set a variable that has not been declared yet (ADR-130 D3)." >&2
+    fail=1
+  fi
+
+  # (c) the premature-termination interceptor is armed before the guard, on fd 9, and
+  #     disarmed after it. A future tidy-up that deletes the trap silently restores the
+  #     silent-allow, so its absence is a failure rather than a style note.
+  if [ -z "$tr_line" ] || [ -z "$vd_line" ] || [ -z "$un_line" ]; then
+    echo "FAIL(6): $f is missing the premature-termination interceptor (trap:${tr_line:-none} verdict:${vd_line:-none} disarm:${un_line:-none}). Without it a helper that exits during the in-process source terminates the hook before the guard can rule, and the hook allows." >&2
+    fail=1
+  elif [ -n "$dl_line" ] && { [ "$tr_line" -ge "$dl_line" ] || [ "$un_line" -le "$dl_line" ]; }; then
+    echo "FAIL(6): $f arms or disarms its EXIT trap outside the guard region (trap:$tr_line guard:$dl_line disarm:$un_line). The trap must be armed BEFORE the source and disarmed only AFTER the contract is proven." >&2
+    fail=1
+  fi
+  if [ -z "$fd_line" ] || ! grep -qF '>&9' "$f"; then
+    echo "FAIL(6): $f does not save stderr to fd 9 and write the interceptor's message there. When a sourced file exits, the 2>/dev/null on the source is STILL in effect while the trap body runs, so a trap writing to plain stderr is silently swallowed — exit 2 with no message at all." >&2
+    fail=1
+  fi
+
+  # (d) the guard attests out of process, and does NOT lean on a syntax check.
+  if ! printf '%s' "$blk" | grep -qF 'dep_lib_attests'; then
+    echo "FAIL(6): $f guard block does not call dep_lib_attests. Sourcing the helper bare inside the condition is the defect: the helper can terminate the hook from inside the guard's own test." >&2
+    fail=1
+  fi
+  if ! grep -qF 'readonly -f dep_lib_attests' "$f"; then
+    echo "FAIL(6): $f does not mark dep_lib_attests readonly -f — the sourced helper could redefine the function the guard's verdict depends on." >&2
+    fail=1
+  fi
+  if printf '%s' "$blk" | grep -qE 'bash[[:space:]]+-n'; then
+    echo "FAIL(6): $f guard block relies on a bash -n syntax precheck. That is the control this defect defeats: it verifies the helper PARSES, never that it MEANS what the hook expects, and it passes a top-level 'exit 0' by construction." >&2
+    fail=1
+  fi
+done
+
 if [ "$fail" -eq 0 ]; then
-  echo "OK: no hard-coded jq path, no legacy fail-open message, all jq resolvers sourced from lib/dep-resolve.sh, always-enforce floor unconditional, mode-capable cohort couples via a readonly pre-guard snapshot."
+  echo "OK: no hard-coded jq path, no legacy fail-open message, all jq resolvers sourced from lib/dep-resolve.sh, always-enforce floor unconditional, mode-capable cohort couples via a readonly pre-guard snapshot, floor attests its helper out of process on contract $LIB_CONTRACT."
 fi
 exit "$fail"
