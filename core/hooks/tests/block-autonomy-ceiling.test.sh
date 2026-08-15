@@ -159,8 +159,28 @@ test_case "Tier-0 override: CLAUDE.md Write at bounded_auto → BLOCK (AC3)" \
   "$(write_payload "${TEST_WS}/CLAUDE.md" "${TEST_WS}/pmo-platform/.claude/worktrees/wt")" \
   2 "BLOCK-AUTONOMY-001"
 
-test_case "Tier-0 override: a SKILL.md Edit at bounded_auto → BLOCK" \
+# SKILL.md is NOT in this hook's governance set — see #5515. It is guarded by
+# block-skill-direct-edit.sh (Gate 2), which owns skills and can tell a sanctioned
+# pmo-skill-editor session from a straight edit. This hook cannot: always_block
+# ignores every signal including the session sentinel, so carrying SKILL.md here
+# made the sanctioned path structurally unreachable — a valid session satisfied
+# Gate 2 and was still denied here.
+#
+# This asserts the ABSENCE of a block, so it is worth stating what stops it from
+# being a hole: the same edit is still denied by Gate 2 absent a live,
+# correctly-targeted, non-stale sentinel. That is Gate 2's contract and is
+# exercised in block-skill-direct-edit.test.sh, not here. A regression that
+# re-adds the arm fails this case; a regression that weakens Gate 2 fails there.
+test_case "SKILL.md Edit at bounded_auto → ALLOW here (Gate 2 owns skills; #5515)" \
   "$(edit_payload "${TEST_WS}/pmo-platform/core/skills/foo/SKILL.md" "${TEST_WS}/pmo-platform")" \
+  0 ""
+
+# Control for the case above: the governance files this hook DOES own must still
+# block at the same ceiling and mode. If this passes while the case above also
+# passes, the arm removal was surgical; if both allow, the hook has been broken
+# rather than narrowed.
+test_case "Tier-0 override: OPERATIONS.md Edit at bounded_auto → BLOCK (control)" \
+  "$(edit_payload "${TEST_WS}/pmo-platform/core/governance/OPERATIONS.md" "${TEST_WS}/pmo-platform")" \
   2 "BLOCK-AUTONOMY-001"
 
 test_case "Tier-0 override: settings.json Write at bounded_auto → BLOCK" \
