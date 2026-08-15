@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.25 (2026-08-15) — Reference-block headings work as documented, and cited counts stay current
+
 ### v4.24 (2026-08-13) — Checks must now prove they stay quiet on correct content
 
 ### v4.23 (2026-08-12) — A partial install now fails loudly instead of reporting success
