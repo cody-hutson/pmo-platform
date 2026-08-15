@@ -465,8 +465,8 @@ for h in $FLOOR_HOOKS; do
     # stderr: the source's 2>/dev/null is still in effect when the trap body runs and
     # would swallow it, yielding exit 2 with EMPTY stderr.
     [ -n "$err" ] || ok=0
-    /usr/bin/printf '%s' "$err" | /usr/bin/grep -qE 'LIB-MISSING' || ok=0
-    /usr/bin/printf '%s' "$err" | /usr/bin/grep -qF 'BLOCKED (fail-closed)' || ok=0
+    /usr/bin/grep -qE 'LIB-MISSING' <<<"$err" || ok=0
+    /usr/bin/grep -qF 'BLOCKED (fail-closed)' <<<"$err" || ok=0
     if [ "$ok" = 1 ]; then
       pass "$base [every mode file = off]: lib $st -> exit 2 + readable LIB-MISSING (deny is mode-independent)"
     else
@@ -493,7 +493,7 @@ for h in $FLOOR_HOOKS; do
   /bin/rm -rf "$sbox"
   ok=1
   [ "$rc" = 0 ] || ok=0
-  /usr/bin/printf '%s' "$err" | /usr/bin/grep -qE 'LIB-MISSING' && ok=0
+  /usr/bin/grep -qE 'LIB-MISSING' <<<"$err" && ok=0
   if [ "$ok" = 1 ]; then
     pass "$base: healthy lib + benign payload -> exit 0 (guard is additive on the healthy path)"
   else
@@ -510,10 +510,10 @@ for h in $FLOOR_HOOKS; do
   /bin/rm -rf "$sbox"
   ok=1
   [ "$rc" = 2 ] || ok=0
-  /usr/bin/printf '%s' "$err" | /usr/bin/grep -qF 'BLOCKED' || ok=0
+  /usr/bin/grep -qF 'BLOCKED' <<<"$err" || ok=0
   # It must deny on its OWN rule, not on the dependency guard — otherwise this arm
   # would agree with itself for a guard that denies everything.
-  /usr/bin/printf '%s' "$err" | /usr/bin/grep -qE 'LIB-MISSING' && ok=0
+  /usr/bin/grep -qE 'LIB-MISSING' <<<"$err" && ok=0
   if [ "$ok" = 1 ]; then
     pass "$base: healthy lib + violating payload -> exit 2 on its OWN rule (rule eval intact)"
   else

@@ -215,7 +215,7 @@ for b in $BACKSTOP_HOOKS; do
   fi
 
   # (d) the guard attests out of process, and does NOT lean on a syntax check.
-  if ! printf '%s' "$blk" | grep -qF 'dep_lib_attests'; then
+  if ! grep -qF 'dep_lib_attests' <<<"$blk"; then
     echo "FAIL(6): $f guard block does not call dep_lib_attests. Sourcing the helper bare inside the condition is the defect: the helper can terminate the hook from inside the guard's own test." >&2
     fail=1
   fi
@@ -223,7 +223,7 @@ for b in $BACKSTOP_HOOKS; do
     echo "FAIL(6): $f does not mark dep_lib_attests readonly -f — the sourced helper could redefine the function the guard's verdict depends on." >&2
     fail=1
   fi
-  if printf '%s' "$blk" | grep -qE 'bash[[:space:]]+-n'; then
+  if grep -qE 'bash[[:space:]]+-n' <<<"$blk"; then
     echo "FAIL(6): $f guard block relies on a bash -n syntax precheck. That is the control this defect defeats: it verifies the helper PARSES, never that it MEANS what the hook expects, and it passes a top-level 'exit 0' by construction." >&2
     fail=1
   fi
