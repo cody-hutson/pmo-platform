@@ -848,6 +848,61 @@ test_case "BLOCK-022 R5 control: unregistered sibling in core/hooks/tests/ block
   2 "BLOCK-DESTRUCTIVE-022"
 
 # ==========================================================================
+# BLOCK-022 AC-FP — the verdict must not depend on non-executing text
+# ==========================================================================
+#
+# The matcher is lexical, so a separator and an interpreter inside a QUOTED
+# ARGUMENT are shredded into fragments that look like commands. The rule then
+# fires on text that DESCRIBES an execution rather than performing one. This is
+# not hypothetical: the class fired three times during the release that added
+# these cases, across two different hooks, including once on a grep pattern.
+#
+# Suppression is gated on an allowlist of outer command words that cannot
+# evaluate their arguments. A word MISSING from that set means a false positive
+# persists -- it can never mean an evasion is admitted.
+
+echo ""
+echo "BLOCK-022 AC-FP quoted-fragment suppression"
+echo "---"
+
+# AC-FP-1: the false positive itself, both arms. Nothing executes here -- gh
+# cannot run its own argument -- so the verdict must be allow.
+test_case "AC-FP-1a: interpreter-shaped text inside a gh --body argument allows" \
+  "$(bash_payload "gh issue comment 1 --body 'note; bash /tmp/evil.sh'")" \
+  0
+
+test_case "AC-FP-1b: source-shaped text inside a gh --body argument allows" \
+  "$(bash_payload "gh issue comment 1 --body 'note; source /tmp/evil.sh'")" \
+  0
+
+# AC-FP-2: the controls that prove no evasion was purchased. Each must STILL
+# block, and each closes a different way the suppression could have been wrong.
+#
+# (a) a real execution after a separator in a carrier-headed command. The
+#     executing segment has balanced quotes, so parity does not suppress it.
+test_case "AC-FP-2a control: real execution after a separator in a carrier command blocks" \
+  "$(bash_payload 'gh issue view 1; bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (b) the -c path is untouched. The first segment's command word is bash, which
+#     is not a carrier, so the gate never opens for a program string.
+test_case "AC-FP-2b control: bash -c program string still blocks (carrier gate closed)" \
+  "$(bash_payload "bash -c 'echo hi; bash /tmp/evil.sh'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (c) suppression is allowlist-GATED, not universal. Identical quoted text under
+#     a command word outside the carrier set must still block.
+test_case "AC-FP-2c control: same quoted text under a non-carrier verb blocks" \
+  "$(bash_payload "zzverb --body 'note; bash /tmp/evil.sh'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (d) a carrier-headed command whose later segment is a REAL invocation with
+#     even quote parity is not suppressed -- the gate opening is not sufficient.
+test_case "AC-FP-2d control: carrier-headed pipeline into a real invocation blocks" \
+  "$(bash_payload "printf '%s' x | bash /tmp/evil.sh")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ==========================================================================
 # NEW-B: Write/Edit primary-write guard
 # ==========================================================================
 

@@ -517,10 +517,83 @@ case "$TOOL_NAME" in
     script_segments="${script_segments//&/$'\n'}"
     script_segments="${script_segments//|/$'\n'}"
 
+    # ---- Quoted-fragment suppression (carrier-gated) ----
+    #
+    # This matcher is LEXICAL: it splits raw argv on separators. A separator and an
+    # interpreter appearing inside a QUOTED ARGUMENT are therefore shredded into
+    # fragments that look exactly like commands, and the rule fires on text that
+    # describes an execution rather than performing one. During this release alone
+    # the class fired three times across two hooks — twice on a quoted data string
+    # and once on a grep PATTERN — and the tightening above ENLARGES the surface,
+    # because every invocation is now adjudicated instead of only the first.
+    #
+    # Suppression is gated on an ALLOWLIST of outer command words that cannot
+    # evaluate their arguments. The direction of that choice is the entire design:
+    # an entry MISSING from this set means a false positive persists — it can never
+    # mean an evasion is admitted. A denylist of evaluating verbs would invert the
+    # failure direction, because one missed verb silently allows a real execution,
+    # and a fail-open surface inside a fail-closed control is not an acceptable
+    # trade for an availability fix.
+    #
+    # Gate: the command word of the FIRST naive segment, resolved with the same
+    # assignment walk the main loop uses. Deliberately kept self-contained rather
+    # than folded into that loop, so this block — and only this block — can be
+    # reverted without unpicking the matcher fix it rides on.
+    script_carrier=0
+    script_first_seg="${script_segments%%$'\n'*}"
+    script_first_seg="${script_first_seg#"${script_first_seg%%[![:space:]]*}"}"
+    if [ -n "$script_first_seg" ]; then
+      set -f
+      # shellcheck disable=SC2206
+      script_ftok=( $script_first_seg )
+      set +f
+      script_fidx=0
+      while [ "$script_fidx" -lt "${#script_ftok[@]}" ]; do
+        case "${script_ftok[$script_fidx]}" in
+          [A-Za-z_]*=*)
+            case "${script_ftok[$script_fidx]%%=*}" in
+              *[!A-Za-z0-9_]*) break ;;
+            esac
+            script_fidx=$(( script_fidx + 1 ))
+            ;;
+          *) break ;;
+        esac
+      done
+      if [ "$script_fidx" -lt "${#script_ftok[@]}" ]; then
+        case "${script_ftok[$script_fidx]##*/}" in
+          gh|git|printf|echo|jq) script_carrier=1 ;;
+        esac
+      fi
+    fi
+
+    # Quote characters held in variables: counting by LENGTH DIFFERENCE after
+    # removal avoids a negated bracket entirely, so there is no pattern-escaping
+    # subtlety for a later editor to get wrong. Validated on bash 3.2.
+    script_q1="'"
+    script_q2='"'
+    script_segno=0
+
     while IFS= read -r script_seg; do
+      script_segno=$(( script_segno + 1 ))
       # trim leading whitespace (leaves the head token at index 0)
       script_seg="${script_seg#"${script_seg%%[![:space:]]*}"}"
       [ -n "$script_seg" ] || continue
+
+      # A segment after the first, under a non-evaluating carrier, with ODD quote
+      # parity is a FRAGMENT of a quoted string rather than a command: the opening
+      # quote is in an earlier fragment or the closing quote in a later one. A
+      # genuinely executing command always has balanced quotes within its own
+      # segment, so this cannot suppress a real invocation. The first segment is
+      # never skipped — that is where the actual command lives.
+      if [ "$script_carrier" -eq 1 ] && [ "$script_segno" -gt 1 ]; then
+        script_strip="${script_seg//$script_q1/}"
+        script_n1=$(( ${#script_seg} - ${#script_strip} ))
+        script_strip="${script_seg//$script_q2/}"
+        script_n2=$(( ${#script_seg} - ${#script_strip} ))
+        if [ $(( script_n1 % 2 )) -eq 1 ] || [ $(( script_n2 % 2 )) -eq 1 ]; then
+          continue
+        fi
+      fi
 
       # tokenize on whitespace with globbing OFF, so a literal `*` in the command
       # is not expanded against the cwd before we can adjudicate it
