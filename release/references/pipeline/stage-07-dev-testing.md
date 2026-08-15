@@ -46,6 +46,8 @@ Set at Stage 7: quality review scores (1-5 per dimension), finding list with sev
 **Domain-Practice Provenance Verification Step:** Phase A asserts that the release plan file (`release/releases/plans/v<X.Y>_RELEASE_PLAN.md`) carries a `domain_practice` provenance label authored by the Stage 4 Planning spoke's Domain-Best-Practice Sourcing-or-Flag Step. This is a Tier-1 deterministic check — it verifies *that a domain was declared*, not that the design conforms to it (conformance is the separate Phase C dimension; see the provenance-vs-conformance composition note under Phase C). The label is verified for:
 
 1. **Presence:** the release plan must contain a single-line `domain_practice:` label (within the `### Release Class declaration` H3 or a sibling `### Domain Practice Provenance` H3, per the Stage 4 placement convention).
+
+   **The check is decoration-tolerant and position-agnostic.** The label satisfies presence wherever it sits on its line — bare, wrapped in a code span, introduced by bold or italic prose, inside a list item, or inside a table cell — because the schema constrains the label's *content*, not its typographic setting. The canonical accepted-rendering set is the Stage 4 §5.7 Serialization-tolerance clause; this step verifies against that set and does **not** define a second one. Presence does **not** accept a narrative mention of `domain_practice` that carries no brace body, nor a plan that merely quotes this step's own verification pattern — in both cases no schema field sits inside a body. A label whose body is **wrapped across two or more lines does satisfy presence** (its opening line carries the body's first fields) and then fails the in-label `domain:` limb, because the class field falls off the matched line; it is reported under that row of the failure table, not as an absent label. A wrapped body is still a genuine finding — the schema is single-line so the fields stay machine-locatable — but it is the second limb that finds it. Two placement rules stated in this list are **not** asserted by either command and remain reviewer-read: the H3 section placement named in this item, and the `date`/`source` field forms in items 2 and 3.
 2. **`date` field populated:** the label's `date` field must be a `YYYY-MM-DD` value (mandatory in BOTH Mode A and Mode B, so staleness is detectable).
 3. **`source` field present:** one of three legitimate forms:
    - Mode A — a citation URL or repo-relative path
@@ -55,20 +57,34 @@ Set at Stage 7: quality review scores (1-5 per dimension), finding list with sev
 
 **Verification command:**
 ```bash
-# (1) label present; (2) the in-label domain: class field present
-grep -nE "^[[:space:]]*domain_practice:" release/releases/plans/v<X.Y>_RELEASE_PLAN.md
-grep -nE "domain_practice:.*\bdomain:[[:space:]]*[A-Za-z]" release/releases/plans/v<X.Y>_RELEASE_PLAN.md
+# (1) label present. Decoration-tolerant: the label counts wherever it sits on its
+#     line — bare, backticked, bold- or prose-introduced, in a list item, or in a
+#     table cell. The discriminator is a schema field inside the label's own brace
+#     body, so neither a narrative mention that carries no body nor a plan that
+#     merely quotes this step's own pattern in prose is a match. Requiring the
+#     field is what keeps the check immune to its own text: the bare token-then-
+#     brace shape alone is satisfied by the pattern written here.
+#     The {0,24} bound is twice the longest decoration run observed across the plan
+#     corpus; re-derive it if a longer rendering ever appears.
+grep -nE 'domain_practice[^{]{0,24}\{[^}]*source:' release/releases/plans/v<X.Y>_RELEASE_PLAN.md
+# (2) the mandatory domain: class field, asserted INSIDE the label body per criterion 4
+#     — not merely somewhere later on the line. The explicit [,{[:space:]] delimiter
+#     replaces \b, which git grep does not support. The delimiter group is OPTIONAL
+#     so the class field is accepted as the body's first key; the schema fixes no
+#     key order, and the group still keeps a longer key such as subdomain: from
+#     satisfying the assertion.
+grep -nE 'domain_practice[^{]{0,24}\{([^}]*[,{[:space:]])?domain:[[:space:]]*[A-Za-z]' release/releases/plans/v<X.Y>_RELEASE_PLAN.md
 ```
 
 **Failure classification:**
 
 | Finding | Severity | Routing |
 |---|---|---|
-| Label absent | Warning | Tier 1 — Engineering adds the label via `fix(dt):` commit; flags the domain-detection follow-up if the auto-detection mechanism is the gap |
+| Label absent — no `domain_practice` label in the Stage 4 §5.7 schema form on any single line (a narrative mention carrying no brace body, a plan that only quotes this step's verification pattern, or provenance serialized in some other shape, does not satisfy presence) | Warning | Tier 1 — Engineering adds the label via `fix(dt):` commit; flags the domain-detection follow-up if the auto-detection mechanism is the gap |
 | Label present, `date` field missing or malformed | Warning | Tier 1 — Engineering refreshes the label via `fix(dt):` commit |
 | Label present, Mode B `UNSOURCED-DOMAIN` with no `rationale` sub-field | Warning | Tier 1 — Engineering adds rationale via `fix(dt):` commit |
 | Label present, Mode B `UNSOURCED-DOMAIN` with rationale — but rationale does not name the unresolved domain | Note | Logged; no routing (the explicit UNSOURCED-DOMAIN flag with any rationale satisfies the disclosure obligation) |
-| Label present, but the mandatory in-label `domain:` class field is absent (or placed as a separate top-level key rather than inside `domain_practice`) | Warning | Tier 1 — Engineering adds the in-label `domain:` class field via `fix(dt):` commit; the field is mandatory in every mode per Stage 4 §5.7 |
+| Label present, but the mandatory in-label `domain:` class field is absent (or placed as a separate top-level key rather than inside `domain_practice`, or falling outside the label body because the body is wrapped across lines — a wrapped label satisfies presence and is reported here) | Warning | Tier 1 — Engineering adds the in-label `domain:` class field via `fix(dt):` commit, re-joining a wrapped body onto one line; the field is mandatory in every mode per Stage 4 §5.7 |
 
 **A8 Runtime-Suite Gate (Blocker, conditional):** When the PR touches a code path that maps to a runtime test suite per [`runtime-suite-selection-map.md`](../standards/runtime-suite-selection-map.md) (rows 1–5; row 6 is the explicit no-match fallback), Phase A runs the selected suite as a gate input and records the outcome as a `test-run` event. This is a Tier-1 deterministic check (a suite passes or fails — it is not an LLM-graded quality score, so it belongs in Phase A, not the Phase C scored dimensions). A doc/governance/spec-only PR matches the map's no-match row → A8 emits `test-run/suite-skip` and is a no-op gate (no ceremony). **Row 4 (tool self-tests) is CI-enforced, not hand-run:** the `selftest-discovery` job in `.github/workflows/release-tooling-smoke.yml` executes every discovered `--self-test` across the two release tool trees on any in-scope PR, so A8 cites an enforced gate for that row rather than a command someone claims to have run — and a self-test recorded as PASS with no CI evidence is now a finding, not a formality.
 
