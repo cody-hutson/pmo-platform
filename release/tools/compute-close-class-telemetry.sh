@@ -108,6 +108,40 @@
 #   That disposition is readable only from the emitted line — `carry-forward-closure
 #   N/A — gh unavailable …` and `evidence-preservation N/A — gh unavailable …`.
 #
+# NO EXIT CODE IS ADDED FOR A DEGRADED OR UNMEASURABLE INDICATOR 6, and that is deliberate.
+# The consumer (automated-closeout.sh, phase_inject_close_class_telemetry_field) routes ANY
+# non-zero exit to FAIL and returns 3, aborting the close-out phase. Signalling a measurement
+# outage by exit code would therefore convert "the check could not measure" into a merge-
+# blocking gate — which review-discipline-principles.md § 8 PV-7c forbids in terms, and which
+# would silently invalidate two sibling standards (phase-telemetry-front-cluster.md,
+# phase-telemetry-middle-cluster.md) that both declare they mirror this tool's 0/1/2 exit
+# semantics. The rule the states follow is that the CONDITION'S KIND picks the transport: a
+# measurement outage never gates and rides IN-BAND in slot 6; an input failure the caller
+# handed us is what exit 1 already covers. A future reader who reads this divergence as an
+# oversight and "fixes" it into an exit code re-opens exactly that gate.
+#
+# INDICATOR 6 SLOT-6 RENDERINGS — three shapes, and the distinction between the last two is
+# the whole point:
+#   <P>/<S> (<ratio>)                          a clean measured rate
+#   N/A — <reason>                             a CLEAN ABSENCE — a genuine zero, or a
+#                                              population that is entirely terminal-stage
+#   <TOKEN> — <reason> — this is not a clean result
+#                                              a degraded or unmeasurable reading
+# TOKEN is a Register B member frozen by review-discipline-principles.md § 8 PV-7 and NO
+# local token is coined here: NOT-EVALUATED when nothing usable was measured, DEGRADED when a
+# rate was computed over a known-incomplete sample. Both always carry the mandated clause.
+# On a NOT-EVALUATED state the counters are ABSENT, never zeroed (PV-7b), so --json publishes
+# null rather than a fabricated "0" for a run that measured nothing. --json additionally
+# reports the Register A measurement status (fetched | truncated | degraded | not-run |
+# fixture) and the unlabelled-candidate count; a consumer MUST branch on that status before
+# reading any counter. `N/A — no stage sub-tasks scaffolded` stays reserved for a GENUINE
+# zero and never renders an unmeasurable one.
+#
+#   NO STATE STRING MAY CONTAIN A SEMICOLON. The eight-slot field grammar
+#   (automated-closeout.sh _close_class_line_conformant, deploy.sh Check 48) splits the field
+#   on `; `, so a semicolon inside a slot silently corrupts the field rather than failing it.
+#   The --self-test asserts this directly over every reachable rendering.
+#
 # Diagnostics go to stderr; stdout carries the single field-value line and nothing else.
 
 set -euo pipefail
@@ -124,10 +158,10 @@ REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
 
 usage() {
-  # Line range = the header comment block, lines 4..111 (ends at the "Diagnostics go to
+  # Line range = the header comment block, lines 4..145 (ends at the "Diagnostics go to
   # stderr" line, immediately before the blank line and `set -euo pipefail`). Re-check this
   # range whenever the header grows or shrinks; a stale upper bound silently truncates --help.
-  /usr/bin/sed -n '4,111p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '4,145p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -175,6 +209,32 @@ EXPECTED_MARKERS=${#CANONICAL_MARKERS[@]}   # 10 canonical-form markers
 ROLLUP_MARKERS=(
   "## 4. Recommendation↔choice delta roll-up (Stage 13 A7.1)"
 )
+
+# ─── The competing category labels (Indicator 6 Layer 2) ─────────────────────
+# A THIRD array, under the same discipline as ROLLUP_MARKERS and for the same reason: it is
+# a FILTER, never a population the rate is computed over, and folding it into either marker
+# array would move a denominator. Three arrays, three questions, three denominators.
+#
+# SSOT: the `group = "category"` rows of core/packs/_common/pack.toml, less `sub-task`
+# itself. label-taxonomy.md § Rules 1 mandates EXACTLY ONE category label per issue, and
+# `sub-task` IS one of those category rows — so a scaffolded stage sub-task whose label went
+# missing carries NO category label at all, while an ordinary intake card always carries
+# exactly one. That documented invariant, not a hand-picked blocklist, is what separates a
+# genuine unlabelled sub-task from an intake card that merely has a stage in its title.
+#
+# DRIFT IS FAIL-SAFE BY CONSTRUCTION. The taxonomy is the union of the installed packs, so a
+# pack that adds a category label drifts this array. An UNLISTED label leaves its issue
+# inside the candidate set, which produces a spurious NON-GATING flag — never a missed one.
+# The failure direction is loud, which is the direction this whole guard exists to enforce.
+CATEGORY_LABELS_EXCEPT_SUBTASK=(
+  improvement protocol skill-update structure documentation
+  enhancement routing-rules tracker-schema bug observation
+)
+
+# The row bound on BOTH Indicator-6 reads. Held as a constant rather than repeated as a
+# literal because the saturation guard below compares against it: a `--limit` and a
+# saturation test that drifted apart would report a truncated read as a complete one.
+SUBTASK_QUERY_LIMIT=500
 
 # ─── Indicator 5: A7.1 roll-up presence ──────────────────────────────────────
 # Returns 0 iff any ROLLUP_MARKERS entry appears as an exact whole line in the register.
@@ -339,6 +399,220 @@ for it in items:
 print(f"{preserved} {scaffolded} {excluded}")
 PY
   return "$_rc"
+}
+
+# ─── Indicator 6 Layer 2: denominator corroboration (the unlabelled-candidate check) ─
+# The SIXTH member of this file's read-model function family (rollup_marker_present,
+# ratio_round_half_up, count_retro_conformance, count_lessons_population,
+# count_subtask_evidence) — one function per population question, JSON-in / counts-out, and
+# drivable from --self-test without gh. count_subtask_evidence was deliberately NOT widened
+# to answer this second question: its contract is the LABEL-SCOPED payload, every shipped arm
+# drives that exact shape, and widening it would re-open the argv-transport question a
+# previous fix closed. A separate function keeps the tested surface tested.
+#
+# THE QUESTION IT ANSWERS is "is the label-scoped denominator COMPLETE?" — never "what is the
+# true denominator?". It reports how many stage sub-task CANDIDATES the milestone holds that
+# the `--label sub-task` query could not see; it NEVER substitutes them for the measured
+# population. Substituting a title-derived population would invent a denominator, which
+# close-class-telemetry.md FM1 forbids in terms — withholding is the sanctioned response.
+#
+# THE DISCRIMINATOR is the label taxonomy's own category axis, not a bare title match:
+#   L  = { i in M : 'sub-task' in labels(i) }                      the measured population
+#   T' = { i in M : STAGE_RE(title(i)) AND labels(i) has no
+#                   CATEGORY_LABELS_EXCEPT_SUBTASK member }        the candidate population
+#   U  = |T' \ L|                                                  the signal
+# A BARE title match does NOT work and this was measured, not assumed: applied to the
+# label-free population it returns ordinary intake cards — "Stage 9 can render GO on a draft
+# release PR …", "Stage 13 Phase C5 thread-locking has not fired …" — several of them
+# milestoned right now, so an unfiltered guard would flag live milestones DEGRADED on a
+# perfectly-measured denominator. The category filter removed every one of those without
+# removing any labelled sub-task, because of the § Rules 1 invariant cited on the array above.
+#
+# U > 0 IS THE SIGNAL, and the difference is ONE-SIDED BY CONSTRUCTION. The converse — a
+# labelled sub-task whose title carries no `Stage N` prefix — is NORMAL and must never flag;
+# the suite already fixtures one. Computed as a PYTHON SET DIFFERENCE over issue numbers,
+# never with shell `comm`, which requires a lexical sort and silently yields a wrong set
+# difference under a numeric one — and a wrong U here fails open in BOTH directions.
+#
+# STAGE_RE IS REUSED VERBATIM from count_subtask_evidence. A second stage-title regex in one
+# file is a duplicate source, and if the two ever diverged the terminal-stage exclusion and
+# the denominator corroboration would disagree about what a stage sub-task IS.
+#
+# Echoes "<M> <T'> <U>" from a JSON array of {number,title,labels}. On an unparseable payload
+# it echoes "-1 0 0" and EXITS 0 — deliberately NOT exit 2. Exit 2 is reserved for a register
+# that EXISTS but is UNREADABLE, a source-integrity violation the caller escalates to FAIL; a
+# cross-check that could not read is a DEGRADATION, and escalating it would turn a measurement
+# outage into a gate. The -1 sentinel is what the caller reads to say so out loud.
+count_denominator_corroboration() {
+  local json="$1"
+  # `printf` here is the BASH BUILTIN, deliberately — see the transport note above.
+  /usr/bin/python3 - <(printf '%s' "$json") "${CATEGORY_LABELS_EXCEPT_SUBTASK[@]}" <<'PY'
+import json, re, sys
+# Reused verbatim from count_subtask_evidence — one definition of "a stage sub-task title".
+STAGE_RE = re.compile(r"^\s*stage\s*0*(\d+)\b", re.IGNORECASE)
+SUBTASK_LABEL = "sub-task"
+CATEGORY_EXCEPT_SUBTASK = {a.strip().lower() for a in sys.argv[2:] if a.strip()}
+
+def labels_of(item):
+    out = set()
+    for lab in (item.get("labels") or []):
+        name = lab.get("name", "") if isinstance(lab, dict) else lab
+        name = str(name or "").strip().lower()
+        if name:
+            out.add(name)
+    return out
+
+# argv[1] is a PATH (a process-substitution FD), not the payload itself.
+try:
+    with open(sys.argv[1], encoding="utf-8") as _fh:
+        items = json.load(_fh)
+    if not isinstance(items, list):
+        raise ValueError("expected a JSON array of issues")
+except (ValueError, TypeError, OSError, UnicodeDecodeError) as e:
+    print(f"denominator corroboration source unparseable: {e}", file=sys.stderr)
+    print("-1 0 0")           # sentinel, exit 0 — a failed cross-check degrades, never gates
+    sys.exit(0)
+
+measured = set()       # L  — carries the sub-task label
+candidates = set()     # T' — stage-titled AND carrying no competing category label
+total = 0
+for it in items:
+    total += 1
+    num = it.get("number") if isinstance(it, dict) else None
+    if num is None:
+        continue
+    labs = labels_of(it)
+    if SUBTASK_LABEL in labs:
+        measured.add(num)
+    if STAGE_RE.match(str(it.get("title") or "")) and not (labs & CATEGORY_EXCEPT_SUBTASK):
+        candidates.add(num)
+# ONE-SIDED difference. |L \ T'| is benign (a labelled sub-task with an unparseable title is
+# normal and already fixtured) and is deliberately neither computed nor reported.
+print(f"{total} {len(candidates)} {len(candidates - measured)}")
+PY
+}
+
+# ─── Indicator 6: slot-6 state resolution (the denominator-integrity guard) ───
+# ONE decision point for every reachable rendering of slot 6, called by the live emission
+# path and driven directly by --self-test. It is a FUNCTION rather than an inline branch for
+# one reason: the DZ/DU arms compare the EMITTED STRINGS, and a test that recomputed the
+# branch itself would be a second copy of the contract — the same duplicate-denominator
+# breach the separate marker arrays exist to prevent, one level up.
+#
+# WHY IT EXISTS. Three genuinely different conditions used to emit the SAME 21 bytes,
+# `N/A — no stage sub-tasks scaffolded`: a true zero, a milestone whose stage sub-tasks exist
+# but are unlabelled, and an unresolvable `--milestone` (which returns `[]` at exit 0, byte-
+# identical to a true zero). A milestone that scaffolded 29 sub-tasks published S=0 and a
+# reader had no signal that anything was wrong. A metric that fails open is worse than a
+# missing one, because it is trusted.
+#
+# REGISTERS per review-discipline-principles.md § 8 PV-7 — NO token is coined here:
+#   Register A (measurement status): fetched | truncated | degraded | not-run | fixture
+#   Register B (degraded state)    : NOT-EVALUATED (nothing usable was measured)
+#                                    DEGRADED      (a rate over a known-incomplete sample)
+# Every Register-B emit carries the mandated clause `this is not a clean result`, and no
+# clean row carries it. The CLEAN-ABSENCE rendering `N/A — <reason>` is a separate register
+# (indicator-value) and keeps its spelling byte-for-byte: the fix is not to replace N/A, it
+# is to stop the UNMEASURABLE case borrowing the CLEAN-ABSENCE rendering.
+#
+# NO REASON STRING MAY CONTAIN A SEMICOLON — the eight-slot field grammar splits on `; `.
+#
+# PRECEDENCE among conditions that can hold at once, stated so it cannot drift: read-integrity
+# first (gh absent -> repo unresolvable -> primary read failed -> milestone unlocatable), then,
+# on a measured rate, truncation (a deterministic fact about the read itself) -> uncorroborated
+# (U could not be computed at all) -> label gap (U > 0). One condition, one reason, always the
+# same one for the same inputs.
+#
+# args: <status> <primary_rc> <primary_rows> <M> <U> <P> <S> <X> [<milestone>]
+#   status        live | no-gh | no-repo | fixture   (fixture => Register A `fixture`)
+#   primary_rc    exit status of the label-scoped `gh issue list`
+#   primary_rows  rows the label-scoped read returned (|L| payload rows)
+#   M             milestone-wide row count from count_denominator_corroboration, or -1 when
+#                 the cross-check could not run at all
+#   U             unlabelled stage sub-task candidates (|T' \ L|)
+#   P S X         count_subtask_evidence output (preserved / measurable / terminal-excluded)
+# Echoes TAB-separated: <register-a>\t<register-b or ->\t<reason>\t<slot-6 string>
+evidence_slot_state() {
+  local status="$1" prc="$2" prows="$3" m="$4" u="$5" p="$6" s="$7" x="$8" ms="${9:-}"
+  local ra="fetched" rb="-" reason="" slot="" rate=""
+  local clause="this is not a clean result"
+  local corrob=0
+  [[ "$m" -lt 0 ]] && corrob=1
+
+  if [[ "$status" == "no-gh" ]]; then
+    ra="not-run"; rb="NOT-EVALUATED"
+    reason="gh unavailable, phase-evidence preservation not computed"
+  elif [[ "$status" == "no-repo" ]]; then
+    ra="not-run"; rb="NOT-EVALUATED"
+    reason="could not resolve target repo, set REPO or run inside a gh-authenticated repo"
+  elif [[ "$prc" -ne 0 ]]; then
+    # Layer 1, deterministic: the read FAILED. Distinct from a read that succeeded and
+    # found nothing, which every earlier version of this branch could not tell apart.
+    ra="degraded"; rb="NOT-EVALUATED"
+    reason="the sub-task read failed (gh exit $prc), the population is unmeasured"
+  elif [[ "$m" -eq 0 ]]; then
+    # Layer 1, deterministic: an unresolvable --milestone returns [] at exit 0. Without this
+    # limb a wrong milestone publishes "this release scaffolded no stage sub-tasks" when the
+    # truth is "I looked in the wrong place".
+    ra="degraded"; rb="NOT-EVALUATED"
+    if [[ -n "$ms" ]]; then
+      reason="milestone $ms returned no issues at all, so the population could not be located"
+    else
+      reason="the milestone returned no issues at all, so the population could not be located"
+    fi
+  elif [[ "$s" -eq 0 ]]; then
+    if [[ "$corrob" -eq 1 ]]; then
+      ra="degraded"; rb="NOT-EVALUATED"
+      reason="the denominator cross-check could not run, so a genuine zero could not be told apart from an unmeasurable one"
+    elif [[ "$u" -gt 0 ]]; then
+      ra="truncated"; rb="NOT-EVALUATED"
+      if [[ "$prows" -eq 0 ]]; then
+        reason="denominator unmeasurable: 0 labelled rows against $u unlabelled stage sub-task candidates"
+      else
+        reason="denominator unmeasurable: 0 measurable labelled rows against $u unlabelled stage sub-task candidates"
+      fi
+    elif [[ "$x" -gt 0 ]]; then
+      reason="no non-terminal stage sub-tasks scaffolded"
+    else
+      reason="no stage sub-tasks scaffolded"
+    fi
+  else
+    rate="$(ratio_round_half_up "$p" "$s")"
+    # EITHER read saturating the row bound truncates this reading. The cross-check's own
+    # saturation matters for the same reason the primary's does, and in the same direction:
+    # a truncated milestone read can only SHRINK the candidate set, so it can only lose a
+    # flag, never invent one. Both reads share one bound, so one comparison covers both.
+    if [[ "$prows" -ge "$SUBTASK_QUERY_LIMIT" || "$m" -ge "$SUBTASK_QUERY_LIMIT" ]]; then
+      ra="truncated"; rb="DEGRADED"
+      reason="$p/$s ($rate) over a read truncated at the $SUBTASK_QUERY_LIMIT-row limit"
+    elif [[ "$corrob" -eq 1 ]]; then
+      ra="degraded"; rb="DEGRADED"
+      reason="$p/$s ($rate), uncorroborated: the denominator cross-check could not run"
+    elif [[ "$u" -gt 0 ]]; then
+      ra="truncated"; rb="DEGRADED"
+      reason="$p/$s ($rate) over a label-scoped sample, $u unlabelled stage sub-task candidates not counted"
+    fi
+  fi
+
+  # ONE composition point for the three renderings, so the mandated clause cannot ride a
+  # clean row and a clean absence cannot borrow a Register-B spelling.
+  if [[ "$rb" != "-" ]]; then
+    slot="$rb — $reason — $clause"
+  elif [[ -n "$reason" ]]; then
+    slot="N/A — $reason"
+  else
+    slot="$p/$s ($rate)"
+  fi
+  # --self-test drives this same decision with fixture inputs; Register A says so, which is
+  # why `fixture` is a member at all. It is never emitted on the field line — the self-test
+  # exits before the emission section.
+  [[ "$status" == "fixture" ]] && ra="fixture"
+  # An ABSENT reason is emitted as `-`, never as an empty field, and the caller translates it
+  # back. Tab is IFS *whitespace*, so `IFS=$'\t' read` COLLAPSES consecutive tabs — an empty
+  # third field would silently shift the slot string into the reason variable and emit an
+  # EMPTY slot 6. That is a fail-open in the guard against fail-open, and it is only reachable
+  # on the clean measured row, which is the row a degraded-state test is least likely to drive.
+  /usr/bin/printf '%s\t%s\t%s\t%s\n' "$ra" "$rb" "${reason:--}" "$slot"
 }
 
 # ─── Self-test mode (no gh / no network) ─────────────────────────────────────
@@ -532,6 +806,127 @@ if [[ "${1:-}" == "--self-test" ]]; then
   R="$(ratio_round_half_up "$EP" "$ES")"
   [[ -n "$R" && "$R" != "N/A" ]] || die "self-test: subtask-evidence ratio(over-argv) = '$R', expected a computed rate"
 
+  # Test 8: Indicator 6 DENOMINATOR INTEGRITY — the guard that stops an UNMEASURABLE
+  #   denominator borrowing the CLEAN-ABSENCE rendering. Before it, a true zero and a total
+  #   label gap emitted the identical 21 bytes, so a milestone that scaffolded 29 stage
+  #   sub-tasks published S=0 with no signal that anything was wrong.
+  #   Following Test 5c: a fixture whose two arms agree is a broken probe, not a clean one,
+  #   and must fail this suite.
+
+  # DZ — TRUE ZERO. A milestone with issues in it, none of them a stage sub-task.
+  DENOM_DZ='[{"number":1,"title":"[Improvement]: something unrelated","labels":[{"name":"improvement"}]}]'
+  read -r DM DT DU < <(count_denominator_corroboration "$DENOM_DZ")
+  [[ "$DM" == "1" && "$DT" == "0" && "$DU" == "0" ]] || die "self-test: denominator-corroboration(DZ true-zero) = M=$DM T'=$DT U=$DU, expected M=1 T'=0 U=0"
+  IFS=$'\t' read -r DZ_RA DZ_RB DZ_REASON DZ_STR < <(evidence_slot_state live 0 0 "$DM" "$DU" 0 0 0)
+  [[ "$DZ_STR" == "N/A — no stage sub-tasks scaffolded" ]] || die "self-test: denominator-integrity(DZ) emitted '$DZ_STR', expected the clean-absence rendering 'N/A — no stage sub-tasks scaffolded' byte-for-byte — a genuine zero keeps its spelling"
+  [[ "$DZ_RA" == "fetched" && "$DZ_RB" == "-" ]] || die "self-test: denominator-integrity(DZ) status = $DZ_RA/$DZ_RB, expected fetched with NO Register-B token — a clean absence is not a degradation"
+
+  # DU — UNLABELLED SUB-TASKS. The same shape plus rows the hub would have scaffolded,
+  #      WITHOUT the sub-task label. This is the card's headline instance.
+  DENOM_DU='[{"number":1,"title":"[Improvement]: something unrelated","labels":[{"name":"improvement"}]},{"number":2,"title":"Stage 5 Solutioning — parent card (slug)","labels":[]},{"number":3,"title":"Stage 6 Engineering — parent card (slug)","labels":[]}]'
+  read -r DM DT DU < <(count_denominator_corroboration "$DENOM_DU")
+  [[ "$DM" == "3" && "$DT" == "2" && "$DU" == "2" ]] || die "self-test: denominator-corroboration(DU unlabelled) = M=$DM T'=$DT U=$DU, expected M=3 T'=2 U=2"
+  IFS=$'\t' read -r DU_RA DU_RB DU_REASON DU_STR < <(evidence_slot_state live 0 0 "$DM" "$DU" 0 0 0)
+  [[ "$DU_RA" == "truncated" && "$DU_RB" == "NOT-EVALUATED" ]] || die "self-test: denominator-integrity(DU) status = $DU_RA/$DU_RB, expected truncated/NOT-EVALUATED"
+  [[ "$DU_STR" != "N/A"* ]] || die "self-test: denominator-integrity(DU) emitted '$DU_STR' — an unmeasurable denominator must NEVER render as N/A"
+  [[ "$DU_STR" == *"this is not a clean result" ]] || die "self-test: denominator-integrity(DU) emitted '$DU_STR' without the mandated clause"
+
+  # THE ASSERTION — the two states must DIFFER. This is the whole card in one line.
+  [[ "$DZ_STR" != "$DU_STR" ]] || die "self-test: denominator-integrity — DZ (true zero) and DU (unlabelled sub-tasks) emitted the IDENTICAL state '$DZ_STR'. An unmeasurable denominator is borrowing the clean-absence rendering, which is the fail-open this guard exists to close"
+
+  # DFP — SPECIFICITY. An ordinary intake card whose TITLE carries the stage vocabulary but
+  #   which carries a competing category label is NOT a sub-task and must NOT flag. Measured
+  #   at the release base, a bare title match returned several such cards, milestoned right
+  #   now; without this arm the guard would ship with a live false-positive population.
+  DENOM_DFP='[{"number":4,"title":"Stage 9 can render GO on a draft release PR — the transition is described but never asserted","labels":[{"name":"bug"},{"name":"status: proposed"}]},{"number":5,"title":"Stage 13 Phase C5 thread-locking has not fired","labels":[{"name":"improvement"}]}]'
+  read -r DM DT DU < <(count_denominator_corroboration "$DENOM_DFP")
+  [[ "$DM" == "2" && "$DT" == "0" && "$DU" == "0" ]] || die "self-test: denominator-corroboration(DFP specificity) = M=$DM T'=$DT U=$DU, expected M=2 T'=0 U=0 — an intake card carrying a category label is not an unlabelled sub-task"
+  IFS=$'\t' read -r DFP_RA DFP_RB DFP_REASON DFP_STR < <(evidence_slot_state live 0 0 "$DM" "$DU" 0 0 0)
+  [[ "$DFP_STR" == "$DZ_STR" ]] || die "self-test: denominator-integrity(DFP) emitted '$DFP_STR', expected the clean-absence rendering — the guard flagged a correctly-measured denominator"
+
+  # DL — ONE-SIDED-DIFFERENCE GUARD. A LABELLED sub-task whose title carries no `Stage N`
+  #   prefix is normal (the shape arm above already fixtures one) and must not flag. The
+  #   difference is |T' \ L|, never a symmetric comparison.
+  DENOM_DL='[{"number":6,"title":"[Subtask] Software-domain templates — Wave 1","labels":[{"name":"sub-task"}]},{"number":7,"title":"Stage 6 Engineering — parent card (slug)","labels":[{"name":"sub-task"}]}]'
+  read -r DM DT DU < <(count_denominator_corroboration "$DENOM_DL")
+  [[ "$DM" == "2" && "$DT" == "1" && "$DU" == "0" ]] || die "self-test: denominator-corroboration(DL one-sided) = M=$DM T'=$DT U=$DU, expected M=2 T'=1 U=0 — |L \\ T'| is benign and must not flag"
+
+  # DP — the PARTIAL label gap. The more dangerous half: a plausible RATE over a wrong
+  #   denominator is trusted more than a false N/A, so the guard fires on the non-zero
+  #   branch too, not only when the labelled population is empty.
+  IFS=$'\t' read -r DP_RA DP_RB DP_REASON DP_STR < <(evidence_slot_state live 0 4 40 2 3 4 0)
+  [[ "$DP_RA" == "truncated" && "$DP_RB" == "DEGRADED" ]] || die "self-test: denominator-integrity(partial gap) status = $DP_RA/$DP_RB, expected truncated/DEGRADED"
+  [[ "$DP_STR" == "DEGRADED — 3/4 (0.75) over a label-scoped sample, 2 unlabelled stage sub-task candidates not counted — this is not a clean result" ]] || die "self-test: denominator-integrity(partial gap) emitted '$DP_STR'"
+
+  # Test 8b: the SLOT-6 STATE GRAMMAR over every reachable rendering. The no-semicolon rule
+  #   is the one constraint that would silently CORRUPT the eight-slot field rather than fail
+  #   it (both grammar predicates split on `; `), so it is asserted directly rather than
+  #   trusted. The clause check is two-sided on purpose: a probe that flags all thirteen has
+  #   not discriminated between a degraded row and a clean one.
+  SLOT_ROWS=0; SLOT_CLEAN=0; SLOT_TOKENED=0; SLOT_RA_SEEN=""; SLOT_RATE_ROWS=0
+  while IFS=$'\t' read -r _ra _rb _rs _slot; do
+    SLOT_ROWS=$(( SLOT_ROWS + 1 ))
+    # NON-EMPTINESS FIRST, and it is not a formality: every other assertion in this loop is
+    # vacuously satisfied by an empty string, so without this one a rendering that failed to
+    # reach its variable at all would read as clean on every check below.
+    [[ -n "$_slot" ]] || die "self-test: slot-6 rendering $SLOT_ROWS is EMPTY — every assertion below is vacuous on an empty string, so this is a broken probe rather than a clean one"
+    [[ -n "$_rs" ]] || die "self-test: slot-6 rendering $SLOT_ROWS carries an empty reason field — an absent reason must be emitted as '-' so the tab-separated read cannot collapse it"
+    case "$_slot" in
+      *";"*) die "self-test: slot-6 state '$_slot' contains a SEMICOLON — the eight-slot field grammar splits on '; ' and this would silently corrupt the field" ;;
+    esac
+    # Reproduce the CONSUMER'S parse structurally rather than copying its regex: compose the
+    # full field line with this rendering in slot 6 and count the `; `-separated slots. Eight
+    # is the contract; a state string that split the field would land here as 9, which is the
+    # corruption mode a permissive `.+` grammar cannot see.
+    _line="**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 8/10 (0.80); carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation ${_slot}; evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh"
+    _slots=1; _rest="$_line"
+    while [[ "$_rest" == *"; "* ]]; do _slots=$(( _slots + 1 )); _rest="${_rest#*"; "}"; done
+    [[ "$_slots" -eq 8 ]] || die "self-test: slot-6 state '$_slot' composes a field line of $_slots slots, expected 8 — this state string splits the field"
+    case "$SLOT_RA_SEEN" in *"|$_ra|"*) : ;; *) SLOT_RA_SEEN="${SLOT_RA_SEEN}|$_ra|" ;; esac
+    if [[ "$_rb" == "-" ]]; then
+      SLOT_CLEAN=$(( SLOT_CLEAN + 1 ))
+      [[ "$_slot" != *"this is not a clean result"* ]] || die "self-test: clean slot-6 state '$_slot' carries the not-clean clause"
+      # A clean row is EITHER a clean absence (`N/A — <reason>`, reason present) or a measured
+      # rate (reason absent, so `-`). Nothing else is a lawful clean rendering.
+      if [[ "$_rs" == "-" ]]; then
+        SLOT_RATE_ROWS=$(( SLOT_RATE_ROWS + 1 ))
+        [[ "$_slot" =~ ^[0-9]+/[0-9]+\ \([0-9]+\.[0-9][0-9]\)$ ]] || die "self-test: clean slot-6 state '$_slot' has no reason and is not a measured rate"
+      else
+        [[ "$_slot" == "N/A — "* ]] || die "self-test: clean slot-6 state '$_slot' carries a reason but does not render as a clean absence"
+      fi
+    else
+      SLOT_TOKENED=$(( SLOT_TOKENED + 1 ))
+      case "$_rb" in
+        NOT-EVALUATED|DEGRADED) : ;;
+        *) die "self-test: slot-6 emitted the out-of-register token '$_rb' — Register B is a CLOSED two-member set and a surface that needs another state amends the rider, it does not coin one here" ;;
+      esac
+      [[ "$_slot" == "$_rb"* ]] || die "self-test: slot-6 state '$_slot' does not open with its Register-B token"
+      [[ "$_slot" == *"this is not a clean result" ]] || die "self-test: Register-B slot-6 state '$_slot' is missing the mandated clause"
+    fi
+  done < <(
+    evidence_slot_state no-gh   0   0   0 0 0 0 0            # gh absent
+    evidence_slot_state no-repo 0   0   0 0 0 0 0            # repo unresolvable
+    evidence_slot_state live    1   0  -1 0 0 0 0            # primary read failed
+    evidence_slot_state live    0   0   0 0 0 0 0 314        # milestone unlocatable
+    evidence_slot_state live    0   0   3 2 0 0 0            # total label gap
+    evidence_slot_state live    0   2   5 1 0 0 2            # all-terminal, still unmeasurable
+    evidence_slot_state live    0   4  -1 0 3 4 0            # uncorroborated rate
+    evidence_slot_state live    0 500 600 0 400 500 0        # limit-saturated primary read
+    evidence_slot_state live    0   4 500 0   3   4 0        # limit-saturated cross-check
+    evidence_slot_state live    0   4  40 2 3 4 0            # partial label gap
+    evidence_slot_state live    0   0   5 0 0 0 0            # true zero
+    evidence_slot_state live    0   2   5 0 0 0 2            # all-terminal clean absence
+    evidence_slot_state live    0   4   8 0 4 4 0            # normal measured rate
+    evidence_slot_state fixture 0   4   8 0 4 4 0            # fixture-sourced measurement
+  )
+  [[ "$SLOT_ROWS" -eq 14 ]] || die "self-test: slot-6 grammar walked $SLOT_ROWS renderings, expected 14 — the extraction is broken and the zero-semicolon finding is not a finding"
+  [[ "$SLOT_TOKENED" -eq 10 ]] || die "self-test: slot-6 grammar saw $SLOT_TOKENED Register-B rows, expected 10"
+  [[ "$SLOT_CLEAN" -eq 4 ]] || die "self-test: slot-6 grammar saw $SLOT_CLEAN clean rows, expected 4"
+  [[ "$SLOT_RATE_ROWS" -eq 2 ]] || die "self-test: slot-6 grammar saw $SLOT_RATE_ROWS measured-rate rows, expected 2 — the clean measured row is the ONLY one with an absent reason, and it is the row an empty-field collapse would silently blank"
+  for _m in fetched truncated degraded not-run fixture; do
+    case "$SLOT_RA_SEEN" in *"|$_m|"*) : ;; *) die "self-test: Register A member '$_m' is unreachable — the mapping claims all five are reachable" ;; esac
+  done
+
   rm -rf "$TMPD"; trap - EXIT
   echo "self-test: PASS"
   echo "  ratio round-half-up validated (exact / below-half / at-half / above-half / zero-den)"
@@ -542,6 +937,11 @@ if [[ "${1:-}" == "--self-test" ]]; then
   echo "  Indicator 6 phase-evidence preservation validated (full 4/4 + partial 1/4 + presence-fallback + int-count + zero-scaffolded N/A)"
   echo "  Indicator 6 terminal-stage exclusion validated (Stage-12/13 excluded 4/4 not 4/6 + unparseable-title fail-safe retain + all-terminal N/A)"
   echo "  Indicator 6 OVER-ARGV transport validated (${#EVID_BIG} bytes, $BIG_N items — refused as argv by exec, accepted by the FD transport, semantics preserved: $EP/$ES excl $EX)"
+  echo "  Indicator 6 denominator-integrity validated (DZ true-zero and DU unlabelled emit DIFFERENT states: '$DZ_STR' vs '$DU_STR')"
+  echo "  Indicator 6 denominator-integrity DFP specificity validated (an intake card whose title carries the stage vocabulary but which holds a competing category label does NOT flag — U=0)"
+  echo "  Indicator 6 denominator-integrity DL one-sided-difference validated (a labelled sub-task with a non-Stage title does NOT flag — the difference is |T' \\ L|, never symmetric)"
+  echo "  Indicator 6 denominator-integrity partial-gap validated (a plausible rate over a wrong denominator degrades too: '$DP_STR')"
+  echo "  Indicator 6 slot-6 state grammar validated ($SLOT_ROWS reachable renderings: 0 semicolons and an 8-slot field line each, the mandated clause on all $SLOT_TOKENED Register-B rows and on none of the $SLOT_CLEAN clean rows, tokens confined to NOT-EVALUATED|DEGRADED, all 5 Register-A members reachable)"
   exit 0
 fi
 
@@ -693,31 +1093,72 @@ fi
 # the GH + REPO resolved for Indicator 3. Mechanical gh-state read only — honors the standard
 # § 8 boundary (NOT the event log). N/A when the release scaffolded zero stage sub-tasks
 # (pre-hub-spoke / grandfathered), or when every scaffolded sub-task is terminal-stage.
+#
+# DENOMINATOR INTEGRITY (Layer 1 read-integrity + Layer 2 corroboration). The label-scoped
+# query is the population whose COMPLETENESS is in question, so it is retained byte-for-byte
+# and the guard AUDITS it rather than replacing it — a title-derived denominator would be an
+# invented one, which FM1 forbids. Layer 1 is heuristic-free: it separates a failed read, an
+# unlocatable milestone and a limit-saturated read, all three of which used to render as the
+# clean absence. Layer 2 is the only heuristic and it is confined to the label-gap case.
 EVID_PRESERVED="N/A"; EVID_SCAFFOLDED="N/A"; EVID_RATIO="N/A"; EVID_NA_REASON=""; EVID_EXCLUDED=0
+EVID_STATE="not-run"; EVID_TOKEN="-"; EVID_UNLABELLED="N/A"; EVID_STR=""
+EVID_P_RAW=0; EVID_S_RAW=0; EVID_X_RAW=0; EVID_M=-1; EVID_U=0
 if [[ -z "$GH" ]]; then
-  EVID_NA_REASON="gh unavailable — phase-evidence preservation not computed"
+  IFS=$'\t' read -r EVID_STATE EVID_TOKEN EVID_NA_REASON EVID_STR < <(evidence_slot_state no-gh 0 0 0 0 0 0 0)
 elif [[ -z "${REPO:-}" ]]; then
-  EVID_NA_REASON="could not resolve target repo — set REPO or run inside a gh-authenticated repo"
+  IFS=$'\t' read -r EVID_STATE EVID_TOKEN EVID_NA_REASON EVID_STR < <(evidence_slot_state no-repo 0 0 0 0 0 0 0)
 else
+  # Capture the read's exit status instead of swallowing it. `|| SUBTASK_RC=$?` keeps the
+  # `2>/dev/null` (the diagnostic is noise) while making "the read FAILED" observably
+  # different from "the read succeeded and found nothing" — which `|| true` could not.
+  SUBTASK_RC=0
   SUBTASK_JSON="$("$GH" issue list --repo "$REPO" \
-    --milestone "$MILESTONE" --label "sub-task" --state all --limit 500 \
-    --json number,title,state,comments 2>/dev/null || true)"
-  if [[ -z "$SUBTASK_JSON" || "$SUBTASK_JSON" == "[]" ]]; then
-    EVID_NA_REASON="no stage sub-tasks scaffolded"
-    EVID_SCAFFOLDED=0; EVID_PRESERVED=0
-  else
-    read -r EVID_PRESERVED EVID_SCAFFOLDED EVID_EXCLUDED < <(count_subtask_evidence "$SUBTASK_JSON")
-    if [[ "$EVID_SCAFFOLDED" -eq 0 ]]; then
-      if [[ "$EVID_EXCLUDED" -gt 0 ]]; then
-        EVID_NA_REASON="no non-terminal stage sub-tasks scaffolded"
-      else
-        EVID_NA_REASON="no stage sub-tasks scaffolded"
-      fi
-    else
-      EVID_RATIO="$(ratio_round_half_up "$EVID_PRESERVED" "$EVID_SCAFFOLDED")"
-    fi
+    --milestone "$MILESTONE" --label "sub-task" --state all --limit "$SUBTASK_QUERY_LIMIT" \
+    --json number,title,state,comments 2>/dev/null)" || SUBTASK_RC=$?
+
+  # Layer 2 — the corroborator. A SECOND, metadata-only read over the milestone-wide
+  # population (no comment bodies, measured at ~10% of the primary payload). A milestone
+  # that returns no issues AT ALL is an unresolvable --milestone, which the primary query
+  # cannot distinguish from a true zero because it returns `[]` at exit 0 either way.
+  CORROB_RC=0
+  CORROB_JSON="$("$GH" issue list --repo "$REPO" \
+    --milestone "$MILESTONE" --state all --limit "$SUBTASK_QUERY_LIMIT" \
+    --json number,title,labels 2>/dev/null)" || CORROB_RC=$?
+  if [[ "$CORROB_RC" -eq 0 && -n "$CORROB_JSON" ]]; then
+    read -r EVID_M EVID_TPRIME EVID_U < <(count_denominator_corroboration "$CORROB_JSON")
   fi
+
+  SUBTASK_ROWS=0
+  if [[ "$SUBTASK_RC" -eq 0 && -n "$SUBTASK_JSON" && "$SUBTASK_JSON" != "[]" ]]; then
+    read -r EVID_P_RAW EVID_S_RAW EVID_X_RAW < <(count_subtask_evidence "$SUBTASK_JSON")
+    SUBTASK_ROWS=$(( EVID_S_RAW + EVID_X_RAW ))
+  fi
+  EVID_EXCLUDED="$EVID_X_RAW"
+
+  IFS=$'\t' read -r EVID_STATE EVID_TOKEN EVID_NA_REASON EVID_STR < <(evidence_slot_state \
+    live "$SUBTASK_RC" "$SUBTASK_ROWS" "$EVID_M" "$EVID_U" \
+    "$EVID_P_RAW" "$EVID_S_RAW" "$EVID_X_RAW" "$MILESTONE")
 fi
+
+# Counters follow the state, not the other way round: on a NOT-EVALUATED row nothing usable
+# was measured, so they are ABSENT (rendered null by --json), never zeroed. A zeroed counter
+# on an unmeasured run publishes a MEASUREMENT that was never taken — the machine-surface
+# twin of the very fail-open this guard closes. The clean-absence rows keep their literal 0/0
+# because there the zero IS the measurement.
+[[ "$EVID_NA_REASON" == "-" ]] && EVID_NA_REASON=""
+if [[ -z "$EVID_STR" ]]; then
+  # Structurally unreachable — the resolver returns exactly one non-empty slot string on
+  # every path. Asserted anyway because an EMPTY slot 6 is the one failure this whole change
+  # could introduce that the permissive `.+` field grammar would accept without complaint.
+  die "internal: Indicator 6 resolved to an EMPTY slot-6 state — refusing to emit a field with a blank indicator" 2
+fi
+if [[ "$EVID_TOKEN" == "NOT-EVALUATED" ]]; then
+  EVID_PRESERVED="N/A"; EVID_SCAFFOLDED="N/A"; EVID_RATIO="N/A"
+else
+  EVID_PRESERVED="$EVID_P_RAW"; EVID_SCAFFOLDED="$EVID_S_RAW"
+  EVID_RATIO="$(ratio_round_half_up "$EVID_P_RAW" "$EVID_S_RAW")"
+fi
+[[ "$EVID_M" -ge 0 ]] && EVID_UNLABELLED="$EVID_U"
 
 # Retained secondary sub-signal: the single Stage-13 G-CL4 close-gate boolean (non-destructive
 # upgrade — the rate is primary, the boolean loses no signal).
@@ -743,7 +1184,9 @@ fmt_rate() {
 RETRO_STR="$(fmt_rate "$RETRO_RATIO" "$RETRO_PRESENT" "$RETRO_EXPECTED" "$RETRO_NA_REASON")"
 LESS_STR="$(fmt_rate "$LESS_RATIO" "$LESS_POP" "$LESS_PROMPTED" "$LESS_NA_REASON")"
 CF_STR="$(fmt_rate "$CF_RATIO" "$CF_CLOSED" "$CF_RAISED" "$CF_NA_REASON")"
-EVID_STR="$(fmt_rate "$EVID_RATIO" "$EVID_PRESERVED" "$EVID_SCAFFOLDED" "$EVID_NA_REASON")"
+# EVID_STR is NOT built by fmt_rate: Indicator 6 carries three renderings, not two, and its
+# resolution has to be callable from --self-test — which runs long before fmt_rate is defined.
+# evidence_slot_state above is the single composition point for all three.
 
 if [[ "$OUTPUT_FORMAT" == "json" ]]; then
   /usr/bin/python3 - \
@@ -752,7 +1195,8 @@ if [[ "$OUTPUT_FORMAT" == "json" ]]; then
     "$LESS_RATIO" "$LESS_POP" "$LESS_PROMPTED" "$LESS_NA_REASON" \
     "$CF_RATIO" "$CF_CLOSED" "$CF_RAISED" "$CF_NA_REASON" \
     "$ROLLUP_PRESENCE" "$EVIDENCE_GATE" \
-    "$EVID_RATIO" "$EVID_PRESERVED" "$EVID_SCAFFOLDED" "$EVID_NA_REASON" "$EVID_EXCLUDED" <<'PY'
+    "$EVID_RATIO" "$EVID_PRESERVED" "$EVID_SCAFFOLDED" "$EVID_NA_REASON" "$EVID_EXCLUDED" \
+    "$EVID_STATE" "$EVID_TOKEN" "$EVID_UNLABELLED" <<'PY'
 import json, sys
 a = sys.argv
 def na(v): return None if v == "N/A" else v
@@ -767,7 +1211,14 @@ out = {
   # `scaffolded` is the MEASURABLE denominator (terminal stages 12/13 excluded);
   # `terminal_excluded` discloses how many were held out, so a reader can reconcile
   # it against the raw sub-task count without re-deriving the rule.
-  "phase_evidence_preservation": {"ratio": na(a[17]), "preserved": na(a[18]), "scaffolded": na(a[19]), "na_reason": a[20] or None, "terminal_excluded": int(a[21])},
+  #
+  # `measurement_state` is Register A and a CONSUMER MUST BRANCH ON IT BEFORE READING ANY
+  # COUNTER. `state_token` is Register B (null on a clean reading). On a NOT-EVALUATED row
+  # the counters are null rather than 0, because nothing was measured and a zero would be a
+  # fabricated measurement. `unlabelled_candidates` is the corroborator's finding — the
+  # stage sub-task candidates the label-scoped query could not see; it is null when the
+  # cross-check could not run at all, which is itself a different fact from zero.
+  "phase_evidence_preservation": {"ratio": na(a[17]), "preserved": na(a[18]), "scaffolded": na(a[19]), "na_reason": a[20] or None, "terminal_excluded": int(a[21]), "measurement_state": a[22], "state_token": (None if a[23] == "-" else a[23]), "unlabelled_candidates": (None if a[24] == "N/A" else int(a[24]))},
   "evidence_close_gate": a[16],
   "mechanism": "compute-close-class-telemetry.sh",
 }

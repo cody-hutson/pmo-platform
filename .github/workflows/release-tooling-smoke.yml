@@ -42,7 +42,7 @@ name: Release tooling smoke
 #              requires the T-13 liveness guard to fire; the suite previously had
 #              ZERO executors, so ADR-111's "protected against regressing to
 #              silence" claim rested on a guard nothing ran), AND the close-class
-#              telemetry regression suite (test_close_class_telemetry.sh — 17 arms
+#              telemetry regression suite (test_close_class_telemetry.sh — 20 arms
 #              over compute-close-class-telemetry.sh, the Stage 13 Phase B producer
 #              of the **Close-Class-Telemetry:** field; mutation-graded, so it asserts
 #              the tool's own --self-test arms DISCRIMINATE rather than restating that
@@ -463,7 +463,7 @@ jobs:
         # untrusted-data path into the shell. Gates on exit code.
         run: bash release/tools/tests/test_spoke_run_directory.sh
 
-      - name: close-class-telemetry regression suite (17 arms; mutation-graded)
+      - name: close-class-telemetry regression suite (20 arms; mutation-graded)
         # Wires a suite that shipped with ZERO executors — the same class as the
         # bundle-issues-parser step below, and found the same way: the platform's own
         # Arm D TEST-SUITE COVERAGE detector flagged it as an UNWIRED SUITE, but that
