@@ -2820,6 +2820,20 @@ PKGSTUB
   # suppress an announcement that is a deliberate deliverable. Partitioning by line
   # stem grades the property actually meant: the two families stay non-confusable
   # LINE BY LINE.
+  #
+  # The ^ anchors are what make that partition STRUCTURAL. The envelope quotes the
+  # step stem as a cross-reference ("the preceding claim-version: stamp — line"),
+  # and an unanchored partition would exclude the envelope only by the accident of
+  # the quote character that follows the dash. Anchoring excludes it by
+  # construction instead, so a later edit to the envelope's punctuation cannot
+  # silently pull it into the wrong family.
+  #
+  # AND THE SAME DISCIPLINE APPLIES TO EVERY POSITIVE ASSERTION BELOW. A substring
+  # sought anywhere in this buffer may be satisfied by a line other than the one
+  # under test — the pre-flight publish line carries the branch name, and the step
+  # line carries the won tag. Where that is possible the assertion names the line
+  # it must hold on. Both were caught as inert by deliberate mutation, in this
+  # fixture set's own favour, which is the reason the rule is written down here.
   # =========================================================================
 
   # _ct_assert_families <stderr> <leg-id>  — the message-family discipline, graded
@@ -2940,6 +2954,8 @@ PKGSTUB
       || _ct_fail "U-18n/A an uncommitted-but-mutated tree is half-applied"
     grep -qF 'COMMITTED, NOT PUSHED' <<< "$err" \
       && _ct_fail "U-18n/A must NOT report a commit that does not exist"
+    grep -qF 'cannot be un-claimed' <<< "$err" \
+      || _ct_fail "U-18n/A the envelope must ride WITH the step line — the pair is the deliverable"
     [[ -n "$_msg18n" ]] \
       || _ct_fail "U-18n/A the seam must record the stamp subject even on its failure path"
     rm -rf "$_sb18nA"
@@ -2963,8 +2979,14 @@ PKGSTUB
       || _ct_fail "U-18n/B the message must forbid redoing work that is already committed"
     grep -qF 'was NOT created' <<< "$err" \
       && _ct_fail "U-18n/B must NOT report a missing commit that exists"
-    grep -qF "$_ST_SANDBOX_BRANCH" <<< "$err" \
-      || _ct_fail "U-18n/B the message must print the branch it READ, not assert a location"
+    grep -qF 'cannot be un-claimed' <<< "$err" \
+      || _ct_fail "U-18n/B the envelope must ride WITH the step line — the pair is the deliverable"
+    # ON THE STEP LINE, not anywhere in the buffer: the pre-flight's publish
+    # announcement also names this branch, so a whole-buffer match is satisfied
+    # whether or not the recovery message ever reads HEAD. Measured inert before
+    # this was narrowed.
+    grep '^claim-version: stamp — ' <<< "$err" | grep -qF "$_ST_SANDBOX_BRANCH" \
+      || _ct_fail "U-18n/B the STEP line must print the branch it READ, not assert a location"
     rm -rf "$_sb18nB"
   }
 
@@ -2998,8 +3020,12 @@ PKGSTUB
     _ct_eq "$(_st_stamp_n)" "0" "U-18o no stamp commit is recorded"
     _ct_assert_families "$err" "U-18o"
     [[ -n "$_won18o" ]] || _ct_fail "U-18o the fixture must observe the won tag to grade against it"
-    grep -qF "$_won18o" <<< "$err" \
-      || _ct_fail "U-18o the envelope must name the identifier that was actually claimed"
+    # ON THE ENVELOPE LINE, not anywhere in the buffer: the step line's progress
+    # trailer also names the tag, so a whole-buffer match would be satisfied by the
+    # step line alone and would say nothing about the envelope. Measured inert
+    # before this was narrowed.
+    grep '^claim-version: HALT — ' <<< "$err" | grep -qF "$_won18o" \
+      || _ct_fail "U-18o the ENVELOPE must name the identifier that was actually claimed"
     grep -qF 'cannot be un-claimed' <<< "$err" \
       || _ct_fail "U-18o the envelope must state the identifier is bound and cannot be un-claimed"
     grep -qF 'Do NOT re-run' <<< "$err" \
