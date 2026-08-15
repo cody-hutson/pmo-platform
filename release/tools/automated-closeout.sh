@@ -4140,6 +4140,14 @@ phase_action_item_gate() {
   STATE_AI_UNRES="$_unres"
   STATE_AI_EMIT="n/a"
 
+  # TOKENISED, NEVER ABSOLUTE. The ledger lives under the operator-instance root, so
+  # its absolute path embeds the operator's home directory — and this detail string
+  # is rendered into the close-out report, which is pasted into a sub-task comment on
+  # a PUBLIC repository. Name the surface by its registered token plus the key that
+  # actually varies (the milestone slug); an operator debugging a resolution failure
+  # needs the KEY, not the prefix, and the prefix is the part that must not ship.
+  local _dirlabel="<OPERATOR_INSTANCE_HUB_STATE_PATH>/${_dir##*/}"
+
   # Is a BLOCK verdict allowed to halt the run at this call site?
   local _blocking=0
   [[ "$MODE" == "apply" && "$NO_MERGE" -eq 0 && "$STATE_MILESTONE_STATE" != "closed" ]] && _blocking=1
@@ -4169,7 +4177,7 @@ phase_action_item_gate() {
               tg=$9; gsub(/^ +| +$/,"",tg);
               printf "%s(owner:%s; trigger:%s) ", id, ow, tg } }' \
           "${_dir}/action-items.md" 2>/dev/null || true)"
-      [[ -z "$_rows" ]] && _rows="(row enumeration returned empty — read ${_dir}/action-items.md directly) "
+      [[ -z "$_rows" ]] && _rows="(row enumeration returned empty — read ${_dirlabel}/action-items.md directly) "
       if [[ "$_blocking" -eq 1 ]]; then
         mark_phase "action_item_gate" "FAIL" "Procedure 7a HARD GATE: UNRESOLVED — ${_unres} of ${_total} action items still open/in-flight; milestone close BLOCKED until each is transitioned to done / cancelled / superseded: ${_rows}"
         return 3
@@ -4180,9 +4188,9 @@ phase_action_item_gate() {
     NOT-RECORDED|EMPTY-LEDGER)
       local _cause_text
       if [[ "$_state" == "NOT-RECORDED" ]]; then
-        _cause_text="No action-item ledger exists for this release (looked in ${_dir}). Either no commitments were made, or the Procedure 4a emit step was skipped."
+        _cause_text="No action-item ledger exists for this release (looked in ${_dirlabel}). Either no commitments were made, or the Procedure 4a emit step was skipped."
       else
-        _cause_text="The action-item ledger at ${_dir} exists and carries zero AI rows — initialized, never appended. Either no commitments were made, or the Procedure 4a emit step was skipped."
+        _cause_text="The action-item ledger at ${_dirlabel} exists and carries zero AI rows — initialized, never appended. Either no commitments were made, or the Procedure 4a emit step was skipped."
       fi
       if [[ -n "$ATTEST_ACTION_ITEMS" ]]; then
         case "$ATTEST_ACTION_ITEMS" in
@@ -9048,6 +9056,23 @@ AISTUB
   _ai_drive ai-empty; _ai_rc="$_AI_RC"
   [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-D2 — an ATTESTED EMPTY-LEDGER state must pass, got rc $_ai_rc"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'attested-cause:emit-skipped' "$_ai_witness" || { echo "FAIL: AI-D2 — the second cause must round-trip into the emitted row, witness: $(/bin/cat "$_ai_witness")"; failures=$((failures+1)); }
+
+  # (P) PUBLIC-SURFACE PATH HYGIENE. This phase's detail lands in the close-out
+  #     report, which is pasted into a sub-task comment on a PUBLIC repository, and
+  #     the ledger it names lives under the operator-instance root — so an absolute
+  #     path here publishes the operator's home directory. The detail must carry the
+  #     registered token and the milestone slug, never the resolved prefix. Both
+  #     limbs are needed: the token alone could sit alongside a leaked path.
+  ATTEST_ACTION_ITEMS=""
+  _ai_drive ai-notrecorded
+  _ai_rec="$(get_phase action_item_gate)"
+  /usr/bin/grep -qF 'OPERATOR_INSTANCE_HUB_STATE_PATH' <<<"$_ai_rec" || { echo "FAIL: AI-P — the detail must name the ledger surface by its registered token, got '$_ai_rec'"; failures=$((failures+1)); }
+  if /usr/bin/grep -qF "$HUB_STATE_PATH" <<<"$_ai_rec"; then
+    echo "FAIL: AI-P — the detail carries the RESOLVED absolute hub-state path; in a real run that publishes the operator's home directory into a public comment"; failures=$((failures+1))
+  fi
+  # Sensitivity: the needle IS findable when the leak is present, so the clean
+  # result above is a property of the detail and not of an inert probe.
+  /usr/bin/grep -qF "$HUB_STATE_PATH" <<<"prefix $HUB_STATE_PATH suffix" || { echo "FAIL: AI-P sensitivity — the leak probe cannot match its own needle; the clean result above proves nothing"; failures=$((failures+1)); }
 
   # (E2) ATTESTATION IS A CLOSED ENUM — any-string attestation would let the gate
   #      be cleared by a typo, which is attestation-shaped noise, not attestation.
