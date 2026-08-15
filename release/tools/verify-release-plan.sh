@@ -979,17 +979,35 @@ parse_fcm_declarations() {
       i = index(s, p); if (i == 0) return s
       return substr(s, 1, i - 1) substr(s, i + length(p))
     }
-    # Conditionality is a MARKER, not a substring. Two things make this exact:
-    # the declared path is removed from the row before the test, and the token
-    # must appear in UPPER case delimited by non-letters. Both are load-bearing —
-    # the originating specimen declares
-    # `release/ADRs/<self-arming-conditional-gate-posture>.md`, whose own path
-    # contains the word. A naive substring test over an upper-cased row classifies
-    # that row as CONDITIONAL, which downgrades its verdict from FAIL to a WARN-tier
-    # SKIP — i.e. the gate would have let the very defect it was built for through.
-    # Caught by the historical replay arm, not by reading.
-    function isconditional(s, p) {
-      return match(stripfirst(s, p), /(^|[^A-Za-z])CONDITIONAL([^A-Za-z]|$)/)
+    # Conditionality is a MARKER, not a substring — and specifically it is one of
+    # the two NORMATIVE marker forms, `CONDITIONAL:<token>` or `CONDITIONAL on
+    # <prose>`. A bare occurrence of the word is neither, because in a real matrix
+    # it is usually annotation prose.
+    #
+    # Both narrowings are load-bearing, and each was found by running the check
+    # rather than by reading it:
+    #   - the declared path is removed before the test, because the originating
+    #     specimen declares `release/ADRs/<self-arming-conditional-gate-posture>.md`,
+    #     whose own slug contains the word. Matching it classified that row
+    #     CONDITIONAL, which downgrades FAIL to a WARN-tier SKIP — the gate would
+    #     have let through the very defect it was built for. Found by the historical
+    #     replay arm.
+    #   - a bare word does not qualify, because a row reading "(promoted from
+    #     CONDITIONAL, see D-11)" is an unconditional row whose NOTE mentions the
+    #     word. Found by running the check against the in-flight matrix of the
+    #     release that ships it.
+    # A row-level conditional exemption should cost a deliberate, tokenizable
+    # marker; it should not be purchasable by prose.
+    #
+    # EDITOR NOTE, and it is not decorative: this awk program is a SINGLE-QUOTED
+    # shell string. One apostrophe anywhere inside it — including inside a comment
+    # like the possessive that used to sit on the line above — closes the quote and
+    # takes the whole file out of parse, and the reported error line has no visible
+    # relationship to the cause. Keep this body apostrophe-free.
+    function isconditional(s, p,   rest) {
+      rest = stripfirst(s, p)
+      return (match(rest, /(^|[^A-Za-z])CONDITIONAL:/) ||
+              match(rest, /(^|[^A-Za-z])CONDITIONAL on /))
     }
     function labelexcludes(l) {
       return (l ~ /non-scope/ || l ~ /not edited/ || l ~ /not touched/ ||
@@ -1272,6 +1290,23 @@ handle_fcm_delivery() {
   fi
 
   local records; records="$(parse_fcm_declarations "$body")"
+
+  # SAME-PATH RECONCILIATION. The dominant authored shape in this corpus is a
+  # machine-readable fence of bare paths PLUS a companion table carrying the intent
+  # for the same paths — the matrix states each declaration twice, in two forms, on
+  # purpose. Counting the bare copy as "uninterpreted" would report a fully-declared
+  # matrix as partially-understood, and every plan in that shape (49 of 117) could
+  # never reach PASS no matter how carefully it was authored. A matrix is ONE
+  # declaration set keyed by path, so a bare row whose path carries a verb ANYWHERE
+  # in the same matrix is a second expression of a known declaration, not a gap.
+  # Only a path with no marked row anywhere is genuinely intent-undeclared.
+  records="$(printf '%s\n' "$records" | awk -F'\t' '
+    { line[NR] = $0; pth[NR] = $1; itn[NR] = $2
+      if ($2 != "unknown" && $2 != "pathless") marked[$1] = 1 }
+    END { for (n = 1; n <= NR; n++) {
+            if (itn[n] == "unknown" && (pth[n] in marked)) continue
+            print line[n] } }')"
+
   local declared;      declared="$(printf '%s' "$records"   | grep -c . || true)"
   if [ "$declared" -eq 0 ]; then
     emit_fcm "FCM-COVERAGE" "at least one declared path" "$VERDICT_ERROR" \
