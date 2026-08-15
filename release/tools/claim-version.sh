@@ -1000,45 +1000,92 @@ _host_rebuild_packages() {
     --root "$CLAIM_REPO_ROOT" "$@"
 }
 
+# _stamp_commit_landed <commit-msg>  — TRUE when HEAD's subject is exactly
+#   <commit-msg>, i.e. the stamp commit WAS created and only the push is still
+#   outstanding. Read-only: reads the repository, writes nothing.
+#
+#   DERIVED FROM THE REPO, NEVER FROM A TRACKED PROGRESS FLAG. A flag is a CLAIM
+#   about state that desyncs the moment a step half-succeeds, and the recovery
+#   instruction for "committed, not pushed" is the OPPOSITE of the one for "not
+#   committed" — a wrong answer here sends the operator to redo work that is
+#   already committed. The repository IS the state, so it is asked.
+#
+#   The capture keeps its `|| have=""` guard and the trailing [[ ]] stays the last
+#   statement (consumed by `if`), so a false result never trips `set -e`.
+_stamp_commit_landed() {
+  local want="$1" have=""
+  have="$(git -C "$CLAIM_REPO_ROOT" log -1 --format=%s 2>/dev/null)" || have=""
+  [[ -n "$want" && "$have" == "$want" ]]
+}
+
 # _stamp_release_identity <tag> <slug> <merge_sha>  — POST-CAS claim-time stamp.
 #   Runs ONLY on the CAS-win path, with the WON <tag>. Resolves {{RELEASE_VERSION}}
 #   -> <tag> in the pre-claim plan's CONTENT (+ any --stamp-file artifacts, repo-
 #   relative), git-mv's the slug-named plan to plans/v<MAJOR>/<tag>_RELEASE_PLAN.md,
 #   and commits+pushes the follow-on stamp via _host_commit_push (the same post-
-#   merge-commit pattern Stage 13 uses for RELEASE_LOG/INDEX rows). A stamp failure
-#   HALTs and surfaces "tag claimed, stamp manually" — it NEVER un-claims the tag.
+#   merge-commit pattern Stage 13 uses for RELEASE_LOG/INDEX rows).
+#
+#   EVERY FAILURE BELOW IS POST-CLAIM, AND NONE OF THEM UN-CLAIMS THE TAG. So the
+#   operator's only instrument is the text on stderr, and it arrives as a PAIR:
+#   each failure site emits its own "claim-version: stamp — " line naming the
+#   failed step, the resulting repo state and its remediation, and the caller's
+#   "claim-version: HALT — " envelope names the bound identifier and forbids the
+#   re-run. The progress trailer is a CLOSED three-value enum keyed on the three
+#   operator-distinguishable states — nothing to undo / partial work uncommitted /
+#   work committed but unpushed:
+#     (tag <T> claimed; stamp NOT started)
+#     (tag <T> claimed; stamp half-applied)
+#     (tag <T> claimed; stamp COMMITTED, NOT PUSHED)
+#   A new failure site joins an existing value rather than adding one.
 _stamp_release_identity() {
   local tag="$1" slug="$2" merge_sha="$3"
   local plan
   plan="$(_resolve_preclaim_plan "$slug")" || {
-    printf 'claim-version: stamp — pre-claim plan for slug %q vanished post-claim\n' "$slug" >&2
+    printf 'claim-version: stamp — pre-claim plan for slug %q vanished post-claim. Nothing was modified: no token resolved, no file renamed, nothing committed. Restore the plan, then complete the stamp by hand — resolve {{RELEASE_VERSION}} to %s, rename the plan to its versioned name under the major-version plans directory, and commit on this branch (tag %s claimed; stamp NOT started)\n' "$slug" "$tag" "$tag" >&2
     return 1
   }
   local vM _vN _vP
   read -r vM _vN _vP <<<"$(version_parse "$tag")" || {
-    printf 'claim-version: stamp — cannot parse won tag %q\n' "$tag" >&2
+    printf 'claim-version: stamp — cannot parse won tag %q, so the versioned plan destination cannot be computed. Nothing was modified. Complete the stamp by hand on this branch (tag %s claimed; stamp NOT started)\n' "$tag" "$tag" >&2
     return 1
   }
   local dest_dir="${CLAIM_REPO_ROOT}/release/releases/plans/v${vM}"
   local dest="${dest_dir}/${tag}_RELEASE_PLAN.md"
-  mkdir -p "$dest_dir" || return 1
+  mkdir -p "$dest_dir" || {
+    printf 'claim-version: stamp — cannot create the versioned plan directory %s. Nothing was modified. Fix the path or permission, then complete the stamp by hand and commit on this branch (tag %s claimed; stamp NOT started)\n' "$dest_dir" "$tag" >&2
+    return 1
+  }
   # Resolve {{RELEASE_VERSION}} in CONTENT — extra --stamp-file artifacts first
   # (repo-relative to CLAIM_REPO_ROOT), then the plan itself.
   local f abs tmp
   local extra_rel=()
   for f in "${STAMP_FILES[@]+"${STAMP_FILES[@]}"}"; do
     abs="${CLAIM_REPO_ROOT}/${f}"
-    [[ -f "$abs" ]] || { printf 'claim-version: stamp — --stamp-file %q not found under repo root\n' "$f" >&2; return 1; }
+    [[ -f "$abs" ]] || {
+      printf 'claim-version: stamp — --stamp-file %q not found under repo root. Any earlier --stamp-file entries in this manifest may already have been rewritten. Inspect with: git -C %s status --short — then finish the substitutions, rename the plan and commit on this branch (tag %s claimed; stamp half-applied)\n' "$f" "$CLAIM_REPO_ROOT" "$tag" >&2
+      return 1
+    }
     tmp="$(mktemp)"
-    sed "s/{{RELEASE_VERSION}}/${tag}/g" "$abs" > "$tmp" && cat "$tmp" > "$abs" || { rm -f "$tmp"; return 1; }
+    sed "s/{{RELEASE_VERSION}}/${tag}/g" "$abs" > "$tmp" && cat "$tmp" > "$abs" || {
+      rm -f "$tmp"
+      printf 'claim-version: stamp — {{RELEASE_VERSION}} substitution FAILED writing %s, which may now be TRUNCATED. Earlier --stamp-file entries were already rewritten. Inspect with: git -C %s status --short — then restore %s from git and finish the stamp by hand on this branch (tag %s claimed; stamp half-applied)\n' "$f" "$CLAIM_REPO_ROOT" "$f" "$tag" >&2
+      return 1
+    }
     rm -f "$tmp"
     extra_rel+=("$f")
   done
   tmp="$(mktemp)"
-  sed "s/{{RELEASE_VERSION}}/${tag}/g" "$plan" > "$tmp" && cat "$tmp" > "$plan" || { rm -f "$tmp"; return 1; }
+  sed "s/{{RELEASE_VERSION}}/${tag}/g" "$plan" > "$tmp" && cat "$tmp" > "$plan" || {
+    rm -f "$tmp"
+    printf 'claim-version: stamp — {{RELEASE_VERSION}} substitution FAILED writing the plan %s, which may now be TRUNCATED. Every --stamp-file entry was already rewritten. Inspect with: git -C %s status --short — then restore the plan from git and finish the stamp by hand on this branch (tag %s claimed; stamp half-applied)\n' "$plan" "$CLAIM_REPO_ROOT" "$tag" >&2
+    return 1
+  }
   rm -f "$tmp"
   # Bind the FILENAME identity: git mv the slug-named plan to its versioned path.
-  git -C "$CLAIM_REPO_ROOT" mv -- "$plan" "$dest" || return 1
+  git -C "$CLAIM_REPO_ROOT" mv -- "$plan" "$dest" || {
+    printf 'claim-version: stamp — git mv of the plan to %s FAILED. Every {{RELEASE_VERSION}} token is already resolved in the working tree; only the rename and the commit are outstanding. Run: git -C %s mv -- %s %s — then commit both on this branch and push (tag %s claimed; stamp half-applied)\n' "$dest" "$CLAIM_REPO_ROOT" "$plan" "$dest" "$tag" >&2
+    return 1
+  }
   # Follow-on stamp commit (+push) of the renamed plan and any stamped extras.
   local commit_paths=("release/releases/plans/v${vM}/${tag}_RELEASE_PLAN.md")
   commit_paths+=("${extra_rel[@]+"${extra_rel[@]}"}")
@@ -1088,7 +1135,27 @@ _stamp_release_identity() {
     fi
   fi
 
-  _host_commit_push "stamp: bind ${tag} release identity (plan rename + {{RELEASE_VERSION}} resolve) [SHA ${merge_sha:0:12}]" "${commit_paths[@]}" || return 1
+  # THE ONE FAILURE WHOSE TWO STATES CARRY OPPOSITE INSTRUCTIONS. _host_commit_push
+  # runs `git add`, `git commit` and `git push`; a failure on the third leaves the
+  # stamp COMMITTED, and telling that operator to "stamp manually" sends them to
+  # redo work that is already committed. So the state is DERIVED from the repo —
+  # the commit message is hoisted so HEAD's subject can be compared against the
+  # exact string `git commit -m` was given — and the branch is READ and PRINTED
+  # rather than asserted, so the sentence stays honest even if the pre-CAS
+  # push-target precondition above it is ever re-placed.
+  local stamp_msg="stamp: bind ${tag} release identity (plan rename + {{RELEASE_VERSION}} resolve) [SHA ${merge_sha:0:12}]"
+  _host_commit_push "$stamp_msg" "${commit_paths[@]}" || {
+    local head_ref=""
+    head_ref="$(git -C "$CLAIM_REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null)" || head_ref=""
+    if _stamp_commit_landed "$stamp_msg"; then
+      printf 'claim-version: stamp — the stamp commit EXISTS LOCALLY on branch %s but was not pushed. Do NOT redo the stamp: the work is already committed. Run: git -C %s push origin HEAD — then verify with: git -C %s status -sb (tag %s claimed; stamp COMMITTED, NOT PUSHED)\n' \
+        "${head_ref:-<unreadable>}" "$CLAIM_REPO_ROOT" "$CLAIM_REPO_ROOT" "$tag" >&2
+    else
+      printf 'claim-version: stamp — the stamp commit was NOT created (git add or git commit failed). The plan is renamed and every {{RELEASE_VERSION}} token resolved in the working tree, uncommitted, on branch %s. Run: git -C %s status --short — then commit the listed paths on this branch and push (tag %s claimed; stamp half-applied)\n' \
+        "${head_ref:-<unreadable>}" "$CLAIM_REPO_ROOT" "$tag" >&2
+    fi
+    return 1
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -1201,9 +1268,13 @@ claim_version() {
     if [[ $push_rc -eq 0 ]]; then
       # WON the compare-and-swap. Post-CAS: stamp the claim-time identity with the
       # WON tag (only when --stamp-slug given). A stamp failure HALTs — the tag is
-      # authoritative and is NEVER un-claimed; stamp manually on failure.
+      # authoritative and is NEVER un-claimed. This envelope is the OUTER half of
+      # the recovery pair: it names the bound identifier and forbids the re-run,
+      # while the "claim-version: stamp — " line _stamp_release_identity emitted
+      # immediately above it names the failed step and its remediation.
       [[ -n "$effective_slug" ]] && { _stamp_release_identity "$tag" "$effective_slug" "$merge_sha" || {
-        printf 'claim-version: HALT — %s claimed but stamp failed; stamp manually (tag authoritative)\n' "$tag" >&2
+        printf 'claim-version: HALT — %s is CLAIMED and PUSHED; it cannot be un-claimed. The claim-time stamp did NOT complete — the preceding "claim-version: stamp —" line names the failed step, the resulting repo state, and its remediation. Do NOT re-run claim-version.sh: a re-run claims a SECOND tag. Complete the stamp by hand on this branch, then verify: git -C %s log --oneline -1 && git -C %s status --short. The release cannot close until the plan is committed at its versioned name.\n' \
+          "$tag" "$CLAIM_REPO_ROOT" "$CLAIM_REPO_ROOT" >&2
         return 1
       }; }
       printf '%s\n' "$tag"                       # WON the compare-and-swap
@@ -1728,9 +1799,21 @@ _claim_self_test() {
   # Records the commit MESSAGE (as before) and now also the committed PATH list,
   # so a fixture can assert that a rebuilt package + its .sha256 sidecar ride the
   # SAME stamp commit rather than a follow-on one — the atomicity property.
+  #
+  # commit_push_rc drives the commit/push seam's FAILURE path — 0 (or absent) =
+  # success, so every pre-existing fixture behaves byte-identically. Absent really
+  # does mean zero: _ct_setup opens with `rm -rf "$_ST_DIR"` and never initialises
+  # this knob, so the `cat` fails and `|| echo 0` answers. Without the seam the
+  # caller's `||` branch is unreachable in BOTH limbs and an if/else inversion or a
+  # swapped message pair ships green — the same always-return-0 defect the sibling
+  # stubs were corrected for.
+  #
+  # DELIBERATELY NOT NAMED push_rc: that name is already a local in claim_version()
+  # holding the CAS tag-push rc, and one name for two unrelated return codes would
+  # misread at a glance.
   _host_commit_push()          { printf '%s\n' "$1" >> "$(_st_f stamp_commits)"; shift
                                  [[ $# -gt 0 ]] && printf '%s\n' "$@" >> "$(_st_f commit_paths)"
-                                 return 0; }
+                                 return "$(cat "$(_st_f commit_push_rc)" 2>/dev/null || echo 0)"; }
   # package-rebuild seam: record the skills it was asked to rebuild and return the
   # configured rc. NEVER invokes the real builder, so no fixture run can write into
   # any packages/ directory. rebuild_rc drives the fail-loud error-path fixture.
@@ -2709,6 +2792,227 @@ PKGSTUB
     rm -rf "$_sb18l"
   }
 
+  # =========================================================================
+  # U-18m..U-18o — THE POST-CAS RECOVERY MESSAGE PAIR.
+  #
+  # Every failure inside _stamp_release_identity happens with the tag already
+  # created, signed and PUSHED, and nothing there un-claims it. The operator's
+  # only instrument is the text on stderr, and it must arrive as a PAIR: a
+  # "claim-version: stamp — " line naming the failed step, the resulting repo
+  # state and its remediation, under the "claim-version: HALT — " envelope naming
+  # the bound identifier and forbidding the re-run. Five of the ten post-CAS
+  # return sites used to emit NOTHING, so for half of them the envelope was the
+  # only line an operator saw — and it named neither a step nor a command.
+  #
+  # ALL THREE DRIVE claim_version, NEVER _stamp_release_identity DIRECTLY. The one
+  # shipped post-claim fixture (U-18d) drives the function, so no fixture in this
+  # suite had ever traversed the caller's post-CAS HALT and the envelope had ZERO
+  # coverage. Driving the caller is also what makes _ct_push_idx == 1 assertable —
+  # the proof that the HALT is POST-claim, the exact inverse of U-18h's
+  # push_idx == 0, which proves a refusal is PRE-claim.
+  #
+  # THE FAMILY ASSERTIONS ARE LINE-ANCHORED, AND THAT IS THE POINT. claim_version
+  # writes BOTH message families onto ONE stderr in a single run: _preflight_stamp
+  # announces its package count on the SUCCESS path, pre-CAS, on every stamp path
+  # including plan-only, and _ct_run_err captures the whole buffer unfiltered. A
+  # whole-buffer "must not contain 'stamp pre-flight'" assertion is therefore FALSE
+  # ON A CORRECT IMPLEMENTATION, and the only way to satisfy it would be to
+  # suppress an announcement that is a deliberate deliverable. Partitioning by line
+  # stem grades the property actually meant: the two families stay non-confusable
+  # LINE BY LINE.
+  # =========================================================================
+
+  # _ct_assert_families <stderr> <leg-id>  — the message-family discipline, graded
+  #   per LINE rather than per buffer. Three properties:
+  #     1. at least one post-claim step line exists. This is the anti-silence
+  #        guard, and it is stated this way because "the buffer is non-empty"
+  #        proves nothing — the pre-CAS announcement is unconditional and fills the
+  #        buffer whether or not the failing site ever emits.
+  #     2. every post-claim step line carries the closed progress trailer, so the
+  #        grammar is CHECKED at the covered limbs rather than conventional.
+  #     3. neither family's lines carry the other's DISTINCTIVE text. The
+  #        discriminator is the trailer, deliberately NOT a "Run: " clause: the
+  #        pre-CAS trackedness refusal legitimately carries one, so keying on it
+  #        would reproduce the same false-by-construction defect one level down.
+  #        Measured: "claimed; stamp " occurs on zero pre-flight lines.
+  _ct_assert_families() {
+    local buf="$1" id="$2" post pre
+    post="$(grep '^claim-version: stamp — '             <<< "$buf" || true)"
+    pre="$( grep '^claim-version: stamp pre-flight — '  <<< "$buf" || true)"
+    if [[ -z "$post" ]]; then
+      _ct_fail "$id no line carries the post-claim stem 'claim-version: stamp — ' (the failure site is SILENT)"
+      return 0
+    fi
+    if grep -qv 'claimed; stamp ' <<< "$post"; then
+      _ct_fail "$id every post-claim step line must carry the (tag <T> claimed; stamp <progress>) trailer"
+    fi
+    if grep -qE 'stamp pre-flight|manifest stales' <<< "$post"; then
+      _ct_fail "$id a post-claim step line must never carry the pre-CAS family's distinctive text"
+    fi
+    if [[ -n "$pre" ]] && grep -q 'claimed; stamp ' <<< "$pre"; then
+      _ct_fail "$id a pre-CAS announcement line must never carry the post-claim progress trailer"
+    fi
+    return 0
+  }
+
+  # ---- U-18m: A SITE THAT WAS 100% SILENT NOW EMITS. `mkdir -p "$dest_dir"` was
+  #      a bare `return 1`. The pre-flight validates release/releases/plans/ but
+  #      never the per-major subdirectory, so planting a regular FILE where that
+  #      subdirectory belongs passes pre-flight and fails POST-CAS — which is the
+  #      whole point: the tag is bound before the failure.
+  #
+  #      Nothing has been mutated at this site (the substitution loop and the
+  #      git mv are both below it), so the fixture asserts BOTH the trailer value
+  #      "NOT started" AND the physical facts that make it true — the plan is
+  #      still at its slug name and still carries the token. A message that
+  #      claimed "half-applied" here would send the operator hunting for damage
+  #      that does not exist.
+  _t_label="U-18m a formerly-silent post-CAS site emits its step, state and trailer"
+  {
+    local _sb18m _save18m _lat18m _maj18m
+    _sb18m="$(_st_stamp_sandbox "widget-nodir")"
+    _save18m="$CLAIM_REPO_ROOT"
+    # DERIVED, never transcribed: the destination directory's major component
+    # comes from the same latest= input the claim computes against, and a minor
+    # bump cannot cross a major boundary.
+    _lat18m="v2.15"; _maj18m="${_lat18m%%.*}"
+    printf 'not a directory\n' > "$_sb18m/release/releases/plans/${_maj18m}"
+    _ct_setup latest="$_lat18m" published="v2.14 $_lat18m" origin="v2.14 $_lat18m" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    CLAIM_REPO_ROOT="$_sb18m"; STAMP_SLUG="widget-nodir"; STAMP_FILES=()
+    _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
+    STAMP_SLUG=""; CLAIM_REPO_ROOT="$_save18m"
+    _ct_eq "$rc" "1" "U-18m the claim HALTs when the versioned plan directory cannot be created"
+    _ct_eq "$(_ct_push_idx)" "1" \
+      "U-18m the tag WAS pushed — this HALT is POST-claim (the inverse of U-18h)"
+    _ct_eq "$(_st_stamp_n)" "0" "U-18m no stamp commit is recorded"
+    _ct_assert_families "$err" "U-18m"
+    grep -qF 'stamp NOT started' <<< "$err" \
+      || _ct_fail "U-18m a site that mutated nothing must report the NOT-started progress value"
+    grep -qF 'half-applied' <<< "$err" \
+      && _ct_fail "U-18m a site that mutated nothing must NEVER claim partial application"
+    grep -qF 'cannot be un-claimed' <<< "$err" \
+      || _ct_fail "U-18m the envelope must state that the identifier is bound and cannot be un-claimed"
+    # The physical facts behind the "NOT started" claim, so the trailer is graded
+    # against the repository rather than only against itself.
+    [[ -f "$_sb18m/release/releases/plans/widget-nodir_RELEASE_PLAN.md" ]] \
+      || _ct_fail "U-18m the plan must still be at its slug name — nothing was renamed"
+    grep -qF '{{RELEASE_VERSION}}' "$_sb18m/release/releases/plans/widget-nodir_RELEASE_PLAN.md" \
+      || _ct_fail "U-18m the plan must still carry its unresolved token — nothing was substituted"
+    rm -rf "$_sb18m"
+  }
+
+  # ---- U-18n: BOTH LIMBS OF THE COMMIT/PUSH SPLIT. `_host_commit_push` covers
+  #      git add, git commit and git push; a failure on the third leaves the stamp
+  #      COMMITTED, and the two states carry OPPOSITE instructions — telling that
+  #      operator to redo the stamp sends them to redo work already committed.
+  #
+  #      BOTH LEGS ARE REQUIRED. A predicate that answered false always would pass
+  #      Leg A alone and silently route every committed-but-unpushed failure to the
+  #      "not created" message. Before the commit_push_rc seam existed the stub
+  #      returned 0 unconditionally, so NEITHER limb was reachable and an if/else
+  #      inversion would have shipped green.
+  #
+  #      THE STAMP SUBJECT IS DERIVED FROM THE TOOL, NOT TRANSCRIBED. The stub
+  #      records the message it was handed BEFORE returning its rc, so Leg A's own
+  #      run yields the exact subject Leg B pre-seeds. No version literal and no
+  #      restatement of the commit-message format appears in this fixture.
+  _t_label="U-18n both commit/push limbs are entered and carry opposite instructions"
+  {
+    local _sb18nA _sb18nB _save18n _msg18n
+    _save18n="$CLAIM_REPO_ROOT"
+
+    # ---- Leg A: the commit was NOT created (HEAD's subject is still "seed") ----
+    _sb18nA="$(_st_stamp_sandbox "widget-push")"
+    _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    printf '1\n' > "$(_st_f commit_push_rc)"      # force the commit/push seam to fail
+    CLAIM_REPO_ROOT="$_sb18nA"; STAMP_SLUG="widget-push"; STAMP_FILES=()
+    _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
+    STAMP_SLUG=""; CLAIM_REPO_ROOT="$_save18n"
+    _msg18n="$(head -n 1 "$(_st_f stamp_commits)" 2>/dev/null || true)"
+    _ct_eq "$rc" "1" "U-18n/A a failed commit+push makes the claim HALT"
+    _ct_eq "$(_ct_push_idx)" "1" "U-18n/A the tag WAS pushed — the HALT is POST-claim"
+    _ct_assert_families "$err" "U-18n/A"
+    grep -qF 'was NOT created' <<< "$err" \
+      || _ct_fail "U-18n/A with no commit on HEAD the message must say the commit was NOT created"
+    grep -qF 'half-applied' <<< "$err" \
+      || _ct_fail "U-18n/A an uncommitted-but-mutated tree is half-applied"
+    grep -qF 'COMMITTED, NOT PUSHED' <<< "$err" \
+      && _ct_fail "U-18n/A must NOT report a commit that does not exist"
+    [[ -n "$_msg18n" ]] \
+      || _ct_fail "U-18n/A the seam must record the stamp subject even on its failure path"
+    rm -rf "$_sb18nA"
+
+    # ---- Leg B: the commit EXISTS on HEAD; only the push is outstanding ----
+    _sb18nB="$(_st_stamp_sandbox "widget-push")"
+    git -C "$_sb18nB" commit --allow-empty -qm "$_msg18n" >/dev/null 2>&1
+    _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    printf '1\n' > "$(_st_f commit_push_rc)"
+    CLAIM_REPO_ROOT="$_sb18nB"; STAMP_SLUG="widget-push"; STAMP_FILES=()
+    _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
+    STAMP_SLUG=""; CLAIM_REPO_ROOT="$_save18n"
+    printf '0\n' > "$(_st_f commit_push_rc)"
+    _ct_eq "$rc" "1" "U-18n/B a failed push still makes the claim HALT"
+    _ct_eq "$(_ct_push_idx)" "1" "U-18n/B the tag WAS pushed — the HALT is POST-claim"
+    _ct_assert_families "$err" "U-18n/B"
+    grep -qF 'COMMITTED, NOT PUSHED' <<< "$err" \
+      || _ct_fail "U-18n/B with the commit on HEAD the trailer must be COMMITTED, NOT PUSHED"
+    grep -qF 'Do NOT redo the stamp' <<< "$err" \
+      || _ct_fail "U-18n/B the message must forbid redoing work that is already committed"
+    grep -qF 'was NOT created' <<< "$err" \
+      && _ct_fail "U-18n/B must NOT report a missing commit that exists"
+    grep -qF "$_ST_SANDBOX_BRANCH" <<< "$err" \
+      || _ct_fail "U-18n/B the message must print the branch it READ, not assert a location"
+    rm -rf "$_sb18nB"
+  }
+
+  # ---- U-18o: THE ENVELOPE ITSELF, reached through claim_version on a genuine
+  #      post-CAS origin. The package-rebuild failure is used as the origin
+  #      because its step line is the file's shipped exemplar of a complete
+  #      recovery message, so this fixture grades the PAIR: the envelope names the
+  #      bound identifier and forbids the re-run, and the step line immediately
+  #      above it names the builder command. Asserting only the envelope would
+  #      pass on an implementation that lost the step line entirely.
+  #
+  #      The won tag is read from the push observation file rather than written
+  #      into the fixture, so no version literal is transcribed here either.
+  _t_label="U-18o the post-CAS envelope names the bound tag and rides WITH its step line"
+  {
+    local _sb18o _save18o _won18o
+    _sb18o="$(_st_pkg_sandbox "widget-halt")"
+    _save18o="$CLAIM_REPO_ROOT"
+    _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" plan="ok"
+    : > "$(_st_f stamp_commits)"; : > "$(_st_f rebuild_calls)"; : > "$(_st_f commit_paths)"
+    printf '1\n' > "$(_st_f rebuild_rc)"          # force the rebuild seam to fail
+    CLAIM_REPO_ROOT="$_sb18o"; STAMP_SLUG="widget-halt"
+    STAMP_FILES=("operations/skills/fixtureops/SKILL.md")
+    _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
+    STAMP_SLUG=""; STAMP_FILES=(); CLAIM_REPO_ROOT="$_save18o"
+    printf '0\n' > "$(_st_f rebuild_rc)"
+    _won18o="$(head -n 1 "$(_st_f pushed_tags)" 2>/dev/null || true)"
+    _ct_eq "$rc" "1" "U-18o the claim HALTs when the post-CAS rebuild fails"
+    _ct_eq "$(_ct_push_idx)" "1" \
+      "U-18o the tag WAS pushed — the envelope is a POST-claim HALT"
+    _ct_eq "$(_st_stamp_n)" "0" "U-18o no stamp commit is recorded"
+    _ct_assert_families "$err" "U-18o"
+    [[ -n "$_won18o" ]] || _ct_fail "U-18o the fixture must observe the won tag to grade against it"
+    grep -qF "$_won18o" <<< "$err" \
+      || _ct_fail "U-18o the envelope must name the identifier that was actually claimed"
+    grep -qF 'cannot be un-claimed' <<< "$err" \
+      || _ct_fail "U-18o the envelope must state the identifier is bound and cannot be un-claimed"
+    grep -qF 'Do NOT re-run' <<< "$err" \
+      || _ct_fail "U-18o the envelope must forbid the re-run (a re-run claims a SECOND tag)"
+    grep -qF 'build-skill-packages.sh' <<< "$err" \
+      || _ct_fail "U-18o the step line must ride WITH the envelope — the pair is what discharges AC1"
+    # AC2's discriminator: the PRE-claim HALT says "not claiming"; this one must not,
+    # because retry is safe pre-claim and forbidden post-claim.
+    grep -qF 'not claiming' <<< "$err" \
+      && _ct_fail "U-18o a post-claim HALT must never carry the pre-claim 'not claiming' wording"
+    rm -rf "$_sb18o"
+  }
+
   # ---- U-19 series: the --verify-stamp verb, the Commit-0 rung's invocation.
   #      These drive _main, NOT _preflight_stamp directly. Driving the function
   #      alone would verify the predicate while leaving the WIRING untested —
@@ -3012,7 +3316,7 @@ PKGSTUB
   rm -rf "$_ST_NEUTRAL_ROOT"
 
   if [[ $failures -eq 0 ]]; then
-    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-20h incl. real-RELEASE_LOG-parser(header-name-pinned + shifted-column control), real-origin-tags-rc-contract(U-0b: failed-read vs tagless-repo + probe/healthy controls), real-seam-rc-contract-on-unresolvable-identity(U-14a), all-three-claimed_set-arms-fail-closed + their controls(U-17), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, never-bypass-signing + its detector-negative-control(U-6/U-6b), fail-closed-on-unresolvable-repo-identity + its detector-negative-control(U-14/U-14b), arm-unavailable-is-not-arm-empty(U-15), anchor-rc-checks-claimed-set-and-greenfield-fallback + their controls(U-16), claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once, post-CAS-package-rebuild-rides-the-same-commit(U-18) + injected-canonical-vector(U-18b) + cross-grammar-guard-with-control(U-18c) + missing-stamp-file-halts-pre-CAS-with-control(U-18e) + fail-loud-rebuild-error-path(U-18d), pre-CAS-rebuild-count-announced-on-every-path-through-the-package-stage-including-zero: canonical-control(U-18f) + count-equals-the-U-18b-rebuild-set(U-18g) + leading-slash-announces-zero-and-stops-with-ZERO-push-attempts(U-18h) + ..-traversal-the-resolver-MATCHES-caught-by-canonicality-alone(U-18i) + embedded-slash-dot-slash(U-18j) + plan-only-announces-zero-and-PROCEEDS(U-18k) + canonical-manifest-staling-zero-refused-by-the-COUNT-limb-alone(U-18l), verify-stamp-verb-wired-through-_main: token-less-HALT-names-the-token(U-19a) + token-bearing-control-states-its-manifest-scope(U-19b) + arg-independence-with-required-arg-control(U-19c), derived-stamp-slug: sensitivity+specificity-pair(U-20a/U-20b) + ambiguity-refuses-naming-both-candidates(U-20c) + explicit-flag-precedence(U-20d), pre-CAS-push-target-precondition-each-asserting-no-tag-pushed: default-branch-with-chore-branch-control(U-20e) + detached-HEAD(U-20f) + untracked-plan-with-re-add-control(U-20g) + --stamp-branch-parsed-from-argv-with-matching-declaration-control(U-20h))"
+    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-20h incl. real-RELEASE_LOG-parser(header-name-pinned + shifted-column control), real-origin-tags-rc-contract(U-0b: failed-read vs tagless-repo + probe/healthy controls), real-seam-rc-contract-on-unresolvable-identity(U-14a), all-three-claimed_set-arms-fail-closed + their controls(U-17), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, never-bypass-signing + its detector-negative-control(U-6/U-6b), fail-closed-on-unresolvable-repo-identity + its detector-negative-control(U-14/U-14b), arm-unavailable-is-not-arm-empty(U-15), anchor-rc-checks-claimed-set-and-greenfield-fallback + their controls(U-16), claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once, post-CAS-package-rebuild-rides-the-same-commit(U-18) + injected-canonical-vector(U-18b) + cross-grammar-guard-with-control(U-18c) + missing-stamp-file-halts-pre-CAS-with-control(U-18e) + fail-loud-rebuild-error-path(U-18d), pre-CAS-rebuild-count-announced-on-every-path-through-the-package-stage-including-zero: canonical-control(U-18f) + count-equals-the-U-18b-rebuild-set(U-18g) + leading-slash-announces-zero-and-stops-with-ZERO-push-attempts(U-18h) + ..-traversal-the-resolver-MATCHES-caught-by-canonicality-alone(U-18i) + embedded-slash-dot-slash(U-18j) + plan-only-announces-zero-and-PROCEEDS(U-18k) + canonical-manifest-staling-zero-refused-by-the-COUNT-limb-alone(U-18l), post-CAS-recovery-message-pair-driven-through-claim_version-each-asserting-the-tag-WAS-pushed: formerly-silent-site-emits-step-state-and-NOT-started-trailer-with-the-unrenamed-plan-as-corroboration(U-18m) + both-commit/push-limbs-entered-via-the-commit_push_rc-seam-carrying-opposite-instructions(U-18n) + envelope-names-the-bound-tag-forbids-the-re-run-and-rides-WITH-its-step-line(U-18o), verify-stamp-verb-wired-through-_main: token-less-HALT-names-the-token(U-19a) + token-bearing-control-states-its-manifest-scope(U-19b) + arg-independence-with-required-arg-control(U-19c), derived-stamp-slug: sensitivity+specificity-pair(U-20a/U-20b) + ambiguity-refuses-naming-both-candidates(U-20c) + explicit-flag-precedence(U-20d), pre-CAS-push-target-precondition-each-asserting-no-tag-pushed: default-branch-with-chore-branch-control(U-20e) + detached-HEAD(U-20f) + untracked-plan-with-re-add-control(U-20g) + --stamp-branch-parsed-from-argv-with-matching-declaration-control(U-20h))"
     return 0
   else
     echo "claim-version.sh --self-test: FAIL ($failures failing fixture(s))"
