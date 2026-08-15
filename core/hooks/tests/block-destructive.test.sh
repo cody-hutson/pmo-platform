@@ -860,6 +860,23 @@ test_case "BLOCK-022 R5 control: unregistered sibling in core/hooks/tests/ block
 # Suppression is gated on an allowlist of outer command words that cannot
 # evaluate their arguments. A word MISSING from that set means a false positive
 # persists -- it can never mean an evasion is admitted.
+#
+# HOW THIS CONTROL SET IS DERIVED, and why it is derived that way. The first
+# version of this block enumerated its controls from the design's own account of
+# how the suppression could be wrong. Every one of them passed while a real
+# evasion was live, because the account was incomplete: no control paired a
+# carrier PREFIX with a real execution, and none put a real command inside a
+# quote that an EVALUATING verb had opened. The cases below are instead derived
+# from the predicate's input space -- for each input axis the suppression reads
+# (who opens the quote, whether a segment is interior to it, which quote
+# character, whether a backslash precedes it, whether the quote has closed
+# again), there is a case on both sides of the axis. Add to this set the same
+# way: name the axis first, then write the pair.
+#
+# THE INVARIANT UNDER TEST. A token at command position of an actually-executing
+# context is always adjudicated, whatever quotes surround it. `bash -c '<string>'`
+# executes the string, so positions inside it are command positions -- and no
+# prefix in front of that command may reattribute the string to the prefix.
 
 echo ""
 echo "BLOCK-022 AC-FP quoted-fragment suppression"
@@ -875,18 +892,31 @@ test_case "AC-FP-1b: source-shaped text inside a gh --body argument allows" \
   "$(bash_payload "gh issue comment 1 --body 'note; source /tmp/evil.sh'")" \
   0
 
+# (c) a quoted body reached through a DOUBLE quote, not a single one. Both quote
+#     characters must open a suppressible run, or the class is only half fixed.
+test_case "AC-FP-1c: interpreter-shaped text inside a double-quoted gh body allows" \
+  "$(bash_payload 'gh issue comment 1 --body "note; bash /tmp/evil.sh"')" \
+  0
+
+# (d) an interior fragment whose OWN quotes balance. It is still inside the gh
+#     argument, so it must be allowed; per-segment parity got this one wrong in
+#     the other direction, blocking text that never executes.
+test_case "AC-FP-1d: even-parity fragment inside a carrier argument allows" \
+  "$(bash_payload "gh issue comment 1 --body 'a; bash \"/tmp/evil.sh\" b; c'")" \
+  0
+
 # AC-FP-2: the controls that prove no evasion was purchased. Each must STILL
 # block, and each closes a different way the suppression could have been wrong.
 #
 # (a) a real execution after a separator in a carrier-headed command. The
-#     executing segment has balanced quotes, so parity does not suppress it.
+#     executing segment is not inside the carrier's quote, so it is adjudicated.
 test_case "AC-FP-2a control: real execution after a separator in a carrier command blocks" \
   "$(bash_payload 'gh issue view 1; bash /tmp/evil.sh')" \
   2 "BLOCK-DESTRUCTIVE-022"
 
-# (b) the -c path is untouched. The first segment's command word is bash, which
-#     is not a carrier, so the gate never opens for a program string.
-test_case "AC-FP-2b control: bash -c program string still blocks (carrier gate closed)" \
+# (b) the -c path is untouched: `bash` opens the quote around its own program
+#     string, and `bash` is not a carrier, so nothing inside it is suppressed.
+test_case "AC-FP-2b control: bash -c program string still blocks" \
   "$(bash_payload "bash -c 'echo hi; bash /tmp/evil.sh'")" \
   2 "BLOCK-DESTRUCTIVE-022"
 
@@ -896,10 +926,77 @@ test_case "AC-FP-2c control: same quoted text under a non-carrier verb blocks" \
   "$(bash_payload "zzverb --body 'note; bash /tmp/evil.sh'")" \
   2 "BLOCK-DESTRUCTIVE-022"
 
-# (d) a carrier-headed command whose later segment is a REAL invocation with
-#     even quote parity is not suppressed -- the gate opening is not sufficient.
+# (d) a carrier-headed command whose later segment is a REAL invocation outside
+#     any quote is not suppressed -- a carrier appearing is not sufficient.
 test_case "AC-FP-2d control: carrier-headed pipeline into a real invocation blocks" \
   "$(bash_payload "printf '%s' x | bash /tmp/evil.sh")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (e) THE CASE THE FIRST CONTROL SET MISSED, and the reason this block was
+#     rewritten. A carrier PREFIX in front of `bash -c` must not reattribute the
+#     program string to the carrier. The quote belongs to whoever opened it, and
+#     `bash` opened this one. Without the pair (e)+(b) the suite cannot tell a
+#     closed gate from a gate that any one-token prefix re-opens.
+test_case "AC-FP-2e control: carrier prefix ahead of bash -c still blocks" \
+  "$(bash_payload "echo x; bash -c 'echo hi; bash /tmp/evil.sh'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (f) the other half of the same miss: a carrier prefix ahead of a real execution
+#     whose ARGUMENT merely contains an apostrophe. `--msg "it's here"` is
+#     ordinary well-formed shell, not evidence that nothing ran.
+test_case "AC-FP-2f control: carrier prefix, real execution, apostrophe in an argument blocks" \
+  "$(bash_payload "echo hi && bash /tmp/evil.sh --msg \"it's here\"")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (g) the double-quoted spelling of (e). Both quote characters must be handled,
+#     or the fix is only half a fix in the evasion direction too.
+test_case "AC-FP-2g control: carrier prefix ahead of a double-quoted -c string blocks" \
+  "$(bash_payload 'echo x; bash -c "echo hi; bash /tmp/evil.sh"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (h) a BACKSLASH-ESCAPED quote does not open a quote. Reading it as one would
+#     mark everything after it as interior to a carrier's argument, which is the
+#     fail-open direction.
+test_case "AC-FP-2h control: escaped quote after a carrier does not open a quoted run" \
+  "$(bash_payload 'echo \'"'"'; bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (i) an apostrophe INSIDE a double-quoted argument is literal and closes
+#     nothing, so the quoted run really has ended by the separator.
+test_case "AC-FP-2i control: apostrophe inside a double-quoted carrier argument blocks after" \
+  "$(bash_payload "echo \"it's\"; bash /tmp/evil.sh")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (j) suppression must STOP at the closing quote. Here it legitimately fires on
+#     the carrier's body and the real execution after it must still block -- one
+#     command exercising both directions at once.
+test_case "AC-FP-2j control: real execution after a carrier's quoted body closes blocks" \
+  "$(bash_payload "gh issue comment 1 --body 'note; ok'; bash /tmp/evil.sh")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (k) membership in the carrier set is a claim that the verb cannot evaluate its
+#     argument, and it is checkable. `git -c alias.x='!<cmd>' x` evaluates its
+#     own quoted argument, so `git` is not a carrier -- this case fails if it is
+#     ever added back.
+test_case "AC-FP-2k control: git is not a carrier (git -c evaluates its argument)" \
+  "$(bash_payload "git -c alias.x='!x; bash /tmp/evil.sh' foo")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (l)(m) the source/. arm reaches the same adjudicator by the same path, so it
+#     needs the same pair. Sourcing executes the file in the current shell; a
+#     carrier prefix must not suppress it on either spelling.
+test_case "AC-FP-2l control: carrier prefix ahead of a real source blocks" \
+  "$(bash_payload "echo hi && source /tmp/evil.sh --msg \"it's here\"")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "AC-FP-2m control: carrier prefix ahead of a real dot-source blocks" \
+  "$(bash_payload "printf hi; . /tmp/evil.sh --msg \"it's\"")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (n) the separator itself is an axis: a pipe splits segments exactly as `;` and
+#     `&` do, so the carrier prefix must not open the -c path through one either.
+test_case "AC-FP-2n control: carrier piped into bash -c still blocks" \
+  "$(bash_payload "gh issue view 1 | bash -c 'echo hi; bash /tmp/evil.sh'")" \
   2 "BLOCK-DESTRUCTIVE-022"
 
 # ==========================================================================
