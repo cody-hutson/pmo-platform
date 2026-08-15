@@ -48,9 +48,11 @@ An analysis once proposed expanding a 12-member correction set to 17 on exactly 
 
 **The membership test is the changed-file set of the release's own merge, nothing else.**
 
-## Specimen — baseline-pinned, illustrative only
+## Specimen — illustrative only
 
-Run at one release's integration merge. Denominator: **20** changed `SKILL.md` files.
+Run at integration merge **`e323b0e8`** and its first parent. Denominator: **20** changed `SKILL.md` files.
+
+The SHA is recorded because "baseline-pinned" without one is not pinned — a reader reproducing this has to source the merge externally, which is the same class of under-specification the probe itself guards against. Reproduce with `git diff --name-only e323b0e8^1 e323b0e8 -- '*/SKILL.md'`.
 
 | Cell | Count |
 |---|---|
