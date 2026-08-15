@@ -10,7 +10,14 @@ Expected: `ERROR — fcm-section-absent`, exit 3.
 
 ## Verification Plan
 
-**#999 — nothing to see**
+The family label below deliberately carries no issue number. This fixture asserts
+only that an absent File Change Matrix is a fail-closed ERROR; the label is inert
+scaffolding that gives the run one check to execute, and nothing here reads it. A
+bare `#N` in this position would be a resolving reference sitting outside any
+designated reference block — a second, unrelated finding on a fixture whose whole
+subject is matrix delivery.
+
+**Synthetic issue family — nothing to see**
 
 | AC | Predicate class | Verification method | Expected result |
 |---|---|---|---|
