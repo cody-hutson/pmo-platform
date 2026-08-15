@@ -208,3 +208,12 @@ unmodelled form the same way: reduce it to a relative name, or abstract it.
 
 A line that legitimately must carry a flagged form — a worked example of the leak itself —
 declares the per-line `path-leak: allow` marker the primitive already honors.
+
+That marker is the **only** way to exempt a home-path-shaped string, and the username in the
+path buys nothing: a home path is flagged whatever account name it carries — `user`, `alice`,
+`testuser` and any other plausible-looking fixture name are detected exactly like a real
+operator's, on both the `/Users/` and `/home/` forms. A username can never distinguish a
+fixture from a real path, because the two are the same string. So a test fixture, a rendered
+brief, or a `gh` body that must embed a home path carries the marker on that line; there is no
+file-scope escape on the runtime surfaces, and the deploy check's path-portability allowlist is
+reserved for files that *define* the detection, never extended for fixture convenience.

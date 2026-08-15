@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # path-leak-patterns.sh — shared path-leak detection primitive (#529).
 #
-# Sourced by:
+# Sourced by (the four BEHAVIORAL consumers — each one evaluates the predicate):
 #   - core/deploy/deploy.sh Check 43 (path-portability) — the tracked-file surface.
 #   - core/hooks/block-gh-path-leak.sh (#1137) — the gh issue/PR-ops surface.
+#   - core/hooks/block-scope-segregation.sh (ADR-091) — the tracker-filing surface.
+#   - the release-hub pre-spawn brief scan — via --scan-file, over one rendered brief.
 #
 # Seam contract (per the Stage-5 + adversarial review): the regex CONSTANTS and the
-# path_leak_line_is_exempt() PREDICATE are SHARED across both surfaces. Each consumer
-# supplies its OWN corpus (which lines to scan) and its OWN file-/surface-allowlist.
+# path_leak_line_is_exempt() PREDICATE are SHARED across all four surfaces. Each
+# consumer supplies its OWN corpus (which lines to scan) and its OWN file-/surface-
+# allowlist.
 #
 # Three leak classes (the path-portability family; host-axis sibling = the
 # host-binding-leak class, knowledge-architecture.md §4.1):
@@ -23,8 +26,11 @@
 #
 # Run directly with --self-test to verify the patterns + predicate.
 
-# Absolute machine path with a username segment. Synthetic fixture usernames are
-# subtracted by the predicate (so deploy/hook test fixtures do not self-trip).
+# Absolute machine path with a username segment. NO username is exempt: a home path is
+# flagged whatever account name it carries, on BOTH the /Users/ and /home/ forms. A
+# username can never distinguish a fixture from a real path, because the two are the
+# same string — so a line that legitimately must carry a flagged form (a worked example
+# of the leak itself, a test payload) declares the per-line 'path-leak: allow' marker.
 PATH_LEAK_RE_MACHINE='(/Users/|/home/)[a-z][a-z0-9._-]+'
 
 # Raw workspace-root form ($HOME/Claude, ~/Claude). DEFINED for reference but NOT in
@@ -37,14 +43,11 @@ PATH_LEAK_RE_RAWROOT='(\$HOME|\$\{HOME\}|~)/Claude'
 # 'personal opinion' / 'personalization' never match.
 PATH_LEAK_RE_INSTANCE_REL='(^|[^A-Za-z0-9._/-])(personal/pmo-instance|personal/analysis|personal/harness)(/|[^A-Za-z]|$)'
 
-# Synthetic fixture usernames that must NOT trip MACHINE (deploy.sh + hook fixtures).
-PATH_LEAK_FIXTURE_USERS='testuser|otheruser|someuser|foo|bar|baz|user|alice|bob|jane-doe'
-
 # path_leak_line_is_exempt <line> → 0 (exempt) / 1 (a real leak).
 # Shared exemptions: an explicit 'path-leak: allow' marker; the sanctioned
-# ${VAR:-$HOME/Claude...} default-expansion; a ${PARAM} reference; a synthetic
-# fixture username in a machine path. Per-surface corpus/file allowlists are the
-# consumer's job (NOT here).
+# ${VAR:-$HOME/Claude...} default-expansion; a ${PARAM} reference. A USERNAME is
+# NEVER an exemption — the marker is the sole content-level fixture escape (#5075).
+# Per-surface corpus/file allowlists are the consumer's job (NOT here).
 path_leak_line_is_exempt() {
   local line="$1"
   case "$line" in
@@ -52,10 +55,6 @@ path_leak_line_is_exempt() {
     *'${'*':-'*'$HOME/Claude'*'}'*)        return 0 ;;  # sanctioned default-expansion
     *'${'*':-'*'${HOME}/Claude'*'}'*)      return 0 ;;
   esac
-  # A synthetic fixture username in a /Users//home path is not a real leak.
-  if grep -qE "(/Users/|/home/)(${PATH_LEAK_FIXTURE_USERS})([^A-Za-z0-9]|$)" <<<"$line"; then
-    return 0
-  fi
   return 1
 }
 
@@ -116,9 +115,18 @@ _path_leak_self_test() {
   echo "MACHINE:"
   expect_leak  "real /Users/<op> path"            'see /Users/operator/Claude/x.md'
   expect_leak  "real /home/<op> path"             'cd /home/operator/work'
-  expect_clean "fixture /Users/testuser"          'export H=/Users/testuser/Claude'
-  expect_clean "fixture /Users/foo"               'p=/Users/foo/bar'
-  expect_clean "fixture /home/user"               'd=/home/user/x'
+  # The two arms below are a FALSIFICATION PAIR, not two unrelated assertions: the three
+  # input strings are byte-identical across both arms, and the ONLY difference is the
+  # marker. That is what proves the verdict turns on the marker rather than on the
+  # username. Arm 1 — a genuine home path under a FORMER fixture username is caught
+  # (the #5075 defect: these three passed silently while the username list existed).
+  expect_leak  "former-fixture user /Users/testuser" 'export H=/Users/testuser/Claude'
+  expect_leak  "former-fixture user /Users/foo"      'p=/Users/foo/bar'
+  expect_leak  "former-fixture user /home/user"      'd=/home/user/x'
+  # Arm 2 — the SAME three inputs stay exempt when the line carries the marker.
+  expect_clean "same input + marker: /Users/testuser" 'export H=/Users/testuser/Claude  # path-leak: allow'
+  expect_clean "same input + marker: /Users/foo"      'p=/Users/foo/bar  # path-leak: allow'
+  expect_clean "same input + marker: /home/user"      'd=/home/user/x  # path-leak: allow'
   echo "RAWROOT (portable — NOT flagged; \$HOME/Claude is the canonical per-user default):"
   expect_clean "raw \$HOME/Claude (portable default)" 'p="$HOME/Claude/notes.md"'
   expect_clean "raw ~/Claude (portable)"              'see ~/Claude/notes'

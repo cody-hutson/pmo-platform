@@ -74,6 +74,14 @@ test_case "enforce: gh pr comment -F body=@ /home leak BLOCKED" \
   "gh pr comment 5 -F body=@${WORK}/leak_home.md" 2 "BLOCK-GH-PATH-001"
 test_case "enforce: gh api issues -f body= machine-path leak BLOCKED" \
   "gh api repos/o/r/issues -f body='/Users/realuser/x'" 2 "BLOCK-GH-PATH-001"
+# A home path under a FORMER synthetic-fixture username is a leak like any other. The
+# shared primitive used to subtract ten common account names, so this exact body passed
+# silently on this surface; the username axis is gone and the marker (see the ALLOWED
+# case below) is now the sole content-level escape. Proves the #5075 catch arm on a real
+# consumer, not only at predicate level — the primitive's own self-test cannot show that
+# a hook actually blocks.
+test_case "enforce: gh api issues -f body= former-fixture username BLOCKED" \
+  "gh api repos/o/r/issues -f body='/Users/user/x'" 2 "BLOCK-GH-PATH-001"
 test_case "enforce: gh issue create generalized pointer ALLOWED" \
   "gh issue create --title T --body-file ${WORK}/clean.md" 0
 test_case "enforce: gh issue view (read, no body) ALLOWED" \
