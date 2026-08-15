@@ -179,14 +179,25 @@ if [ -r "$SCOPE_GUARD_LIB" ]; then . "$SCOPE_GUARD_LIB" 2>/dev/null || true; fi
 if command -v scope_guard_gate >/dev/null 2>&1; then scope_guard_gate "$CWD"; fi
 
 # --- BLOCK LOG HELPER ---
+#
+# `evidence` is the rule-specific detail apply_block already receives — the denied
+# path, the target host, the cause class. It used to be threaded into the WARN log
+# and dropped on the floor in enforce, where log_block was called with the rule id
+# alone. The record then said THAT something was denied but never WHAT, which makes
+# a block log unreadable at exactly the mode where it is the only observation
+# surface: an operator watching a shakedown could see a rule firing and had no way
+# to tell a genuine catch from a false positive. Additive — the field is optional,
+# and every existing consumer reads by key.
 log_block() {
   local rule_id="$1"
+  local evidence="${2:-}"
   local ts; ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
   local tool_input; tool_input="$("$PRINTF" '%s' "$INPUT" | "$JQ" -c '.tool_input // {}')"
   local input_digest; input_digest="$("$PRINTF" '%s' "$tool_input" | /usr/bin/shasum -a 256 | "$GREP" -oE '^[a-f0-9]+' | /usr/bin/head -c 16)"
   "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
     --arg tool "$TOOL_NAME" --arg digest "$input_digest" --arg cwd "$CWD" \
-    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd}' \
+    --arg evidence "$evidence" \
+    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd, evidence:$evidence}' \
     >> "$BLOCK_LOG" 2>/dev/null || true
 }
 
@@ -220,7 +231,7 @@ apply_block() {
       exit 0
       ;;
     enforce|*)
-      log_block "$rule_id"
+      log_block "$rule_id" "$evidence"
       "$PRINTF" '[CLAUDE-HOOK:%s:%s] BLOCKED: %s\nOverride: %s\n' "$HOOK_NAME" "$rule_id" "$reason" "$override" >&2
       exit 2
       ;;
@@ -260,6 +271,290 @@ extract_host() {
 # sha256 digest for log evidence (avoids logging raw secret material)
 digest() {
   "$PRINTF" '%s' "$1" | /usr/bin/shasum -a 256 | "$GREP" -oE '^[a-f0-9]+' | /usr/bin/head -c 16
+}
+
+# ==========================================================================
+# BLOCK-EGRESS-007 — quote-aware, segment-first command scanner
+# ==========================================================================
+#
+# WHY THE SINGLE-ERE MATCH-THEN-EXTRACT STRUCTURE IS REPLACED RATHER THAN PATCHED.
+#
+# -007 used to gate on ANCHOR_PREFIX_BASH and then extract the path with
+# `grep -oE 'gh[[:space:]]+api[[:space:]]+[^[:space:];&|]+' | head -1`. That
+# structure failed on the same three axes BLOCK-DESTRUCTIVE-022 recorded when it
+# abandoned single-ERE matching for the interpreter arm:
+#
+#   (a) QUOTE. The extracted token kept its surrounding quote characters and was
+#       glob-matched against unquoted allowlist patterns, so a path that IS
+#       allowlisted was DENIED whenever it was quoted — the conventional, and
+#       often necessary, spelling. An operator reading the allowlist saw the
+#       permission present, the hook denied anyway, and the natural remediation
+#       (add another entry) could not fix it.
+#   (b) COMMAND POSITION. The anchor admitted only start-of-string or `[;&|]`, so
+#       `gh api` reached from any OTHER command position was never matched and
+#       passed unadjudicated. Eleven such positions were measured, not one: `do`,
+#       `then`, `else`, an `if` condition, a subshell, a command substitution,
+#       backticks, `xargs`, and a leading `VAR=x` assignment prefix. This half
+#       fails OPEN and is the security-relevant one.
+#   (c) FIRST-MATCH TRUNCATION. `head -1` evaluated only the first invocation, so
+#       a second write hid behind an allowlisted first one.
+#
+# A fourth axis is specific to this rule: the extraction took the first token
+# after `api` as the path, so `gh api -X POST <path>` — the repo's own dominant
+# documented spelling — extracted `-X` as the path and denied. Axes (a) and (b)
+# were masking each other: the anchor usually failed first, so fixing either one
+# alone makes the other start firing.
+#
+# `head -1` is removed by REPLACING the extraction, never by looping it. Looping
+# the grep was measured to convert a legitimate issue-comment post whose body
+# QUOTES a `gh api` write into a DENY, and this pipeline's own artifacts quote
+# such commands constantly — so the naive removal is a worse defect than the one
+# it fixes. Quote handling is therefore structural (the scanner consumes quote
+# marks during tokenization) rather than a strip applied to an extracted token.
+#
+# ANCHOR_PREFIX_BASH is NOT modified, and -007 no longer reads it. Rules -001..-006
+# and -008..-011 keep it: their defect class is not under test here, and the
+# constant is read by three hooks and asserted in two governance documents, so
+# widening it would reach far beyond this rule.
+#
+# Bash 3.2-safe throughout (macOS system bash): parameter expansion and `case`
+# only, no subprocess inside the scanner, and the segment loop runs in the CURRENT
+# shell (here-string, never a pipeline) so apply_block's exit 2 propagates instead
+# of dying in a subshell.
+
+# Rollout phase for -007's WIDENING classes, per progressive-rollout-convention.md.
+#   shadow  — evaluate, log `would-fire`, take NO action, surface nothing
+#   warn    — evaluate, log, emit a stderr notice, still allow
+#   enforce — apply the deny
+# Deliberately ONE line to advance, so the Stage-9 GO gate can ratify straight to
+# `enforce` without a code redesign. Advance one rung at a time; retreat is the
+# same single edit. REPAIRS — quote handling, the flag walk, `--` — are NOT gated
+# by this and enforce from day one, because they can only STOP a wrong denial and
+# so carry no new-deny risk by construction.
+#
+# This is deliberately NOT the shared `.claude/hooks/.mode` dial. That file is read
+# by every mode-capable hook in the bundle, so flipping it to soften a -007
+# shakedown would simultaneously soften several unrelated controls. The dial is a
+# cohort instrument and this is a per-rule decision.
+readonly EGRESS_007_WIDENING_PHASE="shadow"
+
+# Sentinel standing in for a structural character that appeared INSIDE a quoted
+# span. Substituting rather than deleting preserves token boundaries, so a quoted
+# argument stays ONE token instead of silently fusing with its neighbour.
+readonly EGRESS_SENT=$'\001'
+
+# Segment-boundary class markers. Segmentation emits one segment per line, each
+# prefixed with the class of the separator that OPENED it, so the rollout classifier
+# can tell a command position the replaced matcher adjudicated from one it never
+# reached. Carrying the class inline keeps segmentation a single flat pass.
+readonly EGRESS_BND_OLD=$'\002'   # `;` `&` `|` — the replaced anchor admitted these
+readonly EGRESS_BND_NEW=$'\003'   # `(` `)` backtick — it did not
+
+# True when the string ends in an ODD number of backslashes — i.e. a following
+# quote character is escaped and is not a terminator.
+egress_trailing_backslash_odd() {
+  local t="$1" c=0
+  while [ "${t%\\}" != "$t" ]; do
+    t="${t%\\}"
+    c=$(( c + 1 ))
+  done
+  [ $(( c % 2 )) -eq 1 ]
+}
+
+# Replace every structural character inside a quoted span with the sentinel and
+# drop the quote marks, leaving unquoted text untouched. This is what makes the
+# command-position predicate immune to strings: structure inside a literal is no
+# longer visible to segmentation, so text that DESCRIBES a command cannot be
+# mistaken for one that performs it. Quote type is tracked, so an apostrophe
+# inside a double-quoted span (and vice versa) is ordinary content, not a
+# delimiter. Returns 1 on an unterminated quote.
+egress_neutralize_quoted() {
+  local rest="$1"
+  local out="" head body q
+  while [ -n "$rest" ]; do
+    head="${rest%%[\"\']*}"
+    if [ "$head" = "$rest" ]; then
+      out="${out}${rest}"
+      rest=""
+      break
+    fi
+    out="${out}${head}"
+    rest="${rest#"$head"}"
+    q="${rest%"${rest#?}"}"
+    rest="${rest#?}"
+    case "$rest" in
+      *"$q"*) ;;
+      *) return 1 ;;
+    esac
+    body="${rest%%"$q"*}"
+    rest="${rest#"$body"}"
+    # A backslash-escaped quote inside a DOUBLE-quoted span is content, not a
+    # terminator; absorb it and keep scanning. Single quotes have no escape
+    # mechanism in shell, so this correction applies to double quotes only.
+    if [ "$q" = '"' ]; then
+      while egress_trailing_backslash_odd "$body"; do
+        rest="${rest#?}"
+        case "$rest" in
+          *"$q"*) ;;
+          *) return 1 ;;
+        esac
+        body="${body}${q}${rest%%"$q"*}"
+        rest="${rest#"${rest%%"$q"*}"}"
+      done
+    fi
+    rest="${rest#?}"
+    body="${body// /${EGRESS_SENT}}"
+    body="${body//	/${EGRESS_SENT}}"
+    body="${body//$'\n'/${EGRESS_SENT}}"
+    body="${body//;/${EGRESS_SENT}}"
+    body="${body//&/${EGRESS_SENT}}"
+    body="${body//|/${EGRESS_SENT}}"
+    body="${body//(/${EGRESS_SENT}}"
+    body="${body//)/${EGRESS_SENT}}"
+    body="${body//\#/${EGRESS_SENT}}"
+    body="${body//\`/${EGRESS_SENT}}"
+    out="${out}${body}"
+  done
+  "$PRINTF" '%s' "$out"
+  return 0
+}
+
+# Classify a gh-api path operand per the AUTHORITY-PREFIX rule.
+#
+# An UNEVALUABLE span is a path segment carrying `$`, a backtick, a `{...}` pair,
+# or a leading `:name`. The AUTHORITY PREFIX is the first THREE path segments:
+# GitHub REST paths are `repos/{owner}/{repo}/...`, `orgs/{org}/...` and
+# `users/{user}/...`, so the first three segments are exactly what decides WHICH
+# repository a write reaches — and every path pattern in the allowlist fixes those
+# three literally. The threshold is read off the allowlist's own shape, not chosen.
+#
+#   unevaluable IN the authority  -> return 1; the caller denies, naming the cause
+#   unevaluable BELOW it          -> substitute `*` and adjudicate normally
+#
+# The second half is sound because every allowlist path pattern is prefix-anchored:
+# the literal prefix is fixed, so whatever the variable expands to, the path still
+# begins inside an allowlisted repository. It is also what keeps a bulk loop over
+# issue numbers working.
+#
+# A blanket deny on any variable-bearing path was rejected on evidence: it would
+# deny `repos/<owner>/<repo>/issues/$n`, the exact bulk-write form measured at 152
+# invocations in one session. No allowlist entry can ever fix an unresolvable path,
+# so a blanket deny pushes the operator toward CLAUDE_HOOK_BYPASS — the outcome a
+# security control least wants. Authority-scoping denies exactly the case where the
+# hook genuinely cannot know the target repository, and permits the case where it
+# provably can.
+#
+# Expanding the placeholders from the repository remote was rejected outright. `gh`
+# resolves `{owner}`/`{repo}` at EXECUTION time from the environment, a default
+# repo setting, the cwd's remotes, or a `--repo` flag elsewhere in the same
+# command, so a hook resolving from its own view can adjudicate a DIFFERENT
+# repository than the command hits — manufacturing an allow for a repository never
+# adjudicated. It is also unreachable under this hook's pinned PATH, which is an
+# anti-hijack control; `gh` does not live there.
+#
+# Echoes the normalized path. Returns 1 when the authority is unresolvable.
+egress_classify_api_path() {
+  local p="$1"
+  local lead="" rest seg out="" idx=0 first=1 unevaluable
+  case "$p" in
+    /*) lead="/"; rest="${p#/}" ;;
+    *)  rest="$p" ;;
+  esac
+  while : ; do
+    case "$rest" in
+      */*) seg="${rest%%/*}"; rest="${rest#*/}" ;;
+      *)   seg="$rest"; rest="" ;;
+    esac
+    unevaluable=0
+    case "$seg" in
+      *'$'*|*'`'*) unevaluable=1 ;;
+      *'{'*'}'*)   unevaluable=1 ;;
+      :?*)         unevaluable=1 ;;
+    esac
+    if [ "$unevaluable" -eq 1 ]; then
+      if [ "$idx" -lt 3 ]; then
+        return 1
+      fi
+      seg="*"
+    fi
+    if [ "$first" -eq 1 ]; then
+      out="$seg"
+      first=0
+    else
+      out="${out}/${seg}"
+    fi
+    idx=$(( idx + 1 ))
+    if [ -z "$rest" ]; then break; fi
+  done
+  "$PRINTF" '%s%s' "$lead" "$out"
+  return 0
+}
+
+# Shadow/warn-phase telemetry for a -007 widening: evaluate, record, take no
+# action. A shadow rung surfaces nothing to the caller by design — the log IS the
+# observation. Carries the CAUSE CLASS as well as the path, because the operator
+# reading this log needs to separate `not-allowlisted` (add an allowlist entry)
+# from `unresolvable` (spell out the owner and repository); conflating those two
+# is precisely the trap this rule was filed about.
+log_would_fire() {
+  local rule_id="$1"
+  local phase="$2"
+  local cause="$3"
+  local path="$4"
+  local ts; ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
+    --arg tool "$TOOL_NAME" --arg phase "$phase" --arg cause "$cause" --arg path "$path" \
+    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, phase:$phase, reason:"would-fire", cause:$cause, path:$path}' \
+    >> "$WARN_LOG" 2>/dev/null || true
+}
+
+# Deny (or shadow-log) one -007 verdict. FOUR causes, each carrying its OWN
+# remediation string.
+#
+# `unresolvable` must NOT offer an allowlist entry. No entry can ever match a path
+# whose authority is unresolved, so sending the operator to edit an allowlist that
+# already permits the call is the exact defect this rule was filed about,
+# reappearing in a new guise. It says: spell the owner and repository out.
+egress_007_verdict() {
+  local cause="$1"
+  local path="$2"
+  local widening="$3"
+  local reason override
+
+  if [ "$widening" -eq 1 ]; then
+    case "$EGRESS_007_WIDENING_PHASE" in
+      shadow)
+        log_would_fire "BLOCK-EGRESS-007" "shadow" "$cause" "$path"
+        return 0
+        ;;
+      warn)
+        log_would_fire "BLOCK-EGRESS-007" "warn" "$cause" "$path"
+        "$PRINTF" '[CLAUDE-HOOK:%s:BLOCK-EGRESS-007] WARN (would-block, rollout=warn, cause=%s): gh api write to %s\n' \
+          "$HOOK_NAME" "$cause" "$path" >&2
+        return 0
+        ;;
+    esac
+  fi
+
+  case "$cause" in
+    unresolvable)
+      reason="gh api write to an unresolvable path denied (path: ${path}). The hook sees unexpanded argv, so it cannot resolve the path authority and cannot know which repository this write would reach."
+      override="spell out the owner and repository literally — gh resolves them at execution time from state the hook cannot see, so NO allowlist entry can match this path. Or set CLAUDE_HOOK_BYPASS=1"
+      ;;
+    unparseable)
+      reason="gh api write denied: the command carries an unterminated quote and cannot be evaluated."
+      override="close the quote — the command cannot execute in this form either. Or set CLAUDE_HOOK_BYPASS=1"
+      ;;
+    no-path)
+      reason="gh api write denied: no API path operand found after 'gh api'."
+      override="supply the API path operand, or set CLAUDE_HOOK_BYPASS=1"
+      ;;
+    *)
+      reason="gh api write to non-allowlisted path denied (path: ${path})."
+      override="add path to .claude/egress-allowlist.txt via allowlist-add.sh, or set CLAUDE_HOOK_BYPASS=1"
+      ;;
+  esac
+  apply_block "BLOCK-EGRESS-007" "$reason" "$override" "path=${path} cause=${cause}"
 }
 
 # ==========================================================================
@@ -333,17 +628,255 @@ case "$TOOL_NAME" in
     fi
 
     # BLOCK-EGRESS-007 — gh api POST/PUT/PATCH/DELETE to non-allowlisted API path
-    # Absolute-path-aware.
-    if matches "${ANCHOR_PREFIX_BASH}"'gh[[:space:]]+api[[:space:]]+[^;&|]*(-X[[:space:]]+(POST|PUT|PATCH|DELETE)|--method[[:space:]]+(POST|PUT|PATCH|DELETE))'; then
-      # Extract API path (first arg after "gh api")
-      api_path="$("$PRINTF" '%s' "$COMMAND" | "$GREP" -oE 'gh[[:space:]]+api[[:space:]]+[^[:space:];&|]+' | /usr/bin/head -1 | "$GREP" -oE '[^[:space:]]+$' || "$PRINTF" '')"
-      if [ -z "$api_path" ] || ! is_allowlisted "$api_path" "$EGRESS_ALLOWLIST"; then
-        apply_block "BLOCK-EGRESS-007" \
-          "gh api write to non-allowlisted path denied (path: ${api_path:-unknown})." \
-          "add path to .claude/egress-allowlist.txt, or set CLAUDE_HOOK_BYPASS=1" \
-          "path=${api_path:-unknown}"
-      fi
+    #
+    # Segment-first, quote-aware, every-invocation. See the scanner block above for
+    # why the single-ERE structure was replaced rather than patched, and why
+    # ANCHOR_PREFIX_BASH is deliberately not read here.
+    #
+    # Fast-path guard. The head token's basename must be `gh`, so the substring is
+    # necessarily present — a command without it can be skipped without scanning.
+    # Non-`gh` commands are therefore measurably FASTER than before this change,
+    # because the gate `grep` fork the old structure always ran is now skipped.
+    case "$COMMAND" in
+      *gh*)
+    # The branch body below is deliberately left at the rule's own indentation
+    # rather than shifted under the `case`. The guard is a performance wrapper, not
+    # a logical nesting level, and re-indenting the whole evaluator to express it
+    # would bury the logic a reviewer actually needs to read. The branch closes at
+    # the `;;` / `esac` at the end of the rule.
+    if ! egress_norm="$(egress_neutralize_quoted "$COMMAND")"; then
+      # Unterminated quote. Only raised when the command plausibly carries a gh-api
+      # write at all, so an unbalanced quote in an unrelated command is not this
+      # rule's business. Classified as a widening: the old matcher had no equivalent
+      # class, so this deny is genuinely new.
+      case "$COMMAND" in
+        *api*) egress_007_verdict "unparseable" "unknown" 1 ;;
+      esac
+    else
+      # Segment on the shell's command separators, in TWO classes — the distinction
+      # is load-bearing for the rollout classification below, not cosmetic.
+      #
+      #   `;` `&` `|` and newline  — separators the REPLACED anchor already
+      #                              recognized, so a `gh api` at the head of such a
+      #                              segment was reachable by the old matcher.
+      #   `(` `)` and the backtick — subshell, command substitution (together with
+      #                              the `$` left behind) and its older spelling.
+      #                              The old anchor did NOT admit these, so a write
+      #                              reached from one of them is a position the old
+      #                              matcher provably never adjudicated.
+      #
+      # Structure inside a quoted span was neutralized above, so a separator that is
+      # part of a STRING can no longer create a segment in either class.
+      # Each separator becomes a newline PLUS a one-character class marker, so every
+      # segment after the first announces how it was opened and the loop below stays a
+      # single flat pass. The first segment carries no marker: it is the start of the
+      # command, which the old anchor always admitted.
+      egress_segs="${egress_norm//;/$'\n'${EGRESS_BND_OLD}}"
+      egress_segs="${egress_segs//&/$'\n'${EGRESS_BND_OLD}}"
+      egress_segs="${egress_segs//|/$'\n'${EGRESS_BND_OLD}}"
+      egress_segs="${egress_segs//(/$'\n'${EGRESS_BND_NEW}}"
+      egress_segs="${egress_segs//)/$'\n'${EGRESS_BND_NEW}}"
+      egress_segs="${egress_segs//\`/$'\n'${EGRESS_BND_NEW}}"
+
+      egress_segno=0
+      egress_ghseen=0
+
+      while IFS= read -r egress_seg; do
+        egress_segno=$(( egress_segno + 1 ))
+        case "$egress_seg" in
+          "${EGRESS_BND_NEW}"*) egress_oldpos=0; egress_seg="${egress_seg#?}" ;;
+          "${EGRESS_BND_OLD}"*) egress_oldpos=1; egress_seg="${egress_seg#?}" ;;
+          *)                    egress_oldpos=1 ;;
+        esac
+        egress_seg="${egress_seg#"${egress_seg%%[![:space:]]*}"}"
+        [ -n "$egress_seg" ] || continue
+        # A segment whose head token opens a comment is not a command.
+        case "$egress_seg" in
+          '#'*) continue ;;
+        esac
+
+        # Tokenize with globbing OFF, so a literal `*` in the command is not
+        # expanded against the cwd before it can be adjudicated.
+        set -f
+        # shellcheck disable=SC2206
+        egress_toks=( $egress_seg )
+        set +f
+        [ "${#egress_toks[@]}" -ge 2 ] || continue
+
+        # ---- Resolve COMMAND POSITION before reading the verb ----
+        #
+        # Consume, repeatedly and in any order: compound-command keywords, command
+        # wrappers (each followed by its own leading flags), and variable-assignment
+        # prefixes. The command word is the first token that is none of these — which
+        # is how the shell itself resolves command position, rather than assuming
+        # index 0.
+        #
+        # A keyword only counts at the HEAD of a segment, and a segment can no longer
+        # begin inside a string literal, which is what makes this precise rather than
+        # permissive: `echo "step 1; do gh api ... --method POST"` produces no segment
+        # at all, because its separators were neutralized.
+        #
+        # The assignment-prefix predicate is spelled identically to the one
+        # BLOCK-DESTRUCTIVE-022 uses — a token is a prefix assignment IFF it contains
+        # `=` AND its NAME part is a valid shell name — so `a-b=1` and `--body=x` both
+        # terminate the walk and the skip cannot degrade into "advance past any token
+        # containing `=`". One vocabulary across both matcher surfaces, deliberately.
+        egress_hidx=0
+        while [ "$egress_hidx" -lt "${#egress_toks[@]}" ]; do
+          egress_raw="${egress_toks[$egress_hidx]}"
+          case "$egress_raw" in
+            [A-Za-z_]*=*)
+              case "${egress_raw%%=*}" in
+                *[!A-Za-z0-9_]*) break ;;
+              esac
+              egress_hidx=$(( egress_hidx + 1 ))
+              continue
+              ;;
+          esac
+          case "${egress_raw##*/}" in
+            do|then|else|elif|if|while|until|'!'|'{'|'}'|'{}')
+              egress_hidx=$(( egress_hidx + 1 ))
+              ;;
+            time|command|builtin|exec|nohup|env|sudo|xargs|timeout|nice|stdbuf)
+              egress_hidx=$(( egress_hidx + 1 ))
+              while [ "$egress_hidx" -lt "${#egress_toks[@]}" ]; do
+                case "${egress_toks[$egress_hidx]}" in
+                  -*) egress_hidx=$(( egress_hidx + 1 )) ;;
+                  *) break ;;
+                esac
+              done
+              ;;
+            *) break ;;
+          esac
+        done
+
+        # need a verb AND at least one token after it
+        [ $(( egress_hidx + 1 )) -lt "${#egress_toks[@]}" ] || continue
+
+        # Basename match subsumes every absolute-path form and is strictly tighter
+        # than the prefix enumeration the old anchor carried: an unlisted prefix no
+        # longer evades.
+        case "${egress_toks[$egress_hidx]##*/}" in
+          gh) ;;
+          *) continue ;;
+        esac
+        case "${egress_toks[$(( egress_hidx + 1 ))]}" in
+          api) ;;
+          *) continue ;;
+        esac
+        egress_ghseen=$(( egress_ghseen + 1 ))
+
+        # ---- Walk the operands: method, write-ness, and the path ----
+        #
+        # Token-level, not a regex over the segment. A `--method PATCH` occurring
+        # inside a quoted body is ONE token after neutralization and therefore cannot
+        # be mistaken for a flag. Value-taking flags are enumerated so their VALUE is
+        # not mistaken for the path — which is the defect that made the repo's own
+        # `gh api -X POST <path>` spelling extract `-X` and deny.
+        #
+        # Implicit POST is exact, not a heuristic: gh documents that the request
+        # method defaults to POST when a field flag is present, so `-f`/`-F`/`--field`
+        # /`--raw-field`/`--input` IS a write even with no `-X`.
+        egress_idx=$(( egress_hidx + 2 ))
+        egress_method=""
+        egress_explicit=0
+        egress_implicit=0
+        egress_path=""
+        egress_ddash=0
+        while [ "$egress_idx" -lt "${#egress_toks[@]}" ]; do
+          egress_tok="${egress_toks[$egress_idx]}"
+          if [ "$egress_ddash" -eq 1 ]; then
+            if [ -z "$egress_path" ]; then egress_path="$egress_tok"; fi
+            egress_idx=$(( egress_idx + 1 ))
+            continue
+          fi
+          case "$egress_tok" in
+            --)
+              egress_ddash=1
+              egress_idx=$(( egress_idx + 1 ))
+              ;;
+            -X|--method)
+              if [ $(( egress_idx + 1 )) -lt "${#egress_toks[@]}" ]; then
+                egress_method="${egress_toks[$(( egress_idx + 1 ))]}"
+                egress_explicit=1
+              fi
+              egress_idx=$(( egress_idx + 2 ))
+              ;;
+            --method=*)
+              egress_method="${egress_tok#--method=}"
+              egress_explicit=1
+              egress_idx=$(( egress_idx + 1 ))
+              ;;
+            -f|-F|--field|--raw-field|--input)
+              egress_implicit=1
+              egress_idx=$(( egress_idx + 2 ))
+              ;;
+            --field=*|--raw-field=*|--input=*)
+              egress_implicit=1
+              egress_idx=$(( egress_idx + 1 ))
+              ;;
+            -H|--header|-q|--jq|-t|--template|--hostname|--cache|-p|--preview)
+              egress_idx=$(( egress_idx + 2 ))
+              ;;
+            -*)
+              egress_idx=$(( egress_idx + 1 ))
+              ;;
+            *)
+              if [ -z "$egress_path" ]; then egress_path="$egress_tok"; fi
+              egress_idx=$(( egress_idx + 1 ))
+              ;;
+          esac
+        done
+
+        # Is this segment a WRITE? Each segment carries its own determination, so a
+        # read co-located with a write is not adjudicated against the write allowlist.
+        egress_write=0
+        case "$egress_method" in
+          POST|PUT|PATCH|DELETE|post|put|patch|delete|Post|Put|Patch|Delete) egress_write=1 ;;
+        esac
+        if [ "$egress_implicit" -eq 1 ] && [ "$egress_write" -eq 0 ] && [ "$egress_explicit" -eq 0 ]; then
+          egress_write=1
+        fi
+        [ "$egress_write" -eq 1 ] || continue
+
+        # ---- Rollout classification ----
+        #
+        # A deny is a WIDENING exactly when the replaced matcher could not have
+        # produced it. That matcher adjudicated ONE path — the FIRST `gh api` in the
+        # command — reached only from start-of-string or a `[;&|]` separator, with the
+        # verb at the head of the segment, and only when an explicit write method was
+        # present. A deny meeting all four conditions is the SAME verdict the old code
+        # reached: it enforces from day one, because gating it would LOOSEN a control
+        # that already denies. Anything else is new and enters the rollout ladder.
+        #
+        # The `oldpos` term is why segmentation tracks two separator classes. Without
+        # it a write inside `$( )` or a subshell would be classified as old-reachable
+        # and enforced on day one — but the old anchor never admitted those positions,
+        # so that deny is new and owes the ladder. Measured: it is the difference
+        # between three cases reading enforce and reading shadow.
+        egress_widening=1
+        if [ "$egress_ghseen" -eq 1 ] && [ "$egress_hidx" -eq 0 ] && [ "$egress_explicit" -eq 1 ] && [ "$egress_oldpos" -eq 1 ]; then
+          egress_widening=0
+        fi
+
+        if [ -z "$egress_path" ]; then
+          egress_007_verdict "no-path" "unknown" "$egress_widening"
+          continue
+        fi
+
+        if ! egress_norm_path="$(egress_classify_api_path "$egress_path")"; then
+          egress_007_verdict "unresolvable" "$egress_path" "$egress_widening"
+          continue
+        fi
+
+        if ! is_allowlisted "$egress_norm_path" "$EGRESS_ALLOWLIST"; then
+          egress_007_verdict "not-allowlisted" "$egress_norm_path" "$egress_widening"
+        fi
+      done <<< "$egress_segs"
     fi
+
+        ;;
+    esac
 
     # ----- Raw network tools -----
 
