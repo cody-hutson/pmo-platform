@@ -82,7 +82,7 @@ Eight allowlists govern specific surfaces:
 
 | File | Surface | Format | Match |
 |---|---|---|---|
-| `.claude/script-execution-allowlist.txt` | `bash <path>.sh` invocations | bash glob patterns | shell `case` globbing |
+| `.claude/script-execution-allowlist.txt` | subprocess script execution — `bash`/`sh`/`zsh <path>.sh` **and** `source` / `.` of a script, including every `.sh`-bearing token after `-c` | bash glob patterns | shell `case` globbing |
 | `.claude/egress-allowlist.txt` | `curl` / `gh api` upload targets | hosts / gh-api path patterns | bash glob |
 | `.claude/webfetch-allowlist.txt` | WebFetch domains | domain patterns | bash glob |
 | `.claude/ssh-allowlist.txt` | SSH destinations | host patterns | bash glob |
@@ -133,7 +133,15 @@ git grep -l 'MODE_FILE="${HOOK_DIR}/\.mode"' -- ':(glob)core/hooks/*.sh'
 
 **Destructive + credential-read + rm-prefer-trash hooks always enforce** (high-confidence, narrow rules, low false-positive risk) and have no mode surface at all. The seven `.mode` readers listed above have warn-mode, as do the four hooks reading their own mode file.
 
-**The always-enforce three keep an unconditional `LIB-MISSING` deny, and that is load-bearing rather than incidental.** Their matchers span Read, Bash, Write and Edit, so a missing helper stays immediately visible even while the mode-capable cohort is degrading — which is the property that makes degrading the cohort acceptable in the first place. `core/hooks/tests/check-hook-dep-hardening.sh` CHECK-4 fails if one of the three acquires a mode-coupled guard. **Scope of that guarantee, stated plainly:** it holds for an absent, unreadable or truncated helper. It does **not** hold for a syntactically-valid helper whose top level runs `exit 0` — that terminates the hook from inside the guard's own condition before the guard can rule, and `bash -n` cannot detect it because the syntax is valid. That residual is pre-existing, is tracked as its own defect, and is printed on every run of `core/hooks/tests/hook-fail-closed.test.sh` section (6) so a green suite is never mistaken for a total guarantee.
+**The always-enforce three keep an unconditional `LIB-MISSING` deny, and that is load-bearing rather than incidental.** Their matchers span Read, Bash, Write and Edit, so a missing helper stays immediately visible even while the mode-capable cohort is degrading — which is the property that makes degrading the cohort acceptable in the first place. `core/hooks/tests/check-hook-dep-hardening.sh` CHECK-4 fails if one of the three acquires a mode-coupled guard.
+
+**Scope of that guarantee, stated plainly.** The deny holds for a helper that is **absent · unreadable · truncated · syntactically valid but semantically corrupt (including a top level that runs `exit 0`, and the define-every-symbol-then-exit variant) · version-skewed (carrying the wrong contract token) · swapped mid-guard between the out-of-process check and the in-process source**. The guarantee is asserted rather than described: `core/hooks/tests/hook-fail-closed.test.sh` section (6) executes every one of those states against all three hooks with every mode file present and set `off`, and requires both `exit 2` and a readable block message. It pairs each with a healthy-lib control — a benign payload that must still be allowed and a violating payload that must still be denied on the hook's own rule — because a matrix proving only denial would pass a guard that denies everything.
+
+The mechanism is that the helper is **attested out of process before it is admitted to the hook's shell**, so a helper that terminates the shell can never produce the token the guard requires; an `EXIT` trap covers the in-process source that cannot be eliminated, writing to a saved stderr descriptor because the redirection suppressing the source's diagnostics is still in effect while the trap body runs; and the expected contract value is captured `readonly` above any source, since a sourced file cannot overwrite a readonly. `bash -n` is deliberately **not** the control — a syntax check verifies that the helper parses, never that it means what the hook expects, and it passes a top-level `exit 0` by construction. The governing decision record is the hook-dependency integrity invariant ADR in `core/ADRs/`, which supersedes in part the mode-coupling record's narrower statement of this guarantee.
+
+**What remains outside the guarantee, and why it is not a boundary the guard can hold.** An **adaptive** helper that satisfies the out-of-process attestation and then strips the `EXIT` trap on the in-process source still yields an allow. That is a *compromise* rather than a *corruption*: it requires code that detects which evaluation it is in. The helper and the hook that sources it ship with identical ownership and identical write permissions, so a writer able to do that can replace the hook itself — no in-process check is a security boundary against them. The guard is specified to the corruption-and-partial-install population and claims nothing beyond it.
+
+**One consequence to know before editing the helper.** The contract token is a breaking-change signal: bump it only when the helper's contract changes, and edit every carrier in the same commit. A skewed token denies every matching tool call across the floor, and `CLAUDE_HOOK_BYPASS` cannot clear it. `check-hook-dep-hardening.sh` CHECK-6 fails the build on disagreement, so skew introduced in the repository cannot reach a deploy — but a hand-edited or partially-installed *deployed* bundle is outside its reach, and recovery for that is the bundle reinstall in § Recovery Procedures. The helper must also stay side-effect-free at its top level: it is now evaluated twice per invocation, once for attestation and once for real.
 
 **Initial deploy state:** `warn` (fast-path 3-day shakedown). User flips to `enforce` after reviewing warn logs and adding any legitimate false-positive patterns to the relevant allowlist.
 
@@ -151,7 +159,7 @@ git grep -l 'MODE_FILE="${HOOK_DIR}/\.mode"' -- ':(glob)core/hooks/*.sh'
 
 ### Missing `jq` dependency
 
-The hook fails OPEN with a loud stderr warning and logs to `.claude/hooks/hook-errors.log`. Install jq: `brew install jq` (or ensure `/usr/bin/jq` exists — macOS 14+ ships jq by default).
+The hook fails **CLOSED**: `deny_missing_dep` emits a `DEPENDENCY-MISSING` block naming the missing tool and exits 2, and the hook logs to `.claude/hooks/hook-errors.log`. A security control that cannot evaluate its input must deny, never allow (`GHSA-9cjm-v22x-4x33`); the historical fail-open behavior described here previously is the defect that advisory removed. Mode-capable hooks degrade to exit 0 with a stderr notice in `warn`/`off`; the always-enforce three deny regardless. Install jq: `brew install jq` (or ensure `/usr/bin/jq` exists — macOS 14+ ships jq by default).
 
 ### Allowlist overflow / legitimate block
 
