@@ -958,6 +958,7 @@ Usage:
   claim-version.sh --sha <merge_sha> --bump <major|minor|patch> \
       [--patch-base <vX.Y>] [--message <m>] [--max-attempts N] \
       [--stamp-slug <slug>] [--stamp-file <repo-rel-path>]... [--dry-run]
+  claim-version.sh --verify-stamp <slug>
   claim-version.sh --self-test
 
 On success prints the claimed tag to stdout; non-zero exit on HALT.
@@ -968,11 +969,24 @@ On success prints the claimed tag to stdout; non-zero exit on HALT.
     (ADR-092). Absent this flag the stamping pass is skipped entirely.
 --stamp-file <path>  Optional, repeatable. Additional repo-relative token-bearing
     file(s) whose {{RELEASE_VERSION}} is resolved in the same stamp commit.
+--verify-stamp <slug>  Read-only stamp-manifest verification. Runs the SAME
+    pre-flight the Stage-12 claim runs before the compare-and-swap, so a
+    Commit-0 PROCEED rehearses the real claim rather than a lookalike. No
+    network, no CAS, no mutation; consumes neither --sha nor --bump. Exit 0 =
+    manifest resolvable, exit 1 = manifest broken. This is the Commit-0 rung's
+    invocation and it asserts a PRE-CLAIM manifest only: after a claim the plan
+    has already been renamed under plans/v<MAJOR>/, so this verb reports
+    non-zero on a correctly recovered repository. Never wire it into a
+    post-claim or recovery path.
 EOF
 }
 
 _main() {
-  local sha="" bump="" patch_base="" message="" dry_run=0
+  # VERIFY_STAMP_SLUG is deliberately a _main LOCAL, never the file-scope
+  # STAMP_SLUG global: the verb takes its slug from argv only, so no environment
+  # seeding can reach it and no claim-path slug derivation can interfere with it
+  # in either direction.
+  local sha="" bump="" patch_base="" message="" dry_run=0 verify_stamp_slug=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --sha)          sha="$2"; shift 2;;
@@ -981,6 +995,7 @@ _main() {
       --message)      message="$2"; shift 2;;
       --max-attempts) MAX_ATTEMPTS="$2"; shift 2;;
       --stamp-slug)   STAMP_SLUG="$2"; shift 2;;
+      --verify-stamp) verify_stamp_slug="$2"; shift 2;;
       # Normalise the operator-supplied path at the single intake point. A leading
       # "./", an embedded "/./", or a doubled "//" all name the same file, but the
       # pre-flight guard (permissive glob) and the affected-skill resolver (anchored
@@ -993,6 +1008,33 @@ _main() {
       *) printf 'claim-version: unknown arg %q\n' "$1" >&2; _usage; exit 2;;
     esac
   done
+
+  # --- Stamp-manifest verification mode (read-only; no network, no CAS) -------
+  # Runs the IDENTICAL predicate the Stage-12 claim runs before the CAS, so a
+  # Commit-0 PROCEED is a faithful rehearsal of the claim rather than a lookalike
+  # that can agree with a broken manifest. It consumes neither --sha nor --bump —
+  # _preflight_stamp's plan-only path is a pure filesystem predicate — which is
+  # why this branch must return BEFORE the two required-arg checks below. That
+  # position is load-bearing, not incidental.
+  #
+  # PRE-CLAIM ONLY. After a claim the plan has been renamed under
+  # plans/v<MAJOR>/, so _resolve_preclaim_plan finds no candidate and this verb
+  # returns non-zero on a repository whose claim already completed correctly.
+  # It is therefore never wired into a recovery path: its single governed caller
+  # is the Commit-0 rung, where the token is expected to be present.
+  if [[ -n "$verify_stamp_slug" ]]; then
+    _preflight_stamp "$verify_stamp_slug" || {
+      printf 'claim-version: verify-stamp HALT — stamp manifest broken for slug %q. At the Stage-12 claim this HALTs before the CAS: the plan would neither resolve {{RELEASE_VERSION}} nor rename into plans/v<MAJOR>/, and the identity-conformance check cannot distinguish it from a claimed release.\n' \
+        "$verify_stamp_slug" >&2
+      exit 1
+    }
+    # State the rehearsal's own extent on success. A PROCEED that does not say
+    # what it exercised reads as broader evidence than it is — the failure mode
+    # this rung exists to close, one level down.
+    printf 'claim-version: verify-stamp OK — %s carries a resolvable stamp manifest; plan-only manifest (%d --stamp-file target(s)); package-consequence checks not exercised\n' \
+      "$verify_stamp_slug" "${#STAMP_FILES[@]}" >&2
+    exit 0
+  fi
 
   [[ -n "$sha"  ]] || { printf 'claim-version: --sha is required\n' >&2; _usage; exit 2; }
   [[ -n "$bump" ]] || { printf 'claim-version: --bump is required\n' >&2; _usage; exit 2; }
@@ -2118,8 +2160,89 @@ PKGSTUB
     rm -rf "$_sb18d"
   }
 
+  # ---- U-19 series: the --verify-stamp verb, the Commit-0 rung's invocation.
+  #      These drive _main, NOT _preflight_stamp directly. Driving the function
+  #      alone would verify the predicate while leaving the WIRING untested —
+  #      which is this defect's own shape reproduced at the test layer: a check
+  #      that passes without ever reaching the thing it exists to check.
+  #      The token-less arm is built by mutating the sandbox's plan in place
+  #      rather than by parameterising _st_stamp_sandbox, deliberately: that
+  #      builder is a sibling card's edit target in this same release.
+
+  # ---- U-19a: SENSITIVITY. A token-less plan must make the verb fail, and the
+  #      message must name the token so the operator knows what to restore.
+  _t_label="U-19a --verify-stamp HALTs on a token-less plan and names the token"
+  {
+    local _sb19a; _sb19a="$(_st_stamp_sandbox "widget-x")"
+    local _save19a="$CLAIM_REPO_ROOT"
+    local _p19a="$_sb19a/release/releases/plans/widget-x_RELEASE_PLAN.md"
+    # Strip every braced token in place; the plan file itself still exists, so
+    # this isolates the TOKEN predicate from the plan-resolution predicate.
+    sed 's/{{RELEASE_VERSION}}//g' "$_p19a" > "$_p19a.tmp" && cat "$_p19a.tmp" > "$_p19a"
+    rm -f "$_p19a.tmp"
+    CLAIM_REPO_ROOT="$_sb19a"; STAMP_FILES=()
+
+    _ct_run_err _main --verify-stamp "widget-x"; err="$REPLY"
+    _ct_eq "$REPLY_RC" "1" "U-19a a token-less plan makes --verify-stamp exit non-zero"
+    grep -q '{{RELEASE_VERSION}}' <<< "$err" \
+      || _ct_fail "U-19a the HALT message must name the token the operator has to restore"
+
+    # Nothing on stdout: the verb speaks only on stderr, so a caller capturing
+    # stdout (as the claim path does for the tag) is never handed a stray line.
+    _ct_run _main --verify-stamp "widget-x"
+    _ct_eq "$REPLY" "" "U-19a the HALT path writes nothing to stdout"
+
+    CLAIM_REPO_ROOT="$_save19a"; STAMP_FILES=()
+    rm -rf "$_sb19a"
+  }
+
+  # ---- U-19b: SPECIFICITY / CONTROL. The same verb on an UNMODIFIED
+  #      token-bearing sandbox must pass. Without this arm U-19a is
+  #      unfalsifiable — a verb that always failed would satisfy it.
+  #      Also asserts the manifest-scope clause, so a PROCEED can never read as
+  #      broader evidence than the plan-only rehearsal it actually performed.
+  _t_label="U-19b --verify-stamp passes a token-bearing plan and states its manifest scope"
+  {
+    local _sb19b; _sb19b="$(_st_stamp_sandbox "widget-x")"
+    local _save19b="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb19b"; STAMP_FILES=()
+
+    _ct_run_err _main --verify-stamp "widget-x"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save19b"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "0" "U-19b control: a token-bearing plan passes --verify-stamp"
+    grep -q 'verify-stamp OK' <<< "$err" \
+      || _ct_fail "U-19b the success line must be recognisable as a verify-stamp PROCEED"
+    grep -qF 'plan-only manifest (0 --stamp-file target(s))' <<< "$err" \
+      || _ct_fail "U-19b the success line must state the rehearsal's extent, not just PROCEED"
+    rm -rf "$_sb19b"
+  }
+
+  # ---- U-19c: ARG INDEPENDENCE. The verb must return BEFORE the --sha/--bump
+  #      required-arg checks, because it consumes neither. The control leg runs
+  #      _main with no args at all and asserts those checks DO fire — otherwise a
+  #      green U-19c would be equally consistent with the checks having been
+  #      deleted, which is a different (and much worse) change.
+  _t_label="U-19c --verify-stamp needs neither --sha nor --bump; the required-arg checks still fire without it"
+  {
+    local _sb19c; _sb19c="$(_st_stamp_sandbox "widget-x")"
+    local _save19c="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb19c"; STAMP_FILES=()
+
+    _ct_run_err _main --verify-stamp "widget-x"
+    _ct_eq "$REPLY_RC" "0" "U-19c --verify-stamp alone succeeds — no --sha, no --bump supplied"
+
+    # Control leg: the same absence of --sha/--bump WITHOUT the verb must still
+    # be rejected, proving the short-circuit is what bypasses them.
+    _ct_run_err _main; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save19c"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "2" "U-19c control: without --verify-stamp the required-arg checks still reject an empty argv"
+    grep -q -- '--sha is required' <<< "$err" \
+      || _ct_fail "U-19c control: the required-arg rejection must still name --sha"
+    rm -rf "$_sb19c"
+  }
+
   if [[ $failures -eq 0 ]]; then
-    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-18d incl. real-RELEASE_LOG-parser(header-name-pinned + shifted-column control), real-origin-tags-rc-contract(U-0b: failed-read vs tagless-repo + probe/healthy controls), real-seam-rc-contract-on-unresolvable-identity(U-14a), all-three-claimed_set-arms-fail-closed + their controls(U-17), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, never-bypass-signing + its detector-negative-control(U-6/U-6b), fail-closed-on-unresolvable-repo-identity + its detector-negative-control(U-14/U-14b), arm-unavailable-is-not-arm-empty(U-15), anchor-rc-checks-claimed-set-and-greenfield-fallback + their controls(U-16), claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once, post-CAS-package-rebuild-rides-the-same-commit(U-18) + injected-canonical-vector(U-18b) + cross-grammar-guard-with-control(U-18c) + missing-stamp-file-halts-pre-CAS-with-control(U-18e) + fail-loud-rebuild-error-path(U-18d))"
+    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-19c incl. real-RELEASE_LOG-parser(header-name-pinned + shifted-column control), real-origin-tags-rc-contract(U-0b: failed-read vs tagless-repo + probe/healthy controls), real-seam-rc-contract-on-unresolvable-identity(U-14a), all-three-claimed_set-arms-fail-closed + their controls(U-17), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, never-bypass-signing + its detector-negative-control(U-6/U-6b), fail-closed-on-unresolvable-repo-identity + its detector-negative-control(U-14/U-14b), arm-unavailable-is-not-arm-empty(U-15), anchor-rc-checks-claimed-set-and-greenfield-fallback + their controls(U-16), claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once, post-CAS-package-rebuild-rides-the-same-commit(U-18) + injected-canonical-vector(U-18b) + cross-grammar-guard-with-control(U-18c) + missing-stamp-file-halts-pre-CAS-with-control(U-18e) + fail-loud-rebuild-error-path(U-18d), verify-stamp-verb-wired-through-_main: token-less-HALT-names-the-token(U-19a) + token-bearing-control-states-its-manifest-scope(U-19b) + arg-independence-with-required-arg-control(U-19c))"
     return 0
   else
     echo "claim-version.sh --self-test: FAIL ($failures failing fixture(s))"
