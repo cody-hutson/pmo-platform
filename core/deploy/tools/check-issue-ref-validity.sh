@@ -140,20 +140,29 @@ esac
 # =============================================================================
 
 OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-issue-ref[[:space:]]*-->'
-# Designated reference-block headers (reuse the parser-clean anchor family).
-# The `Source(s)` arm is explicit: `[Ss]ources?` matches `Source` and
-# `Sources` but NOT `Source(s)`, whose parenthetical then hit the `$` anchor
-# and failed — while this gate's own failure message, core/ADRs/README.md,
-# and reference-durability-standard.md all NAME `### Source(s)` as
-# recognized. That was a specification-versus-implementation defect, not a
-# policy choice, so the implementation is corrected to the stated set.
+# Designated reference-block headers. SOURCED from the canonical declaration
+# in core/hooks/lib/fragile-ref-patterns.sh rather than declared here. This
+# gate and the reference-durability gate compute the SAME quantity — the file
+# line of the first reference-block header, used as the placement cut point —
+# so one question must not have two answers. An inline copy here diverged from
+# the canonical value once already; sourcing makes identity structural instead
+# of asserted. The recognized-spelling rationale (why `Source(s)` is spelled
+# out, why `Related` is recognized and `Related ADRs` is not) lives beside the
+# declaration in that file, per the library's stated convention that each
+# constant's rationale sits with its declaration.
 #
-# `Related ADRs` is deliberately NOT recognized. It is a cross-ADR-link
-# section, where core/standards/adr-authoring-guide.md § Issue references in
-# ADRs forbids a bare #N outright (zone 1) — recognizing it would move the
-# placement cut point ABOVE that section and make this gate accept exactly
-# the placement the authoring guide prohibits.
-REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Rr]elated|[Pp]rovenance|[Ss]ources?|[Ss]ource\(s\))[[:space:]]*:?[[:space:]]*$'
+# Guarded exactly as .github/workflows/reference-durability.yml guards its own
+# source of the same file, and FAIL-CLOSED for the same reason: an unset
+# REFBLOCK_RE is an EMPTY ERE that matches every line, so a missing or
+# truncated lib would not weaken this gate — it would make the first line of
+# every file look like a reference block and pass misplaced references
+# silently. Exit 3 is this file's input/config failure code.
+PATTERNS_LIB="${REPO_ROOT}/core/hooks/lib/fragile-ref-patterns.sh"
+[ -r "$PATTERNS_LIB" ] || die "detector constants missing or unreadable: $PATTERNS_LIB"
+"${BASH:-/bin/bash}" -n "$PATTERNS_LIB" 2>/dev/null || die "detector constants unparseable: $PATTERNS_LIB"
+# shellcheck source=../../hooks/lib/fragile-ref-patterns.sh
+. "$PATTERNS_LIB"
+[ -n "${REFBLOCK_RE:-}" ] || die "REFBLOCK_RE unset after sourcing $PATTERNS_LIB"
 
 CACHE_DIR=""
 
@@ -677,6 +686,15 @@ run_equivalence() {
     echo "FAIL  mutation arm: the perturbation did not change the checker — the arm is inert"
     return 1
   fi
+  # The mutant is a byte-derived copy living in $td, so ITS SCRIPT_DIR — and with it the
+  # REPO_ROOT fallback — resolves to $td, not to the repo. Materialise the constants lib at
+  # the offset the mutant will look for, so the perturbed copy exercises the SAME sourcing
+  # path the real script does. Without it the mutant would die at the fail-closed guard and
+  # the arm would report DISAGREE for the wrong reason — a dead mutant is not a perturbed
+  # one. This is a host-compatibility shim in the write_oracle_prelude sense: it makes the
+  # copy runnable where it stands and never edits the thing under test.
+  mkdir -p "$td/core/hooks/lib"
+  cp "$PATTERNS_LIB" "$td/core/hooks/lib/fragile-ref-patterns.sh"
   set +e
   ( cd "$FX_REPO" && GITHUB_STEP_SUMMARY=/dev/null \
       bash "$mutant" --base "$FX_BASE" --head "$FX_HEAD" --resolver gh ) > "$m_out" 2>&1
