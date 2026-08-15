@@ -4061,16 +4061,35 @@ cmd_check() {
     core/governance/OPERATIONS.md
     release/governance/RELEASE_PROTOCOL.md
   )
+  # EXPECTED_OPS live in the OPERATIONS workspace, which is a SIBLING of this
+  # repo, not a child. They must therefore resolve against the workspace root —
+  # the same expression _resolve_operator_field() uses for PORTFOLIO.md — and
+  # NOT as bare relative paths. Tested relatively they resolved to
+  # <repo>/projects/_config/, a directory that never exists, so all three
+  # reported MISSING on every run while the files were present and correct.
+  # EXPECTED_ENGINEERING is genuinely repo-relative and keeps the bare form.
+  local _ws_root="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"
   local -a EXPECTED_OPS=(
     projects/_config/PORTFOLIO.md
     projects/_config/SESSION_STATE.md
     projects/_config/CORRECTIONS.md
   )
-  for f in "${EXPECTED_ENGINEERING[@]}" "${EXPECTED_OPS[@]}"; do
+  for f in "${EXPECTED_ENGINEERING[@]}"; do
     if [[ -f "$f" ]]; then
       log "  OK:    $f"
     else
       log "  MISSING: $f"
+      ISSUES=$((ISSUES + 1))
+    fi
+  done
+  for f in "${EXPECTED_OPS[@]}"; do
+    if [[ -f "${_ws_root}/$f" ]]; then
+      log "  OK:    $f"
+    else
+      # Name the root that was searched. A bare "MISSING" cannot distinguish an
+      # absent file from a mis-resolved root, which is the defect this block
+      # just carried.
+      log "  MISSING: $f (searched under ${_ws_root})"
       ISSUES=$((ISSUES + 1))
     fi
   done

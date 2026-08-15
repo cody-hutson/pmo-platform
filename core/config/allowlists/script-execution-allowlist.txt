@@ -79,6 +79,57 @@ core/deploy/deploy.sh
 ./.claude/hooks/tests/*.test.sh
 .claude/hooks/tests/*.test.sh
 
+# --- Hook test suites, SOURCE-TREE forms (core/hooks/tests/) ---
+#
+# The four `.claude/hooks/tests/...` rows immediately above address the DEPLOYED
+# layout. That layout is materialized only inside the CI sandbox by
+# core/hooks/tests/setup-ci-layout.sh: docs/scripts/setup-workspace.sh declares the
+# hooks `tests/` subdirectory OUT-OF-SCOPE for deployment (source-tree only; NOT
+# installed to the workspace `.claude/hooks/`), so `.claude/hooks/tests/` does not
+# exist on a workspace and those four rows resolve to nothing there.
+#
+# The suites actually live in the source tree, at core/hooks/tests/. Without the
+# rows below, `bash core/hooks/tests/<suite>.test.sh` from a repo checkout or a
+# worktree is BLOCK-DESTRUCTIVE-022-blocked, and the regression suite for the hooks
+# themselves cannot be run locally at all — which is exactly what happened during
+# this release: an engineering wave could not execute its designed local arm matrix
+# and CI became the sole verification arm for the highest-risk change in the bundle.
+#
+# The deployed-layout rows are retained rather than replaced: they are what the CI
+# sandbox matches, and both layouts are legitimate invocation sites.
+#
+# Existence was never the question — the deployed-layout rows above exist too. The
+# question is whether a row RESOLVES to a file on the layout the invocation runs on,
+# and on a source checkout only these do. All four per-tool invocation forms are
+# required per the form convention documented above; a missing form is a silent
+# block from an unexpected cwd.
+[PMO_PLATFORM_ROOT]/core/hooks/tests/*.test.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/hooks/tests/*.test.sh
+./core/hooks/tests/*.test.sh
+core/hooks/tests/*.test.sh
+
+# Hook test runner, source-tree form (auto-discovers and runs every *.test.sh above)
+[PMO_PLATFORM_ROOT]/core/hooks/tests/test-runner.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/hooks/tests/test-runner.sh
+./core/hooks/tests/test-runner.sh
+core/hooks/tests/test-runner.sh
+
+# Hook dependency-hardening conformance gate (GHSA-9cjm). Named row rather than a
+# core/hooks/tests/* glob: this file does NOT carry the `.test.sh` suffix, so the
+# suite glob above does not reach it, and a blanket glob over the directory would
+# also admit any future non-suite executable dropped there.
+[PMO_PLATFORM_ROOT]/core/hooks/tests/check-hook-dep-hardening.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/hooks/tests/check-hook-dep-hardening.sh
+./core/hooks/tests/check-hook-dep-hardening.sh
+core/hooks/tests/check-hook-dep-hardening.sh
+
+# CI-layout materializer — builds the deployed `.claude/hooks/` tree the suites run
+# against. Same naming rationale as the row above: no `.test.sh` suffix.
+[PMO_PLATFORM_ROOT]/core/hooks/tests/setup-ci-layout.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/hooks/tests/setup-ci-layout.sh
+./core/hooks/tests/setup-ci-layout.sh
+core/hooks/tests/setup-ci-layout.sh
+
 # Release-pipeline tools (Stage 5 Solutioning + Stage 6 Engineering tooling)
 [PMO_PLATFORM_ROOT]/release/tools/blast-radius.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/blast-radius.sh
