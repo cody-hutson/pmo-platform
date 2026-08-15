@@ -23,7 +23,7 @@ The mechanisms surveyed here are **objects of study**. The platform adopts none 
 
 ### 1.1 Why this artifact exists
 
-The platform's target operating model — [`actor-model-and-governance-as-contract.md`](actor-model-and-governance-as-contract.md) — carries five open sub-decisions. Two of them are stalled for want of evidence rather than for want of argument:
+The platform's target operating model — [`actor-model-and-governance-as-contract.md`](actor-model-and-governance-as-contract.md) — carries five open sub-decisions. Two sub-decisions are stalled for want of evidence rather than for want of argument:
 
 - **D3 — *Orchestration-as-Skill vs. Orchestration-as-Agent*.** Marked `[DEFERRED]` in that document's own words because *"its only current seed is itself forward-looking."* It has no non-forward-looking evidence base.
 - **D5 — *Migration Path from Hub-Spoke*.** Unratified. Its Now/Next/Later table is asserted prose whose "Today (hub-spoke)" column is **unmeasured**, so no sequencing claim is grounded and no migration cost is known.
