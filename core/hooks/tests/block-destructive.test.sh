@@ -611,6 +611,243 @@ test_case "BLOCK-022 flags control: -x before a non-allowlisted script blocks" \
   2 "BLOCK-DESTRUCTIVE-022"
 
 # ==========================================================================
+# BLOCK-022 source/. arm — folded into the single segment matcher
+# ==========================================================================
+#
+# Before this block existed, the source/. arm had exactly ONE case anywhere in
+# the suite (AC-AP-022b, a must-flag) and ZERO must-not-flag controls. Every
+# ALLOW claim for the arm was therefore unfalsifiable: a change that converted
+# every sourced path into a denial would have kept the suite green.
+#
+# Every must-flag case below is paired with a must-not-flag control in the SAME
+# spelling, so a tightening that breaks the allow path turns the suite red
+# exactly as a fail-open does.
+
+echo ""
+echo "BLOCK-022 source/. arm"
+echo "---"
+
+# --- quoting: the arm used to keep the quotes, match no filter pattern, and
+# fall through to ALLOW without the allowlist ever being consulted ---
+test_case "BLOCK-022 source quote: double-quoted non-allowlisted path blocks" \
+  "$(bash_payload 'source "/tmp/evil.sh"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 source quote: single-quoted non-allowlisted path blocks" \
+  "$(bash_payload "source '/tmp/evil.sh'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 dot quote: double-quoted non-allowlisted path blocks" \
+  "$(bash_payload '. "/tmp/evil.sh"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 dot quote: single-quoted non-allowlisted path blocks" \
+  "$(bash_payload ". '/tmp/evil.sh'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# must-not-flag controls. The bare form allowed before this change AND after;
+# the quoted forms allowed before for the WRONG reason -- the case fell through
+# ahead of the allowlist read -- and must now allow for the right one. Only
+# these paired controls distinguish those two states.
+test_case "BLOCK-022 source quote control: bare allowlisted path allows" \
+  "$(bash_payload 'source core/deploy/deploy.sh')" \
+  0
+
+test_case "BLOCK-022 source quote control: double-quoted allowlisted path allows" \
+  "$(bash_payload 'source "core/deploy/deploy.sh"')" \
+  0
+
+test_case "BLOCK-022 source quote control: single-quoted allowlisted path allows" \
+  "$(bash_payload "source 'core/deploy/deploy.sh'")" \
+  0
+
+test_case "BLOCK-022 dot quote control: double-quoted allowlisted path allows" \
+  "$(bash_payload '. "core/deploy/deploy.sh"')" \
+  0
+
+# --- chaining: the arm used to apply head -1 to the invocation list, so a
+# second sourced file was never evaluated once the first one resolved ---
+test_case "BLOCK-022 source chain: ';' laundering behind an allowlisted source blocks" \
+  "$(bash_payload 'source core/deploy/deploy.sh; source /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 source chain: '&&' laundering blocks" \
+  "$(bash_payload 'source core/deploy/deploy.sh && source /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 source chain: '||' laundering blocks" \
+  "$(bash_payload 'source core/deploy/deploy.sh || source /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 source chain: '|' laundering blocks" \
+  "$(bash_payload 'source core/deploy/deploy.sh | source /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# must-not-flag control -- chaining itself is not what blocks.
+test_case "BLOCK-022 source chain control: two allowlisted sources chained allow" \
+  "$(bash_payload 'source core/deploy/deploy.sh; source ./core/deploy/deploy.sh')" \
+  0
+
+# --- the arm's own operand filter, one case per branch. These were entirely
+# ungraded before: nothing exercised /*, and nothing exercised *.bash. ---
+test_case "BLOCK-022 source filter: absolute non-allowlisted path blocks (/* arm)" \
+  "$(bash_payload 'source /etc/profile.d/evil')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 source filter: .bash suffix blocks (*.bash arm)" \
+  "$(bash_payload 'source /tmp/evil.bash')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 source filter: ./ relative non-allowlisted blocks (./* arm)" \
+  "$(bash_payload 'source ./tmp-evil-fixture')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# flag walking on the source arm is strictly TIGHTER than not walking: without
+# it, `-x` would be presented as the operand and the real target would evade.
+test_case "BLOCK-022 source flags: -x before a non-allowlisted path blocks" \
+  "$(bash_payload '. -x /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 source flags control: -x before an allowlisted path allows" \
+  "$(bash_payload '. -x core/deploy/deploy.sh')" \
+  0
+
+# --- adopting check_script_target on this arm brings the variable-bearing
+# fail-closed posture the rule doc already claimed for the rule as a whole ---
+test_case "BLOCK-022 source var: variable-bearing sourced path blocks (fail-closed)" \
+  "$(bash_payload 'source "$W/release/tools/version-grammar.sh"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# DOCUMENTED RESIDUAL, pre-existing and preserved verbatim by the fold.
+# bash performs tilde expansion on a `case` PATTERN, so the filter's `~/*` arm
+# is compared as $HOME/* and never matches a LITERAL `~/...` token. A literal
+# home path therefore reaches the filter only via the *.sh / *.bash arms.
+# Pinned here rather than left unknown: if a later change makes these block,
+# that is a deliberate widening and this assertion is where it surfaces.
+test_case "BLOCK-022 source residual: literal ~/ non-script operand allows (tilde-expanded pattern)" \
+  "$(bash_payload 'source ~/evil.conf')" \
+  0
+
+test_case "BLOCK-022 source residual control: ~/ operand with .sh suffix still blocks" \
+  "$(bash_payload 'source ~/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ==========================================================================
+# BLOCK-022 command-position invariance under assignment prefixes
+# ==========================================================================
+#
+# The verdict must not depend on a token that does not change the operation.
+# Before the command-position walk, an assignment ahead of the verb moved the
+# verb off index 0 and the invocation was skipped -- in BOTH directions, so the
+# gap did not fail safe. Each must-flag case is paired with the SAME prefix
+# spelling over an allowlisted target.
+
+echo ""
+echo "BLOCK-022 assignment-prefix invariance"
+echo "---"
+
+test_case "BLOCK-022 prefix: VAR=v before bash, non-allowlisted, blocks" \
+  "$(bash_payload 'ENVV=1 bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 prefix: two assignments before bash, non-allowlisted, blocks" \
+  "$(bash_payload 'FOO=bar BAZ=qux bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 prefix: VAR=v before /bin/bash, non-allowlisted, blocks" \
+  "$(bash_payload 'ENVV=1 /bin/bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 prefix: VAR=v before source, non-allowlisted, blocks" \
+  "$(bash_payload 'ENVV=1 source /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 prefix: VAR=v before '.', non-allowlisted, blocks" \
+  "$(bash_payload 'ENVV=1 . /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# must-not-flag controls -- the SAME prefix spellings over allowlisted targets.
+# Without these the prefix walk could have been implemented as "block anything
+# with an assignment prefix" and the suite would still be green.
+test_case "BLOCK-022 prefix control: VAR=v before bash, allowlisted, allows" \
+  "$(bash_payload 'ENVV=1 bash core/deploy/deploy.sh')" \
+  0
+
+test_case "BLOCK-022 prefix control: two assignments before bash, allowlisted, allows" \
+  "$(bash_payload 'FOO=bar BAZ=qux bash core/deploy/deploy.sh')" \
+  0
+
+test_case "BLOCK-022 prefix control: VAR=v before source, allowlisted, allows" \
+  "$(bash_payload 'ENVV=1 source core/deploy/deploy.sh')" \
+  0
+
+test_case "BLOCK-022 prefix control: VAR=v before quoted allowlisted source allows" \
+  "$(bash_payload 'ENVV=1 source "core/deploy/deploy.sh"')" \
+  0
+
+# skip-precision controls. The walk must advance past ASSIGNMENTS, not past
+# "any token containing =". Both tokens below are invalid shell NAMEs, so they
+# terminate the prefix run and become the command word -- which is not an
+# interpreter, so nothing is adjudicated and the verdict is UNCHANGED from
+# before the walk existed. If the skip ever loosens into a general
+# advance-past-anything-with-an-equals, these two flip to blocking and fail.
+test_case "BLOCK-022 prefix precision: invalid NAME does not advance command position" \
+  "$(bash_payload 'a-b=1 bash /tmp/evil.sh')" \
+  0
+
+test_case "BLOCK-022 prefix precision: flag-shaped =-bearing token does not advance" \
+  "$(bash_payload '--body=x bash /tmp/evil.sh')" \
+  0
+
+# ==========================================================================
+# BLOCK-022 R5 — the pipeline's own invocation shapes must not be blocked
+# ==========================================================================
+#
+# This rule is tightened by the same change that adds these. A tightening that
+# blocks the release pipeline's own Stage 12 or Stage 13 tooling is a
+# self-inflicted outage, so every shape the pipeline actually invokes is a
+# first-class must-not-flag control here rather than an assumption.
+
+echo ""
+echo "BLOCK-022 R5 pipeline invocation shapes"
+echo "---"
+
+test_case "BLOCK-022 R5: deploy.sh --check allows" \
+  "$(bash_payload 'bash core/deploy/deploy.sh --check')" \
+  0
+
+test_case "BLOCK-022 R5: append-pipeline-event.sh allows" \
+  "$(bash_payload 'bash release/tools/append-pipeline-event.sh --stage 6')" \
+  0
+
+test_case "BLOCK-022 R5: automated-closeout.sh allows (Stage 13)" \
+  "$(bash_payload 'bash release/tools/automated-closeout.sh --milestone m')" \
+  0
+
+test_case "BLOCK-022 R5: claim-version.sh allows (Stage 12)" \
+  "$(bash_payload 'bash release/tools/claim-version.sh --version v0.0')" \
+  0
+
+test_case "BLOCK-022 R5: hook suite from the source tree allows" \
+  "$(bash_payload 'bash core/hooks/tests/block-destructive.test.sh')" \
+  0
+
+test_case "BLOCK-022 R5: hook test runner from the source tree allows" \
+  "$(bash_payload 'bash core/hooks/tests/test-runner.sh')" \
+  0
+
+test_case "BLOCK-022 R5: env-prefixed pipeline tool allows" \
+  "$(bash_payload 'VAR=x bash core/deploy/deploy.sh')" \
+  0
+
+# must-flag control for the R5 block -- an unregistered sibling in the very
+# directory the new allowlist rows cover still blocks, so those rows are a
+# named-and-globbed permission rather than a hole in the guard.
+test_case "BLOCK-022 R5 control: unregistered sibling in core/hooks/tests/ blocks" \
+  "$(bash_payload 'bash core/hooks/tests/zz_unregistered_control.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ==========================================================================
 # NEW-B: Write/Edit primary-write guard
 # ==========================================================================
 
