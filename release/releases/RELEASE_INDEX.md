@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.25 | reference-constant-integrity | 2026-08-14 | — | #5508 | [notes/v4.25_RELEASE_NOTES.md](notes/v4.25_RELEASE_NOTES.md) |
 | v4.24 | triage-and-backlog-instrumentation | 2026-08-12 | — | #5257 | [notes/v4.24_RELEASE_NOTES.md](notes/v4.24_RELEASE_NOTES.md) |
 | v4.23 | install-completeness-and-honest-reporting | 2026-08-12 | — | #5266 | [notes/v4.23_RELEASE_NOTES.md](notes/v4.23_RELEASE_NOTES.md) |
 | v4.22 | closeout-output-completeness | 2026-08-11 | — | #5246 | [notes/v4.22_RELEASE_NOTES.md](notes/v4.22_RELEASE_NOTES.md) |
