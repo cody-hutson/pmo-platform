@@ -324,6 +324,10 @@ Each card's acceptance criteria are graded at Stage 8 against the merged branch 
 
 5. **Three integration edges point at two designs that were not re-solutioned** and whose premises moved during Stage 5. The operator elected to carry this into Stage 6 rather than amend first; the edges are unverified against current state and Stage 8 should grade them knowing that.
 
+6. **The Change Description's Issues-resolved rows are keyed by mechanism, not by issue number.** The Change Description Protocol's template keys each row by issue number, and the reference-durability standard — which the Stage-6 convention-compliance beat applies to committed release-plan files — refuses a bare issue number in prose. Both cannot hold, so the row key moved to the mechanism each card delivered; the card-to-mechanism mapping is carried once in § Scope § Issues Included and the per-row outcome and status are unchanged. The rationale is restated at the section itself so a Stage-9 reader meets it where the deviation is visible. **This is a template-versus-standard collision, not a card-level choice** — it will recur on every release plan authored under both rules, and reconciling the two surfaces is out of scope here.
+
+7. **One integration criterion was re-scoped at build time under the scope-lock's fix-the-Majors clause.** The design's message-family criterion asserted that the post-claim stderr contains no pre-flight text, graded over the whole captured buffer. The caller writes both message families to one buffer and the pre-flight announces on its success path, so the criterion was unsatisfiable by a correct implementation and its only satisfying "fix" would have been to suppress a sibling card's deliverable. It is re-scoped to a per-line partition; the intent it grades is unchanged. A second, narrower instance of the same defect was found in the proposed replacement and corrected before it shipped — the runnable-command clause is not exclusive to the post-claim family, because the pre-claim trackedness refusal legitimately carries one, so the discriminator is the progress trailer instead.
+
 ---
 
 ## Verification Evidence
@@ -341,3 +345,46 @@ Populated during Stage 12 execution.
 ## Change Description
 
 Authored at Stage-6 Phase C1 by the final Engineering slice, before the PR is transitioned to ready-for-review, so the section is visible in the PR diff at Stage-9 Plan Review. It is a distinct artifact from the user-facing release note authored at Stage 13.
+
+**On the row key.** The protocol's template keys each row of Issues resolved by issue number. This file is a committed release-plan file, so the reference-durability standard applies to it per the Stage-6 convention-compliance beat, and a bare issue number in prose is a fragile reference the authoring control refuses. Rows are therefore keyed by the **mechanism each card delivered**; the card-to-mechanism mapping is carried once, in § Scope § Issues Included above, and the per-row outcome and status the protocol asks for are unchanged.
+
+### Outcome
+
+A release plan now binds its identity at the Stage-12 atomic claim and can be shown to have done so. The six mechanisms ADR-092 depends on were each broken silently and in sequence — the token that feeds the claim was absent from the authoring contract, the flag that consumes it was unwired, the rename it triggers had not fired for three shipped releases, the close-out emitted a path shape the claim never produces, no gate compared a plan's filename against the ledger, and the message on failure named a bound identifier without supplying a remediation. This release closes all six, relocates the eleven v4 plans the unfired rename left flat, and adds a close-blocking gate so the next occurrence surfaces before a release closes rather than three releases later.
+
+### Issues resolved
+
+| Mechanism | Outcome | Status |
+|---|---|---|
+| Version token in the authoring contract | The release-plan version token is homed in the authoring contract that produces the plan, and a network-free verification verb plus a Commit-0 assertion catch a token-less plan before Engineering commits it | DONE |
+| Claim-time rename reachability | The stamp slug is derived from the corpus rather than requiring a flag nobody passes, an unusable push target is refused before the compare-and-swap instead of stranding a claimed tag, and the eleven flat v4 plans are relocated with their inbound references cascaded | DONE |
+| Close-out plan pointer | The plan pointer resolves by existence at all three close-out emitters, so a nested plan is no longer reported as a dangling flat path | DONE |
+| Pre-claim rebuild-count announcement | The expected package-rebuild count is announced on every path through the package stage including zero, and two independent limbs refuse a manifest that would rebuild nothing — both strictly before the version is bound | DONE |
+| Filename-versus-ledger gate | A close-blocking gate joins each plan filename to its ledger row and refuses on a mismatch in either direction, wired into the close-out phase ladder so a finding stops the chore PR | DONE |
+| Post-claim recovery message | Every post-claim stamp failure emits the claimed identifier, the failed step, the resulting repo state and a runnable remediation, under an envelope that forbids the re-run; five of the ten failure sites previously emitted nothing at all | DONE |
+
+### Key decisions
+
+- **D-1 — the token-presence assertion homes at Stage-6 Commit 0**, not at Stage-4 exit: the Commit-0 beat already re-reads the version determination and spans write-through-commit, so a post-write assertion sits inside the rung rather than beside it.
+- **D-2 — P0 fully-serial on a SINGLE branch topology.** Four compositional edges and a moderate-reversibility relocation make the serial default correct; force-push is prohibited on the shared branch.
+- **D-3 — the filename-versus-ledger check extends the existing corpus lint** rather than adding a sibling at another layer, and absorbs the relocation card's placement criterion: one mechanism, two assertions, one denominator.
+- **D-ReleaseClass — `novel`**, re-classifying the milestone's declared `routine`: the plan renders D-class decisions and two cards carried unresolved design questions. Sets Deep Stage-9 review and Stage-5 activation bias ALL.
+- **D-Version — bump class `minor`**; the concrete number binds only at the Stage-12 atomic claim. The determination was re-rendered three times during the run as concurrent releases shipped, which is the mechanism working rather than a defect.
+
+### Reversibility
+
+**MODERATE / HIGH** — a revert of the merge commit restores every message, gate, and emitter cleanly; the one element that is not a pure code revert is the eleven-file plan relocation, whose reversal is a second rename commit rather than an automatic undo, and a claimed tag is never reversible by construction.
+
+### Downstream impact
+
+- The close-out phase ladder gains its first blocking predicate on a plans path. A post-claim stamp failure at the early failure sites now leaves the plan un-relocated and blocks this release's own Stage-13 close, so the recovery message states completion as a prerequisite rather than as hygiene.
+- The claim-time stamp's self-test harness gains a commit/push failure seam, making a previously unreachable error branch assertable for any future card that touches it.
+- Carry-forward: ownership of the release-corpus lint remains a held escalation and is unresolved by this release.
+- Carry-forward: two declared documentation surfaces did not land on this branch, and the skill-package rebuild this branch owes is blocked by a security control with no allowlist entry for the package builder. Both are recorded as undischarged obligations in the PR body for the Stage-9 gate; the pre-merge freshness gate will run red on the package until the control is resolved.
+
+### Cross-references
+
+- Release plan: this file, `release/releases/plans/plan-file-identity-adr-092_RELEASE_PLAN.md` — renamed to its versioned name under `plans/v<MAJOR>/` at the Stage-12 claim.
+- Milestone: `plan-file-identity-adr-092` on the platform repository.
+- User-facing release note, authored at Stage 13: `release/releases/notes/{{RELEASE_VERSION}}_RELEASE_NOTES.md`.
+- The architecture decision this release implements: `core/ADRs/ADR-092-plan-file-claim-time-stamping.md`.
