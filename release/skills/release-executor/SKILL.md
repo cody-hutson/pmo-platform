@@ -2,7 +2,7 @@
 name: release-executor
 description: >
   Executes approved release plans. Modes: Execute release · Verify release · Rollback release · Close release · Author release note · Publish release · Pattern review execute. Creates snapshots, applies file changes, closes IMP items, updates release log, runs verification, runs automated Stage 13 close-out. Requires an approved plan with Dry-Run Record. Triggers: "execute the approved release plan", "verify the release", "rollback v[X.Y]", "close the release", "stage 13 close-out".
-version: v2.15
+version: v4.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---

@@ -208,6 +208,17 @@ jobs:
         # closed on a corrupt target, and no OTHER flow performs the user-scope write.
         run: bash core/deploy/tests/test_rehome_hook_wiring.sh
 
+      - name: Run Check-49 mode-identifier regression (test_check49_mode_identifier_unification.sh)
+        # #4753: Check 49 resolved its mode under `check-convention` while emitting findings
+        # under `convention-linter`, so one check answered to two independent mode knobs and
+        # neither covered it whole. The fixture's value is that it DISCRIMINATES: it fails on
+        # the pre-fix predicate and passes on the post-fix one, exercising BOTH the enforce
+        # ladder AND the predicate-script-missing error path — a one-arm test reproduces the
+        # original defect as a PASS, because the defect was precisely that one arm worked.
+        # Wired explicitly because this workflow enumerates its test files rather than
+        # discovering them; an unwired fixture is an unrun fixture.
+        run: bash core/deploy/tests/test_check49_mode_identifier_unification.sh
+
       - name: Run composition-lib regression (test_lib_composition.sh)
         run: bash core/deploy/tests/test_lib_composition.sh
 

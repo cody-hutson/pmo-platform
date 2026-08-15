@@ -2,7 +2,7 @@
 name: weekly-status-rollup
 description: >
   Generates a weekly executive status roll-up across all active projects. Covers project health, key risks, decisions made/pending, and upcoming milestones. Writes back updated health indicators to PORTFOLIO.md. Triggers: "generate the weekly roll-up", "weekly status", "SteerCo prep deck", "executive status", "cross-project health summary", "refresh the health indicators".
-version: v2.24
+version: v4.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---

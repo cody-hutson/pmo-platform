@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.28 | skill-suite-conformance | 2026-08-15 | — | #5507 | [notes/v4.28_RELEASE_NOTES.md](notes/v4.28_RELEASE_NOTES.md) |
 | v4.27 | path-and-citation-reconciliation | 2026-08-14 | — | #5506 | [notes/v4.27_RELEASE_NOTES.md](notes/v4.27_RELEASE_NOTES.md) |
 | v4.26 | corpus-tolerance-and-hygiene | 2026-08-14 | — | #5269 | [notes/v4.26_RELEASE_NOTES.md](notes/v4.26_RELEASE_NOTES.md) |
 | v4.25 | reference-constant-integrity | 2026-08-14 | — | #5508 | [notes/v4.25_RELEASE_NOTES.md](notes/v4.25_RELEASE_NOTES.md) |
