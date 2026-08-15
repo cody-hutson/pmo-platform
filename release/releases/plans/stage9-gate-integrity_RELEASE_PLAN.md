@@ -446,20 +446,124 @@ Deltas discovered after Stage 4 are recorded here rather than silently applied.
 | **D-10** | **Two of the read-back card's three source changes are BLOCKED at the edit gate and did not land.** `block-skill-direct-edit.sh` is in **enforce** mode and rejects `BLOCK-SKILL-EDIT-002` on `release/skills/release-hub/references/orchestration-playbook.md` and `BLOCK-SKILL-EDIT-001` on `release/skills/release-hub/SKILL.md` absent a `pmo-skill-editor` session sentinel. A `pmo-skill-editor` Mode A session was opened; its own guardrail forbids synthesizing the sentinel to clear the gate and directs an enforce-mode block to the Hook-Blocked → User-Side Handoff convention instead. | **open — blocked, not deferred** | Surfaced to the hub with the verbatim replacement text for both files. The dependent package rebuild (`packages/release-hub.skill{,.sha256}`) is blocked behind them. **Note:** that package is **already stale on `origin/main`** independently of this release — the rebuild clears a pre-existing Check 7 failure as well as carrying this card's change. |
 | **D-11** | **Two fixtures beyond the nine scope-locked at Collective Review entered the matrix, and the ADR row was promoted out of the CONDITIONAL block.** `fcm-glob.md` and `fcm-truncating.md` cover two arms the scope-lock's nine could not reach: the glob/placeholder path-form taxonomy, and extraction fidelity across an in-fence `#` comment. Both were required by A6.5 findings the same gate rendered (FMF-3, PRF-1). The ADR row's condition — `D-ADR-Disposition = author-retroactively` — is rendered and the record is authored, so it is promoted with its allocated concrete path. | amend — scope, evidence-driven | § File Change Matrix carries thirteen unconditional ADDs. The recursion holds: these ADD rows are judged by the gate they exist to test, and the promoted ADR row is the AC5 obligation. |
 | **D-12** | **`core/config/allowlists/script-execution-allowlist.txt` is edited, but NOT on its declared condition.** Its Stage-4 condition was "any new tracked `*.sh` shipping"; that condition did not fire. The edit adds the four-form rows for `release/tools/compute-dora-metrics.sh` and `core/deploy/tests/test_deploy_sandbox.sh`, authorized by the operator at the deployment-emitter card's gate and recorded there but never applied. **The authorized path for the second tool was recorded as `release/tools/tests/test_deploy_sandbox.sh`; no such file exists.** The repository holds exactly one file of that name, at `core/deploy/tests/test_deploy_sandbox.sh`, and it is the deploy-sandbox safety proof — which is what an edit to `core/deploy/deploy.sh` obliges a spoke to run. Rows were written at the real path; a row at the recorded path would have been inert and would have unblocked nothing. | amend — scope, operator-authorized, path corrected | Row promoted to the unconditional block as an EDIT. Both tools now carry the four invocation forms, mirroring `compute-cycle-time.sh`. **The path correction is surfaced for operator confirmation rather than treated as settled.** |
+| **D-13** | **One file outside the frozen File Change Matrix was edited.** `docs/module-apis.md` carries a one-line tool-description update ("cross-PR" → "cross-PR / cross-branch") landed by the contention-classifier card alongside the capability that made it true. | amend — scope, minimal and consequential | Recorded here because the outbound half of scope-boundary verification (Stage 7 DT / Stage 8 QA) confirms nothing outside the matrix was touched, and an unrecorded edit reads there as a scope breach rather than as a doc kept honest. `G-PR11` is unaffected — it grades declared **ADD** obligations, and EDIT rows never enter the obligation set. |
+| **D-14** | **`release/references/how-to/hub-spoke-bridge.md` is declared EDIT by three cards and did not land.** The read-back card's Procedure 4a, the draft-state card's Procedure 5, and the close-ordering card's Procedure 7 obligations are all undelivered on that file, which is byte-unchanged across the whole branch. For the close-ordering card this is **half of AC1**: three milestone-close paths exist, the tooling edit covers the automated one, and the uncovered hub-direct path at Procedure 7 Step 5 is the shape that closed the originating milestone with six open items — the one path no script can reach. | **open — surfaced, not deferred** | The file was held read-only for this branch, so Engineering did not write it. Recorded rather than absorbed, because a tooling-only fix satisfies AC1's letter and leaves the incident's own path open. **CIAC-5 grades all three cards' obligations on this file and will read them absent.** Needs operator disposition: authorize the edit, or accept the residual with the coverage gap named. |
+| **D-15** | **The plan-verification executor cannot be invoked by an agent, and Engineering declined to unblock itself.** `release/tools/verify-release-plan.sh` — the tool the Stage-6 §C4 contract names as the emitter of this section, and the tool this release extends most heavily — has **no row** in `core/config/allowlists/script-execution-allowlist.txt`, so `BLOCK-DESTRUCTIVE-022` refuses to execute it. Adding the four-form row would have unblocked it in one edit. | **open — surfaced, not self-authorized** | Engineering did **not** add the row: an allowlist row is a governed change and the two rows this release does add were operator-authorized at a named gate (**D-12**). The Verification Evidence section is authored in the executor's shape and every check is run through a registered entry point instead, with the substitute instrument named per row. **This is the same shape as D-12** — a tool the pipeline depends on that nobody registered — and it wants the same operator disposition. |
+| **D-16** | **The schema's own version labels were inconsistent mid-branch, and are reconciled by the final Engineering slice.** The first Gate-9 addition on this branch labelled its changelog block with a version number the mainline had already spent on an unrelated refinement, and left `**Schema version:**` unbumped — so the file briefly carried two blocks reading the same version and a header naming neither addition. The second addition re-derived correctly and bumped the header, and rightly declined to relabel a sibling's committed block. | amend — record reconciliation, no behaviour change | One block on this branch carrying **both** additions, duplicate heading removed, sequence gap-free and duplicate-free from the mainline value. Verified with a parser over the labels — **not** a substring scan — run against the pre-fix file as its control: the control reports the duplicate and a non-descending sequence, the subject reports neither. No criterion ID, column, row, or type moved. |
 
 ---
 
 ## Change Description
 
-*Authored at Stage 6 Phase C1 by the final Engineering spoke, once the full set of landed cards is known. It is committed on the release branch before the pull request is marked ready-for-review, so the section is visible in the pull-request diff at Stage 9 Plan Review.*
+*Authored at Stage 6 Phase C1 by the final Engineering spoke, once the full set of landed cards was known.*
 
-**Owed sub-sections:** Outcome · Issues resolved · Key decisions · Reversibility · Downstream impact · Cross-references.
+### Outcome
+
+Six controls in the release pipeline were declared but never observed anything. This release makes each of them observe, and — the part that distinguishes it from the four prior attempts at the same class — **demonstrates each one failing** on a fixture with its observing step removed before trusting it green.
+
+Concretely, after this release: a deploy emits one `deployment-status` row per target and a failed deploy raises the change-failure rate instead of improving it; the hub's Stage-9 emission is read back as a `POST == PRE + 1` delta rather than a non-zero absolute; the approved File Change Matrix's declared ADDs are compared against the merged diff, with an absent matrix reading MATRIX-UNDELIVERED rather than N/A; a draft release pull request cannot be granted GO, on two independently-taken observations rather than one self-consumed record; the cross-branch contention classifier reports what it could not read instead of reporting clean; and the Procedure 7a action-item gate is **wired to the close it guards** — it had never once run.
+
+The release's own definition of done is CIAC-6, and it is met per-control with both arms recorded.
+
+### Issues resolved
+
+Six cards, one branch, one merge, in the approved sequence:
+
+| Card | What it now does that it did not |
+|---|---|
+| the deployment-emitter card | emits `deployment-status` per target; a totally-failed deploy yields `N/A` cycle time and 100 % change-failure rate, not a measured duration and 0 % |
+| the hub-emission read-back card | reads its own emission back as a stage-scoped delta; **two of its three source edits did not land** — see **D-10**, open and blocked at the skill-edit gate, not deferred |
+| the matrix-delivery gate card | grades declared-vs-delivered matrix ADDs; ships `G-PR11`, a glob path-form arm, and eleven fixtures |
+| the draft-state gate card | ships `G-PR12`; binds `isDraft` at the GO instant, on a Phase A8 read-back plus an independent Phase A9 gate-instant read |
+| the contention-classifier card | classifies a PR-less branch arm, and a read it could not perform is no longer a benign verdict |
+| the close-ordering gate card | dispatches the Procedure 7a HARD GATE immediately before the milestone close, three-valued, with the SURFACE attestation clause implemented |
+
+### Key decisions
+
+- **The close-ordering gate blocks the close by being *guarded*, not by being *early*.** A dispatch line at the correct position carrying a permissive guard passes every ordering assertion and blocks nothing. The control therefore executes the two shipped dispatch lines lifted verbatim from the tool's own text, with a permissive variant as its negative control.
+- **SURFACE states require attestation to pass, and the attestation is emitted.** The originating incident's own state at close was `NOT-RECORDED`. A gate that passes that state silently would not have caught the incident it was built for, so the two SURFACE states now take a closed-enum operator attestation naming which of the two causes holds, and that attestation lands as a `decision` row. It does **not** clear an open row — an unresolved commitment is dispositioned, never attested away.
+- **AC3 of the close-ordering card is not release-buildable** and is routed to action item **AI-001** rather than graded. Stage 8 records it `OUT-OF-SCOPE — routed to AI-001`, never NOT MET.
+- **The warn-mode rationale was re-derived after its original ground turned out to be an empty population.** The claim that a blocking SURFACE state "would fail every CI close" was measured false: no CI workflow runs an apply-mode close at all. The decision survives on the governing standard; the argument for it was replaced rather than left standing, and the corrected form is stronger — because CI never executes the close dispatch, the constructed fixture is the only automated execution that path will ever get.
+- **The version determination moved twice and nothing renamed.** Identity is slug-primary, which is what let two siblings claim and ship mid-build without touching this branch, this plan's filename, or any hub state. The current determination records an advisory collision with a third sibling rather than reserving above it.
+
+### Reversibility
+
+**CHEAP / Confidence HIGH.** A single `git revert -m 1 <merge-sha>` restores every code surface atomically. No migration, no data mutation, no external state, no schema versioning, no corpus backfill; all six cards are additive and per-card pre-merge revert is equally cheap.
+
+**One asymmetry, and it does not revert:** the deployment emitter writes rows into an append-only Vital-retention event log at deploy time. A code revert does not un-write them. The correct posture is to leave them — they are honest records of a deploy that happened. Recorded as **R12**.
+
+### Downstream impact
+
+- **Stage 13 close-out gains a phase that can halt it.** A release reaching `--apply` with an unresolved action item, or with no ledger and no attestation, does not close. This is the intended behaviour and it fires on this very release: its own ledger carries one open row.
+- **`release-executor` Mode D wraps the close-out tool** and must surface a BLOCK rather than retry, and must thread the new attestation flag when the operator supplies one.
+- **Stage 9 gains two criteria** (`G-PR11`, `G-PR12`). Both carry the standard introducing-release exemption, so this release's own Stage 9 is graded under the pre-existing checks.
+- **No skill package changed**, because the two skill-source edits are blocked at the edit gate (**D-10**). The release-hub package remains stale on the mainline independently of this release.
+
+### Cross-references
+
+Governing surfaces this release implements against, each cited rather than restated: the action-item standard's § 4 routing-point-5 hard-gate obligation and its three-valued verdict; the hub bridge's § Procedure 7a predicate, decision table, and attestation clause; the gate-criteria schema's Gate 9 registry and its own versioning rule; the Stage-4 File Change Matrix authoring contract; and the release-readiness scan's § 5.1 draft-state reconciliation. Decision records: **ADR-092** (slug-primary release identity), **ADR-115** (an ADR or version claim binds at merge, not at authoring), **ADR-100** (event-log pipe grammar), and the newly authored **ADR-133**.
 
 ---
 
 ## Verification Evidence
 
-*Populated at Stage 6 Phase C4 and refreshed at Stage 7 and Stage 8. Emitted in the `verify-release-plan.sh --format=md` shape.*
+*Populated at Stage 6 Phase C4 by the final Engineering spoke; refreshed at Stage 7 and Stage 8.*
+
+**Emitter note, stated rather than glossed.** This section is authored in the `verify-release-plan.sh --format=md` shape but was **not emitted by that tool**: the executor is not registered in `core/config/allowlists/script-execution-allowlist.txt`, so `BLOCK-DESTRUCTIVE-022` refuses to run it, and Engineering declined to add its own allowlist row. Every check below was therefore run through an entry point that *is* registered, and each row names the instrument it actually used. See **D-15** — this is the same shape as **D-12**: a tool the pipeline depends on that nobody registered.
+
+### Release-level
+
+| # | Check | Instrument | Result |
+|---|---|---|---|
+| 1 | Close-out tool self-test (carries the Procedure 7a anti-vacuity group) | `automated-closeout.sh --self-test` | **PASS** — suite green, group AI included |
+| 2 | Deploy self-test (carries assertion group DS + group DE) | `core/deploy/deploy.sh --self-test` | **PASS**, exit 0 — DS-1..DS-10 green, including the two DS-10 control arms |
+| 3 | Procedure 7a predicate regression suite | `release/tools/tests/test_action_item_gate_predicate.sh` | **PASS** — 23 assertions, 0 failures, G1–G5 all green |
+| 4 | `deploy.sh --check` FAIL-line set vs. baseline | `core/deploy/deploy.sh --check`, keyed on the `"  FAIL:"` line set and **never** on the exit code | **3 FAIL lines, zero of them new** — all are Check-7 skill-package staleness on two skills. **Structural proof they cannot be this release's:** the branch changes **0** files under `core/skills/`, `release/skills/`, `operations/skills/`, or `packages/` (control: 26 changed files total), so no skill source moved and no package could have gone stale here. Both are pre-existing on the mainline; one is recorded at **D-10** |
+| 5 | Shell syntax + static analysis on every edited script | `bash -n`, `shellcheck -S error` | **CLEAN** |
+| 6 | File Change Matrix self-application (the reflexive `G-PR11` run) | declared-ADD set from this plan's own intent table vs. `git diff --diff-filter=A origin/main...HEAD`, compared as **sets** with `comm` over a plain lexical sort | **MATRIX-DELIVERED** — 13 declared unconditional ADDs, 13 delivered; declared-but-absent **empty**, delivered-but-undeclared **empty**. **Control:** dropping one declared row makes the instrument report that row, so the two empties are a property of the diff and not of an inert comparison |
+| 7 | Doc-link integrity across modified markdown | `deploy.sh --check` Check 14 (inside run 4) | **CLEAN** — zero link findings in the FAIL set |
+| 8 | Cross-Issue Acceptance Criteria | graded at Stage 9 QC3.5 / Phase A3.6 | deferred to Stage 9 by design; CIAC-6's per-control arms are recorded below |
+
+### CIAC-6 — per-control two-arm demonstration (the close-ordering gate card)
+
+> *Every control this release adds or repairs is demonstrated **failing** on a fixture in which its observing step is removed, and **passing** on the conformant control. Both arms recorded with non-empty extraction.*
+
+**Conformant control:** the unmutated branch — `automated-closeout.sh --self-test` → `self-test: PASS`, non-empty output.
+
+**Non-conformant arms — 15 mutants, 15 killed, 0 survivors.** Each mutant removes one observing step, is run through the same entry point, and is reverted from git before the next:
+
+| # | Observing step removed | Arms that fired | Killed |
+|---|---|---|---|
+| M1 | dispatch guard → `\|\| true` (the degenerate adversarial review proved the drafted design could not detect) | AI-F1 ×2, AI-F4 | ✓ 3 |
+| M2 | gate removed from the dispatch entirely (**the originating defect's exact state**) | AI-F anti-vacuity | ✓ 1 |
+| M3 | SURFACE states pass unattested (**the pre-review design**) | AI-C, AI-D | ✓ 2 |
+| M4 | `EMPTY-LEDGER` collapsed into `NOT-RECORDED` (3-valued → 2-valued) | AI-D, AI-E ×2, AI-G | ✓ 4 |
+| M5 | attestation emission removed **while still reporting `emitted`** | AI-C2 ×4, AI-D2 | ✓ 5 |
+| M6 | gate never blocks on `UNRESOLVED` | AI-A ×2, AI-L | ✓ 3 |
+| M7 | gate always blocks | AI-B ×2, AI-B2 | ✓ 3 |
+| M8 | column addressing → row pattern-match | AI-B2 ×2, AI-G | ✓ 3 |
+| M9 | predicate splits on a bare pipe (the GFM escaped-pipe hazard) | 7 arms, 15 assertions | ✓ 15 |
+| M11 | operator-instance path tokenisation removed | AI-P ×2 | ✓ 2 |
+| M12 | row 6 recomputes the verdict *after* the close | AI-K | ✓ 1 |
+| M13 | attestation clears an `UNRESOLVED` verdict | AI-L | ✓ 1 |
+| M14 | the parity arm's canonical source made unreadable *(reflexive)* | AI-G anti-vacuity | ✓ 1 |
+| M15 | arm F's own close-witness neutered *(reflexive)* | AI-F2 sensitivity, AI-F3 negative control | ✓ 2 |
+
+**M14 and M15 are the reflexive pair and they are the ones that matter most.** A control that cannot detect its own neutering is the defect this release exists to eliminate, and two prior cards in this milestone shipped exactly that shape before it was caught. M14 removes the parity arm's ability to read its canonical source; M15 removes the dispatch harness's ability to observe the close at all. Both go RED rather than green-because-inert.
+
+**How the dispatch guard became reachable by a test arm.** The pre-existing suite calls phases *directly*, and the dispatch block is main-body code below the argument-parsing banner — structurally outside every arm's reach, which is why a `|| true` variant passed the drafted design's whole arm set. Arm **F** extracts the two dispatch lines *verbatim from the tool's own text*, executes them in a subshell with both phases stubbed and a witness on the close, and carries three limbs that are each other's controls: the shipped line with a blocking gate must leave the close unfired **and** exit 3 (F1); the shipped line with a passing gate must fire the close (F2 — the sensitivity limb, without which F1's clean result would be meaningless); and a constructed `|| true` line must let the close through (F3 — the negative control, without which the arm could not tell a fail-closed gate from a no-op one). Arm **F4** adds the whole-block invariant: 34 of 34 dispatch lines carry the fail-closed guard, with a specificity control proving the filter rejects an unguarded line.
+
+**All three verdict states are exercised, and asserted on the verdict global rather than the detail prose.** `RESOLVED` (arms B, B2), `UNRESOLVED` (A, H, I, J, L), `NOT-RECORDED` (C, C2, P) and `EMPTY-LEDGER` (D, D2) each drive a distinct fixture; arm **E** asserts that the two SURFACE states resolve **distinct** `STATE_AI_GATE` values, because comparing detail strings would pass on any two different sentences while the value every downstream consumer reads went unchecked.
+
+**Live specimen — evidence, not fixture.** The shipped predicate run against this release's own action-item ledger resolves `TOTAL=1 UNRES=1` → `UNRESOLVED`. It proves the gate *sees* a real open row; it proves nothing about blocking, which is what the constructed fixture and the executed dispatch are for. That row is **AI-001**, and the gate now holds this release's own close until the operator disposes it.
+
+### Per-issue — the close-ordering gate card
+
+| AC | Verdict | Evidence |
+|---|---|---|
+| AC1 — milestone close sequenced after the 7a verdict | **MET at the tooling surface; PARTIAL release-wide** | The gate is dispatched immediately before the close and the close is structurally unreachable on a BLOCK (arm F). **Three milestone-close paths exist and tooling covers one**; the hub-direct narrative path — the shape that closed the originating milestone — is **not** covered, because that file did not land. See **D-14** |
+| AC2 — an anti-vacuity control proves 7a can block | **MET** | The CIAC-6 table above; M2 and M6 both go RED |
+| AC3 — the originating milestone's open items dispositioned | **OUT-OF-SCOPE — routed to AI-001** | Operator action, not release-buildable. Recorded at **R8**. Stage 8 records this verdict, never NOT MET |
 
 ---
 
