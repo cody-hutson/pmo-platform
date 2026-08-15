@@ -292,6 +292,129 @@ check_script_target() {
   fi
 }
 
+# --------------------------------------------------------------------------
+# Cumulative quote tracking for the BLOCK-DESTRUCTIVE-022 segment loop.
+#
+# The -022 matcher is LEXICAL: it splits raw argv on `;`, `&`, `|` and newline.
+# A separator inside a QUOTED ARGUMENT is therefore a spurious split, and the
+# fragments either side of it look exactly like commands. Deciding which
+# fragments are real requires knowing, for each segment, whether it BEGINS
+# inside a quote that opened earlier — which is a property of the whole command,
+# not of the segment. Per-segment quote PARITY cannot answer it: `--msg "it's"`
+# is ordinary well-formed shell whose segment carries one `'`, and a program
+# string like `bash -c 'a; bash x.sh'` puts a REAL command in an odd-parity
+# fragment. Parity conflates "inside a quoted argument" with "contains an odd
+# number of quote characters"; only a carried state distinguishes them.
+#
+# script_qstate is that state: 0 outside any quote, 1 inside '...', 2 inside
+# "...". Shell quoting rules are honoured rather than approximated, because each
+# approximation fails toward OVER-reporting "inside a quote", which is the
+# fail-OPEN direction for the caller:
+#   - inside '...' nothing is special but the closing `'` (no escapes at all);
+#   - inside "..." a backslash escapes the next character, so `\"` does not close;
+#   - outside quotes a backslash escapes the next character, so `\'` does not OPEN
+#     one. Without that rule `echo \'; bash <evil>.sh` would read as "inside a
+#     quote" and suppress a real execution.
+# --------------------------------------------------------------------------
+
+# Index of the earliest occurrence in $script_qt of any character in "$@".
+# Sets script_qi (-1 when none are present) and script_qc (the character found).
+# Searching for one literal character at a time keeps every pattern a quoted
+# expansion, so no bracket expression and no backslash escaping is involved.
+script_qnext() {
+  script_qi=-1
+  script_qc=""
+  local _ch _pre
+  for _ch in "$@"; do
+    _pre="${script_qt%%"$_ch"*}"
+    if [ "${#_pre}" -ne "${#script_qt}" ]; then
+      if [ "$script_qi" -lt 0 ] || [ "${#_pre}" -lt "$script_qi" ]; then
+        script_qi="${#_pre}"
+        script_qc="$_ch"
+      fi
+    fi
+  done
+}
+
+# Advance script_qstate across one segment. Separator characters were replaced by
+# newlines before splitting and neither they nor newlines are quote-significant,
+# so advancing segment by segment is equivalent to scanning the whole command.
+#
+# script_qwork bounds total work across the command. A pathological input (very
+# long, very many quote characters) would otherwise make this quadratic on a hook
+# that runs before every Bash call. On exceeding the cap the scan STOPS and
+# script_qbail latches, which forces the caller to suppress nothing at all for
+# the rest of the command — degradation lands on "adjudicate everything".
+script_qadvance() {
+  script_qt="$1"
+  while [ -n "$script_qt" ]; do
+    if [ "$script_qwork" -ge 1000 ]; then
+      script_qbail=1
+      script_qstate=0
+      return 0
+    fi
+    script_qwork=$(( script_qwork + 1 ))
+    if [ "$script_qstate" -eq 1 ]; then
+      script_qnext "$script_q1"
+      if [ "$script_qi" -lt 0 ]; then break; fi
+      script_qt="${script_qt:$(( script_qi + 1 ))}"
+      script_qstate=0
+    elif [ "$script_qstate" -eq 2 ]; then
+      script_qnext "$script_bs" "$script_q2"
+      if [ "$script_qi" -lt 0 ]; then break; fi
+      script_qt="${script_qt:$(( script_qi + 1 ))}"
+      if [ "$script_qc" = "$script_bs" ]; then
+        script_qt="${script_qt:1}"
+      else
+        script_qstate=0
+      fi
+    else
+      script_qnext "$script_bs" "$script_q1" "$script_q2"
+      if [ "$script_qi" -lt 0 ]; then break; fi
+      script_qt="${script_qt:$(( script_qi + 1 ))}"
+      if [ "$script_qc" = "$script_bs" ]; then
+        script_qt="${script_qt:1}"
+      elif [ "$script_qc" = "$script_q1" ]; then
+        script_qstate=1
+      else
+        script_qstate=2
+      fi
+    fi
+  done
+  return 0
+}
+
+# Resolve the command word of a segment into script_head (empty when the segment
+# has none), using the POSIX 2.9.1 prefix walk the main loop uses: a simple
+# command is `prefix* word suffix*`, and a prefix is a variable assignment.
+# Shared so the carrier test and the verb test resolve command position the same
+# way — an assignment prefix must not change either answer.
+script_resolve_head() {
+  script_head=""
+  local _i
+  local -a _tok
+  set -f
+  # shellcheck disable=SC2206
+  _tok=( $1 )
+  set +f
+  _i=0
+  while [ "$_i" -lt "${#_tok[@]}" ]; do
+    case "${_tok[$_i]}" in
+      [A-Za-z_]*=*)
+        case "${_tok[$_i]%%=*}" in
+          *[!A-Za-z0-9_]*) break ;;
+        esac
+        _i=$(( _i + 1 ))
+        ;;
+      *) break ;;
+    esac
+  done
+  if [ "$_i" -lt "${#_tok[@]}" ]; then
+    script_head="${_tok[$_i]}"
+  fi
+  return 0
+}
+
 # ==========================================================================
 # BRANCH BY TOOL NAME
 # ==========================================================================
@@ -517,7 +640,7 @@ case "$TOOL_NAME" in
     script_segments="${script_segments//&/$'\n'}"
     script_segments="${script_segments//|/$'\n'}"
 
-    # ---- Quoted-fragment suppression (carrier-gated) ----
+    # ---- Quoted-fragment suppression (per-opener attribution) ----
     #
     # This matcher is LEXICAL: it splits raw argv on separators. A separator and an
     # interpreter appearing inside a QUOTED ARGUMENT are therefore shredded into
@@ -527,73 +650,87 @@ case "$TOOL_NAME" in
     # and once on a grep PATTERN — and the tightening above ENLARGES the surface,
     # because every invocation is now adjudicated instead of only the first.
     #
-    # Suppression is gated on an ALLOWLIST of outer command words that cannot
-    # evaluate their arguments. The direction of that choice is the entire design:
-    # an entry MISSING from this set means a false positive persists — it can never
-    # mean an evasion is admitted. A denylist of evaluating verbs would invert the
-    # failure direction, because one missed verb silently allows a real execution,
-    # and a fail-open surface inside a fail-closed control is not an acceptable
-    # trade for an availability fix.
+    # THE DISCRIMINATOR. The question a fragment must answer is not "do my own
+    # quotes balance" but "am I interior to a quoted argument, and whose argument
+    # is it". Those differ, and the difference is the whole rule:
     #
-    # Gate: the command word of the FIRST naive segment, resolved with the same
-    # assignment walk the main loop uses. Deliberately kept self-contained rather
-    # than folded into that loop, so this block — and only this block — can be
-    # reverted without unpicking the matcher fix it rides on.
-    script_carrier=0
-    script_first_seg="${script_segments%%$'\n'*}"
-    script_first_seg="${script_first_seg#"${script_first_seg%%[![:space:]]*}"}"
-    if [ -n "$script_first_seg" ]; then
-      set -f
-      # shellcheck disable=SC2206
-      script_ftok=( $script_first_seg )
-      set +f
-      script_fidx=0
-      while [ "$script_fidx" -lt "${#script_ftok[@]}" ]; do
-        case "${script_ftok[$script_fidx]}" in
-          [A-Za-z_]*=*)
-            case "${script_ftok[$script_fidx]%%=*}" in
-              *[!A-Za-z0-9_]*) break ;;
-            esac
-            script_fidx=$(( script_fidx + 1 ))
-            ;;
-          *) break ;;
-        esac
-      done
-      if [ "$script_fidx" -lt "${#script_ftok[@]}" ]; then
-        case "${script_ftok[$script_fidx]##*/}" in
-          gh|git|printf|echo|jq) script_carrier=1 ;;
-        esac
-      fi
-    fi
-
-    # Quote characters held in variables: counting by LENGTH DIFFERENCE after
-    # removal avoids a negated bracket entirely, so there is no pattern-escaping
-    # subtlety for a later editor to get wrong. Validated on bash 3.2.
+    #   - `bash <x>.sh --msg "it's here"` is a REAL execution whose segment carries
+    #     ONE `'`. Odd parity, and it must block.
+    #   - `bash -c 'echo hi; bash <x>.sh'` puts a real command in the SECOND
+    #     fragment of a quoted program string. Odd parity there too, and it must
+    #     block, because `-c` EXECUTES that string — positions inside it are
+    #     command positions.
+    #   - `gh issue comment 1 --body 'note; bash <x>.sh'` is the false positive.
+    #     Also odd parity. Nothing runs.
+    #
+    # Parity cannot separate those three. Carried quote state can: a segment is
+    # interior to a quoted argument exactly when the state at its START is 1 or 2,
+    # and the argument belongs to the command that OPENED that quote — not to
+    # whichever command happens to head the line.
+    #
+    # THE INVARIANT, stated so a later editor can check an edit against it: a
+    # segment whose start state is 0 begins at COMMAND POSITION and is ALWAYS
+    # adjudicated. Suppression can only ever reach text sitting inside a quote that
+    # some earlier command opened, and only when that command cannot evaluate it.
+    # This is what makes the `-c` case safe: the quote in `bash -c '…'` is opened by
+    # `bash`, so no prefix in front of it — `echo x; bash -c '…'` — can reattribute
+    # the program string to `echo`. The command that opened the quote is the one
+    # asked, every time.
+    #
+    # Suppression stays gated on an ALLOWLIST of command words that cannot evaluate
+    # their arguments. The direction of that choice is deliberate: an entry MISSING
+    # from this set means a false positive persists — it can never mean an evasion
+    # is admitted. A denylist of evaluating verbs would invert the failure
+    # direction, because one missed verb silently allows a real execution, and a
+    # fail-open surface inside a fail-closed control is not an acceptable trade for
+    # an availability fix.
+    #
+    # `git` is NOT in the set, though it reads like a natural member. `git -c
+    # alias.x='!<cmd>' x` evaluates its own quoted argument, so it fails the set's
+    # stated membership criterion; keeping it would leave exactly the fail-open this
+    # block exists to avoid. Membership is the property to re-check when editing.
     script_q1="'"
     script_q2='"'
-    script_segno=0
+    script_bs='\'
+    script_qstate=0
+    script_qwork=0
+    script_qbail=0
+    script_carrier=0
+    script_head=""
 
     while IFS= read -r script_seg; do
-      script_segno=$(( script_segno + 1 ))
+      # Quote state at the START of this segment, carried in from everything before
+      # it. Captured BEFORE the segment is scanned, because a segment that opens a
+      # quote is itself still at command position.
+      script_segstart="$script_qstate"
+
       # trim leading whitespace (leaves the head token at index 0)
       script_seg="${script_seg#"${script_seg%%[![:space:]]*}"}"
-      [ -n "$script_seg" ] || continue
 
-      # A segment after the first, under a non-evaluating carrier, with ODD quote
-      # parity is a FRAGMENT of a quoted string rather than a command: the opening
-      # quote is in an earlier fragment or the closing quote in a later one. A
-      # genuinely executing command always has balanced quotes within its own
-      # segment, so this cannot suppress a real invocation. The first segment is
-      # never skipped — that is where the actual command lives.
-      if [ "$script_carrier" -eq 1 ] && [ "$script_segno" -gt 1 ]; then
-        script_strip="${script_seg//$script_q1/}"
-        script_n1=$(( ${#script_seg} - ${#script_strip} ))
-        script_strip="${script_seg//$script_q2/}"
-        script_n2=$(( ${#script_seg} - ${#script_strip} ))
-        if [ $(( script_n1 % 2 )) -eq 1 ] || [ $(( script_n2 % 2 )) -eq 1 ]; then
-          continue
+      # Advance the carried state over this segment BEFORE any `continue` below —
+      # an empty or suppressed segment still contributes its quote characters, and
+      # losing them would desynchronise every segment that follows.
+      script_qadvance "$script_seg"
+
+      if [ "$script_segstart" -eq 0 ]; then
+        # Command position: this segment follows a separator that was OUTSIDE any
+        # quote, so it is a real command, never a fragment. Re-resolve the carrier
+        # here — this is what attributes a quote to the command that opens it. An
+        # empty segment yields an empty head and therefore carrier 0, which is the
+        # fail-closed answer for "no command word to vouch for what follows".
+        script_resolve_head "$script_seg"
+        script_carrier=0
+        if [ "$script_qbail" -eq 0 ]; then
+          case "${script_head##*/}" in
+            gh|printf|echo|jq) script_carrier=1 ;;
+          esac
         fi
+      elif [ "$script_carrier" -eq 1 ]; then
+        # Interior to a quoted argument of a command that cannot evaluate it.
+        continue
       fi
+
+      [ -n "$script_seg" ] || continue
 
       # tokenize on whitespace with globbing OFF, so a literal `*` in the command
       # is not expanded against the cwd before we can adjudicate it
