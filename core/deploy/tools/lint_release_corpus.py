@@ -51,6 +51,16 @@ Validates:
       Checks 9-12 floored at the lowest live version family (v1.x) per
       NOTE_CONTENT_CUTOVER; check 13 floored at NOTE_LINK_CUTOVER; check 14 has
       no floor (a declared release is by definition current).
+  (f) Tier-1 `links.plan` resolution (release-corpus-schema.md § Tier 1): every
+      note's links.plan value must name an existing file under
+      release/releases/plans/. Two-limbed on its own floor,
+      PLAN_LINK_CUTOVER — blocking at/above it, tallied below it as inherited
+      pre-ADR-092 corpus debt. Carried INSIDE check_note_content() rather than
+      behind its own --check value because --check note-content is the only
+      value any executable caller passes; a check reachable solely under
+      ("all", …) would run in its own acceptance test and nowhere else.
+      Emits one ADVISORY tally line per run carrying BOTH limbs' denominators,
+      so a zero finding count is distinguishable from an unrun check.
 
 This validator handles the schema/structural checks that go beyond link
 resolution. (The doc-link primitive `check-doc-links.py` covers cross-link
@@ -241,6 +251,20 @@ NOTE_LINK_CUTOVER = (2, 37, "", 0)
 # for checks 9-12. (Newly-authored v3.x+ notes would use absolute URLs, so this
 # set covers only the historical legacy-link members present at v2.37.)
 NOTE_LINK_EXEMPT_VERSIONS: set[str] = {"v3.20"}
+
+# ─── Tier-1 links.plan resolution floor (release-corpus-schema.md § Tier 1) ───
+#
+# ADR-092 made plans/v<MAJOR>/ the claim-time home for a versioned plan. BEFORE
+# it a flat links.plan pointer was CORRECT when written, so a pre-cutover dangle
+# is inherited corpus debt stranded by the later foldering reorg — not a breach
+# of the contract this limb enforces. Blocking at or above the floor; counted and
+# named below it, never silently zeroed.
+#
+# Mirrors the NOTE_CONTENT_CUTOVER / NOTE_LINK_CUTOVER tuple shape, and inherits
+# their sentinel behaviour: version_tuple() returns VERSIONLESS_KEY for a
+# slug-keyed (version-less) note, which sorts below this floor, so version-less
+# notes route to the advisory count with no special-casing.
+PLAN_LINK_CUTOVER = (4, 0, "", 0)
 
 # Check 13 regexes. INLINE_LINK_RE captures a markdown link target (group 1).
 # REPO_RELATIVE_TARGET_RE flags targets that render broken on the Release page;
@@ -543,6 +567,58 @@ def check_body_link_purity(rel: str, body: str) -> list[str]:
     return findings
 
 
+def _plan_link_state(text: str) -> tuple[str, str]:
+    """Classify a note's frontmatter `links.plan`, distinguishing FOUR outcomes.
+
+    The four are kept apart deliberately, because collapsing any of them into
+    "skip" is how a resolution check reads green over notes it never examined:
+
+      "unreadable" — parse_frontmatter() returned None, so this file's links
+                     block was never read. NOT the same as "has no pointer":
+                     the corpus carries notes that open with the
+                     `<!-- reference-durability: allow-link -->` marker before
+                     the `---` fence, and parse_frontmatter() keys on line 1
+                     being the fence. Those notes DO carry a links.plan value
+                     the parser cannot reach.
+      "absent"     — read fine; no links object, or no plan key inside it. That
+                     is a required-field finding, owned by the Tier-1 schema
+                     scan, not by this resolution limb — reported in the tally
+                     so it is visible, not re-flagged here.
+      "null"       — the key is present and explicitly null/empty. The schema
+                     permits null, so there is nothing to resolve.
+      "value"      — a non-empty scalar, returned as the second element.
+    """
+    fm = parse_frontmatter(text)
+    if fm is None:
+        return ("unreadable", "")
+    links = fm.get("links")
+    if not isinstance(links, dict) or "plan" not in links:
+        return ("absent", "")
+    raw = (links.get("plan") or "").strip().strip('"').strip("'")
+    if raw in ("", "null", "~"):
+        return ("null", "")
+    return ("value", raw)
+
+
+def _plan_link_resolves(value: str) -> bool:
+    """True iff `value` names an existing file under release/releases/plans/.
+
+    The value is repo-root-relative by contract (release-corpus-schema.md
+    § Tier 1). Containment is asserted rather than assumed: an absolute value,
+    or one whose normalised form lands outside PLANS_DIR, does not resolve — so
+    a `../`-bearing pointer becomes a finding instead of a silent traversal out
+    of the corpus.
+    """
+    if not value or value.startswith("/"):
+        return False
+    target = (WORKSPACE_ROOT / value).resolve()
+    try:
+        target.relative_to(PLANS_DIR.resolve())
+    except ValueError:
+        return False
+    return target.is_file()
+
+
 def parse_bullets(section_text: str) -> list[str]:
     """Group lines into top-level bullets (lines starting with '- ' at column 0)."""
     bullets: list[str] = []
@@ -588,6 +664,14 @@ def check_note_content() -> list[str]:
     path_re = re.compile(r"(?:pmo-platform/|\.claude/)\S+")
     link_strip_re = re.compile(r"\[[^\]]*\]\([^)]*\)")
 
+    # Tier-1 links.plan resolution tallies. Accumulated across the whole loop and
+    # emitted as ONE advisory line after it, so the limb states the denominator it
+    # actually examined rather than a bare finding count — "0 found" and "nothing
+    # examined" must not read the same.
+    pl_block_seen = pl_block_bad = 0
+    pl_adv_seen = pl_adv_bad = 0
+    pl_unreadable = pl_absent = pl_null = 0
+
     # rglob (recursive) — notes are foldered into major-version subdirectories
     # (notes/v1|v2|v3/… + the _unversioned/ bucket) per plans/README.md (#230,
     # v3.54). version_tuple keys off path.name (folder-agnostic), so the cutover
@@ -609,16 +693,78 @@ def check_note_content() -> list[str]:
         # apply to them at all — "no version" is not "older than the floor".
         # Admitting them by BRANCH keeps NOTE_CONTENT_CUTOVER untouched.
         is_versionless = ver == VERSIONLESS_KEY
-        if not is_versionless and ver < NOTE_CONTENT_CUTOVER:
-            continue
         # Extract version key (e.g., "v12.09" from "v12.09_RELEASE_NOTES.md") for exempt-set lookup
         ver_match = VERSION_KEY_RE.match(path.name)
         ver_key = ver_match.group(0) if ver_match else ""
-        if ver_key in PRE_CUTOVER_EXEMPT_VERSIONS:
-            continue
 
         text = path.read_text(encoding="utf-8")
         rel = _rel(path)
+
+        # ── Tier-1 links.plan resolution (release-corpus-schema.md § Tier 1) ──
+        #
+        # WHY IT LIVES HERE rather than behind its own --check value. No caller
+        # anywhere passes --check all: deploy.sh (x2), automated-closeout.sh's
+        # Phase 9.2 and the version-less regression test all pass
+        # --check note-content, which reaches exactly this function. A check
+        # dispatched only under ("all", …) would run solely inside its own
+        # acceptance test — green, and enforcing nothing.
+        #
+        # WHY IT SITS ABOVE THE §3.2 FLOORS AND ABOVE THE RESIDUE `continue`.
+        # This is a Tier-1 SCHEMA assertion, not a §3.2 content check: it carries
+        # its own forward-only floor (PLAN_LINK_CUTOVER) and must not silently
+        # inherit NOTE_CONTENT_CUTOVER, the exempt set, or the residue skip. The
+        # residue `continue` below is correct for its own scope — no prose check
+        # is meaningful on an unauthored note — but a links.plan value is not
+        # prose. It is machine data the close-out scaffold itself just emitted,
+        # which makes a fresh scaffold the single most important place to read it,
+        # not a place to skip. Below the residue skip this limb would be blind to
+        # exactly the artifact that mints the defect.
+        #
+        # WHY EVERY BLOCKING FINDING LEADS WITH `rel`. Phase 9.2 scopes the lint
+        # to the closing release by grepping the output for that release's
+        # repo-root-relative NOTE path (automated-closeout.sh
+        # phase_lint_release_notes). A finding that named only the PLANS path
+        # would miss that needle and take the caller's explicit
+        # "no finding for this version" PASS branch — blocking in name, fail-open
+        # in fact. The note path is the load-bearing token here, not decoration.
+        pl_state, pl_value = _plan_link_state(text)
+        pl_blocking = (not is_versionless) and ver >= PLAN_LINK_CUTOVER
+        if pl_state == "unreadable":
+            pl_unreadable += 1
+            if pl_blocking:
+                findings.append(
+                    f"NOTE-PLAN-LINK-NO-FRONTMATTER: {rel} is at/above the ADR-092 links.plan "
+                    f"floor but its frontmatter does not open with a '---' fence on line 1, so "
+                    f"links.plan could not be read — the pointer is UNVERIFIED, not clean "
+                    f"(release-corpus-schema.md § Tier 1 / § Failure modes 'NO FRONTMATTER')"
+                )
+        elif pl_state == "absent":
+            pl_absent += 1
+        elif pl_state == "null":
+            pl_null += 1
+        else:
+            if pl_blocking:
+                pl_block_seen += 1
+            else:
+                pl_adv_seen += 1
+            if not _plan_link_resolves(pl_value):
+                if pl_blocking:
+                    pl_block_bad += 1
+                    findings.append(
+                        f"NOTE-PLAN-LINK-UNRESOLVED: {rel} links.plan -> '{pl_value}' does not "
+                        f"resolve to an existing file under release/releases/plans/ "
+                        f"(release-corpus-schema.md § Tier 1; the plan's home is defined by "
+                        f"release/releases/plans/README.md § Disposition rule)"
+                    )
+                else:
+                    pl_adv_bad += 1
+
+        # §3.2 content checks 9-14 begin here. Their forward-only floors and the
+        # exempt set are unchanged and apply to them ONLY.
+        if not is_versionless and ver < NOTE_CONTENT_CUTOVER:
+            continue
+        if ver_key in PRE_CUTOVER_EXEMPT_VERSIONS:
+            continue
 
         # Check 9b: scaffold residue. A note still carrying a producer token was
         # written by phase_scaffold_release_notes and never authored, so it is
@@ -706,6 +852,39 @@ def check_note_content() -> list[str]:
             if m_path:
                 snippet = bullet[:80].strip().replace("\n", " ")
                 findings.append(f"NOTE-FILE-PATH-IN-6A: {rel} Section 6a bullet contains raw file path '{m_path.group(0)}' (release-notes-standard.md §3.2 check 12; use inline anchor text via markdown link instead): {snippet!r}")
+
+    # ── Tier-1 links.plan tally — ONE advisory line, always emitted ───────────
+    #
+    # It carries BOTH limbs' denominators so a zero is interpretable: a blocking
+    # limb reporting 0 findings over 0 examined notes is not a clean corpus, it is
+    # an unrun check, and the two must be distinguishable from the output alone.
+    #
+    # It is the whole advisory output, by design and against the obvious
+    # alternative of one advisory line per pre-cutover dangle. Two shipped callers
+    # make the per-line form actively harmful rather than merely noisy:
+    #   • deploy.sh Check 20 reports `wc -l` of the lint output as its finding
+    #     count and shows `head -10`. Roughly a hundred advisory lines would
+    #     inflate that count several-fold and push every real §3.2 finding out of
+    #     the displayed window.
+    #   • test_lint_release_corpus_versionless.sh's specificity arm asserts its
+    #     must-not-flag fixture's BARE FILENAME appears zero times in stdout. A
+    #     per-note advisory naming the bare filename — the shape ADVISORY_PREFIX
+    #     invariant (2) prescribes — would land in that grep and fail the arm.
+    # The count is what the advisory limb owes; the enumeration belongs to the
+    # follow-on card that repairs the inherited debt.
+    #
+    # NO REPO-ROOT-RELATIVE NOTE PATH APPEARS ON THIS LINE, per ADVISORY_PREFIX
+    # invariant (2): the close-out callers grep the output for the closing note's
+    # path whenever the exit code is non-zero, so an advisory carrying one would
+    # false-block a close on unrelated legacy debt.
+    findings.append(
+        f"{ADVISORY_PREFIX}: NOTE-PLAN-LINK-TALLY — links.plan resolution: "
+        f"blocking limb {pl_block_bad} unresolved of {pl_block_seen} pointer(s) examined "
+        f"at/above the ADR-092 floor; advisory limb {pl_adv_bad} unresolved of {pl_adv_seen} "
+        f"examined below it (inherited pre-ADR-092 corpus debt, tracked separately); "
+        f"{pl_unreadable} note(s) with unreadable frontmatter, {pl_null} explicit null, "
+        f"{pl_absent} carrying no links.plan key (release-corpus-schema.md § Tier 1)"
+    )
 
     return findings
 
