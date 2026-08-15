@@ -193,9 +193,18 @@ SUBTYPES_iteration_prefixes="dt-eng-pass- qa-dt-pass-"
 # here rather than restating it is what keeps the two from drifting — the drift
 # that shipped a 5-label schema against a 6-label tool.
 
-# Parse the schema § 11.8 table → "source|label label …" lines on stdout.
+# Parse the schema § 11.8 table → "key|label label …" lines on stdout, where the
+# key is `event_type` or `event_type/event_subtype`.
 # Row shape: | `source` … | `--event-type …` | `l1` / `l2` / … | clustered | zero-state |
 # FS="|" on a leading-pipe row: $2=col1(source) $3=col2(filter) $4=col3(labels).
+#
+# THE KEY COMES FROM COL-2, NOT COL-1. § 11.8 declares each label set's SCOPE in
+# col-2 (the "Input filter" cell) as `--event-type X [--event-subtype Y]`. Col-1
+# is a `--source` enum value consumed by synthesize-release-learnings.sh and only
+# coincidentally shaped like an event type. Reading col-1 as the key is what
+# scoped validation by event_type alone, imposing the learnings-triple label set
+# on every release-synthesis subtype and making qc4-05-result / qc4-06-result
+# structurally un-emittable — zero such rows exist across the log's history.
 parse_schema_labels() {
   [[ -r "$SCHEMA_FILE" ]] || return 1
   awk -F'|' '
@@ -204,15 +213,26 @@ parse_schema_labels() {
     # col-1 must START with a backtick token (the source name); trailing prose in
     # the same cell — e.g. "(default — …)" — is ignored.
     in_s && $2 ~ /^ *`[a-z0-9-]+`/ {
-      s = $2
-      sub(/^ *`/, "", s); sub(/`.*$/, "", s)          # source from col-1
+      filt = $3; et = ""; es = ""                       # declared scope from col-2
+      if (match(filt, /--event-type +[a-z0-9-]+/)) {
+        t = substr(filt, RSTART, RLENGTH); sub(/^--event-type +/, "", t); et = t
+      }
+      if (match(filt, /--event-subtype +[a-z0-9.-]+/)) {
+        t = substr(filt, RSTART, RLENGTH); sub(/^--event-subtype +/, "", t); es = t
+      }
+      # A row declaring no --event-type registers NOTHING rather than
+      # mis-registering under a col-1 name. Fail closed on a malformed
+      # declaration; this also skips the table HEADER row, whose col-1
+      # (`--source`) satisfies the backtick test above.
+      if (et == "") next
+      key = (es == "" ? et : et "/" es)
       rest = $4; labels = ""                            # labels from col-3 ONLY
       while (match(rest, /`[a-z0-9-]+`/)) {
         tok = substr(rest, RSTART+1, RLENGTH-2)
         labels = (labels == "" ? tok : labels " " tok)
         rest = substr(rest, RSTART+RLENGTH)
       }
-      if (labels != "") print s "|" labels
+      if (labels != "") print key "|" labels
     }
   ' "$SCHEMA_FILE"
 }
@@ -220,8 +240,13 @@ parse_schema_labels() {
 # Static fallback (schema unreadable, e.g. invoked outside the repo tree).
 # Asserted against § 11.8 by --self-test, so a one-sided edit fails the test
 # rather than shipping silently.
+#
+# Keys mirror the § 11.8 DECLARED FILTERS, not the col-1 source names:
+# release-synthesis's filter names a subtype, so its key carries one;
+# session-retro's filter names none, so its key stays type-level and all three
+# of its subtypes resolve through the type-level rung of labels_for().
 _FALLBACK_LABEL_SETS="$(printf '%s\n' \
-  "release-synthesis	surprise would-change watch-for" \
+  "release-synthesis/learnings-triple	surprise would-change watch-for" \
   "session-retro	session source theme domain learning reason")"
 
 _schema_labels="$(parse_schema_labels 2>/dev/null || true)"
@@ -366,10 +391,30 @@ validate_subtype() {
   is_in_list "$subtype" "$_subs"
 }
 
-# labels_for <event_type> — the recognized label set, or empty when the type
-# declares none in § 11.8 (in which case no label validation applies).
+# labels_for <event_type> [<event_subtype>] — the recognized label set for this
+# (type, subtype), resolved in three rungs:
+#   1. exact      — a set declared for `type/subtype` (a § 11.8 row whose filter
+#                   names both)
+#   2. type-level — a set declared for `type` alone (a § 11.8 row whose filter
+#                   names no subtype); every subtype of that type resolves here
+#   3. empty      — no declared set reaches this pair; it is NOT label-validated
+#                   (§ 11.8 Scope)
+#
+# The awk reads a here-string rather than a piped writer. `awk … exit` stops
+# reading early; a writer piped into a short-circuiting reader can then die on
+# the broken pipe, and `pipefail` promotes ITS status to the pipeline's — so a
+# SUCCESSFUL match reports failure. The here-string removes the pipe, so the
+# hazard cannot arise regardless of how large the registry grows.
 labels_for() {
-  printf '%s\n' "$LABEL_SETS_LINES" | awk -F'\t' -v t="$1" '$1==t{print $2; exit}'
+  local _t="$1" _s="${2:-}" _out
+  if [[ -n "$_s" ]]; then
+    _out="$(awk -F'\t' -v k="$_t/$_s" '$1==k{print $2; exit}' <<<"$LABEL_SETS_LINES")"
+    if [[ -n "$_out" ]]; then
+      printf '%s\n' "$_out"
+      return 0
+    fi
+  fi
+  awk -F'\t' -v k="$_t" '$1==k{print $2; exit}' <<<"$LABEL_SETS_LINES"
 }
 
 # payload_labels <payload> — every label token that OPENS a segment, one per line.
@@ -387,8 +432,8 @@ payload_labels() {
 validate_payload_labels() {
   local event_type="$1" subtype="$2" payload="$3"
   local allowed lbl forbidden key
-  allowed="$(labels_for "$event_type")"
-  [[ -n "$allowed" ]] || return 0        # type declares no set → not validated
+  allowed="$(labels_for "$event_type" "$subtype")"
+  [[ -n "$allowed" ]] || return 0        # no declared set reaches this pair → not validated
 
   # Per-subtype forbidden set (variable-name-safe key: non-alphanumerics → _).
   key="$(printf '%s_%s' "$event_type" "$subtype" | tr -c 'A-Za-z0-9' '_')"
@@ -598,21 +643,42 @@ if [[ "$SELF_TEST" == "true" ]]; then
   if [[ -r "$SCHEMA_FILE" && -z "$_schema_labels" ]]; then
     die "self-test: § 11.8 label parse returned nothing against a READABLE schema — the registry silently fell back, so the schema↔fallback lockstep would not have run"
   fi
-  # BIDIRECTIONAL schema↔fallback assertion: a one-sided edit to either surface
-  # fails here rather than shipping. This is the check that would have caught the
-  # 5-label schema / 6-label tool drift.
+  # BIDIRECTIONAL schema↔fallback assertion over the WHOLE label registry: a
+  # one-sided edit to either surface fails here rather than shipping. This is the
+  # check that would have caught the 5-label schema / 6-label tool drift.
+  #
+  # It asserts the registry as a TOKEN SET, not two hardcoded set names. The prior
+  # form named `session-retro` and `release-synthesis` literally; once the registry
+  # is keyed by the declared filter, `labels_for release-synthesis` (type-only)
+  # returns "" on BOTH sides and that assertion passes VACUOUSLY — the same
+  # false-green shape the readable-schema guard above exists to prevent. A
+  # both-directions token comparison cannot go vacuous, and it drops the hardcoded
+  # names along with the cascade liability they carried. `enum_tokens` is reused
+  # verbatim: the label registry has the same `key<TAB>values` shape as the § 3
+  # table it already flattens.
   if [[ -n "$_schema_labels" ]]; then
-    _st_sr_schema="$(labels_for session-retro)"
-    _st_sr_fallback="$(printf '%s\n' "$_FALLBACK_LABEL_SETS" | awk -F'\t' '$1=="session-retro"{print $2; exit}')"
-    [[ "$_st_sr_schema" == "$_st_sr_fallback" ]] \
-      || die "self-test: § 11.8 session-retro labels ('$_st_sr_schema') differ from the static fallback ('$_st_sr_fallback') — reconcile both sites"
-    _st_rs_schema="$(labels_for release-synthesis)"
-    _st_rs_fallback="$(printf '%s\n' "$_FALLBACK_LABEL_SETS" | awk -F'\t' '$1=="release-synthesis"{print $2; exit}')"
-    [[ "$_st_rs_schema" == "$_st_rs_fallback" ]] \
-      || die "self-test: § 11.8 release-synthesis labels ('$_st_rs_schema') differ from the static fallback ('$_st_rs_fallback') — reconcile both sites"
+    _lbl_schema_tok="$(printf '%s\n' "$_schema_labels" | /usr/bin/sed 's/|/\t/' | enum_tokens)"
+    _lbl_mirror_tok="$(printf '%s\n' "$_FALLBACK_LABEL_SETS" | enum_tokens)"
+    _lbl_missing="$(LC_ALL=C /usr/bin/comm -23 <(printf '%s\n' "$_lbl_schema_tok") <(printf '%s\n' "$_lbl_mirror_tok"))"
+    _lbl_extra="$(LC_ALL=C /usr/bin/comm -13 <(printf '%s\n' "$_lbl_schema_tok") <(printf '%s\n' "$_lbl_mirror_tok"))"
+    if [[ -n "$_lbl_missing" || -n "$_lbl_extra" ]]; then
+      echo "ERROR: self-test: § 11.8 <-> _FALLBACK_LABEL_SETS lockstep BROKEN" >&2
+      if [[ -n "$_lbl_missing" ]]; then
+        echo "  in § 11.8 but MISSING from the mirror:" >&2
+        printf '    %s\n' $_lbl_missing >&2
+      fi
+      if [[ -n "$_lbl_extra" ]]; then
+        echo "  in the mirror but ABSENT from § 11.8:" >&2
+        printf '    %s\n' $_lbl_extra >&2
+      fi
+      echo "  § 11.8 and the mirror are a two-site obligation: both change in ONE commit." >&2
+      exit 1
+    fi
+    echo "self-test: § 11.8 <-> mirror lockstep OK ($(printf '%s\n' "$_lbl_schema_tok" | grep -c .) tokens, both directions)"
   fi
-  # `reason` must be recognized — it is emitted on every no-learning row.
-  is_in_list "reason" "$(labels_for session-retro)" \
+  # `reason` must be recognized on a no-learning row — and asserting it through the
+  # SUBTYPE form keeps the type-level fallback rung live rather than untested.
+  is_in_list "reason" "$(labels_for session-retro no-learning)" \
     || die "self-test: 'reason' missing from the session-retro label set (no-learning rows carry it)"
   # Positive: a well-formed row of each grain validates.
   validate_payload_labels "session-retro" "learning" \
@@ -630,6 +696,28 @@ if [[ "$SELF_TEST" == "true" ]]; then
   validate_payload_labels "session-retro" "learning" "theme:over-building; learning:the fix: do less" \
     || die "self-test: a colon inside free prose must not be read as a label"
 
+  # ── (event_type, event_subtype) label scoping — the AC-2/AC-3 fixtures ──────
+  # These two subtypes are declared in § 3 and required by the Stage-13 emit
+  # table, but carry payload shapes their sibling learnings-triple does not.
+  # Under event_type-only scoping they were structurally un-emittable: zero rows
+  # across the log's entire history. The fixtures assert EMITTABILITY; they do
+  # NOT canonicalize a payload-label convention for these subtypes.
+  validate_payload_labels "release-synthesis" "qc4-05-result" \
+    "invariant:AV-1; verdict:PASS; files:release/tools/append-pipeline-event.sh" \
+    || die "self-test: a conforming qc4-05-result payload must emit — label scoping is not subtype-aware"
+  validate_payload_labels "release-synthesis" "qc4-06-result" \
+    "verdict:ATTAINED; outcome_excerpt:post-deploy main exhibits the AFTER state; evidence_anchor:release-plan-change-description" \
+    || die "self-test: a conforming qc4-06-result payload must emit — label scoping is not subtype-aware"
+  # Resolution-rung liveness: exact returns a set, type-level falls back, and an
+  # undeclared subtype resolves to EMPTY (not validated). Asserting all three
+  # rungs is what stops a partial implementation reading as green.
+  [[ -n "$(labels_for release-synthesis learnings-triple)" ]] \
+    || die "self-test: exact rung dead — release-synthesis/learnings-triple must resolve"
+  [[ -z "$(labels_for release-synthesis qc4-06-result)" ]] \
+    || die "self-test: qc4-06-result must resolve to NO declared set (§ 11.8 declares none)"
+  [[ "$(labels_for session-retro learning)" == "$(labels_for session-retro)" ]] \
+    || die "self-test: type-level fallback rung dead — session-retro/<subtype> must fall back to the type set"
+
   # Negative tests
   # THE DT-2 GUARD: an unrecognized label must be rejected at emit time.
   if ( validate_payload_labels "session-retro" "learning" \
@@ -644,6 +732,27 @@ if [[ "$SELF_TEST" == "true" ]]; then
   if ( validate_payload_labels "release-synthesis" "learnings-triple" \
        "surprise: a; mood: b" ) 2>/dev/null; then
     die "self-test: unrecognized label on release-synthesis must be rejected"
+  fi
+  # THE MUTATION PROOF (AC-3). This reject and the two qc4 ACCEPTS above are
+  # COMPLEMENTARY, and no single-scope implementation satisfies all three:
+  #   · event_type-only scoping (the defect) fails the two accepts;
+  #   · union-of-all-subtypes scoping ALSO fails the two accepts on the
+  #     CURRENT registry — learnings-triple is release-synthesis's only
+  #     DECLARED subtype, so the union is exactly its set; that same identity
+  #     is why it passes this reject;
+  #   · dropping the release-synthesis gate entirely fails this reject.
+  # `verdict:` is the token that would discriminate a union with something to
+  # widen INTO: it appears in both qc4 accept payloads above, so once § 11.8
+  # declares qc4 label sets the union carries it and union scoping accepts it
+  # here, while the `mood:` arm above still rejects. That asymmetry is LATENT,
+  # not live — today the two are symmetric: both are rejected on
+  # learnings-triple and both EMIT on the qc4 subtypes, which resolve to no
+  # declared set at all (qc4-06-result's EMPTY resolution is asserted above).
+  # Breaking (event_type, event_subtype) resolution therefore fails this test
+  # by construction, with no hand-edit required to demonstrate it.
+  if ( validate_payload_labels "release-synthesis" "learnings-triple" \
+       "surprise: a; verdict: ATTAINED" ) 2>/dev/null; then
+    die "self-test: 'verdict:' must still be REJECTED on learnings-triple — the exact rung must bind, not widen"
   fi
 
   if validate_subtype "decision" "bogus-subtype" 2>/dev/null; then
