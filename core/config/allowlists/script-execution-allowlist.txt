@@ -260,6 +260,18 @@ core/deploy/tools/check-registry-currency.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-issue-ref-validity.sh
 ./core/deploy/tools/check-issue-ref-validity.sh
 core/deploy/tools/check-issue-ref-validity.sh
+# check-pv7-vocabulary.sh — the PV-7a Register B spelling gate (deploy.sh Check 69 +
+# the `pv7-vocabulary` job in .github/workflows/repo-integrity.yml). Executed
+# agent-side as `bash <path> --self-test` (the 5-case fixture set), bare (the corpus
+# scan), and `--no-exempt` (to price the exemptions), plus by the selftest-discovery
+# engine. All four forms per the per-tool convention above, so BLOCK-DESTRUCTIVE-022
+# does not block the agent-side verification path — the path that runs the
+# sensitivity arm. (CI itself runs no Claude hooks, so these rows are for the
+# agent-side path, not the workflow step.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-pv7-vocabulary.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-pv7-vocabulary.sh
+./core/deploy/tools/check-pv7-vocabulary.sh
+core/deploy/tools/check-pv7-vocabulary.sh
 # test-status-label-invariant.sh — deploy.sh Check 16 status-label invariant fixture
 # self-test. Now a wired step of the shell-tests job in install-tests.yml AND invoked
 # agent-side at Stage 7 Dev Testing, plus by any operator re-running it locally. It

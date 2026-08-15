@@ -11320,6 +11320,104 @@ sys.stdout.write("".join(out) + "|")
     fi
   fi
 
+  # Check 69 — PV-7a Register B spelling conformance (ENFORCING) [#5550]
+  #
+  # WHAT IT ASSERTS. review-discipline-principles.md § 8.1 PV-7a freezes the
+  # human-readable degraded-state register at two members and adds "No third
+  # spelling"; ADR-133 D2 reconciles every divergent rendering of the TERMINAL
+  # member to the hyphenated form. This check asserts that reconciliation holds
+  # across the tracked corpus.
+  #
+  # WHY IT EXISTS, AND WHY THE CONVENTION ALONE WAS NOT ENOUGH. PV-7 shipped as
+  # six cards of documentation with FOUR comment citations, ZERO predicates and
+  # ZERO workflows. The first merge after it shipped reintroduced four
+  # space-separated emits into the G1-05a leg of this very file, and CI passed
+  # 47/47 green — because nothing in the repository could tell the two spellings
+  # apart. That is the convention's own defect class arriving through the front
+  # door, undetected, in the first merge after the build. A rule with no
+  # falsifier is a comment; this is the falsifier.
+  #
+  # WHY WHOLE-CORPUS RATHER THAN CHANGED-FILES. This is the load-bearing scope
+  # decision and it is grounded in the actual event, not in a preference. The
+  # four reintroduced emits arrived by MERGING origin/main into a release branch:
+  # relative to the PR's base they are UNCHANGED lines, so a changed-file gate —
+  # the shape every repo-integrity sibling uses — would have returned green on
+  # the exact event that motivated this check. Whole-corpus is what makes the
+  # gate able to see a reintroduction that travels in on a merge.
+  #
+  # ENFORCING BY THE CODE'S SHAPE, NOT BY A DEFAULT. Note what is absent from the
+  # FAIL arms below: no `case` on any mode, no resolve_check_mode call, no mode
+  # gate of any kind. The live population is clean at this pin (the five sites
+  # are fixed in the same change that adds this check), so there is no
+  # pre-existing debt to baseline and no red-wall vector to hedge against — the
+  # conditions that forced Check 63 to ship a committed baseline do not hold
+  # here, and Check 64's precedent applies instead. A new unsanctioned spelling
+  # increments ISSUES on every run.
+  #
+  # THE CONTROL ARM IS INSIDE THE PRIMITIVE, NOT BESIDE IT. The tool counts
+  # SANCTIONED occurrences on every run and exits 3 if that count is zero: a
+  # zero-violation verdict is only readable if the extractor demonstrably reaches
+  # the token at all. That is this check's most likely rot path — a refactor
+  # moves the token behind a variable, the extractor matches nothing, and the
+  # gate goes permanently and vacuously green. It cannot; the control fails loud
+  # first, and this block treats exit 3 as a FAIL.
+  #
+  # NOT THE ONLY LOCUS, AND DELIBERATELY SO. `deploy.sh --check` runs at deploy
+  # time on an operator machine, POST-merge — which is precisely how the four
+  # emits landed unseen. The same primitive is wired as the `pv7-vocabulary` job
+  # in .github/workflows/repo-integrity.yml, which runs PRE-merge on every pull
+  # request. That job is the load-bearing leg; this one is the deploy-time
+  # companion, single-sourced on the same predicate (CIAC-2: no predicate is
+  # re-encoded in either caller).
+  #
+  # DECLARED COVERAGE BOUNDARY. Spelling only. It does NOT assert PV-7c's
+  # non-escalating-emitter obligation, PV-7a's "this is not a clean result"
+  # discriminator clause, PV-7b's absent-not-zero counter rule, or a token
+  # assembled at run time with no literal in the source. Four separate
+  # invariants; this one is the spelling, which is the one the merge broke.
+  #
+  # Primitive: core/deploy/tools/check-pv7-vocabulary.sh (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 69: PV-7a Register B spelling conformance (one sanctioned spelling of the degraded-state terminal token; enforcing; whole-corpus; frozen artifacts and fixture trees exempt)"
+    local c69_script="core/deploy/tools/check-pv7-vocabulary.sh"
+    if [[ ! -f "$c69_script" ]]; then
+      log "  FAIL:  pv7-vocabulary — primitive script missing: $c69_script (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
+      ISSUES=$((ISSUES + 1))
+    else
+      # ── control arms FIRST: a probe that cannot be shown to detect proves nothing ──
+      local c69_fx_out c69_fx_rc=0
+      c69_fx_out=$(bash "$c69_script" --self-test 2>&1) || c69_fx_rc=$?
+      log "  CTRL:  pv7-vocabulary — $(echo "$c69_fx_out" | tail -1)"
+      if [[ $c69_fx_rc -ne 0 ]]; then
+        log "  FAIL:  pv7-vocabulary-fixtures — fixture regression (hard-fail on every mode). A probe that can no longer be shown to detect AND to discriminate proves nothing by returning zero."
+        echo "$c69_fx_out" | sed 's/^/         /'
+        ISSUES=$((ISSUES + 1))
+      else
+        # ── the scan: denominator first, then findings ──────────────────────────
+        local c69_out c69_rc=0
+        c69_out=$(bash "$c69_script" 2>&1) || c69_rc=$?
+        log "  DENOM: pv7-vocabulary — $(echo "$c69_out" | sed -n 's/^DENOM: //p' | tail -1)"
+        case "$c69_rc" in
+          0)
+            log "  OK:    pv7-vocabulary — every all-caps rendering of the terminal token is the sanctioned spelling"
+            ;;
+          1)
+            local _c69_hit
+            while IFS= read -r _c69_hit; do
+              [[ -z "$_c69_hit" ]] && continue
+              log "  FAIL:  pv7-vocabulary — ${_c69_hit#FAIL: }"
+              ISSUES=$((ISSUES + 1))
+            done < <(echo "$c69_out" | grep '^FAIL: ' || true)
+            ;;
+          *)
+            log "  FAIL:  pv7-vocabulary — $(echo "$c69_out" | grep '^SCAN-ERROR: ' | sed 's/^SCAN-ERROR: //' | paste -sd'; ' -)"
+            ISSUES=$((ISSUES + 1))
+            ;;
+        esac
+      fi
+    fi
+  fi
+
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
