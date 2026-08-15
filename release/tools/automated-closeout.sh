@@ -39,6 +39,10 @@
 #   12 await_merge_chore_pr poll mergeStateStatus (#1705: CI-realistic budget, default 300s; --no-merge skips; BLOCKED/UNSTABLE keep-polling)
 #   12.2 sync_primary_checkout  fast-forward the primary checkout to origin/main (git -C only; ff-only; non-fatal)
 #   12.5 reparse_ledgers   post-merge structural re-parse of the ledgers (#1680; detective-only)
+#   12.9 action_item_gate  Procedure 7a HARD GATE (#4439) — 3-valued AI-NNN ledger verdict, evaluated
+#                          BEFORE the milestone close. UNRESOLVED BLOCKS at --apply; NOT-RECORDED /
+#                          EMPTY-LEDGER SURFACE and require --attest-action-items to pass; RESOLVED is
+#                          the only silent pass
 #   13 post_close_milestone gh api -X PATCH state=closed (#2919: DEFERS under --no-merge)
 #   14 manual_close_release_issues operator-authorized D-1 with structured comment (#2919: DEFERS under --no-merge)
 #   15 run_verification + post_gate_passage_proof per the gate-passage-proof template
@@ -99,6 +103,22 @@
 #                              check_release_body_drift — DEFER under this flag
 #                              (#2919); re-run --apply after the chore PR merges to
 #                              complete milestone close + Release publish.
+#     --attest-action-items <c> Operator attestation clearing a Procedure 7a SURFACE
+#                              state (#4439). Closed enum: no-commitments (this
+#                              release genuinely recorded no action items) or
+#                              emit-skipped (the Procedure 4a emit step was missed).
+#                              REQUIRED at --apply when the gate resolves
+#                              NOT-RECORDED or EMPTY-LEDGER — those states pass on
+#                              attestation, never silently. The attestation is
+#                              itself emitted as a `decision` /
+#                              `empirical-verification-finding` row, actor
+#                              `operator`. It does NOT clear an UNRESOLVED verdict:
+#                              an open row is dispositioned, not attested away.
+#   ENV:
+#     HUB_STATE_PATH           Override the hub-state root the Procedure 7a gate
+#                              reads (env → operator.toml
+#                              operator_instance_hub_state_path →
+#                              ${WORKSPACE_ROOT}/personal/pmo-instance/hub-state).
 #   META:
 #     --self-test              Validate internal logic (offline); exit 0 on success
 #     --check-paths            Resolve the four corpus paths (offline); exit 0 if all
@@ -227,6 +247,35 @@ AUDIT_EPIC_ROLLUP="$SCRIPT_DIR/audit-epic-rollup-close.sh"
 # the precedent PROJECTOR below already sets (an `[[ ! -f ]]` guard inside
 # emit_derived_entry rather than a fifth check_paths row).
 COMPUTE_VELOCITY="$SCRIPT_DIR/compute-release-velocity.sh"
+# Pipeline-event writer. Used by ONE caller: phase_action_item_gate, to emit the
+# Procedure 7a operator attestation (`decision` / `empirical-verification-finding`)
+# the gate's own decision table requires. Guarded inline by its consuming phase
+# (the COMPUTE_VELOCITY precedent above), deliberately NOT a fifth check_paths row.
+AI_EVENT_WRITER="$SCRIPT_DIR/append-pipeline-event.sh"
+
+# Hub-state root holding this release's AI-NNN action-item ledger. OPERATOR-INSTANCE
+# content (<OPERATOR_INSTANCE_HUB_STATE_PATH>), never in the repo tree. Resolution is
+# the same 3-tier form WORKSPACE_ROOT and REPO_SLUG already use above, and the
+# append-pipeline-event.sh sibling uses for its own operator-instance path: env
+# override → operator.toml → canonical default. The env tier is load-bearing, not
+# incidental: it is what lets the self-test point the resolver at a sandbox instead
+# of the operator's live ledger.
+#
+# THE `|| true` IS LOAD-BEARING AND WAS PROVEN SO BY BREAKING THIS SCRIPT. The key
+# is optional — most operator.toml files do not carry it — and this file runs under
+# `set -euo pipefail`. A no-match `grep` exits 1, `pipefail` propagates that through
+# the pipeline, and `set -e` then aborts at LOAD time, before argument parsing:
+# every invocation, including --self-test and --check-paths, exits 1 with no output
+# at all. That is a silent total failure of the close-out tool caused by the ABSENCE
+# of an optional config key — the same shape as the defect this phase exists to fix,
+# so it is guarded here and the reason is written down. The sibling writer
+# append-pipeline-event.sh carries the identical guard for the identical reason.
+HUB_STATE_PATH="${HUB_STATE_PATH:-}"
+if [[ -z "$HUB_STATE_PATH" ]] && [[ -r "${HOME}/.config/pmo-platform/operator.toml" ]]; then
+  _hs=$(/usr/bin/grep -E '^operator_instance_hub_state_path' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | /usr/bin/head -1 | /usr/bin/awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
+  [[ -n "$_hs" ]] && HUB_STATE_PATH="$_hs"
+fi
+HUB_STATE_PATH="${HUB_STATE_PATH:-${WORKSPACE_ROOT}/personal/pmo-instance/hub-state}"
 # Close-class telemetry producer for the Phase 6.8 `**Close-Class-Telemetry:**`
 # field. Same form factor and same non-registration rationale as COMPUTE_VELOCITY
 # above — a TOOL dependency guarded inline by its consuming phase, not a fifth
@@ -323,6 +372,16 @@ VERIFY_RECHECK_DELAY=2   # check-5 post-close re-read replication-lag delay, in
                          # milestone-filtered read is not guaranteed
                          # read-after-write. Not a CLI flag — internal; the
                          # self-test overrides it to 0 to stay hermetic.
+ATTEST_ACTION_ITEMS=""   # --attest-action-items <cause> (Procedure 7a SURFACE
+                         # clause). Closed 2-value enum: no-commitments |
+                         # emit-skipped. The gate's SURFACE states resolve
+                         # "requires explicit operator attestation to PASS"
+                         # (hub-action-tracking.md § 4 routing point 5;
+                         # hub-spoke-bridge.md § Procedure 7a decision table rows
+                         # 1-2), and the attestation IS the discriminator — the
+                         # operator states WHICH of the two causes holds. Empty at
+                         # --apply on a SURFACE state therefore BLOCKS; it is not a
+                         # silent pass. See phase_action_item_gate.
 
 # State populated by phases (used by generate_report)
 RUN_TS=""
@@ -352,6 +411,20 @@ EXCLUDED_DETAIL=""        # collect_open_release_issues side channel (#3587): th
 CHORE_BRANCH=""
 CHORE_PR_NUMBER=""
 VERIFICATION_RESULTS=""
+STATE_AI_GATE=""          # Procedure 7a verdict computed at Phase 12.9, BEFORE the
+                          # milestone close. One of the gate's four states:
+                          # NOT-RECORDED / EMPTY-LEDGER / RESOLVED / UNRESOLVED.
+                          # phase_run_verification RENDERS this value in row 6 —
+                          # it never recomputes, because a verdict re-derived after
+                          # the close is not the verdict the close was gated on.
+STATE_AI_TOTAL=0          # whole AI-row population at Phase 12.9 (the denominator)
+STATE_AI_UNRES=0          # status:open + status:in-flight subset (the numerator)
+STATE_AI_DIR=""           # resolved hub-state dir for this release (diagnostic)
+STATE_AI_EMIT="n/a"       # attestation-emission outcome: n/a | emitted | dry-run |
+                          # failed:<reason>. The spec requires the attestation to be
+                          # EMITTED, not merely accepted; when the emit cannot land
+                          # this value says so rather than leaving the close looking
+                          # attested-and-recorded when only half of that is true.
 MERGE_SHA=""              # release-PR merge commit (#1682). Captured ONCE at
                          # read-state from the RELEASE PR (not the chore PR — the
                          # release content merged via the release PR, and the
@@ -3886,6 +3959,259 @@ phase_reparse_ledgers() {
   return 0
 }
 
+# ─── Phase 12.9: action_item_gate (Procedure 7a HARD GATE) ───────────────────
+#
+# THE DEFECT THIS CLOSES (#4439). Procedure 7a declares itself the HARD GATE that
+# fires "BEFORE the Milestone-close PATCH (current Procedure 7 Step 5)". Nothing
+# called it. Across this file's whole length there were ZERO references to action
+# items, AI-NNN, or hub-state, and in the bridge document every `7a` occurrence sat
+# inside 7a's own section — the gate was referenced only by itself. Milestone #304
+# closed at 2026-08-01T11:30:58Z with the gate recorded SURFACED-not-RESOLVED and a
+# ledger that did not yet exist; once built it carried six open rows.
+#
+# So the fix is not "run the gate earlier". It is: run the gate AT ALL, at a point
+# where its BLOCK verdict makes the close structurally unreachable. This phase is
+# dispatched immediately before phase_post_close_milestone, and the dispatcher's
+# pre-existing `|| { generate_report; exit 3; }` guard supplies the fail-closed
+# semantics — no new control flow is invented. The GUARD, not the ordering, is what
+# makes the close unreachable: a line at the right position carrying `|| true`
+# passes every position-only assertion while blocking nothing. Self-test group AI
+# arm (F) therefore EXECUTES the two dispatch lines lifted verbatim from this
+# file's own text, with a constructed `|| true` degenerate as its negative control.
+#
+# THREE-VALUED, DELIBERATELY (hub-action-tracking.md § 4 routing point 5). A gate
+# that only counts unresolved rows cannot tell "every commitment was resolved" from
+# "no commitment was ever recorded" — and a release that never emitted an action
+# item is exactly the release whose emit step was skipped. Two counts over the
+# whole population separate them:
+#
+#   NOT-RECORDED   ledger file absent          -> SURFACE (attestation required)
+#   EMPTY-LEDGER   file present, 0 AI rows     -> SURFACE (attestation required)
+#   RESOLVED       >=1 row, 0 open/in-flight   -> PASS  (the only silent pass)
+#   UNRESOLVED     >=1 open or in-flight       -> BLOCK
+#
+# SURFACE IS ATTESTATION-GATED, NOT ATTESTATION-FREE. The decision table's rows 1-2
+# end "-> requires explicit operator attestation to pass", and the same section
+# states the attestation "is the discriminator: the operator states which of the two
+# causes holds, and that attestation is itself emitted (`decision` /
+# `empirical-verification-finding`, actor `operator`)". A SURFACE state that passes
+# with no attestation input and emits no attestation row implements neither clause —
+# and it is precisely the state #304 was in at close, so a gate that passed it
+# silently would not have caught its own motivating incident. Hence:
+# --attest-action-items <cause> is REQUIRED to pass a SURFACE state at --apply.
+#
+# States 1 and 2 still SURFACE rather than FAIL in the sense the spec means: the
+# STATE is legitimate, and the operator clears it with one flag naming the cause.
+# What is refused is the silent pass. The remedy is named verbatim in the FAIL
+# detail, so the "a gate that fails a legitimate state gets routed around" risk is
+# answered by a one-word remedy rather than by looking away.
+#
+# WHY WARN-MODE COULD NOT REST ON "ALL OF CI". An earlier form of this rationale
+# argued that a blocking SURFACE state "would fail every CI close on day one". That
+# population is EMPTY: `--apply` appears in zero workflow files, and every CI
+# invocation of this script is --check-paths or --self-test. CI never executes the
+# close path in any state. The corrected statement is the one that matters and is
+# stronger: because CI never runs the close dispatch, the self-test fixture below is
+# the ONLY automated execution this phase will ever get, which is exactly why it is
+# four-armed, witness-backed, and executes the shipped dispatch text.
+#
+# NON-BLOCKING BY MODE, for reasons that each cost something to get wrong:
+#   --dry-run    nothing closes, so a return 3 would abort a preview run. The detail
+#                carries the literal "would BLOCK at --apply" (the :3385 precedent).
+#   --no-merge   phase_post_close_milestone already DEFERS, so blocking would abort a
+#                run whose close was deferred anyway. The gate evaluates and records.
+#                It deliberately does NOT join the --no-merge deferred set — that set
+#                is hand-enumerated at five sites this file's own comment warns about.
+#   already-closed  an idempotent re-run must not fail. It records instead — and when
+#                the recorded STATE is UNRESOLVED it NAMES that as the #304 shape,
+#                turning the re-run into a detector for the originating incident.
+#
+# Offline, hermetic, no network and no `gh`: a read of one local markdown file plus
+# two integer comparisons.
+
+# Evaluate the Procedure 7a predicate over a hub-state directory.
+# Emits "STATE TOTAL UNRES" on stdout. Never fails; an unreadable dir is
+# NOT-RECORDED, which is a SURFACE state, never a silent pass.
+#
+# The awk program is the block shipped at hub-spoke-bridge.md § Procedure 7a,
+# implemented here rather than sourced (that file is documentation, not a library).
+# Self-test group AI arm (G) runs BOTH copies over the same fixtures and fails
+# naming both sides if they ever diverge — the Check 68 `enum-parity` posture.
+#
+# TWO THINGS IN THAT awk INVOCATION ARE LOAD-BEARING AND LOOK LIKE STYLE:
+#   FS is ' [|] ' — space, BRACKETED pipe, space. Do NOT "simplify" to ' \| ': awk
+#   puts the -F value through string-escape processing first, which reduces \| to a
+#   bare | (ERE alternation) and the row then splits on every space.
+#   The split is on " | ", never on a bare '|'. GFM writes a literal pipe inside a
+#   cell as \|, and description / owner / trigger_detail / target are all free-text
+#   columns AHEAD of status — under -F'|' an escaped pipe shifts status off $11 and
+#   the gate returns RESOLVED on an unresolved ledger.
+_ai_eval_predicate() {
+  local _dir="$1" _ai _t=0 _u=0 _state
+  _ai="$_dir/action-items.md"
+  if [[ ! -f "$_ai" ]]; then
+    /usr/bin/printf 'NOT-RECORDED 0 0\n'
+    return 0
+  fi
+  read -r _t _u <<<"$(/usr/bin/awk -F' [|] ' '
+      $1 ~ /^\| *AI-[0-9]+ *$/ { t++; gsub(/ /,"",$11);
+                                 if ($11=="open" || $11=="in-flight") u++ }
+      END { print (t+0), (u+0) }' "$_ai" 2>/dev/null)"
+  _t="${_t:-0}"; _u="${_u:-0}"
+  if   [[ "$_t" -eq 0 ]]; then _state="EMPTY-LEDGER"
+  elif [[ "$_u" -gt 0 ]]; then _state="UNRESOLVED"
+  else                         _state="RESOLVED"
+  fi
+  /usr/bin/printf '%s %s %s\n' "$_state" "$_t" "$_u"
+}
+
+# Resolve this release's hub-state directory per the orchestration-playbook § 4a.3
+# resolver: slug-keyed FIRST, version-keyed as a READ-ONLY legacy fallback. The
+# writer creates only the slug form, so the version form is read and never created.
+# Emits the resolved directory on stdout; falls back to the slug form (which then
+# reads NOT-RECORDED) when neither exists, so the diagnostic names a real intent.
+_ai_resolve_dir() {
+  local _slugdir="" _verdir=""
+  [[ -n "$STATE_MILESTONE_SLUG" ]] && _slugdir="${HUB_STATE_PATH}/${STATE_MILESTONE_SLUG}"
+  [[ -n "$VERSION" ]] && _verdir="${HUB_STATE_PATH}/${VERSION}"
+  if [[ -n "$_slugdir" && -d "$_slugdir" ]]; then /usr/bin/printf '%s' "$_slugdir"; return 0; fi
+  if [[ -n "$_verdir"  && -d "$_verdir"  ]]; then /usr/bin/printf '%s' "$_verdir";  return 0; fi
+  /usr/bin/printf '%s' "${_slugdir:-$_verdir}"
+}
+
+# Emit the operator attestation the SURFACE clause requires. Sets STATE_AI_EMIT.
+# Never aborts the run: an unwritable event log must not block a close the operator
+# has legitimately attested — but the outcome is RECORDED either way, so "attested
+# and durably traced" and "attested, trace failed" stay distinguishable outputs.
+_ai_emit_attestation() {
+  local _cause="$1" _slug="${STATE_MILESTONE_SLUG:-$VERSION}"
+  if [[ ! -x "$AI_EVENT_WRITER" ]]; then
+    STATE_AI_EMIT="failed:writer-not-executable"
+    return 0
+  fi
+  if [[ "$MODE" == "dry-run" ]]; then
+    STATE_AI_EMIT="dry-run"
+    return 0
+  fi
+  if "$AI_EVENT_WRITER" --version "$_slug" --stage 13 \
+       --event-type decision --event-subtype empirical-verification-finding \
+       --actor operator --subject "milestone:#${MILESTONE}" \
+       --payload "procedure-7a-attestation; state:${STATE_AI_GATE}; attested-cause:${_cause}" \
+       >/dev/null 2>&1; then
+    STATE_AI_EMIT="emitted"
+  else
+    STATE_AI_EMIT="failed:writer-returned-nonzero"
+  fi
+  return 0
+}
+
+# Render the Procedure 7a cell for Verification-table row 6 FROM THE GLOBALS Phase
+# 12.9 set. A pure projection with no I/O and no predicate evaluation — that is the
+# contract, not an implementation detail. phase_run_verification runs AFTER the
+# milestone close, so any recomputation here would produce a verdict the close was
+# never gated on: the #4439 ordering defect reintroduced one phase later, where it
+# is harder to see. Self-test group AI arm (K) mutates STATE_AI_GATE and asserts the
+# cell follows the global, plus asserts this file's own text carries no predicate
+# evaluation inside phase_run_verification.
+_ai_verification_cell() {
+  local _attest=" (attestation required)"
+  [[ -n "$ATTEST_ACTION_ITEMS" ]] && _attest=" (attested: ${ATTEST_ACTION_ITEMS}; emit=${STATE_AI_EMIT})"
+  case "${STATE_AI_GATE:-}" in
+    RESOLVED)      /usr/bin/printf 'RESOLVED (%s/%s)' "$STATE_AI_TOTAL" "$STATE_AI_TOTAL" ;;
+    UNRESOLVED)    /usr/bin/printf 'BLOCKED (%s unresolved of %s)' "$STATE_AI_UNRES" "$STATE_AI_TOTAL" ;;
+    NOT-RECORDED)  /usr/bin/printf 'SURFACED — NOT-RECORDED%s' "$_attest" ;;
+    EMPTY-LEDGER)  /usr/bin/printf 'SURFACED — EMPTY-LEDGER%s' "$_attest" ;;
+    *)             /usr/bin/printf 'UNVERIFIED (Procedure 7a gate did not run before this phase)' ;;
+  esac
+}
+
+phase_action_item_gate() {
+  # Evaluate FIRST, in every mode. The report carries a real verdict even on a
+  # preview run, and the mode branches below decide only what to DO about it.
+  local _dir _res _state _total _unres
+  _dir="$(_ai_resolve_dir)"
+  _res="$(_ai_eval_predicate "$_dir")"
+  _state="${_res%% *}"; _res="${_res#* }"
+  _total="${_res%% *}"; _unres="${_res##* }"
+
+  STATE_AI_DIR="$_dir"
+  STATE_AI_GATE="$_state"
+  STATE_AI_TOTAL="$_total"
+  STATE_AI_UNRES="$_unres"
+  STATE_AI_EMIT="n/a"
+
+  # Is a BLOCK verdict allowed to halt the run at this call site?
+  local _blocking=0
+  [[ "$MODE" == "apply" && "$NO_MERGE" -eq 0 && "$STATE_MILESTONE_STATE" != "closed" ]] && _blocking=1
+
+  local _mode_note=""
+  if [[ "$MODE" == "dry-run" ]]; then
+    _mode_note=" — would BLOCK at --apply"
+  elif [[ "$NO_MERGE" -eq 1 ]]; then
+    _mode_note=" — recorded, not blocking: --no-merge defers the milestone close"
+  elif [[ "$STATE_MILESTONE_STATE" == "closed" ]]; then
+    _mode_note=" — recorded, not blocking: milestone already closed. THIS IS THE #304 SHAPE — the close preceded the verdict; the rows below were never gated"
+  fi
+
+  case "$_state" in
+    RESOLVED)
+      mark_phase "action_item_gate" "PASS" "Procedure 7a: RESOLVED (${_unres}/${_total} unresolved of ${_total} recorded) — every action item dispositioned before milestone close"
+      return 0
+      ;;
+    UNRESOLVED)
+      # Enumerate the unresolved rows so the operator can act without re-reading
+      # the ledger. Column-addressed exactly as the predicate is.
+      local _rows
+      _rows="$(/usr/bin/awk -F' [|] ' '
+          $1 ~ /^\| *AI-[0-9]+ *$/ { s=$11; gsub(/ /,"",s);
+            if (s=="open" || s=="in-flight") {
+              id=$1; gsub(/[| ]/,"",id); ow=$6; gsub(/^ +| +$/,"",ow);
+              tg=$9; gsub(/^ +| +$/,"",tg);
+              printf "%s(owner:%s; trigger:%s) ", id, ow, tg } }' \
+          "${_dir}/action-items.md" 2>/dev/null || true)"
+      [[ -z "$_rows" ]] && _rows="(row enumeration returned empty — read ${_dir}/action-items.md directly) "
+      if [[ "$_blocking" -eq 1 ]]; then
+        mark_phase "action_item_gate" "FAIL" "Procedure 7a HARD GATE: UNRESOLVED — ${_unres} of ${_total} action items still open/in-flight; milestone close BLOCKED until each is transitioned to done / cancelled / superseded: ${_rows}"
+        return 3
+      fi
+      mark_phase "action_item_gate" "WARN" "Procedure 7a: UNRESOLVED — ${_unres} of ${_total} action items still open/in-flight${_mode_note}: ${_rows}"
+      return 0
+      ;;
+    NOT-RECORDED|EMPTY-LEDGER)
+      local _cause_text
+      if [[ "$_state" == "NOT-RECORDED" ]]; then
+        _cause_text="No action-item ledger exists for this release (looked in ${_dir}). Either no commitments were made, or the Procedure 4a emit step was skipped."
+      else
+        _cause_text="The action-item ledger at ${_dir} exists and carries zero AI rows — initialized, never appended. Either no commitments were made, or the Procedure 4a emit step was skipped."
+      fi
+      if [[ -n "$ATTEST_ACTION_ITEMS" ]]; then
+        case "$ATTEST_ACTION_ITEMS" in
+          no-commitments|emit-skipped) ;;
+          *)
+            mark_phase "action_item_gate" "FAIL" "Procedure 7a: --attest-action-items '${ATTEST_ACTION_ITEMS}' is not a licensed cause; the closed enum is no-commitments | emit-skipped (state ${_state})"
+            return 3
+            ;;
+        esac
+        _ai_emit_attestation "$ATTEST_ACTION_ITEMS"
+        mark_phase "action_item_gate" "WARN" "Procedure 7a: ${_state} — SURFACED, attested by operator as '${ATTEST_ACTION_ITEMS}' (attestation-emitted=${STATE_AI_EMIT}); ${_cause_text}"
+        return 0
+      fi
+      if [[ "$_blocking" -eq 1 ]]; then
+        mark_phase "action_item_gate" "FAIL" "Procedure 7a HARD GATE: ${_state} — SURFACE states require explicit operator attestation to pass, and none was supplied. ${_cause_text} Re-run with --attest-action-items no-commitments (the release genuinely made none) or --attest-action-items emit-skipped (the emit step was missed); the attestation is itself emitted as a decision / empirical-verification-finding row. Milestone close BLOCKED until then"
+        return 3
+      fi
+      mark_phase "action_item_gate" "WARN" "Procedure 7a: ${_state} — SURFACED, unattested${_mode_note}. ${_cause_text} Pass --attest-action-items no-commitments|emit-skipped to clear it"
+      return 0
+      ;;
+  esac
+
+  # Unreachable: _ai_eval_predicate emits one of four states. Fail loudly rather
+  # than falling through to a silent 0 — an unrecognised state is the vacuity
+  # shape this whole phase exists to refuse.
+  mark_phase "action_item_gate" "FAIL" "Procedure 7a: predicate returned an unrecognised STATE '${_state}' — refusing to grade the close on a verdict this gate cannot read"
+  return 3
+}
+
 # ─── Phase 13: post_close_milestone (Hub Tier-1 mechanical) ──────────────────
 
 phase_post_close_milestone() {
@@ -4065,6 +4391,16 @@ phase_run_verification() {
     fi
   fi
 
+  # Row 6 — Procedure 7a composition clause (hub-spoke-bridge.md § Procedure 7a):
+  # "Procedure 7 Step 4's Verification table SHALL include a row carrying the
+  # resolved STATE, not a bare PASS/FAIL."
+  #
+  # IT RENDERS THE GLOBALS PHASE 12.9 SET. It does NOT recompute. This is the whole
+  # point: this phase runs AFTER the milestone close, so a verdict re-derived here
+  # would be a verdict the close was never gated on — the exact ordering defect
+  # #4439 exists to close, reintroduced one phase later and harder to see.
+  local v_ai; v_ai="$(_ai_verification_cell)"
+
   VERIFICATION_RESULTS=$(/bin/cat <<EOF
 | # | Check | Method | Result |
 |---|-------|--------|--------|
@@ -4073,10 +4409,11 @@ phase_run_verification() {
 | 3 | Milestone closed | gh api milestones/${MILESTONE} | ${v_milestone} |
 | 4 | RELEASE_LOG row VERIFIED (corroborated by release-PR merge to main) | grep + gh pr view ${PR_NUMBER} | ${v_log} |
 | 5 | All release issues closed | gh issue list --milestone | ${v_subs} |
+| 6 | Action items resolved (Procedure 7a) | Phase 12.9 verdict, rendered not recomputed | ${v_ai} |
 EOF
 )
 
-  mark_phase "run_verification" "PASS" "5 universal checks evaluated"
+  mark_phase "run_verification" "PASS" "6 universal checks evaluated"
 
   # ── Gate-passage proof: three-rung target ladder (#3819) ───────────────────
   #
@@ -7372,7 +7709,7 @@ STUB
     #     --apply, predict at --dry-run). ONE fixture — the builder removed, so
     #     delegation cannot answer — driven in BOTH modes, so the mode is provably
     #     the variable under test. The dry-run arm is the #4765 regression guard: a
-    #     return 3 here would abort the run and the FOURTEEN phases after 9.95 would
+    #     return 3 here would abort the run and EVERY phase after 9.95 would
     #     never enumerate, re-breaking the dry-run review gate #4765 just restored.
     #     The apply arm is the anti-vacuity half: it proves the fixture really is
     #     broken and that the guard still blocks a real close.
@@ -7381,7 +7718,7 @@ STUB
     local _rp_rc=0
     MODE="dry-run"; phase_rebuild_skill_packages >/dev/null 2>&1 || _rp_rc=$?
     if [[ $_rp_rc -ne 0 ]]; then
-      echo "FAIL: C1 — an undeterminable set under --dry-run must NOT abort (rc $_rp_rc); the 14 phases after 9.95 would never enumerate (#4765)"; failures=$((failures+1))
+      echo "FAIL: C1 — an undeterminable set under --dry-run must NOT abort (rc $_rp_rc); every phase after 9.95 would never enumerate (#4765)"; failures=$((failures+1))
     fi
     if [[ "$(get_phase rebuild_skill_packages | /usr/bin/cut -d'|' -f1)" != "WARN" ]]; then
       echo "FAIL: C1 — an undeterminable set under --dry-run must mark WARN, not a green outcome, got '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1))
@@ -8538,6 +8875,367 @@ PY
   OUTPUT="$_dr_saved_out"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # ── Test AI: phase_action_item_gate (Procedure 7a HARD GATE, #4439) ─────────
+  #
+  # THE ARM SET IS THE ONLY AUTOMATED EXECUTION THIS GATE EVER GETS. CI runs no
+  # apply-mode close at all — `--apply` appears in zero workflow files, and every
+  # CI invocation of this script is --check-paths or --self-test — so the close
+  # dispatch path is never exercised outside this block. That is why the arms
+  # execute the shipped dispatch text rather than modelling it.
+  #
+  # WHAT MAKES THE SET NON-VACUOUS, stated as the property rather than the count:
+  # arms (A) and (B) are each other's control over one differential harness where
+  # only the ledger changes — a gate that never blocks fails (A), a gate that
+  # always blocks fails (B), and a gate reading the wrong path resolves
+  # NOT-RECORDED for both and fails BOTH. Arm (F) closes the gap that shape alone
+  # cannot: it EXECUTES the two dispatch lines lifted verbatim from this file and
+  # carries a constructed `|| true` degenerate as its negative control, because a
+  # dispatch line at the correct POSITION carrying `|| true` passes every
+  # position-only assertion while blocking nothing. Arms assert the VERDICT GLOBAL
+  # (STATE_AI_GATE), not the detail prose — the detail is a rendering, and the
+  # global is what row 6 and every downstream consumer read.
+  local _ai_s_hs="$HUB_STATE_PATH" _ai_s_mode="$MODE" _ai_s_ver="$VERSION"
+  local _ai_s_slug="$STATE_MILESTONE_SLUG" _ai_s_mstate="$STATE_MILESTONE_STATE"
+  local _ai_s_nomerge="$NO_MERGE" _ai_s_attest="$ATTEST_ACTION_ITEMS"
+  local _ai_s_writer="$AI_EVENT_WRITER" _ai_s_ms="$MILESTONE"
+  local _ai_tmp; _ai_tmp="$(/usr/bin/mktemp -d -t aigate-selftest.XXXXXX)"
+  HUB_STATE_PATH="$_ai_tmp/hub-state"
+  VERSION="v9.99"; MILESTONE="999"; NO_MERGE=0; ATTEST_ACTION_ITEMS=""
+  STATE_MILESTONE_STATE="open"
+  # MODE is the variable under test in arms (H) and (J); every other arm needs the
+  # blocking mode explicitly, because the script's DEFAULT is dry-run and a dry-run
+  # gate never returns non-zero. Leaving it defaulted made every blocking arm go
+  # green-by-mode rather than green-by-behaviour — caught by running the set.
+  MODE="apply"
+  /bin/mkdir -p "$HUB_STATE_PATH/ai-unresolved" "$HUB_STATE_PATH/ai-resolved" \
+                "$HUB_STATE_PATH/ai-notrecorded" "$HUB_STATE_PATH/ai-empty" \
+                "$HUB_STATE_PATH/ai-decoy"
+
+  # Fixtures. Quoted heredocs — the escaped pipe and the em-dashes are content.
+  /bin/cat > "$HUB_STATE_PATH/ai-unresolved/action-items.md" <<'AIFIX'
+---
+schema_version: "v1.0"
+---
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AI-001 | 2026-08-14T10:00:00Z | 5 | #5379 | verification | operator | dispose the rows \| then carry forward | stage-boundary | before Stage 13 close | issue:#4439 | open | — | — |
+| AI-002 | 2026-08-14T10:05:00Z | 6 | #5380 | reminder | hub | rebuild the packages | event | after merge | file:packages | done | 2026-08-14T11:00:00Z | merged |
+AIFIX
+  /bin/cat > "$HUB_STATE_PATH/ai-resolved/action-items.md" <<'AIFIX'
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AI-001 | 2026-08-14T10:00:00Z | 5 | #1 | reminder | hub | a | event | after merge | file:a | done | 2026-08-14T11:00:00Z | landed |
+| AI-002 | 2026-08-14T10:01:00Z | 5 | #2 | cleanup | hub | b | event | after merge | file:b | cancelled | 2026-08-14T11:01:00Z | not needed |
+| AI-003 | 2026-08-14T10:02:00Z | 5 | #3 | deferred-edit | hub | c | event | after merge | file:c | superseded | 2026-08-14T11:02:00Z | see AI-002 |
+AIFIX
+  # Decoy: every row TERMINAL, but two carry the literal words `open` and
+  # `in-flight` in trigger_detail. A row-pattern probe reports 2 unresolved here;
+  # a column-addressed one reports 0. This is the false-positive control the
+  # Procedure 7a probe note names, and it is why the gate addresses $11.
+  /bin/cat > "$HUB_STATE_PATH/ai-decoy/action-items.md" <<'AIFIX'
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AI-010 | 2026-08-14T10:00:00Z | 5 | #1 | reminder | hub | x | event | open | file:x | done | 2026-08-14T11:00:00Z | ok |
+| AI-011 | 2026-08-14T10:01:00Z | 5 | #2 | cleanup | hub | y | event | in-flight | file:y | cancelled | 2026-08-14T11:01:00Z | ok |
+AIFIX
+  /bin/cat > "$HUB_STATE_PATH/ai-empty/action-items.md" <<'AIFIX'
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+AIFIX
+
+  # $AI_EVENT_WRITER stub: appends its full argv to a per-arm witness file. The
+  # attestation EMISSION is a spec obligation ("that attestation is itself
+  # emitted"), so it is asserted on the witness CONTENT, never on the phase record.
+  local _ai_witness="$_ai_tmp/attest-witness.txt"
+  # A shell function is not an executable file, and the phase guards its writer
+  # with `[[ -x ]]`, so the stub is a real file — the `_mt_stub` GH-stub idiom this
+  # suite already uses in 15+ arms.
+  /bin/cat > "$_ai_tmp/writer-stub" <<AISTUB
+#!/bin/sh
+printf '%s\n' "\$*" >> "$_ai_witness"
+exit 0
+AISTUB
+  /bin/chmod +x "$_ai_tmp/writer-stub"
+  AI_EVENT_WRITER="$_ai_tmp/writer-stub"
+
+  # Drive the gate against one fixture, leaving the phase record and the STATE_AI_*
+  # globals in place for assertion.
+  #
+  # IT REPORTS THROUGH A GLOBAL, NOT THROUGH STDOUT, AND THAT IS DELIBERATE. Calling
+  # this in `$( )` would run the whole phase in a subshell, so every global it sets
+  # — STATE_AI_GATE above all — would be discarded on return and each arm below
+  # would assert against a stale value from the previous arm. That is the
+  # lost-in-the-subshell defect, and it produces arms that agree with whatever ran
+  # last rather than with what they drove.
+  _ai_drive() {
+    _AI_RC=0
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    STATE_MILESTONE_SLUG="$1"
+    phase_action_item_gate >/dev/null 2>&1 || _AI_RC=$?
+  }
+
+  local _ai_rc _ai_rec
+
+  # (A) BLOCK — one open row, --apply. The close must become unreachable.
+  _ai_drive ai-unresolved; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-A — an UNRESOLVED ledger at --apply must return 3 (the dispatcher's guard is what halts the run), got rc $_ai_rc"; failures=$((failures+1)); }
+  [[ "$STATE_AI_GATE" == "UNRESOLVED" ]] || { echo "FAIL: AI-A — STATE_AI_GATE must be UNRESOLVED, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  [[ "$STATE_AI_TOTAL" -eq 2 && "$STATE_AI_UNRES" -eq 1 ]] || { echo "FAIL: AI-A — counts must be TOTAL=2 UNRES=1 (the escaped pipe must NOT shift the status column), got TOTAL=$STATE_AI_TOTAL UNRES=$STATE_AI_UNRES"; failures=$((failures+1)); }
+  _ai_rec="$(get_phase action_item_gate)"
+  [[ "$_ai_rec" == FAIL\|* ]] || { echo "FAIL: AI-A — the phase must record FAIL, got '$_ai_rec'"; failures=$((failures+1)); }
+  /usr/bin/grep -qE 'AI-[0-9]+' <<<"$_ai_rec" || { echo "FAIL: AI-A — the FAIL detail must ENUMERATE the unresolved rows so the operator can act without re-reading the ledger, got '$_ai_rec'"; failures=$((failures+1)); }
+
+  # (B) PASS — three terminal rows. The close must stay reachable. (A)'s control.
+  _ai_drive ai-resolved; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-B — a RESOLVED ledger must return 0, got rc $_ai_rc"; failures=$((failures+1)); }
+  [[ "$STATE_AI_GATE" == "RESOLVED" ]] || { echo "FAIL: AI-B — STATE_AI_GATE must be RESOLVED, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  [[ "$STATE_AI_TOTAL" -eq 3 && "$STATE_AI_UNRES" -eq 0 ]] || { echo "FAIL: AI-B — counts must be TOTAL=3 UNRES=0, got TOTAL=$STATE_AI_TOTAL UNRES=$STATE_AI_UNRES"; failures=$((failures+1)); }
+  [[ "$(get_phase action_item_gate)" == PASS\|* ]] || { echo "FAIL: AI-B — a RESOLVED ledger must record PASS, got '$(get_phase action_item_gate)'"; failures=$((failures+1)); }
+
+  # (B2) COLUMN-ADDRESSING — the false-positive control. Every row is terminal;
+  #      two carry `open` / `in-flight` in trigger_detail. A row-pattern probe
+  #      reports 2 unresolved. Without this arm the gate could ship a probe that
+  #      blocks a clean close, which is the shape that gets a gate switched off.
+  _ai_drive ai-decoy; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-B2 — a terminal ledger carrying the literals 'open'/'in-flight' in trigger_detail must NOT block (column-addressed, not row-matched), got rc $_ai_rc"; failures=$((failures+1)); }
+  [[ "$STATE_AI_GATE" == "RESOLVED" && "$STATE_AI_UNRES" -eq 0 ]] || { echo "FAIL: AI-B2 — decoy fixture must resolve RESOLVED/0, got '$STATE_AI_GATE'/$STATE_AI_UNRES"; failures=$((failures+1)); }
+
+  # (C) NOT-RECORDED, UNATTESTED — the state milestone #304 was in at close. The
+  #     spec's decision table row 1 ends "requires explicit operator attestation
+  #     to pass", so an unattested SURFACE state does NOT pass.
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-C — an UNATTESTED NOT-RECORDED state at --apply must NOT pass (this is the #304 state; a silent pass is the defect), got rc $_ai_rc"; failures=$((failures+1)); }
+  [[ "$STATE_AI_GATE" == "NOT-RECORDED" ]] || { echo "FAIL: AI-C — STATE_AI_GATE must be NOT-RECORDED, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  local _ai_c_state="$STATE_AI_GATE"
+  /usr/bin/grep -qF -- '--attest-action-items' <<<"$(get_phase action_item_gate)" || { echo "FAIL: AI-C — the FAIL detail must NAME the remedy flag, or the gate is one an operator routes around"; failures=$((failures+1)); }
+
+  # (D) EMPTY-LEDGER, UNATTESTED — same posture, distinct STATE.
+  _ai_drive ai-empty; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-D — an UNATTESTED EMPTY-LEDGER state at --apply must NOT pass, got rc $_ai_rc"; failures=$((failures+1)); }
+  [[ "$STATE_AI_GATE" == "EMPTY-LEDGER" ]] || { echo "FAIL: AI-D — STATE_AI_GATE must be EMPTY-LEDGER, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
+
+  # (E) DISCRIMINATOR — asserted on the VERDICT, not on the prose. The two SURFACE
+  #     states must not collapse into one, or the gate is 2-valued again. Comparing
+  #     detail strings would pass on any two distinct sentences; comparing the
+  #     globals compares the thing row 6 and every consumer actually read.
+  [[ "$_ai_c_state" != "$STATE_AI_GATE" ]] || { echo "FAIL: AI-E — NOT-RECORDED and EMPTY-LEDGER must resolve DISTINCT STATE_AI_GATE values; both read '$STATE_AI_GATE' and the 3-valued gate has collapsed"; failures=$((failures+1)); }
+  [[ "$(_ai_verification_cell)" == *"EMPTY-LEDGER"* ]] || { echo "FAIL: AI-E — the row-6 cell must carry the resolved STATE, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
+
+  # (C'/D') ATTESTED SURFACE — passes, AND the attestation is EMITTED. The spec
+  #         makes the emission part of the contract: "that attestation is itself
+  #         emitted ... so a skipped emit step leaves an auditable trace rather
+  #         than a silent pass." Asserted on the witness CONTENT.
+  : > "$_ai_witness"
+  ATTEST_ACTION_ITEMS="no-commitments"
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-C2 — an ATTESTED NOT-RECORDED state must pass, got rc $_ai_rc"; failures=$((failures+1)); }
+  [[ "$(get_phase action_item_gate)" == WARN\|* ]] || { echo "FAIL: AI-C2 — an attested SURFACE state records WARN (surfaced, not silently green), got '$(get_phase action_item_gate)'"; failures=$((failures+1)); }
+  [[ "$STATE_AI_EMIT" == "emitted" ]] || { echo "FAIL: AI-C2 — the attestation must be EMITTED, STATE_AI_EMIT='$STATE_AI_EMIT'"; failures=$((failures+1)); }
+  [[ -s "$_ai_witness" ]] || { echo "FAIL: AI-C2 — the event-writer witness is empty; the attestation row was never emitted"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'empirical-verification-finding' "$_ai_witness" || { echo "FAIL: AI-C2 — the emitted row must carry the spec's subtype (decision / empirical-verification-finding), witness: $(/bin/cat "$_ai_witness")"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'attested-cause:no-commitments' "$_ai_witness" || { echo "FAIL: AI-C2 — the emitted row must carry the ATTESTED CAUSE; the attestation IS the discriminator between 'no commitments' and 'emit skipped'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF -- '--actor operator' "$_ai_witness" || { echo "FAIL: AI-C2 — the attestation is the OPERATOR's, so actor must be operator"; failures=$((failures+1)); }
+  : > "$_ai_witness"
+  ATTEST_ACTION_ITEMS="emit-skipped"
+  _ai_drive ai-empty; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-D2 — an ATTESTED EMPTY-LEDGER state must pass, got rc $_ai_rc"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'attested-cause:emit-skipped' "$_ai_witness" || { echo "FAIL: AI-D2 — the second cause must round-trip into the emitted row, witness: $(/bin/cat "$_ai_witness")"; failures=$((failures+1)); }
+
+  # (E2) ATTESTATION IS A CLOSED ENUM — any-string attestation would let the gate
+  #      be cleared by a typo, which is attestation-shaped noise, not attestation.
+  ATTEST_ACTION_ITEMS="yes"
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-E2 — an unlicensed attestation cause must NOT clear a SURFACE state, got rc $_ai_rc"; failures=$((failures+1)); }
+
+  # (L) ATTESTATION DOES NOT CLEAR AN OPEN ROW. An unresolved commitment is
+  #     dispositioned (done / cancelled / superseded), never attested away. Without
+  #     this arm the new flag would be a universal gate bypass.
+  ATTEST_ACTION_ITEMS="no-commitments"
+  _ai_drive ai-unresolved; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-L — --attest-action-items must NOT clear an UNRESOLVED verdict; an open row is dispositioned, not attested away (rc $_ai_rc)"; failures=$((failures+1)); }
+  ATTEST_ACTION_ITEMS=""
+
+  # (H) DRY-RUN — evaluates, records, never halts, and says what it WOULD do.
+  MODE="dry-run"
+  _ai_drive ai-unresolved; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-H — --dry-run must never return non-zero (a preview run must not abort), got rc $_ai_rc"; failures=$((failures+1)); }
+  [[ "$STATE_AI_GATE" == "UNRESOLVED" ]] || { echo "FAIL: AI-H — --dry-run must still EVALUATE (record a real verdict), got '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'would BLOCK at --apply' <<<"$(get_phase action_item_gate)" || { echo "FAIL: AI-H — the dry-run detail must name the condition that FAILS at --apply (the :3385 precedent), got '$(get_phase action_item_gate)'"; failures=$((failures+1)); }
+  MODE="apply"
+
+  # (J) --no-merge — the close is already deferred, so blocking would abort a run
+  #     whose close was never going to happen.
+  NO_MERGE=1
+  _ai_drive ai-unresolved; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-J — under --no-merge the gate records rather than blocks (post_close_milestone already DEFERS), got rc $_ai_rc"; failures=$((failures+1)); }
+  [[ "$STATE_AI_GATE" == "UNRESOLVED" ]] || { echo "FAIL: AI-J — --no-merge must still evaluate, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  NO_MERGE=0
+
+  # (I) IDEMPOTENT RE-RUN over an already-closed milestone: record, do not block —
+  #     and NAME it as the originating incident's shape, so a re-run of a run that
+  #     closed before the verdict becomes a detector for exactly that.
+  STATE_MILESTONE_STATE="closed"
+  _ai_drive ai-unresolved; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-I — an idempotent re-run over an already-closed milestone must not fail, got rc $_ai_rc"; failures=$((failures+1)); }
+  /usr/bin/grep -qF '#304 SHAPE' <<<"$(get_phase action_item_gate)" || { echo "FAIL: AI-I — an UNRESOLVED verdict over an ALREADY-CLOSED milestone is the close-before-verdict shape and the detail must say so, got '$(get_phase action_item_gate)'"; failures=$((failures+1)); }
+  STATE_MILESTONE_STATE="open"
+
+  # (K) ROW 6 RENDERS, NEVER RECOMPUTES. phase_run_verification runs AFTER the
+  #     close; a verdict re-derived there was never the verdict the close was
+  #     gated on. Two limbs: the projection FOLLOWS a mutated global (behavioural),
+  #     and phase_run_verification's own text contains no predicate evaluation
+  #     (structural — the limb that survives a later refactor).
+  STATE_AI_GATE="RESOLVED"; STATE_AI_TOTAL=7; STATE_AI_UNRES=0; ATTEST_ACTION_ITEMS=""
+  [[ "$(_ai_verification_cell)" == "RESOLVED (7/7)" ]] || { echo "FAIL: AI-K — the row-6 cell must follow the GLOBAL Phase 12.9 set, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
+  STATE_AI_GATE="UNRESOLVED"; STATE_AI_UNRES=4
+  [[ "$(_ai_verification_cell)" == "BLOCKED (4 unresolved of 7)" ]] || { echo "FAIL: AI-K — mutating STATE_AI_GATE must change the cell; it does not, so the cell is not reading the pre-close verdict, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
+  STATE_AI_GATE=""
+  [[ "$(_ai_verification_cell)" == UNVERIFIED* ]] || { echo "FAIL: AI-K — an unset verdict must render UNVERIFIED, never a green cell, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
+  local _ai_verifun
+  _ai_verifun="$(/usr/bin/awk '/^phase_run_verification\(\) \{$/{f=1} f{print} f&&/^\}$/{exit}' "${BASH_SOURCE[0]}")"
+  [[ -n "$_ai_verifun" ]] || { echo "FAIL: AI-K — could not extract phase_run_verification from this file; the structural limb would pass without asserting anything"; failures=$((failures+1)); }
+  if /usr/bin/grep -qF '_ai_eval_predicate' <<<"$_ai_verifun"; then
+    echo "FAIL: AI-K — phase_run_verification must NOT evaluate the Procedure 7a predicate; it runs after the close, so a recomputed verdict is not the one the close was gated on"; failures=$((failures+1))
+  fi
+  # Specificity on that extraction: the needle IS present in the phase that is
+  # supposed to carry it, so a zero above is a property of the subject and not of
+  # a broken extractor.
+  local _ai_gatefun
+  _ai_gatefun="$(/usr/bin/awk '/^phase_action_item_gate\(\) \{$/{f=1} f{print} f&&/^\}$/{exit}' "${BASH_SOURCE[0]}")"
+  /usr/bin/grep -qF '_ai_eval_predicate' <<<"$_ai_gatefun" || { echo "FAIL: AI-K — the extractor found no predicate call in phase_action_item_gate either; the arm above is not reading what it claims to read"; failures=$((failures+1)); }
+
+  # (F) DISPATCH WIRING — THE ARM THE DRAFTED FIX COULD NOT REACH.
+  #
+  #     Every arm above proves the gate RETURNS 3. None of them proves that return
+  #     is WIRED TO THE CLOSE, because self_test calls phases directly and the
+  #     dispatch block is main-body code below the argument-parsing banner —
+  #     structurally outside every arm's reach. Constructed and measured: three
+  #     dispatch variants (guarded / `|| true` / bare) all satisfy a
+  #     position-only ordering assertion.
+  #
+  #     This arm closes that by EXECUTING the two shipped dispatch lines, lifted
+  #     verbatim from this file's own text, with the two phases stubbed and a
+  #     witness on the close. The `|| true` degenerate is the negative control: if
+  #     the harness cannot tell the honest form from it, the arm fails and says so.
+  local _ai_gate_ln _ai_close_ln _ai_gate_txt _ai_close_txt
+  _ai_gate_ln="$(/usr/bin/grep -nE '^phase_action_item_gate ' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
+  _ai_close_ln="$(/usr/bin/grep -nE '^phase_post_close_milestone ' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
+  if ! [[ "$_ai_gate_ln" =~ ^[0-9]+$ && "$_ai_close_ln" =~ ^[0-9]+$ ]]; then
+    echo "FAIL: AI-F anti-vacuity — a dispatch needle did not resolve to exactly ONE top-level line (gate='$_ai_gate_ln' close='$_ai_close_ln'); the arm would otherwise pass without asserting anything"; failures=$((failures+1))
+  else
+    [[ "$_ai_gate_ln" -lt "$_ai_close_ln" ]] || { echo "FAIL: AI-F — the Procedure 7a gate (line $_ai_gate_ln) must be dispatched BEFORE the milestone close (line $_ai_close_ln); 7a's own trigger clause requires it"; failures=$((failures+1)); }
+    _ai_gate_txt="$(/usr/bin/sed -n "${_ai_gate_ln}p" "${BASH_SOURCE[0]}")"
+    _ai_close_txt="$(/usr/bin/sed -n "${_ai_close_ln}p" "${BASH_SOURCE[0]}")"
+
+    # Execute the two lines with both phases stubbed. $1 = gate line text,
+    # $2 = the gate stub's return code, $3 = close witness path. Emits the
+    # dispatch block's own exit status.
+    _ai_exec_dispatch() {
+      local _dl="$1" _drc="$2" _dw="$3" _dst=0
+      (
+        AI_DISPATCH_RC="$_drc"; AI_DISPATCH_W="$_dw"
+        generate_report() { :; }
+        phase_action_item_gate() { return "$AI_DISPATCH_RC"; }
+        phase_post_close_milestone() { /usr/bin/printf 'CLOSED\n' >> "$AI_DISPATCH_W"; return 0; }
+        eval "$_dl"
+        eval "$_ai_close_txt"
+        exit 0
+      ) || _dst=$?
+      /usr/bin/printf '%s' "$_dst"
+    }
+
+    # F-honest-block: gate returns 3 on the SHIPPED line -> close never fires.
+    local _ai_w1="$_ai_tmp/w-honest-block.txt" _ai_w2="$_ai_tmp/w-honest-pass.txt" _ai_w3="$_ai_tmp/w-degenerate.txt"
+    local _ai_dst
+    _ai_dst="$(_ai_exec_dispatch "$_ai_gate_txt" 3 "$_ai_w1")"
+    [[ "$_ai_dst" -eq 3 ]] || { echo "FAIL: AI-F1 — the SHIPPED dispatch line must propagate the gate's 3 and halt the run, got exit $_ai_dst"; failures=$((failures+1)); }
+    if [[ -e "$_ai_w1" ]]; then
+      echo "FAIL: AI-F1 — the milestone close FIRED behind a BLOCKING gate; the gate's return is not wired to the close: $(/bin/cat "$_ai_w1")"; failures=$((failures+1))
+    fi
+    # F-honest-pass: the SENSITIVITY arm. It proves the harness CAN fire the
+    # close, so F1's absence is caused by the guard and not by an inert harness —
+    # the "a zero whose control also returns zero is a broken probe" case.
+    _ai_dst="$(_ai_exec_dispatch "$_ai_gate_txt" 0 "$_ai_w2")"
+    [[ "$_ai_dst" -eq 0 ]] || { echo "FAIL: AI-F2 — a PASSING gate must leave the run running, got exit $_ai_dst"; failures=$((failures+1)); }
+    /usr/bin/grep -qF 'CLOSED' "$_ai_w2" 2>/dev/null || { echo "FAIL: AI-F2 sensitivity — the harness never fired the close even on a PASSING gate; AI-F1's clean result would be meaningless"; failures=$((failures+1)); }
+    # F-degenerate: the NEGATIVE CONTROL. Same position, same phase name, guard
+    # replaced by `|| true`. The close MUST fire here. If it does not, this arm
+    # cannot discriminate a fail-closed gate from a no-op one and says so rather
+    # than shipping green.
+    _ai_dst="$(_ai_exec_dispatch 'phase_action_item_gate || true' 3 "$_ai_w3")"
+    /usr/bin/grep -qF 'CLOSED' "$_ai_w3" 2>/dev/null || { echo "FAIL: AI-F3 negative control — a '|| true' dispatch line did NOT let the close through, so this arm cannot tell a fail-closed gate from a no-op one; the whole (F) set is uninformative"; failures=$((failures+1)); }
+  fi
+
+  # (F4) GUARDED-FORM INVARIANT over the whole dispatch block. A bare
+  #      `phase_action_item_gate` with no guard is invisible to the pre-existing
+  #      dispatch<->record cross-check, whose parse is `^phase_[a-z0-9_]+ \|\|`.
+  #      Assert the FORM, not just the presence: every dispatched phase carries
+  #      the fail-closed guard.
+  local _ai_disp_n _ai_guard_n _ai_unguarded
+  _ai_disp_n="$(/usr/bin/grep -cE '^phase_[a-z0-9_]+ ' "${BASH_SOURCE[0]}" || true)"; _ai_disp_n="${_ai_disp_n:-0}"
+  _ai_guard_n="$(/usr/bin/awk '/^phase_[a-z0-9_]+ / && index($0, "|| { generate_report; exit ") {n++} END {print n+0}' "${BASH_SOURCE[0]}")"
+  if [[ "$_ai_disp_n" -lt 25 ]]; then
+    echo "FAIL: AI-F4 anti-vacuity — the dispatch parse found only ${_ai_disp_n} lines; the guarded-form invariant would be vacuous"; failures=$((failures+1))
+  fi
+  if [[ "$_ai_disp_n" -ne "$_ai_guard_n" ]]; then
+    _ai_unguarded="$(/usr/bin/awk '/^phase_[a-z0-9_]+ / && !index($0, "|| { generate_report; exit ") {print $1}' "${BASH_SOURCE[0]}" | /usr/bin/tr "\n" " ")"
+    echo "FAIL: AI-F4 — ${_ai_guard_n}/${_ai_disp_n} dispatch lines carry the fail-closed guard; an unguarded line runs a phase whose non-zero return halts nothing: ${_ai_unguarded}"; failures=$((failures+1))
+  fi
+  # Specificity: the guarded-form filter must REJECT an unguarded line, or the
+  # equality above is satisfied by a filter that matches everything.
+  local _ai_specimen; _ai_specimen="$(/usr/bin/awk 'BEGIN{print "phase_zz_probe || true"}' | /usr/bin/awk '/^phase_[a-z0-9_]+ / && index($0, "|| { generate_report; exit ") {n++} END {print n+0}')"
+  [[ "$_ai_specimen" -eq 0 ]] || { echo "FAIL: AI-F4 specificity — the guarded-form filter matched a '|| true' line; it is not reading the guard"; failures=$((failures+1)); }
+
+  # (G) PREDICATE PARITY — this file's implementation vs the block shipped at
+  #     hub-spoke-bridge.md § Procedure 7a, extracted VERBATIM and run over the
+  #     same fixtures. The doc is canonical; a second copy here is a shadow-SSOT
+  #     risk, and this is the Check-68 `enum-parity` answer to it. Divergence
+  #     fails naming both sides.
+  local _ai_doc _ai_block _ai_blk_lines
+  _ai_doc="$SCRIPT_DIR/../references/how-to/hub-spoke-bridge.md"
+  _ai_block=""
+  [[ -r "$_ai_doc" ]] && _ai_block="$(/usr/bin/awk '/^AI="\$DIR\/action-items\.md"$/{f=1} f{print} f && /^fi$/{exit}' "$_ai_doc")"
+  _ai_blk_lines="$(/usr/bin/printf '%s\n' "$_ai_block" | /usr/bin/grep -c . || true)"; _ai_blk_lines="${_ai_blk_lines:-0}"
+  if [[ "$_ai_blk_lines" -lt 8 ]] || ! /usr/bin/grep -qF "awk -F' [|] '" <<<"$_ai_block"; then
+    echo "FAIL: AI-G anti-vacuity — the canonical Procedure 7a predicate did not extract from ${_ai_doc} (${_ai_blk_lines} lines); a parity arm over an empty block asserts nothing"; failures=$((failures+1))
+  else
+    local _ai_fx _ai_mine _ai_theirs _ai_seen=""
+    for _ai_fx in ai-unresolved ai-resolved ai-decoy ai-empty ai-notrecorded; do
+      _ai_mine="$(_ai_eval_predicate "$HUB_STATE_PATH/$_ai_fx")"
+      _ai_theirs="$(
+        DIR="$HUB_STATE_PATH/$_ai_fx"
+        eval "$_ai_block"
+        /usr/bin/printf '%s %s %s\n' "$STATE" "${TOTAL:-0}" "${UNRES:-0}"
+      )"
+      [[ "$_ai_mine" == "$_ai_theirs" ]] || { echo "FAIL: AI-G — predicate FORK on fixture ${_ai_fx}: automated-closeout.sh says '${_ai_mine}', hub-spoke-bridge.md § Procedure 7a says '${_ai_theirs}'"; failures=$((failures+1)); }
+      _ai_seen="${_ai_seen}${_ai_theirs%% *} "
+    done
+    # Sensitivity on the canonical copy: it must return DIFFERENT verdicts across
+    # the fixture set. A doc block that returned one constant would agree with any
+    # implementation on every fixture and the parity arm would prove nothing.
+    local _ai_distinct
+    _ai_distinct="$(/usr/bin/printf '%s\n' $_ai_seen | /usr/bin/sort -u | /usr/bin/grep -c . || true)"
+    [[ "${_ai_distinct:-0}" -ge 4 ]] || { echo "FAIL: AI-G sensitivity — the canonical predicate returned only ${_ai_distinct} distinct STATEs across 5 fixtures; it is not discriminating, so agreement with it is not evidence"; failures=$((failures+1)); }
+  fi
+
+  unset -f _ai_drive _ai_exec_dispatch 2>/dev/null || true
+  unset _AI_RC 2>/dev/null || true
+  /bin/rm -rf "$_ai_tmp" 2>/dev/null || true
+  HUB_STATE_PATH="$_ai_s_hs"; MODE="$_ai_s_mode"; VERSION="$_ai_s_ver"
+  STATE_MILESTONE_SLUG="$_ai_s_slug"; STATE_MILESTONE_STATE="$_ai_s_mstate"
+  NO_MERGE="$_ai_s_nomerge"; ATTEST_ACTION_ITEMS="$_ai_s_attest"
+  AI_EVENT_WRITER="$_ai_s_writer"; MILESTONE="$_ai_s_ms"
+  STATE_AI_GATE=""; STATE_AI_TOTAL=0; STATE_AI_UNRES=0; STATE_AI_DIR=""; STATE_AI_EMIT="n/a"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failures)" >&2
     exit 1
@@ -8666,6 +9364,7 @@ while [[ $# -gt 0 ]]; do
     --close-comment) CLOSE_COMMENTS+=("$2"); shift 2 ;;
     --merge-timeout) MERGE_TIMEOUT="$2"; shift 2 ;;
     --no-merge) NO_MERGE=1; shift ;;
+    --attest-action-items) ATTEST_ACTION_ITEMS="$2"; shift 2 ;;
     --self-test) SELF_TEST=1; shift ;;
     --check-paths) CHECK_PATHS=1; shift ;;
     --help|-h) usage ;;
@@ -8711,6 +9410,7 @@ phase_create_chore_pr || { generate_report; exit 3; }
 phase_await_merge_chore_pr || { generate_report; exit 3; }
 phase_sync_primary_checkout || { generate_report; exit 3; }           # Phase 12.2 — AC7: fast-forward the primary checkout to origin/main (non-fatal; git -C only)
 phase_reparse_ledgers || { generate_report; exit 3; }                 # Phase 12.5 — post-merge structural re-parse (#1680; detective-only)
+phase_action_item_gate || { generate_report; exit 3; }                # Phase 12.9 — Procedure 7a HARD GATE (#4439); MUST precede the close. The GUARD on this line, not its position, is what makes the close unreachable on a BLOCK — self-test group AI arm (F) executes these two lines verbatim from this file's own text
 phase_post_close_milestone || { generate_report; exit 3; }
 phase_manual_close_release_issues || { generate_report; exit 3; }
 phase_run_verification || { generate_report; exit 3; }
