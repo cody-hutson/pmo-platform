@@ -232,7 +232,7 @@ core/rules/bypass-mode-readiness/block-destructive.md
 core/rules/bypass-mode-readiness/block-egress.md
 core/rules/bypass-mode-readiness/block-scope-segregation.md
 core/rules/bypass-mode-readiness.md
-core/ADRs/ADR-133-hook-dependency-integrity-invariant.md
+core/ADRs/ADR-135-hook-dependency-integrity-invariant.md
 release/releases/plans/hooks-enforce-under-adversity_RELEASE_PLAN.md
 ```
 
@@ -294,7 +294,7 @@ The planning sub-task is issue #5521; the Stage-5 Solutioning sub-tasks for W1 a
 
 The milestone is #339.
 
-The ADR allocated for the dependency-floor integrity primitive is ADR-133; its governing antecedent on guard mode-coupling is ADR-130, and the plan-file identity convention is ADR-092.
+The ADR allocated for the dependency-floor integrity primitive is ADR-135; its governing antecedent on guard mode-coupling is ADR-130, and the plan-file identity convention is ADR-092. The record was allocated at 133 and claimed at merge twice over — 133 → 134 → 135 — because two sibling releases merged their own records into the same slot while this branch was in flight. Allocation binds at merge, so the record's Status section carries one provenance note per hop.
 
 The originating survey that surfaced the fixture-exemption defect is issue #4186, under milestone #310, which shipped the gh-path-leak guard at warn.
 

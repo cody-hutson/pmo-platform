@@ -312,7 +312,7 @@ done
 #     and `swapmidguard` (attests out of process, then exits on the real in-process
 #     source). `bash -n` PASSES four of those five, which is why it is not the control:
 #     a syntax check verifies that the helper parses, never that it means what the hook
-#     expects (ADR-134).
+#     expects (ADR-135).
 #
 #   always-enforce, healthy lib: BOTH a negative control (benign payload -> exit 0) and
 #     a positive control (violating payload -> exit 2 on the hook's OWN rule, not on the

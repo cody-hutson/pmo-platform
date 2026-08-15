@@ -32,7 +32,7 @@
 #      and a top-level `exit` is precisely the corruption the attestation exists to
 #      detect. Definitions and the contract assignment only.
 
-# CONTRACT TOKEN (#5071 / ADR-134). Every carrier captures this value `readonly` BEFORE
+# CONTRACT TOKEN (#5071 / ADR-135). Every carrier captures this value `readonly` BEFORE
 # sourcing this file and requires it back afterwards, so a truncated, empty, stale or
 # self-exiting copy cannot pass. Bump `vN` ONLY on a breaking contract change (a resolve_*
 # / deny_* signature or semantic change) and edit every carrier in the SAME commit —

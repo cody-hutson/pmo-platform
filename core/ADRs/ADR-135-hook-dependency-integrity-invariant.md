@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-134 — A sourced dependency must attest its contract out of process; a guard that its own subject can terminate is not a guard"
+title: "ADR-135 — A sourced dependency must attest its contract out of process; a guard that its own subject can terminate is not a guard"
 status: Proposed
 date: 2026-08-15
 release: hooks-enforce-under-adversity
@@ -17,13 +17,15 @@ source_observations:
   - "A checksum manifest measures ~9.9 ms per hash — roughly 2.7x the attestation probe — and converts every un-regenerated helper edit into total agent lockout, which is the release's highest-severity risk rather than a mitigation of it."
 ---
 
-# ADR-134 — A sourced dependency must attest its contract out of process
+# ADR-135 — A sourced dependency must attest its contract out of process
 
 ## Status
 
 **Proposed.** Authored at Solutioning for the `hooks-enforce-under-adversity` release; ratified at that release's plan-review gate.
 
 **Supersedes in part:** D5 of [ADR-130](ADR-130-lib-missing-guard-is-mode-coupled.md), which stated the always-enforce floor's guarantee at its true — narrower — scope and named the valid-syntax `exit 0` residual as pre-existing and tracked separately. That residual is closed here. D5's *reasoning* stands unchanged and is not rewritten in place: it was correct when written, and the mode-coupling it justified was argued on independent grounds. ADR-130's D1-D4 and D6-D8 are unaffected, and the mode-capable cohort is not touched.
+
+**Numbering provenance — `134 → 135`.** Held **ADR-134** branch-local; renumbered to **ADR-135** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 134. In-release citations that read "ADR-134" denote this record.
 
 ## Context
 
@@ -95,12 +97,14 @@ The question this record answers is not "how do we detect a corrupt helper" — 
 - [ADR-130](ADR-130-lib-missing-guard-is-mode-coupled.md) — the mode-coupling record. **Superseded in part** (D5's residual only). Its Alternative 5 pre-registered this design and rejected it on scope pending bash-3.2 validation and a fork-cost measurement; both are discharged here. Its D3 immutability primitive is adopted as D3. Its D4 always-enforce boundary is preserved unchanged by D7.
 - [ADR-078](ADR-078-security-hook-dependency-resolution-posture.md) — the founding dependency-resolution posture. D4's unconditional deny for hooks with no mode surface is the property this record makes true for the corruption class.
 - [ADR-030](ADR-030-hook-registry-drop-in-with-generated-index.md) — the generated hook registry. The registry changes accompanying this decision are made in the source fragments and the index regenerated, never hand-edited.
-- **ADR-133 (degraded-state emit contract), `check-fail-open-elimination`** — concurrent and unmerged. This record **conforms** to its decision kernel (a distinct emitted member for every reachable state of a predicate; clean and degraded may never share one) and to its register-freezing rule (the `LIB-MISSING` marker is kept unrenamed because live consumers grep it). It **diverges** on the gating obligation: that record governs reporting surfaces, where a measurement outage must never gate, while this one governs an enforcement surface, where a control that cannot evaluate its input must deny. The boundary is not new — the hook registry already records that the check cohort is a reporting cohort and the hook cohort an enforcement cohort, and warns that unifying them on consistency grounds re-couples a security guard to a dial it was deliberately removed from. That record must renumber at its own merge (see the numbering note below); whichever number it lands on, the reciprocal cross-reference should be added there.
+- **[ADR-134](ADR-134-degraded-state-emit-contract.md) (degraded-state emit contract), `check-fail-open-elimination`** — allocated 133 alongside this record, merged to mainline as **ADR-134** while this branch was in flight. This record **conforms** to its decision kernel (a distinct emitted member for every reachable state of a predicate; clean and degraded may never share one) and to its register-freezing rule (the `LIB-MISSING` marker is kept unrenamed because live consumers grep it). It **diverges** on the gating obligation: that record governs reporting surfaces, where a measurement outage must never gate, while this one governs an enforcement surface, where a control that cannot evaluate its input must deny. The boundary is not new — the hook registry already records that the check cohort is a reporting cohort and the hook cohort an enforcement cohort, and warns that unifying them on consistency grounds re-couples a security guard to a dial it was deliberately removed from. It landed on 134; the reciprocal cross-reference should be added there.
 
 ## Numbering note
 
-This record is **ADR-134**, not the ADR-133 its design specified. The design allocated 133 as `anchor(origin/main) + 1` when the mainline anchor was 132, and accepted a deliberate collision with two unmerged sibling claims on the recorded rule that *a gap blocks the repository whereas a duplicate is tooled*, and that an unmerged branch claim is advisory rather than binding.
+This record is **ADR-135**, not the ADR-133 its design specified. The design allocated 133 as `anchor(origin/main) + 1` when the mainline anchor was 132, and accepted a deliberate collision with two unmerged sibling claims on the recorded rule that *a gap blocks the repository whereas a duplicate is tooled*, and that an unmerged branch claim is advisory rather than binding.
 
 Between that allocation and this authoring, **133 merged to mainline** under an unrelated subject (the material-edit test record, in the release ADR directory). A merged claim is binding, not advisory, so the rule that permits colliding with unmerged siblings does not reach it: taking 133 here would not be a tooled duplicate, it would be a genuine conflict with mainline. The anchor is therefore 133 and next-free is 134, which `release/tools/renumber-adr.py --next-free` independently returns.
 
-Two unmerged siblings still hold 133 — the degraded-state emit contract on `check-fail-open-elimination` and a gate-default record on `stage9-gate-integrity`. Both now collide with **mainline** rather than with each other, and both renumber at their own merge. This record does not reserve above them: 134 is next-free above the merged anchor, and no branch currently claims it.
+Two unmerged siblings still held 133 at that moment — the degraded-state emit contract on `check-fail-open-elimination` and a gate-default record on `stage9-gate-integrity`. Both then collided with **mainline** rather than with each other, and both renumber at their own merge. This record did not reserve above them: 134 was next-free above the merged anchor, and no branch claimed it at the time.
+
+**Then the same mechanism fired a second time.** `check-fail-open-elimination` merged during this branch's own Engineering run and its record took **134** — the very slot this one had just claimed. So the lineage is `133 → 134 → 135`: allocated at 133, moved to 134 when 133 merged beneath it, moved again to 135 when 134 merged beneath it. Neither move is drift. A number is **allocated at authorship but claimed at merge**, which exposes any record on a long-lived branch to every sibling that merges ahead of it, and pre-reserving a higher slot is no remedy because the integrity gate fails a gap as readily as a duplicate. `release/tools/renumber-adr.py --next-free` returned 135 at the second move, and the § Status provenance note records the hop.
