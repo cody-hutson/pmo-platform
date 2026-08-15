@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.27 (2026-08-15) — Citations now point at files that exist, and say when nothing writes them
+
 ### v4.26 (2026-08-15) — Checks stop failing correct work, and say when they are switched off
 
 ### v4.25 (2026-08-15) — Reference-block headings work as documented, and cited counts stay current
