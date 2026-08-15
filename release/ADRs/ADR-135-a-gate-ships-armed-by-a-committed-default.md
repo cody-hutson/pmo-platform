@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-134 — A gate ships armed by a committed default; arming is never deferred to a later step that can be forgotten
+title: ADR-135 — A gate ships armed by a committed default; arming is never deferred to a later step that can be forgotten
 status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
 date: 2026-08-14
 release: stage9-gate-integrity
@@ -17,7 +17,7 @@ source_observations:
   - "The cost asymmetry is stated contemporaneously in that constraint artifact and is the general argument, not a local one: discovering the constraint later means a required gate is red on every PR at the moment the adapter lands, with the fix competing against the pressure to disable the gate — and 'gates that are disabled to unblock a merge do not come back.'"
 ---
 
-# ADR-134 — A gate ships armed by a committed default; arming is never deferred to a later step that can be forgotten
+# ADR-135 — A gate ships armed by a committed default; arming is never deferred to a later step that can be forgotten
 
 ## Status
 
@@ -28,6 +28,8 @@ source_observations:
 **Numbering.** `133` is the mainline anchor plus one, re-derived against `origin/main` at Engineering time across **both** record directories rather than pre-allocated at design time. The union of the two directories reaches `ADR-132` on the mainline, and no open sibling branch claims `133`. A number claimed at Stage 5 and merged weeks later is a reservation hazard against a sibling's unmerged claim, so the allocation deliberately happens here.
 
 **Numbering provenance — `133 → 134`.** Held **ADR-133** branch-local; renumbered to **ADR-134** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 133. In-release citations that read "ADR-133" denote this record.
+
+**Numbering provenance — `134 → 135`.** Held **ADR-134** branch-local; renumbered to **ADR-135** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 134. In-release citations that read "ADR-134" denote this record.
 
 ## Context
 
