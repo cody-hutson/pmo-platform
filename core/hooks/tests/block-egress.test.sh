@@ -263,10 +263,15 @@ shadow_case() {
   local why=""
   if [ "$actual_exit" != 0 ]; then ok=0; why="expected exit 0 (shadow takes no action), got ${actual_exit}"; fi
   if [ "$ok" = 1 ] && [ "$after" -le "$before" ]; then ok=0; why="warn log did not grow (${before} -> ${after}); the widening was not evaluated"; fi
-  if [ "$ok" = 1 ] && ! /usr/bin/printf '%s' "$last" | /usr/bin/grep -q '"phase":"shadow"'; then
+  # Here-strings rather than a writer piped into a short-circuiting reader, which
+  # closes the pipe under the writer. Both needles are non-empty literals, so the
+  # empty-haystack difference between the two forms cannot produce a spurious match:
+  # a here-string feeds one empty line where a writer feeds none, and neither needle
+  # can match an empty line.
+  if [ "$ok" = 1 ] && ! /usr/bin/grep -q '"phase":"shadow"' <<<"$last"; then
     ok=0; why="last log entry is not a shadow record: ${last}"
   fi
-  if [ "$ok" = 1 ] && ! /usr/bin/printf '%s' "$last" | /usr/bin/grep -q "\"cause\":\"${expect_cause}\""; then
+  if [ "$ok" = 1 ] && ! /usr/bin/grep -q "\"cause\":\"${expect_cause}\"" <<<"$last"; then
     ok=0; why="expected cause=${expect_cause}, got: ${last}"
   fi
 
@@ -360,8 +365,8 @@ _p_exit=0
 _p_err="$(/usr/bin/printf '%s' "$(bash_payload 'gh api repos/{owner}/{repo}/issues --method POST')" \
   | /bin/bash "$HOOK" 2>&1 >/dev/null)" || _p_exit="$?"
 if [ "$_p_exit" = 2 ] \
-  && /usr/bin/printf '%s' "$_p_err" | /usr/bin/grep -q 'spell out the owner and repository' \
-  && ! /usr/bin/printf '%s' "$_p_err" | /usr/bin/grep -q 'add path to'; then
+  && /usr/bin/grep -q 'spell out the owner and repository' <<<"$_p_err" \
+  && ! /usr/bin/grep -q 'add path to' <<<"$_p_err"; then
   /usr/bin/printf 'PASS: AC-E007-P6: unresolvable remediation says spell it out, NOT add-to-allowlist\n'; PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: AC-E007-P6: unresolvable remediation wrong (exit=%s)\n  stderr: %s\n' "$_p_exit" "$_p_err"; FAIL=$((FAIL + 1))
@@ -531,8 +536,8 @@ if [ -f "$BLOCK_LOG_FILE" ]; then
   _bl_tail="$(/usr/bin/tail -20 "$BLOCK_LOG_FILE")"
 fi
 if [ "$_bl_exit" = 2 ] && [ "$_bl_after" -gt "$_bl_before" ] \
-  && /usr/bin/printf '%s' "$_bl_tail" | /usr/bin/grep -q 'evil-org' \
-  && /usr/bin/printf '%s' "$_bl_tail" | /usr/bin/grep -q 'not-allowlisted'; then
+  && /usr/bin/grep -q 'evil-org' <<<"$_bl_tail" \
+  && /usr/bin/grep -q 'not-allowlisted' <<<"$_bl_tail"; then
   /usr/bin/printf 'PASS: AC-E007-L1: block-log record carries the denied path and its cause\n'; PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: AC-E007-L1: block-log lost the evidence (exit=%s lines %s -> %s)\n  tail: %s\n' \
