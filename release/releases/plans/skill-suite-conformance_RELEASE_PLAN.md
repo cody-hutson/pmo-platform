@@ -137,6 +137,16 @@ Single release branch, one PR, one merge. **Release-level rollback** is a single
 
 **Differentiation posture:** engagement density Full/Standard · Stage-9 review depth **Deep** (blast-radius assessment plus design-spec conformance plus Empirical Verification) · Stage-5 activation bias **ALL** · Stage-13 outcome window standard.
 
+### Domain Practice Provenance
+
+Stage-4 Phase A1.5 label, recorded here rather than in frontmatter because this plan carries none. Single-line and machine-readable, per the Stage-4 placement convention.
+
+domain_practice: { source: N/A — pipeline-internal release, date: 2026-08-14, domain: software }
+
+**Sourcing exemption.** The entire File Change Matrix is internal pmo-platform artifacts — shell tooling, pipeline specs, a governance standard, skill definitions and their packages. No external best-practice is consulted, so the external-sourcing step is exempt and `source` carries the pipeline-internal token. Sourcing-exempt does **not** make the release domain-less, which is why the `domain` field below is still populated.
+
+**Classification rationale (from the File Change Matrix, per the A3-time rule).** Dominant domain **`software`**. Three of the four cards change executable shell logic and nothing else: `core/deploy/tools/build-skill-packages.sh` and `release/tools/automated-closeout.sh` (Card 1), `core/deploy/deploy.sh` Check 49 plus a new `core/deploy/tests/test_check49_mode_identifier_unification.sh` harness (Card 2), and `core/deploy/tools/check-citation-anchors.sh` with the Check 66 block (Card 3). The release's whole theme is the behaviour of check and gate *code* — whether it can name a thing consistently, scope it correctly, and be provably able to fail. Secondary domain **`governance`**, carried by Card 4's `core/standards/version-field-semantics.md` bump rule, the twelve `SKILL.md` frontmatter edits, the `stage-13-close.md` reconciliation and the ADR. The secondary is recorded in this rationale rather than inside the label, so the `domain` value stays a bare class name that resolves in one lookup to `core/standards/domain-best-practices/software.md`.
+
 ## Operator Decisions (D-Gate Block)
 
 | ID | Decision | Verdict | Reversibility / confidence |

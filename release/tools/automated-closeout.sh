@@ -3447,14 +3447,29 @@ phase_rebuild_skill_packages() {
   # Guarded per-skill subshell (M3-3): the builder runs set -euo pipefail + exit 1 on
   # failure; the subshell isolates its set -e so its exit does not abort this script
   # before mark_phase runs.
-  local _rb_skill _rb_failed=""
+  local _rb_skill _rb_failed="" _rb_ok="" _rb_detail=""
   for _rb_skill in $candidates; do
     if ! ( /bin/bash "$builder" --root "$REPO_ROOT" "$_rb_skill" ) >/dev/null 2>&1; then
       _rb_failed="${_rb_failed:+$_rb_failed }$_rb_skill"
+    else
+      _rb_ok="${_rb_ok:+$_rb_ok }$_rb_skill"
     fi
   done
   if [[ -n "$_rb_failed" ]]; then
-    mark_phase "rebuild_skill_packages" "FAIL" "build-skill-packages.sh failed for: ${_rb_failed} — package(s) not rebuilt; close blocked (re-run after resolving the build error). Other candidates in this release's set (${names}) are not implicated"
+    # THE EXONERATION LIST IS THE SUCCEEDED SET, NOT $names. $names is the FULL
+    # candidate set, so naming it here placed the skill that had just failed inside its
+    # own "not implicated" list — "failed for: _shared ... (_shared) are not
+    # implicated". Whoever reads this line is mid-diagnosis of that exact failure, which
+    # is the only moment the message is read and the one moment it must not contradict
+    # itself. When every candidate failed the clause has no members and says so, rather
+    # than printing an empty parenthetical that reads like a truncated list.
+    _rb_detail="build-skill-packages.sh failed for: ${_rb_failed} — package(s) not rebuilt; close blocked (re-run after resolving the build error)."
+    if [[ -n "$_rb_ok" ]]; then
+      _rb_detail="${_rb_detail} Other candidates in this release's set (${_rb_ok}) are not implicated"
+    else
+      _rb_detail="${_rb_detail} No other candidate in this release's set built successfully"
+    fi
+    mark_phase "rebuild_skill_packages" "FAIL" "$_rb_detail"
     return 3
   fi
 
@@ -8710,7 +8725,7 @@ PY
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
-  echo "  phase_rebuild_skill_packages detection + files=() composition validated (#4722 — core/schemas sensitivity / core/standards control / rule-a direct-source / specificity negative / C1 dry-run WARN vs apply FAIL / delegation structure / P1 staging-array guard)" >&2
+  echo "  phase_rebuild_skill_packages detection + files=() composition validated (#4722 — core/schemas sensitivity / core/standards control / rule-a direct-source / specificity negative / C1 dry-run WARN vs apply FAIL / delegation structure / P1 staging-array guard; #4755 — a5 _shared filter sensitivity (a non-skill dir under a skills/ root resolves NO candidate) / a6 _templates second-directory proving the filter is a roster-resolvability test and not a hardcoded _shared exclusion / a7 mixed set keeps the buildable candidate and drops the unbuildable one (anti-over-filtering) / d1 --apply anti-regression: a roster-resolvable skill that cannot build still returns 3, marks FAIL, and names ITSELF / d2 the converse in the same sandbox and mode: a filtered-out candidate reaches the N/A limb at rc 0 / c5 build-invocation shape — per-skill loop over \$candidates, --root passed on the BUILD call, failures accumulated by name in _rb_failed)" >&2
   echo "  release-anchor hygiene validated (AC4/AC5 — recorded divergences exempt / a NEW divergence reported in BOTH directions / EQUAL-COUNT-UNEQUAL-SET fixture still reported (the count-parity false negative) / non-noreply tagger flagged, noreply tagger not, recorded exemption suppressed, lightweight tag excluded by objecttype / guard is comm-based by construction)" >&2
   echo "  LEDGER-ROW-PARITY fail-open closed (#3113 F-QA-3 — present-but-empty INDEX vs 3-row LOG now FAILs naming both counts / equal populated ledgers still PASS / both-empty 0==0 correctly clean / missing INDEX still FAILs / grep_count single-integer contract on empty-file, missing-file, match and empty-stdin shapes / reintroduction blocked structurally, needle proven against a known-bad control)" >&2
   echo "  phase_sync_primary_checkout validated (AC7 — behind-primary-on-main fast-forwards and HEAD verifiably MOVES to origin/main / non-main primary SKIPPED and NOT moved / absent primary clean no-op (CI hermeticity) / dry-run no-write / source carries no reset-stash-checkout-push-force-cd)" >&2
