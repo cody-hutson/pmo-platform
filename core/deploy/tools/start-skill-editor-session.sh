@@ -107,7 +107,11 @@ end_session() {
 self_test() {
   local tmp rc=0 fails=0
   tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' EXIT
+  # Double-quoted so $tmp expands NOW, at trap-set time. With single quotes the
+  # expansion is deferred to trap-fire time, by which point this function has
+  # returned and its `local tmp` is out of scope — which under `set -u` aborts the
+  # script with "tmp: unbound variable" instead of cleaning up.
+  trap "rm -rf '${tmp}'" EXIT
   mkdir -p "${tmp}/operations/skills/fixture-skill"
   printf -- '---\nname: fixture-skill\n---\n' > "${tmp}/operations/skills/fixture-skill/SKILL.md"
   ( cd "$tmp" && git init -q . && git add -A && git -c user.email=t@t -c user.name=t commit -qm i ) >/dev/null 2>&1
