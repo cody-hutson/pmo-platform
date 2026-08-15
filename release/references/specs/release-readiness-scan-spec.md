@@ -156,9 +156,13 @@ this scan runs. Grading a draft PR as anything other than PASS would place every
 into the ANY-PARTIAL branch of the aggregate rule below by construction. The
 merge-readiness of a draft PR is separately guarded at Stage 12, which carries its own
 draft-state guard immediately before the merge, and PR mergeability is separately
-asserted by the Gate 9 deployment-readiness criterion, which reads the `mergeable` field
-and is draft-agnostic; this dimension names states for the briefing and does not
-duplicate that gate.
+asserted by the Gate 9 deployment-readiness criterion `G-PR5`, which reads the
+`mergeable` field and is draft-agnostic — a draft PR reports `MERGEABLE`. Draft state
+itself is asserted by a different Gate 9 criterion, `G-PR12`, which binds at the GO
+instant, AFTER the Phase A8 draft-to-ready transition, and is therefore not in tension
+with this dimension's state-4 PASS, which is measured at Phase A6, BEFORE that
+transition. Two non-overlapping instants asking two different questions: this dimension
+names states for the briefing and duplicates neither gate.
 
 **Reachability, stated rather than implied.** At Phase A6 the release PR is draft by
 specification, so a healthy release resolves to state 4 and states 5 and 6 are reached
