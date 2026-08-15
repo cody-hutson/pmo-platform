@@ -648,6 +648,25 @@ def _build_fixture(tmp: str) -> str:
     _fx_branch(root, "release/gamma", base_lines, 90, 3, "gamma")   # disjoint
     _fx_branch(root, "release/delta", base_lines, 50, 2, "delta")   # near-miss at U3
 
+    # A TWO-REVISION PR head, for the E10 stale-ref arm. Revision A edits
+    # 60-62 only; revision B ALSO edits 41-43, which OVERLAPS release/alpha.
+    # The second edit is what makes the arm bite: reading A instead of B does
+    # not merely report stale line numbers, it downgrades a real contention to
+    # append-pattern at exit 0. A single-revision head could only ever prove
+    # the numbers moved, which is the weaker claim.
+    _git(root, ["checkout", "-q", "-b", "release/epsilon", "main"])
+    eps_a = list(base_lines)
+    for offset in range(3):
+        eps_a[59 + offset] = "epsilon %03d" % (60 + offset)
+    _fx_write(root, "f.txt", eps_a)
+    _fx_commit(root, "release/epsilon rev A edits 60-62")
+    eps_b = list(eps_a)
+    for offset in range(3):
+        eps_b[40 + offset] = "epsilon %03d" % (41 + offset)
+    _fx_write(root, "f.txt", eps_b)
+    _fx_commit(root, "release/epsilon rev B also edits 41-43")
+    _git(root, ["checkout", "-q", "main"])
+
     # A branch that DELETES the contended file: git exit 0, large diff, zero
     # parseable hunks. This is the shape that defeats a non-empty-EXTRACTION
     # assertion.
@@ -700,6 +719,9 @@ def run_self_test() -> int:
              conformant control, both arms with non-empty extraction recorded
 
     No network calls. All git operations run against a temp repo built here.
+    E10 is the one arm that runs `git fetch`, and its remote is a bare repo
+    inside that same temp tree -- git's LOCAL transport, no network. The arm
+    asserts the remote URL is inside the fixture rather than trusting it.
     """
     failures: list[str] = []
     notes: list[str] = []
@@ -1113,6 +1135,106 @@ def run_self_test() -> int:
               "E9 CONFORMANT: an empty member map still returns a verdict")
         notes.append("  E9 empty-map guard   conformant=ValueError  "
                      "defective=append-pattern (benign verdict from no data)")
+
+        # E10 -- the PR-refresh guard: a local `refs/pull/<N>/head` that is
+        # PRESENT but STALE. The pre-fix resolver gated its bounded fetch on
+        # `not sha`, so a ref that was merely BEHIND its upstream was never
+        # refreshed and the tool classified an OLD revision at exit 0 -- no
+        # error, no PARTIAL marker. That defect shipped and was found only by
+        # measuring live PRs, because this fixture builds its refs with
+        # `update-ref` and they are therefore FRESH BY CONSTRUCTION: the suite
+        # could not express the failing state at all. This arm constructs it.
+        #
+        # Hermetic, per the suite's no-network contract: the "remote" is a bare
+        # repo inside the fixture tmp, so `git fetch` uses the LOCAL transport.
+        # The arm asserts that below rather than trusting it.
+        remote_root = os.path.join(tmp, "remote")
+        check(_git(root, ["init", "-q", "--bare", remote_root]).returncode == 0,
+              "E10 fixture bare remote did not initialise")
+        check(_git(root, [
+            "push", "-q", remote_root,
+            "+refs/heads/release/epsilon:refs/heads/release/epsilon",
+        ]).returncode == 0, "E10 fixture push to the local remote failed")
+        _git(remote_root, [
+            "update-ref", "refs/pull/44/head", "refs/heads/release/epsilon",
+        ])
+        _git(root, ["remote", "add", "origin", remote_root])
+        e10_url = _git(root, ["remote", "get-url", "origin"]).stdout.strip()
+        check(bool(e10_url) and os.path.realpath(e10_url).startswith(
+                  os.path.realpath(tmp) + os.sep),
+              "E10 fixture remote %r is not inside the fixture tmp -- this arm "
+              "would be a network call wearing a fixture's clothes" % e10_url)
+
+        sha_b = resolve_rev(root, ["release/epsilon"])      # the LIVE head
+        sha_a = resolve_rev(root, ["release/epsilon~1"])    # the older revision
+        check(bool(sha_a) and bool(sha_b) and sha_a != sha_b,
+              "E10 fixture revisions A/B are not two distinct commits")
+        check(resolve_rev(remote_root, ["refs/pull/44/head"]) == sha_b,
+              "E10 the remote's PR head is not revision B")
+
+        e10_a_bytes, e10_a_ranges = _ranges_for(root, base, "release/epsilon~1")
+        e10_b_bytes, e10_b_ranges = _ranges_for(root, base, "release/epsilon")
+        e10_alpha_ranges = _ranges_for(root, base, "release/alpha")[1]
+        check(min(e10_a_bytes, e10_b_bytes) > 0
+              and bool(e10_a_ranges) and bool(e10_b_ranges),
+              "E10 an arm ran on an EMPTY extraction")
+        check(e10_a_ranges == [(57, 65)]
+              and e10_b_ranges == [(38, 46), (57, 65)],
+              "E10 fixture revisions do not carry the DISCRIMINATING ranges "
+              "(A=%r B=%r) -- the arm could not tell them apart"
+              % (e10_a_ranges, e10_b_ranges))
+
+        # DEFECTIVE arm runs FIRST: it must observe the ref while still stale,
+        # and it must not refresh it. `allow_fetch=False` is not an
+        # approximation of the pre-fix gate, it is EQUIVALENT on this input: for
+        # a ref that is PRESENT, `if not sha and kind == "pr" and allow_fetch:`
+        # and `allow_fetch=False` skip the same fetch and resolve the same ref.
+        _git(root, ["update-ref", "refs/pull/44/head", sha_a])
+        check(resolve_rev(root, ["refs/pull/44/head"]) == sha_a,
+              "E10 the local PR ref was not seeded STALE -- the arm is vacuous")
+        _e10_dtok, e10_defect_sha = resolve_member(
+            root, "pr", "44", allow_fetch=False,
+        )
+        check(e10_defect_sha == sha_a,
+              "E10 DEFECTIVE arm did not read the stale revision -- an "
+              "unrefreshed ref is no longer a hazard, so the fetch observes "
+              "nothing")
+
+        # CONFORMANT arm: the shipped resolver, from the same stale state.
+        _e10_ctok, e10_fresh_sha = resolve_member(root, "pr", "44")
+        check(e10_fresh_sha == sha_b,
+              "E10 CONFORMANT: a PRESENT-but-STALE refs/pull/44/head resolved to "
+              "%s, want the refreshed head %s -- the PR fetch is gated on ref "
+              "ABSENCE again" % (e10_fresh_sha[:8], sha_b[:8]))
+
+        # End-to-end through main(), re-seeded stale, and the reason this
+        # matters: the stale read is not a cosmetic number, it FLIPS the verdict.
+        _git(root, ["update-ref", "refs/pull/44/head", sha_a])
+        rc_e10, out_e10, _err_e10 = _run_main([
+            "--baseline-sha", "fixture", "--root", root, "--base-ref", base,
+            "--pr-list", "44", "--branch-list", "release/alpha",
+            "--files", "f.txt", "--output-format", "json",
+        ])
+        e10_entry = json.loads(out_e10)["files"]["f.txt"]
+        e10_emitted = [tuple(r) for r in e10_entry["line_ranges"].get("44", [])]
+        defective_e10 = classify_overlap_class({
+            "44": e10_a_ranges, "branch:release/alpha": e10_alpha_ranges,
+        })
+        check(rc_e10 == 0 and e10_entry["overlap_class"] == "line-range-overlap",
+              "E10 CONFORMANT: the stale-ref run classified %r at exit %d"
+              % (e10_entry["overlap_class"], rc_e10))
+        check(e10_emitted == e10_b_ranges,
+              "E10 CONFORMANT: member 44 was emitted at revision A (%r), not the "
+              "refreshed revision B (%r)" % (e10_emitted, e10_b_ranges))
+        check(defective_e10 == "append-pattern",
+              "E10 DEFECTIVE arm did not downgrade the verdict -- reading the "
+              "stale revision costs nothing, so the refresh observes nothing "
+              "(got %r)" % defective_e10)
+        notes.append("  E10 PR stale-ref     conformant=%s @%s %r(bytes=%d) | "
+                     "defective=%s @%s %r(bytes=%d) -> WRONG verdict at exit 0"
+                     % (e10_entry["overlap_class"], sha_b[:8], e10_b_ranges,
+                        e10_b_bytes, defective_e10, sha_a[:8], e10_a_ranges,
+                        e10_a_bytes))
 
         # E4 -- the merge-base anchor. Advances `main`, so it runs LAST.
         _git(root, ["checkout", "-q", "main"])
