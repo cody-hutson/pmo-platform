@@ -853,6 +853,34 @@ jobs:
         run: /usr/bin/python3 core/deploy/tools/lint_release_corpus.py --check plan-identity
 
       - name: verify-release-plan family dispatch + honesty contract
+        # UNMASKED. This job is a flat sequential step list, so by default a step runs
+        # only while the job status is still success — one red step above silently
+        # SKIPS every suite below it. The plan-identity step immediately above is a
+        # CORPUS gate: it goes red on the state of release/releases/plans, not on the
+        # health of this suite, and it does so on every release whose corpus trips it.
+        # Left masked, the job's check count OVERSTATES the coverage that actually ran
+        # — three regression suites report "skipped", which reads as "nothing to say"
+        # rather than "never executed".
+        #
+        # always() rather than moving the corpus gate to the end of the list:
+        # relocation only unmasks these three from THAT ONE step, and re-masks them the
+        # moment any other step above fails. always() makes the job report the UNION
+        # of its failures rather than the first, whichever step is the first to go red.
+        #
+        # Safe on this step and the two below because all three are hermetic and
+        # independent — each states so in its own comment (mktemp fixtures or frozen
+        # in-repo fixtures; no network, no gh, no write to the checkout). They consume
+        # nothing from any step above except the checkout and the interpreters that
+        # 'Verify prerequisites' confirms, so running them after an upstream red
+        # produces a real verdict, not cascade noise.
+        #
+        # SCOPE, stated because it is a real residual: this unmasks the three trailing
+        # suites only. Steps above still short-circuit on the first red, so the job is
+        # not yet fully union-reporting; widening that is a larger change to the setup
+        # steps' semantics and is deliberately not made here.
+        #
+        # Static expression only — no workflow-context interpolation reaches any shell.
+        if: always()
         # Invokes release/tools/tests/test_verify_release_plan.sh (26 assertions,
         # groups G1..G5).
         #
@@ -875,6 +903,9 @@ jobs:
         run: bash release/tools/tests/test_verify_release_plan.sh
 
       - name: av-verify region-scoped fixture regression
+        # UNMASKED — see the rationale on the verify-release-plan step above. This
+        # suite is frozen-fixture and offline, so it owes nothing to any step before it.
+        if: always()
         # Invokes release/tools/tests/test_av_verify.py (10 frozen cases).
         # Python, not shell: the suite is stdlib-only with sys.exit(main()) at module
         # foot, so plain `python3 <path>` gates correctly on its exit code — the same
@@ -895,6 +926,9 @@ jobs:
         run: python3 release/tools/tests/test_av_verify.py
 
       - name: native-dep-mirror frozen-fixture regression
+        # UNMASKED — see the rationale on the verify-release-plan step above. This
+        # suite is frozen-fixture and offline, so it owes nothing to any step before it.
+        if: always()
         # Invokes release/tools/tests/test_native_dep_mirror.py (20 frozen cases, of
         # which 6 also assert unattributed-reference reporting). Same bare-invocation
         # Python shape and same discovery-scope reasoning as the step above.
