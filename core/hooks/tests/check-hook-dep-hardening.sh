@@ -161,7 +161,7 @@ done
 #    `bash docs/scripts/setup-workspace.sh` from the operator's own terminal, which the
 #    hooks do not gate. Verify any hook redeploy by HASH, never by exit status.
 DEP_LIB_SRC="$HOOKS_GLOB/lib/dep-resolve.sh"
-LIB_CONTRACT="$(grep -E '^DEP_RESOLVE_CONTRACT=' "$DEP_LIB_SRC" 2>/dev/null | head -1 \
+LIB_CONTRACT="$(grep -m1 -E '^DEP_RESOLVE_CONTRACT=' "$DEP_LIB_SRC" 2>/dev/null \
                  | sed -E 's/^DEP_RESOLVE_CONTRACT=//; s/^"//; s/"$//')"
 if [ -z "$LIB_CONTRACT" ]; then
   echo "FAIL(6): $DEP_LIB_SRC declares no DEP_RESOLVE_CONTRACT token. Every floor hook captures that value readonly before sourcing and requires it back afterwards; without it the guard cannot distinguish a healthy helper from a stale or self-exiting one." >&2
@@ -172,12 +172,12 @@ for b in $BACKSTOP_HOOKS; do
   f="$HOOKS_GLOB/$b.sh"
   [ -f "$f" ] || continue
 
-  dl_line="$(grep -nE '^readonly DEP_LIB=' "$f" | head -1 | cut -d: -f1)"
-  ct_line="$(grep -nE '^readonly DEP_LIB_CONTRACT=' "$f" | head -1 | cut -d: -f1)"
-  vd_line="$(grep -nF 'DEP_GUARD_VERDICT="pending"' "$f" | head -1 | cut -d: -f1)"
-  fd_line="$(grep -nF 'exec 9>&2' "$f" | head -1 | cut -d: -f1)"
-  tr_line="$(grep -nE '^trap .*DEP_GUARD_VERDICT' "$f" | head -1 | cut -d: -f1)"
-  un_line="$(grep -nF 'trap - EXIT' "$f" | head -1 | cut -d: -f1)"
+  dl_line="$(grep -m1 -nE '^readonly DEP_LIB=' "$f" | cut -d: -f1)"
+  ct_line="$(grep -m1 -nE '^readonly DEP_LIB_CONTRACT=' "$f" | cut -d: -f1)"
+  vd_line="$(grep -m1 -nF 'DEP_GUARD_VERDICT="pending"' "$f" | cut -d: -f1)"
+  fd_line="$(grep -m1 -nF 'exec 9>&2' "$f" | cut -d: -f1)"
+  tr_line="$(grep -m1 -nE '^trap .*DEP_GUARD_VERDICT' "$f" | cut -d: -f1)"
+  un_line="$(grep -m1 -nF 'trap - EXIT' "$f" | cut -d: -f1)"
   blk="$(guard_block "$f")"
 
   # (a) the expected contract is captured, and it AGREES with the lib.

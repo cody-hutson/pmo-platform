@@ -225,7 +225,15 @@ echo "python3-unresolvable traversal fail-closed (enforce mode) — symlink-esca
 echo "---"
 PY_HOOKS=""
 for h in $JQ_HOOKS; do
-  if /usr/bin/grep -qE '\bresolve_python3\b' "$h"; then PY_HOOKS="$PY_HOOKS $h"; fi
+  # CALLS resolve_python3 — not merely mentions it. Still structural, still no name-list:
+  # a second path-normalizing hook is covered the day it lands. But the predicate has to
+  # be USE rather than MENTION, because a `command -v resolve_python3` inside a dependency
+  # guard is an assertion ABOUT the helper's contract, not a use of python3. Classifying
+  # on mention pulled the three always-enforce hooks into this cohort the moment their
+  # guard began asserting the full helper contract, and then asserted a
+  # BLOCK-FS-BOUNDARY-003 verdict against hooks that have no such rule — three failures
+  # that looked like a regression in the guard and were actually a loose classifier.
+  if /usr/bin/grep -qF '$(resolve_python3)' "$h"; then PY_HOOKS="$PY_HOOKS $h"; fi
 done
 if [ -z "$PY_HOOKS" ]; then
   pass "no resolve_python3-using hook enumerated (nothing to path-normalize) — case N/A"
