@@ -110,6 +110,17 @@ release/tools/produce-learnings-register.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/compute-cycle-time.sh
 ./release/tools/compute-cycle-time.sh
 release/tools/compute-cycle-time.sh
+# compute-dora-metrics.sh — the Vital-log DORA producer, and compute-cycle-time.sh's
+# sibling consumer of the same deployment-status rows. It carried ZERO rows while its
+# sibling directly above carried four, so `--self-test` was BLOCK-DESTRUCTIVE-022-blocked
+# agent-side on exactly one of the two tools a release must verify together — and the
+# change-failure-rate arm is the one that distinguishes a metric being met from a metric
+# being defeated by total deploy failure. Four forms per the convention above.
+# (CI runs no Claude hooks; these rows are for the agent-side path, not the workflow.)
+[PMO_PLATFORM_ROOT]/release/tools/compute-dora-metrics.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/compute-dora-metrics.sh
+./release/tools/compute-dora-metrics.sh
+release/tools/compute-dora-metrics.sh
 [PMO_PLATFORM_ROOT]/release/tools/cleanup-orphan-state.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/cleanup-orphan-state.sh
 ./release/tools/cleanup-orphan-state.sh
@@ -478,3 +489,20 @@ core/deploy/tests/run-install-regression.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_install_end_to_end.sh
 ./core/deploy/tests/test_install_end_to_end.sh
 core/deploy/tests/test_install_end_to_end.sh
+
+# Deploy-target-root sandbox safety proof (test_deploy_sandbox.sh) — in-tree bash
+# CLI. It is the safety proof for the PMO_PLATFORM_DEPLOY_ROOT override, so any
+# release that edits core/deploy/deploy.sh is expected to run it at Stage 6
+# self-verification and Stage 7 Dev Testing; it is also an enrolled
+# REGRESSION_MEMBER of run-install-regression.sh and a named install-tests step.
+# It carried ZERO rows, so the direct agent-side invocation was
+# BLOCK-DESTRUCTIVE-022-blocked while the runner that wraps it was allowlisted —
+# a spoke could run the suite only by not naming the suite it wanted. All four
+# invocation forms per the convention above. Named row rather than a
+# core/deploy/tests/* glob, per the entries above: a pattern would auto-admit any
+# future file dropped in that directory. (CI runs no Claude hooks, so this entry
+# is for the agent-side path, not the workflow.)
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_deploy_sandbox.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_deploy_sandbox.sh
+./core/deploy/tests/test_deploy_sandbox.sh
+core/deploy/tests/test_deploy_sandbox.sh
