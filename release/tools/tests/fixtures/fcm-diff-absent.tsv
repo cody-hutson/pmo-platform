@@ -1,0 +1,3 @@
+M	release/tools/verify-release-plan.sh
+A	release/tools/tests/fixtures/unrelated-addition.md
+D	core/legacy/removed-thing.md

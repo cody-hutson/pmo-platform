@@ -132,6 +132,178 @@ cadence_label() {
   else echo "sparse"; fi
 }
 
+# ─── The DORA aggregation engine (single python pass; stdlib only) ───────────
+#
+# DEFINED HERE, ABOVE THE SELF-TEST, ON PURPOSE (#4215). The self-test used to carry
+# its own transcription of this logic and grade that copy. A transcription is a shadow
+# source of truth: a defect fixed here but not mirrored there stays green, and a
+# mutation introduced here is invisible to the suite — which is precisely the
+# control-that-cannot-fail shape this release exists to eliminate. The self-test below
+# now pipes its fixtures through THIS variable, so every arm grades the engine that
+# actually runs in production.
+#
+# stdin carries the event rows, so the python SOURCE is passed via `-c "$AGG_PY"` —
+# a heredoc on `python3 -` would itself consume stdin and starve the piped rows.
+AGG_PY="$(/bin/cat <<'PY'
+import sys, json
+from datetime import datetime, timezone, timedelta
+
+commit_map_raw = sys.argv[1]
+window_days = int(sys.argv[2]) if sys.argv[2] else 30
+window_occasions = int(sys.argv[3]) if sys.argv[3] else None
+now_iso = sys.argv[4]
+
+def parse_iso(s):
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError as e:
+        print(f"ts_iso parse failure: {e}", file=sys.stderr)
+        sys.exit(2)
+
+now = parse_iso(now_iso)
+
+commit_map = {}
+for line in commit_map_raw.splitlines():
+    if not line.strip():
+        continue
+    if "\t" in line:
+        ver, ciso = line.split("\t", 1)
+        commit_map[ver.strip()] = ciso.strip()
+
+deploys = []    # (ts_iso, version)
+rollbacks = []  # (ts_iso, version)
+# Versions carrying at least one FAILED deploy-target row (#4215). A failed deploy is
+# a change failure, and before this set existed it entered the change_failure_rate
+# DENOMINATOR ONLY — the numerator was keyed exclusively to a self-repair/rollback
+# event — so a release whose every target failed reported 0.0% (0/1). The change-failure
+# rate of the platform IMPROVED as its deploys failed, permanently, in an append-only
+# log. Occasion MEMBERSHIP deliberately still counts a failed deploy: a deploy that ran
+# and failed is a deployment event, so it belongs in the denominator too. What changed
+# is that it now also reaches the numerator.
+failed_deploy_versions = set()
+for line in sys.stdin:
+    line = line.rstrip("\n")
+    if not line.strip():
+        continue
+    parts = line.split(" | ")
+    if len(parts) < 5:
+        continue
+    ts = parts[0][2:].strip()
+    version = parts[1].strip()
+    etype = parts[3].strip()
+    esub = parts[4].strip()
+    outcome = parts[8].strip() if len(parts) > 8 else ""
+    # Validate ts parses (source-integrity; exit 2 on malformed).
+    parse_iso(ts)
+    if etype == "deployment-status" and esub in ("deploy-skill", "deploy-harness"):
+        deploys.append((ts, version))
+        if outcome and outcome != "resolved":
+            failed_deploy_versions.add(version)
+    elif etype == "self-repair" and esub == "rollback":
+        rollbacks.append((ts, version))
+
+# Collapse deploy rows to occasions keyed by version; T_DEPLOY = MAX(ts) per version.
+occ_deploy = {}
+for ts, ver in deploys:
+    if ver not in occ_deploy or ts > occ_deploy[ver]:
+        occ_deploy[ver] = ts
+# occasions sorted chronologically by their T_DEPLOY
+occasions = sorted(occ_deploy.items(), key=lambda kv: kv[1])  # [(version, t_deploy_iso)]
+
+# ─── Window slicing ───────────────────────────────────────────────────────
+if window_occasions is not None:
+    occasions = occasions[-window_occasions:]
+    window_desc = f"{window_occasions} occasions"
+    # for frequency-per-time we still need a span; derive it from the kept-occasion ts range
+    if occasions:
+        span = (parse_iso(occasions[-1][1]) - parse_iso(occasions[0][1])).days or 1
+    else:
+        span = window_days
+else:
+    cutoff = now - timedelta(days=window_days)
+    occasions = [(v, t) for (v, t) in occasions if parse_iso(t) >= cutoff]
+    span = window_days
+    window_desc = f"{window_days}d"
+
+kept_versions = {v for v, _ in occasions}
+# rollbacks restricted to the windowed occasions (a rollback counts only if it
+# remediates an in-window occasion)
+win_rollbacks = [(ts, ver) for ts, ver in rollbacks if ver in kept_versions]
+
+# ─── deployment_frequency ──────────────────────────────────────────────────
+freq_n = len(occasions)
+freq = {
+    "value": freq_n if freq_n > 0 else None,
+    "window_days": span,
+    "na_reason": None if freq_n > 0 else "no deploy events in window",
+}
+
+# ─── lead_time_for_changes (median of t_deploy - t_commit) ─────────────────
+lead_secs = []
+for ver, t_deploy in occasions:
+    if ver in commit_map:
+        d = int((parse_iso(t_deploy) - parse_iso(commit_map[ver])).total_seconds())
+        lead_secs.append(d)
+lead_secs.sort()
+def median(xs):
+    if not xs:
+        return None
+    n = len(xs)
+    return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) // 2
+lead_median = median(lead_secs)
+if freq_n == 0:
+    lead_na = "no deploy occasion with a resolvable commit anchor"
+elif lead_median is None:
+    lead_na = "no deploy occasion with a resolvable commit anchor"
+else:
+    lead_na = None
+lead = {"value_seconds": lead_median, "n": len(lead_secs), "na_reason": lead_na}
+
+# ─── change_failure_rate ───────────────────────────────────────────────────
+# The numerator is the UNION of two independent failure signals, and it must be a
+# union rather than either one alone: a rollback says the deploy landed and was then
+# undone; a failed deploy-target row says it never landed at all. Both are change
+# failures. Keying the numerator only on rollback — the pre-#4215 behaviour — made a
+# totally-failed deploy read as a clean one. The occasions list is already
+# window-sliced, so the membership test below applies the window to both signals.
+#
+# EDITOR NOTE: keep this heredoc body free of apostrophes and backticks. The body is a
+# quoted heredoc nested inside a command substitution, and an unpaired apostrophe here
+# opens a quote context in the scanner of the OUTER shell that never closes — the file
+# then fails to parse hundreds of lines later, at the first parenthesis inside a string.
+# shellcheck does not catch it; only bash does.
+failed_versions = {ver for _, ver in win_rollbacks} | failed_deploy_versions
+failed_occ = sum(1 for ver, _ in occasions if ver in failed_versions)
+if freq_n == 0:
+    cfr = {"value_permille": None, "failed": 0, "total": 0,
+           "na_reason": "no deploy occasions — denominator undefined"}
+else:
+    cfr = {"value_permille": failed_occ * 1000 // freq_n, "failed": failed_occ,
+           "total": freq_n, "na_reason": None}   # 0/N is a REAL 0.0%, not N/A
+
+# ─── mean_time_to_restore ──────────────────────────────────────────────────
+mttr_secs = []
+for ts, ver in win_rollbacks:
+    if ver in occ_deploy:
+        mttr_secs.append(int((parse_iso(ts) - parse_iso(occ_deploy[ver])).total_seconds()))
+mttr_mean = (sum(mttr_secs) // len(mttr_secs)) if mttr_secs else None
+mttr = {
+    "value_seconds": mttr_mean,
+    "n": len(mttr_secs),
+    "na_reason": None if mttr_mean is not None else "no rollback events in window",
+}
+
+print(json.dumps({
+    "window": window_desc,
+    "window_ending": now_iso,
+    "deployment_frequency": freq,
+    "lead_time_for_changes": lead,
+    "change_failure_rate": cfr,
+    "mean_time_to_restore": mttr,
+}))
+PY
+)"
+
 # ─── Self-test mode (no network / no git / no event log) ─────────────────────
 
 if [[ "${1:-}" == "--self-test" ]]; then
@@ -152,107 +324,44 @@ if [[ "${1:-}" == "--self-test" ]]; then
   [[ -x "$QUERY_TOOL" ]] || die "self-test: query-pipeline-event.sh not executable at $QUERY_TOOL"
   [[ -x "$PY" ]] || die "self-test: $PY not executable"
 
-  # Test 4: the core DORA aggregation in python, driven by a SYNTHETIC fixture
-  #   (the same field layout query-pipeline-event.sh emits: "| ts | version | stage
-  #   | event_type | event_subtype | actor | subject | reversibility | outcome | payload |").
-  #   Fixture: 2 deploy occasions (v1.00: 2 targets; v1.01: 1 target) + 1 rollback on v1.01.
-  #   commit-anchor map: v1.00 commit 2026-01-01T00:00:00Z, v1.01 commit 2026-01-05T00:00:00Z.
-  #   Expected: freq=2 occasions; CFR=50.0% (1/2); MTTR = (v1.01 rollback ts - v1.01 deploy ts).
+  # ─── Tests 4-6: the DORA aggregation, run through the REAL engine ──────────
+  #
+  # These arms pipe synthetic fixtures through $AGG_PY — the same variable the live
+  # path uses — rather than through a transcription of it. The transcription that used
+  # to live here was a shadow source of truth: a change made to the engine and not
+  # mirrored into the copy left the suite green, so the suite could not detect the very
+  # class of defect it existed to catch.
+  #
+  # Fixture field layout is the one query-pipeline-event.sh emits:
+  #   "| ts | version | stage | event_type | event_subtype | actor | subject | reversibility | outcome | payload |"
+  # `now` is pinned INSIDE the fixture's own window so the arms do not rot as the wall
+  # clock advances past the 30-day cutoff.
+  ST_NOW="2026-01-10T00:00:00Z"
+
+  _dora_field() {
+    # _dora_field <json> <metric> <key> -> value, or the literal NA for JSON null
+    "$PY" -c 'import json,sys; v=json.loads(sys.argv[1])[sys.argv[2]][sys.argv[3]]; print("NA" if v is None else v)' "$1" "$2" "$3"
+  }
+
+  # Test 4: two occasions (v1.00 carries 2 targets, v1.01 carries 1) + 1 rollback on
+  #   v1.01. Every deploy row succeeded, so the ONLY failure signal is the rollback.
+  #   Expected: freq=2; CFR=50.0% (1/2); lead median over the two occasions; MTTR from
+  #   the v1.01 rollback pair.
   FIXTURE_ROWS="$(/bin/cat <<'ROWS'
-| 2026-01-02T10:00:00Z | v1.00 | 12 | deployment-status | deploy-skill | hub | s | CHEAP | ok | p |
-| 2026-01-02T10:00:05Z | v1.00 | 12 | deployment-status | deploy-harness | hub | s | CHEAP | ok | p |
-| 2026-01-06T09:00:00Z | v1.01 | 12 | deployment-status | deploy-skill | hub | s | CHEAP | ok | p |
-| 2026-01-06T12:12:00Z | v1.01 | 13 | self-repair | rollback | operator | s | MODERATE | ok | p |
+| 2026-01-02T10:00:00Z | v1.00 | 12 | deployment-status | deploy-skill | hub | s | CHEAP | resolved | p |
+| 2026-01-02T10:00:05Z | v1.00 | 12 | deployment-status | deploy-harness | hub | s | CHEAP | resolved | p |
+| 2026-01-06T09:00:00Z | v1.01 | 12 | deployment-status | deploy-skill | hub | s | CHEAP | resolved | p |
+| 2026-01-06T12:12:00Z | v1.01 | 13 | self-repair | rollback | operator | s | MODERATE | resolved | p |
 ROWS
 )"
   COMMIT_MAP="$(/usr/bin/printf 'v1.00\t2026-01-01T00:00:00Z\nv1.01\t2026-01-05T00:00:00Z\n')"
 
-  # NOTE: stdin carries the fixture rows, so the python SOURCE is passed via
-  # `-c "$(cat <<'PY' ... )"` — a heredoc on `python3 -` would itself consume stdin
-  # and starve the piped rows (the synthesize-release-learnings.sh pattern).
-  SELFTEST_PY="$(/bin/cat <<'PY'
-import sys, json
-from datetime import datetime, timezone
-
-commit_map_raw = sys.argv[1]
-# window args unused in self-test (we pass all fixture rows through); kept for parity.
-
-def parse_iso(s):
-    return datetime.fromisoformat(s.replace("Z", "+00:00"))
-
-commit_map = {}
-for line in commit_map_raw.splitlines():
-    if not line.strip():
-        continue
-    ver, ciso = line.split("\t", 1)
-    commit_map[ver.strip()] = ciso.strip()
-
-deploys = []   # (ts, version)
-rollbacks = []  # (ts, version)
-for line in sys.stdin:
-    line = line.rstrip("\n")
-    if not line.strip():
-        continue
-    parts = line.split(" | ")
-    ts = parts[0][2:].strip()        # strip leading "| "
-    version = parts[1].strip()
-    etype = parts[3].strip()
-    esub = parts[4].strip()
-    if etype == "deployment-status" and esub in ("deploy-skill", "deploy-harness"):
-        deploys.append((ts, version))
-    elif etype == "self-repair" and esub == "rollback":
-        rollbacks.append((ts, version))
-
-# Collapse deploy rows to occasions keyed by version; T_DEPLOY = MAX(ts) per version.
-occ = {}
-for ts, ver in deploys:
-    if ver not in occ or ts > occ[ver]:
-        occ[ver] = ts
-occasions = sorted(occ.items(), key=lambda kv: kv[1])  # [(version, t_deploy_iso)]
-
-freq = len(occasions)
-
-# Lead time: per occasion (t_deploy - t_commit), median.
-lead_secs = []
-for ver, t_deploy in occasions:
-    if ver in commit_map:
-        d = (parse_iso(t_deploy) - parse_iso(commit_map[ver])).total_seconds()
-        lead_secs.append(int(d))
-lead_secs.sort()
-def median(xs):
-    if not xs:
-        return None
-    n = len(xs)
-    return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) // 2
-lead_median = median(lead_secs)
-
-# CFR: a rollback's version marks that occasion failed.
-failed_versions = {ver for _, ver in rollbacks}
-failed_occ = sum(1 for ver, _ in occasions if ver in failed_versions)
-cfr = (failed_occ * 1000 // freq) if freq else None  # per-mille for integer compare
-
-# MTTR: per rollback, (rollback_ts - that occasion's t_deploy).
-mttr_secs = []
-for ts, ver in rollbacks:
-    if ver in occ:
-        mttr_secs.append(int((parse_iso(ts) - parse_iso(occ[ver])).total_seconds()))
-mttr_mean = (sum(mttr_secs) // len(mttr_secs)) if mttr_secs else None
-
-print(json.dumps({
-    "freq": freq,
-    "lead_median": lead_median,
-    "cfr_permille": cfr,
-    "failed_occ": failed_occ,
-    "mttr_mean": mttr_mean,
-}))
-PY
-)"
-  SELFTEST_JSON="$(printf '%s\n' "$FIXTURE_ROWS" | "$PY" -c "$SELFTEST_PY" "$COMMIT_MAP" "30" "now")"
-  FREQ="$("$PY" -c 'import json,sys; print(json.loads(sys.argv[1])["freq"])' "$SELFTEST_JSON")"
-  CFRPM="$("$PY" -c 'import json,sys; print(json.loads(sys.argv[1])["cfr_permille"])' "$SELFTEST_JSON")"
-  FAILED="$("$PY" -c 'import json,sys; print(json.loads(sys.argv[1])["failed_occ"])' "$SELFTEST_JSON")"
-  LEADM="$("$PY" -c 'import json,sys; print(json.loads(sys.argv[1])["lead_median"])' "$SELFTEST_JSON")"
-  MTTRM="$("$PY" -c 'import json,sys; print(json.loads(sys.argv[1])["mttr_mean"])' "$SELFTEST_JSON")"
+  SELFTEST_JSON="$(/usr/bin/printf '%s\n' "$FIXTURE_ROWS" | "$PY" -c "$AGG_PY" "$COMMIT_MAP" "30" "" "$ST_NOW")"
+  FREQ="$(_dora_field "$SELFTEST_JSON" deployment_frequency value)"
+  CFRPM="$(_dora_field "$SELFTEST_JSON" change_failure_rate value_permille)"
+  FAILED="$(_dora_field "$SELFTEST_JSON" change_failure_rate failed)"
+  LEADM="$(_dora_field "$SELFTEST_JSON" lead_time_for_changes value_seconds)"
+  MTTRM="$(_dora_field "$SELFTEST_JSON" mean_time_to_restore value_seconds)"
 
   [[ "$FREQ" == "2" ]]   || die "self-test: deployment_frequency occasions = $FREQ, expected 2 (per-target rows collapsed)"
   [[ "$FAILED" == "1" ]] || die "self-test: failed occasions = $FAILED, expected 1"
@@ -269,29 +378,104 @@ PY
   # Test 5: format the self-test durations through the bash formatter (contract parity)
   R="$(format_duration "$MTTRM")"; [[ "$R" == "3h12m" ]] || die "self-test: format_duration(MTTR=$MTTRM) = $R, expected 3h12m"
 
-  # Test 6: CFR real-zero vs N/A discriminator — zero rollbacks WITH occasions -> 0.0% (not N/A);
-  #         zero occasions -> N/A. Exercised via the python branch logic directly.
-  ZERO_PY="$(/bin/cat <<'PY'
-import sys, json
-deploys=[]; rollbacks=[]
-for line in sys.stdin:
-    line=line.rstrip("\n")
-    if not line.strip(): continue
-    parts=line.split(" | ")
-    etype=parts[3].strip(); esub=parts[4].strip(); ver=parts[1].strip()
-    if etype=="deployment-status" and esub in ("deploy-skill","deploy-harness"): deploys.append(ver)
-    elif etype=="self-repair" and esub=="rollback": rollbacks.append(ver)
-occ=set(deploys); freq=len(occ)
-failed=len({v for v in rollbacks} & occ)
-cfr = (failed*1000//freq) if freq else None
-print(json.dumps({"freq":freq,"cfr_permille":cfr}))
-PY
+  # Test 6: CFR real-zero vs N/A discriminator — zero failures WITH occasions -> 0.0%
+  #         (a real clean-window value, NOT N/A); zero occasions -> N/A.
+  ZERO_ROW="| 2026-01-05T10:00:00Z | v2.00 | 12 | deployment-status | deploy-skill | hub | s | CHEAP | resolved | p |"
+  ZERO_JSON="$(/usr/bin/printf '%s\n' "$ZERO_ROW" | "$PY" -c "$AGG_PY" "" "30" "" "$ST_NOW")"
+  ZFREQ="$(_dora_field "$ZERO_JSON" deployment_frequency value)"
+  ZCFR="$(_dora_field "$ZERO_JSON" change_failure_rate value_permille)"
+  [[ "$ZFREQ" == "1" ]] || die "self-test: zero-failure window occasions = $ZFREQ, expected 1"
+  [[ "$ZCFR" == "0" ]]  || die "self-test: zero-failure-with-occasion CFR = $ZCFR, expected 0 (real 0.0%, NOT N/A)"
+
+  EMPTY_JSON="$(/usr/bin/printf '' | "$PY" -c "$AGG_PY" "" "30" "" "$ST_NOW")"
+  ECFR="$(_dora_field "$EMPTY_JSON" change_failure_rate value_permille)"
+  [[ "$ECFR" == "NA" ]] || die "self-test: zero-occasion CFR = $ECFR, expected NA (denominator undefined)"
+
+  # ─── Group DF — failed deploys reach the CFR NUMERATOR (#4215) ─────────────
+  #
+  # THE DEFECT, IN FIXTURE FORM. Before this group existed the change_failure_rate
+  # numerator was keyed ONLY to a self-repair/rollback row, so a deploy whose every
+  # target failed entered the DENOMINATOR ALONE and the release reported 0.0% (0/1).
+  # The platform's change-failure rate therefore IMPROVED as its deploys failed, and
+  # because the event log is append-only the bias was permanent.
+  #
+  # Mutation pairing: delete `| failed_deploy_versions` from the numerator union and
+  # DF-1 turns red while DF-2 stays green — which is exactly why DF-2 exists.
+  DF_FAIL_ROWS="$(/bin/cat <<'ROWS'
+| 2026-01-08T11:30:00Z | slug-allfail | 12 | deployment-status | deploy-skill | hub | skill:a | CHEAP | escalated | result:FAIL |
+| 2026-01-08T11:30:01Z | slug-allfail | 12 | deployment-status | deploy-skill | hub | skill:b | CHEAP | escalated | result:FAIL |
+ROWS
 )"
-  ZERO_JSON="$(printf '%s\n' "| 2026-02-01T10:00:00Z | v2.00 | 12 | deployment-status | deploy-skill | hub | s | CHEAP | ok | p |" | "$PY" -c "$ZERO_PY")"
-  ZFREQ="$("$PY" -c 'import json,sys; print(json.loads(sys.argv[1])["freq"])' "$ZERO_JSON")"
-  ZCFR="$("$PY" -c 'import json,sys; v=json.loads(sys.argv[1])["cfr_permille"]; print("NA" if v is None else v)' "$ZERO_JSON")"
-  [[ "$ZFREQ" == "1" ]] || die "self-test: zero-rollback window occasions = $ZFREQ, expected 1"
-  [[ "$ZCFR" == "0" ]]  || die "self-test: zero-rollback-with-occasion CFR = $ZCFR, expected 0 (real 0.0%, NOT N/A)"
+  DF_OK_ROWS="$(/bin/cat <<'ROWS'
+| 2026-01-08T11:30:00Z | slug-allok | 12 | deployment-status | deploy-skill | hub | skill:a | CHEAP | resolved | result:SUCCESS |
+| 2026-01-08T11:30:01Z | slug-allok | 12 | deployment-status | deploy-skill | hub | skill:b | CHEAP | resolved | result:SUCCESS |
+ROWS
+)"
+  DF_MIXED_ROWS="$(/bin/cat <<'ROWS'
+| 2026-01-08T11:30:00Z | slug-mixed | 12 | deployment-status | deploy-skill | hub | skill:a | CHEAP | resolved | result:SUCCESS |
+| 2026-01-08T11:30:01Z | slug-mixed | 12 | deployment-status | deploy-skill | hub | skill:b | CHEAP | escalated | result:FAIL |
+ROWS
+)"
+
+  # DF-1 — a release whose every target failed is a CHANGE FAILURE: 1 of 1, 100%.
+  DF_JSON="$(/usr/bin/printf '%s\n' "$DF_FAIL_ROWS" | "$PY" -c "$AGG_PY" "" "30" "" "$ST_NOW")"
+  R="$(_dora_field "$DF_JSON" change_failure_rate value_permille)"
+  [[ "$R" == "1000" ]] || die "self-test: DF-1 an all-targets-failed release must read CFR 1000permille (100%), got ${R}permille"
+  # DF-1b — and it STAYS in the denominator. A deploy that ran and failed is still a
+  #         deployment event; dropping it would understate deployment_frequency and
+  #         quietly hide the failure a second way.
+  R="$(_dora_field "$DF_JSON" deployment_frequency value)"
+  [[ "$R" == "1" ]] || die "self-test: DF-1b a failed deploy must still count as 1 occasion (denominator), got $R"
+
+  # DF-2 — CONTROL. The identical fixture with resolved outcomes reads 0%. Without
+  #        this arm, DF-1's 100% would be consistent with an engine that marks
+  #        everything failed.
+  DF_JSON="$(/usr/bin/printf '%s\n' "$DF_OK_ROWS" | "$PY" -c "$AGG_PY" "" "30" "" "$ST_NOW")"
+  R="$(_dora_field "$DF_JSON" change_failure_rate value_permille)"
+  [[ "$R" == "0" ]] || die "self-test: DF-2 CONTROL — an all-targets-succeeded release must read CFR 0permille, got ${R}permille"
+
+  # DF-3 — a PARTIAL failure is a failure. One escalated target means the deploy did
+  #        not succeed, so the occasion is a change failure even though a sibling
+  #        target reported success.
+  DF_JSON="$(/usr/bin/printf '%s\n' "$DF_MIXED_ROWS" | "$PY" -c "$AGG_PY" "" "30" "" "$ST_NOW")"
+  R="$(_dora_field "$DF_JSON" change_failure_rate value_permille)"
+  [[ "$R" == "1000" ]] || die "self-test: DF-3 a partially-failed release must read CFR 1000permille (100%), got ${R}permille"
+
+  # DF-4 — the two failure signals UNION rather than double-count. A release carrying
+  #        BOTH a failed deploy row and a rollback is one failed occasion, not two.
+  DF_RB_ROW="| 2026-01-08T13:00:00Z | slug-allfail | 13 | self-repair | rollback | operator | s | MODERATE | resolved | p |"
+  DF_JSON="$(/usr/bin/printf '%s\n%s\n' "$DF_FAIL_ROWS" "$DF_RB_ROW" | "$PY" -c "$AGG_PY" "" "30" "" "$ST_NOW")"
+  R="$(_dora_field "$DF_JSON" change_failure_rate failed)"
+  [[ "$R" == "1" ]] || die "self-test: DF-4 rollback + failed-deploy on one release is ONE failed occasion, got $R"
+
+  # DF-5 — SPECIFICITY. A failed row of a NON-anchor subtype must not mark the
+  #        occasion failed, because deploy-package is not part of the occasion set at
+  #        all; without this arm the numerator could be keyed on any deployment-status
+  #        row and DF-1 would still pass.
+  DF_PKG_ROW="| 2026-01-08T11:30:02Z | slug-allok | 12 | deployment-status | deploy-package | hub | package:p | CHEAP | escalated | result:FAIL |"
+  DF_JSON="$(/usr/bin/printf '%s\n%s\n' "$DF_OK_ROWS" "$DF_PKG_ROW" | "$PY" -c "$AGG_PY" "" "30" "" "$ST_NOW")"
+  R="$(_dora_field "$DF_JSON" change_failure_rate value_permille)"
+  [[ "$R" == "0" ]] || die "self-test: DF-5 SPECIFICITY — a failed deploy-package row is not an anchor and must not mark the occasion failed, got ${R}permille"
+
+  # DF-6 — DF-5's NEGATIVE CONTROL, and what turns DF-5 from an assertion into a
+  #        demonstration. DF-5 alone only ever PASSES: its 0permille is equally
+  #        consistent with a live subtype narrowing and with an engine that had no
+  #        deploy-package row to reject in the first place. Stage 8 graded DF-5
+  #        conformant-arm-only for exactly that reason.
+  #
+  #        The widened engine is DERIVED FROM THE SHIPPED $AGG_PY BY AN ASSERTED
+  #        TRANSFORM, never transcribed — the transcription this file already warns
+  #        about above is a shadow source of truth, and a hand-copied mutant is the
+  #        same defect wearing a control's clothes. An unbitten substitution ABORTS
+  #        rather than reading green for the wrong reason.
+  _df_widened_py="$(/usr/bin/printf '%s\n' "$AGG_PY" \
+    | /usr/bin/sed -e 's/("deploy-skill", "deploy-harness")/("deploy-skill", "deploy-harness", "deploy-package")/')"
+  if [[ "$_df_widened_py" == "$AGG_PY" ]]; then
+    die "self-test: DF-6 the anchor-subtype widening did not bite \$AGG_PY — the arm is inert and must be repaired, never silenced"
+  fi
+  DF_JSON="$(/usr/bin/printf '%s\n%s\n' "$DF_OK_ROWS" "$DF_PKG_ROW" | "$PY" -c "$_df_widened_py" "" "30" "" "$ST_NOW")"
+  R="$(_dora_field "$DF_JSON" change_failure_rate value_permille)"
+  [[ "$R" == "1000" ]] || die "self-test: DF-6 NEGATIVE CONTROL — with deploy-package admitted to the anchor set the SAME fixture must read 1000permille (expected 1000, got ${R}permille); if it does not, DF-5's zero is uninformative and proves nothing about the narrowing"
 
   echo "self-test: PASS"
   echo "  duration formatter validated (sub-hour / over-hour / multi-day / zero)"
@@ -299,6 +483,9 @@ PY
   echo "  DORA aggregation validated (per-target row collapse to occasions, lead-median, CFR, MTTR)"
   echo "  CFR real-zero vs N/A discriminator validated"
   echo "  query-pipeline-event.sh dependency validated"
+  echo "  every arm above ran through the LIVE \$AGG_PY engine, not a transcription of it"
+  echo "  failed deploys reach the CFR NUMERATOR validated (#4215, group DF):"
+  echo "    DF-1 an all-targets-failed release reads CFR 100% (it used to read 0.0% — failed deploys entered the denominator ALONE, so the platform's change-failure rate improved as its deploys failed, permanently) / DF-1b and it STAYS in the denominator, because a deploy that ran and failed is still a deployment event / DF-2 CONTROL an all-targets-succeeded release reads 0% / DF-3 a PARTIAL failure is a failure / DF-4 rollback + failed-deploy on one release is ONE failed occasion, not two (union, not sum) / DF-5 SPECIFICITY a failed deploy-package row is not an anchor and does not mark the occasion failed / DF-6 NEGATIVE CONTROL the SAME fixture through an engine widened to admit deploy-package — derived from the shipped \$AGG_PY by an asserted transform, never transcribed — DOES read 1000permille, so DF-5's zero is the narrowing biting rather than an inert probe"
   exit 0
 fi
 
@@ -419,141 +606,6 @@ NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 # stdin carries the event rows, so the python SOURCE is passed via `-c "$AGG_PY"` —
 # a heredoc on `python3 -` would itself consume stdin and starve the piped rows
 # (the synthesize-release-learnings.sh pattern).
-AGG_PY="$(/bin/cat <<'PY'
-import sys, json
-from datetime import datetime, timezone, timedelta
-
-commit_map_raw = sys.argv[1]
-window_days = int(sys.argv[2]) if sys.argv[2] else 30
-window_occasions = int(sys.argv[3]) if sys.argv[3] else None
-now_iso = sys.argv[4]
-
-def parse_iso(s):
-    try:
-        return datetime.fromisoformat(s.replace("Z", "+00:00"))
-    except ValueError as e:
-        print(f"ts_iso parse failure: {e}", file=sys.stderr)
-        sys.exit(2)
-
-now = parse_iso(now_iso)
-
-commit_map = {}
-for line in commit_map_raw.splitlines():
-    if not line.strip():
-        continue
-    if "\t" in line:
-        ver, ciso = line.split("\t", 1)
-        commit_map[ver.strip()] = ciso.strip()
-
-deploys = []    # (ts_iso, version)
-rollbacks = []  # (ts_iso, version)
-for line in sys.stdin:
-    line = line.rstrip("\n")
-    if not line.strip():
-        continue
-    parts = line.split(" | ")
-    if len(parts) < 5:
-        continue
-    ts = parts[0][2:].strip()
-    version = parts[1].strip()
-    etype = parts[3].strip()
-    esub = parts[4].strip()
-    # Validate ts parses (source-integrity; exit 2 on malformed).
-    parse_iso(ts)
-    if etype == "deployment-status" and esub in ("deploy-skill", "deploy-harness"):
-        deploys.append((ts, version))
-    elif etype == "self-repair" and esub == "rollback":
-        rollbacks.append((ts, version))
-
-# Collapse deploy rows to occasions keyed by version; T_DEPLOY = MAX(ts) per version.
-occ_deploy = {}
-for ts, ver in deploys:
-    if ver not in occ_deploy or ts > occ_deploy[ver]:
-        occ_deploy[ver] = ts
-# occasions sorted chronologically by their T_DEPLOY
-occasions = sorted(occ_deploy.items(), key=lambda kv: kv[1])  # [(version, t_deploy_iso)]
-
-# ─── Window slicing ───────────────────────────────────────────────────────
-if window_occasions is not None:
-    occasions = occasions[-window_occasions:]
-    window_desc = f"{window_occasions} occasions"
-    # for frequency-per-time we still need a span; derive it from the kept-occasion ts range
-    if occasions:
-        span = (parse_iso(occasions[-1][1]) - parse_iso(occasions[0][1])).days or 1
-    else:
-        span = window_days
-else:
-    cutoff = now - timedelta(days=window_days)
-    occasions = [(v, t) for (v, t) in occasions if parse_iso(t) >= cutoff]
-    span = window_days
-    window_desc = f"{window_days}d"
-
-kept_versions = {v for v, _ in occasions}
-# rollbacks restricted to the windowed occasions (a rollback counts only if it
-# remediates an in-window occasion)
-win_rollbacks = [(ts, ver) for ts, ver in rollbacks if ver in kept_versions]
-
-# ─── deployment_frequency ──────────────────────────────────────────────────
-freq_n = len(occasions)
-freq = {
-    "value": freq_n if freq_n > 0 else None,
-    "window_days": span,
-    "na_reason": None if freq_n > 0 else "no deploy events in window",
-}
-
-# ─── lead_time_for_changes (median of t_deploy - t_commit) ─────────────────
-lead_secs = []
-for ver, t_deploy in occasions:
-    if ver in commit_map:
-        d = int((parse_iso(t_deploy) - parse_iso(commit_map[ver])).total_seconds())
-        lead_secs.append(d)
-lead_secs.sort()
-def median(xs):
-    if not xs:
-        return None
-    n = len(xs)
-    return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) // 2
-lead_median = median(lead_secs)
-if freq_n == 0:
-    lead_na = "no deploy occasion with a resolvable commit anchor"
-elif lead_median is None:
-    lead_na = "no deploy occasion with a resolvable commit anchor"
-else:
-    lead_na = None
-lead = {"value_seconds": lead_median, "n": len(lead_secs), "na_reason": lead_na}
-
-# ─── change_failure_rate ───────────────────────────────────────────────────
-failed_versions = {ver for _, ver in win_rollbacks}
-failed_occ = sum(1 for ver, _ in occasions if ver in failed_versions)
-if freq_n == 0:
-    cfr = {"value_permille": None, "failed": 0, "total": 0,
-           "na_reason": "no deploy occasions — denominator undefined"}
-else:
-    cfr = {"value_permille": failed_occ * 1000 // freq_n, "failed": failed_occ,
-           "total": freq_n, "na_reason": None}   # 0/N is a REAL 0.0%, not N/A
-
-# ─── mean_time_to_restore ──────────────────────────────────────────────────
-mttr_secs = []
-for ts, ver in win_rollbacks:
-    if ver in occ_deploy:
-        mttr_secs.append(int((parse_iso(ts) - parse_iso(occ_deploy[ver])).total_seconds()))
-mttr_mean = (sum(mttr_secs) // len(mttr_secs)) if mttr_secs else None
-mttr = {
-    "value_seconds": mttr_mean,
-    "n": len(mttr_secs),
-    "na_reason": None if mttr_mean is not None else "no rollback events in window",
-}
-
-print(json.dumps({
-    "window": window_desc,
-    "window_ending": now_iso,
-    "deployment_frequency": freq,
-    "lead_time_for_changes": lead,
-    "change_failure_rate": cfr,
-    "mean_time_to_restore": mttr,
-}))
-PY
-)"
 
 DORA_JSON="$(printf '%s\n' "$ALL_ROWS" | "$PY" -c "$AGG_PY" \
   "$COMMIT_MAP_DATA" "$WINDOW_DAYS" "${WINDOW_OCCASIONS:-}" "$NOW_ISO")" \

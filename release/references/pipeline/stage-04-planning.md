@@ -276,6 +276,61 @@ this step binds it into the plan's own matrix so the prerequisite is planned at 
 rather than rediscovered at Solutioning. A delivered script whose allowlist row never
 entered the matrix is unrunnable agent-side on arrival.
 
+**File Change Matrix — the declared-vs-delivered authoring contract.** The matrix is read
+mechanically by the `fcm-delivery` check family in `release/tools/verify-release-plan.sh`,
+which compares every **unconditional ADD** against the merged diff and reports any
+declared-but-absent file. Stage 9 consumes that verdict read-only as **G-PR11**. The
+contract below is what makes a matrix machine-readable; a matrix that does not follow it is
+not *rejected*, but the parts the parser cannot interpret are **reported as uninterpreted
+rather than treated as absent**, and a plan with uninterpreted rows cannot reach PASS.
+
+1. **Intent markers.** Normalize to the shipped three-value enum `add | edit | delete`
+   (`bundle-issues-parser.py`), with synonyms `NEW` / `CREATE` → add, `MODIFY` → edit,
+   `REMOVE` → delete. Two authored forms are normative and both are recognized:
+   - **columnar-in-fence** — `<path>  <VERB>` or `<VERB>  <path>`. **Both orders are
+     accepted**; the corpus authors both, at 440 path-first and 235 verb-first rows.
+   - **table intent column** — a markdown table with a header cell named
+     `Intent` / `Action` / `Change` / `Disposition` / `Operation` / `Op` / `Type`, and a
+     path-bearing cell. When a marked row's path cell carries a human label rather than a
+     repository path, the row is reported `fcm-row-pathless` — a named error, never a
+     silent zero.
+2. **A marker-less path is `unknown`, never `edit`.** This is a deliberate divergence from
+   the issue-surface parser's default. In a matrix, defaulting silently converts *"intent
+   was never declared"* into *"no ADDs were declared, therefore no violations"* — the exact
+   vacuity the check exists to close. Uninterpreted rows are counted and reported.
+3. **Non-change classes sit in a separately labelled block.** `READ` inputs and
+   `NOT EDITED` / `NOT TOUCHED` non-scope rows are **excluded** from the obligation set, not
+   merely un-flagged. Label the block (`#### Read-only inputs`, `#### Release-wide explicit
+   non-scope`, or a bold label) **and** carry the verb on the row; either signal excludes,
+   and authoring both is what makes the exclusion legible to a human reader too.
+4. **CONDITIONAL rows.** Two normative forms: row-level `CONDITIONAL:<condition-token>`
+   (colon-delimited, tokenizable) and a block-level sub-heading matching `/CONDITIONAL/i`.
+   `CONDITIONAL on <prose>` is tolerated but not normative. The token is recognized in
+   **UPPER case, as a delimited word, with the declared path excluded from the match** —
+   a path whose own slug contains the word "conditional" is not a conditional row.
+5. **A fired conditional is promoted in the same commit.** A CONDITIONAL row whose
+   condition resolves at or before Engineering Commit 0 moves into the unconditional set
+   **in that commit**, carrying its now-concrete path. A row left CONDITIONAL after its
+   condition has resolved is an authoring defect: it is indistinguishable from a row whose
+   condition never fired, and it buys exemption from the check for the price of one token.
+   The converse also holds — a row whose declared condition turns out to be *false* while
+   the file is edited anyway must be promoted with its real basis recorded, not left
+   shielded by a predicate that never fired.
+6. **Path forms.** Five are recognized: literal, directory (trailing `/`), **glob**
+   (`*` / `?` / `[…]`), placeholder (`<…>` / `{{…}}` / `NNN` / `XXX` / `X.Y`, normalized
+   into the glob arm), and delivered-as-rename. Globs are normative — 27 glob-bearing
+   tokens across 15 plans make them an established authored form. A pattern with no literal
+   directory prefix, or whose basename is entirely wildcard, is `placeholder-unresolvable`:
+   it cannot distinguish a delivered obligation from any addition at all.
+7. **A declared ADD that legitimately does not ship requires a Deviation-Log row.** Extend
+   the shipped `## Deviation Log` table; author no parallel structure. The load-bearing
+   tokens are the literal `NOT DELIVERED` and the declared path (or, for a conditional row,
+   its condition token). **The row is what converts the finding into a pass** — the record
+   is the obligation, and an omission with no record is the defect.
+8. **Fenced blocks may carry `#` comment labels.** The FCM extractor is fence-aware, so a
+   `# ── label ──` line inside a fence is read as a block label rather than as a heading
+   that ends the section. Authors do not need to avoid it.
+
 The `### Quota Budget` section records the Phase A6 Checkpoint A estimate. Scaffold:
 
 ```markdown

@@ -11,8 +11,23 @@
 # Cycle time = T_DEPLOY - T_GO, where:
 #   T_GO     = MIN(ts_iso) of gate-outcome/plan-review-go events for the release
 #   T_DEPLOY = MAX(ts_iso) of deployment-status/deploy-skill or deploy-harness
-#              events for the release
+#              events for the release THAT CARRY outcome=resolved
 # Both anchors source the ts_iso field per pipeline-event-log-schema.md § 2.
+#
+# WHY T_DEPLOY REQUIRES outcome=resolved (#4215). A deploy in which every target
+# FAILED is not a deploy. Before this conjunct existed, a release whose deploy rows
+# all read outcome=escalated still produced a measured duration — the anchor read the
+# subtype and ignored the outcome column entirely — so "Cycle-Time returns a value
+# rather than N/A" was satisfiable by total failure and could not distinguish the goal
+# being met from the goal being defeated. Restricting the anchor to resolved rows makes
+# a failed deploy read N/A, which is the honest answer, and the N/A diagnostic below
+# names WHICH kind of N/A it is so the two are never conflated again.
+#
+# WHY deploy-package IS NOT AN ANCHOR — a DECLARED narrowing, not an oversight. A
+# package deploy is not evidence that the release's skills reached the install path, so
+# anchoring cycle time on one would overstate what was observed. The bounded consequence
+# is that a package-ONLY deploy yields no T_DEPLOY; that is structurally near-impossible
+# because the deploy tool populates its package set only alongside skills.
 #
 # Usage:
 #   ./compute-cycle-time.sh <release>           # human-readable: "47m" or "2h17m" or "N/A"
@@ -109,6 +124,21 @@ print(int(delta.total_seconds()))
 PY
 }
 
+# ─── T_DEPLOY anchor-row selection (#4215) ───────────────────────────────────
+#
+# Reads pipe-delimited event rows on stdin, echoes only those eligible to anchor
+# T_DEPLOY. Factored out of the main flow so the self-test can grade the PREDICATE
+# rather than only the arithmetic around it — an inline filter is unreachable from a
+# test, and an untestable filter is exactly the shape of control this release exists to
+# eliminate.
+#
+# Field map under FS=" | ": the row's leading "| " has no preceding space, so it is not
+# a delimiter — $1 retains it and reads "| <ts_iso>", $2 is version, $5 is event_subtype
+# and $9 is outcome.
+select_deploy_anchor_rows() {
+  /usr/bin/awk -F ' \\| ' '($5 == "deploy-skill" || $5 == "deploy-harness") && $9 == "resolved" { print }'
+}
+
 # Format integer seconds as "47m" or "2h17m".
 format_human() {
   local secs="$1"
@@ -160,11 +190,105 @@ if [[ "$SELF_TEST" == "true" ]]; then
     die "self-test: malformed ts_iso accepted (should exit 2)"
   fi
 
+  # ─── Group CT — T_DEPLOY anchor eligibility (#4215) ────────────────────────
+  #
+  # The predicate, not the arithmetic. Every arm is paired with the mutation that must
+  # turn it red: delete the `&& $9 == "resolved"` conjunct from select_deploy_anchor_rows
+  # and CT-2, CT-4 and CT-5 all fail. An arm whose mutation leaves it green is theatre.
+  #
+  # Fixture rows use the field layout query-pipeline-event.sh emits:
+  #   "| ts | version | stage | event_type | event_subtype | actor | subject | reversibility | outcome | payload |"
+  CT_ROWS="$(/bin/cat <<'ROWS'
+| 2026-01-02T10:00:00Z | slug-a | 12 | deployment-status | deploy-skill | hub | skill:a | CHEAP | resolved | p |
+| 2026-01-02T10:00:05Z | slug-a | 12 | deployment-status | deploy-harness | hub | harness:h | CHEAP | resolved | p |
+| 2026-01-02T11:00:00Z | slug-a | 12 | deployment-status | deploy-skill | hub | skill:b | CHEAP | escalated | p |
+| 2026-01-02T11:30:00Z | slug-a | 12 | deployment-status | deploy-package | hub | package:p | CHEAP | resolved | p |
+| 2026-01-02T12:00:00Z | slug-a | 12 | deployment-status | deploy-skill | hub | skill:c | CHEAP | pending | p |
+ROWS
+)"
+
+  # CT-1 — SENSITIVITY. The selector fires at all: the two resolved target rows are kept.
+  #        Without this arm, every "excluded" assertion below would also pass on a
+  #        selector that returns nothing, which proves nothing.
+  RESULT="$(printf '%s\n' "$CT_ROWS" | select_deploy_anchor_rows | /usr/bin/grep -c . || true)"
+  if [[ "$RESULT" != "2" ]]; then
+    die "self-test: CT-1 selector must keep the 2 resolved deploy-skill/deploy-harness rows, got $RESULT"
+  fi
+
+  # CT-2 — THE PRF-1 ARM. An escalated deploy-skill row must NOT anchor T_DEPLOY. This
+  #        is the case that previously produced a measured duration for a deploy in
+  #        which nothing deployed.
+  RESULT="$(printf '%s\n' "$CT_ROWS" | select_deploy_anchor_rows | /usr/bin/grep -c 'skill:b' || true)"
+  if [[ "$RESULT" != "0" ]]; then
+    die "self-test: CT-2 an escalated deploy row must NOT be anchor-eligible, got $RESULT"
+  fi
+
+  # CT-3 — the DECLARED narrowing: deploy-package is audit-only and never an anchor.
+  RESULT="$(printf '%s\n' "$CT_ROWS" | select_deploy_anchor_rows | /usr/bin/grep -c 'deploy-package' || true)"
+  if [[ "$RESULT" != "0" ]]; then
+    die "self-test: CT-3 deploy-package must NOT be anchor-eligible (declared narrowing), got $RESULT"
+  fi
+
+  # CT-3b — CT-3's NEGATIVE CONTROL, and the reason CT-3 is now a demonstration
+  #         rather than an assertion. CT-3 alone only ever PASSES: its zero is
+  #         equally consistent with a live narrowing and with a selector that
+  #         never had `deploy-package` to reject. Stage 8 measured exactly that —
+  #         the CT-1 mutation (delete the `resolved` conjunct) moves rows-kept
+  #         2 → 4 while CT-3 stays 0 → 0, so CT-3 observed nothing the rest of
+  #         the group had not already observed.
+  #
+  #         This arm removes the observing step and shows the zero move. The
+  #         widened selector is DERIVED FROM THE SHIPPED FUNCTION'S OWN SOURCE by
+  #         an asserted transform — never transcribed — so it cannot drift into a
+  #         shadow copy that keeps passing after the real predicate changes. An
+  #         unbitten substitution ABORTS the arm rather than letting it read green
+  #         for the wrong reason.
+  _ct_src="$(declare -f select_deploy_anchor_rows)"
+  _ct_widened="$(/usr/bin/printf '%s\n' "$_ct_src" \
+    | /usr/bin/sed -e 's/select_deploy_anchor_rows/_ct_widened_selector/' \
+                   -e 's/\$5 == "deploy-harness"/$5 == "deploy-harness" || $5 == "deploy-package"/')"
+  if [[ "$_ct_widened" == "$_ct_src" ]] || ! /usr/bin/grep -q 'deploy-package' <<<"$_ct_widened"; then
+    die "self-test: CT-3b the widening transform did not bite the shipped selector source — the arm is inert and must be repaired, never silenced"
+  fi
+  eval "$_ct_widened"
+  RESULT="$(printf '%s\n' "$CT_ROWS" | _ct_widened_selector | /usr/bin/grep -c 'deploy-package' || true)"
+  if [[ "$RESULT" != "1" ]]; then
+    die "self-test: CT-3b NEGATIVE CONTROL — the widened selector must ADMIT the deploy-package row (expected 1, got $RESULT); if it does not, CT-3's zero is uninformative and proves nothing about the narrowing"
+  fi
+  unset -f _ct_widened_selector
+
+  # CT-4 — outcome=pending is not a terminal success either. The conjunct is an
+  #        ALLOWLIST on `resolved`, not a denylist on `escalated`, and this arm is what
+  #        makes that difference observable.
+  RESULT="$(printf '%s\n' "$CT_ROWS" | select_deploy_anchor_rows | /usr/bin/grep -c 'skill:c' || true)"
+  if [[ "$RESULT" != "0" ]]; then
+    die "self-test: CT-4 a pending deploy row must NOT be anchor-eligible, got $RESULT"
+  fi
+
+  # CT-5 — MAX over the ELIGIBLE set, not over all rows. The escalated row at 11:00 and
+  #        the package row at 11:30 are both LATER than the last resolved target row at
+  #        10:00:05, so a selector that leaked either would move the anchor forward and
+  #        silently inflate every cycle time it reports.
+  RESULT="$(printf '%s\n' "$CT_ROWS" | select_deploy_anchor_rows \
+            | /usr/bin/awk -F ' \\| ' '{ t = $1; sub(/^\| /, "", t); print t }' | /usr/bin/sort | /usr/bin/tail -1)"
+  if [[ "$RESULT" != "2026-01-02T10:00:05Z" ]]; then
+    die "self-test: CT-5 T_DEPLOY must be the MAX over ELIGIBLE rows (2026-01-02T10:00:05Z), got $RESULT"
+  fi
+
+  # CT-6 — SPECIFICITY. A log containing only non-eligible rows yields an empty
+  #        selection, so CT-1's non-zero is the selector detecting rather than leaking.
+  RESULT="$(printf '%s\n' "$CT_ROWS" | /usr/bin/grep -E 'escalated|pending|deploy-package' | select_deploy_anchor_rows | /usr/bin/grep -c . || true)"
+  if [[ "$RESULT" != "0" ]]; then
+    die "self-test: CT-6 a population of only non-eligible rows must select nothing, got $RESULT"
+  fi
+
   echo "self-test: PASS"
   echo "  ISO8601 delta arithmetic validated"
   echo "  human formatter validated (sub-hour, over-hour, exact-hour, zero)"
   echo "  malformed-input rejection validated"
   echo "  query-pipeline-event.sh dependency validated"
+  echo "  T_DEPLOY anchor eligibility validated (#4215, group CT):"
+  echo "    CT-1 SENSITIVITY the selector keeps 2 resolved target rows / CT-2 an escalated deploy row is NOT an anchor (the defect: a totally-failed deploy used to yield a measured duration) / CT-3 deploy-package is audit-only, never an anchor (declared narrowing) / CT-3b NEGATIVE CONTROL a selector widened to admit deploy-package — derived from the shipped source by an asserted transform, never transcribed — DOES keep that row, so CT-3's zero is the narrowing biting rather than an inert probe / CT-4 outcome=pending is excluded — the conjunct is an allowlist on resolved, not a denylist on escalated / CT-5 MAX is taken over the ELIGIBLE set, so a later ineligible row cannot move the anchor forward / CT-6 SPECIFICITY a non-eligible-only population selects nothing"
   exit 0
 fi
 
@@ -205,9 +329,12 @@ fi
 
 DEPLOY_ROWS="$("$QUERY_TOOL" --release "$VERSION" --event-type deployment-status 2>/dev/null | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
 T_DEPLOY=""
+DEPLOY_ROW_COUNT=0
+DEPLOY_TARGET_ROWS=""
 if [[ -n "$DEPLOY_ROWS" ]]; then
-  # Filter to deploy-skill OR deploy-harness subtype; take MAX(ts_iso)
-  DEPLOY_TARGET_ROWS="$(echo "$DEPLOY_ROWS" | /usr/bin/awk -F ' \\| ' '$5 == "deploy-skill" || $5 == "deploy-harness" { print }')"
+  DEPLOY_ROW_COUNT="$(echo "$DEPLOY_ROWS" | /usr/bin/grep -c . || true)"
+  # Anchor-eligible rows only: deploy-skill|deploy-harness AND outcome=resolved.
+  DEPLOY_TARGET_ROWS="$(echo "$DEPLOY_ROWS" | select_deploy_anchor_rows)"
   if [[ -n "$DEPLOY_TARGET_ROWS" ]]; then
     # ts_iso is $1 minus the leading "| " — see the T_GO note above.
     T_DEPLOY="$(echo "$DEPLOY_TARGET_ROWS" | /usr/bin/awk -F ' \\| ' '{ t = $1; sub(/^\| /, "", t); print t }' | /usr/bin/sort | /usr/bin/tail -1)"
@@ -218,9 +345,19 @@ fi
 
 if [[ -z "$T_GO" || -z "$T_DEPLOY" ]]; then
   # N/A — emit reason on stderr so the operator / caller can diagnose
+  # The two N/A causes below are DIFFERENT FACTS and are reported as such. Collapsing
+  # them into one message would recreate, one layer up, the very ambiguity the
+  # outcome=resolved conjunct was added to remove: "no deploy happened" and "every
+  # deploy target failed" would once again read identically to the operator.
   MISSING=""
   [[ -z "$T_GO" ]] && MISSING="${MISSING}no gate-outcome/plan-review-go event for $VERSION; "
-  [[ -z "$T_DEPLOY" ]] && MISSING="${MISSING}no deployment-status/deploy-skill or deploy-harness event for $VERSION; "
+  if [[ -z "$T_DEPLOY" ]]; then
+    if [[ "$DEPLOY_ROW_COUNT" -gt 0 ]]; then
+      MISSING="${MISSING}${DEPLOY_ROW_COUNT} deployment-status row(s) exist for $VERSION but NONE is an anchor-eligible deploy-skill/deploy-harness row with outcome=resolved — the deploy ran and its targets did not succeed. This is NOT the same as no deploy having occurred; "
+    else
+      MISSING="${MISSING}no deployment-status/deploy-skill or deploy-harness event for $VERSION; "
+    fi
+  fi
   echo "Cycle-Time: N/A (${MISSING%; })" >&2
   case "$OUTPUT_FORMAT" in
     seconds) echo "N/A" ;;
