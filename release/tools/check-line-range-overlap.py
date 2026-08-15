@@ -269,20 +269,29 @@ def resolve_member(
 ) -> tuple[str, str]:
     """Resolve a member to (token, commit SHA), or raise ExtractionError.
 
-    Local refs are tried FIRST, so a caller that has already fetched (the
-    Phase A6.6 contract for the P2 arm) does no network I/O and a hermetic
-    fixture needs no remote at all. Only a PR member falls back to a single
-    bounded fetch, because no prior contract assigned that fetch to the caller.
+    A PR member's bounded fetch is attempted UNCONDITIONALLY, never gated on
+    the local ref being absent. Gating it on absence is a silent stale-read:
+    a ref that is present but behind its upstream resolves happily, so the
+    tool classifies an OLD revision at exit 0 with no error -- and the caller
+    at `stage-09-plan-review.md` takes the P1 arm's *path set* from a live
+    `gh pr view` while taking its *line ranges* from here, which would render
+    one PR at two revisions under one verdict.
+
+    The fetch is failure-TOLERANT, which is what keeps the offline callers
+    working: `_git` runs with `check=False`, so a hermetic fixture with no
+    remote, or an offline run, simply proceeds to the local resolve below.
+    Tolerating the failure is not the same as skipping the attempt -- the
+    branch arm still does no network I/O at all, per the Phase A6.6 contract
+    that assigns that fetch to the caller.
     """
     token = member_token(kind, ident)
     candidates = member_ref_candidates(kind, ident, remote)
-    sha = resolve_rev(root, candidates)
-    if not sha and kind == "pr" and allow_fetch:
+    if kind == "pr" and allow_fetch:
         _git(root, [
             "fetch", "--no-tags", "--quiet", remote,
             "+refs/pull/%s/head:refs/pull/%s/head" % (ident, ident),
         ])
-        sha = resolve_rev(root, candidates)
+    sha = resolve_rev(root, candidates)
     if not sha:
         raise ExtractionError(
             token, "*",
