@@ -1352,7 +1352,15 @@ handle_fcm_delivery() {
     n=$((n+1))
     local hits recorded=0
     hits="$(fcm_match_adds "$path")"
-    if printf '%s' "$devlog" | grep -Fq -- "$path" 2>/dev/null; then recorded=1; fi
+    # SIGPIPE-REWRITE. Was: `printf '%s' "$devlog" | grep -Fq -- "$path"`. Under the
+    # `set -o pipefail` at the top of this file that form INVERTS: `grep -Fq` exits on
+    # its first match, `printf` fails on the broken pipe, and the pipeline reports the
+    # writer's non-zero status — so a path that IS in the Deviation Log reads as not
+    # recorded, and a `NOT DELIVERED` row silently stops converting FCM FAIL to PASS.
+    # The empty-haystack caveat does not bite: a row whose path cell is empty is
+    # emitted upstream as `(none)`/`pathless` and filtered by the `add` test above, so
+    # `$path` is never the empty needle here and needs no `[ -n … ]` guard.
+    if grep -Fq -- "$path" <<<"$devlog" 2>/dev/null; then recorded=1; fi
     if [ "$hits" = "UNRESOLVABLE" ]; then
       emit_fcm "FCM-$n" "resolvable declared path" "$VERDICT_ERROR" \
         "placeholder-unresolvable:$path (no literal directory prefix or wholly-wildcard basename)"

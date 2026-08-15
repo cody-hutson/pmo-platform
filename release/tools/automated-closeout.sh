@@ -272,7 +272,12 @@ AI_EVENT_WRITER="$SCRIPT_DIR/append-pipeline-event.sh"
 # append-pipeline-event.sh carries the identical guard for the identical reason.
 HUB_STATE_PATH="${HUB_STATE_PATH:-}"
 if [[ -z "$HUB_STATE_PATH" ]] && [[ -r "${HOME}/.config/pmo-platform/operator.toml" ]]; then
-  _hs=$(/usr/bin/grep -E '^operator_instance_hub_state_path' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | /usr/bin/head -1 | /usr/bin/awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
+  # SIGPIPE-REWRITE. Was: `grep -E … file | head -1 | awk …`. `grep` reads the file
+  # directly, so it is the leftmost producer and the `| head -1` folds into `-m1`
+  # with no upstream producer left to signal; the downstream `awk` reads to EOF and
+  # short-circuits nothing. Same first-matching-line semantics, and the `|| true`
+  # below still spans the whole substitution for the load-bearing reason above.
+  _hs=$(/usr/bin/grep -m1 -E '^operator_instance_hub_state_path' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | /usr/bin/awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
   [[ -n "$_hs" ]] && HUB_STATE_PATH="$_hs"
 fi
 HUB_STATE_PATH="${HUB_STATE_PATH:-${WORKSPACE_ROOT}/personal/pmo-instance/hub-state}"
@@ -9216,7 +9221,15 @@ AISTUB
   fi
   # Specificity: the guarded-form filter must REJECT an unguarded line, or the
   # equality above is satisfied by a filter that matches everything.
-  local _ai_specimen; _ai_specimen="$(/usr/bin/awk 'BEGIN{print "phase_zz_probe || true"}' | /usr/bin/awk '/^phase_[a-z0-9_]+ / && index($0, "|| { generate_report; exit ") {n++} END {print n+0}')"
+  # SIGPIPE-REWRITE. Was: `awk 'BEGIN{print "<specimen>"}' | awk '<filter>'`. The
+  # generator is now a here-string, so there is no writer to signal. The filter is
+  # kept BYTE-IDENTICAL to the AI-F4 filter above — that identity is the whole point
+  # of this arm, so the filter is what must not be rewritten. (The gate reads this
+  # pipeline as `writer | awk (exit)` because the filter's program text contains the
+  # literal `exit ` inside an `index()` string operand; the filter carries no `exit`
+  # statement and reads to EOF. Removing the pipe answers the finding without
+  # touching the filter.)
+  local _ai_specimen; _ai_specimen="$(/usr/bin/awk '/^phase_[a-z0-9_]+ / && index($0, "|| { generate_report; exit ") {n++} END {print n+0}' <<<'phase_zz_probe || true')"
   [[ "$_ai_specimen" -eq 0 ]] || { echo "FAIL: AI-F4 specificity — the guarded-form filter matched a '|| true' line; it is not reading the guard"; failures=$((failures+1)); }
 
   # (G) PREDICATE PARITY — this file's implementation vs the block shipped at
