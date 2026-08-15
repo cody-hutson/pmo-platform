@@ -214,7 +214,8 @@ or any request to evaluate one skill's output.
      the swept-declaration table enumerates every OLD-value occurrence found. The L5
      defense-in-depth detector for the cascade-omission failure mode — the audit-time,
      across-the-changed-file-set complement to L1–L4's authoring/review-time, within-the-matrix
-     prevention (§ 5.6 line 212 cedes the whole-changed-file-set sweep to "`pmo-qa-auditor`
+     prevention (§ 5.6 Cascade-Completeness Sweep (Phase A4.1) → **Sweep scope (narrow — by
+     design)** → **File-scope** cedes the whole-changed-file-set sweep to "`pmo-qa-auditor`
      automation"). **Phase 1 structural checks (regex/grep-based, deterministic — operate on a
      PRESENT block):** each declared sweep command is a runnable, file-scoped `grep` invocation
      (G8-02); **re-run completeness (the load-bearing check)** — for each `(file, OLD-value)`

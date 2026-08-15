@@ -254,6 +254,37 @@ release/tools/claim-version.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-registry-currency.sh
 ./core/deploy/tools/check-registry-currency.sh
 core/deploy/tools/check-registry-currency.sh
+# check-citation-anchors.sh — the Check 66 citation-anchor predicate. It is a
+# deploy-time-only check invoked by deploy.sh, AND it is executed directly
+# agent-side as the two-arm demonstration a citation-predicate change owes:
+# the SAME predicate is run once before the change (expect zero findings on the
+# sensitivity fixture) and once after (expect non-zero), because a single-arm
+# result cannot distinguish a working widening from a dead probe. It carried
+# ZERO rows, so that agent-side demonstration was BLOCK-DESTRUCTIVE-022-blocked
+# and the arm that proves the widening works was unrunnable. All four invocation
+# forms per the per-tool form convention above. (CI runs no Claude hooks, so
+# these rows are for the agent-side path, not the workflow step.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-citation-anchors.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-citation-anchors.sh
+./core/deploy/tools/check-citation-anchors.sh
+core/deploy/tools/check-citation-anchors.sh
+# build-skill-packages.sh — the .skill package builder. Both of its modes are
+# invoked agent-side and both were blocked: the read-only `--skills-for-paths`
+# query (the delegated package-staleness detection that the release close-out
+# and the version-claim tool both consume, and that a release must be able to
+# run directly to measure its own candidate set), and the build mode itself,
+# which Stage 6 self-verification runs to rebuild a rostered skill's package
+# after editing its SKILL.md or references/ — a rebuild the package-freshness
+# CI gate then requires in the same PR. It carried ZERO rows, so an agent asked
+# to verify either behaviour hit BLOCK-DESTRUCTIVE-022 instead (observed live:
+# both a hub and a Solutioning spoke were blocked invoking the query mode, and
+# the measurement had to be deferred to Dev Testing). All four invocation forms
+# per the per-tool form convention above. (CI runs no Claude hooks, so these
+# rows are for the agent-side path, not the workflow step.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/build-skill-packages.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/build-skill-packages.sh
+./core/deploy/tools/build-skill-packages.sh
+core/deploy/tools/build-skill-packages.sh
 # check-issue-ref-validity.sh — the extracted Issue-reference validity gate.
 # CI WIRING, stated because this tool's wiring is unusual: the script IS
 # CI-executed — the `issue-ref` job in .github/workflows/repo-integrity.yml calls

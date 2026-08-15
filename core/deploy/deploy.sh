@@ -9759,10 +9759,18 @@ sys.stdout.write("".join(out) + "|")
   #
   # Findings route through flag_warn_or_issue (warn-mode-initial per
   # bypass-mode-readiness.md): in warn-mode they annotate + jsonl-log without
-  # incrementing ISSUES; flip core/hooks/check-convention.mode (or the shared
-  # deploy-check.mode) to 'enforce' after the shakedown window. A non-zero exit
-  # with no parsed FAIL (scan-surface error, exit 3) still flags so a broken
-  # predicate run never reads green.
+  # incrementing ISSUES; flip $(pmo_instance_path)/check-convention.mode or
+  # .claude/hooks/check-convention.mode — the two tiers resolve_check_mode reads,
+  # in that order — to 'enforce' after the shakedown window (or the shared
+  # deploy-check.mode, to move every check at once). A non-zero exit with no
+  # parsed FAIL (scan-surface error, exit 3) still flags so a broken predicate
+  # run never reads green.
+  #
+  # RETIRED IDENTIFIER: this check formerly emitted findings under
+  # `convention-linter` while resolving its mode under `check-convention` — two
+  # mode knobs for one check, neither covering all of it. Every site now uses
+  # `check-convention`; a `convention-linter.mode` file no longer binds and
+  # should be renamed to `check-convention.mode`.
   #
   # Cutover discipline: applies to ./deploy.sh --check on or after this release's
   # merge SHA in RELEASE_LOG.md.
@@ -9772,14 +9780,14 @@ sys.stdout.write("".join(out) + "|")
     c49_mode=$(resolve_check_mode "check-convention")
     local c49_script="core/deploy/tools/check-convention.sh"
     if [[ ! -f "$c49_script" ]]; then
-      flag_warn_or_issue "convention-linter" "predicate script missing: $c49_script"
+      flag_warn_or_issue "check-convention" "predicate script missing: $c49_script"
     else
       local c49_out c49_rc
       c49_out=$(bash "$c49_script" 2>&1)
       c49_rc=$?
       if [[ $c49_rc -eq 3 ]]; then
         # scan-surface error — fail-loud independent of warn-mode
-        log "  FAIL:  Check 49 — convention-linter scan-surface error (exit 3)"
+        log "  FAIL:  Check 49 — check-convention scan-surface error (exit 3)"
         ISSUES=$((ISSUES + 1))
         printf '%s\n' "$c49_out" | grep -E '^(FAIL|SUMMARY):' | sed 's/^/         /'
       else
@@ -11263,9 +11271,19 @@ sys.stdout.write("".join(out) + "|")
   # is converting a silent failure mode into a detectable one.
   #
   # TWO LEXICAL FORMS, because narrowing to one was MEASURED to miss real carriers:
-  # F1 `SKILL.md:NNN` and F2 a backticked bare `` `:NNN` ``. An F1-only predicate misses
-  # 3 live anchors inside a file it already flags, and misses an entire third carrier
-  # whose 9 anchors are all F2.
+  # F1 `<basename>.md:NNN` — ANY markdown basename — and F2 a backticked bare `` `:NNN` ``.
+  # An F1-only predicate misses 3 live anchors inside a file it already flags, and misses
+  # an entire third carrier whose 9 anchors are all F2. F1 was itself once narrowed to the
+  # single basename SKILL.md, which missed the commonest carrier shape of all: a
+  # cross-skill citation naming some OTHER reference document plus a line number. The 49
+  # residual occurrences cleared across 18 lines in 2 files resolved to 6 distinct targets,
+  # NONE of them a SKILL.md. The widened arm is a strict superset of the narrow one.
+  #
+  # USE vs MENTION — declared, not exempted. A citation matches only when a LITERAL DIGIT
+  # RUN immediately follows the colon, so prose DOCUMENTING this convention via a
+  # metasyntactic placeholder (`<other-file>.md:NNN`) is structurally invisible to the
+  # predicate. No marker vocabulary and no exemption list are introduced — a second source
+  # of truth for what counts as a citation is precisely what the SCOPE note below rejects.
   #
   # SCOPE — a TREE + FILE-TYPE predicate, not a filename glob and not the whole corpus.
   # A filename glob (SKILL.md + composition-contract-*.md) is precisely what hid a
@@ -11286,8 +11304,21 @@ sys.stdout.write("".join(out) + "|")
   # nearest-enclosing-heading citation's PROSE SUB-REFERENT still exists — those
   # citations carry a verified enclosing heading and an UNVERIFIED sub-locator that this
   # predicate is lexically incapable of seeing, so a renumbered step still fails open;
-  # non-.md files, where a tool legitimately prints file:line; and citations to
-  # non-SKILL.md targets.
+  # non-.md files, where a tool legitimately prints file:line; citations whose TARGET is
+  # not a .md file (a deploy.sh:NNN or foo.py:NNN pin, where the canonical `§`-anchor form
+  # does not exist for a non-markdown target); and line-number references that name no file
+  # and carry no backticks — a bare prose "line 206 of the contract" — which this predicate
+  # is lexically incapable of seeing, exactly as the prose sub-referent above is. MEASURED
+  # population — a point-in-time census, not a standing invariant — over this check's own
+  # reported denominator (238 in-scope files at measurement): non-.md-target pins — 0;
+  # bare-prose line references — 0, having been 4 across 3 files when first measured, all
+  # four ALREADY DRIFTED onto the wrong content. They were converted to section-name
+  # anchors in the same release that measured them, so this zero is the result of that
+  # repair rather than the class being empty by nature. A member LOCATES a referent by
+  # line number; a mandated structural position and a worked-example / fenced-sample /
+  # quoted-specimen line number are not counted. BOTH sub-classes now measure zero — still
+  # a census, not an invariant, and the second has been non-zero before. Re-measure before
+  # relying on it.
   #
   # WARN-MODE INITIAL via resolve_check_mode "citation-anchor" — the Check 51-65
   # deploy-check precedent, NOT the PreToolUse-hook .mode surface. Flip to enforce with
