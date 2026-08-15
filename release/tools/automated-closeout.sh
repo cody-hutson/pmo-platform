@@ -3014,8 +3014,17 @@ phase_lint_plan_identity() {
   out="$(/usr/bin/python3 "$lint_script" --check plan-identity 2>&1)" || exit_code=$?
 
   if [[ $exit_code -eq 3 ]]; then
-    mark_phase "lint_plan_identity" "FAIL" "path-resolution failure (exit 3): $(echo "$out" | /usr/bin/head -1) — plan corpus unverifiable; close BLOCKED (fail-loud)"
-    echo "$out" | /usr/bin/head -20 >&2
+    # Both slices read `$out` from a HERE-STRING rather than through a pipe.
+    # `writer | head` is the SIGPIPE idiom: `head` stops reading at its line
+    # budget, the writer's next write fails on the closed pipe, and `pipefail`
+    # promotes THAT status to the pipeline's — so a successful slice can report
+    # failure. Removing the pipe removes the hazard outright; this is the same
+    # capture-then-read disposition 7b147ba0 applied to two claim-version
+    # assertions, not a gate exemption. Effect is unchanged: `head` still slices
+    # the same bytes, and a here-string is the safer writer besides (bash's
+    # `echo` would mangle an `$out` beginning `-n`/`-e`).
+    mark_phase "lint_plan_identity" "FAIL" "path-resolution failure (exit 3): $(/usr/bin/head -1 <<<"$out") — plan corpus unverifiable; close BLOCKED (fail-loud)"
+    /usr/bin/head -20 <<<"$out" >&2
     return 1
   fi
 
