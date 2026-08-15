@@ -1,0 +1,404 @@
+---
+title: Release Plan — path-and-citation-reconciliation (no citation asserts a path, count, or mapping that reality does not match)
+type: release-plan
+plan_type: release
+status: ACTIVE
+release: slug-only (ADR-092 — the concrete version binds at the Stage-12 atomic claim)
+milestone: path-and-citation-reconciliation
+release_class: cross-cutting
+domain_practice: { source: N/A — pipeline-internal release, date: 2026-08-14, domain: governance }
+reversibility: CHEAP / Confidence HIGH
+---
+<!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-issue-ref -->
+<!-- reference-durability: allow-version-ref -->
+# Release Plan — path-and-citation-reconciliation
+
+> **Milestone:** `path-and-citation-reconciliation` (331) · **Release Class:** `cross-cutting` (Tight engagement / **Deep** Stage-9 review / Stage-5 ALL / 30-day outcome window) · **Version:** `v4.27` — **provisional; binds at the Stage-12 atomic claim (ADR-092)** · **Scope:** 4 issues, indexed below · **Topology:** D-C `SINGLE` · **Concurrency posture:** P0 fully-serial · One release branch, one PR, one merge gate · **Branch:** `release/path-and-citation-reconciliation` (slug-primary, no version stem).
+
+This file is the Stage-4 release plan rendered on the milestone's planning sub-task (2026-08-14) and approved at the Stage-4 plan gate, committed as **Engineering Commit 0** on the release branch per the D-C SINGLE topology. It is reproduced from that sub-task comment with the decisions rendered since — the Stage-4 operator gate and the Stage-5 Solutioning REDIRECT accepted at Phase B — applied inline where they land. Superseded Stage-4 text is marked rather than silently overwritten, so the record shows what moved and why.
+
+## Release Identity — slug-primary, version provisional
+
+The plan file, the branch, and all hub state are keyed on the milestone **slug**, never the version. `v4.27` is **provisional** and binds only at the Stage-12 atomic compare-and-swap, where git's ref CAS is the authority.
+
+**Version re-render at Stage 9 (2026-08-14).** The provisional slot moved `v4.25` → **`v4.27`**. This is precisely the case slug-primary identity exists to absorb: the original `v4.25` slot was claimed and tagged by sibling milestone `reference-constant-integrity`, and `v4.26` was then claimed and tagged by sibling `corpus-tolerance-and-hygiene` (tag `v4.26` → `23abece3`), so the next-free slot advanced by two while this branch sat in verification. Recomputed against current authoritative state, not assumed: `claim-version.sh --sha <rebased-HEAD> --bump minor --dry-run` returns **`v4.27`**, independently corroborated by a three-arm remote tag probe (`v4.25` present / `v4.26` present / `v4.27` absent). No branch, file, or hub state was keyed on the version, so the re-render touched this claim only. The slot still binds at the Stage-12 atomic CAS; it is not reserved by this edit.
+
+## Issue References
+
+Card index for this release. Every issue reference in this plan resolves against this table.
+
+| Issue | Size | Title (abbreviated) | Primary surface |
+|---|---|---|---|
+| #3653 | `L` | Reconcile warn-log path citations with the actual write path | 7 corpus files |
+| #4170 | `S` | Widen the Phase-A `domain_practice` check to accept the prose form | `stage-07-dev-testing.md`, `stage-04-planning.md` |
+| #4324 | `S` | Correct the velocity script's repo-root anchor depth | `compute-release-velocity.sh`, `regression-checks.md` |
+| #2456 | `XS` | Reconcile the re-review § 9 status transitions with the label taxonomy | `triage-design-rereview.md` |
+
+All four are marked as closed at Stage 13, per the close-out protocol. No close-family verb is paired with an issue reference anywhere in this file outside this designated block.
+
+**Removed from scope after the Stage-4 plan was rendered.** The bridge-files card was parked at the Stage-5 Phase A6.5 gate and removed from this milestone — `core/CLAUDE.md.template` is no longer a release surface. The Check-43 widening card graduated to another milestone before Stage 4 entry — `core/deploy/deploy.sh` is no longer a release surface. Both removals are reflected in the File Change Matrix below.
+
+---
+
+## Engineering Commit 0 — verification record
+
+Four obligations, all discharged by the first Engineering spoke before this file was written. Each is a read-and-record against a live source, never an inheritance from this plan.
+
+**Baseline pin:** `origin/main` = `8f48357fe5f687f569d2e069f234cfdbedb9cf10`, re-fetched at Commit 0 and unmoved from the Stage-4 planning pin and from every card's Mode R census SHA. Zero mainline movement across Stages 4–6.
+
+| # | Obligation | Result |
+|---|---|---|
+| 1 | **Version slot re-verify** (contested with a sibling milestone whose planning sub-task claims the same slot) | Recomputed next-free for bump-class `minor` = **`v4.25`**, which equals the planned slot. Unclaimed on all three claimed-set surfaces. **PROCEED.** |
+| 2 | **`gate-criteria-spec.md` schema version re-derived from the mainline** | Mainline reads **2.12**. The sibling open draft PR on `release/corpus-tolerance-and-hygiene` claims 2.13 on its branch; per that file's own version-derivation note a sibling's unmerged claim is **detection, not binding**. This release **does not touch that line** (see the DO-NOT-BUMP determination below), so no claim is made and no merge order produces a conflict at it. |
+| 3 | **Citation census re-run** with the digit-inclusive class | **24 lines / 25 occurrence strings / 7 files** excluding frozen release plans (26 lines including them). **20 lines / 21 occurrence strings in scope**; **4 excluded**. Exactly as the plan predicted. |
+| 4 | **Release plan file authored** on the release branch | This file. |
+
+**Probe records for obligations 1–3** (PV-0 invocation · PV-1 denominator · PV-2 sensitivity observed · PV-2c specificity observed):
+
+| Claim | PV-0 | PV-1 | PV-2 sensitivity (observed) | PV-2c specificity (observed) |
+|---|---|---|---|---|
+| `v4.25` is next-free and unclaimed | `claim-version.sh --bump minor --dry-run` (the allocator's own claimed-set = published Releases ∪ origin tags ∪ ledger DEPLOYED rows) | full claimed set | **control:** the tag-list probe on the prior slot returns that tag | subject: the tag-list probe on the planned slot returns **empty**; the published-Release list's highest entry is the prior slot |
+| mainline schema version = 2.12 | `git show origin/main:core/schemas/gate-criteria-spec.md` piped to a `Schema version` match | mainline blob | value returned: **2.12**, non-empty | the worktree copy reads the same 2.12, so there is no working-tree drift |
+| 24 lines / 25 strings / 7 files | `git grep -anE 'core/hooks/[a-z0-9._-]*warn-log\.jsonl' -- . ':!release/releases/plans'` and its `-aohE` occurrence arm | tree minus frozen plans | fires on a known `gate-g3-14` line → **2** hits | old `[a-z-]` class → **11** excluding plans, **13** including. On `gate-criteria-spec.md` the old class returns **5** of that file's **15** lines and is blind to every digit-carrying filename |
+| exclusion = exactly 4, gate-ID-anchored | `git grep -anoE 'core/hooks/gate-g3-1[45]-warn-log\.jsonl'` plus a read of each row's leading cell | the 24-line census | **4** lines, **one** occurrence each, all carrying `G3-14` or `G3-15` in the leading cell | the remaining 20 lines carry no `G3-1x` gate ID |
+| one line carries **two** occurrence strings | `git grep -anoE` (occurrence-keyed, not line-keyed) on `gate-criteria-spec.md` | 15 lines / 16 strings in that file | the Gate-4/Gate-6 warn-mode posture bullet returns **two** distinct filenames | every other line returns exactly one, so 24 lines ≠ 25 strings is real |
+
+**Every zero above is paired with a control arm observed non-zero.** No count in this record rests on an undemonstrated probe. Line numbers cited anywhere in this file are evidence-at-`8f48357f` only, never an address.
+
+> **SUPERSEDED at Stage 9 (2026-08-14) — baseline pin and version slot only; the census findings stand.** The Commit-0 record above is preserved as authored: it is a read-and-record against the mainline as it stood at `8f48357f`, and it was correct at that anchor. Two of its inputs have since moved and are restated here rather than rewritten above.
+>
+> - **Baseline pin — retracted as a pin, not replaced with a newer one.** `8f48357f` held across Stages 4–6 and that statement is not retracted for those stages. It stopped holding at Stage 7: two sibling releases (`reference-constant-integrity`, `corpus-tolerance-and-hygiene`) merged and then emitted Stage-12 and Stage-13 close-out chores, advancing `main` repeatedly while this branch sat in verification. The branch was rebased to current `main` at Stage 9, replaying its commits with zero conflicts on every pass. **No successor SHA is recorded here on purpose.** Sibling close-out traffic is still landing, so any base SHA written into this file is stale on arrival — the precise failure mode this release exists to eliminate. Base freshness is a Stage-12 pre-merge assertion against the live ref, not a value this plan can hold. Two method notes worth carrying forward: mainline drift must be read from the remote (`git ls-remote`), because a local `origin/main` ref goes stale silently; and behind-ness must be measured with a **two-dot** `rev-list`, because the three-dot form is structurally blind to base drift.
+> - **Version slot.** Obligation 1 and its probe row resolved to `v4.25` against the claimed set at `8f48357f`. That slot has since been claimed and tagged by `reference-constant-integrity`, and `v4.26` by `corpus-tolerance-and-hygiene`. Re-running the same allocator invocation against the rebased HEAD returns **`v4.27`** — the recomputation is recorded under § Release Identity above. The obligation-1 method was sound; only its input state aged.
+>
+> **Not superseded:** obligations 2–4 and probe rows 2–5 (the citation census, its exclusion arm, and the two-occurrence line). Re-measured at Stage 9 rather than assumed: the census probe run against `8f48357f` still returns **24** lines — reproducing the Commit-0 figure exactly — and against the rebased HEAD returns **4**. The 20-line delta is this release's card-1 deliverable, and the 4 survivors are precisely the gate-ID-anchored G3-14 / G3-15 rows the exclusion arm predicted. The same probe returns **24** at `origin/main` as well, so no mainline commit replayed under has disturbed that population; the whole delta is ours. That equality is the durable assertion — it is re-checkable at any base and does not depend on how far `main` has since moved.
+
+---
+
+## Stage 4 Release Planning — path-and-citation-reconciliation
+
+### Summary (30 seconds)
+
+Five open cards at planning time, **zero intra-milestone file contention** (all 10 pairs disjoint, control-armed). All are independent — the dependency graph has **no internal edges**; every edge is cross-milestone.
+
+Three findings changed the plan the milestone description anticipated:
+
+1. **The domain-practice card's fourth acceptance criterion rested on a falsified premise.** The Stage-4 planning spec's § 5.7 carries **no verification grep** — it never has. A history probe on that pattern returns empty for that file and returns a commit for the dev-testing spec (control arm fires). § 5.7 holds the label *schema*, not a check. Routed **G-PL1 CURRENCY-MISMATCH → Tier 1 [ADJUST]**; the operator ruled resolution (i) at the plan gate — re-scope the criterion to the schema, keep the file in the matrix.
+2. **The hub roster's `gate-criteria-spec.md` three-way is mis-attributed.** The card the roster named lists that file **PRESERVE-class, read-only, must NOT be edited** — it is not a contender. The real live contender the roster missed is the open draft PR on `release/corpus-tolerance-and-hygiene`, which edits the file and has already claimed schema version 2.13 while `main` reads 2.12.
+3. **Release Class `cross-cutting` holds — but not on the rationale recorded.** Trigger (a) was one scope decision away from failing. **Trigger (b) fires independently on the warn-log card alone** (3 of the 7 named governance files). The class was retained and the rationale restated to lead with (b) at the plan gate.
+
+**Branch topology: D-C SINGLE** (P0 serial), driven by the single-line schema-version claim on `gate-criteria-spec.md`. **Quota Budget: WARN**, basis `UNSTATED`.
+
+---
+
+### Phase A0 — Triage→Design Re-Review (G-PL5 cache-read)
+
+**G-PL5 verdict: HIT.** All five limbs recomputed under `set -o pipefail` per the literal published pipelines, all non-empty, all exit-zero: the card-set fingerprint, the milestone update timestamp, the milestone-description digest and the mainline head SHA each recomputed **equal** to the recorded value, and the briefing age was **8m20s** against a 7-day bound. Criterion (a)–(d) all satisfied. Truncation guard: member count 7, not the query limit. Fail-closed title guard: no non-sub-task member matches a stage-title pattern. Per-card readiness rows adopted, not re-run.
+
+**Unconditional gates (a HIT never skips these):**
+
+| Gate | Verdict | Evidence |
+|---|---|---|
+| Ticket-architecture reconciliation | PASS | ADR-122 conformance re-confirmed (the template is the editable surface) |
+| **A0.5 / G-PL1** reference currency | **FAIL → Tier 1 [ADJUST]** | The domain-practice card's fourth criterion cites a § 5.7 grep that does not exist. All other cards' refs resolve. |
+| **A0.6 / G-PL2** body crisping | PASS | 5/5 bodies carry actionable Description + files-or-protocols + verifiable acceptance criteria |
+| **A0.7 / G-PL3** placement forward-check | **SKIP** (correct non-ceremony signal) | Release base equals `origin/main` at the pinned SHA; mover window empty (0 rows). Control arm over a 3-commit window returns 176 rows, so the classifier is non-inert. No new files authored by this release. |
+| **A0.8 / G-PL4** empirical repro | **5/5 admit-still-valid** | Every card is drift/reconciliation-class, so the mandatory no-skip lane applies |
+| Parallelization-Map currency | **SUPPRESSED** | Section absent. The milestone predates the convention, so standing applicability suppresses the check rather than raising a finding. Recorded, not concealed. |
+
+**A0.8 / G-PL4 re-run at the pinned baseline.** The warn-log card → **24** citations / **7** files excluding frozen plans, 26 including. The domain-practice card → **165** plans / **31** key-form, and the grep is still key-form-only. The anchor-depth card → the assignment still reads three levels deep, **15** assignments = 1 FIX / 14 PRESERVE. The status-transition card → § 9 option (A) still reads the stale transition and option (C) the stale target. No `close-resolved`, no `re-scope-changed` on the headline defects.
+
+---
+
+### Dependency Graph
+
+**Intra-milestone: zero edges.** No card consumes another's output; no card shares a file with another.
+
+```
+status-transition card  ──(none)  triage-design-rereview.md
+warn-log card           ──(none)  7 corpus files
+domain-practice card    ──(none)  stage-07-dev-testing.md + stage-04-planning.md
+anchor-depth card       ──(none)  compute-release-velocity.sh + regression-checks.md
+```
+
+**Cross-milestone edges (all directional, none blocking):**
+
+```
+warn-log card        ──excludes──▶  the warn-mode gate-graduation card   (4 G3-14/G3-15 rows; DORMANT, 0-of-3 closed)
+warn-log card        ──collides──▶  the corpus-tolerance-and-hygiene PR  (schema-version line; LIVE, open draft)
+warn-log card        ──co-edits──▶  a release-process.md sibling card    (line-disjoint)
+domain-practice card ──co-edits──▶  the stage-07 Phase-A count card      (anchor-disjoint)
+domain-practice card ──complements▶ the true-positive-half card          (explicitly non-blocking per card)
+status-transition    ──cites-only▶  the label-taxonomy card              (NOT edited by us — no invalidation)
+anchor-depth card    ──adjacent──▶  the check-fail-open-elimination card (conceptual only, ZERO file overlap)
+```
+
+**Zero circular chains.** The intra-milestone edge set is empty, so no cycle is constructible; the cross-milestone edges are all outbound to milestones that declare no edge back.
+
+---
+
+### Implementation Sequence
+
+Ordered by **contention-risk retirement**, since no dependency edge constrains order. Contended surfaces run first so cross-release collisions surface at Commit 0 rather than at Stage 12.
+
+| # | Card | Size | Rationale for position |
+|---|---|---|---|
+| 1 | warn-log path citations | `L` | Most contended (3-way on `gate-criteria-spec.md` including a live schema-version claim) and largest. Front-loading forces the schema-version re-derivation and the sibling-PR reconciliation at Commit 0. |
+| 2 | Phase-A domain-practice check | `S` | Second-most contended on the dev-testing spec. Also carried the Tier-1 [ADJUST] on its fourth criterion, resolved at the plan gate. |
+| 3 | velocity-script anchor depth | `S` | The only executable change and the only one with a regression-assertion deliverable. Isolated — no contention. |
+| 4 | re-review status transitions | `XS` | Isolated, single file, single section. |
+
+**Commit 0 obligations (all load-bearing, none may be inherited from this plan):** re-derive the `gate-criteria-spec.md` schema version from the mainline; re-derive the plan-corpus census recursively; re-run the anchor sweep; re-verify the provisional version slot against the live allocator. All four are discharged in the Engineering Commit 0 verification record above and in the per-card records that follow.
+
+**String anchors only** (binding constraint 3) — every target is located by heading string, citation string, or gate ID. No line number in this plan is an address.
+
+---
+
+### Stage Applicability Matrix
+
+Stage 5 activation bias for this milestone is **ALL**. No card is trivial, and every card has verifiable functional impact, so no Stage 7/8 skip is warranted.
+
+| Card | S5 | S6 | S7 | S8 | S9 | S10-12 | S13 | Skips |
+|---|---|---|---|---|---|---|---|---|
+| warn-log path citations | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | none |
+| Phase-A domain-practice check | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | none |
+| velocity-script anchor depth | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | none |
+| re-review status transitions | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | none |
+
+---
+
+### Contention Map
+
+**Intra-milestone: ZERO.** All 10 pairs computed; every pair returns 0 shared paths. PV-0: a lexical set-intersection over all pairs — plain `sort`, never a numeric sort, which yields a silently wrong set difference. PV-2 sensitivity: the warn-log card's self-intersection returns **7** (non-zero), so the intersection primitive fires.
+
+**Cross-milestone / cross-PR:**
+
+| Surface | Ours | Theirs | Class | Disposition |
+|---|---|---|---|---|
+| `core/schemas/gate-criteria-spec.md` | warn-log card (11 of 15 warn-log rows) | the open draft PR on `release/corpus-tolerance-and-hygiene` | **live edit collision** | **Disjoint on content** — their changed lines carry **0** warn-log citations. The schema-version line was the one true single-line collision; **this release does not touch it**, which dissolves the collision entirely rather than sequencing around it. |
+| `core/schemas/gate-criteria-spec.md` | warn-log card | the warn-mode gate-graduation card | row-level split | **Dormant.** Coordinate at Stage 12 pre-merge; the exclusion is anchored on gate ID (G3-14 / G3-15), never line number. |
+| `release/governance/release-process.md` | warn-log card (2 citations) | a sibling card, elsewhere in the file | co-edit | **Disjoint** — hundreds of lines apart. Standard merge. |
+| `release/references/pipeline/stage-07-dev-testing.md` | domain-practice card | a sibling card's Phase-A count label | co-edit, same section | **Anchor-disjoint and semantically compatible** — widening the accepted *forms* changes no check's count or conditionality. Coordinate at Stage 12; no re-scope. |
+| `core/specs/label-taxonomy.md` | status-transition card cites, does not edit | a sibling card edits it | **adjacency only** | Citation form NOT invalidated. Verified. No action. |
+| velocity tooling | anchor-depth card | the check-fail-open-elimination card | **conceptual only** | Edit sets are disjoint. Stay independent. |
+
+**In-Flight Release Roster** — measured at the pinned baseline · **Population: n=1** (the `corpus-tolerance-and-hygiene` draft). Remote `release/*` heads carrying no open PR: **none**. Control arm: the unfiltered open-PR query returns the same single row, so the `release/*` filter is not silently emptying the population.
+
+---
+
+### Risk Register
+
+| # | Risk | Owner | Reversibility · Confidence | Mitigation |
+|---|---|---|---|---|
+| R1 | **Schema-version collision on `gate-criteria-spec.md`.** Main 2.12; the sibling branch claims 2.13 unmerged. Taking either side's value at merge produces a duplicate or a gap. | Engineering, Commit 0 | **CHEAP** · HIGH | Re-derived from the mainline at Commit 0 per that file's own version-derivation note. **Resolved by determination:** this release makes no claim on that line, so no merge order produces a conflict at it. A line you do not touch cannot conflict. |
+| R2 | **Contested version slot.** A sibling milestone asserts the same provisional slot and entered Stage 4 within minutes of this one. | Operator, Stage 12 | **CHEAP** · HIGH | Provisional under ADR-092 until the Stage-12 atomic claim — expected, not an error. The Commit-0 re-verify is load-bearing, not ceremonial, and returned PROCEED. Whichever milestone reaches Stage 12 first claims; the other re-derives. |
+| R3 | **The domain-practice card's fourth criterion targeted a surface that does not exist.** | Operator (Tier 1 [ADJUST]) | **CHEAP** · HIGH | **RESOLVED at the plan gate** — resolution (i), re-scope the criterion to the schema. The card was edited surgically and the new criterion is control-armed. |
+| R4 | **Release Class rationale was fragile.** | Operator, Phase B3 | **CHEAP** · HIGH | **RESOLVED at the plan gate** — class unchanged, rationale restated to lead with trigger (b). |
+| R5 | **The gate-graduation card is dormant, not absent.** Its 4 excluded rows sit inside a file this release edits heavily. | Stage 12 pre-merge | **CHEAP** · MEDIUM | Exclusion anchored on **gate ID**, never line number, so a sibling merge that moves lines cannot silently pull the rows into scope. Re-check at Stage 12. |
+| R6 | **The sibling draft PR also edits files in the anchor-depth card's PRESERVE set**, and one file whose header is that card's cited evidence. If it merges first, the sweep count and the evidence anchor may move. | Engineering, Commit 0 | **CHEAP** · MEDIUM | That card's acceptance criteria already mandate re-running the sweep at implementation time. Treat the recorded 15 as evidence-at-baseline, never as a target. |
+| R7 | **Count assertions are the failure mode this milestone exists to fix.** Three independent assessments were misled by one under-matching character class. | Every stage | **CHEAP** · HIGH | Binding constraint 1a: every count in this release ships with a probe demonstrated to fire on a known-positive. Enforced as **CIAC-1**. Note that `git grep` has no word-boundary escape, and a numeric sort feeding a set-difference yields a silently wrong result. |
+| R8 | **Rollback complexity: LOW.** All but one path is documentation or schema text; the sole executable change is a one-token path edit. | — | **CHEAP** · HIGH | Single branch, single merge, single revert. No data migration, no deploy coupling, no runtime state. |
+| R9 | **Parallelization Map absent.** | Recorded | **CHEAP** · HIGH | Correctly **suppressed** (the milestone predates the convention), not a finding. Recorded explicitly so its absence is not later read as a skipped check. |
+| R10 | **The class-2 implementation-state marker has no automated retirement detector.** A marker nobody retires becomes the next phantom citation — this card's own defect class. | Stage 9 | **CHEAP** · MEDIUM | Retirement is an **emitter-PR obligation** with a published standing inventory and a named owner (the gate-graduation card), handed over at Stage 12 pre-merge. The detector itself is **not built here** and is carried as a **named residual for Stage 9**, not a closed finding. |
+
+---
+
+### Quota Budget
+
+**Verdict: WARN.** Per-spoke cost estimate: size-bucket **ordinal band**, source **heuristic** — the cutover to observed medians is not met for any bucket. Assumed remaining usage-window envelope: **`UNSTATED`** — no operator quota band was supplied at hub start, so the conservative default applies. Estimated cumulative draw: **not rendered** — with no band declared this check renders the basis as `UNSTATED` and does not synthesize a figure. `[ASSUMPTION – CONFIRM]`
+
+**Routing:** WARN → window-aware launch timing and split-batch quota budgeting recommended. The concern is **usage-window cumulative draw**, not a rate limit; stagger is never the mitigation here. The load-bearing gate is the per-launch checkpoint at the hub, re-validated at every spoke launch, not this plan-time estimate.
+
+---
+
+### Cross-Issue Acceptance Criteria
+
+- [ ] **CIAC-1 — control-armed counts, all four cards, on the release's Verification Evidence.** Every count, absence, or "N of M" assertion this release records carries a named control arm with its **observed** result, per binding constraint 1a. *Method:* for each count claim, confirm a paired sensitivity-arm line stating the arm's invocation and its observed non-zero result; a count with no demonstrated arm is NOT MET. *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-2 — cite-don't-copy, warn-log card × status-transition card.** Neither card's edit replaces a citation-to-authority with a restated value list or a re-hardcoded path. *Shared surface:* the register-or-remove rule in `core/standards/duplicate-source-discipline.md`. *Method:* read both diffs; confirm the status-transition edit cites the label taxonomy's Status Labels section without enumerating three or more status values, and the warn-log edit resolves each citation to the actual write path without introducing a second hardcoded absolute path. *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-3 — pipeline-spec verification-surface agreement, warn-log card × domain-practice card.** After both land, no file under `release/references/pipeline/` carries a path citation or a verification command that disagrees with the behavior it describes. *Method:* the digit-inclusive warn-log probe over `release/references/pipeline/` returns only annotated hits — the `[a-z-]` form undercounts — **and** every surface carrying a `domain_practice` accepted-form set states the same set. *Graded at Stage 9 QC3.5 on the merged PR.*
+
+---
+
+### File Change Matrix
+
+Machine-readable. One path per line, path first. Extract with `cut -d'|' -f1 | tr -d ' '`.
+
+```
+core/schemas/gate-criteria-spec.md                           | edit | warn-log       | 11 of 15 warn-log citations (12 occurrence strings); the 4 G3-14/G3-15 rows are OUT of scope; schema version re-derived at Commit 0 and left byte-unchanged
+core/schemas/stage-io-contracts.md                           | edit | warn-log       | 1 warn-log citation
+core/standards/regression-checks.md                          | edit | anchor-depth   | NEW anchor-depth regression assertion; file currently carries 0 repo-root/anchor mentions
+release/governance/release-process.md                        | edit | warn-log       | 2 warn-log citations; disjoint from the sibling card's anchor
+release/references/how-to/hub-spoke-bridge.md                | edit | warn-log       | 2 warn-log citations plus the sibling-format parenthetical reconciliation
+release/references/pipeline/stage-04-planning.md             | edit | domain-practice| the section 5.7 label schema states that the prose form is conformant (plan-gate resolution (i))
+release/references/pipeline/stage-07-dev-testing.md          | edit | domain-practice| widen the Phase-A check to accept the prose form; anchor-disjoint from the sibling card
+release/references/pipeline/stage-13-close.md                | edit | warn-log       | 2 warn-log citations
+release/references/specs/release-outcome-statement-template.md | edit | warn-log     | 1 warn-log citation
+release/references/specs/ticket-information-architecture.md  | edit | warn-log       | 1 warn-log citation — the release's only class-1 citation
+release/references/standards/triage-design-rereview.md       | edit | status-transition | section 9 options (A) and (C) name the correct lifecycle positions and cite the label taxonomy
+release/tools/compute-release-velocity.sh                    | edit | anchor-depth   | the repo-root anchor depth is corrected (the single FIX; 14 siblings are PRESERVE)
+```
+
+**Count: 12 paths.** No `add` rows, so the new-executable companion obligation (the script-execution allowlist) does **not** fire and no new shell script is delivered. No `delete` rows.
+
+> **Superseded Stage-4 rows, recorded rather than silently dropped.** The Stage-4 matrix carried 13 rows: `core/CLAUDE.md.template` for the parked bridge-files card, and a `CONDITIONAL` marker on `stage-04-planning.md`. The bridge-files row is removed with its card. The planning-spec row's condition was resolved at the plan gate toward resolution (i), so the row is now unconditional.
+
+**PRESERVE — must NOT be edited** (a sweep that edits these breaks working scripts): the test-script tree (8), the tools library (1), and the deploy-tools tree (5) — all genuinely three levels deep, where the three-level idiom is correct. A further set of tool scripts mention the idiom only in header comments documenting this defect class; a sweep counting raw grep hits rather than assignments over-reports against them.
+
+**`domain_practice`** — recorded in this file's frontmatter. The classification rationale: the matrix is 11 of 12 internal governance, pipeline-spec, and schema artifacts; the single executable is platform-internal release tooling. Dominant domain **governance**; secondary **software**. Pipeline-internal, so external sourcing is exempt while the domain class stays mandatory and recorded.
+
+---
+
+### Release Class — `cross-cutting`
+
+| Trigger | Fires? | Evidence at the pinned baseline |
+|---|---|---|
+| (a) three or more `pipeline/stage-*.md` files | ✅ FIRES | the planning spec and the dev-testing spec (domain-practice card) plus the close spec (warn-log card) |
+| (b) three or more of the seven named governance surfaces | ✅ **FIRES INDEPENDENTLY** | the warn-log card alone contributes three: `hub-spoke-bridge.md`, `gate-criteria-spec.md`, `release-process.md` |
+| (c) three or more in-bundle compositional edges | ❌ | the intra-milestone edge count is **0** |
+
+Multi-trigger resolution: `cross-cutting` outranks `novel`. The class survives any resolution of the planning-spec surface question because **(b) never depended on it** — the rationale leads with (b) per the plan-gate decision. Weight 1.3, inside the target band.
+
+**Branch topology — D-C SINGLE (P0 fully-serial Stage-6 dispatch).** Intra-milestone contention is zero, so a per-issue-branch option was *structurally* available — but the deciding input was the three-way `gate-criteria-spec.md` contention and its single-line, globally-sequenced schema-version claim. A SINGLE branch makes exactly one claim, re-derived once at Commit 0. Per-issue branches would multiply the claim with no mechanism to reconcile them before merge. SINGLE also matches the one-milestone-one-PR-one-merge convention and keeps rollback to a single revert. Stage 5/7/8 spoke fan-out is unaffected — that is hub parallelism, not Stage-6 branch topology.
+
+---
+
+## Per-Card Implementation Records
+
+### Warn-log path citations
+
+**Stage-5 Solutioning REDIRECT, accepted at Phase B.** The card's open `[ASSUMPTION – CONFIRM]` — the per-citation class-1/class-2 classification — is closed at **1 class-1 / 19 class-2 by line** (1 / 20 by occurrence string). This **supersedes** the card's own exemplar set, which was 0-for-2 as written: the doc-impact citation is class-2 on predicate mismatch, and there is exactly **one** `deploy-check-warn-log.jsonl` citation under the `core/hooks/` prefix, not three.
+
+**The operative test.** A citation is **class-1 if and only if a coded emitter exists whose predicate is the owning gate's predicate.** Emitter existence alone is not sufficient; sink existence alone is not sufficient. Under a sink-existence test the doc-impact and adr-flip rows would read class-1 — both have a backing check that appends to the shared log. Under predicate identity they are class-2, because neither check emits the row its citation describes. The card itself declares the adr-flip row class-2, so predicate identity is the only test consistent with the card's own answer, and applied evenly it moves the doc-impact rows with it.
+
+**The premise survives, re-grounded.** The card's *safety* rationale — that a blanket find-and-replace would silently relabel class-2 citations as though the behavior shipped — is **strengthened**, not weakened: the risk it names is now the dominant case, not a minority case. The remediations genuinely differ. Class-1 relocates a **true** statement to a correct address; class-2 relocates a statement that would become **false** without an implementation-state clause. Collapsing to one uniform remediation is unavailable in both directions. A one-member class is still a class — but Engineering treats **class-2 as the default** and class-1 as the case requiring justification.
+
+**Scope: 20 lines / 21 occurrence strings.** The edit plan is **occurrence-keyed, not line-keyed**, because the Gate-4/Gate-6 warn-mode posture bullet carries **two** citation strings in one sentence. A 20-row line table silently drops one.
+
+**Excluded by gate ID, never by position:** the two G3-14 and two G3-15 strings on their criterion rows and self-repair rows in `gate-criteria-spec.md` — 4 lines / 4 occurrences, owned by the gate-graduation card in another milestone. Do not edit. Do not annotate.
+
+**Canonical remediation forms.**
+
+*Class-1 (1 citation).* Replace the directory only; the filename is already correct. The shipped literal is the resolver form `$(pmo_instance_path)/deploy-check-warn-log.jsonl` — the corrective precedent already live at two corpus sites. No absolute path and no second hardcoded literal is introduced. **No implementation-state clause here** — adding one would assert a falsehood, because that check genuinely emits the rows its citation describes.
+
+*Class-2 (19 lines / 20 strings).* The same replacement, **plus** a clause carrying the exact greppable token and the precise fact:
+
+> … log to the shared deploy-check warn log (`$(pmo_instance_path)/deploy-check-warn-log.jsonl`) and proceed — **specified, not yet emitting**: no check emits this gate's FAIL row.
+
+Grammar adapts per site; the token and the fact do not. The fact is worded *"no check emits this gate's FAIL row"* rather than *"no check writes this row today"* because four of the nineteen sites sit beside a *"Backed by Check N"* statement that is true — those checks exist and do append to the shared log; what they do not emit is the row the citation describes. The looser wording would read as a contradiction at those sites and would be false at them.
+
+*Disambiguator.* Where a named backing check would otherwise read as a contradiction, a half-clause names what that check *does* emit. Required where the backing check is named in the same row or paragraph; recommended where it is named in the immediately adjacent one; not needed at the sites where no coded check exists.
+
+**Three binding constraints on every class-2 clause:** it must not read as a commitment to build the emitter; it must not carry a bare issue reference (four of the six class-2 files lack the issue-ref durability marker — name the construct in words, never a number); and it must not introduce a version-cutover clause (two of the six lack the version-ref marker). Applied uniformly so one clause form is safe everywhere.
+
+**Schema-version determination: NO BUMP.** The `**Schema version:**` line stays byte-unchanged and no new changes block is authored. Bases, over the true denominator of **36** recorded bump blocks (not the 11 a truncated read reached): (1) **no consumer** — the subject probe returns zero against a live control that returns the one real schema-version reader; (2) **no gate** requires a bump on edits to this file; (3) **0 of 36** bumps recorded for a reference correction — every block carrying a *"Reconciled"* or *"Corrected"* item carries it as a rider on a bump whose stated class is driven by something else; (4) no criterion's assertion, applicability, or authority changes.
+
+*The honest counter-argument, stated and answered.* The file **does** state a bump rule — non-breaking changes, named as *new criteria within existing gates* and *self-repair refinements*, increment the minor version. **Six in-scope citations sit on self-repair rows.** This is a stated rule, not mere precedent, and it is the strongest objection anyone raised. **Rebuttal:** every recorded instance of a "self-repair refinement" changes *what the remediation prescribes* — adding a branch, splitting a remedy into a menu, extending a single mandated remedy. Correcting a sink path inside a self-repair row's warn-mode-posture clause adds no branch, removes none, and changes no remediation step. A truth-correction inside a remediation cell is not a refinement of the remediation.
+
+*Conflict dissolution is a consequence, not a basis.* That the determination also dissolves R1 is a welcome result of it, never its justification. **Override path (Stage-9 ruling only):** re-derive from the mainline at that moment, author a fresh block, restate the enumeration to carry every landed addition, and record the override in this file's deviation log.
+
+**Pre-existing contradiction, corrected in shape.** Three corpus sites describe the design-artifact gate's sink; two name a `core/hooks/` path and one names a `.claude/hooks/` path. **All three are unwritten today** — the contradiction pre-exists at HEAD and this release does not create it. Fixing the two in-scope sites takes that gate's false sink statements from **3 to 1**. The residual is one line in the deliberately-cleaved `.claude/hooks/` family, routed to the gate-graduation card rather than widened into this release's file set — the prefix cleave the card made is correct, and adding an eighth file would breach a File Change Matrix that binding constraint 1 declares superseding.
+
+**Marker retirement (normative).** A class-2 clause retires **in the same PR that lands its gate's emitter**. When a PR adds an emitter call site whose predicate is gate G's predicate, that PR deletes G's clause at **every** site in the standing inventory below. Retirement is an emitter-PR obligation, never an orphan-cleanup task.
+
+| Gate ID | Clause sites | Files |
+|---|---|---|
+| G4-01 / Gate 4 | 2 | `gate-criteria-spec.md` (self-repair row; posture bullet — shared with Gate 6) |
+| G6-01 / G6-06 / G6-0N / Gate 6 | 4 | `gate-criteria-spec.md` (two rows plus the shared posture bullet), `stage-io-contracts.md` |
+| G-CL6 | 2 | `gate-criteria-spec.md`, `stage-13-close.md` |
+| G-CL7 | 4 | `gate-criteria-spec.md` (two rows), `release-process.md`, `release-outcome-statement-template.md` |
+| G-CL8 | 3 | `gate-criteria-spec.md` (two rows), `stage-13-close.md` |
+| G-CL9 | 3 | `gate-criteria-spec.md` (two rows), `release-process.md` |
+| return-value smoke-test (a)/(c) | 2 | `hub-spoke-bridge.md` (two sites) |
+| **Total** | **19 clause-bearing lines** | 6 files (the posture bullet counted once, under Gate 4 and Gate 6 jointly) |
+
+**Named residual for Stage 9 (R10):** the automated stale-marker detector is **not built here**. A cheap leading indicator is specifiable — *for each gate ID carrying the token, assert that no emitter tag exists naming that gate* — but building it is emitter-side scope and a net-new check, routed as a follow-on rather than promised here. Until it lands, the mitigation is enumerability plus a named owner.
+
+**Stage-13 note.** On the warn-log limb of the Outcome Statement this release delivers **20 of 24** in-corpus `core/hooks/` citations, leaves 4 to the gate-graduation card by design, and leaves the `.claude/hooks/` family and the mode-file family out of scope. G-CL7 should grade that limb **partially attained with the residual named**, not attained.
+
+### Phase-A domain-practice check
+
+Widen the Stage-7 Phase-A verification grep to accept the prose form as well as the key form, and state in the Stage-4 § 5.7 label schema that the prose form is conformant, so the authoring surface and the verification surface agree. The fourth acceptance criterion was re-scoped to the schema at the plan gate (resolution (i)); the card's original wording cited a verification grep in § 5.7 that has never existed. The plan-corpus census is re-derived recursively at that card's Commit 0 — a non-recursive glob undercounts by more than a hundred plans because it misses the versioned subdirectories.
+
+### Velocity-script anchor depth
+
+Correct the single anchor assignment that resolves the repo root above the repo, so the files-changed signal stops degrading to a null reading, and add the anchor-depth regression assertion to `core/standards/regression-checks.md` (which currently carries zero such mentions, so this is new on an existing seam file, not an extension of an existing assertion). The sweep is **1 FIX / 14 PRESERVE** and is re-run at that card's Commit 0; a blanket replace breaks 14 working scripts, and a sweep counting raw grep hits rather than assignments over-reports.
+
+### Re-review status transitions
+
+Rewrite § 9 options (A) and (C) so their status transitions name the live lifecycle positions and cite the label taxonomy's Status Labels section rather than restating a frozen value list. A sibling-transition sweep across the references tree is part of that card's Stage-5 scope.
+
+---
+
+### Verification Plan
+
+| Card | Check class | Method |
+|---|---|---|
+| warn-log path citations | file-content assertion | The per-file digit-inclusive warn-log probe returns zero on six files and only the four gate-ID-excluded rows on the seventh; the implementation-state token census matches the designed per-file distribution; the anti-collapse assertion holds (no in-scope line names the shared path twice); the schema-version line is byte-unchanged; the excluded rows are byte-unchanged |
+| Phase-A domain-practice check | file-content assertion | The widened check matches both accepted forms against a corpus population; the § 5.7 schema states that the prose form is conformant |
+| velocity-script anchor depth | system-state assertion | The corrected anchor resolves inside the repo; the regression assertion is present; the 14 PRESERVE sites are byte-unchanged |
+| re-review status transitions | file-content assertion | The § 9 transitions resolve against the live status set; no three-or-more-value restatement is introduced |
+| all four | control-arm discipline | CIAC-1 — every count assertion carries a demonstrated sensitivity arm |
+
+**Grader notes carried to Stages 7 and 8.** `git grep` has no word-boundary escape — a pattern relying on one returns zero silently. A numeric sort feeding a set-difference yields a silently wrong result; use plain lexical sort. On macOS, BSD `grep` treats files carrying box or arrow decoration as binary and suppresses matches unless the text flag is passed. A zero whose control arm also returns zero is a **broken probe**, not a clean result.
+
+---
+
+### Rollback Strategy
+
+Single branch, single PR, single merge, therefore a **single revert**. No data migration, no deploy coupling, no runtime state, no schema claim. Rollback tier **CHEAP**, confidence **HIGH**. Reverting restores the pre-existing false citations; it breaks no consumer, because no consumer reads the cited paths — that is the defect.
+
+---
+
+## Change Description
+
+### Outcome
+
+Four independent citation-vs-reality divergences are reconciled so that no corpus citation or tool anchor asserts a path, count, or mapping that reality does not match.
+
+The largest limb is the warn-log citation family. Governance and reference docs cited ten distinct warn-log filenames under `core/hooks/`; the deploy script writes exactly **one** warn log, under the operator-instance path, and nothing has ever been written under `core/hooks/`. A reader following any of those citations to inspect gate output found nothing, and no gate detected the divergence.
+
+The reconciliation is deliberately **not** a find-and-replace. Twenty in-scope citations were classified against the code by a single test — does a coded emitter exist whose predicate is the owning gate's predicate — and the answer came back **1 yes, 19 no**. The one genuine emitter's citation is simply relocated to the real sink. The nineteen that describe behavior no check emits are relocated **and** marked, with a greppable implementation-state token, so a reader can tell "wrong path" from "not built yet". A blanket replace would have silently relabelled all nineteen as though the behavior had shipped.
+
+### Issues resolved
+
+| Card | Status | Deliverable |
+|---|---|---|
+| warn-log path citations | landed | 20 warn-log citations across 7 files reconciled — 1 class-1 relocation, 19 class-2 relocations carrying an implementation-state clause |
+| Phase-A domain-practice check | pending | Phase-A check widened; the § 5.7 schema restated |
+| velocity-script anchor depth | pending | Repo-root anchor depth corrected; anchor-depth regression assertion added |
+| re-review status transitions | pending | § 9 status transitions resolved against the live label taxonomy |
+
+All four are marked as closed at Stage 13.
+
+### Key decisions
+
+- **Class-2 is the default, class-1 is the documented exception.** The card was written expecting the inverse. Re-derivation from source moved the split to 1 / 19 and the design was rebuilt on that basis rather than on the card's exemplars, which were 0-for-2 as written.
+- **No schema-version bump on `gate-criteria-spec.md`.** No mechanical consumer reads that value, no gate requires a bump for this edit class, and none of the 36 recorded bumps was ever classed as a reference correction. The stated bump rule's "self-repair refinements" clause was raised as the counter-argument and answered on evidence: a truth-correction inside a remediation cell refines no remediation. The determination also dissolves the one true line-level collision with a sibling branch — a consequence, never the basis.
+- **The four gate-graduation rows are excluded by gate ID, never by position**, so a sibling merge that moves lines cannot silently pull them into scope.
+- **Marker retirement is an emitter-PR obligation**, published as a standing gate-ID inventory and handed to the owning card at Stage 12 pre-merge. The automated detector is explicitly **not** built here and is carried as a named residual to Stage 9.
+
+### Reversibility
+
+**CHEAP** · confidence **HIGH**. One branch, one PR, one merge, one revert. Every change is corpus text plus a single one-token path edit in release tooling. No runtime state, no migration, no deploy coupling, no version claim.
+
+### Downstream impact
+
+The implementation-state token becomes the enumeration surface for the warn-mode gate cohort: one command lists every gate that is specified but not emitting. The gate-graduation card inherits that inventory and the retirement obligation. Stage 13 grades the warn-log limb of the Outcome Statement as **partially attained with the residual named** — 20 of 24 citations delivered, 4 owned elsewhere by design, and two adjacent path families explicitly out of scope and routed.
+
+### Cross-references
+
+- Milestone `path-and-citation-reconciliation` — binding constraints 1, 1a, 2 and 3, which supersede every card's declared affected-files list and mandate control-armed probes and string anchors.
+- ADR-092 — the version binds at the Stage-12 atomic claim; the slot named in this file is provisional throughout Stages 4 to 11.
+- `core/standards/duplicate-source-discipline.md` — the register-or-remove rule graded by CIAC-2.
+- `core/disciplines/reconcile-dont-annotate.md` — the rule under which the sibling-format parenthetical inside an edited sentence is reconciled rather than left standing.
+
+---
+
+## Deviation Log
+
+| # | Stage | Deviation | Rationale | Disposition |
+|---|---|---|---|---|
+| D-1 | 5 | The warn-log card's class split was re-derived from **5 class-1 / 15 class-2** to **1 / 19** | Every prior classification was treated as a non-authoritative input and re-derived from source against the operative predicate-identity test. Both flipped rows have a backing check that writes the shared sink but whose predicate is not the gate's. | Accepted at Stage-5 Phase B |
+| D-2 | 5 | The census unit was restated from lines to **occurrence strings** | One line carries two citation strings; a line-keyed edit plan silently drops one. | Accepted at Stage-5 Phase B |
+| D-3 | 5 | The bridge-files card was parked and removed from the milestone | Its strict-by-design premise was falsified at the A6.5 gate; the corpus carries two incompatible layer models, so no wording of the planned sentence is true under both. | Operator decision; matrix row removed |
+| D-4 | 6 | The `gate-criteria-spec.md` schema version was left **byte-unchanged** rather than bumped | Determination recorded above under the warn-log card. Re-derived from the mainline at Commit 0 (2.12) and not claimed. | Recorded at Commit 0 |

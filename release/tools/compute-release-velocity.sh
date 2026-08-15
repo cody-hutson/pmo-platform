@@ -67,9 +67,34 @@ set -euo pipefail
 export PATH="/usr/bin:/bin"
 
 # ─── Repo-relative paths ─────────────────────────────────────────────────────
+#
+# Repo root is TWO levels up from this script (release/tools/) — NOT three. The
+# prior `../../..` walked above the repo, and its failure signature is
+# layout-dependent: from the primary checkout it landed outside any repository,
+# so the files-changed query returned nothing and the signal degraded to N/A
+# behind the `|| true` below; from a worktree at
+# .claude/worktrees/<name>/release/tools/ it landed in the worktrees directory,
+# whose git toplevel is a DIFFERENT working tree. A test that only asks "is this
+# a git repo" therefore PASSES the worktree case — which is why the --self-test
+# asserts a resolution identity (arms 1-3) rather than repository membership.
 
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-REPO_ROOT="$( cd "$SCRIPT_DIR/../../.." && pwd )"
+REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
+
+# Anchor-resolution predicate — ONE implementation, called by BOTH self-test
+# arm 1 (the shipped anchor, which must match) and arm 3 (the known-bad anchor,
+# which must NOT match). Sharing the implementation is what makes arm 3 a real
+# vacuity control rather than a constant-true statement about the filesystem: a
+# predicate mutated to always-match fails arm 3, one mutated to never-match
+# fails arm 1, so the pair cannot decay into a no-op that still passes. Echoes
+# the verdict token the arms assert on, mirroring the observed-output assertion
+# shape of append-pipeline-event.sh's liveness check.
+anchor_verdict() {
+  if [[ "${1:-}/release/tools" -ef "$SCRIPT_DIR" ]]; then
+    echo "anchor=match"; return 0
+  fi
+  echo "anchor=mismatch"; return 1
+}
 
 die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
 
@@ -190,11 +215,49 @@ if [[ "${1:-}" == "--self-test" ]]; then
   [[ "$feat" -eq 4 && "$debt" -eq 2 && "$slack" -eq 8 ]] || die "self-test: allocation split wrong (feat=$feat debt=$debt slack=$slack)"
   [[ $((feat+debt+slack)) -eq 14 ]] || die "self-test: allocation does not sum to delivered (14)"
 
+  # Test 6: repo-root anchor resolution — the anchor-depth regression guard.
+  # Arms 1 and 3 call ONE predicate (anchor_verdict) and assert on its OBSERVED
+  # verdict token, so a mutated predicate fails an arm rather than turning the
+  # pair into a decoration that still reports PASS.
+
+  # Arm 1 — anchor identity. Always runs and needs no git, so it holds in a
+  # tarball, a CI checkout, a worktree, or a copied tree. This is the floor: the
+  # composite can never fail open.
+  A1="$(anchor_verdict "$REPO_ROOT" || true)"
+  [[ "$A1" == "anchor=match" ]] || die "self-test: anchor arm 1 observed '$A1' — REPO_ROOT resolved to '$REPO_ROOT', but this script's own directory is '$SCRIPT_DIR' (the repo root is TWO levels up from release/tools/, not three)"
+
+  # Arm 3 — vacuity control. The known-bad ../../.. anchor MUST be rejected by
+  # the SAME predicate arm 1 just passed. Fails closed: a control that could not
+  # run is a FAIL, not a skip.
+  if BAD_ANCHOR="$( cd "$SCRIPT_DIR/../../.." 2>/dev/null && pwd )" && [[ -n "$BAD_ANCHOR" ]]; then
+    A3="$(anchor_verdict "$BAD_ANCHOR" || true)"
+    [[ "$A3" == "anchor=mismatch" ]] || die "self-test: anchor arm 3 — the anchor assertion is VACUOUS; the known-bad anchor '$BAD_ANCHOR' observed '$A3' through the same predicate arm 1 passed"
+  else
+    die "self-test: anchor arm 3 (vacuity control) could not resolve the known-bad anchor from '$SCRIPT_DIR' — the control did not run, which is a FAIL, not a skip"
+  fi
+
+  # Arm 2 — working-tree identity. Catches the worktree case from the other
+  # direction: there the bad anchor DOES resolve to a git root, just the wrong
+  # working tree. Guarded with `if`, never a bare command substitution — under
+  # `set -euo pipefail` (live at the top of this file) a failing $(git ...)
+  # assignment exits 128 with no message, turning the intended skip into an
+  # unattributable crash.
+  if git -C "$SCRIPT_DIR" rev-parse --show-toplevel >/dev/null 2>&1; then
+    TOPLEVEL="$( git -C "$SCRIPT_DIR" rev-parse --show-toplevel )"
+    [[ "$REPO_ROOT" -ef "$TOPLEVEL" ]] || die "self-test: anchor arm 2 — REPO_ROOT '$REPO_ROOT' is not this script's own working tree '$TOPLEVEL'; the anchor resolved to a DIFFERENT working tree"
+    ANCHOR_ARM2="ran — working-tree identity matches '$TOPLEVEL'"
+    echo "  anchor arm 2: RAN — REPO_ROOT matches this script's working tree '$TOPLEVEL'"
+  else
+    ANCHOR_ARM2="SKIPPED — not inside a git working tree"
+    echo "  anchor arm 2: SKIPPED — this script's directory is not inside a git working tree; arms 1 and 3 still ran"
+  fi
+
   echo "self-test: PASS"
   echo "  point scale (XS/S/M/L/XL) validated; out-of-set rejection validated"
   echo "  ratio round-half-up validated (exact / below-half / at-half / above-half / planned-zero)"
   echo "  work-class mapping + precedence validated"
   echo "  allocation-partitions-delivered invariant validated"
+  echo "  repo-root anchor: arm 1 identity + arm 3 vacuity control validated via one shared predicate; arm 2 ${ANCHOR_ARM2}"
   exit 0
 fi
 
@@ -343,6 +406,14 @@ if [[ -n "$MERGE_SHA" ]]; then
   if [[ -n "$SHORTSTAT" ]]; then
     FC="$(/usr/bin/printf '%s' "$SHORTSTAT" | /usr/bin/grep -oE '[0-9]+ files? changed' | /usr/bin/grep -oE '[0-9]+' | /usr/bin/head -1 || true)"
     [[ -n "$FC" ]] && FILES_CHANGED="$FC"
+  fi
+  # Announce the degradation; do not silence it. A degrade to N/A here can be
+  # legitimate (a genuinely empty diff, an unknown SHA), so the `|| true` above
+  # STAYS and the exit-code contract is unchanged — but an INVISIBLE degrade is
+  # how the mis-anchored REPO_ROOT above survived a release cycle. Diagnostic
+  # goes to stderr so the stdout field value stays byte-identical for callers.
+  if [[ "$FILES_CHANGED" == "N/A" ]]; then
+    echo "NOTE: files-changed degraded to N/A — 'git diff --shortstat ${DIFF_BASE}..${MERGE_SHA}' yielded no file count from repo root '${REPO_ROOT}'" >&2
   fi
 fi
 

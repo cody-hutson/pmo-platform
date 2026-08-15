@@ -336,6 +336,64 @@ without naming what was compared.
 - Validation: for each §8 negative-path element, count the **distinct** literals corpus-wide. More than one is a **FAIL** — an abbreviated, relabelled, or reflowed copy counts as a second literal.
 - Failure mode: a second, reflowed copy of the §8.3 `estimation bias: not computable …` fenced literal is introduced into a consumer's instruction text, and each copy is checked only against itself.
 
+### Category 8: Tool Anchor Resolution (ANC-01 through ANC-02)
+
+**Applies to:** any edit to a repo-root anchor assignment — the
+`REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"` idiom — in a shell tool under
+`release/tools/` or `core/deploy/tools/`.
+
+**Reachability — read this before treating the category as a trigger.** This
+document's consumers run it after a **skill** edit, and no consumer of this
+document edits shell tools under those trees. These two checks therefore have
+**no reachable trigger here**. The category is a **citation surface**: the
+enforcement lives in the executable self-test named under *Coverage surface*
+below, and this entry records the invariant so it is discoverable alongside its
+sibling corpus predicates. Treating it as an enforced trigger would reproduce
+the fail-open the category exists to close.
+
+**Coverage surface — stated adjacent to the implementation, so the declaration
+cannot drift from what enforces it.** The predicate is implemented as the anchor
+arms of the `--self-test` in `release/tools/compute-release-velocity.sh`, which
+the self-test coverage engine **discovers** rather than enumerates, and which the
+release-tooling smoke workflow executes pre-merge. That workflow's runner
+partition is total and disjoint, and this tool sits on the **ubuntu partition
+only**. The consequence is stated rather than implied: the primary-checkout half
+of the invariant is CI-gated, and the **worktree half has no CI backstop** — it
+is verified by an operator run. The always-on arm is git-independent and does
+catch the defect in both contexts, so the class cannot silently reappear; but the
+redundancy is single-sided and a reader should not assume otherwise.
+
+**Trigger table** — keyed on the **edited file**, not on a skill, because the
+invariant is a property of a tool's source rather than of a skill's output:
+
+| Edited file | Run |
+|---|---|
+| `release/tools/*.sh`, `release/tools/lib/*.sh` | ANC-01, ANC-02 |
+| `core/deploy/tools/*.sh` | ANC-01, ANC-02 |
+
+Both ANC checks **fail closed**: a check that was not run is a FAIL, not a pass,
+and an assertion whose own liveness control did not run is a FAIL rather than a
+green result.
+
+**ANC-01 (repo-root anchor resolves to the repository root):** a tool's computed repo root is the root under which that tool's own directory sits at its repo-relative path
+- Intent: the anchor scopes git queries and path joins. An anchor that overshoots does not error — it resolves to *some* directory, and the queries it feeds return empty or wrong answers that read as legitimate output.
+- Validation: run the executable self-test named under *Coverage surface* above. This entry **cites** that check as its runner and does not restate the predicate as an independently-enforced rule. The predicate that check implements is a resolution identity: the computed root joined to the tool's repo-relative directory must be the **same directory** as the tool's own directory, compared by identity rather than by string; and where git is available, the computed root must additionally equal the working-tree root discovered from the tool's own directory.
+- Failure mode: the anchor walks one level too far, and the signature is layout-dependent. From a primary checkout it lands outside any repository, the git query returns nothing, and the signal degrades to `N/A` behind a `|| true` — invisible. From a worktree it lands in the worktrees directory, whose git toplevel is the **primary checkout**: a *different working tree* that answers successfully with the wrong answer. This dual signature is why "is the computed root inside a git repository" is **not** a sufficient test — it passes the worktree case.
+
+**ANC-02 (the anchor assertion carries a liveness control):** the check asserting ANC-01 also asserts that a known-bad anchor is REJECTED, through the same predicate implementation
+- Intent: an assertion that cannot fail is a decoration. The liveness control is what distinguishes a regression guard from one.
+- Validation: confirm the good-anchor arm and the known-bad-anchor arm invoke **one** predicate implementation and assert on its observed verdict — not two independently-spelled inline tests. The shared implementation is the property being checked: it makes the pair two-sided, so a predicate mutated to always-accept fails the control arm while one mutated to always-reject fails the assertion arm. Two separate inline tests do **not** satisfy this check.
+- Failure mode: the control arm is written as a standalone filesystem comparison. Because the bad anchor's joined path does not exist in any layout, that arm is **constant-true** — it passes even with the assertion arm deleted entirely, and a later change to the predicate silently turns the guard into a no-op that still reports PASS.
+
+**Anti-pattern — a textual depth-vs-dot-count check is not an acceptable
+implementation of ANC-01.** Comparing a file's directory depth against the length
+of the `..` run in its anchor **fails closed against working scripts**. Each false
+positive `cd`s from an already-walked intermediate variable, so its *effective*
+walk equals its depth and the spelling is legitimately shorter than the depth;
+when this was last measured across every anchor assignment in the repository, the
+correct-but-compound anchors in the flagged set outnumbered the single genuine
+defect six to one. The check must test **resolution behaviour**, never spelling.
+
 ---
 
 ## Skill-to-Check Mapping

@@ -193,6 +193,22 @@ The provenance label schema is **inlined here** — it lives in this pipeline sp
 
 **Provenance label placement:** The Planning spoke embeds the resolved `domain_practice` label in the release plan file under the `### Release Class declaration` H3 (or as a sibling H3 `### Domain Practice Provenance` when the release plan template predates this convention). The label is machine-readable (single-line, key-value form); the `date` field is mandatory in BOTH modes so staleness is detectable. Releases that re-cite a previously-sourced domain after >180 days SHOULD re-confirm currency at A1.5 (the date field surfaces the gap for operator decision).
 
+**Serialization tolerance (which renderings of the label are conformant).** The label is defined by its **content** — the `domain_practice` key, a colon, and a single-line `{ … }` body carrying `source`, `date`, the mandatory `domain:` class, and (Mode A) `name` or (Mode B) `rationale`. Its **typographic setting on the line is not part of the schema**, and the schema fixes no order among the body's keys. Each shape below is a conformant rendering of the same label, and every downstream verification MUST accept all of them. The first is the RECOMMENDED authoring rendering — it is the least fragile to later markdown edits — but the others are equally conformant and MUST NOT be flagged.
+
+```
+domain_practice: { source: …, date: …, domain: … }          bare at line start (recommended)
+`domain_practice: { … }`                                     wrapped in a code span
+**Domain classification.** `domain_practice: { … }`          introduced by bold or italic prose
+- `domain_practice: { … }`                                   inside a list item
+| Domain classification | `domain_practice: { … }` |         inside a table cell
+**domain_practice:** `{ … }`                                 split-key emphasis
+**`domain_practice` label:** `{ … }`                         split-key emphasis, colon detached
+```
+
+The following are **not** rendering variants — each is a genuine finding: a label body split across two or more lines (the schema is single-line so the fields stay machine-locatable); a narrative mention of `domain_practice` carrying no `{ … }` body; and provenance serialized without the `domain_practice` key (for example a bare pipe-delimited `domain: … | date: … | source: …` list under a prose heading), which drops the key every downstream consumer resolves the label from. These are not all found by the same limb: a mention with no body and a non-`domain_practice` serialization fail the presence limb, whereas a **wrapped body satisfies presence and is caught by the in-label `domain:` limb**, because the class field falls off the label's opening line. Stage 7's failure table routes them accordingly.
+
+Stage 7 Dev Testing's Domain-Practice Provenance Verification Step verifies against **this** set and does not define a second one. A rendering this clause declares conformant that the Stage-7 check rejects is a defect in the check, not in the plan.
+
 **Acquisition mechanism (current state):** operator-prompt at Planning time OR explicit `UNSOURCED-DOMAIN` flag. Auto-detection of "is this an unfamiliar domain?" requires a domain-parameter keystone capability and is deferred to a follow-up — the operator-approved posture is SHIP-WITH-FLAG: ship the convention + flag mechanism now, fill in auto-detection later. The convention + flag mechanism is the current-state surface; the follow-up adds auto-detection on top of it.
 
 **Cutover (the `domain:` class field, introducing-release-exempt):** The mandatory `domain:` class field and the A3-time deliverable-domain classification apply to releases entering Stage 4 Planning strictly AFTER this substrate's introducing-release merge SHA recorded in the release log. **The introducing release itself is exempt** — the substrate shipping in a release cannot retroactively bind its own Planning, which ran before the field existed; the introducing release's own `domain_practice` label is authored to the new shape by hand at Engineering time (its release plan demonstrates the field), and all releases that entered Stage 4 prior to the introducing release are exempt. This mirrors the introducing-release-exempt cutover discipline used by the cross-PR overlap audit and the append-pattern detection above.
