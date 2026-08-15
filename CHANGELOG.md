@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.28] - 2026-08-15
+
+Skill checks now measure the whole corpus they claim to cover, and a non-skill folder no longer stops a release from closing.
+
+[Full notes](release/releases/notes/v4.28_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.28)
+
 ## [v4.27] - 2026-08-15
 
 Citations that named files nothing writes now name the real one, and say plainly when the thing they describe was never built.
