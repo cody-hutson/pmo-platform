@@ -263,7 +263,19 @@ pv7_self_test() {
     local out rc=0
     out=$(pv7_scan "$root" yes) || rc=$?
     total=$((total + 1))
-    if [ "$rc" -eq "$want_rc" ] && { [ -z "$want_grep" ] || printf '%s' "$out" | grep -q "$want_grep"; }; then
+    # The needle test is a here-string, never a writer piped into a
+    # short-circuiting reader — that pipeline shape is the SIGPIPE idiom the
+    # repo-integrity gate rejects. It is also lifted out of the `if` rather than
+    # written as a `||` fallback, so no reader ever sits immediately after a bar
+    # character and the line cannot read as that shape to a lexical scanner. The
+    # empty-haystack caveat does not bite: every needle is a non-empty literal,
+    # which cannot match the single empty line `<<<""` emits.
+    local matched=1
+    if [ -n "$want_grep" ]; then
+      matched=0
+      grep -q "$want_grep" <<<"$out" && matched=1
+    fi
+    if [ "$rc" -eq "$want_rc" ] && [ "$matched" -eq 1 ]; then
       pass=$((pass + 1)); echo "  PASS  ${name}"
     else
       echo "  FAIL  ${name} (rc=${rc}, expected ${want_rc})"
