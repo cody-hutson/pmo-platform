@@ -85,6 +85,16 @@ for test_file in *.test.sh; do
   # runner. Forward the lines so the claim and the behaviour agree.
   /usr/bin/printf '%s\n' "$output" | /usr/bin/grep -E '^RESIDUAL' || true
 
+  # FAIL pass-through, for the same reason and by the same mechanism. A summary line
+  # reports HOW MANY assertions failed and never WHICH, so an ordinary red run at the
+  # authoritative runner said "FAIL: 3" and discarded the three messages naming the
+  # hook, the fixture state, the exit code and the stderr. That is diagnosable only by
+  # reproducing the run locally — and the hook suites cannot be executed locally under
+  # the script-execution guard, so in practice it was not diagnosable at all. Forwarding
+  # costs nothing on a green run (no lines match) and is the difference between a red
+  # CI result that can be acted on and one that can only be re-run.
+  /usr/bin/printf '%s\n' "$output" | /usr/bin/grep -E '^FAIL' || true
+
   if [ "$rc" -ne 0 ] || [ "$fail" -gt 0 ]; then
     FAILED_FILES+=("$test_file")
   fi
