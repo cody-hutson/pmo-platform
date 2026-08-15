@@ -10839,8 +10839,13 @@ sys.stdout.write("".join(out) + "|")
   # not a .md file (a deploy.sh:NNN or foo.py:NNN pin, where the canonical `§`-anchor form
   # does not exist for a non-markdown target); and line-number references that name no file
   # and carry no backticks — a bare prose "line 206 of the contract" — which this predicate
-  # is lexically incapable of seeing, exactly as the prose sub-referent above is. Measured
-  # in-scope population of both residual sub-classes: 0.
+  # is lexically incapable of seeing, exactly as the prose sub-referent above is. MEASURED
+  # population — a point-in-time census, not a standing invariant — over this check's own
+  # reported denominator (238 in-scope files at measurement): non-.md-target pins — 0;
+  # bare-prose line references — 4, across 3 files, every one of them ALREADY DRIFTED onto
+  # the wrong content. A member LOCATES a referent by line number; a mandated structural
+  # position and a worked-example / fenced-sample / quoted-specimen line number are not
+  # counted. The second sub-class is real AND POPULATED — the blanket zero was false.
   #
   # WARN-MODE INITIAL via resolve_check_mode "citation-anchor" — the Check 51-65
   # deploy-check precedent, NOT the PreToolUse-hook .mode surface. Flip to enforce with
