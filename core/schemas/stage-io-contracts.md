@@ -208,7 +208,7 @@ Stage 6 (Engineering) produces committed changes on the release branch + the PR 
 
 ### Failure Handling
 
-- **No PR / commits unlinked / PR body unparseable / verification absent / Change Description absent:** return to Stage 6 Engineering at the Phase named in the matching G6-0N self-repair row (C2 for PR, B1 for commit linkage, C4 for verification, C1 for Change Description). **Warn-mode (author-time):** G6 ships warn-mode initially — log to `core/hooks/gate-g6-warn-log.jsonl` and PROCEED; flip-to-enforce deferred to a 2-3-release shakedown (G-CL6/G3-14 precedent).
+- **No PR / commits unlinked / PR body unparseable / verification absent / Change Description absent:** return to Stage 6 Engineering at the Phase named in the matching G6-0N self-repair row (C2 for PR, B1 for commit linkage, C4 for verification, C1 for Change Description). **Warn-mode (author-time):** G6 ships warn-mode initially — log to the shared deploy-check warn log (`$(pmo_instance_path)/deploy-check-warn-log.jsonl`) and PROCEED — **specified, not yet emitting**: no check emits this gate's FAIL row. Flip-to-enforce deferred to a 2-3-release shakedown (G-CL6/G3-14 precedent).
 - **Deviation without a log entry:** Tier 1 `[ADJUST]` — Engineering records the deviation in the release-plan deviation log.
 
 ---

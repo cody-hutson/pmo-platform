@@ -1,0 +1,35 @@
+# corpus-home tolerance suite — arming-posture sentinel
+#
+# This committed marker declares WHICH POSTURE the repository asserts for the
+# corpus-home adapter tolerance suite, release/tools/tests/test_corpus_home_tolerance.sh.
+# The suite derives the posture it OBSERVES from its own structural arming
+# detector and compares the two; its rule R8 fails on any divergence, in either
+# direction. Without this file the suite is stateless — "the seam has not landed
+# yet" and "the seam landed and conforms" are both green, so a revert between
+# them is unobservable and the loss of CH-1/CH-2/CH-4 coverage goes unrecorded.
+#
+# This is a DIFFERENT AXIS from the .enforce sentinels beside it. Those declare
+# whether a red verdict BLOCKS (warn | enforce). This one declares whether the
+# graded property is APPLICABLE YET. The two vocabularies are disjoint on
+# purpose; do not cross them.
+#
+# The first non-comment, non-blank line is the posture token:
+#   pending   the instance-aware corpus-home seam has NOT landed. The suite is
+#             expected to report PENDING-SEAM, and its tolerance rules R3/R4/R7
+#             are legitimately dormant.
+#   armed     the seam HAS landed. The suite is expected to report
+#             PASS-SEAM-LANDED, and those rules are actively grading.
+#
+# The token is neither optional nor inferred:
+#   * a change that LANDS the seam MUST flip this token to `armed` in that same
+#     change — the suite fails until it does, which is what makes the reverse
+#     failure reachable at all;
+#   * a change that REVERTS the seam MUST flip it back to `pending` in that same
+#     change — an un-arm is permitted, an UNRECORDED un-arm is not;
+#   * an absent, empty, or unrecognised token FAILS CLOSED. Deleting this file
+#     does not restore the pre-sentinel behaviour; it reddens the suite.
+#
+# Retiring the suite's PENDING-SEAM branch (see the "Retirement condition" in
+# release/references/standards/corpus-home-adapter-constraints.md section 5)
+# removes this file and rule R8 together. Neither outlives the other.
+pending

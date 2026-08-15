@@ -20,7 +20,7 @@
 # The tools under test are COPIED FROM THE TREE UNDER TEST, never re-implemented,
 # so a regression in the real file fails this suite.
 #
-# Assertions A1-A10 map to the card's acceptance criteria. A7 is the negative
+# Assertions A1-A13 map to the card's acceptance criteria. A7 is the negative
 # control: a fixture whose failure arm is untested is a broken probe, so A7
 # re-runs the same scenario with a bare `git mv` and asserts that A2 and A4 then
 # FAIL. Without it, A2/A4 passing would be evidence of nothing.
@@ -37,6 +37,19 @@ TOOLS="${REPO_UNDER_TEST}/release/tools"
 # `check-adr-durability.py` is additionally invoked directly (A3c) against a worktree.
 for t in check-adr-numbers.py renumber-adr.py generate-adr-index.py check-adr-durability.py; do
   [ -f "${TOOLS}/${t}" ] || { echo "FATAL: ${TOOLS}/${t} missing — the suite cannot test a tool that is not there" >&2; exit 1; }
+done
+
+# A13's closure. R7 does not re-implement the path -> skill reverse resolution; it
+# INVOKES the package builder's `--skills-for-paths` query, so the query and its own
+# read closure are part of what A13 exercises. `deploy.sh` is in the list because the
+# query extracts TEMPLATE_SYNC_MAP and the per-module rosters from it at runtime, and
+# `lib-template-sync-source.sh` because it is sourced for the canonical resolver.
+# Named EXPLICITLY, and staged per-worktree by stage_builder below, so A13 never
+# resolves to the ambient checkout — the suite's contract is that every tool under
+# test is COPIED FROM THE TREE UNDER TEST.
+BUILDER_CLOSURE="core/deploy/tools/build-skill-packages.sh core/deploy/lib-template-sync-source.sh core/deploy/deploy.sh"
+for t in $BUILDER_CLOSURE; do
+  [ -f "${REPO_UNDER_TEST}/${t}" ] || { echo "FATAL: ${REPO_UNDER_TEST}/${t} missing — A13 cannot verify R7's disclosure without the resolver R7 invokes" >&2; exit 1; }
 done
 
 PASS=0; FAIL=0
@@ -153,6 +166,20 @@ author_B() {
 }
 
 cite_count() { grep -o "ADR-$(printf '%03d' "$2")" "$1" 2>/dev/null | wc -l | tr -d ' '; }
+
+# ------------------------------------------- stage the R7 resolver into a worktree
+# The copy is COMMITTED, and that is not incidental: R1 refuses a dirty tree, so an
+# untracked staging would make every A13 arm refuse at R1 and never reach R7 — the
+# arm would go green having tested nothing. A worktree that never calls this keeps
+# the resolver absent, which is exactly the state A13c asserts against.
+stage_builder() {
+  local w="$ROOT/$1" t
+  mkdir -p "$w/core/deploy/tools"
+  for t in $BUILDER_CLOSURE; do
+    cp "${REPO_UNDER_TEST}/${t}" "$w/${t}"
+  done
+  ( cd "$w" && G add -A >/dev/null && G commit -qm "stage the package-builder closure" )
+}
 
 echo "=== ACT 1 — the race (both claimants correct) ==="
 seed_origin origin1
@@ -467,6 +494,76 @@ python3 release/tools/renumber-adr.py --renumber 7 12 --apply >/dev/null 2>&1
 assert_eq "A12 SPECIFICITY — a move that would LAND a gap is still refused" "$?" "2"
 assert_eq "A12 zero mutation after the refusal" \
   "$(G rev-parse HEAD):$(G status --porcelain | wc -l | tr -d ' ')" "$BEFORE12"
+
+echo "=== A13 — R7 package-staleness disclosure ==="
+# WHY THIS ARM EXISTS. `packages/*.skill` is dropped from the R3 scope as a
+# rebuild-derived artifact, and that is correct. But R3 rewrites the SOURCES those
+# archives are built from, so a renumber that touches a packaged skill's source
+# leaves the package stale — and the tool used to say nothing at all. The staleness
+# then surfaced at the next `deploy.sh --check` (Check 7): a drift detector absorbing
+# drift a sibling tool knowingly created, reported to the operator at the next gate
+# rather than at the cause. R7 discloses it at the cause. It NAMES; it never rebuilds.
+seed_origin origin13
+G clone -q "$ROOT/origin13" "$ROOT/wt-A13"
+( cd "$ROOT/wt-A13" && G checkout -q -b feat/a
+  printf '# ADR-004 — alpha\n\n## Status\n\nProposed.\n' > core/ADRs/ADR-004-alpha.md
+  G add -A >/dev/null && G commit -qm a && G push -q origin feat/a && \
+  G checkout -q main && G merge -q --no-edit feat/a && G push -q origin main )
+
+# --- A13a the packaged skill's source is swept, and the package is NAMED ------
+author_B origin13 wt-B13a 4
+stage_builder wt-B13a
+( cd "$ROOT/wt-B13a"
+  mkdir -p core/skills/fixture-skill
+  printf -- '---\nname: fixture-skill\n---\n\n# fixture-skill\n\nThe body cites ADR-004.\n' \
+    > core/skills/fixture-skill/SKILL.md
+  G add -A >/dev/null && G commit -qm "author fixture-skill citing ADR-004" )
+cd "$ROOT/wt-B13a" && G fetch -q origin
+R7A="$(python3 release/tools/renumber-adr.py --renumber 4 5 --apply 2>&1)"; R7A_RC=$?
+assert_eq "A13a the renumber still exits 0 with R7 in the path" "$R7A_RC" "0"
+# Sensitivity first: if the sweep never reached the skill source there is no
+# staleness to disclose, and the assertion below would be measuring nothing.
+assert_eq "A13a SENSITIVITY — the packaged skill's source was actually swept" \
+  "$(cite_count core/skills/fixture-skill/SKILL.md 5)" "1"
+assert_eq "A13a R7 NAMES the staled package" \
+  "$(printf '%s\n' "$R7A" | grep -c 'R7 packages: .*packages/fixture-skill\.skill')" "1"
+assert_eq "A13a R7 emits the exact rebuild command, not a vague instruction" \
+  "$(printf '%s\n' "$R7A" | grep -c 'rebuild via core/deploy/tools/build-skill-packages\.sh fixture-skill')" "1"
+
+# --- A13b NEGATIVE CONTROL — nothing staled, so nothing is named --------------
+# Without this arm A13a is evidence of nothing: a step that named a package
+# unconditionally would satisfy A13a and be worthless. Same discipline as A7 and
+# A3d. The assertion is scoped to the R7 line on purpose — R3's own non-UTF-8 drop
+# line legitimately names `packages/fixture-bravo.skill`, so an unscoped match here
+# would fail against correct behaviour.
+author_B origin13 wt-B13b 4
+stage_builder wt-B13b
+cd "$ROOT/wt-B13b" && G fetch -q origin
+R7B="$(python3 release/tools/renumber-adr.py --renumber 4 5 --apply 2>&1)"; R7B_RC=$?
+assert_eq "A13b the renumber exits 0 with no packaged source in the sweep" "$R7B_RC" "0"
+assert_eq "A13b R7 reports 'none affected' rather than staying silent" \
+  "$(printf '%s\n' "$R7B" | grep -c 'R7 packages: none affected')" "1"
+assert_eq "A13b R7 names NO package when the sweep staled none" \
+  "$(printf '%s\n' "$R7B" | grep -c 'R7 packages: .*\.skill')" "0"
+
+# --- A13c DEGRADATION — the resolver is unreachable; the run STILL succeeds ---
+# The highest-value arm. R7 runs AFTER R6 verified and `git add -A` staged, so a
+# naive `check=True` would fail a fully-verified renumber — turning the defect this
+# card fixes into a strictly worse one. The resolver is absent here NATURALLY: a
+# worktree that never calls stage_builder carries only the ADR-tool closure, so this
+# asserts the fixture's own default state rather than simulating an outage.
+author_B origin13 wt-B13c 4
+cd "$ROOT/wt-B13c" && G fetch -q origin
+assert_nofile "A13c PRECONDITION — the resolver really is absent from this tree" \
+  "core/deploy/tools/build-skill-packages.sh"
+R7C="$(python3 release/tools/renumber-adr.py --renumber 4 5 --apply 2>&1)"; R7C_RC=$?
+assert_eq "A13c an unreachable resolver does NOT fail the renumber (exit 0)" "$R7C_RC" "0"
+assert_eq "A13c R6 still reports success" \
+  "$(printf '%s\n' "$R7C" | grep -c 'R6 verify: zero dangling in-scope citations')" "1"
+assert_eq "A13c R7 says UNDETERMINED rather than falsely claiming 'none affected'" \
+  "$(printf '%s\n' "$R7C" | grep -c 'R7 packages: UNDETERMINED')" "1"
+assert_eq "A13c the degraded notice still names what the run wrote" \
+  "$(printf '%s\n' "$R7C" | grep -c 'This run wrote: .*release/ADRs/ADR-005-bravo\.md')" "1"
 
 echo
 echo "renumber-adr fixture: ${PASS} passed, ${FAIL} failed"

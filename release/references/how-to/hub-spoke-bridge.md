@@ -1897,7 +1897,7 @@ The Agent-tool channel does NOT duplicate or summarize the Handoff Payload; it c
 
 | Trigger | Mechanism | Outcome |
 |---|---|---|
-| (a) After EVERY Agent-tool spoke completion (Procedure 4 entry) | Hub regex-tests the Agent return-value message against the 4-field schema + closed-enum membership; on mismatch, emits `[STRUCTURAL-DEFECT: return-value-non-conformant]` and reads the GitHub comment as fallback authority | Warn-mode initial: log to `core/hooks/return-value-warn-log.jsonl`; flip-to-enforce: hub HALTS routing and surfaces Decision Briefing to operator |
+| (a) After EVERY Agent-tool spoke completion (Procedure 4 entry) | Hub regex-tests the Agent return-value message against the 4-field schema + closed-enum membership; on mismatch, emits `[STRUCTURAL-DEFECT: return-value-non-conformant]` and reads the GitHub comment as fallback authority | Warn-mode initial: log to the shared deploy-check warn log (`$(pmo_instance_path)/deploy-check-warn-log.jsonl`) — **specified, not yet emitting**: no check emits this gate's FAIL row; Check 29 emits agent-definition roster drift, not a return-value row. Flip-to-enforce: hub HALTS routing and surfaces Decision Briefing to operator |
 | (b) Stage 7 DT review (post-cutover spokes) | LLM-graded content check on free-text content after the 4-field block | Tier 1 finding (Engineering fixes via `fix(dt):` commit per the DT↔Engineering iteration loop) |
 | (c) `deploy.sh --check` Check 29 (return-value-conformance lint) | Lints recent Agent-tool return values via sampling parent issue most-recent transcript metadata | Reports drift in `--check` output; warn-mode initial |
 
@@ -1905,7 +1905,7 @@ Gate (a) is the routing-time gate; gate (b) is the review-time gate; gate (c) is
 
 #### Warn-mode → enforce-mode shakedown posture
 
-**Initial mode:** warn. Logs to `core/hooks/return-value-warn-log.jsonl` (sibling format to existing `doc-link-warn-log.jsonl` per Check 14 precedent + `egress-warn-log.jsonl` per Check 8 precedent).
+**Initial mode:** warn. Logs to the shared deploy-check warn log (`$(pmo_instance_path)/deploy-check-warn-log.jsonl`) — **specified, not yet emitting**: no check emits this gate's FAIL row; Check 29 emits agent-definition roster drift, not a return-value row. Per-check sink files are a hook-family convention, where a hook writes beside itself at runtime, and are not a sibling of the shared deploy-check sink, which serves the whole check suite.
 
 **Flip-to-enforce thresholds** (matching `bypass-mode-readiness.md` Shakedown → Enforce Transition Checklist — whichever comes first):
 

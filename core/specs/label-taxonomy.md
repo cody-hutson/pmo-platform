@@ -29,6 +29,31 @@ Classify what an issue **is**. Every issue gets exactly one category label at in
 
 `type:*` is documented here **as a namespace PATTERN**, exactly as `project:*` / `epic:*` are (§ Initiative Labels) — the concrete kinds are **not enumerated in this grammar**. They are declared in each selected pack's `kinds[]` and contributed as `[[labels]]` rows keyed by `projects_kind` (the join that keeps the `type:*` family in lockstep with the pack's declared kinds — no independent drift). Enumerating the kinds here would re-instance-code the grammar and duplicate the pack (`duplicate-source-discipline`). A deployment's live `type:*` set is therefore whichever kinds its selected packs declare: the Scrum pack contributes `type:{epic,story,task}`; the Kanban pack contributes `type:card`; a deployment that brings its own kinds contributes their `type:*` rows.
 
+#### Tolerated Legacy Alias — `type:subtask`
+
+`type:subtask` is a **tolerated legacy alias of the `sub-task` category row** — *not* a work-item-kind row, despite sitting lexically inside the `type:*` namespace above. It joins no pack's `kinds[]`, projects no `work_item_type`, and predates the canonical `sub-task` row it aliases.
+
+**Do not apply it to new work.** New sub-tasks take the canonical `sub-task` category label (§ Rules 6). The alias is frozen — tolerated where it already sits, never extended.
+
+**Do not remove, replace, or delete it.** `core/deploy/tools/check-milestone-epic-membership.py` reads the alias, and the legs whose subject *is* the sub-task scaffold count the issues carrying only it — the M3 sub-task census, and M4's milestone-less sub-task count, which shares the same wide predicate. Two removal paths break those legs, and both are live:
+
+- **Per-issue relabel** — stripping the alias from an issue drops that issue out of the counted population.
+- **Deleting the `type:subtask` label itself** — this removes it from every carrier in a single action. The check evaluates issues irrespective of open/closed state, so the label stays load-bearing even when its carriers are not open work; an audit that reads "unused" off the open-issue view is reading the wrong population.
+
+Either way the failure is **silent**: the legs keep reporting, on a quietly smaller population.
+
+**The two sub-task predicates differ by design; do not collapse them.** That same tool defines `is_sub_task` (narrow — the canonical row only) and `is_sub_task_family` (wide — the canonical row *or* this alias), and states the reason for each inline. The legs that *exclude* scaffolding from a membership population (M1, M2) use the narrow predicate, because a narrow exclusion errs toward flagging, which is the safe direction there; the legs that *count* the scaffold use the wide one, because a sub-task carrying only the alias is still a sub-task. The tool is the authority for that split — read the reasoning there rather than trusting a restatement here.
+
+**Consumer set — what breaks on removal.** Naming a single consumer under-states the blast radius, which is the whole point of this entry:
+
+| Consumer | Dependency on the alias |
+|---|---|
+| `core/deploy/tools/check-milestone-epic-membership.py` | Declares it as a named constant and admits it in the wide sub-task predicate the counting legs use |
+| `release/tools/automated-closeout.sh` | Accepts it as a sub-task-family label in the Stage-13 auto-close exclusion filter, and fixtures that path |
+| `release/skills/release-executor/SKILL.md` | Documents that same exclusion filter as accepting it — the contract an operator reads before running close-out |
+
+Re-derive this set by searching the tree for the alias literal rather than trusting the table to stay complete on its own; a consumer added later will not announce itself here.
+
 ### Status Labels
 
 Track where an issue is in the pipeline lifecycle. Exactly one status label per issue (§ Rules 2), updated as the issue progresses through stages; status tracks lifecycle, **not** priority (§ Rules 5). The lifecycle machine a status label projects is the generic Axis-1 base machine owned by the entity layer (`work-item-type-schema.md §1.2`), which packs project sub-states over — never re-found.

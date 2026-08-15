@@ -20,6 +20,24 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.27] - 2026-08-15
+
+Citations that named files nothing writes now name the real one, and say plainly when the thing they describe was never built.
+
+[Full notes](release/releases/notes/v4.27_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.27)
+
+## [v4.26] - 2026-08-15
+
+Checks that used to fail correct work now pass it, still catch incorrect work, and say out loud when they are switched off.
+
+[Full notes](release/releases/notes/v4.26_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.26)
+
+## [v4.25] - 2026-08-15
+
+Reference-block headings now accept every spelling the docs name, and documents that restated a count or range now cite the source.
+
+[Full notes](release/releases/notes/v4.25_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.25)
+
 ## [v4.24] - 2026-08-13
 
 A work item that ships a check must now say what the check leaves alone, and two backlog blind spots became things the check run reports.

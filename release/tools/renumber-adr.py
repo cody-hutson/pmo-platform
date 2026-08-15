@@ -83,13 +83,13 @@ USAGE
 
     python3 release/tools/renumber-adr.py --renumber <old> <new> [--apply]
         [--extra-path GLOB] [--exclude-path GLOB]
-        Dry-run by default. ``--apply`` performs steps R1-R6 below.
+        Dry-run by default. ``--apply`` performs steps R1-R7 below.
 
     python3 release/tools/renumber-adr.py --self-test
         Pure-function fixtures (no git, no I/O). Exit 0 = clean.
 
-THE SIX STEPS (each individually verifiable)
---------------------------------------------
+THE SEVEN STEPS (each individually verifiable)
+----------------------------------------------
   R1  refuse-or-proceed  — non-zero exit and ZERO mutation if the move
                            INTRODUCES a violation or fails to advance (see
                            "R1's legality test is a delta"). Never --force,
@@ -107,6 +107,14 @@ THE SIX STEPS (each individually verifiable)
   R5  provenance note    — the ``## Status`` note. THE OBSERVED DEFECT.
   R6  zero-dangling verify — re-scan; any surviving in-scope ``ADR-<old>`` is a
                            failure, and the whole staged set is reverted.
+  R7  package disclosure — NAME the ``packages/*.skill`` this run staled, plus
+                           the rebuild command. R3 rewrites the SOURCES those
+                           archives are built from, so a renumber that touches a
+                           packaged skill's source leaves the package stale; the
+                           tool used to leave that for `deploy.sh` Check 7 to
+                           find later. It DISCLOSES and never rebuilds, runs
+                           strictly OUTSIDE the ``revert()`` envelope, and
+                           cannot change the exit code — see the R7 block.
 
 R3 SCOPING RULE (the correctness crux)
 --------------------------------------
@@ -646,7 +654,7 @@ def append_renumber_log(text, old, new, slug, cause):
 
 
 # --------------------------------------------------------------------------
-# The six steps
+# The seven steps
 # --------------------------------------------------------------------------
 
 
@@ -681,7 +689,7 @@ def _strip_projected_region(lines):
 
 
 def _is_utf8_text(path):
-    """True when the file decodes as UTF-8 — i.e. it CAN carry a text citation.
+    """True when the file decodes as UTF-8 — i.e. R3 can sweep it IN PLACE.
 
     The R3 scope is the branch diff, and a real release branch carries BINARY
     deliverables inside it: ``packages/*.skill`` is a compiled archive rebuilt at
@@ -689,10 +697,28 @@ def _is_utf8_text(path):
     production run. ``read_text(encoding="utf-8")`` raises on it, and the raise
     lands OUTSIDE the R4/R5/R6 ``revert()`` path — under ``--apply`` it fires
     after R2 has already renamed the record, leaving a half-applied tree the tool
-    cannot undo and did not report. A binary cannot hold an ``ADR-NNN`` citation,
-    so it is dropped from the scope; the drop is LOGGED rather than silent,
-    because a scope that shrinks without saying so is the same
-    answer-over-the-wrong-population defect this tool exists to fix.
+    cannot undo and did not report. That is why the drop happens at SCOPE time.
+
+    WHY THE ARCHIVE IS DROPPED — AND WHY IT IS *NOT* "IT HOLDS NO CITATION"
+    An archive holds citations in quantity: a whole-tree measurement found 509
+    ``ADR-NNN`` occurrences sealed inside 47 of 55 ``packages/*.skill``. The
+    reason to drop it is that those citations are DERIVED, not authoritative —
+    the archive is rebuilt from the ``SKILL.md`` sources, which are UTF-8 and
+    already in R3 scope, so a sweep of the sources regenerates them. Rewriting
+    inside the zip would edit a build output that the next rebuild overwrites.
+
+    The exclusion is therefore about PROVENANCE, not about content, and the
+    distinction is load-bearing. Stated as an ENCODING limit — as though there
+    were nothing in the archive to rewrite — the reason is simply false, and a
+    contributor who checks it finds 509 counter-examples and "fixes" the gap by
+    sweeping inside archives, the one repair that is certainly wrong. Stated as
+    PROVENANCE it is true, and it points at the correct repair: sweep the source,
+    then rebuild the package.
+
+    The drop is LOGGED rather than silent, because a scope that shrinks without
+    saying so is the same answer-over-the-wrong-population defect this tool
+    exists to fix. R7 closes the other half: the sweep rewrites the SOURCES, so
+    it stales the packages built from them, and R7 names them.
     """
     try:
         path.read_text(encoding="utf-8")
@@ -731,8 +757,9 @@ def _in_scope_files(ref, root, extra_paths, log=None, exclude_paths=None):
     for f in present:
         (text if _is_utf8_text(root / f) else binary).append(f)
     if binary and log:
-        log(f"R3 scope: {len(binary)} non-UTF-8 file(s) dropped — a binary cannot "
-            f"carry a citation: " + ", ".join(binary))
+        log(f"R3 scope: {len(binary)} non-UTF-8 file(s) dropped — rebuild-derived "
+            f"artifact(s); their citations regenerate from in-scope sources: "
+            + ", ".join(binary))
     return text
 
 
@@ -776,9 +803,63 @@ def _project_index(root, rel):
     return True, (root / rel).read_text(encoding="utf-8") != before, "; ".join(lines)
 
 
+# The reverse resolver R7 consults, INVOKED and never re-implemented — the same
+# no-second-parser rule this file already applies to the number space and to the
+# index projector. Its rule (b) is the load-bearing half: a TEMPLATE_SYNC_MAP
+# canonical has no ``skills/`` path of its own, so a renumber that rewrites a
+# citation in ``core/standards/template-protocol.md`` stales SIX packages while
+# touching ZERO ``skills/`` paths. A resolver keyed on ``skills/`` paths alone
+# returns EMPTY on exactly that input — a confident answer computed over the
+# wrong population, which is the defect class this tool exists to eliminate.
+PACKAGE_BUILDER = "core/deploy/tools/build-skill-packages.sh"
+
+
+def _skills_for_paths(root, paths):
+    """Reverse-resolve written paths to the skills whose packages they feed.
+
+    Returns ``(skills, degraded_reason)``. Exactly one side is meaningful: on
+    success ``degraded_reason`` is ``None``; on ANY failure ``skills`` is empty
+    and the reason is a short operator-facing string.
+
+    NEVER RAISES, BY CONTRACT — and that is not defensive habit, it is the
+    property that lets R7 sit where it sits. R7 runs after R6 has passed and the
+    tree is staged, so an exception escaping here would fail a renumber that has
+    already verified, turning a fixed defect into a worse one. The query itself
+    is read-only by construction (it never builds and never writes packages/),
+    so calling it cannot mutate the tree either way.
+
+    THE CATCH BELOW IS DELIBERATELY BROAD — do not narrow it back to the
+    subprocess families. ``subprocess.run(..., text=True)`` DECODES the child's
+    streams, so a child emitting non-UTF-8 bytes raises ``UnicodeDecodeError``,
+    a ``ValueError`` that no subprocess-family clause covers; an enumerated
+    catch makes the contract above conditional on the child's byte output,
+    which is exactly what R7's placement is not allowed to depend on. Nothing
+    is swallowed silently: every caught class is named in the degraded reason
+    via ``type(exc).__name__`` and printed on the run's R7 line, and
+    ``BaseException`` is deliberately NOT caught, so a KeyboardInterrupt during
+    the subprocess still interrupts.
+    """
+    script = root / PACKAGE_BUILDER
+    if not script.is_file():
+        return [], f"{PACKAGE_BUILDER} is not present in this tree"
+    try:
+        proc = subprocess.run(
+            ["bash", str(script), "--skills-for-paths"],
+            input="\n".join(paths) + "\n",
+            cwd=str(root), capture_output=True, text=True, timeout=120,
+        )
+    except Exception as exc:
+        return [], f"{PACKAGE_BUILDER} could not be run ({type(exc).__name__})"
+    if proc.returncode != 0:
+        tail = (proc.stderr or proc.stdout).strip().splitlines()
+        return [], (f"{PACKAGE_BUILDER} exited {proc.returncode}"
+                    + (f" — {tail[-1]}" if tail else ""))
+    return [s for s in proc.stdout.split("\n") if s.strip()], None
+
+
 def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
                 exclude_paths=None):
-    """Steps R1-R6. Returns 0 on success, non-zero on refusal or verify failure."""
+    """Steps R1-R7. Returns 0 on success, non-zero on refusal or verify failure."""
     worktree = worktree_claims(root)
     _a, mainline_by_n = anchor(ref, root)
     mainline = {n: set(p) for n, p in mainline_by_n.items()}
@@ -789,7 +870,7 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
     # performed it by hand. The hand case is the OBSERVED DEFECT: `409545d4`
     # renamed and fixed the index but never wrote the provenance note, leaving
     # ADR-088 unauditable to this day. Refusing here would leave the one
-    # reliably-skipped step still skipped, so the tool completes R3-R6 instead.
+    # reliably-skipped step still skipped, so the tool completes R3-R7 instead.
     # "Ours" is always the PATH set the mainline does not have. At a duplicate
     # the working tree holds two files for one number, so a bare `old in
     # worktree` test would see the MAINLINE's record and mis-route.
@@ -810,7 +891,7 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
         slug = m.group(0)[len(f"ADR-{m.group(1)}-") : -len(".md")]
         old_path = new_path.parent / f"ADR-{old:03d}-{slug}.md"
         log(f"R1 COMPLETION MODE: ADR-{old:03d} is gone and ADR-{new:03d} is "
-            f"present — the rename already happened. Completing R3-R6.")
+            f"present — the rename already happened. Completing R3-R7.")
     else:
         # THE BRANCH'S CLAIM, NEVER THE MAINLINE'S RECORD. At a duplicate the
         # working tree holds two files for the same number; the one to move is
@@ -1070,6 +1151,44 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
     git("add", "-A", root=root)
     log("R6 verify: zero dangling in-scope citations; provenance note present; "
         "number space clean. Changes staged.")
+
+    # ---- R7 package-staleness disclosure --------------------------------
+    # STRICTLY AFTER ALL MUTATION, AND DELIBERATELY OUTSIDE THE revert() ENVELOPE.
+    #
+    # `packages/*.skill` is dropped from the R3 scope as a rebuild-derived
+    # artifact (see `_is_utf8_text`), and that is the right call. But the sweep
+    # rewrites the SOURCES those archives are built from, so a renumber that
+    # touches a packaged skill's source leaves the package stale — and until R7
+    # the tool neither rebuilt it nor said so. The staleness surfaced at the next
+    # `deploy.sh --check` (Check 7), i.e. at a drift detector, not at the sibling
+    # tool that knowingly created the drift.
+    #
+    # THIS STEP DISCLOSES; IT NEVER REBUILDS. Invoking the packager here would
+    # put a fallible, NON-REVERTIBLE write after `git add -A`: `revert()` can
+    # restore tracked paths and unlink a rename, but it has no mechanism to
+    # unbuild a package. That reproduces the half-applied-tree shape recorded in
+    # `_is_utf8_text` one step later, in a tool whose whole point is that it
+    # never half-applies. Disclosure IS the fix, which is why R7 contributes
+    # nothing to the exit code and why every arm below still falls through to
+    # `return 0`.
+    #
+    # A line is emitted on EVERY path, including "none affected". A step that is
+    # silent when it finds nothing is indistinguishable from a step that did not
+    # run — the same disclosure failure this whole block exists to close.
+    stale_skills, degraded = _skills_for_paths(root, sorted(touched))
+    if degraded:
+        log(f"R7 packages: UNDETERMINED — {degraded}. This run wrote: "
+            + ", ".join(sorted(touched)))
+        log("    if any of those feeds a .skill package, rebuild via "
+            "core/deploy/tools/build-skill-packages.sh <skill> before the next "
+            "deploy.sh --check")
+    elif stale_skills:
+        log(f"R7 packages: {len(stale_skills)} stale package(s) owed a rebuild — "
+            + ", ".join(f"packages/{s}.skill" for s in stale_skills))
+        log("    rebuild via core/deploy/tools/build-skill-packages.sh "
+            + " ".join(stale_skills))
+    else:
+        log("R7 packages: none affected")
     return 0
 
 

@@ -245,6 +245,84 @@ N_F3=$(add_fixture "Reconcile the unlicensed-kind card against the applicability
 No intake-tier label and no pack-declared kind.
 ")
 
+# ── G1-05a PRESENCE fixtures (#4232) ────────────────────────────────────────
+# The presence arm asks a different question from the shape arm: does the card
+# carry an Acceptance Criteria section with at least one criterion at all? The
+# shipped check could not answer it — it counted non-conforming checkbox bullets
+# and emitted only when that count exceeded zero, so a body with NO AC bullets
+# produced zero non-conforming bullets and passed silently. It had never once
+# emitted an AC-absence finding, which is why every arm below is paired with a
+# control: an arm set that only proves "AC-bearing cards pass" would be green
+# against the defect itself.
+AC_INTAKE_HEAD='### Priority
+
+P2 - High
+
+### Description
+
+A conforming improvement body.
+
+### Evidence
+
+[SOURCE] measured at the build anchor.
+
+### Proposed Change
+
+Change `core/deploy/deploy.sh`.
+
+'
+# AC-1 — H2 pre-template AC. This is the era the card exists to protect: a
+# predicate keyed to the H3 template heading scores a false FAIL on every one.
+N_AC_H2=$(add_fixture "Reconcile the pre-template body against the presence arm" \
+  "improvement,status: bundled" "${AC_INTAKE_HEAD}## Acceptance Criteria
+
+- [ ] Verify that \`core/deploy/deploy.sh\` carries the presence arm
+")
+# AC-2 — H3 template AC.
+N_AC_H3=$(add_fixture "Reconcile the template body against the presence arm" \
+  "improvement,status: bundled" "${AC_INTAKE_HEAD}${CONFORMING_AC}")
+# AC-3 — template-correct AC whose criteria are an ORDERED LIST. Presence must
+# PASS; the shape arm must stay silent, because widening shape to ordered lists
+# is a different card's scope and would mass-FAIL conformant cards.
+N_AC_ORDERED=$(add_fixture "Reconcile the ordered-list body against the presence arm" \
+  "improvement,status: bundled" "${AC_INTAKE_HEAD}### Acceptance Criteria
+
+1. Verify that \`core/deploy/deploy.sh\` carries the presence arm
+2. Confirm the empty-section control fails
+")
+# AC-4 CONTROL — heading present, ZERO criteria beneath it. This is the exact
+# empty-set shape the shipped verdict line failed open on.
+N_AC_EMPTY=$(add_fixture "Reconcile the empty-section body against the presence arm" \
+  "improvement,status: bundled" "${AC_INTAKE_HEAD}### Acceptance Criteria
+
+To be authored during planning.
+")
+# AC-5 MUTATION CONTROL — AC-2 with the section deleted outright.
+N_AC_REMOVED=$(add_fixture "Reconcile the section-removed body against the presence arm" \
+  "improvement,status: bundled" "${AC_INTAKE_HEAD}")
+# AC-6 — SPECIFICITY. The sub-task scaffold heading is not the card's own AC, so
+# a body carrying only that heading must read ABSENT rather than satisfied.
+N_AC_XISSUE=$(add_fixture "Reconcile the cross-issue scaffold against the presence arm" \
+  "improvement,status: bundled" "${AC_INTAKE_HEAD}### Cross-Issue Acceptance Criteria
+
+- [ ] Verify the sibling card landed
+")
+# AC-7 — a `sub-task`-labelled AC-less card: DETECTED, never gate-blocking
+# (Layer-B(d) detector tier, ADR-120 authority conjunct preserved).
+N_AC_SUBTASK=$(add_fixture "Reconcile the sub-task card against the presence arm" \
+  "improvement,sub-task,status: bundled" "${AC_INTAKE_HEAD}")
+# AC-8 — observation tier declares no AC field, so the criterion must not read it
+# at all (the `n/a` applies-to cell, preserved).
+N_AC_OBS=$(add_fixture "Reconcile the observation card against the presence arm" \
+  "observation,status: bundled" "### What Is Missing
+
+An observation-shaped body declaring no Acceptance Criteria field.
+
+### Evidence
+
+[SOURCE] observed at the build anchor.
+")
+
 FIX="$TMPD/fixtures.json"
 write_fixtures "$FIX"
 FIXTURE_N=$(fixture_count)
@@ -368,6 +446,111 @@ else
   fail "G CONTROL — the degraded run evaluated no F1 card (${_deg_f1} findings); its zeros above are unreadable"
 fi
 
+# ── I. G1-05a PRESENCE arm (#4232) — the empty-set hole, closed ─────────────
+# Presence and shape are separate arms. `presence_for` isolates the presence
+# verdict so an arm below cannot be satisfied by a shape finding that happens to
+# mention the same issue.
+presence_for() { findings_for "$1" | /usr/bin/grep -F 'G1-05a FAIL (presence)' || true; }
+presence_count() { presence_for "$1" | /usr/bin/grep -c '' | /usr/bin/tr -d ' '; }
+
+_i_ok=true; _i_detail=""
+for pair in "H2:$N_AC_H2" "H3:$N_AC_H3" "ordered-list:$N_AC_ORDERED"; do
+  _lbl="${pair%%:*}"; _n="${pair##*:}"
+  if [[ "$(presence_count "$_n")" -ne 0 ]]; then
+    _i_ok=false; _i_detail="${_i_detail}${_lbl} body wrongly flagged absent; "
+  fi
+done
+if [[ "$_i_ok" == "true" ]]; then
+  pass "I an AC-bearing card passes the presence arm at H2, at H3, and with ordered-list criteria — heading depth and template era do not decide the verdict"
+else
+  fail "I presence false-positives: ${_i_detail}"
+fi
+
+# The ordered-list card must be CLEAN OVERALL, not merely presence-clean: if the
+# presence work leaked into the shape arm, this is where it shows up.
+if [[ "$(count_for "$N_AC_ORDERED")" -eq 0 ]]; then
+  pass "I BOUNDARY — an ordered-list AC card yields NO finding of any kind; the presence arm did not widen the checkbox-scoped shape arm"
+else
+  fail "I ordered-list AC card produced finding(s) — presence leaked into shape: $(findings_for "$N_AC_ORDERED")"
+fi
+
+# CONTROL — heading present, zero criteria. Without this the arms above are
+# satisfiable by a predicate that returns "present" unconditionally.
+if [[ "$(presence_count "$N_AC_EMPTY")" -eq 1 ]] \
+   && /usr/bin/grep -qF 'zero criteria' <<<"$(presence_for "$N_AC_EMPTY")"; then
+  pass "I CONTROL — an AC heading with zero criteria FAILS the presence arm exactly once, and the message names emptiness rather than absence"
+else
+  fail "I empty AC section did not produce exactly one emptiness finding: $(presence_for "$N_AC_EMPTY")"
+fi
+
+# MUTATION CONTROL — the card's AC #3: delete the section, verdict flips.
+if [[ "$(presence_count "$N_AC_REMOVED")" -eq 1 ]] \
+   && /usr/bin/grep -qF 'no Acceptance Criteria section found' <<<"$(presence_for "$N_AC_REMOVED")"; then
+  pass "I MUTATION CONTROL — removing the AC section from a passing body flips it to a presence FAIL naming absence (the pre-change verdict on this body was silence)"
+else
+  fail "I section-removed body did not flip to an absence finding: $(presence_for "$N_AC_REMOVED")"
+fi
+
+# SPECIFICITY — the sub-task scaffold heading is not the card's own AC.
+if [[ "$(presence_count "$N_AC_XISSUE")" -eq 1 ]]; then
+  pass "I SPECIFICITY — a body carrying only '### Cross-Issue Acceptance Criteria' reads ABSENT; the match is prefix-anchored, not a substring search"
+else
+  fail "I cross-issue scaffold heading was accepted as the card's own AC: $(presence_for "$N_AC_XISSUE")"
+fi
+
+# AUTHORITY — a sub-task card is DETECTED but never gate-blocking (ADR-120).
+_sub_flag=$(presence_for "$N_AC_SUBTASK" | /usr/bin/grep -c '^FLAG' || true)
+_sub_rec=$(presence_for "$N_AC_SUBTASK" | /usr/bin/grep -c '^REC' || true)
+if [[ "$_sub_flag" -eq 0 && "$_sub_rec" -eq 1 ]]; then
+  pass "I AUTHORITY — an AC-less sub-task card is DETECTED at the recommend tier (${_sub_rec}) and never gate-blocking (${_sub_flag}); the presence arm inherited the router rather than adding an emitter"
+else
+  fail "I sub-task authority wrong: FLAG=${_sub_flag} REC=${_sub_rec} (expected 0 / 1)"
+fi
+
+# APPLICABILITY — observation declares no AC field, so it is not evaluated.
+if [[ "$(presence_count "$N_AC_OBS")" -eq 0 ]]; then
+  pass "I APPLICABILITY — an observation-tier card is not graded on AC presence; the 'n/a' applies-to cell is preserved"
+else
+  fail "I observation card was graded on AC presence: $(presence_for "$N_AC_OBS")"
+fi
+
+# ── J. Degraded AC primitive: ONE finding, no per-issue fan-out ──────────────
+# Bind the same degraded-state contract the priority and kind delegates name: a
+# degraded measurement is never rendered as a clean one, and never fanned out.
+AC_DEGRADED_ROOT="$TMPD/ac_degraded"
+mkdir -p "$AC_DEGRADED_ROOT/release/tools" "$AC_DEGRADED_ROOT/core/deploy/tools"
+cp "$KIND_TOOL" "$AC_DEGRADED_ROOT/core/deploy/tools/" 2>/dev/null || true
+cp -R "${SRC_ROOT}/core/deploy/packs" "$AC_DEGRADED_ROOT/core/deploy/" 2>/dev/null || true
+AC_DEG_OUT="$TMPD/ac_degraded.txt"
+FIXTURE_SRC_ROOT="$AC_DEGRADED_ROOT" bash "$RUNNER" "$FIX" > "$AC_DEG_OUT" 2>"$TMPD/ac_deg.err"
+_acdeg_block=$(/usr/bin/grep -c 'G1-05a presence NOT EVALUATED' "$AC_DEG_OUT" || true)
+_acdeg_perissue=$(/usr/bin/grep -c 'G1-05a FAIL (presence)' "$AC_DEG_OUT" || true)
+if [[ "$_acdeg_block" -eq 1 ]]; then
+  pass "J missing AC primitive emits EXACTLY ONE population-wide NOT-EVALUATED finding (no fan-out)"
+else
+  fail "J missing AC primitive emitted ${_acdeg_block} block-level finding(s); expected exactly 1"
+fi
+if [[ "$_acdeg_perissue" -eq 0 ]]; then
+  pass "J SPECIFICITY — with the primitive unavailable the criterion reads NOT-EVALUATED, never FAILED: zero per-issue presence verdicts"
+else
+  fail "J ${_acdeg_perissue} per-issue presence FAIL(s) under a degraded primitive — one root cause was fanned out into per-card verdicts"
+fi
+# CONTROL — the degraded run must still be a LIVE run, or its zeros are unreadable.
+_acdeg_live=$(/usr/bin/grep -c "issue #${N_F1_BAD} " "$AC_DEG_OUT" || true)
+if [[ "$_acdeg_live" -ge 2 ]]; then
+  pass "J CONTROL — cards are still evaluated on the other criteria under a degraded AC primitive (${_acdeg_live} findings), so arm J's zeros are not measuring a dead runner"
+else
+  fail "J CONTROL — the degraded run evaluated nothing (${_acdeg_live} findings); its zeros above are unreadable"
+fi
+# CONTROL — the SAME probe on the healthy run must be non-zero, or "0 per-issue
+# presence findings" above is a property of the fixtures, not of degradation.
+_ac_healthy=$(/usr/bin/grep -c 'G1-05a FAIL (presence)' "$OUT" || true)
+if [[ "$_ac_healthy" -ge 3 ]]; then
+  pass "J CONTROL — the identical probe finds ${_ac_healthy} presence verdict(s) on the healthy run; arm J measures degradation, not an empty fixture set"
+else
+  fail "J CONTROL — the healthy run produced only ${_ac_healthy} presence verdict(s); arm J cannot distinguish degraded from clean"
+fi
+
 # ── H. Anti-drift: the vocabulary stays DELEGATED and stays literal-free ─────
 # Restricted to NON-COMMENT lines. A bare substring search over the whole file
 # matches this block's own prose, which is how an earlier sibling guard shipped
@@ -400,6 +583,32 @@ if [[ "$_naive" -ge 1 && "$_tight" -eq 0 ]]; then
   pass "H CONTROL — on a regressed tree the naive whole-file form stays green (${_naive}) while the non-comment form goes red (${_tight}); the restriction is load-bearing"
 else
   fail "H CONTROL — could not demonstrate the naive form's blindness (naive=${_naive}, tight=${_tight}); arm H's claim is unproven"
+fi
+
+# ── K. Anti-drift: AC presence stays DELEGATED and stays on the shared router ─
+# Two properties that are invisible at runtime but decide what a future edit is
+# allowed to do, so they are asserted as facts rather than left to the comments.
+_ac_delegated=$(c22_code_lines "$DEPLOY_SH" | /usr/bin/grep -c 'parse_acceptance_criteria' || true)
+if [[ "$_ac_delegated" -ge 1 ]]; then
+  pass "K AC presence is resolved by delegation in LIVE CODE (${_ac_delegated} non-comment reference(s)) — no heading grammar is authored in deploy.sh"
+else
+  fail "K no non-comment parse_acceptance_criteria delegation in the Check-22 block — the predicate may have been re-implemented inline"
+fi
+# The presence emit must go through _c22_emit_structural. That router is what
+# carries BOTH the ADR-120 gating-authority conjunct and the check-wide
+# G1_ENFORCEMENT_MODE posture; a bespoke emitter here would silently escape the
+# warn mode this arm ships under and the detector tier it owes sub-task cards.
+# The emit CALL sits exactly one line above its message, so a one-line lookback
+# is the correct window: it pairs each message with its own caller rather than
+# with a neighbour's, which a wider window would silently do.
+_ac_emit_sites=$(c22_code_lines "$DEPLOY_SH" | /usr/bin/grep -c 'G1-05a FAIL (presence)' || true)
+_ac_router=$(c22_code_lines "$DEPLOY_SH" \
+  | /usr/bin/grep -B1 'G1-05a FAIL (presence)' \
+  | /usr/bin/grep -c '_c22_emit_structural' || true)
+if [[ "$_ac_emit_sites" -ge 1 && "$_ac_router" -eq "$_ac_emit_sites" ]]; then
+  pass "K every presence emit (${_ac_emit_sites}) routes through _c22_emit_structural — it inherits the ADR-120 authority conjunct and the g1-enforcement.mode posture rather than declaring its own"
+else
+  fail "K ${_ac_emit_sites} presence emit site(s) but ${_ac_router} routed through _c22_emit_structural — a bespoke emitter escapes both the authority router and the mode"
 fi
 
 echo ""
