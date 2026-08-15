@@ -11944,6 +11944,19 @@ EOF
   _v="$(_de_selftest_verdict)"
   [[ "$_v" == "INCOMPLETE 1 1" ]] || { echo "FAIL: DE-4 partial set (2 of 3 classes) must report exactly 1 missing class ('INCOMPLETE 1 1'), got '$_v'"; failures=$((failures+1)); }
 
+  # DE-4b — ANTI-VACUITY, MUTATION-DIRECTED: omit a `decision`-typed class while its
+  # SIBLING `decision`-typed class stays present. This is the only arm in the group that
+  # kills the subtype-conjunct mutant (`$4==t && $5==s` -> `$4==t`): the asserted set
+  # partitions as 2 x `decision` + 1 x `gate-outcome`, so every OTHER arm omits a class
+  # whose event_type is unique, and a type-only predicate reproduces the real verdict on
+  # it. Measured before this arm existed: DE-2/3/4/5/8/9 ALL survived that mutation, so
+  # the group could not detect deletion of Check 61 own subtype check. Path coverage is
+  # not mutation coverage — DE-4 executes the same lines and still cannot separate the
+  # two predicates.
+  _de_seed_log "de-postcutover" "milestone:#900" decision/d-class gate-outcome/plan-review-go
+  _v="$(_de_selftest_verdict)"
+  [[ "$_v" == "INCOMPLETE 1 1" ]] || { echo "FAIL: DE-4b omitting decision/scope-lock while its sibling decision-typed class remains must report exactly 1 missing class ('INCOMPLETE 1 1'), got '$_v'"; failures=$((failures+1)); }
+
   # DE-5 — ANTI-VACUITY: rows keyed on the LEGACY version form with the slug absent ⇒
   # INCOMPLETE. The gate asserts the § 2a canonical key (rung 1/2), never an ambiguous
   # rung-3 legacy match. Subject is deliberately non-milestone so rung 2 cannot rescue it.
@@ -12605,7 +12618,7 @@ STUB
   echo "    OS-1 suppressed -> BOTH findings / OS-2 emitted -> zero / OS-3 bolded numerals -> grammar finding / OS-4 explicit-N/A conformant / OS-5 archived+co-located -> zero / OS-6 T4 wrong-surface write -> split-record / OS-7 field on both surfaces -> split-record / OS-8 dangling segment pointer -> finding / OS-9 learnings mis-placed names the heading found / OS-10 short field-set / OS-11 duplicate heading / OS-12 no-match outputs cutoff WARNs vacuous / OS-13 __none__ re-dormants (j)+(k) only. Every arm graded on the FINDING LINE — exit code, corpus-wide grep and 'the field parses' are all identical on OS-4/OS-5 and OS-6.
     Close-Class-Telemetry sub-check (l) (#4437): OS-14 GENUINE FAILURE — a row with velocity+learnings and no telemetry field fires (l) alone / OS-15 control — the same fixture with a measured field raises nothing / OS-16 slot-short field fails the ordered eight-slot grammar while presence passes / OS-17 ANTI-VACUITY — a byte-perfect all-N/A field is a finding, with OS-15 as its control / OS-18 split record (field in the hot stub, body in the segment) / OS-19 __none__ re-dormants (l) and ONLY (l) — the SHIPPED configuration / OS-20 no-match telemetry cutoff WARNs vacuous in its own voice / OS-21 prefix mis-arm WARNs naming the row it actually armed at." >&2
   echo "  decision-emission minimum set validated (#4026, group DE):" >&2
-  echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET" >&2
+  echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-4b sibling-typed omission INCOMPLETE (kills the subtype-conjunct mutant) / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET" >&2
   echo "  complementary-pair ownership validated (#4178, group CP):" >&2
   echo "    CP-4 absent registry NOSET / CP-1 intact pair PASS / CP-2 leaked owned-section OWNERSHIP-DRIFT / CP-5 missing shared-section OWNERSHIP-DRIFT / CP-6 divergent shared-section SHARED-DIVERGENCE / CP-3 unregistered cross-tree pair UNREGISTERED-PAIR / CP-3b named README.md exclusion holds / CP-7 malformed record MALFORMED" >&2
   echo "  register runner-resolution validated (#4208, group RR):" >&2
