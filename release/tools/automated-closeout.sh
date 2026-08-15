@@ -9230,7 +9230,7 @@ AISTUB
   [[ -r "$_ai_doc" ]] && _ai_block="$(/usr/bin/awk '/^AI="\$DIR\/action-items\.md"$/{f=1} f{print} f && /^fi$/{exit}' "$_ai_doc")"
   _ai_blk_lines="$(/usr/bin/printf '%s\n' "$_ai_block" | /usr/bin/grep -c . || true)"; _ai_blk_lines="${_ai_blk_lines:-0}"
   if [[ "$_ai_blk_lines" -lt 8 ]] || ! /usr/bin/grep -qF "awk -F' [|] '" <<<"$_ai_block"; then
-    echo "FAIL: AI-G anti-vacuity — the canonical Procedure 7a predicate did not extract from ${_ai_doc} (${_ai_blk_lines} lines); a parity arm over an empty block asserts nothing"; failures=$((failures+1))
+    echo "FAIL: AI-G anti-vacuity — the canonical Procedure 7a predicate did not extract from ${_ai_doc#$REPO_ROOT/} (${_ai_blk_lines} lines); a parity arm over an empty block asserts nothing"; failures=$((failures+1))
   else
     local _ai_fx _ai_mine _ai_theirs _ai_seen=""
     for _ai_fx in ai-unresolved ai-resolved ai-decoy ai-empty ai-notrecorded; do
