@@ -79,7 +79,65 @@ before routing continues. Neither alone is sufficient (`core/standards/hub-sessi
    and open `--payload` with the release-stable token `ms:#<milestone-number>;`
    (see § 4a.2 Join-key note).
 4. Render the "Events emitted this routing point" block in the Decision Briefing.
-   Omission is a structural defect.
+   Omission is a structural defect. **Read every row back from the log before that
+   block renders** — the block reports what the log CONTAINS, not what this routing
+   point intended, and a block claiming rows the log does not hold is the worse
+   defect of the two.
+
+   Run the read-back from the repository root, once per emitted class, taking the
+   count TWICE with the identical invocation: once immediately before the step-2
+   append (`PRE`) and once after it (`POST`). The `PRE` read belongs to this step
+   even though it happens at step 2's moment — a delta cannot be observed from one
+   side.
+
+   ```bash
+   release/tools/query-pipeline-event.sh --release "<MILESTONE_SLUG>" \
+     --event-type <t> --event-subtype <s> --stage <the value step 2 passed> --count
+   ```
+
+   Assert `POST == PRE + N`, where `N` is the number of rows this routing point
+   emitted for that class at that stage.
+
+   **Assert the delta; never a non-zero absolute.** An absolute count answers "does
+   a row of this class exist ANYWHERE in this release" — a question an earlier
+   routing point has usually already made true, so a rule written about a zero can
+   never fire. Measured on a completed release: the unqualified count of
+   `gate-outcome/plan-review-go` read **10**, of which **8** rows already existed
+   when the Stage-9 gate opened. `--stage` plus the `PRE`/`POST` pair is what
+   narrows the question to THIS write. A pre-emit ABSENCE check asks the opposite
+   question, and an absolute zero is the right answer for it — do not transplant
+   its shape to a post-emit PRESENCE check.
+
+   Exactly four outcomes, and only the first continues routing:
+
+   | Observed | Reading | Routing |
+   |---|---|---|
+   | `POST == PRE + N` | the rows landed | continue |
+   | `POST < PRE + N` (incl. `POST == PRE`, and `0`) | the write did not land | **BLOCKED** — structural defect. Emit the missing row, then re-read. |
+   | `POST > PRE + N` | a surplus row of this class exists | **BLOCKED** — structural defect. Do NOT emit again; reconcile the surplus first. |
+   | no integer on stdout, or a non-zero exit | the probe could not answer | **BLOCKED** — unverified, which is neither a zero nor a pass. Fix the invocation and re-read. |
+
+   **Why a surplus blocks, and why "emit the row" is not the reflex remedy.**
+   `gate-outcome/plan-review-go` is consumed downstream as the EARLIEST matching row
+   of the release, so a second row of it silently re-anchors the release's measured
+   GO→deploy duration. Writing another row to clear a false alarm converts a
+   reporting error into permanent corruption of an append-only log.
+
+   **State the reader's bound, so a zero is not over-read.** `--release` matches the
+   milestone slug in the `version` column — rung 1 of the read ladder in
+   `release/references/standards/pipeline-event-log-schema.md` § 2a. It does NOT
+   resolve the `subject == milestone:#N` rung. Every row this procedure writes
+   carries the slug (step 3 and § 4a.2), so the bound holds by construction here —
+   but a `0` from this reader is not a verdict about rows written any other way.
+   Pass `--release "<MILESTONE_SLUG>"`, never `--version vX.Y`: the version column
+   is provisional pre-claim, and a `vX.Y` filter returns zero rows for a slug-keyed
+   release — a silent zero indistinguishable from a failed emission.
+
+   Attest the observed `PRE` → `POST` pair per class in the line BENEATH the block,
+   alongside the total already recorded there. The block's own column set is
+   normatively declared in `release/skills/release-hub/references/decision-briefing.md`
+   § Principle item 5 and is NOT changed here — the read-back is attested beside the
+   table, never as a new column inside it.
 5. When the hub or a spoke makes a durable commitment — one of the `category`
    values below — append an `AI-NNN` row to `action-items.md` per
    `core/standards/hub-action-tracking.md` § 2 (13 fields; zero-padded id; not
