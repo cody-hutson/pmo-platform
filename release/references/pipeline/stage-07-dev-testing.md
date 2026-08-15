@@ -47,7 +47,7 @@ Set at Stage 7: quality review scores (1-5 per dimension), finding list with sev
 
 1. **Presence:** the release plan must contain a single-line `domain_practice:` label (within the `### Release Class declaration` H3 or a sibling `### Domain Practice Provenance` H3, per the Stage 4 placement convention).
 
-   **The check is decoration-tolerant and position-agnostic.** The label satisfies presence wherever it sits on its line — bare, wrapped in a code span, introduced by bold or italic prose, inside a list item, or inside a table cell — because the schema constrains the label's *content*, not its typographic setting. The canonical accepted-rendering set is the Stage 4 §5.7 Serialization-tolerance clause; this step verifies against that set and does **not** define a second one. Presence does **not** accept a narrative mention of `domain_practice` that carries no brace body, nor a plan that merely quotes this step's own verification pattern — in both cases no schema field sits inside a body. A label whose body is **wrapped across two or more lines does satisfy presence** (its opening line carries the body's first fields) and then fails the in-label `domain:` limb, because the class field falls off the matched line; it is reported under that row of the failure table, not as an absent label. A wrapped body is still a genuine finding — the schema is single-line so the fields stay machine-locatable — but it is the second limb that finds it. Two placement rules stated in this list are **not** asserted by either command and remain reviewer-read: the H3 section placement named in this item, and the `date`/`source` field forms in items 2 and 3.
+   **The check is decoration-tolerant and position-agnostic.** The label satisfies presence wherever it sits on its line, because the schema constrains the label's *content* — the key, a colon, and a single-line brace body — and not its typographic setting. The canonical set of conformant renderings is the Stage 4 §5.7 Serialization-tolerance clause. This step verifies against that set and deliberately enumerates **no** second one, not even a partial illustrative list: a shorter restatement here would silently become a narrower set than the one Planning authors against, which is the same authoring-vs-verification disagreement this step exists to avoid. Presence does **not** accept a narrative mention of `domain_practice` that carries no brace body, nor a plan that merely quotes this step's own verification pattern — in both cases no schema field sits inside a body. A label whose body is **wrapped across two or more lines does satisfy presence** (its opening line carries the body's first fields) and then fails the in-label `domain:` limb, because the class field falls off the matched line; it is reported under that row of the failure table, not as an absent label. A wrapped body is still a genuine finding — the schema is single-line so the fields stay machine-locatable — but it is the second limb that finds it. Two placement rules stated in this list are **not** asserted by either command and remain reviewer-read: the H3 section placement named in this item, and the `date`/`source` field forms in items 2 and 3.
 2. **`date` field populated:** the label's `date` field must be a `YYYY-MM-DD` value (mandatory in BOTH Mode A and Mode B, so staleness is detectable).
 3. **`source` field present:** one of three legitimate forms:
    - Mode A — a citation URL or repo-relative path
@@ -57,9 +57,10 @@ Set at Stage 7: quality review scores (1-5 per dimension), finding list with sev
 
 **Verification command:**
 ```bash
-# (1) label present. Decoration-tolerant: the label counts wherever it sits on its
-#     line — bare, backticked, bold- or prose-introduced, in a list item, or in a
-#     table cell. The discriminator is a schema field inside the label's own brace
+# (1) label present. Decoration-tolerant and position-agnostic: the label counts
+#     wherever it sits on its line. The conformant renderings are enumerated once,
+#     in Stage 4 §5.7; they are deliberately not restated here.
+#     The discriminator is a schema field inside the label's own brace
 #     body, so neither a narrative mention that carries no body nor a plan that
 #     merely quotes this step's own pattern in prose is a match. Requiring the
 #     field is what keeps the check immune to its own text: the bare token-then-
