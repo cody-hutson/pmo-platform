@@ -62,6 +62,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-128](ADR-128-version-tags-are-retained-not-reaped.md) | Version tags are retained, not reaped: the retention rule is homed beside the branch-deletion rule, and the recovery tool reads host policy rather than assuming it | Accepted | 2026-08-06 | hub-spoke-execution-safety |
 | [ADR-129](ADR-129-close-class-is-a-declared-deliverable-value-conditioning-one-gate-spec.md) | The close class is a declared deliverable-type value that conditions one gate spec, never a parallel close path | Proposed | 2026-08-07 | 58-task-artifact-lifecycle-and-knowledge |
 | [ADR-131](ADR-131-precision-binds-to-the-checks-declared-parameter-surface.md) | A precision obligation binds to the check's declared parameter surface, never to the ACs' self-reported scopes | Proposed | 2026-08-09 | triage-and-backlog-instrumentation |
+| [ADR-133](ADR-133-a-gate-ships-armed-by-a-committed-default.md) | A gate ships armed by a committed default; arming is never deferred to a later step that can be forgotten | Proposed | 2026-08-14 | stage9-gate-integrity |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
