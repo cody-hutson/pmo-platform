@@ -34,8 +34,11 @@ set -euo pipefail
 # silent break. Bump SCHEMA_VERSION whenever the evidence-table shape, the
 # verdict enum, or the check-record fields change.
 # ---------------------------------------------------------------------------
-readonly CLI_VERSION="0.1.0"
-readonly SCHEMA_VERSION="1"
+readonly CLI_VERSION="0.2.0"
+# 1 -> 2: the `fcm-delivery` check family enters the emitted stream from a THIRD
+# record source, so every consumer now sees records it has never seen before.
+# That is exactly what this constant exists to make detectable rather than silent.
+readonly SCHEMA_VERSION="2"
 
 # ---------------------------------------------------------------------------
 # Pinned PATH for tool discipline (per bypass-mode-readiness.md posture).
@@ -67,6 +70,9 @@ ARG_ROOT=""
 ARG_PLAN=""
 ARG_NO_COLOR=0
 ARG_EMIT_EVENTS=0   # opt-in: actually write test-run events via the event writer
+ARG_FCM_MERGE_BASE=""   # explicit base ref for the fcm-delivery diff range
+ARG_FCM_HEAD=""         # explicit head ref for the fcm-delivery diff range
+ARG_FCM_DIFF_FILE=""    # TEST-ONLY determinism seam; refused against a real plan
 
 # Scratch array populated by tokenize_cmd (quote-aware command splitter).
 declare -a TOKENS=()
@@ -113,6 +119,13 @@ OPTIONS
   --emit-events     Actually write test-run events via the pipeline-event
                     writer for runtime-suite checks (default: describe only,
                     no event log write)
+  --merge-base REF  Base ref for the fcm-delivery diff range
+                    Default: \$(git merge-base origin/main HEAD)
+  --head REF        Head ref for the fcm-delivery diff range (default: HEAD)
+  --fcm-diff-file P TEST-ONLY determinism seam: read the delivered set from a
+                    <status>TAB<path> file instead of git. REFUSED (ERROR) when
+                    the plan target lives under release/releases/plans/ — a real
+                    release must never be graded against an authored diff set.
   --no-color        Disable ANSI color in table output
   -h, --help        Show this help and exit
   --version         Show CLI version + schema version and exit
@@ -125,6 +138,12 @@ CHECK FAMILIES (dispatched by predicate-class hint, else method keyword)
   sync           source <-> deployed                  (deploy --check)
   runtime-suite  behavioral/runtime dispatch          (test-run event via
                  append-pipeline-event.sh)
+  fcm-delivery   declared File Change Matrix ADDs     (git diff --name-status;
+                 vs the merged diff                    ALWAYS-ON for a plan under
+                                                       release/releases/plans/ —
+                                                       not plan-declared, so it
+                                                       cannot be omitted by not
+                                                       being asked for)
 
 EXIT CODES
   0  all checks PASS or SKIP
@@ -159,6 +178,12 @@ parse_args() {
       --root=*)       ARG_ROOT="${1#--root=}" ;;
       --root)         shift; ARG_ROOT="${1:-}" ;;
       --emit-events)  ARG_EMIT_EVENTS=1 ;;
+      --merge-base=*) ARG_FCM_MERGE_BASE="${1#--merge-base=}" ;;
+      --merge-base)   shift; ARG_FCM_MERGE_BASE="${1:-}" ;;
+      --head=*)       ARG_FCM_HEAD="${1#--head=}" ;;
+      --head)         shift; ARG_FCM_HEAD="${1:-}" ;;
+      --fcm-diff-file=*) ARG_FCM_DIFF_FILE="${1#--fcm-diff-file=}" ;;
+      --fcm-diff-file)   shift; ARG_FCM_DIFF_FILE="${1:-}" ;;
       --no-color)     ARG_NO_COLOR=1 ;;
       --)             shift; break ;;
       -*)             err "unknown option: $1"; usage >&2; exit "$EXIT_INTERNAL" ;;
@@ -826,6 +851,504 @@ parse_ciac() {
 }
 
 # ===========================================================================
+# Component 6 — fcm-delivery: the plan's declared File Change Matrix ADDs
+# reconciled against the diff that actually merged.
+#
+# WHY THIS EXISTS. Scope-boundary verification in this pipeline was
+# ONE-DIRECTIONAL: Stage 7 DT and Stage 8 QA both ask whether anything OUTSIDE
+# the approved matrix was touched, and neither asks whether everything INSIDE it
+# landed. A scope-lock-approved ADR therefore vanished between Collective Review
+# and merge (v4.03, `2adf533e`) with five verification stages, two operator gates
+# and ten review reports passing over it. This family closes the inbound
+# direction. The outbound direction ("every delivered add is declared") is a
+# real and separate gap and is deliberately NOT solved here.
+#
+# THE DOMINANT DEFECT CLASS THIS FAMILY MUST NOT REPRODUCE: an unparseable,
+# absent, empty or truncated matrix must NEVER read as "no declared ADDs,
+# therefore no violations". Every unreadable state below is ERROR or a NAMED
+# SKIP carrying its own denominator — never a silent PASS, and never silence.
+# ===========================================================================
+
+# --- Extraction -------------------------------------------------------------
+#
+# _extract_section (:238) is FENCE-BLIND: its `/^#+ /` awk rule fires on any line
+# beginning `#`+space, including a `# ── label ──` comment INSIDE a fenced block,
+# which terminates the section early. Measured over the 165-file plan corpus:
+# 26 of the 117 FCM-bearing plans truncate that way, losing every declaration row
+# after the first in-fence comment.
+#
+# The shared seam is deliberately NOT widened. Making `_extract_section` itself
+# fence-aware was measured against both of its live consumers first, and it
+# REGRESSES one: `v4.14_RELEASE_PLAN.md` gains 39 spurious `parse_verification_plan`
+# records (32 -> 70) because its Verification Plan section carries an in-fence `#`
+# line, and the newly-visible prose tables parse as check rows. Trading a silent
+# truncation in one family for spurious dispatched checks in another is not a fix.
+# So the FCM path gets its own extractor and the shared seam is left byte-identical.
+# The `_extract_section` fence-blindness remains a real defect for the other two
+# families; it is routed out, not absorbed here.
+#
+# Fence state is scoped to the SECTION (reset on entry), so a fence opened earlier
+# in the file cannot leak in and suppress the terminating heading.
+_extract_fcm_section() {
+  # $1 = plan file. Prints the File Change Matrix section body.
+  local file="$1"
+  awk -v want="File Change Matrix" '
+    function hlevel(s,   k) { k = 0; while (substr(s, k+1, 1) == "#") k++; return k }
+    BEGIN { insec = 0; want_level = 0; want_len = length(want); infence = 0 }
+    /^[ \t]*(```|~~~)/ { if (insec == 1) { infence = 1 - infence; print }; next }
+    (insec == 0 || infence == 0) && /^#+ / {
+      line = $0
+      lvl = hlevel(line)
+      sub(/^#+[ ]+/, "", line)
+      if (insec == 1 && lvl <= want_level) { insec = 0 }
+      if (insec == 0 && substr(line, 1, want_len) == want) { insec = 1; want_level = lvl; infence = 0; next }
+    }
+    insec == 1 { print }
+  ' "$file"
+}
+
+# Extraction-completeness assertion (PV-3: show the bytes the probe read were not
+# truncated). An ODD number of fence markers in the extracted body means a fence
+# opened and never closed inside the section — the body is provably incomplete.
+# Measured on the corpus this predicate is EXACT: it fires on all 26 truncated
+# sections under the fence-blind extractor and on 0 of the other 91 (no misses,
+# no false positives), and on 0 of 117 under the extractor above. It is retained
+# as a belt-and-suspenders guard so a future authoring shape that defeats the
+# fence tracker surfaces as an ERROR rather than as a short, confident row set.
+_fcm_body_truncated() {
+  # stdin = section body. Exit 0 when the body is UNBALANCED (i.e. truncated).
+  awk '
+    /^[ \t]*(```|~~~)/ { n++ }
+    END { exit (n % 2 == 0) }
+  '
+}
+
+# --- Declaration parsing ----------------------------------------------------
+#
+# Emits TAB records:  path \t intent \t conditionality \t source_form \t raw_line
+#
+# intent        add | edit | delete | rename | read | excluded | unknown | malformed
+# conditionality  uncond | cond
+# source_form   fence-verb-first | fence-path-first | fence-bare | table | table-pathless
+#
+# `unknown` is the deliberate divergence from `bundle-issues-parser.py:218`, which
+# defaults a marker-less path to `edit`. That default is safe on an issue body (a
+# wrong guess costs one spurious GENERATES edge) and unsafe here, where it would
+# convert "intent was never declared" into "no ADDs were declared, therefore no
+# violations" — verbatim the vacuity this family exists to close. Same enum,
+# different default, and the difference is the whole point. `unknown` rows are
+# COUNTED and REPORTED (see the coverage record) rather than silently dropped:
+# 962 of the 2,047 declaration rows in the corpus are bare, so dropping them
+# silently would be a 47% blind spot presented as full coverage.
+parse_fcm_declarations() {
+  local body="$1"
+  printf '%s\n' "$body" | awk '
+    function trim(s){ gsub(/^[ \t]+|[ \t]+$/,"",s); return s }
+    function lc(s){ return tolower(s) }
+    function hasw(u, w) { return match(u, "(^|[^A-Z])" w "([^A-Z]|$)") }
+    function pathof(s,   t) {
+      if (!match(s, /(core|release|docs|packages|projects|roadmaps|\.github|\.claude)\/[^ \t`|,;()]+/)) return ""
+      t = substr(s, RSTART, RLENGTH)
+      sub(/\*\*$/, "", t); sub(/[.,;:]+$/, "", t); sub(/`+$/, "", t)
+      return t
+    }
+    # A declared path is a COMPARISON KEY only — never interpolated into a command.
+    # A row carrying a traversal, an absolute root or a shell metacharacter is
+    # reported as malformed rather than normalized into something runnable.
+    # `<` and `>` are NOT metacharacters here: the corpus authors placeholder
+    # segments as `<slug>`, and rejecting them would classify the single most
+    # important row in the originating specimen as malformed. They are safe
+    # because a declared path is only ever a `case` glob key and a string compare,
+    # never a token in a command line.
+    function malformed(p) {
+      if (p ~ /\.\./) return 1
+      if (substr(p,1,1) == "/") return 1
+      if (p ~ /[;&$()]/) return 1
+      return 0
+    }
+    function verbof(u) {
+      if (index(u, "NOT EDITED") || index(u, "NOT TOUCHED")) return "excluded"
+      if (hasw(u,"READ"))                                    return "read"
+      if (hasw(u,"RENAME") || hasw(u,"RENAMED") || hasw(u,"MOVE")) return "rename"
+      if (hasw(u,"ADD") || hasw(u,"NEW") || hasw(u,"CREATE")) return "add"
+      if (hasw(u,"DELETE") || hasw(u,"REMOVE"))              return "delete"
+      if (hasw(u,"EDIT") || hasw(u,"MODIFY"))                return "edit"
+      return ""
+    }
+    function stripfirst(s, p,   i) {
+      i = index(s, p); if (i == 0) return s
+      return substr(s, 1, i - 1) substr(s, i + length(p))
+    }
+    # Conditionality is a MARKER, not a substring. Two things make this exact:
+    # the declared path is removed from the row before the test, and the token
+    # must appear in UPPER case delimited by non-letters. Both are load-bearing —
+    # the originating specimen declares
+    # `release/ADRs/<self-arming-conditional-gate-posture>.md`, whose own path
+    # contains the word. A naive substring test over an upper-cased row classifies
+    # that row as CONDITIONAL, which downgrades its verdict from FAIL to a WARN-tier
+    # SKIP — i.e. the gate would have let the very defect it was built for through.
+    # Caught by the historical replay arm, not by reading.
+    function isconditional(s, p) {
+      return match(stripfirst(s, p), /(^|[^A-Za-z])CONDITIONAL([^A-Za-z]|$)/)
+    }
+    function labelexcludes(l) {
+      return (l ~ /non-scope/ || l ~ /not edited/ || l ~ /not touched/ ||
+              l ~ /read-only/ || l ~ /read only/ || l ~ /untouched/)
+    }
+    BEGIN { infence = 0; label = ""; col_intent = 0; col_path = 0 }
+    # Fence toggles. An in-fence `#` comment is a LABEL, not a heading.
+    /^[ \t]*(```|~~~)/ { infence = 1 - infence; next }
+    {
+      line  = $0
+      strip = line; gsub(/`/, "", strip)
+      s     = trim(strip)
+      if (s == "") next
+    }
+    # Sub-heading, bold label, or in-fence `#` comment -> the current block label.
+    # The in-fence comment form is load-bearing: it is how the corpus labels its
+    # READ-only and non-scope blocks, and it is the same line shape that terminates
+    # the section early under the fence-blind shared extractor.
+    s ~ /^#/ || (s ~ /^\*\*/ && s ~ /\*\*$/ && pathof(s) == "") {
+      l = lc(s); gsub(/[#*_ ]+/, " ", l); label = l
+      col_intent = 0; col_path = 0
+      next
+    }
+    # ---- table row ----
+    !infence && s ~ /^\|/ {
+      n = split(s, cell, "|")
+      is_header = 0
+      for (i = 1; i <= n; i++) {
+        c = lc(trim(cell[i]))
+        if (c == "intent" || c == "action" || c == "change" || c == "disposition" ||
+            c == "operation" || c == "op" || c == "type") { col_intent = i; is_header = 1 }
+        if (c == "path" || c == "file" || c == "file path" || c == "artifact" ||
+            c == "added path" || c == "surface") { col_path = i; is_header = 1 }
+      }
+      if (is_header) next
+      if (s ~ /^\|[ \t:|-]+$/) next
+      if (col_intent == 0) next
+      iv = verbof(toupper(trim(cell[col_intent])))
+      if (iv == "") next
+      # FMF-5(c): a MARKED row whose declared path column holds a human label
+      # rather than a repository path is a NAMED error, not a silent zero. This is
+      # the v4.16 shape, whose `Path` column carries `label grammar` / `ADR-124`.
+      p = (col_path > 0 && col_path <= n) ? pathof(trim(cell[col_path])) : ""
+      if (p == "") p = pathof(s)
+      if (p == "") { printf "%s\t%s\t%s\t%s\t%s\n", "(none)", "pathless", "uncond", "table-pathless", s; next }
+      cond = (isconditional(s, p) || label ~ /conditional/) ? "cond" : "uncond"
+      if (labelexcludes(label)) iv = "excluded"
+      if (malformed(p)) iv = "malformed"
+      printf "%s\t%s\t%s\t%s\t%s\n", p, iv, cond, "table", s
+      next
+    }
+    # ---- fenced declaration row ----
+    infence {
+      p = pathof(s)
+      if (p == "") next
+      u  = toupper(s)
+      iv = verbof(u)
+      lead = toupper(trim(substr(s, 1, index(s " ", " "))))
+      form = "fence-path-first"
+      if (iv != "" && (lead ~ /^(ADD|EDIT|NEW|MODIFY|DELETE|REMOVE|READ|CREATE|RENAME)$/)) form = "fence-verb-first"
+      if (iv == "") { iv = "unknown"; form = "fence-bare" }
+      cond = (isconditional(s, p) || label ~ /conditional/) ? "cond" : "uncond"
+      if (labelexcludes(label)) iv = "excluded"
+      if (malformed(p)) iv = "malformed"
+      printf "%s\t%s\t%s\t%s\t%s\n", p, iv, cond, form, s
+    }
+  '
+}
+
+# --- Deviation Log ----------------------------------------------------------
+#
+# AC2's contract: a declared file that legitimately does not ship requires an
+# explicit Deviation-Log entry, and the check passes ONLY with that entry present.
+# The shipped `## Deviation Log` table is extended; no parallel structure is
+# authored. The load-bearing tokens are the literal `NOT DELIVERED` and the
+# declared path (or, for a conditional row, its condition token).
+parse_deviation_log() {
+  local file="$1"
+  _extract_section "$file" "Deviation Log" | awk '
+    toupper($0) ~ /NOT DELIVERED/ { gsub(/`/, "", $0); print }
+  '
+}
+
+# --- Path-form taxonomy -----------------------------------------------------
+#
+# FIVE arms, enumerated against the CORPUS rather than reverse-engineered from the
+# one row that failed. Deriving the taxonomy from the specimen is what left globs
+# with no arm: 27 glob-bearing path tokens across 15 plans are an established
+# authored form, and a taxonomy without an arm for them yields a guaranteed FAIL
+# on every plan that uses one — including, before this arm existed, THIS release's
+# own scope-lock row.
+#
+# Placeholder rows are normalized INTO the glob arm rather than resolved to a
+# "longest literal ancestor directory". The ancestor-directory rule has no
+# specificity floor (a placeholder in the leading segment resolves to the repo
+# root, where any addition satisfies the predicate) and it discards the declared
+# basename residue. Normalizing `release/ADRs/<self-arming-…>.md` to
+# `release/ADRs/*.md` keeps the `.md` and keeps the directory, which is strictly
+# more specific and still resolves the row that actually vanished.
+fcm_normalize_pattern() {
+  # $1 = declared path. Prints the match pattern (a bash `case` glob).
+  printf '%s' "$1" | sed -E \
+    -e 's/<[^>]*>/*/g' \
+    -e 's/\{\{[^}]*\}\}/*/g' \
+    -e 's/(^|[^A-Za-z])NNN([^A-Za-z]|$)/\1*\2/g' \
+    -e 's/(^|[^A-Za-z])XXX([^A-Za-z]|$)/\1*\2/g' \
+    -e 's/(^|[^A-Za-z])X\.Y([^A-Za-z]|$)/\1*\2/g'
+}
+
+fcm_path_form() {
+  case "$1" in
+    */)                 printf 'dir' ;;
+    *'<'*|*'{{'*|*NNN*|*XXX*|*X.Y*) printf 'placeholder' ;;
+    *'*'*|*'?'*|*'['*)  printf 'glob' ;;
+    *)                  printf 'literal' ;;
+  esac
+}
+
+# Specificity floor. A pattern that keeps no literal directory prefix, or whose
+# basename is entirely wildcard, cannot distinguish a delivered obligation from
+# any addition at all — so it is ERROR, not a permissive PASS. Measured: 1
+# placeholder-leading token corpus-wide, so this is prophylactic and is stated as
+# such rather than inflated into a live defect.
+fcm_pattern_resolvable() {
+  local pat="$1" prefix base
+  prefix="${pat%%[*?[]*}"
+  case "$prefix" in */*) : ;; *) return 1 ;; esac
+  base="${pat##*/}"
+  case "$base" in
+    ''|'*'|'**'|'?') return 1 ;;
+  esac
+  return 0
+}
+
+# --- Reconciliation ---------------------------------------------------------
+#
+# The git invocation is a NATIVE code path with a FIXED command. It does not route
+# through `eval_free_run`, and `git` MUST NOT be added to RUNNABLE_VERBS — that set
+# is closed on purpose (:363-371): a verification harness driven by an authored
+# artifact must not acquire a code-execution channel. This family reads authored
+# DATA and runs a fixed command; the allowlist governs authored COMMANDS. The
+# distinction is precisely why widening the verb set is unnecessary here.
+#
+# `--no-renames` is deliberate. Under `--find-renames` a declared ADD delivered as
+# a move reports `R`, which the arms would grade `declared-add-delivered-as-edit`
+# ("the file pre-existed; the declaration was wrong") — factually false for a
+# rename. With renames off, a move reports as `A`+`D`, which is exactly FCM ADD
+# semantics.
+FCM_ADDS_FILE=""
+FCM_ANY_FILE=""
+FCM_DIFF_STATUS=""
+
+# NOTE FOR THE NEXT EDITOR: this function sets GLOBALS and must be called
+# DIRECTLY, never as `x="$(fcm_resolve_diff)"`. A command substitution runs it in
+# a subshell, where the two path globals are assigned and then discarded — the
+# caller reads empty strings, every declared ADD matches nothing, and the family
+# reports a clean-looking "not delivered" for files that were in fact delivered.
+# That failure is silent and it is the same defect class this family exists to
+# catch, so the status rides in a global too rather than on stdout.
+fcm_resolve_diff() {
+  FCM_DIFF_STATUS="diff-unresolvable"
+  FCM_ADDS_FILE="$(mktemp -t vrp-fcm-adds.XXXXXX)"
+  FCM_ANY_FILE="$(mktemp -t vrp-fcm-any.XXXXXX)"
+  if [ -n "$ARG_FCM_DIFF_FILE" ]; then
+    if [ ! -f "$ARG_FCM_DIFF_FILE" ]; then return 0; fi
+    awk -F'\t' 'NF>=2 { print $1 "\t" $2 }' "$ARG_FCM_DIFF_FILE" > "$FCM_ANY_FILE"
+  else
+    local base head raw rc=0
+    head="${ARG_FCM_HEAD:-HEAD}"
+    if [ -n "$ARG_FCM_MERGE_BASE" ]; then base="$ARG_FCM_MERGE_BASE"
+    else base="$( cd "$REPO_ROOT" && git merge-base origin/main HEAD 2>/dev/null )" || base=""; fi
+    if [ -z "$base" ]; then return 0; fi
+    set +e
+    raw="$( cd "$REPO_ROOT" && git diff --name-status --no-renames "$base..$head" 2>/dev/null )"
+    rc=$?
+    set -e
+    if [ "$rc" -ne 0 ]; then return 0; fi
+    printf '%s\n' "$raw" > "$FCM_ANY_FILE"
+  fi
+  # An EMPTY diff is not the same fact as an unresolvable one, and neither is a
+  # licence to pass: an empty delivered set with a non-empty obligation set FAILs
+  # every obligation, which is the correct reading.
+  awk -F'\t' '$1 ~ /^A/ { print $2 }' "$FCM_ANY_FILE" | sort -u > "$FCM_ADDS_FILE"
+  FCM_DIFF_STATUS="ok"
+  return 0
+}
+
+# Each arm uses a DISTINCT matching mechanism, and that is deliberate. The obvious
+# implementation routes every arm through `case "$p" in $pat)`, which glob-matches
+# an unquoted pattern — so the "literal" arm silently performs glob matching and
+# becomes indistinguishable from the glob arm. A five-arm taxonomy in which two arms
+# cannot be told apart is a taxonomy on paper only: deleting the glob arm then
+# changes no verdict, which is exactly what the M7 mutation arm reported before this
+# was rewritten. Literal compares strings, directory compares a prefix, and only the
+# glob/placeholder arms glob.
+fcm_match_adds() {
+  # $1 = declared path. Prints the number of delivered ADDITIONS it matches,
+  # or the literal token UNRESOLVABLE.
+  local declared="$1" form pat n=0 p
+  form="$(fcm_path_form "$declared")"
+  if [ "$form" = "placeholder" ]; then
+    pat="$(fcm_normalize_pattern "$declared")"
+    if ! fcm_pattern_resolvable "$pat"; then printf 'UNRESOLVABLE'; return 0; fi
+  elif [ "$form" = "glob" ]; then
+    pat="$declared"
+    if ! fcm_pattern_resolvable "$pat"; then printf 'UNRESOLVABLE'; return 0; fi
+  fi
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    case "$form" in
+      # `if`, not `[ … ] && …`: under errexit a failing AND-list at the end of a
+      # case branch takes the whole function down inside its command substitution,
+      # and the caller then sees an empty count rather than zero.
+      literal)          if [ "$p" = "$declared" ]; then n=$((n+1)); fi ;;
+      dir)              case "$p" in "$declared"*) n=$((n+1)) ;; esac ;;
+      glob|placeholder) # shellcheck disable=SC2254
+                        case "$p" in $pat) n=$((n+1)) ;; esac ;;
+    esac
+  done < "$FCM_ADDS_FILE"
+  printf '%s' "$n"
+}
+
+fcm_present_any() {
+  local declared="$1"
+  awk -F'\t' -v want="$declared" '$2 == want { f=1 } END { exit !f }' "$FCM_ANY_FILE"
+}
+
+# --- Handler ----------------------------------------------------------------
+#
+# Emits FULL stream records (issue \t id \t family \t method \t expected \t
+# verdict \t observed), one per obligation PLUS a mandatory coverage record.
+#
+# The coverage record is not decoration and it is emitted UNCONDITIONALLY on
+# every applicable run. A check whose output states only a finding count has not
+# shown that it examined anything: a reader cannot distinguish "zero declared ADDs
+# were missing" from "no rows were interpreted". Carrying declared / interpreted /
+# obligations / excluded / conditional in the record is what makes a vacuous run
+# VISIBLE, and a run in which some rows were seen but not understood is a NON-PASS
+# regardless of how the understood rows graded.
+handle_fcm_delivery() {
+  local plan="$1"
+  local ISS='FCM (delivery)' FAM='fcm-delivery'
+  local method='declared File Change Matrix ADDs vs the merged diff (git diff --name-status --no-renames)'
+
+  emit_fcm() { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ISS" "$1" "$FAM" "$method" "$2" "$3" "$4"; }
+
+  # (1) Applicability. The governed population is the release-plan corpus, defined
+  #     by location. A target outside it is a NAMED skip stating exactly why — it
+  #     can never hide a real release whose matrix is missing, because a real
+  #     release plan lives inside the corpus and takes the ERROR arm below.
+  local in_corpus=0
+  case "$plan" in */release/releases/plans/*) in_corpus=1 ;; esac
+  if [ -n "$ARG_FCM_DIFF_FILE" ] && [ "$in_corpus" -eq 1 ]; then
+    # The determinism seam is a TEST seam. Honoring it against a real release plan
+    # would let the same actor whose work this audits supply the evidence it is
+    # audited against, and the emitted record would be indistinguishable from a
+    # live run. That is an off-switch on the control, so it is refused outright
+    # rather than stamped and left for a downstream reader to notice.
+    emit_fcm "FCM-COVERAGE" "live evidence" "$VERDICT_ERROR" \
+      "fcm-fixture-mode-on-live-plan (--fcm-diff-file refused against a plan under release/releases/plans/)"
+    return 0
+  fi
+  if [ -z "$ARG_FCM_DIFF_FILE" ] && [ "$in_corpus" -eq 0 ]; then
+    emit_fcm "FCM-COVERAGE" "release-plan target" "$VERDICT_SKIP" \
+      "fcm-not-a-release-plan (target outside release/releases/plans/; no FCM obligation)"
+    return 0
+  fi
+
+  # (2) Extraction, with every unreadable state fail-closed.
+  local body; body="$(_extract_fcm_section "$plan")"
+  if [ -z "$(printf '%s' "$body" | tr -d '[:space:]')" ]; then
+    emit_fcm "FCM-COVERAGE" "a File Change Matrix section" "$VERDICT_ERROR" \
+      "fcm-section-absent (no File Change Matrix heading resolves; absent matrix is NOT zero obligations)"
+    return 0
+  fi
+  if printf '%s\n' "$body" | _fcm_body_truncated; then
+    emit_fcm "FCM-COVERAGE" "a complete matrix body" "$VERDICT_ERROR" \
+      "fcm-section-truncated (unbalanced fence in the extracted body; row set is provably incomplete)"
+    return 0
+  fi
+
+  local records; records="$(parse_fcm_declarations "$body")"
+  local declared;      declared="$(printf '%s' "$records"   | grep -c . || true)"
+  if [ "$declared" -eq 0 ]; then
+    emit_fcm "FCM-COVERAGE" "at least one declared path" "$VERDICT_ERROR" \
+      "fcm-empty (matrix section present but carries no path-shaped rows; empty matrix is an authoring defect)"
+    return 0
+  fi
+
+  # (3) Delivered set. Called DIRECTLY — see the note on fcm_resolve_diff.
+  fcm_resolve_diff
+  if [ "$FCM_DIFF_STATUS" != "ok" ]; then
+    emit_fcm "FCM-COVERAGE" "a resolvable diff range" "$VERDICT_ERROR" \
+      "diff-unresolvable (never infer an empty diff from an absent one)"
+    return 0
+  fi
+
+  local devlog; devlog="$(parse_deviation_log "$plan" || true)"
+
+  local excluded conditional unknown pathless obligations
+  excluded="$(   printf '%s\n' "$records" | awk -F'\t' '$2=="excluded"||$2=="read"||$2=="rename"{c++} END{print c+0}')"
+  unknown="$(    printf '%s\n' "$records" | awk -F'\t' '$2=="unknown"{c++}  END{print c+0}')"
+  pathless="$(   printf '%s\n' "$records" | awk -F'\t' '$2=="pathless"{c++} END{print c+0}')"
+  conditional="$(printf '%s\n' "$records" | awk -F'\t' '$2=="add"&&$3=="cond"{c++} END{print c+0}')"
+  obligations="$(printf '%s\n' "$records" | awk -F'\t' '$2=="add"&&$3=="uncond"{c++} END{print c+0}')"
+  local interpreted=$(( declared - unknown - pathless ))
+
+  # (4) Coverage record — ALWAYS emitted, so "the family never ran" is not
+  #     byte-identical to "the family found nothing".
+  local cov_verdict="$VERDICT_PASS" cov_note=""
+  if [ "$pathless" -gt 0 ]; then
+    cov_verdict="$VERDICT_ERROR"; cov_note=" fcm-row-pathless:$pathless (a MARKED row whose path cell holds no repository path)"
+  elif [ "$unknown" -gt 0 ]; then
+    cov_verdict="$VERDICT_SKIP";  cov_note=" fcm-rows-uninterpreted:$unknown (declared paths carrying no intent marker; intent undeclared is NOT zero ADDs)"
+  elif [ "$obligations" -eq 0 ]; then
+    cov_verdict="$VERDICT_SKIP";  cov_note=" fcm-no-unconditional-adds (matrix fully interpreted; nothing for this family to assert)"
+  fi
+  emit_fcm "FCM-COVERAGE" "full row coverage" "$cov_verdict" \
+    "declared=$declared interpreted=$interpreted obligations=$obligations excluded=$excluded conditional=$conditional uninterpreted=$unknown pathless=$pathless${cov_note}"
+
+  # (5) One record per ADD row. Conditional and unconditional both reported.
+  local n=0 path intent cond form _raw
+  while IFS=$'\t' read -r path intent cond form _raw; do
+    [ "$intent" = "add" ] || continue
+    n=$((n+1))
+    local hits recorded=0
+    hits="$(fcm_match_adds "$path")"
+    if printf '%s' "$devlog" | grep -Fq -- "$path" 2>/dev/null; then recorded=1; fi
+    if [ "$hits" = "UNRESOLVABLE" ]; then
+      emit_fcm "FCM-$n" "resolvable declared path" "$VERDICT_ERROR" \
+        "placeholder-unresolvable:$path (no literal directory prefix or wholly-wildcard basename)"
+    elif [ "$cond" = "cond" ]; then
+      if [ "$hits" -gt 0 ]; then
+        emit_fcm "FCM-$n" "conditional ADD" "$VERDICT_PASS" "conditional-fired:$path ($form)"
+      elif [ "$recorded" -eq 1 ]; then
+        emit_fcm "FCM-$n" "conditional ADD" "$VERDICT_PASS" "conditional-not-fired (recorded):$path"
+      else
+        emit_fcm "FCM-$n" "conditional ADD" "$VERDICT_SKIP" \
+          "conditional-unrecorded:$path (WARN tier — the gate cannot evaluate a prose condition)"
+      fi
+    else
+      if [ "$hits" -gt 0 ]; then
+        emit_fcm "FCM-$n" "delivered as an addition" "$VERDICT_PASS" "declared-add-delivered:$path ($form)"
+      elif [ "$recorded" -eq 1 ]; then
+        emit_fcm "FCM-$n" "delivered or a Deviation-Log row" "$VERDICT_PASS" "deviation-recorded:$path"
+      elif fcm_present_any "$path"; then
+        emit_fcm "FCM-$n" "delivered as an addition" "$VERDICT_FAIL" \
+          "declared-add-delivered-as-edit:$path (the file pre-existed; the ADD declaration was wrong)"
+      else
+        emit_fcm "FCM-$n" "delivered as an addition" "$VERDICT_FAIL" "declared-add-not-delivered:$path"
+      fi
+    fi
+  done <<< "$records"
+
+  rm -f "$FCM_ADDS_FILE" "$FCM_ANY_FILE"
+  return 0
+}
+
+# ===========================================================================
 # Component 5 — emit_evidence(): render verdict records in the requested format.
 # Records arrive on stdin as: issue \t id \t family \t method \t expected \t verdict \t observed
 # ===========================================================================
@@ -973,6 +1496,22 @@ main() {
       stream="${stream}CIAC (integration)	${id}	integration	${method}	${span_note}	${verdict}	${observed}
 "
     done <<< "$ciac_records"
+  fi
+
+  # 2c) fcm-delivery — the THIRD record source.
+  #
+  # WIRED HERE ON PURPOSE, AND ALWAYS-ON. Every other family reaches dispatch only
+  # via a record the plan itself declares, which means a family nothing produces a
+  # record for is unreachable and its absence is indistinguishable from a pass. A
+  # declared-vs-delivered gate that a release can omit by simply not declaring it
+  # would reproduce, one layer up, exactly the defect it exists to catch. So this
+  # family is not plan-declared: it fires on every invocation, and when it has
+  # nothing to assert it says so in a record rather than by being absent.
+  local fcm_records
+  fcm_records="$(handle_fcm_delivery "$PLAN_ABS" || true)"
+  if [ -n "$fcm_records" ]; then
+    stream="${stream}${fcm_records}
+"
   fi
 
   # No checks parsed at all → not an error, but say so honestly on stderr.

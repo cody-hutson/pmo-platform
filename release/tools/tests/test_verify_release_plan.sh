@@ -19,6 +19,19 @@ set -euo pipefail
 #   (G4) CIAC EXECUTION — the integration handler runs CIAC-1's grep method
 #        (quote-aware; a pattern with a `|` alternation and spaces stays one arg)
 #        and grades it on the co-occurrence threshold.
+#   (G6) FCM DELIVERY — declared File-Change-Matrix ADDs vs the merged diff.
+#        Eleven fixture arms covering the verdict lattice, ONE non-synthetic
+#        historical replay against the release that motivated the family, and
+#        EIGHT mutation arms. Group id is G6 because G5 is already taken by the
+#        deploy-check delegation group below.
+#
+#        THE MUTATION ARMS ARE THE POINT. A fixture arm proves the code returns
+#        the expected verdict; it does not prove the verdict is OBSERVED by
+#        anything. Every mutation below deletes one observing step and asserts
+#        that at least one arm changes its answer. An arm that survives every
+#        mutation of the thing it claims to check is not a control — it is a
+#        control-shaped assertion, and this release exists because ten of those
+#        were found in one milestone.
 #
 # Offline + deterministic: fixtures are committed under tests/fixtures/ and all
 # methods are fast local greps against the repo tree (no deploy.sh --check here —
@@ -122,8 +135,10 @@ grep -q '"issue":"#802"' <<<"$ISSUECOL_JSON" && ok "issue-column form: #802 grou
 echo "G3 — exit code + schema version"
 [ "$CANON_RC" -eq 3 ] && ok "fixture carrying a FAIL exits 3" || bad "canonical fixture expected exit 3, got $CANON_RC"
 
+# SCHEMA_VERSION 1 -> 2 with the fcm-delivery family. This assertion is pinned to the
+# literal, so the bump cannot land silently — which is the whole point of the constant.
 VER_OUT="$("$VERIFY" --version)"
-grep -q 'schema v1' <<<"$VER_OUT" && ok "--version prints SCHEMA_VERSION (schema v1)" || bad "--version missing schema version: '$VER_OUT'"
+grep -q 'schema v2' <<<"$VER_OUT" && ok "--version prints SCHEMA_VERSION (schema v2)" || bad "--version missing schema version: '$VER_OUT'"
 
 # Clean all-PASS/SKIP synthetic → exit 0.
 CLEAN_FIX="$(mktemp -t verify-plan-3175-clean.XXXXXX.md)"
@@ -246,6 +261,252 @@ if [ "$(compare_threshold 0 '==' 0)" = PASS ] && [ "$(compare_threshold 1 '==' 0
 else
   bad "compare_threshold does not discriminate on one or more comparators"
 fi
+
+# ---------------------------------------------------------------------------
+# G6 — FCM DELIVERY (declared File Change Matrix ADDs vs the merged diff).
+# ---------------------------------------------------------------------------
+echo "G6 — fcm-delivery: declared ADDs vs the merged diff"
+
+FIXD="release/tools/tests/fixtures"
+DIFF_ABSENT="$REPO_ROOT/$FIXD/fcm-diff-absent.tsv"
+DIFF_PRESENT="$REPO_ROOT/$FIXD/fcm-diff-present.tsv"
+
+# fcm_run <tool> <fixture-basename> <diff-set> — sets FCM_JSON and FCM_RC in the
+# CURRENT shell. It deliberately does NOT print the JSON for the caller to capture
+# with `$(...)`: that runs the function in a subshell, where FCM_RC is assigned and
+# then discarded, and every exit-code assertion silently grades a stale 0. Two arms
+# were passing that way before this was caught.
+FCM_JSON=""
+FCM_RC=0
+fcm_run() {
+  local tool="$1" fx="$2" diff="$3"
+  set +e
+  FCM_JSON="$("$tool" --format=json --fcm-diff-file "$diff" "$REPO_ROOT/$FIXD/$fx" 2>/dev/null)"
+  FCM_RC=$?
+  set -e
+}
+observed_of() {
+  local json="$1" id="$2" obj
+  obj="$(grep -oE "\{[^{}]*\"id\":\"$id\"[^{}]*\}" <<<"$json" || true)"
+  # sigpipe-idiom: allow — here-string writer, no upstream producer to signal.
+  sed -n 's/.*"observed":"\([^"]*\)".*/\1/p' <<<"$obj" | head -1
+}
+
+# --- A1 / A2: the AC4 pair. Same declaration; the ONLY difference is delivery. ---
+fcm_run "$VERIFY" fcm-declared-absent.md "$DIFF_ABSENT"; J_ABSENT="$FCM_JSON"; RC_ABSENT="$FCM_RC"
+fcm_run "$VERIFY" fcm-conformant.md "$DIFF_PRESENT"; J_PRESENT="$FCM_JSON"
+
+case "$(observed_of "$J_ABSENT" FCM-1)" in
+  declared-add-not-delivered*) ok "A1 MUST-FLAG — a declared, undelivered ADD is caught" ;;
+  *) bad "A1 expected declared-add-not-delivered, got '$(observed_of "$J_ABSENT" FCM-1)'" ;;
+esac
+[ "$(verdict_of "$J_ABSENT" FCM-1)" = FAIL ] && ok "A1 verdict is FAIL" || bad "A1 verdict expected FAIL, got '$(verdict_of "$J_ABSENT" FCM-1)'"
+[ "$RC_ABSENT" -eq 3 ] && ok "A1 exits 3 (the FAIL reaches the exit predicate)" || bad "A1 expected exit 3, got $RC_ABSENT"
+case "$(observed_of "$J_PRESENT" FCM-1)" in
+  declared-add-delivered*) ok "A2 CONFORMANT CONTROL — the delivered ADD passes (probe is not stuck-on)" ;;
+  *) bad "A2 expected declared-add-delivered, got '$(observed_of "$J_PRESENT" FCM-1)'" ;;
+esac
+
+# --- A3: AC2 — the Deviation-Log row is what converts FAIL to PASS. ---
+fcm_run "$VERIFY" fcm-deviation-recorded.md "$DIFF_ABSENT"; J_DEV="$FCM_JSON"
+case "$(observed_of "$J_DEV" FCM-1)" in
+  deviation-recorded*) ok "A3 AC2 — an undelivered declared ADD PASSes only with a NOT DELIVERED row" ;;
+  *) bad "A3 expected deviation-recorded, got '$(observed_of "$J_DEV" FCM-1)'" ;;
+esac
+
+# --- A4: AC3 — conditional rows are discriminated from unconditional ones. ---
+fcm_run "$VERIFY" fcm-conditional.md "$DIFF_ABSENT"; J_COND="$FCM_JSON"; RC_COND="$FCM_RC"
+case "$(observed_of "$J_COND" FCM-1)" in
+  conditional-unrecorded*) ok "A4 AC3 — an unfired CONDITIONAL ADD is a named SKIP, not a FAIL" ;;
+  *) bad "A4 expected conditional-unrecorded, got '$(observed_of "$J_COND" FCM-1)'" ;;
+esac
+[ "$RC_COND" -eq 0 ] && ok "A4 conditional SKIP does not red-line the run" || bad "A4 expected exit 0, got $RC_COND"
+grep -q 'conditional=1' <<<"$(observed_of "$J_COND" FCM-COVERAGE)" \
+  && ok "A4 the conditional count is VISIBLE in the coverage record (the exemption is priced)" \
+  || bad "A4 coverage record does not carry conditional=1: '$(observed_of "$J_COND" FCM-COVERAGE)'"
+
+# --- A5: fail-closed. An absent matrix is ERROR, never 'no ADDs, no violations'. ---
+fcm_run "$VERIFY" fcm-no-matrix.md "$DIFF_ABSENT"; J_NOMX="$FCM_JSON"; RC_NOMX="$FCM_RC"
+case "$(observed_of "$J_NOMX" FCM-COVERAGE)" in
+  fcm-section-absent*) ok "A5 FAIL-CLOSED — an absent matrix is ERROR, not a silent zero" ;;
+  *) bad "A5 expected fcm-section-absent, got '$(observed_of "$J_NOMX" FCM-COVERAGE)'" ;;
+esac
+[ "$RC_NOMX" -eq 3 ] && ok "A5 the fail-closed ERROR reaches the exit predicate" || bad "A5 expected exit 3, got $RC_NOMX"
+
+# --- A6: marker-less rows are 'unknown', never 'edit' — and they are COUNTED. ---
+fcm_run "$VERIFY" fcm-bare-paths.md "$DIFF_ABSENT"; J_BARE="$FCM_JSON"
+case "$(observed_of "$J_BARE" FCM-COVERAGE)" in
+  *fcm-rows-uninterpreted:3*) ok "A6 bare rows are reported as uninterpreted, with their count" ;;
+  *) bad "A6 expected fcm-rows-uninterpreted:3, got '$(observed_of "$J_BARE" FCM-COVERAGE)'" ;;
+esac
+[ "$(verdict_of "$J_BARE" FCM-COVERAGE)" = SKIP ] \
+  && ok "A6 partial row coverage is NON-PASS (silence must not read as zero)" \
+  || bad "A6 expected coverage SKIP, got '$(verdict_of "$J_BARE" FCM-COVERAGE)'"
+
+# --- A7: READ / non-scope rows are excluded from the obligation set. ---
+fcm_run "$VERIFY" fcm-readonly-rows.md "$DIFF_PRESENT"; J_RO="$FCM_JSON"
+case "$(observed_of "$J_RO" FCM-COVERAGE)" in
+  *excluded=4*obligations=1*|*obligations=1*excluded=4*)
+    ok "A7 READ + NOT EDITED/NOT TOUCHED rows are excluded, not asserted" ;;
+  *) bad "A7 expected excluded=4 obligations=1, got '$(observed_of "$J_RO" FCM-COVERAGE)'" ;;
+esac
+
+# --- A8: the glob arm (FMF-3) + placeholder normalization. ---
+fcm_run "$VERIFY" fcm-glob.md "$DIFF_PRESENT"; J_GLOB="$FCM_JSON"; RC_GLOB="$FCM_RC"
+case "$(observed_of "$J_GLOB" FCM-1)" in
+  declared-add-delivered*) ok "A8 GLOB ARM — an authored glob ADD resolves (18+ such tokens are authored)" ;;
+  *) bad "A8 expected declared-add-delivered for the glob row, got '$(observed_of "$J_GLOB" FCM-1)'" ;;
+esac
+case "$(observed_of "$J_GLOB" FCM-2)" in
+  declared-add-delivered*) ok "A8 PLACEHOLDER ARM — ADR-NNN-<slug>.md normalizes and resolves" ;;
+  *) bad "A8 expected declared-add-delivered for the placeholder row, got '$(observed_of "$J_GLOB" FCM-2)'" ;;
+esac
+[ "$RC_GLOB" -eq 0 ] && ok "A8 a correctly-authored glob matrix does not red-line" || bad "A8 expected exit 0, got $RC_GLOB"
+
+# --- A9: extraction fidelity — the row after an in-fence '#' comment is SEEN. ---
+fcm_run "$VERIFY" fcm-truncating.md "$DIFF_PRESENT"; J_TRUNC="$FCM_JSON"
+case "$(observed_of "$J_TRUNC" FCM-1)" in
+  declared-add-delivered*) ok "A9 EXTRACTION FIDELITY — an ADD after an in-fence '#' comment is graded" ;;
+  *) bad "A9 expected declared-add-delivered, got '$(observed_of "$J_TRUNC" FCM-1)'" ;;
+esac
+
+# --- A10: fixture-mode is REFUSED against a real release plan (no off-switch). ---
+REALPLAN="release/releases/plans/closeout-output-set-integrity_RELEASE_PLAN.md"
+set +e
+J_FIXLIVE="$("$VERIFY" --format=json --fcm-diff-file "$DIFF_PRESENT" "$REPO_ROOT/$REALPLAN" 2>/dev/null)"
+RC_FIXLIVE=$?
+set -e
+case "$(observed_of "$J_FIXLIVE" FCM-COVERAGE)" in
+  fcm-fixture-mode-on-live-plan*) ok "A10 the determinism seam is REFUSED on a real release plan" ;;
+  *) bad "A10 expected fcm-fixture-mode-on-live-plan, got '$(observed_of "$J_FIXLIVE" FCM-COVERAGE)'" ;;
+esac
+[ "$RC_FIXLIVE" -eq 3 ] && ok "A10 the refusal is a hard ERROR, not an advisory stamp" || bad "A10 expected exit 3, got $RC_FIXLIVE"
+
+# --- A11: NON-SYNTHETIC historical replay against the release that motivated this. ---
+# v4.03 declared 5 ADDs; merge 2adf533e delivered 24 files with 5 A-status paths, none
+# of them the declared ADR. The fifth declared ADD is a PLACEHOLDER path
+# (release/ADRs/<self-arming-conditional-gate-posture>.md), so a literal `test -f`
+# would have failed it even had the ADR shipped — the placeholder arm is what makes
+# the verdict correct rather than accidentally right. Guarded for a shallow clone:
+# an unreachable commit degrades to a stated skip, never a false pass.
+if git -C "$REPO_ROOT" cat-file -e 2adf533e^{commit} 2>/dev/null; then
+  set +e
+  J_V403="$("$VERIFY" --format=json --merge-base '2adf533e^1' --head 2adf533e "$REPO_ROOT/$REALPLAN" 2>/dev/null)"
+  RC_V403=$?
+  set -e
+  V403_MISS="$(grep -c '"observed":"declared-add-not-delivered' <<<"$J_V403" || true)"
+  V403_HIT="$(grep -c '"observed":"declared-add-delivered' <<<"$J_V403" || true)"
+  # Print the replay's own denominator. A control that reports only "ok" has not
+  # shown what it examined, and this is the one arm whose evidence is worth reading.
+  printf '       replay: %s\n       replay: delivered=%s undelivered=%s exit=%s\n' \
+    "$(observed_of "$J_V403" FCM-COVERAGE)" "$V403_HIT" "$V403_MISS" "$RC_V403"
+  grep -oE '"observed":"declared-add-not-delivered[^"]*"' <<<"$J_V403" | sed 's/^/       replay: /' || true
+  [ "$V403_MISS" -ge 1 ] \
+    && ok "A11 HISTORICAL REPLAY — the v4.03 merge FAILs on its undelivered declared ADD" \
+    || bad "A11 v4.03 replay did not flag the undelivered ADD (miss=$V403_MISS hit=$V403_HIT)"
+  [ "$V403_HIT" -ge 1 ] \
+    && ok "A11 CONTROL — the v4.03 ADDs that DID ship still PASS (not a stuck-on probe)" \
+    || bad "A11 v4.03 replay flagged everything — no delivered ADD passed (hit=$V403_HIT)"
+  [ "$RC_V403" -eq 3 ] && ok "A11 the replay exits 3" || bad "A11 expected exit 3, got $RC_V403"
+else
+  ok "A11 SKIP — historical-commit-unreachable (shallow clone); degraded honestly, not passed"
+fi
+
+# ---------------------------------------------------------------------------
+# G6-M — MUTATION ARMS. Each removes ONE observing step and asserts an arm moves.
+# ---------------------------------------------------------------------------
+echo "G6-M — mutation arms (each deletes one observing step)"
+MUTD="$(mktemp -d -t verify-plan-fcm-mut.XXXXXX)"
+
+# mutate <name> <sed-expr> — writes a mutated tool copy, prints its path.
+mutate() {
+  local name="$1"; shift
+  local dst="$MUTD/$name.sh"
+  cp "$VERIFY" "$dst"
+  local e
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  printf '%s' "$dst"
+}
+# mutant_differs <label> <mutant> <fixture> <diff> <id> <live-observed-prefix>
+mutant_differs() {
+  local label="$1" mut="$2" fx="$3" diff="$4" id="$5" live="$6" got
+  fcm_run "$mut" "$fx" "$diff"
+  got="$(observed_of "$FCM_JSON" "$id")"
+  case "$got" in
+    "$live"*) bad "$label — SURVIVED the mutation (still '$got'): the arm observes nothing" ;;
+    *)        ok  "$label — mutation detected (observed moved to '${got:-<no record at all>}')" ;;
+  esac
+}
+
+# M1 flips the VERDICT and leaves the observed text alone — which is exactly how a
+# neutered control still looks healthy in an evidence table. The arm therefore reads
+# the verdict, not the prose. (Comparing observed here would have passed under the
+# mutation; that was caught on the first run of this group.)
+M1="$(mutate m1-must-flag 's/"\$VERDICT_FAIL" "declared-add-not-delivered/"$VERDICT_PASS" "declared-add-not-delivered/')"
+fcm_run "$M1" fcm-declared-absent.md "$DIFF_ABSENT"
+[ "$(verdict_of "$FCM_JSON" FCM-1)" != FAIL ] \
+  && ok "M1 must-flag emission neutered — mutation detected (verdict moved to '$(verdict_of "$FCM_JSON" FCM-1)')" \
+  || bad "M1 SURVIVED — the undelivered ADD still FAILs with the FAIL emission removed"
+[ "$FCM_RC" -eq 0 ] \
+  && ok "M1 CONTROL — the neutered build also stops exiting 3 (the verdict really is load-bearing)" \
+  || bad "M1 control — the neutered build still exits $FCM_RC"
+
+M2="$(mutate m2-fence-blind \
+      '/infence = 1 - infence; print \}; next \}/d' \
+      's/\(insec == 0 \|\| infence == 0\) \&\& \/\^#\+ \/ \{/\/^#+ \/ {/')"
+mutant_differs "M2 fence-aware extraction reverted to the shared fence-blind seam" \
+      "$M2" fcm-truncating.md "$DIFF_PRESENT" FCM-1 "declared-add-delivered"
+
+M3="$(mutate m3-no-trunc-guard 's/exit \(n % 2 == 0\)/exit 1/')"
+M23="$(mutate m23-blind-and-unguarded \
+      '/infence = 1 - infence; print \}; next \}/d' \
+      's/\(insec == 0 \|\| infence == 0\) \&\& \/\^#\+ \/ \{/\/^#+ \/ {/' \
+      's/exit \(n % 2 == 0\)/exit 1/')"
+# The pair is the real demonstration: with BOTH removed the obligation is not merely
+# mis-graded, it becomes invisible and the matrix reads as having nothing to assert.
+fcm_run "$M23" fcm-truncating.md "$DIFF_PRESENT"; J_M23="$FCM_JSON"
+case "$(observed_of "$J_M23" FCM-COVERAGE)" in
+  *fcm-no-unconditional-adds*|*obligations=0*)
+    ok "M2+M3 VACUITY DEMO — without both guards the declared ADD vanishes and the matrix reads clean" ;;
+  *) bad "M2+M3 expected a vacuous obligations=0 reading, got '$(observed_of "$J_M23" FCM-COVERAGE)'" ;;
+esac
+[ "$(observed_of "$J_M23" FCM-1)" = "" ] \
+  && ok "M2+M3 the obligation record is ABSENT under the unguarded mutant (this is the defect class)" \
+  || bad "M2+M3 an obligation record survived: '$(observed_of "$J_M23" FCM-1)'"
+
+M4="$(mutate m4-unwired 's/fcm_records="\$\(handle_fcm_delivery "\$PLAN_ABS" \|\| true\)"/fcm_records=""/')"
+fcm_run "$M4" fcm-declared-absent.md "$DIFF_ABSENT"; J_M4="$FCM_JSON"
+[ -z "$(observed_of "$J_M4" FCM-COVERAGE)" ] && [ -z "$(observed_of "$J_M4" FCM-1)" ] \
+  && ok "M4 WIRING — with the main() record source removed the family emits NOTHING (FMF-2 class)" \
+  || bad "M4 the unwired mutant still emitted FCM records — the mutation did not take"
+grep -q 'FCM-COVERAGE' <<<"$J_ABSENT" \
+  && ok "M4 CONTROL — the wired build DOES emit the coverage record (absence is detectable)" \
+  || bad "M4 control — the wired build emitted no coverage record either; M4 proves nothing"
+
+M5="$(mutate m5-default-edit 's/iv = "unknown"; form = "fence-bare"/iv = "edit"; form = "fence-bare"/')"
+mutant_differs "M5 marker-less default flipped from unknown to edit" \
+      "$M5" fcm-bare-paths.md "$DIFF_ABSENT" FCM-COVERAGE "declared=3 interpreted=0"
+
+M6="$(mutate m6-seam-open 's/if \[ -n "\$ARG_FCM_DIFF_FILE" \] \&\& \[ "\$in_corpus" -eq 1 \]; then/if false; then/')"
+set +e
+J_M6="$("$M6" --format=json --fcm-diff-file "$DIFF_PRESENT" "$REPO_ROOT/$REALPLAN" 2>/dev/null)"
+set -e
+case "$(observed_of "$J_M6" FCM-COVERAGE)" in
+  fcm-fixture-mode-on-live-plan*) bad "M6 SURVIVED — the seam refusal fired without its guard" ;;
+  *) ok "M6 fixture-seam refusal removed — a real plan becomes gradeable against an authored diff" ;;
+esac
+
+M7="$(mutate m7-no-glob-arm "s/printf 'glob'/printf 'literal'/")"
+mutant_differs "M7 glob arm removed (falls to the literal arm)" \
+      "$M7" fcm-glob.md "$DIFF_PRESENT" FCM-1 "declared-add-delivered"
+
+M8="$(mutate m8-no-devlog 's/devlog="\$\(parse_deviation_log "\$plan" \|\| true\)"/devlog=""/')"
+mutant_differs "M8 Deviation-Log read removed" \
+      "$M8" fcm-deviation-recorded.md "$DIFF_ABSENT" FCM-1 "deviation-recorded"
+
+rm -rf "$MUTD"
 
 # ---------------------------------------------------------------------------
 # Summary
