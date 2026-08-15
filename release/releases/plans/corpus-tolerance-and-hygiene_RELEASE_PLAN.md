@@ -34,9 +34,9 @@ Every issue reference below sits inside this reference block and is accompanied 
 
 ## Release Outcome Statement
 
-**AFTER** — Tolerance suites accept conformant layouts, and structural gaps in bundling and signing are closed.
+**AFTER** — The tolerance suite accepts a conformant resolver and still fails one that does not demonstrate the constraint; its arming posture is declared in a committed sentinel asserted against what the run observes, failing closed in both directions; AC presence is asserted at the bundling transition — surfaced at **warn** per D-8, detected rather than blocked; both previously un-emittable result labels emit; an advisory workflow names any unverified commit and its SHA on every pull request; and a renumber run names every package archive it staled plus the exact rebuild command.
 
-**BEFORE** — The tolerance suite fails a conformant resolver and its arming transition is manual and reversible; no check asserts AC presence at bundling; two result labels are un-emittable; there is no signature gate; ADR numbering forces repeated renumber sweeps.
+**BEFORE** — The tolerance suite fails a conformant resolver and its arming transition is manual and reversible; no check asserts AC presence at bundling; two result labels are un-emittable; there is no signature gate; a renumber leaves the package archives it stales neither rebuilt nor flagged.
 
 **Success Indicator:** every ticket below closes with its acceptance criteria verified, and the gate or check each one names demonstrates a **real failure on a fixture** before it is trusted.
 
@@ -397,7 +397,7 @@ Nineteen deviations are logged above. The five an operator would most want surfa
 
 - **D-11** — the signature check ships **advisory and unregistered**, because branch protection already blocks unsigned merges and the real gap is diagnostic legibility. This also keeps a misfiring-required-check blast radius out of the release.
 - **D-8** — the new bundling check inherits an existing warn posture rather than shipping a grandfathering clause the check cannot mechanically honour.
-- **D-16 and D-15** — the mechanism and the blast radius that both the card body and the Stage-4 plan asserted for that check were **wrong**, and were corrected by reading the substrate rather than reasoning about it. The real blast radius is **2 of 86**, not an order of magnitude larger.
+- **D-16 and D-15** — the mechanism and the blast radius that both the card body and the Stage-4 plan asserted for that check were **wrong**, and were corrected by reading the substrate rather than reasoning about it. The blast radius measured **2 of 86 at commit `6735600b`, 2026-08-12** — the point-in-time reading the posture decision was taken on, over a gated class that grows whenever a card takes `status: bundled`. Re-measure against the then-current tree before relying on it; a larger later count means the population moved, not that this reading was wrong. What is durable is the direction, not the pair of numbers: the genuinely gated class was far narrower than the order-of-magnitude-larger figure both sources asserted.
 - **D-14** — no ADR file ships in this release, and the deferral was re-confirmed after one of its three original grounds was found false.
 - **D-6** — the suite's `--help` range must be re-derived from the file, not from any design document. It is the release's only failure mode that produces no signal when it goes wrong.
 
