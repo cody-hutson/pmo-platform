@@ -827,6 +827,17 @@ def _skills_for_paths(root, paths):
     already verified, turning a fixed defect into a worse one. The query itself
     is read-only by construction (it never builds and never writes packages/),
     so calling it cannot mutate the tree either way.
+
+    THE CATCH BELOW IS DELIBERATELY BROAD — do not narrow it back to the
+    subprocess families. ``subprocess.run(..., text=True)`` DECODES the child's
+    streams, so a child emitting non-UTF-8 bytes raises ``UnicodeDecodeError``,
+    a ``ValueError`` that no subprocess-family clause covers; an enumerated
+    catch makes the contract above conditional on the child's byte output,
+    which is exactly what R7's placement is not allowed to depend on. Nothing
+    is swallowed silently: every caught class is named in the degraded reason
+    via ``type(exc).__name__`` and printed on the run's R7 line, and
+    ``BaseException`` is deliberately NOT caught, so a KeyboardInterrupt during
+    the subprocess still interrupts.
     """
     script = root / PACKAGE_BUILDER
     if not script.is_file():
@@ -837,7 +848,7 @@ def _skills_for_paths(root, paths):
             input="\n".join(paths) + "\n",
             cwd=str(root), capture_output=True, text=True, timeout=120,
         )
-    except (OSError, subprocess.SubprocessError) as exc:
+    except Exception as exc:
         return [], f"{PACKAGE_BUILDER} could not be run ({type(exc).__name__})"
     if proc.returncode != 0:
         tail = (proc.stderr or proc.stdout).strip().splitlines()

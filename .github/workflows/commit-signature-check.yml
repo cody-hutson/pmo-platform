@@ -104,11 +104,17 @@ jobs:
             fi
           done <<< "$ROWS"
 
-          # (5) VERDICT. The unresolved count is always printed, so the gate never
-          # reports a clean over a commit it did not actually assert.
+          # (5) VERDICT. The clean headline's numerator is the count actually
+          # ASSERTED — the population MINUS the unresolved, never the population
+          # itself — and the unresolved count is always printed beside it. Both
+          # halves are needed for the gate to never report a clean over a commit
+          # it did not actually assert: on the green path step (3) has already
+          # established API_N == GIT_N and NF is 0, so every row is either
+          # verified or unresolved and GIT_N - NU is exactly the verified count.
+          # With NF=0 and NU=3 the headline reads "0/3", not "3/3".
           if [ "$NF" -eq 0 ]; then
             {
-              echo ":white_check_mark: Commit-signature verification — ${GIT_N}/${GIT_N} PR-range commits GitHub-verified"
+              echo ":white_check_mark: Commit-signature verification — $((GIT_N - NU))/${GIT_N} PR-range commits GitHub-verified"
               if [ "$NU" -gt 0 ]; then
                 echo ""
                 echo "${NU} commit(s) UNRESOLVED (transient GitHub verification state) — reported, not asserted:"

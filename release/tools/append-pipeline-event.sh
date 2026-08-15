@@ -736,13 +736,20 @@ if [[ "$SELF_TEST" == "true" ]]; then
   # THE MUTATION PROOF (AC-3). This reject and the two qc4 ACCEPTS above are
   # COMPLEMENTARY, and no single-scope implementation satisfies all three:
   #   · event_type-only scoping (the defect) fails the two accepts;
-  #   · union-of-all-subtypes scoping passes the accepts but fails this reject;
+  #   · union-of-all-subtypes scoping ALSO fails the two accepts on the
+  #     CURRENT registry — learnings-triple is release-synthesis's only
+  #     DECLARED subtype, so the union is exactly its set; that same identity
+  #     is why it passes this reject;
   #   · dropping the release-synthesis gate entirely fails this reject.
-  # `verdict:` is the discriminating token precisely because it IS legal on a
-  # sibling subtype — the `mood:` arm above cannot distinguish union scoping,
-  # since `mood` is legal nowhere. Breaking (event_type, event_subtype)
-  # resolution therefore fails this test by construction, with no hand-edit
-  # required to demonstrate it.
+  # `verdict:` is the token that would discriminate a union with something to
+  # widen INTO: it appears in both qc4 accept payloads above, so once § 11.8
+  # declares qc4 label sets the union carries it and union scoping accepts it
+  # here, while the `mood:` arm above still rejects. That asymmetry is LATENT,
+  # not live — today the two are symmetric: both are rejected on
+  # learnings-triple and both EMIT on the qc4 subtypes, which resolve to no
+  # declared set at all (qc4-06-result's EMPTY resolution is asserted above).
+  # Breaking (event_type, event_subtype) resolution therefore fails this test
+  # by construction, with no hand-edit required to demonstrate it.
   if ( validate_payload_labels "release-synthesis" "learnings-triple" \
        "surprise: a; verdict: ATTAINED" ) 2>/dev/null; then
     die "self-test: 'verdict:' must still be REJECTED on learnings-triple — the exact rung must bind, not widen"
