@@ -126,7 +126,7 @@ Canary (not part of Public API, source-only): [`pmo-skill-refiner-selftest-canar
 - [`automated-closeout.sh`](../release/tools/automated-closeout.sh) — Stage 13 automated close-out helper.
 - [`blast-radius.sh`](../release/tools/blast-radius.sh) — blast-radius analysis.
 - [`bundle-issues-parser.py`](../release/tools/bundle-issues-parser.py) — bundle-issue parser.
-- [`check-line-range-overlap.py`](../release/tools/check-line-range-overlap.py) — cross-PR line-range overlap analyzer.
+- [`check-line-range-overlap.py`](../release/tools/check-line-range-overlap.py) — cross-PR / cross-branch line-range overlap analyzer.
 - [`cleanup-orphan-state.sh`](../release/tools/cleanup-orphan-state.sh) — orphan branch / worktree sweeper.
 - [`compute-cycle-time.sh`](../release/tools/compute-cycle-time.sh) — cycle-time computation.
 - [`query-pipeline-event.sh`](../release/tools/query-pipeline-event.sh) — pipeline event-log query helper.
