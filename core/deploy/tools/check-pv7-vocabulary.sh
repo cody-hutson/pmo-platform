@@ -110,11 +110,20 @@ release/releases/'
 # prose out of the population. Interval expressions ({n,m}) are deliberately not
 # used — the macOS awk this runs under does not support them, and a regex that
 # silently fails to compile is a gate that silently passes.
+#
+# UNDERSCORE IS A SEPARATOR HERE AND A WORD CHARACTER THERE, AND THAT ASYMMETRY IS
+# DELIBERATE. The separator class admits `_` so an underscore rendering is CAUGHT;
+# the boundary test below treats `_` as a word character so a compound identifier
+# (FOO_NOT_EVALUATED_BAR) is NOT flagged. Collapsing the two into one class is not
+# hypothetical: the first cut of this file excluded `_` from BOTH, and the gate was
+# structurally blind to the underscore rendering it exists to catch. Fixture arm B
+# caught it on the first CI run, before the live sites were touched — which is the
+# entire argument for running the sensitivity arm before the fix.
 pv7_classify_awk() {
   cat <<'AWK'
 {
   line = $0
-  while (match(line, /NOT[^A-Za-z0-9_]*EVALUATED/)) {
+  while (match(line, /NOT[^A-Za-z0-9]*EVALUATED/)) {
     tok  = substr(line, RSTART, RLENGTH)
     pre  = (RSTART > 1) ? substr(line, RSTART - 1, 1) : ""
     post = substr(line, RSTART + RLENGTH, 1)
@@ -167,7 +176,7 @@ pv7_scan() {
 
   # Candidate files first (fast, binary-safe, tracked-only), then classify.
   local cand_list
-  cand_list=$(git -C "$root" grep -l -I -E 'NOT[^A-Za-z0-9_]*EVALUATED' -- . 2>/dev/null || true)
+  cand_list=$(git -C "$root" grep -l -I -E 'NOT[^A-Za-z0-9]*EVALUATED' -- . 2>/dev/null || true)
 
   local f findings=""
   while IFS= read -r f; do
