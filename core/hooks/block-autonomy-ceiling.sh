@@ -442,17 +442,37 @@ if [ -n "$ABS_TARGET" ]; then
     Write|Edit)
       # --- BLOCK-AUTONOMY-001 — Tier-0 item 6: governance-file modification ---
       # The governance set per autonomy-tiers.md item 6 + CLAUDE.md "No ungoverned
-      # changes": CLAUDE.md, OPERATIONS.md, RELEASE_PROTOCOL.md, any SKILL.md, the
-      # settings.json security file, and the security hooks/rules. Matched by
-      # resolved path. This is the autonomy-tier dimension of the same surface
-      # block-destructive BLOCK-DESTRUCTIVE-019 guards — but C5's floor is
-      # level/mode-independent and does NOT carve out the worktree exemption
-      # (governance edits are operator-irreducible regardless of cwd).
+      # changes": CLAUDE.md, OPERATIONS.md, RELEASE_PROTOCOL.md, the settings.json
+      # security file, and the security hooks/rules. Matched by resolved path. This
+      # is the autonomy-tier dimension of the same surface block-destructive
+      # BLOCK-DESTRUCTIVE-019 guards — but C5's floor is level/mode-independent and
+      # does NOT carve out the worktree exemption (governance edits are
+      # operator-irreducible regardless of cwd).
+      #
+      # SKILL.md IS DELIBERATELY NOT IN THIS SET — see #5515.
+      # Every other member has no sanctioned agent-editing path, which is what makes an
+      # unconditional block the right instrument for them. Skills are the exception: they
+      # have a purpose-built editing skill (pmo-skill-editor) and a purpose-built gate
+      # (block-skill-direct-edit.sh, BLOCK-SKILL-EDIT-002) covering BOTH SKILL.md and
+      # references?/*.md with discriminations this hook lacks — migration-marker scoping,
+      # session-target matching, a 30-minute TTL, and an exemption surface.
+      #
+      # Carrying SKILL.md here duplicated that gate with a blunter instrument AND, because
+      # always_block ignores every signal including the session sentinel, made the
+      # sanctioned path structurally unreachable: a valid pmo-skill-editor session
+      # satisfied Gate 2 and was still denied here. The observable result was an agent
+      # that followed every documented instruction, declined every offered bypass, and
+      # still could not proceed — which reads as over-caution and is a broken contract.
+      #
+      # This does NOT make skills agent-writable at will. Gate 2 still denies a direct
+      # edit to any migrated skill absent a live, correctly-targeted, non-stale session
+      # sentinel. The assertion moves from "no agent may edit a skill" to "no agent may
+      # edit a skill outside a sanctioned session" — which is what the surrounding design
+      # already assumed was true.
       case "$ABS_TARGET" in
         */CLAUDE.md \
         | */OPERATIONS.md \
         | */RELEASE_PROTOCOL.md \
-        | */SKILL.md \
         | "${PRIMARY_ROOT}/.claude/settings.json" \
         | "${PRIMARY_ROOT}/.claude/hooks/"* \
         | "${PRIMARY_ROOT}/.claude/rules/"*)
