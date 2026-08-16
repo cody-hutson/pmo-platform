@@ -371,7 +371,25 @@ case "$(observed_of "$J_TRUNC" FCM-1)" in
 esac
 
 # --- A10: fixture-mode is REFUSED against a real release plan (no off-switch). ---
-REALPLAN="release/releases/plans/closeout-output-set-integrity_RELEASE_PLAN.md"
+# This is v4.03's plan, at the ADR-092 claim-time home (a plan's identity is its
+# VERSION, so it is filed under plans/v4/ by version). It previously carried the
+# legacy milestone-slug name closeout-output-set-integrity_RELEASE_PLAN.md. Both the
+# A11 replay below and its own prose speak of "the v4.03 merge", so the versioned
+# name is also the one that agrees with what these arms actually assert.
+REALPLAN="release/releases/plans/v4/v4.03_RELEASE_PLAN.md"
+# PRECONDITION, and it is load-bearing rather than decorative. Every REALPLAN
+# consumer below (A10, A11, M6) decides its verdict by reading the tool's OUTPUT, and
+# a target the tool cannot open yields empty output plus EXIT_BAD_TARGET(2). A10 and
+# A11 read that as a WRONG ANSWER, but M6 reads it as a clean PASS — M6's success
+# condition is the ABSENCE of the refusal string, and nothing absent is more absent
+# than a run that never happened. So a relocated or renamed plan silently converts one
+# arm into a false green while reddening two others, and the red arms point at the
+# family rather than at the missing file. Assert the target once, loudly, so this
+# suite can never grade "the tool refused" and "the tool never ran" as the same
+# observation.
+if [ ! -f "$REPO_ROOT/$REALPLAN" ]; then
+  bad "A10/A11/M6 PRECONDITION — REALPLAN target absent: $REALPLAN (relocated or renamed? the arms below cannot grade)"
+fi
 set +e
 J_FIXLIVE="$("$VERIFY" --format=json --fcm-diff-file "$DIFF_PRESENT" "$REPO_ROOT/$REALPLAN" 2>/dev/null)"
 RC_FIXLIVE=$?
@@ -495,6 +513,11 @@ J_M6="$("$M6" --format=json --fcm-diff-file "$DIFF_PRESENT" "$REPO_ROOT/$REALPLA
 set -e
 case "$(observed_of "$J_M6" FCM-COVERAGE)" in
   fcm-fixture-mode-on-live-plan*) bad "M6 SURVIVED — the seam refusal fired without its guard" ;;
+  # An EMPTY record is not evidence the refusal was removed — it is evidence nothing
+  # was graded. Without this arm M6's success condition is satisfied by any failure
+  # that produces no output at all, which is the same "silence must not read as zero"
+  # defect A6 pins for coverage. This arm is what makes M6 discriminate.
+  "") bad "M6 NOT GRADEABLE — the mutant emitted no coverage record at all; absence of the refusal is not evidence its guard was removed" ;;
   *) ok "M6 fixture-seam refusal removed — a real plan becomes gradeable against an authored diff" ;;
 esac
 
