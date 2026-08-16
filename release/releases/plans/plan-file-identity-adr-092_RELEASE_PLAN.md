@@ -182,7 +182,9 @@ move    release/releases/plans/<11 flat v4 plans>                               
 add     release/releases/plans/plan-file-identity-adr-092_RELEASE_PLAN.md         Commit 0 (this file)
 ```
 
-The relocation set is **11** plan files, not the 14 the milestone description states; the three excluded files and the reason for each are named in § Scope → Exclusions. The inbound-referrer population is **12** distinct files, not 37 — both figures are Stage-4 corrections that survived re-measurement.
+The relocation set as scoped at Stage 4 is **11** plan files, not the 14 the milestone description states; the three files that correction excludes — and the reason each is unmovable — are named in § Scope → Exclusions. The inbound-referrer population is **12** distinct files, not 37. Both are Stage-4 corrections that survived re-measurement.
+
+**Delivered total: 14**, and the arithmetic is a coincidence rather than a vindication of the milestone's figure. The mainline shipped three further releases while this one was in flight, each leaving its plan flat at the `plans/` root: v4.28 and v4.29 (relocated at `55189f2f`, under operator approval, after v4.29's own plan delegated the residual to *"the in-flight ADR-092 release"*), and v4.30 (relocated at `5e587323`). So **11 + 3 late arrivals = 14** — a different three from the three § Exclusions names, which remain correctly unmoved. The Stage-4 correction stands; the delivered count grew past it because the defect kept recurring during the release built to stop it.
 
 **New-executable companion obligation.** The matrix carries no `add` row for a tracked shell script. Should any card resolve toward a standalone sibling script, `core/config/allowlists/script-execution-allowlist.txt` must gain its companion row in the same release, or the delivered script is unrunnable agent-side on arrival.
 
@@ -350,7 +352,7 @@ Authored at Stage-6 Phase C1 by the final Engineering slice, before the PR is tr
 
 ### Outcome
 
-A release plan now binds its identity at the Stage-12 atomic claim and can be shown to have done so. The six mechanisms ADR-092 depends on were each broken silently and in sequence — the token that feeds the claim was absent from the authoring contract, the flag that consumes it was unwired, the rename it triggers had not fired for three shipped releases, the close-out emitted a path shape the claim never produces, no gate compared a plan's filename against the ledger, and the message on failure named a bound identifier without supplying a remediation. This release closes all six, relocates the eleven v4 plans the unfired rename left flat, and adds a close-blocking gate so the next occurrence surfaces before a release closes rather than three releases later.
+A release plan now binds its identity at the Stage-12 atomic claim and can be shown to have done so. The six mechanisms ADR-092 depends on were each broken silently and in sequence — the token that feeds the claim was absent from the authoring contract, the flag that consumes it was unwired, the rename it triggers had not fired for three shipped releases, the close-out emitted a path shape the claim never produces, no gate compared a plan's filename against the ledger, and the message on failure named a bound identifier without supplying a remediation. This release closes all six, relocates **fourteen** v4 plans the unfired rename left flat — the eleven found at Stage 4 plus three more that arrived from the mainline while this release was in flight — and adds a close-blocking gate so the next occurrence surfaces before a release closes rather than three releases later.
 
 ### Issues resolved
 
