@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.32 | plan-file-identity-adr-092 | 2026-08-16 | — | #5581 | [notes/v4.32_RELEASE_NOTES.md](notes/v4.32_RELEASE_NOTES.md) |
 | v4.31 | hooks-enforce-under-adversity | 2026-08-16 | — | #5560 | [notes/v4.31_RELEASE_NOTES.md](notes/v4.31_RELEASE_NOTES.md) |
 | v4.30 | stage9-gate-integrity | 2026-08-15 | — | #5551 | [notes/v4.30_RELEASE_NOTES.md](notes/v4.30_RELEASE_NOTES.md) |
 | v4.29 | check-fail-open-elimination | 2026-08-15 | — | #5509 | [notes/v4.29_RELEASE_NOTES.md](notes/v4.29_RELEASE_NOTES.md) |
