@@ -361,6 +361,35 @@ egress_trailing_backslash_odd() {
   [ $(( c % 2 )) -eq 1 ]
 }
 
+# True when the unquoted text `$1` ENDS inside a `#` comment — i.e. its final line
+# carries a `#` at the start of a word. Only the final line is examined, because a
+# newline closes a comment; and only a `#` that opens a word counts, so `${x#?}`
+# and `a#b` are not comment openers.
+#
+# WHY THIS EXISTS. Everything after a comment opener is inert: it cannot execute
+# and it cannot open a quoted span. Without that knowledge the scanner reads an
+# apostrophe in a trailing comment as an opening quote, finds no terminator, and
+# reports the WHOLE command unparseable — which is how an ordinary
+# `grep -r "x" . # don't miss the api docs` reached a gh-api rule. The premise the
+# unparseable cause rests on ("such a command cannot execute either") is TRUE for an
+# unbalanced quote in command text and FALSE for one in a comment; this is what
+# separates the two.
+egress_comment_open_at_end() {
+  local last="${1##*$'\n'}"
+  local pre
+  while : ; do
+    case "$last" in
+      *'#'*) ;;
+      *) return 1 ;;
+    esac
+    pre="${last%%#*}"
+    case "$pre" in
+      ''|*[[:space:]]) return 0 ;;
+    esac
+    last="${last#*#}"
+  done
+}
+
 # Replace every structural character inside a quoted span with the sentinel and
 # drop the quote marks, leaving unquoted text untouched. This is what makes the
 # command-position predicate immune to strings: structure inside a literal is no
@@ -368,6 +397,12 @@ egress_trailing_backslash_odd() {
 # mistaken for one that performs it. Quote type is tracked, so an apostrophe
 # inside a double-quoted span (and vice versa) is ordinary content, not a
 # delimiter. Returns 1 on an unterminated quote.
+#
+# Comment text is handled by neutralizing its QUOTE CHARACTERS ONLY, in place. It
+# is deliberately NOT stripped: a strip would delete a segment the replaced matcher
+# adjudicated — `# x; gh api <path> --method DELETE` denies today and must keep
+# denying — so removal would soften a live deny while fixing the desynchronization.
+# Neutralizing just the quotes fixes the desynchronization and moves nothing else.
 egress_neutralize_quoted() {
   local rest="$1"
   local out="" head body q
@@ -380,6 +415,19 @@ egress_neutralize_quoted() {
     fi
     out="${out}${head}"
     rest="${rest#"$head"}"
+    # The quote just reached may sit inside a `#` comment, where it is inert.
+    # Neutralize quote characters through end-of-line and resume scanning at the
+    # newline that closes the comment.
+    if egress_comment_open_at_end "$head"; then
+      case "$rest" in
+        *$'\n'*) body="${rest%%$'\n'*}"; rest="${rest#"$body"}" ;;
+        *)       body="$rest"; rest="" ;;
+      esac
+      body="${body//\"/${EGRESS_SENT}}"
+      body="${body//\'/${EGRESS_SENT}}"
+      out="${out}${body}"
+      continue
+    fi
     q="${rest%"${rest#?}"}"
     rest="${rest#?}"
     case "$rest" in
@@ -417,6 +465,60 @@ egress_neutralize_quoted() {
   done
   "$PRINTF" '%s' "$out"
   return 0
+}
+
+# Reachability test for the `unparseable` cause, run on the RAW command because by
+# definition the scanner could not normalize it. True when the command carries a
+# `gh` token immediately followed by an `api` token, at a command position the
+# REPLACED matcher could have reached: the start of the command, or immediately
+# after `;` `&` `|` or a newline, with an optional path prefix on the `gh` token.
+#
+# TWO INDEPENDENT SUBSTRING TESTS ARE NOT THIS TEST, and the difference is the whole
+# point. `*gh*` plus `*api*` is satisfied by `grep -r "highlight" . # ... api docs`,
+# which is not a gh-api invocation in any sense; scoping the class by adjacency and
+# command position is what keeps a rule about `gh api` writes out of the business of
+# ordinary commands.
+#
+# The position set is deliberately no WIDER than the anchor it models. This cause
+# denies from day one (it is not a widening), so firing it at a position the old
+# matcher never adjudicated would introduce an un-laddered deny — the exact error
+# the rollout classifier exists to prevent. A write reached from a subshell, a
+# command substitution or behind a wrapper is therefore NOT covered here; those
+# positions carry no old deny to preserve, and a command that cannot be parsed
+# cannot execute, so nothing is lost by allowing them.
+egress_old_reachable_gh_api() {
+  local rest="$1"
+  local pre seg after first=1
+  while : ; do
+    case "$rest" in
+      *gh[[:space:]]*) ;;
+      *) return 1 ;;
+    esac
+    pre="${rest%%gh[[:space:]]*}"
+    rest="${rest#"$pre"}"
+    after="${rest#gh}"
+    after="${after#"${after%%[![:space:]]*}"}"
+    case "$after" in
+      api|api[[:space:]]*)
+        # Drop an absolute- or relative-path prefix attached to the verb, then any
+        # run of BLANKS — never the newline, which is itself a command position
+        # because the replaced matcher's anchor was line-oriented.
+        seg="${pre##*[[:space:];&|]}"
+        case "$seg" in
+          ''|*/)
+            pre="${pre%"$seg"}"
+            pre="${pre%"${pre##*[![:blank:]]}"}"
+            case "$pre" in
+              *';'|*'&'|*'|'|*$'\n') return 0 ;;
+              '') [ "$first" -eq 1 ] && return 0 ;;
+            esac
+            ;;
+        esac
+        ;;
+    esac
+    first=0
+    rest="${rest#gh}"
+  done
 }
 
 # Classify a gh-api path operand per the AUTHORITY-PREFIX rule.
@@ -547,7 +649,7 @@ egress_007_verdict() {
       ;;
     unparseable)
       reason="gh api write denied: the command carries an unterminated quote and cannot be evaluated."
-      override="close the quote — the command cannot execute in this form either. Or set CLAUDE_HOOK_BYPASS=1"
+      override="close the quote — an unbalanced quote outside a comment means the command cannot execute in this form either. Or set CLAUDE_HOOK_BYPASS=1"
       ;;
     no-path)
       reason="gh api write denied: no API path operand found after 'gh api'."
@@ -649,13 +751,18 @@ case "$TOOL_NAME" in
     # would bury the logic a reviewer actually needs to read. The branch closes at
     # the `;;` / `esac` at the end of the rule.
     if ! egress_norm="$(egress_neutralize_quoted "$COMMAND")"; then
-      # Unterminated quote. Only raised when the command plausibly carries a gh-api
-      # write at all, so an unbalanced quote in an unrelated command is not this
-      # rule's business. Classified as a widening: the old matcher had no equivalent
-      # class, so this deny is genuinely new.
-      case "$COMMAND" in
-        *api*) egress_007_verdict "unparseable" "unknown" 1 ;;
-      esac
+      # An unterminated quote in COMMAND text — comment text can no longer produce
+      # one. Raised only when the command carries a `gh api` invocation at a command
+      # position the replaced matcher could have reached, so an unbalanced quote in
+      # an unrelated command is not this rule's business.
+      #
+      # NOT a widening. The class is scoped to input that genuinely cannot execute
+      # as typed, so the deny costs nothing that the shell would not cost anyway —
+      # and gating it would do what the rollout ladder must never do: allow, on
+      # account of the rung, a case the replaced matcher denied.
+      if egress_old_reachable_gh_api "$COMMAND"; then
+        egress_007_verdict "unparseable" "unknown" 0
+      fi
     else
       # Segment on the shell's command separators, in TWO classes — the distinction
       # is load-bearing for the rollout classification below, not cosmetic.
