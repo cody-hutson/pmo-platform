@@ -307,29 +307,50 @@ check_script_target() {
 # number of quote characters"; only a carried state distinguishes them.
 #
 # script_qstate is that state: 0 outside any quote, 1 inside '...', 2 inside
-# "...". Shell quoting rules are honoured rather than approximated, because each
-# approximation fails toward OVER-reporting "inside a quote", which is the
-# fail-OPEN direction for the caller:
+# "...", 3 inside $'...'. Shell quoting rules are honoured rather than
+# approximated, because each approximation fails toward OVER-reporting "inside a
+# quote", which is the fail-OPEN direction for the caller:
 #   - inside '...' nothing is special but the closing `'` (no escapes at all);
 #   - inside "..." a backslash escapes the next character, so `\"` does not close;
+#   - inside $'...' a backslash escapes the next character too, so `\'` does NOT
+#     close. This is a DIFFERENT construct from '...' and needs its own state:
+#     reading `$'it\'s'` under the '...' rule ends one quote out of phase and
+#     reports *inside* where bash is *outside*, which is exactly the fail-open
+#     direction this block exists to avoid;
 #   - outside quotes a backslash escapes the next character, so `\'` does not OPEN
 #     one. Without that rule `echo \'; bash <evil>.sh` would read as "inside a
 #     quote" and suppress a real execution.
+#
+# script_qtaint is a second, independent fact about the CURRENT double-quoted
+# run: whether the SHELL will evaluate something inside it. Quote state alone
+# cannot answer that. Inside "..." the shell performs parameter expansion,
+# command substitution and arithmetic expansion, so text there can be at command
+# position no matter which verb opened the quote — `echo "$(cd /x; bash <evil>.sh
+# --f)"` runs, and `echo` never gets a say. Every one of those expansions is
+# introduced by `$` or by a backtick and by nothing else, so seeing either one
+# inside an open double-quoted run marks the run EVALUATING for the rest of its
+# life. `\$` and `\`` do not count, and that falls out for free: the backslash is
+# searched in the same pass and wins by position, so it consumes the character
+# after it before the taint test is ever reached. '...' and $'...' perform no
+# expansion at all, so neither can be tainted.
 # --------------------------------------------------------------------------
 
 # Index of the earliest occurrence in $script_qt of any character in "$@".
-# Sets script_qi (-1 when none are present) and script_qc (the character found).
+# Sets script_qi (-1 when none are present), script_qc (the character found) and
+# script_qpre (the text before it, which the caller needs to tell `'` from `$'`).
 # Searching for one literal character at a time keeps every pattern a quoted
 # expansion, so no bracket expression and no backslash escaping is involved.
 script_qnext() {
   script_qi=-1
   script_qc=""
+  script_qpre=""
   local _ch _pre
   for _ch in "$@"; do
     _pre="${script_qt%%"$_ch"*}"
     if [ "${#_pre}" -ne "${#script_qt}" ]; then
       if [ "$script_qi" -lt 0 ] || [ "${#_pre}" -lt "$script_qi" ]; then
         script_qi="${#_pre}"
+        script_qpre="$_pre"
         script_qc="$_ch"
       fi
     fi
@@ -347,10 +368,12 @@ script_qnext() {
 # the rest of the command — degradation lands on "adjudicate everything".
 script_qadvance() {
   script_qt="$1"
+  local _pre
   while [ -n "$script_qt" ]; do
     if [ "$script_qwork" -ge 1000 ]; then
       script_qbail=1
       script_qstate=0
+      script_qtaint=0
       return 0
     fi
     script_qwork=$(( script_qwork + 1 ))
@@ -359,8 +382,10 @@ script_qadvance() {
       if [ "$script_qi" -lt 0 ]; then break; fi
       script_qt="${script_qt:$(( script_qi + 1 ))}"
       script_qstate=0
-    elif [ "$script_qstate" -eq 2 ]; then
-      script_qnext "$script_bs" "$script_q2"
+    elif [ "$script_qstate" -eq 3 ]; then
+      # $'...': a backslash escapes the next character, `'` closes. Same shape as
+      # the double-quote scan with `'` as the terminator.
+      script_qnext "$script_bs" "$script_q1"
       if [ "$script_qi" -lt 0 ]; then break; fi
       script_qt="${script_qt:$(( script_qi + 1 ))}"
       if [ "$script_qc" = "$script_bs" ]; then
@@ -368,16 +393,39 @@ script_qadvance() {
       else
         script_qstate=0
       fi
-    else
-      script_qnext "$script_bs" "$script_q1" "$script_q2"
+    elif [ "$script_qstate" -eq 2 ]; then
+      # `$` and the backtick are searched alongside the escape and the closing
+      # quote, in ONE pass, so an escaped `\$` or ``\` `` is consumed by the
+      # backslash branch and never taints.
+      script_qnext "$script_bs" "$script_q2" "$script_qd" "$script_qbt"
       if [ "$script_qi" -lt 0 ]; then break; fi
       script_qt="${script_qt:$(( script_qi + 1 ))}"
       if [ "$script_qc" = "$script_bs" ]; then
         script_qt="${script_qt:1}"
+      elif [ "$script_qc" = "$script_q2" ]; then
+        script_qstate=0
+        script_qtaint=0
+      else
+        script_qtaint=1
+      fi
+    else
+      script_qnext "$script_bs" "$script_q1" "$script_q2"
+      if [ "$script_qi" -lt 0 ]; then break; fi
+      _pre="$script_qpre"
+      script_qt="${script_qt:$(( script_qi + 1 ))}"
+      if [ "$script_qc" = "$script_bs" ]; then
+        script_qt="${script_qt:1}"
       elif [ "$script_qc" = "$script_q1" ]; then
+        # A `'` directly preceded by `$` opens ANSI-C quoting, not a plain single
+        # quote. `\$'` cannot reach here: the backslash is earlier in the same
+        # search and consumes the `$` first.
         script_qstate=1
+        case "$_pre" in
+          *"$script_qd") script_qstate=3 ;;
+        esac
       else
         script_qstate=2
+        script_qtaint=0
       fi
     fi
   done
@@ -668,14 +716,43 @@ case "$TOOL_NAME" in
     # and the argument belongs to the command that OPENED that quote — not to
     # whichever command happens to head the line.
     #
-    # THE INVARIANT, stated so a later editor can check an edit against it: a
-    # segment whose start state is 0 begins at COMMAND POSITION and is ALWAYS
-    # adjudicated. Suppression can only ever reach text sitting inside a quote that
-    # some earlier command opened, and only when that command cannot evaluate it.
-    # This is what makes the `-c` case safe: the quote in `bash -c '…'` is opened by
-    # `bash`, so no prefix in front of it — `echo x; bash -c '…'` — can reattribute
-    # the program string to `echo`. The command that opened the quote is the one
-    # asked, every time.
+    # THE INVARIANT, stated so a later editor can check an edit against it:
+    #
+    #   A suppression may fire only when the enclosing context PROVABLY CANNOT
+    #   cause the shell to evaluate the segment.
+    #
+    # Two independent conditions, and BOTH are necessary:
+    #
+    #  (1) The command that OPENED the quote cannot evaluate its argument. This is
+    #      the carrier test. It is what makes the `-c` case safe: the quote in
+    #      `bash -c '…'` is opened by `bash`, so no prefix in front of it —
+    #      `echo x; bash -c '…'` — can reattribute the program string to `echo`.
+    #  (2) The quoting construct itself performs no expansion. `'…'` and `$'…'`
+    #      perform none. `"…"` performs parameter expansion, command substitution
+    #      and arithmetic expansion, so a double-quoted run is suppressible only
+    #      while it is UNTAINTED — no `$` and no backtick seen since it opened.
+    #
+    # Condition (1) alone is what the previous two attempts checked, and it is not
+    # sufficient. Inside a double-quoted argument the SHELL evaluates `$( … )` and
+    # `` ` … ` `` BEFORE the carrier ever runs: `echo "$(cd /x; bash <evil>.sh --f)"`
+    # executes, and `echo` — which genuinely cannot evaluate its argument — is never
+    # asked. `$( )` does not PREFIX the inner command, it ENCLOSES it, and enclosure
+    # was not covered. Condition (2) closes that, and closes it by construct rather
+    # than by enumerating shapes: any expansion inside `"…"` needs a `$` or a
+    # backtick, so tainting on those two characters covers the whole class —
+    # `$( )`, `` ` ` ``, `$(( ))`, `${ }` and anything later added to the language.
+    #
+    # A segment whose start state is 0 still begins at COMMAND POSITION and is
+    # ALWAYS adjudicated. Unquoted `$( )`, backticks and `<( )` all land there, so
+    # they need no separate rule.
+    #
+    # HEREDOCS ARE NOT MODELLED, so suppression is switched off entirely for any
+    # command containing `<<`. A heredoc BODY line is not a command line, but the
+    # matcher splits on newlines and cannot tell the difference: a body line that
+    # opens a quote poisons the carried state, and a real execution after the
+    # terminator is then read as interior to it. Declining to suppress is the
+    # fail-closed answer to "this construct is outside the model"; the cost is that
+    # `<<`-bearing commands keep the false positive.
     #
     # Suppression stays gated on an ALLOWLIST of command words that cannot evaluate
     # their arguments. The direction of that choice is deliberate: an entry MISSING
@@ -692,17 +769,29 @@ case "$TOOL_NAME" in
     script_q1="'"
     script_q2='"'
     script_bs='\'
+    script_qd='$'
+    script_qbt='`'
     script_qstate=0
     script_qwork=0
     script_qbail=0
+    script_qtaint=0
     script_carrier=0
     script_head=""
+
+    # Heredocs are outside the model — see THE INVARIANT above. Latch suppression
+    # off for the whole command rather than reason about a body line. This reuses
+    # script_qbail, whose meaning is already "stop vouching for anything".
+    case "$COMMAND" in
+      *'<<'*) script_qbail=1 ;;
+    esac
 
     while IFS= read -r script_seg; do
       # Quote state at the START of this segment, carried in from everything before
       # it. Captured BEFORE the segment is scanned, because a segment that opens a
-      # quote is itself still at command position.
+      # quote is itself still at command position. The taint is captured with it:
+      # both describe the context this segment SITS IN, not the one it creates.
       script_segstart="$script_qstate"
+      script_segtaint="$script_qtaint"
 
       # trim leading whitespace (leaves the head token at index 0)
       script_seg="${script_seg#"${script_seg%%[![:space:]]*}"}"
@@ -726,8 +815,14 @@ case "$TOOL_NAME" in
           esac
         fi
       elif [ "$script_carrier" -eq 1 ]; then
-        # Interior to a quoted argument of a command that cannot evaluate it.
-        continue
+        # Interior to a quoted argument of a command that cannot evaluate it —
+        # condition (1). Condition (2) is the construct test: `'…'` (state 1) and
+        # `$'…'` (state 3) expand nothing, so they are inert unconditionally; a
+        # double-quoted run (state 2) is inert only while untainted.
+        case "$script_segstart" in
+          1|3) continue ;;
+          2) if [ "$script_segtaint" -eq 0 ]; then continue; fi ;;
+        esac
       fi
 
       [ -n "$script_seg" ] || continue

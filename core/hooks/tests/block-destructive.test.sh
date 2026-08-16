@@ -861,22 +861,37 @@ test_case "BLOCK-022 R5 control: unregistered sibling in core/hooks/tests/ block
 # evaluate their arguments. A word MISSING from that set means a false positive
 # persists -- it can never mean an evasion is admitted.
 #
-# HOW THIS CONTROL SET IS DERIVED, and why it is derived that way. The first
-# version of this block enumerated its controls from the design's own account of
-# how the suppression could be wrong. Every one of them passed while a real
-# evasion was live, because the account was incomplete: no control paired a
-# carrier PREFIX with a real execution, and none put a real command inside a
-# quote that an EVALUATING verb had opened. The cases below are instead derived
-# from the predicate's input space -- for each input axis the suppression reads
-# (who opens the quote, whether a segment is interior to it, which quote
-# character, whether a backslash precedes it, whether the quote has closed
-# again), there is a case on both sides of the axis. Add to this set the same
-# way: name the axis first, then write the pair.
+# HOW THIS CONTROL SET IS DERIVED, and why it is derived that way. Twice now a
+# version of this block enumerated its controls from the DESIGN's own account of
+# how the suppression could be wrong. Both times every control passed while a real
+# evasion was live, because a design document is a list of the failures somebody
+# already thought of. The first miss was a carrier PREFIX ahead of a real
+# execution; the second was a command reached through ENCLOSURE (`$( )`) rather
+# than through a prefix, plus `$'...'`, whose escape rules desynchronise the
+# quote scan.
 #
-# THE INVARIANT UNDER TEST. A token at command position of an actually-executing
-# context is always adjudicated, whatever quotes surround it. `bash -c '<string>'`
-# executes the string, so positions inside it are command positions -- and no
-# prefix in front of that command may reattribute the string to the prefix.
+# THE DERIVATION RULE, which is the durable fix and is binding on anything added
+# here. Enumerate the BASH CONSTRUCTS THAT CAN CAUSE THE SHELL TO EVALUATE TEXT,
+# independently of what verb encloses them, and write a pair for each:
+#
+#   '...'  "..."  $'...'  $"..."  \ escaping (outside, and inside "...")
+#   $( )   ` `    $(( ))  ${ }    <( )  >( )
+#   heredoc << and <<-   herestring <<<
+#   eval-family verbs: eval xargs env command exec nohup timeout nice stdbuf
+#   interpreter -c in every spelling (-c, -xc, -cx, -o opt -c) and enclosure of it
+#
+# then cross that list with POSITION (outside quotes / interior to each quoting
+# construct / after the run closes) and with WHO OPENED THE QUOTE (carrier,
+# non-carrier, absolute-path spelling, assignment prefix, no head at all). The
+# shapes below are that cross product, not a restatement of the design.
+#
+# THE INVARIANT UNDER TEST. A suppression may fire only when the enclosing context
+# PROVABLY CANNOT cause the shell to evaluate the segment. Two conditions, both
+# necessary: the command that OPENED the quote cannot evaluate its argument, AND
+# the quoting construct itself performs no expansion. `bash -c '<string>'` executes
+# the string, so positions inside it are command positions and no prefix in front
+# may reattribute the string to the prefix; and `echo "$( ... )"` executes too,
+# because the SHELL expands it before `echo` is ever reached.
 
 echo ""
 echo "BLOCK-022 AC-FP quoted-fragment suppression"
@@ -998,6 +1013,140 @@ test_case "AC-FP-2m control: carrier prefix ahead of a real dot-source blocks" \
 test_case "AC-FP-2n control: carrier piped into bash -c still blocks" \
   "$(bash_payload "gh issue view 1 | bash -c 'echo hi; bash /tmp/evil.sh'")" \
   2 "BLOCK-DESTRUCTIVE-022"
+
+# ----- Axis: the SHELL evaluates the enclosed text, whatever the carrier is -----
+#
+# Inside a double-quoted argument the shell performs command substitution before
+# the carrier ever runs, so a carrier that genuinely cannot evaluate its argument
+# does not have to. Each spelling of "the shell evaluates this" needs its own
+# case, because they are separate constructs, not variants of one.
+
+# (o) command substitution inside a double-quoted carrier argument.
+test_case "AC-FP-2o control: command substitution inside a carrier argument blocks" \
+  "$(bash_payload 'echo "$(cd /x; bash /tmp/evil.sh --f)"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (p) the backtick spelling of the same thing. Two spellings, two cases.
+test_case "AC-FP-2p control: backtick substitution inside a carrier argument blocks" \
+  "$(bash_payload 'echo "`cd /x; bash /tmp/evil.sh --f`"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (q) the corpus-prescribed --body shape, which is the reachable one: an agent
+#     that hits -022 and reaches for a command substitution must not get through.
+test_case "AC-FP-2q control: command substitution inside a gh --body blocks" \
+  "$(bash_payload 'gh issue comment 1 --body "$(cd /x; bash /tmp/evil.sh --f)"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (r) ENCLOSURE of `bash -c`, as distinct from a PREFIX in front of it (2e). The
+#     invariant covered prefixes; `$( )` wraps the whole invocation instead.
+test_case "AC-FP-2r control: bash -c enclosed by a command substitution blocks" \
+  "$(bash_payload 'echo "$(bash -c '"'"'cd /x; bash /tmp/evil.sh --f'"'"')"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (s)(t) $'...' is a DIFFERENT quoting construct: `\'` escapes and does not close.
+#     Read under the '...' rule the scan ends one quote out of phase and reports
+#     *inside* where bash is *outside* -- the fail-open direction. Both verb arms.
+test_case "AC-FP-2s control: ANSI-C quoting does not desync the scan (interpreter arm)" \
+  "$(bash_payload 'echo $'"'"'it\'"'"'s'"'"'; bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "AC-FP-2t control: ANSI-C quoting does not desync the scan (source arm)" \
+  "$(bash_payload 'echo $'"'"'a\'"'"'b'"'"' ; source /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (u)(v) arithmetic and parameter expansion can each carry a substitution. They
+#     are covered by the same `$` taint, and each gets a case so a later narrowing
+#     of that taint to `$(` alone fails here rather than silently.
+test_case "AC-FP-2u control: arithmetic expansion carrying a substitution blocks" \
+  "$(bash_payload 'echo "$(( $(cd /x; bash /tmp/evil.sh --f) ))"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "AC-FP-2v control: parameter expansion carrying a substitution blocks" \
+  "$(bash_payload 'echo "${x:-$(cd /x; bash /tmp/evil.sh --f)}"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (w) process substitution is valid only OUTSIDE quotes, so it lands at segment
+#     start state 0 and is adjudicated for a different reason. Pinning it anyway:
+#     the reason must stay true if the state model changes.
+test_case "AC-FP-2w control: process substitution blocks" \
+  "$(bash_payload 'echo <(cd /x; bash /tmp/evil.sh --f)')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (x) a heredoc BODY line is not a command line, but the matcher splits on
+#     newlines and cannot tell. A body line that opens a quote poisons the carried
+#     state, so a real execution after the terminator reads as interior to it.
+#     Heredocs are outside the model and switch suppression off entirely.
+test_case "AC-FP-2x control: a heredoc body cannot suppress an execution after the terminator" \
+  "$(bash_payload 'cat <<EOF
+echo "hi
+EOF
+bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (y) nesting: an inner double quote inside a substitution must not clear the
+#     outer run early.
+test_case "AC-FP-2y control: nested command substitution blocks" \
+  "$(bash_payload 'echo "$(echo "$(cd /x; bash /tmp/evil.sh --f)")"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (z) $"..." is a translated double-quoted string and performs the same expansions.
+test_case "AC-FP-2z control: locale-translation quoting carrying a substitution blocks" \
+  "$(bash_payload 'echo $"a $(cd /x; bash /tmp/evil.sh --f) b"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (aa) every carrier in the set gets the substitution treatment, not just `echo`.
+test_case "AC-FP-2aa control: printf carrier with a substitution blocks" \
+  "$(bash_payload 'printf -v X "%s" "$(cd /x; bash /tmp/evil.sh --f)"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (ab) a subshell inside the substitution, so the head of the executing segment
+#      is not the first token after the separator.
+test_case "AC-FP-2ab control: subshell inside a substitution blocks" \
+  "$(bash_payload 'echo "$( ( cd /x; bash /tmp/evil.sh ) )"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (ac) the source arm reaches the same adjudicator through the same enclosure.
+test_case "AC-FP-2ac control: source through a command substitution blocks" \
+  "$(bash_payload 'echo "$(cd /x; source /tmp/evil.sh --f)"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ----- The paired must-not-flag side of each axis above -----
+#
+# Without these the suite cannot tell a correctly narrowed suppression from one
+# that has been narrowed until it never fires. Each is a real false positive: the
+# construct is present as TEXT and the shell expands nothing.
+
+# (e) $'...' performs no expansion at all, so it is inert and suppressible.
+test_case "AC-FP-1e: interpreter-shaped text inside an ANSI-C quoted body allows" \
+  "$(bash_payload 'gh issue comment 1 --body $'"'"'note; bash /tmp/evil.sh'"'"'')" \
+  0
+
+# (f) $"..." with nothing to expand is likewise inert.
+test_case "AC-FP-1f: interpreter-shaped text inside a translated body allows" \
+  "$(bash_payload 'echo $"note; bash /tmp/evil.sh"')" \
+  0
+
+# (g)(h) an ESCAPED `$` or backtick introduces no expansion, so the run stays
+#     inert. These are the pairs that keep the taint from degenerating into "any
+#     dollar sign anywhere, escaped or not".
+test_case "AC-FP-1g: an escaped dollar does not open a substitution" \
+  "$(bash_payload 'echo "\$(cd /x; bash /tmp/evil.sh)"')" \
+  0
+
+test_case "AC-FP-1h: an escaped backtick does not open a substitution" \
+  "$(bash_payload 'echo "a \`cd /x; bash /tmp/evil.sh\` b"')" \
+  0
+
+# (i) inside '...' the shell expands nothing, so substitution-shaped TEXT there is
+#     inert however it is spelled.
+test_case "AC-FP-1i: substitution-shaped text inside a single-quoted body allows" \
+  "$(bash_payload 'echo '"'"'note; $(bash /tmp/evil.sh)'"'"'')" \
+  0
+
+# (j) `\"` does not close a double-quoted run, so what follows is still interior.
+test_case "AC-FP-1j: an escaped double quote does not close the carrier's run" \
+  "$(bash_payload 'echo "a\"; bash /tmp/evil.sh"')" \
+  0
 
 # ==========================================================================
 # NEW-B: Write/Edit primary-write guard
