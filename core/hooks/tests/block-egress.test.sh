@@ -474,6 +474,31 @@ test_case "AC-E007-G9: comment body QUOTING a gh api write allows" \
 test_case "AC-E007-G10: gh pr merge is not a gh api write" \
   "$(bash_payload 'gh pr merge 5560 --squash')" 0
 
+# Stages 5 and 8 both verified the pipeline's shapes by hand and neither pinned
+# them all. Seven of the fourteen had no shipped assertion, including the two the
+# release TAG depends on. A shape verified once in a stage report is not a
+# regression control; a shape that fails a suite is.
+test_case "AC-E007-G11: label create (Stage 2/12 label ops)" \
+  "$(bash_payload "gh api repos/${GH_HANDLE}/pmo-platform/labels --method POST -f name=approved")" 0
+
+test_case "AC-E007-G12: GitHub Release publish (Stage 13 close-out)" \
+  "$(bash_payload "gh api repos/${GH_HANDLE}/pmo-platform/releases --method POST -f tag_name=v4.31")" 0
+
+test_case "AC-E007-G13: tag ref create (Stage 13 close-out)" \
+  "$(bash_payload "gh api repos/${GH_HANDLE}/pmo-platform/git/refs --method POST -f ref=refs/tags/v4.31")" 0
+
+test_case "AC-E007-G14: project item add" \
+  "$(bash_payload "gh api repos/${GH_HANDLE}/pmo-platform/projects --method POST -f name=wave")" 0
+
+test_case "AC-E007-G15: PR merge via the API (Stage 12)" \
+  "$(bash_payload "gh api repos/${GH_HANDLE}/pmo-platform/pulls/5560/merge --method PUT -f merge_method=squash")" 0
+
+test_case "AC-E007-G16: gh release create is not a gh api write" \
+  "$(bash_payload 'gh release create v4.31 --notes-file /tmp/notes.md')" 0
+
+test_case "AC-E007-G17: gh issue edit is not a gh api write" \
+  "$(bash_payload "gh issue edit 5541 --repo ${GH_HANDLE}/pmo-platform --add-label approved")" 0
+
 echo ""
 echo "gh api — false-positive guards (AC-E007-H*)"
 echo "---"
