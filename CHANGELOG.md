@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.32] - 2026-08-16
+
+A release plan now takes its name at the moment the version is claimed, and a release cannot close while name and record disagree.
+
+[Full notes](release/releases/notes/v4.32_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.32)
+
 ## [v4.31] - 2026-08-16
 
 Five security controls now reach the same verdict however a command is spelled, and a control that cannot read its input refuses.
