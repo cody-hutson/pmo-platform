@@ -223,7 +223,11 @@ for b in $BACKSTOP_HOOKS; do
     echo "FAIL(6): $f does not mark dep_lib_attests readonly -f — the sourced helper could redefine the function the guard's verdict depends on." >&2
     fail=1
   fi
-  if grep -qE 'bash[[:space:]]+-n' <<<"$blk"; then
+  # Matches the interpreter token in ANY spelling before ' -n': the bare literal,
+  # an absolute path, and the ${BASH:-...} parameter form a sibling hook uses. A
+  # literal-only probe is the defect this release exists to close, and this gate
+  # carried it: 'bash -n' matched while '"${BASH:-/bin/bash}" -n' did not.
+  if grep -qE '([bB][aA][sS][hH])[^[:space:]]*[[:space:]]+-n' <<<"$blk"; then
     echo "FAIL(6): $f guard block relies on a bash -n syntax precheck. That is the control this defect defeats: it verifies the helper PARSES, never that it MEANS what the hook expects, and it passes a top-level 'exit 0' by construction." >&2
     fail=1
   fi

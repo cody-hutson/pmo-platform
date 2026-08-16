@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-136 — A sourced dependency must attest its contract out of process; a guard that its own subject can terminate is not a guard"
-status: Proposed
+status: Accepted
 date: 2026-08-15
 release: hooks-enforce-under-adversity
 deciders: "operator (Stage-4 plan gate; Collective Review scope-lock) + Stage 5 Solutioning spoke (design, D1-D7) + hub adversarial evaluation (R1/R2 verified rather than accepted)"
@@ -109,4 +109,4 @@ Between that allocation and this authoring, **133 merged to mainline** under an 
 
 Two unmerged siblings still held 133 at that moment — the degraded-state emit contract on `check-fail-open-elimination` and a gate-default record on `stage9-gate-integrity`. Both then collided with **mainline** rather than with each other, and both renumber at their own merge. This record did not reserve above them: 134 was next-free above the merged anchor, and no branch claimed it at the time.
 
-**Then the same mechanism fired a second time.** `check-fail-open-elimination` merged during this branch's own Engineering run and its record took **134** — the very slot this one had just claimed. So the lineage is `133 → 134 → 135`: allocated at 133, moved to 134 when 133 merged beneath it, moved again to 135 when 134 merged beneath it. Neither move is drift. A number is **allocated at authorship but claimed at merge**, which exposes any record on a long-lived branch to every sibling that merges ahead of it, and pre-reserving a higher slot is no remedy because the integrity gate fails a gap as readily as a duplicate. `release/tools/renumber-adr.py --next-free` returned 135 at the second move, and the § Status provenance note records the hop.
+**Then the same mechanism fired a second time.** `check-fail-open-elimination` merged during this branch's own Engineering run and its record took **134** — the very slot this one had just claimed. So the lineage is `133 → 134 → 135 → 136`: allocated at 133, moved to 134 when 133 merged beneath it, moved again to 135 when 134 merged beneath it, and a **third** time to 136 when `stage9-gate-integrity` merged during this branch's Stage-7 window and its own record took 135. Neither move is drift. A number is **allocated at authorship but claimed at merge**, which exposes any record on a long-lived branch to every sibling that merges ahead of it, and pre-reserving a higher slot is no remedy because the integrity gate fails a gap as readily as a duplicate. `release/tools/renumber-adr.py --next-free` returned 135 at the second move and 136 at the third, and the § Status provenance note records one hop each. Three moves, three different siblings — the allocation rule behaving correctly under sustained contention on a long-running branch, not drift.
