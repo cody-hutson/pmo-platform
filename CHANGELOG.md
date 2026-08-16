@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.31] - 2026-08-16
+
+Five security controls now reach the same verdict however a command is spelled, and a control that cannot read its input refuses.
+
+[Full notes](release/releases/notes/v4.31_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.31)
+
 ## [v4.30] - 2026-08-15
 
 Six release checks that always passed because they never looked now examine what they guard, each proven able to fail first.
