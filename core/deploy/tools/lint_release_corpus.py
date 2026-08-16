@@ -386,10 +386,24 @@ CORPUS_PATH_UNRESOLVED_PREFIX = "CORPUS-PATH-UNRESOLVED"
 # survive any future edit:
 #
 #   (1) Advisories go to STDOUT in the findings list — never to stderr with
-#       exit 0. All four callers capture the lint with `2>&1` but only INSPECT
-#       the buffer when the exit code is non-zero, so a stderr advisory on a
-#       clean run would be silently swallowed. An invisible advisory is not a
-#       check.
+#       exit 0. EVERY caller that captures this lint captures it with `2>&1` and
+#       INSPECTS the buffer only when the exit code is non-zero, so a stderr
+#       advisory on a clean run would be silently swallowed. An invisible
+#       advisory is not a check.
+#
+#       THE QUANTIFIER IS UNIVERSAL ON PURPOSE, where it used to be a count.
+#       "All four callers" was true when it was written and was falsified by the
+#       very commit that added the ADR-092 plan-identity gate: that commit
+#       brought two more callers — automated-closeout.sh phase 9.3, and the
+#       hub-spoke-bridge.md Procedure 7 Step 4 command that mirrors it on the
+#       script-less close path — and left the number behind. A count here is a
+#       defect with a delay fuse: it goes stale the next time a caller is added
+#       and nothing announces it. What binds is the PROPERTY, which every caller
+#       owes however many there are. To enumerate the set rather than trust a
+#       figure, re-derive it — the pathspec excludes THIS file, which carries the
+#       two needles only as the documentation you are reading:
+#         git grep -n -e '--check note-content 2>&1' -e '--check plan-identity 2>&1' \
+#           -- ':!core/deploy/tools/lint_release_corpus.py'
 #   (2) An advisory line cites the VERSION KEY and the BARE FILENAME only —
 #       never the repo-root-relative note path. The close-out callers scope
 #       findings to the closing version by grepping the output for
@@ -1744,6 +1758,101 @@ def _self_test() -> int:
         arm("S-12b the same run still blocks on a real identity defect",
             any("PLAN-VERSION-UNKNOWN" in f for f in blocking(fg)),
             "advisory routing did not swallow the blocking limb")
+
+        # ── Scenario I — the UNVERIFIABLE advisory's ITEMISATION ─────────────
+        #
+        # THE PROPERTY THE CODE DOCUMENTS AS LOAD-BEARING, WITH NOTHING WATCHING
+        # IT. The comment above `unverifiable_above_floor.append(rel)` states the
+        # design outright: "A bare count of the unexamined is the same fail-open
+        # one level in: a member of this bucket can BE the defect under test, and
+        # a count cannot say so." Measured: replacing that append with
+        # `.append("")` renders the live advisory as a bare comma-run
+        # (`... resolve to no ledger row: , , , ...`) and left this suite at 27
+        # arms / 0 failures. The itemisation was reached on every run and asserted
+        # by nothing.
+        #
+        # THE COUNT IS NOT A SUBSTITUTE FOR THE NAMES, and that is exactly why
+        # S-21 grades the paths. `len(unverifiable_above_floor)` is UNCHANGED by
+        # the blanking mutation — a list of two empty strings still has length
+        # two — so an arm asserting the figure passes on the blanked build. Only
+        # a name-grading arm discriminates.
+        #
+        # FIXTURE SHAPE IS THE LIVE SHAPE, not a synthetic one. A version-named
+        # plan carrying no join key of any kind (no filename slug tail, no
+        # `milestone:`, no `issues:`, no `links.log_anchor`) makes all four
+        # oracles come back empty, so resolve_plan_identity() returns
+        # (None, False) while the declared version IS a concrete ledger version —
+        # which is what routes it past PLAN-VERSION-UNKNOWN and into this bucket.
+        # That is the shape of every member of the live residual.
+        i_ = root / "I"
+        ip = i_ / "plans"
+        ilog = _write_ledger(i_ / "RELEASE_LOG.md", [
+            ("v4.05", "widget-i-five", "VERIFIED"),
+            ("v4.06", "widget-i-six", "VERIFIED"),
+            ("v3.05", "widget-i-old", "VERIFIED"),
+        ])
+        f_unv_hi_a = _write(ip, "v4/v4.05_RELEASE_PLAN.md")
+        f_unv_hi_b = _write(ip, "v4/v4.06_RELEASE_PLAN.md")
+        # The SAME unjoinable shape BELOW the ADR-092 floor — reached and counted,
+        # never itemised. It is what makes S-21b a partition assertion rather than
+        # a restatement of S-21.
+        f_unv_lo = _write(ip, "v3/v3.05_RELEASE_PLAN.md")
+        fi = check_plan_identity(plans_dir=ip, log_path=ilog, reversions_path=root / "none.md")
+        i_unv = next((f for f in fi if "PLAN-IDENTITY-UNVERIFIABLE" in f), "")
+        i_denom = next((f for f in fi if "PLAN-IDENTITY-DENOM" in f), "")
+
+        arm("S-21 sensitivity — the UNVERIFIABLE advisory NAMES its members, not just their count",
+            str(f_unv_hi_a) in i_unv and str(f_unv_hi_b) in i_unv
+            and "2 version-declaring plan(s)" in i_unv,
+            "both at/above-floor members appear verbatim beside the figure — blanking the "
+            "itemisation reddens this arm while leaving the figure intact")
+        arm("S-21b partition + anti-vacuity — the below-floor twin is REACHED but not itemised",
+            str(f_unv_lo) not in i_unv and "3 unverifiable" in i_denom,
+            "DENOM counts all 3 unverifiable plans, so the below-floor file was walked and "
+            "classified; its absence from the itemisation is the floor, not a blind walker")
+        arm("S-21c the advisory stays ADVISORY — an itemised residual never blocks",
+            i_unv.startswith(ADVISORY_PREFIX) and blocking(fi) == [],
+            "itemising the unexamined is a control payload, not a finding")
+
+        # ── Scenario J — the PLACEMENT tally's at/above-floor COUNTER ────────
+        #
+        # `place_blocking` is the number an operator reads to conclude the v4-era
+        # corpus is clean, and it was pinned by nothing: `place_blocking += 1`
+        # mutated to `+= 0` left the suite green. S-12 asserts the enclosing
+        # string EXISTS; `place_advisory` is pinned only indirectly, because it
+        # gates emission. The at/above-floor figure had neither.
+        #
+        # SCOPE, STATED NARROWLY. The placement FINDING is already guarded (S-6,
+        # S-16, S-16b). What was inert is the reported COUNT — so these arms pin
+        # the figure to the findings it is a count OF, which is the durable form:
+        # a future limb that emits a finding without incrementing, or increments
+        # without emitting, reddens on the disagreement rather than on a literal.
+        j_ = root / "J"
+        jp = j_ / "plans"
+        jlog = _write_ledger(j_ / "RELEASE_LOG.md", [
+            ("v4.07", "widget-j-seven", "VERIFIED"),
+            ("v4.08", "widget-j-eight", "VERIFIED"),
+            ("v4.09", "widget-j-nine", "VERIFIED"),
+            ("v3.07", "widget-j-old", "VERIFIED"),
+        ])
+        # v4.09 is the conformant control — its plan sits at the nested home, so
+        # the limb must discriminate rather than count every row.
+        _write(jp, "v4/v4.09_RELEASE_PLAN.md", "widget-j-nine")
+        fj = check_plan_identity(plans_dir=jp, log_path=jlog, reversions_path=root / "none.md")
+        j_tally = next((f for f in fj if "PLAN-PLACEMENT-TALLY" in f), "")
+        j_missing = [f for f in blocking(fj) if "PLAN-MISSING-FOR-LEDGER-ROW" in f]
+
+        arm("S-22 sensitivity — the tally's at/above-floor figure is PINNED to the findings it counts",
+            "; 2 at/above the floor" in j_tally and len(j_missing) == 2,
+            "the reported 2 and the 2 blocking findings agree — a counter mutated to `+= 0` "
+            "reports 0 beside two live findings and reddens here")
+        arm("S-22b partition — the below-floor row is tallied under ADVISORY and never blocks",
+            "1 concrete ledger row(s) below the ADR-092 floor" in j_tally
+            and fires(fj, "PLAN-MISSING-FOR-LEDGER-ROW", "v3.07") == 0,
+            "one below-floor row counted as inherited debt, zero blocking findings name it")
+        arm("S-22c specificity — the conformant at/above-floor row is neither counted nor flagged",
+            fires(fj, "PLAN-MISSING-FOR-LEDGER-ROW", "v4.09") == 0,
+            "a row whose plan sits at its nested home contributes to neither figure")
 
         # ── Scenario H — check_note_content()'s Tier-1 links.plan limb ───────
         #

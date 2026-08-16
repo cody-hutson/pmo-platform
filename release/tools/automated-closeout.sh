@@ -692,14 +692,26 @@ notes_abs_path() {
 # close-out minted a plan pointer that dangled on arrival. One resolver, one rule,
 # no site left behind.
 #
-# This function expresses NO LAYOUT OF ITS OWN. It probes the homes
+# This function AUTHORS no layout — it PROBES one. It walks the homes
 # release/releases/plans/README.md § Disposition rule already documents, in that
 # rule's own order, and returns the first that EXISTS. Because existence IS the
 # selection criterion it structurally cannot emit a path that is not there; a
 # future corpus-layout change degrades to a loud "unresolved" rather than to a
 # silently wrong pointer. release/tools/claim-version.sh remains the sole
 # WRITE-SIDE hardcoder of the versioned home (search it for `plans/v${vM}`) and is
-# NOT modified here — one hardcoder, and this side holds no layout literal at all.
+# NOT modified here — one WRITER of the layout, and this side never writes it.
+#
+# WHAT THIS SIDE DOES HOLD. An earlier form of the line above claimed this side
+# "holds no layout literal at all", which was false on its own surface: the
+# resolver pair below carries a layout literal on 12 code lines — 10 in
+# plan_rel_path(), 2 in plan_rel_path_expected() — and the block enumerates five
+# layout forms a dozen lines further down. Re-derive rather than trust the
+# figure: grep the two function bodies for `_RELEASE_PLAN.md`. The distinction
+# that actually binds is READ-side versus WRITE-side, not literal-count: every
+# literal here is a probe guarded by existence, so a stale one resolves nothing
+# and says so, where a stale literal on the write side mints a pointer that
+# dangles on arrival. That asymmetry is the reason the two sides are allowed to
+# hold layout knowledge on different terms.
 #
 # FIVE candidates, not three, because the shipped corpus carries five structural
 # forms and a resolver blind to one of them turns a model gap into a dangling

@@ -2311,11 +2311,13 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    | Output | Verification | Result |
    |---|---|---|
    | User-facing release note | \`git show origin/main:.../v<X.Y>_RELEASE_NOTES.md\` | PASS |
+   | Release plan identity + placement (ADR-092) | \`lint_release_corpus.py --check plan-identity\` (cmd #1c, scoped to v<X.Y>) | PASS / N/A (version-less release) |
    | Version tag | \`gh api .../git/refs/tags/v<X.Y>\` | PASS |
    | Milestone closed | \`gh api .../milestones/<N>\` | PENDING (about to close) |
    | RELEASE_LOG entry | \`git log --grep ...\` | PASS |
    | Sub-issues closed | \`gh issue list --state open\` | PASS |
    | GitHub Release (Surface 1, Layer-1 dual-write) | \`gh release view v<X.Y> --repo {REPO}\` | PASS |
+   | Surface 1 body matches in-repo note (§5.1 enforced transform) | \`./release/tools/check-release-body-drift.sh v<X.Y>\` | PASS / N/A (gh offline) |
    | CHANGELOG.md entry (Surface 2, Layer-1 dual-write) | \`git show origin/main:CHANGELOG.md | grep -qE "^## \[?v<X.Y>\]?[[:space:]]"\` | PASS / N/A (pre-CHANGELOG state) |
    | .version stamped (release-cut-owned) | \`git show origin/main:.version | grep -qx v<X.Y>\` | PASS / N/A (version-less release) |
    | Posted Release TITLE versioned (Surface 1, posted-surface) | \`gh release view v<X.Y> --repo {REPO} --json name --jq '.name' | grep -qE '^v[0-9]+\.[0-9]+( |-)\` | PASS / N/A (version-less release) |
