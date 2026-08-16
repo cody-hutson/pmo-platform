@@ -511,6 +511,118 @@ test_case "AC-E007-H7: a command with no gh token allows (fast path)" \
   "$(bash_payload 'ls -la /tmp')" 0
 
 echo ""
+echo "comment-inert scanning and the unparseable class (AC-E007-U*)"
+echo "---"
+
+# The `unparseable` cause exists for input the scanner cannot evaluate. Two things
+# decide whether it is safe: WHAT can reach it, and how it is CLASSIFIED. Both are
+# pinned below.
+#
+# These cases are derived from the SCANNER'S INPUT SPACE, one axis at a time —
+# carrier of the odd quote (none / comment / command text / heredoc / escape),
+# quote character, `gh` occurrence (absent / incidental substring / real token),
+# `api` occurrence (absent / incidental / adjacent), command position, path status,
+# write-ness. A set derived from a list of known failures is not a test of the
+# predicate, and a broad set that all instantiates ONE template is not a factorial;
+# both have shipped green past a live evasion on this release already.
+
+# ---- MUST-FLAG. Every case here DENIES under the replaced matcher. Allowing one
+# would be the rollout ladder softening a deny that already exists, which is the
+# single thing the classification must never do. They deny at the SHIPPED rung, and
+# that is exactly what pins `unparseable` as NON-widening: reclassify it as a
+# widening and every one of these silently returns 0.
+test_case "AC-E007-U1: unterminated double quote around an ALLOWLISTED path blocks" \
+  "$(bash_payload "gh api \"${E007_OK} --method PATCH -f state=closed")" 2 "unterminated quote"
+
+test_case "AC-E007-U2: unterminated single quote, same shape, blocks (quote-type axis)" \
+  "$(bash_payload "gh api '${E007_OK} --method PATCH -f state=closed")" 2 "unterminated quote"
+
+test_case "AC-E007-U3: unterminated quote around a NON-allowlisted path blocks" \
+  "$(bash_payload "gh api \"${E007_NO} --method POST -f title=x")" 2 "unterminated quote"
+
+test_case "AC-E007-U4: unterminated quote after a ';' blocks (position axis)" \
+  "$(bash_payload "true; gh api \"${E007_NO} --method POST")" 2 "unterminated quote"
+
+test_case "AC-E007-U5: unterminated quote on a later LINE blocks (the old anchor was line-oriented)" \
+  "$(bash_payload "true"$'\n'"gh api \"${E007_NO} --method POST")" 2 "unterminated quote"
+
+test_case "AC-E007-U6: unterminated quote behind an absolute-path gh blocks (verb-prefix axis)" \
+  "$(bash_payload "/usr/local/bin/gh api \"${E007_NO} --method POST")" 2 "unterminated quote"
+
+# A write whose ONLY defect is an apostrophe in a trailing comment is an ordinary
+# write, and it is adjudicated as one — on its path, not on the apostrophe.
+test_case "AC-E007-U7: non-allowlisted write with an apostrophe in a trailing comment blocks on its PATH" \
+  "$(bash_payload "gh api ${E007_NO} --method POST # don't re-run")" 2 "non-allowlisted path denied"
+
+# ---- MUST-NOT-FLAG. The class must be reachable only from a real `gh api`
+# invocation at a position the replaced matcher could have reached. Before the
+# comment fix these ALL denied at enforce on nothing more than an unbalanced quote
+# plus the substrings `gh` and `api` appearing anywhere in the command.
+test_case "AC-E007-U8: ordinary grep, incidental gh+api substrings, apostrophe comment, allows" \
+  "$(bash_payload "grep -r \"highlight\" . # don't miss the api docs")" 0
+
+# U8's control: identical but for the apostrophe. The pair is the point — it isolates
+# the quote as the trigger, so a future regression cannot be read as "that command
+# was always denied".
+test_case "AC-E007-U9: same command without the apostrophe allows (control for U8)" \
+  "$(bash_payload 'grep -r "highlight" . # do not miss the api docs')" 0
+
+test_case "AC-E007-U10: no gh token at all, incidental 'api', apostrophe comment, allows" \
+  "$(bash_payload "echo copyright api # isn't this fine")" 0
+
+test_case "AC-E007-U11: 'gh api' adjacency inside a QUOTED string allows" \
+  "$(bash_payload "grep -r \"gh api\" . # don't match this")" 0
+
+test_case "AC-E007-U12: a real gh token whose next token is NOT 'api' allows (adjacency axis)" \
+  "$(bash_payload "gh pr list --json \"title # it's a read of the api")" 0
+
+test_case "AC-E007-U13: prose naming gh api mid-line allows (command-position axis)" \
+  "$(bash_payload "echo see gh api docs for detail # it's documented")" 0
+
+# The position set is deliberately no wider than the anchor it models: a wrapper, a
+# command substitution and a glued verb are positions the replaced matcher never
+# adjudicated, so a day-one deny there would be un-laddered. Nothing is lost —
+# the command cannot execute in this form either.
+test_case "AC-E007-U14: unterminated quote behind a wrapper allows (not an old-reachable position)" \
+  "$(bash_payload "sudo gh api \"${E007_NO} --method POST")" 0
+
+test_case "AC-E007-U15: unterminated quote inside \$( ) allows (not an old-reachable position)" \
+  "$(bash_payload "echo x \$(gh api \"${E007_NO} --method POST)")" 0
+
+test_case "AC-E007-U16: 'xgh api' allows — the verb must be a TOKEN, not a substring" \
+  "$(bash_payload "xgh api \"${E007_NO} --method POST")" 0
+
+# ---- COMMENT SEMANTICS. Comment text is made quote-INERT, never stripped. A strip
+# is the obvious implementation and it is wrong: it deletes a segment the replaced
+# matcher adjudicated, so it would soften a live deny while fixing the
+# desynchronization. U17 is that case and it must keep blocking.
+test_case "AC-E007-U17: '# x; gh api ... --method DELETE' still blocks (comment text is not stripped)" \
+  "$(bash_payload "# x; gh api ${E007_NO} --method DELETE")" 2 "BLOCK-EGRESS-007"
+
+test_case "AC-E007-U18: '#' inside a quoted span is not a comment opener" \
+  "$(bash_payload "echo \"a#b\" 'c'")" 0
+
+test_case "AC-E007-U19: '#' that does not open a word is not a comment opener" \
+  "$(bash_payload "echo \${x#?} 'a'")" 0
+
+# A comment ends at the newline, so a write on the NEXT line is adjudicated normally
+# — in both directions.
+test_case "AC-E007-U20: apostrophe comment, then an ALLOWLISTED write on the next line, allows" \
+  "$(bash_payload "# it's a header"$'\n'"gh api ${E007_OK} --method POST -f title=x")" 0
+
+test_case "AC-E007-U21: apostrophe comment, then a NON-allowlisted write on the next line, blocks" \
+  "$(bash_payload "echo a # it's a note"$'\n'"gh api ${E007_NO} --method POST")" 2 "non-allowlisted path denied"
+
+# ---- SELF-OUTAGE CONTROLS. This release's own close-out writes carry prose comments,
+# and an apostrophe in one is not exotic. Both of these denied at enforce before the
+# fix, on the shipped allowlist, for no reason connected to their path.
+test_case "AC-E007-U22: the milestone close with an apostrophe in its comment allows" \
+  "$(bash_payload "gh api repos/${GH_HANDLE}/pmo-platform/milestones/172 --method PATCH -f state=closed # Stage 12's close")" 0
+
+test_case "AC-E007-U23: an allowlisted write whose comment quotes a '#' allows" \
+  "$(bash_payload "gh api ${E007_OK} --method POST -f title=x # tag \"#5292\" don't forget")" 0
+
+echo ""
 echo "block-log carries the evidence (AC-E007-L*)"
 echo "---"
 
