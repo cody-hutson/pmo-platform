@@ -215,6 +215,472 @@ test_case "gh api GET (no -X POST) allows" \
 test_case "gh api -X DELETE /user blocks (not allowlisted)" \
   "$(bash_payload 'gh api /user -X DELETE')" 2 "BLOCK-EGRESS-007"
 
+# ==========================================================================
+# BLOCK-EGRESS-007 — quote-aware, segment-first matcher (AC-E007-*)
+# ==========================================================================
+#
+# The rule no longer reads ANCHOR_PREFIX_BASH and no longer extracts its path
+# with a grep. Cases below are PAIRED throughout: every must-flag spelling has a
+# must-not-flag twin in the same shape. That pairing is the point — before this
+# change the rule had no allow-direction coverage for a quoted path at all, so a
+# matcher that denied EVERY gh-api write would have kept this suite green.
+#
+# Two owners are used deliberately. ${GH_HANDLE} is allowlisted (the deployed
+# allowlist carries a `repos/<handle>/*` catch-all); `evil-org` is not, and is not
+# reachable through any other row.
+E007_OK="repos/${GH_HANDLE}/pmo-platform/issues"
+E007_NO="repos/evil-org/secret/issues"
+
+EGRESS_WARN_LOG="${HOOK_DIR}/egress-warn-log.jsonl"
+
+# A WIDENING ships in the `shadow` rollout phase: it evaluates, records
+# would-fire, and takes no action. Asserting exit 0 alone would be worthless —
+# indistinguishable from the fail-open the change exists to close. So this helper
+# asserts BOTH that the call was allowed AND that the evaluation was recorded with
+# the expected cause. If the phase is later advanced to `enforce`, these cases are
+# the ones that flip, and they flip loudly.
+shadow_case() {
+  local name="$1"
+  local payload="$2"
+  local expect_cause="$3"
+
+  local before=0
+  if [ -f "$EGRESS_WARN_LOG" ]; then
+    before="$(/usr/bin/wc -l < "$EGRESS_WARN_LOG" | /usr/bin/tr -d '[:space:]')"
+  fi
+  local actual_exit=0
+  /usr/bin/printf '%s' "$payload" | /bin/bash "$HOOK" 2>/dev/null >/dev/null || actual_exit="$?"
+  local after=0
+  if [ -f "$EGRESS_WARN_LOG" ]; then
+    after="$(/usr/bin/wc -l < "$EGRESS_WARN_LOG" | /usr/bin/tr -d '[:space:]')"
+  fi
+  local last=""
+  if [ -f "$EGRESS_WARN_LOG" ]; then
+    last="$(/usr/bin/tail -1 "$EGRESS_WARN_LOG")"
+  fi
+
+  local ok=1
+  local why=""
+  if [ "$actual_exit" != 0 ]; then ok=0; why="expected exit 0 (shadow takes no action), got ${actual_exit}"; fi
+  if [ "$ok" = 1 ] && [ "$after" -le "$before" ]; then ok=0; why="warn log did not grow (${before} -> ${after}); the widening was not evaluated"; fi
+  # Here-strings rather than a writer piped into a short-circuiting reader, which
+  # closes the pipe under the writer. Both needles are non-empty literals, so the
+  # empty-haystack difference between the two forms cannot produce a spurious match:
+  # a here-string feeds one empty line where a writer feeds none, and neither needle
+  # can match an empty line.
+  if [ "$ok" = 1 ] && ! /usr/bin/grep -q '"phase":"shadow"' <<<"$last"; then
+    ok=0; why="last log entry is not a shadow record: ${last}"
+  fi
+  if [ "$ok" = 1 ] && ! /usr/bin/grep -q "\"cause\":\"${expect_cause}\"" <<<"$last"; then
+    ok=0; why="expected cause=${expect_cause}, got: ${last}"
+  fi
+
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$name"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  %s\n' "$name" "$why"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+echo ""
+echo "gh api write — spelling invariance (AC-E007-Q*)"
+echo "---"
+
+# CIAC-1, BOTH directions. The allow arm is the one the old matcher failed: a
+# quoted allowlisted path was denied because the extracted token kept its quotes.
+test_case "AC-E007-Q1: double-quoted allowlisted path allows" \
+  "$(bash_payload "gh api \"${E007_OK}\" --method POST -f title=x")" 0
+
+test_case "AC-E007-Q2: single-quoted allowlisted path allows" \
+  "$(bash_payload "gh api '${E007_OK}' --method POST -f title=x")" 0
+
+test_case "AC-E007-Q3: bare allowlisted path allows" \
+  "$(bash_payload "gh api ${E007_OK} --method POST -f title=x")" 0
+
+test_case "AC-E007-Q4: double-quoted NON-allowlisted path blocks" \
+  "$(bash_payload "gh api \"${E007_NO}\" --method POST -f title=x")" 2 "BLOCK-EGRESS-007"
+
+test_case "AC-E007-Q5: single-quoted NON-allowlisted path blocks" \
+  "$(bash_payload "gh api '${E007_NO}' --method POST -f title=x")" 2 "BLOCK-EGRESS-007"
+
+test_case "AC-E007-Q6: bare NON-allowlisted path blocks" \
+  "$(bash_payload "gh api ${E007_NO} --method POST -f title=x")" 2 "BLOCK-EGRESS-007"
+
+echo ""
+echo "gh api write — flag-before-path (AC-E007-F*)"
+echo "---"
+
+# The repo's own dominant documented spelling. The old extraction took the first
+# token after `api`, so every one of these denied an allowlisted call.
+test_case "AC-E007-F1: -X POST before the path allows (allowlisted)" \
+  "$(bash_payload "gh api -X POST ${E007_OK} -f title=x")" 0
+
+test_case "AC-E007-F2: --method POST before the path allows (allowlisted)" \
+  "$(bash_payload "gh api --method POST ${E007_OK} -f title=x")" 0
+
+test_case "AC-E007-F3: -H header before the path allows (header VALUE is not the path)" \
+  "$(bash_payload "gh api -H 'Accept: application/vnd.github+json' -X PATCH ${E007_OK}/1 -f state=closed")" 0
+
+test_case "AC-E007-F4: -- terminator before the path allows" \
+  "$(bash_payload "gh api -X POST -- ${E007_OK}")" 0
+
+test_case "AC-E007-F5: --method=VERB attached form is still a write (non-allowlisted blocks)" \
+  "$(bash_payload "gh api --method=DELETE ${E007_NO}")" 2 "BLOCK-EGRESS-007"
+
+# Must-flag twin for F1: the flag walk must not become a way to lose the path.
+test_case "AC-E007-F6: -X POST before a NON-allowlisted path still blocks" \
+  "$(bash_payload "gh api -X POST ${E007_NO} -f title=x")" 2 "BLOCK-EGRESS-007"
+
+echo ""
+echo "gh api write — unresolvable path authority (AC-E007-P*)"
+echo "---"
+
+# A path whose AUTHORITY cannot be resolved is denied with its own cause. The
+# remediation string must NOT offer an allowlist entry: no entry can match an
+# unresolved authority, and sending the operator to edit an allowlist that already
+# permits the call is the defect this rule was filed about.
+test_case "AC-E007-P1: gh {owner}/{repo} placeholder blocks, naming the cause" \
+  "$(bash_payload "gh api \"repos/{owner}/{repo}/milestones/172\" --method PATCH -f state=closed")" \
+  2 "unresolvable"
+
+test_case "AC-E007-P2: :owner/:repo placeholder blocks" \
+  "$(bash_payload 'gh api repos/:owner/:repo/issues --method POST')" 2 "unresolvable"
+
+test_case "AC-E007-P3: shell variable IN the authority blocks" \
+  "$(bash_payload 'gh api repos/$OWNER/pmo-platform/issues --method POST')" 2 "unresolvable"
+
+# The allow-direction control for the authority rule, and the one that keeps bulk
+# loops working. Below the authority the span is wildcard-normalized, because every
+# allowlist path pattern is prefix-anchored.
+test_case "AC-E007-P4: shell variable BELOW the authority allows (allowlisted prefix)" \
+  "$(bash_payload "gh api ${E007_OK}/\$n --method PATCH -f state=closed")" 0
+
+test_case "AC-E007-P5: braced variable below the authority allows" \
+  "$(bash_payload "gh api \"${E007_OK}/\${N}/comments\" --method POST -f body=x")" 0
+
+# The unresolvable message must not send the operator to the allowlist.
+_p_exit=0
+_p_err="$(/usr/bin/printf '%s' "$(bash_payload 'gh api repos/{owner}/{repo}/issues --method POST')" \
+  | /bin/bash "$HOOK" 2>&1 >/dev/null)" || _p_exit="$?"
+if [ "$_p_exit" = 2 ] \
+  && /usr/bin/grep -q 'spell out the owner and repository' <<<"$_p_err" \
+  && ! /usr/bin/grep -q 'add path to' <<<"$_p_err"; then
+  /usr/bin/printf 'PASS: AC-E007-P6: unresolvable remediation says spell it out, NOT add-to-allowlist\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-E007-P6: unresolvable remediation wrong (exit=%s)\n  stderr: %s\n' "$_p_exit" "$_p_err"; FAIL=$((FAIL + 1))
+fi
+
+echo ""
+echo "gh api write — command position, every-invocation, implicit POST (AC-E007-S*)"
+echo "---"
+
+# These are the WIDENINGS. They ship in the `shadow` rollout phase, so each asserts
+# allowed-and-recorded rather than blocked. Every one of them passed COMPLETELY
+# unevaluated before this change — that is the fail-open half of the defect.
+shadow_case "AC-E007-S1: one-line 'for ...; do gh api' is evaluated (was unmatched)" \
+  "$(bash_payload "for n in 1 2; do gh api ${E007_NO}/\$n --method PATCH -f state=closed; done")" \
+  "not-allowlisted"
+
+shadow_case "AC-E007-S2: 'if ...; then gh api' is evaluated" \
+  "$(bash_payload "if true; then gh api ${E007_NO} --method POST; fi")" \
+  "not-allowlisted"
+
+shadow_case "AC-E007-S3: command substitution \$( gh api ) is evaluated" \
+  "$(bash_payload "echo x \$(gh api ${E007_NO} --method DELETE)")" \
+  "not-allowlisted"
+
+shadow_case "AC-E007-S4: subshell ( gh api ) is evaluated" \
+  "$(bash_payload "( gh api ${E007_NO} --method POST )")" \
+  "not-allowlisted"
+
+shadow_case "AC-E007-S5: leading VAR=x assignment prefix is evaluated" \
+  "$(bash_payload "VAR=1 gh api ${E007_NO} --method POST")" \
+  "not-allowlisted"
+
+shadow_case "AC-E007-S6: xargs -I{} gh api is evaluated" \
+  "$(bash_payload "xargs -I{} gh api ${E007_NO} --method DELETE")" \
+  "not-allowlisted"
+
+shadow_case "AC-E007-S7: a SECOND write after an allowlisted first is evaluated (head -1 truncation)" \
+  "$(bash_payload "gh api ${E007_OK} --method POST; gh api ${E007_NO} --method POST")" \
+  "not-allowlisted"
+
+shadow_case "AC-E007-S8: implicit POST via -f with no -X is a write" \
+  "$(bash_payload "gh api ${E007_NO} -f title=x")" \
+  "not-allowlisted"
+
+shadow_case "AC-E007-S9: unresolvable authority inside a loop body is evaluated" \
+  "$(bash_payload 'for r in a b; do gh api repos/$O/$R/issues --method POST; done')" \
+  "unresolvable"
+
+echo ""
+echo "gh api — reads and allowlisted chains stay allowed (AC-E007-R*)"
+echo "---"
+
+# Each segment carries its OWN method determination, so a read co-located with a
+# write is never adjudicated against the write allowlist.
+test_case "AC-E007-R1: GET to a non-allowlisted path allows (not a write)" \
+  "$(bash_payload "gh api ${E007_NO}")" 0
+
+test_case "AC-E007-R2: explicit --method GET allows" \
+  "$(bash_payload "gh api ${E007_NO} --method GET")" 0
+
+test_case "AC-E007-R3: -q jq expression is not a field flag, so still a read" \
+  "$(bash_payload "gh api ${E007_NO} -q .title")" 0
+
+test_case "AC-E007-R4: read then allowlisted write allows" \
+  "$(bash_payload "gh api ${E007_OK}/1; gh api ${E007_OK} --method POST")" 0
+
+test_case "AC-E007-R5: two allowlisted writes allow" \
+  "$(bash_payload "gh api ${E007_OK} --method POST; gh api repos/${GH_HANDLE}/pmo-platform/labels --method POST")" 0
+
+echo ""
+echo "gh api — must-not-flag pipeline shapes (AC-E007-G*)"
+echo "---"
+
+# Every shape below is one this release's own pipeline issues at Stages 6-13. A
+# tightened -007 that blocks the pipeline's close-out is a self-inflicted outage,
+# so these are first-class assertions, not spot checks.
+test_case "AC-E007-G1: milestone close (Stage 12/13)" \
+  "$(bash_payload "gh api repos/${GH_HANDLE}/pmo-platform/milestones/172 --method PATCH -f state=closed")" 0
+
+test_case "AC-E007-G2: spoke output comment" \
+  "$(bash_payload "gh api ${E007_OK}/5541/comments --method POST -f body=hello")" 0
+
+test_case "AC-E007-G3: issue edit" \
+  "$(bash_payload "gh api ${E007_OK}/5541 --method PATCH -f body=hello")" 0
+
+test_case "AC-E007-G4: issue state change" \
+  "$(bash_payload "gh api ${E007_OK}/5541 --method PATCH -f state=closed")" 0
+
+test_case "AC-E007-G5: sub-issue link" \
+  "$(bash_payload "gh api ${E007_OK}/5541/sub_issues --method POST -F sub_issue_id=1")" 0
+
+test_case "AC-E007-G6: graphql write" \
+  "$(bash_payload 'gh api graphql --method POST -f query=xyz')" 0
+
+test_case "AC-E007-G7: gh issue comment --body-file is not a gh api write" \
+  "$(bash_payload "gh issue comment 5541 --repo ${GH_HANDLE}/pmo-platform --body-file /tmp/out.md")" 0
+
+# The case a naive `head -1` removal breaks. An allowlisted comment-post whose BODY
+# quotes a gh api write: looping the old grep extraction adjudicated the quoted
+# text as a second invocation and denied. Structure inside a quoted span is
+# neutralized, so the body cannot produce a segment.
+test_case "AC-E007-G9: comment body QUOTING a gh api write allows" \
+  "$(bash_payload "gh api ${E007_OK}/1/comments --method POST -f body=\"see gh api ${E007_NO} --method DELETE for detail\"")" 0
+
+test_case "AC-E007-G10: gh pr merge is not a gh api write" \
+  "$(bash_payload 'gh pr merge 5560 --squash')" 0
+
+# Stages 5 and 8 both verified the pipeline's shapes by hand and neither pinned
+# them all. Seven of the fourteen had no shipped assertion, including the two the
+# release TAG depends on. A shape verified once in a stage report is not a
+# regression control; a shape that fails a suite is.
+test_case "AC-E007-G11: label create (Stage 2/12 label ops)" \
+  "$(bash_payload "gh api repos/${GH_HANDLE}/pmo-platform/labels --method POST -f name=approved")" 0
+
+test_case "AC-E007-G12: GitHub Release publish (Stage 13 close-out)" \
+  "$(bash_payload "gh api repos/${GH_HANDLE}/pmo-platform/releases --method POST -f tag_name=v4.31")" 0
+
+test_case "AC-E007-G13: tag ref create (Stage 13 close-out)" \
+  "$(bash_payload "gh api repos/${GH_HANDLE}/pmo-platform/git/refs --method POST -f ref=refs/tags/v4.31")" 0
+
+test_case "AC-E007-G14: project item add" \
+  "$(bash_payload "gh api repos/${GH_HANDLE}/pmo-platform/projects --method POST -f name=wave")" 0
+
+test_case "AC-E007-G15: PR merge via the API (Stage 12)" \
+  "$(bash_payload "gh api repos/${GH_HANDLE}/pmo-platform/pulls/5560/merge --method PUT -f merge_method=squash")" 0
+
+test_case "AC-E007-G16: gh release create is not a gh api write" \
+  "$(bash_payload 'gh release create v4.31 --notes-file /tmp/notes.md')" 0
+
+test_case "AC-E007-G17: gh issue edit is not a gh api write" \
+  "$(bash_payload "gh issue edit 5541 --repo ${GH_HANDLE}/pmo-platform --add-label approved")" 0
+
+echo ""
+echo "gh api — false-positive guards (AC-E007-H*)"
+echo "---"
+
+# Text that DESCRIBES a command must never be adjudicated as one. This class has
+# fired repeatedly across this release's own hooks, and the every-invocation
+# tightening above enlarges the surface, so these are load-bearing.
+test_case "AC-E007-H1: echo of a quoted '; do gh api ... --method POST' allows" \
+  "$(bash_payload "echo \"step 1; do gh api ${E007_NO} --method POST\"")" 0
+
+test_case "AC-E007-H2: printf of a quoted loop form allows" \
+  "$(bash_payload "printf '%s' \"for n in 1 2; do gh api ${E007_NO} --method DELETE; done\"")" 0
+
+test_case "AC-E007-H3: a comment line is not a command" \
+  "$(bash_payload "# gh api ${E007_NO} --method DELETE")" 0
+
+test_case "AC-E007-H4: a commit message quoting a write allows" \
+  "$(bash_payload "git commit -m \"note: gh api ${E007_NO} --method POST was denied\"")" 0
+
+# Skip-precision control: the assignment-prefix walk must not degrade into
+# "advance past any token containing =". A token whose NAME part is not a valid
+# shell name terminates the walk, so this is NOT a gh invocation at command
+# position and must be allowed on that ground rather than by accident.
+test_case "AC-E007-H5: a-b=1 does not read as an assignment prefix" \
+  "$(bash_payload "a-b=1 gh api ${E007_NO} --method POST")" 0
+
+# The && chain sits at a position the OLD anchor already admitted, so this deny is
+# not a widening and enforces from day one. Its presence here is what proves the
+# rollout split is real rather than a blanket shadow.
+test_case "AC-E007-H6: && chained write at an old-reachable position blocks NOW" \
+  "$(bash_payload "true && gh api ${E007_NO} --method POST")" 2 "BLOCK-EGRESS-007"
+
+# Non-gh commands take the fast path and are never scanned.
+test_case "AC-E007-H7: a command with no gh token allows (fast path)" \
+  "$(bash_payload 'ls -la /tmp')" 0
+
+echo ""
+echo "comment-inert scanning and the unparseable class (AC-E007-U*)"
+echo "---"
+
+# The `unparseable` cause exists for input the scanner cannot evaluate. Two things
+# decide whether it is safe: WHAT can reach it, and how it is CLASSIFIED. Both are
+# pinned below.
+#
+# These cases are derived from the SCANNER'S INPUT SPACE, one axis at a time —
+# carrier of the odd quote (none / comment / command text / heredoc / escape),
+# quote character, `gh` occurrence (absent / incidental substring / real token),
+# `api` occurrence (absent / incidental / adjacent), command position, path status,
+# write-ness. A set derived from a list of known failures is not a test of the
+# predicate, and a broad set that all instantiates ONE template is not a factorial;
+# both have shipped green past a live evasion on this release already.
+
+# ---- MUST-FLAG. Every case here DENIES under the replaced matcher. Allowing one
+# would be the rollout ladder softening a deny that already exists, which is the
+# single thing the classification must never do. They deny at the SHIPPED rung, and
+# that is exactly what pins `unparseable` as NON-widening: reclassify it as a
+# widening and every one of these silently returns 0.
+test_case "AC-E007-U1: unterminated double quote around an ALLOWLISTED path blocks" \
+  "$(bash_payload "gh api \"${E007_OK} --method PATCH -f state=closed")" 2 "unterminated quote"
+
+test_case "AC-E007-U2: unterminated single quote, same shape, blocks (quote-type axis)" \
+  "$(bash_payload "gh api '${E007_OK} --method PATCH -f state=closed")" 2 "unterminated quote"
+
+test_case "AC-E007-U3: unterminated quote around a NON-allowlisted path blocks" \
+  "$(bash_payload "gh api \"${E007_NO} --method POST -f title=x")" 2 "unterminated quote"
+
+test_case "AC-E007-U4: unterminated quote after a ';' blocks (position axis)" \
+  "$(bash_payload "true; gh api \"${E007_NO} --method POST")" 2 "unterminated quote"
+
+test_case "AC-E007-U5: unterminated quote on a later LINE blocks (the old anchor was line-oriented)" \
+  "$(bash_payload "true"$'\n'"gh api \"${E007_NO} --method POST")" 2 "unterminated quote"
+
+test_case "AC-E007-U6: unterminated quote behind an absolute-path gh blocks (verb-prefix axis)" \
+  "$(bash_payload "/usr/local/bin/gh api \"${E007_NO} --method POST")" 2 "unterminated quote"
+
+# A write whose ONLY defect is an apostrophe in a trailing comment is an ordinary
+# write, and it is adjudicated as one — on its path, not on the apostrophe.
+test_case "AC-E007-U7: non-allowlisted write with an apostrophe in a trailing comment blocks on its PATH" \
+  "$(bash_payload "gh api ${E007_NO} --method POST # don't re-run")" 2 "non-allowlisted path denied"
+
+# ---- MUST-NOT-FLAG. The class must be reachable only from a real `gh api`
+# invocation at a position the replaced matcher could have reached. Before the
+# comment fix these ALL denied at enforce on nothing more than an unbalanced quote
+# plus the substrings `gh` and `api` appearing anywhere in the command.
+test_case "AC-E007-U8: ordinary grep, incidental gh+api substrings, apostrophe comment, allows" \
+  "$(bash_payload "grep -r \"highlight\" . # don't miss the api docs")" 0
+
+# U8's control: identical but for the apostrophe. The pair is the point — it isolates
+# the quote as the trigger, so a future regression cannot be read as "that command
+# was always denied".
+test_case "AC-E007-U9: same command without the apostrophe allows (control for U8)" \
+  "$(bash_payload 'grep -r "highlight" . # do not miss the api docs')" 0
+
+test_case "AC-E007-U10: no gh token at all, incidental 'api', apostrophe comment, allows" \
+  "$(bash_payload "echo copyright api # isn't this fine")" 0
+
+test_case "AC-E007-U11: 'gh api' adjacency inside a QUOTED string allows" \
+  "$(bash_payload "grep -r \"gh api\" . # don't match this")" 0
+
+test_case "AC-E007-U12: a real gh token whose next token is NOT 'api' allows (adjacency axis)" \
+  "$(bash_payload "gh pr list --json \"title # it's a read of the api")" 0
+
+test_case "AC-E007-U13: prose naming gh api mid-line allows (command-position axis)" \
+  "$(bash_payload "echo see gh api docs for detail # it's documented")" 0
+
+# The position set is deliberately no wider than the anchor it models: a wrapper, a
+# command substitution and a glued verb are positions the replaced matcher never
+# adjudicated, so a day-one deny there would be un-laddered. Nothing is lost —
+# the command cannot execute in this form either.
+test_case "AC-E007-U14: unterminated quote behind a wrapper allows (not an old-reachable position)" \
+  "$(bash_payload "sudo gh api \"${E007_NO} --method POST")" 0
+
+test_case "AC-E007-U15: unterminated quote inside \$( ) allows (not an old-reachable position)" \
+  "$(bash_payload "echo x \$(gh api \"${E007_NO} --method POST)")" 0
+
+test_case "AC-E007-U16: 'xgh api' allows — the verb must be a TOKEN, not a substring" \
+  "$(bash_payload "xgh api \"${E007_NO} --method POST")" 0
+
+# ---- COMMENT SEMANTICS. Comment text is made quote-INERT, never stripped. A strip
+# is the obvious implementation and it is wrong: it deletes a segment the replaced
+# matcher adjudicated, so it would soften a live deny while fixing the
+# desynchronization. U17 is that case and it must keep blocking.
+test_case "AC-E007-U17: '# x; gh api ... --method DELETE' still blocks (comment text is not stripped)" \
+  "$(bash_payload "# x; gh api ${E007_NO} --method DELETE")" 2 "BLOCK-EGRESS-007"
+
+test_case "AC-E007-U18: '#' inside a quoted span is not a comment opener" \
+  "$(bash_payload "echo \"a#b\" 'c'")" 0
+
+test_case "AC-E007-U19: '#' that does not open a word is not a comment opener" \
+  "$(bash_payload "echo \${x#?} 'a'")" 0
+
+# A comment ends at the newline, so a write on the NEXT line is adjudicated normally
+# — in both directions.
+test_case "AC-E007-U20: apostrophe comment, then an ALLOWLISTED write on the next line, allows" \
+  "$(bash_payload "# it's a header"$'\n'"gh api ${E007_OK} --method POST -f title=x")" 0
+
+test_case "AC-E007-U21: apostrophe comment, then a NON-allowlisted write on the next line, blocks" \
+  "$(bash_payload "echo a # it's a note"$'\n'"gh api ${E007_NO} --method POST")" 2 "non-allowlisted path denied"
+
+# ---- SELF-OUTAGE CONTROLS. This release's own close-out writes carry prose comments,
+# and an apostrophe in one is not exotic. Both of these denied at enforce before the
+# fix, on the shipped allowlist, for no reason connected to their path.
+test_case "AC-E007-U22: the milestone close with an apostrophe in its comment allows" \
+  "$(bash_payload "gh api repos/${GH_HANDLE}/pmo-platform/milestones/172 --method PATCH -f state=closed # Stage 12's close")" 0
+
+test_case "AC-E007-U23: an allowlisted write whose comment quotes a '#' allows" \
+  "$(bash_payload "gh api ${E007_OK} --method POST -f title=x # tag \"#5292\" don't forget")" 0
+
+echo ""
+echo "block-log carries the evidence (AC-E007-L*)"
+echo "---"
+
+# apply_block always received the denied path, but the enforce branch called
+# log_block with the rule id alone, so the JSONL record said THAT something was
+# denied and never WHAT. At enforce the block log is the only observation surface
+# there is, which made a shakedown unwatchable: a rule firing looked identical
+# whether it caught a real violation or a false positive.
+BLOCK_LOG_FILE="${HOOK_DIR}/block-log.jsonl"
+_bl_before=0
+if [ -f "$BLOCK_LOG_FILE" ]; then
+  _bl_before="$(/usr/bin/wc -l < "$BLOCK_LOG_FILE" | /usr/bin/tr -d '[:space:]')"
+fi
+_bl_exit=0
+/usr/bin/printf '%s' "$(bash_payload "gh api ${E007_NO} --method POST")" \
+  | /bin/bash "$HOOK" >/dev/null 2>&1 || _bl_exit="$?"
+_bl_after=0
+if [ -f "$BLOCK_LOG_FILE" ]; then
+  _bl_after="$(/usr/bin/wc -l < "$BLOCK_LOG_FILE" | /usr/bin/tr -d '[:space:]')"
+fi
+_bl_tail=""
+if [ -f "$BLOCK_LOG_FILE" ]; then
+  _bl_tail="$(/usr/bin/tail -20 "$BLOCK_LOG_FILE")"
+fi
+if [ "$_bl_exit" = 2 ] && [ "$_bl_after" -gt "$_bl_before" ] \
+  && /usr/bin/grep -q 'evil-org' <<<"$_bl_tail" \
+  && /usr/bin/grep -q 'not-allowlisted' <<<"$_bl_tail"; then
+  /usr/bin/printf 'PASS: AC-E007-L1: block-log record carries the denied path and its cause\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-E007-L1: block-log lost the evidence (exit=%s lines %s -> %s)\n  tail: %s\n' \
+    "$_bl_exit" "$_bl_before" "$_bl_after" "$_bl_tail"; FAIL=$((FAIL + 1))
+fi
+
 # ----- Raw network tools (BLOCK-EGRESS-008/009/010/011) -----
 
 echo ""

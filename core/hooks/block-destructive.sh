@@ -34,14 +34,64 @@ readonly PRIMARY_ROOT="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"
 readonly SCRIPT_ALLOWLIST="${HOOK_DIR}/../script-execution-allowlist.txt"
 
 # --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
-# Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
-# `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
-# NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
+# Two properties this guard must have that the prior shape did not (#5071, ADR-136):
+#
+#  1. A helper whose top level runs `exit 0` is SYNTACTICALLY VALID and terminates this
+#     hook from inside the guard's own condition — before the guard can rule. `bash -n`
+#     cannot see it: that is a syntax check and the syntax is fine. So the helper is
+#     first evaluated OUT OF PROCESS, in a command-substitution subshell where its exit
+#     kills the child and not this hook. It must ATTEST: the token below is printed by
+#     THIS file, as the last term of the chain, and is therefore reachable only if
+#     control RETURNED from the source. The helper's own stdout is discarded during the
+#     source, so it cannot forge the token.
+#  2. The real, in-process source still has to happen (the hook needs these as functions
+#     in its own shell), and a helper swapped between the probe and that source could
+#     still exit. The EXIT trap below is armed BEFORE it and disarmed only once the
+#     contract is proven, so ANY premature termination of this region lands on deny.
+#     It writes to fd 9 — a saved copy of stderr — because when a sourced file exits,
+#     the `2>/dev/null` on the source is still in effect and would swallow the message.
+#
+# Readability is still tested BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a
+# failed `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2)
+# is NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
+#
+# The expected contract value is captured `readonly` ABOVE any source: a sourced file
+# cannot overwrite a readonly (ADR-130 D3 — the control is immutability, not ordering).
+readonly DEP_LIB_CONTRACT="dep-resolve/v1"
+exec 9>&2
+DEP_GUARD_VERDICT="pending"
+trap 'if [ "${DEP_GUARD_VERDICT:-pending}" = "pending" ]; then
+        "$PRINTF" "[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh terminated this hook instead of satisfying the %s contract. Reinstall the hook bundle from your own terminal: bash docs/scripts/setup-workspace.sh (CLAUDE_HOOK_BYPASS does not clear this block).\n" "$HOOK_NAME" "$DEP_LIB_CONTRACT" >&9
+        exit 2
+      fi' EXIT
+
+# Out-of-process contract attestation. Never sources into this shell.
+dep_lib_attests() {
+  [ "$( { . "$DEP_LIB" >/dev/null 2>&1 \
+          && [ "${DEP_RESOLVE_CONTRACT:-}" = "$DEP_LIB_CONTRACT" ] \
+          && command -v resolve_jq              >/dev/null 2>&1 \
+          && command -v resolve_python3         >/dev/null 2>&1 \
+          && command -v deny_missing_dep        >/dev/null 2>&1 \
+          && command -v deny_missing_primitive  >/dev/null 2>&1 \
+          && "$PRINTF" '%s' "$DEP_LIB_CONTRACT" ; } 2>/dev/null || true )" \
+    = "$DEP_LIB_CONTRACT" ]
+}
+readonly -f dep_lib_attests 2>/dev/null || true
+
 readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
-if [ ! -r "$DEP_LIB" ] || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1; then
+if [ ! -r "$DEP_LIB" ] \
+   || ! dep_lib_attests \
+   || ! . "$DEP_LIB" 2>/dev/null \
+   || [ "${DEP_RESOLVE_CONTRACT:-}" != "$DEP_LIB_CONTRACT" ] \
+   || ! command -v resolve_jq >/dev/null 2>&1 \
+   || ! command -v deny_missing_dep >/dev/null 2>&1; then
+  DEP_GUARD_VERDICT="denied"
   "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
   exit 2
 fi
+DEP_GUARD_VERDICT="passed"
+trap - EXIT
+exec 9>&-
 JQ="$(resolve_jq)"; readonly JQ
 
 # --- ABSOLUTE-PATH-AWARE ANCHORS ---
@@ -101,7 +151,8 @@ if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
 fi
 
 # --- Master-activation gate (#310) — layer 2, AFTER CLAUDE_HOOK_BYPASS and BEFORE the
-# .mode read. CLASS=security (D-R9): master-OFF NEVER makes this hook inert — the
+# SCOPE gate. (There is no `.mode` read in this hook; see the scope-gate comment
+# below.) CLASS=security (D-R9): master-OFF NEVER makes this hook inert — the
 # security/floor class always enforces (public-surface security is paramount; a silently
 # disabled guard -> an IRREVERSIBLE leaked commit/PR). It goes inert ONLY on the operator's
 # explicit, logged security_class_master_optout=true. Fail-toward-current-behavior: a
@@ -130,7 +181,17 @@ TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
 CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
 
 # --- Workspace-scope gate (#4436) — layer 3, AFTER the master-activation gate and
-# BEFORE the .mode / rule path. Precedence: bypass -> master -> SCOPE -> .mode -> rule.
+# BEFORE the rule path. Precedence AS IMPLEMENTED IN THIS FILE:
+#   dependency guard -> bypass -> master -> SCOPE -> rule
+# This hook is MODE-INDEPENDENT: there is no `.mode` layer. It declares no MODE_FILE and
+# reads no mode file of any name — it is one of the three always-enforce hooks, and that
+# unconditional posture is the basis on which the mode-capable cohort was permitted to
+# degrade (ADR-130 D4). The chain above previously read `... SCOPE -> .mode -> rule`,
+# which advertised a warn dial this hook has never had — on precisely the hooks whose
+# tightenings land hardest at deploy. A reader planning a rollback for a change to this
+# file could reasonably have concluded a mode flip was available; it is not. The coverage
+# boundary is stated at core/rules/bypass-mode-readiness/block-destructive.md, condition
+# (4), and canonically at core/standards/subagent-security-posture.md section 3.1.
 # The PreToolUse wiring is re-homed out of workspace-project scope so repo- and
 # worktree-rooted sessions resolve it at all; this bounds that reach to the governed
 # workspace root, so hooks do not begin firing in unrelated repositories. The fail
@@ -229,6 +290,177 @@ check_script_target() {
       "subprocess script execution not in allowlist: $path (Red Team C1 — script-laundering mitigation)." \
       "add to .claude/script-execution-allowlist.txt (glob patterns supported), or set CLAUDE_HOOK_BYPASS=1"
   fi
+}
+
+# --------------------------------------------------------------------------
+# Cumulative quote tracking for the BLOCK-DESTRUCTIVE-022 segment loop.
+#
+# The -022 matcher is LEXICAL: it splits raw argv on `;`, `&`, `|` and newline.
+# A separator inside a QUOTED ARGUMENT is therefore a spurious split, and the
+# fragments either side of it look exactly like commands. Deciding which
+# fragments are real requires knowing, for each segment, whether it BEGINS
+# inside a quote that opened earlier — which is a property of the whole command,
+# not of the segment. Per-segment quote PARITY cannot answer it: `--msg "it's"`
+# is ordinary well-formed shell whose segment carries one `'`, and a program
+# string like `bash -c 'a; bash x.sh'` puts a REAL command in an odd-parity
+# fragment. Parity conflates "inside a quoted argument" with "contains an odd
+# number of quote characters"; only a carried state distinguishes them.
+#
+# script_qstate is that state: 0 outside any quote, 1 inside '...', 2 inside
+# "...", 3 inside $'...'. Shell quoting rules are honoured rather than
+# approximated, because each approximation fails toward OVER-reporting "inside a
+# quote", which is the fail-OPEN direction for the caller:
+#   - inside '...' nothing is special but the closing `'` (no escapes at all);
+#   - inside "..." a backslash escapes the next character, so `\"` does not close;
+#   - inside $'...' a backslash escapes the next character too, so `\'` does NOT
+#     close. This is a DIFFERENT construct from '...' and needs its own state:
+#     reading `$'it\'s'` under the '...' rule ends one quote out of phase and
+#     reports *inside* where bash is *outside*, which is exactly the fail-open
+#     direction this block exists to avoid;
+#   - outside quotes a backslash escapes the next character, so `\'` does not OPEN
+#     one. Without that rule `echo \'; bash <evil>.sh` would read as "inside a
+#     quote" and suppress a real execution.
+#
+# script_qtaint is a second, independent fact about the CURRENT double-quoted
+# run: whether the SHELL will evaluate something inside it. Quote state alone
+# cannot answer that. Inside "..." the shell performs parameter expansion,
+# command substitution and arithmetic expansion, so text there can be at command
+# position no matter which verb opened the quote — `echo "$(cd /x; bash <evil>.sh
+# --f)"` runs, and `echo` never gets a say. Every one of those expansions is
+# introduced by `$` or by a backtick and by nothing else, so seeing either one
+# inside an open double-quoted run marks the run EVALUATING for the rest of its
+# life. `\$` and `\`` do not count, and that falls out for free: the backslash is
+# searched in the same pass and wins by position, so it consumes the character
+# after it before the taint test is ever reached. '...' and $'...' perform no
+# expansion at all, so neither can be tainted.
+# --------------------------------------------------------------------------
+
+# Index of the earliest occurrence in $script_qt of any character in "$@".
+# Sets script_qi (-1 when none are present), script_qc (the character found) and
+# script_qpre (the text before it, which the caller needs to tell `'` from `$'`).
+# Searching for one literal character at a time keeps every pattern a quoted
+# expansion, so no bracket expression and no backslash escaping is involved.
+script_qnext() {
+  script_qi=-1
+  script_qc=""
+  script_qpre=""
+  local _ch _pre
+  for _ch in "$@"; do
+    _pre="${script_qt%%"$_ch"*}"
+    if [ "${#_pre}" -ne "${#script_qt}" ]; then
+      if [ "$script_qi" -lt 0 ] || [ "${#_pre}" -lt "$script_qi" ]; then
+        script_qi="${#_pre}"
+        script_qpre="$_pre"
+        script_qc="$_ch"
+      fi
+    fi
+  done
+}
+
+# Advance script_qstate across one segment. Separator characters were replaced by
+# newlines before splitting and neither they nor newlines are quote-significant,
+# so advancing segment by segment is equivalent to scanning the whole command.
+#
+# script_qwork bounds total work across the command. A pathological input (very
+# long, very many quote characters) would otherwise make this quadratic on a hook
+# that runs before every Bash call. On exceeding the cap the scan STOPS and
+# script_qbail latches, which forces the caller to suppress nothing at all for
+# the rest of the command — degradation lands on "adjudicate everything".
+script_qadvance() {
+  script_qt="$1"
+  local _pre
+  while [ -n "$script_qt" ]; do
+    if [ "$script_qwork" -ge 1000 ]; then
+      script_qbail=1
+      script_qstate=0
+      script_qtaint=0
+      return 0
+    fi
+    script_qwork=$(( script_qwork + 1 ))
+    if [ "$script_qstate" -eq 1 ]; then
+      script_qnext "$script_q1"
+      if [ "$script_qi" -lt 0 ]; then break; fi
+      script_qt="${script_qt:$(( script_qi + 1 ))}"
+      script_qstate=0
+    elif [ "$script_qstate" -eq 3 ]; then
+      # $'...': a backslash escapes the next character, `'` closes. Same shape as
+      # the double-quote scan with `'` as the terminator.
+      script_qnext "$script_bs" "$script_q1"
+      if [ "$script_qi" -lt 0 ]; then break; fi
+      script_qt="${script_qt:$(( script_qi + 1 ))}"
+      if [ "$script_qc" = "$script_bs" ]; then
+        script_qt="${script_qt:1}"
+      else
+        script_qstate=0
+      fi
+    elif [ "$script_qstate" -eq 2 ]; then
+      # `$` and the backtick are searched alongside the escape and the closing
+      # quote, in ONE pass, so an escaped `\$` or ``\` `` is consumed by the
+      # backslash branch and never taints.
+      script_qnext "$script_bs" "$script_q2" "$script_qd" "$script_qbt"
+      if [ "$script_qi" -lt 0 ]; then break; fi
+      script_qt="${script_qt:$(( script_qi + 1 ))}"
+      if [ "$script_qc" = "$script_bs" ]; then
+        script_qt="${script_qt:1}"
+      elif [ "$script_qc" = "$script_q2" ]; then
+        script_qstate=0
+        script_qtaint=0
+      else
+        script_qtaint=1
+      fi
+    else
+      script_qnext "$script_bs" "$script_q1" "$script_q2"
+      if [ "$script_qi" -lt 0 ]; then break; fi
+      _pre="$script_qpre"
+      script_qt="${script_qt:$(( script_qi + 1 ))}"
+      if [ "$script_qc" = "$script_bs" ]; then
+        script_qt="${script_qt:1}"
+      elif [ "$script_qc" = "$script_q1" ]; then
+        # A `'` directly preceded by `$` opens ANSI-C quoting, not a plain single
+        # quote. `\$'` cannot reach here: the backslash is earlier in the same
+        # search and consumes the `$` first.
+        script_qstate=1
+        case "$_pre" in
+          *"$script_qd") script_qstate=3 ;;
+        esac
+      else
+        script_qstate=2
+        script_qtaint=0
+      fi
+    fi
+  done
+  return 0
+}
+
+# Resolve the command word of a segment into script_head (empty when the segment
+# has none), using the POSIX 2.9.1 prefix walk the main loop uses: a simple
+# command is `prefix* word suffix*`, and a prefix is a variable assignment.
+# Shared so the carrier test and the verb test resolve command position the same
+# way — an assignment prefix must not change either answer.
+script_resolve_head() {
+  script_head=""
+  local _i
+  local -a _tok
+  set -f
+  # shellcheck disable=SC2206
+  _tok=( $1 )
+  set +f
+  _i=0
+  while [ "$_i" -lt "${#_tok[@]}" ]; do
+    case "${_tok[$_i]}" in
+      [A-Za-z_]*=*)
+        case "${_tok[$_i]%%=*}" in
+          *[!A-Za-z0-9_]*) break ;;
+        esac
+        _i=$(( _i + 1 ))
+        ;;
+      *) break ;;
+    esac
+  done
+  if [ "$_i" -lt "${#_tok[@]}" ]; then
+    script_head="${_tok[$_i]}"
+  fi
+  return 0
 }
 
 # ==========================================================================
@@ -414,8 +646,9 @@ case "$TOOL_NAME" in
 
     # BLOCK-DESTRUCTIVE-022 — bash/sh/zsh <path.sh> or source/. <path> not in allowlist
     #
-    # STRATEGY: segment first, then match. A single ERE cannot model shell grammar,
-    # and the prior single-pass pattern failed on three independent axes:
+    # STRATEGY: segment first, then match — for BOTH verbs, through ONE matcher.
+    # A single ERE cannot model shell grammar, and the prior single-pass pattern
+    # failed on five independent axes:
     #
     #   (a) the argument span `([^[:space:]]+[[:space:]]+)*` admitted `;`, `&`, and
     #       `|`, so several commands fused into ONE match. That forced a compensating
@@ -428,12 +661,24 @@ case "$TOOL_NAME" in
     #       invocation fell through to ALLOW without the allowlist being consulted.
     #   (c) a quoted path does not end in `.sh`, so `bash "x.sh"` likewise matched
     #       nothing and fell through to ALLOW.
+    #   (d) an assignment ahead of the verb moved the verb off index 0, so the whole
+    #       invocation was skipped — in BOTH directions, so it did not fail safe.
+    #       Closed by the command-position walk below.
+    #   (e) `source`/`.` ran through a SECOND, older mechanism — a `grep -oE` anchored
+    #       at line-start-or-separator, plus `head -1` — which carried (c) unfixed,
+    #       evaluated only the FIRST invocation on the line, and was evaded entirely
+    #       by (d) because its anchor could not admit a prefix at all. That mechanism
+    #       is deleted, not patched: keeping two matchers is what let the arms drift
+    #       apart, and patching would have required writing the fix twice.
     #
-    # Splitting on separators makes each segment a single command whose head token is
-    # at command position, so the FIRST non-flag operand is the script actually
-    # executed — which is what this rule always intended to adjudicate. Every segment
-    # is evaluated, not just the first, so a laundered second command cannot hide
-    # behind an allowlisted first one.
+    # Splitting on separators makes each segment a single command whose command word
+    # is resolvable, so the FIRST non-flag operand is the script actually executed —
+    # which is what this rule always intended to adjudicate. Every segment is
+    # evaluated, not just the first, so a laundered second command cannot hide behind
+    # an allowlisted first one. Both verbs share the command-position walk, the quote
+    # normalization and `check_script_target` as the single adjudicator; only the
+    # operand FILTER differs per verb, because an interpreter takes a script and
+    # `source` takes any file.
     #
     # Bash 3.2-safe throughout (macOS system bash): parameter expansion only, no
     # `tr`, no associative arrays, and the loop runs in the CURRENT shell (here-string,
@@ -443,9 +688,143 @@ case "$TOOL_NAME" in
     script_segments="${script_segments//&/$'\n'}"
     script_segments="${script_segments//|/$'\n'}"
 
+    # ---- Quoted-fragment suppression (per-opener attribution) ----
+    #
+    # This matcher is LEXICAL: it splits raw argv on separators. A separator and an
+    # interpreter appearing inside a QUOTED ARGUMENT are therefore shredded into
+    # fragments that look exactly like commands, and the rule fires on text that
+    # describes an execution rather than performing one. During this release alone
+    # the class fired three times across two hooks — twice on a quoted data string
+    # and once on a grep PATTERN — and the tightening above ENLARGES the surface,
+    # because every invocation is now adjudicated instead of only the first.
+    #
+    # THE DISCRIMINATOR. The question a fragment must answer is not "do my own
+    # quotes balance" but "am I interior to a quoted argument, and whose argument
+    # is it". Those differ, and the difference is the whole rule:
+    #
+    #   - `bash <x>.sh --msg "it's here"` is a REAL execution whose segment carries
+    #     ONE `'`. Odd parity, and it must block.
+    #   - `bash -c 'echo hi; bash <x>.sh'` puts a real command in the SECOND
+    #     fragment of a quoted program string. Odd parity there too, and it must
+    #     block, because `-c` EXECUTES that string — positions inside it are
+    #     command positions.
+    #   - `gh issue comment 1 --body 'note; bash <x>.sh'` is the false positive.
+    #     Also odd parity. Nothing runs.
+    #
+    # Parity cannot separate those three. Carried quote state can: a segment is
+    # interior to a quoted argument exactly when the state at its START is 1 or 2,
+    # and the argument belongs to the command that OPENED that quote — not to
+    # whichever command happens to head the line.
+    #
+    # THE INVARIANT, stated so a later editor can check an edit against it:
+    #
+    #   A suppression may fire only when the enclosing context PROVABLY CANNOT
+    #   cause the shell to evaluate the segment.
+    #
+    # Two independent conditions, and BOTH are necessary:
+    #
+    #  (1) The command that OPENED the quote cannot evaluate its argument. This is
+    #      the carrier test. It is what makes the `-c` case safe: the quote in
+    #      `bash -c '…'` is opened by `bash`, so no prefix in front of it —
+    #      `echo x; bash -c '…'` — can reattribute the program string to `echo`.
+    #  (2) The quoting construct itself performs no expansion. `'…'` and `$'…'`
+    #      perform none. `"…"` performs parameter expansion, command substitution
+    #      and arithmetic expansion, so a double-quoted run is suppressible only
+    #      while it is UNTAINTED — no `$` and no backtick seen since it opened.
+    #
+    # Condition (1) alone is what the previous two attempts checked, and it is not
+    # sufficient. Inside a double-quoted argument the SHELL evaluates `$( … )` and
+    # `` ` … ` `` BEFORE the carrier ever runs: `echo "$(cd /x; bash <evil>.sh --f)"`
+    # executes, and `echo` — which genuinely cannot evaluate its argument — is never
+    # asked. `$( )` does not PREFIX the inner command, it ENCLOSES it, and enclosure
+    # was not covered. Condition (2) closes that, and closes it by construct rather
+    # than by enumerating shapes: any expansion inside `"…"` needs a `$` or a
+    # backtick, so tainting on those two characters covers the whole class —
+    # `$( )`, `` ` ` ``, `$(( ))`, `${ }` and anything later added to the language.
+    #
+    # A segment whose start state is 0 still begins at COMMAND POSITION and is
+    # ALWAYS adjudicated. Unquoted `$( )`, backticks and `<( )` all land there, so
+    # they need no separate rule.
+    #
+    # HEREDOCS ARE NOT MODELLED, so suppression is switched off entirely for any
+    # command containing `<<`. A heredoc BODY line is not a command line, but the
+    # matcher splits on newlines and cannot tell the difference: a body line that
+    # opens a quote poisons the carried state, and a real execution after the
+    # terminator is then read as interior to it. Declining to suppress is the
+    # fail-closed answer to "this construct is outside the model"; the cost is that
+    # `<<`-bearing commands keep the false positive.
+    #
+    # Suppression stays gated on an ALLOWLIST of command words that cannot evaluate
+    # their arguments. The direction of that choice is deliberate: an entry MISSING
+    # from this set means a false positive persists — it can never mean an evasion
+    # is admitted. A denylist of evaluating verbs would invert the failure
+    # direction, because one missed verb silently allows a real execution, and a
+    # fail-open surface inside a fail-closed control is not an acceptable trade for
+    # an availability fix.
+    #
+    # `git` is NOT in the set, though it reads like a natural member. `git -c
+    # alias.x='!<cmd>' x` evaluates its own quoted argument, so it fails the set's
+    # stated membership criterion; keeping it would leave exactly the fail-open this
+    # block exists to avoid. Membership is the property to re-check when editing.
+    script_q1="'"
+    script_q2='"'
+    script_bs='\'
+    script_qd='$'
+    script_qbt='`'
+    script_qstate=0
+    script_qwork=0
+    script_qbail=0
+    script_qtaint=0
+    script_carrier=0
+    script_head=""
+
+    # Heredocs are outside the model — see THE INVARIANT above. Latch suppression
+    # off for the whole command rather than reason about a body line. This reuses
+    # script_qbail, whose meaning is already "stop vouching for anything".
+    case "$COMMAND" in
+      *'<<'*) script_qbail=1 ;;
+    esac
+
     while IFS= read -r script_seg; do
+      # Quote state at the START of this segment, carried in from everything before
+      # it. Captured BEFORE the segment is scanned, because a segment that opens a
+      # quote is itself still at command position. The taint is captured with it:
+      # both describe the context this segment SITS IN, not the one it creates.
+      script_segstart="$script_qstate"
+      script_segtaint="$script_qtaint"
+
       # trim leading whitespace (leaves the head token at index 0)
       script_seg="${script_seg#"${script_seg%%[![:space:]]*}"}"
+
+      # Advance the carried state over this segment BEFORE any `continue` below —
+      # an empty or suppressed segment still contributes its quote characters, and
+      # losing them would desynchronise every segment that follows.
+      script_qadvance "$script_seg"
+
+      if [ "$script_segstart" -eq 0 ]; then
+        # Command position: this segment follows a separator that was OUTSIDE any
+        # quote, so it is a real command, never a fragment. Re-resolve the carrier
+        # here — this is what attributes a quote to the command that opens it. An
+        # empty segment yields an empty head and therefore carrier 0, which is the
+        # fail-closed answer for "no command word to vouch for what follows".
+        script_resolve_head "$script_seg"
+        script_carrier=0
+        if [ "$script_qbail" -eq 0 ]; then
+          case "${script_head##*/}" in
+            gh|printf|echo|jq) script_carrier=1 ;;
+          esac
+        fi
+      elif [ "$script_carrier" -eq 1 ]; then
+        # Interior to a quoted argument of a command that cannot evaluate it —
+        # condition (1). Condition (2) is the construct test: `'…'` (state 1) and
+        # `$'…'` (state 3) expand nothing, so they are inert unconditionally; a
+        # double-quoted run (state 2) is inert only while untainted.
+        case "$script_segstart" in
+          1|3) continue ;;
+          2) if [ "$script_segtaint" -eq 0 ]; then continue; fi ;;
+        esac
+      fi
+
       [ -n "$script_seg" ] || continue
 
       # tokenize on whitespace with globbing OFF, so a literal `*` in the command
@@ -456,23 +835,70 @@ case "$TOOL_NAME" in
       set +f
       [ "${#script_tokens[@]}" -ge 2 ] || continue
 
-      # interpreter at command position. Basename match subsumes every absolute
-      # form (/bin/bash, /usr/local/bin/zsh, ...) that ANCHOR_PREFIX_BASH enumerated
+      # Resolve COMMAND POSITION before reading the verb. POSIX Shell Command
+      # Language 2.9.1 defines a simple command as `prefix* word suffix*`, where a
+      # prefix is a variable assignment (or redirection) and the command word is the
+      # FIRST token that is not one. Walking the assignment run resolves command
+      # position the way the shell resolves it, instead of assuming index 0.
+      #
+      # Without this the verdict flips on a token that does not change the operation:
+      # an assignment ahead of the verb presented that assignment as the head token,
+      # matched no verb, and was never adjudicated — in BOTH directions, so it did
+      # not even fail safe.
+      #
+      # A token is a prefix assignment IFF it contains `=` AND its NAME part
+      # (everything before the FIRST `=`) is a valid shell name. Anything else
+      # TERMINATES the run and is the command word — so `a-b=1` and `--body=x` both
+      # stop the walk, and the skip cannot degrade into a general "advance past any
+      # token containing `=`". The two tests are ordered: `${tok%%=*}` returns the
+      # whole token when there is no `=`, so the pattern test must gate it.
+      #
+      # NOT skipped, by construction: `env`, `command`, `exec`, `nohup`, `timeout`,
+      # `xargs`, `eval`. Under the same grammar their head token IS a real command
+      # word, not a prefix. Covering them requires a denylist of evaluating verbs,
+      # and a denylist inside a fail-closed control is itself a fail-open surface
+      # (miss one and the evasion is silent). Deliberate, recorded residual.
+      script_hidx=0
+      while [ "$script_hidx" -lt "${#script_tokens[@]}" ]; do
+        case "${script_tokens[$script_hidx]}" in
+          [A-Za-z_]*=*)
+            case "${script_tokens[$script_hidx]%%=*}" in
+              *[!A-Za-z0-9_]*) break ;;
+            esac
+            script_hidx=$(( script_hidx + 1 ))
+            ;;
+          *) break ;;
+        esac
+      done
+      # need a verb AND at least one operand after it
+      [ $(( script_hidx + 1 )) -lt "${#script_tokens[@]}" ] || continue
+
+      # Verb at command position. Basename match subsumes every absolute form
+      # (/bin/bash, /usr/local/bin/zsh, /bin/.) that ANCHOR_PREFIX_BASH enumerated
       # explicitly, and is strictly tighter: an unlisted prefix no longer evades.
-      case "${script_tokens[0]##*/}" in
-        bash|sh|zsh) ;;
+      # `source`/`.` are adjudicated HERE rather than by a second mechanism —
+      # sourcing executes the file's contents in the current shell, which is the
+      # same execution capability the interpreter arm guards, not a lesser one.
+      script_verb=""
+      case "${script_tokens[$script_hidx]##*/}" in
+        bash|sh|zsh) script_verb="interp" ;;
+        source|.)    script_verb="source" ;;
         *) continue ;;
       esac
 
-      # walk past interpreter flags to the first operand. `-c` takes a program
-      # STRING rather than a path, so every .sh-bearing token after it is a
-      # candidate instead of just one.
-      script_idx=1
+      # walk past flags to the first operand. `-c` takes a program STRING rather
+      # than a path, so every .sh-bearing token after it is a candidate instead of
+      # just one — and `-c` is meaningless for `source`, so cmode is gated on the
+      # interpreter verb. Walking `-*` on the source arm is strictly TIGHTER than
+      # not walking it: otherwise `. -x <path>` presents `-x` as the operand.
+      script_idx=$(( script_hidx + 1 ))
       script_cmode=0
       while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
         case "${script_tokens[$script_idx]}" in
           --) script_idx=$(( script_idx + 1 )); break ;;
-          -c) script_cmode=1; script_idx=$(( script_idx + 1 )); break ;;
+          -c)
+            if [ "$script_verb" = "interp" ]; then script_cmode=1; fi
+            script_idx=$(( script_idx + 1 )); break ;;
           -*) script_idx=$(( script_idx + 1 )) ;;
           *) break ;;
         esac
@@ -488,28 +914,26 @@ case "$TOOL_NAME" in
           script_idx=$(( script_idx + 1 ))
         done
       else
+        # normalize BEFORE the filter on both verbs — a quoted path does not end in
+        # `.sh` and does not start with `/`, so an unstripped quote matches no
+        # pattern and falls through to ALLOW without the allowlist being consulted.
         script_cand="$(normalize_script_token "${script_tokens[$script_idx]}")"
-        case "$script_cand" in
-          *.sh) check_script_target "$script_cand" ;;
-        esac
+        if [ "$script_verb" = "source" ]; then
+          # `source`/`.` take ANY file, not only a script suffix. This filter is
+          # preserved verbatim from the mechanism it replaces. Do NOT unify it with
+          # the interpreter arm's `*.sh`: narrowing silently drops `/*`, `~/*` and
+          # `*.bash` coverage, and widening the interpreter arm to `/*` opens a
+          # false-positive surface with no defect behind it.
+          case "$script_cand" in
+            /*|./*|../*|~/*|*.sh|*.bash) check_script_target "$script_cand" ;;
+          esac
+        else
+          case "$script_cand" in
+            *.sh) check_script_target "$script_cand" ;;
+          esac
+        fi
       fi
     done <<< "$script_segments"
-
-    # Also detect source/. with explicit file argument
-    source_invocation="$("$PRINTF" '%s' "$COMMAND" | "$GREP" -oE "${ANCHOR_PREFIX_BASH}"'(source|\.)[[:space:]]+[^[:space:];&|]+' | head -1 || true)"
-    if [ -n "$source_invocation" ]; then
-      sourced_path="$("$PRINTF" '%s' "$source_invocation" | "$GREP" -oE '[^[:space:]]+$' || true)"
-      # Only block paths that look like files (contain / or start with ~ or end with common extensions)
-      case "$sourced_path" in
-        /*|./*|../*|~/*|*.sh|*.bash)
-          if ! is_script_allowlisted "$sourced_path"; then
-            block "BLOCK-DESTRUCTIVE-022" \
-              "source/. of script not in allowlist: $sourced_path" \
-              "add to .claude/script-execution-allowlist.txt, or set CLAUDE_HOOK_BYPASS=1"
-          fi
-          ;;
-      esac
-    fi
 
     # No Bash rule matched — allow
     exit 0
