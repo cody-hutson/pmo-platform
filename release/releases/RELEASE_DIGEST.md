@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.31 (2026-08-16) — Security controls now judge what a command does, not how it is written
+
 ### v4.30 (2026-08-15) — Six release safeguards that never checked anything now do — and can fail
 
 ### v4.29 (2026-08-15) — Checks now tell you when they could not measure
