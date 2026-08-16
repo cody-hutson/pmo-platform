@@ -26,6 +26,19 @@
 #   4. deny_missing_dep is the single fail-closed exit (exit 2) with an actionable
 #      message. Callers MUST invoke it (or an equivalent exit 2) when resolution fails
 #      — never fall through to `exit 0`.
+#   5. This file MUST stay side-effect-free at its top level. It is evaluated TWICE per
+#      hook invocation — once out of process for attestation, once in process for real
+#      (see the CONTRACT TOKEN block below). A top-level side effect would run twice,
+#      and a top-level `exit` is precisely the corruption the attestation exists to
+#      detect. Definitions and the contract assignment only.
+
+# CONTRACT TOKEN (#5071 / ADR-136). Every carrier captures this value `readonly` BEFORE
+# sourcing this file and requires it back afterwards, so a truncated, empty, stale or
+# self-exiting copy cannot pass. Bump `vN` ONLY on a breaking contract change (a resolve_*
+# / deny_* signature or semantic change) and edit every carrier in the SAME commit —
+# check-hook-dep-hardening.sh CHECK-6 fails the build if they disagree. A non-breaking
+# edit does NOT bump it.
+DEP_RESOLVE_CONTRACT="dep-resolve/v1"
 
 # _dr_resolve_tool CANDIDATE...  — echo the best candidate path (root-owned first,
 # else first executable of any owner), or nothing. Never exits.

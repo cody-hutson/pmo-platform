@@ -11,6 +11,35 @@
 #   - For curl/wget: match the host portion of the URL (e.g., api.github.com)
 #   - For gh api: match the path (e.g., repos/[OPERATOR_GITHUB]/pmo-platform/issues*)
 #
+# What a gh-api path pattern is matched AGAINST (BLOCK-EGRESS-007):
+#   - The RESOLVED, UNQUOTED path. The matcher consumes quote marks while
+#     tokenizing, so `gh api "<path>"`, `gh api '<path>'` and `gh api <path>` all
+#     produce the same token and therefore the same verdict. Do NOT add a quoted
+#     spelling of a pattern — it can never match.
+#   - The path is located by walking flags, so it is found wherever it sits in the
+#     command line: `gh api -X POST <path>` and `gh api <path> -X POST` are
+#     equivalent. A value-taking flag's VALUE is never mistaken for the path.
+#   - EVERY gh-api invocation in a command is matched, not just the first, and a
+#     write is matched wherever it sits in the command — inside a loop body, a
+#     subshell, a command substitution, or behind a `VAR=x` prefix.
+#
+# PREFIX-ANCHORING INVARIANT — keep this true when adding a path pattern.
+#   Every gh-api path pattern must fix its AUTHORITY — the first three path
+#   segments (`repos/<owner>/<repo>`, `orgs/<org>`, `users/<user>`) — LITERALLY.
+#   Those three segments decide which repository a write reaches, and -007 relies
+#   on them being literal: content BELOW the authority that the hook cannot
+#   evaluate (a `$VAR`, a `{placeholder}`) is wildcard-normalized and adjudicated
+#   normally, which is only sound because the literal prefix pins the target.
+#   A pattern that wildcards into the authority would let an unevaluable path match
+#   a repository nobody adjudicated.
+#
+#   A path whose AUTHORITY itself is unresolvable — `repos/{owner}/{repo}/...`,
+#   `repos/:owner/...`, `repos/$OWNER/...` — is DENIED with its own cause, and NO
+#   allowlist entry can change that. gh resolves those placeholders at execution
+#   time from the environment, a default-repo setting, or the current remote, none
+#   of which the hook can see. The fix is to spell the owner and repository out in
+#   the command, not to add a row here.
+#
 # Add custom entries to the OPERATOR ADDITIONS section at runtime, or run:
 #   ./.claude/hooks/allowlist-add.sh .claude/egress-allowlist.txt '<pattern>'
 #

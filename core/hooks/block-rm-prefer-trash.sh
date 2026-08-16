@@ -42,14 +42,64 @@ readonly BYPASS_LOG="${HOOK_DIR}/bypass-log.jsonl"
 readonly WORKSPACE_ROOT="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"
 
 # --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
-# Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
-# `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
-# NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
+# Two properties this guard must have that the prior shape did not (#5071, ADR-136):
+#
+#  1. A helper whose top level runs `exit 0` is SYNTACTICALLY VALID and terminates this
+#     hook from inside the guard's own condition — before the guard can rule. `bash -n`
+#     cannot see it: that is a syntax check and the syntax is fine. So the helper is
+#     first evaluated OUT OF PROCESS, in a command-substitution subshell where its exit
+#     kills the child and not this hook. It must ATTEST: the token below is printed by
+#     THIS file, as the last term of the chain, and is therefore reachable only if
+#     control RETURNED from the source. The helper's own stdout is discarded during the
+#     source, so it cannot forge the token.
+#  2. The real, in-process source still has to happen (the hook needs these as functions
+#     in its own shell), and a helper swapped between the probe and that source could
+#     still exit. The EXIT trap below is armed BEFORE it and disarmed only once the
+#     contract is proven, so ANY premature termination of this region lands on deny.
+#     It writes to fd 9 — a saved copy of stderr — because when a sourced file exits,
+#     the `2>/dev/null` on the source is still in effect and would swallow the message.
+#
+# Readability is still tested BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a
+# failed `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2)
+# is NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
+#
+# The expected contract value is captured `readonly` ABOVE any source: a sourced file
+# cannot overwrite a readonly (ADR-130 D3 — the control is immutability, not ordering).
+readonly DEP_LIB_CONTRACT="dep-resolve/v1"
+exec 9>&2
+DEP_GUARD_VERDICT="pending"
+trap 'if [ "${DEP_GUARD_VERDICT:-pending}" = "pending" ]; then
+        "$PRINTF" "[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh terminated this hook instead of satisfying the %s contract. Reinstall the hook bundle from your own terminal: bash docs/scripts/setup-workspace.sh (CLAUDE_HOOK_BYPASS does not clear this block).\n" "$HOOK_NAME" "$DEP_LIB_CONTRACT" >&9
+        exit 2
+      fi' EXIT
+
+# Out-of-process contract attestation. Never sources into this shell.
+dep_lib_attests() {
+  [ "$( { . "$DEP_LIB" >/dev/null 2>&1 \
+          && [ "${DEP_RESOLVE_CONTRACT:-}" = "$DEP_LIB_CONTRACT" ] \
+          && command -v resolve_jq              >/dev/null 2>&1 \
+          && command -v resolve_python3         >/dev/null 2>&1 \
+          && command -v deny_missing_dep        >/dev/null 2>&1 \
+          && command -v deny_missing_primitive  >/dev/null 2>&1 \
+          && "$PRINTF" '%s' "$DEP_LIB_CONTRACT" ; } 2>/dev/null || true )" \
+    = "$DEP_LIB_CONTRACT" ]
+}
+readonly -f dep_lib_attests 2>/dev/null || true
+
 readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
-if [ ! -r "$DEP_LIB" ] || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1; then
+if [ ! -r "$DEP_LIB" ] \
+   || ! dep_lib_attests \
+   || ! . "$DEP_LIB" 2>/dev/null \
+   || [ "${DEP_RESOLVE_CONTRACT:-}" != "$DEP_LIB_CONTRACT" ] \
+   || ! command -v resolve_jq >/dev/null 2>&1 \
+   || ! command -v deny_missing_dep >/dev/null 2>&1; then
+  DEP_GUARD_VERDICT="denied"
   "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
   exit 2
 fi
+DEP_GUARD_VERDICT="passed"
+trap - EXIT
+exec 9>&-
 JQ="$(resolve_jq)"; readonly JQ
 
 # --- ABSOLUTE-PATH-AWARE ANCHOR ---
@@ -103,7 +153,7 @@ if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
 fi
 
 # --- Master-activation gate (#310) — layer 2, AFTER CLAUDE_HOOK_BYPASS and BEFORE the
-# .mode read. CLASS=security (D-R9): master-OFF NEVER makes this hook inert — the
+# rule path. CLASS=security (D-R9): master-OFF NEVER makes this hook inert — the
 # security/floor class always enforces (public-surface security is paramount; a silently
 # disabled guard -> an IRREVERSIBLE leaked commit/PR). It goes inert ONLY on the operator's
 # explicit, logged security_class_master_optout=true. Fail-toward-current-behavior: a
@@ -131,7 +181,14 @@ TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
 CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
 
 # --- Workspace-scope gate (#4436) — layer 3, AFTER the master-activation gate and
-# BEFORE the rule path. Precedence: bypass -> master -> SCOPE -> .mode -> rule.
+# BEFORE the rule path. Precedence AS IMPLEMENTED IN THIS FILE:
+#   dependency guard -> bypass -> master -> SCOPE -> rule
+# This hook is MODE-INDEPENDENT: there is no `.mode` layer. It declares no MODE_FILE and
+# reads no mode file of any name — it is one of the three always-enforce hooks, and that
+# unconditional posture is the basis on which the mode-capable cohort was permitted to
+# degrade (ADR-130 D4). check-hook-dep-hardening.sh CHECK-4 goes red if a mode reference
+# appears in the dependency-guard block. Note also that the dependency guard is the FIRST
+# gate, ahead of bypass: CLAUDE_HOOK_BYPASS cannot clear a LIB-MISSING block.
 # Inverted fail direction on the cwd axis, NOT on the lib axis. See lib/scope-guard.sh. ---
 readonly SCOPE_GUARD_LIB="${HOOK_DIR}/lib/scope-guard.sh"
 if [ -r "$SCOPE_GUARD_LIB" ]; then . "$SCOPE_GUARD_LIB" 2>/dev/null || true; fi
