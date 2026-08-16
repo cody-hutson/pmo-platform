@@ -244,6 +244,7 @@ Promote `components` to controlled vocabulary if drift bites within 5 post-cutov
 - `type:` value matches one of the 5 enum values.
 - `version:` matches the parent Milestone exactly.
 - `links.log_anchor` resolves to an existing fragment in `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`.
+- `links.plan` resolves to an existing file under `release/releases/plans/`. The plan's home is whichever of the documented dispositions applies (see `release/releases/plans/README.md` § Disposition rule); this criterion asserts only that the value names a file that is there. A `null` value is permitted and asserts nothing; an absent `links.plan` is a missing-required-field finding under the rule above, not a resolution finding.
 
 ### Tier 2 — Cross-reference symmetry (bidirectional)
 
@@ -267,6 +268,8 @@ A Python validator at `core/deploy/tools/lint_release_corpus.py` (authored along
 | Type mismatch (filename vs. `type:`) | Validator flags `TYPE MISMATCH: filename suggests <X>, type: declares <Y>` | Tier 3 discriminator coherence | Correct `type:` OR rename file |
 | Asymmetric cross-link | Validator flags `ASYMMETRIC: plan_X→note_Y but note_Y→plan_Z` | Tier 2 symmetry round-trip | Update `links.plan` or `links.note` to restore bidirectional path |
 | log_anchor unresolved | Validator flags `LOG ANCHOR MISSING: #<slug> not found in RELEASE_LOG.md` | Tier 1 anchor resolution | Either add the LOG row OR correct the anchor slug |
+| `links.plan` unresolved | Validator flags `NOTE-PLAN-LINK-UNRESOLVED: <note> links.plan -> '<value>' does not resolve` | Tier 1 plan resolution, inside the note-content check so every caller reaches it | Correct the pointer to the plan's actual home, OR relocate the plan to the home the pointer names |
+| `links.plan` unreadable | Validator flags `NOTE-PLAN-LINK-NO-FRONTMATTER: <note> …` — the file does not open with a `---` fence on line 1, so the value could not be read and the pointer is UNVERIFIED rather than clean | Tier 1 presence check | Move any leading marker comment below the frontmatter block, so the fence opens the file |
 | Frontmatter absent (forward-only file) | Validator flags `NO FRONTMATTER: file is post-cutover but lacks `---` block` | Tier 1 presence check | Add frontmatter per spec |
 | Frontmatter present on pre-cutover file | No-op — schema is forward-only; pre-cutover files exempt | N/A | N/A — backfill via F-3 backfill executes |
 

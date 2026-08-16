@@ -29,6 +29,7 @@
 #   8.5 append_reversions   append re-version row(s) to RELEASE_REVERSIONS.md (#1679; N/A on the common no-collision path)
 #   9  scaffold_release_notes  frontmatter + section H2 placeholders (SCAFFOLD-ONLY)
 #   9.2 lint_release_notes  §3.2 note-content close gate — a finding for THIS version BLOCKS close
+#   9.3 lint_plan_identity  ADR-092 plan-file identity/placement close gate — a finding for THIS version BLOCKS close (SKIP version-less)
 #   9.5 append_changelog   prepend ## [vX.Y] section to CHANGELOG.md (Layer-1 dual-write Surface 2)
 #   9.55 assert_derived_surfaces  version-scoped scaffold-residue assert on the CHANGELOG + DIGEST entries for THIS version (read-only)
 #   9.6 bump_version       write .version=$VERSION (versioned releases; SKIP version-less)
@@ -679,6 +680,133 @@ notes_rel_path() {
 notes_abs_path() {
   local rel; rel="$(notes_rel_path)"
   printf '%s/%s' "$RELEASE_NOTES_DIR" "${rel#notes/}"
+}
+
+# ─── The release's PLAN file — selected by EXISTENCE, never by layout ─────────
+#
+# The plans-corpus analogue of notes_rel_path()/notes_abs_path() above, and the
+# same defect one corpus over. Three emitters below (the scaffolded note's
+# links.plan frontmatter, the chore-PR body's Cross-references block, and the D-1
+# issue-close comment) each retyped release/releases/plans/<VERSION>_RELEASE_PLAN.md
+# — a FOURTH form matching none of the homes the corpus actually uses — so every
+# close-out minted a plan pointer that dangled on arrival. One resolver, one rule,
+# no site left behind.
+#
+# This function AUTHORS no layout — it PROBES one. It walks the homes
+# release/releases/plans/README.md § Disposition rule already documents, in that
+# rule's own order, and returns the first that EXISTS. Because existence IS the
+# selection criterion it structurally cannot emit a path that is not there; a
+# future corpus-layout change degrades to a loud "unresolved" rather than to a
+# silently wrong pointer. release/tools/claim-version.sh remains the sole
+# WRITE-SIDE hardcoder of the versioned home (search it for `plans/v${vM}`) and is
+# NOT modified here — one WRITER of the layout, and this side never writes it.
+#
+# WHAT THIS SIDE DOES HOLD. An earlier form of the line above claimed this side
+# "holds no layout literal at all", which was false on its own surface: the
+# resolver pair below carries a layout literal on 12 code lines — 10 in
+# plan_rel_path(), 2 in plan_rel_path_expected() — and the block enumerates five
+# layout forms a dozen lines further down. Re-derive rather than trust the
+# figure: grep the two function bodies for `_RELEASE_PLAN.md`. The distinction
+# that actually binds is READ-side versus WRITE-side, not literal-count: every
+# literal here is a probe guarded by existence, so a stale one resolves nothing
+# and says so, where a stale literal on the write side mints a pointer that
+# dangles on arrival. That asymmetry is the reason the two sides are allowed to
+# hold layout knowledge on different terms.
+#
+# FIVE candidates, not three, because the shipped corpus carries five structural
+# forms and a resolver blind to one of them turns a model gap into a dangling
+# pointer rather than a fallback:
+#
+#   1  v<MAJOR>/<VERSION>_RELEASE_PLAN.md    nested, version-named  rule 1 (ADR-092)
+#   2  v<MAJOR>/<SLUG>_RELEASE_PLAN.md       nested, slug-named     rule 1, rename never fired
+#   3  _unversioned/<SLUG>_RELEASE_PLAN.md   version-less           rule 2
+#   4  <SLUG>_RELEASE_PLAN.md                flat, slug-named       rule 0 (pre-claim / in flight)
+#   5  <VERSION>_RELEASE_PLAN.md             flat, version-named    rule 0 legacy
+#
+# Candidate 2 is not hypothetical and is the one a three-valued reading of the
+# disposition rule misses: the mainline carries plans nested under a major-version
+# folder whose basename is the milestone SLUG, not the version. They match no other
+# candidate. Candidate 5 is not vestigial either — v3-era notes point at flat
+# version-named plans that resolve today.
+#
+# Ordered rule-1-first so a correctly-claimed release binds its canonical home even
+# if a stale flat copy lingers, and so the order is an asserted property (see the
+# PL-* self-test arms) rather than an incidental one.
+#
+# Resolved off $RELEASE_PLANS_DIR, never a hardcoded root — exactly as
+# notes_abs_path() resolves off $RELEASE_NOTES_DIR and for the same stated reason:
+# so a self-test that sandboxes the plans dir is honored rather than silently
+# reading the live repository tree. The repo-relative prefix is DERIVED from
+# $RELEASE_PLANS_DIR rather than retyped, so there is no second expression of the
+# corpus root to drift.
+#
+# Contract: echoes the REPO-RELATIVE path of the first existing candidate and
+# returns 0; echoes NOTHING and returns 1 when no candidate exists. Pure query —
+# reads only, mutates nothing, no network.
+plan_rel_path() {
+  local slug="${STATE_MILESTONE_SLUG:-$VERSION}"
+  local root="${RELEASE_PLANS_DIR#"$REPO_ROOT"/}"
+  local vM=""
+  is_version_less || vM="$(extract_major "$VERSION")"
+
+  if [[ -n "$vM" ]]; then
+    if [[ -f "${RELEASE_PLANS_DIR}/${vM}/${VERSION}_RELEASE_PLAN.md" ]]; then
+      printf '%s/%s/%s_RELEASE_PLAN.md' "$root" "$vM" "$VERSION"; return 0
+    fi
+    if [[ "$slug" != "$VERSION" && -f "${RELEASE_PLANS_DIR}/${vM}/${slug}_RELEASE_PLAN.md" ]]; then
+      printf '%s/%s/%s_RELEASE_PLAN.md' "$root" "$vM" "$slug"; return 0
+    fi
+  fi
+  if [[ -f "${RELEASE_PLANS_DIR}/_unversioned/${slug}_RELEASE_PLAN.md" ]]; then
+    printf '%s/_unversioned/%s_RELEASE_PLAN.md' "$root" "$slug"; return 0
+  fi
+  if [[ -f "${RELEASE_PLANS_DIR}/${slug}_RELEASE_PLAN.md" ]]; then
+    printf '%s/%s_RELEASE_PLAN.md' "$root" "$slug"; return 0
+  fi
+  if [[ "$slug" != "$VERSION" && -f "${RELEASE_PLANS_DIR}/${VERSION}_RELEASE_PLAN.md" ]]; then
+    printf '%s/%s_RELEASE_PLAN.md' "$root" "$VERSION"; return 0
+  fi
+  return 1
+}
+
+# The canonical home this release's plan WOULD occupy — the annotation fallback,
+# never a resolution. Used only when plan_rel_path() finds nothing, so the emitted
+# artifact still says which home was expected instead of going blank.
+plan_rel_path_expected() {
+  local slug="${STATE_MILESTONE_SLUG:-$VERSION}"
+  local root="${RELEASE_PLANS_DIR#"$REPO_ROOT"/}"
+  if is_version_less; then
+    printf '%s/_unversioned/%s_RELEASE_PLAN.md' "$root" "$slug"
+  else
+    printf '%s/%s/%s_RELEASE_PLAN.md' "$root" "$(extract_major "$VERSION")" "$VERSION"
+  fi
+}
+
+# The value the three emitters WRITE — ONE producer for all three, which is what
+# makes "3 sites, 1 resolver" an asserted property (arm PL-8) rather than a
+# convention. When the plan resolves this is that path verbatim. When it does not,
+# it is the expected home carrying the literal ` (unresolved at close-out)` suffix
+# and the function returns 1, so the caller can additionally notice on stderr.
+#
+# ANNOTATE-AND-CONTINUE, not halt, and the choice is deliberate. Refusing to write
+# the note would put the FIRST failure path into phase_scaffold_release_notes —
+# a phase that today returns 0 on every branch and runs at position 12 of 38, after
+# the chore branch is cut and after the RELEASE_LOG DEPLOYED->VERIFIED transition
+# and seven further ledger writers. Pre-merge partial state is explicitly out of
+# scope in core/rules/../partial-deployment-recovery, so the abort would land in a
+# governed gap. It is also unnecessary: phase_lint_release_notes runs ONE phase
+# later and blocks the close on any finding naming this release's note, and the
+# corpus lint now emits exactly such a finding for an unresolved links.plan value
+# at or above the ADR-092 cutover. Same blocking outcome, no new abort point, and
+# the behaviour is identical across all three sites instead of asymmetric.
+plan_ref_for_emit() {
+  local p
+  if p="$(plan_rel_path)"; then
+    printf '%s' "$p"
+    return 0
+  fi
+  printf '%s (unresolved at close-out)' "$(plan_rel_path_expected)"
+  return 1
 }
 
 # The INDEX Version-cell label: version-less rows carry the "(version-less)" marker.
@@ -2815,6 +2943,15 @@ phase_scaffold_release_notes() {
   # fail the redirect outright. Idempotent and a no-op for the versioned path.
   /bin/mkdir -p "$(/usr/bin/dirname "$notes_path")"
 
+  # Resolve the plan pointer into a local BEFORE the heredoc. A non-zero return
+  # from inside an unquoted heredoc is invisible — the substitution simply expands
+  # to whatever was printed and the write proceeds — so the unresolved branch has
+  # to be observable out here to be noticeable at all.
+  local plan_ref
+  if ! plan_ref="$(plan_ref_for_emit)"; then
+    printf 'NOTICE: no plan file resolves for %s at any documented home (plans/v<MAJOR>/, plans/_unversioned/, plans/ — see release/releases/plans/README.md § Disposition rule); writing the expected home annotated as unresolved. The note-content lint blocks this close one phase later.\n' "$VERSION" >&2
+  fi
+
   /bin/cat > "$notes_path" <<EOF
 ---
 version: ${VERSION}
@@ -2823,7 +2960,7 @@ type: note
 issues: []
 pr: "#${PR_NUMBER}"
 links:
-  plan: release/releases/plans/${VERSION}_RELEASE_PLAN.md
+  plan: ${plan_ref}
   log_anchor: "#${STATE_MILESTONE_SLUG:-${VERSION}}"
 reversibility-tier: MODERATE
 themes: []
@@ -2949,6 +3086,113 @@ phase_lint_release_notes() {
   fi
 
   mark_phase "lint_release_notes" "PASS" "§3.2 note-content clean for ${VERSION}"
+  return 0
+}
+
+# ─── Phase 9.3: lint_plan_identity (ADR-092 plan-file identity close gate) ────
+#
+# WHY A DEDICATED PHASE RATHER THAN A LIMB INSIDE check_note_content(). Homing a
+# plan assertion inside the note-content check is reachable and INERT: Phase 9.2
+# blocks on `grep -F "$note_rel"`, a `release/releases/notes/…` needle, and a
+# finding naming a `release/releases/plans/…` path structurally cannot contain
+# it — so the caller takes its explicit "no finding for THIS version" PASS branch
+# and the close proceeds with the finding sitting unread in its own output.
+# Measured before this phase was written; the arms PI-6/PI-7 below re-assert it.
+# "Already blocking" is a property of a CALLER PLUS A PREDICATE, never of a
+# function. Recorded here so the co-location is not re-proposed.
+#
+# TWO NEEDLES, ORed, AND THE SECOND ONE IS NOT OPTIONAL. The obvious needle is
+# the plan's EXPECTED path. It reaches the placement limb — whose finding names
+# that path by construction — and it reaches the two identity sub-cases where the
+# offending file already sits there. It does NOT reach this card's canonical
+# defect: a plan NAMED FOR THE WRONG VERSION emits its ACTUAL path, which is by
+# definition not the expected one, and neither does PLAN-MAJOR-DIR-MISMATCH.
+# Measured: 2 of 5 identity findings reachable on the path needle alone. The
+# second needle is version-keyed and closes that gap directly, so the identity
+# limb has a blocking predicate of its own rather than depending on the placement
+# limb it absorbed. Arm PI-4 is the arm that distinguishes the two.
+#
+# ADVISORY LINES ARE FILTERED OUT BEFORE EITHER NEEDLE RUNS. The lint's plan
+# advisories legitimately carry `release/releases/plans/…` paths (unlike the note
+# advisories, which may not, per the lint's ADVISORY_PREFIX invariant 2). An
+# advisory is by definition not a blocking finding, so letting one reach the
+# needle would false-block a close on a known residual. Arm PI-8 asserts it.
+phase_lint_plan_identity() {
+  local lint_script="${REPO_ROOT}/core/deploy/tools/lint_release_corpus.py"
+
+  # A version-less release claims no concrete Version cell, so both limbs are
+  # structurally N/A. This branch is NOT where the version-less exclusion is
+  # obtained — that is the Version-cell SHAPE classification inside the lint's
+  # ledger parser, which is what makes the exclusion structural rather than a
+  # special case. It is also not reachable through --apply/--dry-run (main
+  # validates --version and dies first, per the REACHABILITY note above
+  # is_version_less); it is kept and driven by --self-test arm PI-5 for the same
+  # three reasons that note gives. The close gate for a version-less release is
+  # the event-bound Step 4 command, not this phase — see stage-13-close.md Phase
+  # A8.3, which binds plan-identity to the close EVENT across every close path.
+  if is_version_less; then
+    mark_phase "lint_plan_identity" "SKIP" "version-less release — no concrete Version cell to bind a plan filename to; the plan-identity close gate for this path is the Step 4 completion-verification command (stage-13-close.md Phase A8.3)"
+    return 0
+  fi
+
+  # The EXPECTED home, repo-root-relative — the form the lint prints. Derived
+  # from plan_rel_path_expected() rather than retyped, so this needle and the
+  # emitters cannot express two different layouts.
+  local plan_rel; plan_rel="$(plan_rel_path_expected)"
+  # The version-keyed needle. Dots are escaped so `v4.28` cannot match `v4028`,
+  # and both boundaries exclude digits and dots so `v4.2` does not match inside
+  # `v4.28` and `v4.28` does not match inside `v14.28`.
+  local v_esc; v_esc="$(printf '%s' "$VERSION" | /usr/bin/sed 's/\./\\./g')"
+  local ver_needle="^PLAN-[A-Z-]+:.*[^0-9.]${v_esc}([^0-9.]|\$)"
+
+  if [[ ! -f "$lint_script" ]]; then
+    mark_phase "lint_plan_identity" "FAIL" "lint tooling missing: ${lint_script} — cannot enforce the ADR-092 plan-identity close gate"
+    return 1
+  fi
+  if [[ ! -x "/usr/bin/python3" ]]; then
+    mark_phase "lint_plan_identity" "FAIL" "/usr/bin/python3 not executable; cannot run the plan-identity lint"
+    return 1
+  fi
+
+  local out exit_code=0
+  out="$(/usr/bin/python3 "$lint_script" --check plan-identity 2>&1)" || exit_code=$?
+
+  if [[ $exit_code -eq 3 ]]; then
+    # Both slices read `$out` from a HERE-STRING rather than through a pipe.
+    # `writer | head` is the SIGPIPE idiom: `head` stops reading at its line
+    # budget, the writer's next write fails on the closed pipe, and `pipefail`
+    # promotes THAT status to the pipeline's — so a successful slice can report
+    # failure. Removing the pipe removes the hazard outright; this is the same
+    # capture-then-read disposition 7b147ba0 applied to two claim-version
+    # assertions, not a gate exemption. Effect is unchanged: `head` still slices
+    # the same bytes, and a here-string is the safer writer besides (bash's
+    # `echo` would mangle an `$out` beginning `-n`/`-e`).
+    mark_phase "lint_plan_identity" "FAIL" "path-resolution failure (exit 3): $(/usr/bin/head -1 <<<"$out") — plan corpus unverifiable; close BLOCKED (fail-loud)"
+    /usr/bin/head -20 <<<"$out" >&2
+    return 1
+  fi
+
+  if [[ $exit_code -ne 0 ]]; then
+    local blocking v_findings
+    blocking="$(echo "$out" | /usr/bin/grep -v '^ADVISORY' || true)"
+    v_findings="$(echo "$blocking" | /usr/bin/grep -F "$plan_rel" || true)"
+    v_findings="${v_findings}$(echo "$blocking" | /usr/bin/grep -E "$ver_needle" || true)"
+    if [[ -n "$v_findings" ]]; then
+      mark_phase "lint_plan_identity" "FAIL" "ADR-092 plan-identity finding(s) for ${VERSION} — close BLOCKED (the release plan's filename or its nested home disagrees with the RELEASE_LOG row)"
+      echo "$blocking" | /usr/bin/grep -F "$plan_rel" >&2 || true
+      echo "$blocking" | /usr/bin/grep -E "$ver_needle" >&2 || true
+      return 1
+    fi
+    # Findings exist but none for THIS release → pre-existing debt for another
+    # version; do NOT block this close on it (audit-baseline discipline, the
+    # same contract Phase 9.2 carries).
+    local legacy_count
+    legacy_count="$(echo "$blocking" | /usr/bin/grep -c . || true)"
+    mark_phase "lint_plan_identity" "PASS" "no plan-identity finding for ${VERSION} (${legacy_count} pre-existing finding(s) for other versions — out of scope for this close)"
+    return 0
+  fi
+
+  mark_phase "lint_plan_identity" "PASS" "plan-identity clean for ${VERSION} (filename and nested home agree with the RELEASE_LOG row)"
   return 0
 }
 
@@ -3276,6 +3520,11 @@ build_chore_pr_body() {
   if [[ "$OPEN_ISSUE_COUNT" -gt 0 ]]; then
     deferred_summary="${OPEN_ISSUE_COUNT} open issue(s) at close (D-1 manual close pending — see Phase 14)"
   fi
+  # Same resolver the note frontmatter uses — this body becomes a PUBLIC GitHub PR
+  # body that no in-repo sweep can ever reach back and correct, so getting it right
+  # at emission is the only chance there is. Resolved before the heredoc for the
+  # same reason as the note scaffold: a non-zero return inside it is invisible.
+  local plan_ref; plan_ref="$(plan_ref_for_emit)" || true
 
   /bin/cat <<EOF
 ## Summary
@@ -3309,7 +3558,7 @@ ${STATE_CYCLE_TIME}
 
 ## Cross-references
 
-- Release plan: release/releases/plans/${VERSION}_RELEASE_PLAN.md
+- Release plan: ${plan_ref}
 - Release PR: #${PR_NUMBER}
 - Milestone: ${slug} (#${MILESTONE})
 
@@ -4383,7 +4632,14 @@ phase_manual_close_release_issues() {
     return 0
   fi
 
-  local plan_ref="release/releases/plans/${VERSION}_RELEASE_PLAN.md"
+  # Same resolver as the note frontmatter and the chore-PR body. This one is
+  # interpolated into a comment posted onto a PUBLIC GitHub issue — permanent,
+  # unrewritable content — so it gets the resolved path or a loudly-annotated one,
+  # never a silently-wrong guess.
+  local plan_ref
+  if ! plan_ref="$(plan_ref_for_emit)"; then
+    printf 'NOTICE: no plan file resolves for %s; the D-1 issue-close comment will name the expected home annotated as unresolved (see release/releases/plans/README.md § Disposition rule).\n' "$VERSION" >&2
+  fi
   # Default comment for the genuine auto-close-anomaly case. #38 Defect 1: this
   # generic anomaly text must NOT be the single hardcoded template applied to
   # every issue — a Tier-0 disposition needs the correct comment. Per-issue
@@ -7591,6 +7847,162 @@ STUB
 
   /bin/rm -rf "$_ln_tmp" 2>/dev/null || true
   REPO_ROOT="$_ln_saved_root"; VERSION="$_ln_saved_version"
+
+  # ── Test 5.6: phase_lint_plan_identity — the ADR-092 plan-identity close gate ──
+  #
+  # Same stub seam as Test 5.5, and the same reason: these arms grade the CALLER's
+  # needle logic. The lint's own limbs are graded by its `--self-test`.
+  #
+  # PI-4 IS THE ARM THAT EARNS THIS BLOCK. A suite that only ever stubs a finding
+  # whose path EQUALS the caller's needle is green by construction on the one
+  # sub-case that matches and blind to the ones that do not — it proves the needle
+  # reaches paths equal to itself, which is not the claim. PI-4 stubs the card's
+  # CANONICAL defect: a plan named for the WRONG version, whose finding therefore
+  # names a path the expected-path needle cannot match. It fails on a
+  # single-needle implementation and passes on the shipped two-needle one.
+  local _pi_saved_root="$REPO_ROOT" _pi_saved_version="$VERSION" _pi_saved_plansdir="$RELEASE_PLANS_DIR"
+  local _pi_tmp; _pi_tmp="$(/usr/bin/mktemp -d -t lintplanid-selftest.XXXXXX)"
+  /bin/mkdir -p "$_pi_tmp/core/deploy/tools" "$_pi_tmp/release/releases/plans"
+  local _pi_stub="$_pi_tmp/core/deploy/tools/lint_release_corpus.py"
+  /bin/cat > "$_pi_stub" <<'STUB'
+import os, sys
+sys.stdout.write(os.environ.get("LN_OUT", ""))
+sys.exit(int(os.environ.get("LN_EXIT", "0")))
+STUB
+  REPO_ROOT="$_pi_tmp"; VERSION="v9.99"; RELEASE_PLANS_DIR="$_pi_tmp/release/releases/plans"
+  local _pi_expected; _pi_expected="$(plan_rel_path_expected)"
+
+  # PI-0 — clean (exit 0) → PASS.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=0 LN_OUT="" phase_lint_plan_identity >/dev/null 2>&1 || true
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: PI-0 — a clean plan corpus (exit 0) must PASS"; failures=$((failures+1)); }
+
+  # PI-1 — the placement finding (names the EXPECTED path) BLOCKS. This is the
+  # absorbed #4707 AC4 limb reaching the caller.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=1 LN_OUT="PLAN-MISSING-FOR-LEDGER-ROW: v9.99 (release/releases/RELEASE_LOG.md:5) has no plan at ${_pi_expected} (ADR-092 claim-time home)" phase_lint_plan_identity >/dev/null 2>&1; then
+    echo "FAIL: PI-1 — a placement finding naming this release's expected plan path must BLOCK the close"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: PI-1 — the phase must mark FAIL on a this-version placement finding"; failures=$((failures+1)); }
+
+  # PI-1b — the expected-path needle carries INDEPENDENT reach. Measured while
+  # building this suite: every finding class the check emits today also names the
+  # version, so PI-1 alone is satisfied by the version needle and proves nothing
+  # about the path needle. This arm stubs a finding that names this release's plan
+  # path under a prefix the version needle's `^PLAN-` anchor does not admit — the
+  # shape a future finding class added by a sibling would have. Both needles are
+  # kept because they fail independently: the path needle survives a
+  # finding-vocabulary change, the version needle survives a path-rendering change.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=1 LN_OUT="PLANFILE-FUTURE-CLASS: ${_pi_expected} is malformed" phase_lint_plan_identity >/dev/null 2>&1; then
+    echo "FAIL: PI-1b — a blocking finding naming this release's plan path must BLOCK even when its prefix is outside the version needle's anchor; the path needle is dead"; failures=$((failures+1))
+  fi
+
+  # PI-2 — CONTROL: another release's finding must NOT block (audit-baseline).
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=1 LN_OUT="PLAN-VERSION-MISMATCH: release/releases/plans/v2/v2.42_RELEASE_PLAN.md declares v2.42; release/releases/RELEASE_LOG.md:93 records v3.21 (ADR-092)" phase_lint_plan_identity >/dev/null 2>&1 || { echo "FAIL: PI-2 — a finding naming neither this release's plan path nor this version must NOT block"; failures=$((failures+1)); }
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: PI-2 — another release's finding must resolve to PASS (audit-baseline discipline)"; failures=$((failures+1)); }
+
+  # PI-3 — exit 3 → FAIL, fail-loud. Never a vacuous pass.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=3 LN_OUT="CORPUS-PATH-UNRESOLVED: release ledger does not resolve" phase_lint_plan_identity >/dev/null 2>&1; then
+    echo "FAIL: PI-3 — exit-3 (corpus unverifiable) must BLOCK the close"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: PI-3 — exit 3 must mark FAIL (fail-loud, not a vacuous pass)"; failures=$((failures+1)); }
+
+  # PI-4 — THE UNMASKING ARM. The card's canonical defect: this release's plan is
+  # named for the WRONG version, so the finding names `…/v9.98_RELEASE_PLAN.md`
+  # while the expected-path needle is `…/v9.99_RELEASE_PLAN.md`. The path needle
+  # CANNOT match it; only the version-keyed needle can. This arm fails on a
+  # single-needle caller — which is the whole reason the second needle exists.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=1 LN_OUT="PLAN-VERSION-MISMATCH: release/releases/plans/v9/v9.98_RELEASE_PLAN.md declares v9.98; release/releases/RELEASE_LOG.md:7 records v9.99 — the filename names a version the release did not ship as (ADR-092)" phase_lint_plan_identity >/dev/null 2>&1; then
+    echo "FAIL: PI-4 — a plan NAMED FOR THE WRONG VERSION emits its ACTUAL path, which the expected-path needle cannot match. The version-keyed needle must catch it and BLOCK; it did not, so the identity limb has no blocking predicate."; failures=$((failures+1))
+  fi
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: PI-4 — the wrong-version-named plan must mark the phase FAIL"; failures=$((failures+1)); }
+
+  # PI-4b — the same shape for PLAN-MAJOR-DIR-MISMATCH (the second finding class
+  # the path needle misses: right version, wrong major folder).
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=1 LN_OUT="PLAN-MAJOR-DIR-MISMATCH: release/releases/plans/v8/v9.99_RELEASE_PLAN.md declares v9.99 but sits under v8/ (ADR-092)" phase_lint_plan_identity >/dev/null 2>&1; then
+    echo "FAIL: PI-4b — a MAJOR-DIR finding for this version names a path under the WRONG major, which the expected-path needle cannot match; the version-keyed needle must catch it"; failures=$((failures+1))
+  fi
+
+  # PI-4c — SPECIFICITY for the version-keyed needle. A neighbouring version must
+  # not match: `v9.9` is a prefix of `v9.99`, and `v19.99` contains it. Without
+  # the boundary guards this arm goes red, so the needle is a real predicate
+  # rather than a substring search.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=1 LN_OUT="PLAN-VERSION-MISMATCH: release/releases/plans/v9/v9.999_RELEASE_PLAN.md declares v9.999; release/releases/RELEASE_LOG.md:3 records v19.99 (ADR-092)" phase_lint_plan_identity >/dev/null 2>&1 || { echo "FAIL: PI-4c — the version needle must not match v9.999 (trailing guard) or v19.99 (leading guard) when closing v9.99; without both guards this is a substring search, not a predicate"; failures=$((failures+1)); }
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: PI-4c — a neighbouring-version finding must resolve to PASS"; failures=$((failures+1)); }
+
+  # PI-5 — version-less → SKIP with PASS. Driven here because --self-test
+  # dispatches BEFORE main()'s version-grammar gate; production cannot reach it.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  local _pi_savedv2="$VERSION"; VERSION="widget-three"
+  LN_EXIT=1 LN_OUT="PLAN-MISSING-FOR-LEDGER-ROW: v9.99 has no plan at ${_pi_expected}" phase_lint_plan_identity >/dev/null 2>&1 || { echo "FAIL: PI-5 — a version-less release must SKIP the phase, not block"; failures=$((failures+1)); }
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "SKIP" ]] || { echo "FAIL: PI-5 — a version-less release must mark SKIP, got '$(get_phase lint_plan_identity)'"; failures=$((failures+1)); }
+  VERSION="$_pi_savedv2"
+
+  # PI-6 — NEEDLE INDEPENDENCE, this direction: a NOTE finding must not block the
+  # plan phase. The two gates own disjoint predicates; either one capturing the
+  # other's findings means a §3.2 defect could red-line the plan gate (or mask it).
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=1 LN_OUT="NOTE-6A-MISSING: release/releases/notes/v9.99_RELEASE_NOTES.md lacks section" phase_lint_plan_identity >/dev/null 2>&1 || { echo "FAIL: PI-6 — a NOTE-path finding must not block the plan-identity phase; the two needles are independent"; failures=$((failures+1)); }
+
+  # PI-7 — NEEDLE INDEPENDENCE, the other direction, and the measurement that
+  # produced this whole phase: a PLANS-path finding provably does NOT reach
+  # phase_lint_release_notes' note-path needle. If this arm ever goes red the
+  # co-location counter-design has become viable and this phase can be revisited;
+  # while it is green, homing a plan limb inside check_note_content() is fail-open.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  local _pi_saved_notesdir="${RELEASE_NOTES_DIR:-}"
+  LN_EXIT=1 LN_OUT="PLAN-VERSION-MISMATCH: release/releases/plans/v9/v9.98_RELEASE_PLAN.md declares v9.98; records v9.99" phase_lint_release_notes >/dev/null 2>&1 || { echo "FAIL: PI-7 — a plans-path finding must NOT match the note-path needle. It did, which means the fail-open measurement this phase is built on no longer holds."; failures=$((failures+1)); }
+  [[ "$(get_phase lint_release_notes | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: PI-7 — phase_lint_release_notes must take its PASS branch on a plans-path finding (the fail-open property)"; failures=$((failures+1)); }
+  RELEASE_NOTES_DIR="$_pi_saved_notesdir"
+
+  # PI-8 — an ADVISORY line naming this release's expected path must NOT block.
+  # The lint's plan advisories legitimately carry plans paths; a caller that fed
+  # them to the needle would false-block every close on a known residual.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=1 LN_OUT="ADVISORY: PLAN-VERSION-MISMATCH: ${_pi_expected} declares v9.99 [KNOWN RESIDUAL]
+PLAN-VERSION-UNKNOWN: release/releases/plans/v2/v2.98_RELEASE_PLAN.md declares v2.98" phase_lint_plan_identity >/dev/null 2>&1 || { echo "FAIL: PI-8 — an ADVISORY line naming this release's plan path must not block; advisories are filtered before the needles run"; failures=$((failures+1)); }
+  [[ "$(get_phase lint_plan_identity | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: PI-8 — the advisory-only case must resolve to PASS"; failures=$((failures+1)); }
+
+  # PI-9 — missing lint tooling → FAIL. A gate that cannot run is not a passing gate.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  /bin/rm -f "$_pi_stub"
+  if phase_lint_plan_identity >/dev/null 2>&1; then
+    echo "FAIL: PI-9 — the phase must FAIL when the lint tooling is missing, never silently skip"; failures=$((failures+1))
+  fi
+
+  # PI-10 — the phase is DISPATCHED, and dispatched in the right window: after
+  # phase_transition_release_log and BEFORE phase_commit_chore_pr, so a finding
+  # halts before the chore branch is committed, PR'd, or merged. A phase function
+  # that exists but is never dispatched is the dead-check class one level up.
+  local _pi_prod; _pi_prod="$(/usr/bin/sed -n '/^phase_preflight || {/,/^phase_audit_epic_rollup/p' "${BASH_SOURCE[0]}" || true)"
+  /usr/bin/grep -qE '^phase_lint_plan_identity \|\|' <<<"$_pi_prod" || { echo "FAIL: PI-10 — phase_lint_plan_identity is not in the production dispatch ladder"; failures=$((failures+1)); }
+  local _pi_n_id _pi_n_log _pi_n_commit
+  _pi_n_id="$(/usr/bin/grep -n '^phase_lint_plan_identity ||' <<<"$_pi_prod" | /usr/bin/cut -d: -f1)"
+  _pi_n_log="$(/usr/bin/grep -n '^phase_transition_release_log ||' <<<"$_pi_prod" | /usr/bin/cut -d: -f1)"
+  _pi_n_commit="$(/usr/bin/grep -n '^phase_commit_chore_pr ||' <<<"$_pi_prod" | /usr/bin/cut -d: -f1)"
+  [[ -n "$_pi_n_id" && -n "$_pi_n_log" && -n "$_pi_n_commit" && "$_pi_n_log" -lt "$_pi_n_id" && "$_pi_n_id" -lt "$_pi_n_commit" ]] || { echo "FAIL: PI-10 — dispatch order must be transition_release_log < lint_plan_identity < commit_chore_pr (got $_pi_n_log / $_pi_n_id / $_pi_n_commit)"; failures=$((failures+1)); }
+  # Control: the same extraction finds a phase that is genuinely absent → nothing.
+  ! /usr/bin/grep -qE '^phase_nonexistent_control \|\|' <<<"$_pi_prod" || { echo "FAIL: PI-10 control — the dispatch extractor matched a fabricated phase name"; failures=$((failures+1)); }
+
+  # PI-11 — the hand-maintained `usage()` phase roster carries a 9.3 row. That
+  # roster IS the --help output (usage() prints the header comment block
+  # verbatim), and nothing asserts roster<->dispatch parity, so a phase added to
+  # the ladder is silently absent from --help. Reading the "the table is derived"
+  # comment answers a different question: the DERIVED table is the runtime Phase
+  # Outcomes report, not this one.
+  local _pi_help; _pi_help="$(usage 2>&1 || true)"
+  /usr/bin/grep -qE '^[[:space:]]*9\.3 lint_plan_identity' <<<"$_pi_help" || { echo "FAIL: PI-11 — the usage()/--help phase roster has no 9.3 lint_plan_identity row"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^[[:space:]]*9\.2 lint_release_notes' <<<"$_pi_help" || { echo "FAIL: PI-11 control — the roster extractor cannot see the shipped 9.2 row, so its 9.3 result is not interpretable"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_pi_tmp" 2>/dev/null || true
+  REPO_ROOT="$_pi_saved_root"; VERSION="$_pi_saved_version"; RELEASE_PLANS_DIR="$_pi_saved_plansdir"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   PHASE_NAMES=("${_ln_saved_names[@]:-}"); PHASE_RESULTS=("${_ln_saved_results[@]:-}"); PHASE_DETAILS=("${_ln_saved_details[@]:-}")
 
   # Test 6: corpus-path resolution — HARD assertion (not a soft WARN).
@@ -8120,11 +8532,17 @@ STUB
   # derived from its own producer cannot silently diverge from it.
   local _sr_saved_root="$REPO_ROOT" _sr_saved_mode="$MODE" _sr_saved_version="$VERSION"
   local _sr_saved_notesdir="$RELEASE_NOTES_DIR" _sr_saved_digest="$RELEASE_DIGEST"
+  # RELEASE_PLANS_DIR is saved and rebound below for the same reason RELEASE_NOTES_DIR
+  # is: it is set at load time from the REAL $REPO_ROOT, so a block that rebinds only
+  # REPO_ROOT would leave the plans resolver reading the LIVE repository tree and the
+  # PL-* arms below would assert against whatever the working copy happens to contain.
+  local _sr_saved_plansdir="$RELEASE_PLANS_DIR"
   local _sr_saved_pr="$PR_NUMBER" _sr_saved_slug="$STATE_MILESTONE_SLUG"
   local _sr_tmp; _sr_tmp="$(/usr/bin/mktemp -d -t scaffoldresidue-selftest.XXXXXX)"
   /bin/mkdir -p "$_sr_tmp/notes"
   REPO_ROOT="$_sr_tmp"; MODE="apply"; VERSION="v9.99"
   RELEASE_NOTES_DIR="$_sr_tmp/notes"; RELEASE_DIGEST="$_sr_tmp/RELEASE_DIGEST.md"
+  RELEASE_PLANS_DIR="$_sr_tmp/plans"; /bin/mkdir -p "$RELEASE_PLANS_DIR"
   PR_NUMBER="9999"; STATE_MILESTONE_SLUG="selftest-slug"
 
   # (a) AC1-T1 round-trip — the real scaffold must trip the real detector.
@@ -8164,16 +8582,22 @@ AUTHORED
   # Drives the real check against a 2-note sandbox population: the scaffold from (a)
   # and the authored note from (b). Asserts on a NON-EMPTY population with a control —
   # exactly one NOTE-SCAFFOLD-RESIDUE, naming the scaffold and not the authored note.
-  # Hermetic: the module is imported and NOTES_DIR rebound, so the live corpus is
-  # never read and no network or credential is involved.
+  # Hermetic: the module is imported and NOTES_DIR / PLANS_DIR / WORKSPACE_ROOT are
+  # ALL rebound, so the live corpus is never read and no network or credential is
+  # involved. WORKSPACE_ROOT and PLANS_DIR matter because check_note_content()'s
+  # Tier-1 links.plan limb resolves pointer values against them — leaving them at
+  # their module defaults would resolve this sandbox's notes against the real
+  # repository's plans, which is not a sandbox.
   local _sr_lintout
-  _sr_lintout="$(/usr/bin/python3 - "$LINT_RELEASE_CORPUS" "$RELEASE_NOTES_DIR" <<'PY' 2>&1 || true
+  _sr_lintout="$(/usr/bin/python3 - "$LINT_RELEASE_CORPUS" "$RELEASE_NOTES_DIR" "$_sr_tmp" "$RELEASE_PLANS_DIR" <<'PY' 2>&1 || true
 import importlib.util, pathlib, sys
-lint_path, notes_dir = sys.argv[1], sys.argv[2]
+lint_path, notes_dir, ws_root, plans_dir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 spec = importlib.util.spec_from_file_location("lint_rc_selftest", lint_path)
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 mod.NOTES_DIR = pathlib.Path(notes_dir)
+mod.WORKSPACE_ROOT = pathlib.Path(ws_root)
+mod.PLANS_DIR = pathlib.Path(plans_dir)
 for finding in mod.check_note_content():
     print(finding)
 PY
@@ -8422,9 +8846,194 @@ VLSTUB
 
   VERSION="v9.99"
 
+  # (g) PL-* — the PLAN-PATH RESOLVER (#4706). Every arm drives the REAL
+  # plan_rel_path() against a sandboxed $RELEASE_PLANS_DIR, so nothing here reads
+  # the live corpus. The block exists because the three emitters below used to
+  # retype release/releases/plans/<VERSION>_RELEASE_PLAN.md — a form matching NONE
+  # of the homes the corpus actually uses — and every close-out therefore minted a
+  # links.plan pointer that dangled on arrival, with no test that could have seen
+  # it. These are that test.
+  local _pl_saved_slug2="$STATE_MILESTONE_SLUG"
+  /bin/mkdir -p "$RELEASE_PLANS_DIR/v9" "$RELEASE_PLANS_DIR/_unversioned"
+  local _pl_root="plans"   # $RELEASE_PLANS_DIR with $REPO_ROOT/ stripped, in-sandbox
+
+  # PL-0 — SPECIFICITY, and the arm that makes every other one mean something.
+  # With no plan file anywhere the resolver must return NON-ZERO and print NOTHING.
+  # Without this a resolver that always echoed a path would pass PL-1..PL-5.
+  VERSION="v9.97"; STATE_MILESTONE_SLUG="pl-selftest-slug"
+  local _pl_out _pl_rc=0
+  _pl_out="$(plan_rel_path)" || _pl_rc=$?
+  [[ "$_pl_rc" -ne 0 ]] || { echo "FAIL: PL-0 — with no plan file in the sandbox plan_rel_path() must return non-zero, got rc=0 and '$_pl_out'"; failures=$((failures+1)); }
+  [[ -z "$_pl_out" ]] || { echo "FAIL: PL-0 — an unresolved plan_rel_path() must print NOTHING (a path printed alongside a non-zero rc is exactly the dangling pointer this card removes), got '$_pl_out'"; failures=$((failures+1)); }
+
+  # PL-1 — rule 1, the ADR-092 claim-time home: nested + version-named.
+  /usr/bin/touch "$RELEASE_PLANS_DIR/v9/v9.97_RELEASE_PLAN.md"
+  [[ "$(plan_rel_path)" == "${_pl_root}/v9/v9.97_RELEASE_PLAN.md" ]] || { echo "FAIL: PL-1 — rule 1 (plans/v<MAJOR>/<VERSION>) must resolve, got '$(plan_rel_path)'"; failures=$((failures+1)); }
+
+  # PL-2 — PRECEDENCE, asserted rather than incidental. With a flat slug-named copy
+  # ALSO present the nested claim-time home must still win, so a stale flat residue
+  # cannot capture a correctly-claimed release.
+  /usr/bin/touch "$RELEASE_PLANS_DIR/pl-selftest-slug_RELEASE_PLAN.md"
+  [[ "$(plan_rel_path)" == "${_pl_root}/v9/v9.97_RELEASE_PLAN.md" ]] || { echo "FAIL: PL-2 — rule 1 must take precedence over a lingering flat slug-named copy, got '$(plan_rel_path)'"; failures=$((failures+1)); }
+
+  # PL-3 — rule 0, pre-claim / in-flight: flat + slug-named. Same fixture as PL-2
+  # with the nested home removed, so PL-2 and PL-3 differ in exactly one property.
+  /bin/rm -f "$RELEASE_PLANS_DIR/v9/v9.97_RELEASE_PLAN.md"
+  [[ "$(plan_rel_path)" == "${_pl_root}/pl-selftest-slug_RELEASE_PLAN.md" ]] || { echo "FAIL: PL-3 — rule 0 (flat slug-primary, pre-claim) must resolve, got '$(plan_rel_path)'"; failures=$((failures+1)); }
+
+  # PL-4 — the NESTED SLUG-NAMED form. This is the candidate a three-valued reading
+  # of the disposition rule omits, and the corpus carries plans in exactly this shape
+  # (nested under a major-version folder, basename = the milestone slug). Omit it and
+  # the resolver falls through to a wrong answer or to none at all.
+  /bin/rm -f "$RELEASE_PLANS_DIR/pl-selftest-slug_RELEASE_PLAN.md"
+  /usr/bin/touch "$RELEASE_PLANS_DIR/v9/pl-selftest-slug_RELEASE_PLAN.md"
+  [[ "$(plan_rel_path)" == "${_pl_root}/v9/pl-selftest-slug_RELEASE_PLAN.md" ]] || { echo "FAIL: PL-4 — the nested slug-named form (plans/v<MAJOR>/<SLUG>) must resolve; a resolver blind to it turns a real corpus shape into a dangling pointer, got '$(plan_rel_path)'"; failures=$((failures+1)); }
+  /bin/rm -f "$RELEASE_PLANS_DIR/v9/pl-selftest-slug_RELEASE_PLAN.md"
+
+  # PL-5 — rule 2, version-less: _unversioned/. Anti-vacuity twin asserts the answer
+  # is NOT the flat form, which is what the pre-fix emitters produced here.
+  VERSION="77-selftest-version-less-theme"; STATE_MILESTONE_SLUG="77-selftest-version-less-theme"
+  is_version_less || { echo "FAIL: PL-5 setup — the fixture must classify as version-less or the arm tests nothing"; failures=$((failures+1)); }
+  /usr/bin/touch "$RELEASE_PLANS_DIR/_unversioned/77-selftest-version-less-theme_RELEASE_PLAN.md"
+  [[ "$(plan_rel_path)" == "${_pl_root}/_unversioned/77-selftest-version-less-theme_RELEASE_PLAN.md" ]] || { echo "FAIL: PL-5 — rule 2 (plans/_unversioned/<SLUG>) must resolve for a version-less release, got '$(plan_rel_path)'"; failures=$((failures+1)); }
+  [[ "$(plan_rel_path)" != "${_pl_root}/77-selftest-version-less-theme_RELEASE_PLAN.md" ]] || { echo "FAIL: PL-5 anti-vacuity — a version-less plan must NOT resolve to the FLAT form"; failures=$((failures+1)); }
+
+  # PL-6 — ANNOTATE AND CONTINUE at the note producer. With no plan resolvable the
+  # scaffold must STILL be written (no new abort path in a phase that has never had
+  # one) and its links.plan value must carry the loud marker, so the corpus lint
+  # blocks the close one phase later instead of a mid-pipeline exit doing it.
+  VERSION="v9.96"; STATE_MILESTONE_SLUG="pl-noplan-slug"
+  MODE="apply"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  local _pl_prc=0
+  phase_scaffold_release_notes >/dev/null 2>&1 || _pl_prc=$?
+  [[ "$_pl_prc" -eq 0 ]] || { echo "FAIL: PL-6 — an unresolvable plan must NOT introduce a failure path into phase_scaffold_release_notes (it returns 0 on every branch today, and nine ledger-mutating phases precede it), got rc=$_pl_prc"; failures=$((failures+1)); }
+  local _pl_note="$RELEASE_NOTES_DIR/v9.96_RELEASE_NOTES.md"
+  if [[ ! -f "$_pl_note" ]]; then
+    echo "FAIL: PL-6 — the note must still be written when the plan does not resolve; refusing to write is the abort path this design deliberately does not add"; failures=$((failures+1))
+  else
+    /usr/bin/grep -qF 'plan: plans/v9/v9.96_RELEASE_PLAN.md (unresolved at close-out)' "$_pl_note" || { echo "FAIL: PL-6 — the unresolved pointer must name the EXPECTED home and carry the '(unresolved at close-out)' marker; got: $(/usr/bin/grep -F 'plan:' "$_pl_note" || true)"; failures=$((failures+1)); }
+  fi
+
+  # PL-7 — DRY-RUN must not fail, and must write nothing. The no-regression arm for
+  # the behaviour change: a review-gate dry run against a not-yet-claimed plan is the
+  # normal case, not an error.
+  /bin/rm -f "$_pl_note"
+  MODE="dry-run"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  local _pl_drc=0
+  phase_scaffold_release_notes >/dev/null 2>&1 || _pl_drc=$?
+  [[ "$_pl_drc" -eq 0 ]] || { echo "FAIL: PL-7 — --dry-run must never fail on an unresolvable plan, got rc=$_pl_drc"; failures=$((failures+1)); }
+  [[ ! -f "$_pl_note" ]] || { echo "FAIL: PL-7 — --dry-run must write no note"; failures=$((failures+1)); }
+  MODE="apply"
+
+  # PL-8 — ALL THREE EMITTERS AGREE. The direct analogue of VL-0 for the plans
+  # corpus, and the arm that makes "3 sites, 1 resolver" an ASSERTED property rather
+  # than a convention someone has to keep. The scaffolded note's frontmatter and the
+  # chore-PR body's Cross-references line must carry the SAME string, and that string
+  # must be the resolved one — the anti-vacuity limb, because two sites agreeing on a
+  # wrong value would otherwise pass.
+  VERSION="v9.95"; STATE_MILESTONE_SLUG="pl-agree-slug"
+  /usr/bin/touch "$RELEASE_PLANS_DIR/v9/v9.95_RELEASE_PLAN.md"
+  local _pl_expect="${_pl_root}/v9/v9.95_RELEASE_PLAN.md"
+  [[ "$(plan_rel_path)" == "$_pl_expect" ]] || { echo "FAIL: PL-8 setup — the fixture plan must resolve, got '$(plan_rel_path)'"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_scaffold_release_notes >/dev/null 2>&1 || true
+  local _pl_note2="$RELEASE_NOTES_DIR/v9.95_RELEASE_NOTES.md"
+  /usr/bin/grep -qF "plan: ${_pl_expect}" "$_pl_note2" || { echo "FAIL: PL-8 — site 1 (note frontmatter) must emit the RESOLVED path '${_pl_expect}'; got: $(/usr/bin/grep -F 'plan:' "$_pl_note2" 2>/dev/null || echo '<no note>')"; failures=$((failures+1)); }
+  # `-- ` before the pattern is load-bearing: the needle begins with a hyphen (it is
+  # a markdown list item) and grep would otherwise parse it as an option bundle.
+  local _pl_prbody; _pl_prbody="$(build_chore_pr_body 2>/dev/null | /usr/bin/grep -cF -- "- Release plan: ${_pl_expect}" || true)"
+  [[ "$_pl_prbody" -eq 1 ]] || { echo "FAIL: PL-8 — site 2 (chore-PR body) must name the SAME resolved path as site 1 (matches=$_pl_prbody); this body becomes a public GitHub PR no in-repo sweep can correct"; failures=$((failures+1)); }
+  [[ -n "$_pl_expect" ]] || { echo "FAIL: PL-8 anti-vacuity — the agreed string must be non-empty; two sites agreeing on nothing is not agreement"; failures=$((failures+1)); }
+
+  # PL-9 — THE CALLER'S PREDICATE REACHES THE FINDING. "Already blocking" is a
+  # property of a caller PLUS a predicate, never of a function. phase_lint_release_notes
+  # scopes the lint to this release by grepping the output for THIS NOTE's
+  # repo-root-relative path; a links.plan finding that named only the PLANS path would
+  # miss that needle and take the caller's explicit "no finding for this version" PASS
+  # branch — blocking in name, fail-open in fact. This arm drives the REAL phase with
+  # the REAL finding shape and asserts it BLOCKS, then proves with two controls that
+  # the arm discriminates rather than blocking on everything.
+  local _pl_needle; _pl_needle="release/releases/$(notes_rel_path)"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=1 LN_OUT="NOTE-PLAN-LINK-UNRESOLVED: ${_pl_needle} links.plan -> 'release/releases/plans/v9/nope_RELEASE_PLAN.md' does not resolve to an existing file under release/releases/plans/" phase_lint_release_notes >/dev/null 2>&1; then
+    echo "FAIL: PL-9 — a links.plan finding naming THIS release's note MUST block the close; it did not, which means the finding text and the caller's version-scoping needle have drifted apart"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase lint_release_notes | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: PL-9 — the blocking finding must mark the phase FAIL, got '$(get_phase lint_release_notes)'"; failures=$((failures+1)); }
+  # PL-9a control — the SAME finding class for a DIFFERENT release must NOT block
+  # (audit-baseline discipline), so PL-9 is not passing on a caller that blocks on
+  # everything.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=1 LN_OUT="NOTE-PLAN-LINK-UNRESOLVED: release/releases/notes/v9.01_RELEASE_NOTES.md links.plan -> 'release/releases/plans/v9/other_RELEASE_PLAN.md' does not resolve" phase_lint_release_notes >/dev/null 2>&1 || { echo "FAIL: PL-9a control — another release's links.plan finding must NOT block this close"; failures=$((failures+1)); }
+  # PL-9b control — a finding naming ONLY the PLANS path is exactly the fail-open
+  # shape this arm exists to forbid: the caller cannot see it. Asserted as a
+  # PROPERTY OF THE CALLER, so if someone later reshapes the finding to lead with the
+  # plans path, PL-9 goes red and this control explains why.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=1 LN_OUT="NOTE-PLAN-LINK-UNRESOLVED: release/releases/plans/v9/v9.95_RELEASE_PLAN.md does not resolve" phase_lint_release_notes >/dev/null 2>&1 || { echo "FAIL: PL-9b control — a plans-path-only finding does not match the caller's note-path needle, so the caller MUST take its PASS branch; it did not, which means the needle changed"; failures=$((failures+1)); }
+
+  # PL-10 — END TO END: the REAL linter's finding, fed to the REAL caller.
+  # PL-9 pins the caller's behaviour given a finding SHAPE, but a hand-written
+  # LN_OUT cannot notice if the linter later stops producing that shape. This arm
+  # closes that seam: it builds a layout-faithful sandbox (release/releases/... so
+  # the linter's repo-root-relative rendering is byte-identical to production),
+  # runs the REAL check_note_content() over a v4-era note whose links.plan names an
+  # absent file, and pipes the REAL finding into the REAL phase_lint_release_notes.
+  # Emitter and predicate are therefore verified as one composed mechanism rather
+  # than as two independently-plausible halves.
+  local _pl_e2e; _pl_e2e="$(/usr/bin/mktemp -d -t planlink-e2e.XXXXXX)"
+  /bin/mkdir -p "$_pl_e2e/release/releases/notes" "$_pl_e2e/release/releases/plans/v9"
+  /bin/cat > "$_pl_e2e/release/releases/notes/v9.94_RELEASE_NOTES.md" <<'E2E'
+---
+version: v9.94
+date: 2026-08-15
+type: note
+issues: []
+pr: "#1"
+links:
+  plan: release/releases/plans/v9/v9.94_RELEASE_PLAN.md
+  log_anchor: "#x"
+---
+
+# H
+
+## What changed for everyone using the platform
+
+- **A bullet.** *Why it matters:* it matters.
+E2E
+  local _pl_e2eout
+  _pl_e2eout="$(/usr/bin/python3 - "$LINT_RELEASE_CORPUS" "$_pl_e2e" <<'PY' 2>&1 || true
+import importlib.util, pathlib, sys
+lint_path, root = sys.argv[1], pathlib.Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("lint_rc_e2e", lint_path)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+mod.WORKSPACE_ROOT = root
+mod.NOTES_DIR = root / "release" / "releases" / "notes"
+mod.PLANS_DIR = root / "release" / "releases" / "plans"
+for finding in mod.check_note_content():
+    print(finding)
+PY
+)"
+  /usr/bin/grep -qF 'NOTE-PLAN-LINK-UNRESOLVED' <<<"$_pl_e2eout" || { echo "FAIL: PL-10 setup — the real linter must emit NOTE-PLAN-LINK-UNRESOLVED for a v4-era note whose plan is absent; got: $_pl_e2eout"; failures=$((failures+1)); }
+  # The binding assertion: drive the REAL caller with the REAL output.
+  local _pl_savedv="$VERSION"
+  VERSION="v9.94"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=1 LN_OUT="$_pl_e2eout" phase_lint_release_notes >/dev/null 2>&1; then
+    echo "FAIL: PL-10 — the linter's REAL links.plan finding must reach phase_lint_release_notes' version-scoping needle and BLOCK the close. It did not, which means the finding no longer carries this note's repo-root-relative path and the gate is fail-open. Finding was: $_pl_e2eout"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase lint_release_notes | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: PL-10 — the composed emitter+caller must mark the phase FAIL, got '$(get_phase lint_release_notes)'"; failures=$((failures+1)); }
+  VERSION="$_pl_savedv"
+  /bin/rm -rf "$_pl_e2e" 2>/dev/null || true
+
+  VERSION="v9.99"; STATE_MILESTONE_SLUG="$_pl_saved_slug2"
+
   /bin/rm -rf "$_sr_tmp" 2>/dev/null || true
   REPO_ROOT="$_sr_saved_root"; MODE="$_sr_saved_mode"; VERSION="$_sr_saved_version"
   RELEASE_NOTES_DIR="$_sr_saved_notesdir"; RELEASE_DIGEST="$_sr_saved_digest"
+  RELEASE_PLANS_DIR="$_sr_saved_plansdir"
   PR_NUMBER="$_sr_saved_pr"; STATE_MILESTONE_SLUG="$_sr_saved_slug"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
@@ -9522,6 +10131,8 @@ AISTUB
   echo "  phase_sync_primary_checkout validated (AC7 — behind-primary-on-main fast-forwards and HEAD verifiably MOVES to origin/main / non-main primary SKIPPED and NOT moved / absent primary clean no-op (CI hermeticity) / dry-run no-write / source carries no reset-stash-checkout-push-force-cd)" >&2
   echo "  scaffold-residue detector + pre-authored-note tolerance validated (AC1/AC2 — T1 round-trip: the REAL scaffold trips the REAL token set (anti-drift) / T2 authored note clean / T4 this-version CHANGELOG+DIGEST residue FAILs naming surface:line / T3 audit-baseline control: another version's residue does NOT block / T6 mode-awareness: --dry-run over ABSENT entries returns 0 and marks literally DRY-RUN, never a vacuous PASS / T7 anti-vacuity: the SAME absent-entry fixture under --apply still returns non-zero, FAILs, and preserves the dropped-write message verbatim / AC2 tolerance: this-version untracked note passes, other-version + modified-tracked + unrelated-untracked all still block)" >&2
   echo "  AC1/AC2 VERSION-LESS shape validated (#3113 Records 2+3 — VL-0 notes_abs_path()==notes_rel_path() in BOTH identity modes / VL-1 producer writes notes/_unversioned/ and creates the dir / VL-2 anti-vacuity: NOT written flat / VL-3 preflight (f) residue gate FIRES (no longer a silent no-op) / VL-4 preflight (b) tolerates the note this run produced (deadlock closed) / VL-5 controls: flat bucket + another version-less release still block / VL-6 §3.2 needle blocks this release, not another / VL-7 chore-PR File Change Matrix names the real path / VL-ORDER the --self-test dispatch verifiably PRECEDES the canonical-version gate, which is what makes every arm above reachable — asserted from source, with an anti-vacuity arm on both needles)" >&2
+  echo "  plan-path resolver validated (#4706 — PL-0 specificity: no plan anywhere returns non-zero AND prints nothing / PL-1 rule 1 nested version-named / PL-2 precedence: rule 1 beats a lingering flat copy / PL-3 rule 0 flat slug-primary / PL-4 the nested SLUG-named form a three-valued reading omits / PL-5 rule 2 _unversioned with an anti-vacuity twin that it is NOT the flat form / PL-6 an unresolvable plan ANNOTATES and the note is still written — no new abort path in a phase that has never had one / PL-7 --dry-run never fails and writes nothing / PL-8 all three emitters carry the SAME resolved string / PL-9 the caller PLUS its predicate: a note-path finding blocks, another release does not, and a plans-path-only finding provably does NOT reach the needle / PL-10 end-to-end: the REAL linter finding piped into the REAL phase_lint_release_notes blocks the close)" >&2
+  echo "  plan-identity close gate validated (ADR-092 Phase 9.3 — PI-0 clean PASS / PI-1 a this-version placement finding BLOCKS / PI-1b the expected-path needle carries INDEPENDENT reach (every finding class today also names the version, so PI-1 alone proves nothing about it) / PI-2 audit-baseline control: another release does NOT block / PI-3 exit-3 fails loud / PI-4 THE UNMASKING ARM: a plan NAMED FOR THE WRONG VERSION emits its ACTUAL path, which the expected-path needle cannot match — only the version-keyed needle catches it, so a single-needle caller fails here / PI-4b same shape for MAJOR-DIR / PI-4c both version-needle boundary guards / PI-5 version-less SKIPs / PI-6 + PI-7 needle INDEPENDENCE in both directions — and PI-7 is the standing measurement this phase exists for: a plans-path finding provably does NOT reach the note-path needle, so homing a plan limb inside check_note_content() is fail-open / PI-8 advisories are filtered before the needles, so a known residual cannot false-block / PI-9 missing tooling FAILs / PI-10 the phase is DISPATCHED and in the right window (transition_release_log < 9.3 < commit_chore_pr), with a fabricated-name control / PI-11 the hand-maintained usage()/--help phase roster carries the 9.3 row, with the shipped 9.2 row as its control)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  close-out report phase set is RECORD-DERIVED validated (#4773 — every recorded phase renders against a denominator parsed from this file's own mark_phase subjects (pre-fix: 3 missing — inject_velocity_field / append_release_learnings / audit_epic_rollup) / a phase in NO enumeration still renders (AC-2) / an unmarked name does NOT render (anti-vacuity) / post_gate_passage_proof renders AND is asserted definition-less, so a definition-derived set cannot silently drop it / a double-marked name renders ONE row carrying the FIRST result / the halted marker fires on a FAIL-terminated run and is absent on a clean one / DISPATCH<->RECORD cross-check: every dispatched phase is a record subject, with vacuity floors on both parses plus sensitivity and specificity arms — the one invariant no seeded arm can reach / JSON twin carries the same de-duplicated set with pre-existing keys intact)" >&2
@@ -9677,6 +10288,7 @@ phase_append_release_digest || { generate_report; exit 3; }
 phase_append_reversions || { generate_report; exit 3; }                # Phase 8.5 — re-version ledger (#1679; N/A on the common no-collision path)
 phase_scaffold_release_notes || { generate_report; exit 3; }
 phase_lint_release_notes || { generate_report; exit 3; }              # Phase 9.2 — §3.2 note-content close gate; a finding for THIS version BLOCKS close
+phase_lint_plan_identity || { generate_report; exit 3; }              # Phase 9.3 — ADR-092 plan-file identity/placement close gate; a finding for THIS version BLOCKS close (before the chore branch is committed)
 phase_append_changelog || { generate_report; exit 3; }                # Phase 9.5 — Layer-1 dual-write Surface 2
 phase_assert_derived_surfaces || { generate_report; exit 3; }         # Phase 9.55 — AC1 anchor A3: version-scoped scaffold-residue assert on CHANGELOG + DIGEST
 phase_bump_version || { generate_report; exit 3; }                    # Phase 9.6 — stamp .version (versioned releases; SKIP version-less)

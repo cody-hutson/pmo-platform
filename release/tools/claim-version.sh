@@ -95,6 +95,13 @@ MAX_ATTEMPTS_DEFAULT=5
 # existing caller (backward-compatible; the CAS arithmetic/retry is untouched).
 STAMP_SLUG="${STAMP_SLUG:-}"
 STAMP_FILES=()
+# Operator-DECLARED push target for the stamp's follow-on commit. Optional and
+# assertion-only: when set, the pre-CAS precondition refuses a claim whose HEAD is
+# not this branch. It is deliberately NOT required — every correctly-stamped
+# release to date passed no such flag, and making it mandatory would refuse them.
+# When it is unset the precondition ANNOUNCES the resolved target instead, because
+# whether a branch will reach the mainline is not decidable from git.
+STAMP_BRANCH="${STAMP_BRANCH:-}"
 
 # ---------------------------------------------------------------------------
 # Host I/O seams (the ONLY place GitHub/git mechanism lives).
@@ -649,10 +656,140 @@ _resolve_preclaim_plan() {
   return 1
 }
 
+# _derive_stamp_slug  — echo the slug of the UNIQUE pre-claim plan that is ready to
+#   be stamped, or fail. PURE QUERY: reads only, writes nothing, and REFUSES rather
+#   than guesses.
+#
+#   Why this exists. The stamping pass runs only when a slug is in hand, and every
+#   historical silent skip was the SAME failure: the flag was simply not passed, the
+#   claim pushed its tag, printed it and returned 0 with no diagnostic of any kind.
+#   Deriving the slug when the operator did not supply one removes the bypass; it
+#   does not change what the stamp does once it runs.
+#
+#   Candidate set: *_RELEASE_PLAN.md at DEPTH 1 under release/releases/plans/, plus
+#   the _unversioned/ home — exactly the two homes _resolve_preclaim_plan already
+#   searches — carrying at least one {{RELEASE_VERSION}} token.
+#
+#   The DEPTH-1 RESTRICTION IS LOAD-BEARING, not tidiness. The token oracle cannot
+#   distinguish a live placeholder from PROSE ABOUT the placeholder, and shipped
+#   plans already foldered under plans/v<MAJOR>/ discuss {{RELEASE_VERSION}} in
+#   exactly that way — three do at the time of writing, all of them closed releases.
+#   A recursive walk would admit them and derive a slug for a release that shipped
+#   months ago. Depth-1 excludes them STRUCTURALLY rather than by a name denylist.
+#
+#   Returns non-zero when the candidate count is 0 or >= 2, so the caller falls back
+#   to the pre-existing no-stamp behaviour. AMBIGUITY IS A REFUSAL, NEVER A PICK:
+#   choosing between two in-flight plans is precisely the class of silent
+#   wrong-thing this derivation exists to remove, and it is announced on stderr so
+#   the operator can pass --stamp-slug explicitly.
+_derive_stamp_slug() {
+  local plans_dir="${CLAIM_REPO_ROOT}/release/releases/plans"
+  [[ -d "$plans_dir" ]] || return 1
+  local f base cands=()
+  for f in "${plans_dir}"/*_RELEASE_PLAN.md "${plans_dir}"/_unversioned/*_RELEASE_PLAN.md; do
+    [[ -f "$f" ]] || continue                       # unmatched glob stays literal
+    grep -q '{{RELEASE_VERSION}}' "$f" || continue
+    base="${f##*/}"
+    cands+=("${base%_RELEASE_PLAN.md}")
+  done
+  if [[ ${#cands[@]} -ge 2 ]]; then
+    printf 'claim-version: stamp slug not derived — %d pre-claim plans carry {{RELEASE_VERSION}} (%s); pass --stamp-slug to name the one this claim binds\n' \
+      "${#cands[@]}" "$(printf '%s ' "${cands[@]}")" >&2
+    return 1
+  fi
+  [[ ${#cands[@]} -eq 1 ]] || return 1              # zero candidates: silent, as before
+  printf '%s\n' "${cands[0]}"
+}
+
+# _resolve_default_branch  — echo the repository's default branch NAME. Resolved,
+#   never hardcoded: the remote's own HEAD symref first, then the configured
+#   init.defaultBranch, then the conventional literal as a last resort.
+_resolve_default_branch() {
+  local d
+  d="$(git -C "$CLAIM_REPO_ROOT" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  [[ -n "$d" ]] && { printf '%s\n' "${d#origin/}"; return 0; }
+  d="$(git -C "$CLAIM_REPO_ROOT" config --get init.defaultBranch 2>/dev/null || true)"
+  [[ -n "$d" ]] && { printf '%s\n' "$d"; return 0; }
+  printf 'main\n'
+}
+
+# _preflight_push_target <slug>  — PRE-CAS precondition on the stamp's PUSH TARGET
+#   and on the plan's trackedness. Mutates NOTHING; returns non-zero so the caller
+#   declines to claim rather than stranding a half-applied stamp post-CAS.
+#
+#   REFUSE WHAT IS DECIDABLE; ANNOUNCE WHAT IS NOT. Two states are decidably wrong
+#   and are refused: a detached HEAD (from which `push origin HEAD` creates no
+#   branch ref a PR can use) and the repository's default branch (a direct-to-
+#   mainline push, forbidden by core/rules/git-workflow.md § What NOT To Do —
+#   "Never commit directly to main — always use a branch + PR"). Whether any OTHER
+#   branch will reach the mainline is NOT decidable from git, so it is announced
+#   rather than inferred: refusing every branch that does not match a name pattern
+#   would break the platform's normal worktree-isolated execution mode, and guessing
+#   from a name is guessing. The announcement is what removes the historical
+#   signature in which a skipped stamp was indistinguishable from a correct run.
+#
+#   The trackedness arm closes a separate blind spot: the stamp's `git mv` requires
+#   a TRACKED source (an untracked plan fails with "not under version control"),
+#   and the manifest pre-flight checks existence, token presence and directory
+#   writability but never trackedness. Checking it here converts the most likely
+#   post-CAS `git mv` failure — which strands a claimed tag beside a resolved but
+#   unmoved plan — into a free pre-CAS decline.
+_preflight_push_target() {
+  local slug="$1" head_ref default_branch plan plan_rel
+  head_ref="$(git -C "$CLAIM_REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  if [[ -z "$head_ref" ]]; then
+    printf 'claim-version: stamp pre-flight — cannot resolve HEAD under %s; the stamp commit has no push target\n' "$CLAIM_REPO_ROOT" >&2
+    return 1
+  fi
+  if [[ "$head_ref" == "HEAD" ]]; then
+    printf 'claim-version: stamp pre-flight — HEAD is DETACHED. The stamp commit pushes with `git push origin HEAD`, which from a detached head creates no branch ref a PR can use. Check out the Stage-12 chore branch before invoking the claim.\n' >&2
+    return 1
+  fi
+  default_branch="$(_resolve_default_branch)"
+  if [[ "$head_ref" == "$default_branch" ]]; then
+    printf 'claim-version: stamp pre-flight — HEAD is %s, the default branch. The stamp commit would push directly to the mainline, which core/rules/git-workflow.md § What NOT To Do forbids ("Never commit directly to main — always use a branch + PR"). Create the correctly-named Stage-12 chore branch before invoking the claim, then re-run.\n' "$head_ref" >&2
+    return 1
+  fi
+  if [[ -n "${STAMP_BRANCH:-}" && "$head_ref" != "${STAMP_BRANCH}" ]]; then
+    printf 'claim-version: stamp pre-flight — declared --stamp-branch %s does not match HEAD %s; not claiming against a push target the caller did not declare\n' \
+      "$STAMP_BRANCH" "$head_ref" >&2
+    return 1
+  fi
+  plan="$(_resolve_preclaim_plan "$slug")" || {
+    printf 'claim-version: stamp pre-flight — no pre-claim plan %s_RELEASE_PLAN.md under release/releases/plans/\n' "$slug" >&2
+    return 1
+  }
+  plan_rel="${plan#"${CLAIM_REPO_ROOT}/"}"
+  if ! git -C "$CLAIM_REPO_ROOT" ls-files --error-unmatch -- "$plan_rel" >/dev/null 2>&1; then
+    printf 'claim-version: stamp pre-flight — pre-claim plan %s is NOT TRACKED. The stamp git-mv requires a tracked source and would fail post-CAS with the tag already bound. Run: git add %s\n' \
+      "$plan_rel" "$plan_rel" >&2
+    return 1
+  fi
+  printf 'claim-version: stamp will publish to origin/%s\n' "$head_ref" >&2
+  return 0
+}
+
 # _preflight_stamp <slug>  — read-only PRE-CAS validation (the "before the CAS"
 #   checkable half). Mutates NOTHING. Fails — so the caller HALTs BEFORE claiming a
 #   number it cannot stamp — when the stamp manifest is broken: the pre-claim plan
-#   must resolve, carry >=1 {{RELEASE_VERSION}} token, and plans/ must be writable.
+#   must resolve and carry >=1 {{RELEASE_VERSION}} token, plans/ must be writable,
+#   every --stamp-file must exist and be in CANONICAL repo-relative form, no
+#   SKILL.md version: line may carry the token, and the manifest's package
+#   consequence must be determinable.
+#
+#   THE EXPECTED REBUILD COUNT IS A STOP CONDITION, NOT A SILENT SUCCESS. Once the
+#   manifest's paths are validated, the count is announced on every path THROUGH
+#   THAT STAGE INCLUDING ZERO, and a --stamp-file manifest that stales zero
+#   packages is refused HERE — pre-CAS, where refusing costs nothing and creates
+#   no state to undo.
+#
+#   WHAT THE ABSENCE OF A COUNT LINE MEANS. An EARLIER manifest defect (no plan,
+#   no token, plans/ unwritable, a missing --stamp-file, a cross-grammar token)
+#   refuses with its own named diagnostic and NO count line, because those guards
+#   sit above the package-consequence resolution. Absence of a count therefore
+#   reads "refused before the package consequence was reached" — never "no
+#   refusal occurred". A caller keying a stop condition off this function reads
+#   the RETURN CODE; the count line tells it WHICH stage answered.
 _preflight_stamp() {
   local slug="$1" plan
   plan="$(_resolve_preclaim_plan "$slug")" || {
@@ -669,13 +806,31 @@ _preflight_stamp() {
     return 1
   }
 
-  # A plan-only manifest cannot stale a package and cannot cross a version
-  # grammar: the plan lives under release/releases/plans/, which is neither a
-  # skills/ source path nor a TEMPLATE_SYNC_MAP canonical, and its own frontmatter
-  # version IS the release version. Returning here keeps every existing plan-only
-  # caller byte-unaffected by the checks below — which is the whole invocation
-  # population in the release log to date.
-  [[ ${#STAMP_FILES[@]} -eq 0 ]] && return 0
+  # ANNOUNCE (A0), THEN PROCEED. A plan-only manifest cannot stale a package and
+  # cannot cross a version grammar: the plan lives under release/releases/plans/,
+  # which is neither a skills/ source path nor a TEMPLATE_SYNC_MAP canonical, and
+  # its own frontmatter version IS the release version. A zero package
+  # consequence here is CORRECT, not a manifest error — so it is ANNOUNCED rather
+  # than left silent (a caller must be able to read the count on every stamp path,
+  # not only on the paths that happen to resolve something), and it is NOT
+  # refused.
+  #
+  # WHY IT IS NOT REFUSED — the shipped-population argument, and that argument
+  # alone. --stamp-file has exactly ONE production intake (the argv parser below)
+  # and no shipped invocation has ever passed it: every claim in the release log
+  # to date reaches this branch. A "zero packages implies refuse" predicate would
+  # therefore break 100% of shipped invocations, which is decisive on its own.
+  #
+  # This rationale is deliberately NOT propped on the adjacent derived-slug
+  # invariant that this path "can never create a new HALT". That claim does not
+  # hold — _stamp_release_identity retains post-CAS failure returns reachable
+  # from this very branch — so what follows the announcement is a measured
+  # statement of what this pre-flight examined, never a clearance for what runs
+  # after the CAS.
+  if [[ ${#STAMP_FILES[@]} -eq 0 ]]; then
+    printf 'claim-version: stamp pre-flight — manifest stales 0 package(s): plan-only manifest (no --stamp-file entries; release/releases/plans/ is neither a skills/ source path nor a TEMPLATE_SYNC_MAP canonical). Proceeding.\n' >&2
+    return 0
+  fi
 
   # --- Everything below extends this function's stated doctrine from "can I
   #     substitute?" to "can I complete the stamp INCLUDING its package
@@ -683,13 +838,65 @@ _preflight_stamp() {
   #     where it must run: post-CAS, _stamp_release_identity NEVER un-claims the
   #     tag, so the same failure discovered late strands a half-applied stamp AND
   #     a stale package instead of simply declining to claim.
-  local f abs
+  local f abs phys_dir canon_rel
+  local noncanon=()
+
+  # BOTH SIDES PHYSICAL. pwd -P resolves symlinks, and the self-test sandboxes
+  # live under ${TMPDIR:-/tmp}, which is itself a symlink on macOS — comparing a
+  # physically-resolved child against a logical root would declare every fixture
+  # non-canonical. Resolved once, outside the loop, and only after the plan-only
+  # return above, so no shipped invocation pays for it.
+  local root_phys
+  root_phys="$(cd -- "$CLAIM_REPO_ROOT" && pwd -P)" || {
+    printf 'claim-version: stamp pre-flight — cannot resolve the physical repo root %s; the canonical form of a --stamp-file path is not decidable\n' "$CLAIM_REPO_ROOT" >&2
+    return 1
+  }
+
   for f in "${STAMP_FILES[@]}"; do
     abs="${CLAIM_REPO_ROOT}/${f}"
     [[ -f "$abs" ]] || {
       printf 'claim-version: stamp pre-flight — --stamp-file %s not found under repo root %s\n' "$f" "$CLAIM_REPO_ROOT" >&2
       return 1
     }
+
+    # PATH CANONICALITY — COLLECTED here, refused after the announcement (G7).
+    #
+    # FORM-AGNOSTIC BY CONSTRUCTION: it enumerates no path shapes. It asks the OS
+    # for the one physical form and requires the manifest to already be in it, so
+    # a leading slash, an embedded /./ (including a repeated one the intake sed
+    # cannot collapse, because sed's g flag does not rescan replacement text), a
+    # ..-traversal, a repo-escaping traversal, and any shape nobody has imagined
+    # are all covered by ONE predicate.
+    #
+    # IT REFUSES RATHER THAN NORMALISES, and that is the load-bearing half.
+    # Extending the intake normalisation was recommended against by the
+    # acceptance review this guard answers, and it is worse than merely
+    # incomplete. The affected-skill resolver's direct-source rule inspects only
+    # the first three segments — ^(core|operations|release)/skills/<name>/ — and
+    # roster-checks only <name>. A non-canonical shape sitting BELOW that captured
+    # segment therefore leaves <name> resolving correctly, the count NON-ZERO, and
+    # the count guard below satisfied: it waves the manifest through. What the
+    # resolver's roster filter closes is only the narrower sub-case where the
+    # non-canonical segment IS the captured name (a bare ".." resolves in no
+    # roster and is dropped, so that form now announces zero); the filter says
+    # nothing about the segments after it, which is where this guard earns its
+    # keep. Normalising would quietly repair a malformed manifest into a green
+    # run; leaving it alone lets a path whose PHYSICAL target differs from the one
+    # the resolver answered about reach the post-CAS stamp, where the substitution
+    # rewrites the physical file while the announced rebuild set describes a
+    # different one — AFTER the tag is bound. Refusing pre-CAS is the only option
+    # that neither guesses nor strands a claimed tag.
+    phys_dir="$(cd -- "$(dirname "$abs")" 2>/dev/null && pwd -P)" || phys_dir=""
+    if [[ -z "$phys_dir" ]]; then
+      # Practically unreachable — the -f guard above already resolved this path.
+      # Collected rather than returned so the ordering invariant holds: every
+      # refusal from here down is preceded by the count announcement.
+      noncanon+=("${f}|<unresolvable>")
+    else
+      canon_rel="${phys_dir}/$(basename "$abs")"
+      canon_rel="${canon_rel#"${root_phys}/"}"
+      [[ "$canon_rel" == "$f" ]] || noncanon+=("${f}|${canon_rel}")
+    fi
 
     # CROSS-GRAMMAR GUARD. {{RELEASE_VERSION}} resolves to the WON RELEASE TAG
     # verbatim, and the release-tag grammar and the skill version:-field grammar
@@ -726,10 +933,48 @@ _preflight_stamp() {
     printf 'claim-version: stamp pre-flight — cannot determine the package consequence of this manifest: core/deploy/tools/build-skill-packages.sh is missing or failed under %s. Not claiming a number whose stamp could silently stale a package.\n' "$CLAIM_REPO_ROOT" >&2
     return 1
   fi
-  if [[ -n "$affected" ]]; then
+  # ANNOUNCE (A1) — UNCONDITIONAL. The count IS this function's contract: the
+  # caller sees the expected rebuild count BEFORE the CAS, where refusing is
+  # free. Previously this line sat inside `if [[ -n "$affected" ]]`, so a zero
+  # resolution printed nothing and returned 0 into the compare-and-swap — the
+  # whole defect.
+  #
+  # Counted with awk, NOT `grep -c`: this file's own self-test comment states the
+  # rule ("no grep -c double-output / non-zero-on-empty pitfalls") and un-guarding
+  # a count over possibly-empty input under `set -e` is exactly the case that
+  # walks into it. awk always exits 0, so it is safe in command substitution.
+  local n_aff
+  n_aff="$(awk 'NF{n++} END{print n+0}' <<<"$affected")"
+  if [[ "$n_aff" -gt 0 ]]; then
     printf 'claim-version: stamp pre-flight — manifest stales %s package(s): %s (they will be rebuilt into the stamp commit)\n' \
-      "$(grep -c . <<<"$affected")" "$(tr '\n' ' ' <<<"$affected")" >&2
+      "$n_aff" "$(tr '\n' ' ' <<<"$affected")" >&2
+  else
+    printf 'claim-version: stamp pre-flight — manifest stales 0 package(s): %s --stamp-file path(s) resolve to no .skill package\n' \
+      "${#STAMP_FILES[@]}" >&2
   fi
+
+  # REFUSE — TWO INDEPENDENT LIMBS, both AFTER the announcement, both evaluated.
+  # They catch different, both-real classes and neither subsumes the other: G7
+  # catches a non-canonical path the resolver nonetheless MATCHES — non-canonical
+  # BELOW the ^…/skills/<name>/ segment the resolver captures, so <name> resolves,
+  # the count is non-zero, and G8 has nothing to fire on (U-18i); G8 catches a
+  # canonical manifest whose package set is genuinely empty (U-18l). A path that
+  # is both — the leading-slash form — emits both diagnoses. The announcement
+  # precedes both so that every refusal from this stage carries the count that
+  # motivated it.
+  local refuse=0 nc
+  if [[ ${#noncanon[@]} -gt 0 ]]; then
+    for nc in "${noncanon[@]}"; do
+      printf 'claim-version: stamp pre-flight — --stamp-file %s is not in canonical repo-relative form (canonical: %s). The affected-skill resolver anchors on the canonical form and git add rejects or misreads the rest, so this path either rebuilds nothing or fails AFTER the tag is claimed. Pass the canonical form; the pre-flight refuses rather than rewriting it.\n' \
+        "${nc%%|*}" "${nc#*|}" >&2
+    done
+    refuse=1
+  fi
+  if [[ "$n_aff" -eq 0 ]]; then
+    printf 'claim-version: stamp pre-flight — a --stamp-file manifest that stales 0 package(s) rebuilds nothing. Refusing pre-CAS, where refusing costs nothing; the same manifest discovered post-claim strands a bound tag with a half-applied stamp. Correct the manifest, or drop --stamp-file if only the plan is being stamped.\n' >&2
+    refuse=1
+  fi
+  [[ "$refuse" -eq 0 ]] || return 1
   return 0
 }
 
@@ -765,45 +1010,92 @@ _host_rebuild_packages() {
     --root "$CLAIM_REPO_ROOT" "$@"
 }
 
+# _stamp_commit_landed <commit-msg>  — TRUE when HEAD's subject is exactly
+#   <commit-msg>, i.e. the stamp commit WAS created and only the push is still
+#   outstanding. Read-only: reads the repository, writes nothing.
+#
+#   DERIVED FROM THE REPO, NEVER FROM A TRACKED PROGRESS FLAG. A flag is a CLAIM
+#   about state that desyncs the moment a step half-succeeds, and the recovery
+#   instruction for "committed, not pushed" is the OPPOSITE of the one for "not
+#   committed" — a wrong answer here sends the operator to redo work that is
+#   already committed. The repository IS the state, so it is asked.
+#
+#   The capture keeps its `|| have=""` guard and the trailing [[ ]] stays the last
+#   statement (consumed by `if`), so a false result never trips `set -e`.
+_stamp_commit_landed() {
+  local want="$1" have=""
+  have="$(git -C "$CLAIM_REPO_ROOT" log -1 --format=%s 2>/dev/null)" || have=""
+  [[ -n "$want" && "$have" == "$want" ]]
+}
+
 # _stamp_release_identity <tag> <slug> <merge_sha>  — POST-CAS claim-time stamp.
 #   Runs ONLY on the CAS-win path, with the WON <tag>. Resolves {{RELEASE_VERSION}}
 #   -> <tag> in the pre-claim plan's CONTENT (+ any --stamp-file artifacts, repo-
 #   relative), git-mv's the slug-named plan to plans/v<MAJOR>/<tag>_RELEASE_PLAN.md,
 #   and commits+pushes the follow-on stamp via _host_commit_push (the same post-
-#   merge-commit pattern Stage 13 uses for RELEASE_LOG/INDEX rows). A stamp failure
-#   HALTs and surfaces "tag claimed, stamp manually" — it NEVER un-claims the tag.
+#   merge-commit pattern Stage 13 uses for RELEASE_LOG/INDEX rows).
+#
+#   EVERY FAILURE BELOW IS POST-CLAIM, AND NONE OF THEM UN-CLAIMS THE TAG. So the
+#   operator's only instrument is the text on stderr, and it arrives as a PAIR:
+#   each failure site emits its own "claim-version: stamp — " line naming the
+#   failed step, the resulting repo state and its remediation, and the caller's
+#   "claim-version: HALT — " envelope names the bound identifier and forbids the
+#   re-run. The progress trailer is a CLOSED three-value enum keyed on the three
+#   operator-distinguishable states — nothing to undo / partial work uncommitted /
+#   work committed but unpushed:
+#     (tag <T> claimed; stamp NOT started)
+#     (tag <T> claimed; stamp half-applied)
+#     (tag <T> claimed; stamp COMMITTED, NOT PUSHED)
+#   A new failure site joins an existing value rather than adding one.
 _stamp_release_identity() {
   local tag="$1" slug="$2" merge_sha="$3"
   local plan
   plan="$(_resolve_preclaim_plan "$slug")" || {
-    printf 'claim-version: stamp — pre-claim plan for slug %q vanished post-claim\n' "$slug" >&2
+    printf 'claim-version: stamp — pre-claim plan for slug %q vanished post-claim. Nothing was modified: no token resolved, no file renamed, nothing committed. Restore the plan, then complete the stamp by hand — resolve {{RELEASE_VERSION}} to %s, rename the plan to its versioned name under the major-version plans directory, and commit on this branch (tag %s claimed; stamp NOT started)\n' "$slug" "$tag" "$tag" >&2
     return 1
   }
   local vM _vN _vP
   read -r vM _vN _vP <<<"$(version_parse "$tag")" || {
-    printf 'claim-version: stamp — cannot parse won tag %q\n' "$tag" >&2
+    printf 'claim-version: stamp — cannot parse won tag %q, so the versioned plan destination cannot be computed. Nothing was modified. Complete the stamp by hand on this branch (tag %s claimed; stamp NOT started)\n' "$tag" "$tag" >&2
     return 1
   }
   local dest_dir="${CLAIM_REPO_ROOT}/release/releases/plans/v${vM}"
   local dest="${dest_dir}/${tag}_RELEASE_PLAN.md"
-  mkdir -p "$dest_dir" || return 1
+  mkdir -p "$dest_dir" || {
+    printf 'claim-version: stamp — cannot create the versioned plan directory %s. Nothing was modified. Fix the path or permission, then complete the stamp by hand and commit on this branch (tag %s claimed; stamp NOT started)\n' "$dest_dir" "$tag" >&2
+    return 1
+  }
   # Resolve {{RELEASE_VERSION}} in CONTENT — extra --stamp-file artifacts first
   # (repo-relative to CLAIM_REPO_ROOT), then the plan itself.
   local f abs tmp
   local extra_rel=()
   for f in "${STAMP_FILES[@]+"${STAMP_FILES[@]}"}"; do
     abs="${CLAIM_REPO_ROOT}/${f}"
-    [[ -f "$abs" ]] || { printf 'claim-version: stamp — --stamp-file %q not found under repo root\n' "$f" >&2; return 1; }
+    [[ -f "$abs" ]] || {
+      printf 'claim-version: stamp — --stamp-file %q not found under repo root. Any earlier --stamp-file entries in this manifest may already have been rewritten. Inspect with: git -C %s status --short — then finish the substitutions, rename the plan and commit on this branch (tag %s claimed; stamp half-applied)\n' "$f" "$CLAIM_REPO_ROOT" "$tag" >&2
+      return 1
+    }
     tmp="$(mktemp)"
-    sed "s/{{RELEASE_VERSION}}/${tag}/g" "$abs" > "$tmp" && cat "$tmp" > "$abs" || { rm -f "$tmp"; return 1; }
+    sed "s/{{RELEASE_VERSION}}/${tag}/g" "$abs" > "$tmp" && cat "$tmp" > "$abs" || {
+      rm -f "$tmp"
+      printf 'claim-version: stamp — {{RELEASE_VERSION}} substitution FAILED writing %s, which may now be TRUNCATED. Earlier --stamp-file entries were already rewritten. Inspect with: git -C %s status --short — then restore %s from git and finish the stamp by hand on this branch (tag %s claimed; stamp half-applied)\n' "$f" "$CLAIM_REPO_ROOT" "$f" "$tag" >&2
+      return 1
+    }
     rm -f "$tmp"
     extra_rel+=("$f")
   done
   tmp="$(mktemp)"
-  sed "s/{{RELEASE_VERSION}}/${tag}/g" "$plan" > "$tmp" && cat "$tmp" > "$plan" || { rm -f "$tmp"; return 1; }
+  sed "s/{{RELEASE_VERSION}}/${tag}/g" "$plan" > "$tmp" && cat "$tmp" > "$plan" || {
+    rm -f "$tmp"
+    printf 'claim-version: stamp — {{RELEASE_VERSION}} substitution FAILED writing the plan %s, which may now be TRUNCATED. Every --stamp-file entry was already rewritten. Inspect with: git -C %s status --short — then restore the plan from git and finish the stamp by hand on this branch (tag %s claimed; stamp half-applied)\n' "$plan" "$CLAIM_REPO_ROOT" "$tag" >&2
+    return 1
+  }
   rm -f "$tmp"
   # Bind the FILENAME identity: git mv the slug-named plan to its versioned path.
-  git -C "$CLAIM_REPO_ROOT" mv -- "$plan" "$dest" || return 1
+  git -C "$CLAIM_REPO_ROOT" mv -- "$plan" "$dest" || {
+    printf 'claim-version: stamp — git mv of the plan to %s FAILED. Every {{RELEASE_VERSION}} token is already resolved in the working tree; only the rename and the commit are outstanding. Run: git -C %s mv -- %s %s — then commit both on this branch and push (tag %s claimed; stamp half-applied)\n' "$dest" "$CLAIM_REPO_ROOT" "$plan" "$dest" "$tag" >&2
+    return 1
+  }
   # Follow-on stamp commit (+push) of the renamed plan and any stamped extras.
   local commit_paths=("release/releases/plans/v${vM}/${tag}_RELEASE_PLAN.md")
   commit_paths+=("${extra_rel[@]+"${extra_rel[@]}"}")
@@ -853,7 +1145,27 @@ _stamp_release_identity() {
     fi
   fi
 
-  _host_commit_push "stamp: bind ${tag} release identity (plan rename + {{RELEASE_VERSION}} resolve) [SHA ${merge_sha:0:12}]" "${commit_paths[@]}" || return 1
+  # THE ONE FAILURE WHOSE TWO STATES CARRY OPPOSITE INSTRUCTIONS. _host_commit_push
+  # runs `git add`, `git commit` and `git push`; a failure on the third leaves the
+  # stamp COMMITTED, and telling that operator to "stamp manually" sends them to
+  # redo work that is already committed. So the state is DERIVED from the repo —
+  # the commit message is hoisted so HEAD's subject can be compared against the
+  # exact string `git commit -m` was given — and the branch is READ and PRINTED
+  # rather than asserted, so the sentence stays honest even if the pre-CAS
+  # push-target precondition above it is ever re-placed.
+  local stamp_msg="stamp: bind ${tag} release identity (plan rename + {{RELEASE_VERSION}} resolve) [SHA ${merge_sha:0:12}]"
+  _host_commit_push "$stamp_msg" "${commit_paths[@]}" || {
+    local head_ref=""
+    head_ref="$(git -C "$CLAIM_REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null)" || head_ref=""
+    if _stamp_commit_landed "$stamp_msg"; then
+      printf 'claim-version: stamp — the stamp commit EXISTS LOCALLY on branch %s but was not pushed. Do NOT redo the stamp: the work is already committed. Run: git -C %s push origin HEAD — then verify with: git -C %s status -sb (tag %s claimed; stamp COMMITTED, NOT PUSHED)\n' \
+        "${head_ref:-<unreadable>}" "$CLAIM_REPO_ROOT" "$CLAIM_REPO_ROOT" "$tag" >&2
+    else
+      printf 'claim-version: stamp — the stamp commit was NOT created (git add or git commit failed). The plan is renamed and every {{RELEASE_VERSION}} token resolved in the working tree, uncommitted, on branch %s. Run: git -C %s status --short — then commit the listed paths on this branch and push (tag %s claimed; stamp half-applied)\n' \
+        "${head_ref:-<unreadable>}" "$CLAIM_REPO_ROOT" "$tag" >&2
+    fi
+    return 1
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -869,11 +1181,62 @@ _stamp_release_identity() {
 #               ref-rejection (COLLISION)-> drop local tag; recompute; retry
 #               any other failure        -> HARD HALT; surface raw error; return 1
 #   Bounded MAX_ATTEMPTS; on exhaustion -> deterministic HALT (return 1).
+#
+# THE STAMP-SKIP PREDICATE, recorded in source because it was diagnosed from the
+# outside once and should never have to be again. The claim-time rename at
+# `git mv` is UNCONDITIONAL inside _stamp_release_identity; every observed skip is
+# therefore a NON-INVOCATION of that function, and there are exactly three arms:
+#
+#   P1  no stamp slug in hand  — SILENT. The claim pushes the tag, prints it and
+#       returns 0 with NO diagnostic. The tag IS bound. This arm explains every
+#       historical unrenamed plan in the ledger, and the auto-derivation plus the
+#       announcement below are what remove it: a claim that does not stamp now
+#       says so, and one that can stamp no longer needs to be told to.
+#   P2  pre-flight failure     — LOUD, strictly PRE-CAS, NO tag bound. The manifest
+#       is broken (plan missing / token-less / plans dir unwritable) or the push
+#       target is unusable (detached HEAD, default branch, undeclared target,
+#       untracked plan). Nothing is mutated and nothing is claimed; re-running
+#       after the fix is free. This arm is structurally incapable of producing an
+#       unrenamed plan beside a bound tag.
+#   P3  post-CAS stamp failure — LOUD, tag ALREADY bound, HALT below. The tag is
+#       authoritative and is never un-claimed; the surviving post-CAS failure
+#       states are enumerated on _stamp_release_identity.
+#
+# The discriminator between "skipped and nothing is wrong" and "skipped and the
+# corpus just drifted" is P1-vs-P2, and the whole point of the pre-CAS block is to
+# keep every newly-introduced refusal on the P2 side of the CAS.
 # ---------------------------------------------------------------------------
 claim_version() {
   local merge_sha="$1" bump="$2" patch_base="${3:-}" message="${4:-}"
   local max="${MAX_ATTEMPTS:-$MAX_ATTEMPTS_DEFAULT}"
   local attempt tag push_out push_rc
+
+  # --- STEP 0: resolve the EFFECTIVE stamp slug (local; never the global) ------
+  # The explicit flag always wins. Absent it, derive from the corpus — and on a
+  # derivation refusal fall back to the pre-existing no-stamp behaviour, so a repo
+  # with no unique pre-claim plan claims exactly as it does today.
+  #
+  # WHY A LOCAL AND NEVER THE GLOBAL: _main's --dry-run block reads STAMP_SLUG to
+  # decide what to report. Assigning the global here would silently un-gate that
+  # block for every caller that passed no flag — a different card's design, changed
+  # from underneath it by a variable write. The two gates below read this local.
+  local effective_slug="${STAMP_SLUG:-}"
+  if [[ -z "$effective_slug" ]]; then
+    effective_slug="$(_derive_stamp_slug)" || effective_slug=""
+  fi
+
+  # --- STEP 0.5: pre-CAS push-target + trackedness precondition ---------------
+  # Gated on effective_slug being non-empty, so a non-stamping caller and a
+  # version-less release are byte-unaffected. Evaluated ONCE, before the retry
+  # loop: it reads HEAD and the index, neither of which a lost CAS can change, so
+  # re-running it per attempt would only re-emit the announcement. It remains
+  # strictly pre-CAS — no tag has been pushed at this point on any attempt.
+  if [[ -n "$effective_slug" ]]; then
+    _preflight_push_target "$effective_slug" || {
+      printf 'claim-version: HALT — stamp push-target pre-flight failed; not claiming\n' >&2
+      return 1
+    }
+  fi
 
   for (( attempt=1; attempt<=max; attempt++ )); do
     # --- STEP 1: fetch authoritative refs (correctness precondition) ---
@@ -900,7 +1263,7 @@ claim_version() {
     # --- STEP 2.7: stamp pre-flight (read-only; only when --stamp-slug given) ---
     # Validate the stamp manifest BEFORE the CAS so we never claim a number we
     # cannot stamp. Mutates nothing (the recompute-retry loop stays free).
-    [[ -n "${STAMP_SLUG:-}" ]] && { _preflight_stamp "$STAMP_SLUG" || {
+    [[ -n "$effective_slug" ]] && { _preflight_stamp "$effective_slug" || {
       printf 'claim-version: HALT — stamp pre-flight failed (broken manifest); not claiming\n' >&2
       return 1
     }; }
@@ -915,9 +1278,13 @@ claim_version() {
     if [[ $push_rc -eq 0 ]]; then
       # WON the compare-and-swap. Post-CAS: stamp the claim-time identity with the
       # WON tag (only when --stamp-slug given). A stamp failure HALTs — the tag is
-      # authoritative and is NEVER un-claimed; stamp manually on failure.
-      [[ -n "${STAMP_SLUG:-}" ]] && { _stamp_release_identity "$tag" "$STAMP_SLUG" "$merge_sha" || {
-        printf 'claim-version: HALT — %s claimed but stamp failed; stamp manually (tag authoritative)\n' "$tag" >&2
+      # authoritative and is NEVER un-claimed. This envelope is the OUTER half of
+      # the recovery pair: it names the bound identifier and forbids the re-run,
+      # while the "claim-version: stamp — " line _stamp_release_identity emitted
+      # immediately above it names the failed step and its remediation.
+      [[ -n "$effective_slug" ]] && { _stamp_release_identity "$tag" "$effective_slug" "$merge_sha" || {
+        printf 'claim-version: HALT — %s is CLAIMED and PUSHED; it cannot be un-claimed. The claim-time stamp did NOT complete — the preceding "claim-version: stamp —" line names the failed step, the resulting repo state, and its remediation. Do NOT re-run claim-version.sh: a re-run claims a SECOND tag. Complete the stamp by hand on this branch, then verify: git -C %s log --oneline -1 && git -C %s status --short. The release cannot close until the plan is committed at its versioned name.\n' \
+          "$tag" "$CLAIM_REPO_ROOT" "$CLAIM_REPO_ROOT" >&2
         return 1
       }; }
       printf '%s\n' "$tag"                       # WON the compare-and-swap
@@ -957,7 +1324,9 @@ _usage() {
 Usage:
   claim-version.sh --sha <merge_sha> --bump <major|minor|patch> \
       [--patch-base <vX.Y>] [--message <m>] [--max-attempts N] \
-      [--stamp-slug <slug>] [--stamp-file <repo-rel-path>]... [--dry-run]
+      [--stamp-slug <slug>] [--stamp-file <repo-rel-path>]... \
+      [--stamp-branch <name>] [--dry-run]
+  claim-version.sh --verify-stamp <slug>
   claim-version.sh --self-test
 
 On success prints the claimed tag to stdout; non-zero exit on HALT.
@@ -965,14 +1334,58 @@ On success prints the claimed tag to stdout; non-zero exit on HALT.
 --stamp-slug <slug>  When set, on the CAS-win path resolve {{RELEASE_VERSION}} in
     the pre-claim plan release/releases/plans/<slug>_RELEASE_PLAN.md (post-CAS,
     with the WON tag) and git-mv it to plans/v<MAJOR>/vX.Y_RELEASE_PLAN.md
-    (ADR-092). Absent this flag the stamping pass is skipped entirely.
+    (ADR-092). Absent this flag the slug is DERIVED from the corpus: the unique
+    pre-claim plan at the plans/ top level or under _unversioned/ carrying at
+    least one {{RELEASE_VERSION}} token. The stamping pass is skipped entirely
+    only when no such plan is resolvable or when two or more are (an ambiguity
+    is announced on stderr and refused, never guessed).
 --stamp-file <path>  Optional, repeatable. Additional repo-relative token-bearing
     file(s) whose {{RELEASE_VERSION}} is resolved in the same stamp commit.
+    Paths must be in CANONICAL repo-relative form. The pre-flight announces the
+    expected rebuild count before the claim and refuses pre-CAS when the manifest
+    stales zero packages or names a non-canonical path — it never rewrites a path
+    for you.
+--stamp-branch <name>  Optional. DECLARES the branch the stamp's follow-on commit
+    will publish to; the claim refuses PRE-CAS when it does not match HEAD. Not
+    required: the pre-CAS precondition already refuses a detached HEAD and the
+    default branch outright, and ANNOUNCES the resolved target on stderr when the
+    flag is absent, because whether any other branch reaches the mainline is not
+    decidable from git. Stage-12 automation should pass it; a hand-run claim from
+    a correctly-named chore branch does not have to.
+--verify-stamp <slug>  Read-only stamp-manifest verification. Runs the SAME
+    pre-flight the Stage-12 claim runs before the compare-and-swap, so a
+    Commit-0 PROCEED rehearses the real claim rather than a lookalike. No
+    network, no CAS, no mutation; consumes neither --sha nor --bump. This is the
+    Commit-0 rung's invocation and it asserts a PRE-CLAIM manifest only.
+
+    Exit 0 = manifest resolvable ("verify-stamp OK"). Exit 1 = no pre-claim
+    manifest was verifiable, and the VERDICT LINE names which of three states was
+    found — the states are not interchangeable and the exit code alone cannot
+    tell them apart:
+      NO PRE-CLAIM PLAN  no <slug>_RELEASE_PLAN.md exists. This is the CORRECT
+                         shape after a completed claim (the plan was renamed
+                         under plans/v<MAJOR>/) and reports no defect; it is also
+                         what a never-authored slug looks like, and the rename
+                         destroys the slug, so the verb states both readings
+                         rather than guessing.
+      TOKEN-LESS PLAN    the plan exists but carries no {{RELEASE_VERSION}}.
+      HALT               plan and token both present; a later pre-flight stage
+                         refused (plans dir, a --stamp-file entry, or the package
+                         consequence). This is the only genuinely broken-manifest
+                         verdict.
+    Because a completed claim lands on the first of those, this verb still
+    returns non-zero on a correctly claimed repository — by design, since it has
+    no pre-claim manifest to assert there. Never wire it into a post-claim or
+    recovery path.
 EOF
 }
 
 _main() {
-  local sha="" bump="" patch_base="" message="" dry_run=0
+  # VERIFY_STAMP_SLUG is deliberately a _main LOCAL, never the file-scope
+  # STAMP_SLUG global: the verb takes its slug from argv only, so no environment
+  # seeding can reach it and no claim-path slug derivation can interfere with it
+  # in either direction.
+  local sha="" bump="" patch_base="" message="" dry_run=0 verify_stamp_slug=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --sha)          sha="$2"; shift 2;;
@@ -981,6 +1394,11 @@ _main() {
       --message)      message="$2"; shift 2;;
       --max-attempts) MAX_ATTEMPTS="$2"; shift 2;;
       --stamp-slug)   STAMP_SLUG="$2"; shift 2;;
+      # Assertion-only intake for the DECLARED push target. Kept adjacent to
+      # --stamp-slug because it qualifies the same pass; consumed pre-CAS by
+      # _preflight_push_target, never by the stamp itself.
+      --stamp-branch) STAMP_BRANCH="$2"; shift 2;;
+      --verify-stamp) verify_stamp_slug="$2"; shift 2;;
       # Normalise the operator-supplied path at the single intake point. A leading
       # "./", an embedded "/./", or a doubled "//" all name the same file, but the
       # pre-flight guard (permissive glob) and the affected-skill resolver (anchored
@@ -993,6 +1411,70 @@ _main() {
       *) printf 'claim-version: unknown arg %q\n' "$1" >&2; _usage; exit 2;;
     esac
   done
+
+  # --- Stamp-manifest verification mode (read-only; no network, no CAS) -------
+  # Runs the IDENTICAL predicate the Stage-12 claim runs before the CAS, so a
+  # Commit-0 PROCEED is a faithful rehearsal of the claim rather than a lookalike
+  # that can agree with a broken manifest. It consumes neither --sha nor --bump —
+  # _preflight_stamp's plan-only path is a pure filesystem predicate — which is
+  # why this branch must return BEFORE the two required-arg checks below. That
+  # position is load-bearing, not incidental.
+  #
+  # PRE-CLAIM ONLY. After a claim the plan has been renamed under
+  # plans/v<MAJOR>/, so _resolve_preclaim_plan finds no candidate and this verb
+  # returns non-zero on a repository whose claim already completed correctly.
+  # It is therefore never wired into a recovery path: its single governed caller
+  # is the Commit-0 rung, where the token is expected to be present.
+  if [[ -n "$verify_stamp_slug" ]]; then
+    _preflight_stamp "$verify_stamp_slug" || {
+      # THE VERDICT IS CLASSIFIED, NOT CONSTANT — and that is this branch's whole
+      # contract. One envelope used to be emitted for every refusal, so a
+      # correctly-claimed repository, a token-less plan and a partly-recovered
+      # tree produced a BYTE-IDENTICAL verdict; worse, that single envelope
+      # asserted "the identity-conformance check cannot distinguish it from a
+      # claimed release" on the very repository whose release IS claimed, which
+      # inverts the reading on the one healthy post-claim input.
+      #
+      # Classified on the two predicates that are EXACTLY decidable and SLUG-
+      # SCOPED, and on no others:
+      #   P — a pre-claim plan for <slug> exists (_resolve_preclaim_plan)
+      #   T — that plan carries the {{RELEASE_VERSION}} token
+      # Nothing here consults a corpus-wide predicate. "Some versioned plan exists
+      # under plans/v<MAJOR>/" was rejected as a discriminator precisely because it
+      # is TRUE of every real repository (v1..v4 are all populated), so it would
+      # classify a genuinely missing plan as a completed claim — the same
+      # fail-open shape one level down.
+      #
+      # THE ONE THING IT REFUSES TO GUESS. The claim's rename destroys the slug, so
+      # "already claimed" and "never authored" are not distinguishable from the
+      # filesystem. P=0 therefore reports BOTH readings and decides neither; it
+      # does not say "broken", because on a completed claim nothing is.
+      #
+      # Read-only throughout, and the exit code is deliberately UNCHANGED (1 on
+      # every non-resolvable state). The Commit-0 rung keys PROCEED off exit 0;
+      # re-contracting that from here would change a caller's gate as a side
+      # effect of improving a message.
+      local _vs_plan="" _vs_pre=0
+      if _vs_plan="$(_resolve_preclaim_plan "$verify_stamp_slug" 2>/dev/null)"; then _vs_pre=1; fi
+      if [[ "$_vs_pre" -eq 0 ]]; then
+        printf 'claim-version: verify-stamp NO PRE-CLAIM PLAN — release/releases/plans/ carries no %s_RELEASE_PLAN.md (neither at the plans root nor under _unversioned/). On a repository whose claim COMPLETED this is the CORRECT shape: the Stage-12 CAS-win path renamed the plan to plans/v<MAJOR>/vX.Y_RELEASE_PLAN.md and resolved its tokens, so this verb — which asserts a PRE-CLAIM manifest only — has nothing left to verify and reports NO DEFECT. It is also what a slug that was never authored looks like; the rename destroys the slug, so the two are not distinguishable here and this verb does not guess between them. Exit 1 means "no pre-claim manifest for this slug", NOT "this repository is broken".\n' \
+          "$verify_stamp_slug" >&2
+      elif ! grep -q '{{RELEASE_VERSION}}' "$_vs_plan"; then
+        printf 'claim-version: verify-stamp TOKEN-LESS PLAN — the pre-claim plan %s EXISTS but carries no {{RELEASE_VERSION}} token, so the Stage-12 claim would rename it with nothing to resolve. Two readings, both actionable: the plan was authored without the placeholder, or a stamp already resolved its tokens and did not complete the rename (the "half-applied" state the post-CAS recovery messages name). Restore the placeholder if the release has not claimed; finish the rename by hand if it has.\n' \
+          "$_vs_plan" >&2
+      else
+        printf 'claim-version: verify-stamp HALT — stamp manifest broken for slug %q. The pre-claim plan and its {{RELEASE_VERSION}} token are BOTH present, so the refusal above came from a later pre-flight stage — the plans directory, a --stamp-file entry, or the manifest package consequence. At the Stage-12 claim this HALTs before the CAS: nothing is claimed and nothing is mutated, so correcting the manifest and re-running costs nothing.\n' \
+          "$verify_stamp_slug" >&2
+      fi
+      exit 1
+    }
+    # State the rehearsal's own extent on success. A PROCEED that does not say
+    # what it exercised reads as broader evidence than it is — the failure mode
+    # this rung exists to close, one level down.
+    printf 'claim-version: verify-stamp OK — %s carries a resolvable stamp manifest; plan-only manifest (%d --stamp-file target(s)); package-consequence checks not exercised\n' \
+      "$verify_stamp_slug" "${#STAMP_FILES[@]}" >&2
+    exit 0
+  fi
 
   [[ -n "$sha"  ]] || { printf 'claim-version: --sha is required\n' >&2; _usage; exit 2; }
   [[ -n "$bump" ]] || { printf 'claim-version: --bump is required\n' >&2; _usage; exit 2; }
@@ -1057,6 +1539,35 @@ _claim_self_test() {
   # The package fixtures copy the actual builder + resolver out of it so they
   # exercise the REAL --skills-for-paths query rather than a restatement of it.
   local _ST_REAL_ROOT="$CLAIM_REPO_ROOT"
+  # Every stamp sandbox is born on THIS branch, never on init.defaultBranch. The
+  # pre-CAS push-target precondition refuses the default branch, and U-13 drives
+  # the full claim on a sandbox with a stamp slug set — so an implicit default
+  # branch would turn the collision-safety crux red for an environment reason.
+  # U-20e flips a sandbox ONTO the default branch deliberately, which is the
+  # sensitivity arm proving this value is doing work.
+  local _ST_SANDBOX_BRANCH="chore/selftest-stage-12"
+
+  # HERMETICITY FLOOR. Most fixtures never set CLAIM_REPO_ROOT and so inherited the
+  # LIVE repository root. That was harmless only while the stamp needed an explicit
+  # flag no fixture passed. Now that the slug is DERIVED, a fixture that sets no root
+  # would resolve the real in-flight release plan and drive the real pre-CAS
+  # push-target precondition against the live checkout — which refuses a detached
+  # HEAD and the default branch, so the suite's colour would depend on which branch
+  # the operator happens to be standing on and on how many plans are in flight. That
+  # is the "green for an environmental reason" trap, and it is measurable: forcing
+  # the derivation to succeed reddens seventeen fixtures that have nothing to do
+  # with stamping.
+  #
+  # Pinning an EMPTY root makes the omission mean what it always looked like it
+  # meant — "this fixture has no corpus" — so derivation legitimately finds nothing
+  # and those fixtures run byte-identically to before. It masks nothing: every
+  # fixture that needs a corpus builds its own sandbox and assigns the root
+  # explicitly, U-0 scopes the real root per invocation, and _st_pkg_sandbox copies
+  # out of _ST_REAL_ROOT above.
+  local _ST_ENTRY_ROOT="$CLAIM_REPO_ROOT"
+  local _ST_NEUTRAL_ROOT
+  _ST_NEUTRAL_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/claim-version-neutral.XXXXXX")"
+  CLAIM_REPO_ROOT="$_ST_NEUTRAL_ROOT"
 
   # Assertion helpers are defined FIRST (ahead of the fixture seams) because the
   # pre-stub fixtures — U-0 and U-14a, which must run against the REAL host seams
@@ -1351,9 +1862,21 @@ _claim_self_test() {
   # Records the commit MESSAGE (as before) and now also the committed PATH list,
   # so a fixture can assert that a rebuilt package + its .sha256 sidecar ride the
   # SAME stamp commit rather than a follow-on one — the atomicity property.
+  #
+  # commit_push_rc drives the commit/push seam's FAILURE path — 0 (or absent) =
+  # success, so every pre-existing fixture behaves byte-identically. Absent really
+  # does mean zero: _ct_setup opens with `rm -rf "$_ST_DIR"` and never initialises
+  # this knob, so the `cat` fails and `|| echo 0` answers. Without the seam the
+  # caller's `||` branch is unreachable in BOTH limbs and an if/else inversion or a
+  # swapped message pair ships green — the same always-return-0 defect the sibling
+  # stubs were corrected for.
+  #
+  # DELIBERATELY NOT NAMED push_rc: that name is already a local in claim_version()
+  # holding the CAS tag-push rc, and one name for two unrelated return codes would
+  # misread at a glance.
   _host_commit_push()          { printf '%s\n' "$1" >> "$(_st_f stamp_commits)"; shift
                                  [[ $# -gt 0 ]] && printf '%s\n' "$@" >> "$(_st_f commit_paths)"
-                                 return 0; }
+                                 return "$(cat "$(_st_f commit_push_rc)" 2>/dev/null || echo 0)"; }
   # package-rebuild seam: record the skills it was asked to rebuild and return the
   # configured rc. NEVER invokes the real builder, so no fixture run can write into
   # any packages/ directory. rebuild_rc drives the fail-loud error-path fixture.
@@ -1476,6 +1999,14 @@ _claim_self_test() {
   #   _stamp_release_identity git mv/sed run hermetically (the _host_commit_push
   #   stub records instead of pushing). Signing is disabled so the seed commit never
   #   depends on the operator's gpg config, and a fresh init carries no hooks.
+  #
+  #   THE SANDBOX BRANCH IS EXPLICIT AND THAT IS LOAD-BEARING. `git init` puts the
+  #   repo on whatever init.defaultBranch says, which on this platform is the very
+  #   default branch the pre-CAS push-target precondition refuses. U-13 — the
+  #   collision-safety crux — drives the full claim_version on this sandbox with a
+  #   stamp slug set, so a sandbox born on the default branch would be refused and
+  #   the shipped green crux test would turn red. Naming a chore branch here also
+  #   removes the fixture's dependence on the operator's git configuration.
   _st_stamp_sandbox() {
     local slug="$1" root
     root="$(mktemp -d "${TMPDIR:-/tmp}/claim-version-stamp.XXXXXX")"
@@ -1484,6 +2015,7 @@ _claim_self_test() {
       '# Release Plan {{RELEASE_VERSION}}' 'Body cites {{RELEASE_VERSION}} once more.' \
       > "$root/release/releases/plans/${slug}_RELEASE_PLAN.md"
     git -C "$root" init -q
+    git -C "$root" checkout -q -b "$_ST_SANDBOX_BRANCH"
     git -C "$root" config user.email "selftest@example.invalid"
     git -C "$root" config user.name "claim-version-selftest"
     git -C "$root" config commit.gpgsign false
@@ -1768,18 +2300,34 @@ PKGSTUB
     rm -rf "$_sb11"
   }
 
-  # ---- U-12: no --stamp-slug -> stamping pass is skipped entirely ----
-  # With STAMP_SLUG empty, claim_version behaves byte-identically to U-1 and does
-  # NO stamp (backward-compatibility: every existing caller is unaffected).
-  _t_label="U-12 no stamp-slug -> pass skipped"
-  _ct_setup latest="v2.08" published="v2.06 v2.06.1 v2.07 v2.08" \
-            origin="v2.06 v2.06.1 v2.07 v2.08" plan="ok"
-  : > "$(_st_f stamp_commits)"
-  STAMP_SLUG=""
-  _ct_run claim_version "deadbeefcafe" "minor" "" ""; out="$REPLY"; rc="$REPLY_RC"
-  _ct_eq "$rc" "0" "U-12 exit 0"
-  _ct_eq "$out" "v2.09" "U-12 returns v2.09 (unchanged from no-stamp behavior)"
-  _ct_eq "$(_st_stamp_n)" "0" "U-12 no stamp commit when --stamp-slug absent"
+  # ---- U-12: no slug AND no derivable pre-claim plan -> pass skipped entirely ----
+  # RETARGETED. Its previous wording — "flag absent => no stamp" — encoded predicate
+  # P1, which is the DEFECT this card removes, so a green U-12 under the old wording
+  # would have asserted the bug. The surviving invariant is narrower and still the
+  # backward-compatibility guarantee every existing caller depends on: with no flag
+  # AND no unique token-bearing pre-claim plan resolvable, claim_version behaves
+  # byte-identically to U-1 and stamps nothing.
+  #
+  # HERMETIC. It previously left CLAIM_REPO_ROOT pointing at the LIVE repository, so
+  # once derivation exists it would resolve the real in-flight release plan and
+  # attempt a real stamp against the working tree. It now runs on a sandbox with its
+  # plan removed — zero candidates by construction — mirroring U-13's save/restore.
+  _t_label="U-12 no slug + no derivable plan -> pass skipped"
+  {
+    local _sb12; _sb12="$(_st_stamp_sandbox "widget-none")"
+    rm -f "$_sb12/release/releases/plans/widget-none_RELEASE_PLAN.md"
+    local _save12="$CLAIM_REPO_ROOT"
+    _ct_setup latest="v2.08" published="v2.06 v2.06.1 v2.07 v2.08" \
+              origin="v2.06 v2.06.1 v2.07 v2.08" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    CLAIM_REPO_ROOT="$_sb12"; STAMP_SLUG=""; STAMP_FILES=()
+    _ct_run claim_version "deadbeefcafe" "minor" "" ""; out="$REPLY"; rc="$REPLY_RC"
+    CLAIM_REPO_ROOT="$_save12"
+    _ct_eq "$rc" "0" "U-12 exit 0"
+    _ct_eq "$out" "v2.09" "U-12 returns v2.09 (unchanged from no-stamp behavior)"
+    _ct_eq "$(_st_stamp_n)" "0" "U-12 no stamp commit when no slug is derivable"
+    rm -rf "$_sb12"
+  }
 
   # ---- U-13: collision-then-win stamps ONCE with the WON tag (never the lost one) --
   # The collision-safety proof (the crux). Attempt 1 computes v2.16 and is REJECTED;
@@ -2118,8 +2666,986 @@ PKGSTUB
     rm -rf "$_sb18d"
   }
 
+  # =========================================================================
+  # U-18f..U-18l — THE PRE-CAS REBUILD-COUNT ANNOUNCEMENT and its two refusal
+  # limbs. The defect: the count was computed pre-CAS and then announced only
+  # when non-empty, so a ZERO resolution printed nothing and returned 0 into the
+  # compare-and-swap — the one number an operator needed was visible only from
+  # the outcome, after the version was irreversibly bound.
+  #
+  # THE PAIRING IS THE EVIDENCE. f/g are rc-0 controls and h/i/j are rc-1
+  # sensitivity arms; either half alone is unfalsifiable — a guard that refused
+  # every manifest would satisfy h/i/j, and one that refused none would satisfy
+  # f/g. k is the regression guard on the ONLY invocation form that has ever
+  # shipped.
+  #
+  # i IS THE FIXTURE THAT DISTINGUISHES THE TWO LIMBS, and its vector was
+  # RE-CHOSEN when the resolver changed under it. The resolver's direct-source
+  # rule now roster-filters the segment it captures, so the form i originally used
+  # — a traversal AT the captured segment — resolves in no roster, announces ZERO,
+  # and trips BOTH limbs: it stopped discriminating them and started grading the
+  # count limb by accident. The surviving discriminator is a shape that is
+  # non-canonical BELOW the captured segment: the resolver's regex reads only
+  # ^(core|operations|release)/skills/<name>/ and roster-checks only <name>, so
+  # everything after <name> is invisible to it, the count comes back NON-ZERO, and
+  # the canonicality limb is the only thing that can refuse. A count-only design
+  # passes f/g/h/j/k and fails exactly here.
+  # =========================================================================
+
+  # ---- U-18f: SPECIFICITY / CONTROL. A canonical manifest announces its
+  #      non-zero count pre-CAS and is NOT refused.
+  _t_label="U-18f a canonical manifest announces its non-zero count and passes"
+  {
+    local _sb18f; _sb18f="$(_st_pkg_sandbox "widget-count")"
+    local _save18f="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb18f"; STAMP_FILES=("operations/skills/fixtureops/SKILL.md")
+    _ct_run_err _preflight_stamp "widget-count"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save18f"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "0" "U-18f a canonical manifest passes pre-flight"
+    grep -qF 'manifest stales 1 package(s)' <<< "$err" \
+      || _ct_fail "U-18f the expected rebuild count must be announced PRE-CAS"
+    grep -qF 'fixtureops' <<< "$err" \
+      || _ct_fail "U-18f the announcement must name the skill that will be rebuilt"
+    grep -qF 'Refusing pre-CAS' <<< "$err" \
+      && _ct_fail "U-18f a resolvable canonical manifest must NOT be refused"
+    rm -rf "$_sb18f"
+  }
+
+  # ---- U-18g: COUNT-VS-REBUILD PARITY. The announced count must equal the set
+  #      that is actually rebuilt, not merely be non-zero. This manifest is the
+  #      injected-canonical vector whose real rebuild set U-18b pins at exactly
+  #      {fixtureops, fixturerel} — so asserting 2 HERE proves the announcement
+  #      is the same answer the post-CAS rebuild acts on, from the same resolver.
+  _t_label="U-18g the announced count equals the set U-18b proves is rebuilt"
+  {
+    local _sb18g; _sb18g="$(_st_pkg_sandbox "widget-parity")"
+    local _save18g="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb18g"; STAMP_FILES=("core/standards/output-format.md")
+    _ct_run_err _preflight_stamp "widget-parity"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save18g"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "0" "U-18g an injected canonical passes pre-flight"
+    grep -qF 'manifest stales 2 package(s)' <<< "$err" \
+      || _ct_fail "U-18g the count must be 2 — the same set U-18b asserts is rebuilt"
+    grep -qF 'fixtureops' <<< "$err" \
+      || _ct_fail "U-18g the announcement must name the first injected skill"
+    grep -qF 'fixturerel' <<< "$err" \
+      || _ct_fail "U-18g the announcement must name the second injected skill"
+    rm -rf "$_sb18g"
+  }
+
+  # ---- U-18h: SENSITIVITY, form 1 — the LEADING-SLASH residue. The intake sed
+  #      collapses an embedded "//" but leaves the leading slash, the resolver's
+  #      anchored regex misses it, and post-CAS `git add -- /core/...` reads it as
+  #      absolute and fails with the tag already bound. Both limbs fire here.
+  #      The claim_version leg is the load-bearing one: rc alone cannot tell a
+  #      pre-CAS stop from a post-claim HALT — ZERO PUSH ATTEMPTS can.
+  _t_label="U-18h a leading-slash path announces zero and stops PRE-CAS, no tag pushed"
+  {
+    local _sb18h; _sb18h="$(_st_pkg_sandbox "widget-slash")"
+    local _save18h="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb18h"; STAMP_FILES=("/operations/skills/fixtureops/SKILL.md")
+    _ct_run_err _preflight_stamp "widget-slash"; err="$REPLY"
+    _ct_eq "$REPLY_RC" "1" "U-18h a leading-slash --stamp-file is refused"
+    grep -qF 'manifest stales 0 package(s)' <<< "$err" \
+      || _ct_fail "U-18h the zero count must be ANNOUNCED, not merely acted on"
+    grep -qF 'not in canonical repo-relative form' <<< "$err" \
+      || _ct_fail "U-18h the refusal must name the non-canonical form"
+    grep -qF 'operations/skills/fixtureops/SKILL.md' <<< "$err" \
+      || _ct_fail "U-18h the refusal must state the canonical form the caller should pass"
+
+    # Whole-claim leg: THE assertion that the stop is pre-CAS.
+    _ct_setup latest="v3.98" published="v3.98" origin="v3.98" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    STAMP_SLUG="widget-slash"
+    _ct_run claim_version "deadbeefcafe" "minor" "" ""; rc="$REPLY_RC"
+    STAMP_SLUG=""; CLAIM_REPO_ROOT="$_save18h"; STAMP_FILES=()
+    [[ "$rc" -ne 0 ]] || _ct_fail "U-18h the claim must HALT on a broken manifest"
+    _ct_eq "$(_ct_push_idx)" "0" "U-18h ZERO push attempts — the stop is PRE-CAS, not a post-claim HALT"
+    _ct_eq "$(_ct_pushed_n)" "0" "U-18h no tag reached origin"
+    _ct_eq "$(_st_stamp_n)" "0" "U-18h no stamp commit"
+    rm -rf "$_sb18h"
+  }
+
+  # ---- U-18i: SENSITIVITY, form 2 — THE TRAVERSAL THE RESOLVER MATCHES, caught
+  #      by canonicality ALONE. The traversal sits BELOW the segment the resolver
+  #      captures, which is what keeps this arm discriminating now that the
+  #      captured segment is roster-filtered (see the family header above): the
+  #      regex reads operations/skills/fixtureops/ and stops, fixtureops IS in the
+  #      stub roster, so the count comes back NON-ZERO and the count limb has
+  #      nothing to fire on. Only G7 can refuse this manifest.
+  #
+  #      THE VECTOR CARRIES A REAL POST-CAS HARM, not just a shape. It traverses
+  #      OUT of the skill directory and lands on core/standards/output-format.md —
+  #      a TEMPLATE_SYNC_MAP canonical. Rule (b) is an EXACT string match against
+  #      the resolved canonical path, so the traversing form does not match it and
+  #      the answer comes back as {fixtureops} alone. But the file the post-CAS
+  #      substitution would actually rewrite is that canonical, and U-18g pins
+  #      that its canonical form stales TWO packages, {fixtureops, fixturerel}. So
+  #      the count is not merely non-zero, it is WRONG BY ONE PACKAGE — the stamp
+  #      would rewrite the canonical, rebuild only fixtureops, and leave
+  #      fixturerel.skill stale on the mainline behind a bound tag. That
+  #      understatement is exactly what the canonicality limb exists to refuse,
+  #      and it is why normalising the path instead would be worse than refusing.
+  #
+  #      The three assertions below are the discrimination proof and must be read
+  #      together: the count line proves the count limb was SATISFIED, the absent
+  #      'Refusing pre-CAS' proves it did not fire, and the canonicality diagnostic
+  #      proves what did. That absence is the exact mirror of U-18l's assertion
+  #      that the canonicality diagnostic is absent there.
+  _t_label="U-18i a ..-traversal BELOW the captured segment is MATCHED by the resolver and caught by canonicality alone"
+  {
+    local _sb18i; _sb18i="$(_st_pkg_sandbox "widget-trav")"
+    local _save18i="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb18i"
+    STAMP_FILES=("operations/skills/fixtureops/../../../core/standards/output-format.md")
+    _ct_run_err _preflight_stamp "widget-trav"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save18i"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "1" "U-18i a ..-traversing --stamp-file is refused pre-CAS"
+    grep -qF 'not in canonical repo-relative form' <<< "$err" \
+      || _ct_fail "U-18i the canonicality limb must be the one that fires"
+    grep -qF 'operations/skills/fixtureops/../../../core/standards/output-format.md' <<< "$err" \
+      || _ct_fail "U-18i the refusal must name the path as supplied"
+    # The count limb is SATISFIED, so it cannot be what refused.
+    grep -qF 'manifest stales 1 package(s)' <<< "$err" \
+      || _ct_fail "U-18i this form must resolve NON-zero — a zero count here would let the COUNT limb refuse and the arm would stop grading canonicality"
+    grep -qF 'Refusing pre-CAS' <<< "$err" \
+      && _ct_fail "U-18i the COUNT limb must NOT fire — its absence is what makes this arm grade the canonicality limb alone"
+    # The count is non-zero AND WRONG: U-18g pins the canonical form of this same
+    # file at 2 packages. Seeing fixturerel here would mean the resolver had been
+    # taught to normalise — the repair this guard deliberately refuses to make.
+    grep -qF 'fixturerel' <<< "$err" \
+      && _ct_fail "U-18i the traversing form must resolve to the UNDERSTATED set — fixturerel appearing means the path was normalised rather than refused"
+    rm -rf "$_sb18i"
+  }
+
+  # ---- U-18j: SENSITIVITY, form 3 — an embedded "/./". A third structurally
+  #      distinct shape, so the guard is exercised across three forms rather than
+  #      one form twice.
+  _t_label="U-18j an embedded /./ path announces zero and is refused pre-CAS"
+  {
+    local _sb18j; _sb18j="$(_st_pkg_sandbox "widget-dot")"
+    local _save18j="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb18j"; STAMP_FILES=("operations/./skills/fixtureops/SKILL.md")
+    _ct_run_err _preflight_stamp "widget-dot"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save18j"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "1" "U-18j an embedded /./ --stamp-file is refused pre-CAS"
+    grep -qF 'manifest stales 0 package(s)' <<< "$err" \
+      || _ct_fail "U-18j the zero count must be announced for this form too"
+    grep -qF 'not in canonical repo-relative form' <<< "$err" \
+      || _ct_fail "U-18j the refusal must name the non-canonical form"
+    rm -rf "$_sb18j"
+  }
+
+  # ---- U-18k: NO-REGRESSION on the ONLY form that has ever shipped. A plan-only
+  #      manifest announces zero and PROCEEDS — it is not refused. --stamp-file
+  #      has one production intake and no shipped invocation has passed it, so a
+  #      "zero implies refuse" predicate would break 100% of them. This fixture
+  #      is what keeps the count limb from swallowing the shipped population.
+  _t_label="U-18k a plan-only manifest announces zero and PROCEEDS (never refused)"
+  {
+    local _sb18k; _sb18k="$(_st_pkg_sandbox "widget-planonly")"
+    local _save18k="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb18k"; STAMP_FILES=()
+    _ct_run_err _preflight_stamp "widget-planonly"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save18k"
+    _ct_eq "$REPLY_RC" "0" "U-18k a plan-only manifest passes pre-flight"
+    grep -qF 'manifest stales 0 package(s)' <<< "$err" \
+      || _ct_fail "U-18k the zero count must be announced on the plan-only path too"
+    grep -qF 'plan-only manifest' <<< "$err" \
+      || _ct_fail "U-18k the announcement must say WHY the count is zero"
+    grep -qF 'Refusing pre-CAS' <<< "$err" \
+      && _ct_fail "U-18k the plan-only branch must NEVER refuse — it is the whole shipped population"
+    rm -rf "$_sb18k"
+  }
+
+  # ---- U-18l: THE COUNT LIMB'S OWN DISCRIMINATING ARM. Added because the limb
+  #      had none: h and j are refused by the CANONICALITY limb as well, so
+  #      deleting the count check outright left the whole suite green — a limb
+  #      whose denominator is empty is a limb that cannot be shown to work.
+  #      This manifest is CANONICAL in form and genuinely feeds no .skill
+  #      package, so the count limb is the only thing that can refuse it.
+  #
+  #      It also pins the design's ONE ACCEPTED FALSE POSITIVE as a tested
+  #      contract rather than an unstated tradeoff: a stamp target that is
+  #      legitimately unpackaged IS refused here. That population is currently
+  #      empty in production, and the refusal message names the condition, so the
+  #      day it becomes non-empty the tool says so instead of failing silently.
+  _t_label="U-18l a canonical manifest staling zero packages is refused by the COUNT limb alone"
+  {
+    local _sb18l; _sb18l="$(_st_pkg_sandbox "widget-unpackaged")"
+    local _save18l="$CLAIM_REPO_ROOT"
+    # Canonical repo-relative, exists, under no skills/ path and in no
+    # TEMPLATE_SYNC_MAP entry -> resolves to zero packages.
+    printf '%s\n' '# Unmapped standard {{RELEASE_VERSION}}' \
+      > "$_sb18l/core/standards/unmapped.md"
+    CLAIM_REPO_ROOT="$_sb18l"; STAMP_FILES=("core/standards/unmapped.md")
+    _ct_run_err _preflight_stamp "widget-unpackaged"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save18l"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "1" "U-18l a canonical manifest that stales nothing is refused pre-CAS"
+    grep -qF 'manifest stales 0 package(s)' <<< "$err" \
+      || _ct_fail "U-18l the zero count must be announced"
+    grep -qF 'Refusing pre-CAS' <<< "$err" \
+      || _ct_fail "U-18l the COUNT limb must be the one that fires"
+    grep -qF 'not in canonical repo-relative form' <<< "$err" \
+      && _ct_fail "U-18l the canonicality limb must NOT fire — this path IS canonical, which is what makes the count limb falsifiable"
+    rm -rf "$_sb18l"
+  }
+
+  # =========================================================================
+  # U-18m..U-18o — THE POST-CAS RECOVERY MESSAGE PAIR.
+  #
+  # Every failure inside _stamp_release_identity happens with the tag already
+  # created, signed and PUSHED, and nothing there un-claims it. The operator's
+  # only instrument is the text on stderr, and it must arrive as a PAIR: a
+  # "claim-version: stamp — " line naming the failed step, the resulting repo
+  # state and its remediation, under the "claim-version: HALT — " envelope naming
+  # the bound identifier and forbidding the re-run. Five of the ten post-CAS
+  # return sites used to emit NOTHING, so for half of them the envelope was the
+  # only line an operator saw — and it named neither a step nor a command.
+  #
+  # ALL THREE DRIVE claim_version, NEVER _stamp_release_identity DIRECTLY. The one
+  # shipped post-claim fixture (U-18d) drives the function, so no fixture in this
+  # suite had ever traversed the caller's post-CAS HALT and the envelope had ZERO
+  # coverage. Driving the caller is also what makes _ct_push_idx == 1 assertable —
+  # the proof that the HALT is POST-claim, the exact inverse of U-18h's
+  # push_idx == 0, which proves a refusal is PRE-claim.
+  #
+  # THE FAMILY ASSERTIONS ARE LINE-ANCHORED, AND THAT IS THE POINT. claim_version
+  # writes BOTH message families onto ONE stderr in a single run: _preflight_stamp
+  # announces its package count on the SUCCESS path, pre-CAS, on every stamp path
+  # including plan-only, and _ct_run_err captures the whole buffer unfiltered. A
+  # whole-buffer "must not contain 'stamp pre-flight'" assertion is therefore FALSE
+  # ON A CORRECT IMPLEMENTATION, and the only way to satisfy it would be to
+  # suppress an announcement that is a deliberate deliverable. Partitioning by line
+  # stem grades the property actually meant: the two families stay non-confusable
+  # LINE BY LINE.
+  #
+  # The ^ anchors are what make that partition STRUCTURAL. The envelope quotes the
+  # step stem as a cross-reference ("the preceding claim-version: stamp — line"),
+  # and an unanchored partition would exclude the envelope only by the accident of
+  # the quote character that follows the dash. Anchoring excludes it by
+  # construction instead, so a later edit to the envelope's punctuation cannot
+  # silently pull it into the wrong family.
+  #
+  # AND THE SAME DISCIPLINE APPLIES TO EVERY POSITIVE ASSERTION BELOW. A substring
+  # sought anywhere in this buffer may be satisfied by a line other than the one
+  # under test — the pre-flight publish line carries the branch name, and the step
+  # line carries the won tag. Where that is possible the assertion names the line
+  # it must hold on. Both were caught as inert by deliberate mutation, in this
+  # fixture set's own favour, which is the reason the rule is written down here.
+  # =========================================================================
+
+  # _ct_assert_families <stderr> <leg-id>  — the message-family discipline, graded
+  #   per LINE rather than per buffer. Three properties:
+  #     1. at least one post-claim step line exists. This is the anti-silence
+  #        guard, and it is stated this way because "the buffer is non-empty"
+  #        proves nothing — the pre-CAS announcement is unconditional and fills the
+  #        buffer whether or not the failing site ever emits.
+  #     2. every post-claim step line carries the closed progress trailer, so the
+  #        grammar is CHECKED at the covered limbs rather than conventional.
+  #     3. neither family's lines carry the other's DISTINCTIVE text. The
+  #        discriminator is the trailer, deliberately NOT a "Run: " clause: the
+  #        pre-CAS trackedness refusal legitimately carries one, so keying on it
+  #        would reproduce the same false-by-construction defect one level down.
+  #        Measured: "claimed; stamp " occurs on zero pre-flight lines.
+  _ct_assert_families() {
+    local buf="$1" id="$2" post pre
+    post="$(grep '^claim-version: stamp — '             <<< "$buf" || true)"
+    pre="$( grep '^claim-version: stamp pre-flight — '  <<< "$buf" || true)"
+    if [[ -z "$post" ]]; then
+      _ct_fail "$id no line carries the post-claim stem 'claim-version: stamp — ' (the failure site is SILENT)"
+      return 0
+    fi
+    if grep -qv 'claimed; stamp ' <<< "$post"; then
+      _ct_fail "$id every post-claim step line must carry the (tag <T> claimed; stamp <progress>) trailer"
+    fi
+    if grep -qE 'stamp pre-flight|manifest stales' <<< "$post"; then
+      _ct_fail "$id a post-claim step line must never carry the pre-CAS family's distinctive text"
+    fi
+    if [[ -n "$pre" ]] && grep -q 'claimed; stamp ' <<< "$pre"; then
+      _ct_fail "$id a pre-CAS announcement line must never carry the post-claim progress trailer"
+    fi
+    return 0
+  }
+
+  # ---- U-18m: A SITE THAT WAS 100% SILENT NOW EMITS. `mkdir -p "$dest_dir"` was
+  #      a bare `return 1`. The pre-flight validates release/releases/plans/ but
+  #      never the per-major subdirectory, so planting a regular FILE where that
+  #      subdirectory belongs passes pre-flight and fails POST-CAS — which is the
+  #      whole point: the tag is bound before the failure.
+  #
+  #      Nothing has been mutated at this site (the substitution loop and the
+  #      git mv are both below it), so the fixture asserts BOTH the trailer value
+  #      "NOT started" AND the physical facts that make it true — the plan is
+  #      still at its slug name and still carries the token. A message that
+  #      claimed "half-applied" here would send the operator hunting for damage
+  #      that does not exist.
+  _t_label="U-18m a formerly-silent post-CAS site emits its step, state and trailer"
+  {
+    local _sb18m _save18m _lat18m _maj18m
+    _sb18m="$(_st_stamp_sandbox "widget-nodir")"
+    _save18m="$CLAIM_REPO_ROOT"
+    # DERIVED, never transcribed: the destination directory's major component
+    # comes from the same latest= input the claim computes against, and a minor
+    # bump cannot cross a major boundary.
+    _lat18m="v2.15"; _maj18m="${_lat18m%%.*}"
+    printf 'not a directory\n' > "$_sb18m/release/releases/plans/${_maj18m}"
+    _ct_setup latest="$_lat18m" published="v2.14 $_lat18m" origin="v2.14 $_lat18m" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    CLAIM_REPO_ROOT="$_sb18m"; STAMP_SLUG="widget-nodir"; STAMP_FILES=()
+    _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
+    STAMP_SLUG=""; CLAIM_REPO_ROOT="$_save18m"
+    _ct_eq "$rc" "1" "U-18m the claim HALTs when the versioned plan directory cannot be created"
+    _ct_eq "$(_ct_push_idx)" "1" \
+      "U-18m the tag WAS pushed — this HALT is POST-claim (the inverse of U-18h)"
+    _ct_eq "$(_st_stamp_n)" "0" "U-18m no stamp commit is recorded"
+    _ct_assert_families "$err" "U-18m"
+    grep -qF 'stamp NOT started' <<< "$err" \
+      || _ct_fail "U-18m a site that mutated nothing must report the NOT-started progress value"
+    grep -qF 'half-applied' <<< "$err" \
+      && _ct_fail "U-18m a site that mutated nothing must NEVER claim partial application"
+    grep -qF 'cannot be un-claimed' <<< "$err" \
+      || _ct_fail "U-18m the envelope must state that the identifier is bound and cannot be un-claimed"
+    # The physical facts behind the "NOT started" claim, so the trailer is graded
+    # against the repository rather than only against itself.
+    [[ -f "$_sb18m/release/releases/plans/widget-nodir_RELEASE_PLAN.md" ]] \
+      || _ct_fail "U-18m the plan must still be at its slug name — nothing was renamed"
+    grep -qF '{{RELEASE_VERSION}}' "$_sb18m/release/releases/plans/widget-nodir_RELEASE_PLAN.md" \
+      || _ct_fail "U-18m the plan must still carry its unresolved token — nothing was substituted"
+    rm -rf "$_sb18m"
+  }
+
+  # ---- U-18n: BOTH LIMBS OF THE COMMIT/PUSH SPLIT. `_host_commit_push` covers
+  #      git add, git commit and git push; a failure on the third leaves the stamp
+  #      COMMITTED, and the two states carry OPPOSITE instructions — telling that
+  #      operator to redo the stamp sends them to redo work already committed.
+  #
+  #      BOTH LEGS ARE REQUIRED. A predicate that answered false always would pass
+  #      Leg A alone and silently route every committed-but-unpushed failure to the
+  #      "not created" message. Before the commit_push_rc seam existed the stub
+  #      returned 0 unconditionally, so NEITHER limb was reachable and an if/else
+  #      inversion would have shipped green.
+  #
+  #      THE STAMP SUBJECT IS DERIVED FROM THE TOOL, NOT TRANSCRIBED. The stub
+  #      records the message it was handed BEFORE returning its rc, so Leg A's own
+  #      run yields the exact subject Leg B pre-seeds. No version literal and no
+  #      restatement of the commit-message format appears in this fixture.
+  _t_label="U-18n both commit/push limbs are entered and carry opposite instructions"
+  {
+    local _sb18nA _sb18nB _save18n _msg18n _post18n
+    _save18n="$CLAIM_REPO_ROOT"
+
+    # ---- Leg A: the commit was NOT created (HEAD's subject is still "seed") ----
+    _sb18nA="$(_st_stamp_sandbox "widget-push")"
+    _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    printf '1\n' > "$(_st_f commit_push_rc)"      # force the commit/push seam to fail
+    CLAIM_REPO_ROOT="$_sb18nA"; STAMP_SLUG="widget-push"; STAMP_FILES=()
+    _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
+    STAMP_SLUG=""; CLAIM_REPO_ROOT="$_save18n"
+    _msg18n="$(head -n 1 "$(_st_f stamp_commits)" 2>/dev/null || true)"
+    _ct_eq "$rc" "1" "U-18n/A a failed commit+push makes the claim HALT"
+    _ct_eq "$(_ct_push_idx)" "1" "U-18n/A the tag WAS pushed — the HALT is POST-claim"
+    _ct_assert_families "$err" "U-18n/A"
+    grep -qF 'was NOT created' <<< "$err" \
+      || _ct_fail "U-18n/A with no commit on HEAD the message must say the commit was NOT created"
+    grep -qF 'half-applied' <<< "$err" \
+      || _ct_fail "U-18n/A an uncommitted-but-mutated tree is half-applied"
+    grep -qF 'COMMITTED, NOT PUSHED' <<< "$err" \
+      && _ct_fail "U-18n/A must NOT report a commit that does not exist"
+    grep -qF 'cannot be un-claimed' <<< "$err" \
+      || _ct_fail "U-18n/A the envelope must ride WITH the step line — the pair is the deliverable"
+    [[ -n "$_msg18n" ]] \
+      || _ct_fail "U-18n/A the seam must record the stamp subject even on its failure path"
+    rm -rf "$_sb18nA"
+
+    # ---- Leg B: the commit EXISTS on HEAD; only the push is outstanding ----
+    _sb18nB="$(_st_stamp_sandbox "widget-push")"
+    git -C "$_sb18nB" commit --allow-empty -qm "$_msg18n" >/dev/null 2>&1
+    _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    printf '1\n' > "$(_st_f commit_push_rc)"
+    CLAIM_REPO_ROOT="$_sb18nB"; STAMP_SLUG="widget-push"; STAMP_FILES=()
+    _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
+    STAMP_SLUG=""; CLAIM_REPO_ROOT="$_save18n"
+    printf '0\n' > "$(_st_f commit_push_rc)"
+    _ct_eq "$rc" "1" "U-18n/B a failed push still makes the claim HALT"
+    _ct_eq "$(_ct_push_idx)" "1" "U-18n/B the tag WAS pushed — the HALT is POST-claim"
+    _ct_assert_families "$err" "U-18n/B"
+    grep -qF 'COMMITTED, NOT PUSHED' <<< "$err" \
+      || _ct_fail "U-18n/B with the commit on HEAD the trailer must be COMMITTED, NOT PUSHED"
+    grep -qF 'Do NOT redo the stamp' <<< "$err" \
+      || _ct_fail "U-18n/B the message must forbid redoing work that is already committed"
+    grep -qF 'was NOT created' <<< "$err" \
+      && _ct_fail "U-18n/B must NOT report a missing commit that exists"
+    grep -qF 'cannot be un-claimed' <<< "$err" \
+      || _ct_fail "U-18n/B the envelope must ride WITH the step line — the pair is the deliverable"
+    # ON THE STEP LINE, not anywhere in the buffer: the pre-flight's publish
+    # announcement also names this branch, so a whole-buffer match is satisfied
+    # whether or not the recovery message ever reads HEAD. Measured inert before
+    # this was narrowed.
+    _post18n="$(grep '^claim-version: stamp — ' <<< "$err" || true)"
+    grep -qF "$_ST_SANDBOX_BRANCH" <<< "$_post18n" \
+      || _ct_fail "U-18n/B the STEP line must print the branch it READ, not assert a location"
+    rm -rf "$_sb18nB"
+  }
+
+  # ---- U-18o: THE ENVELOPE ITSELF, reached through claim_version on a genuine
+  #      post-CAS origin. The package-rebuild failure is used as the origin
+  #      because its step line is the file's shipped exemplar of a complete
+  #      recovery message, so this fixture grades the PAIR: the envelope names the
+  #      bound identifier and forbids the re-run, and the step line immediately
+  #      above it names the builder command. Asserting only the envelope would
+  #      pass on an implementation that lost the step line entirely.
+  #
+  #      The won tag is read from the push observation file rather than written
+  #      into the fixture, so no version literal is transcribed here either.
+  _t_label="U-18o the post-CAS envelope names the bound tag and rides WITH its step line"
+  {
+    local _sb18o _save18o _won18o _env18o
+    _sb18o="$(_st_pkg_sandbox "widget-halt")"
+    _save18o="$CLAIM_REPO_ROOT"
+    _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" plan="ok"
+    : > "$(_st_f stamp_commits)"; : > "$(_st_f rebuild_calls)"; : > "$(_st_f commit_paths)"
+    printf '1\n' > "$(_st_f rebuild_rc)"          # force the rebuild seam to fail
+    CLAIM_REPO_ROOT="$_sb18o"; STAMP_SLUG="widget-halt"
+    STAMP_FILES=("operations/skills/fixtureops/SKILL.md")
+    _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
+    STAMP_SLUG=""; STAMP_FILES=(); CLAIM_REPO_ROOT="$_save18o"
+    printf '0\n' > "$(_st_f rebuild_rc)"
+    _won18o="$(head -n 1 "$(_st_f pushed_tags)" 2>/dev/null || true)"
+    _ct_eq "$rc" "1" "U-18o the claim HALTs when the post-CAS rebuild fails"
+    _ct_eq "$(_ct_push_idx)" "1" \
+      "U-18o the tag WAS pushed — the envelope is a POST-claim HALT"
+    _ct_eq "$(_st_stamp_n)" "0" "U-18o no stamp commit is recorded"
+    _ct_assert_families "$err" "U-18o"
+    [[ -n "$_won18o" ]] || _ct_fail "U-18o the fixture must observe the won tag to grade against it"
+    # ON THE ENVELOPE LINE, not anywhere in the buffer: the step line's progress
+    # trailer also names the tag, so a whole-buffer match would be satisfied by the
+    # step line alone and would say nothing about the envelope. Measured inert
+    # before this was narrowed.
+    _env18o="$(grep '^claim-version: HALT — ' <<< "$err" || true)"
+    grep -qF "$_won18o" <<< "$_env18o" \
+      || _ct_fail "U-18o the ENVELOPE must name the identifier that was actually claimed"
+    grep -qF 'cannot be un-claimed' <<< "$err" \
+      || _ct_fail "U-18o the envelope must state the identifier is bound and cannot be un-claimed"
+    grep -qF 'Do NOT re-run' <<< "$err" \
+      || _ct_fail "U-18o the envelope must forbid the re-run (a re-run claims a SECOND tag)"
+    grep -qF 'build-skill-packages.sh' <<< "$err" \
+      || _ct_fail "U-18o the step line must ride WITH the envelope — the pair is what discharges AC1"
+    # AC2's discriminator: the PRE-claim HALT says "not claiming"; this one must not,
+    # because retry is safe pre-claim and forbidden post-claim.
+    grep -qF 'not claiming' <<< "$err" \
+      && _ct_fail "U-18o a post-claim HALT must never carry the pre-claim 'not claiming' wording"
+    rm -rf "$_sb18o"
+  }
+
+  # ---- U-19 series: the --verify-stamp verb, the Commit-0 rung's invocation.
+  #      These drive _main, NOT _preflight_stamp directly. Driving the function
+  #      alone would verify the predicate while leaving the WIRING untested —
+  #      which is this defect's own shape reproduced at the test layer: a check
+  #      that passes without ever reaching the thing it exists to check.
+  #      The token-less arm is built by mutating the sandbox's plan in place
+  #      rather than by parameterising _st_stamp_sandbox, deliberately: that
+  #      builder is a sibling card's edit target in this same release.
+
+  # ---- U-19a: SENSITIVITY. A token-less plan must make the verb fail, and the
+  #      PRE-FLIGHT diagnostic must name the token so the operator knows what to
+  #      restore.
+  #
+  #      THE ASSERTION IS LINE-SCOPED, AND IT HAD TO BE. It was written against the
+  #      whole captured buffer and was measured INERT: stripping the token out of
+  #      the pre-flight diagnostic under test left the fixture GREEN, because the
+  #      verb's own envelope quotes {{RELEASE_VERSION}} too and satisfied a
+  #      whole-buffer match on its own. The buffer now carries the token on at
+  #      least two lines from two different emitters, so partitioning by line stem
+  #      is the only form that grades the line this arm is named for. Same
+  #      discipline, same reason, as the U-18m..o family assertions.
+  _t_label="U-19a --verify-stamp HALTs on a token-less plan and the pre-flight line names the token"
+  {
+    local _sb19a; _sb19a="$(_st_stamp_sandbox "widget-x")"
+    local _save19a="$CLAIM_REPO_ROOT"
+    local _p19a="$_sb19a/release/releases/plans/widget-x_RELEASE_PLAN.md"
+    local _pre19a
+    # Strip every braced token in place; the plan file itself still exists, so
+    # this isolates the TOKEN predicate from the plan-resolution predicate.
+    sed 's/{{RELEASE_VERSION}}//g' "$_p19a" > "$_p19a.tmp" && cat "$_p19a.tmp" > "$_p19a"
+    rm -f "$_p19a.tmp"
+    CLAIM_REPO_ROOT="$_sb19a"; STAMP_FILES=()
+
+    _ct_run_err _main --verify-stamp "widget-x"; err="$REPLY"
+    _ct_eq "$REPLY_RC" "1" "U-19a a token-less plan makes --verify-stamp exit non-zero"
+    # Partition FIRST, then match — a writer grep feeding a short-circuiting
+    # `grep -q` is the SIGPIPE shape this file has already been bitten by.
+    _pre19a="$(grep '^claim-version: stamp pre-flight — ' <<< "$err" || true)"
+    [[ -n "$_pre19a" ]] \
+      || _ct_fail "U-19a no pre-flight line was captured — the token assertion below would be vacuous"
+    grep -q '{{RELEASE_VERSION}}' <<< "$_pre19a" \
+      || _ct_fail "U-19a the PRE-FLIGHT diagnostic must name the token the operator has to restore"
+
+    # STATE 2 OF 3 — the verdict. Asserted here and NEGATED in U-19d/U-19e, which
+    # is what makes the three states distinguishable rather than merely present:
+    # one constant envelope satisfies any single arm, and only the exclusions
+    # catch a regression back to it.
+    grep -qF 'verify-stamp TOKEN-LESS PLAN' <<< "$err" \
+      || _ct_fail "U-19a a plan that exists but carries no token must get the TOKEN-LESS verdict"
+    grep -qF 'verify-stamp NO PRE-CLAIM PLAN' <<< "$err" \
+      && _ct_fail "U-19a the plan EXISTS here — the no-plan verdict must not fire"
+    grep -qF 'manifest broken' <<< "$err" \
+      && _ct_fail "U-19a a token-less plan is a NAMED state, not the generic broken-manifest verdict"
+
+    # Nothing on stdout: the verb speaks only on stderr, so a caller capturing
+    # stdout (as the claim path does for the tag) is never handed a stray line.
+    _ct_run _main --verify-stamp "widget-x"
+    _ct_eq "$REPLY" "" "U-19a the HALT path writes nothing to stdout"
+
+    CLAIM_REPO_ROOT="$_save19a"; STAMP_FILES=()
+    rm -rf "$_sb19a"
+  }
+
+  # ---- U-19b: SPECIFICITY / CONTROL. The same verb on an UNMODIFIED
+  #      token-bearing sandbox must pass. Without this arm U-19a is
+  #      unfalsifiable — a verb that always failed would satisfy it.
+  #      Also asserts the manifest-scope clause, so a PROCEED can never read as
+  #      broader evidence than the plan-only rehearsal it actually performed.
+  _t_label="U-19b --verify-stamp passes a token-bearing plan and states its manifest scope"
+  {
+    local _sb19b; _sb19b="$(_st_stamp_sandbox "widget-x")"
+    local _save19b="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb19b"; STAMP_FILES=()
+
+    _ct_run_err _main --verify-stamp "widget-x"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save19b"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "0" "U-19b control: a token-bearing plan passes --verify-stamp"
+    grep -q 'verify-stamp OK' <<< "$err" \
+      || _ct_fail "U-19b the success line must be recognisable as a verify-stamp PROCEED"
+    grep -qF 'plan-only manifest (0 --stamp-file target(s))' <<< "$err" \
+      || _ct_fail "U-19b the success line must state the rehearsal's extent, not just PROCEED"
+    rm -rf "$_sb19b"
+  }
+
+  # ---- U-19c: ARG INDEPENDENCE. The verb must return BEFORE the --sha/--bump
+  #      required-arg checks, because it consumes neither. The control leg runs
+  #      _main with no args at all and asserts those checks DO fire — otherwise a
+  #      green U-19c would be equally consistent with the checks having been
+  #      deleted, which is a different (and much worse) change.
+  _t_label="U-19c --verify-stamp needs neither --sha nor --bump; the required-arg checks still fire without it"
+  {
+    local _sb19c; _sb19c="$(_st_stamp_sandbox "widget-x")"
+    local _save19c="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb19c"; STAMP_FILES=()
+
+    _ct_run_err _main --verify-stamp "widget-x"
+    _ct_eq "$REPLY_RC" "0" "U-19c --verify-stamp alone succeeds — no --sha, no --bump supplied"
+
+    # Control leg: the same absence of --sha/--bump WITHOUT the verb must still
+    # be rejected, proving the short-circuit is what bypasses them.
+    _ct_run_err _main; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save19c"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "2" "U-19c control: without --verify-stamp the required-arg checks still reject an empty argv"
+    grep -q -- '--sha is required' <<< "$err" \
+      || _ct_fail "U-19c control: the required-arg rejection must still name --sha"
+    rm -rf "$_sb19c"
+  }
+
+  # ---- U-19d: STATE 1 OF 3 — A CORRECTLY-CLAIMED REPOSITORY, and the arm that
+  #      cures the INVERSION. The verb used to emit one envelope for every
+  #      refusal, and that envelope asserted "the identity-conformance check
+  #      cannot distinguish it from a claimed release" — on the repository whose
+  #      release IS claimed. A healthy post-claim tree read as a broken manifest.
+  #
+  #      THE POST-CLAIM STATE IS PRODUCED BY THE TOOL, NOT HAND-BUILT. The fixture
+  #      drives the REAL claim first, so what the verb is then asked about is the
+  #      exact shape claim_version itself leaves behind — a hand-constructed
+  #      lookalike would let the verdict agree with a state the tool never
+  #      produces. The physical post-claim facts are asserted BEFORE the verb runs,
+  #      so a claim that silently failed to stamp cannot present as a passing arm.
+  _t_label="U-19d --verify-stamp names the post-claim state on a correctly-claimed repository"
+  {
+    local _sb19d; _sb19d="$(_st_stamp_sandbox "widget-claimed")"
+    local _save19d="$CLAIM_REPO_ROOT"
+    _ct_setup latest="v3.98" published="v3.98" origin="v3.98" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    CLAIM_REPO_ROOT="$_sb19d"; STAMP_SLUG=""; STAMP_FILES=()
+    _ct_run claim_version "deadbeefcafe" "minor" "" ""; rc="$REPLY_RC"
+    _ct_eq "$rc" "0" "U-19d the claim itself succeeds"
+    _ct_eq "$(_st_stamp_n)" "1" "U-19d the claim stamped — otherwise the verdict below grades an unclaimed tree"
+    [[ -f "$_sb19d/release/releases/plans/v3/v3.99_RELEASE_PLAN.md" ]] \
+      || _ct_fail "U-19d the plan must be renamed under plans/v3/ — the post-claim shape this arm asks about"
+    [[ -f "$_sb19d/release/releases/plans/widget-claimed_RELEASE_PLAN.md" ]] \
+      && _ct_fail "U-19d the slug-named plan must be gone — that absence IS the state under test"
+
+    _ct_run_err _main --verify-stamp "widget-claimed"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save19d"; STAMP_SLUG=""; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "1" \
+      "U-19d the verb still reports non-zero — it asserts a PRE-CLAIM manifest and there is none here"
+    grep -qF 'verify-stamp NO PRE-CLAIM PLAN' <<< "$err" \
+      || _ct_fail "U-19d a completed claim must get the no-pre-claim-plan verdict"
+    # THE INVERSION, ASSERTED AS ABSENT. This is the arm's reason for existing.
+    grep -qF 'manifest broken' <<< "$err" \
+      && _ct_fail "U-19d a correctly-claimed repository must NEVER be reported as a broken manifest"
+    grep -qF 'cannot distinguish it from a claimed release' <<< "$err" \
+      && _ct_fail "U-19d the inverted clause must not reach the one input on which it is false"
+    grep -qF 'verify-stamp TOKEN-LESS PLAN' <<< "$err" \
+      && _ct_fail "U-19d there is no plan here at all — the token-less verdict must not fire"
+    rm -rf "$_sb19d"
+  }
+
+  # ---- U-19e: STATE 3 OF 3 — A HALF-RECOVERED REPOSITORY. The pre-claim plan and
+  #      its token have both been restored, but the manifest's --stamp-file
+  #      artifact has not: a partial recovery that brings back the plan and stops.
+  #      Plan present AND token present, so neither named state applies and the
+  #      generic broken-manifest verdict is the correct one — which is now a
+  #      MEANINGFUL verdict rather than the catch-all it used to be, because the
+  #      two states above have been lifted out of it.
+  #
+  #      Scope note: "half-recovered" admits more than one construction. This is
+  #      the one that exercises the third verdict and is a genuine partial
+  #      recovery; a recovery that restored plan AND artifacts would pass the
+  #      pre-flight outright and is U-19b's case, not a failure state.
+  _t_label="U-19e --verify-stamp names the broken-manifest state on a half-recovered repository"
+  {
+    local _sb19e; _sb19e="$(_st_stamp_sandbox "widget-halfrec")"
+    local _save19e="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb19e"
+    # The plan is intact and token-bearing; the artifact the manifest names was
+    # never restored alongside it.
+    STAMP_FILES=("operations/skills/fixtureops/SKILL.md")
+    _ct_run_err _main --verify-stamp "widget-halfrec"; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save19e"; STAMP_FILES=()
+    _ct_eq "$REPLY_RC" "1" "U-19e a manifest naming an absent artifact is refused"
+    grep -qF 'verify-stamp HALT — stamp manifest broken' <<< "$err" \
+      || _ct_fail "U-19e plan and token both present — this is the genuine broken-manifest verdict"
+    grep -qF 'verify-stamp NO PRE-CLAIM PLAN' <<< "$err" \
+      && _ct_fail "U-19e the plan EXISTS here — the no-plan verdict must not fire"
+    grep -qF 'verify-stamp TOKEN-LESS PLAN' <<< "$err" \
+      && _ct_fail "U-19e the token IS present here — the token-less verdict must not fire"
+    # The verdict must say which stage refused, or it is the old catch-all again.
+    # The `--` is load-bearing: without it grep reads the pattern as an option,
+    # exits 2, and the arm reddens for a reason that has nothing to do with the
+    # message. Same guard U-19c's `--sha` assertion carries.
+    grep -qF -- '--stamp-file' <<< "$err" \
+      || _ct_fail "U-19e the broken-manifest verdict must name the later stages it could have come from"
+    rm -rf "$_sb19e"
+  }
+
+  # =========================================================================
+  # U-20 family — slug DERIVATION and the pre-CAS push-target precondition.
+  #
+  # U-20a/b are the discharging pair and must be read together: a's fire is
+  # evidence only beside b's zero, because a fixture that stamps unconditionally
+  # would satisfy a alone. c/d pin the refusal-vs-guess and precedence semantics.
+  # e/f/g/h are the precondition arms, and each asserts NO TAG WAS PUSHED — that
+  # is the property distinguishing a free pre-CAS decline from the post-CAS HALT
+  # it replaces, and a fixture that only checked the return code could not see it.
+  # =========================================================================
+
+  # ---- U-20a: SENSITIVITY. One token-bearing pre-claim plan, no flag -> stamped.
+  _t_label="U-20a derived slug stamps when exactly one token-bearing plan exists"
+  {
+    local _sb20a; _sb20a="$(_st_stamp_sandbox "widget-derive")"
+    local _save20a="$CLAIM_REPO_ROOT"
+    _ct_setup latest="v3.98" published="v3.98" origin="v3.98" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    CLAIM_REPO_ROOT="$_sb20a"; STAMP_SLUG=""; STAMP_FILES=()
+    _ct_run claim_version "deadbeefcafe" "minor" "" ""; out="$REPLY"; rc="$REPLY_RC"
+    CLAIM_REPO_ROOT="$_save20a"
+    _ct_eq "$rc" "0" "U-20a exit 0"
+    _ct_eq "$out" "v3.99" "U-20a returns the computed tag"
+    _ct_eq "$(_st_stamp_n)" "1" "U-20a exactly ONE stamp commit from the DERIVED slug"
+    [[ -f "$_sb20a/release/releases/plans/v3/v3.99_RELEASE_PLAN.md" ]] \
+      || _ct_fail "U-20a plan must be renamed to plans/v3/v3.99_RELEASE_PLAN.md"
+    [[ -f "$_sb20a/release/releases/plans/widget-derive_RELEASE_PLAN.md" ]] \
+      && _ct_fail "U-20a slug-named plan must be gone after the git mv"
+    grep -q '{{RELEASE_VERSION}}' "$_sb20a/release/releases/plans/v3/v3.99_RELEASE_PLAN.md" 2>/dev/null \
+      && _ct_fail "U-20a no {{RELEASE_VERSION}} token may survive the derived stamp"
+    rm -rf "$_sb20a"
+  }
+
+  # ---- U-20b: SPECIFICITY. Zero token-bearing plans -> byte-identical to today.
+  #      Without this arm U-20a's green is equally consistent with a stamp that
+  #      fires unconditionally, which would be a worse defect than the one fixed.
+  _t_label="U-20b zero token-bearing plans -> no stamp, rc 0, tag still printed"
+  {
+    local _sb20b; _sb20b="$(_st_stamp_sandbox "widget-none")"
+    # Strip the token but KEEP the plan file: this isolates the TOKEN oracle from
+    # the file-existence oracle, so a green here cannot be explained by the plan
+    # simply being absent.
+    printf '%s\n' '---' 'version: v0.00' 'type: plan' '---' '# Release Plan' \
+      > "$_sb20b/release/releases/plans/widget-none_RELEASE_PLAN.md"
+    local _save20b="$CLAIM_REPO_ROOT"
+    _ct_setup latest="v3.98" published="v3.98" origin="v3.98" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    CLAIM_REPO_ROOT="$_sb20b"; STAMP_SLUG=""; STAMP_FILES=()
+    _ct_run claim_version "deadbeefcafe" "minor" "" ""; out="$REPLY"; rc="$REPLY_RC"
+    CLAIM_REPO_ROOT="$_save20b"
+    _ct_eq "$rc" "0" "U-20b exit 0 — unchanged from the pre-derivation behaviour"
+    _ct_eq "$out" "v3.99" "U-20b the tag is still computed and printed"
+    _ct_eq "$(_st_stamp_n)" "0" "U-20b NO stamp commit when no plan carries the token"
+    rm -rf "$_sb20b"
+  }
+
+  # ---- U-20c: AMBIGUITY IS A REFUSAL, NEVER A PICK. Two candidates -> no stamp,
+  #      and the notice must name BOTH so the operator can disambiguate.
+  _t_label="U-20c two token-bearing plans -> refuse, name both candidates"
+  {
+    local _sb20c; _sb20c="$(_st_stamp_sandbox "widget-one")"
+    printf '%s\n' '---' 'version: {{RELEASE_VERSION}}' '---' '# Second in-flight plan' \
+      > "$_sb20c/release/releases/plans/widget-two_RELEASE_PLAN.md"
+    local _save20c="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb20c"; STAMP_SLUG=""; STAMP_FILES=()
+    _ct_run_err _derive_stamp_slug; err="$REPLY"
+    _ct_eq "$REPLY_RC" "1" "U-20c derivation REFUSES when two candidates exist"
+    grep -qF 'widget-one' <<< "$err" || _ct_fail "U-20c the notice must name the first candidate"
+    grep -qF 'widget-two' <<< "$err" || _ct_fail "U-20c the notice must name the second candidate"
+
+    # Whole-claim leg: the refusal must degrade to no-stamp, not to a HALT — an
+    # ambiguous corpus is not a reason to refuse a version.
+    _ct_setup latest="v3.98" published="v3.98" origin="v3.98" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    _ct_run claim_version "deadbeefcafe" "minor" "" ""; rc="$REPLY_RC"
+    CLAIM_REPO_ROOT="$_save20c"
+    _ct_eq "$rc" "0" "U-20c the claim still succeeds; only the stamp is declined"
+    _ct_eq "$(_st_stamp_n)" "0" "U-20c no stamp commit on an ambiguous corpus"
+    rm -rf "$_sb20c"
+  }
+
+  # ---- U-20d: THE EXPLICIT FLAG ALWAYS WINS. Two candidates would refuse the
+  #      derivation, but an explicit --stamp-slug bypasses it entirely.
+  _t_label="U-20d an explicit --stamp-slug takes precedence over an ambiguous corpus"
+  {
+    local _sb20d; _sb20d="$(_st_stamp_sandbox "widget-x")"
+    printf '%s\n' '---' 'version: {{RELEASE_VERSION}}' '---' '# Decoy' \
+      > "$_sb20d/release/releases/plans/widget-decoy_RELEASE_PLAN.md"
+    git -C "$_sb20d" add -A; git -C "$_sb20d" commit -qm "decoy" >/dev/null 2>&1
+    local _save20d="$CLAIM_REPO_ROOT"
+    _ct_setup latest="v3.98" published="v3.98" origin="v3.98" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    CLAIM_REPO_ROOT="$_sb20d"; STAMP_SLUG="widget-x"; STAMP_FILES=()
+    _ct_run claim_version "deadbeefcafe" "minor" "" ""; rc="$REPLY_RC"
+    STAMP_SLUG=""; CLAIM_REPO_ROOT="$_save20d"
+    _ct_eq "$rc" "0" "U-20d exit 0"
+    _ct_eq "$(_st_stamp_n)" "1" "U-20d the FLAGGED slug stamps despite two candidates"
+    [[ -f "$_sb20d/release/releases/plans/v3/v3.99_RELEASE_PLAN.md" ]] \
+      || _ct_fail "U-20d the flagged plan must be the one stamped"
+    [[ -f "$_sb20d/release/releases/plans/widget-decoy_RELEASE_PLAN.md" ]] \
+      || _ct_fail "U-20d the decoy plan must be untouched"
+    rm -rf "$_sb20d"
+  }
+
+  # ---- U-20e: DEFAULT-BRANCH REFUSAL, pre-CAS, NO TAG PUSHED.
+  #      The sandbox is flipped onto the resolved default branch deliberately. This
+  #      is also the sensitivity arm for _ST_SANDBOX_BRANCH: it proves the explicit
+  #      branch in the sandbox builder is load-bearing rather than decorative.
+  _t_label="U-20e a claim on the default branch is refused pre-CAS with no tag pushed"
+  {
+    local _sb20e; _sb20e="$(_st_stamp_sandbox "widget-main")"
+    local _save20e="$CLAIM_REPO_ROOT"
+    CLAIM_REPO_ROOT="$_sb20e"; STAMP_SLUG=""; STAMP_FILES=()
+    local _db20e; _db20e="$(_resolve_default_branch)"
+
+    # Control leg FIRST, on the chore branch: the precondition must PASS, or a red
+    # main leg would be equally consistent with a guard that refuses everything.
+    _ct_run_err _preflight_push_target "widget-main"
+    _ct_eq "$REPLY_RC" "0" "U-20e control: the chore-branch sandbox passes the precondition"
+
+    git -C "$_sb20e" checkout -q -B "$_db20e"
+    _ct_setup latest="v3.98" published="v3.98" origin="v3.98" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
+    CLAIM_REPO_ROOT="$_save20e"
+    _ct_eq "$rc" "1" "U-20e the claim is REFUSED"
+    _ct_eq "$(_st_stamp_n)" "0" "U-20e no stamp commit"
+    _ct_eq "$(cat "$(_st_f push_idx)" 2>/dev/null || echo 0)" "0" \
+      "U-20e NO TAG WAS PUSHED — the refusal is strictly pre-CAS"
+    grep -qF 'git-workflow.md' <<< "$err" \
+      || _ct_fail "U-20e the refusal must cite core/rules/git-workflow.md so the operator can act on it"
+    rm -rf "$_sb20e"
+  }
+
+  # ---- U-20f: DETACHED-HEAD REFUSAL, pre-CAS, NO TAG PUSHED. ----
+  _t_label="U-20f a claim from a detached HEAD is refused pre-CAS with no tag pushed"
+  {
+    local _sb20f; _sb20f="$(_st_stamp_sandbox "widget-detached")"
+    git -C "$_sb20f" checkout -q --detach HEAD
+    local _save20f="$CLAIM_REPO_ROOT"
+    _ct_setup latest="v3.98" published="v3.98" origin="v3.98" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    CLAIM_REPO_ROOT="$_sb20f"; STAMP_SLUG=""; STAMP_FILES=()
+    _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
+    CLAIM_REPO_ROOT="$_save20f"
+    _ct_eq "$rc" "1" "U-20f the claim is REFUSED"
+    _ct_eq "$(_st_stamp_n)" "0" "U-20f no stamp commit"
+    _ct_eq "$(cat "$(_st_f push_idx)" 2>/dev/null || echo 0)" "0" \
+      "U-20f NO TAG WAS PUSHED — the refusal is strictly pre-CAS"
+    grep -qF 'DETACHED' <<< "$err" || _ct_fail "U-20f the refusal must name the detached-HEAD condition"
+    rm -rf "$_sb20f"
+  }
+
+  # ---- U-20g: UNTRACKED-PLAN REFUSAL, pre-CAS, NO TAG PUSHED.
+  #      Today this path reaches the post-CAS `git mv`, which fails with the tag
+  #      already bound. The control leg re-adds the file and asserts the same
+  #      precondition then passes, so the arm is discriminating on TRACKEDNESS and
+  #      not on some other property of the fixture.
+  _t_label="U-20g an untracked pre-claim plan is refused pre-CAS with no tag pushed"
+  {
+    local _sb20g; _sb20g="$(_st_stamp_sandbox "widget-untracked")"
+    git -C "$_sb20g" rm -q --cached "release/releases/plans/widget-untracked_RELEASE_PLAN.md" >/dev/null 2>&1
+    local _save20g="$CLAIM_REPO_ROOT"
+    _ct_setup latest="v3.98" published="v3.98" origin="v3.98" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    CLAIM_REPO_ROOT="$_sb20g"; STAMP_SLUG=""; STAMP_FILES=()
+    _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
+    _ct_eq "$rc" "1" "U-20g the claim is REFUSED"
+    _ct_eq "$(_st_stamp_n)" "0" "U-20g no stamp commit"
+    _ct_eq "$(cat "$(_st_f push_idx)" 2>/dev/null || echo 0)" "0" \
+      "U-20g NO TAG WAS PUSHED — the refusal is strictly pre-CAS"
+    grep -qF 'NOT TRACKED' <<< "$err" || _ct_fail "U-20g the refusal must name the trackedness condition"
+
+    git -C "$_sb20g" add -A
+    _ct_run_err _preflight_push_target "widget-untracked"
+    CLAIM_REPO_ROOT="$_save20g"
+    _ct_eq "$REPLY_RC" "0" "U-20g control: re-adding the plan makes the SAME precondition pass"
+    rm -rf "$_sb20g"
+  }
+
+  # ---- U-20h: DECLARED-TARGET MISMATCH. Exercises --stamp-branch through its REAL
+  #      CLI INTAKE via _main, not by setting the global directly: a fixture that
+  #      seeded STAMP_BRANCH itself would pass green on a limb no production caller
+  #      could reach, because the flag would still have no parser arm. The control
+  #      leg asserts a MATCHING declaration is accepted, so the arm discriminates
+  #      the mismatch rather than the flag's mere presence.
+  _t_label="U-20h --stamp-branch is parsed from argv and refuses a mismatched HEAD"
+  {
+    local _sb20h; _sb20h="$(_st_stamp_sandbox "widget-declared")"
+    local _save20h="$CLAIM_REPO_ROOT"
+    _ct_setup latest="v3.98" published="v3.98" origin="v3.98" plan="ok"
+    : > "$(_st_f stamp_commits)"
+    CLAIM_REPO_ROOT="$_sb20h"; STAMP_SLUG=""; STAMP_FILES=()
+
+    # Intake control: the flag must not fall through to _main's unknown-arg arm.
+    _ct_run_err _main --sha "deadbeefcafe" --bump minor --stamp-branch "chore/wrong-branch"
+    err="$REPLY"; rc="$REPLY_RC"
+    grep -qF 'unknown arg' <<< "$err" \
+      && _ct_fail "U-20h --stamp-branch has NO CLI intake — it fell through to the unknown-arg arm"
+    _ct_eq "$rc" "1" "U-20h a declared branch that does not match HEAD is REFUSED"
+    _ct_eq "$(_st_stamp_n)" "0" "U-20h no stamp commit"
+    _ct_eq "$(cat "$(_st_f push_idx)" 2>/dev/null || echo 0)" "0" \
+      "U-20h NO TAG WAS PUSHED — the refusal is strictly pre-CAS"
+    grep -qF 'chore/wrong-branch' <<< "$err" \
+      || _ct_fail "U-20h the refusal must name the DECLARED branch"
+    grep -qF "$_ST_SANDBOX_BRANCH" <<< "$err" \
+      || _ct_fail "U-20h the refusal must name the ACTUAL HEAD"
+
+    # Control leg: the MATCHING declaration is accepted and the stamp fires.
+    : > "$(_st_f stamp_commits)"
+    _ct_setup latest="v3.98" published="v3.98" origin="v3.98" plan="ok"
+    _ct_run_err _main --sha "deadbeefcafe" --bump minor --stamp-branch "$_ST_SANDBOX_BRANCH"
+    STAMP_BRANCH=""; CLAIM_REPO_ROOT="$_save20h"
+    _ct_eq "$REPLY_RC" "0" "U-20h control: a MATCHING --stamp-branch is accepted"
+    _ct_eq "$(_st_stamp_n)" "1" "U-20h control: the stamp fires under a matching declaration"
+    rm -rf "$_sb20h"
+  }
+
+  # ---- U-20i: THE DEPTH-1 RESTRICTION, which had ZERO coverage. Belongs with the
+  #      derivation sub-family (U-20a..d); placed here so fixture IDs stay
+  #      monotonic. Widening the glob in _derive_stamp_slug reddened NOTHING,
+  #      because no sandbox in this suite ever built a nested plan — the excluded
+  #      population was EMPTY, so the restriction could not be shown to work. That
+  #      is the same "green from a population that cannot discriminate" shape this
+  #      milestone has produced once per card.
+  #
+  #      WHY THIS GUARD IS RELEASE-CRITICAL. The token oracle cannot tell a live
+  #      placeholder from PROSE ABOUT the placeholder, and shipped plans already
+  #      foldered under plans/v<MAJOR>/ discuss {{RELEASE_VERSION}} in exactly that
+  #      way. A recursive walk admits them, the candidate count reaches >= 2, and
+  #      the derivation REFUSES — which does not fail loudly, it degrades to
+  #      no-stamp. The in-flight release then claims its tag and skips its own
+  #      stamp SILENTLY: the historical signature this derivation exists to remove,
+  #      reintroduced by the very query meant to remove it. This release's own
+  #      Stage 12 runs through this code path.
+  #
+  #      BOTH DIRECTIONS, ON ONE CORPUS. Leg 1: a nested plan must NOT become a
+  #      second candidate, so the depth-1 slug still resolves. Leg 2: adding a real
+  #      DEPTH-1 sibling to that same corpus must still refuse and name both — so
+  #      leg 1's green cannot be explained by a derivation that simply stopped
+  #      refusing, which is the mutation leg 1 alone would not survive.
+  _t_label="U-20i a nested plan is excluded from derivation; a depth-1 sibling still refuses"
+  {
+    local _sb20i; _sb20i="$(_st_stamp_sandbox "widget-nested")"
+    local _save20i="$CLAIM_REPO_ROOT"
+    # A SHIPPED, foldered plan that merely DISCUSSES the placeholder — the exact
+    # shape of the three such plans in the live corpus. It is a candidate under a
+    # recursive walk and must not be one under a depth-1 walk.
+    mkdir -p "$_sb20i/release/releases/plans/v3"
+    printf '%s\n' '---' 'version: v3.42' '---' '# Shipped plan' \
+      'Prose about the {{RELEASE_VERSION}} placeholder, not a live token.' \
+      > "$_sb20i/release/releases/plans/v3/v3.42_RELEASE_PLAN.md"
+    CLAIM_REPO_ROOT="$_sb20i"; STAMP_SLUG=""; STAMP_FILES=()
+
+    # Leg 1 — EXACTLY ONE candidate, and it is the depth-1 slug.
+    _ct_run _derive_stamp_slug; out="$REPLY"
+    _ct_eq "$REPLY_RC" "0" "U-20i derivation SUCCEEDS — the nested plan must not make the corpus ambiguous"
+    _ct_eq "$out" "widget-nested" "U-20i the resolved slug is the depth-1 plan, never the foldered one"
+    grep -qF 'v3.42' <<< "$out" \
+      && _ct_fail "U-20i a foldered plan must never be derivable as an in-flight slug"
+
+    # Leg 2 — the refusal is INTACT on this same corpus. Without this, leg 1 is
+    # equally consistent with a derivation that no longer counts candidates.
+    printf '%s\n' '---' 'version: {{RELEASE_VERSION}}' '---' '# Second in-flight plan' \
+      > "$_sb20i/release/releases/plans/widget-sibling_RELEASE_PLAN.md"
+    _ct_run_err _derive_stamp_slug; err="$REPLY"
+    CLAIM_REPO_ROOT="$_save20i"
+    _ct_eq "$REPLY_RC" "1" "U-20i a real DEPTH-1 sibling must still refuse — the >=2 guard is unchanged"
+    grep -qF 'widget-nested' <<< "$err" || _ct_fail "U-20i the refusal must name the first depth-1 candidate"
+    grep -qF 'widget-sibling' <<< "$err" || _ct_fail "U-20i the refusal must name the second depth-1 candidate"
+    grep -qF 'v3.42' <<< "$err" \
+      && _ct_fail "U-20i the foldered plan must not be counted even when the derivation refuses"
+    rm -rf "$_sb20i"
+  }
+
+  # =========================================================================
+  # U-21 — TRAILER EXCLUSIVITY, ENFORCED AT THE SOURCE.
+  #
+  # The post-claim progress trailer is exclusive to the post-claim family BY
+  # SEMANTICS: it reports what a BOUND tag left behind, and a pre-CAS line runs
+  # with nothing bound, so a pre-flight message can never truthfully carry one.
+  # Until now that exclusivity was enforced only by _ct_assert_families, which
+  # grades the stderr of the four legs U-18m..o actually traverse. A trailer added
+  # to an un-traversed pre-flight path — or to a pre-flight emitter added later —
+  # was caught by NOTHING: static source-level assertions on this property
+  # numbered ZERO, and a traversal-only guard cannot see a path it does not walk.
+  #
+  # GRADED OVER THE EMITTERS, NOT OVER PROSE. The population is every printf whose
+  # format string opens with the pre-flight stem — exactly the set of lines that
+  # can put one of these messages on stderr. Anchoring on `^<space>*printf '`
+  # excludes header prose, the family-partition greps, and this fixture's own two
+  # pattern lines BY CONSTRUCTION rather than by a denylist that would need
+  # maintaining.
+  # =========================================================================
+  _t_label="U-21 no pre-flight EMITTER carries the post-claim progress trailer"
+  {
+    local _pf21 _n21 _bad21
+    _pf21="$(grep -E "^[[:space:]]*printf 'claim-version: stamp pre-flight — " "${BASH_SOURCE[0]}" || true)"
+    _n21="$(awk 'NF{n++} END{print n+0}' <<< "$_pf21")"
+    # ANTI-VACUITY, the U-6 discipline: a FORBIDDEN-string grep over an empty
+    # subject passes while testing nothing. Bind the population to a floor first,
+    # so a moved stem or an unreadable BASH_SOURCE reports itself instead of
+    # silently disarming the guard. A floor, not an exact count — pinning the
+    # exact number would redden this arm every time a pre-flight message is added,
+    # which buys no safety and trains the wrong response.
+    [[ "$_n21" -ge 10 ]] \
+      || _ct_fail "U-21 only $_n21 pre-flight emitters were found — the exclusivity assertion below would be vacuous"
+    _bad21="$(grep -F 'claimed; stamp ' <<< "$_pf21" || true)"
+    [[ -z "$_bad21" ]] \
+      || _ct_fail "U-21 a pre-flight emitter carries the post-claim trailer, so the two families are confusable at a path no fixture walks: $_bad21"
+  }
+
+  CLAIM_REPO_ROOT="$_ST_ENTRY_ROOT"
+  rm -rf "$_ST_NEUTRAL_ROOT"
+
   if [[ $failures -eq 0 ]]; then
-    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-18d incl. real-RELEASE_LOG-parser(header-name-pinned + shifted-column control), real-origin-tags-rc-contract(U-0b: failed-read vs tagless-repo + probe/healthy controls), real-seam-rc-contract-on-unresolvable-identity(U-14a), all-three-claimed_set-arms-fail-closed + their controls(U-17), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, never-bypass-signing + its detector-negative-control(U-6/U-6b), fail-closed-on-unresolvable-repo-identity + its detector-negative-control(U-14/U-14b), arm-unavailable-is-not-arm-empty(U-15), anchor-rc-checks-claimed-set-and-greenfield-fallback + their controls(U-16), claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once, post-CAS-package-rebuild-rides-the-same-commit(U-18) + injected-canonical-vector(U-18b) + cross-grammar-guard-with-control(U-18c) + missing-stamp-file-halts-pre-CAS-with-control(U-18e) + fail-loud-rebuild-error-path(U-18d))"
+    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-21 incl. real-RELEASE_LOG-parser(header-name-pinned + shifted-column control), real-origin-tags-rc-contract(U-0b: failed-read vs tagless-repo + probe/healthy controls), real-seam-rc-contract-on-unresolvable-identity(U-14a), all-three-claimed_set-arms-fail-closed + their controls(U-17), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, never-bypass-signing + its detector-negative-control(U-6/U-6b), fail-closed-on-unresolvable-repo-identity + its detector-negative-control(U-14/U-14b), arm-unavailable-is-not-arm-empty(U-15), anchor-rc-checks-claimed-set-and-greenfield-fallback + their controls(U-16), claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once, post-CAS-package-rebuild-rides-the-same-commit(U-18) + injected-canonical-vector(U-18b) + cross-grammar-guard-with-control(U-18c) + missing-stamp-file-halts-pre-CAS-with-control(U-18e) + fail-loud-rebuild-error-path(U-18d), pre-CAS-rebuild-count-announced-on-every-path-through-the-package-stage-including-zero: canonical-control(U-18f) + count-equals-the-U-18b-rebuild-set(U-18g) + leading-slash-announces-zero-and-stops-with-ZERO-push-attempts(U-18h) + ..-traversal-BELOW-the-captured-segment-the-resolver-MATCHES-non-zero-and-UNDERSTATED-caught-by-canonicality-alone-with-the-count-limb-asserted-silent(U-18i) + embedded-slash-dot-slash(U-18j) + plan-only-announces-zero-and-PROCEEDS(U-18k) + canonical-manifest-staling-zero-refused-by-the-COUNT-limb-alone(U-18l), post-CAS-recovery-message-pair-driven-through-claim_version-each-asserting-the-tag-WAS-pushed: formerly-silent-site-emits-step-state-and-NOT-started-trailer-with-the-unrenamed-plan-as-corroboration(U-18m) + both-commit/push-limbs-entered-via-the-commit_push_rc-seam-carrying-opposite-instructions(U-18n) + envelope-names-the-bound-tag-forbids-the-re-run-and-rides-WITH-its-step-line(U-18o), verify-stamp-verb-wired-through-_main, all-three-refusal-states-mutually-exclusive: token-less-verdict-with-the-PRE-FLIGHT-line-scoped-token-assertion(U-19a) + token-bearing-control-states-its-manifest-scope(U-19b) + arg-independence-with-required-arg-control(U-19c) + correctly-claimed-repo-driven-through-the-REAL-claim-gets-the-post-claim-verdict-and-NOT-the-inverted-broken-manifest-clause(U-19d) + half-recovered-repo-gets-the-genuine-broken-manifest-verdict(U-19e), derived-stamp-slug: sensitivity+specificity-pair(U-20a/U-20b) + ambiguity-refuses-naming-both-candidates(U-20c) + explicit-flag-precedence(U-20d) + depth-1-restriction-excludes-a-foldered-plan-with-the->=2-refusal-re-asserted-on-the-same-corpus(U-20i), pre-CAS-push-target-precondition-each-asserting-no-tag-pushed: default-branch-with-chore-branch-control(U-20e) + detached-HEAD(U-20f) + untracked-plan-with-re-add-control(U-20g) + --stamp-branch-parsed-from-argv-with-matching-declaration-control(U-20h), source-level-trailer-exclusivity-over-every-pre-flight-EMITTER-with-an-anti-vacuity-floor-so-an-un-traversed-path-cannot-escape-it(U-21))"
     return 0
   else
     echo "claim-version.sh --self-test: FAIL ($failures failing fixture(s))"

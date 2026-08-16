@@ -42,7 +42,7 @@ Set at Engineering: sub-task decomposition (GitHub sub-issues or PR-body checkli
 
 ## 5. Process
 **Phase A — Entry Validation + Decomposition (Tier 1):**
-A1 Entry contract validation (check release plan file, sequence, specs, matrix, strategy, risks, verification — adapted for spec depth). Gate: PROCEED / CAVEATS / HOLD.
+A1 Entry contract validation (check release plan file, sequence, specs, matrix, strategy, risks, verification — adapted for spec depth) and, for the first Engineering spoke under SINGLE topology, the Commit-0 stamp-manifest assertion per `release/references/how-to/hub-spoke-bridge.md` § Canonical location step 3b. Gate: PROCEED / CAVEATS / HOLD.
 A2 Sub-task decomposition: one sub-task per file-level change or logical unit. **Container selection** — the decomposition lands in one of two containers, chosen by a reproducible threshold predicate evaluated against the release plan's change matrix:
 
 - **Threshold predicate.** Count the planned sub-tasks (file-level changes + logical units, special sub-tasks excluded from the count). If sub-task count ≤ **5** `[CALIBRATE-AFTER-3]` **AND** the work is doc-only or a single logical unit (no calibration-sensitive change, no eval/judge/threshold value being tuned, no cross-file structural change) → **PR-body checklist container**. Otherwise — sub-task count above the threshold, OR any multi-file / calibration-sensitive / structure-changing work — → **GitHub sub-issue container**. The predicate is evaluable from the change matrix alone before any container is created, so the choice is reproducible and reviewable.

@@ -45,8 +45,19 @@ packages/
 
 **Naming convention:** `[version]_RELEASE_PLAN.md` / `[version]_RELEASE_NOTES.md` — foldered by
 major version (`plans/v3/`, `notes/v3/`), with `_unversioned/` holding the slug-keyed artifacts for
-version-less releases. Flat files at the `plans/` and `notes/` roots are the in-flight and
-recent-release working set; foldering happens as major versions close out.
+version-less releases.
+
+**Plans fold at the claim, not at major-version close-out.** A `versioned` release's plan is
+**slug-keyed while it is in flight** — `plans/<slug>_RELEASE_PLAN.md`, flat at the `plans/` root
+through Stages 4–11 — and binds its version only at the Stage-12 atomic claim, where the CAS-win
+path renames it to `plans/v<MAJOR>/vX.Y_RELEASE_PLAN.md` and resolves its `{{RELEASE_VERSION}}`
+placeholder to the won number (ADR-092; see § Versioning Phase 1). Foldering a plan is therefore a
+**per-release step performed at the claim**, not a batch performed when a major version closes out.
+A `version-less` release has no number to bind: its plan stays slug-keyed permanently under
+`_unversioned/` and the rename never fires.
+
+Flat files at the **`notes/` root** are the recent-release working set; note foldering does happen
+as major versions close out.
 
 **Snapshots:** the `_snapshots/` and `_archive/` directories described by earlier revisions of this
 protocol do not exist in the repository. Pre-change snapshots are the **Cowork-path** mechanism (see
@@ -139,7 +150,7 @@ The mode is **orthogonal to bundle size** — all four combinations (`versioned`
 
 The release plan declares a **bump-class** — one of `major`, `minor`, `patch` — and a **provisional-display version** for human readability. This is *intent to bump*: it binds **no concrete `vX.Y`**. It sets the **floor** the eventually-claimed number must satisfy. The bump-class is the operator's semantic signal, chosen by the change's nature; the **Bump-Class Selection Guide** below maps change types to bump-classes. The provisional-display version is a label, not a reservation — the concrete number is not known until Phase 2.
 
-The **same "binds no concrete value" discipline extends beyond the tag to the release's other monotonic identifiers** — the **plan-file name** and the **branch name**. For a `versioned` release both are **slug-primary** while the release is in flight (`release/<slug>`, `release/releases/plans/<slug>_RELEASE_PLAN.md`), and in-file version references are carried as the `{{RELEASE_VERSION}}` placeholder; none of the three binds a concrete `vX.Y` at plan time. They bind only at Phase 2's atomic claim, where the CAS-win path renames the plan to `vX.Y_RELEASE_PLAN.md` and resolves the placeholder to the won number (ADR-092). For a `version-less` release the plan and branch stay slug-primary permanently — there is no number to bind, and the rename never fires. This **composes with** the release-identity mode precondition above (it is the plan-file/branch projection of the same defer-to-claim rule the tag already obeys); it does not collapse the `{versioned, version-less}` enum.
+The **same "binds no concrete value" discipline extends beyond the tag to the release's other monotonic identifiers** — the **plan-file name** and the **branch name**. For a `versioned` release both are **slug-primary** while the release is in flight (`release/<slug>`, `release/releases/plans/<slug>_RELEASE_PLAN.md`), and in-file version references are carried as the `{{RELEASE_VERSION}}` placeholder; none of the three binds a concrete `vX.Y` at plan time. They bind only at Phase 2's atomic claim, where the CAS-win path renames the plan to `vX.Y_RELEASE_PLAN.md` and resolves the placeholder to the won number (ADR-092). **The rename is conditional on a resolvable stamp slug, and winning the CAS does not by itself guarantee it fires.** The claim tool derives the slug from the plan corpus and **declines when the derivation is ambiguous** — two or more plans carrying an unresolved placeholder at the `plans/` root, which happens whenever two releases are in flight at once. A decline is a correct refusal to guess, not an error: the tool returns zero, the tag is bound, and the rename and placeholder resolution simply do not happen. Nothing downstream reports the omission, so the failure is silent by construction and is detected later by the ADR-092 identity gate, which blocks the close. **The Stage-12 claim therefore passes `--stamp-slug` explicitly** — the explicit flag always wins over derivation — so a multi-candidate corpus cannot silently skip a stamp. For a `version-less` release the plan and branch stay slug-primary permanently — there is no number to bind, and the rename never fires. This **composes with** the release-identity mode precondition above (it is the plan-file/branch projection of the same defer-to-claim rule the tag already obeys); it does not collapse the `{versioned, version-less}` enum.
 
 ### Phase 2 — Claim time (at the merge): compute next-free ≥ floor, then claim atomically
 

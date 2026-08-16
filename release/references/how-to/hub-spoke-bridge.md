@@ -265,12 +265,13 @@ Release planning runs once per Milestone at release scope (all issues) before an
 
 - **Single-branch topology** (D-C SINGLE — default): The plan file is committed on the release branch as **Engineering Commit 0** (the first commit on the release branch produced by the first per-issue Stage 6 Engineering spoke). Until that first Engineering commit lands, the Stage 4 sub-task comment is the working reference.
 
-  **Commit-0 version re-verify (FIRST Engineering spoke only, immediately before writing the plan file as Engineering Commit 0).** The version selected at D-Version (recommendation time, Stage 4) may have been claimed by a concurrent release in the window between selection and now — the originating incident surfaced exactly this way (a concurrent release shipped the recommended version; the collision was caught only when the Engineering spoke fetched fresh authoritative refs before the plan-file write). Before authoring `release/releases/plans/<slug>_RELEASE_PLAN.md`, the first Engineering spoke re-runs the authoritative-version-selection check:
+  **Commit-0 version re-verify (FIRST Engineering spoke only, spanning the plan-file write and its commit as Engineering Commit 0).** The version selected at D-Version (recommendation time, Stage 4) may have been claimed by a concurrent release in the window between selection and now — the originating incident surfaced exactly this way (a concurrent release shipped the recommended version; the collision was caught only when the Engineering spoke fetched fresh authoritative refs before the plan-file write). Before authoring `release/releases/plans/<slug>_RELEASE_PLAN.md`, the first Engineering spoke re-runs the authoritative-version-selection check — steps 1–3 below, all of which run pre-write. Step 3b then runs **after** the plan-file write and **before** its commit, so the numbered list as a whole spans the beat rather than sitting entirely ahead of it:
     1. `git fetch --tags origin && git fetch origin main` — refresh authoritative host state at Commit-0 time.
     2. Recompute next-free for the plan's bump-class per the D-Version authoritative-version-selection procedure (§ Recurring D-decisions) — the host-agnostic allocation rule consuming the adapter's `anchor()` + `claimed_set()` by name; any ledger input read via `git show origin/main:<ledger-path>`, never the worktree copy.
     3. If the planned version is NOT in the claimed set AND equals the recomputed next-free → **PROCEED**: write the plan file. Else → **HALT**: do NOT overwrite a shipped version's plan file. Post a Tier 2 `[SCOPE CHANGE]` comment on the parent sub-task per `release-process.md` § Inter-Stage Feedback Protocol, naming the planned version, the recomputed next-free, and the colliding tag/ledger row; the operator re-renders D-Version against current state.
+    3b. **After** the plan file is written and **before** it is committed, assert its stamp manifest: `release/tools/claim-version.sh --verify-stamp <slug>`. Read-only and network-free — it runs the identical pre-flight the Stage-12 atomic claim runs before the compare-and-swap, so a PROCEED here rehearses the real claim rather than a lookalike that can agree with a broken manifest. Exit 0 → commit the plan file as Engineering Commit 0. Non-zero → **HALT**: the plan carries no `{{RELEASE_VERSION}}` token, so at Stage 12 it can neither resolve its version nor rename into `plans/v<MAJOR>/`, and the identity-conformance check cannot distinguish it from a claimed release. Restore the token in the Header `**Version**` cell — that cell is a machine-read stamp manifest, not prose, and the bump-class determination belongs in the `**Bump Class**` row beside it — then re-run this step. Do not commit a plan that fails this assertion. **Scope: pre-claim only, and only at this rung.** After a claim the plan has already been renamed, so the verb reports non-zero on a repository whose claim completed correctly; it is never part of a recovery procedure and a recovery re-run does not route through step 3b.
 
-     The Commit-0 re-verify is a **single detect-and-HALT** — it does NOT auto-recompute-and-retry. On HALT it hands to the operator, who re-renders D-Version; the spoke then re-runs this same single re-verify against the operator's new value. Bounded retry on sustained contention is the atomic-claim rung's job at the tag (Stage 12), not this rung's. This is detection rung 1 (earliest); it composes with — does not replace — the Stage 9 mid-pipeline divergence re-check (file-divergence axis), the Stage 12 pre-merge freeness check, and the atomic version claim.
+     The Commit-0 re-verify carries **two detect-and-HALT sub-checks with distinct triggers and instants** — the **version half** (steps 1–3, pre-write; trigger: *the planned version is taken*) and the **manifest half** (step 3b, post-write and pre-commit; trigger: *the plan carries no stamp manifest*). **Each half is a single detect-and-HALT** — neither auto-recomputes-and-retries, and both hand to the operator rather than looping. On a version-half HALT the operator re-renders D-Version and the spoke re-runs that same single re-verify against the operator's new value; on a manifest-half HALT the operator restores the token and the spoke re-runs step 3b. Bounded retry on sustained contention is the atomic-claim rung's job at the tag (Stage 12), not this rung's. This is detection rung 1 (earliest); it composes with — does not replace — the Stage 9 mid-pipeline divergence re-check (file-divergence axis), the Stage 12 pre-merge freeness check, and the atomic version claim.
 
 - **Option-A topology** (D-C OPTION-A — per-issue branches + per-issue PRs per Procedure 6 early-merge precedent): The plan file is committed via a dedicated **Stage 4 release-plan chore PR** authored by the hub from the approved Stage 4 sub-task comment. Mechanics:
   1. Hub copies the Stage 4 sub-task comment content into a new file at `release/releases/plans/<slug>_RELEASE_PLAN.md`.
@@ -2168,6 +2169,32 @@ This mandate is consistent with — and bounded by — the **operator-agency car
      echo "§3.2 note-content conformant for v<X.Y> (clean, or only legacy other-version findings — out of scope)"
    fi
 
+   # 1c. ADR-092 PLAN-FILE IDENTITY + PLACEMENT (the plan-identity lint runs on EVERY
+   # Stage-13 close of a versioned release, not only the automated-closeout.sh path).
+   # This is the runbook gate for the pure-hub-direct / Phase-B chore-PR close that does
+   # NOT run automated-closeout.sh (the script path is gated in-script by its Phase 9.3
+   # phase_lint_plan_identity). Inherited exit contract: 0 clean / 1 finding /
+   # 3 path-unresolved — BOTH non-zero outcomes BLOCK. Scoped to THIS release by two
+   # needles, because one is not enough: the plan's EXPECTED path catches a missing or
+   # misplaced plan, but a plan NAMED FOR THE WRONG VERSION emits its ACTUAL path, which
+   # the expected path by definition is not. The second needle is version-keyed and
+   # catches exactly that case — this card's canonical defect. ADVISORY lines are
+   # filtered first: the two known pre-existing mis-named plans are printed residuals
+   # and must not block anyone's close. N/A for a version-less release (no concrete
+   # Version cell for a filename to disagree with) — record N/A, do not skip silently.
+   # It is a conformance assertion on the release's own plan file, NOT a new output row
+   # in the canonical Step 4 table.
+   plan_lint_out=$(/usr/bin/python3 core/deploy/tools/lint_release_corpus.py --check plan-identity 2>&1); plan_lint_rc=$?
+   plan_blocking=$(echo "$plan_lint_out" | grep -v '^ADVISORY')
+   if [ $plan_lint_rc -eq 3 ]; then
+     echo "plan-identity lint path-unresolved (exit 3) — plan corpus unverifiable; BLOCK closure (fail-loud)"
+   elif [ $plan_lint_rc -ne 0 ] && { echo "$plan_blocking" | grep -qF "release/releases/plans/v<MAJOR>/v<X.Y>_RELEASE_PLAN.md" \
+        || echo "$plan_blocking" | grep -qE "^PLAN-[A-Z-]+:.*[^0-9.]v<X\.Y>([^0-9.]|$)"; }; then
+     echo "ADR-092 plan-identity finding for v<X.Y> — BLOCK closure (the plan filename or its nested home disagrees with the RELEASE_LOG row)"
+   else
+     echo "plan-identity conformant for v<X.Y> (clean, or only advisory residuals / other-version findings — out of scope)"
+   fi
+
    # 2. Version tag exists on origin
    gh api repos/{REPO}/git/refs/tags/v<X.Y> \
      --jq '.ref' || echo "MISSING tag — block closure"
@@ -2232,6 +2259,7 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    | Output | Verification | Result |
    |---|---|---|
    | User-facing release note | `git show origin/main:.../v<X.Y>_RELEASE_NOTES.md` (presence, cmd #1) **+ §3.2 note-content conformance (cmd #1b: `lint_release_corpus.py --check note-content`, version-scoped — a finding for v<X.Y> BLOCKS)** | PASS/FAIL |
+   | Release plan identity + placement (ADR-092) | **cmd #1c: `lint_release_corpus.py --check plan-identity`, scoped to v<X.Y> by expected-plan-path OR version-keyed needle — a blocking finding for v<X.Y> BLOCKS; advisories never block**; N/A for a version-less release | PASS/FAIL/N/A |
    | Version tag | `gh api .../git/refs/tags/v<X.Y>` | PASS/FAIL |
    | Milestone closed | `gh api .../milestones/<N>` | PASS/FAIL |
    | RELEASE_LOG entry | `git log --grep ...` | PASS/FAIL |
@@ -2283,11 +2311,13 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    | Output | Verification | Result |
    |---|---|---|
    | User-facing release note | \`git show origin/main:.../v<X.Y>_RELEASE_NOTES.md\` | PASS |
+   | Release plan identity + placement (ADR-092) | \`lint_release_corpus.py --check plan-identity\` (cmd #1c, scoped to v<X.Y>) | PASS / N/A (version-less release) |
    | Version tag | \`gh api .../git/refs/tags/v<X.Y>\` | PASS |
    | Milestone closed | \`gh api .../milestones/<N>\` | PENDING (about to close) |
    | RELEASE_LOG entry | \`git log --grep ...\` | PASS |
    | Sub-issues closed | \`gh issue list --state open\` | PASS |
    | GitHub Release (Surface 1, Layer-1 dual-write) | \`gh release view v<X.Y> --repo {REPO}\` | PASS |
+   | Surface 1 body matches in-repo note (§5.1 enforced transform) | \`./release/tools/check-release-body-drift.sh v<X.Y>\` | PASS / N/A (gh offline) |
    | CHANGELOG.md entry (Surface 2, Layer-1 dual-write) | \`git show origin/main:CHANGELOG.md | grep -qE "^## \[?v<X.Y>\]?[[:space:]]"\` | PASS / N/A (pre-CHANGELOG state) |
    | .version stamped (release-cut-owned) | \`git show origin/main:.version | grep -qx v<X.Y>\` | PASS / N/A (version-less release) |
    | Posted Release TITLE versioned (Surface 1, posted-surface) | \`gh release view v<X.Y> --repo {REPO} --json name --jq '.name' | grep -qE '^v[0-9]+\.[0-9]+( |-)\` | PASS / N/A (version-less release) |

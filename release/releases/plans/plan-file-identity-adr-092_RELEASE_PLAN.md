@@ -1,0 +1,393 @@
+---
+title: Release Plan — plan-file-identity-adr-092 (make the release plan's identity bind at the claim instead of by hand)
+type: release-plan
+plan_type: release
+status: ACTIVE
+release: slug-only (ADR-092 — the concrete version binds at the Stage-12 atomic claim)
+milestone: plan-file-identity-adr-092
+release_class: novel
+reversibility: CHEAP / Confidence HIGH
+---
+# Release Plan — `plan-file-identity-adr-092`
+
+**Version identity:** **slug-only** per **ADR-092**. This file is `plan-file-identity-adr-092_RELEASE_PLAN.md` and the branch is `release/plan-file-identity-adr-092`; no `vX.Y` stem appears in the plan filename, the branch name, or this plan's identity prose. The bump class is the durable declaration; the concrete number binds at the **Stage-12 atomic claim**, when `claim-version.sh --stamp-slug` resolves **every** braced RELEASE_VERSION token this file carries — two of them, the Header `**Version**` cell and the release-note path in § Cross-references — and renames the file into `plans/v<MAJOR>/`. The substitution is global by construction, so the plural is the mechanism's own contract rather than an incidental count.
+
+**Topology:** D-C **SINGLE** — one release branch, one PR, one merge gate. This file lands as **Engineering Commit 0**, authored by the first per-issue Stage-6 Engineering spoke.
+
+**Concurrency posture:** **P0 fully-serial** (D-2). Stage-6 spokes route one at a time in the approved sequence on the single shared branch; force-push — including `--force-with-lease` — is prohibited on that branch under any multi-spoke activity.
+
+**Release class:** **`novel`** (operator verdict at the Stage-4 gate, re-classifying the milestone's declared `routine`). Posture: engagement density **Standard** · Stage-9 review depth **Deep** · Stage-5 activation bias **ALL** · Stage-13 outcome window **30-day**.
+
+---
+
+## Header
+
+| Field | Value |
+|-------|-------|
+| **Version** | {{RELEASE_VERSION}} |
+| **Bump Class** | `minor` — the durable determination. Rule-computed next-free at Engineering Commit 0 is **v4.28** (provisional-display, not a reservation); the concrete number binds only at the Stage-12 atomic claim per ADR-092. |
+| **Date Created** | 2026-08-15 (Saturday) |
+| **Release Manager** | Agent-assisted (`release-hub` Mode O) |
+| **Status** | Executing (Stage 6 Engineering) |
+| **Branch** | `release/plan-file-identity-adr-092` |
+| **PR** | (populated at PR creation — hub-owned, after the final Engineering slice) |
+| **Milestone** | `plan-file-identity-adr-092` (318) |
+| **Baseline** | `origin/main` @ `a7907fcb` — the Commit-0 re-pin. Mainline advanced **seven** times during Stage 5; every count in this file is re-derived at this pin, none transcribed from a Stage-5 comment. |
+
+---
+
+## Provenance
+
+This file transcribes the Stage-4 Release Planning output posted on the hub's release-scoped Stage-4 sub-task (#5297), reconciled to the **Stage-4 operator decision gate**, the **Collective Review scope-lock** granted 2026-08-15, and the six approved Stage-5 Solutioning designs. Where a later disposition superseded a Stage-4 assumption, the transcribed section carries the **decided** state and the § Deviation Log records the delta.
+
+Sources, each read at the Commit-0 pin:
+
+- Stage-4 release plan and the scope-lock record — hub sub-task #5297, whose thread also carries the INT-lattice pre-gate note.
+- Stage-5 Solutioning designs and their second-pass adversarial reviews — sub-tasks #5315 (#5063), #5324 (#4707), #5328 (#4706), #5332 (#4723), #5336 (#4727), #5341 (#4728).
+- Engineering Commit 0 authored by the Stage-6 spoke for the lead card, working sub-task #5316.
+
+**Why this milestone exists.** ADR-092 decided that a release plan binds its identity at the Stage-12 atomic claim rather than at authoring time. Six mechanisms carry that decision, and every one of them is broken in a way that is silent: the token that feeds the claim is missing from almost every plan, the flag that consumes it is unwired, the rename it triggers has not fired for three shipped releases, the close-out emits a path shape the claim does not produce, no gate compares a plan's filename to the ledger, and the recovery message on failure is not an instruction. Each defect hides the next.
+
+---
+
+## Scope
+
+### Issues Included
+
+Six cards. Sizes re-derived from live labels at the Commit-0 pin: three `size:M`, two `size:S`, one `size:XS` → raw **17** pts × `novel` class weight **1.15** → `effective_pts` **20** (round-half-up), inside the 15–25 band.
+
+| # | Issue | Size | Title | What it fixes |
+|---|-------|------|-------|---------------|
+| 1 | #5063 | M | Release plans reach Stage 12 without the version token | The token's only home is a header section the authoring surface never enumerates, so plans ship token-less and the stamp pre-flight halts |
+| 2 | #4707 | M | ADR-092 claim-time plan rename is not firing reliably | The rename is reachable only through a flag nothing passes; flat plan files accumulate on shipped releases |
+| 3 | #4706 | S | Close-out emits flat plan pointers while the claim files them nested | Three emission sites in the close-out tool mint a dangling plan pointer on every release |
+| 4 | #4723 | S | Claim-time stamp does not announce its expected rebuild count pre-CAS | An empty package resolution is invisible until after the version is irreversibly bound |
+| 5 | #4727 | M | No gate compares a release-plan filename against the ledger | A plan named for the wrong version passes every existing check |
+| 6 | #4728 | XS | Post-claim stamp failure emits an incomplete operator instruction | The message names the bound identifier but supplies no runnable remediation |
+
+### Exclusions
+
+Three flat plan files are explicitly **not** relocated by this release, and the exclusion is load-bearing rather than cosmetic — attempting the move would fabricate a version identity:
+
+- `pda-rollup-and-portfolio_RELEASE_PLAN.md` — v3-era, outside the v4 relocation scope.
+- `governance-ci-checks_RELEASE_PLAN.md` — no ledger row and no remote branch; there is no version to name it for.
+- `governance-ci-gates_RELEASE_PLAN.md` — same condition.
+
+Also out of scope: the ownership of `lint_release_corpus.py` (held escalation E-3, unresolved by the scope-lock gate), and the Check-59 oracle re-home, which is filed separately as #5468 and deliberately not re-proposed here.
+
+---
+
+## Dependency Graph
+
+### Topologically Sorted Sequence
+
+| Order | Issue | In-release dependency | Edge Type | Basis |
+|-------|-------|----------------------|-----------|-------|
+| 1 | #5063 | — | — | Establishes the token-presence precondition every later card's end-to-end verification needs |
+| 2 | #4707 | #5063 | DEPENDS_ON | The rename is gated on a pre-flight that fails on a token-less plan, so the mechanism cannot fire until the token lands |
+| 3 | #4706 | #4707 | DEPENDS_ON | The canonical layout literal lives inside the region #4707 restructures; #4706 must cite a settled address |
+| 4 | #4723 | #5063 | DEPENDS_ON (soft) | Its announcement sits downstream of the token gate in the same function; a fixture can supply the token directly, so this constrains verification convenience rather than the build |
+| 5 | #4727 | #4707 | DEPENDS_ON | Its residual-count control must be measured against the reconciled plan corpus, not the drifting one |
+| 6 | #4728 | — | — | Message text plus a fixture; order-free throughout |
+
+### Artifact Relationship Graph
+
+| From | To | Type | Shared artifact |
+|------|----|------|-----------------|
+| #5063 | #4707 | DEPENDS_ON | `release/tools/claim-version.sh` — the stamp pre-flight predicate |
+| #4707 | #4706 | GENERATES | The canonical nested-plan path layout |
+| #4707 | #4727 | DEPENDS_ON | `release/releases/RELEASE_LOG.md` as the shared denominator |
+| #5063 | #4723 | DEPENDS_ON | `_preflight_stamp` — distinct regions of one function |
+
+### Critical Path
+
+`[TYPED-MODE]` · `#5063 → #4707 → #4706` · chain length **3**. #4723, #4727 and #4728 are off the critical path; #4727 is sequenced after #4707 for measurement fidelity rather than for a hard build edge.
+
+Zero circular chains — every edge points forward in the declared order, so the set is a DAG by construction.
+
+---
+
+## Implementation Sequence
+
+### Commit Plan
+
+Serial, one shared branch, one merge gate. Each card commits in sequence; the next spoke builds on the landed state.
+
+| # | Card | Commit shape |
+|---|------|--------------|
+| 0 | — | **This plan file** as Engineering Commit 0 |
+| 1 | #5063 | The verification verb and its fixtures, the Commit-0 procedure step, the pipeline pointer, the plan template row, the authoring-surface contract |
+| 2 | #4707 | Mechanism fix committed **separately** from the 11-file relocation, so the expensive half reverts independently of the cheap half |
+| 3 | #4706 | Three emission sites corrected to cite the canonical layout |
+| 4 | #4723 | Pre-CAS count announcement plus fixture |
+| 5 | #4727 | Filename-versus-ledger comparison plus fixture tree |
+| 6 | #4728 | Recovery message plus fixture |
+
+The relocation in card 2 ships its file moves and its inbound-reference repairs as **one commit**, so the operation reverts atomically per the rename-reference-cascade rule.
+
+### Stage Applicability Matrix
+
+| Card | S5 | S6 | S7 | S8 | S9–S13 | Basis for any skip |
+|------|----|----|----|----|--------|--------------------|
+| #5063 | APPLY | APPLY | APPLY | APPLY | APPLY | Carried a D-class placement decision (assertion home) |
+| #4707 | APPLY | APPLY | APPLY | APPLY | APPLY | Two design questions: skip-predicate statement and relocation strategy |
+| #4706 | APPLY | APPLY | APPLY | APPLY | APPLY | Canonical-source decision plus a three-site correction |
+| #4723 | APPLY | APPLY | APPLY | APPLY | APPLY | Converts a post-claim halt into a pre-CAS stop — a control-flow change |
+| #4727 | APPLY | APPLY | APPLY | APPLY | APPLY | Layer decision plus the merge question with the sibling's fourth criterion |
+| #4728 | SKIP | APPLY | APPLY | APPLY | APPLY | Message-string content plus a fixture; no design uncertainty, no new interface |
+
+---
+
+## Contention Map
+
+### Within-release
+
+| File | Cards | Verdict |
+|------|-------|---------|
+| `release/tools/claim-version.sh` | #5063, #4707, #4723, #4728 edit · #4706 reads | **LOW despite four-of-six sharing.** The editors target disjoint regions: #5063 owns the argument parser and the usage text, #4707 owns the stamp function and its two gates, #4723 owns the pre-flight body, #4728 owns the post-claim message. Non-overlapping hunks under serial commits |
+| `release/tools/automated-closeout.sh` | #4706 | Sole editor in-release; heavy cross-milestone contention (see below) |
+| `core/deploy/tools/lint_release_corpus.py` | #4727 | Sole editor in-release |
+| `release/releases/plans/**` | #4707 | Sole mover — the relocation serialization point |
+
+**The one genuine coupling that is not a line-range question** is the usage text. Three cards want the same region, and because the milestone ships as one PR there is no merge conflict to announce the drift — see § Deviation Log, item 1.
+
+### Cross-milestone
+
+| File | Other open milestones | Verdict |
+|------|----------------------|---------|
+| `release/tools/claim-version.sh` | `version-claim-atomicity` owns the pre-claim version-computation half | **Disjoint regions.** That milestone owns computation; this one owns the stamp and rename half. Merge-order coordination only |
+| `core/deploy/tools/lint_release_corpus.py` | `note-resolver-and-corpus-lint` is widening the same file's glob scope | **Real and material.** A population widened underneath a residual-count control makes a future zero uninterpretable. Pin the glob expression and the baseline alongside the count |
+| `release/tools/automated-closeout.sh` | Roughly fifteen milestones hold open issues against this file; one declares a full-file sweep | **Highest true cross-milestone contention in this release.** Land the three-site fix early; do not parallelize with that sweep |
+
+---
+
+## File Change Matrix
+
+One repo-relative path per line, intent-prefixed, for deterministic extraction by the later stages. Re-derived at the Commit-0 pin.
+
+```
+edit    release/tools/claim-version.sh                                            #5063 #4707 #4723 #4728
+edit    release/references/how-to/hub-spoke-bridge.md                             #5063
+edit    release/references/pipeline/stage-06-engineering.md                       #5063
+edit    release/references/pipeline/stage-09-plan-review.md                       #5063
+edit    release/skills/release-planner/SKILL.md                                   #5063
+edit    release/skills/release-planner/references/release-plan-template.md        #5063
+edit    packages/release-planner.skill                                            #5063 (rostered-skill package rebuild)
+edit    packages/release-planner.skill.sha256                                     #5063 (content-baseline sidecar)
+edit    release/tools/automated-closeout.sh                                       #4706
+edit    core/deploy/tools/lint_release_corpus.py                                  #4727
+edit    release/governance/RELEASE_PROTOCOL.md                                    #4707
+edit    release/releases/RELEASE_LOG.md                                           #4707 (inbound-reference repair)
+move    release/releases/plans/<11 flat v4 plans>                                 #4707 (into plans/v4/, with their inbound-reference cascade)
+add     release/releases/plans/plan-file-identity-adr-092_RELEASE_PLAN.md         Commit 0 (this file)
+```
+
+The relocation set as scoped at Stage 4 is **11** plan files, not the 14 the milestone description states; the three files that correction excludes — and the reason each is unmovable — are named in § Scope → Exclusions. The inbound-referrer population is **12** distinct files, not 37. Both are Stage-4 corrections that survived re-measurement.
+
+**Delivered total: 14**, and the arithmetic is a coincidence rather than a vindication of the milestone's figure. The mainline shipped three further releases while this one was in flight, each leaving its plan flat at the `plans/` root: v4.28 and v4.29 (relocated at `55189f2f`, under operator approval, after v4.29's own plan delegated the residual to *"the in-flight ADR-092 release"*), and v4.30 (relocated at `5e587323`). So **11 + 3 late arrivals = 14** — a different three from the three § Exclusions names, which remain correctly unmoved. The Stage-4 correction stands; the delivered count grew past it because the defect kept recurring during the release built to stop it.
+
+**New-executable companion obligation.** The matrix carries no `add` row for a tracked shell script. Should any card resolve toward a standalone sibling script, `core/config/allowlists/script-execution-allowlist.txt` must gain its companion row in the same release, or the delivered script is unrunnable agent-side on arrival.
+
+---
+
+## Risk Register
+
+| ID | Risk | Sev | Reversibility | Mitigation |
+|----|------|-----|---------------|------------|
+| R1 | Relocation-set miscount ships, renaming a pre-claim plan to a fabricated version | HIGH | MODERATE | Adopt the corrected set of 11; treat the three excluded files as explicit non-scope; re-derive from the ledger rather than from any narrative count |
+| R2 | Reference cascade left half-done, leaving dangling references no link checker reaches | HIGH | MODERATE | Move and reference-repair in one commit; emit the cascade observable with its non-zero pre-count so the post-zero is evidence |
+| R3 | Cross-milestone collision on the close-out tool with an in-flight full-file sweep | MED | CHEAP | Land the three-site fix early; re-baseline if the sweep merges first |
+| R4 | Corpus-lint population drift makes a recorded residual count uninterpretable | MED | CHEAP | Record the count with its glob expression and baseline pinned alongside |
+| R5 | Restoring the token converts a silent skip into live evaluation and surfaces a backlog | MED | CHEAP | Forward-only application; do not retrofit the token into an in-flight plan |
+| R6 | Two cards independently build overlapping filename-versus-ledger validators | MED | CHEAP | Build one mechanism with two assertions; keep both cards for their distinct closure evidence |
+| R7 | Version slot contested by a concurrent release | LOW | CHEAP | Expected and designed for. The durable declaration is the bump class; binding defers to the atomic claim |
+| R8 | Rollback complexity is asymmetric inside one card | MED | MODERATE | Keep mechanism and relocation in separate commits |
+| R9 | The Commit-0 assertion this release introduces is a prose step with no mechanical trigger and no detector for its own non-execution — measured at roughly 37% mention rate across the shipped plan corpus | MED | CHEAP | Stated honestly rather than mitigated. No CI gate is proposed; the enforcement residual routes to the held E-3 |
+
+**Rollback strategy.** Single release branch, merge-commit topology, so a revert applies at release granularity. Per-card granularity is preserved by committing the mechanism fix and the relocation separately (R8). The relocation commit is the only one whose revert touches durable audit-trail paths.
+
+---
+
+## Cross-Issue Acceptance Criteria
+
+Graded on the merged PR at the Stage-9 release-integration check.
+
+- [ ] **CIAC-1 (#5063 × #4707).** A plan authored from the corrected template reaches the claim path and the stamp pass completes rather than halts, producing a nested version-named destination — the token change demonstrably unblocks the rename on one end-to-end fixture run, not merely in two separate unit fixtures.
+- [ ] **CIAC-2 (#4707 × #4706).** After both land, the nested plan-path layout is hardcoded in exactly one file and cited by the other; the flat form no longer appears as an emitted pointer in the close-out tool. Control: the same probe returns three at the Commit-0 pin, so the zero is evidence.
+- [ ] **CIAC-3 (#4707 × #4727).** The reconciled plan population and the new filename-versus-ledger check agree — every verified v4 ledger row has a nested version-named plan, and the check reports zero mismatches over that same population, with a deliberately mis-named fixture proving the check still fires. Set difference computed with plain lexical sort, never numeric.
+- [ ] **CIAC-4 (#4723 × #4728).** The claim path distinguishes pre-CAS refusal from post-claim failure in its emitted text, and the two messages are not confusable — assert each string appears on its own path and on neither other.
+
+---
+
+## Operator Decisions (D-Gate Block)
+
+### D-1: Where does the token-presence assertion home?
+
+- **Gate input:** the lead card's own open assumption — Stage-4 exit versus the Stage-6 Commit-0 version re-verify.
+- **Pre-decided:** Commit 0 is the card's stated preference, since that beat already re-reads the version determination.
+- **Gate decision:** **RENDERED — Stage 6 Commit 0.** The assertion runs after the plan file is written and before it is committed.
+- **Blocks:** whether the Stage-6 pipeline spec enters the File Change Matrix. It does.
+- **Upstream compatibility:** N/A — pipeline-internal governance surface.
+- **Reversibility-Confidence:** CHEAP / HIGH.
+- **Spoke recommendation:** adopted as rendered. Solutioning verified that the Commit-0 beat spans write through commit, so a post-write step sits inside the rung rather than beside it.
+
+### D-2: Concurrency posture and branch topology
+
+- **Gate input:** contention map, overlap classification, wave count.
+- **Pre-decided:** P0 fully-serial is the safe-by-construction default; posture parallelism is opt-in.
+- **Gate decision:** **P0 fully-serial, SINGLE branch topology.**
+- **Blocks:** Stage-6 spoke routing.
+- **Upstream compatibility:** N/A — names existing behavior, adds no routing primitive.
+- **Reversibility-Confidence:** MODERATE / HIGH.
+- **Spoke recommendation:** P0. Four compositional edges and a moderate-reversibility relocation make the serial default correct here.
+
+### D-3: Layer for the filename-versus-ledger check
+
+- **Gate input:** extend the existing corpus lint, or add a sibling check at another layer — and whether it absorbs the sibling card's fourth criterion.
+- **Pre-decided:** the corpus lint already imports the ledger path and never compares against it, which is the natural anchor.
+- **Gate decision:** rendered at the Stage-4 gate; the implementing card owns the mechanism and the sibling grades against it.
+- **Blocks:** whether the script-execution allowlist gains a companion row.
+- **Upstream compatibility:** N/A.
+- **Reversibility-Confidence:** CHEAP / HIGH.
+- **Spoke recommendation:** one mechanism, two assertions, one residual-count control, one fixture tree.
+
+### D-ReleaseClass: What class governs this release?
+
+- **Gate input:** the trigger table evaluated against the bundle.
+- **Pre-decided:** the milestone declared `routine`; three of its four triggers fail.
+- **Gate decision:** **`novel`.** Its second trigger fires unambiguously — the plan renders D-class decisions and two cards carried unresolved design questions.
+- **Blocks:** engagement density, Stage-9 review depth, Stage-5 activation bias, outcome window, and the capacity weight.
+- **Upstream compatibility:** N/A.
+- **Reversibility-Confidence:** CHEAP / HIGH — cheaper-to-stricter re-classification invalidates no downstream artifact.
+- **Spoke recommendation:** `novel`, adopted.
+
+### D-Version: What version does this release claim?
+
+**Recorded determination, not a gate** — this decision is rule-determined, so the hub records the value and proceeds.
+
+- **Bump class:** `minor` — the durable declaration.
+- **Commit-0 re-verify (this file's own authoring beat):** authoritative host state refreshed; the adapter's anchor reads **v4.27** and the rule-computed next-free is **v4.28**. The candidate appears in neither the origin tag frontier nor the ledger at the remote tip. Verdict **PROCEED**.
+- **Re-verification rungs:** this Commit-0 check, then the Stage-12 atomic claim.
+- **Blocks:** the Stage-12 claim and any version frontmatter this release writes. Branch and plan-file names are not blocked — both are slug-primary while the release is in flight.
+- **Reversibility-Confidence:** CHEAP pre-Engineering; CHEAP for filesystem identity after Commit 0, since neither the branch nor this filename renames on a re-derivation / HIGH.
+- **History worth recording:** the determination was re-rendered three times during this run as concurrent releases shipped. Each re-render was the mechanism working, not a defect.
+
+---
+
+## Delivery Strategy
+
+One release branch off mainline, six Engineering spokes in the declared order, one draft PR opened by the hub after the final card lands, transitioned to ready at the Stage-9 gate. Commit messages reference their source issues. Per-issue closure is marked at Stage 13 per the standard close-out; no commit or PR body asserts a closure verb against an issue number outside the dedicated reference block.
+
+Because the milestone ships as a single PR, sequential edits to a shared file region are not announced by a merge conflict. Every card touching a shared region cites its target **by anchor text rather than by line number** — see § Deviation Log, item 1.
+
+---
+
+## Verification Plan
+
+### Per-Issue Verification
+
+Each card's acceptance criteria are graded at Stage 8 against the merged branch state, using the methods declared in the card body as refined by its Stage-5 design. Fixture-backed criteria are discharged by the tool's own self-test suite, run at Stage 7.
+
+### Release-Level Verification
+
+- The corpus and package integrity checks pass, including skill-package freshness for the rostered skill this release edits.
+- The four cross-issue criteria above are graded on the merged PR.
+- Doc-link integrity resolves for every modified markdown file.
+- The stamp-manifest assertion this release introduces is exercised against this very plan file, demonstrating the rung end-to-end on real rather than fixture input.
+
+**Enforcement stated honestly.** Mainline carries exactly nine required status checks, none of them a release-corpus or release-tooling check, and the workflow that runs this release's new fixtures self-declares an advisory posture. **No CI gate is proposed by this release and no merge-blocking effect is claimed.** The fixtures run; running is not blocking. The evidence for the assertion criterion is the Stage-7 developer-testing run, and Stage 8 should grade it on that basis. The enforcement residual is a wiring gap rather than a capability gap — a required, blocking, unfiltered gate already scans this exact file population under a different invariant — and that measurement routes to the held E-3 rather than being squatted here.
+
+---
+
+## Recommendations
+
+1. **Build the two overlapping validators as one mechanism.** Both read the ledger as denominator over the plan-file population; built separately the release ships two checks with two independently drifting baselines.
+2. **Do not split the relocation card.** Reconciling before the mechanism lands re-drifts the corpus, so both halves must ship together. Separate commits give the rollback granularity a split would buy without the bundle churn.
+3. **Pin every residual count with its probe expression and baseline.** Three of this milestone's cards record a count as a control; a count without its denominator and its instrument is not re-derivable.
+4. **Carry the anchor-text citation discipline forward.** It costs one word per citation and is immune to first-mover growth in a shared region.
+
+---
+
+## Domain Practice Provenance
+
+`domain_practice: { source: N/A — pipeline-internal release, date: 2026-08-15, domain: governance }`. Every path in the change matrix is an internal platform artifact — pipeline specs, release tooling, governance, and the release corpus. Secondary domain `software` for the three executable surfaces. Pipeline-internal releases are exempt from external sourcing, not from classification.
+
+---
+
+## Deviation Log
+
+1. **Shared-region ownership on the usage text — three cards, one region.** The lead card's disjointness map asserted outright ownership of the usage heredoc; a sibling's claim on the same region had already been accepted, and a third card needs it too. The lead card lands first, so its edit stales both siblings' absolute line citations silently. **Resolution: the region is SHARED, not owned.** All three cards cite by anchor text. The note lands in this card because no sibling can add it retroactively.
+
+2. **The Commit-0 procedure's own scoping header contradicted the step inserted into it.** The numbered list's title says the list runs before the plan file is written; the new step runs after. Both the header and one external consumer that characterizes the rung as a single pre-write stop are reconciled by the lead card, and the external consumer joins the File Change Matrix.
+
+3. **The new verification verb is not wired into any recovery path, deliberately.** On a correctly recovered repository the plan has already been renamed, so the pre-claim plan resolver finds no candidate and the verb exits non-zero before the token test is ever reached. **It does not, however, call that repository broken** — an earlier form of this entry said it would, and the Stage-6 iteration falsified that by classifying the refusal into three mutually-exclusive verdicts over two exactly-decidable, slug-scoped predicates: `NO PRE-CLAIM PLAN` (the correct post-claim shape, stated in the message as **no defect**, and equally what a never-authored slug looks like — the claim's rename destroys the slug, so the verb reports both readings and guesses neither), `TOKEN-LESS PLAN`, and `HALT — stamp manifest broken`, which is the only genuinely broken-manifest verdict. The exit code is deliberately unchanged at 1 across all three, because the Commit-0 rung keys PROCEED off exit 0 and re-contracting that from here would move a caller's gate as a side effect of improving a message. The code and both procedure homes carry the classified reading; this entry is reconciled to it. Its scope is stated narrowly at both its procedure home and its usage text: pre-claim only, first Engineering spoke only.
+
+4. **This release introduces the assertion it will be graded on, so the assertion did not exist at this file's own Commit-0 instant.** The version half of the re-verify ran normally and is recorded under D-Version. The manifest half is demonstrated after the fact against this very file, which is stronger evidence than a fixture and is recorded as such rather than claimed as a rung that ran.
+
+5. **Three integration edges point at two designs that were not re-solutioned** and whose premises moved during Stage 5. The operator elected to carry this into Stage 6 rather than amend first; the edges are unverified against current state and Stage 8 should grade them knowing that.
+
+6. **The Change Description's Issues-resolved rows are keyed by mechanism, not by issue number.** The Change Description Protocol's template keys each row by issue number, and the reference-durability standard — which the Stage-6 convention-compliance beat applies to committed release-plan files — refuses a bare issue number in prose. Both cannot hold, so the row key moved to the mechanism each card delivered; the card-to-mechanism mapping is carried once in § Scope § Issues Included and the per-row outcome and status are unchanged. The rationale is restated at the section itself so a Stage-9 reader meets it where the deviation is visible. **This is a template-versus-standard collision, not a card-level choice** — it will recur on every release plan authored under both rules, and reconciling the two surfaces is out of scope here.
+
+7. **One integration criterion was re-scoped at build time under the scope-lock's fix-the-Majors clause.** The design's message-family criterion asserted that the post-claim stderr contains no pre-flight text, graded over the whole captured buffer. The caller writes both message families to one buffer and the pre-flight announces on its success path, so the criterion was unsatisfiable by a correct implementation and its only satisfying "fix" would have been to suppress a sibling card's deliverable. It is re-scoped to a per-line partition; the intent it grades is unchanged. A second, narrower instance of the same defect was found in the proposed replacement and corrected before it shipped — the runnable-command clause is not exclusive to the post-claim family, because the pre-claim trackedness refusal legitimately carries one, so the discriminator is the progress trailer instead.
+
+---
+
+## Verification Evidence
+
+Populated at Stage 13 Close. Blank at creation per the template's usage rules.
+
+---
+
+## Deployment Execution Log
+
+Populated during Stage 12 execution.
+
+---
+
+## Change Description
+
+Authored at Stage-6 Phase C1 by the final Engineering slice, before the PR is transitioned to ready-for-review, so the section is visible in the PR diff at Stage-9 Plan Review. It is a distinct artifact from the user-facing release note authored at Stage 13.
+
+**On the row key.** The protocol's template keys each row of Issues resolved by issue number. This file is a committed release-plan file, so the reference-durability standard applies to it per the Stage-6 convention-compliance beat, and a bare issue number in prose is a fragile reference the authoring control refuses. Rows are therefore keyed by the **mechanism each card delivered**; the card-to-mechanism mapping is carried once, in § Scope § Issues Included above, and the per-row outcome and status the protocol asks for are unchanged.
+
+### Outcome
+
+A release plan now binds its identity at the Stage-12 atomic claim and can be shown to have done so. The six mechanisms ADR-092 depends on were each broken silently and in sequence — the token that feeds the claim was absent from the authoring contract, the flag that consumes it was unwired, the rename it triggers had not fired for three shipped releases, the close-out emitted a path shape the claim never produces, no gate compared a plan's filename against the ledger, and the message on failure named a bound identifier without supplying a remediation. This release closes all six, relocates **fourteen** v4 plans the unfired rename left flat — the eleven found at Stage 4 plus three more that arrived from the mainline while this release was in flight — and adds a close-blocking gate so the next occurrence surfaces before a release closes rather than three releases later.
+
+### Issues resolved
+
+| Mechanism | Outcome | Status |
+|---|---|---|
+| Version token in the authoring contract | The release-plan version token is homed in the authoring contract that produces the plan, and a network-free verification verb plus a Commit-0 assertion catch a token-less plan before Engineering commits it | DONE |
+| Claim-time rename reachability | The stamp slug is derived from the corpus rather than requiring a flag nobody passes, an unusable push target is refused before the compare-and-swap instead of stranding a claimed tag, and the eleven flat v4 plans are relocated with their inbound references cascaded | DONE |
+| Close-out plan pointer | The plan pointer resolves by existence at all three close-out emitters, so a nested plan is no longer reported as a dangling flat path | DONE |
+| Pre-claim rebuild-count announcement | The expected package-rebuild count is announced on every path through the package stage including zero, and two independent limbs refuse a manifest that would rebuild nothing — both strictly before the version is bound | DONE |
+| Filename-versus-ledger gate | A close-blocking gate joins each plan filename to its ledger row and refuses on a mismatch in either direction, wired into the close-out phase ladder so a finding stops the chore PR | DONE |
+| Post-claim recovery message | Every post-claim stamp failure emits the claimed identifier, the failed step, the resulting repo state and a runnable remediation, under an envelope that forbids the re-run; five of the ten failure sites previously emitted nothing at all | DONE |
+
+### Key decisions
+
+- **D-1 — the token-presence assertion homes at Stage-6 Commit 0**, not at Stage-4 exit: the Commit-0 beat already re-reads the version determination and spans write-through-commit, so a post-write assertion sits inside the rung rather than beside it.
+- **D-2 — P0 fully-serial on a SINGLE branch topology.** Four compositional edges and a moderate-reversibility relocation make the serial default correct; force-push is prohibited on the shared branch.
+- **D-3 — the filename-versus-ledger check extends the existing corpus lint** rather than adding a sibling at another layer, and absorbs the relocation card's placement criterion: one mechanism, two assertions, one denominator.
+- **D-ReleaseClass — `novel`**, re-classifying the milestone's declared `routine`: the plan renders D-class decisions and two cards carried unresolved design questions. Sets Deep Stage-9 review and Stage-5 activation bias ALL.
+- **D-Version — bump class `minor`**; the concrete number binds only at the Stage-12 atomic claim. The determination was re-rendered three times during the run as concurrent releases shipped, which is the mechanism working rather than a defect.
+
+### Reversibility
+
+**MODERATE / HIGH** — a revert of the merge commit restores every message, gate, and emitter cleanly; the one element that is not a pure code revert is the eleven-file plan relocation, whose reversal is a second rename commit rather than an automatic undo, and a claimed tag is never reversible by construction.
+
+### Downstream impact
+
+- The close-out phase ladder gains its first blocking predicate on a plans path. A post-claim stamp failure at the early failure sites now leaves the plan un-relocated and blocks this release's own Stage-13 close, so the recovery message states completion as a prerequisite rather than as hygiene.
+- The claim-time stamp's self-test harness gains a commit/push failure seam, making a previously unreachable error branch assertable for any future card that touches it.
+- Carry-forward: ownership of the release-corpus lint remains a held escalation and is unresolved by this release.
+- Carry-forward: two declared documentation surfaces did not land on this branch, and both are named rather than counted — `release/governance/RELEASE_PROTOCOL.md`, whose reconciliation is Tier-0 operator-only and which the autonomy-ceiling control correctly refuses to an agent (the finished replacement text is carried on the owning card's Stage-7 sub-task, surfaced rather than bypassed), and the `release/releases/RELEASE_LOG.md` inbound-reference repair. Both files are byte-identical to mainline on this branch, and both are recorded as undischarged obligations in the PR body for the Stage-9 gate.
+- **The skill-package rebuild is discharged.** An earlier form of this section carried it as blocked by a security control with no allowlist entry for the package builder; that no longer holds and is reconciled here rather than annotated. The rebuild landed in its own commit against the edited source, every rostered `.skill` package is content-fresh, and the pre-merge freshness gate passes on this branch. The block was a **stale deployed mirror** of the script-execution allowlist, not a corpus gap — the allowlist source carries the package builder's rows — so nothing was hand-built or bypassed to get around it, and the mirror-refresh residual is tracked separately from this release.
+
+### Cross-references
+
+- Release plan: this file, `release/releases/plans/plan-file-identity-adr-092_RELEASE_PLAN.md` — renamed to its versioned name under `plans/v<MAJOR>/` at the Stage-12 claim.
+- Milestone: `plan-file-identity-adr-092` on the platform repository.
+- User-facing release note, authored at Stage 13: `release/releases/notes/{{RELEASE_VERSION}}_RELEASE_NOTES.md`.
+- The architecture decision this release implements: `core/ADRs/ADR-092-plan-file-claim-time-stamping.md`.
