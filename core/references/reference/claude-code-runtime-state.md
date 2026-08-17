@@ -16,6 +16,8 @@ Technical descriptions of the runtime-state surfaces Claude Code keeps on the ho
 
 This catalog covers the **non-deploy-managed** runtime state. The deploy-managed surfaces (`~/.claude/skills/`, `~/.claude/skills/packages/`) are enumerated separately in [`../../disciplines/architecture-overview.md`](../../disciplines/architecture-overview.md) § "What gets deployed vs read in place"; the two are complementary.
 
+Alongside the written-on-disk surfaces, this document also carries **measured resolution-time findings** — see § "Context-resolution semantics". Resolution-time behavior is already in scope here: the "Env-var precedence" surface below is a precedence rule rather than a file.
+
 ## Per-surface entry schema
 
 Each surface below is one H2 section carrying a fixed five-field record:
@@ -56,6 +58,78 @@ Each surface below is one H2 section carrying a fixed five-field record:
 - **Scope-class:** `operator-owned` (the operator sets the environment; the precedence ordering itself is host-defined).
 - **Discovery-source:** [`../../rules/doc-link-maintenance.md`](../../rules/doc-link-maintenance.md) documents the workspace-root precedence as `--workspace-root` > `$CLAUDE_WORKSPACE_ROOT` > the in-repo default. State only precedence rules verifiable from in-repo evidence; any ordering not so verifiable is `UNKNOWN`.
 
+## Context-resolution semantics
+
+**Measurement date:** 2026-08-16 (Sunday) · **Runtime version observed:** Claude Code 2.1.233 · **Host platform:** Darwin 25.5.0
+
+A discovery record of how the runtime resolves context files, measured so that a downstream anchoring design is selected against observed behavior rather than assumption. **This section records findings only. It states no recommended mechanism and selects no candidate shape** — selection is a downstream design decision and is deliberately absent here.
+
+Because runtime behavior can change between measurement and use, the date and version above are the staleness handle: a consumer re-checks them before relying on anything below.
+
+### Candidate-shape verdicts
+
+Each shape carries exactly one verdict token — `VIABLE`, `NOT-VIABLE`, or `UNMEASURED` — and every `UNMEASURED` verdict states the reason measurement could not be completed on this instance.
+
+| Candidate shape | Verdict | Fixture and observed result |
+|---|---|---|
+| **Shape A — a context file placed on the operations side that references the platform sources** | `UNMEASURED` — **reason:** neither instrument capable of answering it was available on this instance; no fixture resolved, so no result exists to grade. | Fixture **FX-NEST** (a purpose-built nested context-file tree plus a no-context control tree) **could not be constructed** — the platform's own autonomy-ceiling control refuses creation of any file carrying the context-file basename, anywhere on disk. The substitute, fixture **FX-SESSION-NEW** (a fresh non-interactive session rooted at an existing directory), **terminated at authentication** before resolving any context. Observed result in both arms: no context set was produced. |
+| **Shape B — an import or inclusion chain rooted at the workspace-root charter** | `UNMEASURED` — **reason:** no live instance of the mechanism exists to observe, and the fixture that would create one is the same blocked FX-NEST; whether an inclusion resolves across the tracked/untracked boundary was therefore never exercised. | Fixture **FX-LIVE-CHARTER** (the live workspace-root charter, inspected for import directives) resolved to **0 import directives** against **18** ordinary markdown links in the same file — i.e. the charter uses linking, not inclusion, so there was no existing chain whose resolution could be watched. |
+| **Shape C — reliance on the runtime's own directory-walk discovery, unaided** | `UNMEASURED` — **reason:** the recorded-session instrument does not persist the resolved context set (demonstrated broken below), and the live-session instrument could not authenticate; walk-up depth was therefore never observed. | Fixture **FX-TRANSCRIPT** (a real recorded session that ran rooted at the operations workspace and at directories beneath it) resolved to **364 recorded working-directory entries across 4 distinct depths** — confirming sessions genuinely run at those locations — but **0 records of the resolved context set**, because that set is not written to the session store at all. |
+
+### Measured findings
+
+These were measured and are stated as results, independent of the verdicts above.
+
+- **The operations workspace carries no context file at its root, and none on the path from its active project subdirectories up to the workspace-root charter.** The only context files anywhere beneath it sit inside an archived implementation folder, off the live path.
+- **The user-scope context carrier does not exist.** There is no user-scope context file and no user-scope rules directory, so nothing today carries procedures independently of a session's location.
+- **A user-scope memory surface and the workspace-root charter load together in one session.** These are two different carriers, and their coexistence shows the runtime combines across carrier classes rather than letting one displace the other. This says nothing about precedence *within* the context-file carrier, which was not measured.
+- **Session identity is keyed by working directory, not by context-file location.** A directory that holds a context file but was never a session's working directory receives no session key, while directories that were working directories each receive one. The session key is therefore a sound instrument for *where sessions ran* and an unsound one for *what context resolved* — a distinction that misleads if the key is read as a context root.
+- **A session's context root and its working directory can differ.** A spawned agent thread does not acquire a key for its own working directory; it operates under the key of the session that spawned it. Any behavior that depends on working-directory discovery therefore needs separate confirmation for spawned threads, which need not resolve context from the directory they are running in.
+
+### Probe records
+
+Every probe carries a sensitivity arm with an observed non-zero result and a specificity arm with an observed zero.
+
+| Probe | Denominator | Subject result | Sensitivity arm | Specificity arm |
+|---|---|---|---|---|
+| **P1** — context files beneath the operations workspace | all files beneath it | **2** (both inside an archived implementation folder; none at its root or at any active project root) | same invocation across the whole workspace → **12** | nonsense basename across the whole workspace → **0** |
+| **P2** — user-scope context carrier | the user-scope runtime directory | context file **absent**; rules directory **absent** | user-scope memory file → **present** | nonsense user-scope path → **absent (0)** |
+| **P3** — context files on this session's ancestor chain | 6 ancestor directories from working directory to filesystem root | **1** of 6 (the workspace-root charter only) | the one that exists resolved → **1** | the other 5 → **0** |
+| **P4** — session-key derivation | **119** session keys | a context-file-bearing directory that was never a working directory → **0** keys; this thread's own working directory → **0** keys | working-directory-rooted sibling keys → **4**; all keys → **119** | key for a directory that was never a working directory → **0** |
+| **P5** — working-directory depth of a recorded operations-workspace session | **364** working-directory records in that session | **4** distinct working directories, the deepest **2 levels** below the operations-workspace root | working-directory field extraction → **364** | nonsense field name, same file → **0** |
+| **P6** — import directives in the live charter | the workspace-root charter | **0** | ordinary markdown links in the same file → **18** | nonsense pattern, same file → **0** |
+
+### Broken probe — recorded as unusable, not as a negative result
+
+**P7 — reading the resolved context set out of the session store.** Applied to the recorded operations-workspace session, a search for the injected-context marker returned **0**. That zero is **uninformative and is not reported as an absence of loaded context**.
+
+The demonstration is a positive control against known ground truth: the same invocation was run against **this session's own transcript**, where the injected-context block is known with certainty to be present in the live context. It returned **0** there as well, under two independent marker spellings. An instrument that returns zero on a case known to be positive is not measuring the property. The session store does not persist the resolved context set, so no session transcript — past or future — can answer what a session loaded.
+
+This is recorded so the instrument is not retried: transcript archaeology cannot answer context-resolution questions on this runtime.
+
+### Instruments attempted and unavailable
+
+Four independent routes were attempted. Three were unavailable and one was broken; the questions they would have answered are the three unmeasured verdicts above, each carrying its reason.
+
+| Instrument | Outcome |
+|---|---|
+| Purpose-built context-file fixtures | **Unavailable** — the autonomy-ceiling control refuses creation of a file with the context-file basename at any path, including throwaway scratch paths. The control was not worked around: renaming the fixture would have destroyed what the experiment tests, and re-routing the same creation through a different tool would have re-attempted a refused action. |
+| A fresh non-interactive session rooted at a chosen directory | **Unavailable** — terminates at authentication before any context resolution occurs. No credential was sought or supplied. |
+| Startup diagnostics from such a session | **Unavailable** — authentication fails ahead of diagnostic output, so nothing is emitted. |
+| Reading the resolved set out of the session store | **Broken** — see P7 above; fails its own positive control. |
+
+### Questions this record does not close
+
+Each remains open because the instruments above were unavailable, not because a negative result was observed.
+
+- **Walk-up depth** — how many parent levels the runtime searches, and whether it crosses a repository boundary or a tracked/untracked boundary.
+- **Accumulate versus stop-at-first** — whether several context files on one chain combine or the nearest wins.
+- **Scope precedence within the context-file carrier** — which of a user-scope and a project-scope context file wins, and whether they merge or override.
+
+### Reproducing this measurement where the instruments are available
+
+On an instance where a non-interactive session can authenticate, the three open questions are answerable without any fixture that a control would refuse: root a session at each level of a directory chain that already carries context files at more than one level, and have it read back the context-file paths its own harness injected. The sensitivity arm is a chain known to carry a context file; the specificity arm is a directory chain carrying none, which must return an empty set. A run that cannot produce a non-empty sensitivity arm has not measured anything and is recorded as unmeasured rather than as an absence.
+
 ## Related
 
 - [`../../rules/bypass-mode-readiness.md`](../../rules/bypass-mode-readiness.md) — its `_cross-cutting.md` ssh-agent socket side-channel residual is the keychain failure-mode touch-point (`commit.gpgsign=true` fails when the agent has no key loaded; `ssh-add --apple-use-keychain …` reloads it from Keychain).
@@ -66,4 +140,5 @@ Each surface below is one H2 section carrying a fixed five-field record:
 
 ## Provenance
 
+- Context-resolution discovery work item: #5161 — Measure the runtime's context-resolution semantics so a downstream operations-workspace anchoring design is selected against evidence (the § "Context-resolution semantics" record: three candidate-shape verdicts, six two-armed probes, one broken probe demonstrated against a positive control, and the build rule that an unavailable instrument yields an `UNMEASURED` verdict with its reason rather than a negative result).
 - Catalog work item: #163 — Catalog Claude Code runtime-state surfaces (the `~/.claude/backups/` discovery context, the four seed surfaces, and the build rule that the `~/.claude/backups/` cadence stays UNKNOWN rather than fabricated). Empirically disambiguating that cadence ("on launch" vs. "on significant config change") is explicitly a separate low-priority test, out of scope for this catalog.
