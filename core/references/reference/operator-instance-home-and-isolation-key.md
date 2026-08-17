@@ -222,7 +222,7 @@ The natural cleave, if a split is wanted: **slices 1–2 are independently valua
 
 ---
 
-## 4. Card references
+## References
 
 The work-tracker binding for this record. Each entry carries a summary noun phrase so the meaning survives if a number rots.
 
