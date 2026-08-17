@@ -247,6 +247,50 @@ Phases 0 and 1 are doc- and decision-class; the runtime-suite selection for them
 
 ---
 
+## Change Description
+
+> **Currency note.** This section is authored incrementally. It currently reflects **Phase 0, thread A only** — the first Engineering spoke's work. Each subsequent Stage-6 spoke refreshes it as its card lands, and it is complete before the PR is transitioned to ready-for-review at the Stage-9 gate.
+
+### Outcome
+
+The release opens by answering the question every other card in it was waiting on: **what class of home does platform-written state use, and what is that home keyed on?** The answer turned out to be cheaper than the milestone assumed. The platform *already* runs the split the fork set asked it to choose — configuration in the XDG config root, runtime state workspace-relative — and the distribution ADR's fourth decision already wrote that rule down. So the home-class fork resolves to **ratification plus one repair**, not a three-way design choice, and the relocation it unblocks is a leaf correction rather than a re-architecture.
+
+Two of the six forks turned out to be asking about a world that no longer exists, which is exactly what the planning stage flagged and required this spike to re-check. The inline-fallback fork was scoped against roughly five un-converged sites; **two** remain, and the deploy script's twenty-one declared fallthroughs measure **zero** — that convergence debt was paid without anyone updating the card. The sequencing fork asked how to order against a pending corpus migration that, measured, **never executed and has no successor** — the platform solved that problem a different way, with a tolerance adapter that is live and armed. Both forks were re-derived from current state before being resolved rather than answered against their stale framing.
+
+### Issues resolved so far
+
+| Card | State after this phase |
+|---|---|
+| `SPIKE-FORKS` | All three completion conditions met — six forks resolved, blast radius re-measured at this release's own base with both control arms, ordered slice plan authored. Ready to be marked as closed at Stage 13 |
+| `DEC-HOME` | Its question is answered inside forks 0a and 0b. Stays open as the decision's tracking home through Stage 8; recommended to be marked as closed at Stage 13, superseded by the fork record |
+| `OBS-CONFIG` | Its direction is set as a consequence of fork 0a — the installer changes, not the resolver. The edit itself lands in Phase 1 |
+| `DISCOVERY-CTX` · `BLD-ANCHOR` · `UMB-RELOCATE` | Not yet entered; unchanged by this phase |
+
+### Key decisions
+
+- **Home class:** ratify the running split; move the runtime-state leaf to the workspace-root home. The derived-internals tier stays prospective — the distribution ADR explicitly declines to migrate existing content, and that clause is what keeps this a one-leaf move.
+- **Isolation key:** target-slug namespace, **recorded but not built** in this release. Its urgency is lower than assumed, because the masking condition the home-class card expected to disappear is not scheduled to disappear.
+- **Family scope:** one member left to move. The other two already left under earlier decisions, which is why the predicted "two stranded siblings" residual measures one file each — both inside the detector itself.
+- **Supersession ADR:** yes, but it supersedes the unratified reorganization convention, not the distribution ADR — the relocation realigns with that ADR rather than reversing it.
+
+### Reversibility
+
+**CHEAP · HIGH** for everything committed in this phase. Two documents landed: a release plan and a decision record. No resolver default moved, no detector pattern changed, no installed state was touched. Rollback is a revert of the merge commit.
+
+The tier rises sharply in Phase 2, and the plan says so rather than discovering it later: the relocation carries a copy-first data migration and a pre-commit hook that fails **open** if its needle file has not arrived at the new home before the resolver flips.
+
+### Downstream impact
+
+The slice plan is the load-bearing output. Its ten slices become the relocation umbrella's child work items through the late-add rule, and its stated dependency order is not cosmetic — the detector must learn the new path form **before** anything writes it, and the two convergence slices must land **before** the resolver flips so the flip has a single resolution site.
+
+One finding materially affects the release's shape and is routed to the Stage-9 gate rather than absorbed: **the slice plan's arithmetic puts the bundle far past the sizing breach the operator accepted.** The accepted figure was 26 effective against a 25 bound; the measured figure with Phase 2 included is roughly 59. That is a decision the operator has not yet been asked to make.
+
+### Cross-references
+
+The fork record and slice plan live at `core/references/reference/operator-instance-home-and-isolation-key.md` — the single authoritative home for both. Work-tracker comments that mirror them are copies for card-completion purposes, not second sources.
+
+---
+
 ## Issue References
 
 The label-to-number binding for this release. Each entry carries a summary noun phrase so the meaning survives if a number rots.
