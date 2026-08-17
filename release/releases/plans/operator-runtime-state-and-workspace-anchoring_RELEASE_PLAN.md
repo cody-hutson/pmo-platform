@@ -249,13 +249,17 @@ Phases 0 and 1 are doc- and decision-class; the runtime-suite selection for them
 
 ## Change Description
 
-> **Currency note.** This section is authored incrementally. It currently reflects **Phase 0, thread A only** — the first Engineering spoke's work. Each subsequent Stage-6 spoke refreshes it as its card lands, and it is complete before the PR is transitioned to ready-for-review at the Stage-9 gate.
+> **Currency note.** This section is authored incrementally. It currently reflects **Phase 0, both threads** — the first two Engineering spokes' work. Each subsequent Stage-6 spoke refreshes it as its card lands, and it is complete before the PR is transitioned to ready-for-review at the Stage-9 gate.
 
 ### Outcome
 
 The release opens by answering the question every other card in it was waiting on: **what class of home does platform-written state use, and what is that home keyed on?** The answer turned out to be cheaper than the milestone assumed. The platform *already* runs the split the fork set asked it to choose — configuration in the XDG config root, runtime state workspace-relative — and the distribution ADR's fourth decision already wrote that rule down. So the home-class fork resolves to **ratification plus one repair**, not a three-way design choice, and the relocation it unblocks is a leaf correction rather than a re-architecture.
 
 Two of the six forks turned out to be asking about a world that no longer exists, which is exactly what the planning stage flagged and required this spike to re-check. The inline-fallback fork was scoped against roughly five un-converged sites; **two** remain, and the deploy script's twenty-one declared fallthroughs measure **zero** — that convergence debt was paid without anyone updating the card. The sequencing fork asked how to order against a pending corpus migration that, measured, **never executed and has no successor** — the platform solved that problem a different way, with a tolerance adapter that is live and armed. Both forks were re-derived from current state before being resolved rather than answered against their stale framing.
+
+Thread B's discovery slice returns a result the gate needs to see plainly: **the runtime's context-resolution semantics could not be measured on this instance, and the record says so rather than inferring them.** Four independent instruments were tried. Purpose-built context-file fixtures cannot be created — the platform's own autonomy-ceiling control refuses any file carrying the context-file basename, at any path. A fresh non-interactive session, which would have read its own resolved context back, cannot authenticate. Startup diagnostics die with it. And the session store, which records a real session that ran at exactly the directories in question, turns out not to persist the resolved context set at all — proven by running the same probe against a session whose loaded context is known with certainty and getting the same zero.
+
+What the slice did establish is the surrounding state, measured with both control arms: the operations workspace still carries no context file at its root or anywhere on the path up to the workspace charter, no user-scope carrier exists, and the charter uses linking rather than inclusion. It also found that session identity is keyed by working directory rather than by context-file location, and that a spawned agent thread runs under its parent's key rather than its own — so any design resting on working-directory discovery needs separate confirmation for spawned threads. The three open questions — walk-up depth, whether several context files on one chain combine or the nearest wins, and scope precedence — are recorded as unmeasured with their reasons, together with the procedure that would answer them where a session can authenticate. **The design card therefore does not receive the measured input the plan promised it**, and that is a gate decision rather than something for this spoke to paper over.
 
 ### Issues resolved so far
 
@@ -264,7 +268,8 @@ Two of the six forks turned out to be asking about a world that no longer exists
 | `SPIKE-FORKS` | All three completion conditions met — six forks resolved, blast radius re-measured at this release's own base with both control arms, ordered slice plan authored. Ready to be marked as closed at Stage 13 |
 | `DEC-HOME` | Its question is answered inside forks 0a and 0b. Stays open as the decision's tracking home through Stage 8; recommended to be marked as closed at Stage 13, superseded by the fork record |
 | `OBS-CONFIG` | Its direction is set as a consequence of fork 0a — the installer changes, not the resolver. The edit itself lands in Phase 1 |
-| `DISCOVERY-CTX` · `BLD-ANCHOR` · `UMB-RELOCATE` | Not yet entered; unchanged by this phase |
+| `DISCOVERY-CTX` | Findings record committed at its declared path. Three candidate-shape verdicts rendered, six probes carry both control arms, one instrument recorded broken against a positive control. Three of the questions stay open as unmeasured-with-reason because the instruments that would answer them are unavailable on this instance. No mechanism recommended — that is the design card's call |
+| `BLD-ANCHOR` · `UMB-RELOCATE` | Not yet entered; unchanged by this phase |
 
 ### Key decisions
 
@@ -275,7 +280,7 @@ Two of the six forks turned out to be asking about a world that no longer exists
 
 ### Reversibility
 
-**CHEAP · HIGH** for everything committed in this phase. Two documents landed: a release plan and a decision record. No resolver default moved, no detector pattern changed, no installed state was touched. Rollback is a revert of the merge commit.
+**CHEAP · HIGH** for everything committed in this phase. Three documents landed: a release plan, a decision record, and a findings record. No resolver default moved, no detector pattern changed, no installed state was touched. Rollback is a revert of the merge commit.
 
 The tier rises sharply in Phase 2, and the plan says so rather than discovering it later: the relocation carries a copy-first data migration and a pre-commit hook that fails **open** if its needle file has not arrived at the new home before the resolver flips.
 
