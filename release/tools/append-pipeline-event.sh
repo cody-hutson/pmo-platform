@@ -43,43 +43,33 @@ export PATH="/usr/bin:/bin"
 #
 # The event log is OPERATOR-INSTANCE content (gitignored, not in the repo tree):
 # it lives at <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md per the
-# schema doc + core/standards/depersonalization-spec.md §4. Resolution order
-# (mirrors the cleanup-orphan-state.sh / automated-closeout.sh WORKSPACE_ROOT
-# precedent): env override → operator.toml → canonical default
-# (${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/evals/results/).
+# schema doc + core/standards/depersonalization-spec.md §4.
+#
+# The path is NOT resolved here. core/deploy/lib-instance-path.sh's
+# pmo_evals_results_path() is the single resolution site for it, and this writer
+# calls it — as does query-pipeline-event.sh, the reader. Resolving it inline
+# (which this file used to do) is what let a reader drift from its writer: the
+# resolver's rung-3 base was two steps where this block's was four, so deploy.sh
+# Check 19 and the decision-emission gate read a directory this writer never wrote
+# to on any instance setting $WORKSPACE_ROOT or the claude_workspace_root key. One
+# site cannot disagree with itself. See that function's header for the full ladder.
 
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 SCHEMA_FILE="$REPO_ROOT/release/references/standards/pipeline-event-log-schema.md"
 
-# Workspace root (env → operator.toml → default), per the cleanup-tool pattern.
-WORKSPACE_ROOT="${WORKSPACE_ROOT:-${CLAUDE_WORKSPACE_ROOT:-}}"
-if [[ -z "$WORKSPACE_ROOT" ]]; then
-  _operator_toml="${HOME}/.config/pmo-platform/operator.toml"
-  if [[ -r "$_operator_toml" ]]; then
-    # `|| true`: an absent key makes grep exit non-zero, which would abort under
-    # set -e / pipefail — tolerate it and fall through to the default.
-    _wr=$( { grep -E '^claude_workspace_root' "$_operator_toml" 2>/dev/null || true; } | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-    [[ -n "$_wr" ]] && WORKSPACE_ROOT="$_wr"
-  fi
-fi
-WORKSPACE_ROOT="${WORKSPACE_ROOT:-${HOME}/Claude}"
+# Fail-closed on an absent resolver — the shape used by produce-learnings-register.sh,
+# the shipped precedent for a release/tools/ script sourcing this cross-module lib.
+# The empty positional is load-bearing: a sourced file inherits the caller's "$@",
+# so sourcing while $1 is still `--self-test` would run the LIBRARY's self-test and
+# exit. Fail-OPEN was considered and rejected: a silent fallback would restore the
+# duplicate resolution this change exists to remove, and hide it.
+INSTANCE_LIB="$REPO_ROOT/core/deploy/lib-instance-path.sh"
+[[ -r "$INSTANCE_LIB" ]] || { echo "ERROR: instance-path resolver missing at $INSTANCE_LIB" >&2; exit 2; }
+# shellcheck source=/dev/null
+source "$INSTANCE_LIB" ""
 
-# Operator-instance evals-results dir (env → operator.toml override → default).
-# <OPERATOR_INSTANCE_EVALS_RESULTS_PATH> resolves verbatim when the operator.toml
-# override is set; otherwise to the ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/<stem>/
-# canonical default per depersonalization-spec.md §4.
-EVALS_RESULTS_PATH="${EVALS_RESULTS_PATH:-}"
-if [[ -z "$EVALS_RESULTS_PATH" ]]; then
-  _operator_toml="${HOME}/.config/pmo-platform/operator.toml"
-  if [[ -r "$_operator_toml" ]]; then
-    # `|| true`: this key is absent on instances that use the canonical default;
-    # tolerate grep's non-zero exit under set -e / pipefail.
-    _er=$( { grep -E '^operator_instance_evals_results_path' "$_operator_toml" 2>/dev/null || true; } | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-    [[ -n "$_er" ]] && EVALS_RESULTS_PATH="$_er"
-  fi
-fi
-EVALS_RESULTS_PATH="${EVALS_RESULTS_PATH:-${WORKSPACE_ROOT}/personal/pmo-instance/evals/results}"
+EVALS_RESULTS_PATH="$(pmo_evals_results_path)"
 
 LOG_FILE="$EVALS_RESULTS_PATH/pipeline-event-log.md"
 WRITE_LOG="$EVALS_RESULTS_PATH/pipeline-event-log-write.log"
@@ -529,6 +519,55 @@ done
 
 if [[ "$SELF_TEST" == "true" ]]; then
   # Validates schema enums; appends a test row then reverts.
+  # Liveness: the resolver MUST be in scope. Without this, a future edit that
+  # dropped or renamed the source would leave EVALS_RESULTS_PATH empty and the
+  # whole self-test would run against "/pipeline-event-log.md" — a probe that
+  # still passes while asserting nothing about the real path.
+  declare -F pmo_evals_results_path >/dev/null \
+    || die "self-test: pmo_evals_results_path not in scope — the instance-path resolver was not sourced" 2
+  [[ -n "$EVALS_RESULTS_PATH" ]] || die "self-test: EVALS_RESULTS_PATH resolved empty" 2
+
+  # ── Workspace-root cascade assertion (value-pinned, hermetic) ─────────────
+  # The resolver's rung-3 base is a four-step cascade. This asserts each step
+  # against a LITERAL expected value under a throwaway HOME — not against another
+  # resolver. A parity assertion between this tool and the resolver cannot fail,
+  # because this tool's path IS the resolver's return value; only a pinned literal
+  # can catch a future narrowing of the cascade (the exact regression that put a
+  # reader and its writer in different directories until #5634).
+  _cas_home="$(/usr/bin/mktemp -d)" || die "self-test: cannot create cascade sandbox" 2
+  /bin/mkdir -p "$_cas_home/.config/pmo-platform" || die "self-test: cannot seed cascade sandbox" 2
+  # Expectations are written in ROOTED form (a workspace root immediately followed
+  # by the governed stem). The bare stem is never assigned to a variable of its
+  # own: an unrooted operator-instance leaf is exactly what the path-portability
+  # detector exists to keep out of tracked files, and the rooted form is both the
+  # governed spelling and the one these assertions actually mean.
+  _cas_fail=0
+  _cas_chk() {
+    if [[ "$2" != "$3" ]]; then
+      echo "ERROR: self-test: cascade $1 — want '$2' got '$3'" >&2
+      _cas_fail=1
+    fi
+  }
+  # 3c — operator.toml claude_workspace_root (no env root set)
+  printf '[paths]\nclaude_workspace_root = "%s"\n' "$_cas_home/wsK" > "$_cas_home/.config/pmo-platform/operator.toml"
+  _cas_got="$( unset EVALS_RESULTS_PATH PMO_INSTANCE_PATH WORKSPACE_ROOT CLAUDE_WORKSPACE_ROOT
+               HOME="$_cas_home"; pmo_evals_results_path )"
+  _cas_chk "3c toml claude_workspace_root" "$_cas_home/wsK/personal/pmo-instance/evals/results" "$_cas_got"
+  # 3a — $WORKSPACE_ROOT, with no toml key present
+  printf '[paths]\noperator_homedir_path = ""\n' > "$_cas_home/.config/pmo-platform/operator.toml"
+  _cas_got="$( unset EVALS_RESULTS_PATH PMO_INSTANCE_PATH CLAUDE_WORKSPACE_ROOT
+               HOME="$_cas_home"; WORKSPACE_ROOT="$_cas_home/wsE"; pmo_evals_results_path )"
+  _cas_chk "3a env WORKSPACE_ROOT" "$_cas_home/wsE/personal/pmo-instance/evals/results" "$_cas_got"
+  # 3d — specificity arm: nothing set anywhere, so the HOME-rooted default stands.
+  # This arm must pass both before and after any cascade change; it is what
+  # discriminates "the cascade works" from "every arm returns the same thing".
+  _cas_got="$( unset EVALS_RESULTS_PATH PMO_INSTANCE_PATH WORKSPACE_ROOT CLAUDE_WORKSPACE_ROOT
+               HOME="$_cas_home"; pmo_evals_results_path )"
+  _cas_chk "3d default" "$_cas_home/Claude/personal/pmo-instance/evals/results" "$_cas_got"
+  /bin/rm -rf "$_cas_home"
+  [[ "$_cas_fail" -eq 0 ]] || die "self-test: workspace-root cascade assertion FAILED (see above)" 1
+  echo "self-test: workspace-root cascade OK (3a env / 3c toml / 3d default, value-pinned)"
+
   # Assert the resolved path's parent is reachable, then seed if absent.
   [[ -d "$(dirname "$LOG_FILE")" ]] || /bin/mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null \
     || die "self-test: resolved log parent dir not creatable: $(dirname "$LOG_FILE")" 2
@@ -576,9 +615,16 @@ if [[ "$SELF_TEST" == "true" ]]; then
   if [[ -z "${_APE_SELFTEST_FALLBACK_CHILD:-}" ]]; then
     _ft_tmp="$(/usr/bin/mktemp -d)" || die "self-test: cannot create forced-fallback temp tree" 2
     trap '/bin/rm -rf "$_ft_tmp"' EXIT
-    /bin/mkdir -p "$_ft_tmp/release/tools" || die "self-test: cannot populate forced-fallback temp tree" 2
+    /bin/mkdir -p "$_ft_tmp/release/tools" "$_ft_tmp/core/deploy" || die "self-test: cannot populate forced-fallback temp tree" 2
     /bin/cp "${BASH_SOURCE[0]}" "$_ft_tmp/release/tools/append-pipeline-event.sh" \
       || die "self-test: cannot copy script into forced-fallback temp tree" 2
+    # The instance-path resolver travels with the script, for the same reason the
+    # grammar SSOT does. The child's REPO_ROOT resolves INTO the temp tree, so the
+    # fail-closed source at the top of this file would `die` there and take a
+    # self-test that passes today down with it. This probe forces the SCHEMA to be
+    # unfindable — it is not a probe of a missing resolver.
+    /bin/cp "$INSTANCE_LIB" "$_ft_tmp/core/deploy/lib-instance-path.sh" \
+      || die "self-test: cannot copy lib-instance-path.sh into forced-fallback temp tree" 2
     # The grammar SSOT travels with the script. This probe forces the SCHEMA to
     # be unfindable (REPO_ROOT resolves into the temp tree) — it is not a probe
     # of a missing grammar library, and the child's join-key guard fails closed

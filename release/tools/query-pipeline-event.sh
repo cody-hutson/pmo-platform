@@ -52,8 +52,10 @@ export PATH="/usr/bin:/bin"
 # ─── Path resolution ─────────────────────────────────────────────────────────
 #
 # MUST resolve to the SAME log location as append-pipeline-event.sh, so a row
-# written by the append CLI is read back by this query CLI. Resolution mirrors
-# the writer verbatim.
+# written by the append CLI is read back by this query CLI. Both call the SAME
+# function — core/deploy/lib-instance-path.sh's pmo_evals_results_path() — rather
+# than each carrying its own copy of the ladder, so writer↔reader parity is
+# structural rather than maintained by hand.
 #
 # Repo root is TWO levels up from this script (release/tools/) — NOT three. The
 # prior `../../..` walked above the repo and, from a worktree at
@@ -62,45 +64,28 @@ export PATH="/usr/bin:/bin"
 #
 # The event log is OPERATOR-INSTANCE content (gitignored, not in the repo tree):
 # it lives at <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md per the
-# schema doc + core/standards/depersonalization-spec.md §4. Resolution order
-# (mirrors append-pipeline-event.sh / cleanup-orphan-state.sh / automated-closeout.sh):
-# env override → operator.toml → canonical default
-# (${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/evals/results/).
+# schema doc + core/standards/depersonalization-spec.md §4. See the resolver's own
+# header for the full three-rung ladder and its four-step workspace-root cascade.
 
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 # REPO_ROOT resolution is verbatim from append-pipeline-event.sh for resolution-block
 # parity. It is now LOAD-BEARING here too: --release resolves the § 2a version<->milestone
-# binding out of the in-repo RELEASE_LOG. Two levels up — NOT three; see header note above.
+# binding out of the in-repo RELEASE_LOG, and it anchors the resolver source below.
+# Two levels up — NOT three; see header note above.
 REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 
-# Workspace root (env → operator.toml → default), per the cleanup-tool pattern.
-WORKSPACE_ROOT="${WORKSPACE_ROOT:-${CLAUDE_WORKSPACE_ROOT:-}}"
-if [[ -z "$WORKSPACE_ROOT" ]]; then
-  _operator_toml="${HOME}/.config/pmo-platform/operator.toml"
-  if [[ -r "$_operator_toml" ]]; then
-    # `|| true`: an absent key makes grep exit non-zero, which would abort under
-    # set -e / pipefail — tolerate it and fall through to the default.
-    _wr=$( { grep -E '^claude_workspace_root' "$_operator_toml" 2>/dev/null || true; } | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-    [[ -n "$_wr" ]] && WORKSPACE_ROOT="$_wr"
-  fi
-fi
-WORKSPACE_ROOT="${WORKSPACE_ROOT:-${HOME}/Claude}"
+# Fail-closed on an absent resolver — the shape used by produce-learnings-register.sh,
+# the shipped precedent for a release/tools/ script sourcing this cross-module lib.
+# The empty positional is load-bearing: a sourced file inherits the caller's "$@",
+# so sourcing while $1 is still a flag would hand the library the caller's argv.
+# Fail-OPEN was considered and rejected: a silent fallback would restore the
+# duplicate resolution this change exists to remove, and hide it.
+INSTANCE_LIB="$REPO_ROOT/core/deploy/lib-instance-path.sh"
+[[ -r "$INSTANCE_LIB" ]] || { echo "ERROR: instance-path resolver missing at $INSTANCE_LIB" >&2; exit 1; }
+# shellcheck source=/dev/null
+source "$INSTANCE_LIB" ""
 
-# Operator-instance evals-results dir (env → operator.toml override → default).
-# <OPERATOR_INSTANCE_EVALS_RESULTS_PATH> resolves verbatim when the operator.toml
-# override is set; otherwise to the ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/<stem>/
-# canonical default per depersonalization-spec.md §4.
-EVALS_RESULTS_PATH="${EVALS_RESULTS_PATH:-}"
-if [[ -z "$EVALS_RESULTS_PATH" ]]; then
-  _operator_toml="${HOME}/.config/pmo-platform/operator.toml"
-  if [[ -r "$_operator_toml" ]]; then
-    # `|| true`: this key is absent on instances that use the canonical default;
-    # tolerate grep's non-zero exit under set -e / pipefail.
-    _er=$( { grep -E '^operator_instance_evals_results_path' "$_operator_toml" 2>/dev/null || true; } | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-    [[ -n "$_er" ]] && EVALS_RESULTS_PATH="$_er"
-  fi
-fi
-EVALS_RESULTS_PATH="${EVALS_RESULTS_PATH:-${WORKSPACE_ROOT}/personal/pmo-instance/evals/results}"
+EVALS_RESULTS_PATH="$(pmo_evals_results_path)"
 
 LOG_FILE="$EVALS_RESULTS_PATH/pipeline-event-log.md"
 

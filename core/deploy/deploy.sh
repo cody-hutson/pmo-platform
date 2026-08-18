@@ -5870,9 +5870,19 @@ cmd_check() {
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 19: Pipeline-event-log integrity"
     # Class A — operator-instance runtime state. Resolved through the SHARED
-    # resolver in lib-instance-path.sh (sourced above), which is the same surface
-    # append-pipeline-event.sh writes through, so the reader and the writer of
-    # these two files can never disagree about where they live (#4051).
+    # resolver in lib-instance-path.sh (sourced above). That resolver is now the
+    # single resolution site: append-pipeline-event.sh (the writer) and
+    # query-pipeline-event.sh (its reader) both CALL it rather than each carrying
+    # a copy of the ladder, so this check cannot look somewhere the writer does
+    # not write (#4051, corrected by #5634).
+    #
+    # It could before. Until #5634 the resolver's rung-3 base was two steps while
+    # the writer's was four, so on an instance setting $WORKSPACE_ROOT or the
+    # operator.toml claude_workspace_root key this check resolved to a directory
+    # that never held the log — and 19a took its benign-absence SKIP branch, so
+    # 19b and 19c never ran there. A new 19b/19c finding on such an instance after
+    # upgrading is a PRE-EXISTING condition this check can finally see, not a
+    # regression introduced by the path change.
     local c19_evals_dir="$(pmo_evals_results_path)"
     local c19_log="$c19_evals_dir/pipeline-event-log.md"
     local c19_write_log="$c19_evals_dir/pipeline-event-log-write.log"
