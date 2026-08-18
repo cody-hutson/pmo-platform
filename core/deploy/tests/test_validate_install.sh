@@ -147,7 +147,7 @@ new_fixture() {
 
 # --- Fixture construction -------------------------------------------------- #
 #
-# A9 is the subject, but validate-install.sh runs all twelve Mode A checks and
+# A9 is the subject, but validate-install.sh runs all thirteen Mode A checks and
 # gates Mode B on Mode A's aggregate verdict. So the fixture is built HEALTHY
 # across every other check. Two reasons, both load-bearing:
 #   1. Each arm's A9 verdict is then attributable to the A9 variation alone.
@@ -238,6 +238,26 @@ build_workspace() {
       printf 'CLAUDE.md of realistic size with no unresolved operator tokens in it.\n'
     done
   } > "${ws}/CLAUDE.md"
+
+  # A5b — the operations context anchor. This fixture's minimal source repo ships
+  # no lib-instance-path.sh, so A5b currently SKIPs (it will not guess where the
+  # anchor lives). The anchor is seeded anyway, deliberately: the fixture's
+  # contract is a workspace that is HEALTHY on every check but A9, and the moment
+  # the resolver appears in build_source_repo for some other check, an unseeded
+  # anchor would FAIL A5b and — through the Mode-A -> Mode-B gate — silently
+  # break arm 2's cascade limb rather than the check it belongs to.
+  #
+  # Deliberately NOT adding lib-instance-path.sh to build_source_repo here: that
+  # would activate A2's ambient-directory limb, which this workspace does not
+  # provision, turning A2 red for an unrelated reason.
+  mkdir -p "${ws}/projects"
+  {
+    printf '# Fixture operations context anchor\n\n'
+    for i in 1 2 3 4; do
+      printf 'Pointer line %d. This file exists so check A5b has an anchor of\n' "${i}"
+      printf 'realistic size with no unresolved operator tokens in it.\n'
+    done
+  } > "${ws}/projects/CLAUDE.md"
 
   # A6 — settings.json, valid JSON, no unresolved tokens.
   printf '{"hooks":{}}\n' > "${ws}/.claude/settings.json"

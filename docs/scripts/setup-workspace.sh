@@ -2253,6 +2253,14 @@ install_composition_surface_files() {
     # hub-state-tier parent for <OPERATOR_INSTANCE_HUB_STATE_PATH> templates
     # per core/deploy/composition-surface-manifest.sh hub-state tier.
     mkdir -p "${WORKSPACE_ROOT}/personal/pmo-instance/hub-state" || { err "mkdir failed: ${WORKSPACE_ROOT}/personal/pmo-instance/hub-state"; exit 73; }
+    # operations-root-tier parent for the operations-workspace context anchor.
+    # Resolved, not spelled: the operations leaf lives in lib-instance-path.sh so
+    # a relocation re-points one function rather than every caller. The resolver
+    # is guaranteed loaded here — lib-composition.sh sources it at its own file
+    # scope, and this block is unreachable unless that source succeeded (the
+    # early return above).
+    local operations_root; operations_root="$(pmo_operations_path_for "${WORKSPACE_ROOT}")"
+    mkdir -p "${operations_root}" || { err "mkdir failed: ${operations_root}"; exit 73; }
   fi
 
   local override_toml="${WORKSPACE_ROOT}/${OPERATOR_LOCAL_TOML_BASENAME}"

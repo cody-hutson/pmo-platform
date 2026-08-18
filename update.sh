@@ -353,13 +353,19 @@ regenerate_managed_sections() {
     cp "${target}" "${backup_dir}/${target_basename}"
 
     # Out-of-fence discard notice (composition-surface-spec.md §3.3). A bare
-    # warning is proportionate for an allowlist; for a workspace-root target —
-    # the operator's top-level governance file — name the path AND the backup
-    # location, so content held outside either fence is recoverable rather than
-    # merely reported lost.
-    if [ "${tier}" = "workspace-root" ]; then
-      info "Regenerating workspace-root target ${target}: content INSIDE the OPERATOR ADDITIONS fence is preserved verbatim; content outside either fence is not carried forward. Pre-write copy: ${backup_dir}/${target_basename}"
-    fi
+    # warning is proportionate for an allowlist; for a top-level governance-
+    # adjacent target — the workspace-root charter, or the operations-workspace
+    # context anchor — name the path AND the backup location, so content held
+    # outside either fence is recoverable rather than merely reported lost.
+    #
+    # A tier CLASS test, not a single-value equality: the spec clause is written
+    # against the class, so a tier added to the class in the spec and not here
+    # would ship a documented behavior no code provides.
+    case "${tier}" in
+      workspace-root|operations-root)
+        info "Regenerating ${tier} target ${target}: content INSIDE the OPERATOR ADDITIONS fence is preserved verbatim; content outside either fence is not carried forward. Pre-write copy: ${backup_dir}/${target_basename}"
+        ;;
+    esac
 
     if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "${dialect}"; then
       regenerated=$((regenerated + 1))

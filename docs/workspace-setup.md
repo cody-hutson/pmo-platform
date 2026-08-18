@@ -26,7 +26,9 @@ The package is shared. Every operator who clones pmo-platform receives the same 
 - **Package upgrades would conflict.** `git pull` of upstream changes would race against operator edits in the same tree. Every upgrade would become a merge exercise.
 - **Operator content would accidentally ship to the package.** A misconfigured commit, a stray `git add .`, a copy-paste from a working note — and operator-identifying content lands in the public clone.
 
-The sibling-directory model addresses both. `pmo-platform/` is a clone. Operator content lives in siblings — `projects/`, `knowledge/`, `personal/` — that the package never reads, the package never writes, and `git pull` never touches. The boundary is physical, not procedural; the filesystem prevents the failure mode that documentation alone cannot.
+The sibling-directory model addresses both. `pmo-platform/` is a clone. Operator content lives in siblings — `projects/`, `knowledge/`, `personal/` — that the package never reads, that the package never writes **operator content into**, and that `git pull` never touches. The boundary is physical, not procedural; the filesystem prevents the failure mode that documentation alone cannot.
+
+The write clause is stated narrowly on purpose. The installer **does** seed a small set of package-managed files into the siblings — the operator-instance surfaces, and the operations context anchor at `projects/CLAUDE.md` — under install-if-missing semantics with a preserved operator-additions fence (§2.2 records the same fact for `projects/` itself, which `setup-workspace.sh` creates). Seeding a managed file the operator then extends is not the failure mode above: the file is never a `git pull` target, and it holds no operator content the package could overwrite. What the package never does is write operator **content** into a sibling.
 
 The rationale for this design is recorded in [ADR-007 — Core module boundary lock-in](../core/ADRs/ADR-007-core-module-boundary.md), which establishes the broader module-boundary principle that the workspace layout expresses operationally.
 
@@ -95,6 +97,8 @@ Why this is separate from the package:
 - **Operator-discretionary git posture.** Some operators keep `projects/` in a private repository of their own; others keep it local-only. The package model does not require either choice.
 
 `projects/` is created by `setup-workspace.sh` (per [docs/scripts/setup-workspace.sh](scripts/setup-workspace.sh)) and populated by `mkdir projects/[NewProject]` + author PROJECT.md per [GETTING_STARTED.md](GETTING_STARTED.md).
+
+`projects/CLAUDE.md` — the operations context anchor — is the **only** package-seeded file in `projects/`. The installer writes it if it is absent and never overwrites it; it is pointer-only, naming the platform governance an operations-rooted session loads and restating none of it. Its paths resolve relative to its own location, so it reads correctly from a session rooted at any depth beneath it. No agent can hand-edit it: the autonomy-ceiling control blocks writes to that basename unconditionally, which is what keeps the pointer-only property from depending on review discipline.
 
 ### 2.3 knowledge/ — optional knowledge base
 

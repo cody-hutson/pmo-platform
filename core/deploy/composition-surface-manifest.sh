@@ -27,7 +27,15 @@
 #                                               subdirectories (vX.Y/) created lazily by hub
 #                                               on first surface emit)
 #                           "workspace-root" → <workspace-root>/<basename minus trailing .template>
-#                                              (ADR-122; the only suffix-stripping tier)
+#                                              (ADR-122; suffix-stripping)
+#                           "operations-root" → <operations-base>/<basename minus trailing .template>
+#                                              (the operations-workspace context
+#                                               anchor; <operations-base> resolved
+#                                               by lib_compose_resolve_target via
+#                                               the lib-instance-path.sh resolver,
+#                                               same as <instance-base>. Suffix-
+#                                               stripping, and deliberately does
+#                                               NOT consume <instance-base>.)
 #   <tokens-flag>           "tokens"    → substitute [OPERATOR_*] / [CLAUDE_*] tokens at write
 #                           "raw"       → install verbatim (no substitution)
 #   <marker-dialect>        OPTIONAL 4th field (ADR-122).
@@ -37,14 +45,29 @@
 #                                         returns empty, so every pre-ADR-122 row keeps its
 #                                         exact prior behavior with no rewrite.
 #
-# Adding a new composition-surface file: append one row. No other code change needed.
+# Adding a new composition-surface file: append one row — AND update the
+# self-declared "<N> composition-surface" count below, which an enforcing QA check
+# asserts against the actual row count (core/deploy/qa/checks.py R1). A membership
+# change that leaves the numeral behind turns that check red.
+#
+# Adding a new TIER costs more than a row: the resolver needs a `case` arm
+# (core/deploy/lib-composition.sh lib_compose_resolve_target), the install
+# validator needs a matching arm in check_a3b_composition_surface — whose tier
+# `case` falls through `*) continue ;;`, so an unhandled tier is verified by
+# nothing — and any tier-literal branch downstream of resolution needs widening
+# (update.sh's out-of-fence discard notice is one).
+#
+# The rule this generalizes: enumerate every reader of a manifest-DERIVED value —
+# a row, a tier name, the cardinality — not every reader of the manifest. A
+# consumer that regex-parses this file or branches on a tier name never appears in
+# a sourcing-graph sweep. See core/standards/composition-surface-spec.md §5.
 #
 # IMPORTANT — bash 3.2 array scope:
 # This file uses PLAIN ASSIGNMENT (no `declare -a`) on purpose. Under bash 3.2
 # (the macOS system bash), `declare -a` inside a function — or inside a script
 # sourced from a function — makes the array function-local; the caller never
 # sees it. The lib_compose_source_manifest helper IS a function, so any
-# `declare -a` here would silently break all 19 composition-surface installs.
+# `declare -a` here would silently break all 20 composition-surface installs.
 # Plain assignment is global by default in bash 3.2, which is what we need.
 # (Verified: bash 3.2.57(1)-release on Darwin 25.x.)
 
@@ -106,6 +129,25 @@ COMPOSITION_SURFACE_FILES=(
   # composed file — which is the invariant that keeps this row safe under the
   # installer's own unresolved-token verification gate.
   "core/CLAUDE.md.template|workspace-root|tokens|markdown"
+
+  # Operations-root tier (<operations-base>/CLAUDE.md). The operations-workspace
+  # context anchor: a POINTER-ONLY file naming the platform governance an
+  # operations-rooted session loads, restating none of it. Like the workspace-root
+  # row it strips the trailing `.template`, so this row targets
+  # <operations-base>/CLAUDE.md — NOT <operations-base>/CLAUDE.md.template.
+  #
+  # Token-free (`raw`): the anchor names paths, never operator identity, so there
+  # is nothing to substitute and nothing that can survive unresolved into the
+  # composed file.
+  #
+  # `markdown` dialect — the HTML-comment fence per
+  # composition-surface-spec.md §2.2, matching the workspace-root row above.
+  #
+  # The installer is the ONLY writer, and that is a property rather than a
+  # constraint: the autonomy-ceiling control blocks Write/Edit to any */CLAUDE.md
+  # basename, so no agent can hand-edit the installed anchor. The
+  # reference-never-restate invariant is held by a control, not by discipline.
+  "operations/CLAUDE.md.template|operations-root|raw|markdown"
 )
 
 # --- Install-time token vocabulary (ADR-122 §Decision 8) --------------------

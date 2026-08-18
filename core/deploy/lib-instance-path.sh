@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # lib-instance-path.sh — single resolver for the operator-instance directory, the
-# localized-context needle file, the people-roster file, the evals-results
-# directory (home of the pipeline event log), and the three ambient-intake member
-# directories (inbox drop-zone, Path-A intake-sweep run-log dir, Path-B
-# external-sync dir).
+# operations-workspace root, the localized-context needle file, the people-roster
+# file, the evals-results directory (home of the pipeline event log), and the
+# three ambient-intake member directories (inbox drop-zone, Path-A intake-sweep
+# run-log dir, Path-B external-sync dir).
 #
 # Design rationale (applies existing ADRs — NO standalone ADR):
 #   - The default base CANONICALIZES on the ADR-032 idiom
@@ -22,6 +22,8 @@
 #
 # Resolution (highest precedence first):
 #   pmo_instance_path()      → ${PMO_INSTANCE_PATH:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance}
+#   pmo_operations_path_for()→ <workspace-root>/projects
+#                              (1 tier — no env or config tier; see the function)
 #   pmo_localized_needles()  → ${PMO_LOCALIZED_NEEDLES:-$(pmo_instance_path)/localized-context-needles.txt}
 #   pmo_people_roster()      → ${PMO_PEOPLE_ROSTER:-$(pmo_instance_path)/people-roster.yaml}
 #   pmo_evals_results_path() → $EVALS_RESULTS_PATH, else the operator.toml key
@@ -63,6 +65,33 @@ pmo_instance_path() {
 pmo_instance_path_for() {
   local _base="$1"
   printf '%s\n' "${PMO_INSTANCE_PATH:-${_base}/personal/pmo-instance}"
+}
+
+# Echo the operations-workspace root relative to an EXPLICIT workspace root (no
+# trailing slash) — the sibling of pmo_instance_path_for for the OTHER operator
+# sibling directory. Callers: lib-composition.sh's `operations-root` tier arm and
+# the installer's parent pre-create for it.
+#
+# WHY THIS EXISTS: the composition resolver's own contract states that an
+# operator-directory leaf literal lives only in the resolver (ADR-017 §
+# operator-instance surface convergence). Adding an `operations-root` tier that
+# spelled `projects` inline would have put a second such literal back into the one
+# file that convergence cleaned. Centralizing the leaf here keeps that contract
+# true and hands a future relocation of the operations sibling ONE call site to
+# re-point instead of a hunt across the installer, the resolver and the validator.
+#
+# NO env tier and NO operator.toml tier — deliberately, and this is where the
+# shape departs from pmo_instance_path_for above. That function honors
+# PMO_INSTANCE_PATH only because the variable pre-dates it; ADR-032 § "invent no
+# new variable" forbids minting a PMO_OPERATIONS_PATH to fill the symmetry, and no
+# operations-workspace path token exists in the closed [OPERATOR_*] vocabulary
+# (core/standards/depersonalization-spec.md §1) for a config tier to read. A
+# relocation that needs one registers the token first; this function is then the
+# single site that grows a tier, and every caller inherits it unchanged.
+# Usage: pmo_operations_path_for <workspace-root>
+pmo_operations_path_for() {
+  local _base="$1"
+  printf '%s\n' "${_base}/projects"
 }
 
 # Echo the absolute path to the localized-context needle file.
