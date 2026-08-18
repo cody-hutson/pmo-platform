@@ -310,7 +310,12 @@ cas_toml_root "${SBX}/wsA"
 q_out="$( unset EVALS_RESULTS_PATH PMO_INSTANCE_PATH WORKSPACE_ROOT CLAUDE_WORKSPACE_ROOT
           HOME="${CAS_HOME}"
           "${REPO_ROOT}/release/tools/query-pipeline-event.sh" --count 2>&1 )"
-if printf '%s' "${q_out}" | grep -qF "${SBX}/wsA/personal/pmo-instance/evals/results/pipeline-event-log.md"; then
+# Here-string, not `printf | grep -q`: grep -q exits at its first match while the
+# writer still has output to push, and under pipefail that broken pipe becomes the
+# pipeline's status — a SUCCESSFUL match reporting failure. A here-string has no
+# writer to signal. The needle is a non-empty absolute path, so the here-string's
+# one-empty-line-for-empty-input behaviour cannot produce a false match.
+if grep -qF -- "${SBX}/wsA/personal/pmo-instance/evals/results/pipeline-event-log.md" <<<"${q_out}"; then
   report "cascade: query-pipeline-event.sh sources the resolver and reports the same literal" 1
 else
   report "cascade: query-pipeline-event.sh sources the resolver and reports the same literal" 0 \
