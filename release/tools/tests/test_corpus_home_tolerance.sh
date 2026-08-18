@@ -163,9 +163,13 @@
 # seam can read the right channel at the right layout and still escape by
 # crashing, which is why arming stays structural.
 #
-# TODAY the detector matches nothing outside comments, a=1 and b=1, so the verdict
-# is PENDING-SEAM and the suite exits 0. It CANNOT redden a PR before the seam
-# lands.
+# TODAY the seam HAS LANDED. The detector matches instance-resolution vocabulary
+# throughout the script's executable text, a=0 and b=0, the committed sentinel
+# declares `armed`, and the verdict is PASS-SEAM-LANDED. R3/R4/R7 are LIVE and
+# this suite CAN redden a PR — which is the mechanism working, not a regression in
+# it. The paragraph this replaces asserted the pre-seam world and outlived it; the
+# conditional rule statements above state the RULE rather than today's state and
+# are correct as written.
 #
 # ─── Arming posture: committed, not inferred ─────────────────────────────────
 #
@@ -217,8 +221,21 @@
 #
 # mktemp fixtures only. No network, no `gh`, no git remote, and no write outside
 # the temp tree — the real checkout is never mutated. HOME and CLAUDE_WORKSPACE_ROOT
-# are PINNED to an empty temp dir for every fixture so an ambient operator instance
-# on the runner cannot leak into a fixture and silently defeat it.
+# are PINNED to an empty temp dir for every fixture, and WORKSPACE_ROOT is UNSET,
+# so an ambient operator instance on the runner cannot leak into a fixture and
+# silently defeat it.
+#
+# WORKSPACE_ROOT is named here because it was a real hole rather than a
+# completeness flourish: the script under test resolves its workspace root as
+# $WORKSPACE_ROOT first and $CLAUDE_WORKSPACE_ROOT only second, so an exported
+# ambient WORKSPACE_ROOT on the runner OUTRANKED the pin and fixtures A-D silently
+# resolved against the operator's real root. `env -u` in run_fixture closes it.
+#
+# The instance-root parity arm below does NOT reuse run_fixture, and that is
+# deliberate: its property is observable only at tiers run_fixture pins, so
+# reusing the runner would make the new arm inherit exactly the blindness it was
+# added to remove. It states its whole environment per limb under `env -i`
+# instead — see its own header.
 #
 # ─── Instrument validation ───────────────────────────────────────────────────
 #
@@ -259,6 +276,11 @@ SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 REPO_ROOT="$( cd "$SCRIPT_DIR/../../.." && pwd )"
 CLOSEOUT="${CLOSEOUT_SH_UNDER_TEST:-$REPO_ROOT/release/tools/automated-closeout.sh}"
 STANDARD="$REPO_ROOT/release/references/standards/corpus-home-adapter-constraints.md"
+# The shared instance-path resolver the script under test sources FAIL-CLOSED.
+# Deliberately NOT overridable alongside CLOSEOUT_SH_UNDER_TEST: a negative
+# control mutates the SCRIPT, and a run that silently swapped the resolver too
+# would be grading two changes while reporting one.
+INSTANCE_LIB_SRC="$REPO_ROOT/core/deploy/lib-instance-path.sh"
 
 # The CH ids this suite claims to assert. R6 binds them to the standard.
 CLAIMED_IDS="CH-1 CH-2 CH-3 CH-4"
@@ -271,10 +293,22 @@ CLAIMED_IDS="CH-1 CH-2 CH-3 CH-4"
 # path/root/dir/home/corpus/aware vocabulary, or "corpus" adjacent to "home" —
 # not a bare `instance`. A bare token would arm on any unrelated future use of the
 # word; this shape arms on instance-CORPUS-RESOLUTION and stays quiet otherwise.
-# Measured against the shipped script: 5 occurrences, ALL inside comments, 0
-# outside them — including `WORKSPACE_ROOT="${CLAUDE_WORKSPACE_ROOT:-}"`, which is
-# a workspace root, not an instance-corpus home, and correctly does not match. So
-# the detector reads NOT-ARMED today and cannot redden a PR before a seam lands.
+# Measured against the shipped script AFTER the seam landed: the vocabulary now
+# appears MANY times OUTSIDE comments, including inside the corpus-path resolution
+# surface, so the detector reads ARMED and the tolerance rules grade every run.
+#
+# NO COUNT IS RECORDED HERE, and that is a deliberate change from the note this
+# replaces. That note read "5 occurrences, ALL inside comments, 0 outside them" —
+# true before the seam, false the moment it landed, and false again on any edit
+# that adds or removes a line of resolution code. A count in a comment is a second
+# copy of a number the suite already measures and PRINTS on every run (see the
+# ARMING line in its output), so it can only ever drift out of agreement with the
+# live one. The calibration this note owes the reader is the SHAPE of the needle,
+# not an arithmetic snapshot of today's tree.
+#
+# The needle itself is unchanged, and still correctly does NOT match a bare
+# `WORKSPACE_ROOT="${CLAUDE_WORKSPACE_ROOT:-}"`, which is a workspace root rather
+# than an instance-corpus home.
 #
 # Nine resolver idioms were checked against it and all nine match: a
 # `$(pmo_instance_path)` call, a `${PMO_INSTANCE_PATH:-}` read, a
@@ -456,10 +490,18 @@ under_root() {
 #   corpus-mode: none    -> no release/releases/ at all (fixtures A/B)
 #                partial -> notes/ + INDEX + DIGEST, RELEASE_LOG DELIBERATELY absent (C)
 #                full    -> all four corpus paths present (D)
+#
+# The fixture root carries core/deploy/lib-instance-path.sh as well as the script.
+# That is a REQUIREMENT, not tidiness: automated-closeout.sh sources the resolver
+# FAIL-CLOSED and exits 2 at LOAD time without it, so every fixture would abort,
+# d would be non-zero, and R1 would fail the suite for a reason that has nothing
+# to do with the constraint under test. Copying it also makes each fixture a more
+# faithful model of a real deployment than a script-only tree was.
 build_repo() {
   local root="$1" mode="$2"
-  mkdir -p "$root/release/tools"
+  mkdir -p "$root/release/tools" "$root/core/deploy"
   cp "$CLOSEOUT" "$root/release/tools/automated-closeout.sh"
+  cp "$INSTANCE_LIB_SRC" "$root/core/deploy/lib-instance-path.sh"
   case "$mode" in
     none) : ;;
     partial)
@@ -575,6 +617,25 @@ if [[ -z "$_p6_bad" ]]; then
   pass "P6 every fixture runs a byte-identical copy of the script under test"
 else
   fail "P6 fixture script copy differs from the script under test —$_p6_bad"
+fi
+
+# P6b — the SIBLING of P6, for the second file every fixture now carries.
+#
+# The script under test sources core/deploy/lib-instance-path.sh fail-closed, so
+# each fixture root carries a copy of it. P6 asserts the SCRIPT copy is faithful
+# and nothing asserted the RESOLVER copy — and no rule anywhere else in this repo
+# asserts the freshness of a library copied into a fixture. A stale or truncated
+# resolver copy would make every fixture resolve through code the repo no longer
+# ships, and the whole suite would grade a resolver that is not the one under
+# review. Silently, and in the direction of a false green.
+_p6b_bad=""
+for _r in "$AB_REPO" "$C_REPO" "$D_REPO"; do
+  cmp -s "$INSTANCE_LIB_SRC" "$_r/core/deploy/lib-instance-path.sh" || _p6b_bad="$_p6b_bad $_r"
+done
+if [[ -z "$_p6b_bad" ]]; then
+  pass "P6b every fixture runs a byte-identical copy of the instance-path resolver"
+else
+  fail "P6b fixture resolver copy differs from $INSTANCE_LIB_SRC —$_p6b_bad. Every fixture would resolve its instance root through code this repo does not ship, so the suite would be grading a resolver nobody reviewed."
 fi
 
 if [[ -f "$STANDARD" ]]; then
@@ -735,16 +796,25 @@ echo
 # explicitly provides an instance root. Without the pin, a future instance-aware
 # resolver running on the operator's own machine would find the REAL instance and
 # fixture B would stop testing absence — passing for the wrong reason.
+#
+# WORKSPACE_ROOT is UNSET on both limbs. The script resolves its workspace root as
+# $WORKSPACE_ROOT first and $CLAUDE_WORKSPACE_ROOT only second, so without this an
+# exported ambient WORKSPACE_ROOT outranks the pin and every fixture resolves
+# against the runner's real operator root — the pin present, and defeated. This
+# was a pre-existing hole; the parity arm below, which sets WORKSPACE_ROOT
+# deliberately for one of its limbs, is what made it worth closing now.
 run_fixture() {
   local label="$1" repo="$2" inst="$3" cap="$4" rc=0
   if [[ -n "$inst" ]]; then
     ( cd "$repo" \
-      && HOME="$PINNED_HOME" CLAUDE_WORKSPACE_ROOT="$PINNED_HOME" PMO_INSTANCE_PATH="$inst" \
+      && env -u WORKSPACE_ROOT \
+         HOME="$PINNED_HOME" CLAUDE_WORKSPACE_ROOT="$PINNED_HOME" PMO_INSTANCE_PATH="$inst" \
          bash release/tools/automated-closeout.sh --check-paths ) > "$cap" 2>&1
     rc=$?
   else
     ( cd "$repo" \
-      && env -u PMO_INSTANCE_PATH HOME="$PINNED_HOME" CLAUDE_WORKSPACE_ROOT="$PINNED_HOME" \
+      && env -u PMO_INSTANCE_PATH -u WORKSPACE_ROOT \
+         HOME="$PINNED_HOME" CLAUDE_WORKSPACE_ROOT="$PINNED_HOME" \
          bash release/tools/automated-closeout.sh --check-paths ) > "$cap" 2>&1
     rc=$?
   fi
@@ -1107,6 +1177,189 @@ case "$POSTURE_STATUS" in
     fail "R8 ARMING POSTURE UNRECOGNISED TOKEN '$DECLARED_POSTURE' in $POSTURE_FILE — expected exactly one of: $POSTURE_ENUM. This fails closed rather than guessing. The enum holds only postures this suite can OBSERVE, so it has exactly two members; a declared state with no observable counterpart would be a control whose silence reads as approval, re-introduced at the vocabulary layer."
     ;;
 esac
+
+echo
+
+# ─── Instance-root parity across the tiers the fixtures do not pin ───────────
+#
+# WHY THIS EXISTS. The script under test resolves its corpus instance root
+# through core/deploy/lib-instance-path.sh's ARG-TAKING accessor, handing it a
+# workspace root it resolved through a four-step cascade: $WORKSPACE_ROOT, then
+# $CLAUDE_WORKSPACE_ROOT, then the operator.toml key claude_workspace_root, then
+# the $HOME-rooted default. Converging onto the NO-ARG accessor instead — the
+# obvious reading of "route it through the resolver" — silently discards the first
+# and third of those, because that accessor rebuilds its own two-step base.
+#
+# Fixtures A-D CANNOT SEE THAT REGRESSION, and this was measured rather than
+# assumed: run_fixture pins CLAUDE_WORKSPACE_ROOT and either sets or unsets
+# PMO_INSTANCE_PATH, which are exactly the two tiers at which the arg-taking and
+# no-arg accessors CANNOT differ. The pin also short-circuits the workspace-root
+# cascade before the operator.toml tier is ever consulted. So the whole fixture
+# matrix is blind by construction to the one change this seam could get wrong, and
+# a suite that reports PASS-SEAM-LANDED would have graded nothing on that axis.
+#
+# THIS ARM DELIBERATELY DOES NOT REUSE run_fixture. Reusing it would inherit the
+# very pin that causes the blindness. Each limb states its COMPLETE environment
+# under `env -i`, so nothing is inherited and nothing is delegated to an idiom.
+#
+# THE ASSERTIONS ARE VALUES, NOT PARITY. Asserting "the resolved root equals what
+# the resolver returns" would be `f(x) == f(x)` after convergence: both arms are
+# one function, so no narrowing of the accessor could ever fail it. Each limb
+# instead pins the resolved root to a LITERAL built from the tier value this limb
+# sets. The instance STEM is derived once from the resolver so the arm follows an
+# operator-instance relocation instead of breaking on it — the base, which is the
+# axis under test, is never derived from the code under test.
+#
+# THE OPERATOR.TOML IS SEEDED PER LIMB, NOT AT GROUP SCOPE. Limbs 1-3 need
+# claude_workspace_root present; limb 4 is DEFINED by its absence and would be
+# unconstructible under a group-scope "seed all three keys" rule. All four limbs
+# seed operator_github and pmo_platform_repo_name, because the repo-slug reads
+# that follow are still unguarded and a toml missing either aborts the script at
+# load — which would redden a limb for a reason that is not the property under
+# test. Limb 4 doubles as the executable proof that the workspace-root read is
+# guarded: before that guard, a toml present-but-missing claude_workspace_root
+# aborted this script at LOAD time, on every invocation, with exit 1 and no output.
+
+echo "Instance-root parity (tiers the fixtures do not pin)"
+
+# The instance stem, derived ONCE from the resolver under a synthetic base. This
+# is the one thing the arm takes from the code under test, and it is deliberately
+# the one thing that is NOT the axis under test: a relocation of the instance leaf
+# should carry this arm with it, while a narrowing of the workspace-root cascade
+# must still fail it.
+_par_sentinel="/zzqx-stem-probe-root"
+_par_stem_raw="$( env -i PATH="/usr/bin:/bin" HOME="$PINNED_HOME" \
+  /bin/bash -c '. "$1" "" && pmo_instance_path_for "$2"' _ \
+  "$INSTANCE_LIB_SRC" "$_par_sentinel" 2>/dev/null || true )"
+INSTANCE_STEM="${_par_stem_raw#$_par_sentinel/}"
+
+# P19 — the stem derivation's own non-vacuity control. An empty or unstripped stem
+# would make every expectation below meaningless in the SAME direction for every
+# limb, which is how a value assertion degenerates into a shape assertion.
+if [[ -n "$INSTANCE_STEM" ]] && [[ "$INSTANCE_STEM" != "$_par_stem_raw" ]] \
+   && [[ "$INSTANCE_STEM" != *"$_par_sentinel"* ]]; then
+  pass "P19 instance stem derived from the resolver and the synthetic base stripped ($INSTANCE_STEM)"
+else
+  fail "P19 instance-stem derivation is VACUOUS — raw='${_par_stem_raw:-<empty>}' stem='${INSTANCE_STEM:-<empty>}'. Every limb below would compare against a degenerate expectation, so the arm would report on its own plumbing instead of on the resolver's tiers."
+fi
+
+# observed_instance_root <capture> — echo the instance root the script DECLARED it
+# consulted, read out of the tolerance branch's own message. Echoes nothing when
+# the capture carries no such line. First-line selection is parameter expansion,
+# not a pipe into `head -1`, for the sigpipe reason declared_path() states above.
+observed_instance_root() {
+  local _all
+  _all="$(sed -nE 's|^check-paths: no corpus home resolves .*no instance corpus under (.+)$|\1|p' "$1" 2>/dev/null)"
+  printf '%s\n' "${_all%%$'\n'*}"
+}
+
+# P20/P21 — the extractor's own non-vacuity controls, on the P13/P14 pattern. A
+# blind extractor returns empty for every limb and fails them all with a confident
+# and wrong reason; a permissive one matches a line that is not the declaration.
+_par_pos_cap="$TMP/parity-planted-capture.txt"
+printf '%s\n' \
+  'check-paths: no corpus home resolves — in-tree corpus absent at /planted/repo/release/releases, and no instance corpus under /planted/instance-root' \
+  '  N/A  RELEASE_LOG -> /planted/instance-root/release/releases/RELEASE_LOG.md (instance-corpus root absent)' \
+  > "$_par_pos_cap"
+_par_neg_cap="$TMP/parity-planted-resolved.txt"
+printf '%s\n' \
+  'check-paths: resolving corpus paths under /planted/repo/release/releases (repo-homed)' \
+  '  OK   RELEASE_LOG -> /planted/repo/release/releases/RELEASE_LOG.md (file)' \
+  > "$_par_neg_cap"
+
+_p20_got="$(observed_instance_root "$_par_pos_cap")"
+if [[ "$_p20_got" == "/planted/instance-root" ]]; then
+  pass "P20 instance-root extractor reads the declared root out of the tolerance message ($_p20_got)"
+else
+  fail "P20 instance-root extractor is BLIND — expected '/planted/instance-root', got '${_p20_got:-<empty>}'. Every limb below would compare an empty observation against a real expectation and fail, so the arm would redden on its own extractor rather than on the resolver."
+fi
+
+_p21_got="$(observed_instance_root "$_par_neg_cap")"
+if [[ -z "$_p21_got" ]]; then
+  pass "P21 instance-root extractor returns empty for a capture that resolved a corpus (it reads the tolerance branch only)"
+else
+  fail "P21 instance-root extractor invented a root from a capture that carries no tolerance message: '$_p21_got'. It is matching something other than the declaration, so a limb could pass against a line that is not the resolver's answer."
+fi
+
+# seed_operator_toml <sandbox-home> <claude_workspace_root-or-empty>
+# Always writes operator_github and pmo_platform_repo_name; writes the workspace
+# root key ONLY when a value is given. See the per-limb rationale above.
+seed_operator_toml() {
+  local _home="$1" _ws="$2"
+  mkdir -p "$_home/.config/pmo-platform"
+  {
+    printf '%s\n' '[paths]'
+    [[ -n "$_ws" ]] && printf 'claude_workspace_root = "%s"\n' "$_ws"
+    printf '%s\n' 'operator_github = "parity-fixture-owner"'
+    printf '%s\n' 'pmo_platform_repo_name = "pmo-platform"'
+  } > "$_home/.config/pmo-platform/operator.toml"
+}
+
+# run_parity <sandbox-home> <capture> [NAME=VALUE ...]
+# env -i, so the limb's environment is exactly HOME, PATH, and whatever the caller
+# names. Nothing is inherited from the runner and nothing is pinned behind the
+# caller's back.
+run_parity() {
+  local _home="$1" _cap="$2" rc=0
+  shift 2
+  ( cd "$AB_REPO" \
+    && env -i PATH="/usr/bin:/bin" HOME="$_home" "$@" \
+       /bin/bash release/tools/automated-closeout.sh --check-paths ) > "$_cap" 2>&1
+  rc=$?
+  echo "$rc"
+}
+
+# check_parity_limb <name> <expected-root> <sandbox-home> <capture> [NAME=VALUE ...]
+check_parity_limb() {
+  local _name="$1" _want="$2" _home="$3" _cap="$4"
+  shift 4
+  local _rc _got
+  _rc="$(run_parity "$_home" "$_cap" "$@")"
+  _got="$(observed_instance_root "$_cap")"
+  if [[ "$_rc" -ne 0 ]]; then
+    fail "PARITY $_name — the script exited $_rc instead of taking the tolerance branch. Expected instance root '$_want'. A non-zero exit here is a load-time abort or a resolved corpus, not a parity answer; read the capture before reading anything else into it."
+  elif [[ "$_got" == "$_want" ]]; then
+    pass "PARITY $_name — instance root resolves to the expected literal ($_got)"
+  else
+    fail "PARITY $_name — instance root MISMATCH. expected '$_want', got '${_got:-<empty>}'. The script is not honoring the tier this limb sets. The usual cause is a convergence onto the NO-ARG instance accessor, which rebuilds its own two-step base and discards \$WORKSPACE_ROOT and the operator.toml claude_workspace_root key; the arg-taking accessor keeps the workspace root its caller resolved."
+  fi
+}
+
+_par_ws_a="$TMP/parity-ws-alpha"
+_par_ws_b="$TMP/parity-ws-bravo"
+_par_ws_c="$TMP/parity-ws-charlie"
+_par_home_toml="$TMP/parity-home-toml"
+_par_home_env="$TMP/parity-home-env"
+_par_home_none="$TMP/parity-home-none"
+mkdir -p "$_par_ws_a" "$_par_ws_b" "$_par_ws_c"
+
+# Limbs 1 and 2 — the operator.toml tier, run with TWO DISTINCT values. Two values
+# rather than one because a stuck or hardcoded resolver can satisfy a single
+# expected literal by accident; it cannot track two.
+seed_operator_toml "$_par_home_toml" "$_par_ws_a"
+check_parity_limb "L1 operator.toml claude_workspace_root (value A)" \
+  "$_par_ws_a/$INSTANCE_STEM" "$_par_home_toml" "$TMP/cap.par1"
+
+seed_operator_toml "$_par_home_toml" "$_par_ws_b"
+check_parity_limb "L2 operator.toml claude_workspace_root (value B)" \
+  "$_par_ws_b/$INSTANCE_STEM" "$_par_home_toml" "$TMP/cap.par2"
+
+# Limb 3 — the $WORKSPACE_ROOT env tier, with the toml deliberately naming a
+# DIFFERENT root. This limb therefore asserts two things at once: that the env
+# tier is honored at all, and that it still outranks the toml tier.
+seed_operator_toml "$_par_home_env" "$_par_ws_a"
+check_parity_limb "L3 \$WORKSPACE_ROOT env tier (outranks a differing toml key)" \
+  "$_par_ws_c/$INSTANCE_STEM" "$_par_home_env" "$TMP/cap.par3" \
+  WORKSPACE_ROOT="$_par_ws_c"
+
+# Limb 4 — the SPECIFICITY control, and the one limb that must stay green under
+# every narrowing of the cascade. No env tier, and an operator.toml that OMITS
+# claude_workspace_root, so the answer is the $HOME-rooted canonical default. A
+# mutant that drops a workspace-root tier cannot move this limb; a mutant that
+# broke resolution generally would. It is also the guarded-partial-toml proof.
+seed_operator_toml "$_par_home_none" ""
+check_parity_limb "L4 no override, partial operator.toml (specificity control)" \
+  "$_par_home_none/Claude/$INSTANCE_STEM" "$_par_home_none" "$TMP/cap.par4"
 
 echo
 

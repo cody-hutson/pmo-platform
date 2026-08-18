@@ -596,12 +596,23 @@ jobs:
         # tree that is MISSING one corpus path and assert --check-paths exits
         # non-zero. The real checkout is never mutated. If a broken corpus stops
         # failing the gate, this step fails the PR.
+        #
+        # THE RESOLVER CO-COPY BELOW IS MANDATORY, NOT TIDINESS. automated-closeout.sh
+        # sources core/deploy/lib-instance-path.sh FAIL-CLOSED and exits 2 when it is
+        # absent — at LOAD time, before check_paths() runs at all. This step's verdict
+        # rule keys on `rc -eq 0` and treats ANY non-zero as a successful detection,
+        # so a temp tree without the resolver would make the probe print
+        # "Precision probe OK" while never having reached the code it exists to
+        # measure. That is a false GREEN, not a red: the step stops measuring and
+        # says so in the affirmative. Assert the whole tree the script needs, not
+        # just the script.
         run: |
           set -euo pipefail
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
-          mkdir -p "$tmp/release/tools" "$tmp/release/releases/notes"
+          mkdir -p "$tmp/release/tools" "$tmp/release/releases/notes" "$tmp/core/deploy"
           cp release/tools/automated-closeout.sh "$tmp/release/tools/"
+          cp core/deploy/lib-instance-path.sh "$tmp/core/deploy/"
           # Provide three of four corpus paths; deliberately OMIT RELEASE_LOG.md.
           : > "$tmp/release/releases/RELEASE_INDEX.md"
           : > "$tmp/release/releases/RELEASE_DIGEST.md"
@@ -622,9 +633,14 @@ jobs:
         # real --check-paths probe once instance-aware resolution is DETECTED in it,
         # plus CH-3 unconditionally, using four hermetic mktemp fixtures.
         #
-        # TODAY no instance-resolution vocabulary appears outside comments in
-        # automated-closeout.sh, fixtures A and B are expected-red, the suite reports
-        # PENDING-SEAM and exits 0 — it CANNOT redden a PR before the seam lands.
+        # THE SEAM HAS LANDED. Instance-resolution vocabulary now appears throughout
+        # automated-closeout.sh's executable text, fixtures A and B both exit 0, the
+        # committed sentinel declares `armed`, and the suite reports PASS-SEAM-LANDED.
+        # R3/R4/R7 are therefore LIVE and this step CAN redden a PR — which is the
+        # point of the mechanism, not a regression in it. (This paragraph described
+        # the pre-seam world and was left behind when the seam landed; the
+        # conditional rule statements elsewhere in this file remain correct as
+        # written, because they state the rule rather than today's state.)
         #
         # Its gating rules run from day one: a regressed in-tree baseline (R1), a
         # --check-paths that stopped detecting a broken corpus path (R2), a

@@ -74,13 +74,32 @@ printf '\nVersion-stamping regression (#1643) (bash %s)\n' "${BASH_VERSION:-unkn
 #
 # We source a FUNCTION-ONLY slice of the close-out script (everything up to the
 # "# ─── Argument parsing" banner) so its top-level Main block never runs on load.
-# Two load-time guards in that slice are neutralized for the offline harness, both
-# irrelevant to phase_bump_version (which never calls gh and never needs the PATH
-# pin): (1) the `export PATH="/usr/bin:/bin"` pin is dropped so this harness's
-# tools stay reachable; (2) the gh-resolution `exit 1` (fires when neither
+# THREE load-time guards in that slice are neutralized for the offline harness,
+# all irrelevant to phase_bump_version (which never calls gh, never needs the PATH
+# pin, and never resolves an operator-instance path): (1) the
+# `export PATH="/usr/bin:/bin"` pin is dropped so this harness's tools stay
+# reachable; (2) the gh-resolution `exit 1` (fires when neither
 # /opt/homebrew/bin/gh nor /usr/local/bin/gh exists — e.g. Linux CI) is rewritten
-# to set GH to a harmless stub. The phase_bump_version logic itself is sourced
-# verbatim — it is the unit under test.
+# to set GH to a harmless stub; (3) INSTANCE_LIB is REPOINTED at the real resolver
+# in this checkout. The phase_bump_version logic itself is sourced verbatim — it
+# is the unit under test.
+#
+# WHY (3) EXISTS, AND WHY IT PINS RATHER THAN DISABLES. The slice carries
+# automated-closeout.sh's fail-closed `source "$INSTANCE_LIB"` guard. Inside the
+# slice, SCRIPT_DIR resolves to ${SBX} (the sliced copy's own directory), so the
+# script's own `REPO_ROOT="$SCRIPT_DIR/../.."` lands outside this repo and
+# $REPO_ROOT/core/deploy/lib-instance-path.sh does not exist. The guard would then
+# `exit 2` — inside the bv_result subshell, with the `source` already running under
+# `2>/dev/null`, so the failure is SILENT and every Part-1 assertion fails with no
+# stated cause.
+#
+# The pin points INSTANCE_LIB at the real library via this harness's own REPO_ROOT
+# (the real repo, resolved at the top of this file), which PRESERVES the
+# fail-closed guard rather than defeating it: a genuinely missing resolver still
+# exits 2 and still surfaces. Neutralizing the guard instead (making it fail-open,
+# or deleting the source) was considered and rejected — that would let this harness
+# exercise a code path that resolves the instance root differently from production,
+# which is the duplicate-resolution defect the source exists to remove.
 
 CLOSEOUT_FUNCS="${SBX}/closeout-funcs.sh"
 /usr/bin/sed -n '1,/^# ─── Argument parsing/p' "${CLOSEOUT_SRC}" \
@@ -88,6 +107,7 @@ CLOSEOUT_FUNCS="${SBX}/closeout-funcs.sh"
       -e '/^export PATH="\/usr\/bin:\/bin"/c\
 : PATH-pin disabled for offline harness' \
       -e 's@^  exit 1$@  GH=/usr/bin/true@' \
+      -e "s@^INSTANCE_LIB=.*@INSTANCE_LIB=\"${REPO_ROOT}/core/deploy/lib-instance-path.sh\"@" \
   > "${CLOSEOUT_FUNCS}"
 
 # Run all phase_bump_version assertions inside one subshell so the sourced
