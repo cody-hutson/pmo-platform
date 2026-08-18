@@ -249,7 +249,7 @@ Phases 0 and 1 are doc- and decision-class; the runtime-suite selection for them
 
 ## Change Description
 
-> **Currency note.** This section is authored incrementally. It currently reflects **Phase 0, both threads** — the first two Engineering spokes' work. Each subsequent Stage-6 spoke refreshes it as its card lands, and it is complete before the PR is transitioned to ready-for-review at the Stage-9 gate.
+> **Currency note.** This section is authored incrementally. It currently reflects **Phase 0, both threads**, plus the **`OBS-CONFIG`** card in Phase 1. Each subsequent Stage-6 spoke refreshes it as its card lands, and it is complete before the PR is transitioned to ready-for-review at the Stage-9 gate.
 
 ### Outcome
 
@@ -261,13 +261,19 @@ Thread B's discovery slice returns a result the gate needs to see plainly: **the
 
 What the slice did establish is the surrounding state, measured with both control arms: the operations workspace still carries no context file at its root or anywhere on the path up to the workspace charter, no user-scope carrier exists, and the charter uses linking rather than inclusion. It also found that session identity is keyed by working directory rather than by context-file location, and that a spawned agent thread runs under its parent's key rather than its own — so any design resting on working-directory discovery needs separate confirmation for spawned threads. The three open questions — walk-up depth, whether several context files on one chain combine or the nearest wins, and scope precedence — are recorded as unmeasured with their reasons, together with the procedure that would answer them where a session can authenticate. **The design card therefore does not receive the measured input the plan promised it**, and that is a gate decision rather than something for this spoke to paper over.
 
+**Phase 1's config card turned out to be reporting a real defect for the wrong reason, and fixing it properly meant fixing a second one underneath.** The card said an operator who edits the installed platform-config sees no effect because the resolver reads a different file. Measured, the resolver already reads the shipped template in place from the clone, so the defaults were never missing. What was actually wrong is narrower and worse: the composition manifest was installing a further full copy of that 23 KB template into the operator-instance home that **no code path read at all**, while shipping it with an empty operator-additions fence that invited edits taking no effect. The fix is therefore a deletion, not a relocation — the orphan row comes out and the template is recorded as what it has always behaved like, a file read in place from the clone.
+
+That reframing also disqualified the mechanism the spike's fork record had selected. Registering the operator's own config file as a composition surface would have put it under update-time regeneration, and the regeneration contract discards operator content that sits outside a fence. The live file carries no fences — its entire content is the operator's security-hooks master enable — so the first update after that change would have silently switched the operator's workflow-hook posture back off. That was caught by design review, not by any check, and the fork record's §2.7 is reconciled in the same commit as the manifest edit: its principle stands, its mechanism does not.
+
+**Underneath the reported defect sat an inverted precedence order, and it is corrected here rather than filed.** Governance states deliberately that an individual operator's own override is the *highest*-precedence rung — more specific than a project setting, and winning over it. The resolver did the opposite: it folded the operator's file in at the lowest rung and then let the portfolio, program and project rungs overwrite it, with no diagnostic. A flat `key = value` line in a portfolio or project file silently beat the operator's explicit setting. Measured before and after against the real resolver bytes with both control arms and a restore-check: before, a value set in both the operator's file and the portfolio file resolved to the portfolio's; after, it resolves to the operator's, while a value set only in the shipped template still resolves to the template's. This is the same defect the card reports, one layer in — the operator edits the right file and still does not get their value — so leaving it filed while shipping "your edit now takes effect" would have been misleading.
+
 ### Issues resolved so far
 
 | Card | State after this phase |
 |---|---|
 | `SPIKE-FORKS` | All three completion conditions met — six forks resolved, blast radius re-measured at this release's own base with both control arms, ordered slice plan authored. Ready to be marked as closed at Stage 13 |
 | `DEC-HOME` | Its question is answered inside forks 0a and 0b. Stays open as the decision's tracking home through Stage 8; recommended to be marked as closed at Stage 13, superseded by the fork record |
-| `OBS-CONFIG` | Its direction is set as a consequence of fork 0a — the installer changes, not the resolver. The edit itself lands in Phase 1 |
+| `OBS-CONFIG` | **Landed.** The orphan manifest row is deleted (20 rows to 19, with the manifest's self-declared count corrected in the same edit), the shipped template is recategorized from Composition-surface to Universal in the governing spec, the operator's own config file is named as the edit surface in the schema and the config reference, the fork record's §2.7 mechanism is reconciled, and the resolver's inverted rung precedence is corrected so the individual rung wins as governance specifies |
 | `DISCOVERY-CTX` | Findings record committed at its declared path. Three candidate-shape verdicts rendered, six probes carry both control arms, one instrument recorded broken against a positive control. Three of the questions stay open as unmeasured-with-reason because the instruments that would answer them are unavailable on this instance. No mechanism recommended — that is the design card's call |
 | `BLD-ANCHOR` · `UMB-RELOCATE` | Not yet entered; unchanged by this phase |
 
@@ -277,10 +283,20 @@ What the slice did establish is the surrounding state, measured with both contro
 - **Isolation key:** target-slug namespace, **recorded but not built** in this release. Its urgency is lower than assumed, because the masking condition the home-class card expected to disappear is not scheduled to disappear.
 - **Family scope:** one member left to move. The other two already left under earlier decisions, which is why the predicted "two stranded siblings" residual measures one file each — both inside the detector itself.
 - **Supersession ADR:** yes, but it supersedes the unratified reorganization convention, not the distribution ADR — the relocation realigns with that ADR rather than reversing it.
+- **Config divergence:** close it by **deregistering** the orphan write, not by adding a destination tier. The fork record's principle — configuration belongs at the read-path, so the writer is what changes — is kept; its selected mechanism is rejected on safety grounds, because registering the operator's own config file would have let regeneration discard their security-hooks opt-in.
+- **Category of the shipped template:** **Universal**, not Composition-surface. That is a recategorization, which the spec names a breaking change gated at Solutioning, and it is recorded at the governing spec rather than in a new ADR — the spec is the category source of truth, and the relocation's own supersession ADR absorbs it later.
+- **Rung precedence:** corrected in this release rather than filed. The alternative was to ship working code that contradicts stated governance with no tracking item, which is the worse of the two.
+- **Class versus instance:** three of the manifest's five operator-scoped rows carry the same writer-reader divergence, one of them with no card at all. This release ships the point fix; the invariant is *stated* in the spec, and *enforcing* it is filed as its own work rather than absorbed here.
 
 ### Reversibility
 
-**CHEAP · HIGH** for everything committed in this phase. Three documents landed: a release plan, a decision record, and a findings record. No resolver default moved, no detector pattern changed, no installed state was touched. Rollback is a revert of the merge commit.
+**CHEAP · HIGH** for Phase 0. Three documents landed: a release plan, a decision record, and a findings record. No resolver default moved, no detector pattern changed, no installed state was touched.
+
+**CHEAP · HIGH** for the config card's documentation and manifest work — re-adding one array row and reverting prose. It is worth stating plainly that deregistration does **not** delete anything already installed: an operator instance carrying the stale copy keeps it, inert, exactly as before, because nothing ever read it. Nothing that worked stops working.
+
+**CHEAP to revert · MODERATE in effect · confidence HIGH** for the precedence correction, and the three are deliberately separated. Reverting is one commit. The *effect* is a real behavior change on any instance that sets the same field both in the operator's own config and in a portfolio, program or project surface — that field now resolves to the operator's value where it previously resolved to the other one. That is the governed order being restored rather than a new choice, the change is measured in both directions against the real resolver, and the common case is unaffected: where only one rung sets a field, the resolved value is identical before and after.
+
+Rollback for the whole phase is a revert of the merge commit.
 
 The tier rises sharply in Phase 2, and the plan says so rather than discovering it later: the relocation carries a copy-first data migration and a pre-commit hook that fails **open** if its needle file has not arrived at the new home before the resolver flips.
 
@@ -289,6 +305,8 @@ The tier rises sharply in Phase 2, and the plan says so rather than discovering 
 The slice plan is the load-bearing output. Its ten slices become the relocation umbrella's child work items through the late-add rule, and its stated dependency order is not cosmetic — the detector must learn the new path form **before** anything writes it, and the two convergence slices must land **before** the resolver flips so the flip has a single resolution site.
 
 One finding materially affects the release's shape and is routed to the Stage-9 gate rather than absorbed: **the slice plan's arithmetic puts the bundle far past the sizing breach the operator accepted.** The accepted figure was 26 effective against a 25 bound; the measured figure with Phase 2 included is roughly 59. That is a decision the operator has not yet been asked to make.
+
+The config card leaves the composition manifest **one row shorter**, and the anchor card adds a row and a destination tier to the same array. That is why the two are sequenced rather than run in parallel: deletion goes first, so the anchor card is not registering a tier next to a row that is about to disappear. The manifest also carries a self-declared row count that an enforcing check asserts against the actual rows, so any card changing manifest membership owes that numeral in the same commit — this card sets it to 19, and the next one to touch membership moves it again.
 
 ### Cross-references
 
