@@ -421,6 +421,53 @@ assert_line "${OUT}" '0 recognized'                       "arm4: the diagnostic 
 assert_absent "${OUT}" '^\[A9\] FAIL.*missing version'    "arm4: the FAIL is NOT misattributed to skill health"
 assert_line "${OUT}" 'complete pmo-platform clone'        "arm4: the hint points at the source repo, not at the skills"
 
+# =========================================================================== #
+# Arm 5 — A5b operations-anchor check: BOTH arms, present and absent           #
+# =========================================================================== #
+#
+# A check that has never been observed FAILING is not known to fail. A5b's whole
+# reason for existing is to report non-green when the operations anchor is
+# absent, so the absent arm is the one that proves the check rather than the
+# present one.
+#
+# This arm needs the real instance-path resolver in the source tree, because A5b
+# resolves the anchor's location rather than guessing it — and with the resolver
+# present, A2's ambient-directory limb activates too, so the three ambient dirs
+# are provisioned here to keep A2's verdict attributable to A2.
+printf '\nArm 5. A5b operations anchor — present PASSes, absent FAILs (both arms)\n'
+new_arm; SBX="${NEW_ARM}"
+write_skill "${SBX}/.claude/skills/demo-platform-skill/SKILL.md" "demo-platform-skill" 1
+mkdir -p "${SBX}/src/core/deploy"
+cp "${REPO_ROOT}/core/deploy/lib-instance-path.sh" "${SBX}/src/core/deploy/lib-instance-path.sh"
+mkdir -p "${SBX}/Claude/personal/pmo-instance/inbox" \
+         "${SBX}/Claude/personal/pmo-instance/ambient-intake" \
+         "${SBX}/Claude/personal/pmo-instance/external-sync"
+
+# Precondition, asserted BEFORE any A5b verdict is read: the resolver really did
+# load, so A5b is exercising its real path and not silently taking the
+# resolver-unavailable SKIP. Without this, both arms below could be reporting on
+# a check that never ran.
+_run "${SBX}" "${SBX}/src" "install"
+assert_absent "${OUT}" '^\[A5b\] SKIP'  "arm5 precondition: A5b is NOT taking the resolver-unavailable SKIP (the check actually ran)"
+assert_line   "${OUT}" '^\[A5b\] PASS'  "arm5: A5b PASSes when the anchor is present"
+assert_line   "${OUT}" '^\[A5b\] PASS.*projects/CLAUDE\.md' "arm5: the PASS names the resolved anchor path"
+assert_eq     "${RC}" "0"               "arm5: healthy run with the anchor present exits 0"
+
+# The absent arm — the one AC-6 is actually about.
+rm -f "${SBX}/Claude/projects/CLAUDE.md"
+_run "${SBX}" "${SBX}/src" "install"
+assert_line   "${OUT}" '^\[A5b\] FAIL'   "arm5b: A5b FAILs when the anchor is absent"
+assert_absent "${OUT}" '^\[A5b\] PASS'   "arm5b: A5b does not also PASS"
+assert_line   "${OUT}" '^\[A5b\] FAIL.*missing' "arm5b: the FAIL names the absent artifact"
+assert_eq     "${RC}" "1"                "arm5b: an absent anchor makes the whole run exit 1 (non-green, not a silent skip)"
+
+# The pre-existing sub-mode must NOT fail on the same workspace: that population
+# predates the installer that produces the anchor, so a real check there would
+# fail workspaces that were healthy before this release.
+_run "${SBX}" "${SBX}/src" "operator-pre-existing"
+assert_line   "${OUT}" '^\[A5b\] SKIP'   "arm5c: A5b SKIPs in the operator-pre-existing sub-mode"
+assert_absent "${OUT}" '^\[A5b\] FAIL'   "arm5c: the absent anchor does NOT fail a pre-installer workspace"
+
 # --- Summary --------------------------------------------------------------- #
 printf '\n======================================================================\n'
 printf 'test_validate_install.sh: %d passed, %d failed (bash %s)\n' "${PASS}" "${FAIL}" "${BASH_VERSION:-unknown}"

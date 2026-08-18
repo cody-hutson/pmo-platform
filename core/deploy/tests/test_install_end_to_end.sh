@@ -146,6 +146,70 @@ else
   report "settings.json valid JSON" 0
 fi
 
+# --- operations-root tier: the operations-workspace context anchor ------------
+# The operations-root tier is the only tier resolving OUTSIDE both .claude/ and
+# the operator-instance base, so a real install is the only place its parent
+# pre-create, its resolver arm and its suffix-strip are exercised together.
+OPS_ANCHOR="${SBX}/ws/projects/CLAUDE.md"
+if [ -f "${OPS_ANCHOR}" ]; then
+  report "operations context anchor installed at projects/CLAUDE.md" 1
+else
+  report "operations context anchor installed at projects/CLAUDE.md" 0 \
+    "absent: ${OPS_ANCHOR}"
+fi
+
+# Suffix-strip arm: the row's source basename is CLAUDE.md.template, so a tier
+# that failed to strip would land the template name instead. Asserting the
+# absence of the un-stripped name is what discriminates "stripped" from
+# "happened to also write the right file".
+if [ ! -e "${SBX}/ws/projects/CLAUDE.md.template" ]; then
+  report "operations anchor .template suffix stripped (no projects/CLAUDE.md.template)" 1
+else
+  report "operations anchor .template suffix stripped (no projects/CLAUDE.md.template)" 0
+fi
+
+# Marker dialect: the row declares `markdown`, so the fence is the HTML-comment
+# form with a resolved managed_sha — NOT the `#`-prefixed plain form. Reading the
+# fence back is what proves the dialect generalized past its single prior user;
+# asserting mere existence would not.
+if grep -qE '^<!-- === BEGIN MANAGED SECTION' "${OPS_ANCHOR}" 2>/dev/null \
+   && grep -qE '^<!-- managed_sha: [0-9a-f]{64} -->' "${OPS_ANCHOR}" 2>/dev/null; then
+  report "operations anchor carries the markdown fence with a resolved managed_sha" 1
+else
+  report "operations anchor carries the markdown fence with a resolved managed_sha" 0 \
+    "fence/managed_sha not in markdown form"
+fi
+
+# The row is `raw` (token-free). An unresolved token here would fail the install
+# validator's A5b check on a real workspace.
+if [ -f "${OPS_ANCHOR}" ] && ! grep -qE '\[(OPERATOR|CLAUDE|COWORK)_[A-Z_]+\]' "${OPS_ANCHOR}"; then
+  report "operations anchor carries no unresolved operator tokens" 1
+else
+  report "operations anchor carries no unresolved operator tokens" 0
+fi
+
+# AC-3 teeth: the anchor REFERENCES, it never restates. No line of its managed
+# body may appear verbatim in the charter template or the operations governance
+# file. grep -Fxf, not comm — a numerically-sorted comm silently yields a wrong
+# set difference. Blank/fence/heading lines are stripped so the comparison is
+# over content lines only.
+if [ -f "${OPS_ANCHOR}" ]; then
+  ops_body="${SBX}/ops-anchor-body.txt"
+  grep -vE '^\s*$|^<!-- |^#' "${OPS_ANCHOR}" > "${ops_body}" 2>/dev/null || true
+  ops_body_lines=$(grep -c . "${ops_body}" 2>/dev/null | tr -d ' ')
+  ops_restated=$(grep -Fxf "${ops_body}" \
+    "${REPO_ROOT}/core/CLAUDE.md.template" \
+    "${REPO_ROOT}/core/governance/OPERATIONS.md" 2>/dev/null | grep -c . | tr -d ' ')
+  # Anti-vacuity: a zero over an EMPTY body is not a result. The denominator is
+  # asserted before the zero is read.
+  if [ "${ops_body_lines}" -ge 5 ] && [ "${ops_restated}" = "0" ]; then
+    report "operations anchor restates no line of the charter or OPERATIONS.md (${ops_restated} of ${ops_body_lines} content lines)" 1
+  else
+    report "operations anchor restates no line of the charter or OPERATIONS.md" 0 \
+      "restated=${ops_restated} over body_lines=${ops_body_lines} (body_lines < 5 means a BROKEN PROBE — the zero is vacuous)"
+  fi
+fi
+
 state_file="${SBX}/ws/.claude/.workspace-setup.state"
 if [ -f "${state_file}" ]; then
   verification_passed=$(jq -r '.verification_passed // false' "${state_file}" 2>/dev/null)

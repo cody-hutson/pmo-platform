@@ -270,6 +270,17 @@ regenerate_managed_sections() {
     # backups and operator-facing messages name the TARGET file, not the source
     # template. Identical to `basename` for every non-stripping tier.
     local target_basename; target_basename="$(basename "${target}")"
+    # A basename is NOT unique across the manifest: two tiers may resolve two
+    # different targets to the same basename (the workspace-root charter and the
+    # operations-root context anchor are both `CLAUDE.md`, in different
+    # directories). Every BACKUP filename is therefore keyed on tier+basename,
+    # not basename alone — a flat basename backup would let one row's pre-write
+    # copy silently overwrite the other's within the same timestamped directory,
+    # destroying the ADR-122 §Decision 7 recovery path exactly when
+    # `--force-regen` regenerates both. tier+basename IS unique: each tier
+    # resolves into its own directory, so a basename can repeat across tiers but
+    # never within one.
+    local target_key="${tier}-${target_basename}"
 
     count=$((count + 1))
 
@@ -279,7 +290,7 @@ regenerate_managed_sections() {
     fi
 
     if [ ! -f "${target}" ]; then
-      info "Target absent (${target_basename}); fresh install needed via setup-workspace.sh"
+      info "Target absent (${target_basename}, ${tier} tier); fresh install needed via setup-workspace.sh"
       if [ "${tier}" = "hook" ]; then
         MISSING_HOOK_TIER_SURFACES="${MISSING_HOOK_TIER_SURFACES:+${MISSING_HOOK_TIER_SURFACES} }${target_basename}"
       fi
@@ -318,14 +329,14 @@ regenerate_managed_sections() {
       fi
       local tamper_backup="${WORKSPACE_ROOT}/.backup-tampered-$(date -u +%Y%m%dT%H%M%SZ)"
       mkdir -p "${tamper_backup}"
-      cp "${target}" "${tamper_backup}/${target_basename}"
-      warn "tamper detected in managed section of ${target_basename}; backed up to ${tamper_backup}/${target_basename}; regenerating from template."
+      cp "${target}" "${tamper_backup}/${target_key}"
+      warn "tamper detected in managed section of ${target_basename} (${tier} tier); backed up to ${tamper_backup}/${target_key}; regenerating from template."
       if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "${dialect}"; then
         regenerated=$((regenerated + 1))
         info "Regenerated (tamper): ${target_basename}"
       else
-        err "Regeneration failed for ${target_basename}; restoring from tamper backup"
-        cp "${tamper_backup}/${target_basename}" "${target}"
+        err "Regeneration failed for ${target_basename} (${tier} tier); restoring from tamper backup"
+        cp "${tamper_backup}/${target_key}" "${target}"
         exit "${EX_REGENFAIL}"
       fi
       continue
@@ -350,7 +361,7 @@ regenerate_managed_sections() {
     # reversibility write depends on.
     local backup_dir="${BACKUP_DIR_ROOT}-$(date -u +%Y%m%dT%H%M%SZ)"
     mkdir -p "${backup_dir}"
-    cp "${target}" "${backup_dir}/${target_basename}"
+    cp "${target}" "${backup_dir}/${target_key}"
 
     # Out-of-fence discard notice (composition-surface-spec.md §3.3). A bare
     # warning is proportionate for an allowlist; for a top-level governance-
@@ -363,16 +374,16 @@ regenerate_managed_sections() {
     # would ship a documented behavior no code provides.
     case "${tier}" in
       workspace-root|operations-root)
-        info "Regenerating ${tier} target ${target}: content INSIDE the OPERATOR ADDITIONS fence is preserved verbatim; content outside either fence is not carried forward. Pre-write copy: ${backup_dir}/${target_basename}"
+        info "Regenerating ${tier} target ${target}: content INSIDE the OPERATOR ADDITIONS fence is preserved verbatim; content outside either fence is not carried forward. Pre-write copy: ${backup_dir}/${target_key}"
         ;;
     esac
 
     if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "${dialect}"; then
       regenerated=$((regenerated + 1))
-      info "Regenerated: ${target_basename} (backup: ${backup_dir}/${target_basename})"
+      info "Regenerated: ${target_basename} (${tier} tier; backup: ${backup_dir}/${target_key})"
     else
-      err "Regeneration failed for ${target_basename}; restoring from backup"
-      cp "${backup_dir}/${target_basename}" "${target}"
+      err "Regeneration failed for ${target_basename} (${tier} tier); restoring from backup"
+      cp "${backup_dir}/${target_key}" "${target}"
       exit "${EX_REGENFAIL}"
     fi
   done
