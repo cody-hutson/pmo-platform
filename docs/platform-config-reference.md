@@ -15,19 +15,24 @@
 - **How a value is resolved.** Both surfaces feed one **5-rung resolver** (global default → portfolio → program → project → individual; most-specific wins). The full resolver, the 3-level fallback, and the two-track update governance are in [`core/governance/OPERATIONS.md § Platform-Config Resolution Protocol`](../core/governance/OPERATIONS.md).
 - **Two ways to change config:**
   - **Track A (default / schema change):** edit a Layer-1 default or the schema → a governed PR (this is a governance file).
-  - **Track B (set your own value):** set a value for your own portfolio / program / project / individual scope → an operator-instance write, no PR (like setting `delivery_approach: Kanban` in PROJECT.md).
+  - **Track B (set your own value):** set a value for your own portfolio / program / project / individual scope → an operator-instance write, no PR (like setting `delivery_approach: Kanban` in PROJECT.md). For a value that is just yours, the surface is `~/.config/pmo-platform/platform-config.toml` — see § 2.
 
 ## 2. Where to set a value (the 5 rungs)
 
 | Rung (lowest → highest precedence) | Surface | Scope |
 |---|---|---|
-| 1 — global default | `core/config/platform-config.toml.template` + `core/config/operator.toml.template` (Layer 1, ships) | all installs |
+| 1 — global default | `core/config/platform-config.toml.template` + `core/config/operator.toml.template` (Layer 1, ships) — read in place from your clone; **not** installed to a runtime copy | all installs |
 | 2 — portfolio | `projects/_config/PORTFOLIO.md` frontmatter `platform_config: {...}` | a portfolio |
 | 3 — program | `projects/<Program>/_config/program-config.toml` | a program |
 | 4 — project | `projects/<Project>/PROJECT.md` frontmatter `platform_config: {...}` | a project |
 | 5 — individual | `~/.config/pmo-platform/platform-config.toml` `[overrides]` (and `operator.toml` for identity/adapters) | one operator (highest precedence) |
 
 A field set at a higher rung overrides the same field set at a lower rung. A field set nowhere falls back to the global default; a field absent even there falls back to the consuming surface's documented hardcoded default (logged).
+
+**To set a value just for yourself, edit `~/.config/pmo-platform/platform-config.toml`.** That file — rung 5, the highest-precedence rung — is the operator's own edit surface, and it is the only one for a personal value. Two things to know about it:
+
+- **It does not exist on a fresh install, and that is normal.** The package never creates it and never regenerates it, so nothing you put there is overwritten by `update.sh`. Create it yourself, add an `[overrides]` section, and set only the fields you want to change — every unset field keeps resolving from the global default.
+- **There is no installed copy of the shipped template to edit.** The Layer-1 template is read in place from your clone. Editing it changes the global default for every install and is a governed (Track A) change — not a personal override. Earlier versions installed a copy of that template into the operator instance directory; nothing ever read it, so it has been removed. If your instance still has that stale copy, it is inert and can be ignored or deleted.
 
 ## 3. operator.toml fields (environment / identity)
 

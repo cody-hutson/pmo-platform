@@ -36,8 +36,10 @@ It is DISTINCT from [`operator.toml`](../config/operator.toml.template), the ope
 
 | Layer | Carries | Storage | Git status |
 |---|---|---|---|
-| **Layer 1** | Field SCHEMA (this doc) + global DEFAULT values | [`core/config/platform-config.toml.template`](../config/platform-config.toml.template) | tracked (ships) |
+| **Layer 1** | Field SCHEMA (this doc) + global DEFAULT values; read **in place from the clone** — the package installs no runtime copy of the template | [`core/config/platform-config.toml.template`](../config/platform-config.toml.template) | tracked (ships) |
 | **Layer 2** | Per-tier override VALUES only | individual: `~/.config/pmo-platform/platform-config.toml` `[overrides]` · portfolio: `projects/_config/PORTFOLIO.md` frontmatter `platform_config:` · program: `projects/<Program>/_config/program-config.toml` · project: `projects/<Project>/PROJECT.md` frontmatter `platform_config:` | git-ignored (operator-instance) |
+
+**Setting your own value: the individual rung is the XDG file, and there is no installed template to edit.** An operator's own value goes in `${PMO_PLATFORM_CONFIG_ROOT:-$HOME/.config/pmo-platform}/platform-config.toml` under `[overrides]` — the rung-5 individual surface, which per § 4 wins over every other rung. That file is Operator-instance: the package never creates it and never regenerates it, so an edit there is durable across updates. The Layer-1 template is read from the clone and is not installed anywhere, so there is no runtime copy of it to edit; editing the tracked template instead is a Track A governed change to the global default for every install, not a personal override.
 
 No per-tier operator value ever lands in a tracked file. This mirrors the `delivery_approach` precedent exactly: the enum + validation is Layer 1 ([`project-schema.md`](project-schema.md)); the value (`delivery_approach: Kanban`) is Layer 2 (PROJECT.md frontmatter).
 
