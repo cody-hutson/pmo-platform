@@ -223,6 +223,21 @@ build_workspace() {
     > "${ws}/.claude/hooks/lib-fixture-resolver.sh"
   chmod 644 "${ws}/.claude/hooks/lib-fixture-resolver.sh"
 
+  # A3c — one entrypoint DECLARES a hooks/lib/ dependency, and the library is seeded beside
+  # it. A3c derives its requirement from the deployed hooks, so without a declared dependency
+  # it derives an empty set and SKIPs: the healthy fixture would never exercise its PASS path
+  # and arm 6 would have no baseline to break. Same reasoning as the A5b anchor above — seed
+  # the healthy state deliberately. The library lives one directory down, so it is invisible
+  # to A3's maxdepth-1 entrypoint glob and cannot perturb A3's verdict.
+  mkdir -p "${ws}/.claude/hooks/lib"
+  printf '%s\n' '#!/usr/bin/env bash' \
+                'readonly FIXTURE_DEP_LIB="${HOOK_DIR}/lib/fixture-dep.sh"' \
+                'true' > "${ws}/.claude/hooks/block-fixture-1.sh"
+  chmod +x "${ws}/.claude/hooks/block-fixture-1.sh"
+  printf '#!/usr/bin/env bash\n# fixture shared library; sourced, never invoked\n' \
+    > "${ws}/.claude/hooks/lib/fixture-dep.sh"
+  chmod 644 "${ws}/.claude/hooks/lib/fixture-dep.sh"
+
   # A3b — the hook-tier target the fixture manifest declares.
   printf 'fixture composition surface\n' > "${ws}/.claude/fixture-surface.txt"
 
@@ -467,6 +482,62 @@ assert_eq     "${RC}" "1"                "arm5b: an absent anchor makes the whol
 _run "${SBX}" "${SBX}/src" "operator-pre-existing"
 assert_line   "${OUT}" '^\[A5b\] SKIP'   "arm5c: A5b SKIPs in the operator-pre-existing sub-mode"
 assert_absent "${OUT}" '^\[A5b\] FAIL'   "arm5c: the absent anchor does NOT fail a pre-installer workspace"
+
+# =========================================================================== #
+# Arm 6 — A3c hook shared-library closure: BOTH arms, present and absent       #
+# =========================================================================== #
+#
+# Same discipline as arm 5, applied to the class this file had NO coverage of at
+# all: before A3c, every co-deployed hook library was invisible to every check
+# here, and the absent arm is again the one that proves the check.
+#
+# The predicate under test is DERIVED — "every library a deployed hook declares
+# is present" — not "the current release's file list is installed". Arm 6c below
+# is the arm that distinguishes those two readings, and it is the reason A3c can
+# safely run in the operator-pre-existing sub-mode where A3b/A4/A5b/A10 SKIP.
+printf '\nArm 6. A3c hook-library closure — present PASSes, absent FAILs (both arms)\n'
+new_arm; SBX="${NEW_ARM}"
+write_skill "${SBX}/.claude/skills/demo-platform-skill/SKILL.md" "demo-platform-skill" 1
+
+# Precondition, asserted BEFORE any A3c verdict is read: the derivation actually
+# matched something. An empty derived set makes A3c SKIP, and a PASS/FAIL read off
+# a scan that matched nothing would be reporting on a check that never ran — the
+# exact shape that let this class ship uncovered.
+_run "${SBX}" "${SBX}/src" "install"
+assert_absent "${OUT}" '^\[A3c\] SKIP'  "arm6 precondition: A3c is NOT taking the nothing-derived SKIP (the check actually ran)"
+assert_line   "${OUT}" '^\[A3c\] PASS'  "arm6: A3c PASSes when every declared library is present"
+assert_line   "${OUT}" '^\[A3c\] PASS.*1 declared' "arm6: the PASS reports a non-zero measured requirement"
+assert_eq     "${RC}" "0"               "arm6: healthy run with the library present exits 0"
+
+# The absent arm — delete ONLY the library, leaving the hook that declares it.
+# This is the deployed shape of the release hazard: entrypoints present, the
+# shared library they load at startup missing.
+rm -f "${SBX}/Claude/.claude/hooks/lib/fixture-dep.sh"
+_run "${SBX}" "${SBX}/src" "install"
+assert_line   "${OUT}" '^\[A3c\] FAIL'  "arm6b: A3c FAILs when a declared library is absent"
+assert_absent "${OUT}" '^\[A3c\] PASS'  "arm6b: A3c does not also PASS"
+assert_line   "${OUT}" '^\[A3c\] FAIL.*fixture-dep\.sh' "arm6b: the FAIL names the absent library"
+assert_eq     "${RC}" "1"               "arm6b: an absent hook library makes the whole run exit 1 (non-green, not a silent skip)"
+
+# Unlike A5b, A3c must FAIL here too. The requirement is derived from the
+# workspace's own hooks, so a pre-installer workspace is measured against its own
+# declarations — a hook that declares a library it cannot read fails closed
+# whether or not the workspace predates the installer.
+_run "${SBX}" "${SBX}/src" "operator-pre-existing"
+assert_line   "${OUT}" '^\[A3c\] FAIL'  "arm6c: A3c also FAILs in the operator-pre-existing sub-mode (derived requirement, not a release file list)"
+assert_absent "${OUT}" '^\[A3c\] SKIP'  "arm6c: A3c does not SKIP its way out of a real fault"
+
+# Restore, then remove the DECLARATION instead of the library: nothing is owed,
+# so the honest verdict is SKIP rather than PASS. This separates "checked and
+# clean" from "found nothing to check" — the distinction whose absence is how a
+# green result off an empty scan becomes indistinguishable from a healthy one.
+printf '#!/usr/bin/env bash\n# fixture shared library; sourced, never invoked\n' \
+  > "${SBX}/Claude/.claude/hooks/lib/fixture-dep.sh"
+printf '#!/usr/bin/env bash\ntrue\n' > "${SBX}/Claude/.claude/hooks/block-fixture-1.sh"
+chmod +x "${SBX}/Claude/.claude/hooks/block-fixture-1.sh"
+_run "${SBX}" "${SBX}/src" "install"
+assert_line   "${OUT}" '^\[A3c\] SKIP'  "arm6d: A3c SKIPs (not PASSes) when no deployed hook declares a dependency"
+assert_absent "${OUT}" '^\[A3c\] PASS'  "arm6d: an empty derived set is never reported as a clean PASS"
 
 # --- Summary --------------------------------------------------------------- #
 printf '\n======================================================================\n'

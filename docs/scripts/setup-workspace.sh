@@ -1746,6 +1746,46 @@ settings_install_or_guarded_rerender() {
   esac
 }
 
+# --- Section 14b: Pre-write backup + overwrite-safe rollback op ---
+# The rollback ledger carried ONE verb, `rm-file`, and it is correct only for a write that
+# CREATES a file that did not exist — undoing a creation is a delete. Every --refresh-hooks
+# write OVERWRITES an already-deployed file, and for those `rm-file` is not merely wrong but
+# actively harmful: rolling back a partial refresh would DELETE hooks and shared libraries
+# that were present and healthy beforehand, converting a partial refresh into exactly the
+# fail-closed denial storm the rollback exists to prevent.
+#
+# `restore-file` is the overwrite-safe verb. The pre-write bytes are copied aside first and
+# the EXIT trap copies them back. The backup location is DERIVED from the target path by a
+# pure function that both the writer and the trap call, so the ledger line carries a single
+# field — no separator that a path character could be confused with, and no second file to
+# keep in sync. This mirrors the unconditional pre-write backup update.sh takes before
+# regenerating a composition surface (ADR-122 §Decision 7); the hook bundle is the one
+# non-git deploy surface that had no equivalent.
+prewrite_backup_path() {
+  local target="$1" key
+  key=$(printf '%s' "${target}" | shasum -a 256 | awk '{print $1}')
+  printf '%s/prewrite/%s\n' "${SESSION_TMPDIR}" "${key}"
+}
+
+# record_write_rollback <target> — call IMMEDIATELY BEFORE writing <target>.
+#   target absent  → ledger `rm-file:`      (undo the creation)
+#   target present → copy the bytes aside, ledger `restore-file:` (undo the overwrite)
+# A backup that cannot be taken is a hard failure: proceeding would perform an
+# irreversible write on the one surface `git revert` cannot restore.
+record_write_rollback() {
+  local target="$1" backup
+  [ "${DRY_RUN}" -eq 0 ] || return 0
+  [ -n "${ROLLBACK_OPS_FILE}" ] || return 0
+  if [ ! -e "${target}" ]; then
+    printf 'rm-file:%s\n' "${target}" >> "${ROLLBACK_OPS_FILE}"
+    return 0
+  fi
+  backup=$(prewrite_backup_path "${target}")
+  mkdir -p "$(dirname "${backup}")" || { err "pre-write backup dir failed for ${target}"; exit 74; }
+  cp "${target}" "${backup}" || { err "pre-write backup failed for ${target}"; exit 74; }
+  printf 'restore-file:%s\n' "${target}" >> "${ROLLBACK_OPS_FILE}"
+}
+
 # --- Section 15: Hook install with checksum drift detection ---
 install_hook_with_checksum() {
   local source_hook="$1"
@@ -1816,6 +1856,13 @@ install_hook_with_checksum() {
         info "[dry-run] would REFRESH: ${basename} (${target_sha:0:8} → ${source_sha:0:8})"
         return 0
       fi
+      # Pre-write backup + rollback op. The FIRST-INSTALL branch above has recorded an
+      # `rm-file` op since it was written; this branch — the only one that reaches an
+      # already-installed workspace, and the whole point of --refresh-hooks — recorded
+      # nothing and kept no copy. `git revert` restores the repository; it does not
+      # restore .claude/hooks/, so without this the prior deployed bytes were simply
+      # gone and a partial refresh had no way back.
+      record_write_rollback "${target}"
       cp "${source_hook}" "${target}"
       chmod +x "${target}"
       json_set "${CHECKSUMS_FILE}" "${basename}" "${source_sha}"
@@ -1945,9 +1992,9 @@ install_hooks() {
   elif [ "${DRY_RUN}" -eq 1 ]; then
     info "[dry-run] would co-deploy path-leak primitive → ${primitive_dst}"
   else
+    record_write_rollback "${primitive_dst}"
     cp "${primitive_src}" "${primitive_dst}"
     info "INSTALLED: path-leak primitive (block-gh-path-leak dependency)"
-    printf 'rm-file:%s\n' "${primitive_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
   # Co-deploy the shared operator-instance / needle resolver NEXT TO the hooks.
@@ -1965,9 +2012,9 @@ install_hooks() {
   elif [ "${DRY_RUN}" -eq 1 ]; then
     info "[dry-run] would co-deploy lib-instance-path.sh → ${needlelib_dst}"
   else
+    record_write_rollback "${needlelib_dst}"
     cp "${needlelib_src}" "${needlelib_dst}"
     info "INSTALLED: lib-instance-path.sh (block-scope-segregation needle resolver)"
-    printf 'rm-file:%s\n' "${needlelib_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
   # Co-deploy the shared jq/dependency resolver into .claude/hooks/lib/. Every security
@@ -1983,9 +2030,9 @@ install_hooks() {
     info "[dry-run] would co-deploy dep-resolve.sh → ${depresolve_dst}"
   else
     mkdir -p "${WORKSPACE_ROOT}/.claude/hooks/lib"
+    record_write_rollback "${depresolve_dst}"
     cp "${depresolve_src}" "${depresolve_dst}"
     info "INSTALLED: dep-resolve.sh (shared hook jq/dependency resolver)"
-    printf 'rm-file:%s\n' "${depresolve_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
   # Co-deploy the shared positional-issue-ref classifier into .claude/hooks/lib/.
@@ -2004,9 +2051,9 @@ install_hooks() {
     info "[dry-run] would co-deploy positional-issueref.awk → ${posawk_dst}"
   else
     mkdir -p "${WORKSPACE_ROOT}/.claude/hooks/lib"
+    record_write_rollback "${posawk_dst}"
     cp "${posawk_src}" "${posawk_dst}"
     info "INSTALLED: positional-issueref.awk (block-fragile-refs positional classifier)"
-    printf 'rm-file:%s\n' "${posawk_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
   # Co-deploy the shared command-position canonicalizer into .claude/hooks/lib/.
@@ -2020,15 +2067,32 @@ install_hooks() {
   # name), so hook-registry checks ignore it.
   local cmdposawk_src="${SOURCE_REPO}/core/hooks/lib/command-position.awk"
   local cmdposawk_dst="${WORKSPACE_ROOT}/.claude/hooks/lib/command-position.awk"
+  # ABORT, do not warn-and-continue. Every other co-deploy above warns and proceeds, and
+  # for a soft dependency that is right — the workspace degrades but keeps working. This
+  # one is different in kind: the four hooks are copied into place BEFORE this point in
+  # the same function, so a warn-and-continue here does not degrade the workspace, it
+  # CREATES the fail-closed state. Measured: 412 of 871 assertions flip to deny and none
+  # to allow, and the two unconditional deniers ignore the .mode escape hatch entirely, so
+  # "flip to warn" recovers only half the bundle. A partial hook state without this file
+  # is the failure mode, so the install refuses to create it and lets the EXIT trap put
+  # the pre-write bundle back.
+  #
+  # Exit 74 (EX_IOERR) is deliberate: it is NOT one of the no-mutation codes cleanup()
+  # skips rollback for (64/66/69/78), so the trap runs and the restore-file ops recorded
+  # above are replayed.
   if [ ! -r "${cmdposawk_src}" ]; then
-    warn "command-position.awk not found at ${cmdposawk_src}; all four anchor-carrying hooks will fail closed in enforce"
+    err "command-position.awk not readable at ${cmdposawk_src}"
+    err "  All four anchor-carrying hooks (block-destructive, block-egress, block-fs-boundary,"
+    err "  block-rm-prefer-trash) read this file at startup and FAIL CLOSED without it."
+    err "  Refusing to leave the hook bundle in that state; rolling back."
+    exit 74
   elif [ "${DRY_RUN}" -eq 1 ]; then
     info "[dry-run] would co-deploy command-position.awk → ${cmdposawk_dst}"
   else
     mkdir -p "${WORKSPACE_ROOT}/.claude/hooks/lib"
+    record_write_rollback "${cmdposawk_dst}"
     cp "${cmdposawk_src}" "${cmdposawk_dst}"
     info "INSTALLED: command-position.awk (shared command-start canonicalizer, 4 hooks)"
-    printf 'rm-file:%s\n' "${cmdposawk_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
   # Co-deploy the reference-durability detector constants into .claude/hooks/lib/.
@@ -2049,9 +2113,9 @@ install_hooks() {
     info "[dry-run] would co-deploy fragile-ref-patterns.sh → ${patternslib_dst}"
   else
     mkdir -p "${WORKSPACE_ROOT}/.claude/hooks/lib"
+    record_write_rollback "${patternslib_dst}"
     cp "${patternslib_src}" "${patternslib_dst}"
     info "INSTALLED: fragile-ref-patterns.sh (block-fragile-refs detector constants)"
-    printf 'rm-file:%s\n' "${patternslib_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
   # Co-deploy the master-activation gate lib into .claude/hooks/lib/. Every block-* hook
@@ -2071,9 +2135,9 @@ install_hooks() {
     info "[dry-run] would co-deploy master-enable.sh → ${masterlib_dst}"
   else
     mkdir -p "${WORKSPACE_ROOT}/.claude/hooks/lib"
+    record_write_rollback "${masterlib_dst}"
     cp "${masterlib_src}" "${masterlib_dst}"
     info "INSTALLED: master-enable.sh (block-* master-activation gate)"
-    printf 'rm-file:%s\n' "${masterlib_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
   # Co-deploy the workspace-scope gate lib into .claude/hooks/lib/. Every block-* PreToolUse
@@ -2093,9 +2157,9 @@ install_hooks() {
     info "[dry-run] would co-deploy scope-guard.sh → ${scopelib_dst}"
   else
     mkdir -p "${WORKSPACE_ROOT}/.claude/hooks/lib"
+    record_write_rollback "${scopelib_dst}"
     cp "${scopelib_src}" "${scopelib_dst}"
     info "INSTALLED: scope-guard.sh (block-* workspace-scope gate)"
-    printf 'rm-file:%s\n' "${scopelib_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
   # Surface the enforcement point rather than performing it (#4436). The hooks installed
@@ -2766,6 +2830,63 @@ rebootstrap() {
   fi
 }
 
+# --- Section 22a2: Hook shared-library closure post-condition ---
+# The whole partial-refresh hazard reduces to ONE checkable predicate: every shared library
+# a DEPLOYED hook loads at startup is present in the deployed hooks/lib/. A mixed hook state
+# — some entrypoints refreshed, some not — is harmless provided that holds, because each hook
+# either carries a canary and finds its library, or predates the canary and never looks.
+#
+# DERIVED, not enumerated. The required set is read out of the deployed hooks themselves:
+# `${HOOK_DIR}/lib/<name>` is the single reference form every entrypoint uses. An enumerated
+# list is exactly what let command-position.awk ship with no assertion anywhere — the
+# co-deploy list, the refresh regression test and the install validator each enumerate per
+# named file, so a newly-added primitive is invisible to all three at once. Deriving the set
+# from the consumers means a library added in a later release is covered the day its first
+# consumer ships, with no list to remember to update.
+#
+# Called BEFORE INSTALL_COMPLETE=1 so a failure leaves the EXIT trap armed: the refresh is
+# rolled back to the pre-write bundle rather than left half-applied.
+assert_hook_lib_closure() {
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] hook-library closure not asserted (nothing was deployed)"
+    return 0
+  fi
+  local hooks_dir="${WORKSPACE_ROOT}/.claude/hooks"
+  local required="" missing="" present=0 name
+  required=$(grep -ho 'HOOK_DIR}/lib/[A-Za-z0-9._-]*' "${hooks_dir}"/*.sh 2>/dev/null \
+             | sed 's|^.*/lib/||' | sort -u) || true
+
+  # Assert the INSTRUMENT ran before reading its result. Every deployed entrypoint
+  # references at least lib/dep-resolve.sh, so an empty derived set never means "no
+  # dependencies" — it means the scan matched nothing and this check is measuring nothing.
+  # Reporting a green post-condition off a silent zero is how the gap it closes shipped.
+  if [ -z "${required}" ]; then
+    err "Hook-library closure: derived ZERO required libraries from ${hooks_dir}/*.sh"
+    err "  A healthy bundle always references lib/dep-resolve.sh, so this is a FAILED PROBE,"
+    err "  not a clean result. Refusing to report a post-condition that was never tested."
+    exit 74
+  fi
+
+  # Names are charset-constrained by the grep pattern above (no whitespace, no glob
+  # metacharacters), so word-splitting the derived set is safe and bash 3.2-portable.
+  for name in ${required}; do
+    if [ -r "${hooks_dir}/lib/${name}" ]; then
+      present=$((present + 1))
+    else
+      missing="${missing} ${name}"
+    fi
+  done
+
+  if [ -n "${missing}" ]; then
+    err "Hook-library closure FAILED — deployed hooks load libraries that are not present:"
+    err "  missing:${missing}"
+    err "  Each of those is read at hook startup and the reader fails CLOSED without it."
+    err "  Refusing to complete the refresh; rolling back to the pre-refresh bundle."
+    exit 74
+  fi
+  info "Hook-library closure: PASS (${present} required librar(y/ies) present under ${hooks_dir}/lib/)"
+}
+
 # --- Section 22b: Refresh-hooks flow (#3430) ---
 # Re-deploy ONLY the security-hook bundle into an EXISTING workspace: the hook scripts
 # (via install_hook_with_checksum in checksum-aware REFRESH mode — unedited platform hooks
@@ -2790,9 +2911,15 @@ refresh_hooks_flow() {
   # -> apply the platform version" (the security-priority default).
   read_existing_state || warn "Could not read existing state; refreshing all hooks from source."
   install_hooks
-  # Mark success so the EXIT-trap cleanup does NOT roll back the co-deployed primitives
-  # (they record rm-file rollback ops). If install_hooks aborts under set -e, this is not
-  # reached and the partial co-deploy rolls back, as intended.
+  # The verification gate fresh_install and rebootstrap both run does not reach this flow
+  # (it asserts tokens, settings.json and dir scaffolding this flow deliberately skips), so
+  # until now the ONE flow that upgrades an already-installed workspace was the one flow with
+  # no post-condition of any kind. This is the narrow post-condition that actually matters
+  # for the hook bundle, and it runs BEFORE the success mark below.
+  assert_hook_lib_closure
+  # Mark success so the EXIT-trap cleanup does NOT roll back the refreshed bundle. If
+  # install_hooks or the closure assertion aborts, this is not reached and the pre-write
+  # bytes are restored, as intended.
   INSTALL_COMPLETE=1
 }
 
@@ -3159,7 +3286,7 @@ cleanup() {
 
   warn "Rolling back partial state (INSTALL_COMPLETE=0, exit_code=${exit_code})"
   # Reverse the rollback ops
-  local op kind target
+  local op kind target backup
   while IFS= read -r op; do
     [ -z "${op}" ] && continue
     kind="${op%%:*}"
@@ -3173,6 +3300,22 @@ cleanup() {
       rm-file)
         if [ -f "${target}" ]; then
           rm "${target}" 2>/dev/null && info "rolled back (rm): ${target}" || true
+        fi
+        ;;
+      restore-file)
+        # Undo an OVERWRITE by putting the pre-write bytes back. A failure here is
+        # reported loudly rather than swallowed: unlike a failed `rm-file` (which leaves
+        # an extra file), a failed restore leaves a deployed hook or shared library in its
+        # half-refreshed state, which is the fail-closed condition itself.
+        backup=$(prewrite_backup_path "${target}")
+        if [ -f "${backup}" ]; then
+          if cp "${backup}" "${target}" 2>/dev/null; then
+            info "rolled back (restore): ${target}"
+          else
+            err "ROLLBACK INCOMPLETE: could not restore ${target} from its pre-write backup"
+          fi
+        else
+          err "ROLLBACK INCOMPLETE: no pre-write backup found for ${target}"
         fi
         ;;
     esac

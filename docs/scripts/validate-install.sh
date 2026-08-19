@@ -121,14 +121,20 @@ readonly OPERATOR_TOML_PATH="${HOME}/.config/pmo-platform/operator.toml"
 # are EXCLUDED by construction: an INFO is a record, not a step, and increments
 # no counter.
 #
-# Both Mode A sub-modes emit the SAME total. --mode install runs all thirteen
-# checks. --mode operator-pre-existing runs nine (A1, A2, A3, A5, A6, A6b, A7,
-# A8, A9) and emits SKIP for the four whose surfaces postdate such a workspace
-# — A3b composition-surface manifest, A4 state marker, A5b operations anchor,
-# A10 operator.toml. A SKIP is still an emitted record, so a single constant is
-# correct for both sub-modes, which is what stops this number drifting the next
-# time a check is added or dropped from one sub-mode only.
-readonly MODE_A_TOTAL=13
+# Both Mode A sub-modes emit the SAME total. --mode install runs all fourteen
+# checks. --mode operator-pre-existing runs ten (A1, A2, A3, A3c, A5, A6, A6b,
+# A7, A8, A9) and emits SKIP for the four whose surfaces postdate such a
+# workspace — A3b composition-surface manifest, A4 state marker, A5b operations
+# anchor, A10 operator.toml. A SKIP is still an emitted record, so a single
+# constant is correct for both sub-modes, which is what stops this number
+# drifting the next time a check is added or dropped from one sub-mode only.
+#
+# A3c (hook shared-library closure) is on the RUN side of both sub-modes because
+# its requirement is derived from the workspace's own deployed hooks rather than
+# from the current release's file list, so it is satisfiable by a pre-installer
+# workspace. It may still emit SKIP at runtime when the derivation matches
+# nothing — a SKIP is an emitted record either way, so the total is unaffected.
+readonly MODE_A_TOTAL=14
 readonly MODE_B_TOTAL=4
 
 # --- Section 3: Mutable state (scalars only; bash-3.2-compatible) ---
@@ -672,6 +678,59 @@ check_a3b_composition_surface() {
   fi
 }
 
+# A3c — hook shared-library closure. This is the class the validator had NO coverage of:
+# every co-deployed hook library was invisible to every check in this file. A3 globs
+# hooks/*.sh at maxdepth 1, so hooks/lib/ is out of its reach — and the newest entry is a
+# .awk file in that subdirectory, invisible twice over.
+#
+# DERIVED, not enumerated, and for the same reason the installer's post-condition is: a list
+# of names is precisely the mechanism that let a new primitive ship with no assertion in the
+# co-deploy list's test, in this file, or in the refresh flow. `${HOOK_DIR}/lib/<name>` is the
+# single reference form every entrypoint uses, so reading the requirement out of the deployed
+# hooks covers a library added in a later release the day its first consumer ships.
+#
+# Self-calibrating, which is why — unlike A3b / A4 / A5b / A10 — it RUNS rather than SKIPs in
+# operator-pre-existing mode: an older workspace's older hooks declare only the libraries they
+# actually load, so this cannot fail a pre-installer workspace for lacking a library that
+# nothing there references. The predicate is not "the current library set is installed"; it is
+# "every library some deployed hook will try to load is there".
+check_a3c_hook_lib_closure() {
+  local hooks_dir="${WORKSPACE_ROOT}/.claude/hooks"
+  if ! assert_dir_exists "${hooks_dir}"; then
+    emit_skip "A3c" "INSTALL-HOOK-LIB-CLOSURE" \
+      "hooks directory absent — A3 owns that failure; nothing to derive a requirement from" "A"
+    return
+  fi
+  local required="" missing="" present=0 name
+  required=$(grep -ho 'HOOK_DIR}/lib/[A-Za-z0-9._-]*' "${hooks_dir}"/*.sh 2>/dev/null \
+             | sed 's|^.*/lib/||' | sort -u) || true
+  # An empty derived set is reported as SKIP, never PASS. A green verdict off a scan that
+  # matched nothing is indistinguishable from a green verdict off a healthy workspace, and
+  # that ambiguity is the failure shape this whole check exists to remove.
+  if [ -z "${required}" ]; then
+    emit_skip "A3c" "INSTALL-HOOK-LIB-CLOSURE" \
+      "no deployed hook declares a lib/ dependency (derivation matched 0 references); nothing owed" "A"
+    return
+  fi
+  # Names are charset-constrained by the pattern above — no whitespace, no glob
+  # metacharacters — so word-splitting the derived set is safe and bash 3.2-portable.
+  for name in ${required}; do
+    if [ -r "${hooks_dir}/lib/${name}" ]; then
+      present=$((present + 1))
+    else
+      missing="${missing} ${name}"
+    fi
+  done
+  if [ -n "${missing}" ]; then
+    emit_fail "A3c" "INSTALL-HOOK-LIB-CLOSURE" \
+      "deployed hook(s) load shared librar(y/ies) absent from ${hooks_dir}/lib/:${missing}" \
+      "run 'setup-workspace.sh --refresh-hooks'; a hook that cannot read its library fails CLOSED" "A"
+    return
+  fi
+  emit_pass "A3c" "INSTALL-HOOK-LIB-CLOSURE" \
+    "${present} declared hook librar(y/ies) present and readable under ${hooks_dir}/lib/" "A"
+}
+
 check_a4_state_marker() {
   local state_file="${WORKSPACE_ROOT}/.claude/${STATE_FILE_NAME}"
   if ! assert_file_exists "${state_file}"; then
@@ -1137,6 +1196,7 @@ mode_a_install_verify() {
   check_a2_workspace_layout
   check_a3_hooks_layout
   check_a3b_composition_surface
+  check_a3c_hook_lib_closure
   check_a4_state_marker
   check_a5_claude_md
   check_a5b_operations_anchor
@@ -1160,12 +1220,16 @@ mode_a_operator_pre_existing() {
   # only, so this population cannot satisfy it by definition.
   #
   # Every dropped check emits SKIP rather than vanishing, so this sub-mode emits
-  # the same 13 step records as --mode install (see MODE_A_TOTAL). A3b was
+  # the same 14 step records as --mode install (see MODE_A_TOTAL). A3b was
   # previously the one dropped check that left no trace in the record at all.
   check_a1_platform
   check_a2_workspace_layout
   check_a3_hooks_layout
   emit_skip "A3b" "INSTALL-COMPOSITION-SURFACE" "operator-pre-existing mode (composition-surface manifest not expected)" "A"
+  # A3c RUNS here rather than SKIPping. Its requirement is derived from whatever hooks the
+  # workspace actually has, so a pre-installer workspace is measured against its own hooks'
+  # declarations and cannot be failed for lacking a library nothing there loads.
+  check_a3c_hook_lib_closure
   emit_skip "A4" "INSTALL-STATE-MARKER" "operator-pre-existing mode (state marker not expected)" "A"
   check_a5_claude_md
   emit_skip "A5b" "INSTALL-OPERATIONS-ANCHOR" "operator-pre-existing mode (operations anchor not expected)" "A"
