@@ -277,7 +277,9 @@ This hook is tool-name-matched (`mcp__*`), not Bash-verb-anchored — the absolu
 
 ### Path Resolution — block-rm-prefer-trash.sh
 
-For each target token after the matched verb (flag tokens skipped):
+**Command-position model (runs first).** Before any pattern is matched, the command is canonicalized by the shared primitive `core/hooks/lib/command-position.awk`, which all four regex-anchored hooks consume. The anchor recognises a command start only at start-of-line or after `;`/`&`/`|`; the canonicalizer inserts a `; ` in front of every *genuine* command start so those positions become ones the anchor already sees — grouping (`{ … }`, `( … )`, function bodies), compound-command keywords, the bounded command-prefix word set (`sudo`, `time`, `env`, `nohup`, `command`, `builtin`, `exec`, `xargs`), `VAR=value` prefixes, leading redirects, and the escaped verb `\rm`. Detection is quote-neutralized, so a verb appearing inside a quoted span is content, not a command. Both the verb regex and `extract_target_tokens()` read the canonicalized form — they are atomically coupled, and canonicalizing only one of them either fires the gate and extracts nothing or leaves the regex gating first. `xargs` has no argv target, so the canonicalizer emits a `$XARGS-STDIN` sentinel that routes to step 2's existing unresolvable branch rather than a new rule. See the § Command-Start Position Canonicalization and § Known Limitations sections of the parent readiness doc for the closed set and the nested-shell residual this deliberately does not close.
+
+For each target token after the matched verb (flag tokens skipped; bare shell structure such as a subshell's closing `)` is skipped too, so a targetless `( rm -rf )` does not resolve `)` as a relative path):
 
 1. Strip surrounding single/double quotes.
 2. Detect unresolvable patterns: tokens containing `$`, backtick, or `$(` → **strict-policy BLOCK** (do not attempt to resolve dynamic values; emit BLOCK-TRASH-001 / BLOCK-TRASH-003 with "use explicit absolute paths" guidance).
