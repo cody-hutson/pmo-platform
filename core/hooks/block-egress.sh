@@ -58,13 +58,25 @@ readonly SSH_ALLOWLIST="${HOOK_DIR}/../ssh-allowlist.txt"
 # pass unchanged.
 #
 # POSIX-ERE compliant (no Perl extensions). Tested against BSD grep.
-# Pattern is duplicated across the 3 regex-based PreToolUse hooks
-# (block-destructive.sh, block-egress.sh, block-rm-prefer-trash.sh) —
-# extracted as a per-hook constant to surface the convention and keep
-# each hook file-local-self-contained per the existing posture.
+# Pattern is duplicated across the 4 regex-based PreToolUse hooks
+# (block-destructive.sh, block-egress.sh, block-fs-boundary.sh,
+# block-rm-prefer-trash.sh) — extracted as a per-hook constant to surface
+# the convention and keep each hook file-local-self-contained per the
+# existing posture.
 # WebFetch-branch rules (BLOCK-EGRESS-012, BLOCK-EGRESS-013) are
 # tool-name-matched (not verb-anchored) and not affected by this hook.
 readonly ANCHOR_PREFIX_BASH='(^|[;&|])[[:space:]]*(/(usr/(local/)?|opt/(homebrew|local)/)?bin/)?'
+
+# --- COMMAND-POSITION CANONICALIZER (shared primitive, #5644) ---
+# The anchor above recognises a command start ONLY at start-of-line or after `;`, `&`,
+# `|`, so a verb inside `{ … }`, `( … )`, after `then`/`do`, behind `sudo`/`env`/`xargs`/
+# `VAR=…`, or written `\curl` was invisible to it — the verdict tracked lexical POSITION
+# rather than the action. The Bash-branch command is canonicalized before matching so
+# genuine command starts become positions this anchor already recognises; the anchor,
+# rule IDs and messages are unchanged. ONE implementation shared by all four
+# anchor-carrying hooks (see core/hooks/lib/command-position.awk). The -007 path keeps its
+# own egress_neutralize_quoted() reading the RAW command — that mechanism is unchanged.
+readonly CMDPOS_AWK="${HOOK_DIR}/lib/command-position.awk"
 
 # --- MODE DETECTION (jq-free; defined BEFORE the dependency gate so a mode-gated
 # hook can degrade correctly when jq is unresolvable) ---
@@ -240,9 +252,12 @@ apply_block() {
 
 # --- HELPERS ---
 
-# Pattern match against $COMMAND
+# Pattern match against the canonicalized command. Rule patterns are unchanged; only the
+# text they read is, so a verb at any genuine command start is now anchored. Direct
+# "$COMMAND" readers below (the -007 quote-neutralizer, the URL and ssh-host extractors)
+# deliberately keep the RAW command — they parse argument text, not command position.
 matches() {
-  "$PRINTF" '%s' "$COMMAND" | "$GREP" -qE "$1"
+  "$PRINTF" '%s' "$COMMAND_CMDPOS" | "$GREP" -qE "$1"
 }
 
 # Check a value against a glob-pattern allowlist file (bash case globbing)
@@ -671,6 +686,34 @@ case "$TOOL_NAME" in
   Bash)
     COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
     [ -z "$COMMAND" ] && exit 0
+
+    # --- CANONICALIZE COMMAND POSITIONS (see CMDPOS_AWK above) ---
+    # Verify the primitive WORKS before trusting its output: a present-but-empty,
+    # truncated or corrupt awk emits an empty string, and every matcher below would then
+    # find nothing — the hook would fail OPEN, strictly worse than the gap this closes.
+    # Canary: a one-line function body whose canonical form MUST expose the inner command
+    # at an anchor position. Mode-gated severity, mirroring this hook's dependency gate:
+    # enforce DENIES, warn degrades to the raw command — which is exactly this hook's
+    # pre-#5644 behaviour, so warn never loses coverage it already had.
+    CMDPOS_OK=0
+    if [ -r "$CMDPOS_AWK" ]; then
+      if _cp_canary="$("$PRINTF" '%s' 'q() { r; }' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
+         && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r'; then
+        CMDPOS_OK=1
+      fi
+    fi
+    if [ "$CMDPOS_OK" = 1 ]; then
+      COMMAND_CMDPOS="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '%s' "$COMMAND")"
+      [ -n "$COMMAND_CMDPOS" ] || COMMAND_CMDPOS="$COMMAND"
+    else
+      log_error "PRIMITIVE-MISSING-OR-INVALID: command-position.awk unusable at $CMDPOS_AWK"
+      if [ "$LIB_GUARD_MODE" = "enforce" ]; then
+        deny_missing_primitive "command-position.awk" "$HOOK_NAME" "$PRINTF"
+        exit 2   # caller owns the fail-closed exit — never trust the callee to terminate
+      fi
+      "$PRINTF" '[CLAUDE-HOOK:%s:PRIMITIVE-MISSING] WARN (degraded, %s=%s): command-position.awk absent or invalid; command-start canonicalization skipped this run (pre-existing anchor positions still enforced).\n' "$HOOK_NAME" "${MODE_FILE##*/}" "$LIB_GUARD_MODE" >&2
+      COMMAND_CMDPOS="$COMMAND"
+    fi
 
     # ----- Subprocess credential reads -----
 

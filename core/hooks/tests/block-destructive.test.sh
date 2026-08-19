@@ -144,6 +144,49 @@ test_case "AC-006c: rm --no-preserve-root -rf / blocks" \
   "$(bash_payload 'rm --no-preserve-root -rf /')" \
   2 "BLOCK-DESTRUCTIVE-004"
 
+# --- EXT-POS (#5644): the root-filesystem rule is command-POSITION sensitive ---
+#
+# ANCHOR_PREFIX_BASH saw a command start only at line-start or after `;&|`, so the
+# highest-severity rule in this hook did not fire on the same deletion behind an ordinary
+# command prefix. Each case below is the IDENTICAL `rm -rf /` and allowed before the
+# shared canonicalizer (core/hooks/lib/command-position.awk) landed.
+test_case "EXT-POS-D1: sudo rm -rf / blocks (command-prefix word)" \
+  "$(bash_payload 'sudo rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D2: time rm -rf / blocks (command-prefix word)" \
+  "$(bash_payload 'time rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D3: env rm -rf / blocks (command-prefix word)" \
+  "$(bash_payload 'env rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D4: FOO=1 rm -rf / blocks (assignment prefix)" \
+  "$(bash_payload 'FOO=1 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D5: escaped verb rm -rf / blocks" \
+  "$(bash_payload '\rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+# --- EXT-RES (#5644): residual boundary of THIS rule, pinned deliberately ---
+#
+# ALLOW assertions on purpose, and NOT because the position is still blind — it is not.
+# `{ rm -rf /; }` puts the target immediately before `;`, and this rule's own terminator
+# class is `([[:space:]]|$|/\*)`, which does not admit `;`. The position is closed; the
+# terminator class is a separate defect in this rule, tracked outside this change (the
+# root-filesystem guard is filed as its own item). Pinning it means the fix for that
+# defect has a fixture that MUST flip rather than a silent behaviour change. The
+# containment guard (BLOCK-TRASH-001, block-rm-prefer-trash.sh) does deny these today.
+test_case "EXT-RES-D1: { rm -rf /; } allows HERE — terminator class, not position (residual)" \
+  "$(bash_payload '{ rm -rf /; }')" \
+  0
+
+test_case "EXT-RES-D2: nested-shell program string allows (documented nested-shell residual)" \
+  "$(bash_payload 'bash -c '"'"'rm -rf /'"'"'')" \
+  0
+
 # --- /Users subdirs — block at /Users bare, allow deeper ---
 test_case "rm -rf /Users blocks (catastrophic)" \
   "$(bash_payload 'rm -rf /Users')" \

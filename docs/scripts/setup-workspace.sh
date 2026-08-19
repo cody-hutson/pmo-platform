@@ -2009,6 +2009,28 @@ install_hooks() {
     printf 'rm-file:%s\n' "${posawk_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
+  # Co-deploy the shared command-position canonicalizer into .claude/hooks/lib/.
+  # All FOUR anchor-carrying hooks (block-destructive, block-egress, block-fs-boundary,
+  # block-rm-prefer-trash) read it from ${HOOK_DIR}/lib/command-position.awk at runtime to
+  # decide where a command actually starts; without it their matchers see only start-of-line
+  # and `;`/`&`/`|` positions, which is the blind spot this file exists to close. Each hook
+  # canaries it and — post GHSA-g9g6-28c9-vrx5 posture — fails CLOSED in enforce (the
+  # mode-gated pair degrade to the raw command in warn). HARD dependency; mirrors the
+  # positional-issueref.awk co-deploy above. Sourced lib, not a registered hook (no block-*
+  # name), so hook-registry checks ignore it.
+  local cmdposawk_src="${SOURCE_REPO}/core/hooks/lib/command-position.awk"
+  local cmdposawk_dst="${WORKSPACE_ROOT}/.claude/hooks/lib/command-position.awk"
+  if [ ! -r "${cmdposawk_src}" ]; then
+    warn "command-position.awk not found at ${cmdposawk_src}; all four anchor-carrying hooks will fail closed in enforce"
+  elif [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would co-deploy command-position.awk → ${cmdposawk_dst}"
+  else
+    mkdir -p "${WORKSPACE_ROOT}/.claude/hooks/lib"
+    cp "${cmdposawk_src}" "${cmdposawk_dst}"
+    info "INSTALLED: command-position.awk (shared command-start canonicalizer, 4 hooks)"
+    printf 'rm-file:%s\n' "${cmdposawk_dst}" >> "${ROLLBACK_OPS_FILE}"
+  fi
+
   # Co-deploy the reference-durability detector constants into .claude/hooks/lib/.
   # block-fragile-refs.sh sources it from ${HOOK_DIR}/lib/fragile-ref-patterns.sh at runtime
   # to obtain EVERY detector pattern it evaluates; the source lib lives at core/hooks/lib/
@@ -2748,7 +2770,8 @@ rebootstrap() {
 # Re-deploy ONLY the security-hook bundle into an EXISTING workspace: the hook scripts
 # (via install_hook_with_checksum in checksum-aware REFRESH mode — unedited platform hooks
 # are updated, operator edits preserved), the co-shipped primitives (path-leak-patterns.sh,
-# positional-issueref.awk), lib/dep-resolve.sh, and the .version snapshot. It reuses
+# positional-issueref.awk, command-position.awk), lib/dep-resolve.sh, and the .version
+# snapshot. It reuses
 # install_hooks so the co-deploy list stays single-sourced (the drift trap that hid the
 # awk in GHSA-g9g6 does not get a third copy). It does NOT scaffold dirs, resolve tokens,
 # substitute templates, or redeploy skills. The hook-tier allowlists are composition-surface

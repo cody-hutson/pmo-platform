@@ -120,6 +120,27 @@ JQ="$(resolve_jq)"; readonly JQ
 readonly ANCHOR_PREFIX_BASH='(^|[;&|])[[:space:]]*(/(usr/(local/)?|opt/(homebrew|local)/)?bin/)?'
 readonly ANCHOR_PREFIX_GIT='(^|[^[:alnum:]_-])(/(usr/(local/)?|opt/(homebrew|local)/)?bin/)?'
 
+# --- COMMAND-POSITION CANONICALIZER (shared primitive, #5644) ---
+# ANCHOR_PREFIX_BASH recognises a command start ONLY at start-of-line or after `;`, `&`,
+# `|`, so a verb inside `{ … }`, `( … )`, after `then`/`do`, behind `sudo`/`env`/`xargs`/
+# `VAR=…`, or written `\rm` was invisible to it — the verdict tracked lexical POSITION
+# rather than the action. `sudo rm -rf /` did not reach BLOCK-DESTRUCTIVE-004 for that
+# reason alone. The command is canonicalized before matching so genuine command starts
+# become positions the anchor already recognises; the anchors, rule IDs and messages are
+# unchanged. ONE implementation shared by all four anchor-carrying hooks (see
+# core/hooks/lib/command-position.awk).
+#
+# ANCHOR_PREFIX_GIT is a word-boundary anchor, not a command-position one, so it was never
+# blind in this way. Canonicalization only ever INSERTS `;` and replaces in-quote structure
+# with a non-alphanumeric sentinel — both of which are already `[^[:alnum:]_-]` — so it can
+# add boundaries for the git rules but never remove one.
+#
+# BLOCK-DESTRUCTIVE-022 is deliberately NOT routed through this: its segment loop and
+# cumulative quote-parity tracking read "$COMMAND" directly and own their own lexical
+# model. Canonicalizing its input would pre-empt the parity machinery that catches a
+# script path carried inside a quoted program string.
+readonly CMDPOS_AWK="${HOOK_DIR}/lib/command-position.awk"
+
 # --- ERROR HANDLERS ---
 log_error() {
   local ts
@@ -231,10 +252,14 @@ block() {
   exit 2
 }
 
-# Pattern match against $COMMAND (single-string scan via printf — preserves newlines, avoids IFS splitting)
+# Pattern match against the canonicalized command (single-string scan via printf —
+# preserves newlines, avoids IFS splitting). Rule patterns are unchanged; only the text
+# they read is, so a verb at any genuine command start is now anchored. Direct "$COMMAND"
+# readers below — the BLOCK-DESTRUCTIVE-022 segment loop and its quote-parity tracking —
+# deliberately keep the RAW command and are unaffected.
 matches() {
   local pattern="$1"
-  "$PRINTF" '%s' "$COMMAND" | "$GREP" -qE "$pattern"
+  "$PRINTF" '%s' "$COMMAND_CMDPOS" | "$GREP" -qE "$pattern"
 }
 
 # Check if a path matches any glob pattern in the script-execution allowlist
@@ -472,6 +497,29 @@ case "$TOOL_NAME" in
     # ---- Bash branch — destructive command patterns ----
     COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
     [ -z "$COMMAND" ] && exit 0
+
+    # --- CANONICALIZE COMMAND POSITIONS (see CMDPOS_AWK above) ---
+    # Verify the primitive WORKS before trusting its output. A present-but-empty,
+    # truncated or corrupt awk emits an empty string, and every matcher below would then
+    # find nothing — this hook would fail OPEN, strictly worse than the gap it closes.
+    # Canary: a one-line function body whose canonical form MUST expose the inner command
+    # at an anchor position. Same posture as block-fragile-refs.sh's classifier canary
+    # (GHSA-g9g6-28c9-vrx5) and the same fail-closed direction as the dependency guard.
+    CMDPOS_OK=0
+    if [ -r "$CMDPOS_AWK" ]; then
+      if _cp_canary="$("$PRINTF" '%s' 'q() { r; }' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
+         && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r'; then
+        CMDPOS_OK=1
+      fi
+    fi
+    if [ "$CMDPOS_OK" != 1 ]; then
+      log_error "PRIMITIVE-MISSING-OR-INVALID: command-position.awk unusable at $CMDPOS_AWK"
+      deny_missing_primitive "command-position.awk" "$HOOK_NAME" "$PRINTF"
+      exit 2   # caller owns the fail-closed exit — never trust the callee to terminate
+    fi
+    COMMAND_CMDPOS="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '%s' "$COMMAND")"
+    # Belt-and-braces: a non-empty command must never canonicalize to nothing.
+    [ -n "$COMMAND_CMDPOS" ] || COMMAND_CMDPOS="$COMMAND"
 
     # ----- NEW-A: destructive rule set (shell-semantics rewrite + catastrophic paths) -----
 

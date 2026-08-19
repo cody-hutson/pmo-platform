@@ -112,13 +112,26 @@ JQ="$(resolve_jq)"; readonly JQ
 # pass unchanged.
 #
 # POSIX-ERE compliant (no Perl extensions). Tested against BSD grep.
-# Pattern is duplicated across the 3 regex-based PreToolUse hooks
-# (block-destructive.sh, block-egress.sh, block-rm-prefer-trash.sh) —
-# extracted as a per-hook constant to surface the convention and keep
-# each hook file-local-self-contained per the existing posture. Future
-# prefix-set additions require a coordinated 3-hook edit (see Stage 5
-# spec Approach 1 trade-off discussion).
+# Pattern is duplicated across the 4 regex-based PreToolUse hooks
+# (block-destructive.sh, block-egress.sh, block-fs-boundary.sh,
+# block-rm-prefer-trash.sh) — extracted as a per-hook constant to surface
+# the convention and keep each hook file-local-self-contained per the
+# existing posture. Future prefix-set additions require a coordinated
+# 4-hook edit (see Stage 5 spec Approach 1 trade-off discussion).
 readonly ANCHOR_PREFIX_BASH='(^|[;&|])[[:space:]]*(/(usr/(local/)?|opt/(homebrew|local)/)?bin/)?'
+
+# --- COMMAND-POSITION CANONICALIZER (shared primitive) ---
+# The anchor above recognises a command start ONLY at start-of-line or after `;`, `&`,
+# `|`. Every other position at which a shell starts a command — `{ … }`, `( … )`,
+# `then`/`do`, `sudo`/`env`/`xargs`/`VAR=…`, `\rm` — was invisible to it, so the verdict
+# tracked lexical POSITION rather than the action and a deletion became invisible by
+# being wrapped. Rather than widen the anchor (which would make the regex the deny
+# authority over a loose pattern), the command is canonicalized FIRST so that genuine
+# command starts become positions this anchor already recognises. The anchor, the rule
+# IDs and the messages are unchanged; the tokenizer below stays the sole deny authority.
+# ONE implementation, shared by all four anchor-carrying hooks — four agreeing copies is
+# how this cohort drifted into a common blind spot in the first place.
+readonly CMDPOS_AWK="${HOOK_DIR}/lib/command-position.awk"
 
 # --- ERROR HANDLERS ---
 log_error() {
@@ -202,6 +215,29 @@ fi
 COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
 [ -z "$COMMAND" ] && exit 0
 
+# --- CANONICALIZE COMMAND POSITIONS (see CMDPOS_AWK above) ---
+# Verify the primitive actually WORKS before trusting its output. A present-but-empty,
+# truncated or corrupt awk would emit an empty string, and every matcher below would then
+# find nothing — the whole hook would fail OPEN, which is strictly worse than the gap this
+# closes. Canary: a one-line function body, whose canonical form MUST expose the inner
+# command at an anchor position. Same posture as block-fragile-refs.sh's classifier canary
+# (GHSA-g9g6-28c9-vrx5), and the same fail-closed direction as the dependency guard above.
+CMDPOS_OK=0
+if [ -r "$CMDPOS_AWK" ]; then
+  if _cp_canary="$("$PRINTF" '%s' 'q() { r; }' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
+     && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r'; then
+    CMDPOS_OK=1
+  fi
+fi
+if [ "$CMDPOS_OK" != 1 ]; then
+  log_error "PRIMITIVE-MISSING-OR-INVALID: command-position.awk unusable at $CMDPOS_AWK"
+  deny_missing_primitive "command-position.awk" "$HOOK_NAME" "$PRINTF"
+  exit 2   # caller owns the fail-closed exit — never trust the callee to terminate
+fi
+COMMAND_CMDPOS="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '%s' "$COMMAND")"
+# Belt-and-braces: a non-empty command must never canonicalize to nothing.
+[ -n "$COMMAND_CMDPOS" ] || COMMAND_CMDPOS="$COMMAND"
+
 # --- HELPERS ---
 log_block() {
   local rule_id="$1"
@@ -223,10 +259,13 @@ block() {
   exit 2
 }
 
-# Pattern match against $COMMAND
+# Pattern match against the canonicalized command. Rule patterns are unchanged; only the
+# text they read is, so a verb at any genuine command start is now anchored. Direct
+# "$COMMAND" readers below (the osascript POSIX-file extractor) deliberately keep the RAW
+# command — they parse quoted argument text, which canonicalization is not for.
 matches() {
   local pattern="$1"
-  "$PRINTF" '%s' "$COMMAND" | "$GREP" -qE "$pattern"
+  "$PRINTF" '%s' "$COMMAND_CMDPOS" | "$GREP" -qE "$pattern"
 }
 
 # resolve_and_classify(token)
@@ -328,9 +367,16 @@ suggest_trash_command() {
 #   file; per-segment partial revert produces silently-degraded
 #   behavior (regex triggers but awk extracts no target tokens, hook
 #   exits 0 instead of blocking). Land as single atomic commit.
+#
+#   fix F3 (#5644): reads the CANONICALIZED command, not the raw one.
+#   This is the same atomic coupling in a new place — the regex above
+#   and this tokenizer must agree on where a command starts. Pointing
+#   only the regex at the canonical form would fire the gate and then
+#   extract nothing (silent no-op); pointing only this one would leave
+#   the regex gating first and close a fraction of the positions.
 extract_target_tokens() {
   local verb="$1"
-  "$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -v v="$verb" '
+  "$PRINTF" '%s' "$COMMAND_CMDPOS" | /usr/bin/awk -v v="$verb" '
     {
       # Split on command separators first; each segment is separator-free.
       n = split($0, segments, /[;&|]+/);
@@ -352,6 +398,10 @@ extract_target_tokens() {
           if (t == "") continue;
           # Skip flags (start with -) and -- separator
           if (substr(t, 1, 1) == "-") continue;
+          # Skip bare shell structure. A subshell leaves its closing `)` inside
+          # the segment, and without this `( rm -rf )` would resolve `)` as a
+          # relative path and block a targetless no-op (#5644).
+          if (t ~ /^[(){}]+$/) continue;
           print t;
         }
       }

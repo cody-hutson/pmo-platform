@@ -83,6 +83,27 @@ test_case "cat ~/Documents blocks" \
 test_case "cat /Users/otheruser blocks" \
   "$(bash_payload 'cat /Users/otheruser/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
 
+# ----- EXT-POS (#5644): command-start position coverage -----
+#
+# ANCHOR_PREFIX_BASH saw a command start only at line-start or after `;&|`, so the
+# IDENTICAL out-of-boundary read allowed when moved behind an ordinary command prefix or
+# into a group. Closed by the shared canonicalizer (core/hooks/lib/command-position.awk).
+test_case "EXT-POS-F1: sudo cat outside-root blocks (command-prefix word)" \
+  "$(bash_payload 'sudo cat /Users/otheruser/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F2: brace group cat outside-root blocks (grouping)" \
+  "$(bash_payload '{ cat /Users/otheruser/notes.txt; }')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F3: do-body cat outside-root blocks (compound keyword)" \
+  "$(bash_payload 'for f in a; do cat /Users/otheruser/notes.txt; done')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F4: escaped verb cat outside-root blocks" \
+  "$(bash_payload '\cat /Users/otheruser/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+# FP guard: shell text carried as quoted content is not a command.
+test_case "EXT-FP-F1: quoted outside-root path as message content allows" \
+  "$(bash_payload 'git commit -m "cat /Users/otheruser/notes.txt was the bug"')" 0
+
 test_case "head ~/Desktop blocks" \
   "$(bash_payload 'head ~/Desktop/foo.log')" 2 "BLOCK-FS-BOUNDARY-001"
 

