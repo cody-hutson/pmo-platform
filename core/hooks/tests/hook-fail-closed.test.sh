@@ -248,6 +248,11 @@ for h in $PY_HOOKS; do
                -e 's#/opt/homebrew/bin/python3#/nonexistent/py-b#g' \
                -e 's#/usr/local/bin/python3#/nonexistent/py-c#g' \
                "$DEP_LIB" > "$sbox/.claude/hooks/lib/dep-resolve.sh"
+  # Co-locate the shared command-start canonicalizer, mirroring the deployed posture. The
+  # axis under test here is python3 resolvability; a missing canonicalizer would make the
+  # anchor-carrying hooks deny for an unrelated reason and vacuate this arm.
+  [ -f "${HOOK_DIR}/lib/command-position.awk" ] \
+    && /bin/cp "${HOOK_DIR}/lib/command-position.awk" "$sbox/.claude/hooks/lib/command-position.awk"
   write_all_modes "$sbox/.claude/hooks" enforce
   allowed="$sbox/allowed"; /bin/mkdir -p "$allowed"
   /bin/ln -s /etc "$allowed/link"   # symlink INSIDE the allowed root → outside (no literal '..')
@@ -340,6 +345,13 @@ lib_sandbox() {
   _lsb="$(/usr/bin/mktemp -d)"; /bin/mkdir -p "$_lsb/lib"
   /bin/cp "$1" "$_lsb/$(/usr/bin/basename "$1")"
   write_all_modes "$_lsb" "$2"
+  # Co-locate the shared command-start canonicalizer, mirroring the deployed posture.
+  # The four anchor-carrying hooks canary it and fail CLOSED without it, so omitting it
+  # would make every arm below deny for the WRONG reason — the healthy-lib control pair
+  # would flip to a PRIMITIVE-MISSING denial and stop proving what it exists to prove.
+  # The axis under test here is dep-resolve.sh's state; everything else stays healthy.
+  [ -f "${HOOK_DIR}/lib/command-position.awk" ] \
+    && /bin/cp "${HOOK_DIR}/lib/command-position.awk" "$_lsb/lib/command-position.awk"
   case "$3" in
     absent)    : ;;                                                   # no lib written
     # truncated — cut mid-function so the file genuinely does NOT parse (the

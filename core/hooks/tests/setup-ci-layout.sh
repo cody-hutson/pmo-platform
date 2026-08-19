@@ -154,6 +154,23 @@ else
   log "setup-ci-layout: WARNING positional classifier missing at ${POSAWK_SRC}"
 fi
 
+# 1d') Co-locate the shared command-start canonicalizer at .claude/hooks/lib/, mirroring the
+#      deployed posture (setup-workspace.sh co-deploys it there). ALL FOUR anchor-carrying
+#      hooks (block-destructive, block-egress, block-fs-boundary, block-rm-prefer-trash) read
+#      it from ${HOOK_DIR}/lib/command-position.awk to decide where a command actually starts,
+#      canary it before trusting its output, and fail CLOSED in enforce without it; the source
+#      lives at core/hooks/lib/, a subdir the *.sh loop above does not copy. WITHOUT this the
+#      sandbox hooks would deny EVERY payload and four whole suites would fail on nearly every
+#      assertion — the same CI-fidelity class as the dep-resolve / positional co-locations.
+CMDPOSAWK_SRC="${HOOKS_SRC}/lib/command-position.awk"
+if [ -f "${CMDPOSAWK_SRC}" ]; then
+  mkdir -p "${HOOKS_DST}/lib"
+  cp "${CMDPOSAWK_SRC}" "${HOOKS_DST}/lib/"
+  log "setup-ci-layout: co-located command-position canonicalizer -> ${HOOKS_DST}/lib/command-position.awk"
+else
+  log "setup-ci-layout: WARNING command-position canonicalizer missing at ${CMDPOSAWK_SRC}"
+fi
+
 # 1e') Co-locate the reference-durability detector constants at .claude/hooks/lib/, mirroring
 #      the deployed posture (setup-workspace.sh co-deploys it there). block-fragile-refs.sh
 #      sources it from ${HOOK_DIR}/lib/fragile-ref-patterns.sh for EVERY pattern it evaluates;
