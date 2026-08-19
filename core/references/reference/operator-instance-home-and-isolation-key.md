@@ -50,7 +50,7 @@ The read side is **wider than the divergence card records**. Measured at the pin
 | Probe | Invocation | Subject | Sensitivity arm | Specificity arm |
 |---|---|---|---|---|
 | Total tracked references | reference sweep for the instance leaf at `130a1e6b` | **57** | resolver symbol → **34** | nonsense token → **0** |
-| Immutable / live split | prefix classification over the 57 | **14 immutable / 43 live movers** | 14 enumerated | — |
+| Immutable / live split | prefix classification over the 57 | **14 immutable / 43 live movers** | all 14 enumerated by name in §1.5 | complement sums to 43; `14 + 43 = 57`, no residue |
 | Detector sibling forms | sweep for the two sibling leaves | **1 file each** | — | both arms extract |
 | Deploy-script inline fallthroughs | sweep for the inline instance-path default | **0** | repo-wide → 8 files | — |
 
@@ -66,6 +66,38 @@ The two edge cases the planning stage flagged were adjudicated by a single state
 - **The release-body pre-capture** — reclassified to **immutable**, against its earlier count as a live mover. It is a snapshot of published release bodies taken before an overwrite; its content is historical by construction.
 
 **Net effect:** the immutable set is **14**, not 13, and the live mover set is **43**, not 44. The guard asserting the immutable set is untouched must be widened by the pre-capture path, or a correct sweep will appear to violate it.
+
+**The rule in its operational form.** The tense test above is adjudicative prose; the form a sweep can execute is a path-prefix rule, and the two agree on all 57:
+
+> **A reference is immutable exactly when its path lies under `core/ADRs/` or `release/releases/`** — the two trees whose contents record what was true at a past moment rather than what the platform does now.
+
+The two bullets above are the only cases where prefix membership and tense could have been read apart, which is why they were adjudicated individually rather than left to the prefix.
+
+**Why the split is stated as 14/43 and not 13/44.** Both figures have been reported for this same corpus, and they differ by **exactly one file** — the release-body pre-capture at `release/releases/_captures/…/v2.04.published.txt`. A rule that treats a pre-capture as a working artifact rather than a record excludes it and yields **13 immutable / 44 live**; the rule stated above includes it, because a snapshot taken *before* an overwrite is historical by construction, and yields **14 / 43**. This record applies the second. The number is not self-evident and should not be cited without the rule that produced it.
+
+**The 14, enumerated.** Measured at the pinned base `130a1e6b`: sweep the tracked corpus for the instance leaf → **57** files; apply the prefix rule → **14** immutable, **43** live movers, `14 + 43 = 57` with no residue. The names are given in full so that the immutable-set guard in §3.2 — and any acceptance step whose verification method is a name-only diff against this list — has an executable input rather than a count.
+
+Under `core/ADRs/` — **6**:
+
+1. `core/ADRs/ADR-007-core-module-boundary.md`
+2. `core/ADRs/ADR-009-rewrite-map-cli-design.md`
+3. `core/ADRs/ADR-032-release-corpus-public-vs-instance-split.md`
+4. `core/ADRs/ADR-046-roadmap-instance-in-repo-home.md`
+5. `core/ADRs/ADR-096-finops-usage-store-and-data-home.md`
+6. `core/ADRs/README.md` — *the ADR index; first adjudicated case above*
+
+Under `release/releases/` — **8**:
+
+7. `release/releases/RELEASE_DIGEST.md`
+8. `release/releases/RELEASE_INDEX.md`
+9. `release/releases/_captures/2026-08-05-release-body-precapture-partA-ext/v2.04.published.txt` — *the release-body pre-capture; second adjudicated case above, and the single file the 13/44 split classifies differently*
+10. `release/releases/notes/v2/v2.04_RELEASE_NOTES.md`
+11. `release/releases/plans/_unversioned/public-flip-depersonalization-enforcement_RELEASE_PLAN.md`
+12. `release/releases/plans/v2/ci-gate-trustworthiness-and-parallel-pr-safety_RELEASE_PLAN.md`
+13. `release/releases/plans/v3.70_RELEASE_PLAN.md`
+14. `release/releases/plans/v3.96_agent-finops-foundation_RELEASE_PLAN.md`
+
+This list is pinned to `130a1e6b` and is not self-maintaining: both trees are append-targets, so a later base carries more files. A consumer diffing against it re-derives the sweep at its own base rather than treating these fourteen names as permanent.
 
 > **Do not read the 43 as a vindication of the original estimate.** The card's original figure of 43 was a count of *total tracked references*, of which roughly 29 were thought to be movers. The 43 here is the *live-mover* count out of 57 total. The two numbers are equal by coincidence and are measuring different sets; the mover set has grown by roughly half since the card was written.
 
@@ -183,7 +215,7 @@ It follows the pattern of the earlier in-repo-home ADR, which is the executed pr
 
 2. **Registering the XDG file as a composition surface would destroy operator state.** A composition surface is regenerated by the update path, and the composition-surface spec discards operator content that sits outside a fence. The live XDG config file carries no fences at all — it is written by the installer's security-hooks config writer as a plain header plus a section, install-if-missing and preserve-if-present. Registering it would therefore have discarded the operator's security-hooks master enable on the first update, silently reverting the workflow-hook posture to the shipped default. Three corpus surfaces state the opposite contract — that the update path never overwrites that file — so this is a documented invariant the tier option breaks, not a nuance. That is disqualifying independent of cost.
 
-**Consequence as executed:** the orphan manifest row is deleted and the platform-config template is recategorized from Composition-surface to Universal, which is what its measured install/update contract has always been. The manifest's tier vocabulary is unchanged at four tiers, so the merge collision this section anticipated with the sibling milestone does not arise from this card — a row deletion does not touch the tier resolver. The XDG file remains Operator-instance and is named as the operator's own edit surface in the schema and the config reference.
+**Consequence as executed:** the orphan manifest row is deleted and the platform-config template is recategorized from Composition-surface to Universal, which is what its measured install/update contract has always been. The manifest's tier vocabulary stands at **five** tiers — it read four when this section was written, and a sibling card on this same branch has since added `operations-root` — but **this card adds and removes no tier**, so the merge collision this section anticipated with the sibling milestone does not arise from it: a row deletion does not touch the tier resolver. The XDG file remains Operator-instance and is named as the operator's own edit surface in the schema and the config reference.
 
 ---
 
@@ -218,7 +250,7 @@ The natural cleave, if a split is wanted: **slices 1–2 are independently valua
 
 1. **Detector before writer.** Slice 3 lands before any slice writes the new form.
 2. **Copy before flip before verify before delete.** Slice 4's sequence is a hard precondition, not a recommendation. The failure mode is silent: the pre-commit personal-data hook fails open on a missing needle file.
-3. **Immutable set untouched.** The 14 files enumerated in §1.5 are historical records and are correct as written. A sweep that edits them corrupts the audit trail.
+3. **Immutable set untouched.** The 14 files enumerated by name in §1.5 are historical records and are correct as written. A sweep that edits them corrupts the audit trail. The enumeration is pinned to `130a1e6b`; a sweep running at a later base re-derives it by the prefix rule stated there rather than trusting the fourteen names as a closed set.
 4. **Cross-thread serialization.** Slice 6 shares three files with the workspace-anchoring card; the two do not run concurrently.
 
 ---
