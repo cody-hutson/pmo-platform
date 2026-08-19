@@ -362,6 +362,12 @@ The fork record and slice plan live at `core/references/reference/operator-insta
 
 ---
 
+## Domain Practice Provenance
+
+`domain_practice: { source: N/A — pipeline-internal release, date: 2026-08-16, domain: governance }` — every file in the change matrix is an internal pmo-platform artifact (governance, deploy tooling, ADRs, reference docs), so A1.5 external sourcing is not triggered; the deliverable class is nonetheless classified per the mandatory `domain:` field. Rationale from the matrix: `core/deploy/` + `core/standards/` + `core/ADRs/` + `docs/` + `core/rules/` dominate; the secondary domain is `software` (the four `core/deploy/*.sh` and `docs/scripts/*.sh` edits).
+
+---
+
 ## Issue References
 
 The label-to-number binding for this release. Each entry carries a summary noun phrase so the meaning survives if a number rots.
