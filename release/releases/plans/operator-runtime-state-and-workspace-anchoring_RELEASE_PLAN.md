@@ -255,6 +255,169 @@ Phases 0 and 1 are doc- and decision-class; the runtime-suite selection for them
 
 ---
 
+## Rollback Strategy
+
+> **Scope correction (Stage 10 → Stage 11).** An earlier draft of § Reversibility described rollback as
+> "a revert of the merge commit with no data migration and **no installed-state change**." That is accurate
+> for the repository and **wrong for the deployed hook bundle**, which is an installed-state change by
+> definition. `git revert` restores Layer 1. It does not restore `<workspace-root>/.claude/`. The two limbs
+> below are therefore separate, and the second one is the one that needs a substrate.
+
+### Per-Issue Rollback
+
+| Card | Rollback Method | Rollback Complexity |
+|---|---|---|
+| `SPIKE-FORKS`, `DISCOVERY-CTX`, `DEC-HOME`, `OBS-CONFIG` | `git revert` of the card's commits | **Low** — doc/decision class, no deployed target |
+| `UMB-RELOCATE` | `git revert`, then re-run `./update.sh` to re-resolve the instance home | **Medium** — entangled with the resolver on three shared surfaces |
+| `BLD-ANCHOR` | `git revert`, then delete `<workspace-root>/projects/CLAUDE.md` | **Low** — install-if-missing, inert, registered rollback op, A5b absence-detector green in CI |
+| `FIX-CMDPOS` | `git revert` **plus** a deployed-bundle restore (see below) | **High** — the only card whose rollback is not satisfied by git |
+
+### Whole-Release Rollback
+
+| Limb | Covered by | Procedure |
+|---|---|---|
+| **Layer 1 (repository)** | git | Revert the merge commit per `rollback-protocol.md`. Complete and sufficient for every surface that lives in the repo. |
+| **Layer 2 (deployed hook bundle)** | **the Stage 11 snapshot** — *not* git, *not* the installer | Restore the pre-change bundle from the snapshot directory named in the Operational Deployment Manifest below, then re-run `./update.sh` to reconcile recorded checksums. |
+| **Layer 2 (composition surfaces)** | `update.sh` Phase 3 per-file managed-section backups **plus** the Stage 11 snapshot | Restore the affected allowlist / anchor from the snapshot; re-run `./update.sh --surfaces-only`. |
+
+**Why the installer's own rollback does not cover the second limb.** The refresh flow records a pre-write
+backup and a rollback op before every hook write and every co-deploy, and an EXIT trap replays them when the
+run does not reach its success mark. That machinery is real and it works — but its ledger and its backup
+copies live in the run's `mktemp -d` session directory, which is removed at exit. It therefore covers
+**in-run failure only**. After a *successful* refresh the prior deployed bytes are gone, and a decision to
+roll the release back an hour later has no installer-side substrate at all. That gap is what the snapshot
+below exists to fill; it is not a criticism of the installer, which was never scoped to cover it.
+
+---
+
+## Operational Deployment Manifest
+
+Layer 2 propagation targets for Stage 12/13. **This release's deployment is not atomic** — see § Interruption
+semantics below before executing.
+
+### Propagation targets
+
+| # | Source (Layer 1) | Target (Layer 2) | Mechanism | Verification |
+|---|---|---|---|---|
+| 1 | `core/hooks/block-destructive.sh`, `block-egress.sh`, `block-fs-boundary.sh`, `block-rm-prefer-trash.sh` | `<workspace-root>/.claude/hooks/` | `./update.sh` Phase 5c → `setup-workspace.sh --refresh-hooks` → `install_hooks` (checksum-aware REFRESH: unedited platform copy updated, operator edit preserved) | Deployed copy carries the command-start anchor; hook exits 0 on benign input |
+| 2 | `core/hooks/lib/command-position.awk` **(new)** | `<workspace-root>/.claude/hooks/lib/command-position.awk` | Same `install_hooks` run, co-deploy step — the hooks land **before** it | **The single load-bearing post-condition.** `assert_hook_lib_closure` must report PASS |
+| 3 | `core/deploy/lib-instance-path.sh` | `<workspace-root>/.claude/hooks/lib-instance-path.sh` | Co-deploy inside `install_hooks` | Present and readable |
+| 4 | `core/config/allowlists/script-execution-allowlist.txt` | `<workspace-root>/.claude/script-execution-allowlist.txt` | `./update.sh` Phase 3 `regenerate_managed_sections` (hook tier, token-resolved) | Managed-section sha advances; tokens resolved |
+| 5 | `core/CLAUDE.md.template` | `<workspace-root>/CLAUDE.md` | Phase 3, workspace-root tier (`.template` stripped, token-resolved) | Managed section regenerated |
+| 6 | `operations/CLAUDE.md.template` **(new)** | `<workspace-root>/projects/CLAUDE.md` | Phase 3, operations-root tier, raw, **install-if-missing** | `validate-install.sh` check A5b — both arms exercised in CI |
+| 7 | `core/rules/operations-bridge.md`, `core/rules/bypass-mode-readiness.md` (+ `bypass-mode-readiness/`) | `$DEPLOY_ROOT/.claude/rules/` | `deploy.sh` rules mirror | Mirror-sync check green |
+| 8 | *(no `SKILL.md` changed this release)* | `$DEPLOY_ROOT/.claude/skills/` | `deploy.sh` Phase 5 | No source delta — redeploy is a no-op by content |
+
+Two further targets are **written as a side effect** rather than propagated from a source, and must be
+snapshotted even though no row above names them: `<workspace-root>/.claude/.workspace-setup.state` (its
+`hook_checksums` map is rewritten by the refresh) and `<workspace-root>/.claude/.version`.
+
+### Execution order — and the one command that matters
+
+1. **Use `./update.sh`. Do not call `setup-workspace.sh --refresh-hooks` directly.** `update.sh` Phase 5b
+   refuses to refresh the hook bundle while any hook-tier composition surface is absent — i.e. it refuses to
+   install the enforcement half without the escape half. Calling the installer directly skips that gate.
+2. **`deploy.sh` does not deploy hooks and does not refresh allowlists.** It deploys skills and packages and
+   only *checks* hooks. An allowlist refresh is `./update.sh --surfaces-only`; a hook refresh is Phase 5c.
+   A run of `deploy.sh` alone will exit 0 having propagated none of rows 1–6.
+3. **Post-refresh presence check is mandatory and is now automated** — `assert_hook_lib_closure` runs inside
+   the refresh flow before its success mark, derives the required library set from the deployed hooks
+   themselves, and refuses to report a green post-condition off an empty derived set. Read its PASS line;
+   do not infer it from an exit code alone.
+4. **Add the behavioural arm the flow still does not run.** The refresh flow does not call
+   `run_verification_gate`. After the refresh, invoke one deployed anchor hook on benign input and confirm
+   exit 0.
+
+### Interruption semantics — what a partial refresh leaves behind
+
+The hooks are copied into place first; the library they require is co-deployed roughly ninety lines later in
+the same function. The window between those two points is the hazard, and it is **not atomic**.
+
+| Interruption shape | Outcome | Covered by |
+|---|---|---|
+| **Missing/unreadable library source** | The co-deploy **aborts** with exit 74 rather than warning and continuing. The EXIT trap replays the recorded ops and the pre-refresh bundle is put back. | Installer (in-run) — verified firing on a planted failure |
+| **Closure post-condition fails** | `assert_hook_lib_closure` exits 74 **before** the success mark; the trap restores. | Installer (in-run) — verified firing on a planted failure |
+| **Any error under `set -Eeuo pipefail`** | Trap fires, pre-write bytes restored. | Installer (in-run) |
+| **Process killed without running the EXIT trap** (`SIGKILL`, power loss, terminal teardown) | Ledger **and** backups die with the session temp dir. Hooks may be new, library absent, nothing restores. | **Only the Stage 11 snapshot** |
+| **Refresh succeeds, release rolled back later** | Pre-write backups already destroyed at exit. | **Only the Stage 11 snapshot** |
+
+If the bundle is ever left in the hooks-new/library-absent state, the measured consequence is **412 of 871
+hook assertions flip to deny and none to allow**, and the live mode is `enforce`. A *mixed* hook state is
+harmless provided the library is present — each hook either carries the anchor (and needs the library) or
+predates it (and ignores the library). The entire hazard reduces to one question: **is
+`command-position.awk` present under the deployed `hooks/lib/`?**
+
+### Operator action items
+
+| # | Action | When | Why it cannot be an agent action |
+|---|---|---|---|
+| **AI-1** | Pre-stage the restore command in a terminal **before** the refresh runs | Before Stage 12 execute | Under an active fail-closed storm every Bash call the agent makes is denied. The agent cannot issue its own recovery. Handing the command over afterwards is too late to type it through the agent. |
+| **AI-2** | Confirm the snapshot directory named below exists and is readable | Before Stage 12 execute | A snapshot that is trusted and absent is worse than none. |
+| **AI-3** | Read the `assert_hook_lib_closure` PASS line in the refresh output | During Stage 12 | Post-condition confirmation. |
+
+**Do not treat the hook mode file as the mitigation.** Flipping it to `warn` relieves `block-egress` and
+`block-fs-boundary` only. `block-destructive` and `block-rm-prefer-trash` carry no mode gate on this branch
+and deny unconditionally. Any runbook that treats "flip to warn" as the escape hatch is wrong by half.
+
+### Pre-change snapshot (Stage 11)
+
+Non-git surfaces only; the repository is covered by git per `stage-11-snapshot.md`. The snapshot is
+**operator-local and outside the repository by design** — these files carry resolved operator tokens, and
+`RELEASE_PROTOCOL.md` records that no `_snapshots/` directory exists in the repo on the Claude Code path.
+
+- **Location:** `<workspace-root>/.backup-pre-release-operator-runtime-state-20260820T015104Z/`
+  (follows the platform's own `<workspace-root>/.backup-pre-update-<timestamp>` convention; the workspace
+  root is not a git repository, so nothing here can reach the public remote).
+- **Contents:** `claude-hooks/` (deployed hook scripts, `lib/`, mode files), `claude-config/` (the resolved
+  allowlists, `settings.json`, `.version`, `.workspace-setup.state`, the user-scope hook wiring),
+  `anchors/` (the workspace-root charter).
+- **Deliberate exclusion:** the hook directory's runtime logs. Restoring an old log would destroy
+  operational data rather than recover it.
+- **Restore command** (the AI-1 pre-staged command):
+
+  ```bash
+  cp -R <workspace-root>/.backup-pre-release-operator-runtime-state-20260820T015104Z/claude-hooks/. <workspace-root>/.claude/hooks/
+  ```
+
+- **Restore caveat, measured:** a `cp -R` restore does not remove files the release *added*. After a
+  restore, `lib/command-position.awk` survives. It is **inert** — the restored hooks contain zero references
+  to it — so the restore is functionally complete. Removing the file is optional tidying, not recovery.
+- **Reconcile afterwards:** re-run `./update.sh` so the recorded `hook_checksums` baseline matches the
+  restored bytes; otherwise the next refresh classifies the restored hooks as operator-edited and preserves
+  them instead of updating.
+
+### Schema Migrations
+
+N/A — no schema migrations in this release.
+
+---
+
+## Verification Evidence
+
+(Populated after Stage 12 execution — see `verification-checklist.md` for format.)
+
+---
+
+## Deployment Execution Log
+
+(Populated during Stage 12 — see `execution-checklist.md`.)
+
+| Step | Timestamp | Result | Notes |
+|------|-----------|--------|-------|
+| Snapshot confirmed present (AI-2) | | PASS/FAIL | |
+| Rollback command pre-staged (AI-1) | | PASS/FAIL | |
+| Pre-execution check | | PASS/FAIL | |
+| Merge PR | | PASS/FAIL | |
+| Tag release | | PASS/FAIL | |
+| Skill deployment | | PASS/FAIL | |
+| Manifest execution (`./update.sh`) | | PASS/FAIL | |
+| Hook-library closure PASS observed (AI-3) | | PASS/FAIL | |
+| Behavioural arm — anchor hook exits 0 on benign input | | PASS/FAIL | |
+| State anchor update | | PASS/FAIL | |
+| Post-execution verification | | PASS/FAIL | |
+
+---
+
 ## Change Description
 
 > **Currency note.** This section is authored incrementally. It currently reflects **Phase 0, both threads**, the **`OBS-CONFIG`** and **`BLD-ANCHOR`** cards in Phase 1, and the first two Phase-2 convergence slices **`SLICE-EVENT-PATH`** and **`SLICE-CORPUS-HOME`**. Each subsequent Stage-6 spoke refreshes it as its card lands, and it is complete before the PR is transitioned to ready-for-review at the Stage-9 gate.
