@@ -213,12 +213,20 @@ lib_compose_parse_entry() {
 #                            (resolves <OPERATOR_INSTANCE_HUB_STATE_PATH> per
 #                             core/standards/depersonalization-spec.md §4)
 #         "workspace-root" → <workspace-root>/<basename minus a trailing .template>
-#                            (ADR-122; the only tier that strips a suffix, because
-#                             the workspace-root target is the operator-facing file
-#                             itself — <ws>/CLAUDE.md, not <ws>/CLAUDE.md.template)
+#                            (ADR-122; strips a suffix because the workspace-root
+#                             target is the operator-facing file itself —
+#                             <ws>/CLAUDE.md, not <ws>/CLAUDE.md.template)
+#         "operations-root"→ <operations-base>/<basename minus a trailing .template>
+#                            (the operations-workspace context anchor; strips the
+#                             suffix for the same reason workspace-root does. It
+#                             deliberately does NOT consume <instance-base>, which
+#                             is what keeps it independent of any relocation of the
+#                             operator-instance family.)
 #   <instance-base> = pmo_instance_path_for <workspace-root> — the
 #                     PMO_INSTANCE_PATH override when set, else the instance leaf
 #                     under <workspace-root> (#1830; resolver-owned leaf).
+#   <operations-base> = pmo_operations_path_for <workspace-root> — the operations
+#                     sibling leaf, resolver-owned for the same reason.
 # Echoes the resolved path; non-zero exit on unknown tier.
 lib_compose_resolve_target() {
   local basename="$1" tier="$2" workspace_root="$3"
@@ -239,6 +247,12 @@ lib_compose_resolve_target() {
       # installer (".mode.template" -> ".mode"). A basename with no .template
       # suffix passes through unchanged.
       printf '%s/%s\n' "${workspace_root}" "${basename%.template}" ;;
+    operations-root)
+      # Same suffix-strip as workspace-root, one sibling directory over: the
+      # target is the operations-workspace context anchor itself. The operations
+      # leaf is resolved, never spelled here — the leaf-literal contract stated
+      # above governs this arm exactly as it governs the instance ones.
+      printf '%s/%s\n' "$(pmo_operations_path_for "${workspace_root}")" "${basename%.template}" ;;
     *)
       lib_compose_log_err "Unknown tier '${tier}' for basename '${basename}'"
       return 1

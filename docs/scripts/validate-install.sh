@@ -121,14 +121,20 @@ readonly OPERATOR_TOML_PATH="${HOME}/.config/pmo-platform/operator.toml"
 # are EXCLUDED by construction: an INFO is a record, not a step, and increments
 # no counter.
 #
-# Both Mode A sub-modes emit the SAME total. --mode install runs all twelve
-# checks. --mode operator-pre-existing runs nine (A1, A2, A3, A5, A6, A6b, A7,
-# A8, A9) and emits SKIP for the three whose surfaces postdate such a workspace
-# — A3b composition-surface manifest, A4 state marker, A10 operator.toml. A SKIP
-# is still an emitted record, so a single constant is correct for both sub-modes,
-# which is what stops this number drifting the next time a check is added or
-# dropped from one sub-mode only.
-readonly MODE_A_TOTAL=12
+# Both Mode A sub-modes emit the SAME total. --mode install runs all fourteen
+# checks. --mode operator-pre-existing runs ten (A1, A2, A3, A3c, A5, A6, A6b,
+# A7, A8, A9) and emits SKIP for the four whose surfaces postdate such a
+# workspace — A3b composition-surface manifest, A4 state marker, A5b operations
+# anchor, A10 operator.toml. A SKIP is still an emitted record, so a single
+# constant is correct for both sub-modes, which is what stops this number
+# drifting the next time a check is added or dropped from one sub-mode only.
+#
+# A3c (hook shared-library closure) is on the RUN side of both sub-modes because
+# its requirement is derived from the workspace's own deployed hooks rather than
+# from the current release's file list, so it is satisfiable by a pre-installer
+# workspace. It may still emit SKIP at runtime when the derivation matches
+# nothing — a SKIP is an emitted record either way, so the total is unaffected.
+readonly MODE_A_TOTAL=14
 readonly MODE_B_TOTAL=4
 
 # --- Section 3: Mutable state (scalars only; bash-3.2-compatible) ---
@@ -168,13 +174,13 @@ Verify pmo-platform install (Mode A) and first-task invocation (Mode B).
 Options:
   --mode {install,first-task,all,operator-pre-existing}
                           Select scope (default: all).
-                          - install: Mode A only (12 checks).
+                          - install: Mode A only (13 checks).
                           - first-task: Mode B only (4 checks).
                           - all: Mode A followed by Mode B.
                           - operator-pre-existing: subset of Mode A for
                             workspaces that predate setup-workspace.sh
-                            — SKIPs A3b composition-surface, A4 state-marker
-                            and A10 operator.toml.
+                            — SKIPs A3b composition-surface, A4 state-marker,
+                            A5b operations anchor and A10 operator.toml.
   --source-repo PATH      Path to cloned pmo-platform (default: ${HOME}/Claude/pmo-platform).
   --workspace-root PATH   Workspace root (default: ${HOME}/Claude).
   --validation-dir PATH   Artifact directory override (default:
@@ -192,7 +198,7 @@ Output channels:
 
 Modes:
   - install                  Verifies setup-workspace.sh succeeded.
-                             12 checks, all read-only bash.
+                             13 checks, all read-only bash.
   - first-task               Verifies demo skill output parses correctly.
                              4 checks; B2 emits an operator hand-off block;
                              re-run with --continue after capturing the
@@ -201,9 +207,10 @@ Modes:
                              skipped (install must verify first).
   - operator-pre-existing    Workspaces created before setup-workspace.sh
                              shipped (no state-marker yet). Runs A1, A2, A3,
-                             A5, A6, A6b, A7, A8, A9; A3b, A4 and A10 emit SKIP
-                             because those surfaces postdate such a workspace.
-                             Emits 12 check records — the same total as the
+                             A5, A6, A6b, A7, A8, A9; A3b, A4, A5b and A10 emit
+                             SKIP because those surfaces postdate such a
+                             workspace.
+                             Emits 13 check records — the same total as the
                              install sub-mode, because a SKIP is still a record.
                              Aggregate verdict is per-mode unambiguous.
 
@@ -602,6 +609,25 @@ check_a3_hooks_layout() {
   fi
 }
 
+# Resolve the operations-workspace root through the single resolver, sourcing the
+# resolver on first use. Sourced HERE rather than at file scope for the reason
+# check_a2_workspace_layout states: SOURCE_REPO is not populated until argument
+# parsing completes, well after the constants block.
+#
+# Echoes the resolved path and returns 0; returns 1 and echoes nothing when the
+# resolver is not readable from the given source repo. Callers must then report
+# what they did NOT check rather than claiming a verdict the run did not earn —
+# the same three-state degradation A2 uses for the ambient directories.
+resolve_operations_root() {
+  local lib="${SOURCE_REPO}/core/deploy/lib-instance-path.sh"
+  if ! command -v pmo_operations_path_for > /dev/null 2>&1 && [ -r "${lib}" ]; then
+    # shellcheck source=../../core/deploy/lib-instance-path.sh disable=SC1091
+    . "${lib}"
+  fi
+  command -v pmo_operations_path_for > /dev/null 2>&1 || return 1
+  pmo_operations_path_for "${WORKSPACE_ROOT}"
+}
+
 check_a3b_composition_surface() {
   # Verify composition-surface files installed per manifest. Read the manifest
   # from the source repo (where this script lives one level up under docs/scripts).
@@ -615,7 +641,7 @@ check_a3b_composition_surface() {
   # shellcheck disable=SC1090
   source "${manifest}"
 
-  local entry src tier basename target missing=0 present=0
+  local entry src tier basename target ops_root missing=0 present=0
   for entry in "${COMPOSITION_SURFACE_FILES[@]}"; do
     src=$(printf '%s' "${entry}" | awk -F'|' '{print $1}')
     tier=$(printf '%s' "${entry}" | awk -F'|' '{print $2}')
@@ -623,6 +649,15 @@ check_a3b_composition_surface() {
     case "${tier}" in
       hook)     target="${WORKSPACE_ROOT}/.claude/${basename}" ;;
       instance) target="${WORKSPACE_ROOT}/personal/pmo-instance/${basename}" ;;
+      operations-root)
+        # A row whose tier this case does not handle falls through the
+        # `*) continue ;;` arm below and is therefore verified by NOTHING — which
+        # is why a new tier ships its arm here in the same change that adds the
+        # row, not after it. The operations-root tier strips a trailing
+        # `.template` exactly as workspace-root does, so the target basename is
+        # the composed file, not the template.
+        if ! ops_root="$(resolve_operations_root)"; then continue; fi
+        target="${ops_root}/${basename%.template}" ;;
       *)        continue ;;
     esac
     if [ -f "${target}" ]; then
@@ -641,6 +676,59 @@ check_a3b_composition_surface() {
     emit_pass "A3b" "INSTALL-COMPOSITION-SURFACE" \
       "${present} composition-surface file(s) installed" "A"
   fi
+}
+
+# A3c — hook shared-library closure. This is the class the validator had NO coverage of:
+# every co-deployed hook library was invisible to every check in this file. A3 globs
+# hooks/*.sh at maxdepth 1, so hooks/lib/ is out of its reach — and the newest entry is a
+# .awk file in that subdirectory, invisible twice over.
+#
+# DERIVED, not enumerated, and for the same reason the installer's post-condition is: a list
+# of names is precisely the mechanism that let a new primitive ship with no assertion in the
+# co-deploy list's test, in this file, or in the refresh flow. `${HOOK_DIR}/lib/<name>` is the
+# single reference form every entrypoint uses, so reading the requirement out of the deployed
+# hooks covers a library added in a later release the day its first consumer ships.
+#
+# Self-calibrating, which is why — unlike A3b / A4 / A5b / A10 — it RUNS rather than SKIPs in
+# operator-pre-existing mode: an older workspace's older hooks declare only the libraries they
+# actually load, so this cannot fail a pre-installer workspace for lacking a library that
+# nothing there references. The predicate is not "the current library set is installed"; it is
+# "every library some deployed hook will try to load is there".
+check_a3c_hook_lib_closure() {
+  local hooks_dir="${WORKSPACE_ROOT}/.claude/hooks"
+  if ! assert_dir_exists "${hooks_dir}"; then
+    emit_skip "A3c" "INSTALL-HOOK-LIB-CLOSURE" \
+      "hooks directory absent — A3 owns that failure; nothing to derive a requirement from" "A"
+    return
+  fi
+  local required="" missing="" present=0 name
+  required=$(grep -ho 'HOOK_DIR}/lib/[A-Za-z0-9._-]*' "${hooks_dir}"/*.sh 2>/dev/null \
+             | sed 's|^.*/lib/||' | sort -u) || true
+  # An empty derived set is reported as SKIP, never PASS. A green verdict off a scan that
+  # matched nothing is indistinguishable from a green verdict off a healthy workspace, and
+  # that ambiguity is the failure shape this whole check exists to remove.
+  if [ -z "${required}" ]; then
+    emit_skip "A3c" "INSTALL-HOOK-LIB-CLOSURE" \
+      "no deployed hook declares a lib/ dependency (derivation matched 0 references); nothing owed" "A"
+    return
+  fi
+  # Names are charset-constrained by the pattern above — no whitespace, no glob
+  # metacharacters — so word-splitting the derived set is safe and bash 3.2-portable.
+  for name in ${required}; do
+    if [ -r "${hooks_dir}/lib/${name}" ]; then
+      present=$((present + 1))
+    else
+      missing="${missing} ${name}"
+    fi
+  done
+  if [ -n "${missing}" ]; then
+    emit_fail "A3c" "INSTALL-HOOK-LIB-CLOSURE" \
+      "deployed hook(s) load shared librar(y/ies) absent from ${hooks_dir}/lib/:${missing}" \
+      "run 'setup-workspace.sh --refresh-hooks'; a hook that cannot read its library fails CLOSED" "A"
+    return
+  fi
+  emit_pass "A3c" "INSTALL-HOOK-LIB-CLOSURE" \
+    "${present} declared hook librar(y/ies) present and readable under ${hooks_dir}/lib/" "A"
 }
 
 check_a4_state_marker() {
@@ -696,6 +784,49 @@ check_a5_claude_md() {
     return
   fi
   emit_pass "A5" "INSTALL-CLAUDE-MD" "$(wc -c < "${claude_md}" | tr -d ' ') bytes; no unresolved tokens" "A"
+}
+
+# A5b — the operations-workspace context anchor. Sibling of A5 in ASSERTION SHAPE
+# (exists / minimum byte size / no unresolved operator tokens) against the same
+# artifact class one directory over.
+#
+# Deliberately NOT a sibling of A5 in ROUTING, and the difference is load-bearing.
+# A5's CLAUDE.md is operator-authored and pre-dates the installer, so it is
+# legitimately expected on a workspace that pre-dates setup-workspace.sh. The
+# anchor is produced ONLY by the current installer, so on that same population it
+# cannot exist by definition — the identical reason A3b and A4 SKIP there.
+# Emitting a real check into a population that structurally cannot satisfy it
+# would fail workspaces that were healthy before this release and, through the
+# Mode-A -> Mode-B gate, suppress first-task validation for those operators
+# entirely. The non-green-when-absent contract is carried in full by the install
+# sub-mode, where the installer HAS run and the artifact is genuinely owed.
+check_a5b_operations_anchor() {
+  local ops_root
+  if ! ops_root="$(resolve_operations_root)"; then
+    emit_skip "A5b" "INSTALL-OPERATIONS-ANCHOR" \
+      "operations-path resolver unavailable at ${SOURCE_REPO}/core/deploy/lib-instance-path.sh; anchor location not resolvable" "A"
+    return
+  fi
+  local anchor="${ops_root}/CLAUDE.md"
+  if ! assert_file_exists "${anchor}"; then
+    emit_fail "A5b" "INSTALL-OPERATIONS-ANCHOR" "operations context anchor missing: ${anchor}" \
+      "re-run setup-workspace.sh (operations-root composition surface not installed)" "A"
+    return
+  fi
+  if ! assert_byte_size_min "${anchor}" 200; then
+    emit_fail "A5b" "INSTALL-OPERATIONS-ANCHOR" "operations context anchor < 200 bytes" \
+      "re-run setup-workspace.sh; the anchor appears truncated" "A"
+    return
+  fi
+  # Same canonical-namespace token regex A5 uses, for the same reason: it must not
+  # false-positive on ordinary evidence-label vocabulary.
+  if grep -qE '\[(OPERATOR|CLAUDE|COWORK)_[A-Z_]+\]' "${anchor}"; then
+    emit_fail "A5b" "INSTALL-OPERATIONS-ANCHOR" "unresolved token(s) in the operations context anchor" \
+      "re-run setup-workspace.sh; token substitution incomplete" "A"
+    return
+  fi
+  emit_pass "A5b" "INSTALL-OPERATIONS-ANCHOR" \
+    "$(wc -c < "${anchor}" | tr -d ' ') bytes at ${anchor}; no unresolved tokens" "A"
 }
 
 check_a6_settings_json() {
@@ -1065,8 +1196,10 @@ mode_a_install_verify() {
   check_a2_workspace_layout
   check_a3_hooks_layout
   check_a3b_composition_surface
+  check_a3c_hook_lib_closure
   check_a4_state_marker
   check_a5_claude_md
+  check_a5b_operations_anchor
   check_a6_settings_json
   check_a6b_hook_wiring_rehome
   check_a7_source_repo
@@ -1077,19 +1210,29 @@ mode_a_install_verify() {
 
 mode_a_operator_pre_existing() {
   # Subset of Mode A for workspaces created before setup-workspace.sh shipped:
-  # drops A3b (composition-surface manifest), A4 (state-marker) and A10
-  # (operator.toml) because those workspaces predate all three mechanisms.
-  # Per CD-3A — modal sub-mode, not flag-skip.
+  # drops A3b (composition-surface manifest), A4 (state-marker), A5b (operations
+  # context anchor) and A10 (operator.toml) because those workspaces predate all
+  # four mechanisms. Per CD-3A — modal sub-mode, not flag-skip.
+  #
+  # A5b is on the SKIP side while its assertion-shape sibling A5 runs, and the
+  # split is the point: A5's CLAUDE.md is operator-authored and pre-dates the
+  # installer, so it is genuinely expected here; the anchor is installer-produced
+  # only, so this population cannot satisfy it by definition.
   #
   # Every dropped check emits SKIP rather than vanishing, so this sub-mode emits
-  # the same 12 step records as --mode install (see MODE_A_TOTAL). A3b was
+  # the same 14 step records as --mode install (see MODE_A_TOTAL). A3b was
   # previously the one dropped check that left no trace in the record at all.
   check_a1_platform
   check_a2_workspace_layout
   check_a3_hooks_layout
   emit_skip "A3b" "INSTALL-COMPOSITION-SURFACE" "operator-pre-existing mode (composition-surface manifest not expected)" "A"
+  # A3c RUNS here rather than SKIPping. Its requirement is derived from whatever hooks the
+  # workspace actually has, so a pre-installer workspace is measured against its own hooks'
+  # declarations and cannot be failed for lacking a library nothing there loads.
+  check_a3c_hook_lib_closure
   emit_skip "A4" "INSTALL-STATE-MARKER" "operator-pre-existing mode (state marker not expected)" "A"
   check_a5_claude_md
+  emit_skip "A5b" "INSTALL-OPERATIONS-ANCHOR" "operator-pre-existing mode (operations anchor not expected)" "A"
   check_a6_settings_json
   check_a6b_hook_wiring_rehome
   check_a7_source_repo

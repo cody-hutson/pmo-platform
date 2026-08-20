@@ -277,7 +277,9 @@ This hook is tool-name-matched (`mcp__*`), not Bash-verb-anchored — the absolu
 
 ### Path Resolution — block-rm-prefer-trash.sh
 
-For each target token after the matched verb (flag tokens skipped):
+**Command-position model (runs first).** Before any pattern is matched, the command is canonicalized by the shared primitive `core/hooks/lib/command-position.awk`, which all four regex-anchored hooks consume. The anchor recognises a command start only at start-of-line or after `;`/`&`/`|`; the canonicalizer inserts a `; ` in front of every *genuine* command start so those positions become ones the anchor already sees — grouping (`{ … }`, `( … )`, function bodies), compound-command keywords, the bounded command-prefix word set (`sudo`, `time`, `env`, `nohup`, `command`, `builtin`, `exec`, `xargs`), `VAR=value` prefixes, leading redirects, and the escaped verb `\rm`. Detection is quote-neutralized, so a verb appearing inside a quoted span is content, not a command. Both the verb regex and `extract_target_tokens()` read the canonicalized form — they are atomically coupled, and canonicalizing only one of them either fires the gate and extracts nothing or leaves the regex gating first. `xargs` has no argv target, so the canonicalizer emits a `$XARGS-STDIN` sentinel that routes to step 2's existing unresolvable branch rather than a new rule. See the § Command-Start Position Canonicalization and § Known Limitations sections of the parent readiness doc for the closed set and the nested-shell residual this deliberately does not close.
+
+For each target token after the matched verb (flag tokens skipped; bare shell structure such as a subshell's closing `)` is skipped too, so a targetless `( rm -rf )` does not resolve `)` as a relative path):
 
 1. Strip surrounding single/double quotes.
 2. Detect unresolvable patterns: tokens containing `$`, backtick, or `$(` → **strict-policy BLOCK** (do not attempt to resolve dynamic values; emit BLOCK-TRASH-001 / BLOCK-TRASH-003 with "use explicit absolute paths" guidance).
@@ -381,7 +383,7 @@ Added in the shell-injection shakedown release. Initial deploy state: warn-mode 
 
 ## Absolute-Path-Aware Verb Anchor
 
-All three regex-based PreToolUse hooks that match Bash verb invocations (`block-destructive.sh`, `block-egress.sh`, `block-rm-prefer-trash.sh`) detect verbs invoked at canonical absolute-path prefixes — not only verb-at-command-start. The canonical anchor pattern is:
+All four regex-based PreToolUse hooks that match Bash verb invocations (`block-destructive.sh`, `block-egress.sh`, `block-fs-boundary.sh`, `block-rm-prefer-trash.sh`) detect verbs invoked at canonical absolute-path prefixes — not only verb-at-command-start. The canonical anchor pattern is:
 
 ```
 (^|[;&|])[[:space:]]*(/(usr/(local/)?|opt/(homebrew|local)/)?bin/)?<verb>
@@ -414,6 +416,25 @@ Out of scope per parent body (deliberate):
 - `block-credential-reads.sh` and `block-mcp-writes.sh` — Read-tool / MCP-tool matched, NOT Bash-verb anchored; absolute-path bypass is structurally irrelevant
 - WebFetch-branch rules in `block-egress.sh` (BLOCK-EGRESS-012 / -013) — tool-name matched, not verb-anchored
 - Write/Edit-branch rules in `block-destructive.sh` (BLOCK-DESTRUCTIVE-016 / -019) — file-path matched, not verb-anchored
+
+## Command-Start Position Canonicalization
+
+The anchor above recognises a command start at exactly two places: start-of-line, and immediately after `;`, `&` or `|`. A shell starts a command in many more positions than that, so the same verb with the same target received a **different verdict depending on where it sat** — the guard tracked lexical position rather than the action. Wrapping a deletion in a function body was enough to make it invisible, and nothing reported the skip.
+
+All four hooks now canonicalize the command **before** matching, via one shared primitive — `core/hooks/lib/command-position.awk`. Genuine command starts are rewritten into positions the existing anchor already recognises (a `; ` is inserted in front of them). The anchor itself, every rule pattern, every rule ID and every block message are unchanged.
+
+Two properties make the widening safe rather than merely broader:
+
+1. **Insertion-only on the syntactic axis.** The canonicalizer does not delete, reorder or rewrite command text (the single exception is dropping one leading backslash on the verb position, so `\rm` reads as `rm`). Anything the anchor matched before still matches — the change is additive.
+2. **Quote-neutralized detection.** Structural characters inside a quoted span cannot open a segment, so shell text carried *as content* — `echo "cleanup() { rm -rf /tmp/x; }" > s.sh`, `sed 's/(rm foo)/X/'`, `grep -E '(rm |mv)' f` — is not treated as a command start. This is load-bearing, not cosmetic: writing a shell script as content is ordinary work in this repo, and a guard that fires on it gets disabled by the operator — a worse security outcome than the gap it closed. Two of those three shapes were blocked *before* this change; quote-neutralization is what makes them allow.
+
+Positions closed: grouping (`{ … }`, `( … )`, function bodies), compound-command keywords (`then`, `do`, `else`, `elif`, `in`), the bounded command-prefix word set (`sudo`, `time`, `env`, `nohup`, `command`, `builtin`, `exec`, `xargs`), `VAR=value` assignment prefixes, leading redirects, and the escaped verb. The prefix set is a **bounded enumeration, never a wildcard** — an unlisted leading word is treated as the command, exactly as before.
+
+`xargs` is a special case: the verb reads its targets from stdin, so no argv target exists. The canonicalizer emits a deliberately variable-shaped `$XARGS-STDIN` sentinel, which routes to each token extractor's **existing** unresolvable-under-strict-policy branch. No new rule ID and no new message were introduced for it.
+
+**Fail direction.** Each hook canaries the primitive before trusting its output — a truncated or corrupt copy would emit an empty string and take the hook's whole matcher with it, which is a fail-OPEN strictly worse than the gap being closed. On canary failure the always-enforce pair (`block-destructive.sh`, `block-rm-prefer-trash.sh`) DENY via `deny_missing_primitive`; the mode-capable pair (`block-egress.sh`, `block-fs-boundary.sh`) deny in enforce and degrade to the raw command in warn — which is exactly their pre-canonicalization behaviour, so warn never loses coverage it already had. Unbalanced quotes make the mask unreliable, so the input is handed back byte-identical for the same reason.
+
+**Deliberately not routed through it:** `BLOCK-DESTRUCTIVE-022` (its segment loop and cumulative quote-parity tracking own their own lexical model and read the raw command), `block-egress.sh`'s `egress_neutralize_quoted()` path for `BLOCK-EGRESS-007`, and the argument-text extractors (osascript POSIX-file paths, URL and ssh-host extraction). Those parse argument text, which canonicalization is not for.
 
 ## CLAUDE_HOOK_BYPASS — Escape Hatch Usage
 
@@ -565,7 +586,12 @@ After the shakedown period:
 - **MCP tool UUID churn** — MCP server UUIDs (e.g., `mcp__8db9f365-...__`) can change on reinstall/reauth. Allowlist entries tied to specific UUIDs need re-add after changes. Future work: support wildcard `mcp__*__<tool_name>` patterns.
 - **BSD grep extensions** — Regex uses POSIX-ERE only. On macOS, certain GNU grep extensions (`\b` word boundaries) do not work consistently — we use `([[:space:]]|$)` terminators instead.
 - **Hook tamper via `/opt/homebrew/bin`** — PATH pinning is `/usr/bin:/bin` only; if a tool under `/opt/homebrew/bin` were compromised and the hook relied on it, tamper would succeed. We avoid this by using absolute paths for all critical tools (`/usr/bin/grep`, `/usr/bin/jq`, etc., all under `/usr/bin` which is root-owned).
-- **`block-rm-prefer-trash.sh` nested-shell** — `bash -c "rm /tmp/foo"` and similar nested invocations bypass the word-boundary regex prefix class (same class of limitation that affects `block-destructive.sh` and the regex-anchored rules of `block-egress.sh`). Mitigating would require nested-shell parsing across all regex-based hooks. Defer to a future systemic hardening release. **Still open for every rule listed here, including `BLOCK-EGRESS-007`** — the token-level rewrite described below closes the tokenization residual for that rule but does not descend into a nested shell's program string.
+- **Command-start position — SAME-SHELL positions CLOSED, nested-shell positions STILL OPEN.** Read both halves; the first is not the second. The mechanism is the shared canonicalizer `core/hooks/lib/command-position.awk`, described in the § Command-Start Position Canonicalization section of this file.
+  - **Closed** (all four regex-anchored hooks): same-shell command starts the anchor could not see — grouping (`{ … }`, `( … )`, function bodies), compound-command keywords (`then`/`do`/`else`/`elif`/`in`), the bounded command-prefix word set (`sudo`, `time`, `env`, `nohup`, `command`, `builtin`, `exec`, `xargs`), `VAR=value` assignment prefixes, leading redirects, and the escaped verb (`\rm`).
+  - **Still open — `nested-shell`:** `bash -c "rm /tmp/foo"`, `sh -c "…"`, `eval '…'`, `alias x='…'`, and command-substitution / backtick bodies. These carry a program string for *another* shell, which a lexical matcher does not parse; delimiter recognition is deliberately suppressed inside `$( … )` for the same reason. Mitigating requires nested-shell parsing across all regex-based hooks. **Defer to a future systemic hardening release** — filed as its own item. **Still open for every rule listed here, including `BLOCK-EGRESS-007`** — the token-level rewrite described below closes the tokenization residual for that rule but does not descend into a nested shell's program string.
+  - **Still open — other deletion mechanisms:** `find … -exec rm`, `find … -delete`. Same residual class as below.
+  - **Still open — rule-local terminator classes.** Closing the *position* does not close a rule whose own pattern then rejects the match. `BLOCK-DESTRUCTIVE-004` terminates its target with `([[:space:]]|$|/\*)`, which does not admit `;`, so `{ rm -rf /; }` reaches the rule at a correct command start and is still declined by the terminator class. Measured, not inferred: the identical payload with a space before the `;` DOES fire. That is a defect in the rule's own pattern rather than in the anchor, and is tracked separately with the root-filesystem guard; the containment guard `BLOCK-TRASH-001` denies these payloads today.
+  - **A lexical matcher has a coverage boundary by construction** — it approximates a grammar it does not parse. Every extension buys a bounded set of positions and cannot buy completeness. This change is explicitly NOT class closure.
 - **`block-rm-prefer-trash.sh` other deletion mechanisms** — `find ... -delete`, `mv foo /dev/null`, `> file` (truncation) are not classified as deletion verbs and pass the hook. Out of scope for v1; add rules if encountered in practice.
 - **Quoted-path tokenization — now a PER-HOOK split, not a blanket residual.** Simple whitespace splitting tokenizes a quoted operand incorrectly, and an unstripped quote leaves a token that matches no allowlist pattern. The residual is open or closed *per rule*, and recording it as one blanket limitation is no longer accurate:
 

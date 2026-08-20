@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
 # lib-instance-path.sh — single resolver for the operator-instance directory, the
-# localized-context needle file, the people-roster file, the evals-results
-# directory (home of the pipeline event log), and the three ambient-intake member
-# directories (inbox drop-zone, Path-A intake-sweep run-log dir, Path-B
-# external-sync dir).
+# operations-workspace root, the localized-context needle file, the people-roster
+# file, the evals-results directory (home of the pipeline event log), and the
+# three ambient-intake member directories (inbox drop-zone, Path-A intake-sweep
+# run-log dir, Path-B external-sync dir).
 #
 # Design rationale (applies existing ADRs — NO standalone ADR):
 #   - The default base CANONICALIZES on the ADR-032 idiom
 #     `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}`, NOT on PMO_INSTANCE_PATH (per
 #     ADR-032 (Accepted) § "Canonicalization note — CLAUDE_WORKSPACE_ROOT, not
 #     PMO_INSTANCE_PATH" + "invent no new variable"). No new variable is invented
-#     here; PMO_INSTANCE_PATH, PMO_LOCALIZED_NEEDLES, and PMO_PEOPLE_ROSTER are
-#     honored ONLY as pre-existing / direct-path back-compat overrides.
+#     here; PMO_INSTANCE_PATH, PMO_LOCALIZED_NEEDLES, PMO_PEOPLE_ROSTER, and
+#     WORKSPACE_ROOT are honored ONLY as pre-existing / direct-path back-compat
+#     overrides. WORKSPACE_ROOT is the fourth and newest member of that list and
+#     the only one scoped to a SINGLE function (pmo_evals_results_path): it is a
+#     pre-existing release-tools convention, documented as an operator override
+#     at release/tools/cleanup-orphan-state.sh and honored by the pipeline-event
+#     writer, so the reader honors it for writer-parity — not because a new
+#     variable was minted here.
 #   - This is the one resolution site for the instance/needle/roster path surface.
 #     deploy.sh, the PII pre-commit hook, lib-composition.sh, the composition
 #     manifest, check-canonical-structure.sh, extract-roster-needles.sh, and the
@@ -22,13 +28,35 @@
 #
 # Resolution (highest precedence first):
 #   pmo_instance_path()      → ${PMO_INSTANCE_PATH:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance}
+#   pmo_operations_path_for()→ <workspace-root>/projects
+#                              (1 tier — no env or config tier; see the function)
 #   pmo_localized_needles()  → ${PMO_LOCALIZED_NEEDLES:-$(pmo_instance_path)/localized-context-needles.txt}
 #   pmo_people_roster()      → ${PMO_PEOPLE_ROSTER:-$(pmo_instance_path)/people-roster.yaml}
 #   pmo_evals_results_path() → $EVALS_RESULTS_PATH, else the operator.toml key
 #                              operator_instance_evals_results_path, else
-#                              ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/evals/results
+#                              <workspace-root>/personal/pmo-instance/evals/results
+#                              where <workspace-root> is itself a four-step
+#                              cascade: $WORKSPACE_ROOT, else
+#                              $CLAUDE_WORKSPACE_ROOT, else the operator.toml key
+#                              claude_workspace_root, else $HOME/Claude
 #                              (3 tiers — deliberately NOT expressible as one
 #                              ${VAR:-default} expansion like the three above)
+#
+# Honored-tier contract, per function — stated because "which variables and which
+# operator.toml keys does this function honor, and which does it deliberately
+# ignore" is the question every converging consumer must answer before it can
+# safely stop resolving the path itself:
+#   pmo_instance_path()       env: PMO_INSTANCE_PATH, CLAUDE_WORKSPACE_ROOT · toml: none
+#   pmo_instance_path_for()   env: PMO_INSTANCE_PATH                        · toml: none
+#   pmo_operations_path_for() env: none                                     · toml: none
+#   pmo_localized_needles()   env: PMO_LOCALIZED_NEEDLES (+ pmo_instance_path's)
+#   pmo_people_roster*()      env: PMO_PEOPLE_ROSTER     (+ pmo_instance_path's)
+#   pmo_evals_results_path()  env: EVALS_RESULTS_PATH, WORKSPACE_ROOT,
+#                                  CLAUDE_WORKSPACE_ROOT
+#                             toml: operator_instance_evals_results_path,
+#                                   claude_workspace_root
+#                             NOT honored: PMO_INSTANCE_PATH (see its block below)
+#   pmo_<ambient-member>_path_for() toml: the member's own key (+ pmo_instance_path_for's env)
 #   pmo_inbox_path_for()           → operator.toml operator_instance_inbox_path,
 #                                    else $(pmo_instance_path_for <root>)/inbox
 #   pmo_ambient_intake_path_for()  → dirname of operator.toml
@@ -65,6 +93,33 @@ pmo_instance_path_for() {
   printf '%s\n' "${PMO_INSTANCE_PATH:-${_base}/personal/pmo-instance}"
 }
 
+# Echo the operations-workspace root relative to an EXPLICIT workspace root (no
+# trailing slash) — the sibling of pmo_instance_path_for for the OTHER operator
+# sibling directory. Callers: lib-composition.sh's `operations-root` tier arm and
+# the installer's parent pre-create for it.
+#
+# WHY THIS EXISTS: the composition resolver's own contract states that an
+# operator-directory leaf literal lives only in the resolver (ADR-017 §
+# operator-instance surface convergence). Adding an `operations-root` tier that
+# spelled `projects` inline would have put a second such literal back into the one
+# file that convergence cleaned. Centralizing the leaf here keeps that contract
+# true and hands a future relocation of the operations sibling ONE call site to
+# re-point instead of a hunt across the installer, the resolver and the validator.
+#
+# NO env tier and NO operator.toml tier — deliberately, and this is where the
+# shape departs from pmo_instance_path_for above. That function honors
+# PMO_INSTANCE_PATH only because the variable pre-dates it; ADR-032 § "invent no
+# new variable" forbids minting a PMO_OPERATIONS_PATH to fill the symmetry, and no
+# operations-workspace path token exists in the closed [OPERATOR_*] vocabulary
+# (core/standards/depersonalization-spec.md §1) for a config tier to read. A
+# relocation that needs one registers the token first; this function is then the
+# single site that grows a tier, and every caller inherits it unchanged.
+# Usage: pmo_operations_path_for <workspace-root>
+pmo_operations_path_for() {
+  local _base="$1"
+  printf '%s\n' "${_base}/projects"
+}
+
 # Echo the absolute path to the localized-context needle file.
 pmo_localized_needles() {
   printf '%s\n' "${PMO_LOCALIZED_NEEDLES:-$(pmo_instance_path)/localized-context-needles.txt}"
@@ -96,12 +151,35 @@ pmo_people_roster_for() {
 # Echo the absolute path to the operator-instance evals-results directory (no
 # trailing slash) — the home of the pipeline event log and its write-log.
 #
-# Three-tier resolution, mirroring release/tools/append-pipeline-event.sh — the
-# WRITER of those files — so a reader can never resolve somewhere the writer does
+# Three-tier resolution. This function is the SINGLE resolution site for the path
+# — release/tools/append-pipeline-event.sh (the WRITER of those files) and
+# release/tools/query-pipeline-event.sh (its reader) both call it rather than
+# resolving independently, so a reader cannot resolve somewhere the writer does
 # not write:
 #   1. $EVALS_RESULTS_PATH                                     (env / direct override)
 #   2. operator.toml  operator_instance_evals_results_path      (instance override)
-#   3. ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/evals/results
+#   3. <workspace-root>/personal/pmo-instance/evals/results, where <workspace-root>
+#      is a four-step cascade in its own right:
+#        3a. $WORKSPACE_ROOT               (pre-existing release-tools convention)
+#        3b. $CLAUDE_WORKSPACE_ROOT        (the ADR-032 canonical variable)
+#        3c. operator.toml  claude_workspace_root
+#        3d. $HOME/Claude                  (canonical default)
+#
+# HISTORY — why rung 3 is spelled out rather than summarized. This header used to
+# assert that the function "mirrors" the writer "so a reader can never resolve
+# somewhere the writer does not write." It did not mirror it: rung 3's base was a
+# two-step fallback ($CLAUDE_WORKSPACE_ROOT, else $HOME/Claude) against the
+# writer's four, so on an instance setting either $WORKSPACE_ROOT or the
+# claude_workspace_root key, this reader resolved to a directory the writer never
+# wrote to — and deploy.sh Check 19 and the decision-emission gate, the two
+# consumers that read through here, looked there and found nothing. The invariant
+# is now held by convergence rather than by duplication: there is one resolution
+# site, so parity is structural. The enforcement point against a FUTURE narrowing
+# of rung 3 is the value-assertion group "evals-results workspace-root cascade" in
+# core/deploy/tests/test_instance_path_roundtrip.sh, which pins each rung's
+# resolved value against a literal expectation rather than against another
+# resolver — a parity assertion between two sites that now share one function
+# cannot fail, and would be theater.
 #
 # The default, the override key, and the two-segment `evals/results` stem are all
 # already registered under <OPERATOR_INSTANCE_EVALS_RESULTS_PATH> in
@@ -120,18 +198,17 @@ pmo_people_roster_for() {
 # produced #4051.
 pmo_evals_results_path() {
   local _erp="${EVALS_RESULTS_PATH:-}"
-  local _toml _val
-  if [[ -z "$_erp" ]]; then
-    _toml="${HOME}/.config/pmo-platform/operator.toml"
-    if [[ -r "$_toml" ]]; then
-      # `|| true`: the key is absent on instances using the canonical default;
-      # tolerate grep's non-zero exit under `set -euo pipefail`.
-      _val=$( { grep -E '^operator_instance_evals_results_path' "$_toml" 2>/dev/null || true; } \
-                | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-      if [[ -n "$_val" ]]; then _erp="$_val"; fi
-    fi
-  fi
-  printf '%s\n' "${_erp:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/evals/results}"
+  local _base=""
+  # Rungs 1-2. The toml read goes through _pmo_instance_toml_key rather than an
+  # inline `grep | head -1 | awk`: same value, and it drops the SIGPIPE hazard
+  # that reader documents in its own header (a successful key read reporting
+  # failure to a `set -e` caller).
+  [[ -n "$_erp" ]] || _erp="$(_pmo_instance_toml_key "operator_instance_evals_results_path")"
+  if [[ -n "$_erp" ]]; then printf '%s\n' "$_erp"; return 0; fi
+  # Rung 3 — the four-step workspace-root cascade (3a..3d in the header above).
+  _base="${WORKSPACE_ROOT:-${CLAUDE_WORKSPACE_ROOT:-}}"
+  [[ -n "$_base" ]] || _base="$(_pmo_instance_toml_key "claude_workspace_root")"
+  printf '%s\n' "${_base:-$HOME/Claude}/personal/pmo-instance/evals/results"
 }
 
 # --- Ambient-intake member directories -------------------------------------
@@ -169,14 +246,22 @@ pmo_evals_results_path() {
 #
 # Usage: pmo_<member>_path_for <workspace-root>
 
-# Private. Read one key from the canonical operator.toml, else empty. Mirrors
-# pmo_evals_results_path()'s read in every observable respect — same canonical
-# XDG location, same `|| true` tolerance for an absent key under
-# `set -euo pipefail`, same first-match-wins. Factored so the three resolvers
-# below share one reader rather than triplicating it; a fourth ambient member
-# costs one more one-line public function and no new logic.
+# Private. Read one key from the canonical operator.toml, else empty. This is THE
+# operator.toml reader for this file — the three ambient resolvers below and
+# pmo_evals_results_path() above all call it, so there is one canonical XDG
+# location, one `|| true` tolerance for an absent key under `set -euo pipefail`,
+# and one first-match-wins rule rather than a copy per consumer. A fourth ambient
+# member costs one more one-line public function and no new logic.
 #
-# ONE deliberate departure from that reader's literal form: first-match-wins is
+# HISTORY: this header used to describe the relationship to pmo_evals_results_path()
+# as "mirrors its read, with ONE deliberate departure" — accurate while that
+# function carried its own inline `grep | head -1 | awk`. It no longer does: it
+# calls this reader, so the relationship is caller-callee and there is no second
+# reader to mirror or depart from. The `-m1` rationale below is retained unchanged
+# because it is the reason THIS reader is written the way it is, and it is now the
+# only form in the file.
+#
+# WHY `grep -m1` AND NOT `grep | head -1`: first-match-wins is
 # taken with `grep -m1` rather than by piping an unbounded grep into `head -1`.
 # The two are equivalent on the value returned and differ on the exit status. In
 # the `| head -1` form the reader closes the pipe at its first line while the

@@ -216,6 +216,112 @@ else
   report "instance backup captured the filled needle file" 0 "backup copy: ${backup_needle:-none}"
 fi
 
+# --- Stage 6: evals-results workspace-root cascade (value-pinned) ---
+#
+# Guards pmo_evals_results_path()'s rung-3 base against a future narrowing. Until
+# #5634 that base was two steps ($CLAUDE_WORKSPACE_ROOT, else $HOME/Claude) while
+# the pipeline-event WRITER's was four, so deploy.sh Check 19 and the
+# decision-emission gate read a directory the writer never wrote to on any
+# instance setting $WORKSPACE_ROOT or the claude_workspace_root key.
+#
+# WHY VALUE ASSERTIONS AND NOT A WRITER-vs-READER PARITY ASSERTION. The same
+# change that closed the divergence made both pipeline-event tools CALL this
+# function. Asserting "the resolver agrees with the tool" is therefore f(x)==f(x)
+# — it passes on the correct implementation AND on a narrowed one, because a
+# narrowing moves both arms together. Each limb below pins the resolved path to a
+# LITERAL expectation instead. Those literals are not asserted from the resolver:
+# they were measured from the writer's own filesystem behaviour (where
+# append-pipeline-event.sh actually created the log under each configuration)
+# before the convergence landed.
+#
+# ENVIRONMENT IS STATED PER LIMB, NOT DELEGATED TO AN IDIOM. Every limb needs
+# EVALS_RESULTS_PATH and PMO_INSTANCE_PATH unset — rung 1 would otherwise force
+# every arm to the same answer and the group would pass while asserting nothing.
+# Limbs (i)/(iii) additionally need BOTH workspace-root env variables unset, or
+# rung 3a/3b short-circuits before the toml tier is ever consulted.
+printf '\nStage 6: evals-results workspace-root cascade (value-pinned)\n'
+
+# Expectations below are written in ROOTED form (a workspace root immediately
+# followed by the governed stem). The bare stem is deliberately NOT hoisted into a
+# variable of its own: an unrooted operator-instance leaf in a tracked file is what
+# the path-portability detector exists to catch, and the rooted spelling is both
+# governed and what these assertions actually mean.
+CAS_HOME="${SBX}/cashome"
+mkdir -p "${CAS_HOME}/.config/pmo-platform"
+
+cas_toml_root() {   # seed operator.toml carrying ONLY claude_workspace_root
+  printf '[paths]\nclaude_workspace_root = "%s"\n' "$1" > "${CAS_HOME}/.config/pmo-platform/operator.toml"
+}
+cas_toml_norootkey() {  # a present-but-rootless operator.toml — limb (iii) is DEFINED by this
+  printf '[paths]\noperator_homedir_path = ""\n' > "${CAS_HOME}/.config/pmo-platform/operator.toml"
+}
+cas_resolve() {     # resolve with every rung-1/2 and env-root lever explicitly cleared
+  ( unset EVALS_RESULTS_PATH PMO_INSTANCE_PATH WORKSPACE_ROOT CLAUDE_WORKSPACE_ROOT
+    HOME="${CAS_HOME}"; pmo_evals_results_path )
+}
+
+# (i) rung 3c — operator.toml claude_workspace_root. Run with TWO distinct values
+#     so a stuck probe returning one constant cannot pass.
+cas_toml_root "${SBX}/wsA"
+got="$(cas_resolve)"; want="${SBX}/wsA/personal/pmo-instance/evals/results"
+if [ "${got}" = "${want}" ]; then
+  report "cascade 3c: operator.toml claude_workspace_root honored (value A)" 1
+else
+  report "cascade 3c: operator.toml claude_workspace_root honored (value A)" 0 "want=${want} got=${got}"
+fi
+
+cas_toml_root "${SBX}/wsB"
+got="$(cas_resolve)"; want="${SBX}/wsB/personal/pmo-instance/evals/results"
+if [ "${got}" = "${want}" ]; then
+  report "cascade 3c: tracks a SECOND distinct value (value B — stuck-probe guard)" 1
+else
+  report "cascade 3c: tracks a SECOND distinct value (value B — stuck-probe guard)" 0 "want=${want} got=${got}"
+fi
+
+# (ii) rung 3a — $WORKSPACE_ROOT, the pre-existing release-tools override. No toml
+#      root key present, so this limb cannot pass by falling through to 3c.
+cas_toml_norootkey
+got="$( unset EVALS_RESULTS_PATH PMO_INSTANCE_PATH CLAUDE_WORKSPACE_ROOT
+        HOME="${CAS_HOME}"; WORKSPACE_ROOT="${SBX}/wsC"; pmo_evals_results_path )"
+want="${SBX}/wsC/personal/pmo-instance/evals/results"
+if [ "${got}" = "${want}" ]; then
+  report "cascade 3a: env WORKSPACE_ROOT honored" 1
+else
+  report "cascade 3a: env WORKSPACE_ROOT honored" 0 "want=${want} got=${got}"
+fi
+
+# (iii) SPECIFICITY ARM — rung 3d. Nothing set anywhere and no root key in the
+#       toml, so the $HOME-rooted canonical default must stand. This arm passes
+#       before AND after any cascade change; it is what discriminates "the
+#       cascade resolves correctly" from "every limb returns the same string".
+got="$(cas_resolve)"; want="${CAS_HOME}/Claude/personal/pmo-instance/evals/results"
+if [ "${got}" = "${want}" ]; then
+  report "cascade 3d SPECIFICITY: no override anywhere -> HOME-rooted default" 1
+else
+  report "cascade 3d SPECIFICITY: no override anywhere -> HOME-rooted default" 0 "want=${want} got=${got}"
+fi
+
+# (iv) SOURCE-LIVENESS — not a parity assertion. query-pipeline-event.sh no longer
+#      resolves this path itself; it sources the resolver. If that source ever
+#      breaks, the tool dies before it can report a path, so this limb turns a
+#      silent tool-side regression into a failure here. The expectation is still
+#      pinned to the literal, not read back off the resolver.
+cas_toml_root "${SBX}/wsA"
+q_out="$( unset EVALS_RESULTS_PATH PMO_INSTANCE_PATH WORKSPACE_ROOT CLAUDE_WORKSPACE_ROOT
+          HOME="${CAS_HOME}"
+          "${REPO_ROOT}/release/tools/query-pipeline-event.sh" --count 2>&1 )"
+# Here-string, not `printf | grep -q`: grep -q exits at its first match while the
+# writer still has output to push, and under pipefail that broken pipe becomes the
+# pipeline's status — a SUCCESSFUL match reporting failure. A here-string has no
+# writer to signal. The needle is a non-empty absolute path, so the here-string's
+# one-empty-line-for-empty-input behaviour cannot produce a false match.
+if grep -qF -- "${SBX}/wsA/personal/pmo-instance/evals/results/pipeline-event-log.md" <<<"${q_out}"; then
+  report "cascade: query-pipeline-event.sh sources the resolver and reports the same literal" 1
+else
+  report "cascade: query-pipeline-event.sh sources the resolver and reports the same literal" 0 \
+    "expected the tool to name ${SBX}/wsA/personal/pmo-instance/evals/results/pipeline-event-log.md; got: $(printf '%s' "${q_out}" | tr '\n' '|')"
+fi
+
 # --- R-8 safety proof: live ~/.claude/skills untouched ---
 printf '\nR-8 safety proof: live ~/.claude/skills untouched\n'
 LIVE_AFTER=$(manifest_dir "${LIVE_SKILLS}")

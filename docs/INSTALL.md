@@ -113,7 +113,7 @@ The default workspace location is `~/Claude/pmo-platform`. To install elsewhere,
 7. Resolves operator-identifying tokens — via interactive prompts by default, or from each token's declared default with no read from stdin under `--non-interactive`; writes the canonical `operator.toml` at `~/.config/pmo-platform/operator.toml` (XDG-spec; mode 0600).
 8. Substitutes tokens into `CLAUDE.md` and `.claude/settings.json` from the templates, and scaffolds an empty `~/Claude/.claude/settings.local.json` — **your** settings overlay (see below).
 9. Installs the PreToolUse hooks at `~/Claude/.claude/hooks/` from `core/hooks/*.sh`.
-10. Installs composition-surface seed files (allowlists, exemption lists) from `core/config/allowlists/` to runtime locations (`~/Claude/.claude/` for hook-tier; `~/Claude/personal/pmo-instance/` for instance-tier), wrapped in MANAGED SECTION + OPERATOR ADDITIONS fences per [`composition-surface-spec.md` §2](../core/standards/composition-surface-spec.md). Install-if-missing semantics: operator edits to OPERATOR ADDITIONS sections are preserved on re-run.
+10. Installs composition-surface seed files (allowlists, exemption lists) from `core/config/allowlists/` to runtime locations (`~/Claude/.claude/` for hook-tier; `~/Claude/personal/pmo-instance/` for instance-tier), wrapped in MANAGED SECTION + OPERATOR ADDITIONS fences per [`composition-surface-spec.md` §2](../core/standards/composition-surface-spec.md). Install-if-missing semantics: operator edits to OPERATOR ADDITIONS sections are preserved on re-run. The same pass installs the **operations context anchor** at `~/Claude/projects/CLAUDE.md` — a pointer-only file naming the platform governance an operations-rooted session loads, so a session started anywhere under `projects/` reaches the operational procedure set without you doing anything. It restates no procedure and is never overwritten once present.
 11. Runs a post-install verification gate. On pass, writes `.workspace-setup.state` with `verification_passed: true` and prints the validate-install invocation hint.
 
 **Where your own Claude Code settings go.** The install creates two settings files, and the split matters:
@@ -154,6 +154,8 @@ After setup completes successfully, run the validate-install script:
 ```
 
 The script prints a per-check status line and exits 0 on success. If any check fails, the script prints the specific failing assertion with diagnostic context.
+
+Among the Mode A checks, `A5b` (`INSTALL-OPERATIONS-ANCHOR`) asserts the operations context anchor is present at `~/Claude/projects/CLAUDE.md`, is non-trivial, and carries no unresolved operator tokens. If the anchor is missing the run reports `Overall: FAIL` and exits 1 rather than passing quietly — re-run `setup-workspace.sh` to install it. On `--mode operator-pre-existing`, `A5b` emits SKIP: those workspaces predate the installer that produces the anchor, so the artifact is not owed there.
 
 For deeper reference on what setup did and why, see [workspace-setup.md](workspace-setup.md).
 

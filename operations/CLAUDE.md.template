@@ -1,0 +1,34 @@
+# Operations Workspace — Context Anchor
+
+Anchors platform context for sessions rooted anywhere under the operations
+workspace. This file **references**; it never restates.
+
+## How to resolve the paths below
+
+Every path below is relative to **this file's own location** — the
+operations-workspace root. Resolve each one from here, never from the session's
+working directory. A session that loads this anchor may be rooted at any depth
+beneath it, so its working directory is not a usable base: read cwd-relatively
+from the operations root, the first entry would resolve to this anchor itself.
+Relative to this file, `../` is the workspace root.
+
+## What an operations-rooted session loads
+
+1. `../CLAUDE.md` — workspace charter: universal rules, routing, quality standards
+2. `../pmo-platform/core/governance/OPERATIONS.md` — PMO protocols, cross-project rules
+3. `_config/SESSION_STATE.md` — session handoff state
+4. `_config/CORRECTIONS.md` — platform-wide behavioral redirects
+5. `<Project>/PROJECT.md` — active project context
+6. `<Project>/CORRECTIONS.md` — project-scoped redirects (absent is normal)
+
+Context files accumulate: this anchor adds to whatever the runtime already
+resolved from an ancestor directory, and replaces none of it. The charter's
+Session Management section is authoritative on the full session-start sequence,
+including surfaces not named here.
+
+## Invariant
+
+Any procedure appearing here in full rather than as a pointer is a shadow SSOT
+and must be removed — see
+`../pmo-platform/core/disciplines/knowledge-architecture.md`, Memory-corpus
+boundary section.

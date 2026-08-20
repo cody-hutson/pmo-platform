@@ -117,9 +117,25 @@
 #                              an open row is dispositioned, not attested away.
 #   ENV:
 #     HUB_STATE_PATH           Override the hub-state root the Procedure 7a gate
-#                              reads (env → operator.toml
-#                              operator_instance_hub_state_path →
-#                              ${WORKSPACE_ROOT}/personal/pmo-instance/hub-state).
+#                              reads. Composite precedence, highest first:
+#                                1. $HUB_STATE_PATH  (this variable)
+#                                2. operator.toml    operator_instance_hub_state_path
+#                                3. $PMO_INSTANCE_PATH — inherited, because the
+#                                   default is now resolved through
+#                                   core/deploy/lib-instance-path.sh's
+#                                   pmo_instance_path_for() rather than spelled
+#                                   inline, and that accessor honors it
+#                                4. the ${WORKSPACE_ROOT}-rooted canonical default
+#                                   (that same accessor's fallback), with a
+#                                   `hub-state` leaf appended
+#                              Rung 3 sits BELOW rung 2 deliberately, and that is
+#                              worth stating because it INVERTS the resolver's own
+#                              PMO_INSTANCE_PATH-is-highest convention for this one
+#                              surface: a config key naming THIS directory
+#                              specifically beats a coarse whole-instance
+#                              relocation. Rung 3 is new as of the resolver
+#                              convergence; before it, a PMO_INSTANCE_PATH-relocated
+#                              instance left hub-state behind at the old root.
 #   META:
 #     --self-test              Validate internal logic (offline); exit 0 on success
 #     --check-paths            Resolve the four corpus paths (offline); exit 0 if all
@@ -207,11 +223,74 @@ WORKSPACE_ROOT="${WORKSPACE_ROOT:-${CLAUDE_WORKSPACE_ROOT:-}}"
 if [[ -z "$WORKSPACE_ROOT" ]]; then
   _operator_toml="${HOME}/.config/pmo-platform/operator.toml"
   if [[ -r "$_operator_toml" ]]; then
-    _wr=$(/usr/bin/grep -E '^claude_workspace_root' "$_operator_toml" 2>/dev/null | /usr/bin/head -1 | /usr/bin/awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+    # SIGPIPE-REWRITE + `|| true`, identical in form AND in reason to the
+    # HUB_STATE_PATH read further down — see that block for the full rationale,
+    # which was PROVEN by breaking this script and is not restated here.
+    #
+    # Both halves are load-bearing, and this site had neither. `claude_workspace_root`
+    # is OPTIONAL: an operator.toml that exists but omits it makes this grep exit 1,
+    # `pipefail` propagates that through the pipeline, and `set -e` aborts at LOAD
+    # time — before argument parsing, on EVERY invocation including --self-test and
+    # --check-paths — with exit 1 and no output at all. That is a silent total
+    # failure of the close-out tool caused by the ABSENCE of an optional config key.
+    # The `| head -1` folds into `grep -m1` for the same SIGPIPE reason: grep reads
+    # the FILE directly, so it is the leftmost producer and there is no upstream
+    # writer left for an early-closing reader to signal.
+    _wr=$(/usr/bin/grep -m1 -E '^claude_workspace_root' "$_operator_toml" 2>/dev/null | /usr/bin/awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
     [[ -n "$_wr" ]] && WORKSPACE_ROOT="$_wr"
   fi
 fi
 WORKSPACE_ROOT="${WORKSPACE_ROOT:-${HOME}/Claude}"
+
+# ─── Instance-path resolver (sourced fail-closed) ────────────────────────────
+#
+# The single resolution site for operator-instance paths (ADR-017 § operator-
+# instance surface convergence; ADR-032 § "invent no new variable"). Sourced here
+# so the two instance-root call sites below — CORPUS_INSTANCE_ROOT and the
+# HUB_STATE_PATH default — resolve THROUGH it instead of spelling the leaf
+# themselves. A relocation of the operator-instance home then re-points ONE
+# function and this tool follows automatically, rather than needing a coordinated
+# edit here.
+#
+# Sourced AFTER WORKSPACE_ROOT is fully resolved, because both call sites pass it
+# to pmo_instance_path_for() and that accessor keeps the base its caller hands it.
+#
+# The EMPTY POSITIONAL is deliberate, and is copied from
+# release/tools/produce-learnings-register.sh along with its reason: a sourced file
+# inherits the CALLER's positionals when `source` passes none, and this source runs
+# BEFORE argument parsing, so $1 is still --check-paths or --self-test at this
+# point. lib-instance-path.sh carries no direct-run guard today; passing "" is
+# defence-in-depth so a future one cannot break this caller.
+#
+# FAIL-CLOSED, NOT FAIL-OPEN — and the alternative was considered rather than
+# skipped. A `[[ -r ]] && source || <inline expansion>` degrade (the shape the
+# version-grammar source further down uses) would leave this tool resolving the
+# instance root two different ways: through the resolver on a real checkout, and
+# through a stale inline copy anywhere the library is missing. Today those two
+# expressions are identical, so the degrade would look free; after the relocation
+# they resolve to DIFFERENT directories, and no gate anywhere would see it. A
+# path degrade is not the same class as the version-grammar degrade, which is
+# behavioural and documented as such.
+#
+# Fail-closed has a cost and it is paid explicitly: every tree that runs this
+# script must carry the resolver beside it. Three do, and each is treated —
+# the tolerance suite's fixtures copy it in build_repo(), the CI precision probe
+# copies it into its temp tree, and the version-stamping harness pins this
+# variable to the real library in its sed neutralization pipeline. The CI probe
+# is the one that MUST be treated: its rule reads any non-zero exit as a
+# successful detection, so an untreated load-time abort there would turn the
+# probe green while it measured nothing.
+#
+# die() is not defined until much later in this file, so the guard uses the
+# pre-die error idiom already used at the gh-resolution block above. Exit 2 is
+# this file's documented preflight-failure code.
+INSTANCE_LIB="$REPO_ROOT/core/deploy/lib-instance-path.sh"
+if [[ ! -r "$INSTANCE_LIB" ]]; then
+  echo "ERROR: instance-path resolver missing at $INSTANCE_LIB" >&2
+  exit 2
+fi
+# shellcheck source=/dev/null
+source "$INSTANCE_LIB" ""
 
 # Repo slug resolution (env-override → operator.toml → default). Empty operator
 # config → bare "pmo-platform"; gh calls below tolerate a non-resolving slug.
@@ -258,15 +337,25 @@ fi
 # An EMPTY $CORPUS_HOME is the one and only signal check_paths() reads for the
 # tolerance branch, so the three states cannot drift apart into two encodings.
 #
-# The instance root honors PMO_INSTANCE_PATH and otherwise appends the canonical
-# `personal/pmo-instance` leaf to the already-resolved $WORKSPACE_ROOT — the same
-# contract core/deploy/lib-instance-path.sh's pmo_instance_path_for() carries,
-# and the same inline form HUB_STATE_PATH below already uses in this file. The
-# library is deliberately NOT sourced here: the tolerance suite's fixtures copy
-# ONLY this script into their fixture repos, so a `source` of a sibling under
-# core/deploy/ would abort the script under `set -euo pipefail` in exactly the
-# hermetic runs that grade these constraints.
-CORPUS_INSTANCE_ROOT="${PMO_INSTANCE_PATH:-${WORKSPACE_ROOT}/personal/pmo-instance}"
+# The instance root is RESOLVED, not spelled. pmo_instance_path_for() honors
+# PMO_INSTANCE_PATH and otherwise appends the canonical instance leaf to the
+# workspace root it is handed — which is why the arg-taking accessor is the
+# correct one here and the no-arg pmo_instance_path() is not: the no-arg form
+# rebuilds its own two-step base and would DISCARD the $WORKSPACE_ROOT env
+# override and the operator.toml claude_workspace_root key that the cascade above
+# resolves. Measured across nine configurations before this converged: the
+# arg-taking accessor agrees with the previous inline expression in 9 of 9; the
+# no-arg accessor diverges in 5 of 9, in every case by silently dropping one of
+# those two documented overrides.
+#
+# HISTORY — this block used to carry the leaf inline, and stated that the library
+# was deliberately NOT sourced because the tolerance suite's fixtures copy only
+# this script into their fixture repos. That reason was TRUE and it was
+# REPAIRABLE: the fixtures now copy the resolver alongside the script, as does the
+# CI precision probe, and the version-stamping harness pins it. Two of those three
+# consumers were not named by the original rationale, and one of them would have
+# gone silently green rather than red. See the fail-closed source block above.
+CORPUS_INSTANCE_ROOT="$(pmo_instance_path_for "$WORKSPACE_ROOT")"
 CORPUS_HOME=""
 CORPUS_HOME_KIND="none"
 if [[ -d "$REPO_ROOT/release/releases" ]]; then
@@ -310,11 +399,31 @@ AI_EVENT_WRITER="$SCRIPT_DIR/append-pipeline-event.sh"
 
 # Hub-state root holding this release's AI-NNN action-item ledger. OPERATOR-INSTANCE
 # content (<OPERATOR_INSTANCE_HUB_STATE_PATH>), never in the repo tree. Resolution is
-# the same 3-tier form WORKSPACE_ROOT and REPO_SLUG already use above, and the
-# append-pipeline-event.sh sibling uses for its own operator-instance path: env
-# override → operator.toml → canonical default. The env tier is load-bearing, not
-# incidental: it is what lets the self-test point the resolver at a sandbox instead
-# of the operator's live ledger.
+# the same env-override → operator.toml → canonical-default form WORKSPACE_ROOT and
+# REPO_SLUG already use above, and the append-pipeline-event.sh sibling uses for its
+# own operator-instance path. The env tier is load-bearing, not incidental: it is
+# what lets the self-test point the resolver at a sandbox instead of the operator's
+# live ledger.
+#
+# FOUR tiers now, not three, and the fourth is INHERITED rather than written here:
+# the canonical default is resolved through pmo_instance_path_for(), which honors
+# PMO_INSTANCE_PATH. So the composite precedence is
+#   $HUB_STATE_PATH → operator.toml operator_instance_hub_state_path
+#                   → $PMO_INSTANCE_PATH → the ${WORKSPACE_ROOT}-rooted default
+# and PMO_INSTANCE_PATH sits BELOW the operator.toml key — the inverse of the
+# resolver's own PMO_INSTANCE_PATH-is-highest convention, for this one surface.
+# That relation is defensible (a key naming THIS directory beats a coarse
+# whole-instance relocation) but it is new, so it is stated rather than inferred;
+# the ENV banner at the top of this file states the same ladder.
+#
+# BEHAVIOUR DELTA, stated rather than smuggled: on an instance relocated by
+# PMO_INSTANCE_PATH, hub-state now follows the instance root where before it
+# stayed behind at the ${WORKSPACE_ROOT}-rooted location. Measured: 1 of 4
+# configurations moves, and it moves toward canonical semantics — hub-state IS
+# operator-instance content, and the omission was an omission (the tier list this
+# very comment used to give did not mention PMO_INSTANCE_PATH at all), not a
+# decision. The env tier still wins, and --self-test reassigns HUB_STATE_PATH at
+# runtime, so no self-test or fixture verdict moves.
 #
 # THE `|| true` IS LOAD-BEARING AND WAS PROVEN SO BY BREAKING THIS SCRIPT. The key
 # is optional — most operator.toml files do not carry it — and this file runs under
@@ -335,7 +444,7 @@ if [[ -z "$HUB_STATE_PATH" ]] && [[ -r "${HOME}/.config/pmo-platform/operator.to
   _hs=$(/usr/bin/grep -m1 -E '^operator_instance_hub_state_path' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | /usr/bin/awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
   [[ -n "$_hs" ]] && HUB_STATE_PATH="$_hs"
 fi
-HUB_STATE_PATH="${HUB_STATE_PATH:-${WORKSPACE_ROOT}/personal/pmo-instance/hub-state}"
+HUB_STATE_PATH="${HUB_STATE_PATH:-$(pmo_instance_path_for "$WORKSPACE_ROOT")/hub-state}"
 # Close-class telemetry producer for the Phase 6.8 `**Close-Class-Telemetry:**`
 # field. Same form factor and same non-registration rationale as COMPUTE_VELOCITY
 # above — a TOOL dependency guarded inline by its consuming phase, not a fifth

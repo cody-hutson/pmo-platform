@@ -18,3 +18,4 @@ reversibility: CHEAP / Confidence HIGH
 Key entries:
 - [toolchain-operational-reference.md](toolchain-operational-reference.md) — non-obvious operational behaviors of the gh CLI, zsh, GitHub's repository/Projects surfaces, and a known third-party Claude plugin.
 - [claude-code-runtime-state.md](claude-code-runtime-state.md) — known Claude Code runtime-state surfaces: backups, session storage, keychain, env-var precedence.
+- [operator-instance-home-and-isolation-key.md](operator-instance-home-and-isolation-key.md) — how the operator-instance runtime-state family resolves today (the config/state split already in force), the resolved fork record governing its relocation out of the personal namespace, and the ordered slice plan the relocation build consumes.

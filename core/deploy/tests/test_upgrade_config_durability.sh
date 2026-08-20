@@ -1033,12 +1033,16 @@ fi
 #      CLAUDE.md has ever carried an installed_sha marker, so the tamper-backup
 #      path cannot fire on a first rewrite; this asserts the recovery copy the
 #      EXPENSIVE-reversibility write depends on exists REGARDLESS.
-c7_backup=$(find "${SBX}/ws" -maxdepth 2 -path '*/.backup-pre-update-*/CLAUDE.md' -print -quit 2>/dev/null)
+# The backup filename is tier-qualified (tier-basename), because a basename is
+# not unique across the manifest — two tiers resolve a target named CLAUDE.md.
+# A basename-only glob here would match whichever row happened to be backed up
+# and could not tell them apart.
+c7_backup=$(find "${SBX}/ws" -maxdepth 2 -path '*/.backup-pre-update-*/workspace-root-CLAUDE.md' -print -quit 2>/dev/null)
 if [ -n "${c7_backup}" ] && [ -f "${c7_backup}" ]; then
   report "C-7a pre-write backup of CLAUDE.md exists (unconditional, not tamper-gated)" 1
 else
   report "C-7a pre-write backup of CLAUDE.md exists (unconditional, not tamper-gated)" 0 \
-    "no .backup-pre-update-*/CLAUDE.md under ${SBX}/ws"
+    "no .backup-pre-update-*/workspace-root-CLAUDE.md under ${SBX}/ws"
 fi
 # The backup must be the PRE-regeneration content: it must NOT carry the delta.
 if [ -n "${c7_backup}" ] && ! grep -qF "c3831-claude-md-version-delta-probe" "${c7_backup}"; then
@@ -1072,15 +1076,23 @@ else
 fi
 
 # C-9: workspace-root resolver precedence — flag > env var > $HOME default.
-#      Observable signal: update.sh reports "Target absent (CLAUDE.md)" when the
-#      resolved root holds no CLAUDE.md, and a would-regenerate / unchanged line
-#      when it does. Run under --dry-run so no arm writes anything.
+#      Observable signal: update.sh reports "Target absent (CLAUDE.md, <tier>
+#      tier)" when the resolved root holds no CLAUDE.md for that tier, and a
+#      would-regenerate / unchanged line when it does. Run under --dry-run so no
+#      arm writes anything.
+#
+#      The probe is TIER-QUALIFIED, and must stay so. More than one manifest row
+#      resolves to a target named CLAUDE.md — the workspace-root charter and the
+#      operations-root context anchor — in different directories. A basename-only
+#      grep cannot tell which row reported absent, so it silently reports the
+#      WRONG file's absence and the C-9 precedence arms stop meaning what they
+#      say. Suite C's subject is the workspace-root tier; the probe names it.
 resolves_claude_md() {
-  # Echoes 1 when the run resolved a PRESENT CLAUDE.md, 0 when it reported the
-  # target absent. Reads the survey line rather than the exit code, because the
-  # exit code aggregates every manifest row.
+  # Echoes 1 when the run resolved a PRESENT workspace-root CLAUDE.md, 0 when it
+  # reported that target absent. Reads the survey line rather than the exit code,
+  # because the exit code aggregates every manifest row.
   local out="$1"
-  if grep -qE 'Target absent \(CLAUDE\.md\)' <<<"${out}"; then
+  if grep -qE 'Target absent \(CLAUDE\.md, workspace-root tier\)' <<<"${out}"; then
     printf '0'
   else
     printf '1'
@@ -1115,9 +1127,9 @@ mkdir -p "${SBX}/emptyroot"
 c9d_out=$(bash "${REPONEXT}/update.sh" --dry-run \
   --config-root "${SBX}/config" --workspace-root "${SBX}/emptyroot" 2>&1)
 if [ "$(resolves_claude_md "${c9d_out}")" = "0" ]; then
-  report "C-9d specificity control: an empty root DOES report 'Target absent (CLAUDE.md)'" 1
+  report "C-9d specificity control: an empty root DOES report 'Target absent (CLAUDE.md, workspace-root tier)'" 1
 else
-  report "C-9d specificity control: an empty root DOES report 'Target absent (CLAUDE.md)'" 0 \
+  report "C-9d specificity control: an empty root DOES report 'Target absent (CLAUDE.md, workspace-root tier)'" 0 \
     "empty root did not report absent — BROKEN PROBE, C-9a/b/c are meaningless"
 fi
 

@@ -2731,13 +2731,31 @@ build_skill_to_dir() {
 # cowork_install_path readers near the top of this script + detect_install_path):
 # a grep-rung TOML extractor, no YAML/JSON parser, no new dependency.
 #
-# Rungs read (lowest -> highest precedence; first hit at the highest rung wins):
-#   1. global default   <- core/config/platform-config.toml.template (this repo) OR
-#                          ~/.config/pmo-platform/platform-config.toml managed body
+# Rungs read (lowest -> highest precedence; the LAST rung that sets the field wins):
+#   1. global default   <- core/config/platform-config.toml.template (this repo)
 #   2. portfolio        <- $CLAUDE_WORKSPACE_ROOT/projects/_config/PORTFOLIO.md frontmatter (optional)
 #   3. program          <- $CLAUDE_WORKSPACE_ROOT/projects/<Program>/_config/program-config.toml (optional)
 #   4. project          <- <project-path>/PROJECT.md frontmatter (optional; arg 2)
-#   5. individual       <- ~/.config/pmo-platform/platform-config.toml [overrides] (optional)
+#   5. individual       <- ~/.config/pmo-platform/platform-config.toml (optional)
+#
+# PRECEDENCE — the individual rung is read LAST because it is HIGHEST. Rule 1 is
+# explicit that an individual operator's explicit override is the most-specific
+# intent and wins even over a project setting. This reader previously folded the
+# XDG file in at rung 1 and then let rungs 2-4 overwrite it, which made the
+# operator's own value the LOWEST-precedence Layer-2 rung — the exact inversion
+# of the governed order, and silent: a flat `key = value` line in PORTFOLIO.md or
+# PROJECT.md won over the operator's explicit setting with no diagnostic. The
+# rung-1 alternative source ("or the installed managed body") is gone with it:
+# the platform-config template is a Universal file read in place from the clone
+# and the package installs no runtime copy of it, so the XDG file is unambiguously
+# the operator's individual surface and nothing else.
+#
+# KNOWN AND DELIBERATELY UNCHANGED HERE: this reader is section-BLIND. It matches
+# `<field> = <value>` anywhere in the XDG file rather than only under [overrides],
+# while master-enable.sh and platform-toggle.sh are section-aware. That is a
+# separate defect about WHICH KEYS are read; the correction above is about WHICH
+# RUNG WINS. Making this reader section-aware is tracked on its own and must not
+# be inferred from this change.
 #
 # Layer-2 rungs (2-5) are operator-instance + git-ignored; on a bare repo clone
 # they are absent and the reader falls through to rung 1. The global rung-1
@@ -2776,11 +2794,9 @@ resolve_platform_config() {
 
   local val="" hit=""
 
-  # Rung 1 — global default (in-repo template, or installed managed body).
+  # Rung 1 — global default (in-repo template; the package installs no runtime copy).
   hit="$(_toml_field "$tmpl" "$field")"
   [ -n "$hit" ] && val="$hit"
-  hit="$(_toml_field "${cfg_root}/platform-config.toml" "$field")"
-  [ -n "$hit" ] && val="$hit"   # installed instance overrides the repo template at the global rung
 
   # Rung 2 — portfolio (PORTFOLIO.md frontmatter platform_config block; flat key match).
   hit="$(_toml_field "${ws_root}/projects/_config/PORTFOLIO.md" "$field")"
@@ -2802,10 +2818,11 @@ resolve_platform_config() {
     [ -n "$hit" ] && val="$hit"
   fi
 
-  # Rung 5 — individual (highest precedence). The installed instance's value was
-  # already folded at rung 1; a dedicated [overrides] section read-by-section is a
-  # future hardening — the global rung-1 read of the installed instance is the
-  # operative individual value today.
+  # Rung 5 — individual (HIGHEST precedence, per OPERATIONS.md Rule 1). Read LAST
+  # so an operator's explicit override wins over rungs 1-4. Section-blind by
+  # design-debt, not by intent — see the header note.
+  hit="$(_toml_field "${cfg_root}/platform-config.toml" "$field")"
+  [ -n "$hit" ] && val="$hit"
 
   printf '%s' "$val"
 }
@@ -5853,9 +5870,19 @@ cmd_check() {
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 19: Pipeline-event-log integrity"
     # Class A — operator-instance runtime state. Resolved through the SHARED
-    # resolver in lib-instance-path.sh (sourced above), which is the same surface
-    # append-pipeline-event.sh writes through, so the reader and the writer of
-    # these two files can never disagree about where they live (#4051).
+    # resolver in lib-instance-path.sh (sourced above). That resolver is now the
+    # single resolution site: append-pipeline-event.sh (the writer) and
+    # query-pipeline-event.sh (its reader) both CALL it rather than each carrying
+    # a copy of the ladder, so this check cannot look somewhere the writer does
+    # not write (#4051, corrected by #5634).
+    #
+    # It could before. Until #5634 the resolver's rung-3 base was two steps while
+    # the writer's was four, so on an instance setting $WORKSPACE_ROOT or the
+    # operator.toml claude_workspace_root key this check resolved to a directory
+    # that never held the log — and 19a took its benign-absence SKIP branch, so
+    # 19b and 19c never ran there. A new 19b/19c finding on such an instance after
+    # upgrading is a PRE-EXISTING condition this check can finally see, not a
+    # regression introduced by the path change.
     local c19_evals_dir="$(pmo_evals_results_path)"
     local c19_log="$c19_evals_dir/pipeline-event-log.md"
     local c19_write_log="$c19_evals_dir/pipeline-event-log-write.log"

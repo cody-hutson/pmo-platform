@@ -192,6 +192,84 @@ test_case "AC-AP-015c: piped chain with /usr/bin/rm blocks (composes with EXT-CH
 test_case "AC-AP-015d: quoted '/usr/bin/rm' as grep pattern allows (false-positive guard)" \
   "$(bash_payload 'cat /tmp/log.txt | grep "/usr/bin/rm called"')" 0
 
+# ----- EXT-POS: command-start position coverage (#5644) -----
+#
+# The anchor recognises a command start only at line-start or after `;&|`. Every case
+# below is the IDENTICAL deletion of the IDENTICAL absolute literal, moved to a position
+# the anchor could not see; each one allowed before the shared canonicalizer
+# (core/hooks/lib/command-position.awk) landed. One case per closed family.
+
+test_case "EXT-POS1: one-line function body blocks (grouping)" \
+  "$(bash_payload 'cleanup() { rm -rf /tmp/foo; }')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS2: brace group blocks (grouping)" \
+  "$(bash_payload '{ rm -rf /tmp/foo; }')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS3: subshell blocks (grouping)" \
+  "$(bash_payload '( rm -rf /tmp/foo )')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS4: then-branch blocks (compound keyword)" \
+  "$(bash_payload 'if true; then rm /tmp/foo; fi')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS5: do-body blocks (compound keyword)" \
+  "$(bash_payload 'for f in a; do rm /tmp/foo; done')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS6: sudo prefix blocks (command-prefix word)" \
+  "$(bash_payload 'sudo rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS7: assignment prefix blocks (VAR=value)" \
+  "$(bash_payload 'FOO=1 rm /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS8: escaped verb blocks (backslash-rm)" \
+  "$(bash_payload '\rm /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+# xargs feeds the verb from stdin, so there is no argv target to resolve. The
+# canonicalizer emits the $XARGS-STDIN sentinel, which routes to the EXISTING
+# unresolvable-under-strict-policy branch — no new rule ID, no new message.
+test_case "EXT-POS9: xargs-fed rm blocks via the existing unresolvable branch" \
+  "$(bash_payload 'echo /tmp/foo | xargs rm -rf')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS10: case-arm blocks (compound keyword)" \
+  "$(bash_payload 'case x in a) rm /tmp/foo;; esac')" 2 "BLOCK-TRASH-001"
+
+# ----- EXT-FP: false-positive guards for the widened positions (#5644) -----
+#
+# Shell text carried AS CONTENT is not a command. These are ordinary engineering commands
+# and every one of them must stay allowed — a guard that fires on them gets disabled by
+# the operator, which is a worse security outcome than the gap it closed. EXT-FP2 and
+# EXT-FP3 were blocked BEFORE this change (the anchor matched the `;` inside the quoted
+# span); quote-neutralisation is what makes them allow.
+
+test_case "EXT-FP1: sed program containing rm allows" \
+  "$(bash_payload 'sed '"'"'s/(rm foo)/X/'"'"' file.txt')" 0
+
+test_case "EXT-FP2: writing a shell script as quoted content allows" \
+  "$(bash_payload 'echo "cleanup() { rm -rf /tmp/x; }" > s.sh')" 0
+
+test_case "EXT-FP3: printf of a quoted brace group allows" \
+  "$(bash_payload 'printf '"'"'%s'"'"' '"'"'{ rm -rf /tmp/x; }'"'"'')" 0
+
+test_case "EXT-FP4: grep alternation containing rm allows" \
+  "$(bash_payload 'grep -E '"'"'(rm |mv)'"'"' file.txt')" 0
+
+test_case "EXT-FP5: commit message mentioning rm allows" \
+  "$(bash_payload 'git commit -m "guard the (rm foo) case"')" 0
+
+test_case "EXT-FP6: brace EXPANSION is not a group command (no split)" \
+  "$(bash_payload 'cat {a,b}.txt')" 0
+
+test_case "EXT-FP7: escaped parens are literal, not grouping" \
+  "$(bash_payload 'find . \( -name a \) -print')" 0
+
+# ----- EXT-RES: residual boundary, pinned deliberately (#5644) -----
+#
+# This is an ALLOW assertion on purpose. `bash -c '…'` is the documented nested-shell
+# residual in core/rules/bypass-mode-readiness.md, carrying an explicit deferral decision.
+# Pinning it means a future parser migration has a fixture that MUST flip, rather than a
+# silent behaviour change nobody notices.
+test_case "EXT-RES1: nested-shell program string allows (documented residual, not a defect)" \
+  "$(bash_payload 'bash -c '"'"'rm /tmp/foo'"'"'')" 0
+
 # ----- CLAUDE_HOOK_BYPASS escape hatch -----
 
 test_case "CLAUDE_HOOK_BYPASS bypass allows" \
