@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.33 (2026-08-20) — A settled home for operator files, and an undo for hook updates
+
 ### v4.32 (2026-08-16) — A release's plan is now named by the release, not by hand
 
 ### v4.31 (2026-08-16) — Security controls now judge what a command does, not how it is written

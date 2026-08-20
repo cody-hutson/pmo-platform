@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.33] - 2026-08-20
+
+Your personal platform files get a defined home, and a bad hook update can now be undone after the fact.
+
+[Full notes](release/releases/notes/v4.33_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.33)
+
 ## [v4.32] - 2026-08-16
 
 A release plan now takes its name at the moment the version is claimed, and a release cannot close while name and record disagree.
