@@ -3034,6 +3034,13 @@ rebootstrap() {
   # Baselines are recorded there, arm-scoped to the arms that actually wrote.
   substitute_templates
   scaffold_settings_local
+  # Durable pre-write snapshot (#5669), the same guarantee refresh_hooks_flow takes and for
+  # the same reason: this flow is where a plain re-run over a HEALTHY workspace lands, so a
+  # live bundle almost always exists here and install_hooks is about to overwrite it. Taken
+  # BEFORE the first byte, so an untrapped kill inside the hooks-copied / library-absent
+  # window stays recoverable after SESSION_TMPDIR is gone. fresh_install deliberately takes
+  # no snapshot -- it runs only when there is no existing bundle to capture.
+  capture_durable_hook_snapshot
   install_hooks
   configure_hook_activation
   install_composition_surface_files
@@ -3389,8 +3396,11 @@ PY
 #      (#4447, open; refresh with update.sh --surfaces-only, not deploy.sh).
 #      So this must be ordered AFTER allowlist reconciliation -- an ordering only
 #      an operator can honor.
-#   3. It is the operator-executed precondition the release records as AI-004 member 1.
-#      Merging the repository change must not, by itself, alter live enforcement state.
+#   3. It is an operator-executed precondition: merging the repository change must not,
+#      by itself, alter live enforcement state. (This previously cited a bare "AI-004".
+#      Action-item ids are release-scoped and reused -- AI-001 appears in seven plans --
+#      so an unqualified id resolves to several unrelated items, and this one matched
+#      none of them. Cite such ids as "<release> AI-NNN" or not at all.)
 #
 # Idempotent, backup-first, and reversible: delete the PreToolUse key from the target
 # (or restore the .bak) and the prior posture returns immediately.
