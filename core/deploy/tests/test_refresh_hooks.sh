@@ -441,8 +441,8 @@ printf '    [counts] pre-refresh bundle=%s file(s); durable generation=%s\n' "${
 # --- 11-order: the capture PRECEDES the first write. This is the property that makes an
 # untrapped kill survivable at all: if the snapshot were taken after the hooks were copied,
 # a kill inside the window would still have nothing to restore from.
-first_snap="$(printf '%s\n' "${OUT}" | grep -n 'DURABLE SNAPSHOT:' | head -n1 | cut -d: -f1)"
-first_write="$(printf '%s\n' "${OUT}" | grep -nE 'REFRESHED:|INSTALLED:' | head -n1 | cut -d: -f1)"
+first_snap="$(grep -n -m1 'DURABLE SNAPSHOT:' <<<"${OUT}" | cut -d: -f1)"
+first_write="$(grep -nE -m1 'REFRESHED:|INSTALLED:' <<<"${OUT}" | cut -d: -f1)"
 if [ -n "${first_snap}" ] && [ -n "${first_write}" ] && [ "${first_snap}" -lt "${first_write}" ]; then
   report "11-order: the durable capture is emitted BEFORE the first bundle write" 1
 else

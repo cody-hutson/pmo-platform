@@ -1998,7 +1998,7 @@ prune_durable_hook_snapshots() {
   drop=$((total - HOOK_BACKUP_RETAIN))
   # Oldest-first, and only names that matched the generation pattern above -- the store is
   # never blind-rm'd, and anything an operator parked here by hand is left untouched.
-  for victim in $(printf '%s\n' "${gens}" | head -n "${drop}"); do
+  for victim in $(head -n "${drop}" <<<"${gens}"); do
     rm -rf "${root:?}/${victim}" 2>/dev/null \
       && info "PRUNED durable snapshot (retention ${HOOK_BACKUP_RETAIN}): ${victim}" \
       || warn "could not prune durable snapshot ${victim}"
