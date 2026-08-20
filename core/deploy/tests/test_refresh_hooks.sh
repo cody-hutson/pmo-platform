@@ -648,6 +648,126 @@ fi
      "the prune deleted an entry it did not create"
 printf '    [counts] 7 refreshes -> %s generation(s) retained (bound = 5)\n' "${n_f}"
 
+
+printf '\nCase 12: rebootstrap captures a durable snapshot BEFORE rewriting the bundle (#5669)\n'
+# refresh_hooks_flow was the only capture-bearing write path #5662 covered. rebootstrap also
+# calls install_hooks, and it is the flow a plain re-run over a HEALTHY workspace routes to --
+# so it is the path most likely to overwrite a live bundle, and it had no capture at all.
+# Nothing in this file exercised rebootstrap before this case, which is why that survived.
+CFG12="${SBX}/cfg12"; mkdir -p "${CFG12}"
+pre_gens12="$(gens_in "${CFG12}" | wc -l | tr -d ' ')"
+WS="${SBX}/ws12"; deploy_ws "${WS}"
+# Unlike --refresh-hooks, rebootstrap resolves the full operator token set and PROMPTS for any
+# it cannot find. With no operator.toml under CFG12 the run dies on "Prompt input failed
+# (stdin closed?)" before install_hooks is ever reached -- observed, and the reason this arm
+# needs a fixture identity where the refresh arms do not. Values are deliberately synthetic:
+# this file ships in a public repository.
+{
+  printf '[meta]\nschema_version = 1\n\n[identity]\n'
+  printf 'operator_name = "Test Operator"\n'
+  printf 'operator_email = "operator@example.invalid"\n'
+  printf 'operator_git_email = "operator@example.invalid"\n'
+  printf 'operator_github = "example-operator"\n'
+  printf 'operator_phone = ""\n'
+  printf 'operator_role_title = "Test Role"\n'
+  printf 'operator_organization = "Example Org"\n\n[paths]\n'
+  printf 'claude_workspace_root = "%s"\n' "${WS}"
+  printf 'operator_homedir_path = "%s"\n' "${SBX}/home12"
+  printf 'cowork_install_path = "%s"\n' "${SBX}/cowork12"
+} > "${CFG12}/operator.toml"
+# Route the dispatcher to rebootstrap. It picks that branch only for a state file whose schema
+# matches AND whose verification_passed is true -- i.e. what an already-installed, healthy
+# workspace looks like. Anything else lands on fresh-install or guided recovery, and this arm
+# would then be measuring a different flow entirely.
+python3 - "${WS}/.claude/.workspace-setup.state" <<'PY'
+import json, sys
+st = sys.argv[1]
+d = json.load(open(st))
+d["schema_version"] = "1.0"
+d["verification_passed"] = True
+json.dump(d, open(st, "w"))
+PY
+pre_n12="$(n_bundle_files "${WS}/.claude/hooks")"
+# Bytes of a hook as they stand BEFORE rebootstrap runs. This -- not the post-rebootstrap
+# value -- is what a restore must return, because the capture is taken before the first write.
+pre_sha_egress12="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+rc12=0
+# --non-interactive resolves every token from its declared default instead of prompting.
+# Required here: [OPERATOR_PROJECT_NAME] is not an operator.toml field at all, and an
+# operator_phone set to "" is read as unset, so even a complete fixture still blocks on a
+# prompt. No flag is passed to the refresh arms because that path resolves no tokens.
+OUT12="$(bash "${SETUP}" --non-interactive --workspace-root "${WS}" --source-repo "${REPO_ROOT}" --config-root "${CFG12}" 2>&1)" || rc12=$?
+post_gens12="$(gens_in "${CFG12}" | wc -l | tr -d ' ')"
+post_n12="$(n_bundle_files "${WS}/.claude/hooks")"
+mode12="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("install_mode",""))' "${WS}/.claude/.workspace-setup.state" 2>/dev/null || true)"
+
+# --- 12-mode: the anti-vacuity control. If the dispatcher did not actually route to
+# rebootstrap, every arm below is measuring some other flow and proves nothing about #5669.
+if [ "${mode12}" = "rebootstrapped" ]; then
+  report "12-mode: the run actually routed to rebootstrap (not fresh-install or recovery)" 1
+else
+  report "12-mode: the run actually routed to rebootstrap (not fresh-install or recovery)" 0 \
+    "install_mode=${mode12:-unset} exit=${rc12} -- the arms below are vacuous unless this is rebootstrapped"
+  # A failing anti-vacuity control has to say WHY, or the next reader re-derives it from
+  # scratch. Print the run's own tail rather than making them reproduce the invocation.
+  printf '         --- rebootstrap run tail ---\n'
+  printf '%s\n' "${OUT12}" | tail -n 12 | sed 's/^/         | /'
+fi
+
+# --- 12-control: a rebootstrap over a healthy workspace deposits exactly one generation.
+# pre must be 0 or the count proves nothing about THIS run.
+if [ "${pre_gens12}" = "0" ] && [ "${post_gens12}" = "1" ]; then
+  report "12-control: rebootstrap creates exactly 1 durable generation (0 -> 1)" 1
+else
+  report "12-control: rebootstrap creates exactly 1 durable generation (0 -> 1)" 0 \
+    "pre=${pre_gens12} post=${post_gens12} exit=${rc12} -- pre must be 0 or the arm is vacuous"
+fi
+
+# --- 12-order: the capture PRECEDES the first bundle write, the same property Case 11 pins
+# for the refresh flow. A capture taken after install_hooks would leave an untrapped kill
+# inside the write window with nothing to restore from, which is the whole point of #5669.
+snap12="$(grep -n -m1 'DURABLE SNAPSHOT:' <<<"${OUT12}" | cut -d: -f1)"
+write12="$(grep -nE -m1 'REFRESHED:|INSTALLED:' <<<"${OUT12}" | cut -d: -f1)"
+if [ -n "${snap12}" ] && [ -n "${write12}" ] && [ "${snap12}" -lt "${write12}" ]; then
+  report "12-order: rebootstrap emits the durable capture BEFORE its first bundle write" 1
+else
+  report "12-order: rebootstrap emits the durable capture BEFORE its first bundle write" 0 \
+    "snapshot-line=${snap12:-none} first-write-line=${write12:-none} exit=${rc12}"
+fi
+printf '    [counts] pre-rebootstrap bundle=%s file(s); post=%s; generation=%s\n' \
+  "${pre_n12}" "${post_n12}" "$(latest_gen_in "${CFG12}")"
+
+# --- 12a (AC-2): the captured generation is actually RECOVERABLE. Capture plus correct
+# ordering still proves nothing if the snapshot cannot be restored from -- that is the
+# difference between a backup and a directory of files. Damage the rebootstrapped bundle,
+# then recover from the generation rebootstrap itself deposited.
+# The generation holds the PRE-rebootstrap bundle, so a correct restore lands on pre_n12
+# files and the pre-rebootstrap bytes -- NOT on the post-rebootstrap state. Asserting the
+# post-state here would pass only if the capture had been taken AFTER the write, which is
+# precisely the defect #5669 exists to prevent. Observed 34 -> 33 -> 27 while getting this
+# expectation backwards.
+dmg12="${WS}/.claude/hooks/block-egress.sh"
+printf '#!/bin/bash\n# DAMAGED-12\nexit 0\n' > "${dmg12}"
+rm -f "${WS}/.claude/hooks/lib/positional-issueref.awk"
+dmg_n12="$(n_bundle_files "${WS}/.claude/hooks")"
+rc12r=0
+bash "${SETUP}" --restore-hooks --workspace-root "${WS}" --source-repo "${REPO_ROOT}" --config-root "${CFG12}" >/dev/null 2>&1 || rc12r=$?
+rec_n12="$(n_bundle_files "${WS}/.claude/hooks")"
+rec_sha12="$(sha "${dmg12}")"
+if [ "${dmg_n12}" -lt "${post_n12}" ]; then
+  report "12a-pre: the damage actually removed a file (so recovery has work to do)" 1
+else
+  report "12a-pre: the damage actually removed a file (so recovery has work to do)" 0 \
+    "post=${post_n12} damaged=${dmg_n12} -- the recovery arm below would be vacuous"
+fi
+if [ "${rc12r}" -eq 0 ] && [ "${rec_n12}" = "${pre_n12}" ] && [ "${rec_sha12}" = "${pre_sha_egress12}" ]; then
+  report "12a (AC-2): a damaged bundle is recovered to its PRE-rebootstrap state" 1
+else
+  report "12a (AC-2): a damaged bundle is recovered to its PRE-rebootstrap state" 0 \
+    "exit=${rc12r} files ${dmg_n12}->${rec_n12} (expected ${pre_n12}); bytes restored=$([ "${rec_sha12}" = "${pre_sha_egress12}" ] && echo yes || echo no)"
+fi
+printf '    [counts] rebootstrapped=%s file(s) -> damaged=%s -> recovered=%s\n' \
+  "${post_n12}" "${dmg_n12}" "${rec_n12}"
 printf '\n======================================================================\n'
 printf 'test_refresh_hooks.sh: %d passed, %d failed (bash %s)\n' "${PASS}" "${FAIL}" "${BASH_VERSION}"
 printf '======================================================================\n'
