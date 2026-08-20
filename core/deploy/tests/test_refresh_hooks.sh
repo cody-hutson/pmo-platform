@@ -21,8 +21,10 @@
 #      only to be readable — the #4449 acceptance criterion as reframed and ratified
 #      (entrypoint implies executable; sourced library implies readable)
 #   9. a missing shared-library SOURCE ABORTS the refresh and ROLLS BACK, rather than
-#      warning and completing — and the rollback RESTORES overwritten bytes instead of
-#      deleting them (Cases 9a-9d)
+#      warning and completing — the abort is attributed to the co-deploy guard ITSELF
+#      rather than to a bare non-zero exit (9a), and the rollback RESTORES overwritten
+#      bytes instead of deleting them (9b, 9c) while REMOVING what the refresh newly
+#      created (9d) (Cases 9a-9d)
 #  10. the hook-library closure post-condition FAILS when a deployed hook references a
 #      library that is not present, and PASSES on a healthy refresh (Cases 10a-10d)
 #
@@ -254,10 +256,33 @@ depresolve_sha_before="$(sha "${WS}/.claude/hooks/lib/dep-resolve.sh")"
 rc=0
 OUT="$(bash "${SETUP}" --refresh-hooks --workspace-root "${WS}" --source-repo "${SRC_BROKEN}" 2>&1)" || rc=$?
 
-# 9a — the abort fires at all.
-[ "${rc}" -ne 0 ] \
-  && report "9a: missing library source ABORTS the refresh (exit ${rc})" 1 \
-  || report "9a: missing library source ABORTS the refresh" 0 "exit 0 — the install completed over a fail-closed bundle"
+# 9a — the abort fires, AND it is THIS guard that fired.
+#
+# The old shape asserted only `rc != 0`, which attributes a failure to nothing. `exit 74`
+# appears 11 times in setup-workspace.sh, so the exit CODE alone names no guard, and a bare
+# non-zero is satisfied equally by three different states this arm must tell apart: the
+# deliberate co-deploy abort, the Case-10 closure post-condition catching the SAME condition
+# one step later, and an unrelated incidental failure.
+#
+# Measured, not reasoned about (#5663): with the co-deploy abort removed ENTIRELY — the exact
+# regression this case exists to catch — the suite still reported 22 passed / 0 failed,
+# because assert_hook_lib_closure independently exits 74 on the same input and held this arm
+# green. Under a different mutation the arm passed on an incidental `cp` failure that exited 1.
+#
+# So the arm pins the two properties that are true ONLY of the co-deploy abort:
+#   - its own refusal line. The closure backstop rolls back too, but says something else
+#     ("Hook-library closure FAILED … rolling back to the pre-refresh bundle"), so this
+#     string separates the guard from its backstop.
+#   - exit 74 specifically, not merely non-zero. cleanup() skips rollback for 64/66/69/78,
+#     so an abort that exited one of those would leave the half-refreshed bundle in place.
+abort_sig='Refusing to leave the hook bundle in that state; rolling back.'
+sig_seen=no; grep -qF "${abort_sig}" <<<"${OUT}" && sig_seen=yes
+if [ "${rc}" -eq 74 ] && [ "${sig_seen}" = "yes" ]; then
+  report "9a: the co-deploy guard ITSELF aborts the refresh (exit 74 + its own refusal)" 1
+else
+  report "9a: the co-deploy guard ITSELF aborts the refresh (exit 74 + its own refusal)" 0 \
+    "exit ${rc}, co-deploy refusal seen=${sig_seen} — a bare non-zero is also produced by the closure backstop and by incidental failures, so it cannot attribute this abort"
+fi
 
 # 9b — the overwritten hook is RESTORED. This is the rollback limb Stage 10 could not
 # validate: git revert restores the repo, it does not restore .claude/hooks/.
@@ -277,10 +302,45 @@ else
     "a healthy pre-existing library did not survive the rollback"
 fi
 
-# 9d — the workspace is not left holding a half-deployed library.
-[ ! -f "${WS}/.claude/hooks/lib/command-position.awk" ] \
-  && report "9d: no partial library left behind" 1 \
-  || report "9d: no partial library left behind" 0
+# 9d — the rollback REMOVES a library this refresh created (the `rm-file` limb).
+#
+# The old shape asserted the ABSENCE of command-position.awk in ws6 above, and was vacuous
+# (#5663): deploy_ws never seeds that file and the plant deletes its only source, so the
+# co-deploy aborts BEFORE the file is ever written and the postcondition is already true
+# before the code under test runs. It passed in all five guard configurations measured —
+# including one where rollback deleted files outright, and one where no rollback op was
+# recorded at all. An assertion that holds equally under "rollback works", "rollback deletes
+# everything" and "no rollback at all" is not measuring rollback.
+#
+# Seeding the file into ws6 does NOT repair it. Measured: with command-position.awk seeded
+# into ws6, it is present before the refresh and still present after, because the abort fires
+# before the co-deploy touches it. That is CORRECT — deleting an operator's healthy copy is
+# the denial storm 9c exists to catch — so asserting its absence there would pin the
+# regression as the expected result.
+#
+# The limb 9d was reaching for ("no partial library left behind") is record_write_rollback's
+# rm-file branch: a target that did NOT exist pre-refresh is created, and the EXIT trap must
+# undo the creation. Nothing else in this file covers it — 9b and 9c both cover restore-file.
+# Observing it requires the file to actually BE created and then removed, so this arm uses its
+# own workspace and a HEALTHY source (command-position.awk co-deploys normally) and triggers
+# the abort one step later, with a deployed hook whose library nothing can satisfy.
+#
+# ANTI-VACUITY: the arm asserts the file WAS created, from the co-deploy's own INSTALLED line,
+# BEFORE reading its absence. Without that the postcondition is satisfied equally by "never
+# written at all" — which is precisely how the old arm passed.
+WS="${SBX}/ws6d"; deploy_ws "${WS}"
+printf '%s\n' '#!/bin/bash' 'readonly FAKE_LIB="${HOOK_DIR}/lib/no-such-lib.sh"' 'exit 0' \
+  > "${WS}/.claude/hooks/zz-rollback-fixture.sh"
+chmod +x "${WS}/.claude/hooks/zz-rollback-fixture.sh"
+rc=0; OUT="$(refresh "${WS}")" || rc=$?
+created=no; grep -qF 'INSTALLED: command-position.awk' <<<"${OUT}" && created=yes
+left=no; [ -f "${WS}/.claude/hooks/lib/command-position.awk" ] && left=yes
+if [ "${created}" = "yes" ] && [ "${rc}" -eq 74 ] && [ "${left}" = "no" ]; then
+  report "9d: rollback REMOVES a library this refresh created (rm-file limb)" 1
+else
+  report "9d: rollback REMOVES a library this refresh created (rm-file limb)" 0 \
+    "created=${created} exit=${rc} still-present=${left} — created=no would make the absence vacuous; still-present=yes means the creation was never undone"
+fi
 
 printf '\nCase 10: hook-library closure post-condition (PLANTED FAILURE + specificity)\n'
 # The refresh flow is the only flow with no verification gate. The closure post-condition is
