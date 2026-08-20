@@ -49,6 +49,14 @@ SETUP="${REPO_ROOT}/docs/scripts/setup-workspace.sh"
 SBX="$(mktemp -d -t refresh-hooks.XXXXXX)"
 trap 'rm -rf "${SBX}"' EXIT
 
+# CONFIG_ROOT ISOLATION (#5662). --refresh-hooks now captures a DURABLE snapshot, which by
+# design lives outside the workspace and outlives the run — so unless this suite pins
+# --config-root into its own sandbox, every refresh below would deposit generations into the
+# operator's real ${HOME}/.config/pmo-platform. Observed doing exactly that before this line
+# existed. Every invocation of ${SETUP} in this file MUST carry --config-root.
+CFGROOT="${SBX}/config"
+mkdir -p "${CFGROOT}"
+
 PASS=0
 FAIL=0
 report() {
@@ -75,7 +83,13 @@ cs = {os.path.basename(h): hashlib.sha256(open(h, "rb").read()).hexdigest()
 json.dump({"hook_checksums": cs}, open(out, "w"))
 PY
 }
-refresh() { bash "${SETUP}" --refresh-hooks --workspace-root "$1" --source-repo "${REPO_ROOT}" "${@:2}" 2>&1; }
+refresh() { bash "${SETUP}" --refresh-hooks --workspace-root "$1" --source-repo "${REPO_ROOT}" --config-root "${CFGROOT}" "${@:2}" 2>&1; }
+# restore <ws> [args...] — the #5662 recovery path, same CONFIG_ROOT so it sees the snapshots
+# the refreshes above deposited.
+restore() { bash "${SETUP}" --restore-hooks --workspace-root "$1" --source-repo "${REPO_ROOT}" --config-root "${CFGROOT}" "${@:2}" 2>&1; }
+# n_bundle_files <dir> — regular files in a deployed bundle, dotfiles included. The file
+# COUNT is the unit every #5662 recovery arm reports in, so it is derived once here.
+n_bundle_files() { find "$1" -type f 2>/dev/null | wc -l | tr -d ' '; }
 
 printf '\nCase 1-3: stale hook refreshed · missing hook libs co-deployed (awk + constants) · .mode preserved\n'
 WS="${SBX}/ws1"; deploy_ws "${WS}"
@@ -133,7 +147,7 @@ after="$(sha "${WS}/.claude/hooks/block-egress.sh")"
 [ "${before}" = "${after}" ] && report "--dry-run performs no mutation" 1 || report "--dry-run performs no mutation" 0
 
 printf '\nCase 7: non-existent workspace fails closed\n'
-rc=0; bash "${SETUP}" --refresh-hooks --workspace-root "${SBX}/nonexistent" --source-repo "${REPO_ROOT}" >/dev/null 2>&1 || rc=$?
+rc=0; bash "${SETUP}" --refresh-hooks --workspace-root "${SBX}/nonexistent" --source-repo "${REPO_ROOT}" --config-root "${CFGROOT}" >/dev/null 2>&1 || rc=$?
 [ "${rc}" -ne 0 ] && report "missing workspace exits non-zero" 1 || report "missing workspace exits non-zero" 0 "exit ${rc}"
 
 printf '\nCase 8: entrypoints carry +x; sourced libs need only be readable (#4449 AC-1 reframed)\n'
@@ -225,7 +239,7 @@ mk_src_mirror() {
 SRC_GOOD="${SBX}/src-good"; mk_src_mirror "${SRC_GOOD}"
 WS="${SBX}/ws6a"; deploy_ws "${WS}"
 rc=0
-OUT="$(bash "${SETUP}" --refresh-hooks --workspace-root "${WS}" --source-repo "${SRC_GOOD}" 2>&1)" || rc=$?
+OUT="$(bash "${SETUP}" --refresh-hooks --workspace-root "${WS}" --source-repo "${SRC_GOOD}" --config-root "${CFGROOT}" 2>&1)" || rc=$?
 if [ "${rc}" -eq 0 ] && [ -f "${WS}/.claude/hooks/lib/command-position.awk" ]; then
   report "9-control: the same mirror WITH the library refreshes cleanly (exit 0, library lands)" 1
 else
@@ -254,7 +268,7 @@ stale_sha="$(sha "${WS}/.claude/hooks/block-egress.sh")"
 depresolve_sha_before="$(sha "${WS}/.claude/hooks/lib/dep-resolve.sh")"
 
 rc=0
-OUT="$(bash "${SETUP}" --refresh-hooks --workspace-root "${WS}" --source-repo "${SRC_BROKEN}" 2>&1)" || rc=$?
+OUT="$(bash "${SETUP}" --refresh-hooks --workspace-root "${WS}" --source-repo "${SRC_BROKEN}" --config-root "${CFGROOT}" 2>&1)" || rc=$?
 
 # 9a — the abort fires, AND it is THIS guard that fired.
 #
@@ -386,6 +400,253 @@ case "${OUT}" in
     esac ;;
   *) report "10d: the PASS is measured, not vacuous (non-zero required set)" 0 "no closure PASS line emitted" ;;
 esac
+
+printf '\nCase 11: DURABLE rollback substrate — survives success AND untrapped kill (#5662)\n'
+# The in-run ledger (Cases 9a-9d) lives in SESSION_TMPDIR and dies with the run, so it covers
+# in-run failure ONLY. Case 11 exercises the substrate that outlives the run, and every arm
+# below is written so that it is FALSE before the code under test runs and TRUE after — the
+# vacuity defect #5663 found in the old 9d.
+
+gens_in() { ls -1 "$1/hook-bundle-backups" 2>/dev/null | grep -E '^[0-9]{8}T[0-9]{6}Z-[0-9]+$' | sort; }
+latest_gen_in() { gens_in "$1" | tail -n 1; }
+
+# --- 11-control: a refresh CREATES a durable generation, and the store was empty first.
+# Without the emptiness pre-check, "a generation exists" is satisfied by one left behind by
+# an earlier case in this file, and the arm would measure nothing.
+CFG11="${SBX}/cfg11"; mkdir -p "${CFG11}"
+pre_gens="$(gens_in "${CFG11}" | wc -l | tr -d ' ')"
+WS="${SBX}/ws11"; deploy_ws "${WS}"
+printf '#!/bin/bash\n# STALE-11\nexit 0\n' > "${WS}/.claude/hooks/block-egress.sh"
+python3 - "${WS}/.claude/.workspace-setup.state" <<'PY'
+import hashlib, json, os, sys
+st = sys.argv[1]
+d = json.load(open(st)); cs = d.get("hook_checksums", {})
+p = os.path.join(os.path.dirname(st), "hooks", "block-egress.sh")
+cs["block-egress.sh"] = hashlib.sha256(open(p, "rb").read()).hexdigest()
+d["hook_checksums"] = cs; json.dump(d, open(st, "w"))
+PY
+pre_sha11="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+pre_n11="$(n_bundle_files "${WS}/.claude/hooks")"
+rc=0; OUT="$(bash "${SETUP}" --refresh-hooks --workspace-root "${WS}" --source-repo "${REPO_ROOT}" --config-root "${CFG11}" 2>&1)" || rc=$?
+post_gens="$(gens_in "${CFG11}" | wc -l | tr -d ' ')"
+gen11="$(latest_gen_in "${CFG11}")"
+if [ "${pre_gens}" = "0" ] && [ "${rc}" -eq 0 ] && [ "${post_gens}" = "1" ]; then
+  report "11-control: a successful refresh creates exactly 1 durable generation (0 -> 1)" 1
+else
+  report "11-control: a successful refresh creates exactly 1 durable generation (0 -> 1)" 0 \
+    "pre=${pre_gens} exit=${rc} post=${post_gens} — pre must be 0 or the arm is vacuous"
+fi
+printf '    [counts] pre-refresh bundle=%s file(s); durable generation=%s\n' "${pre_n11}" "${gen11:-none}"
+
+# --- 11-order: the capture PRECEDES the first write. This is the property that makes an
+# untrapped kill survivable at all: if the snapshot were taken after the hooks were copied,
+# a kill inside the window would still have nothing to restore from.
+first_snap="$(printf '%s\n' "${OUT}" | grep -n 'DURABLE SNAPSHOT:' | head -n1 | cut -d: -f1)"
+first_write="$(printf '%s\n' "${OUT}" | grep -nE 'REFRESHED:|INSTALLED:' | head -n1 | cut -d: -f1)"
+if [ -n "${first_snap}" ] && [ -n "${first_write}" ] && [ "${first_snap}" -lt "${first_write}" ]; then
+  report "11-order: the durable capture is emitted BEFORE the first bundle write" 1
+else
+  report "11-order: the durable capture is emitted BEFORE the first bundle write" 0 \
+    "snapshot-line=${first_snap:-none} first-write-line=${first_write:-none}"
+fi
+
+# --- 11a (AC-1): roll back AFTER a refresh that already SUCCEEDED.
+# cleanup() has run with INSTALL_COMPLETE=1, so every in-run pre-write backup is gone. This
+# is the shape the ledger structurally cannot cover.
+post_sha11="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+if [ "${post_sha11}" != "${pre_sha11}" ]; then
+  report "11a-pre: the refresh actually CHANGED the hook (so the rollback has work to do)" 1
+else
+  report "11a-pre: the refresh actually CHANGED the hook (so the rollback has work to do)" 0 \
+    "hook unchanged — the restore arm below would be vacuous"
+fi
+rc=0; ROUT="$(bash "${SETUP}" --restore-hooks --workspace-root "${WS}" --source-repo "${REPO_ROOT}" --config-root "${CFG11}" 2>&1)" || rc=$?
+back_sha11="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+post_n11="$(n_bundle_files "${WS}/.claude/hooks")"
+if [ "${rc}" -eq 0 ] && [ "${back_sha11}" = "${pre_sha11}" ]; then
+  report "11a (AC-1): a SUCCEEDED refresh is rolled back from the durable snapshot" 1
+else
+  report "11a (AC-1): a SUCCEEDED refresh is rolled back from the durable snapshot" 0 \
+    "exit=${rc}; hook did not return to its pre-refresh bytes"
+fi
+printf '    [counts] %s\n' "$(printf '%s\n' "${ROUT}" | grep -E 'RESTORED:|REMOVED \(' | tr '\n' ' ')"
+
+# --- 11b (AC-2): an UNTRAPPED KILL leaves a recoverable state.
+# Two properties, measured separately.
+#   11b-1: the store SURVIVES SIGKILL. The refresh is backgrounded and killed with -9 once its
+#          generation is on disk; -9 runs no EXIT trap, so nothing cleans up after it.
+#   11b-2: recovery from the exact damaged state that window leaves (hooks new, library
+#          absent) succeeds, with counts.
+CFG11B="${SBX}/cfg11b"; mkdir -p "${CFG11B}"
+WS="${SBX}/ws11b"; deploy_ws "${WS}"
+bash "${SETUP}" --refresh-hooks --workspace-root "${WS}" --source-repo "${REPO_ROOT}" --config-root "${CFG11B}" >/dev/null 2>&1 &
+bg_pid=$!
+i=0; gen11b=""
+while [ "${i}" -lt 4000 ]; do
+  gen11b="$(latest_gen_in "${CFG11B}")"
+  [ -n "${gen11b}" ] && break
+  i=$((i + 1))
+done
+kill -9 "${bg_pid}" 2>/dev/null
+wait "${bg_pid}" 2>/dev/null
+# The generation must be on disk AND complete after a kill that ran no trap.
+man11b="${CFG11B}/hook-bundle-backups/${gen11b}/MANIFEST.tsv"
+if [ -n "${gen11b}" ] && [ -s "${man11b}" ]; then
+  n_man11b="$(wc -l < "${man11b}" | tr -d ' ')"
+  report "11b-1 (AC-2): the durable generation survives SIGKILL (no EXIT trap ran)" 1
+else
+  n_man11b=0
+  report "11b-1 (AC-2): the durable generation survives SIGKILL (no EXIT trap ran)" 0 \
+    "generation=${gen11b:-none} manifest=${man11b}"
+fi
+printf '    [counts] generation %s carries %s manifested file(s) after SIGKILL\n' "${gen11b:-none}" "${n_man11b}"
+
+# 11b-2 — reproduce the hooks-copied / library-absent state the window leaves, then recover.
+# This is the state Stage 10 measured at 412/871 assertions flipping to deny, in which an
+# agent's own shell calls are denied and nothing can self-repair.
+rm -rf "${WS}/.claude/hooks/lib"
+damaged_n="$(n_bundle_files "${WS}/.claude/hooks")"
+lib_before="$([ -d "${WS}/.claude/hooks/lib" ] && echo present || echo absent)"
+rc=0; ROUT="$(bash "${SETUP}" --restore-hooks --workspace-root "${WS}" --source-repo "${REPO_ROOT}" --config-root "${CFG11B}" 2>&1)" || rc=$?
+recovered_n="$(n_bundle_files "${WS}/.claude/hooks")"
+lib_after="$([ -d "${WS}/.claude/hooks/lib" ] && echo present || echo absent)"
+if [ "${lib_before}" = "absent" ] && [ "${rc}" -eq 0 ] && [ "${lib_after}" = "present" ] && [ "${recovered_n}" = "${n_man11b}" ]; then
+  report "11b-2 (AC-2): the hooks-new/library-absent state is recovered from the durable snapshot" 1
+else
+  report "11b-2 (AC-2): the hooks-new/library-absent state is recovered from the durable snapshot" 0 \
+    "lib before=${lib_before} after=${lib_after} exit=${rc} recovered=${recovered_n} expected=${n_man11b}"
+fi
+printf '    [counts] damaged=%s file(s) -> recovered=%s file(s) (manifest=%s)\n' "${damaged_n}" "${recovered_n}" "${n_man11b}"
+
+# --- 11c (AC-3): the restore REMOVES a file the restored generation does not carry.
+# ANTI-VACUITY is the whole point here: the arm asserts the file is PRESENT before the
+# restore. Asserting only its absence afterwards passes equally when it was never created.
+CFG11C="${SBX}/cfg11c"; mkdir -p "${CFG11C}"
+WS="${SBX}/ws11c"; deploy_ws "${WS}"
+rc=0; bash "${SETUP}" --refresh-hooks --workspace-root "${WS}" --source-repo "${REPO_ROOT}" --config-root "${CFG11C}" >/dev/null 2>&1 || rc=$?
+# A file introduced AFTER the snapshot — the "release-added file" `cp -R` would leave behind.
+printf '# added by a later release\n' > "${WS}/.claude/hooks/lib/zz-release-added.sh"
+added_before="$([ -f "${WS}/.claude/hooks/lib/zz-release-added.sh" ] && echo present || echo absent)"
+keeper_sha="$(sha "${WS}/.claude/hooks/lib/dep-resolve.sh")"
+rc=0; ROUT="$(bash "${SETUP}" --restore-hooks --workspace-root "${WS}" --source-repo "${REPO_ROOT}" --config-root "${CFG11C}" 2>&1)" || rc=$?
+added_after="$([ -f "${WS}/.claude/hooks/lib/zz-release-added.sh" ] && echo present || echo absent)"
+if [ "${added_before}" = "present" ] && [ "${rc}" -eq 0 ] && [ "${added_after}" = "absent" ]; then
+  report "11c (AC-3): the restore REMOVES a release-added file (present before, absent after)" 1
+else
+  report "11c (AC-3): the restore REMOVES a release-added file (present before, absent after)" 0 \
+    "before=${added_before} exit=${rc} after=${added_after} — before=absent makes this vacuous"
+fi
+# SPECIFICITY — removal is targeted, not a wipe: a file the manifest DOES carry survives, byte-identical.
+if [ -f "${WS}/.claude/hooks/lib/dep-resolve.sh" ] && [ "$(sha "${WS}/.claude/hooks/lib/dep-resolve.sh")" = "${keeper_sha}" ]; then
+  report "11c-specificity: a manifested file SURVIVES the same restore, byte-identical" 1
+else
+  report "11c-specificity: a manifested file SURVIVES the same restore, byte-identical" 0 \
+    "the removal pass is deleting manifested files — that is a wipe, not a restore"
+fi
+printf '    [counts] %s\n' "$(printf '%s\n' "${ROUT}" | grep -E 'RESTORED:|REMOVED \(' | tr '\n' ' ')"
+
+# --- 11d: MUTATION — the capture's zero-file FAILED-PROBE guard.
+# A guard that has not been watched firing is not accepted as working. `exit 74` appears many
+# times in setup-workspace.sh, so the arm pins the guard's OWN message, not the exit code.
+CFG11D="${SBX}/cfg11d"; mkdir -p "${CFG11D}"
+WS="${SBX}/ws11d"; mkdir -p "${WS}/.claude/hooks"          # an EMPTY bundle — the plant
+rc=0; OUT="$(bash "${SETUP}" --refresh-hooks --workspace-root "${WS}" --source-repo "${REPO_ROOT}" --config-root "${CFG11D}" 2>&1)" || rc=$?
+if grep -qF 'manifested ZERO files' <<<"${OUT}" && [ "${rc}" -eq 74 ]; then
+  report "11d MUTATION: the zero-file capture guard FIRES on an empty bundle (own message + 74)" 1
+else
+  report "11d MUTATION: the zero-file capture guard FIRES on an empty bundle (own message + 74)" 0 \
+    "exit=${rc}; guard message not seen — a bare non-zero here is also produced by other guards"
+fi
+# and it leaves NO half-written generation behind.
+n_d="$(gens_in "${CFG11D}" | wc -l | tr -d ' ')"
+[ "${n_d}" = "0" ] \
+  && report "11d: the failed capture records no generation (no half-written snapshot)" 1 \
+  || report "11d: the failed capture records no generation (no half-written snapshot)" 0 "found ${n_d}"
+
+# --- 11e: MUTATION — the restore's N/N verification guard.
+# Corrupt one file INSIDE a captured generation so the bytes the restore lays down no longer
+# match the manifest sha. The restore must refuse rather than report a green recovery.
+CFG11E="${SBX}/cfg11e"; mkdir -p "${CFG11E}"
+WS="${SBX}/ws11e"; deploy_ws "${WS}"
+bash "${SETUP}" --refresh-hooks --workspace-root "${WS}" --source-repo "${REPO_ROOT}" --config-root "${CFG11E}" >/dev/null 2>&1
+gen11e="$(latest_gen_in "${CFG11E}")"
+# CONTROL ARM FIRST — the untouched generation restores cleanly. Without it, the failure
+# below could be attributable to the generation being unusable rather than to the corruption.
+# The generation is named EXPLICITLY: a restore takes its own snapshot first, so "newest"
+# after the control run is the control's own snapshot, not gen11e — naming it is what keeps
+# the plant and the control pointed at the same bytes.
+rc=0; bash "${SETUP}" --restore-hooks "${gen11e}" --workspace-root "${WS}" --source-repo "${REPO_ROOT}" --config-root "${CFG11E}" >/dev/null 2>&1 || rc=$?
+[ "${rc}" -eq 0 ] \
+  && report "11e-control: the UNCORRUPTED generation restores cleanly (exit 0)" 1 \
+  || report "11e-control: the UNCORRUPTED generation restores cleanly (exit 0)" 0 "exit ${rc}"
+# THE PLANT — same generation, one file's bytes changed, manifest left alone.
+printf 'corrupted\n' > "${CFG11E}/hook-bundle-backups/${gen11e}/bundle/lib/dep-resolve.sh"
+rc=0; OUT="$(bash "${SETUP}" --restore-hooks "${gen11e}" --workspace-root "${WS}" --source-repo "${REPO_ROOT}" --config-root "${CFG11E}" 2>&1)" || rc=$?
+if grep -qF 'RESTORE INCOMPLETE' <<<"${OUT}" && [ "${rc}" -eq 74 ]; then
+  report "11e MUTATION: the restore's N/N verification FIRES on a corrupted generation" 1
+else
+  report "11e MUTATION: the restore's N/N verification FIRES on a corrupted generation" 0 \
+    "exit=${rc}; 'RESTORE INCOMPLETE' not seen — the restore reported success over bytes that do not match"
+fi
+
+# --- 11g: MUTATION — the workspace-binding guard.
+# Found by this suite (#5662): before the guard, a restore run against a config root holding
+# ANOTHER workspace's generations laid that foreign bundle down and reported "27/27 verified
+# identical", because the manifest verification is self-consistent and cannot notice the
+# snapshot belongs elsewhere. CONTROL first, then the plant.
+CFG11G="${SBX}/cfg11g"; mkdir -p "${CFG11G}"
+WS_A="${SBX}/ws11g-a"; deploy_ws "${WS_A}"
+WS_B="${SBX}/ws11g-b"; deploy_ws "${WS_B}"
+bash "${SETUP}" --refresh-hooks --workspace-root "${WS_A}" --source-repo "${REPO_ROOT}" --config-root "${CFG11G}" >/dev/null 2>&1
+gen11g="$(latest_gen_in "${CFG11G}")"
+# CONTROL — restoring that generation into its OWN workspace succeeds.
+rc=0; bash "${SETUP}" --restore-hooks "${gen11g}" --workspace-root "${WS_A}" --source-repo "${REPO_ROOT}" --config-root "${CFG11G}" >/dev/null 2>&1 || rc=$?
+[ "${rc}" -eq 0 ] \
+  && report "11g-control: a generation restores into the workspace it came FROM" 1 \
+  || report "11g-control: a generation restores into the workspace it came FROM" 0 "exit ${rc}"
+# THE PLANT — same generation, different workspace.
+rc=0; OUT="$(bash "${SETUP}" --restore-hooks "${gen11g}" --workspace-root "${WS_B}" --source-repo "${REPO_ROOT}" --config-root "${CFG11G}" 2>&1)" || rc=$?
+if grep -qF 'captured from a DIFFERENT workspace' <<<"${OUT}" && [ "${rc}" -eq 66 ]; then
+  report "11g MUTATION: a FOREIGN generation is refused (own message + 66)" 1
+else
+  report "11g MUTATION: a FOREIGN generation is refused (own message + 66)" 0 \
+    "exit=${rc}; guard message not seen — a foreign hook bundle would be importable"
+fi
+
+# --- 11h: a half-written capture is INVISIBLE to the selector.
+# The SIGKILL arm (11b-1) originally failed because a directory-first scheme published the
+# generation name before the manifest existed, so the selector picked an empty shell. The
+# staging name must not be selectable.
+CFG11H="${SBX}/cfg11h"; mkdir -p "${CFG11H}/hook-bundle-backups"
+mkdir -p "${CFG11H}/hook-bundle-backups/20260101T000000Z-999.partial/bundle"
+sel11h="$(latest_gen_in "${CFG11H}")"
+[ -z "${sel11h}" ] \
+  && report "11h: a .partial staging dir is NOT selectable as a generation" 1 \
+  || report "11h: a .partial staging dir is NOT selectable as a generation" 0 "selector returned ${sel11h}"
+
+# --- 11f: retention is BOUNDED, and bounded selectively.
+# HOOK_BACKUP_RETAIN generations are kept; the oldest is evicted, and a directory that is not
+# a generation is left alone (the store is never blind-rm'd).
+CFG11F="${SBX}/cfg11f"; mkdir -p "${CFG11F}"
+WS="${SBX}/ws11f"; deploy_ws "${WS}"
+mkdir -p "${CFG11F}/hook-bundle-backups"
+printf 'operator parked this here\n' > "${CFG11F}/hook-bundle-backups/NOTES.txt"
+i=0
+while [ "${i}" -lt 7 ]; do
+  bash "${SETUP}" --refresh-hooks --workspace-root "${WS}" --source-repo "${REPO_ROOT}" --config-root "${CFG11F}" >/dev/null 2>&1
+  i=$((i + 1))
+done
+n_f="$(gens_in "${CFG11F}" | wc -l | tr -d ' ')"
+if [ "${n_f}" = "5" ]; then
+  report "11f: retention BOUNDS the store at 5 generations after 7 refreshes" 1
+else
+  report "11f: retention BOUNDS the store at 5 generations after 7 refreshes" 0 "found ${n_f}"
+fi
+[ -f "${CFG11F}/hook-bundle-backups/NOTES.txt" ] \
+  && report "11f-specificity: pruning leaves a NON-generation entry untouched (no blind rm)" 1 \
+  || report "11f-specificity: pruning leaves a NON-generation entry untouched (no blind rm)" 0 \
+     "the prune deleted an entry it did not create"
+printf '    [counts] 7 refreshes -> %s generation(s) retained (bound = 5)\n' "${n_f}"
 
 printf '\n======================================================================\n'
 printf 'test_refresh_hooks.sh: %d passed, %d failed (bash %s)\n' "${PASS}" "${FAIL}" "${BASH_VERSION}"
