@@ -574,6 +574,23 @@ core/skills/skill-compliance-auditor/scripts/measure-skill-compliance.sh
 ./core/deploy/tests/test_validate_install.sh
 core/deploy/tests/test_validate_install.sh
 
+# refresh-flow guard regression (test_refresh_hooks.sh) — in-tree bash CLI.
+# Holds the only planted-failure arms for two hook-deployment guards: the
+# abort-on-missing-library check (Case 9a, attributable via a same-mirror
+# control arm) and the refresh-branch rollback op with pre-write backup
+# (Cases 9b/9c/9d). Executed agent-side at Stage 7 Dev Testing and during
+# release verification, and by the install-tests shell-tests job; all four
+# invocation forms so BLOCK-DESTRUCTIVE-022 does not block the agent-side
+# path. Without these rows the arms are CI-only reachable, so neither an
+# operator nor an agent can confirm rollback works before relying on it —
+# including during an incident, which is when they would most want to.
+# Named row rather than a core/deploy/tests/* glob: a pattern would
+# auto-admit any future file dropped in that directory.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_refresh_hooks.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_refresh_hooks.sh
+./core/deploy/tests/test_refresh_hooks.sh
+core/deploy/tests/test_refresh_hooks.sh
+
 # Install regression suite runner (run-install-regression.sh) — in-tree bash CLI.
 # Runs the enrolled REGRESSION_MEMBERS set end to end; membership resolution is
 # itself asserted by qa.sh R2. Executed agent-side at Stage 6 self-verification
