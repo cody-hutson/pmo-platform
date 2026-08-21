@@ -298,30 +298,38 @@ esac
 # COMPOSITION SURFACE installed by update.sh — routing an operator to the hook-bundle
 # reinstall would not restore it, and a wrong remediation on a lockout message is worse
 # than a generic one.
+# Reachability is ABSENCE, not emptiness. An allowlist with zero active entries is a
+# legitimate authored state — an operator who deliberately clears it is asking for
+# enforcement with no path exemptions, and denying that would override their intent. This
+# is the one place the posture diverges from the three sibling gates above, and the reason
+# is that they guard primitives where empty IS corrupt (an empty ERE matches every line);
+# an empty exemption list is merely empty.
+#
+# A 0-byte file is still worth saying something about, because a truncated or interrupted
+# install produces exactly that and is indistinguishable from intent by inspection. Hence
+# a non-blocking note rather than a deny: visible immediately, decides nothing.
 _allowlist_ok=0
-# TODO(operator) — DECISION 1: the reachability predicate.
-#   -f  treats an EMPTY allowlist as healthy. That is defensible: zero exemptions is a
-#       legitimate authored state, distinct from a broken install.
-#   -s  also denies on empty, collapsing "install broke" and "operator cleared every
-#       entry" into one verdict. The three sibling gates above collapse it that way, but
-#       they guard primitives where empty genuinely IS corrupt (an empty ERE matches every
-#       line). An empty exemption list is merely empty.
-#   Replace the test below with whichever you want to be true.
 if [ -f "$ALLOWLIST" ]; then
   _allowlist_ok=1
+  # -qv is true when SOME line is neither comment nor blank; negated, every line is one of
+  # those, i.e. no entry can ever match. Also true for a 0-byte file (grep finds no lines).
+  if ! "$GREP" -qvE '^[[:space:]]*(#|$)' "$ALLOWLIST" 2>/dev/null; then
+    "$PRINTF" '[CLAUDE-HOOK:%s:ALLOWLIST-EMPTY] NOTE: path allowlist at %s has zero active entries, so no path exemption can match. Deliberate, or a truncated install?\n' \
+      "$HOOK_NAME" "$ALLOWLIST" >&2
+  fi
 fi
 
 if [ "$_allowlist_ok" -eq 0 ]; then
   log_error "ALLOWLIST-UNREACHABLE: exemption surface $ALLOWLIST absent or unusable"
   if [ "$MODE" = "enforce" ]; then
-    # TODO(operator) — DECISION 2: the deny message.
-    #   This string is the ONLY thing an operator sees when a durable-corpus write is
-    #   denied because the exemption surface is missing, and at that moment every durable
-    #   write is denied. It must name the real remediation (./update.sh installs
-    #   composition surfaces; ./core/deploy/deploy.sh --deploy explicitly does NOT) and
-    #   should say that recovery is not self-blocked — <ws>/.claude/ is outside this
-    #   hook's scope gate, so writing the allowlist back is never denied by this hook.
-    "$PRINTF" '[CLAUDE-HOOK:%s:ALLOWLIST-UNREACHABLE] BLOCKED (fail-closed): the reference-durability path allowlist is absent at %s, so every path exemption is unreachable and this rule has no escape. Restore it with ./update.sh (composition surfaces are NOT installed by deploy.sh --deploy). Recovery is not blocked by this hook: the allowlist path is outside its durable-corpus scope. To stand this hook down meanwhile, set its .mode to off.\n' \
+    # Remediation-first on purpose. At the moment this prints, EVERY durable-corpus write
+    # is being denied, so the reader is blocked and wants out before they want a diagnosis.
+    # The fix line names update.sh and rules out the wrong guess explicitly — deploy.sh
+    # --deploy does not install composition surfaces, and reaching for it would look like
+    # a no-op fix. The recovery line exists because the failure reads like a bricked
+    # workspace and is not one: the allowlist path sits outside this hook's own scope gate,
+    # so writing it back is never denied by this hook.
+    "$PRINTF" '[CLAUDE-HOOK:%s:ALLOWLIST-UNREACHABLE] BLOCKED (fail-closed).\nFix: run ./update.sh  (composition surfaces are NOT installed by deploy.sh --deploy)\n\nWhy: the reference-durability path allowlist is absent at %s,\nso every path exemption is unreachable and this rule currently has no escape.\nRecovery is not blocked by this hook — that path is outside its durable-corpus scope.\nTo stand the hook down meanwhile: set its .mode to off.\n' \
       "$HOOK_NAME" "$ALLOWLIST" >&2
     exit 2
   fi
