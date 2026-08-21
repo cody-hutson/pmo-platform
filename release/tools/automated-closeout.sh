@@ -7418,6 +7418,18 @@ EOF
   /usr/bin/grep -qE '_learnings_capture_gap' <<<"$_pfg_body" || { echo "FAIL: (n) — phase_preflight does not call _learnings_capture_gap; the gate is defined but never fires"; failures=$((failures+1)); }
   # control: the same extraction must NOT match a fabricated symbol.
   ! /usr/bin/grep -qE '_learnings_zzfabricatedzz' <<<"$_pfg_body" || { echo "FAIL: (n) control — the phase_preflight extractor matched a fabricated symbol"; failures=$((failures+1)); }
+  # The gate must PRINT the remedy, not merely detect the gap. A block whose message
+  # does not name the one command that clears it sends the operator to read source.
+  /usr/bin/grep -qE '_learnings_capture_remedy' <<<"$_pfg_body" || { echo "FAIL: (n) — phase_preflight does not embed _learnings_capture_remedy; the block would name the condition without naming its remedy"; failures=$((failures+1)); }
+  # ...and the remedy must name the capture command AND the event subtype, because
+  # append-pipeline-event.sh alone is not runnable — the subtype is what makes the
+  # row a learnings triple rather than some other event.
+  local _pfg_rem; _pfg_rem="$(_learnings_capture_remedy)"
+  /usr/bin/grep -qF 'append-pipeline-event.sh' <<<"$_pfg_rem" || { echo "FAIL: (n) — the capture remedy must name append-pipeline-event.sh"; failures=$((failures+1)); }
+  /usr/bin/grep -qF -- '--event-subtype learnings-triple' <<<"$_pfg_rem" || { echo "FAIL: (n) — the capture remedy must name --event-subtype learnings-triple; without it the command does not produce the row the gate wants"; failures=$((failures+1)); }
+  # control: the same matcher over the same string must NOT find a subtype that is
+  # not there, or the two assertions above would pass on any non-empty remedy.
+  ! /usr/bin/grep -qF -- '--event-subtype zzfabricatedzz' <<<"$_pfg_rem" || { echo "FAIL: (n) control — the remedy matcher matched a fabricated subtype"; failures=$((failures+1)); }
   local _pfg_prod; _pfg_prod="$(/usr/bin/sed -n '/^phase_preflight || {/,/^phase_audit_epic_rollup/p' "${BASH_SOURCE[0]}" || true)"
   local _pfg_n_pf _pfg_n_br _pfg_n_log
   _pfg_n_pf="$(/usr/bin/grep -n '^phase_preflight ||' <<<"$_pfg_prod" | /usr/bin/cut -d: -f1)"
