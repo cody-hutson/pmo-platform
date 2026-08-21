@@ -172,11 +172,11 @@ core/schemas/gate-criteria-spec.md                                       edit
 release/skills/release-executor/SKILL.md                                 edit
 release/skills/release-executor/references/close-out-checklist.md        edit
 release/releases/RELEASE_LOG.md                                          edit
+packages/release-executor.skill                                          edit
+packages/release-executor.skill.sha256                                   edit
 
 # ── Additions ──
 release/releases/plans/closeout-reports-what-shipped_RELEASE_PLAN.md     add
-packages/release-executor.skill                                          add-or-replace
-packages/release-executor.skill.sha256                                   add-or-replace
 
 # ── Read-only inputs (excluded from the delivery obligation set) ──
 core/deploy/deploy.sh                                                    READ
@@ -206,7 +206,7 @@ release-velocity-tracking.md :: 3.3 and N6 (field placement)             NOT EDI
 | `release/skills/release-executor/SKILL.md` + its `references/close-out-checklist.md` | `FIX-PREFLIGHT` | Mode D input collection, and the checklist's preflight-block remedy. **Editing either fires the package-rebuild obligation** below. |
 | `release/releases/RELEASE_LOG.md` | `FIX-VELOCITY` | Historical Deployment-Log correction. The affected-row population is **seven rows, not the two the card names, and the earliest row it names is not among them** — that row records a real ratio and never carried a zero. Land the correction early, never at Stage 12/13. |
 
-**Package-rebuild obligation (fires; do not skip).** `FIX-PREFLIGHT` edits a rostered skill's `SKILL.md` **and** a file under its `references/`, so the `.skill` package and its `.sha256` content baseline must be rebuilt via the package builder and committed **in this PR**. The `skill-package-freshness` CI gate enforces this pre-merge; a stale package cannot merge green. That obligation is the only reason the `packages/` rows appear in the matrix.
+**Package-rebuild obligation (fires; do not skip).** `FIX-PREFLIGHT` edits a rostered skill's `SKILL.md` **and** a file under its `references/`, so the `.skill` package and its `.sha256` content baseline must be rebuilt via the package builder and committed **in this PR**. The `skill-package-freshness` CI gate enforces this pre-merge; a stale package cannot merge green. That obligation is the only reason the `packages/` rows appear in the matrix. Both rows are **`edit`**, not `add`: the package and its `.sha256` baseline already exist on `main` for this rostered skill, so a rebuild REPLACES tracked content rather than introducing a new path.
 
 **Script-execution allowlist:** no row adds a *new* tracked executable script, so the allowlist companion obligation does not fire.
 
