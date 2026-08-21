@@ -85,7 +85,9 @@ A present marker suppresses the corresponding class for that file: matches are s
 
 ### Path allowlist
 
-The path allowlist lives at `core/hooks/reference-durability-allowlist.txt`: one glob per line, a leading `#` introduces a comment, and a trailing slash matches a directory. Seed entries cover historical-by-design corpus (the release archive) and files that are link-resolution maps by design. Allowlist additions document why the path is exempt — the rationale records the structural reason the path carries flagged constructs, not a desire to silence the gate.
+The path allowlist is authored at `core/config/allowlists/reference-durability-allowlist.txt`: one glob per line, a leading `#` introduces a comment, and a trailing slash matches a directory. That repo path is the single source an author edits, and it is what the CI gate and the deploy-time saturation check both read directly.
+
+The PreToolUse hook reads a different copy. It is a hook-tier composition surface, so the installer writes it to the workspace agent-config root — `<workspace>/.claude/reference-durability-allowlist.txt` — and the hook resolves it there at runtime, beside the other hook allowlists. Two consequences follow. First, an edit to the repo file does not reach the hook until the composition surfaces are reinstalled; `./update.sh` does that, and the skill/harness deploy path deliberately does not. Second, the deployed copy is regenerated from the repo file, so an operator who edits the deployed copy in place loses that edit on the next install — author in the repo, then reinstall. Seed entries cover historical-by-design corpus (the release archive) and files that are link-resolution maps by design. Allowlist additions document why the path is exempt — the rationale records the structural reason the path carries flagged constructs, not a desire to silence the gate.
 
 ## Enforcement primitives
 

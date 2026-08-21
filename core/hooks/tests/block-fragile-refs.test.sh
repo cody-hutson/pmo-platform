@@ -127,18 +127,18 @@ See [the standard](../x.md) — link class suppressed for this file.')" \
 # (a bare positional issue-ref, the class with no per-file override marker), identical
 # scope arm (core/standards/*.md), differing ONLY in allowlist membership.
 test_case "enforce: allowlisted durable path with fragile content ALLOWED (path allowlist grants)" \
-  "$(payload Write "$ALLOWLISTED" 'This behavior was corrected in #1477 during the last release.')" \
+  "$(payload Write "$ALLOWLISTED" 'This behavior was corrected in #9999 during the last release.')" \
   0
 
 test_case "enforce: NON-allowlisted durable path, same content, still BLOCKED (allowlist is not a hook-wide off switch)" \
-  "$(payload Write "$INSCOPE" 'This behavior was corrected in #1477 during the last release.')" \
+  "$(payload Write "$INSCOPE" 'This behavior was corrected in #9999 during the last release.')" \
   2 "BLOCK-FRAGILE-REF-003"
 
 # Directory-prefix form (trailing slash in the allowlist) — the release-plans entry is the
 # one the v4.34 incident hit, and it exercises a different match branch than the file form
 # above, so a regression in either branch is caught.
 test_case "enforce: allowlisted DIRECTORY prefix (release plans) ALLOWED" \
-  "$(payload Write "release/releases/plans/v9.99_RELEASE_PLAN.md" 'This milestone carries the fix from #5746 into the pipeline.')" \
+  "$(payload Write "release/releases/plans/v9.99_RELEASE_PLAN.md" 'This milestone carries the fix from #9999 into the pipeline.')" \
   0
 
 # CLAUDE_HOOK_BYPASS escape hatch — permits a fragile write even in enforce mode.
