@@ -34,6 +34,12 @@ INSCOPE="core/standards/__block-fragile-refs-fixture__.md"
 # A path OUTSIDE the hook's durable-corpus scope (core/governance/ is not a scanned
 # durable surface) — proves the scope gate lets a non-durable write through untouched.
 OUTSCOPE="core/governance/__block-fragile-refs-fixture__.md"
+# A path that IS in durable-corpus scope AND carries a path-allowlist entry. The pair
+# (ALLOWLISTED, INSCOPE) is the whole point: same fragile content, same scope arm, and
+# the ONLY difference is allowlist membership. Asserting the allow arm alone cannot
+# distinguish "the exemption fired" from "the hook did nothing", so the two must move
+# together. Kept in sync with core/config/allowlists/reference-durability-allowlist.txt.
+ALLOWLISTED="core/standards/version-field-semantics.md"
 
 # Preserve + restore the shared .mode file so the suite is hermetic regardless of the
 # deployed mode.
@@ -108,6 +114,31 @@ test_case "enforce: non-Write/Edit tool ALLOWED (tool gate)" \
 test_case "enforce: per-file allow-link override marker ALLOWED" \
   "$(payload Write "$INSCOPE" '<!-- reference-durability: allow-link -->
 See [the standard](../x.md) — link class suppressed for this file.')" \
+  0
+
+# --- PATH ALLOWLIST: the exemption surface is reachable and actually grants -----------
+# Regression arms for the defect where the hook resolved its allowlist beside itself
+# (${HOOK_DIR}/) instead of at the workspace .claude/ root (${HOOK_DIR}/..), while the
+# surface was also unregistered as a composition surface — so nothing deployed it, the
+# existence test was false on every run, and ALL path exemptions were silently inert
+# while the hook ran in enforce.
+#
+# These two arms are a matched pair and must be read together. Identical fragile content
+# (a bare positional issue-ref, the class with no per-file override marker), identical
+# scope arm (core/standards/*.md), differing ONLY in allowlist membership.
+test_case "enforce: allowlisted durable path with fragile content ALLOWED (path allowlist grants)" \
+  "$(payload Write "$ALLOWLISTED" 'This behavior was corrected in #1477 during the last release.')" \
+  0
+
+test_case "enforce: NON-allowlisted durable path, same content, still BLOCKED (allowlist is not a hook-wide off switch)" \
+  "$(payload Write "$INSCOPE" 'This behavior was corrected in #1477 during the last release.')" \
+  2 "BLOCK-FRAGILE-REF-003"
+
+# Directory-prefix form (trailing slash in the allowlist) — the release-plans entry is the
+# one the v4.34 incident hit, and it exercises a different match branch than the file form
+# above, so a regression in either branch is caught.
+test_case "enforce: allowlisted DIRECTORY prefix (release plans) ALLOWED" \
+  "$(payload Write "release/releases/plans/v9.99_RELEASE_PLAN.md" 'This milestone carries the fix from #5746 into the pipeline.')" \
   0
 
 # CLAUDE_HOOK_BYPASS escape hatch — permits a fragile write even in enforce mode.
