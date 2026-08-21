@@ -85,7 +85,7 @@ jobs:
             echo "::error::reference-durability: MIN_SELFDESCRIBE_WORDS is not numeric (got '${MIN_SELFDESCRIBE_WORDS}')"
             exit 1
           fi
-          ALLOWLIST='core/hooks/reference-durability-allowlist.txt'
+          ALLOWLIST='core/config/allowlists/reference-durability-allowlist.txt'
           # Shared positional-issue-ref classifier (single source of the positional
           # decision; the hook and the fixture-runner invoke this same file via `awk -f`).
           # The CI was the surface that drifted (position-blind existence check); routing

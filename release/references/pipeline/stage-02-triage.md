@@ -6,7 +6,7 @@
 <!-- reference-durability: allow-link -->
 <!-- Navigational pipeline shard carrying many pre-existing intra-repo cross-reference links;
      retained (not summarized inline) per operator decision, consistent with the sibling
-     de-reference-pass entries in core/hooks/reference-durability-allowlist.txt. Scopes only
+     de-reference-pass entries in core/config/allowlists/reference-durability-allowlist.txt. Scopes only
      the markdown-link gate for this file; the other reference-durability gates stay active. -->
 
 ## 1. Purpose

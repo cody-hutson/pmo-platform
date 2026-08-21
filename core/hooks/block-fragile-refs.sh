@@ -51,10 +51,18 @@ readonly BLOCK_LOG="${HOOK_DIR}/block-log.jsonl"
 readonly BYPASS_LOG="${HOOK_DIR}/bypass-log.jsonl"
 readonly WARN_LOG="${HOOK_DIR}/fragile-ref-warn-log.jsonl"
 readonly MODE_FILE="${HOOK_DIR}/.mode"
-# ALLOWLIST resolves relative to the hook's own directory (matches the sibling hook's
-# exemption-list pattern). This finds the allowlist in whichever checkout the hook runs
-# from — primary or worktree — which matters during engineering before deployment.
-readonly ALLOWLIST="${HOOK_DIR}/reference-durability-allowlist.txt"
+# ALLOWLIST resolves at the workspace .claude/ root — ${HOOK_DIR}/.. — which is the
+# hook-tier composition-surface target and the pattern every sibling exemption list in
+# this cohort uses (block-destructive, block-egress x3, block-mcp-writes,
+# block-scope-segregation, block-shell-injection, block-skill-direct-edit, and
+# block-fs-boundary via its CLAUDE_DIR).
+#
+# It deliberately does NOT resolve beside the hook. At runtime $0 is the DEPLOYED copy,
+# so ${HOOK_DIR} is the deployed hooks directory and never a checkout — a hook-adjacent
+# path resolves to a file that no install step writes. That was the defect: the source
+# copy sat in core/hooks/, whose installer loop copies *.sh only, so the surface shipped
+# nowhere and every path exemption was unreachable while the hook ran in enforce.
+readonly ALLOWLIST="${HOOK_DIR}/../reference-durability-allowlist.txt"
 # Shared positional-issue-ref classifier (single source of the positional decision; the
 # fixture-runner and the reference-durability CI invoke this same file via `awk -f`, so
 # the positional logic cannot drift across the three surfaces). Resolves beside the hook.
@@ -273,8 +281,77 @@ case "$FILE_PATH" in
   *) exit 0 ;;
 esac
 
-# --- PATH ALLOWLIST check (glob-per-line; trailing slash = directory; # = comment) ---
+# --- ALLOWLIST-REACHABILITY GATE (mode-coupled, mirroring the primitive gates above) ---
+# Placed AFTER the durable-corpus scope gate deliberately: only a write this hook would
+# actually adjudicate can be denied for an unreachable exemption surface. Anything outside
+# the durable globs already exited above and is untouched by this gate.
+#
+# Why a gate at all. The path allowlist is the ONLY exemption mechanism for
+# BLOCK-FRAGILE-REF-003 — Classes L/V/U each carry a per-file override marker, the
+# positional rule carries none. So a silent skip on an absent allowlist does not degrade
+# the control, it removes the sole escape from it: strictly stricter than anyone authored,
+# with no signal that it happened. That is the inverse of the fail-open risk the sibling
+# primitive gates guard, and it warrants the same loudness.
+#
+# deny_missing_primitive() is deliberately NOT reused here. Its message names a co-shipped
+# primitive and prescribes docs/scripts/setup-workspace.sh, but this surface is a
+# COMPOSITION SURFACE installed by update.sh — routing an operator to the hook-bundle
+# reinstall would not restore it, and a wrong remediation on a lockout message is worse
+# than a generic one.
+# Reachability is ABSENCE, not emptiness. An allowlist with zero active entries is a
+# legitimate authored state — an operator who deliberately clears it is asking for
+# enforcement with no path exemptions, and denying that would override their intent. This
+# is the one place the posture diverges from the three sibling gates above, and the reason
+# is that they guard primitives where empty IS corrupt (an empty ERE matches every line);
+# an empty exemption list is merely empty.
+#
+# A 0-byte file is still worth saying something about, because a truncated or interrupted
+# install produces exactly that and is indistinguishable from intent by inspection. Hence
+# a non-blocking note rather than a deny: visible immediately, decides nothing.
+_allowlist_ok=0
 if [ -f "$ALLOWLIST" ]; then
+  _allowlist_ok=1
+  # -qv is true when SOME line is neither comment nor blank; negated, every line is one of
+  # those, i.e. no entry can ever match. Also true for a 0-byte file (grep finds no lines).
+  if ! "$GREP" -qvE '^[[:space:]]*(#|$)' "$ALLOWLIST" 2>/dev/null; then
+    "$PRINTF" '[CLAUDE-HOOK:%s:ALLOWLIST-EMPTY] NOTE: path allowlist at %s has zero active entries, so no path exemption can match. Deliberate, or a truncated install?\n' \
+      "$HOOK_NAME" "$ALLOWLIST" >&2
+  fi
+fi
+
+if [ "$_allowlist_ok" -eq 0 ]; then
+  log_error "ALLOWLIST-UNREACHABLE: exemption surface $ALLOWLIST absent or unusable"
+  if [ "$MODE" = "enforce" ]; then
+    # Remediation-first on purpose. At the moment this prints, EVERY durable-corpus write
+    # is being denied, so the reader is blocked and wants out before they want a diagnosis.
+    #
+    # The fix line names setup-workspace.sh FIRST, and that ordering is the whole point.
+    # This message fires only when the allowlist is ABSENT, and update.sh does not create
+    # an absent surface — its regenerate loop logs "Target absent … fresh install needed
+    # via setup-workspace.sh" and skips it, then assert_install_complete refuses to go
+    # further. So update.sh alone cannot clear this condition; it is the SECOND step, which
+    # re-runs the regenerate path once the surface exists. Naming it alone would send a
+    # blocked operator to a command that declines, which is the failure this very hook
+    # exists to stop being silent about. deploy.sh --deploy is ruled out explicitly for the
+    # same reason: it does not source composition surfaces at all.
+    #
+    # The recovery line exists because the failure reads like a bricked workspace and is
+    # not one: the allowlist path sits outside this hook's own scope gate, so writing it
+    # back is never denied by this hook.
+    "$PRINTF" '[CLAUDE-HOOK:%s:ALLOWLIST-UNREACHABLE] BLOCKED (fail-closed).\nFix: run docs/scripts/setup-workspace.sh   (installs the absent surface)\n     then ./update.sh                      (regenerates it thereafter)\n     NOT deploy.sh --deploy — it does not source composition surfaces at all,\n     and update.sh ALONE will decline: it regenerates surfaces, it does not create them.\n\nWhy: the reference-durability path allowlist is absent at %s,\nso every path exemption is unreachable and this rule currently has no escape.\nRecovery is not blocked by this hook — that path is outside its durable-corpus scope.\nTo stand the hook down meanwhile: set its .mode to off.\n' \
+      "$HOOK_NAME" "$ALLOWLIST" >&2
+    exit 2
+  fi
+  # warn/off: a rule match would only warn here, so an unreachable exemption surface must
+  # not block harder than a match would. Degrade and keep evaluating (the POSITIONAL_LIB
+  # pattern), rather than standing the hook down entirely.
+  "$PRINTF" '[CLAUDE-HOOK:%s:ALLOWLIST-UNREACHABLE] WARN (degraded, .mode=%s): path allowlist absent at %s; ALL path exemptions are unreachable this run and findings below may name paths that are supposed to be exempt.\n' \
+    "$HOOK_NAME" "$MODE" "$ALLOWLIST" >&2
+fi
+
+# --- PATH ALLOWLIST check (glob-per-line; trailing slash = directory; # = comment) ---
+# Existence is the gate's verdict above, not a second test here — one decision, one place.
+if [ "$_allowlist_ok" -eq 1 ]; then
   while IFS= read -r _glob || [ -n "$_glob" ]; do
     # strip comments + whitespace
     _glob="${_glob%%#*}"
