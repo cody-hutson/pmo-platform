@@ -324,12 +324,21 @@ if [ "$_allowlist_ok" -eq 0 ]; then
   if [ "$MODE" = "enforce" ]; then
     # Remediation-first on purpose. At the moment this prints, EVERY durable-corpus write
     # is being denied, so the reader is blocked and wants out before they want a diagnosis.
-    # The fix line names update.sh and rules out the wrong guess explicitly — deploy.sh
-    # --deploy does not install composition surfaces, and reaching for it would look like
-    # a no-op fix. The recovery line exists because the failure reads like a bricked
-    # workspace and is not one: the allowlist path sits outside this hook's own scope gate,
-    # so writing it back is never denied by this hook.
-    "$PRINTF" '[CLAUDE-HOOK:%s:ALLOWLIST-UNREACHABLE] BLOCKED (fail-closed).\nFix: run ./update.sh  (composition surfaces are NOT installed by deploy.sh --deploy)\n\nWhy: the reference-durability path allowlist is absent at %s,\nso every path exemption is unreachable and this rule currently has no escape.\nRecovery is not blocked by this hook — that path is outside its durable-corpus scope.\nTo stand the hook down meanwhile: set its .mode to off.\n' \
+    #
+    # The fix line names setup-workspace.sh FIRST, and that ordering is the whole point.
+    # This message fires only when the allowlist is ABSENT, and update.sh does not create
+    # an absent surface — its regenerate loop logs "Target absent … fresh install needed
+    # via setup-workspace.sh" and skips it, then assert_install_complete refuses to go
+    # further. So update.sh alone cannot clear this condition; it is the SECOND step, which
+    # re-runs the regenerate path once the surface exists. Naming it alone would send a
+    # blocked operator to a command that declines, which is the failure this very hook
+    # exists to stop being silent about. deploy.sh --deploy is ruled out explicitly for the
+    # same reason: it does not source composition surfaces at all.
+    #
+    # The recovery line exists because the failure reads like a bricked workspace and is
+    # not one: the allowlist path sits outside this hook's own scope gate, so writing it
+    # back is never denied by this hook.
+    "$PRINTF" '[CLAUDE-HOOK:%s:ALLOWLIST-UNREACHABLE] BLOCKED (fail-closed).\nFix: run docs/scripts/setup-workspace.sh   (installs the absent surface)\n     then ./update.sh                      (regenerates it thereafter)\n     NOT deploy.sh --deploy — it does not source composition surfaces at all,\n     and update.sh ALONE will decline: it regenerates surfaces, it does not create them.\n\nWhy: the reference-durability path allowlist is absent at %s,\nso every path exemption is unreachable and this rule currently has no escape.\nRecovery is not blocked by this hook — that path is outside its durable-corpus scope.\nTo stand the hook down meanwhile: set its .mode to off.\n' \
       "$HOOK_NAME" "$ALLOWLIST" >&2
     exit 2
   fi
