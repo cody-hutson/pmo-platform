@@ -64,12 +64,30 @@
 # back into `planned`. Timeline events are immutable, so the recovery is
 # order-independent for the same reason the label predicate is.
 #
-# KNOWN BOUND, stated rather than papered over: a member that was demilestoned
-# at Phase A2 and later RE-BUNDLED into a different milestone loses its terminal
-# status label, leaves the scanned population, and is NOT recovered. Recovering
-# it would need the Stage-3 membership snapshot the platform does not yet take.
-# The recovery therefore closes the common case (parked/rejected work) and
-# under-reports `planned` on the re-bundled case — never over-reports it.
+# KNOWN BOUNDS, stated rather than papered over. The join is keyed on the
+# milestone TITLE — the `demilestoned` event payload carries no stable milestone
+# id — and it is TEMPORALLY UNBOUNDED: any demilestone naming that title counts,
+# whenever it happened. The recovery is best-effort in BOTH directions.
+#
+#   UNDER-reports when a member demilestoned at Phase A2 is later RE-BUNDLED
+#   into a different milestone (it loses its terminal status label, leaves the
+#   scanned population, and is not recovered), or when the event's title no
+#   longer resolves to a live milestone (a rename, or a title the live set never
+#   carried) — the fixed-string join can then never fire, and a zero-recovery
+#   outcome is indistinguishable from "nothing to recover": the NOTE below fires
+#   only when something WAS recovered.
+#
+#   OVER-reports when a member was milestoned mid-release for provenance and
+#   demilestoned long AFTER the release closed. Nothing here distinguishes that
+#   from a disposition at this release's Phase A2, so its points are returned to
+#   a bundle it was never committed to.
+#
+# `planned` is therefore NOT a guaranteed bound in either direction. Closing both
+# gaps needs the Stage-3 membership snapshot the platform does not yet take.
+# REACHABILITY: measured at a release's own Stage 13 the demilestone and the
+# close are the same step, so the divergence is not reachable in practice; it
+# bites on RECOMPUTATION of a historical row, where the elapsed window admits
+# later demilestones.
 #
 # Usage:
 #   ./compute-release-velocity.sh <version> --milestone <N> [--merge-sha <SHA>] [--base <ref>]
