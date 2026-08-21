@@ -15,7 +15,7 @@
 #
 # Phases (sequenced; each idempotent — re-running is safe):
 #   1  parse_args         CLI validation
-#   2  preflight          gh auth, clean tree, worktree cwd, DEPLOYED row, tag exists
+#   2  preflight          gh auth, clean tree, worktree cwd, DEPLOYED row + unique slug match, tag RECORDED (not gated), no scaffold residue in the note, Phase-A7 learnings-triple captured
 #   3  read_state         RELEASE_LOG row + visible-H4 Deployment Log + Milestone state + release-PR MERGE_SHA (#1682)
 #   4  detect_open_issues auto-close anomaly enumeration (#38: --exclude-issue + Stage-13-subtask sub-task-label+title-regex auto-exclude, #3665)
 #   5  create_chore_branch chore/v<X.Y>-stage-13-corpus-update
@@ -1320,6 +1320,99 @@ is_first_phase_occurrence() {
   return 0
 }
 
+# ─── Shared: the Phase-A7 learnings-capture predicate — ONE definition, two sites
+#
+# Phase 6.7 (append_release_learnings) owns the D-1 refusal: a render reporting
+# ZERO source events is the synthesizer's honest "nothing was captured" sentinel,
+# and appending it writes an absence of EVIDENCE into a permanent record as a
+# statement of FACT. That refusal fires at dispatch position 8 — after
+# create_chore_branch, transition_release_log and two field injections have
+# already written, on a tree the operator then has to reset by hand.
+#
+# Preflight asserts the SAME condition at dispatch position 1. The predicate
+# therefore lives HERE, in ONE definition both call, rather than being re-probed
+# inside preflight: phase_append_release_learnings already rejects that shape in
+# its own words — "a second composer here would be a second writer of a fact that
+# already has one" — and the file's shared-resolver precedent
+# (_resolve_deployment_log_target, consumed by 6.5 / 6.6 / 6.8 so BOTH lookups
+# resolve through the ONE resolver and can never disagree about which file they
+# mean) is exactly the guarantee a gate and its backstop owe each other.
+#
+# Deliberately NOT named phase_* — that prefix is the dispatchable-phase namespace.
+
+# Placement-idempotency probe. Returns 0 when `#### Release Learnings <VERSION>`
+# is ALREADY the next `#### ` heading after `#### Deployment Log <VERSION>`.
+# Expressed as PLACEMENT rather than presence: a bare presence grep is also
+# satisfied by a learnings block sitting somewhere else in the ledger entirely,
+# and would then skip a genuine placement defect.
+# HOT LEDGER ONLY (RECORDS_POLICY KEEP_CLASS) — deliberately NOT routed through
+# _resolve_deployment_log_target: a Release Learnings block is never written to,
+# and so never read from, an archive segment.
+_learnings_block_placed() {
+  local _lbp_next
+  _lbp_next="$(/usr/bin/awk -v ver="$VERSION" '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      seen && line ~ /^#### / { print line; exit }
+      line == "#### Deployment Log " ver { seen = 1 }
+    ' "$RELEASE_LOG" 2>/dev/null || true)"
+  [[ "$_lbp_next" == "#### Release Learnings $VERSION" ]]
+}
+
+# The capture remedy, as ONE string. The preflight gate and the 6.7 backstop both
+# print it, so an operator who hits either is told the same command.
+_learnings_capture_remedy() {
+  /usr/bin/printf '%s' "capture the release's learnings triple FIRST, then re-run close-out: release/tools/append-pipeline-event.sh --version $VERSION --stage 13 --event-type release-synthesis --event-subtype learnings-triple --actor <actor> --subject <subject> --payload '<surprise/would-change/watch-for>' (run it with --help for the required flag set, and --dry-run to validate the row before appending)"
+}
+
+# THE CAPTURE-GAP PREDICATE — returns 0 for EXACTLY ONE condition: the
+# `release-synthesis/learnings-triple` row for this release was never captured.
+# Returns 1 in every other case, INCLUDING every degraded case.
+#
+# It mirrors phase 6.7's arm PRECEDENCE, not merely 6.7's last arm. 6.7 evaluates
+# an ordered ladder — anchor presence, placement-idempotency SKIPPED,
+# synthesizer-not-executable SKIPPED, render-failure FAIL, structural FAIL, and
+# only THEN the D-1 zero-source-event BLOCK. Lifting the last arm without its
+# predecessors inverts that precedence and manufactures a false block: a resumed
+# close whose block is already correctly placed, or a run on a host without the
+# synthesizer, would then be refused at the door by the gate that exists to
+# protect 6.7. Preflight has LESS information than 6.7 and must not pretend
+# otherwise.
+#
+# DEGRADE NEVER ESCALATES. A missing or non-executable synthesizer, a render that
+# exits non-zero, and a whitespace-only render all return 1 here. FAILing on them
+# would convert a degraded ENVIRONMENT into a close-out failure — the judgement
+# phase_inject_close_class_telemetry_field already records for its own producer.
+# 6.7 still owns those arms, with its richer diagnostic, at position 8.
+#
+# The parity property this owes 6.7 — a 0 here implies 6.7 returns 3 — is
+# asserted as MECHANISM by the Test 4c.5 parity arm, not left to convention: this
+# predicate is a fixed conjunction while 6.7 is an ordered ladder later cards will
+# extend, and two shapes cannot be held in agreement by construction.
+_learnings_capture_gap() {
+  # Arm 1 — already placed. 6.7 SKIPs this; so does the gate. A re-entry the
+  # backstop waves through is never blocked by the gate that protects it.
+  if _learnings_block_placed; then return 1; fi
+
+  # Arm 2 — synthesizer unavailable. 6.7 SKIPs; the gate asserts nothing.
+  if [[ ! -x "$SYNTHESIZE_LEARNINGS" ]]; then return 1; fi
+
+  # Arm 3 — render. Sentinel-preserved capture, identical to 6.7's, so the
+  # producer's trailing newlines are not eaten by `$( )` and the explicit exit
+  # propagates the PRODUCER's status rather than printf's.
+  local _lcg_render _lcg_rc=0 _lcg_prc
+  _lcg_render="$("$SYNTHESIZE_LEARNINGS" --mode per-release --version "$VERSION" 2>/dev/null; _lcg_prc=$?; /usr/bin/printf 'X'; exit "$_lcg_prc")" || _lcg_rc=$?
+  _lcg_render="${_lcg_render%X}"
+  local _lcg_stripped
+  _lcg_stripped="$(/usr/bin/printf '%s' "$_lcg_render" | /usr/bin/tr -d '[:space:]')"
+  if [[ "$_lcg_rc" -ne 0 || -z "$_lcg_stripped" ]]; then return 1; fi
+
+  # Arm 4 — the ONE condition this predicate owns. `grep` reads a HERE-STRING,
+  # never `producer | grep -q`: under `set -euo pipefail` grep -q exits at the
+  # first match and SIGPIPEs the writer, so pipefail promotes a SUCCESSFUL match
+  # to a non-zero status and the assert silently inverts.
+  /usr/bin/grep -qE '^\*\*Source events:\*\* 0([^0-9]|$)' <<<"$_lcg_render"
+}
+
 # ─── Phase 2: preflight ──────────────────────────────────────────────────────
 
 phase_preflight() {
@@ -1417,7 +1510,32 @@ phase_preflight() {
     fi
   fi
 
-  mark_phase "preflight" "PASS" "gh auth OK; tree clean; cwd worktree; RELEASE_LOG row state=$STATE_LOG_ROW_STATE; tag_exists=$STATE_TAG_EXISTS; no scaffold residue in ${VERSION} note"
+  # (g) Phase-A7 learnings-triple capture gate — the LAST sub-check, and it must
+  # stay last. The predicate renders through synthesize-release-learnings.sh,
+  # which resolves `--release <slug>` through the RELEASE_LOG join ladder; (d)
+  # and (d.1) are what guarantee that ladder sees EXACTLY ONE matching row. The
+  # constraint is diagnostic PRECEDENCE, not resolution correctness: reordering
+  # does not change what the ladder reads, because (d)/(d.1) verify the row and
+  # never mutate it. What it changes is WHICH remedy the operator is handed. Run
+  # first, (g) would tell an operator whose Stage-12 chore PR never landed to
+  # "capture your learnings triple" — wrong remedy, wrong stage, and a triple
+  # captured in response would not clear it. Placed last, the run has ALREADY
+  # died on the true cause, so the misdiagnosis is unreachable rather than merely
+  # unlikely.
+  #
+  # This condition is a MISSING INPUT, not a not-yet-ready state, and the two
+  # classes have different remedies — see stage-13-close.md Phase A8.
+  if _learnings_capture_gap; then
+    local _g_msg="the release-synthesis/learnings-triple row for $VERSION was never captured — the $VERSION learnings render reports 0 source events, so phase 6.7 would refuse to append the '#### Release Learnings $VERSION' block seven phases from here, with four write phases already applied. Stopping at the door instead leaves a clean tree and nothing to reset. This is a MISSING INPUT, not a not-yet-ready state: the Phase-A8 hand-assembly fallback does NOT apply to it, because hand-assembling the block would produce by hand exactly the unevidenced record phase 6.7 exists to refuse. Remedy: $(_learnings_capture_remedy)"
+    if [[ "$MODE" == "dry-run" ]]; then
+      mark_phase "preflight" "WARN" "$_g_msg — NOT blocking under --dry-run (nothing is committed, so no record can be corrupted here); this same condition FAILS the close at --apply"
+      return 0
+    fi
+    mark_phase "preflight" "FAIL" "$_g_msg"
+    return 2
+  fi
+
+  mark_phase "preflight" "PASS" "gh auth OK; tree clean; cwd worktree; RELEASE_LOG row state=$STATE_LOG_ROW_STATE; tag_exists=$STATE_TAG_EXISTS; no scaffold residue in ${VERSION} note; A7 learnings-triple: no capture gap"
   return 0
 }
 
@@ -2414,13 +2532,10 @@ phase_append_release_learnings() {
   # ── Idempotency, expressed as PLACEMENT rather than presence. A bare presence
   # grep would also be satisfied by a learnings block sitting somewhere else in
   # the ledger entirely, and would then skip a genuine placement defect.
-  local _next_h4
-  _next_h4="$(/usr/bin/awk -v ver="$VERSION" '
-      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
-      seen && line ~ /^#### / { print line; exit }
-      line == "#### Deployment Log " ver { seen = 1 }
-    ' "$RELEASE_LOG" 2>/dev/null || true)"
-  if [[ "$_next_h4" == "#### Release Learnings $VERSION" ]]; then
+  # The probe itself lives in _learnings_block_placed, which the Phase-2 preflight
+  # gate calls too — ONE definition, so the gate and this backstop cannot disagree
+  # about whether the block is already placed.
+  if _learnings_block_placed; then
     mark_phase "append_release_learnings" "SKIPPED" "'#### Release Learnings $VERSION' is already the sibling H4 after the $VERSION Deployment Log block ($_log_name)"
     return 0
   fi
@@ -2485,7 +2600,9 @@ phase_append_release_learnings() {
   # same proposition applies to an entry produced empty rather than dropped.
   # The remedy is mechanical and belongs BEFORE the close, not during it.
   if /usr/bin/printf '%s\n' "$_render" | /usr/bin/grep -qE '^\*\*Source events:\*\* 0([^0-9]|$)'; then
-    local _remedy="capture the release's learnings triple FIRST, then re-run close-out: release/tools/append-pipeline-event.sh --version $VERSION --stage 13 --event-type release-synthesis --event-subtype learnings-triple --actor <actor> --subject <subject> --payload '<surprise/would-change/watch-for>' (run it with --help for the required flag set, and --dry-run to validate the row before appending)"
+    # Same string the Phase-2 preflight gate prints — ONE definition, so an
+    # operator who hits either site is handed the identical command.
+    local _remedy; _remedy="$(_learnings_capture_remedy)"
     if [[ "$MODE" == "dry-run" ]]; then
       mark_phase "append_release_learnings" "DRY-RUN" "would FAIL: the $VERSION learnings render reports 0 source events — the release-synthesis/learnings-triple row was never captured, so the block would record 'no novel learning this release' as a fact rather than as an absence of evidence. Remedy: $_remedy"
       return 0
@@ -7249,6 +7366,102 @@ EOF
   [[ "$(get_phase append_release_learnings)" == PASS\|* ]] || { echo "FAIL: D-1 control — a >0-source-event render must PASS, got '$(get_phase append_release_learnings)'"; failures=$((failures+1)); }
   [[ "$(/usr/bin/grep -c '^#### Release Learnings v9\.95$' "$RELEASE_LOG")" -eq 1 ]] || { echo "FAIL: D-1 control — the block must be appended exactly once"; failures=$((failures+1)); }
 
+  # ── (l) THE GATE PREDICATE — the same D-1 condition, now readable at Phase 2.
+  # Arm (k) above covers the PREVIOUSLY-COVERED path: the zero-source-event
+  # condition caught by phase_append_release_learnings at dispatch position 8,
+  # after four write phases. This arm covers the PREVIOUSLY-UNCOVERED path: the
+  # identical condition read by _learnings_capture_gap, which phase_preflight
+  # calls at dispatch position 1. Against the pre-fix construct there is no helper
+  # and no call site, so this arm cannot be satisfied by it.
+  _vl_write; VERSION="v9.95"; MODE="apply"; SYNTHESIZE_LEARNINGS="$_vl_sl_zero"
+  _learnings_capture_gap || { echo "FAIL: (l) A7-gate — a 0-source-event render must read as a capture GAP (_learnings_capture_gap must return 0)"; failures=$((failures+1)); }
+  # control: the SAME predicate over a >0-source-event render must NOT report a
+  # gap. Without it the assertion above is satisfied by a predicate that returns
+  # 0 for every input, which is indistinguishable from a working gate.
+  SYNTHESIZE_LEARNINGS="$_vl_sl"
+  ! _learnings_capture_gap || { echo "FAIL: (l) control — a >0-source-event render must NOT read as a capture gap"; failures=$((failures+1)); }
+
+  # ── (m) THE SHORT-CIRCUITS — the gate inherits 6.7's arm PRECEDENCE, not merely
+  # its last arm. Each state below is one 6.7 SKIPs; a gate that blocked them
+  # would refuse at the door a close the backstop waves through, which is the
+  # precise failure that moving an assertion earlier invites.
+  #
+  # (m.1) ALREADY PLACED — a resumed close whose block is correctly placed is not
+  # a capture gap, EVEN under a zero-source-event stub.
+  _vl_write; VERSION="v9.95"; SYNTHESIZE_LEARNINGS="$_vl_sl"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_release_learnings >/dev/null 2>&1 || true
+  [[ "$(_vl_next_h4 "$RELEASE_LOG" v9.95)" == "#### Release Learnings v9.95" ]] || { echo "FAIL: (m.1) setup — the block was not placed, so the idempotency assertion below is untestable"; failures=$((failures+1)); }
+  SYNTHESIZE_LEARNINGS="$_vl_sl_zero"
+  ! _learnings_capture_gap || { echo "FAIL: (m.1) — an already-placed learnings block must NOT read as a capture gap; a resumed close 6.7 SKIPs would be blocked at preflight"; failures=$((failures+1)); }
+  # sensitivity: remove the block, keep the SAME stub — now it IS a gap. Without
+  # this the assertion above also passes for a predicate that never returns 0.
+  _vl_write; VERSION="v9.95"
+  _learnings_capture_gap || { echo "FAIL: (m.1) sensitivity — with the block REMOVED and the same 0-event stub, the predicate must report a gap"; failures=$((failures+1)); }
+  #
+  # (m.2) DEGRADED ENVIRONMENT NEVER ESCALATES. A missing synthesizer and a
+  # whitespace-only render are 6.7 SKIP / FAIL arms it owns with a richer
+  # diagnostic; blocking preflight on them converts a degraded ENVIRONMENT into a
+  # close-out failure and widens this gate past the one condition it owns.
+  SYNTHESIZE_LEARNINGS="$_vl_tmp/definitely-not-here.sh"
+  ! _learnings_capture_gap || { echo "FAIL: (m.2) — a non-executable synthesizer must NOT read as a capture gap"; failures=$((failures+1)); }
+  SYNTHESIZE_LEARNINGS="$_vl_sl_empty"
+  ! _learnings_capture_gap || { echo "FAIL: (m.2) — a whitespace-only render at exit 0 must NOT read as a capture gap"; failures=$((failures+1)); }
+
+  # ── (n) THE GATE IS WIRED, AND WIRED EARLY ENOUGH. A predicate that exists but
+  # is never called from phase_preflight is the dead-check class one level up; a
+  # preflight dispatched after the first write phase does not save the tree.
+  # Both facts are derived from the SHIPPED text (the PI-10 producer-derived
+  # detector idiom) — asserting against a restated copy would stay green while
+  # the production ladder moved underneath it.
+  local _pfg_body; _pfg_body="$(/usr/bin/sed -n '/^phase_preflight() {/,/^}/p' "${BASH_SOURCE[0]}" || true)"
+  /usr/bin/grep -qE '_learnings_capture_gap' <<<"$_pfg_body" || { echo "FAIL: (n) — phase_preflight does not call _learnings_capture_gap; the gate is defined but never fires"; failures=$((failures+1)); }
+  # control: the same extraction must NOT match a fabricated symbol.
+  ! /usr/bin/grep -qE '_learnings_zzfabricatedzz' <<<"$_pfg_body" || { echo "FAIL: (n) control — the phase_preflight extractor matched a fabricated symbol"; failures=$((failures+1)); }
+  local _pfg_prod; _pfg_prod="$(/usr/bin/sed -n '/^phase_preflight || {/,/^phase_audit_epic_rollup/p' "${BASH_SOURCE[0]}" || true)"
+  local _pfg_n_pf _pfg_n_br _pfg_n_log
+  _pfg_n_pf="$(/usr/bin/grep -n '^phase_preflight ||' <<<"$_pfg_prod" | /usr/bin/cut -d: -f1)"
+  _pfg_n_br="$(/usr/bin/grep -n '^phase_create_chore_branch ||' <<<"$_pfg_prod" | /usr/bin/cut -d: -f1)"
+  _pfg_n_log="$(/usr/bin/grep -n '^phase_transition_release_log ||' <<<"$_pfg_prod" | /usr/bin/cut -d: -f1)"
+  [[ -n "$_pfg_n_pf" && -n "$_pfg_n_br" && -n "$_pfg_n_log" && "$_pfg_n_pf" -lt "$_pfg_n_br" && "$_pfg_n_br" -lt "$_pfg_n_log" ]] || { echo "FAIL: (n) — dispatch order must be preflight < create_chore_branch < transition_release_log (got $_pfg_n_pf / $_pfg_n_br / $_pfg_n_log)"; failures=$((failures+1)); }
+  # control: the same extraction finds a genuinely absent phase → nothing.
+  ! /usr/bin/grep -qE '^phase_zzfabricatedzz \|\|' <<<"$_pfg_prod" || { echo "FAIL: (n) control — the dispatch extractor matched a fabricated phase name"; failures=$((failures+1)); }
+
+  # ── (o) GATE↔BACKSTOP PARITY, as MECHANISM rather than convention. The gate is
+  # a fixed conjunction; 6.7 is an ordered ladder that later cards will extend.
+  # Two shapes cannot be held in agreement by construction, so the implication is
+  # asserted directly, over the SAME fixture matrix:
+  #     _learnings_capture_gap returns 0  ==>  phase_append_release_learnings returns 3
+  # No arm above can catch a violation: (l) and (m) grade the gate alone, and the
+  # 6.7 arms grade the backstop alone. A new SKIP arm added to 6.7 without a
+  # matching arm here reddens THIS assertion and nothing else.
+  local _pfg_cell _pfg_gap _pfg_rc _pfg_gaps=0
+  for _pfg_cell in placed synth-absent synth-empty render-0 render-N; do
+    _vl_write; VERSION="v9.95"; MODE="apply"; SYNTHESIZE_LEARNINGS="$_vl_sl"
+    case "$_pfg_cell" in
+      placed)
+        PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+        phase_append_release_learnings >/dev/null 2>&1 || true
+        SYNTHESIZE_LEARNINGS="$_vl_sl_zero" ;;
+      synth-absent) SYNTHESIZE_LEARNINGS="$_vl_tmp/definitely-not-here.sh" ;;
+      synth-empty)  SYNTHESIZE_LEARNINGS="$_vl_sl_empty" ;;
+      render-0)     SYNTHESIZE_LEARNINGS="$_vl_sl_zero" ;;
+      render-N)     SYNTHESIZE_LEARNINGS="$_vl_sl" ;;
+    esac
+    _pfg_gap=0; _learnings_capture_gap || _pfg_gap=1
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    _pfg_rc=0; phase_append_release_learnings >/dev/null 2>&1 || _pfg_rc=$?
+    if [[ "$_pfg_gap" -eq 0 && "$_pfg_rc" -ne 3 ]]; then
+      echo "FAIL: (o) parity [$_pfg_cell] — the gate reports a capture gap but phase_append_release_learnings returned $_pfg_rc, not 3: preflight would block a close the backstop waves through"; failures=$((failures+1))
+    fi
+    if [[ "$_pfg_gap" -eq 0 ]]; then _pfg_gaps=$((_pfg_gaps+1)); fi
+  done
+  # control: the implication is VACUOUSLY true if no cell ever produces a gap.
+  # Assert the matrix actually exercised the antecedent, or this arm is inert and
+  # indistinguishable from a passing one.
+  [[ "$_pfg_gaps" -ge 1 ]] || { echo "FAIL: (o) control — no matrix cell produced a capture gap, so the parity implication was vacuous and this arm asserted nothing"; failures=$((failures+1)); }
+  SYNTHESIZE_LEARNINGS="$_vl_sl"; VERSION="v9.95"; MODE="apply"
+
   # ── (f)(g)(i) POST-ARCHIVAL. Separate tmp dir so the segment glob cannot see,
   # or be seen by, the hot-only cases above.
   local _vl_atmp; _vl_atmp="$(/usr/bin/mktemp -d -t velocity-archived.XXXXXX)"
@@ -10936,7 +11149,7 @@ AISTUB
   echo "  extract_row_state + extract_milestone_slug validated (3 shapes: vX.Y- / NN- / pure-alpha incl. hyphen-less #2539 a4 branch; version-less end-anchor; #667 F2 bare theme-named slug → title)" >&2
   echo "  phase_append_release_digest + phase_append_release_index + phase_append_changelog validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency; #2048 — version-less marker + _unversioned notes link + marker-aware idempotency + CHANGELOG SKIP; #4455 — all three entries PROJECTED by generate_release_index.py, versioned CHANGELOG block lands above the prior entry WITH its separating blank line intact, re-run SKIPs, and a non-owner/repo-shaped REPO_SLUG FAILs before writing a broken Release URL)" >&2
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped; #3715 two-surface — archived body resolves to its segment and the hot ledger is left untouched / cross-surface idempotency re-run SKIPs without duplicating / a genuine **Result:** absence still hard-FAILs naming every surface searched / no sibling leak within a segment); Outcome KEY GRAMMAR validated (#4222 — k1 a QUALIFIED key is recognized and REJECTED at --apply leaving the record byte-unchanged, with an EXECUTABLE SENSITIVITY arm re-demonstrating on every run that the pre-fix bare-literal probe reads the same fixture as ABSENT and would inject the second line / k2 the bare path is unregressed (SKIP, no write) with a SPECIFICITY arm proving an Outcome-less block still injects exactly one / k3 phase 6.8 anchors under a qualified key, asserted on the RAW line because the field-name class used elsewhere cannot see parentheses, with the bare-key fallback as its control / k4 ONE RESOLVER, TWO SITES: extending the shared key constant moves BOTH the 6.5 probe and the 6.8 anchor, and at the default constant the same key is accepted at NEITHER — a one-site fix fails here / k5 grammar non-collision asserted in BOTH directions against the real sibling field **Outcome rationale:** / k6 raw-prefix fidelity — an INDENTED key classifies and anchors through the UNCHANGED primitive, with the unindented twin as control / k7 both-present classifies DUPLICATE and FAILs writing nothing, control: bare-only raises no duplicate diagnostic / k8 three PRESENT-BUT-UNPARSEABLE shapes (nested paren, doubled space, missing space) classify UNPARSEABLE rather than ABSENT and stop the write, control: a genuine absence still injects / k9 NO EMPTY ANCHOR REACHES THE PRIMITIVE — an unresolvable anchor FAILs loudly instead of landing the field at the top of the block, paired with an ANTI-VACUITY arm that hands the unchanged primitive an empty anchor and demonstrates it exits 0 writing to the top, so k9 is a measurement and not a tautology / k10 MODE: --dry-run returns 0 and marks WARN naming the condition that FAILS at --apply, control: the same fixture at --apply returns 3 and marks FAIL / k11 the governance constant is hard-assigned, not env-overridable, scoped to the production region with an anti-vacuity control on the known-bad form)" >&2
-  echo "  phase_inject_velocity_field + phase_append_release_learnings validated (velocity — field ORDER 'Cycle-Time Velocity Result' on a clean block / no sibling leak / idempotent re-run / bolded-numeral value REJECTED writing nothing / empty capture at exit 0 degrades to an explicit N/A never a bare field / non-conformant existing field SKIPs WITH the warning, conformant control WITHOUT it; CO-LOCATION — an archived block's field lands in the SEGMENT beside its own **Result:** and the hot stub stays at 0, cross-surface re-run SKIPs, dry-run names the segment and prints the RESOLVED bytes. learnings — sibling H4 placed IMMEDIATELY after its Deployment Log block / body intact through the sentinel capture / idempotent re-run / whitespace-only render at exit 0 FAILs writing nothing / D-1 zero-source-events BLOCKS the close and prints the capture remedy, >0-events control PASSes / over an ARCHIVED block the block still lands in the HOT ledger and every segment stays at 0 Release Learnings — RECORDS_POLICY KEEP_CLASS)" >&2
+  echo "  phase_inject_velocity_field + phase_append_release_learnings validated (velocity — field ORDER 'Cycle-Time Velocity Result' on a clean block / no sibling leak / idempotent re-run / bolded-numeral value REJECTED writing nothing / empty capture at exit 0 degrades to an explicit N/A never a bare field / non-conformant existing field SKIPs WITH the warning, conformant control WITHOUT it; CO-LOCATION — an archived block's field lands in the SEGMENT beside its own **Result:** and the hot stub stays at 0, cross-surface re-run SKIPs, dry-run names the segment and prints the RESOLVED bytes. learnings — sibling H4 placed IMMEDIATELY after its Deployment Log block / body intact through the sentinel capture / idempotent re-run / whitespace-only render at exit 0 FAILs writing nothing / D-1 zero-source-events BLOCKS the close and prints the capture remedy, >0-events control PASSes / over an ARCHIVED block the block still lands in the HOT ledger and every segment stays at 0 Release Learnings — RECORDS_POLICY KEEP_CLASS. A7 capture gate — the SAME 0-source-event condition read at Phase 2 by _learnings_capture_gap reports a gap, >0-events control does NOT / an already-placed block is NOT a gap even under the 0-event stub, block-removed sensitivity IS / neither a missing synthesizer nor a whitespace-only render escalates to a gap / phase_preflight actually CALLS the predicate and is dispatched before create_chore_branch and transition_release_log, both derived from the shipped text with fabricated-symbol controls / GATE-BACKSTOP PARITY over the placed x synth-absent x synth-empty x render-0 x render-N matrix — a gap implies 6.7 returns 3, with a non-vacuity control asserting the antecedent actually fired)" >&2
   echo "  phase_inject_close_class_telemetry_field validated (#4437 — clean block PASSes with the field positioned after **Outcome rationale:** and no sibling leak / idempotent re-run SKIPs / fallback anchor lands after **Outcome:** and names which anchor it used / VACUITY PAIR: an all-N/A-but-conformant line is WRITTEN and carries the no-computed-ratio warning WITH the disposition read from the emitted line, measured-line control carries NO warning / a line missing § 3.2 slots FAILs writing nothing / an empty capture at exit 0 FAILs writing nothing / producer exit 2 escalates as a source-integrity condition writing nothing / a non-executable producer SKIPs rather than hand-composing a field that would fabricate its own mechanism claim / dry-run prints the RESOLVED bytes and writes nothing / CO-LOCATION: an archived block's field lands in the SEGMENT beside its own **Result:** with the hot stub at 0, and the cross-surface re-run SKIPs)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache)" >&2
   echo "  post_gate_passage_proof three-rung target ladder validated (#3819 — T-13 rung 1 resolves a CLOSED Stage-13 sub-task via --state all and does NOT fall through to the PR / rung 2 posts to the release PR naming the OBSERVED rung-1 reason / rung 3 MANUAL names BOTH attempted targets; T-14 two collect_open_release_issues calls in one run keep EXCLUDED_DETAIL undoubled, COLLECTED_OPEN_ISSUES identical and resolve_stage13_subtask stable, with a non-empty-exclusion anti-vacuity control)" >&2
