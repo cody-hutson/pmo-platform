@@ -46,7 +46,7 @@ jobs:
           # code-spans like `feedback_x_y` and prose like "feedback_x_y memory:", not just
           # markdown links). The 2+-segment shape (prefix_word_word) avoids single-word
           # false positives such as "feedback_loop".
-          MEM_RE='OPERATOR_INSTANCE_MEMORY|\.claude/memory|/memory/[a-z]|(feedback|project|reference|temp_pointer)_[a-z]+_[a-z_]+|observations\.md'
+          MEM_RE='OPERATOR_INSTANCE_MEMORY|\.claude/memory|/memory/[a-z]|(^|[[:space:]`"'"'"'[(/])(feedback|project|reference|temp_pointer)_[a-z]+_[a-z_]+|observations\.md'
 
           mapfile -t CHANGED < <(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- '*.md' '*.sh' '*.py' 2>/dev/null || true)
 

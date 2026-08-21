@@ -148,12 +148,31 @@ output, reported every close-out regardless of whether anything was deferred.
 
 The close-out is outcome-bound, not tool-bound: what is mandated is the complete output
 set produced and verified on the mainline, not a single mechanism. The script's pre-flight
-hard-exits on exactly the conditions a close can legitimately hit — authentication
-unavailable, working tree not clean, the deployed RELEASE_LOG row not yet landed, the
-version tag absent. When the pre-flight cannot pass, the operator MAY produce the same
+hard-exits before any write, and its conditions fall into three classes with different
+remedies — only the first licenses the fallback.
+
+NOT-YET-READY — authentication unavailable, working tree not clean, the deployed
+RELEASE_LOG row not yet landed. These describe an environment the close cannot yet run in.
+When the pre-flight cannot pass for one of them, the operator MAY produce the same
 output set by hand via the Stage-13 chore-PR mechanism defined in stage-13-close.md; the
 close is satisfied when the deploy-check release-corpus completeness check and the
-hub-side completion-verification table both pass. Binding the outcome rather than the tool
+hub-side completion-verification table both pass.
+
+MISSING INPUT — an unfilled scaffold token in this version's release note, and the
+Phase-A7 release-synthesis/learnings-triple row not yet captured. Supply the input and
+re-run. Hand-assembly does NOT apply here: it would produce by hand exactly the unevidenced
+artifact the gate exists to refuse.
+
+DEFECT — the close-out invoked from the primary checkout, a milestone slug resolving to
+other than exactly one RELEASE_LOG row, or a scaffold-token set the lint tool cannot read.
+Repair and re-run. Hand-assembly does not apply here either, and on the slug case it is
+actively harmful: that check exists to catch a mis-resolved slug before any mutation
+rather than let a bad ledger cell be written, and hand-assembly writes that cell by hand.
+
+The version tag is RECORDED at pre-flight, not gated there. A tag-absent state at dry-run
+time is normal — the tag is pushed at Stage 12 Phase B3, which has not run when the
+operator dry-runs the close — and the tag blocks later, at the GitHub-Release publish
+phase. It is not a pre-flight exit condition. Binding the outcome rather than the tool
 keeps the close satisfiable even when the tool's pre-flight blocks. The six checklist items
 above are the outcome the fallback must still produce — including the issue-closure audit
 and the carry-forward output.

@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.34 | closeout-reports-what-shipped | 2026-08-21 | — | #5759 | [notes/v4.34_RELEASE_NOTES.md](notes/v4.34_RELEASE_NOTES.md) |
 | v4.33 | operator-runtime-state-and-workspace-anchoring | 2026-08-20 | — | #5632 | [notes/v4.33_RELEASE_NOTES.md](notes/v4.33_RELEASE_NOTES.md) |
 | v4.32 | plan-file-identity-adr-092 | 2026-08-16 | — | #5581 | [notes/v4.32_RELEASE_NOTES.md](notes/v4.32_RELEASE_NOTES.md) |
 | v4.31 | hooks-enforce-under-adversity | 2026-08-16 | — | #5560 | [notes/v4.31_RELEASE_NOTES.md](notes/v4.31_RELEASE_NOTES.md) |
