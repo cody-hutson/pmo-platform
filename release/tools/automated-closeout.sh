@@ -12176,9 +12176,13 @@ EOF
   local _os_disp; _os_disp="$(grep_count -E '^phase_assert_output_set \|\| \{ generate_report; exit 3; \}' "${BASH_SOURCE[0]}")"
   [[ "$_os_disp" -eq 1 ]] || { echo "FAIL: #5288 m11 — expected EXACTLY ONE guarded top-level dispatch of phase_assert_output_set, found $_os_disp"; failures=$((failures+1)); }
   local _os_ln_ads _os_ln_new _os_ln_commit
-  _os_ln_ads="$(/usr/bin/grep -nE '^phase_assert_derived_surfaces \|\|' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 | /usr/bin/head -1)"
-  _os_ln_new="$(/usr/bin/grep -nE '^phase_assert_output_set \|\|' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 | /usr/bin/head -1)"
-  _os_ln_commit="$(/usr/bin/grep -nE '^phase_commit_chore_pr \|\|' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 | /usr/bin/head -1)"
+  # The trailing `head -1` folds into `grep -m1`: grep reads the FILE directly, so it
+  # is the leftmost producer and no upstream writer is left for an early-closing
+  # consumer to signal, while `cut` drains what remains. Selection-preserving because
+  # no needle here carries `-o` — `-m` bounds matching LINES, not matches.
+  _os_ln_ads="$(/usr/bin/grep -m1 -nE '^phase_assert_derived_surfaces \|\|' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1)"
+  _os_ln_new="$(/usr/bin/grep -m1 -nE '^phase_assert_output_set \|\|' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1)"
+  _os_ln_commit="$(/usr/bin/grep -m1 -nE '^phase_commit_chore_pr \|\|' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1)"
   [[ -n "$_os_ln_ads" && -n "$_os_ln_new" && -n "$_os_ln_commit" ]] || { echo "FAIL: #5288 m11 anti-vacuity — one of the three dispatch needles resolved to nothing, so the ordering assert below is unfalsifiable"; failures=$((failures+1)); }
   [[ "$_os_ln_new" -gt "$_os_ln_ads" && "$_os_ln_new" -lt "$_os_ln_commit" ]] || { echo "FAIL: #5288 m11 — phase 9.56 must dispatch AFTER assert_derived_surfaces and BEFORE commit_chore_pr, or the stamp commits ahead of the assert (ads=$_os_ln_ads new=$_os_ln_new commit=$_os_ln_commit)"; failures=$((failures+1)); }
   local _os_fab; _os_fab="$(grep_count -E '^phase_assert_output_set_zz \|\|' "${BASH_SOURCE[0]}")"

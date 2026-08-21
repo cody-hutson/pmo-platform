@@ -168,7 +168,9 @@ usage() {
   # Range ends at the last header comment line (the exit-code block), immediately
   # before `set -euo pipefail`. Derived, not hardcoded — the prior literal 4,63p
   # silently truncated --help the moment the header grew.
-  local _last; _last="$(/usr/bin/grep -n '^set -euo pipefail' "${BASH_SOURCE[0]}" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  # The trailing `head -1` folds into `grep -m1`: grep reads the FILE directly, so no
+  # upstream writer is left for an early-closing consumer to signal, and `cut` drains.
+  local _last; _last="$(/usr/bin/grep -m1 -n '^set -euo pipefail' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1)"
   /usr/bin/sed -n "4,$(( _last - 2 ))p" "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
