@@ -2,6 +2,7 @@
 type: project-page
 managed_by: project-initiator
 domain: managed
+folder: _project-root
 lifecycle_state: emerging
 trust_category: controlled-truth
 created_date: {{CREATION_DATE}}
@@ -10,9 +11,12 @@ created_date: {{CREATION_DATE}}
 # PROJECT.md — {{PROJECT_NAME}}
 
 <!--
-Born entity frontmatter (above): the 6-field block per frontmatter-schema.md § Classification/Trust
+Born entity frontmatter (above): the 7-field block per frontmatter-schema.md § Classification/Trust
 + agent-processing-contracts.md Skill-6 contract. `domain: managed` is the live value (A/B/C
-deprecated per frontmatter-schema.md § Category 6). Entity `lifecycle_state: emerging` is the
+deprecated per frontmatter-schema.md § Category 6). `folder: _project-root` is the NON-BIN
+SENTINEL (ADR-137) — PROJECT.md sits at the project ROOT, in no bin, and `folder` is a NOT-NULL
+core field, so without this value a newly-scaffolded PROJECT.md is born missing one.
+Entity `lifecycle_state: emerging` is the
 ENTITY maturity axis — distinct from the project-lifecycle `Status` below (two-lifecycle model).
 Composed-index PROJECT.md (ADR-060): a thin dashboard, NOT the container. Methodology + Status
 are INLINE (consumer back-compat per project-schema.md §4); People / Systems / Milestones /

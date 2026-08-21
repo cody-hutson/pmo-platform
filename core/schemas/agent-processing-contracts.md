@@ -167,7 +167,7 @@ Each skill contract specifies:
 |-------|-------|
 | **Trigger** | During project initiation (after folder structure creation) |
 | **Reads** | Portfolio structure (existing projects, programs) |
-| **Writes** | Full frontmatter on PROJECT.md: `type: project-page`, `managed_by: project-initiator`, `domain: managed`, `lifecycle_state: emerging`, `trust_category: controlled-truth`. Navigation page headers for folder indexes. |
+| **Writes** | Full frontmatter on PROJECT.md: `type: project-page`, `managed_by: project-initiator`, `domain: managed`, `folder: _project-root`, `lifecycle_state: emerging`, `trust_category: controlled-truth`. Navigation page headers for folder indexes. |
 | **Relationships Created** | `BELONGS_TO` (project → program → portfolio), `BELONGS_TO` (PROJECT.md → project) |
 | **Lifecycle Transitions** | Sets initial states only |
 | **Ecosystem Tag** | `[ECOSYSTEM_UPDATE: {project}/PROJECT.md | FRONTMATTER_CREATED | project-initiator | scaffold: {folder_count} folders]` |

@@ -45,10 +45,12 @@ THREE BLOCKING FIXES folded in from the Stage-5 Collective-Review scope-lock:
            matches ZERO without this, orphaning 100% of the corpus.
   * FIX 2  EXCLUDE_PATTERNS tier fires BEFORE classification. Any path segment in
            the exclusion set (body-backups, Staging, _archived, _unclassified,
-           phase3-scratch, bodies, snapshot, _inbox) is skipped — not stamped, not
-           orphaned — and logged separately. Most members are non-authoritative copies
-           that collide on the bare-filename join key; `_inbox` is the ADR-080 transient
-           intake area, excluded because an unrouted item is not yet a record.
+           phase3-scratch, bodies, snapshot, _inbox, _superseded) is skipped — not
+           stamped, not orphaned — and logged separately. Most members are
+           non-authoritative copies that collide on the bare-filename join key;
+           `_inbox` is the ADR-080 transient intake area, excluded because an unrouted
+           item is not yet a record; `_superseded` holds RETIRED artifacts, excluded
+           because stamping them would assert they are current.
   * FIX 3  coverage scope D — `--scope active` (default) excludes the `Archive/`
            subtree; `--scope all` includes it (stamped `archived`). Plus the
            folder->default-type fallback above.
@@ -255,6 +257,15 @@ FILENAME_TYPE_SIGNALS = (
 EXCLUDE_PATTERNS = frozenset({
     "body-backups", "staging", "_archived", "_unclassified",
     "phase3-scratch", "bodies", "snapshot", "_inbox",
+    # Retired artifacts. `superseded` IS a legal lifecycle_state and the trust rule
+    # shifts it to historical-record, so stamping these draft/interpretation would
+    # assert they are current. Exact structural sibling of the `_archived` member
+    # above. Honouring `_superseded/` as a lifecycle override is the better long-run
+    # answer, but the directory is not yet a defined platform convention, so blessing
+    # it would be a governance change rather than a tool change: excluding is the
+    # truthful move — the files are ABSENT from the warehouse rather than
+    # mis-described in it.
+    "_superseded",
 })
 
 # The Archive subtree — excluded under scope=active (FIX 3), stamped `archived` under
@@ -286,6 +297,26 @@ NONPROJECT_TOP_SEGMENTS = frozenset({"_config", "_pmo", "transcripts"})
 # today -- ADR-080 names the enforcement instrument for the closed set as a
 # still-unbuilt sibling work item. The corpus condition itself is unchanged.
 NONRECORD_PROJECT_SEGMENTS = frozenset({"templates"})
+
+# D-12 — the PROJECT-ROOT NON-BIN SENTINEL (ADR-137).
+# A project's governance files sit at the project ROOT, not in any bin, so no folder
+# token resolves for them and they orphan. `_project-root` is the `folder` value that
+# names that location. It is a SENTINEL, not a sixth bin: ADR-080 declares the bin set
+# CLOSED, and this value describes a location OUTSIDE the taxonomy rather than adding a
+# member TO it — which is why the underscore prefix (the established marker for a
+# non-bin area, cf. `_inbox` / `_generated`) is load-bearing and `0-Root` would not do.
+PROJECT_ROOT_FOLDER = "_project-root"
+# domain/default-type for the sentinel, mirroring the project-initiator emit contract
+# in agent-processing-contracts.md Skill 6. lifecycle_state and trust_category still
+# flow through LIFECYCLE_BY_DOMAIN / TRUST_BY_DOMAIN, so a BACKFILLED project root
+# reads `current` where a BORN one reads `emerging` — for an established project that
+# is arguably the right answer, and `_absent_core_keys()` never overwrites an existing
+# value, so a born file keeps its own.
+PROJECT_ROOT_CLASSIFICATION = (DOMAIN_MANAGED, PROJECT_ROOT_FOLDER, "project-page")
+# The KNOWN governance basenames. Deliberately a closed set rather than a catch-all:
+# an arbitrary stray at a project root STAYS an orphan, so this branch can never become
+# a silent sink for unclassifiable files.
+PROJECT_ROOT_BASENAMES = frozenset({"project.md", "readme.md", "corrections.md"})
 
 # file_format by suffix (frontmatter-schema.md Category 6). Markdown embeds; the rest
 # get a .meta.yml sidecar.
@@ -338,6 +369,25 @@ def _folder_prefix(folder_name):
     return name
 
 
+def _is_project_root_governance(rel_path):
+    """True for a KNOWN governance file sitting directly at a project root (D-12).
+
+    THREE guards, each load-bearing and none removable:
+      * depth == 2 — a file inside a bin resolves normally, so this must not shadow it;
+      * the basename is in PROJECT_ROOT_BASENAMES — an arbitrary stray at a project
+        root stays an orphan, so the branch is never a catch-all;
+      * the top segment is not `_`-prefixed — `_pmo/` and `_config/` are NOT projects
+        and are claimed by the non-project-top-segment tier. Drop this guard and the
+        shared-entity store's README is mis-claimed as project-root governance.
+
+    Provably disjoint from NONRECORD_PROJECT_SEGMENTS, which requires len(segs) > 2.
+    """
+    parts = rel_path.parts
+    return (len(parts) == 2
+            and parts[1].lower() in PROJECT_ROOT_BASENAMES
+            and not parts[0].startswith("_"))
+
+
 def _project_of(rel_path):
     """The project name = the first path segment under the corpus root (original case)."""
     return rel_path.parts[0] if rel_path.parts else ""
@@ -375,6 +425,8 @@ def classify(path, root, scope):
       5.  no resolvable folder token                -> orphan (unless a filename signal
                                                       + a domain can still be defended;
                                                       here: orphan — no confident domain)
+      5a. KNOWN governance file at a project ROOT   -> the `_project-root` NON-BIN
+                                                      sentinel (D-12 / ADR-137)
       6.  else                                      -> full 11-field stamp
     """
     rel_path = path.relative_to(root)
@@ -437,6 +489,12 @@ def classify(path, root, scope):
             bin_idx = i
             domain, canonical_folder, default_type = FOLDER_PREFIX_MAP[p]
             break
+    # (5a) D-12 — project-root governance file. No folder token resolves at a project
+    # ROOT, so these would orphan. The NON-BIN sentinel classifies them by LOCATION
+    # without adding a bin (see PROJECT_ROOT_FOLDER / ADR-137).
+    if domain is None and _is_project_root_governance(rel_path):
+        domain, canonical_folder, default_type = PROJECT_ROOT_CLASSIFICATION
+
     if domain is None:
         # No confident domain -> orphan candidate (recorded, not guessed).
         c.is_orphan = True
@@ -444,7 +502,11 @@ def classify(path, root, scope):
         return c
 
     # (5b) sub-bin refinement — the segment IMMEDIATELY under the resolved bin only.
-    if bin_idx + 1 < len(folder_parts):
+    # `bin_idx is None` whenever the domain came from somewhere other than the token
+    # walk (today: the D-12 project-root sentinel, which by construction has no bin and
+    # therefore no sub-bin). Guarded rather than assumed — the walk and the sentinel are
+    # two independent domain resolvers writing one variable.
+    if bin_idx is not None and bin_idx + 1 < len(folder_parts):
         sub = SUBBIN_DEFAULT_TYPE.get((prefix, folder_parts[bin_idx + 1].lower()))
         if sub is not None:
             default_type, subbin_authoritative = sub
@@ -680,10 +742,14 @@ def run_self_test():
     """Assert the tool's contract against the committed fixture:
       (a) full 11-field core set stamped on a canonical file;
       (b) case-normalization fires on a Capitalized folder (01-Governance);
-      (c) exclusion fires on a backup segment (body-backups);
+      (c) exclusion fires on a backup segment (body-backups) and on the retired-artifact
+          segment (_superseded), and the merged set still carries _inbox;
       (d) Archive/ excluded under scope=active, included (archived) under scope=all;
       (e) idempotent re-run produces zero further changes;
-      (f) orphan list is populated by an unclassifiable file;
+      (f) orphan list is populated by an unclassifiable file, its reason string is the
+          one this tool emits, and the D-12 project-root sentinel classifies a KNOWN
+          governance file at a project root while leaving a stray — and an `_`-prefixed
+          top segment — alone;
       (g) every folder default-type is valid for its domain (type-taxonomy invariant);
       (h) the Stage-12 confirmation-token gate: --stamp WITHOUT --i-am-at-stage-12 refuses
           (exit 3) and writes nothing; --stamp WITH the token writes (mirrors the
@@ -869,6 +935,77 @@ def run_self_test():
         sidecar = root / "Default" / "05-Transcripts" / "SteerCo_2026-06-01.txt.meta.yml"
         if not sidecar.exists():
             failures.append(f"(a-write) sidecar not created for non-md file: {sidecar.name}")
+
+    # --- (c) merged exclusion set + (f) the D-12 project-root sentinel --------------
+    # Built in-process so the committed fixture stays the LEGACY fixture. The (c) cases
+    # grade the exclusion set at its COMBINED final state — the only state that ships —
+    # so a per-card green with a combined red cannot pass. The (f) cases grade the
+    # non-bin sentinel and, critically, its three NEGATIVES.
+    with tempfile.TemporaryDirectory() as td:
+        droot = Path(td) / "corpus"
+        d_cases = [
+            # (c) retired artifacts, and the merged set still carrying _inbox
+            ("Proj/08-Generated/_superseded/y.md", "EXCL",
+             "excluded path segment (_superseded)"),
+            ("Proj/1-Governance/_inbox/z.md", "EXCL", "excluded path segment (_inbox)"),
+            ("Proj/01-Governance/body-backups/PROJECT.md", "EXCL",
+             "excluded path segment (body-backups)"),
+            # (f) the D-12 sentinel over all three KNOWN governance basenames
+            ("Proj/PROJECT.md", "STAMP", ("_project-root", "project-page")),
+            ("Proj/README.md", "STAMP", ("_project-root", "project-page")),
+            ("Proj/CORRECTIONS.md", "STAMP", ("_project-root", "project-page")),
+            # (f) NEGATIVE 1 — a stray at a project root is NOT swallowed
+            ("Proj/scratch-note.md", "ORPHAN", None),
+            # (f) NEGATIVE 2 — depth: a governance basename INSIDE a bin resolves to
+            # that bin, never to the sentinel
+            ("Proj/01-Governance/README.md", "STAMP", ("01-governance", "reference")),
+            # (f) NEGATIVE 3 — a governance basename BELOW the project root, under a
+            # folder that resolves no token, stays an orphan: the sentinel does not
+            # reach into unresolvable subtrees. NOTE this case does NOT discriminate
+            # the `len(parts) == 2` guard on its own — the predicate indexes parts[1],
+            # so relaxing the depth limb only changes behaviour for a directory literally
+            # NAMED `PROJECT.md`/`README.md`/`CORRECTIONS.md`. The depth limb is kept as
+            # defence-in-depth and is deliberately NOT claimed as independently pinned.
+            ("Proj/notes/README.md", "ORPHAN", None),
+        ]
+        for rel, _v, _e in d_cases:
+            f = droot / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("---\ntitle: t\n---\n", encoding="utf-8")
+        for rel, verdict, expect in d_cases:
+            cd = classify(droot / rel, droot, scope="active")
+            if verdict == "EXCL":
+                if not cd.is_excluded or cd.reason != expect:
+                    failures.append(f"(c) {rel}: expected EXCLUDED {expect!r}, got "
+                                    f"excluded={cd.is_excluded} reason={cd.reason!r}")
+            elif verdict == "STAMP":
+                if cd.is_orphan or cd.is_excluded:
+                    failures.append(f"(f) {rel}: expected STAMP, got "
+                                    f"{'orphan' if cd.is_orphan else 'excluded'} "
+                                    f"({cd.reason})")
+                    continue
+                got = (cd.fields.get("folder"), cd.fields.get("type"))
+                if got != expect:
+                    failures.append(f"(f) {rel}: expected (folder,type)={expect}, got {got}")
+            else:
+                if not cd.is_orphan:
+                    failures.append(f"(f) {rel}: a stray at a project root must stay an "
+                                    f"orphan, got excluded={cd.is_excluded} "
+                                    f"folder={cd.fields.get('folder')!r}")
+        # (f) NEGATIVE 4 — the `_`-prefix guard. `_pmo/README.md` is the shared-entity
+        # store's page, claimed by the non-project-top-segment tier; the sentinel must
+        # NOT take it. This is the guard whose removal turns the residual 6 into 7.
+        pmo = droot / "_pmo" / "README.md"
+        pmo.parent.mkdir(parents=True, exist_ok=True)
+        pmo.write_text("---\ntitle: t\n---\n", encoding="utf-8")
+        c_pmo = classify(pmo, droot, scope="active")
+        if not (c_pmo.is_excluded and c_pmo.reason == "non-project top segment (_pmo)"):
+            failures.append(f"(f) _-prefix guard: _pmo/README.md must be excluded by the "
+                            f"non-project tier, got excluded={c_pmo.is_excluded} "
+                            f"folder={c_pmo.fields.get('folder')!r} reason={c_pmo.reason!r}")
+        if _is_project_root_governance(Path("_pmo/README.md")):
+            failures.append("(f) _-prefix guard: the sentinel predicate claimed an "
+                            "`_`-prefixed top segment")
 
     # --- (i) ADR-080 taxonomy arm -------------------------------------------------
     # Built in-process in its own tempdir so the committed legacy fixture stays the

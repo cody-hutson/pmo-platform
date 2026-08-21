@@ -396,4 +396,264 @@ Recorded so that a reader of the decision chain does not mistake a retired posit
 
 | Path or token | Status | Basis |
 |---|---|---|
-| *(none yet — populated at Engineering)* | — | A declared ADD that legitimately does not ship requires a row here carrying the literal `NOT DELIVERED` and the declared path, or — for a conditional row — its condition token |
+| `core/governance/OPERATIONS.md` | **NOT DELIVERED** | Blocked at Engineering by `.claude/hooks/block-autonomy-ceiling.sh:BLOCK-AUTONOMY-001`. The rule matches `*/OPERATIONS.md` unconditionally — no worktree carve-out, no mode gate, no session sentinel — so no agent-side path exists. Not bypassed. Requires an operator-side edit; the one-line change is specified in § Node-Backfill Evidence Record § 12 |
+| `operations/skills/project-initiator/SKILL.md` | **NOT DELIVERED** | Blocked at Engineering by `.claude/hooks/block-skill-direct-edit.sh:BLOCK-SKILL-EDIT-001` in enforce mode (the skill carries the `skill_discipline_migrated_v10_2` marker). The sanctioned path is a genuine `pmo-skill-editor` session sentinel; `pmo-skill-editor`'s own guardrail forbids self-creating that sentinel to clear the gate, so it was not created. Impact analysis was completed and is recorded in § Node-Backfill Evidence Record § 12 |
+
+## Node-Backfill Evidence Record
+
+*Part A (pre-write), authored at Stage 6 per **D-3123-E**. This is #3123's PR-side gradeable artifact — the surface Stage 7 DT and Stage 8 QA grade, because the card's corpus deliverable is not readable from the PR diff. **Part B (post-write) appends here via the Stage-12 Phase-B5 chore PR.***
+
+**Corpus-privacy construction, stated because it changes how §§ 5–8 read.** This plan is a tracked file in a **public** repository; the corpus it measures is git-ignored Layer-2 client-engagement material. Every per-file row below is therefore keyed by an **opaque stable file key** — `sha256(<corpus-relative path>)[:12]` — never by a path, project name, or filename. The keys are deterministic and reproducible by anyone holding the corpus, so per-file auditability is preserved without publishing any corpus identifier. Everything else emitted here is a count, a depth index, a platform-vocabulary token, or a tool-emitted enum value.
+
+### § 1 — Measurement instant
+
+| Field | Value |
+|---|---|
+| Merge base | `origin/main` @ `ccd3be07` |
+| Branch state measured | Commit 1 (#5668) + Commit 2 (#3123) applied |
+| Date | 2026-08-21 |
+| Invocation | `stamp-node-frontmatter.py --dry-run --scope active --output-format json --root <corpus>` |
+| Mode | read-only throughout; `--dry-run` is the default and is not gated, and `--stamp` was never invoked |
+
+**Every figure below is a point-in-time observation and MUST be re-derived immediately before the Stage-12 write (AI-010).** The corpus moved **three times during this Stage-6 session alone**, with the tool byte-identical across every read: baseline `would_stamp` 186 → 187 → 190. It had already moved 180 → 181 during review. The **class structure** is the durable output of this record; every **count** is an observation.
+
+**The third move is recorded rather than absorbed, because it is the strongest available evidence for that distinction.** A re-measurement taken minutes after the tables below were computed — between authoring this record and committing it — read `would_stamp` **185**, `excluded` **2682**, Σ **2868**. The whole delta reconciles to one cause: `_superseded` grew **32 → 50** as 18 artifacts were retired into it mid-session, and three new candidate files appeared. **`orphans` stayed at exactly 1, on the same file key.** Every table below is left at its coherent 200-population instant rather than partially re-derived, because re-deriving one section and not the others would make the record internally inconsistent and would be stale again by the time it merged. **The class structure held across all three moves; only the counts moved.** That is the record's thesis, demonstrated rather than asserted — and it is why Stage 12 re-derives rather than reads.
+
+### § 2 — Post-fix counts
+
+| Counter | Baseline (`ccd3be07` tool) | Merged branch | Δ |
+|---|---|---|---|
+| `would_stamp` | 187 | **200** | +13 |
+| `orphans` | 97 | **1** | −96 |
+| `excluded` | 2581 | **2664** | +83 |
+| `stamped` / `created` / `skipped_complete` | 0 / 0 / 0 | 0 / 0 / 0 | — |
+| **Σ candidates** | 2865 | **2865** | 0 — closes exactly |
+| exit code | 1 | **1** | unchanged |
+
+**Exit 0 is not the readiness gate.** The tool returns 1 whenever `counts.orphans` is non-zero, and the merged branch leaves exactly one declared accepted-residual orphan, so a green exit is unreachable by design. Read the per-class census in § 3, not the exit code.
+
+### § 3 — Orphan census, per reason × per class, with a disposition for every class
+
+Read structurally from the `orphans` array — **never** by grepping a reason literal, which is the defect DR-R3-1 records.
+
+**Baseline (97), classified against every claimant on record:**
+
+| Class | Claimant | n | Disposition |
+|---|---|---|---|
+| File inside an ADR-080 five-bin project | #5668 core | 68 | Fixed in-release by the classification union |
+| Cross-project staging tier | #5668 / D-7 | 17 | Excluded in-release |
+| `_`-prefixed top segment | #5668 / D-7 | 1 | Excluded in-release |
+| Free-text folder segment in a legacy project | #5668 / D-25 (per **D-38**) | 4 | Excluded in-release by the positional out-of-taxonomy tier |
+| Project-root governance file at depth 2 | **#3123 / D-12** | 6 | Fixed in-release by the `_project-root` non-bin sentinel |
+| **Depth-1 corpus-root file** | **NONE** | **1** | **Accepted-residual, next-release owner** |
+| | | **Σ 97 ✓** | |
+
+**Merged residual: exactly 1.**
+
+| Key | Depth | Suffix | Reason | Disposition |
+|---|---|---|---|---|
+| `6ebdb617a810` | 1 | `.md` | `no resolvable folder token (no confident domain)` | **Accepted-residual.** Program-scoped operational config at the corpus root with no project segment — it should never have been a node candidate. Its correct long-run home is the non-project-top-segment tier, which is #5668's surface; claiming it here would be a count-driven carve-out. Next-release owner |
+
+**D-38's residual-of-1 is re-derived here rather than carried.** Post-#5668 the residual is **7** (the six depth-2 governance files plus the depth-1 corpus-root file); post-#3123/D-12 it is **1**. Both arms: *sensitivity* — the five-bin token detector returns **68** over the claimed bucket; *specificity* — a bogus bin token returns **0** over the same population. The D-12 third-guard discriminator returns **6** with the `_`-prefix guard and **7** without it, so the guard is measurably load-bearing rather than decorative.
+
+### § 4 — N derivation (rule, then literal)
+
+**Rule (D-3123-C).** Zero-defect hypergeometric acceptance number: the smallest `n` such that `C(N−D, n) / C(N, n) ≤ 0.05`, where `D = floor(0.05 · N_pop) + 1`. This buys 95% confidence that the population defect rate is ≤ 5%.
+
+| Term | Value |
+|---|---|
+| `N_pop` (post-fix `would_stamp`) | **200** |
+| `D` = `floor(0.05 × 200) + 1` | **11** |
+| `n_min` | **47** |
+| `P(accept | D)` at `n_min` | 0.0481 |
+| `n_min / N_pop` | 23.5% |
+
+**Stratified top-up (mandatory).** The seeded draw (`random.Random(1469)`, the tool's own sampler seed) covers **12 of the 14** live `(domain, type)` cells. Uncovered: `(source, export)` and `(source, plan)`. Top-up is the lexicographically-first file in each — deterministic and reproducible: `(source, export)` → key `4fe577a22aec`; `(source, plan)` → key `91ddf07f5493`.
+
+| | |
+|---|---|
+| **`N_eff`** | **49** |
+| **`N_eff` / `would_stamp`** | **24.5%** |
+
+`(source, export)` is one of the sub-bin cells #5668 introduces — the random draw misses the exact cell the fix creates, which is why the top-up is a gate and not a nicety.
+
+### § 5 — Cell census
+
+**33 distinct `(folder, domain, type, lifecycle_state, trust_category, file_format)` cells over 200 files.** Every cell's `type` was checked against `TYPES_BY_DOMAIN[domain]` — the schema's type-taxonomy-matches-domain rule: **33 / 33 valid, 0 violations.**
+
+| n | folder | domain | type | lifecycle | trust | format |
+|---|---|---|---|---|---|---|
+| 40 | `08-generated` | generated | analysis | draft | interpretation | md |
+| 21 | `_generated` | generated | analysis | draft | interpretation | md |
+| 14 | `04-operations` | managed | tracker | current | controlled-truth | md |
+| 12 | `01-governance` | source | reference | created | evidence | md |
+| 12 | `05-transcripts` | source | transcript | created | evidence | txt |
+| 12 | `06-emails` | source | email | created | evidence | md |
+| 10 | `4-Evidence` | source | email | created | evidence | md |
+| 9 | `05-transcripts` | source | transcript | created | evidence | pdf |
+| 9 | `2-Delivery` | source | fdd | created | evidence | md |
+| 9 | `3-Operations` | managed | tracker | current | controlled-truth | md |
+| 6 | `3-Operations` | managed | status-log | current | controlled-truth | md |
+| 6 | **`_project-root`** | managed | project-page | current | controlled-truth | md |
+| 4 | `04-operations` | managed | status-log | current | controlled-truth | md |
+| 4 | `07-reference` | source | reference | created | evidence | md |
+| 4 | `4-Evidence` | source | email | created | evidence | pdf |
+| 3 | `04-operations` | managed | risk-register | current | controlled-truth | csv |
+| 3 | `04-operations` | managed | tracker | current | controlled-truth | html |
+| 2 | `04-operations` | managed | tracker | current | controlled-truth | csv |
+| 2 | `07-reference` | source | plan | created | evidence | md |
+| 2 | `08-generated` | generated | readiness-assessment | draft | interpretation | md |
+| 2 | `3-Operations` | managed | risk-register | current | controlled-truth | csv |
+| 2 | `3-Operations` | managed | tracker | current | controlled-truth | csv |
+| 2 | `4-Evidence` | source | transcript | created | evidence | txt |
+| 1 | `01-governance` | source | plan | created | evidence | md |
+| 1 | `02-design` | source | fdd | created | evidence | md |
+| 1 | `03-testing` | source | test-plan | created | evidence | md |
+| 1 | `07-reference` | source | reference | created | evidence | pdf |
+| 1 | `08-generated` | generated | analysis | draft | interpretation | html |
+| 1 | `08-generated` | generated | analysis | draft | interpretation | pdf |
+| 1 | `08-generated` | generated | analysis | draft | interpretation | txt |
+| 1 | `08-generated` | generated | runbook | draft | interpretation | md |
+| 1 | `2-Delivery` | source | test-plan | created | evidence | md |
+| 1 | `4-Evidence` | source | export | created | evidence | md |
+
+**Declared coverage gap, stated so the audit claims no coverage it lacks:** `1-Governance` and `5-Reference` have **zero** live population in this corpus, so the cell census exercises neither. Both are covered by the classifier's own `(i)` self-test arm with literal expected values; the census does not and cannot corroborate them.
+
+**Instrument-bias note.** The census is derived by importing the shipped module and reading its structured output — never by mirroring `FOLDER_PREFIX_MAP` or `FILENAME_TYPE_SIGNALS` into the probe, because a mirrored copy drifts silently and would grade the tool against itself. Cell *validity*, by contrast, is judged against the schema rule, not against the tool's constants.
+
+### § 6 — Sample verdicts
+
+The `N_eff = 49` draw and its two top-up files are **derived and pinned** above (seed `1469` over a pool of 200, plus the two named top-up keys), so the sample is reproducible byte-for-byte at Stage 12.
+
+**Per-file PASS/FAIL adjudication is deliberately NOT rendered here, and this is a scope statement rather than an omission.** A verdict on whether a given file's eleven proposed fields are *correct* requires reading that file's content — client-engagement material that cannot be quoted, characterised, or summarised in a public repository. The mechanical half is complete: every sampled file's proposed tuple is fully determined by the cell census in § 5, and § 5 shows **0 schema violations across all 33 cells**, which bounds the *cell-level* defect surface at zero. What remains is the *file-level* judgement — does this particular file deserve the type its filename signalled — and § 7 isolates exactly the sub-population where that judgement can go wrong.
+
+**Stage-12 obligation:** render the 49 + 2 verdicts in Part B, from the operations-rooted session where the content is readable, against the pinned keys above.
+
+### § 7 — Accuracy: the divergence census (D-3123-G)
+
+Computed by importing the shipped module and resolving each record against the tool's own tables.
+
+| Measure | Value |
+|---|---|
+| Population (`would_stamp`) | 200 |
+| Files firing any domain-valid filename signal | **48** |
+| Signal **agrees** with the bin default | 26 |
+| Signal **diverges** from the bin default (signal wins) | **21** |
+| Signal diverged but was **suppressed by an authoritative sub-bin** | **1** |
+| Files firing **no** signal | 152 |
+
+**Divergence composition:**
+
+| n | needle | default → resolved | folder |
+|---|---|---|---|
+| 6 | `status` | `tracker` → `status-log` | `3-Operations` |
+| 4 | `status` | `tracker` → `status-log` | `04-operations` |
+| 3 | `raid` | `tracker` → `risk-register` | `04-operations` |
+| 2 | `raid` | `tracker` → `risk-register` | `3-Operations` |
+| 2 | `plan` | `reference` → `plan` | `07-reference` |
+| 2 | `readiness` | `analysis` → `readiness-assessment` | `08-generated` |
+| 1 | `plan` | `reference` → `plan` | `01-governance` |
+| 1 | `runbook` | `analysis` → `runbook` | `08-generated` |
+
+**T1 — cross-domain override (HALT-eligible): 0.** Not a lucky corpus — unreachable by construction, because the classifier accepts a signal type only when it is valid for the file's domain. Since the schema's validation rule is exactly `type ∈ TYPES_BY_DOMAIN[domain]`, **the divergence class cannot produce a schema-invalid stamp at all.** Every live divergence is a *specialization within one domain*: a generic bin default yielding to a more specific type. A divergence is prima-facie evidence the classifier worked.
+
+**FM-2 confirmed live, once.** Exactly one file (key `1e55b531c870`, in `4-Evidence`) has a filename signal that would give `plan` where the authoritative sub-bin correctly gives `email`. This is the mechanism working, and it is a **defect count of 1**, not the size of the 14-file class it sits in.
+
+**T2 — the genuine over-claim sub-class.** Divergent rows whose stem carries a non-instance marker (`template`, `prompt`, `example`, `sample`, `boilerplate`, `skeleton`, `starter`) — a form or exemplar naming a type it is not an instance of:
+
+| Key | default → resolved | folder |
+|---|---|---|
+| `8e184904bdcf` | `reference` → `plan` | `07-reference` |
+| `723bf352faaa` | `reference` → `plan` | `07-reference` |
+| `8ec4b7a405f4` | `tracker` → `status-log` | `04-operations` |
+| `9f12cff8e8e7` | `tracker` → `status-log` | `3-Operations` |
+| `451825add420` | `tracker` → `status-log` | `3-Operations` |
+
+**AC-4 arithmetic.** Budget = `floor(0.05 × 200)` = **10**. Measured candidate ceiling = **5**. **Margin 5, on measurement.** AC-4 does not fail first at Stage 12 after the snapshot — which was the precise hazard this instrument exists to remove.
+
+**Stated honestly: 5 is a *candidate* ceiling, not an adjudicated defect count.** Each of the five is hand-verified at Stage 12 and recorded individually in Part B; some will prove correct.
+
+**Arms (all three mandatory, all three fired).** *Sensitivity:* the marker probe over the whole `would_stamp` set returns **7** — it is live and is not merely re-matching the divergence set (5). *Specificity:* a bogus marker returns **0**. *Non-degeneracy:* 152 files fire no signal at all, so the bound is not vacuous.
+
+### § 8 — Pre-write marker gate (HALT-eligible, re-run immediately before the write)
+
+**Predicate (D-3123-F).** For every file in the write set: `lifecycle_trigger ∈ _absent_core_keys(existing, proposed)` **OR** the file has no parseable frontmatter (a whole-block write includes the marker by construction). **The gate is a SET-IDENTITY assertion, never count-equality** — any file failing the predicate that is not in the enumerated exception list below is a **HALT**.
+
+| Outcome | n |
+|---|---|
+| Write set | 200 |
+| No parseable frontmatter → whole-block write, marker by construction | 132 |
+| Marker present in the added-key set | 56 |
+| **Exceptions — already carry a `lifecycle_trigger`, so the marker is NOT added** | **12** |
+
+The 12 are correct, not a defect: `_absent_core_keys()` writes only ABSENT keys, and these files carry **real provenance** that must not be overwritten. That is also precisely why a marker-scan reversal is unsound — it would skip exactly these 12 — and why the reversal path is a **path-keyed snapshot** instead.
+
+| Key | Existing `lifecycle_trigger` | Added-key set |
+|---|---|---|
+| `e87e279581ea` | `operator-send` | `filename`, `path` |
+| `1cf9a6ca3108` | `user-request` | `filename`, `path` |
+| `706dcef74e42` | `user-request` | `filename`, `path` |
+| `5bc4d8bbab5b` | `user-request` | `filename`, `path` |
+| `dc1e568e5e54` | `operator-decision` | `filename`, `path` |
+| `df6a11ecee34` | `user-request` | `filename`, `path` |
+| `2623104aa7cc` | `operator-confirmed-send` | `filename`, `path` |
+| `73aa5a6f8cc4` | `user-request` | `filename`, `path` |
+| `cdb3a2e2dda5` | `user-request` | `filename`, `path` |
+| `4757305b29ed` | `transcript-processing` | `filename`, `path` |
+| `16f04670f28e` | `transcript-processing` | `filename`, `path` |
+| `062c3f2a792d` | `user-request` | `filename`, `managed_by`, `path`, `type` |
+
+Existing-trigger histogram: `user-request` ×7 · `transcript-processing` ×2 · `operator-send` ×1 · `operator-decision` ×1 · `operator-confirmed-send` ×1. Added-key-count histogram across the whole write set: `{2: 11, 3: 15, 4: 1, 6: 2, 8: 2, 10: 16, 11: 16, 12: 5}`.
+
+### § 9 — Snapshot plan (D-11, as corrected by D-3123-A′)
+
+| Field | Value |
+|---|---|
+| **Scope** | The **union of BOTH writers' file sets** — node `would_stamp[]` ∪ the edge planner's plan-with-edges. A node-only snapshot misses every file the edge writer mutates |
+| **Measured** | node **200** · edge **196** · node-only **5** · edge-only **1** · both **195** ⇒ **union 201 files / 5.70 MB** |
+| **Sidecar-creating** | **39** files gain a new `.meta.yml`; restore must **DELETE** these, not restore them |
+| **Destination** | `[CLAUDE_WORKSPACE_ROOT]/.backup-pre-node-backfill-${BACKFILL_TS_UTC}/` |
+| **Timestamp** | `date -u +%Y%m%dT%H%M%SZ`, sampled **once**, immediately before the snapshot. **Not a date.** All 30 shipped `.backup-pre-*` directories carry a full UTC timestamp and none carries a date-only suffix; nine distinct days in the snapshot history already hold more than one snapshot, and the worst holds six — a date-only suffix would have destroyed the rollback path on nine separate occasions |
+| **Pre-existing target** | **Refuse and HALT.** An existing directory means a prior attempt; writing into it overlays the only good pre-write copy |
+| **Manifest** | Per file: relative path, pre-write SHA-256, `sidecar_created: bool`, and the exact added-key set |
+| **Placement** | **Outside** the corpus root, so no tool rooted at the corpus re-scans it; the dot-prefix is a second, independent guarantee (`iter_corpus_files` skips any dot-leading segment) |
+| **Verification** | Verify the copy by file count **and** byte total before the write proceeds. A failed or unverified snapshot ⇒ **HALT** |
+
+**Token note:** `[CLAUDE_WORKSPACE_ROOT]` is the registered square-bracket form (94 files); the previously-recorded `${OPERATOR_WORKSPACE_ROOT}` is **unregistered** (0 files) *and* in a rendering form the depersonalization spec forbids. `${BACKFILL_TS_UTC}` is a genuine shell variable in a documented command sequence, not an operator-identity token.
+
+### § 10 — Rollback: two independent paths
+
+**Repo-side.** `git revert` of the merge restores the classifier, the schema surfaces, the ADR and this record. Reversibility **CHEAP · confidence HIGH**.
+
+**Corpus-side.** Restore the snapshot, **path-keyed, never marker-keyed**: for each manifest entry, `sidecar_created: true` → **delete** the `.meta.yml`; otherwise → copy the snapshot file back. Then re-hash every restored path against the manifest's pre-write SHA-256; **any mismatch ⇒ halt and report, never partially restore.** Reversibility **EXPENSIVE · confidence MEDIUM** — medium because the restore is specified but, as of this record, not yet demonstrated.
+
+**The two paths are independent and must be briefed as such.** A `git revert` does **not** touch the corpus: it leaves files carrying `folder: _project-root` while the tree no longer defines that value, and the stamp writes only absent keys so it will not self-correct on a re-run. **The `--strip` flag that earlier records named as the reverser does not exist** — a repo-wide search returns 0 occurrences against a working sensitivity arm. A corpus stamped without a verified restorable snapshot is unreversible by any designed path.
+
+**Ordering constraint against #5741.** #3123's corpus write executes **first**, then #5741's seeding. A restore that unwinds #3123 after #5741 has seeded must unwind #5741 first, or the seeded records are left referencing a classification vocabulary the corpus no longer carries.
+
+### § 11 — Exclusion report (CIAC-1 clause 3)
+
+Every exclusion introduced by any card in this release, with its measured Δ on **both** counters. Clause 3 does not forbid exclusions; it forbids **undeclared** ones.
+
+| Exclusion | Card | Δ `orphans` | Δ `would_stamp` | Δ `excluded` |
+|---|---|---|---|---|
+| `NONPROJECT_TOP_SEGMENTS += transcripts` | #5668 / D-7 | −17 | 0 | +17 |
+| `NONPROJECT_TOP_SEGMENTS += _pmo` | #5668 / D-7 | −1 | 0 | +1 |
+| `EXCLUDE_PATTERNS += _inbox` | #5668 | −1 | 0 | +1 |
+| `NONRECORD_PROJECT_SEGMENTS = {templates}` | #5668 / D-25 | −4 | −28 | +32 |
+| `EXCLUDE_PATTERNS += _superseded` | **#3123** | **0** | **−32** | **+32** |
+| | | | **total +83** | |
+
+**Reading the Δ on one counter systematically understates an exclusion.** `templates` reads −4 on orphans and **−28 on `would_stamp`** — 28 blank forms that stop being stamped as records. `_superseded` reads **0** on orphans and **−32** on `would_stamp`: it is **aggregation-inert on `counts.orphans`**, which is the counter the exit rule reduces, so it provably cannot be "an exclusion added to drive the count down." Both columns are reported because either alone misleads.
+
+**Baseline exclusion classes (unchanged by this release), for completeness:** `Archive/ excluded under scope=active` 1912 · `snapshot` 403 · `body-backups` 175 · `_archived` 44 · `staging` 23 · `_config` 22 · `_unclassified` 1 · `phase3-scratch` 1.
+
+### § 12 — Undelivered rows, with the operator-side change each requires
+
+Two FCM rows were blocked at Engineering by Tier-0 controls. **Neither was bypassed**, and `CLAUDE_HOOK_BYPASS` was never set. Both are recorded in the Deviation Log above.
+
+**Row 5 — `core/governance/OPERATIONS.md`.** The union restatement at the ADR-080 taxonomy note gains the sentinel. Required change, one line: after the existing union `{legacy 01-08, new 1-Governance…5-Reference + _inbox/_generated}`, add ` + _project-root`, and append the sentence: *"`_project-root` is a NON-BIN sentinel, not a sixth bin (ADR-137) — it names a project's own root-level governance files, which sit outside the taxonomy; the closed-set invariant above is unaffected and agents never route into it."*
+
+**Row 6 — `operations/skills/project-initiator/SKILL.md`.** The born-entity-frontmatter block moves from a 6-field to a 7-field block: add `folder: _project-root` after `domain: managed`, change "the 6-field entity block" to "the 7-field entity block", change "Five values are fixed" to "Six values are fixed", and state that `folder` is a NOT-NULL core field carrying the ADR-137 sentinel because PROJECT.md sits at the project root rather than in a bin. **Impact analysis is complete and clears the edit:** the skill registry lists `project-initiator` as a `function-skill` with **no registered consumers** (control arm — `delivery-engine` returns 8 registry mentions, so the probe is live), so the Cross-Skill Impact set is legitimately empty. The mirrored surface — `operations/templates/project-md-composed-index-template.md` — **is** delivered in this commit, so until row 6 lands the SKILL.md text and the template it describes disagree on the field count.
+
+**Consequence for the package rebuild (Commit 4).** `project-initiator/SKILL.md` is presently **unmodified** on this branch, so its `.skill` package is **not** stale on the current tree. The rebuild obligation fires only once row 6 lands. Sequence the rebuild after it, not before.
