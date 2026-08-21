@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.34] - 2026-08-21
+
+A release's closing record now matches what it actually delivered, and a close that cannot finish stops loudly instead of quietly.
+
+[Full notes](release/releases/notes/v4.34_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.34)
+
 ## [v4.33] - 2026-08-20
 
 Your personal platform files get a defined home, and a bad hook update can now be undone after the fact.

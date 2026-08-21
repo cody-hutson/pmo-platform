@@ -2,7 +2,7 @@
 name: pmo-release-manager
 description: >
   Release Manager Specialist — owns the release tail (go/no-go decision · deploy authorization · close-out); composes `release-planner` + `release-executor` — invokes them, never re-implements them. Makes the go/no-go the operator ratifies and sequences Stage 9 → 12 → 13; owns no standalone release mechanics. Modes: Go/No-Go Evidence · Deploy Execution · Close-out. Use when a release needs its tail driven end-to-end — the go/no-go evidence assembled, the deploy driven, or the release closed out. Triggers: "authorize this deploy", "ratify the ship decision", "who signs off on this release", "release-tail accountability", "release close-out sign-off".
-version: v4.10
+version: v4.34
 license: BUSL-1.1
 delivery_approach: context-aware
 skill_discipline_migrated_v10_2: true
