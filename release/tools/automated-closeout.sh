@@ -624,6 +624,18 @@ REBUILT_PACKAGES=()
 # until its block ages out of the archival sweep window.
 TOUCHED_ARCHIVE_SEGMENTS=()
 
+# The exact `**Not-produced:**` bytes composed by the most recent
+# _write_not_produced_marker call (#5288). The writer still echoes the line on
+# stdout — its documented contract, and what the self-test's direct callers
+# redirect — but the PRODUCTION call sites read it from HERE instead, because
+# capturing stdout requires a command substitution and a command substitution is
+# a SUBSHELL: the writer's `_record_touched_archive_segment` append would die
+# with it, and the marker it just wrote to an archive segment would be dropped at
+# commit while the phase reported "Absence RECORDED". Assigned unconditionally at
+# the single point the line is composed, so it can never go stale relative to
+# stdout and a second call cannot read the first call's bytes.
+NOT_PRODUCED_MARKER_LINE=""
+
 # Phase outcomes (PASS / FAIL / SKIPPED / N/A / DRY-RUN / MANUAL)
 # Bash 3.2 (macOS default) lacks associative arrays — use parallel indexed arrays
 # keyed by phase name. Lookup is O(n) over a small, dispatch-bounded set (one
@@ -2110,6 +2122,14 @@ PY
 _write_not_produced_marker() {
   local _id="$1" _phase="$2" _reason="$3" _tgt _line
   _line="**Not-produced:** ${_id} — ${_reason}; recorded at $(ts_now) by automated-closeout.sh phase ${_phase}"
+  # MUST NOT BE CALLED IN A COMMAND SUBSTITUTION. This function records into
+  # TOUCHED_ARCHIVE_SEGMENTS below; `$( )` is a subshell, so that append would be
+  # discarded and a marker written to an archive segment would be dropped at
+  # commit while the caller reported "Absence RECORDED". Callers that need the
+  # bytes read NOT_PRODUCED_MARKER_LINE, set here on EVERY exit path (dry-run,
+  # already-present, unresolvable target and success alike) so it cannot
+  # disagree with what stdout emitted.
+  NOT_PRODUCED_MARKER_LINE="$_line"
   /usr/bin/printf '%s' "$_line"
   [[ "$MODE" == "dry-run" ]] && return 0
   _tgt="$(_resolve_deployment_log_target "$VERSION" || true)"
@@ -2655,9 +2675,16 @@ phase_append_release_learnings() {
     # The marker is EVIDENCE, not an exemption: `learnings-block` is a required
     # member of the Step-4 output-set manifest, so phase 9.56 still BLOCKS the
     # close on it. The marker says WHY, it does not say "allowed".
+    # Called DIRECTLY, never in a command substitution: the writer records the
+    # resolved surface into TOUCHED_ARCHIVE_SEGMENTS, and `$( )` would run it in
+    # a subshell that discards the append. The bytes come back through
+    # NOT_PRODUCED_MARKER_LINE instead. The `|| _lrc=$?` is unchanged and still
+    # the tolerance boundary — it also keeps `set -e` disabled for the whole
+    # call, exactly as the subshell did.
     local _lm _lrc=0
-    _lm="$(_write_not_produced_marker "learnings-block" "append_release_learnings" \
-            "synthesize-release-learnings.sh not executable at $SYNTHESIZE_LEARNINGS, so the $VERSION learnings block could not be rendered; hand-composing one would fabricate the source-events accounting the block exists to carry")" || _lrc=$?
+    _write_not_produced_marker "learnings-block" "append_release_learnings" \
+            "synthesize-release-learnings.sh not executable at $SYNTHESIZE_LEARNINGS, so the $VERSION learnings block could not be rendered; hand-composing one would fabricate the source-events accounting the block exists to carry" >/dev/null || _lrc=$?
+    _lm="$NOT_PRODUCED_MARKER_LINE"
     local _lnote="Absence RECORDED in the $VERSION Deployment Log block: '$_lm'"
     [[ "$MODE" == "dry-run" ]] && _lnote="Absence WOULD be recorded in the $VERSION Deployment Log block: '$_lm'"
     [[ "$_lrc" -ne 0 ]] && _lnote="Absence could NOT be recorded — no resolvable Deployment Log block to carry the marker. The absence itself still blocks at phase 9.56"
@@ -2917,9 +2944,13 @@ phase_inject_close_class_telemetry_field() {
     # `required-if telemetry-cutover-armed` member of the output-set manifest —
     # the marker records the absence either way, and phase 9.56 blocks on it
     # only when that cutover is armed. The marker never decides that question.
+    # Called DIRECTLY, never in a command substitution — same reason as phase
+    # 6.7's site above: `$( )` is a subshell and the writer's
+    # TOUCHED_ARCHIVE_SEGMENTS append would not survive it.
     local _tm _trc=0
-    _tm="$(_write_not_produced_marker "close-class-telemetry" "inject_close_class_telemetry_field" \
-            "compute-close-class-telemetry.sh not executable at $COMPUTE_CLOSE_CLASS_TELEMETRY, so no field was written; composing one without that mechanism would fabricate the claim the field exists to measure")" || _trc=$?
+    _write_not_produced_marker "close-class-telemetry" "inject_close_class_telemetry_field" \
+            "compute-close-class-telemetry.sh not executable at $COMPUTE_CLOSE_CLASS_TELEMETRY, so no field was written; composing one without that mechanism would fabricate the claim the field exists to measure" >/dev/null || _trc=$?
+    _tm="$NOT_PRODUCED_MARKER_LINE"
     local _tnote="Absence RECORDED in the $VERSION Deployment Log block: '$_tm'"
     [[ "$MODE" == "dry-run" ]] && _tnote="Absence WOULD be recorded in the $VERSION Deployment Log block: '$_tm'"
     [[ "$_trc" -ne 0 ]] && _tnote="Absence could NOT be recorded — no resolvable Deployment Log block to carry the marker"
@@ -8440,6 +8471,98 @@ EOF
   [[ "$(get_phase inject_close_class_telemetry_field)" == SKIPPED\|* ]] || { echo "FAIL: archived-block re-run must SKIP (cross-surface idempotency), got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
   [[ "$(_cc_count "$_cc_aseg" v9.96)" -eq 1 ]] || { echo "FAIL: archived-block re-run must not duplicate the field in the segment"; failures=$((failures+1)); }
 
+  # ── (j.1) THE NOT-PRODUCED MARKER'S STAGING RECORD MUST SURVIVE THE CALL.
+  # THE DEFECT (#5288 DT AI-028). _write_not_produced_marker ends by calling
+  # _record_touched_archive_segment — the recorder whose array phase_commit_chore_pr's
+  # files=() consumes. Both production call sites invoked the writer inside a COMMAND
+  # SUBSTITUTION, so that append died with the subshell. Neither independent guard
+  # covers it: the commit phase's files=() carries no archive glob, and the
+  # staging-completeness arm filters to `inject_*` phases with a PASS result, and
+  # neither marker site carries both (6.7 is not inject_*; this one is inject_* but
+  # marks SKIPPED). The live path — archived block + producer unavailable + dormant
+  # cutover, today's default — wrote the marker to a segment, never staged the
+  # segment, dropped the marker at commit, and reported "Absence RECORDED".
+  #
+  # This arm drives the REAL production call site (not the writer directly) over the
+  # archived fixture above and asserts the RECORD, because the record is the interface
+  # files=() reads. Pre-fix it fails on the staging assertion ALONE: the marker still
+  # reaches disk (the subshell's file write persists), so the sensitivity floor below
+  # stays green and the differential isolates exactly the lost append.
+  local _np_e _np_joined="" _np_hit=0
+  /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+
+#### Deployment Log v9.96
+_Archived: [segment](RELEASE_LOG_ARCHIVE-v9.md)_
+EOF
+  /bin/cat > "$_cc_aseg" <<'EOF'
+# RELEASE_LOG_ARCHIVE-v9
+
+#### Deployment Log v9.96
+**Cycle-Time:** 5d 0h.
+**Result:** SUCCESS — archived body.
+**Outcome:** SUCCESS
+EOF
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  TOUCHED_ARCHIVE_SEGMENTS=()
+  MODE="apply"; VERSION="v9.96"
+  COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_atmp/definitely-not-here.sh"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  # sensitivity floor: the marker must genuinely have been written to the SEGMENT.
+  # Without it the staging assertion below could pass-by-absence on a run in which
+  # the emit path never fired at all.
+  [[ "$(grep_count -F '**Not-produced:** close-class-telemetry ' "$_cc_aseg")" -eq 1 ]] || { echo "FAIL: (j.1) sensitivity — the capability skip must have written a **Not-produced:** marker into the ARCHIVE SEGMENT; without it the staging assertion below is untestable"; failures=$((failures+1)); }
+  for _np_e in "${TOUCHED_ARCHIVE_SEGMENTS[@]:-}"; do
+    [[ -z "$_np_e" ]] && continue
+    _np_joined="${_np_joined}${_np_e} "
+  done
+  case " $_np_joined" in *" $_cc_aseg "*) _np_hit=1 ;; esac
+  [[ "$_np_hit" -eq 1 ]] || { echo "FAIL: (j.1) — the marker was written into an archive segment but the segment was NOT recorded in TOUCHED_ARCHIVE_SEGMENTS, so files=() never names it and the marker is DROPPED at commit while the phase reports 'Absence RECORDED' (got: '${_np_joined:-<empty>}'). The writer must not be called in a command substitution — the append does not survive the subshell"; failures=$((failures+1)); }
+  # CONTROL — a marker that lands in the HOT LEDGER must NOT be recorded. That skip
+  # is BY DESIGN (files=() names the hot ledger unconditionally), and without this
+  # arm the assertion above is equally satisfied by a recorder that appends every
+  # target it is handed. Same producer, same mode, one variable moved: the block is
+  # no longer archived.
+  /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+
+#### Deployment Log v9.96
+**Cycle-Time:** 5d 0h.
+**Result:** SUCCESS — hot body.
+**Outcome:** SUCCESS
+EOF
+  /bin/rm -f "$_cc_aseg" 2>/dev/null || true
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  TOUCHED_ARCHIVE_SEGMENTS=()
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  # the control's own vacuity floor — it must pass because the hot ledger is SKIPPED,
+  # never because the emit path failed to fire.
+  [[ "$(grep_count -F '**Not-produced:** close-class-telemetry ' "$RELEASE_LOG")" -eq 1 ]] || { echo "FAIL: (j.1) control vacuity — the hot-ledger fixture must also have written a marker, or the control below passes for the wrong reason"; failures=$((failures+1)); }
+  [[ "${#TOUCHED_ARCHIVE_SEGMENTS[@]}" -eq 0 ]] || { echo "FAIL: (j.1) control — a marker written into the HOT LEDGER must NOT be recorded as a touched segment (files=() already names it); the recorder is appending every target it is handed, so the assertion above measures nothing"; failures=$((failures+1)); }
+  TOUCHED_ARCHIVE_SEGMENTS=()
+
+  # ── (j.2) STRUCTURAL, BOTH SITES AND EVERY FUTURE ONE. (j.1) drives the 6.8
+  # telemetry site only; the IDENTICAL shape at 6.7's learnings site is fixed the
+  # same way and would not redden (j.1) if it regressed alone. Asserted over the
+  # SHIPPED text of each calling phase: no call may sit inside a command
+  # substitution, because that subshell is the defect. Read from the FUNCTION
+  # BODIES rather than the whole file, so this arm's own needle cannot match
+  # itself — a whole-file grep for this pattern is satisfied by the line you are
+  # reading and measures nothing.
+  local _np_67 _np_68 _np_sub
+  _np_sub='$(_write_not_produced_marker'
+  _np_67="$(/usr/bin/sed -n '/^phase_append_release_learnings() {/,/^}/p' "${BASH_SOURCE[0]}" || true)"
+  _np_68="$(/usr/bin/sed -n '/^phase_inject_close_class_telemetry_field() {/,/^}/p' "${BASH_SOURCE[0]}" || true)"
+  # vacuity floors — each extraction must actually contain the call it grades.
+  /usr/bin/grep -qF '_write_not_produced_marker' <<<"$_np_67" || { echo "FAIL: (j.2) vacuity — phase_append_release_learnings does not call _write_not_produced_marker; the emit-on-absence site is gone, so the shape assertion below grades nothing"; failures=$((failures+1)); }
+  /usr/bin/grep -qF '_write_not_produced_marker' <<<"$_np_68" || { echo "FAIL: (j.2) vacuity — phase_inject_close_class_telemetry_field does not call _write_not_produced_marker; the emit-on-absence site is gone, so the shape assertion below grades nothing"; failures=$((failures+1)); }
+  ! /usr/bin/grep -qF "$_np_sub" <<<"$_np_67" || { echo "FAIL: (j.2) — phase_append_release_learnings invokes _write_not_produced_marker inside a command substitution; the writer records into TOUCHED_ARCHIVE_SEGMENTS and that append does not survive a subshell, so the marker lands on disk and is DROPPED at commit while the phase reports 'Absence RECORDED'"; failures=$((failures+1)); }
+  ! /usr/bin/grep -qF "$_np_sub" <<<"$_np_68" || { echo "FAIL: (j.2) — phase_inject_close_class_telemetry_field invokes _write_not_produced_marker inside a command substitution; same lost-append defect as the 6.7 site"; failures=$((failures+1)); }
+  # capability-to-fail: the SAME matcher over a CONSTRUCTED bad call site must
+  # MATCH. Without it, both negatives above are equally satisfied by a pattern that
+  # can never fire, which is indistinguishable from a clean file.
+  /usr/bin/grep -qF "$_np_sub" <<<'    _x="$(_write_not_produced_marker a b c)"' || { echo "FAIL: (j.2) capability-to-fail — the command-substitution matcher does not match a constructed bad call site, so its two clean readings above measure nothing"; failures=$((failures+1)); }
+
   /bin/rm -rf "$_cc_atmp" 2>/dev/null || true
   /bin/rm -rf "$_cc_tmp" 2>/dev/null || true
   unset -f _cc_write _cc_count _cc_seq
@@ -12084,7 +12207,7 @@ EOF
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped; #3715 two-surface — archived body resolves to its segment and the hot ledger is left untouched / cross-surface idempotency re-run SKIPs without duplicating / a genuine **Result:** absence still hard-FAILs naming every surface searched / no sibling leak within a segment); Outcome KEY GRAMMAR validated (#4222 — k1 a QUALIFIED key is recognized and REJECTED at --apply leaving the record byte-unchanged, with an EXECUTABLE SENSITIVITY arm re-demonstrating on every run that the pre-fix bare-literal probe reads the same fixture as ABSENT and would inject the second line / k2 the bare path is unregressed (SKIP, no write) with a SPECIFICITY arm proving an Outcome-less block still injects exactly one / k3 phase 6.8 anchors under a qualified key, asserted on the RAW line because the field-name class used elsewhere cannot see parentheses, with the bare-key fallback as its control / k4 ONE RESOLVER, TWO SITES: extending the shared key constant moves BOTH the 6.5 probe and the 6.8 anchor, and at the default constant the same key is accepted at NEITHER — a one-site fix fails here / k5 grammar non-collision asserted in BOTH directions against the real sibling field **Outcome rationale:** / k6 raw-prefix fidelity — an INDENTED key classifies and anchors through the UNCHANGED primitive, with the unindented twin as control / k7 both-present classifies DUPLICATE and FAILs writing nothing, control: bare-only raises no duplicate diagnostic / k8 three PRESENT-BUT-UNPARSEABLE shapes (nested paren, doubled space, missing space) classify UNPARSEABLE rather than ABSENT and stop the write, control: a genuine absence still injects / k9 NO EMPTY ANCHOR REACHES THE PRIMITIVE — an unresolvable anchor FAILs loudly instead of landing the field at the top of the block, paired with an ANTI-VACUITY arm that hands the unchanged primitive an empty anchor and demonstrates it exits 0 writing to the top, so k9 is a measurement and not a tautology / k10 MODE: --dry-run returns 0 and marks WARN naming the condition that FAILS at --apply, control: the same fixture at --apply returns 3 and marks FAIL / k11 the governance constant is hard-assigned, not env-overridable, scoped to the production region with an anti-vacuity control on the known-bad form)" >&2
   echo "  phase_inject_velocity_field + phase_append_release_learnings validated (velocity — field ORDER 'Cycle-Time Velocity Result' on a clean block / no sibling leak / idempotent re-run / bolded-numeral value REJECTED writing nothing / empty capture at exit 0 degrades to an explicit N/A never a bare field / non-conformant existing field SKIPs WITH the warning, conformant control WITHOUT it; CO-LOCATION — an archived block's field lands in the SEGMENT beside its own **Result:** and the hot stub stays at 0, cross-surface re-run SKIPs, dry-run names the segment and prints the RESOLVED bytes. learnings — sibling H4 placed IMMEDIATELY after its Deployment Log block / body intact through the sentinel capture / idempotent re-run / whitespace-only render at exit 0 FAILs writing nothing / D-1 zero-source-events BLOCKS the close and prints the capture remedy, >0-events control PASSes / over an ARCHIVED block the block still lands in the HOT ledger and every segment stays at 0 Release Learnings — RECORDS_POLICY KEEP_CLASS. A7 capture gate — the SAME 0-source-event condition read at Phase 2 by _learnings_capture_gap reports a gap, >0-events control does NOT / an already-placed block is NOT a gap even under the 0-event stub, block-removed sensitivity IS / neither a missing synthesizer nor a whitespace-only render escalates to a gap / phase_preflight actually CALLS the predicate and is dispatched before create_chore_branch and transition_release_log, both derived from the shipped text with fabricated-symbol controls / n.1 THE MANDATED WARN SHAPE — the Collective-Review dry-run posture asserted over that same shipped text in three limbs, one per half of the ruling: the WARN result TOKEN (a regression back to PASS reddens here and nowhere else), the NON-BLOCKING return bound to the WARN line BY CONTEXT (phase_preflight carries two bare 'return 0' lines, so an unbound grep measures nothing), and the TAIL CLAUSE naming what FAILS at --apply, with a fabricated-result-token specificity control / GATE-BACKSTOP PARITY over the placed x synth-absent x synth-empty x render-0 x render-N matrix — a gap implies 6.7 returns 3, with a non-vacuity control asserting the antecedent actually fired)" >&2
   echo "  phase_inject_velocity_field EXIT-CLASS contract validated (#4927, group 4c.5b — this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): (p) a producer exit 2 FAILs at --apply, returns 3 so the runner halts, writes NOTHING, and quotes the producer's OWN stderr rather than a generic message — with a control proving the same fixture PASSes and writes exactly one field under a conformant producer, so the arm is not just a phase that always fails / (q) the same exit 2 under --dry-run marks a NON-blocking WARN that names the condition failing at --apply, and still writes nothing / (r) exit 2 is never laundered into the explicit 'N/A' form — a refusal to measure must not be recorded as a measurement — with a SENSITIVITY arm requiring exit 1 to STILL degrade to N/A at PASS, so a blanket fail-on-any-nonzero phase reddens here instead of passing / (s) a successful run's stderr still reaches the run report, so a DEGRADED Phase-A2 planned-recovery (which under-reports 'planned' and makes the ratio look healthier than the truth) is visible rather than discarded, with a control proving a silent producer manufactures no note" >&2
-  echo "  phase_inject_close_class_telemetry_field validated (#4437 — clean block PASSes with the field positioned after **Outcome rationale:** and no sibling leak / idempotent re-run SKIPs / fallback anchor lands after **Outcome:** and names which anchor it used / VACUITY PAIR: an all-N/A-but-conformant line is WRITTEN and carries the no-computed-ratio warning WITH the disposition read from the emitted line, measured-line control carries NO warning / a line missing § 3.2 slots FAILs writing nothing / an empty capture at exit 0 FAILs writing nothing / producer exit 2 escalates as a source-integrity condition writing nothing / a non-executable producer SKIPs rather than hand-composing a field that would fabricate its own mechanism claim / dry-run prints the RESOLVED bytes and writes nothing / CO-LOCATION: an archived block's field lands in the SEGMENT beside its own **Result:** with the hot stub at 0, and the cross-surface re-run SKIPs)" >&2
+  echo "  phase_inject_close_class_telemetry_field validated (#4437 — clean block PASSes with the field positioned after **Outcome rationale:** and no sibling leak / idempotent re-run SKIPs / fallback anchor lands after **Outcome:** and names which anchor it used / VACUITY PAIR: an all-N/A-but-conformant line is WRITTEN and carries the no-computed-ratio warning WITH the disposition read from the emitted line, measured-line control carries NO warning / a line missing § 3.2 slots FAILs writing nothing / an empty capture at exit 0 FAILs writing nothing / producer exit 2 escalates as a source-integrity condition writing nothing / a non-executable producer SKIPs rather than hand-composing a field that would fabricate its own mechanism claim / dry-run prints the RESOLVED bytes and writes nothing / CO-LOCATION: an archived block's field lands in the SEGMENT beside its own **Result:** with the hot stub at 0, and the cross-surface re-run SKIPs; #5288 AI-028 NOT-PRODUCED MARKER STAGING — j.1 drives the REAL 6.8 call site over an archived block with the producer unavailable and asserts the resolved SEGMENT reaches TOUCHED_ARCHIVE_SEGMENTS, the array files=() consumes, with a sensitivity floor proving the marker genuinely reached the segment (pre-fix the marker still lands on disk, so the differential isolates the LOST APPEND alone) and a HOT-LEDGER control proving the by-design skip is preserved and the recorder is not appending every target it is handed / j.2 STRUCTURAL over the shipped text of BOTH calling phases — neither may invoke the writer inside a command substitution, read from the FUNCTION BODIES so the needle cannot match itself, with per-site vacuity floors and a capability-to-fail arm matching a CONSTRUCTED bad call site so a clean reading is a measurement)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache)" >&2
   echo "  post_gate_passage_proof three-rung target ladder validated (#3819 — T-13 rung 1 resolves a CLOSED Stage-13 sub-task via --state all and does NOT fall through to the PR / rung 2 posts to the release PR naming the OBSERVED rung-1 reason / rung 3 MANUAL names BOTH attempted targets; T-14 two collect_open_release_issues calls in one run keep EXCLUDED_DETAIL undoubled, COLLECTED_OPEN_ISSUES identical and resolve_stage13_subtask stable, with a non-empty-exclusion anti-vacuity control)" >&2
   echo "  phase_action_item_gate validated (#4439, group AI — 21 arms; this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all four verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=4 distinct STATEs / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle" >&2
