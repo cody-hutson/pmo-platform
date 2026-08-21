@@ -191,7 +191,7 @@ project-initiator`, `domain: managed`, `folder: _project-root`, `lifecycle_state
 `trust_category: controlled-truth`, `created_date` — per `frontmatter-schema.md` § Classification/Trust
 and the `agent-processing-contracts.md` Skill-6 contract. Six values are fixed (carried verbatim from
 the template); fill `created_date` with today's date. `folder: _project-root` is the NON-BIN SENTINEL
-(ADR-137) — PROJECT.md sits at the project ROOT, in no bin, and `folder` is a NOT-NULL core field, so
+(ADR-139) — PROJECT.md sits at the project ROOT, in no bin, and `folder` is a NOT-NULL core field, so
 without this value a newly-scaffolded PROJECT.md is born missing one. `lifecycle_state: emerging` is the
 FILE/NODE content-maturity axis; the Project ENTITY's Axis-1 carrier is `status` (project-schema.md §3b,
 entity-field-schemas.md V-PRJ-03) — the inline `**Status:**` line, which stays inline and distinct. The

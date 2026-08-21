@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-137 — A project's own governance files are located by a non-bin sentinel, not by a sixth bin"
+title: "ADR-139 — A project's own governance files are located by a non-bin sentinel, not by a sixth bin"
 status: Accepted
 date: 2026-08-21
 release: operational-folder-enforcement-and-migration
@@ -16,13 +16,15 @@ source_observations:
   - "The sentinel's guard set was falsified once during design and re-derived: without the `_`-prefix guard the predicate selects 7 files rather than 6, because the shared-entity store's own README sits at the same depth with the same basename and belongs to the non-project-top-segment tier instead."
 ---
 
-# ADR-137 — A project's own governance files are located by a non-bin sentinel
+# ADR-139 — A project's own governance files are located by a non-bin sentinel
 
 ## Status
 
 **Accepted.** Authored at Engineering for the `operational-folder-enforcement-and-migration` release, against the operator's D-12 decision to extend the `folder` enum; scope-locked at D-47.
 
 **Depends on:** [ADR-080](ADR-080-project-folder-taxonomy-closed-5-bin-set.md), whose closed-set clause is the constraint this record must satisfy rather than amend.
+
+**Numbering provenance — `137 → 139`.** Held **ADR-137** branch-local; renumbered to **ADR-139** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 137. In-release citations that read "ADR-137" denote this record.
 
 ## Context
 

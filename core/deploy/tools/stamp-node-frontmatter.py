@@ -298,7 +298,7 @@ NONPROJECT_TOP_SEGMENTS = frozenset({"_config", "_pmo", "transcripts"})
 # still-unbuilt sibling work item. The corpus condition itself is unchanged.
 NONRECORD_PROJECT_SEGMENTS = frozenset({"templates"})
 
-# D-12 — the PROJECT-ROOT NON-BIN SENTINEL (ADR-137).
+# D-12 — the PROJECT-ROOT NON-BIN SENTINEL (ADR-139).
 # A project's governance files sit at the project ROOT, not in any bin, so no folder
 # token resolves for them and they orphan. `_project-root` is the `folder` value that
 # names that location. It is a SENTINEL, not a sixth bin: ADR-080 declares the bin set
@@ -426,7 +426,7 @@ def classify(path, root, scope):
                                                       + a domain can still be defended;
                                                       here: orphan — no confident domain)
       5a. KNOWN governance file at a project ROOT   -> the `_project-root` NON-BIN
-                                                      sentinel (D-12 / ADR-137)
+                                                      sentinel (D-12 / ADR-139)
       6.  else                                      -> full 11-field stamp
     """
     rel_path = path.relative_to(root)
@@ -491,7 +491,7 @@ def classify(path, root, scope):
             break
     # (5a) D-12 — project-root governance file. No folder token resolves at a project
     # ROOT, so these would orphan. The NON-BIN sentinel classifies them by LOCATION
-    # without adding a bin (see PROJECT_ROOT_FOLDER / ADR-137).
+    # without adding a bin (see PROJECT_ROOT_FOLDER / ADR-139).
     if domain is None and _is_project_root_governance(rel_path):
         domain, canonical_folder, default_type = PROJECT_ROOT_CLASSIFICATION
 

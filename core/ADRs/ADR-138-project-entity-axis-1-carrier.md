@@ -97,6 +97,6 @@ The question this record answers is therefore narrow and load-bearing: **where d
 
 ## Related ADRs
 
-- [ADR-137](ADR-137-project-root-is-a-non-bin-sentinel.md) — the non-bin sentinel that makes a project's own governance files classifiable. Its stamp supplies the `lifecycle_state` value that discharges D5's presence guard on a `PROJECT.md`, which is why D7's ordering constraint runs backfill-then-seed.
+- [ADR-139](ADR-139-project-root-is-a-non-bin-sentinel.md) — the non-bin sentinel that makes a project's own governance files classifiable. Its stamp supplies the `lifecycle_state` value that discharges D5's presence guard on a `PROJECT.md`, which is why D7's ordering constraint runs backfill-then-seed.
 - [ADR-040](ADR-040-leadership-owner-person-ref.md) — the leadership-owner type lift and the exactly-one-of owner invariant. It is the reason the seeding protocol's tier order is forced: an unresolved owner reference is BLOCK-WRITE, so the Person record must exist before any record references it.
 - [ADR-058](ADR-058-pmo-entity-page-ssot.md) — the shared-entity store and the one-Person cap. The seeding protocol never auto-creates a second Person; unresolved names route to the operator clarification queue.
