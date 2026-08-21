@@ -2417,7 +2417,9 @@ phase_inject_velocity_field() {
   # bytes --apply will write — including an N/A degrade or a conformance
   # failure. A dry run that renders a PREDICTED string is a green rehearsal for
   # a red run.
-  local _line
+  # Declared on BOTH branches — the file runs under `set -u`, so a note set only
+  # inside the else would be an unbound-variable crash on the unavailable-tool path.
+  local _line _vnote=""
   if [[ ! -x "$COMPUTE_VELOCITY" ]]; then
     _line="**Velocity:** N/A — compute-release-velocity.sh unavailable or returned no value"
   else
@@ -2426,9 +2428,34 @@ phase_inject_velocity_field() {
     # Sentinel-preserved capture with explicit status propagation — the
     # emit_derived_entry idiom, for the same two reasons: `$( )` strips trailing
     # newlines, and `$?` after a pipeline reports the wrong command's status.
-    local _out _rc=0
-    _out="$("$COMPUTE_VELOCITY" "${_cv_args[@]}" 2>/dev/null; _prc=$?; /usr/bin/printf 'X'; exit "$_prc")" || _rc=$?
+    # stderr is CAPTURED, not discarded. The producer's diagnostics are the only
+    # channel that carries an exit-2 reason or a degraded Phase-A2 planned-recovery
+    # notice, and a phase that throws them away can only ever report "no value".
+    local _out _rc=0 _errf
+    _errf="$(/usr/bin/mktemp -t velocity-stderr.XXXXXX)"
+    _out="$("$COMPUTE_VELOCITY" "${_cv_args[@]}" 2>"$_errf"; _prc=$?; /usr/bin/printf 'X'; exit "$_prc")" || _rc=$?
     _out="${_out%X}"
+    local _err
+    _err="$(/usr/bin/head -c 800 "$_errf" 2>/dev/null | /usr/bin/tr '\n' ' ' || true)"
+    /bin/rm -f "$_errf" 2>/dev/null || true
+
+    # Exit 2 is the producer's source-integrity / implausible-measurement
+    # contract, and it must NOT fall through to the N/A degrade below. An N/A
+    # would record "this release could not be measured" for a release the tool
+    # measured fine and found WRONG — trading a loud refusal for a quiet
+    # permanent row, which is the exact trade this phase exists to stop making.
+    # Dry-run/apply posture per the release-wide ruling: non-blocking WARN under
+    # --dry-run, fatal at --apply.
+    if [[ "$_rc" -eq 2 ]]; then
+      local _v2="compute-release-velocity.sh REFUSED the measurement (exit 2) for the $VERSION **Velocity:** field: ${_err:-<the producer wrote nothing to stderr>}"
+      if [[ "$MODE" == "dry-run" ]]; then
+        mark_phase "inject_velocity_field" "WARN" "$_v2 — NOT blocking under --dry-run (nothing is committed, so no record can be corrupted here); this same condition FAILS the close at --apply"
+        return 0
+      fi
+      mark_phase "inject_velocity_field" "FAIL" "$_v2"
+      return 3
+    fi
+
     local _stripped
     _stripped="$(/usr/bin/printf '%s' "$_out" | /usr/bin/tr -d '[:space:]')"
     if [[ "$_rc" -ne 0 || -z "$_stripped" ]]; then
@@ -2441,6 +2468,11 @@ phase_inject_velocity_field() {
       # Take the first; a producer that emitted more is caught by the
       # conformance assert below rather than smuggled into the ledger.
       _line="**Velocity:** ${_out%%$'\n'*}"
+      # A successful run can still have something to say — most importantly that
+      # the Phase-A2 planned-recovery DEGRADED, which silently under-reports
+      # planned. It cannot go in the field (the consumer grammar is fixed), so it
+      # rides the phase detail into the run report, where the operator reads it.
+      if [[ -n "$_err" ]]; then _vnote=" [producer stderr: ${_err}]"; fi
     fi
   fi
 
@@ -2459,7 +2491,7 @@ phase_inject_velocity_field() {
   fi
 
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "inject_velocity_field" "DRY-RUN" "would insert '$_line' after **Cycle-Time:** in the $VERSION Deployment Log block ($target_name)"
+    mark_phase "inject_velocity_field" "DRY-RUN" "would insert '$_line' after **Cycle-Time:** in the $VERSION Deployment Log block ($target_name)${_vnote}"
     return 0
   fi
 
@@ -2482,7 +2514,7 @@ phase_inject_velocity_field() {
   # subject to the same staging omission (#4710).
   _record_touched_archive_segment "$target_log"
 
-  mark_phase "inject_velocity_field" "PASS" "injected '$_line' $_anchor_desc in the $VERSION Deployment Log block ($target_name)"
+  mark_phase "inject_velocity_field" "PASS" "injected '$_line' $_anchor_desc in the $VERSION Deployment Log block ($target_name)${_vnote}"
   return 0
 }
 
@@ -7561,6 +7593,137 @@ EOF
   MILESTONE="$_vl_saved_ms"; MERGE_SHA="$_vl_saved_sha"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # ── Test 4c.5b: phase_inject_velocity_field × the producer's EXIT-CLASS contract
+  #
+  # Offline, hermetic, self-contained (own tmp dir, own fixture, own teardown),
+  # and deliberately SEPARATE from Test 4c.5 above: 4c.5 grades WHERE the field
+  # lands, this grades whether the phase may write one AT ALL. Arm letters
+  # continue the group's space, which 4c.5 currently ends at (o).
+  #
+  # THE REGRESSION THIS EXISTS FOR: a producer exit 2 used to fall into the same
+  # branch as "the tool is missing" and be recorded as `**Velocity:** N/A`. A
+  # refusal to measure became a measurement — written to a permanent ledger row,
+  # at exit 0, with the phase reporting PASS. The distinguishing observable is
+  # NOT the exit code but WHAT REACHES THE FILE, so every arm below asserts on
+  # the fixture's contents as well as on the phase verdict.
+  local _vd_saved_log="$RELEASE_LOG" _vd_saved_ver="$VERSION" _vd_saved_mode="$MODE"
+  local _vd_saved_cv="$COMPUTE_VELOCITY" _vd_saved_ms="$MILESTONE" _vd_saved_sha="$MERGE_SHA"
+  local _vd_tmp; _vd_tmp="$(/usr/bin/mktemp -d -t velocity-exitclass.XXXXXX)"
+  MODE="apply"; MILESTONE="999"; MERGE_SHA=""; VERSION="v9.95"
+
+  # One stub per exit class the phase must treat DIFFERENTLY.
+  local _vd_cv_ok="$_vd_tmp/cv-ok.sh" _vd_cv_e2="$_vd_tmp/cv-exit2.sh"
+  local _vd_cv_e1="$_vd_tmp/cv-exit1.sh" _vd_cv_note="$_vd_tmp/cv-note.sh"
+  /bin/cat > "$_vd_cv_ok" <<'EOF'
+#!/bin/sh
+echo "planned 12 pts / delivered 12 pts (1.00); files-changed 9; allocation 0/12/0 pts (feature/debt/protocol-slack); class routine; mechanism: compute-release-velocity.sh"
+EOF
+  /bin/cat > "$_vd_cv_e2" <<'EOF'
+#!/bin/sh
+echo "ERROR: implausible Velocity measurement for milestone 999 - planned 18 pts against delivered 0 pts over 5 sized member(s)" >&2
+exit 2
+EOF
+  /bin/cat > "$_vd_cv_e1" <<'EOF'
+#!/bin/sh
+echo "ERROR: gh CLI not found - required to read milestone membership labels" >&2
+exit 1
+EOF
+  /bin/cat > "$_vd_cv_note" <<'EOF'
+#!/bin/sh
+echo "NOTE: Phase-A2 planned-recovery degraded (could not list issues carrying 'status: deferred')" >&2
+echo "planned 12 pts / delivered 12 pts (1.00); files-changed 9; allocation 0/12/0 pts (feature/debt/protocol-slack); class routine; mechanism: compute-release-velocity.sh"
+EOF
+  /bin/chmod +x "$_vd_cv_ok" "$_vd_cv_e2" "$_vd_cv_e1" "$_vd_cv_note"
+
+  RELEASE_LOG="$_vd_tmp/RELEASE_LOG.md"
+  local _vd_write
+  _vd_write() {
+    /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+
+#### Deployment Log v9.95
+**Mechanism:** git merge.
+**Cycle-Time:** 3d 4h; mechanism: compute-cycle-time.sh
+**Result:** SUCCESS — green CI.
+EOF
+  }
+  local _vd_vcount
+  _vd_vcount() { /usr/bin/grep -c '^\*\*Velocity:\*\*' "$RELEASE_LOG" 2>/dev/null || true; }
+  local _vd_rc
+
+  # (p) EXIT 2 AT --apply = FAIL, return 3, and NOTHING written.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vd_write; COMPUTE_VELOCITY="$_vd_cv_e2"; MODE="apply"
+  _vd_rc=0; phase_inject_velocity_field >/dev/null 2>&1 || _vd_rc=$?
+  [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: (p) — a producer exit 2 must FAIL the phase at --apply, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  [[ "$_vd_rc" -eq 3 ]] || { echo "FAIL: (p) — the phase must return 3 on a producer exit 2 so the runner halts before the close, got $_vd_rc"; failures=$((failures+1)); }
+  [[ "$(_vd_vcount)" -eq 0 ]] || { echo "FAIL: (p) — nothing may be written to the ledger when the producer refuses the measurement"; failures=$((failures+1)); }
+  # The detail must carry the PRODUCER's own words. A generic "tool failed" sends
+  # the operator to re-run the tool to find out what it already said.
+  /usr/bin/grep -qF 'implausible' <<<"$(get_phase inject_velocity_field)" || { echo "FAIL: (p) — the FAIL detail must quote the producer's stderr, not a generic message, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+
+  # (p) control — the SAME fixture with a conformant producer must PASS and write
+  # exactly one field. Without it, (p) is satisfied by a phase that always fails.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vd_write; COMPUTE_VELOCITY="$_vd_cv_ok"
+  phase_inject_velocity_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: (p) control — the same fixture with a conformant producer must PASS, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  [[ "$(_vd_vcount)" -eq 1 ]] || { echo "FAIL: (p) control — the conformant run must write exactly one **Velocity:** line, got $(_vd_vcount)"; failures=$((failures+1)); }
+
+  # (q) EXIT 2 UNDER --dry-run = non-blocking WARN per the release-wide dry-run /
+  # apply ruling, naming the condition that fails at apply, and still writing
+  # nothing. A dry run that BLOCKED here would halt a rehearsal that corrupts
+  # nothing; one that stayed silent would rehearse green for a red run.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vd_write; COMPUTE_VELOCITY="$_vd_cv_e2"; MODE="dry-run"
+  _vd_rc=0; phase_inject_velocity_field >/dev/null 2>&1 || _vd_rc=$?
+  [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "WARN" ]] || { echo "FAIL: (q) — a producer exit 2 under --dry-run must mark WARN per the in-file non-blocking-preview precedent, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  [[ "$_vd_rc" -eq 0 ]] || { echo "FAIL: (q) — the dry-run WARN must be NON-blocking (return 0), got $_vd_rc"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'FAILS the close at --apply' <<<"$(get_phase inject_velocity_field)" || { echo "FAIL: (q) — the dry-run WARN must name the condition that fails at --apply, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  [[ "$(_vd_vcount)" -eq 0 ]] || { echo "FAIL: (q) — a dry run must not write"; failures=$((failures+1)); }
+  MODE="apply"
+
+  # (r) EXIT 2 IS NOT AN N/A. The refusal must not be laundered into the explicit
+  # N/A form, which parses cleanly and reads as an honest "not measurable".
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vd_write; COMPUTE_VELOCITY="$_vd_cv_e2"
+  phase_inject_velocity_field >/dev/null 2>&1 || true
+  ! /usr/bin/grep -q '^\*\*Velocity:\*\* N/A' "$RELEASE_LOG" || { echo "FAIL: (r) — a producer exit 2 was degraded to an 'N/A' field; a refusal to measure must never be recorded as a measurement"; failures=$((failures+1)); }
+
+  # (r) SENSITIVITY — exit 1 is the generic-unavailable class and MUST still
+  # degrade to N/A at PASS. Without this arm (r) is equally satisfied by a phase
+  # that blanket-fails every non-zero exit, which would break the legitimate
+  # gh-unavailable path the standard's manual-fill fallback rests on.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vd_write; COMPUTE_VELOCITY="$_vd_cv_e1"
+  phase_inject_velocity_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: (r) sensitivity — a producer exit 1 must STILL degrade to an N/A field at PASS, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -q '^\*\*Velocity:\*\* N/A' "$RELEASE_LOG" || { echo "FAIL: (r) sensitivity — the exit-1 degrade must write the explicit N/A field, or the exit-2 arm above proves nothing about exit 2 specifically"; failures=$((failures+1)); }
+
+  # (s) A SUCCESSFUL run's stderr still reaches the report. The producer announces
+  # a DEGRADED Phase-A2 planned-recovery there — a condition that under-reports
+  # `planned`, i.e. makes the ratio look HEALTHIER than the truth. Discarded
+  # stderr is how that becomes invisible.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vd_write; COMPUTE_VELOCITY="$_vd_cv_note"
+  phase_inject_velocity_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: (s) — a producer that writes a NOTE to stderr but a conformant field to stdout must still PASS, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'planned-recovery degraded' <<<"$(get_phase inject_velocity_field)" || { echo "FAIL: (s) — a degraded planned-recovery notice must reach the run report; on stderr alone it is discarded and 'planned' under-reports invisibly, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  [[ "$(_vd_vcount)" -eq 1 ]] || { echo "FAIL: (s) — the stderr note must not disturb the write; expected exactly one **Velocity:** line, got $(_vd_vcount)"; failures=$((failures+1)); }
+
+  # (s) control — a SILENT producer must add no note, or the note is decoration
+  # rather than a signal that something happened.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _vd_write; COMPUTE_VELOCITY="$_vd_cv_ok"
+  phase_inject_velocity_field >/dev/null 2>&1 || true
+  ! /usr/bin/grep -qF 'producer stderr:' <<<"$(get_phase inject_velocity_field)" || { echo "FAIL: (s) control — a silent producer must add no stderr note to the phase detail, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_vd_tmp" 2>/dev/null || true
+  unset -f _vd_write _vd_vcount
+  RELEASE_LOG="$_vd_saved_log"; VERSION="$_vd_saved_ver"; MODE="$_vd_saved_mode"
+  COMPUTE_VELOCITY="$_vd_saved_cv"; MILESTONE="$_vd_saved_ms"; MERGE_SHA="$_vd_saved_sha"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # ── Test 4c.6: phase_inject_close_class_telemetry_field (6.8) — offline, hermetic.
   #
   # The producer is STUBBED (the real one reaches `gh` and the operator-instance
@@ -11162,6 +11325,7 @@ AISTUB
   echo "  phase_append_release_digest + phase_append_release_index + phase_append_changelog validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency; #2048 — version-less marker + _unversioned notes link + marker-aware idempotency + CHANGELOG SKIP; #4455 — all three entries PROJECTED by generate_release_index.py, versioned CHANGELOG block lands above the prior entry WITH its separating blank line intact, re-run SKIPs, and a non-owner/repo-shaped REPO_SLUG FAILs before writing a broken Release URL)" >&2
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped; #3715 two-surface — archived body resolves to its segment and the hot ledger is left untouched / cross-surface idempotency re-run SKIPs without duplicating / a genuine **Result:** absence still hard-FAILs naming every surface searched / no sibling leak within a segment); Outcome KEY GRAMMAR validated (#4222 — k1 a QUALIFIED key is recognized and REJECTED at --apply leaving the record byte-unchanged, with an EXECUTABLE SENSITIVITY arm re-demonstrating on every run that the pre-fix bare-literal probe reads the same fixture as ABSENT and would inject the second line / k2 the bare path is unregressed (SKIP, no write) with a SPECIFICITY arm proving an Outcome-less block still injects exactly one / k3 phase 6.8 anchors under a qualified key, asserted on the RAW line because the field-name class used elsewhere cannot see parentheses, with the bare-key fallback as its control / k4 ONE RESOLVER, TWO SITES: extending the shared key constant moves BOTH the 6.5 probe and the 6.8 anchor, and at the default constant the same key is accepted at NEITHER — a one-site fix fails here / k5 grammar non-collision asserted in BOTH directions against the real sibling field **Outcome rationale:** / k6 raw-prefix fidelity — an INDENTED key classifies and anchors through the UNCHANGED primitive, with the unindented twin as control / k7 both-present classifies DUPLICATE and FAILs writing nothing, control: bare-only raises no duplicate diagnostic / k8 three PRESENT-BUT-UNPARSEABLE shapes (nested paren, doubled space, missing space) classify UNPARSEABLE rather than ABSENT and stop the write, control: a genuine absence still injects / k9 NO EMPTY ANCHOR REACHES THE PRIMITIVE — an unresolvable anchor FAILs loudly instead of landing the field at the top of the block, paired with an ANTI-VACUITY arm that hands the unchanged primitive an empty anchor and demonstrates it exits 0 writing to the top, so k9 is a measurement and not a tautology / k10 MODE: --dry-run returns 0 and marks WARN naming the condition that FAILS at --apply, control: the same fixture at --apply returns 3 and marks FAIL / k11 the governance constant is hard-assigned, not env-overridable, scoped to the production region with an anti-vacuity control on the known-bad form)" >&2
   echo "  phase_inject_velocity_field + phase_append_release_learnings validated (velocity — field ORDER 'Cycle-Time Velocity Result' on a clean block / no sibling leak / idempotent re-run / bolded-numeral value REJECTED writing nothing / empty capture at exit 0 degrades to an explicit N/A never a bare field / non-conformant existing field SKIPs WITH the warning, conformant control WITHOUT it; CO-LOCATION — an archived block's field lands in the SEGMENT beside its own **Result:** and the hot stub stays at 0, cross-surface re-run SKIPs, dry-run names the segment and prints the RESOLVED bytes. learnings — sibling H4 placed IMMEDIATELY after its Deployment Log block / body intact through the sentinel capture / idempotent re-run / whitespace-only render at exit 0 FAILs writing nothing / D-1 zero-source-events BLOCKS the close and prints the capture remedy, >0-events control PASSes / over an ARCHIVED block the block still lands in the HOT ledger and every segment stays at 0 Release Learnings — RECORDS_POLICY KEEP_CLASS. A7 capture gate — the SAME 0-source-event condition read at Phase 2 by _learnings_capture_gap reports a gap, >0-events control does NOT / an already-placed block is NOT a gap even under the 0-event stub, block-removed sensitivity IS / neither a missing synthesizer nor a whitespace-only render escalates to a gap / phase_preflight actually CALLS the predicate and is dispatched before create_chore_branch and transition_release_log, both derived from the shipped text with fabricated-symbol controls / GATE-BACKSTOP PARITY over the placed x synth-absent x synth-empty x render-0 x render-N matrix — a gap implies 6.7 returns 3, with a non-vacuity control asserting the antecedent actually fired)" >&2
+  echo "  phase_inject_velocity_field EXIT-CLASS contract validated (#4927, group 4c.5b — this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): (p) a producer exit 2 FAILs at --apply, returns 3 so the runner halts, writes NOTHING, and quotes the producer's OWN stderr rather than a generic message — with a control proving the same fixture PASSes and writes exactly one field under a conformant producer, so the arm is not just a phase that always fails / (q) the same exit 2 under --dry-run marks a NON-blocking WARN that names the condition failing at --apply, and still writes nothing / (r) exit 2 is never laundered into the explicit 'N/A' form — a refusal to measure must not be recorded as a measurement — with a SENSITIVITY arm requiring exit 1 to STILL degrade to N/A at PASS, so a blanket fail-on-any-nonzero phase reddens here instead of passing / (s) a successful run's stderr still reaches the run report, so a DEGRADED Phase-A2 planned-recovery (which under-reports 'planned' and makes the ratio look healthier than the truth) is visible rather than discarded, with a control proving a silent producer manufactures no note" >&2
   echo "  phase_inject_close_class_telemetry_field validated (#4437 — clean block PASSes with the field positioned after **Outcome rationale:** and no sibling leak / idempotent re-run SKIPs / fallback anchor lands after **Outcome:** and names which anchor it used / VACUITY PAIR: an all-N/A-but-conformant line is WRITTEN and carries the no-computed-ratio warning WITH the disposition read from the emitted line, measured-line control carries NO warning / a line missing § 3.2 slots FAILs writing nothing / an empty capture at exit 0 FAILs writing nothing / producer exit 2 escalates as a source-integrity condition writing nothing / a non-executable producer SKIPs rather than hand-composing a field that would fabricate its own mechanism claim / dry-run prints the RESOLVED bytes and writes nothing / CO-LOCATION: an archived block's field lands in the SEGMENT beside its own **Result:** with the hot stub at 0, and the cross-surface re-run SKIPs)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache)" >&2
   echo "  post_gate_passage_proof three-rung target ladder validated (#3819 — T-13 rung 1 resolves a CLOSED Stage-13 sub-task via --state all and does NOT fall through to the PR / rung 2 posts to the release PR naming the OBSERVED rung-1 reason / rung 3 MANUAL names BOTH attempted targets; T-14 two collect_open_release_issues calls in one run keep EXCLUDED_DETAIL undoubled, COLLECTED_OPEN_ISSUES identical and resolve_stage13_subtask stable, with a non-empty-exclusion anti-vacuity control)" >&2
