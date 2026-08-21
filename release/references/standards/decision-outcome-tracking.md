@@ -32,6 +32,39 @@ This standard codifies a structurally elevated **`**Outcome:**` field** as an ad
 **Outcome rationale:** <one-line free text, optional — omit when ENUM = SUCCESS unless additional context warrants>
 ```
 
+### 2.1 Permitted key forms
+
+The schema above states the field; this sub-section states its **key grammar**, which the schema previously left unspecified. An unspecified key form is not a permissive one — it is one every consumer re-derives independently, and two consumers that each assumed the bare literal is how a qualified key came to be read as an *absent* field and silently injected past.
+
+**`**Outcome:**` at column 0 is the sole conformant key form.** A **qualified** key — `**Outcome (<qualifier>):**` — is **recognized but NOT conformant**. A consumer that meets one must fail loudly; it must never treat the field as absent, and must never write a second Outcome line past it.
+
+| Key form | Conformant | Required consumer behaviour |
+|---|---|---|
+| `**Outcome:** <ENUM>` | **YES** — canonical | Read the field. |
+| `**Outcome (<qualifier>):** …` | **NO** — recognized, rejected | Fail loudly, naming the observed key and the remedy below. Never read as absent. |
+| An `**Outcome…:**` key parsing as neither of the above | **NO** — recognized, rejected | As above. A key that is present but unparseable is not an absent key. |
+| `**Outcome rationale:** …` | n/a — a **different field** (§ 5) | Not an Outcome key at all. |
+
+**The value slot holds exactly one enum token.** Qualification does not move from the key into the value. The § 6 JOIN extracts the value by stripping the literal `**Outcome:** ` prefix and counts the remainder against the closed enum, so free text in the value slot is simply unmatched by the aggregation this standard exists to enable — the same corruption a permissive key would cause, relocated one field to the right. **Qualification belongs on the `**Outcome rationale:**` line** (§ 5): a slot that already exists, is already governed, and is already the preferred anchor for fields written after it.
+
+**Remedy for a non-conformant key** — normalize to the two sanctioned lines:
+
+```markdown
+**Outcome:** <ENUM>
+**Outcome rationale:** <the qualification that was in the key>
+```
+
+**Why strict rather than permissive.** The permissive alternative was weighed and rejected on evidence, not preference:
+
+- **Corpus fit.** 171 bare keys and 0 qualified keys across the release log and all four of its archive segments, with the partition closing exactly (171 bare + 0 qualified + 6 rationale lines = 177 `**Outcome`-family lines in total). The canonical form is the 100%-observed one; the qualified form has never occurred on the governed surface.
+- **Prior decision.** The one qualified key that has ever existed here was deliberately normalized away at the Stage 13 close of the release that introduced it, by a commit naming `**Outcome:**` the canonical key — and that normalization carried the qualification forward into the record with no information lost.
+- **Consumer cost.** Widening the key without also widening § 6's value extraction leaves the qualifier inside the extracted value. Widening both places an unbounded free-text slot immediately adjacent to a closed enum, which is an extension-by-drift surface.
+- **Failure visibility.** A non-conformant key fails at the moment it is authored, with a human in the loop, instead of producing a record that diverges from the schema in silence.
+
+**Grammar boundary, stated rather than discovered.** A qualifier MUST be delimited. A qualifier written without a delimiter — `**Outcome Stage-12 read:**` — is indistinguishable from a sibling field name by grammar alone, because `**Outcome rationale:**` is exactly that shape and is a real, distinct field. Such a key therefore reads as a *different field*, not as a malformed Outcome key. That is a property of the grammar rather than a gap in it, and it is why the delimiter is required.
+
+**Enforcement.** The automated close-out resolves this key through ONE shared grammar consumed by both its Outcome-injection idempotency probe and its downstream field-insert anchor, so a producer and a consumer cannot re-derive the form independently. Under `--apply` a non-conformant key fails the phase and blocks the close. Under `--dry-run` the same condition reports as a non-blocking warning that names what would fail at apply, so the preview run still completes and still shows the operator every later phase — the preview is the review in which a non-conformant key is most likely to be caught, and a preview that aborts on it would remove the very mechanism that caught it historically.
+
 **Enum semantics (4 values; closed; minimum-viable signal):**
 
 | Value | Definition | Set by |
@@ -226,3 +259,4 @@ Per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.m
 | Version | Date | Change |
 |---|---|---|
 | Initial | 2026-05-23 | Initial authoring — release-metrics-and-recovery release |
+| closeout-reports-what-shipped | 2026-08-20 | Added **§ 2.1 Permitted key forms** — the key grammar the schema previously left unspecified. `**Outcome:**` at column 0 is the sole conformant key; a qualified `**Outcome (…):**` key is recognized-but-non-conformant and must fail loudly rather than read as absent. States that the value slot holds exactly one enum token and that qualification belongs on the `**Outcome rationale:**` line, names the two-line remedy, records the strict-over-permissive rationale (171 bare / 0 qualified corpus census, the prior normalization decision, the § 6 value-extraction cost, failure visibility), states the delimiter requirement as a grammar boundary, and states the apply-fatal / dry-run-warning enforcement posture. Version cell carries the release **slug** rather than a version number: under the slug-only plan-identity convention the concrete release tag binds at the Stage-12 atomic claim, and writing one here would invent it. |

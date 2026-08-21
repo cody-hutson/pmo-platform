@@ -20,10 +20,10 @@
 #   4  detect_open_issues auto-close anomaly enumeration (#38: --exclude-issue + Stage-13-subtask sub-task-label+title-regex auto-exclude, #3665)
 #   5  create_chore_branch chore/v<X.Y>-stage-13-corpus-update
 #   6  transition_release_log  DEPLOYED → VERIFIED
-#   6.5 inject_outcome_field  **Outcome:** field on the visible-H4 Deployment Log block (#37; default SUCCESS, --outcome overrides)
+#   6.5 inject_outcome_field  **Outcome:** field on the visible-H4 Deployment Log block (#37; default SUCCESS, --outcome overrides; key resolved through the shared field-key grammar — a non-conformant key FAILs loudly rather than injecting past, #4222)
 #   6.6 inject_velocity_field **Velocity:** field after **Cycle-Time:** in that block (stage-13-close.md Phase B-velocity; surface-resolved)
 #   6.7 append_release_learnings  sibling H4 `#### Release Learnings v<X.Y>` after the Deployment Log block (stage-13-close.md Phase A7; hot ledger only)
-#   6.8 inject_close_class_telemetry_field  **Close-Class-Telemetry:** field after **Outcome rationale:**/**Outcome:** in that block (close-class-telemetry.md § 3.2; surface-resolved)
+#   6.8 inject_close_class_telemetry_field  **Close-Class-Telemetry:** field after **Outcome rationale:**/**Outcome:** in that block (close-class-telemetry.md § 3.2; surface-resolved; anchor STRING resolved through the same shared field-key grammar as 6.5, #4222)
 #   7  append_release_index    new row in RELEASE_INDEX.md
 #   8  append_release_digest   new entry under v<MAJOR>.* H2 in RELEASE_DIGEST.md
 #   8.5 append_reversions   append re-version row(s) to RELEASE_REVERSIONS.md (#1679; N/A on the common no-collision path)
@@ -1933,6 +1933,137 @@ with open(log_path, "w", encoding="utf-8") as f:
 PY
 }
 
+# ─── Shared field-key grammar + block classifier (#4222) ──────────────────────
+#
+# THE DEFECT THIS CLOSES. Two sites independently assumed the Outcome field's key
+# is the bare literal `**Outcome:**` — phase 6.5's idempotency probe and phase
+# 6.8's insert anchor. A Deployment Log authored with a QUALIFIED key
+# (`**Outcome (Stage-12 read; finalized at Stage 13 VERIFIED):**`) is invisible to
+# both: 6.5 reads "absent" and injects a SECOND, contradicting `**Outcome:**` line
+# into the audit record, and 6.8 fails to resolve its anchor. Producer and
+# consumer had no shared specification to agree on, so each re-derived one — which
+# is why the fix is a single shared definition rather than two patched matchers.
+#
+# THE SINGLE SHARED DEFINITION is the pair below: one qualifier grammar
+# (`_FIELD_KEY_QUALIFIER_RE`) plus one block-scoped classifier, consumed by BOTH
+# sites. Extending the grammar moves both sites at once, and that one-variable
+# property is the falsifiable form of "one resolver serves both sites" — a
+# one-site fix demonstrably fails it.
+#
+# CHARACTER CLASSES, NOT BACKSLASH ESCAPES — load-bearing, not style. The grammar
+# reaches awk through `-v`, and `-v` performs escape-sequence EXPANSION on its
+# value: a ` \([^)]*\)` literal arrives inside awk as ` ([^)]*)`, which is a
+# CAPTURE GROUP over "any run of non-`)` characters". That silently widens the
+# grammar so the real sibling field `**Outcome rationale:**` classifies as a
+# qualified Outcome key, AND narrows it so a genuine qualified key stops matching
+# — both directions wrong, both silent. Verified on this platform's awk before
+# this line was written. The bracket form carries no backslash and survives `-v`
+# byte for byte.
+_FIELD_KEY_QUALIFIER_RE=' [(][^)]*[)]'
+
+# The governance choice, in one place, HARD-ASSIGNED ON PURPOSE.
+#   reject — `**Outcome:**` at column 0 is the SOLE conformant key form; a
+#            qualified key is RECOGNIZED and REJECTED loudly, never silently
+#            injected past. Corpus evidence: 171 bare keys, 0 qualified, across
+#            the ledger and all four archive segments.
+#   accept — a qualified key is conformant; the phase SKIPs with a diagnostic.
+# The AUTHORITY is release/references/standards/decision-outcome-tracking.md
+# § 2.1, not this line — the constant mirrors the standard, it does not decide.
+#
+# DO NOT convert this to the `${VAR:-default}` env-overridable idiom this file
+# uses for tunables. The two settings encode two DIFFERENT governance rulings; no
+# gate anywhere in the repo asserts on the Outcome field, so an env-overridable
+# form would let the ruling be flipped per-invocation with no PR, no review, and
+# no trace in git. A self-test arm asserts that construct's ABSENCE from the
+# production region, with an anti-vacuity control on a known-bad source form.
+OUTCOME_QUALIFIED_KEY_POLICY="reject"      # reject | accept
+
+#   _resolve_field_key_in_block <target-log> <version> <base-field-name>
+#     → stdout: "<CLASS>\t<raw-key-prefix>"   ·   exit 0 always
+#
+# CLASS ∈ CANONICAL · QUALIFIED · UNPARSEABLE · DUPLICATE · ABSENT · UNREADABLE
+#
+# THE CLASS SET IS WIDER THAN THE GRAMMAR ON PURPOSE. A three-value class
+# (present / qualified / absent) is narrower than its callers' state space, and
+# every state it cannot represent collapses into a member that already means
+# something else — which is the same shape as the defect this function exists to
+# close, one level up. So each reachable state gets its OWN member:
+#   CANONICAL   exactly one bare `**<base>:**` key
+#   QUALIFIED   exactly one `**<base> (<qualifier>):**` key
+#   UNPARSEABLE a key IS present on this base but does not satisfy the grammar
+#               (nested parens, a doubled space, a missing space). Collapsing this
+#               into ABSENT is precisely what lets a PRESENT key drive a duplicate
+#               injection, so it is reported rather than absorbed.
+#   DUPLICATE   more than one Outcome-family key in the block — the fourth
+#               dispatch row is reachable only because the class carries it
+#   ABSENT      no key on this base. THE ONLY CLASS THAT EMITS AN EMPTY PREFIX.
+#   UNREADABLE  awk could not read the surface. A degraded read never shares a
+#               member with a clean one.
+#
+# THE PREFIX IS RAW, INCLUDING ANY LEADING WHITESPACE — load-bearing. The old
+# probe compared on a STRIPPED line while `_insert_field_after_in_block` matches
+# the RAW line; returning the raw prefix keeps classifier and anchor identical BY
+# CONSTRUCTION, which is the producer/consumer disagreement this card roots out.
+#
+# CONSUMERS MUST BRANCH ON THE CLASS BEFORE READING THE PREFIX. An empty anchor is
+# not a benign no-op downstream: `str.startswith("")` is True for every string, so
+# an empty prefix matches the block's FIRST line, the primitive's exit-4
+# "anchor absent" path becomes unreachable, and a field lands silently at the top
+# of the block at exit 0.
+#
+# GRAMMAR BOUNDARY, STATED NOT DISCOVERED. A key whose continuation is a plain
+# word (`**Outcome rationale:**`, `**Outcomes:**`) is a DIFFERENT FIELD, not a
+# malformed Outcome key — that is exactly how the real, distinct
+# `**Outcome rationale:**` field survives this classifier, and it is asserted in
+# BOTH directions by a self-test arm. The consequence is symmetric and bounded: a
+# qualifier written WITHOUT a delimiter (`**Outcome Stage-12 read:**`) is
+# indistinguishable from a sibling field name by grammar alone, and classifies as
+# a different field. § 2.1 states the delimiter requirement for that reason.
+_resolve_field_key_in_block() {
+  local _out _rc=0
+  _out="$(/usr/bin/awk -v ver="$2" -v base="$3" -v qre="$_FIELD_KEY_QUALIFIER_RE" '
+    function classify(key,   rem) {
+      if (index(key, base) != 1) return ""
+      rem = substr(key, length(base) + 1)
+      if (rem == "") return "CANONICAL"
+      if (rem ~ ("^" qre "$")) return "QUALIFIED"
+      if (rem ~ /^[ -]?[A-Za-z0-9][A-Za-z0-9 -]*$/) return ""
+      return "UNPARSEABLE"
+    }
+    { raw = $0; line = raw; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+    line == "#### Deployment Log " ver { inblk = 1; next }
+    inblk && line ~ /^#### / { inblk = 0 }
+    inblk && substr(line, 1, 2) == "**" {
+      key = substr(line, 3)
+      p = index(key, ":**")
+      if (p > 0) {
+        key = substr(key, 1, p - 1)
+        cls = classify(key)
+        if (cls != "") {
+          n++
+          if (n == 1) {
+            first = cls
+            match(raw, /^[ \t]*/)
+            firstpfx = substr(raw, 1, RLENGTH) "**" key ":**"
+          }
+        }
+      }
+    }
+    END {
+      if (n + 0 == 0) { printf "ABSENT\t\n"; exit 0 }
+      if (n + 0 > 1)  { printf "DUPLICATE\t%s\n", firstpfx; exit 0 }
+      printf "%s\t%s\n", first, firstpfx
+    }
+  ' "$1" 2>/dev/null)" || _rc=$?
+  if [[ "$_rc" -ne 0 || -z "$_out" ]]; then
+    # A surface that could not be read is NOT an absent field. Reporting it as
+    # ABSENT would hand the caller a clean-looking answer and an empty prefix.
+    printf 'UNREADABLE\t\n'
+    return 0
+  fi
+  printf '%s\n' "$_out"
+}
+
 phase_inject_outcome_field() {
   # Resolve + validate the outcome value (default SUCCESS per §4).
   local outcome="${OUTCOME:-SUCCESS}"
@@ -1971,19 +2102,50 @@ phase_inject_outcome_field() {
   fi
   local target_name; target_name="$(/usr/bin/basename "$target_log")"
 
-  # LOOKUP SITE 2 of 2 — idempotent: skip if the block on the RESOLVED surface
-  # already carries Outcome. (Scope the scan to the block via awk so a sibling
-  # release's Outcome line does not false-positive.)
-  if /usr/bin/awk -v ver="$VERSION" '
-      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
-      line == "#### Deployment Log " ver { inblk = 1; next }
-      inblk && line ~ /^#### / { inblk = 0 }
-      inblk && line ~ /^\*\*Outcome:\*\*/ { found = 1 }
-      END { exit(found ? 0 : 1) }
-    ' "$target_log" 2>/dev/null; then
-    mark_phase "inject_outcome_field" "SKIPPED" "**Outcome:** already present in the $VERSION Deployment Log block ($target_name)"
-    return 0
-  fi
+  # LOOKUP SITE 2 of 2 — idempotent, block-scoped, ON THE RESOLVED SURFACE, and
+  # resolved through the SHARED key grammar rather than a bare literal (#4222).
+  # A bare literal is structurally incapable of distinguishing ABSENT from
+  # QUALIFIED, and that distinction IS the defect: a qualified key read as absent
+  # drives a second, contradicting `**Outcome:**` line into the audit record —
+  # the surface least likely to be re-read. Every class that is neither a clean
+  # canonical key nor a genuine absence now stops the write instead of falling
+  # through it.
+  local _okg_res _okg_cls _okg_pfx _okg_why _okg_msg
+  _okg_res="$(_resolve_field_key_in_block "$target_log" "$VERSION" 'Outcome')"
+  _okg_cls="${_okg_res%%$'\t'*}"; _okg_pfx="${_okg_res#*$'\t'}"
+
+  case "$_okg_cls" in
+    CANONICAL)
+      mark_phase "inject_outcome_field" "SKIPPED" "**Outcome:** already present in the $VERSION Deployment Log block ($target_name)"
+      return 0
+      ;;
+    ABSENT)
+      : # genuine absence — fall through to the injection path below, unchanged
+      ;;
+    *)
+      if [[ "$_okg_cls" == "QUALIFIED" && "$OUTCOME_QUALIFIED_KEY_POLICY" == "accept" ]]; then
+        mark_phase "inject_outcome_field" "SKIPPED" "an Outcome field is already present in the $VERSION Deployment Log block ($target_name) under the NON-CANONICAL qualified key '$_okg_pfx' — accepted under OUTCOME_QUALIFIED_KEY_POLICY=accept, nothing injected. A silent skip over a non-conformant key is how a divergent record stays invisible, so the skip carries this diagnostic."
+        return 0
+      fi
+      case "$_okg_cls" in
+        QUALIFIED)   _okg_why="carries a NON-CONFORMANT qualified Outcome key '$_okg_pfx'" ;;
+        DUPLICATE)   _okg_why="carries MORE THAN ONE Outcome-family key (first: '$_okg_pfx')" ;;
+        UNPARSEABLE) _okg_why="carries an Outcome key this grammar cannot parse, '$_okg_pfx' — a nested parenthesis, a doubled space, or a missing space before the qualifier" ;;
+        *)           _okg_why="could not be read for an Outcome key (classifier returned '$_okg_cls')" ;;
+      esac
+      # The remedy names the shape the standard ALREADY sanctions. Moving the
+      # qualifier into the VALUE would satisfy this phase and then break the
+      # § 6 JOIN's value extraction — the same corruption the strict key form
+      # exists to prevent, relocated one field to the right.
+      _okg_msg="the $VERSION Deployment Log block ($target_name) $_okg_why. decision-outcome-tracking.md § 2.1 makes '**Outcome:**' at column 0 the sole conformant key form and its value exactly one enum token; the qualification belongs on the '**Outcome rationale:**' line. Normalize the key, move the qualifier to the rationale line, then re-run. Nothing was written."
+      if [[ "$MODE" == "dry-run" ]]; then
+        mark_phase "inject_outcome_field" "WARN" "$_okg_msg NOT blocking under --dry-run (nothing is committed, so no record can be corrupted here); this same condition FAILS the close at --apply"
+        return 0
+      fi
+      mark_phase "inject_outcome_field" "FAIL" "$_okg_msg"
+      return 3
+      ;;
+  esac
 
   if [[ "$MODE" == "dry-run" ]]; then
     local _r=""
@@ -2592,18 +2754,54 @@ phase_inject_close_class_telemetry_field() {
   fi
 
   # ── Insert after `**Outcome rationale:**`, falling back to `**Outcome:**` when
-  # the block carries no rationale line (exit 4 = block present, anchor absent —
-  # distinguishable from exit 3 = block absent, which stays fatal). TWO live
-  # limbs, not more: _resolve_deployment_log_target only resolves blocks carrying
-  # `**Result:**`, and 6.5 has already placed `**Outcome:**` in the same block, so
-  # a third fallback would be unreachable code.
-  local _irc=0 _anchor_desc="after **Outcome rationale:**"
-  _insert_field_after_in_block "$target_log" "$VERSION" '**Outcome rationale:**' "$_line" || _irc=$?
-  if [[ "$_irc" -eq 4 ]]; then
-    _irc=0
-    _anchor_desc="after **Outcome:** (the block carries no **Outcome rationale:** field)"
-    _insert_field_after_in_block "$target_log" "$VERSION" '**Outcome:**' "$_line" || _irc=$?
+  # the block carries no rationale line. TWO live limbs, not more:
+  # _resolve_deployment_log_target only resolves blocks carrying `**Result:**`,
+  # and 6.5 has already placed `**Outcome:**` in the same block, so a third
+  # fallback would be unreachable code.
+  #
+  # THE ANCHOR STRING IS RESOLVED FIRST, THROUGH THE SHARED KEY GRAMMAR (#4222),
+  # and the resolved RAW prefix is what the primitive receives — so a qualified
+  # key anchors exactly as a bare one does and `_insert_field_after_in_block`
+  # keeps its exact-prefix semantics, signature and body UNCHANGED. Generalizing
+  # the primitive's matcher instead would have reached all five of its call sites,
+  # including phase 6.6's; resolving the string upstream reaches none of them.
+  #
+  # AN UNRESOLVED PREFIX IS NEVER PASSED THROUGH. `str.startswith("")` is True for
+  # every string, so an EMPTY anchor matches the block's FIRST line: the
+  # primitive's exit-4 "anchor absent" path becomes UNREACHABLE and the field
+  # lands silently at the top of the block at exit 0 — a PASS verdict over a
+  # misplaced audit field, which is this card's own failure signature. The
+  # classifier emits an empty prefix ONLY for ABSENT, the class is branched on
+  # BEFORE the prefix is read, and the literal canonical key is the floor. That
+  # floor preserves the pre-fix loud exit-4 failure for a block that genuinely
+  # carries no Outcome anchor rather than trading it for a silent misplacement.
+  local _ckg_res _ckg_cls _ckg_pfx
+  local _irc=0 _anchor="" _anchor_desc=""
+  # ANCHORABLE CLASSES ARE AN ALLOWLIST, not "anything but ABSENT". Only a key
+  # this grammar actually RECOGNIZED may become an anchor: an UNPARSEABLE key is
+  # not a recognized field, a DUPLICATE block is already broken, and UNREADABLE
+  # is a failed read. Each of those falls to the literal floor below and fails
+  # loudly, which is the correct standalone behaviour and is also what makes the
+  # grammar arm falsifiable — flipping _FIELD_KEY_QUALIFIER_RE must move BOTH
+  # sites, and with the constant at its default the same key must be accepted at
+  # NEITHER.
+  _ckg_res="$(_resolve_field_key_in_block "$target_log" "$VERSION" 'Outcome rationale')"
+  _ckg_cls="${_ckg_res%%$'\t'*}"; _ckg_pfx="${_ckg_res#*$'\t'}"
+  if [[ ( "$_ckg_cls" == "CANONICAL" || "$_ckg_cls" == "QUALIFIED" ) && -n "$_ckg_pfx" ]]; then
+    _anchor="$_ckg_pfx"; _anchor_desc="after **Outcome rationale:**"
+  else
+    _ckg_res="$(_resolve_field_key_in_block "$target_log" "$VERSION" 'Outcome')"
+    _ckg_cls="${_ckg_res%%$'\t'*}"; _ckg_pfx="${_ckg_res#*$'\t'}"
+    if [[ ( "$_ckg_cls" == "CANONICAL" || "$_ckg_cls" == "QUALIFIED" ) && -n "$_ckg_pfx" ]]; then
+      _anchor="$_ckg_pfx"
+      _anchor_desc="after **Outcome:** (the block carries no **Outcome rationale:** field)"
+    fi
   fi
+  if [[ -z "$_anchor" ]]; then
+    _anchor='**Outcome:**'
+    _anchor_desc="after **Outcome:** (the block carries no **Outcome rationale:** field)"
+  fi
+  _insert_field_after_in_block "$target_log" "$VERSION" "$_anchor" "$_line" || _irc=$?
   if [[ "$_irc" -ne 0 ]]; then
     mark_phase "inject_close_class_telemetry_field" "FAIL" "could not insert **Close-Class-Telemetry:** into the $VERSION Deployment Log block (block or **Outcome:** anchor not found in $target_name; searched: $_surfaces)"
     return 3
@@ -6430,6 +6628,362 @@ EOF
   unset -f _oc_write_log
   REPO_ROOT="$_oc_saved_root"; MODE="$_oc_saved_mode"; VERSION="$_oc_saved_version"
   RELEASE_LOG="$_oc_saved_log"; OUTCOME="$_oc_saved_outcome"; OUTCOME_RATIONALE="$_oc_saved_rat"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # ── Test 4c.1: the Outcome field-key GRAMMAR (#4222) — offline, hermetic ─────
+  #
+  # WHY THIS ARM EXISTS. The shipped defect is invisible on the bare-literal path,
+  # which is every path the pre-existing arms exercise — which is exactly why it
+  # shipped. Test 4c above drives phase 6.5 nine ways and every one of them seeds
+  # a bare `**Outcome:**` key. Seed a QUALIFIED key instead and the idempotency
+  # probe reads "absent" and injects a SECOND, contradicting Outcome line into the
+  # audit record at exit 0. So the deliverable is this arm, not the matcher.
+  #
+  # THE POSITION AND THE LABEL AGREE. This arm sits between `Test 4c` (the phase
+  # it extends) and `Test 4c.5`, and its label sorts there. The insertion anchor is
+  # the `# ── Test 4c.5:` comment line, probed at exactly ONE occurrence — the
+  # teardown idiom one line above it occurs 187 times and is a line number wearing
+  # a construct's clothes.
+  #
+  # EVERY SYMBOL IS PREFIXED `_ockg_` so no sibling arm can collide on a name.
+  local _ockg_saved_log="$RELEASE_LOG" _ockg_saved_ver="$VERSION" _ockg_saved_mode="$MODE"
+  local _ockg_saved_outcome="$OUTCOME" _ockg_saved_rat="$OUTCOME_RATIONALE"
+  local _ockg_saved_tool="$COMPUTE_CLOSE_CLASS_TELEMETRY" _ockg_saved_ms="$MILESTONE"
+  local _ockg_saved_qre="$_FIELD_KEY_QUALIFIER_RE"
+  local _ockg_tmp; _ockg_tmp="$(/usr/bin/mktemp -d -t outcomekey-selftest.XXXXXX)"
+  RELEASE_LOG="$_ockg_tmp/RELEASE_LOG.md"; MODE="apply"; VERSION="v9.90"; MILESTONE="999"
+  OUTCOME=""; OUTCOME_RATIONALE=""
+
+  local _ockg_qual='**Outcome (Stage-12 read; finalized at Stage 13 VERIFIED):** ALIGNED, UNOBSERVED'
+  local _ockg_res _ockg_rc _ockg_n _ockg_before _ockg_line
+
+  # Fixture: the v9.90 target block plus an untouched v9.89 sibling, so every
+  # assertion is proven block-scoped. $1/$2 are the Outcome-family line(s) seeded
+  # into v9.90; omit both for a genuinely Outcome-less block.
+  local _ockg_write
+  _ockg_write() {
+    {
+      /bin/echo "# RELEASE_LOG"
+      /bin/echo ""
+      /bin/echo "#### Deployment Log v9.90"
+      /bin/echo "**Cycle-Time:** 2d 0h."
+      /bin/echo "**Result:** SUCCESS — green CI."
+      if [[ -n "${1:-}" ]]; then /usr/bin/printf '%s\n' "$1"; fi
+      if [[ -n "${2:-}" ]]; then /usr/bin/printf '%s\n' "$2"; fi
+      /bin/echo ""
+      /bin/echo "#### Deployment Log v9.89"
+      /bin/echo "**Result:** SUCCESS — untouched sibling."
+      /bin/echo "**Outcome:** SUCCESS"
+    } > "$RELEASE_LOG"
+  }
+  # Count Outcome-FAMILY key lines (any `**Outcome…`) inside one version's block.
+  local _ockg_count
+  _ockg_count() {
+    /usr/bin/awk -v ver="$2" '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { inblk = 1; next }
+      inblk && line ~ /^#### / { inblk = 0 }
+      inblk && substr(line, 1, 9) == "**Outcome" { n++ }
+      END { print n + 0 }
+    ' "$1" 2>/dev/null || /bin/echo 0
+  }
+  # The RAW line immediately following the first line in <ver>'s block whose raw
+  # text starts with <prefix>. Position is asserted on the raw line and NOT via
+  # _cc_seq, whose `[A-Za-z -]*` field-name class excludes parentheses and so
+  # cannot see a qualified key at all.
+  local _ockg_after
+  _ockg_after() {
+    /usr/bin/awk -v ver="$2" -v pfx="$3" '
+      hit && !shown { print $0; shown = 1 }
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { inblk = 1; next }
+      inblk && line ~ /^#### / { inblk = 0 }
+      inblk && !hit && index($0, pfx) == 1 { hit = 1 }
+    ' "$1" 2>/dev/null || true
+  }
+  # The RAW line immediately following a version's block HEADING — i.e. the TOP of
+  # the block. Separate from _ockg_after because the heading rule there consumes
+  # its record; this is the position an empty anchor writes to.
+  local _ockg_firstline
+  _ockg_firstline() {
+    /usr/bin/awk -v ver="$2" '
+      hit && !shown { print $0; shown = 1 }
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { hit = 1 }
+    ' "$1" 2>/dev/null || true
+  }
+  # Conformant § 3.2 telemetry stub, so the 6.8 arms below reach the anchor code
+  # rather than stopping at the grammar assert.
+  local _ockg_cct="$_ockg_tmp/cct.sh"
+  /bin/cat > "$_ockg_cct" <<'EOF'
+#!/bin/sh
+echo "retro-conformance 10/10 (1.00); lessons-population 8/10 (0.80); carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 12/13 (0.92); evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh"
+EOF
+  /bin/chmod +x "$_ockg_cct"
+  COMPUTE_CLOSE_CLASS_TELEMETRY="$_ockg_cct"
+
+  # (k1) AC-1 — A QUALIFIED KEY IS RECOGNIZED AND REJECTED, never injected past.
+  # The block keeps exactly one Outcome-family line and the record is byte-identical.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _ockg_write "$_ockg_qual"
+  _ockg_before="$(/bin/cat "$RELEASE_LOG")"
+  phase_inject_outcome_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_outcome_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: #4222 k1 — a qualified Outcome key must FAIL loudly at --apply under the C1 grammar, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  _ockg_n="$(_ockg_count "$RELEASE_LOG" v9.90)"
+  [[ "$_ockg_n" -eq 1 ]] || { echo "FAIL: #4222 k1 — the block must still carry exactly ONE Outcome-family line, got $_ockg_n"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$RELEASE_LOG")" == "$_ockg_before" ]] || { echo "FAIL: #4222 k1 — a rejected key must leave the record BYTE-UNCHANGED"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'Outcome rationale' <<<"$(get_phase inject_outcome_field)" || { echo "FAIL: #4222 k1 — the FAIL diagnostic must name the sanctioned remedy (the rationale line), not merely the rejection; got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+
+  # (k1s) EXECUTABLE SENSITIVITY — re-demonstrated on EVERY run, not once at
+  # authoring time. The PRE-FIX bare-literal probe is inlined verbatim and must
+  # read this same fixture as ABSENT (rc 1) — i.e. must be the thing that would
+  # inject the second line. Without this arm, k1's green result is uninformative:
+  # a phase that FAILed for any other reason would satisfy it.
+  _ockg_rc=0
+  /usr/bin/awk -v ver="v9.90" '
+      { line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { inblk = 1; next }
+      inblk && line ~ /^#### / { inblk = 0 }
+      inblk && line ~ /^\*\*Outcome:\*\*/ { found = 1 }
+      END { exit(found ? 0 : 1) }
+    ' "$RELEASE_LOG" 2>/dev/null || _ockg_rc=$?
+  [[ "$_ockg_rc" -eq 1 ]] || { echo "FAIL: #4222 k1 SENSITIVITY — the PRE-FIX bare-literal probe must read this fixture as ABSENT (rc 1) so k1 is exercising the real defect; it returned rc $_ockg_rc"; failures=$((failures+1)); }
+  _ockg_res="$(_resolve_field_key_in_block "$RELEASE_LOG" v9.90 'Outcome')"
+  [[ "${_ockg_res%%$'\t'*}" == "QUALIFIED" ]] || { echo "FAIL: #4222 k1 SENSITIVITY — the new classifier must read the SAME fixture as QUALIFIED, got '${_ockg_res%%$'\t'*}'"; failures=$((failures+1)); }
+
+  # (k2) AC-2 — the bare-literal path is UNREGRESSED: SKIPPED, nothing injected.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _ockg_write '**Outcome:** SUCCESS'
+  _ockg_before="$(/bin/cat "$RELEASE_LOG")"
+  phase_inject_outcome_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_outcome_field)" == SKIPPED\|* ]] || { echo "FAIL: #4222 k2 — a bare canonical key must still SKIP, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$RELEASE_LOG")" == "$_ockg_before" ]] || { echo "FAIL: #4222 k2 — the SKIP path must write nothing"; failures=$((failures+1)); }
+  # (k2c) SPECIFICITY — the probe has NOT simply been made to match everything: a
+  # block carrying NO Outcome line at all must still inject exactly one.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _ockg_write
+  phase_inject_outcome_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_outcome_field)" == PASS\|* ]] || { echo "FAIL: #4222 k2 SPECIFICITY — a genuinely Outcome-less block must still inject, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  _ockg_n="$(_ockg_count "$RELEASE_LOG" v9.90)"
+  [[ "$_ockg_n" -eq 1 ]] || { echo "FAIL: #4222 k2 SPECIFICITY — exactly one Outcome line must be injected, got $_ockg_n"; failures=$((failures+1)); }
+  [[ "$(_ockg_count "$RELEASE_LOG" v9.89)" -eq 1 ]] || { echo "FAIL: #4222 k2 — the sibling v9.89 block must be untouched"; failures=$((failures+1)); }
+
+  # (k3) AC-3 — PHASE 6.8's ANCHOR RESOLVES UNDER A QUALIFIED KEY. Seed a
+  # qualified key with NO `**Outcome rationale:**` line and drive 6.8 standalone:
+  # the field lands IMMEDIATELY AFTER the qualified key rather than failing anchor
+  # resolution. Asserted on the RAW line (see _ockg_after).
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _ockg_write "$_ockg_qual"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field)" == PASS\|* ]] || { echo "FAIL: #4222 k3 — 6.8 must resolve its anchor under a qualified Outcome key, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  _ockg_line="$(_ockg_after "$RELEASE_LOG" v9.90 '**Outcome (Stage-12 read')"
+  case "$_ockg_line" in
+    '**Close-Class-Telemetry:**'*) : ;;
+    *) echo "FAIL: #4222 k3 — the field must land immediately after the QUALIFIED key; the following line was '$_ockg_line'"; failures=$((failures+1)) ;;
+  esac
+  # (k3c) CONTROL — the same phase on a BARE key still lands after `**Outcome:**`,
+  # so k3 is not passing because 6.8 now anchors on anything at all.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _ockg_write '**Outcome:** SUCCESS'
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  _ockg_line="$(_ockg_after "$RELEASE_LOG" v9.90 '**Outcome:**')"
+  case "$_ockg_line" in
+    '**Close-Class-Telemetry:**'*) : ;;
+    *) echo "FAIL: #4222 k3 CONTROL — the bare-key fallback anchor must be unregressed; the following line was '$_ockg_line'"; failures=$((failures+1)) ;;
+  esac
+
+  # (k4) AC-4 — ONE RESOLVER SERVES BOTH SITES. Extend the SHARED key definition
+  # with an additional conformant form and BOTH the 6.5 probe and the 6.8 anchor
+  # must move. One variable, two sites: a one-site fix demonstrably fails here.
+  local _ockg_brk='**Outcome [Stage-12 read]:** SUCCESS'
+  _FIELD_KEY_QUALIFIER_RE=' [[][^]]*[]]'
+  _ockg_write "$_ockg_brk"
+  _ockg_res="$(_resolve_field_key_in_block "$RELEASE_LOG" v9.90 'Outcome')"
+  [[ "${_ockg_res%%$'\t'*}" == "QUALIFIED" ]] || { echo "FAIL: #4222 k4 — with the shared constant extended, the bracketed key must classify QUALIFIED, got '${_ockg_res%%$'\t'*}'"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _ockg_before="$(/bin/cat "$RELEASE_LOG")"
+  phase_inject_outcome_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_outcome_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: #4222 k4 — SITE 1 (6.5) must recognize the extended form and reject it, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$RELEASE_LOG")" == "$_ockg_before" ]] || { echo "FAIL: #4222 k4 — SITE 1 must write nothing on a recognized non-conformant key"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  _ockg_line="$(_ockg_after "$RELEASE_LOG" v9.90 '**Outcome [Stage-12 read]:**')"
+  case "$_ockg_line" in
+    '**Close-Class-Telemetry:**'*) : ;;
+    *) echo "FAIL: #4222 k4 — SITE 2 (6.8) must anchor on the extended form too; the following line was '$_ockg_line'"; failures=$((failures+1)) ;;
+  esac
+  # (k4c) CONTROL — restore the constant to its default and the SAME bracketed key
+  # must be accepted at NEITHER site. Without this arm k4 passes on a resolver that
+  # accepts everything, and the constant is proven to be read rather than incidental.
+  _FIELD_KEY_QUALIFIER_RE="$_ockg_saved_qre"
+  _ockg_write "$_ockg_brk"
+  _ockg_res="$(_resolve_field_key_in_block "$RELEASE_LOG" v9.90 'Outcome')"
+  [[ "${_ockg_res%%$'\t'*}" == "UNPARSEABLE" ]] || { echo "FAIL: #4222 k4 CONTROL — at the DEFAULT constant the bracketed key must NOT classify QUALIFIED, got '${_ockg_res%%$'\t'*}'"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: #4222 k4 CONTROL — SITE 2 must NOT anchor on a key the default grammar does not recognize, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+
+  # (k5) GRAMMAR NON-COLLISION, ASSERTED IN BOTH DIRECTIONS. `**Outcome rationale:**`
+  # is a real, distinct field with live instances in the corpus; a matcher that
+  # swallowed it would collapse 6.8's primary and fallback anchors onto each other
+  # and make that pair unfalsifiable. The pair must DISAGREE both ways.
+  _ockg_write '**Outcome rationale:** every declared limb landed.'
+  _ockg_res="$(_resolve_field_key_in_block "$RELEASE_LOG" v9.90 'Outcome')"
+  [[ "${_ockg_res%%$'\t'*}" == "ABSENT" ]] || { echo "FAIL: #4222 k5 — '**Outcome rationale:**' must classify ABSENT for base 'Outcome', got '${_ockg_res%%$'\t'*}'"; failures=$((failures+1)); }
+  _ockg_res="$(_resolve_field_key_in_block "$RELEASE_LOG" v9.90 'Outcome rationale')"
+  [[ "${_ockg_res%%$'\t'*}" == "CANONICAL" ]] || { echo "FAIL: #4222 k5 — '**Outcome rationale:**' must classify CANONICAL for base 'Outcome rationale', got '${_ockg_res%%$'\t'*}'"; failures=$((failures+1)); }
+  _ockg_write '**Outcome:** SUCCESS'
+  _ockg_res="$(_resolve_field_key_in_block "$RELEASE_LOG" v9.90 'Outcome')"
+  [[ "${_ockg_res%%$'\t'*}" == "CANONICAL" ]] || { echo "FAIL: #4222 k5 — '**Outcome:**' must classify CANONICAL for base 'Outcome', got '${_ockg_res%%$'\t'*}'"; failures=$((failures+1)); }
+  _ockg_res="$(_resolve_field_key_in_block "$RELEASE_LOG" v9.90 'Outcome rationale')"
+  [[ "${_ockg_res%%$'\t'*}" == "ABSENT" ]] || { echo "FAIL: #4222 k5 — '**Outcome:**' must classify ABSENT for base 'Outcome rationale', got '${_ockg_res%%$'\t'*}'"; failures=$((failures+1)); }
+
+  # (k6) RAW-PREFIX FIDELITY. The classifier returns the prefix VERBATIM, leading
+  # whitespace included — the old probe stripped while the insert primitive matches
+  # the raw line, and that asymmetry is the producer/consumer seam this card closes.
+  # An indented key must classify AND anchor through the unchanged primitive.
+  _ockg_write "  $_ockg_qual"
+  _ockg_res="$(_resolve_field_key_in_block "$RELEASE_LOG" v9.90 'Outcome')"
+  [[ "${_ockg_res%%$'\t'*}" == "QUALIFIED" ]] || { echo "FAIL: #4222 k6 — an INDENTED qualified key must still classify QUALIFIED, got '${_ockg_res%%$'\t'*}'"; failures=$((failures+1)); }
+  [[ "${_ockg_res#*$'\t'}" == "  **Outcome (Stage-12 read; finalized at Stage 13 VERIFIED):**" ]] || { echo "FAIL: #4222 k6 — the returned prefix must carry the leading whitespace verbatim, got '${_ockg_res#*$'\t'}'"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  _ockg_line="$(_ockg_after "$RELEASE_LOG" v9.90 '  **Outcome (Stage-12 read')"
+  case "$_ockg_line" in
+    '**Close-Class-Telemetry:**'*) : ;;
+    *) echo "FAIL: #4222 k6 — the raw indented prefix must anchor through the unchanged primitive; the following line was '$_ockg_line'"; failures=$((failures+1)) ;;
+  esac
+  # (k6c) CONTROL — the same fixture UNINDENTED behaves identically, so k6 is
+  # measuring whitespace fidelity rather than a coincidence of the fixture.
+  _ockg_write "$_ockg_qual"
+  _ockg_res="$(_resolve_field_key_in_block "$RELEASE_LOG" v9.90 'Outcome')"
+  [[ "${_ockg_res#*$'\t'}" == "**Outcome (Stage-12 read; finalized at Stage 13 VERIFIED):**" ]] || { echo "FAIL: #4222 k6 CONTROL — the unindented prefix must carry NO leading whitespace, got '${_ockg_res#*$'\t'}'"; failures=$((failures+1)); }
+
+  # (k7) BOTH-PRESENT PRECEDENCE. A block carrying a canonical AND a qualified key
+  # is a distinct reachable state, and it must be REPRESENTABLE — a three-value
+  # class would have collapsed it into "canonical" and the duplicate diagnostic
+  # would silently never fire.
+  _ockg_write '**Outcome:** SUCCESS' "$_ockg_qual"
+  _ockg_res="$(_resolve_field_key_in_block "$RELEASE_LOG" v9.90 'Outcome')"
+  [[ "${_ockg_res%%$'\t'*}" == "DUPLICATE" ]] || { echo "FAIL: #4222 k7 — a both-present block must classify DUPLICATE, got '${_ockg_res%%$'\t'*}'"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _ockg_before="$(/bin/cat "$RELEASE_LOG")"
+  phase_inject_outcome_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_outcome_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: #4222 k7 — a both-present block must FAIL at --apply, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'MORE THAN ONE' <<<"$(get_phase inject_outcome_field)" || { echo "FAIL: #4222 k7 — the duplicate diagnostic must fire and say so, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$RELEASE_LOG")" == "$_ockg_before" ]] || { echo "FAIL: #4222 k7 — a duplicate-key block must be left byte-unchanged"; failures=$((failures+1)); }
+  # (k7c) CONTROL — the bare-only fixture SKIPs with NO duplicate diagnostic.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _ockg_write '**Outcome:** SUCCESS'
+  phase_inject_outcome_field >/dev/null 2>&1 || true
+  if /usr/bin/grep -qF 'MORE THAN ONE' <<<"$(get_phase inject_outcome_field)"; then
+    echo "FAIL: #4222 k7 CONTROL — a bare-only block must NOT raise the duplicate diagnostic"; failures=$((failures+1))
+  fi
+
+  # (k8) PRESENT-BUT-UNPARSEABLE IS NOT ABSENT. Three key shapes satisfy neither
+  # the canonical nor the qualified form: a NESTED parenthesis, a DOUBLED space,
+  # and a MISSING space. Under a three-value class each classifies "absent" and
+  # drives a silent duplicate injection — the original defect, unfixed. Each must
+  # classify UNPARSEABLE and stop the write.
+  local _ockg_shape
+  for _ockg_shape in \
+    '**Outcome (Stage-12 read (final)):** ALIGNED' \
+    '**Outcome  (Stage-12 read):** ALIGNED' \
+    '**Outcome(Stage-12 read):** ALIGNED'
+  do
+    _ockg_write "$_ockg_shape"
+    _ockg_res="$(_resolve_field_key_in_block "$RELEASE_LOG" v9.90 'Outcome')"
+    [[ "${_ockg_res%%$'\t'*}" == "UNPARSEABLE" ]] || { echo "FAIL: #4222 k8 — '$_ockg_shape' must classify UNPARSEABLE, not '${_ockg_res%%$'\t'*}'"; failures=$((failures+1)); }
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    _ockg_before="$(/bin/cat "$RELEASE_LOG")"
+    phase_inject_outcome_field >/dev/null 2>&1 || true
+    [[ "$(get_phase inject_outcome_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: #4222 k8 — '$_ockg_shape' must FAIL rather than inject past, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+    [[ "$(/bin/cat "$RELEASE_LOG")" == "$_ockg_before" ]] || { echo "FAIL: #4222 k8 — '$_ockg_shape' must leave the record byte-unchanged"; failures=$((failures+1)); }
+  done
+  # (k8c) CONTROL — a genuinely absent key still classifies ABSENT and still
+  # injects, so k8 is not passing on a classifier that rejects everything.
+  _ockg_write
+  _ockg_res="$(_resolve_field_key_in_block "$RELEASE_LOG" v9.90 'Outcome')"
+  [[ "${_ockg_res%%$'\t'*}" == "ABSENT" ]] || { echo "FAIL: #4222 k8 CONTROL — an Outcome-less block must classify ABSENT, got '${_ockg_res%%$'\t'*}'"; failures=$((failures+1)); }
+
+  # (k9) NO EMPTY ANCHOR EVER REACHES THE SHARED PRIMITIVE. This is the arm the
+  # whole anchor-resolution design turns on. `str.startswith("")` is True for every
+  # string, so an empty anchor matches the block's FIRST line: the primitive's
+  # exit-4 "anchor absent" path becomes unreachable, the field lands at the TOP of
+  # the block, and the phase reports success. A misplaced audit field under a PASS
+  # verdict is this card's own failure signature.
+  _ockg_write                      # no Outcome line at all → ABSENT → empty prefix
+  _ockg_res="$(_resolve_field_key_in_block "$RELEASE_LOG" v9.90 'Outcome')"
+  [[ -z "${_ockg_res#*$'\t'}" ]] || { echo "FAIL: #4222 k9 — ABSENT must emit an EMPTY prefix (it is the only class that may), got '${_ockg_res#*$'\t'}'"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  [[ "$(get_phase inject_close_class_telemetry_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: #4222 k9 — with no resolvable anchor, 6.8 must FAIL LOUDLY rather than place the field anywhere, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  _ockg_line="$(_ockg_firstline "$RELEASE_LOG" v9.90)"
+  case "$_ockg_line" in
+    '**Close-Class-Telemetry:**'*) echo "FAIL: #4222 k9 — the field landed at the TOP of the block, which is exactly the empty-anchor signature"; failures=$((failures+1)) ;;
+    *) : ;;
+  esac
+  [[ -n "$_ockg_line" ]] || { echo "FAIL: #4222 k9 — the top-of-block reader returned nothing, so the arm above asserted over an empty string"; failures=$((failures+1)); }
+  # (k9s) ANTI-VACUITY / EXECUTABLE SENSITIVITY — the hazard is REAL and is
+  # re-demonstrated on every run: handing the UNCHANGED primitive an empty anchor
+  # on this very fixture exits 0 and inserts at the top of the block. Without this
+  # arm, k9's clean result is indistinguishable from a primitive that never had the
+  # weakness. The fixture is rewritten immediately afterwards.
+  _ockg_write
+  _ockg_rc=0
+  _insert_field_after_in_block "$RELEASE_LOG" v9.90 '' '**Close-Class-Telemetry:** SENSITIVITY-PROBE' >/dev/null 2>&1 || _ockg_rc=$?
+  [[ "$_ockg_rc" -eq 0 ]] || { echo "FAIL: #4222 k9 ANTI-VACUITY — the empty-anchor probe must reproduce the exit-0 path on the unchanged primitive, got rc $_ockg_rc"; failures=$((failures+1)); }
+  _ockg_line="$(_ockg_firstline "$RELEASE_LOG" v9.90)"
+  case "$_ockg_line" in
+    '**Close-Class-Telemetry:** SENSITIVITY-PROBE') : ;;
+    *) echo "FAIL: #4222 k9 ANTI-VACUITY — the empty anchor must demonstrably land at the TOP of the block, or k9 is measuring nothing; the following line was '$_ockg_line'"; failures=$((failures+1)) ;;
+  esac
+
+  # (k10) MODE DIMENSION — the release-wide dry-run/apply ruling. `--dry-run` must
+  # never return non-zero, yet must still EVALUATE and name the condition that
+  # FAILs at `--apply`. The runner's guard is mode-blind: a phase returning 3 under
+  # --dry-run aborts the preview and truncates every phase after it from the
+  # report — which is the very review the historical incident was caught in.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  MODE="dry-run"
+  _ockg_write "$_ockg_qual"
+  _ockg_before="$(/bin/cat "$RELEASE_LOG")"
+  _ockg_rc=0
+  phase_inject_outcome_field >/dev/null 2>&1 || _ockg_rc=$?
+  [[ "$_ockg_rc" -eq 0 ]] || { echo "FAIL: #4222 k10 — --dry-run over a qualified key must return 0 (the documented '0 = success (dry-run or apply)' contract), got rc $_ockg_rc"; failures=$((failures+1)); }
+  [[ "$(get_phase inject_outcome_field | /usr/bin/cut -d'|' -f1)" == "WARN" ]] || { echo "FAIL: #4222 k10 — --dry-run must mark WARN per the in-file non-blocking-preview precedent, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'FAILS the close at --apply' <<<"$(get_phase inject_outcome_field)" || { echo "FAIL: #4222 k10 — the dry-run WARN must name the condition that fails at --apply, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$RELEASE_LOG")" == "$_ockg_before" ]] || { echo "FAIL: #4222 k10 — --dry-run must write nothing"; failures=$((failures+1)); }
+  # (k10c) CONTROL — the SAME fixture at --apply is fatal. Without this arm the
+  # WARN could be a phase that simply never blocks.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  MODE="apply"
+  _ockg_rc=0
+  phase_inject_outcome_field >/dev/null 2>&1 || _ockg_rc=$?
+  [[ "$_ockg_rc" -eq 3 ]] || { echo "FAIL: #4222 k10 CONTROL — the same condition must return 3 at --apply, got rc $_ockg_rc"; failures=$((failures+1)); }
+  [[ "$(get_phase inject_outcome_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: #4222 k10 CONTROL — the same condition must mark FAIL at --apply, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+
+  # (k11) THE GOVERNANCE CONSTANT IS NOT A RUNTIME FLAG. Its two settings encode
+  # two different governance rulings and no gate anywhere reads the Outcome field,
+  # so an env-overridable form would let the ruling be flipped per invocation with
+  # no PR, no review and no trace in git. Scoped to the PRODUCTION region above
+  # `self_test` — the same production-region discipline the sibling arm uses — so
+  # this arm's own known-bad literal cannot satisfy its own probe.
+  local _ockg_prod _ockg_bad
+  _ockg_prod="$(/usr/bin/sed -n '1,/^self_test() {/p' "${BASH_SOURCE[0]}" || true)"
+  _ockg_bad='OUTCOME_QUALIFIED_KEY_POLICY="${OUTCOME_QUALIFIED_KEY_POLICY:-reject}"'
+  if /usr/bin/grep -qF 'OUTCOME_QUALIFIED_KEY_POLICY:-' <<<"$_ockg_prod"; then
+    echo "FAIL: #4222 k11 — the policy constant must NOT take the env-overridable \${VAR:-} form"; failures=$((failures+1))
+  fi
+  /usr/bin/grep -qF 'OUTCOME_QUALIFIED_KEY_POLICY:-' <<<"$_ockg_bad" || { echo "FAIL: #4222 k11 ANTI-VACUITY — the same matcher must MATCH the known-bad source form, or k11's zero is a broken probe rather than a measurement"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'OUTCOME_QUALIFIED_KEY_POLICY="reject"' <<<"$_ockg_prod" || { echo "FAIL: #4222 k11 ANTI-VACUITY — the production region must actually carry the hard-assigned constant, or the probe above is reading the wrong region"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_ockg_tmp" 2>/dev/null || true
+  unset -f _ockg_write _ockg_count _ockg_after _ockg_firstline
+  _FIELD_KEY_QUALIFIER_RE="$_ockg_saved_qre"
+  RELEASE_LOG="$_ockg_saved_log"; VERSION="$_ockg_saved_ver"; MODE="$_ockg_saved_mode"
+  OUTCOME="$_ockg_saved_outcome"; OUTCOME_RATIONALE="$_ockg_saved_rat"
+  COMPUTE_CLOSE_CLASS_TELEMETRY="$_ockg_saved_tool"; MILESTONE="$_ockg_saved_ms"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # ── Test 4c.5: phase_inject_velocity_field (6.6) + phase_append_release_learnings (6.7)
@@ -10381,7 +10935,7 @@ AISTUB
   echo "  phase_lint_release_notes validated (§3.2 close gate — clean PASS / this-version finding FAIL / other-version PASS / exit-3 fail-loud / missing-tool FAIL)" >&2
   echo "  extract_row_state + extract_milestone_slug validated (3 shapes: vX.Y- / NN- / pure-alpha incl. hyphen-less #2539 a4 branch; version-less end-anchor; #667 F2 bare theme-named slug → title)" >&2
   echo "  phase_append_release_digest + phase_append_release_index + phase_append_changelog validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency; #2048 — version-less marker + _unversioned notes link + marker-aware idempotency + CHANGELOG SKIP; #4455 — all three entries PROJECTED by generate_release_index.py, versioned CHANGELOG block lands above the prior entry WITH its separating blank line intact, re-run SKIPs, and a non-owner/repo-shaped REPO_SLUG FAILs before writing a broken Release URL)" >&2
-  echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped; #3715 two-surface — archived body resolves to its segment and the hot ledger is left untouched / cross-surface idempotency re-run SKIPs without duplicating / a genuine **Result:** absence still hard-FAILs naming every surface searched / no sibling leak within a segment)" >&2
+  echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped; #3715 two-surface — archived body resolves to its segment and the hot ledger is left untouched / cross-surface idempotency re-run SKIPs without duplicating / a genuine **Result:** absence still hard-FAILs naming every surface searched / no sibling leak within a segment); Outcome KEY GRAMMAR validated (#4222 — k1 a QUALIFIED key is recognized and REJECTED at --apply leaving the record byte-unchanged, with an EXECUTABLE SENSITIVITY arm re-demonstrating on every run that the pre-fix bare-literal probe reads the same fixture as ABSENT and would inject the second line / k2 the bare path is unregressed (SKIP, no write) with a SPECIFICITY arm proving an Outcome-less block still injects exactly one / k3 phase 6.8 anchors under a qualified key, asserted on the RAW line because the field-name class used elsewhere cannot see parentheses, with the bare-key fallback as its control / k4 ONE RESOLVER, TWO SITES: extending the shared key constant moves BOTH the 6.5 probe and the 6.8 anchor, and at the default constant the same key is accepted at NEITHER — a one-site fix fails here / k5 grammar non-collision asserted in BOTH directions against the real sibling field **Outcome rationale:** / k6 raw-prefix fidelity — an INDENTED key classifies and anchors through the UNCHANGED primitive, with the unindented twin as control / k7 both-present classifies DUPLICATE and FAILs writing nothing, control: bare-only raises no duplicate diagnostic / k8 three PRESENT-BUT-UNPARSEABLE shapes (nested paren, doubled space, missing space) classify UNPARSEABLE rather than ABSENT and stop the write, control: a genuine absence still injects / k9 NO EMPTY ANCHOR REACHES THE PRIMITIVE — an unresolvable anchor FAILs loudly instead of landing the field at the top of the block, paired with an ANTI-VACUITY arm that hands the unchanged primitive an empty anchor and demonstrates it exits 0 writing to the top, so k9 is a measurement and not a tautology / k10 MODE: --dry-run returns 0 and marks WARN naming the condition that FAILS at --apply, control: the same fixture at --apply returns 3 and marks FAIL / k11 the governance constant is hard-assigned, not env-overridable, scoped to the production region with an anti-vacuity control on the known-bad form)" >&2
   echo "  phase_inject_velocity_field + phase_append_release_learnings validated (velocity — field ORDER 'Cycle-Time Velocity Result' on a clean block / no sibling leak / idempotent re-run / bolded-numeral value REJECTED writing nothing / empty capture at exit 0 degrades to an explicit N/A never a bare field / non-conformant existing field SKIPs WITH the warning, conformant control WITHOUT it; CO-LOCATION — an archived block's field lands in the SEGMENT beside its own **Result:** and the hot stub stays at 0, cross-surface re-run SKIPs, dry-run names the segment and prints the RESOLVED bytes. learnings — sibling H4 placed IMMEDIATELY after its Deployment Log block / body intact through the sentinel capture / idempotent re-run / whitespace-only render at exit 0 FAILs writing nothing / D-1 zero-source-events BLOCKS the close and prints the capture remedy, >0-events control PASSes / over an ARCHIVED block the block still lands in the HOT ledger and every segment stays at 0 Release Learnings — RECORDS_POLICY KEEP_CLASS)" >&2
   echo "  phase_inject_close_class_telemetry_field validated (#4437 — clean block PASSes with the field positioned after **Outcome rationale:** and no sibling leak / idempotent re-run SKIPs / fallback anchor lands after **Outcome:** and names which anchor it used / VACUITY PAIR: an all-N/A-but-conformant line is WRITTEN and carries the no-computed-ratio warning WITH the disposition read from the emitted line, measured-line control carries NO warning / a line missing § 3.2 slots FAILs writing nothing / an empty capture at exit 0 FAILs writing nothing / producer exit 2 escalates as a source-integrity condition writing nothing / a non-executable producer SKIPs rather than hand-composing a field that would fabricate its own mechanism claim / dry-run prints the RESOLVED bytes and writes nothing / CO-LOCATION: an archived block's field lands in the SEGMENT beside its own **Result:** with the hot stub at 0, and the cross-surface re-run SKIPs)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache)" >&2
