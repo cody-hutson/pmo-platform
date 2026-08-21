@@ -5524,7 +5524,7 @@ generate_markdown_report() {
 **Mode:** ${MODE}
 **Release PR:** #${PR_NUMBER}
 **Milestone:** ${slug} (#${MILESTONE})
-**Chore PR:** ${CHORE_PR_NUMBER:+#${CHORE_PR_NUMBER}}${CHORE_PR_NUMBER:-N/A — dry-run or not-yet-created}
+**Chore PR:** $([[ -n "$CHORE_PR_NUMBER" ]] && echo "#${CHORE_PR_NUMBER}" || echo "N/A — dry-run or not-yet-created")
 
 ## State
 
@@ -9826,6 +9826,163 @@ PY
   OUTPUT="$_dr_saved_out"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # ── #4322: the Gate-Passage-Proof **Chore PR:** field renders ONCE, both paths ──
+  #
+  # The shipped defect was a PAIRED set-arm / unset-arm parameter expansion on ONE
+  # variable: the set-arm fires when the variable is set, and the unset-arm ALSO passes
+  # the value through when it is set, so the populated path emitted the number twice —
+  # a '#'-prefixed number immediately followed by the bare number. It shipped because
+  # the only path the pre-existing report arms exercise is the dry-run/unset one, where
+  # the two arms are indistinguishable. (b1)/(b3) are therefore the PREVIOUSLY-UNCOVERED
+  # path; (b2) is the previously-covered one, kept so the fix is asserted in both
+  # directions rather than swapping one blind spot for another.
+  #
+  # The prose above names the arms in words rather than spelling the brace form. This
+  # file's own census-denominator rule (stated with the zz-prefix rationale in the #4773
+  # group below) is that PROSE IN THIS FILE IS PART OF A CENSUS'S DENOMINATOR TOO, so
+  # writing the literal paired form here would register a phantom instance of the exact
+  # class (b5) guards. The one deliberate literal instance is the _cp_src fixture, which
+  # (b5) excludes by construction because it scopes itself above self_test.
+  #
+  # MUTATION EXPECTATION — recorded because it was EXECUTED, not reasoned. Reverting the
+  # render line alone makes b1, b3 and b5 name themselves. b7 does NOT fire, and that is
+  # a DESIGNED property rather than a gap: it strips the **Chore PR:** line from both
+  # renders before comparing, so it is structurally invariant to this mutation, which is
+  # what makes it a clean collateral check instead of a second copy of b1. An
+  # expected-kill set that disagrees with execution turns a falsifiability proof into an
+  # instruction to "fix" whichever correct arm disagrees with it.
+  #
+  # grep reads a HERE-STRING throughout, never a pipe into a short-circuiting reader:
+  # under this script's `set -euo pipefail` a piped `grep -q` exits at the first match
+  # and SIGPIPEs the writer, so pipefail promotes a SUCCESSFUL match to a non-zero
+  # status. That form is also what the repo-integrity SIGPIPE-idiom gate reddens on an
+  # added line in a changed *.sh, and that gate is enforce-day-one with no warn mode.
+  # Matchers are BSD-ERE and BACKREFERENCE-FREE: this suite runs on the macOS partition
+  # only (see the selftest-runner directive at the top of this file), where /usr/bin/grep
+  # is BSD grep 2.6.0 and -P exits 2 — which, under grep_count's own `|| true` plus its
+  # default-zero, renders exactly 0 and ships a broken probe INSIDE the test.
+  local _cp_saved_out="$OUTPUT" _cp_saved_pr="$CHORE_PR_NUMBER" _cp_saved_nm="$NO_MERGE"
+  local _cp_rep _cp_n _cp_line _cp_occ _cp_pre _cp_prod _cp_paired _cp_ctl _cp_a _cp_b _cp_as _cp_bs
+  local _cp_tok _cp_rest _cp_dbl _cp_ctl_occ
+  # The pre-fix construct as SOURCE text, single-quoted so it never expands here, and the
+  # ONE fixture (b3), (b4) and (b5) all read — so the source form and the expanded form
+  # cannot drift apart.
+  local _cp_src='**Chore PR:** ${CHORE_PR_NUMBER:+#${CHORE_PR_NUMBER}}${CHORE_PR_NUMBER:-N/A — dry-run or not-yet-created}'
+  local _cp_rx='\$\{CHORE_PR_NUMBER:\+.*\}\$\{CHORE_PR_NUMBER:-'
+  OUTPUT="markdown"; NO_MERGE=0
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "zz_chore_pr_probe" "PASS" "seeded by the #4322 arm"
+
+  # (b1) POPULATED path (AC-1) — THE PREVIOUSLY-UNCOVERED PATH. Exactly one
+  #      **Chore PR:** line, and it carries the number exactly once.
+  CHORE_PR_NUMBER="3697"
+  _cp_rep="$(generate_markdown_report 2>/dev/null)"
+  _cp_n="$(grep_count -E '^\*\*Chore PR:\*\* ' <<< "$_cp_rep")"
+  [[ "$_cp_n" -eq 1 ]] || { echo "FAIL: #4322 — the report must carry exactly ONE **Chore PR:** line, got ${_cp_n}"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF '**Chore PR:** #3697' <<< "$_cp_rep" \
+    || { echo "FAIL: #4322 — populated path must render '**Chore PR:** #3697' exactly"; failures=$((failures+1)); }
+  if /usr/bin/grep -qF '36973697' <<< "$_cp_rep"; then
+    echo "FAIL: #4322 — the doubled rendering is back; the set-arm and unset-arm are both contributing"; failures=$((failures+1))
+  fi
+
+  # (b2) UNSET path (AC-2) — the previously-covered path. The fallback verbatim,
+  #      with no '#' prefix and no bare number.
+  CHORE_PR_NUMBER=""
+  _cp_rep="$(generate_markdown_report 2>/dev/null)"
+  /usr/bin/grep -qxF '**Chore PR:** N/A — dry-run or not-yet-created' <<< "$_cp_rep" \
+    || { echo "FAIL: #4322 — unset path must render the fallback verbatim, with no '#' prefix"; failures=$((failures+1)); }
+
+  # (b3) SPECIFICITY (AC-3) — a fabricated value matches exactly ONE arm, never both
+  #      and never neither. A numeric fixture cannot show this: '#3697' contains '3697',
+  #      so "no bare number" is unfalsifiable on a numeric input. A non-numeric token
+  #      makes the occurrence count decisive.
+  #
+  #      THE COUNT IS PURE BASH, NOT `grep_count -oF`. grep_count is /usr/bin/grep -c,
+  #      which counts matching LINES, and on the BSD grep this suite runs against, -o
+  #      does not change that. Measured on this runner: `grep -c -oF` returns 1 for BOTH
+  #      the doubled rendering and the single one — the PASS value on the very defect
+  #      this arm exists to catch. Zero of this file's other grep_count call sites pass
+  #      -o, and the helper's own contract comment describes a LINE count. The
+  #      length-delta form below needs no external tool and no pipe, so neither the
+  #      BSD/GNU divergence nor the SIGPIPE-idiom gate can reach it.
+  CHORE_PR_NUMBER="zz4322"
+  _cp_rep="$(generate_markdown_report 2>/dev/null)"
+  /usr/bin/grep -qxF '**Chore PR:** #zz4322' <<< "$_cp_rep" \
+    || { echo "FAIL: #4322 — specificity: a fabricated value must render under the prefixed arm, exactly"; failures=$((failures+1)); }
+  _cp_tok='zz4322'
+  _cp_line="$(/usr/bin/grep -E '^\*\*Chore PR:\*\* ' <<< "$_cp_rep" || true)"
+  _cp_rest="${_cp_line//$_cp_tok/}"
+  _cp_occ=$(( (${#_cp_line} - ${#_cp_rest}) / ${#_cp_tok} ))
+  [[ "$_cp_occ" -eq 1 ]] || { echo "FAIL: #4322 — the value must appear ONCE on the **Chore PR:** line, got ${_cp_occ}"; failures=$((failures+1)); }
+  # Anti-vacuity on the occurrence counter ITSELF — the control this assertion shipped
+  # without, and the reason its predecessor was inert. The IDENTICAL computation over the
+  # pre-fix expansion of the one source fixture must return 2. A counter that cannot see
+  # the doubled form makes the 1 above a coincidence rather than a measurement.
+  _cp_dbl="$(eval "printf %s \"$_cp_src\"")"
+  _cp_rest="${_cp_dbl//$_cp_tok/}"
+  _cp_ctl_occ=$(( (${#_cp_dbl} - ${#_cp_rest}) / ${#_cp_tok} ))
+  [[ "$_cp_ctl_occ" -eq 2 ]] || { echo "FAIL: #4322 — the occurrence counter did not see the doubled form (got ${_cp_ctl_occ}); its 1 above proves nothing"; failures=$((failures+1)); }
+
+  # (b4) SENSITIVITY — EXECUTABLE, re-demonstrated on every run rather than asserted in
+  #      a comment. (b1) is only informative if its matcher REJECTS the pre-fix
+  #      rendering; a matcher that accepted anything would pass (b1) silently. Expand the
+  #      ONE source fixture and assert both directions.
+  CHORE_PR_NUMBER="3697"
+  _cp_pre="$(eval "printf %s \"$_cp_src\"")"
+  /usr/bin/grep -qF '36973697' <<< "$_cp_pre" \
+    || { echo "FAIL: #4322 sensitivity — the pre-fix fixture no longer reproduces the doubled rendering; this arm can no longer tell a fixed line from a broken one"; failures=$((failures+1)); }
+  if /usr/bin/grep -qxF '**Chore PR:** #3697' <<< "$_cp_pre"; then
+    echo "FAIL: #4322 sensitivity — the (b1) matcher ACCEPTED the pre-fix rendering; (b1)'s green result is uninformative"; failures=$((failures+1))
+  fi
+
+  # (b5) REINTRODUCTION GUARD — the PRODUCTION region carries ZERO same-variable paired
+  #      set-arm/unset-arm expansions on CHORE_PR_NUMBER. Repo-wide that construct
+  #      occurred exactly once before this fix (the defect); after it, zero. Scoped to
+  #      everything above `self_test` by the same production-region discipline arm (g) of
+  #      the #4773 group uses — otherwise the (b4) fixture would satisfy this guard on
+  #      the production code's behalf: the test vouching for the code. The guard is
+  #      variable-scoped rather than class-scoped by deliberate choice: the class has
+  #      exactly one member and this change removes it, so a class-wide gate would guard
+  #      an empty population.
+  _cp_prod="$(/usr/bin/sed -n '1,/^self_test() {/p' "${BASH_SOURCE[0]}" || true)"
+  _cp_paired="$(grep_count -E "$_cp_rx" <<< "$_cp_prod")"
+  [[ "$_cp_paired" -eq 0 ]] || { echo "FAIL: #4322 — the production region carries ${_cp_paired} same-variable paired set/unset expansion(s) on CHORE_PR_NUMBER; the defect idiom is back"; failures=$((failures+1)); }
+  # Anti-vacuity on the guard itself: the SAME matcher must return 1 against the pre-fix
+  # SOURCE form. A zero whose control also returns zero is a broken probe, not an empty
+  # population.
+  _cp_ctl="$(grep_count -E "$_cp_rx" <<< "$_cp_src")"
+  [[ "$_cp_ctl" -eq 1 ]] || { echo "FAIL: #4322 — the reintroduction-guard matcher did not match the known-bad source form (got ${_cp_ctl}); its zero above proves nothing"; failures=$((failures+1)); }
+
+  # (b6) OUT-OF-SCOPE SITE UNCHANGED — the --no-merge deferral message's SOLITARY set-arm
+  #      is correct and is an explicit NOT-EDITED row. Assert the fix did not generalize
+  #      into it, in BOTH directions.
+  NO_MERGE=1; CHORE_PR_NUMBER="3697"
+  _cp_rep="$(generate_markdown_report 2>/dev/null)"
+  /usr/bin/grep -qF 'The Stage 13 chore PR #3697 was left open' <<< "$_cp_rep" \
+    || { echo "FAIL: #4322 — the out-of-scope --no-merge message must still carry the number when set"; failures=$((failures+1)); }
+  CHORE_PR_NUMBER=""
+  _cp_rep="$(generate_markdown_report 2>/dev/null)"
+  /usr/bin/grep -qF 'The Stage 13 chore PR was left open' <<< "$_cp_rep" \
+    || { echo "FAIL: #4322 — the out-of-scope --no-merge message must carry NO number when unset"; failures=$((failures+1)); }
+
+  # (b7) NO COLLATERAL (AC-5) — at NO_MERGE=0 the ONLY line whose content depends on
+  #      CHORE_PR_NUMBER is the **Chore PR:** line. Two renders on identical globals are
+  #      byte-identical (the run timestamp is sampled once at load), so this is exact
+  #      rather than approximate. The anti-vacuity arm comes FIRST: without it, "stripped
+  #      remainders are equal" is satisfied by two identical renders.
+  NO_MERGE=0
+  CHORE_PR_NUMBER="3697"; _cp_a="$(generate_markdown_report 2>/dev/null)"
+  CHORE_PR_NUMBER="";     _cp_b="$(generate_markdown_report 2>/dev/null)"
+  [[ "$_cp_a" != "$_cp_b" ]] \
+    || { echo "FAIL: #4322 AC-5 anti-vacuity — the two renders are identical, so the comparison below proves nothing"; failures=$((failures+1)); }
+  _cp_as="$(/usr/bin/grep -vE '^\*\*Chore PR:\*\* ' <<< "$_cp_a" || true)"
+  _cp_bs="$(/usr/bin/grep -vE '^\*\*Chore PR:\*\* ' <<< "$_cp_b" || true)"
+  [[ "$_cp_as" == "$_cp_bs" ]] \
+    || { echo "FAIL: #4322 AC-5 — a field other than **Chore PR:** changed with CHORE_PR_NUMBER; the fix has collateral"; failures=$((failures+1)); }
+
+  OUTPUT="$_cp_saved_out"; CHORE_PR_NUMBER="$_cp_saved_pr"; NO_MERGE="$_cp_saved_nm"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # ── Test AI: phase_action_item_gate (Procedure 7a HARD GATE, #4439) ─────────
   #
   # THE ARM SET IS THE ONLY AUTOMATED EXECUTION THIS GATE EVER GETS. CI runs no
@@ -10245,6 +10402,7 @@ AISTUB
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  close-out report phase set is RECORD-DERIVED validated (#4773 — every recorded phase renders against a denominator parsed from this file's own mark_phase subjects (pre-fix: 3 missing — inject_velocity_field / append_release_learnings / audit_epic_rollup) / a phase in NO enumeration still renders (AC-2) / an unmarked name does NOT render (anti-vacuity) / post_gate_passage_proof renders AND is asserted definition-less, so a definition-derived set cannot silently drop it / a double-marked name renders ONE row carrying the FIRST result / the halted marker fires on a FAIL-terminated run and is absent on a clean one / DISPATCH<->RECORD cross-check: every dispatched phase is a record subject, with vacuity floors on both parses plus sensitivity and specificity arms — the one invariant no seeded arm can reach / JSON twin carries the same de-duplicated set with pre-existing keys intact)" >&2
+  echo "  Gate-Passage-Proof **Chore PR:** field renders ONCE on BOTH paths (#4322 — b1 POPULATED path, the path the pre-existing report arms never exercised: exactly one **Chore PR:** line carrying the number once, and the doubled form absent / b2 UNSET path, the previously-covered one, renders the fallback verbatim with no '#' / b3 SPECIFICITY on a NON-numeric fixture, because '#3697' contains '3697' so 'no bare number' is unfalsifiable on a numeric input: the value occurs exactly once on the line, counted in PURE BASH by length-delta rather than by grep_count -o, which counts LINES on this suite's BSD grep and so returns the PASS value on the doubled form — paired with the anti-vacuity control asserting the identical computation returns 2 over the pre-fix expansion / b4 EXECUTABLE SENSITIVITY: the pre-fix construct is expanded from a single-quoted source fixture and must BOTH reproduce the doubling AND be rejected by b1's matcher, without which b1's green result is uninformative / b5 REINTRODUCTION GUARD: the production region above self_test carries ZERO same-variable paired set/unset expansions on CHORE_PR_NUMBER, with an anti-vacuity control asserting the same matcher returns 1 on the known-bad source form, so the zero is a measurement rather than a broken probe / b6 the out-of-scope --no-merge deferral message's solitary set-arm is asserted unchanged in BOTH directions, so the fix did not generalize into a correct site / b7 AC-5: with the **Chore PR:** line stripped, two renders differing only in CHORE_PR_NUMBER are byte-identical, preceded by the anti-vacuity arm that the unstripped renders differ — b7 is invariant to a render-line revert BY DESIGN, so the executed mutation-kill set is b1/b3/b5)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
   echo "  usage block extractable" >&2
