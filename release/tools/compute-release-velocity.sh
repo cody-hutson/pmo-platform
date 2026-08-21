@@ -236,7 +236,17 @@ labels_to_work_class() {
 # The terminal not-delivered members of the status:* lifecycle, canonical SPACED
 # form, comma-separated. ONE definition: `labels_to_delivered` below is the
 # self-tested bash reference, and the python pass reads this SAME string through
-# argv, so the producer and the reference cannot drift into two rules.
+# argv, so the two cannot drift into two different exclusion SETS.
+#
+# What the shared constant does NOT buy — stated because asserting it did was an
+# overclaim: it does not make the two MATCHERS identical. They differ on CASE
+# NORMALIZATION. The bash reference matches the canonical form as written
+# (case-sensitive `case` globs); the python pass lowercases each label name
+# before the set intersection (see `delivered_member`), so it additionally
+# catches a mis-cased variant the reference rejects. Python is strictly the more
+# tolerant of the two. The divergence is unreachable on canonical GitHub labels,
+# which are lowercase, and the case arm at self-test 5.5(b) now pins the
+# reference's half of it rather than leaving it to be discovered.
 #
 # OPEN-SET CAVEAT, stated because a negative predicate over an open set has no
 # failure signal of its own: core/specs/label-taxonomy.md § Status Labels calls
@@ -334,11 +344,20 @@ if [[ "${1:-}" == "--self-test" ]]; then
   R="$(labels_to_delivered "size:m status: rejected")"; [[ "$R" == "not-delivered" ]] || die "self-test 5.5(a): 'status: rejected' must be not-delivered, got '$R'"
   R="$(labels_to_delivered "size:m")";                  [[ "$R" == "delivered" ]]     || die "self-test 5.5(a): a bare sized member must default to delivered (never silently drop points), got '$R'"
 
-  # (b) MATCH FIDELITY. The canonical form is SPACED. A no-space variant, a
-  # non-lowercased variant, and the bare word inside an unrelated label must all
-  # miss — the regression labels_to_work_class already records, on a label with
-  # the same shape.
+  # (b) MATCH FIDELITY. The canonical form is SPACED and LOWERCASE. One arm per
+  # way a near-miss arrives: a no-space variant, a non-lowercased variant, and
+  # the bare word inside an unrelated label must all MISS; a label whose suffix
+  # is the marker must miss on the left space boundary; and the marker at the
+  # START of the string must HIT. The regression labels_to_work_class already
+  # records is the same shape.
+  #
+  # The case arm is the one this comment used to claim while no assertion
+  # covered it. It asserts the REFERENCE's half of a real divergence: the python
+  # production pass lowercases first and would read this same fixture as
+  # not-delivered (see the note at _STATUS_NOT_DELIVERED). Unreachable on
+  # canonical GitHub labels; pinned so a harmonization either way is deliberate.
   R="$(labels_to_delivered "size:m status:deferred")";           [[ "$R" == "delivered" ]] || die "self-test 5.5(b): the unspaced 'status:deferred' is not the canonical label and must NOT match, got '$R'"
+  R="$(labels_to_delivered "size:m STATUS: DEFERRED")";          [[ "$R" == "delivered" ]] || die "self-test 5.5(b): the non-lowercased 'STATUS: DEFERRED' is not the canonical label and must NOT match the case-sensitive bash reference, got '$R'"
   R="$(labels_to_delivered "size:m cluster: deferred-intake")";  [[ "$R" == "delivered" ]] || die "self-test 5.5(b): 'deferred' as a SUBSTRING of an unrelated label must NOT match, got '$R'"
   R="$(labels_to_delivered "size:m xstatus: deferred")";         [[ "$R" == "delivered" ]] || die "self-test 5.5(b): a label whose suffix is the marker must NOT match (left space boundary), got '$R'"
   R="$(labels_to_delivered "status: deferred size:m")";          [[ "$R" == "not-delivered" ]] || die "self-test 5.5(b): the marker must match at the START of the label string, got '$R'"
@@ -463,7 +482,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
   echo "  ratio round-half-up validated (exact / below-half / at-half / above-half / planned-zero)"
   echo "  work-class mapping + precedence validated"
   echo "  allocation-partitions-delivered invariant validated"
-  echo "  delivery predicate (5.5) validated: both directions disagree / spaced-label match fidelity / exclusion-constant shape / close-state independence WITH the pre-fix predicate as a firing sensitivity arm / non-degenerate planned-vs-delivered / allocation partitions delivered across an exclusion"
+  echo "  delivery predicate (5.5) validated: both directions disagree / spaced-and-cased label match fidelity (5 arms, case included) / exclusion-constant shape / close-state independence WITH the pre-fix predicate as a firing sensitivity arm / non-degenerate planned-vs-delivered / allocation partitions delivered across an exclusion"
   echo "  repo-root anchor: arm 1 identity + arm 3 vacuity control validated via one shared predicate; arm 2 ${ANCHOR_ARM2}"
   exit 0
 fi
