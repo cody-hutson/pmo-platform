@@ -39,8 +39,17 @@ SRC_AWK="${HOOK_DIR}/lib/positional-issueref.awk"
 SRC_PATTERNS="${HOOK_DIR}/lib/fragile-ref-patterns.sh"
 SRC_PRIM="${HOOK_DIR}/path-leak-patterns.sh"
 [ -f "$SRC_PRIM" ] || SRC_PRIM="${HOOK_DIR}/../deploy/tools/path-leak-patterns.sh"
+# The reference-durability path allowlist is a REQUIRED runtime surface for
+# block-fragile-refs, not an optional extra: with it unreachable the hook fails closed on
+# every in-scope write, so the CLEAN -> ALLOW controls below would fail for a reason no
+# case names — the vacuous-control failure this suite exists to prevent, in the same shape
+# the $patterns default already guards against. Same resolution order as SRC_PRIM:
+# co-located deployed/sandbox form first (${HOOK_DIR}/.. is the hook's own contract), then
+# the source-repo fallback.
+SRC_ALLOWLIST="${HOOK_DIR}/../reference-durability-allowlist.txt"
+[ -f "$SRC_ALLOWLIST" ] || SRC_ALLOWLIST="${HOOK_DIR}/../config/allowlists/reference-durability-allowlist.txt"
 
-for req in "$SRC_FRAG" "$SRC_GHPL" "$SRC_DEPLIB" "$SRC_AWK" "$SRC_PATTERNS" "$SRC_PRIM"; do
+for req in "$SRC_FRAG" "$SRC_GHPL" "$SRC_DEPLIB" "$SRC_AWK" "$SRC_PATTERNS" "$SRC_PRIM" "$SRC_ALLOWLIST"; do
   if [ ! -f "$req" ]; then
     echo "FAIL: required source missing: $req" >&2
     echo "Total: 1  PASS: 0  FAIL: 1"
@@ -67,13 +76,26 @@ fi
 
 # build_layout <dir> <mode> <awk:0|1|empty|trunc> <primitive:0|1|empty> <deplib: ok|stale|trunc|noop>
 #              [patterns: 1|0|empty|trunc]   (default 1 = present and valid)
+#              [allowlist: 1|0]              (default 1 = present)
 # The 6th argument is the co-shipped detector-constant lib (lib/fragile-ref-patterns.sh).
 # It defaults to PRESENT so every pre-existing case keeps testing the primitive it names —
 # a case that omitted it would fail closed at the constants gate and pass for the wrong
 # reason, which is the vacuous-control failure this suite exists to prevent.
+#
+# The 7th is the path allowlist, and it defaults to PRESENT for exactly the same reason.
+# It is written to <dir>/.. rather than <dir> because the hook resolves it at
+# ${HOOK_DIR}/.., alongside the other hook-tier allowlists. <dir> is rebuilt per case but
+# its parent is the shared WORK root, so the allowlist persists across cases; that is
+# correct here, since every case in this suite means to exercise a MISSING PRIMITIVE
+# against an otherwise-complete runtime surface. A case that wants the allowlist absent
+# passes 0 and gets it removed.
 build_layout() {
-  local d="$1" mode="$2" awk="$3" prim="$4" deplib="$5" patterns="${6:-1}"
+  local d="$1" mode="$2" awk="$3" prim="$4" deplib="$5" patterns="${6:-1}" allowlist="${7:-1}"
   rm -rf "$d"; mkdir -p "$d/lib"
+  case "$allowlist" in
+    1) cp "$SRC_ALLOWLIST" "$d/../reference-durability-allowlist.txt" ;;
+    0) rm -f "$d/../reference-durability-allowlist.txt" ;;
+  esac
   cp "$SRC_FRAG" "$SRC_GHPL" "$d/"
   case "$patterns" in
     1)     cp "$SRC_PATTERNS" "$d/lib/fragile-ref-patterns.sh" ;;
