@@ -4,7 +4,7 @@ purpose: The canonical schema for PROJECT.md — the fields a project context fi
 type: schema
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
-consumers: the PROJECT.md-reading skills (the §8 consumer table); OPERATIONS.md §Methodology Awareness Protocol; project-initiator; the role-skill wave
+consumers: the PROJECT.md-reading skills (the §8 consumer table); OPERATIONS.md §Methodology Awareness Protocol; project-initiator; the role-skill wave; the §7 Entity-Seeding Protocol and any entity-grain validator resolving the Project record's §3b dialect
 ---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-memory-ref -->
@@ -131,6 +131,51 @@ Field presence rules summary:
 | `org_structure_type` | ⚪ Optional | default `functional` when absent (new) |
 | `work_tracker` | ⚪ Optional | when present, must name a declared `operator.toml` `[trackers.<id>]` id; absent → routing falls back per the resolution order, fail-closed for a private-scope project when `[trackers.*]` are configured (new) |
 | `team_roster` | ⚪ Optional | when present, every entry is `{person_ref → Person.person_id, role_on_project}`; refs only (new) |
+
+### 3b. Entity-record block (the Project entity's persisted fields)
+
+`PROJECT.md` is the backing file of the **Project** entity (`../disciplines/project-entity-model.md` §7 row 1 — `storage_tier: project-scoped → [Project]/`, `persistence_mode: file-backed`). This section is that entity's **persistence dialect**: which entity fields persist in this file's frontmatter, under which key names. It adds no field and redefines none — `entity-field-schemas.md` §3.1 remains the field and validation authority.
+
+**Two records, one file, disjoint key sets.** A live `PROJECT.md` is simultaneously (a) a **node** in the file ecosystem, carrying the `frontmatter-schema.md` Category-1..6 keys that the node stamper writes, and (b) the **Project entity record**. The two are distinguished by key, never by parsing order:
+
+| Concern | Key | Meaning | Written by |
+|---|---|---|---|
+| file axis | `lifecycle_state` | content maturity (`frontmatter-schema.md` Cat-2, per-domain enum) | the node stamper |
+| entity axis | `status` | the Project entity's Axis-1 (`ACTIVE → CLOSING → CLOSED`) | this dialect |
+| shared | `created_date` | when the file entered the ecosystem; the entity's `created_date` reads the same value | the node stamper — the entity dialect **never** writes it |
+| shared | `id` | on an entity-backing file, `id` is the **entity** id (`entity-field-schemas.md` V-CORE-01), not the Cat-3 artifact id | this dialect |
+
+**`status` is the Axis-1 carrier, and that is a structural fact rather than a local convention.** `../disciplines/project-entity-model.md` §4.1 states Axis-1 *"reconciles 1:1 with `project-schema.md status`"*, and `entity-field-schemas.md` V-PRJ-03 keys the rule on `status` and annotates it `= V-CORE-03 instance`. Project is the **only** entity in the 19-roster whose dialect renames the carrier, because it is the only entity whose backing file is also a stamped ecosystem node — the only one where a single `lifecycle_state` key would otherwise have to carry two enums at once. Portfolio (V-PORT-04) and Person (V-PER-05) key `lifecycle_state` directly, and their tiers carry no node frontmatter at all.
+
+**`lifecycle_state` is still required on this file, and is not this dialect's to write.** V-CORE-03b (the D-42 presence guard) restates the frozen Core-7 requiredness independently of V-CORE-03, so renaming the carrier does not silently retire the field. On a `PROJECT.md` the key is supplied by the node stamper, which is why the entity seed is ordered **after** the node-frontmatter backfill rather than beside it: seeding a project whose file has not yet been stamped leaves V-CORE-03b unsatisfied through no fault of the seed.
+
+**Persisted key set.** Required keys, each with its authority:
+
+| Key | Rule | Source of truth |
+|---|---|---|
+| `id` | V-CORE-01 | the project folder slug, normalized per `../standards/artifact-naming-standard.md` |
+| `entity_type` | V-CORE-02 | the literal `Project` |
+| `status` | V-PRJ-03 (= V-CORE-03) | the file's existing inline `**Status:**` line, parsed per the rule below |
+| `content_lifecycle_pattern` | V-CORE-04 | the literal `Living` (Project Axis-2 is `Living (B)` — a frozen per-entity constant, not a per-file judgement) |
+| `owning_agent` | V-CORE-05 | the literal `ppm-agent` (the maintain side of the frozen owning-agent triplet) |
+| `created_date` | V-CORE-06 | **not written** — discharged against the node-axis `created_date` already on the file |
+| `lifecycle_state` | V-CORE-03b | **not written** — discharged against the node-axis value the stamper supplies |
+| `project_name` | V-PRJ-01 | the project folder display name |
+| `delivery_approach` | V-PRJ-04 | the file's own `delivery_approach:` when present; otherwise the `operator.toml` `[methodology].default_delivery_approach`, which that file states the file-level key overrides |
+| exactly one of `project_owner` / `project_owner_external` | V-PRJ-02, V-PRJ-08 | see the owner rule below |
+| `portfolio_id` | V-PRJ-05 (optional) | the seeded portfolio-tier record's `portfolio_id` |
+
+**`relationships[]` is deliberately not persisted here.** V-CORE-07 is L2 / WARN-HEALTH, so omitting it leaves the record valid. Writing it would be actively harmful: `frontmatter-schema.md` Cat-4 defines `relationships[].target` as a reference to a **file**, resolved against the index's filename column, while V-CORE-07 requires `target` to resolve to an **entity**. Entity-id targets on a stamped node would therefore log a dangling-edge warning per edge on every index rebuild. The two FK obligations this dialect actually carries — V-PRJ-05 and V-PRJ-08 — are both scalar ref keys and are satisfied above. Reconciling the two target domains is a downstream automation concern, named here rather than silently inherited.
+
+**Status parse rule.** `status` is derived from the file's existing inline `**Status:**` line, which the composed-index shape keeps inline for exactly this reason. Resolve it in three steps, in order:
+
+1. **Take** the first whitespace-delimited token after the `**Status:**` label.
+2. **Normalize** it: strip surrounding markdown emphasis and code markers (`` ` ``, `*`, `_`) and trailing punctuation, then upper-case. **This step is load-bearing, not tidying** — measured against the live corpus, every in-scope `PROJECT.md` writes the value inside backticks, so a first-token rule *without* normalization resolves **0 of 4** and the protocol would write no Project record at all. With normalization it resolves **4 of 4**.
+3. **Require** membership in `{ACTIVE, CLOSING, CLOSED}`.
+
+A compound value (a state token followed by a parenthetical or dash-qualifier) contributes its **leading token only**, and the qualifier is preserved untouched in the body line. A first token outside the enum is **not** coerced: the record is not written for that project, and the file is reported in the evidence record as an unresolved-status exclusion. No default is applied — V-PRJ-03 is L1, and guessing a lifecycle state is the No-invention breach this rule exists to prevent.
+
+**Owner rule.** V-PRJ-02 requires exactly one of `project_owner` / `project_owner_external`, and V-PRJ-08 makes an unresolved `project_owner` **BLOCK-WRITE**. The dialect resolves this to `project_owner` = the operator's `person_id`, on the ground that the operator is the PMO owner of record for every project in their own operational corpus. `project_owner_external` is **never** written by a seeding run: its value is a named human, and writing engagement-derived personal data into the corpus is the exact hazard the one-Person cap exists to prevent. A project whose owner is genuinely someone else is an operator-supplied value, not a derived one.
 
 ## 4. Field Reference
 
@@ -574,6 +619,31 @@ Migrating a live PROJECT.md from the narrative-table monolith to the composed-in
 
 The POC project for the first migration is **decided at the Stage-12 gate** (not in Engineering); bulk migration beyond the POC is a gated follow-up.
 
+### Entity-Seeding Protocol (ADR-138 — gated, per-tier)
+
+Populating the operational corpus with conformant entity records so that entity-grain audits measure a real population rather than an empty one. **EXPENSIVE / gated** — the live ops tree is git-ignored, so there is **no git rollback**; the S1 snapshot is the only reversal path. A sibling of the Composed-Index Migration Protocol above: same tree, same gating posture, same snapshot-first discipline. Run S1–S6 in order.
+
+- **S1 — Snapshot, verify, or halt.** Copy every file the run will touch to `[CLAUDE_WORKSPACE_ROOT]/.backup-pre-entity-seed-<YYYYMMDDTHHMMSSZ>/`, corpus-relative paths preserved, plus a JSON manifest recording each file's pre-existing frontmatter key set and a `RESTORE-ORDER` field (below). The timestamp is `date -u +%Y%m%dT%H%M%SZ`, matching the shipped `.backup-pre-*` convention — **a date-only suffix is forbidden**, because more than one snapshot per day is routine and a same-day collision destroys the only pre-write copy. **S1 refuses to run when the resolved directory already exists**; it never overwrites, because a second same-instant run would otherwise capture post-write state over the pre-write copy. Verify every copy at its path; any unverified write halts the run **before** any mutation.
+- **S2 — Portfolio tier.** Author the Portfolio record at its program-scoped config home as a discrete file-backed record. Fields per `entity-field-schemas.md` §3.13; `portfolio_owner` = the operator's `person_id`. That tier is a non-project top segment for the node stamper, so the record carries **no** node frontmatter and its `lifecycle_state` is unambiguously the entity's Axis-1.
+- **S3 — Shared-entity tier.** Author the operator's Person record at the shared-entity home per §3.10, sourced from `operator.toml` (`operator_name` → `full_name`, `operator_role_title` → `primary_role`, `operator_email` → `email`). **Never auto-create a second Person** — ADR-058 §Decision 5 routes any unresolved person name to the operator clarification queue. This is both the governance rule and the only shape that keeps engagement-derived personal data out of the corpus.
+- **S4 — Project tier.** For each in-scope project, add the §3b key set to `PROJECT.md` frontmatter. **Add-absent-keys-only**: never overwrite an operator-supplied value, which is what makes a re-run a no-op. Write `lifecycle_state` **never** and `created_date` **never** — those two belong to the node stamper, and that exclusion is what keeps the two writers non-interfering.
+- **S5 — Verify.** Assert per tier: record present, `entity_type` correct, every L1 rule for that entity satisfied (V-CORE-03 **and** V-CORE-03b), and each FK resolving to a record seeded in an earlier step. Report counts with denominators and a sensitivity arm proving the probe is live.
+- **S6 — Record.** Emit the realized per-record added-key manifest, the resolved snapshot path, and a demonstrated restore-then-re-apply on at least one record. A snapshot whose restore has never been exercised is not a reversal mechanism.
+
+**Scope.** `ACTIVE` and `CLOSING` projects only; `CLOSED` is read-only reference per `CLAUDE.md § Project Lifecycle`. Excluded projects are **accounted for** in the evidence record — by count and reason, never silently dropped.
+
+**Tier order S2 → S3 → S4 is forced, not stylistic.** It follows FK direction: V-PRJ-08 is BLOCK-WRITE on an unresolved `project_owner`, so the Person record must exist before any Project record references it, and V-PORT-03's owner ref makes the Portfolio record's own owner the same target. Reordering produces records that are invalid at the instant they are written.
+
+**Snapshot destination — why the workspace root.** The destination must survive every mover that could run between the snapshot and a restore. The `08-Generated/_migration-snapshot/` destination M1 names is excluded because the folder-taxonomy reshape renames that bin, and a reversal path the operation itself relocates mid-flight is not a reversal path. A project-root destination is excluded because this run's write set spans three tiers, two of which are not project roots. The workspace root is a shipped convention, and a dot-leading directory there is **structurally** invisible to the corpus iterator — which skips any dot-leading path segment — rather than merely policy-excluded.
+
+**Restore ordering (load-bearing whenever two snapshots exist).** A release that runs both a node-frontmatter backfill and an entity seed leaves two pre-write snapshots over an overlapping file set, taken at different instants. They do not compose in either direction, so the order is fixed rather than inferred:
+
+> The backfill's snapshot is **pre-seed**: restoring it after the seed has landed silently discards the seed on every shared file. The seed's snapshot is **post-backfill**: restoring it after a backfill restore re-applies the backfill. **LIFO only** — restore the seed's snapshot before the backfill's, and re-run S1–S6 after any backfill restore.
+
+This rule is carried in the S1 manifest's `RESTORE-ORDER` field as well as here, because whoever performs a rollback on a git-ignored tree is reading the snapshot directory, not a tracked schema.
+
+**Retention.** Snapshots are retained through the release's outcome window; deletion is **operator-only**. Nothing in the platform expires them — a deferred-cleanup residual rather than a guarantee, stated so that a future retention policy knows this directory exists.
+
 ## 8. Consumers
 
 Skills and governance files that read `PROJECT.md` fields at invocation. Methodology-sensitivity column indicates whether the skill's behavior should vary by `delivery_approach` (per the blast radius analysis §6.1).
@@ -593,6 +663,7 @@ Skills and governance files that read `PROJECT.md` fields at invocation. Methodo
 | `pmo-process-designer` | project context | LOW | Unchanged |
 | `implementation-planner` | release context | MEDIUM | Unchanged |
 | `artifact-generator` | project context | LOW | Unchanged |
+| the §7 Entity-Seeding Protocol | the inline `**Status:**` line (via the §3b parse rule) + `delivery_approach` + the §3b persisted key set | LOW | New — writes the §3b entity-record block; methodology-agnostic (it *carries* `delivery_approach`, it does not branch on it) |
 
 **Governance consumers:**
 

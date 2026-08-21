@@ -11,13 +11,15 @@ created_date: {{CREATION_DATE}}
 # PROJECT.md — {{PROJECT_NAME}}
 
 <!--
-Born entity frontmatter (above): the 7-field block per frontmatter-schema.md § Classification/Trust
+Born NODE frontmatter (above) — the node axis, NOT the entity record: the 7-field block per frontmatter-schema.md § Classification/Trust
 + agent-processing-contracts.md Skill-6 contract. `domain: managed` is the live value (A/B/C
 deprecated per frontmatter-schema.md § Category 6). `folder: _project-root` is the NON-BIN
 SENTINEL (ADR-137) — PROJECT.md sits at the project ROOT, in no bin, and `folder` is a NOT-NULL
 core field, so without this value a newly-scaffolded PROJECT.md is born missing one.
-Entity `lifecycle_state: emerging` is the
-ENTITY maturity axis — distinct from the project-lifecycle `Status` below (two-lifecycle model).
+`lifecycle_state: emerging` is the FILE/NODE content-maturity axis; the Project ENTITY's Axis-1
+carrier is `status` (project-schema.md §3b, entity-field-schemas.md V-PRJ-03) — the inline
+`**Status:**` line below. The entity-record keys are NOT in this block; they are seeded by the
+project-schema.md §7 Entity-Seeding Protocol, not written at scaffold time.
 Composed-index PROJECT.md (ADR-060): a thin dashboard, NOT the container. Methodology + Status
 are INLINE (consumer back-compat per project-schema.md §4); People / Systems / Milestones /
 Plans / Workstreams are [[wiki-link]] lists into the _pmo/ shared-entity pages and the

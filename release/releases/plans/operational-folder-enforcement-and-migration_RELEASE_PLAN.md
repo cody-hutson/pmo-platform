@@ -105,9 +105,9 @@ core/schemas/agent-processing-contracts.md                                edit
 core/ADRs/ADR-*-project-entity-axis-1-carrier.md                          add
 release/releases/plans/operational-folder-enforcement-and-migration_RELEASE_PLAN.md   edit
 
-# ── #5741 — CONDITIONAL:D-48-ROUTING (retained here only if the sibling milestone declines) ──
-operations/skills/project-initiator/SKILL.md                              edit    CONDITIONAL:D-48-ROUTING
-operations/templates/project-md-composed-index-template.md                edit    CONDITIONAL:D-48-ROUTING
+# ── #5741 — PROMOTED at Commit 3: D-48-ROUTING resolved RETAIN (sibling plan silent → stated fallback) ──
+operations/skills/project-initiator/SKILL.md                              edit
+operations/templates/project-md-composed-index-template.md                edit
 
 # ── Package rebuild (tool-generated; triggered by #3123's SKILL.md edit at Commit 2) ──
 packages/project-initiator.skill                                          edit
@@ -374,7 +374,7 @@ Revert the merge commit. That restores every tracked surface — both deploy too
 
 | Token | Question | Fallback if unresolved |
 |---|---|---|
-| **`D-48-ROUTING`** | Does the sibling milestone accept the two born-block regions? Its Stage-4 plan **does not yet name them** (verified: 0 against sensitivity arms of 11 and 2) | **Retain both rows in this release** and extend the D-44 re-authoring discipline to both hunks. The misnomer is pre-existing in the mainline, so deferring is debt, not regression — but retaining is the safe default when the receiving plan is silent |
+| **`D-48-ROUTING`** — **RESOLVED at Commit 3: RETAIN** | Does the sibling milestone accept the two born-block regions? Its Stage-4 plan **does not yet name them** (verified: 0 against sensitivity arms of 11 and 2). Re-checked at Commit 3: the sibling's only in-flight PR carries a single file and does not answer, so the plan's stated fallback fires | **Retain both rows in this release** and extend the D-44 re-authoring discipline to both hunks. The misnomer is pre-existing in the mainline, so deferring is debt, not regression — but retaining is the safe default when the receiving plan is silent. **Applied:** both rows promoted to unconditional in the FCM; the template row is **delivered** (re-authored against Commit 2's landed text, `_project-root` sentence byte-identical); the SKILL.md row is **hook-blocked and folded into the single combined operator-side edit** (Deviation Log; § A12) |
 | **`D-5668-OPTION`** | The two-file option of record, or the one-file counter-design that achieves the same measured invariant with the sibling tool unedited? | **Ship the design of record (two files).** The FCM declares both rows unconditionally on that basis; adopting the counter-design at Commit 0 drops the second row and requires a Deviation Log entry naming the dropped path |
 | **Package-rebuild ownership** | Which commit rebuilds `project-initiator`? | **Commit 4**, after the last SKILL.md writer. Executed and diffed in the PR, because the CI gate ships non-blocking |
 
@@ -397,7 +397,7 @@ Recorded so that a reader of the decision chain does not mistake a retired posit
 | Path or token | Status | Basis |
 |---|---|---|
 | `core/governance/OPERATIONS.md` | **NOT DELIVERED** | Blocked at Engineering by `.claude/hooks/block-autonomy-ceiling.sh:BLOCK-AUTONOMY-001`. The rule matches `*/OPERATIONS.md` unconditionally — no worktree carve-out, no mode gate, no session sentinel — so no agent-side path exists. Not bypassed. Requires an operator-side edit; the one-line change is specified in § Node-Backfill Evidence Record § 12 |
-| `operations/skills/project-initiator/SKILL.md` | **NOT DELIVERED** | Blocked at Engineering by `.claude/hooks/block-skill-direct-edit.sh:BLOCK-SKILL-EDIT-001` in enforce mode (the skill carries the `skill_discipline_migrated_v10_2` marker). The sanctioned path is a genuine `pmo-skill-editor` session sentinel; `pmo-skill-editor`'s own guardrail forbids self-creating that sentinel to clear the gate, so it was not created. Impact analysis was completed and is recorded in § Node-Backfill Evidence Record § 12 |
+| `operations/skills/project-initiator/SKILL.md` | **NOT DELIVERED** — **two claimants, one combined operator-side edit** | Blocked at Engineering by `.claude/hooks/block-skill-direct-edit.sh:BLOCK-SKILL-EDIT-001` in enforce mode (the skill carries the `skill_discipline_migrated_v10_2` marker). The sanctioned path is a genuine `pmo-skill-editor` session sentinel; `pmo-skill-editor`'s own guardrail forbids self-creating that sentinel to clear the gate, so it was not created. Impact analysis was completed and is recorded in § Node-Backfill Evidence Record § 12. **#5741's misnomer correction (`D-48-ROUTING` → RETAIN) joins this same row rather than opening a second one**, because the Release-Level Verification list requires the `pmo-skill-editor` regression pass to run once against the **final combined state**; landing the two changes separately would grade a file that never ships. The combined required change is specified in § Entity-Seeding Evidence Record § A12 |
 
 ## Node-Backfill Evidence Record
 
@@ -657,3 +657,148 @@ Two FCM rows were blocked at Engineering by Tier-0 controls. **Neither was bypas
 **Row 6 — `operations/skills/project-initiator/SKILL.md`.** The born-entity-frontmatter block moves from a 6-field to a 7-field block: add `folder: _project-root` after `domain: managed`, change "the 6-field entity block" to "the 7-field entity block", change "Five values are fixed" to "Six values are fixed", and state that `folder` is a NOT-NULL core field carrying the ADR-137 sentinel because PROJECT.md sits at the project root rather than in a bin. **Impact analysis is complete and clears the edit:** the skill registry lists `project-initiator` as a `function-skill` with **no registered consumers** (control arm — `delivery-engine` returns 8 registry mentions, so the probe is live), so the Cross-Skill Impact set is legitimately empty. The mirrored surface — `operations/templates/project-md-composed-index-template.md` — **is** delivered in this commit, so until row 6 lands the SKILL.md text and the template it describes disagree on the field count.
 
 **Consequence for the package rebuild (Commit 4).** `project-initiator/SKILL.md` is presently **unmodified** on this branch, so its `.skill` package is **not** stale on the current tree. The rebuild obligation fires only once row 6 lands. Sequence the rebuild after it, not before.
+
+## Entity-Seeding Evidence Record
+
+*Part A (pre-write), authored at Stage 6 Commit 3. This is #5741's PR-side gradeable artifact — the surface Stage 7 DT and Stage 8 QA grade, because the card's corpus deliverable is not readable from the PR diff. **Part B (post-write) appends here via the Stage-12 chore PR.*** The corpus-privacy construction is the one declared for the node-backfill record above and is not restated: every per-file row is keyed by the same opaque stable file key — `sha256(<corpus-relative path>)[:12]` — and everything else is a count, a depth index, a platform-vocabulary token or a schema key name.
+
+### § A0 — Measurement instant
+
+| Field | Value |
+|---|---|
+| Merge base | `origin/main` @ `ccd3be07` |
+| Branch state measured | Commits 1–3 applied (#5668 + #3123 + #5741) |
+| Date | 2026-08-21 |
+| Mode | read-only throughout; no corpus file was opened for write and no seeding step was executed |
+
+**Every count below is a point-in-time observation and MUST be re-derived immediately before the Stage-12 write (AI-010).** Two figures already moved between the node-backfill record and this one, on a byte-identical probe: the corpus `.md` denominator read **2 136** at Stage 5 and **2 142** here, and the `lifecycle_state:` sensitivity arm read **43** at Stage 5, **46** in the card body, and **46** here. The class structure is the durable output; the counts are observations.
+
+### § A1 — Baseline census (every arm re-derived at Commit 3)
+
+| Probe | Denominator | Result | Sensitivity arm | Specificity arm | Valid |
+|---|---|---|---|---|---|
+| `^entity_type:` corpus-wide | 2 142 `.md` | **0** | `^lifecycle_state:` → **46** | `^entity_typo:` → **0** | yes |
+| `^owning_agent:` corpus-wide | 2 142 `.md` | **0** | as above | as above | yes |
+| `^content_lifecycle_pattern:` corpus-wide | 2 142 `.md` | **0** | as above | as above | yes |
+| `^portfolio_id:` / `^program_id:` corpus-wide | 2 142 `.md` | **0** / **0** | as above | as above | yes |
+| `^id:` on in-scope `PROJECT.md` | 4 | **0** | `^---` opener → **4 / 4** | — | yes |
+| `entity_type:` at the **project** tier | 4 | **0** | as above | — | yes |
+| `entity_type:` at the **portfolio** tier | 22 `.md` | **0** | any `^<key>:` line → **3 / 22** | `^entity_typo:` → **0** | yes |
+| `entity_type:` at the **shared-entity** tier | **1** `.md` | **0** | **none can fire — see below** | — | **arm declared weak** |
+
+**The shared-entity tier's arm is disclosed as weak rather than reported as clean.** That tier holds a single `.md` file and it carries no frontmatter at all, so every in-tier arm attempted (`^---` opener, `^title:`, any `^<key>:` line) also returns **0**. A zero whose control arm also returns zero is a broken probe (D-50), so the liveness of this probe is established at the **corpus** level instead — the identical pattern returns 46 over 2 142 files — and the tier-local result is reported as *empty on a denominator of 1*, which is what it is. All three tiers are empty of conformant records; that part of the card's premise reproduces exactly.
+
+### § A2 — Scope and denominators
+
+| Population | n | Basis |
+|---|---|---|
+| `PROJECT.md` files anywhere in the corpus | **22** | depth histogram `{1: 4, 2: 11, 3: 2, 4: 4, 6: 1}` |
+| Excluded — under the archived top segment | **18** | `CLOSED` / archived: read-only reference per `CLAUDE.md § Project Lifecycle` |
+| **In-scope candidates** (depth ≤ 1, non-archived) | **4** | the seeding population |
+| Resolving in-enum under the §3b parse rule | **4 / 4** | all resolve `ACTIVE` |
+| Excluded for unresolved status | **0** | the refusal path exists but does not fire on this corpus |
+
+**The §3b parse rule was corrected at build, and the correction is the difference between delivering and not.** The Stage-5 draft specified *"first whitespace-delimited token, upper-cased, require membership"*. Measured against the live corpus that rule resolves **0 of 4** — every in-scope file writes the value inside backticks (wrapper histogram `` {`: 2, ``: 2} ``), so the naive first token is never in-enum and the protocol would write **no Project record at all**. Adding the normalization step (strip surrounding `` ` `` / `*` / `_` and trailing punctuation before the enum test) resolves **4 of 4**. Specificity arm: the normalized token matches a bogus enum `{ARCHIVED, PENDING}` on **0 of 4**, so normalization is not simply making everything pass. The shipped §3b rule carries the step as step 2 of 3, marked load-bearing.
+
+### § A3 — Per-tier write plan (project tier, realized add-key sets)
+
+Nine-key set per §3b; `lifecycle_state` and `created_date` are in the **untouched** set for every record, at every tier, without exception.
+
+| Key | add | already present | `NEVER`-set keys already on file |
+|---|---|---|---|
+| `199cd64d52c3` | 7 | `status`, `delivery_approach` | — |
+| `694a627ca59d` | 9 | — | — |
+| `9dc4fd4bad65` | 9 | — | `lifecycle_state`, `created_date` |
+| `ab36874e0baf` | 9 | — | `lifecycle_state`, `created_date` |
+
+Add-count histogram `{7: 1, 9: 3}`. **Add-absent-keys-only** makes the one partially-populated record a 7-key add rather than an overwrite, which is the property that makes a re-run a no-op.
+
+**The two files carrying no `lifecycle_state` are the ordering constraint, made concrete.** V-CORE-03b (the D-42 presence guard, ADR-138 D5) is discharged on a `PROJECT.md` by the node stamper's value. Two of four in-scope files do not carry it yet. Seeding before the backfill would therefore leave **2 of 4** seeded records failing an L1 rule through no fault of the seed. This is not a restatement of the plan's ordering claim — it is the measurement that makes it load-bearing rather than tidy.
+
+### § A4 — Source of truth per key
+
+| Key | Derivation | Class |
+|---|---|---|
+| `id` | project folder slug, normalized per the artifact-naming standard | derived |
+| `entity_type` | literal `Project` | constant |
+| `status` | inline `**Status:**` line via the §3b 3-step parse rule | derived |
+| `content_lifecycle_pattern` | literal `Living` — frozen per-entity Axis-2 constant | constant |
+| `owning_agent` | literal `ppm-agent` — maintain side of the frozen triplet | constant |
+| `project_name` | project folder display name | derived |
+| `delivery_approach` | file key when present (**1 of 4**), else `operator.toml` default | derived / config |
+| `project_owner` | the operator's `person_id` | **operator-supplied** `[ASSUMPTION – CONFIRM]` per D-5741-9 |
+| `portfolio_id` | the `portfolio_id` of the record seeded at S2 | FK, resolved in-run |
+
+No key is defaulted where it is underivable: `project_owner` is listed as operator-supplied rather than invented, and an unresolved `status` refuses the record instead of coercing it.
+
+### § A5 — FK resolution table
+
+| Ref key | Target | Rule | on-unresolved | Resolvable because |
+|---|---|---|---|---|
+| `project_owner` | Person record | V-PRJ-08 | **BLOCK-WRITE** | S3 runs before S4 |
+| `portfolio_owner` | the same Person record | V-PORT-03 / V-PORT-06 | **BLOCK-WRITE** | S3 runs before S2's owner is read back at S5 |
+| `portfolio_id` | Portfolio record | V-PRJ-05 | WARN-HEALTH | S2 runs before S4 |
+
+**Tier order S2 → S3 → S4 is forced by FK direction, and two of the three edges are BLOCK-WRITE.** Reordering does not degrade the records; it makes them invalid at the instant they are written.
+
+### § A6 — Audit-readiness arithmetic
+
+Each entity-grain completeness factor, stated as `n/d` with the denominator it will carry post-seed. Pre-seed every `d` is **0**, which is the readiness gap this card closes.
+
+| Factor | `d` pre-seed | `d` post-seed | Note |
+|---|---|---|---|
+| `%entities-present` | 0 | **6** (4 Project + 1 Person + 1 Portfolio) | three tiers, all non-empty |
+| `%fields-populated` | 0 | **9 per Project record**; per-entity field count at the other two tiers | denominators are the §3.N required sets, not a flat constant |
+| `%relationships-valid` | 0 | **3** scalar ref edges (§ A5) | `relationships[]` is deliberately not written, so the factor measures the scalar refs |
+
+**Coverage envelope, named rather than dropped.** Sixteen of the nineteen entity types are **not** seeded by this card and are expected-absent, not missing: the seed covers Project, Person and Portfolio only. A completeness score that counts the other sixteen as absent-therefore-incomplete is measuring the card's declared scope as a defect.
+
+### § A7 — Non-interference assertions
+
+- **N-1 — disjoint key sets.** The seeded 9-key set ∩ the node stamper's core field set = **∅**. *Sensitivity:* the same intersection computed over the 9-key set **plus** the two `NEVER` keys returns **2** (`lifecycle_state`, `created_date`), so the method returns non-empty when overlap exists and the empty result is a measurement rather than a broken probe.
+- **N-2 — no counter movement.** The seed adds no exclusion, no classifier table entry and no new file to any scanned population, so the stamper's `counts` block is invariant across it. The seeded Portfolio record lands in a non-project top segment; the Person record lands in a segment that joins that set in this release; the snapshot lands outside the corpus entirely **and** dot-leading.
+- **N-3 — no new orphan.** Project records modify files already in the census. The orphan **reason census** is therefore invariant under the seed, which is a stronger and more directly gradeable statement than scalar invariance.
+- **Stated as assertions, not as independence.** The two writes are *ordered* and the ordering is load-bearing (§ A3). Nothing here claims they are independent.
+
+### § A8 — Snapshot plan and mover survival
+
+| Field | Value |
+|---|---|
+| Destination | `[CLAUDE_WORKSPACE_ROOT]/.backup-pre-entity-seed-<YYYYMMDDTHHMMSSZ>/` |
+| Timestamp form | `date -u +%Y%m%dT%H%M%SZ`, sampled once, immediately before the copy |
+| Convention corroboration | **30** `.backup-pre-*` directories at the workspace root; **30 / 30** carry a full UTC timestamp, **0** carry a date-only suffix. *Sensitivity:* `.backup-*` → **32**. *Specificity:* `.backup-zzz-*` → **0** |
+| Pre-existing target | `.backup-pre-entity-seed-*` → **0** today. S1 **refuses and halts** if the resolved directory exists |
+| Manifest | per file: relative path, pre-write SHA-256, pre-existing frontmatter key set, exact added-key set, and `RESTORE-ORDER` |
+| Verification | file count **and** byte total verified before any mutation; unverified ⇒ **HALT** |
+
+**Mover survival, each dispositioned.** The generated-bin destination is excluded because the folder-taxonomy reshape renames that bin — a reversal path the operation itself relocates mid-flight is not a reversal path. A project-root destination is excluded because the write set spans three tiers, two of which are not project roots. The workspace root survives both: the corpus iterator skips any dot-leading path segment, so the destination is **structurally** unreachable rather than policy-excluded, and it sits outside the corpus root as a second independent guarantee.
+
+**Token note.** `[CLAUDE_WORKSPACE_ROOT]` re-verified at Commit 3: registered in the depersonalization spec's token table, **86** files carry it. `OPERATOR_WORKSPACE_ROOT` returns **1** file — this plan, in the node-backfill record's own token note — confirming it is discussed but never used as a token.
+
+### § A9 — Rollback: two independent paths
+
+**Repo-side.** `git revert` restores the four schema surfaces, the ADR and this record. It reaches **no** corpus file. Reversibility **CHEAP · confidence HIGH**.
+
+**Corpus-side.** Restore the S1 snapshot, **path-keyed**: copy each manifest entry back and re-hash against its pre-write SHA-256; any mismatch ⇒ halt and report, never partially restore. Reversibility **EXPENSIVE · confidence MEDIUM** — medium because the restore is specified and, as of this record, demonstrated on no record. S6 exists to convert that to HIGH before the release closes.
+
+**A revert decided after the Stage-12 write must do both.** Reverting the repository alone leaves seeded records valid against a rule the tree no longer defines.
+
+### § A10 — Stage-12 restore ordering (binds both corpus-writing cards)
+
+Two pre-write snapshots will exist over an overlapping file set, taken at different instants. They do not compose in either direction:
+
+> The backfill's snapshot is **pre-seed** — restoring it after the seed has landed silently discards the seed on every shared file. The seed's snapshot is **post-backfill** — restoring it after a backfill restore re-applies the backfill. **LIFO only:** restore the seed's snapshot before the backfill's, and re-run the seeding protocol S1–S6 after any backfill restore.
+
+The same rule is carried in the seed snapshot's `RESTORE-ORDER` manifest field, because a rollback operator on a git-ignored tree reads the snapshot directory rather than a tracked plan. Write order is #3123 then #5741; restore order is the exact inverse.
+
+### § A11 — Tier-A design artifact (declared for Stage-13 G-CL6)
+
+Activated by the Data-flow row — this release modifies schema and contract files with cross-component data flow. Produced **embedded** (below the ≥3-parent-doc centralization threshold) as the two-record key table and the persisted-key-set table in `project-schema.md` §3b, plus the FK resolution table at § A5 above.
+
+### § A12 — Undelivered row for this card
+
+**`operations/skills/project-initiator/SKILL.md` — the `:193` "born-aligned entity record" misnomer.** `D-48-ROUTING` resolved to **RETAIN** (the sibling milestone's Stage-4 plan never named the regions, so the plan's stated fallback applies), and the row was promoted from CONDITIONAL to live. It is **NOT DELIVERED** at Engineering for the same Tier-0 reason as row 6 of the node-backfill record — `BLOCK-SKILL-EDIT-001` in enforce mode, whose sanctioned path needs a session sentinel the agent is forbidden to self-create. **It was not bypassed and `CLAUDE_HOOK_BYPASS` was never set.**
+
+**Required change, operator-side, folded into the same combined edit as row 6:** the block is the **node axis**, not the entity record — replace "born-aligned entity record" with a node-frontmatter framing, and correct the `lifecycle_state` characterization, which currently reads as the ENTITY maturity axis and is the FILE/NODE content-maturity axis. The Project entity's Axis-1 carrier is `status` (ADR-138 D1, V-PRJ-03), the entity-record keys are not part of the born block, and they are seeded by `project-schema.md` §7 rather than written at scaffold time.
+
+**Why one combined edit rather than two.** The Release-Level Verification list requires the `pmo-skill-editor` regression pass to run **once against the final combined state** of this file. Landing #3123's 6→7-field change and this misnomer correction separately would grade an intermediate state that never ships. **The mirrored template surface — `operations/templates/project-md-composed-index-template.md` — IS delivered in this commit**, with both corrections applied and #3123's `_project-root` sentence preserved byte-identical, so until the combined edit lands the SKILL.md text and the template disagree on both the field count and the axis attribution.
