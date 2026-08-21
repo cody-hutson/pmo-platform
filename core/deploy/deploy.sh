@@ -8086,7 +8086,7 @@ sys.stdout.write("".join(out) + "|")
     log "Check 31: Reference-durability saturation (durable-corpus fragile refs)"
     local c31_fixture="core/hooks/testdata/cutover-fixtures.txt"
     local c31_runner="core/hooks/run-fragile-ref-fixtures.sh"
-    local c31_allowlist="core/hooks/reference-durability-allowlist.txt"
+    local c31_allowlist="core/config/allowlists/reference-durability-allowlist.txt"
 
     # --- precision probe: fixture self-test (hard FAIL on regression) ---
     if [[ -x "$c31_runner" && -f "$c31_fixture" ]]; then

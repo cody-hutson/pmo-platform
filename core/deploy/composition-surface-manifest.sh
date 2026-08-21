@@ -67,7 +67,7 @@
 # (the macOS system bash), `declare -a` inside a function — or inside a script
 # sourced from a function — makes the array function-local; the caller never
 # sees it. The lib_compose_source_manifest helper IS a function, so any
-# `declare -a` here would silently break all 20 composition-surface installs.
+# `declare -a` here would silently break all 21 composition-surface installs.
 # Plain assignment is global by default in bash 3.2, which is what we need.
 # (Verified: bash 3.2.57(1)-release on Darwin 25.x.)
 
@@ -84,6 +84,12 @@ COMPOSITION_SURFACE_FILES=(
   "core/config/allowlists/mcp-write-allowlist.txt|hook|raw"
   "core/config/allowlists/shell-injection-allowlist.txt|hook|raw"
   "core/config/allowlists/scope-segregation-allowlist.txt|hook|raw"
+  # hook tier is load-bearing here, not incidental. block-fragile-refs fails CLOSED
+  # when this surface is unreachable, and update.sh's assert_install_complete gates
+  # refresh_hooks on hook-tier surfaces only. Registering at this tier is therefore
+  # what makes it structurally impossible to refresh the fail-closed hook without
+  # its allowlist. Demoting this row to `instance` would re-open that window.
+  "core/config/allowlists/reference-durability-allowlist.txt|hook|raw"
   "core/config/allowlists/skip-localized-context-check.txt|hook|raw"
   "core/config/allowlists/skip-release-note-check.txt|hook|raw"
 
