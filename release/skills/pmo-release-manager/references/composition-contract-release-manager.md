@@ -58,7 +58,7 @@ The line that keeps `pmo-release-manager`, its two composed function-skills, and
 ## 5. Worked Mode 3 output (illustrative — close-out disposition)
 
 > **Audience:** operator. **Close-out disposition (awaiting Apply authorization).**
-> **Deploy-landed gate:** DEPLOYED row present in `RELEASE_LOG.md` + annotated tag v[X.Y] exists [SOURCE: `release-executor` Mode D pre-flight] — Stage-12 confirmed before close.
+> **Deploy-landed gate:** DEPLOYED row present in `RELEASE_LOG.md` [SOURCE: `release-executor` Mode D pre-flight] — this row is the gate; Stage-12 confirmed before close. Annotated tag v[X.Y] recorded present [CONTEXT: the same pre-flight *records* tag state and does not gate on it — the tag blocks later, at the GitHub-Release publish phase].
 > **Issue-closure audit (Step 2.5):** 2 open on milestone #M [SOURCE: `release-executor` Mode D Step 2.5]:
 > - #A — auto-close-anomaly (shipped in the release PR, close-keyword missed) → **close at apply** (operator-authorized).
 > - #B — bundled-but-unshipped (scope deferred) → **defer to carry-forward** (status-deferred label, milestone removed, stays OPEN).

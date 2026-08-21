@@ -1450,6 +1450,24 @@ _cc_compute_verdict() {
   # (no arming row exists yet; a Stage-5 version literal went stale twice mid-flight;
   # the measured alternative anchor would raise ~17 findings against grandfathered
   # rows). Arming is owned by #5245, not by a comment.
+  #
+  # CROSS-TOOL READ CONTRACT — this line is a PUBLISHED SEAM, not a private local.
+  # `release/tools/automated-closeout.sh` resolves the SAME cutoff at close time, to
+  # decide whether the `**Close-Class-Telemetry:**` field is an owed member of the
+  # Stage-13 output set (its `required-if telemetry-cutover-armed` membership state).
+  # It does NOT keep a second copy of the value: it reads THIS assignment out of THIS
+  # file, so arming the cutover stays a ONE-VALUE change in ONE place and the two
+  # lanes can never disagree about whether the field is owed.
+  #
+  # The extraction is shape-frozen. The reader matches, on a single line:
+  #     local cc_telemetry_cutoff="${CLOSE_COMPLETENESS_TELEMETRY_CUTOFF:-<default>}"
+  # and requires EXACTLY ONE match. Renaming the local, splitting the assignment
+  # across lines, or introducing a second assignment breaks the read — which the
+  # reader reports as INDETERMINATE and BLOCKS on, rather than silently defaulting.
+  # A blocked close is the loud failure; a silent default would grade an owed output
+  # "satisfied" because its membership test could not run. If this line must change
+  # shape, change the reader in the same commit — `_resolve_telemetry_cutoff` there,
+  # and the `Test 15 (m*)` self-test arms that assert the read against this file.
   local cc_telemetry_cutoff="${CLOSE_COMPLETENESS_TELEMETRY_CUTOFF:-__none__}"
 
   # Dormancy is now an EXPLICIT opt-out, not the default: the __none__ sentinel is the
