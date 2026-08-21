@@ -84,11 +84,23 @@ COMPOSITION_SURFACE_FILES=(
   "core/config/allowlists/mcp-write-allowlist.txt|hook|raw"
   "core/config/allowlists/shell-injection-allowlist.txt|hook|raw"
   "core/config/allowlists/scope-segregation-allowlist.txt|hook|raw"
-  # hook tier is load-bearing here, not incidental. block-fragile-refs fails CLOSED
-  # when this surface is unreachable, and update.sh's assert_install_complete gates
-  # refresh_hooks on hook-tier surfaces only. Registering at this tier is therefore
-  # what makes it structurally impossible to refresh the fail-closed hook without
-  # its allowlist. Demoting this row to `instance` would re-open that window.
+  # hook tier is load-bearing here, not incidental. block-fragile-refs fails CLOSED when
+  # this surface is unreachable, so the hook must never be installed ahead of it.
+  #
+  # On the UPDATE path that is enforced: update.sh orders regenerate -> assert_install_complete
+  # -> refresh_hooks, and the assert covers hook-tier rows only, so a missing surface aborts
+  # the run before any hook is refreshed. Demoting this row to `instance` would silently
+  # re-open that window, because the assert would stop covering it. That is the reason for
+  # the tier, and it has been observed working: a run against a workspace missing this
+  # surface refused at the assert and left the old hook in place.
+  #
+  # It is NOT enforced on the INSTALL path. setup-workspace.sh's rebootstrap orders
+  # install_hooks BEFORE install_composition_surface_files, with no assert between them, so
+  # the fail-closed hook lands first and the surface follows. That window is bounded and
+  # low-consequence — both writes happen in one run, PreToolUse hooks gate agent tool calls
+  # rather than the installer's own file operations, and a durable hook snapshot is taken
+  # immediately before — but it is a window, and the two installers ordering the same pair
+  # oppositely is worth knowing before anyone relies on the update-path guarantee generally.
   "core/config/allowlists/reference-durability-allowlist.txt|hook|raw"
   "core/config/allowlists/skip-localized-context-check.txt|hook|raw"
   "core/config/allowlists/skip-release-note-check.txt|hook|raw"
