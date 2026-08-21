@@ -275,6 +275,47 @@ labels_to_delivered() {
   echo delivered
 }
 
+# ─── Phase-A2 candidate selection ────────────────────────────────────────────
+#
+# Narrow the terminal-status population to the candidates worth an API call:
+# SIZED, and not already a member of this milestone. Emits `<number> <points>`
+# per line, then a literal OK sentinel — an empty capture is otherwise
+# indistinguishable between "no candidates" (correct) and "the pass crashed"
+# (silently under-reports planned).
+#
+# It is a FUNCTION, and it is defined up here rather than inline in the recovery
+# block, for one reason: inline it sat below the --self-test exit, so no arm
+# could reach it, and the recovery shipped with zero coverage over its only
+# pure-computation step. It takes JSON on argv and touches neither gh nor the
+# network, so Test 7 runs the real thing rather than a simulation of it.
+#
+# Input: $1 = milestone-membership JSON; $2.. = one candidate-list JSON blob per
+# exclusion marker. Output on stdout; exit status is python's.
+_rv_select_candidates() {
+  /usr/bin/python3 - "$@" <<'PY' 2>/dev/null
+import json, sys
+PTS = {"xs":1, "s":2, "m":4, "l":8, "xl":16}
+members = {i.get("number") for i in json.loads(sys.argv[1])}
+seen = {}
+for b in sys.argv[2:]:
+    for it in json.loads(b):
+        n = it.get("number")
+        if n is None or n in members or n in seen:
+            continue
+        pts = 0
+        for l in it.get("labels", []):
+            nm = (l.get("name") or "").lower()
+            if nm.startswith("size:"):
+                pts = PTS.get(nm.split(":",1)[1].strip(), 0)
+                break
+        if pts > 0:
+            seen[n] = pts
+for n in sorted(seen):
+    print(n, seen[n])
+print("OK")
+PY
+}
+
 # ─── Self-test mode (no gh / no network) ─────────────────────────────────────
 
 if [[ "${1:-}" == "--self-test" ]]; then
@@ -477,12 +518,65 @@ if [[ "${1:-}" == "--self-test" ]]; then
     echo "  anchor arm 2: SKIPPED — this script's directory is not inside a git working tree; arms 1 and 3 still ran"
   fi
 
+  # Test 7: PHASE-A2 CANDIDATE SELECTION. The recovery's only pure-computation
+  # step had no arm at all: Test 5.5(e) "simulates" a recovered member by adding
+  # a literal 4 to a counter, which asserts arithmetic, not the pass. These arms
+  # run `_rv_select_candidates` itself on synthetic JSON — no gh, no network.
+  #
+  # Every filter is paired with a control that CHANGES the result, so no arm can
+  # pass because the fixture failed to exercise it. The join itself (the
+  # `demilestoned` title match) is NOT covered here — it needs the events API.
+  #
+  # Fixture: #101 is already on the milestone, #103 is unsized, #102 appears in
+  # both blobs, and #105 carries a lowercased size label. Expect 102/104/105
+  # only, sorted, sentinel last.
+  _cs_members='[{"number":101}]'
+  _cs_b1='[{"number":101,"labels":[{"name":"size:M"}]},{"number":102,"labels":[{"name":"size:L"}]},{"number":103,"labels":[{"name":"bug"}]},{"number":104,"labels":[{"name":"size:XS"}]}]'
+  _cs_b2='[{"number":102,"labels":[{"name":"size:L"}]},{"number":105,"labels":[{"name":"size:xl"}]}]'
+
+  _cs_out=""; _cs_rc=0
+  _cs_out="$(_rv_select_candidates "$_cs_members" "$_cs_b1" "$_cs_b2")" || _cs_rc=$?
+  [[ "$_cs_rc" -eq 0 ]] || die "self-test 7: the candidate-selection pass exited $_cs_rc on well-formed input"
+  _cs_want="$(/usr/bin/printf '102 8\n104 1\n105 16\nOK')"
+  [[ "$_cs_out" == "$_cs_want" ]] || die "self-test 7: candidate selection returned '$_cs_out'; expected sized-only, deduped across blobs, sorted, sentinel last: '$_cs_want'"
+
+  # (a) the NOT-ALREADY-A-MEMBER filter, with its firing control. Same blobs,
+  # empty membership: #101 must NOW appear at 4 pts. Without this arm the
+  # exclusion above could pass because #101 was never selectable at all —
+  # double-counting a current member into `planned` is the failure it guards.
+  _cs_out2=""; _cs_rc=0
+  _cs_out2="$(_rv_select_candidates '[]' "$_cs_b1" "$_cs_b2")" || _cs_rc=$?
+  [[ "$_cs_rc" -eq 0 ]] || die "self-test 7(a): the pass exited $_cs_rc on the empty-membership control"
+  /usr/bin/grep -qx '101 4' <<< "$_cs_out2" || die "self-test 7(a) CONTROL: with an empty membership #101 must be selected at 4 pts — otherwise the member filter is not what excluded it above; got '$_cs_out2'"
+  if /usr/bin/grep -qx '101 4' <<< "$_cs_out"; then
+    die "self-test 7(a): #101 is already on the milestone and must NOT be re-counted into planned; got '$_cs_out'"
+  fi
+
+  # (b) the SIZED filter, both directions. An unsized candidate contributes zero
+  # points either way, so it must never cost an events call.
+  if /usr/bin/grep -q '^103 ' <<< "$_cs_out2"; then
+    die "self-test 7(b): the unsized #103 must be dropped from the candidate set; got '$_cs_out2'"
+  fi
+  /usr/bin/grep -qx '104 1' <<< "$_cs_out" || die "self-test 7(b) CONTROL: the sized #104 must survive the same filter that dropped #103; got '$_cs_out'"
+
+  # (c) the OK SENTINEL, with a vacuity control. The caller reads a missing
+  # sentinel as "the pass crashed" and degrades the recovery; that check is
+  # worthless if the sentinel cannot go missing. Malformed input must not
+  # produce exit 0 WITH a sentinel.
+  /usr/bin/grep -qx 'OK' <<< "$_cs_out" || die "self-test 7(c): the OK sentinel is absent from a successful pass"
+  _cs_bad=""; _cs_rc=0
+  _cs_bad="$(_rv_select_candidates '[{"number":1}]' 'not json at all')" || _cs_rc=$?
+  if [[ "$_cs_rc" -eq 0 ]] && /usr/bin/grep -qx 'OK' <<< "$_cs_bad"; then
+    die "self-test 7(c) CONTROL: malformed candidate JSON produced exit 0 WITH the sentinel — the caller's crash check is vacuous"
+  fi
+
   echo "self-test: PASS"
   echo "  point scale (XS/S/M/L/XL) validated; out-of-set rejection validated"
   echo "  ratio round-half-up validated (exact / below-half / at-half / above-half / planned-zero)"
   echo "  work-class mapping + precedence validated"
   echo "  allocation-partitions-delivered invariant validated"
   echo "  delivery predicate (5.5) validated: both directions disagree / spaced-and-cased label match fidelity (5 arms, case included) / exclusion-constant shape / close-state independence WITH the pre-fix predicate as a firing sensitivity arm / non-degenerate planned-vs-delivered / allocation partitions delivered across an exclusion"
+  echo "  Phase-A2 candidate selection (7) validated on the real pass, offline: sized filter / not-already-a-member filter / cross-blob dedup / sort order / OK sentinel — each with a firing control, and a vacuity control on the sentinel"
   echo "  repo-root anchor: arm 1 identity + arm 3 vacuity control validated via one shared predicate; arm 2 ${ANCHOR_ARM2}"
   exit 0
 fi
@@ -605,38 +699,15 @@ else
 fi
 
 if [[ -z "$RECOVERY_DEGRADED" ]]; then
-  # Narrow to the candidates worth an API call: sized, and not already a member.
-  # Emits `<number> <points>` per line, then a literal OK sentinel — an empty
-  # capture is otherwise indistinguishable between "no candidates" (correct) and
-  # "the pass crashed" (silently under-reports planned). The exit-0-with-empty-
-  # stdout failure mode the files-changed degrade below already documents.
+  # The selection pass itself is `_rv_select_candidates`, defined above the
+  # self-test block so Test 7 can reach it — see the note there. The exit-0-with-
+  # empty-stdout failure mode the files-changed degrade below documents is what
+  # the OK sentinel exists to distinguish from an honest empty result.
   # The `|| _rv_src=$?` MUST sit outside the command substitution. Inside it, the
   # assignment lands in the subshell and is discarded — the status is lost and
   # the failure reads as success with empty output.
   _rv_short=""; _rv_src=0
-  _rv_short="$(/usr/bin/python3 - "$MEMBERS_JSON" "${_rv_blobs[@]}" <<'PY' 2>/dev/null
-import json, sys
-PTS = {"xs":1, "s":2, "m":4, "l":8, "xl":16}
-members = {i.get("number") for i in json.loads(sys.argv[1])}
-seen = {}
-for b in sys.argv[2:]:
-    for it in json.loads(b):
-        n = it.get("number")
-        if n is None or n in members or n in seen:
-            continue
-        pts = 0
-        for l in it.get("labels", []):
-            nm = (l.get("name") or "").lower()
-            if nm.startswith("size:"):
-                pts = PTS.get(nm.split(":",1)[1].strip(), 0)
-                break
-        if pts > 0:
-            seen[n] = pts
-for n in sorted(seen):
-    print(n, seen[n])
-print("OK")
-PY
-)" || _rv_src=$?
+  _rv_short="$(_rv_select_candidates "$MEMBERS_JSON" "${_rv_blobs[@]}")" || _rv_src=$?
   if [[ "$_rv_src" -ne 0 ]] || ! /usr/bin/grep -qx 'OK' <<< "$_rv_short"; then
     RECOVERY_DEGRADED="the candidate-selection pass did not complete (exit $_rv_src)"
     _rv_short=""
