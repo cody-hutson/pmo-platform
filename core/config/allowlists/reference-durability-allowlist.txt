@@ -12,6 +12,16 @@
 # Per core/standards/reference-durability-standard.md § The override-marker and
 # allowlist mechanism. For a single file that needs a single class, prefer the
 # per-file override marker over a path allowlist entry.
+#
+# EDITING CONSTRAINT — no markdown inline links, not even inside a comment.
+# This file is a deployed managed composition surface, and the install regression
+# suite asserts that every deployed managed allowlist is free of markdown link
+# sequences. That assertion is the portion of deployed-tree link integrity that is
+# resolvable inside an isolated sandbox: a surface with no links has trivially
+# intact links, whereas an environment-relative link cannot be resolved there at
+# all. Comments below therefore DESCRIBE anchor-link syntax rather than reproduce
+# it — quoting a link here would be a live link to a link-checker, and this file
+# is data, not documentation.
 
 # Historical-by-design corpus: archived release artifacts are immutable history and
 # legitimately carry references frozen at their authoring time. Never re-author them.
@@ -48,7 +58,8 @@ release/references/specs/release-personas.md
 # Entity-model derivation surface — pervasive intra-doc anchor links on touched lines.
 # entity-field-schemas.md (G2 field schemas) is a navigational reference doc whose
 # AC-checklist, §3 per-entity sections, and §4 X-rule table cross-link to each other and
-# to project-entity-model.md via intra-doc anchors ([§3.0](#30-...), [§3.6](#36-...), etc.).
+# to project-entity-model.md via intra-doc anchors — bracketed section labels such as
+# §3.0 or §3.6 targeting the matching "#30-" / "#36-" heading fragments.
 # The reference-durability issue-ref detector cannot distinguish an anchor link's `#N`
 # fragment (e.g. `#3`, `#30`, `#36`) from a bare GitHub issue reference, and is not
 # governed by the per-file allow-link marker. The ADR-018 Work Item amendment (roster
@@ -74,7 +85,7 @@ release/releases/plans/
 # stage-02-triage.md's A6.5 management-task detection table (~lines 167-168) carries
 # #-shaped patterns the issue-ref detector cannot distinguish from a bare GitHub issue
 # reference and that the per-file allow-link marker does not govern: the `#5` fragment of
-# the `[Phase B B3](#5-process)` anchor link, and the `#[0-9]+` grep regex inside the
+# an anchor link labelled "Phase B B3" targeting "#5-process", and the `#[0-9]+` grep regex inside the
 # detection bash. The awk-range correctness fix (silent-zero -> BEGIN/flag) plus the
 # operator-handle tokenization re-touched these lines, surfacing the pre-existing patterns
 # in the added-lines delta. They are NOT net-new fragile refs — an anchor fragment and a
