@@ -27,6 +27,33 @@
 #     produced by release/tools/capture-release-bodies.sh and must already be
 #     committed and merged to main — a capture living only in a working tree is
 #     not durable, and the whole point is durability.
+#   * THE PRE-EXECUTE GATE RUNS FIRST, AND IT RUNS FROM HERE. See the next block.
+#
+# ─── THE PRE-EXECUTE GATE (--execute only) ─────────────────────────────────────
+# release/tools/preflight-release-body-reemit.py asserts five preconditions this
+# script cannot check for itself, and --execute REFUSES unless it exits 0. It is
+# invoked below, immediately after the git-guard and before the first mutation.
+#
+# WHY IT IS WIRED HERE RATHER THAN WRITTEN DOWN. The gate's own docstring used to
+# say "run it immediately before --execute" and nothing invoked it — not this
+# script, not deploy.sh, not CI, not any pipeline stage spec. A pre-execute gate
+# that only a document points at is a gate nobody runs, and the whole
+# reversibility argument for this tool routes through it. Binding it to the
+# mechanism removes the human step that can be skipped, forgotten, or run against
+# a different version list than the one --execute is about to emit: the gate
+# receives THIS invocation's capture dir and THIS invocation's versions.
+#
+# WHAT IT ADDS OVER PRECONDITION 1 BELOW. Precondition 1 tests that the capture
+# exists ON DISK. The gate tests that it is DURABLE — reachable at origin/main via
+# git cat-file — because a capture living only in a working tree is not a rollback
+# source. It also asserts the notes-layout migration has landed, that the bytes
+# that WOULD be published carry no surviving YAML frontmatter, and that the drift
+# checker can discriminate on this host.
+#
+# IT FAILS CLOSED. A gate that cannot run is not a gate that passed: an absent
+# python3, an absent gate file, or a non-zero gate exit all REFUSE the --execute.
+# There is deliberately NO skip flag and no bypass environment variable.
+# PREFLIGHT_TOOL is a path override for the self-test's benefit only.
 #
 # ─── WHY THIS IS SAFE TO RESUME ────────────────────────────────────────────────
 # The operation is PER-VERSION ATOMIC. There is no cross-version transaction and
@@ -81,11 +108,16 @@
 #   ./reemit-release-bodies.sh --execute <capture-dir> <version> [<version> ...]   # MUTATES
 #   ./reemit-release-bodies.sh --self-test                                         # hermetic; no network
 #
+# --execute runs the pre-execute gate itself; there is no separate step to
+# remember and no way to run --execute without it.
+#
 # Exit codes:
 #   0  every requested version ends VERIFIED at MATCH
 #   1  at least one version failed (emit error, or still drifted after emit)
-#   2  a capability is missing (gh absent/unauthenticated, origin/main unreadable)
+#   2  a capability is missing (gh absent/unauthenticated, origin/main unreadable,
+#      or the pre-execute gate cannot run at all — fail closed)
 #   3  refused — a required pre-overwrite capture is absent or empty
+#   4  refused — the pre-execute gate BLOCKED or HALTed; nothing was written
 set -uo pipefail
 
 # ─── Config ──────────────────────────────────────────────────────────────────
@@ -105,6 +137,12 @@ REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || printf '.
 # suite is hermetic). No production caller sets it; the default is the shipped
 # verifier, resolved relative to the invocation cwd as before.
 DRIFT_TOOL="${DRIFT_TOOL:-release/tools/check-release-body-drift.sh}"
+
+# PREFLIGHT_TOOL — the pre-execute gate. Repo-root-relative; see the header block.
+# The ${...:-} form is a PATH override for tests only. It is NOT a skip: there is
+# no value of it that lets --execute proceed without a passing gate, because an
+# unresolvable path REFUSES rather than waving through.
+PREFLIGHT_TOOL="${PREFLIGHT_TOOL:-release/tools/preflight-release-body-reemit.py}"
 
 REF="origin/main"
 
@@ -321,6 +359,29 @@ NOTE
     failures=$((failures + 1))
   fi
 
+  # Case T — STATIC guard on the PRE-EXECUTE GATE. The gate is the reversibility
+  # control for an irreversible public mutation, so a gate that is deleted, or
+  # moved to AFTER the first emit, is a gate that does not exist. Neither shape
+  # fails any behavioural leg above, because no leg reaches --execute. Assert the
+  # two structural facts instead: the invocation is present exactly once, and its
+  # line precedes EVERY line that names the emit command.
+  # Same split-needle discipline as Case S — a self-scanning assertion must not
+  # count itself. Reuses Case S's _flagged, which is already line-ordered.
+  local _pfn="PREFLIGHT""_ABS" _gate _gate_n _gate_ln _emit_ln
+  _gate="$(/usr/bin/grep -n "$_pfn" "$0" | /usr/bin/grep -vE '^[0-9]+:[[:space:]]*#' \
+           | /usr/bin/grep -- '--capture-dir' || true)"
+  _gate_n="$(printf '%s' "$_gate" | /usr/bin/grep -c . || true)"
+  _gate_ln="$(printf '%s' "$_gate" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  _emit_ln="$(printf '%s' "$_flagged" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  if [[ "$_gate_n" -eq 1 && -n "$_emit_ln" && "$_gate_ln" -lt "$_emit_ln" ]]; then
+    printf '  PASS  %-34s gate line %s precedes the first emit line %s\n' \
+      "T pre-execute gate is wired" "$_gate_ln" "$_emit_ln" >&2
+  else
+    printf '  FAIL  %-34s gate_n=%s gate_line=%s first_emit_line=%s\n' \
+      "T pre-execute gate is wired" "$_gate_n" "$_gate_ln" "$_emit_ln" >&2
+    failures=$((failures + 1))
+  fi
+
   if [[ "$failures" -eq 0 ]]; then
     printf 'reemit-release-bodies self-test: ALL PASS\n' >&2
     exit 0
@@ -355,6 +416,30 @@ if ! git -C "$REPO_ROOT" rev-parse --verify "$REF" >/dev/null 2>&1; then
 fi
 
 if [[ $EXECUTE -eq 1 ]]; then
+  # ─── PRE-EXECUTE GATE ────────────────────────────────────────────────────
+  # See the header block. Fires ONLY on --execute (a dry run mutates nothing,
+  # so gating it would cost a git sweep and buy no safety), and fires BEFORE
+  # the first mutation. Fails closed in all three unrunnable cases.
+  PREFLIGHT_ABS="${REPO_ROOT}/${PREFLIGHT_TOOL}"
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "REFUSED: python3 is absent, so the pre-execute gate cannot run." >&2
+    echo "         A gate that cannot run is not a gate that passed." >&2
+    exit 2
+  fi
+  if [[ ! -f "$PREFLIGHT_ABS" ]]; then
+    echo "REFUSED: the pre-execute gate is absent at ${PREFLIGHT_TOOL}." >&2
+    echo "         Refusing an irreversible overwrite with no gate in front of it." >&2
+    exit 2
+  fi
+  echo "=== PRE-EXECUTE GATE — ${PREFLIGHT_TOOL} ==="
+  if ! python3 "$PREFLIGHT_ABS" --capture-dir "$CAPTURE_DIR" "$@"; then
+    echo >&2
+    echo "REFUSED: the pre-execute gate did not pass. NOTHING was written." >&2
+    echo "         Resolve every non-PASS arm above and re-run this command." >&2
+    exit 4
+  fi
+  echo
+
   echo "*** EXECUTE MODE — published Release bodies WILL be overwritten. IRREVERSIBLE. ***"
 else
   echo "--- DRY RUN (no --execute) — GitHub is READ but never written. ---"
