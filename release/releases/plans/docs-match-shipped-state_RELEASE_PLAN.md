@@ -37,6 +37,8 @@ consumers: Stage 5-9 spokes; the release hub; Stage 9 Plan Review
 
 **BEFORE:** 84 CHANGELOG `[Full notes]` links are broken, 110 release notes sit foldered against a standard that forbids subfolders, and 39 published Release bodies are structurally drifted.
 
+> **Read the 39 as a PRE-STATE, not as #4747's cohort.** 39 is the drift count measured at `origin/main`. This release itself authors 19 more (#3698's link repair rewrites notes whose bodies are already published), so the population #4747 must emit is **58**. See **D-4747-D**.
+
 **Members (9):** #4747 · #3698 · #4321 · #4323 · #5192 · #4748 · #5191 · #5271 · #5072.
 
 **Out of scope, release-wide.** `release/releases/plans/**` layout (ADR-092-backed, lint-enforced) · the `automated-closeout.sh` / `claim-version.sh` / `produce-learnings-register.sh` producers · `RELEASE_BODY_DRIFT_CHECK_CUTOFF` · the `WARN_MODE` / `deploy.sh` Check-14 posture flip (separate protocol, operator-owned) · pipeline stage specs · `CLAUDE.md` · `core/governance/OPERATIONS.md`.
@@ -101,7 +103,9 @@ Single branch, serial commits, dependency order.
 
 ---
 
-## Decision Record — D-4747-A (rendered 2026-08-22, operator)
+## Decision Record — D-4747-A (rendered 2026-08-22, operator) — **SUPERSEDED by D-4747-D**
+
+> **Superseded.** The verdict below is preserved as rendered. Its figure of 39 was correct against the `origin/main` pre-state and is **no longer the operative scope**: **D-4747-D (below) raises it to 58.** Do not execute against this row.
 
 **VERDICT: ALL 39 published Release bodies** (Cohort A 26 + Cohort B 13), superseding the approved 26.
 
@@ -109,6 +113,29 @@ Single branch, serial commits, dependency order.
 - #4747's AC4 is structurally unpassable if Cohort B is deferred — it demands full-population zero DRIFT.
 - 13 live public pages link to a 404 (root cause: the ADR-092 plan re-identification rewrote the note and never re-emitted Surface 1).
 - The card's claim *"Check 47's cutoff contains zero of this cohort, so CI is unaffected"* is **falsified by observation**.
+
+---
+
+## Decision Record — D-4747-D · Cohort C (rendered 2026-08-22, operator) — **THE OPERATIVE SCOPE**
+
+**VERDICT: INCLUDE ALL 58 published Release bodies**, and fix the frontmatter-strip so the three YAML-leak bodies can emit. Supersedes D-4747-A's 39.
+
+**Why the cohort moved from 39 to 58: this milestone authors the extra 19.** #3698's link-repair commit `b8db817e` rewrites an outbound relative link inside **37** of the 100 migrated notes (not all 100 — the 100-file move is a pure rename; only 37 carry a link that needed depth repair). Of those 37, **32** have a published Release: **13** were already drifted at `origin/main`, **19** are NEWLY drifted at the branch tip, **0** still MATCH. The set of new-drift versions minus the set `b8db817e` rewrote is **empty**, so `b8db817e` is the sole author of Cohort C. `strip_frontmatter(note)` is therefore **not** byte-identical across the migration.
+
+| Cohort | Count | Origin |
+|---|---:|---|
+| A | 26 | deferred structural / content-tail / whitespace population this card already owned |
+| B | 13 | ADR-092 plan re-identification rewrote the note and never re-emitted Surface 1 |
+| **C** | **19** | **authored by this release** — `b8db817e`'s link repair inside the moved notes |
+| **Total** | **58** | 39 (A+B) is a strict SUBSET of 58; A∪B∪C reconciles with no overlap |
+
+**Consequences that bind Stage 12:**
+
+1. **AC4 grades against 58**, not 39. Emitting 39 leaves 19 bodies drifted — precisely the outcome this decision was rendered to prevent.
+2. **The `#3698 → #4747` SERIALIZE edge is now load-bearing on CONTENT, not only on evidence.** A pre-merge `--execute` publishes the pre-repair links and the very next merge re-drifts every one of the 19. Stage 5's **IAC-3** ("emitted bytes are ordering-invariant") is **discharged as FALSIFIED**.
+3. **The frontmatter strip must be fixed before emit.** `v1.08` / `v1.09` / `v1.10` carry a line before their opening `---`, so the shipped `sed` range ends on the OPENING delimiter and the whole YAML block survives into the body. Emitting them publishes raw frontmatter — the §5.1 defect this card exists to repair, reintroduced by the repair. The pre-execute gate's **A4** arm blocks on exactly these three.
+
+**Reversibility:** MODERATE / confidence HIGH. **Source:** operator, sub-task #5780, 2026-08-22 (Saturday).
 
 ---
 
@@ -130,7 +157,7 @@ The A-prime migration breaks the moved notes' **own outbound relative links**. A
 |---|---|---|
 | #4321 | AC3 | Not dischargeable as written — its named third surface has 0 markdown links and 11 bare prose tokens; no link checker resolves a bare token. **Re-scope to the link population (404 links).** |
 | #4748 | AC3 | **Scope to the two named sites plus a regression arm** — the live claim-shape population is larger and most instances are legitimate claims about other pairs. |
-| #4747 | AC4 | Follows D-4747-A: full-population zero DRIFT across **all 39**. |
+| #4747 | AC4 | Follows **D-4747-D**: full-population zero DRIFT across **all 58** (A 26 + B 13 + C 19). *Amended at Stage 6 — D-4747-A's 39 is superseded.* |
 | CIAC-4 + FCM | path | Names `core/config/allowlists/skip-doc-link-check-ci.txt`; **the live path is `core/deploy/allowlists/skip-doc-link-check-ci.txt`** (hub-verified: 1740-file control arm, exactly 1 match). CIAC-4 cannot be graded until corrected. |
 
 ### Trap carried to Engineering
@@ -190,8 +217,10 @@ release/tools/check-release-links.py               edit   # delete the note/plan
 core/deploy/allowlists/doc-link-target-paths.txt   edit   # reconcile the CHANGELOG routing rationale; KEEP the release/releases/ exclusion
 core/rules/doc-link-maintenance.md                 edit   # strike the instance-side CHANGELOG clause — MIRROR-PAIR, re-sync or Check 9 fails
 
-# ── #4747 — external surface + captures ──
-release/releases/_captures/<date>-release-body-reemit/*.published.txt   add   # capture-before-overwrite, one per re-emitted version (AC2)
+# ── #4747 — external surface + captures + the pre-execute gate ──
+release/releases/_captures/<date>-release-body-reemit/*.published.txt   add   # capture-before-overwrite, one per re-emitted version (AC2) — 58 files (D-4747-D)
+release/tools/preflight-release-body-reemit.py                         add   # the pre-execute gate: 5 fail-closed arms, derived aggregate verdict, 50-assertion self-test
+release/tools/reemit-release-bodies.sh                                 edit  # --execute INVOKES the gate (exit 4 on refusal); self-test Case T keeps it wired. Distinct region from #3698's D-7 comment reconcile below
 
 # ── Wave 1 independents ──
 core/ADRs/ADR-112-decision-time-adherence-trigger-layer.md   edit   # 4748 claim site 1
@@ -222,7 +251,7 @@ CLAUDE.md                                 NOT EDITED
 core/governance/OPERATIONS.md             NOT EDITED
 ```
 
-**External (non-file) change surface — #4747.** **39** published GitHub Release bodies re-emitted via `gh release edit`. These are not repository files and carry no FCM row; they are recorded here so the matrix is not read as the release's complete change surface.
+**External (non-file) change surface — #4747.** **58** published GitHub Release bodies re-emitted via `gh release edit` (**D-4747-D**; was 39 under the superseded D-4747-A). These are not repository files and carry no FCM row; they are recorded here so the matrix is not read as the release's complete change surface.
 
 ---
 
@@ -235,6 +264,7 @@ core/governance/OPERATIONS.md             NOT EDITED
 | `CHANGELOG.md` | **#4321** (write) · #3698 (repairs 80 of 84 by rename, edits nothing) | single writer | No conflict — #3698 contributes zero `CHANGELOG.md` edits. |
 | `release/releases/RELEASE_LOG_ARCHIVE-*.md` | #4323 (`-v2`, `-v3`) · #5192 (`-version-less`) · **#3698** (`-v1`, 4 D-5 occurrences) | **disjoint files** | **No contention.** Three writers, three disjoint archive segments. |
 | `core/deploy/tools/generate_release_index.py` | **#3698** (D-5 path + D-7 comment) | single writer | Both edits land in #3698's commits. |
+| `release/tools/reemit-release-bodies.sh` | **#3698** (D-7 comment reconcile) · **#4747** (pre-execute gate wiring, added at Stage 6) | 2 writers, **disjoint regions** | No conflict. #3698 edits the NOTE-RESOLUTION rationale comment; #4747 adds a header block, a `PREFLIGHT_TOOL` config line, the `--execute` gate, and self-test Case T. Stage 6 is write-serialized, so the two land in sequence on one branch. |
 
 **Cross-PR contention.** Measured at `6d0e2080`: PR #5765 (`operational-folder-enforcement-migration`) **MERGED** 2026-08-22; the Stage-4 `EDITSET ∩ FCM = ∅` finding survives the merge — the 7 commits between the Stage-4 pin and the Stage-5 pin touch none of #3698's change set.
 
@@ -271,13 +301,27 @@ core/governance/OPERATIONS.md             NOT EDITED
 5. `python3 core/deploy/tools/generate_release_index.py --verify` → 0 `notes_link` findings.
 6. `./deploy.sh --check` → confirm Check 9 (mirror byte-identity) and Check 14 both clean.
 
+### #4747 — Stage-12 execution sequence
+
+**Read this as the execution contract. The cohort is 58 (D-4747-D), not 39.**
+
+1. **#3698 must already be merged to `origin/main`.** The `#3698 → #4747` edge is a SERIALIZE edge and it is load-bearing on CONTENT (D-4747-D consequence 2). A pre-merge `--execute` publishes the pre-repair links and the next merge re-drifts all 19 of Cohort C.
+2. **Fix the frontmatter strip** so `v1.08` / `v1.09` / `v1.10` do not publish raw YAML. The gate's A4 arm blocks until this lands.
+3. **Capture all 58 bodies**, commit, and **merge the captures to `origin/main`**. On-disk captures are not durable; the gate's A3 arm proves durability with `git cat-file` at the ref. `capture-release-bodies.sh` is currently blocked to agent-side invocation by `BLOCK-DESTRUCTIVE-022`; that gap is owned and scheduled under **#5227**. Until it clears, this step is operator-side.
+4. **Run the gate**, and read every arm:
+   `python3 release/tools/preflight-release-body-reemit.py --capture-dir release/releases/_captures/<dated-dir> <58 versions>`
+   Exit 0 is the only value that authorizes step 5. Paste the output into the execution record.
+5. **Emit.** `./reemit-release-bodies.sh --execute <capture-dir> <58 versions>` — this **re-runs the gate itself** and refuses with exit 4 if it does not pass, so step 4 is a read-the-arms rehearsal, not the only barrier.
+6. **Re-probe the full population** for AC4: 0 DRIFT across all 58, tally reconciled, both arms reported.
+7. **Render AC6** on `RELEASE_BODY_DRIFT_CHECK_CUTOFF` — decide or decline, but record it. Measured input: 13 of the 58 sit at or above the current `v3.78` cutoff, across 59 logged releases; 45 sit below it and are invisible to CI today. Re-emitting the cohort turns Check 47 green **without** touching the cutoff. Lowering it **before** the re-emit would arm the gate against 45 knowingly-red bodies.
+
 ### Release-level
 
 | Issue | Verification method class | Expected result |
 |---|---|---|
 | #3698 | file-content / system-state assertion | `notes/*/` enumeration and the standard's rule agree; all four subfolders dispositioned; 0 unresolved links inside the movers |
 | #4321 | evaluate predicate against current state | link sweep resolves 100% of the **live** denominator (never a hardcoded 161/165/166), both arms reported |
-| #4747 | reproduction-and-observe (network sweep) | full-population drift sweep returns 0 DRIFT across **all 39**, tally reconciles, both arms reported |
+| #4747 | reproduction-and-observe (network sweep) | full-population drift sweep returns 0 DRIFT across **all 58** (D-4747-D), tally reconciles, both arms reported |
 | #4323 | file-content assertion | shape-A + shape-B probes return 0 across all 5 surfaces; 63 correct-form occurrences survive |
 | #5192 | file-content assertion + external oracle | body no longer claims a tag; `git tag -l` confirms none exists |
 | #4748 | evaluate predicate (shingle measurement) | the two named sites corrected; regression arm holds; register entry resolves to both headings |
@@ -292,10 +336,10 @@ core/governance/OPERATIONS.md             NOT EDITED
 | # | Risk | Owner | Likelihood | Impact | Mitigation | Reversibility |
 |---|---|---|---|---|---|---|
 | **R1** | **#4321 AC3 unreachable as written** — its named third surface is a token population no link checker resolves. | #4321 | Certain (measured) | Gate FAIL at S8 | **AC amended at Collective Review** — re-scoped to the link population (404 links). | CHEAP |
-| **R2** | **#4747's cohort was under-scoped at 26.** | #4747 | Certain (measured) | Wrong scope, AC4 unpassable | **D-4747-A: all 39.** | MODERATE |
+| **R2** | **#4747's cohort was under-scoped at 26, then at 39.** The second under-scope is self-inflicted: this release authors 19 more bodies than it started with. | #4747 | Certain (measured) | Wrong scope, AC4 unpassable | **D-4747-D: all 58** (A 26 + B 13 + C 19), superseding D-4747-A's 39. | MODERATE |
 | **R3** | A corpus-wide probe for #4748's claim phrase returns 3, not 2. | #4748 | Medium | False FAIL | Scope the probe to the two named claim sites plus a regression arm. | CHEAP |
 | **R4** | Migrate-flat leaves four recursive consumers carrying rationale prose that names the `v1\|v2\|v3` layout. | #3698 | High | Stale prose | D-7 reconciles the four comments in the same change; the recursion itself is **retained** (it still serves `_unversioned/`). | CHEAP |
-| **R5** | Re-emitting published Release bodies reaches outside the repo and is not `git revert`-able. | #4747 | Low | Public surface | Capture-before-overwrite under `release/releases/_captures/` (AC2). Hard gate at Stage 12. | **MODERATE** |
+| **R5** | Re-emitting published Release bodies reaches outside the repo and is not `git revert`-able. | #4747 | Low | Public surface | Capture-before-overwrite under `release/releases/_captures/` (AC2), **enforced on the mechanism**: `--execute` invokes `preflight-release-body-reemit.py` and refuses (exit 4) unless its A3 arm proves every capture DURABLE at `origin/main`. No skip flag. | **MODERATE** |
 | **R6** | Retiring the CHANGELOG allowlist entry red-fails CI if any note link remains broken at merge. | #4321 | Medium | Blocked merge | Retire only after the link sweep is green; the fail-closed demonstration is the proof. | CHEAP |
 | **R7** | #5271 edits land inside executable test files. | #5271 | Low | Silent test break | Stage 7 retained; run both suites before and after. | CHEAP |
 | **R8** | **100-file rename buries the substantive edits.** | #3698 | Medium | Weak S9 review | **Pure-rename commit, zero content edits**, so `--find-renames` renders it compactly. Verified `0 0` numstat on all 100 rows. | CHEAP |
@@ -335,9 +379,13 @@ core/governance/OPERATIONS.md             NOT EDITED
 | All in-repo file changes | `git revert -m 1` of the single release-PR merge commit | **CHEAP** |
 | The 100-note migration | Reverted by the same merge revert; the pure-rename commit reverts cleanly under `--find-renames` | **CHEAP** |
 | Retired allowlist entry / re-armed check | Restored by the same revert; CI returns to its prior suppressed state | **CHEAP** |
-| **39 published Release bodies (#4747)** | **NOT git-revertible** — restore each from its pre-edit capture under `release/releases/_captures/` via `gh release edit` | **MODERATE** |
+| **58 published Release bodies (#4747)** | **NOT git-revertible** — restore each from its pre-edit capture under `release/releases/_captures/` via `gh release edit` | **MODERATE** |
 
 **Rollback-infeasibility statement.** The published-body layer is the only component whose rollback depends on an artifact this release must itself create. If captures are not written before overwrite, that layer becomes **IRREVERSIBLE**. Capture-before-overwrite is therefore a hard gate at Stage 12 Execute, not a best practice.
+
+**The capture population is 58, and the Part A directories are not a substitute.** `release/releases/_captures/2026-08-05-release-body-precapture-partA-ext` already holds captures for 18 of this cohort's versions. They capture the **pre-Part-A** body, all 18 of those foldered versions **aborted** without being overwritten, and the state they describe has since been superseded by this release's note migration. A fresh capture is required for all 58.
+
+**The gate is now on the mechanism.** `reemit-release-bodies.sh --execute` invokes `release/tools/preflight-release-body-reemit.py` itself before the first mutation and refuses (exit 4) unless it passes. Its **A3** arm proves each capture is DURABLE at `origin/main` via `git cat-file` — on-disk existence is not durability — so a capture living only in a working tree cannot satisfy the rollback layer. There is no skip flag.
 
 ---
 
@@ -349,9 +397,10 @@ core/governance/OPERATIONS.md             NOT EDITED
 | D-ReleaseClass | `routine` → `novel` | 2026-08-21 | CHEAP / HIGH |
 | D-4747-Posture | Accept the G-PL4 pass-through on the 26-body count | 2026-08-21 | CHEAP / MEDIUM |
 | **D-3698** | **A-prime — class-scoped migrate-flat** | 2026-08-22 | MODERATE / HIGH |
-| **D-4747-A** | **ALL 39 bodies** (Cohort A 26 + Cohort B 13) | 2026-08-22 | MODERATE / HIGH |
+| **D-4747-A** | **ALL 39 bodies** (Cohort A 26 + Cohort B 13) — **SUPERSEDED by D-4747-D** | 2026-08-22 | MODERATE / HIGH |
 | **D-3698-amend** | **ABSORB the 75 link rewrites into #3698** | 2026-08-22 | CHEAP / HIGH |
 | **D-ScopeLock** | **Scope locked at 9 cards; 4 ACs amended; route Stage 6** | 2026-08-22 | MODERATE / HIGH |
+| **D-4747-D** | **ALL 58 bodies** (A 26 + B 13 + **C 19, authored by this release**), and fix the frontmatter-strip so `v1.08` / `v1.09` / `v1.10` can emit. **This is the operative scope for Stage 12.** | 2026-08-22 | MODERATE / HIGH |
 
 ### Open at plan time — resolve at Stage 12
 
@@ -377,6 +426,9 @@ This plan therefore carries the token in its Header **Version** cell, which is t
 | 10 | Waves 2 → 3 are two merges | **One branch, one PR, one merge** — four of five intermediate tree states are red | #4321 Stage-5 state matrix |
 | 11 | CIAC-4 names `core/config/allowlists/skip-doc-link-check-ci.txt` | **`core/deploy/allowlists/skip-doc-link-check-ci.txt`** | Collective Review |
 | 12 | CHANGELOG `[Full notes]` denominator 161 → 165 | **166** at `6d0e2080`; broken count unchanged at **84**. No denominator is hardcoded in any AC. | #4321 Stage-5 design |
+| 13 | #4747 cohort = **39** (row 5 above) | **58** — A 26 + B 13 + **C 19**. Cohort C is authored by this release: `b8db817e` rewrites an outbound link in 37 of the 100 migrated notes; 32 of the 37 have a published Release; 19 of those newly drift at the branch tip. 39 is a strict subset of 58. | **D-4747-D**, 2026-08-22 (operator, sub-task #5780) |
+| 14 | #4747 delivers one FCM row (the captures) | **Plus two tool files** — `release/tools/preflight-release-body-reemit.py` (new, the pre-execute gate) and an edit to `release/tools/reemit-release-bodies.sh` wiring the gate into `--execute`. Both are recorded in the FCM at § File Change Matrix. | Stage 6 remediation, 2026-08-22 |
+| 15 | "`b8db817e` rewrites one outbound-link line inside **every** moved note" | **FALSE — 37 of 100.** The conclusion it supported (Cohort C = 19, `b8db817e` is its sole author) is nonetheless correct and was re-derived independently. Corrected at every site in this plan; the claim also stands uncorrected in two issue comments, which are operator-owned. | Stage 7 Dev Testing F-07, sub-task #5781 |
 
 ---
 
