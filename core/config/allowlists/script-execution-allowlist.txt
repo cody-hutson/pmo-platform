@@ -207,6 +207,36 @@ release/tools/compute-close-class-telemetry.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/audit-epic-rollup-close.sh
 ./release/tools/audit-epic-rollup-close.sh
 release/tools/audit-epic-rollup-close.sh
+# The three published-Release-body tools — the § 5.1 body-drift verifier, the
+# pre-overwrite capture, and the § 5.6 re-emitter. All three ship in this repo, all
+# three carry a --self-test on the committed coverage floor, and all three are invoked
+# agent-side: the verifier by the Stage 13 close-out's post-emit phase and by anyone
+# reproducing the standing deploy Check, the capture as the mandatory pre-overwrite
+# reversibility control, the re-emitter in dry-run at Engineering and with --execute at
+# the Execute stage. They carried ZERO rows, so every agent-side invocation was
+# BLOCK-DESTRUCTIVE-022-blocked (observed live: an Engineering spoke was refused on the
+# verifier and again on the capture, which is the release's own reversibility control —
+# the block landed on the one step whose absence makes the mutation irreversible).
+# Registration, not exemption: these are governed repo tools, and the alternative paths
+# — a hand-rolled `gh release edit` loop, or a bypass — are the two dispositions the
+# re-emit design explicitly forbids, because a hand-rolled loop is what damaged two of
+# the published bodies the re-emitter exists to repair.
+# (CI runs no Claude hooks; these rows are for the agent-side path, not the workflow.)
+[PMO_PLATFORM_ROOT]/release/tools/check-release-body-drift.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/check-release-body-drift.sh
+./release/tools/check-release-body-drift.sh
+release/tools/check-release-body-drift.sh
+*/release/tools/check-release-body-drift.sh
+[PMO_PLATFORM_ROOT]/release/tools/capture-release-bodies.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/capture-release-bodies.sh
+./release/tools/capture-release-bodies.sh
+release/tools/capture-release-bodies.sh
+*/release/tools/capture-release-bodies.sh
+[PMO_PLATFORM_ROOT]/release/tools/reemit-release-bodies.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/reemit-release-bodies.sh
+./release/tools/reemit-release-bodies.sh
+release/tools/reemit-release-bodies.sh
+*/release/tools/reemit-release-bodies.sh
 # test_corpus_home_tolerance.sh — corpus-home adapter tolerance conformance suite
 # (CH-1..CH-4 of release/references/standards/corpus-home-adapter-constraints.md).
 # Runs in the closeout-smoke CI job AND is invoked agent-side at Stage 7 Dev Testing
