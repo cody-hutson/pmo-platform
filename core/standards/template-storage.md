@@ -154,7 +154,9 @@ Template Architecture (this initiative) and Project Data Architecture (abbreviat
 When a new template enters the canonical registry, OR a new skill consumes a canonical template or standards doc:
 
 1. Add the source file to its canonical home (`operations/templates/<file>` for templates; `core/standards/template-<aspect>.md` for template-architecture standards docs; `core/standards/<file>` for a shared standards doc that is single-sourced across skills, e.g. `output-format.md`, `operational-artifacts.md`).
-2. Add a `TEMPLATE_SYNC_MAP` entry in [`deploy.sh`](../deploy/deploy.sh) — colon-delimited 3-tuple `<skill>:<canonical-filename>:<target-path-relative-to-skill-root>` — one entry per consumer skill. (No SKILL.md edit is required for the registration itself; this is a deploy.sh edit, not a skill-internal edit. SKILL.md modifications, when also needed, route through `pmo-skill-editor` per [`.claude/rules/skill-deployment.md`](../rules/skill-deployment.md).)
+2. Add a `TEMPLATE_SYNC_MAP` entry in [`deploy.sh`](../deploy/deploy.sh) — colon-delimited 3-tuple `<skill>:<canonical-ref>:<target-path-relative-to-skill-root>` — one entry per consumer skill. (No SKILL.md edit is required for the registration itself; this is a deploy.sh edit, not a skill-internal edit. SKILL.md modifications, when also needed, route through `pmo-skill-editor` per [`.claude/rules/skill-deployment.md`](../rules/skill-deployment.md).)
+   **Field 2 (`<canonical-ref>`) is a bare filename OR a repo-relative subpath** under the resolver's default home (`operations/templates/`). The default arm concatenates without a basename constraint, so `project-bins/1-governance/README.md` resolves to `operations/templates/project-bins/1-governance/README.md` — no new arm, no grammar change. **The key is the whole of field 2, not its basename**, and no consumer reduces it to one; entries sharing a basename (five `README.md`, five `manifest.yml`) are therefore distinct keys, not a collision. Use a **bare filename** when the canonical sits directly in its home; use a **subpath** when it lives in a subdirectory of that home and the subtree is registered file-by-file. Field 3 is independent of this choice: it may target a skill-local `references/` path, or — per ADR-104 — the canonical's own repo-relative path when the consuming skill cites that path and needs it to resolve from the package root.
+
 3. **If the canonical filename matches neither the `*-template.{md,csv}` nor the `template-*.md` pattern** (the resolver's default routes anything else to `operations/templates/`), add an explicit basename to `resolve_template_sync_source()` in `deploy.sh` AND to its byte-aligned mirror `resolve_canonical_source()` in `build-skill-packages.sh`, mapping the basename to its canonical home. The narrow explicit-basename rule is deliberate — never a broad "non-template → `core/standards/`" catch-all.
 4. Document the entry in §7 of this doc (Registered Mirrors).
 5. Run `./deploy.sh --deploy <skill>` to perform the initial sync.
@@ -205,12 +207,29 @@ Per R-NEW1 Option A (approved at Collective Review 2026-05-10). 6 consumer skill
 
 ### §7.3 Shared standards-doc mirrors (8 entries — single-sourced shared references)
 
-Two shared standards docs — formerly carried as per-skill `references/` duplicate copies held identical by discipline alone — consolidated to single canonicals at `core/standards/` and registered in `TEMPLATE_SYNC_MAP` (the single-source-shared-references + enforced-rebuild work; provenance in §9). Consumer counts differ per doc (not a clean N×M product), so the entries are listed explicitly rather than as an arithmetic product. Total standards-doc mirror entries across §7.2 + §7.3 = 18 + 8 = 26; total map entries (template mirrors + standards-doc mirrors) = 21 + 26 = 47.
+Two shared standards docs — formerly carried as per-skill `references/` duplicate copies held identical by discipline alone — consolidated to single canonicals at `core/standards/` and registered in `TEMPLATE_SYNC_MAP` (the single-source-shared-references + enforced-rebuild work; provenance in §9). Consumer counts differ per doc (not a clean N×M product), so the entries are listed explicitly rather than as an arithmetic product. Total standards-doc mirror entries across §7.2 + §7.3 = 18 + 8 = 26. **The map's total entry count is deliberately not restated here** — read it live from `${#TEMPLATE_SYNC_MAP[@]}` in `deploy.sh`, which Check 13 enumerates on every run. A hardcoded total drifts on the next registration and cannot be enforced; the previously stated figure had already gone stale against the live array.
 
 | Standards doc | Consumer skills | Target path (under each skill root) | Status |
 |---|---|---|---|
 | `output-format.md` | comms-writer, change-management, delivery-engine, pmo-process-designer, pmo-technical-analyst, ppm-agent (6) | `references/output-format.md` | LANDED |
 | `operational-artifacts.md` | comms-writer, ppm-agent (2) | `references/operational-artifacts.md` | LANDED |
+
+### §7.4 Bin orientation-card mirrors (11 entries — subpath-keyed)
+
+The five project bins and the transient `_inbox/` area each carry an orientation card — a `README.md` per area plus a `manifest.yml` per content bin — copied into every scaffolded project from the canonical tree at `operations/templates/project-bins/`. `_generated/` is a transient control folder, not a content bin: it has no card and no entry, so the set is **11**, not 12.
+
+Two shape choices here are deliberate and differ from §7.1–§7.3:
+
+- **Field 2 is a subpath, not a bare filename** (`project-bins/<bin>/README.md`). The resolver's default arm concatenates, so the subpath resolves to the canonical with no new arm; and because the key is the whole of field 2, the five `README.md` and five `manifest.yml` entries are distinct keys rather than a basename collision. See §6 step 2.
+- **Field 3 is the canonical's repo-relative path, not a `references/` path** — the same shape as the `tracker-manager` entry and for the same reason (ADR-104). The scaffold step in `project-initiator` and the two bin-manifest assertions in `file-router` both name `operations/templates/project-bins/<bin>/`; injecting at that path makes those citations resolve verbatim from the deployed package root, instead of naming a path the package does not carry. One path vocabulary, true in the repo and true in the package.
+
+| Canonical subtree | Entries | Target path (under skill root) | Status |
+|---|---|---|---|
+| `project-bins/{1-governance,2-delivery,3-operations,4-evidence,5-reference}/README.md` | 5 | `operations/templates/project-bins/<bin>/README.md` | LANDED |
+| `project-bins/{1-governance,2-delivery,3-operations,4-evidence,5-reference}/manifest.yml` | 5 | `operations/templates/project-bins/<bin>/manifest.yml` | LANDED |
+| `project-bins/_inbox/README.md` | 1 | `operations/templates/project-bins/_inbox/README.md` | LANDED |
+
+Consumer skill for all 11: `project-initiator`. Check 13 holds each injected copy byte-identical to its canonical at the deployed target, which is what makes the per-project copy safe to take verbatim.
 
 ## §8 Dedup Direction
 
