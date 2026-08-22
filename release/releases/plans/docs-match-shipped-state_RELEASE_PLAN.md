@@ -137,6 +137,52 @@ Single branch, serial commits, dependency order.
 
 **Reversibility:** MODERATE / confidence HIGH. **Source:** operator, sub-task #5780, 2026-08-22 (Saturday).
 
+### Cohort C — per-version shape record (discharges AC1 for the 19)
+
+AC1 asks for *"the version list with each version's shape — structural / content-tail / whitespace"*. Stage 5's D-1 supplied that for Cohort A (10 single-line · 14 multi-line structural · 2 whitespace) and Cohort B (13). D-4747-D supplied Cohort C's **count and cause** but not its shapes. This is the missing record. It is **derived, never hardcoded**: the cohort is re-computed from `b8db817e`'s file list each time, and the classifier below is a rule, not a table.
+
+**Derivation.** `b8db817e` rewrites **37** notes. Per-version verdict at `origin/main` vs the branch tip: **19 newly drifted · 13 already drifted at main · 0 still MATCH · 5 no published Release = 37**, balanced. Reproduces D-4747-D on every cell.
+
+**Classifier**, applied in order to the trailing-newline-normalised pair *(published body, `strip_frontmatter(branch-tip note)`)* — the same normalisation `check-release-body-drift.sh` applies (accepted-residual AR-1):
+
+| # | Test | Shape |
+|---|---|---|
+| 1 | byte-equal | MATCH — not in the cohort |
+| 2 | identical token sequence | **whitespace** |
+| 3 | one body is a strict prefix of the other | **content-tail** |
+| 4 | exactly one 1↔1 replace opcode | **structural (single-line)** |
+| 5 | otherwise | **structural (multi-line)** |
+
+**All 19 classify as `structural (single-line)`** — one line replaced per version, the outbound relative-link depth repair (`../../` → `../`) that `b8db817e` performed. The shape is uniform because the cause is: a single mechanical rewrite applied once per note.
+
+| Version | Shape | Line replaced | Published → note-body delta |
+|---|---|---:|---:|
+| `v1.07` | structural (single-line) | 46 | −6 |
+| `v1.11` | structural (single-line) | 48 | −6 |
+| `v1.13` | structural (single-line) | 53 | −6 |
+| `v1.16` | structural (single-line) | 47 | −6 |
+| `v1.19` | structural (single-line) | 34 | −6 |
+| `v1.20` | structural (single-line) | 39 | −6 |
+| `v1.21` | structural (single-line) | 36 | −6 |
+| `v1.22` | structural (single-line) | 45 | −6 |
+| `v1.23` | structural (single-line) | 40 | −6 |
+| `v1.24` | structural (single-line) | 38 | −3 |
+| `v2.04` | structural (single-line) | 37 | −6 |
+| `v2.09` | structural (single-line) | 41 | −6 |
+| `v2.14` | structural (single-line) | 38 | −6 |
+| `v2.15` | structural (single-line) | 51 | −6 |
+| `v2.18` | structural (single-line) | 46 | −6 |
+| `v2.22` | structural (single-line) | 36 | −6 |
+| `v2.25` | structural (single-line) | 39 | −6 |
+| `v2.26` | structural (single-line) | 33 | −6 |
+| `v2.36` | structural (single-line) | 49 | −11 |
+
+**A uniform result needs a control arm, or it is a broken classifier.** Two fired. (1) The same classifier over the **13 already-drifted** versions from the same commit returns **13 multi-line structural**, 0 single-line — so it is not answering "single-line" to everything. (2) Driven over synthetic pairs, all five branches are reachable: MATCH, whitespace, content-tail, single-line, multi-line — **5 of 5**. Neither `whitespace` nor `content-tail` has a member in Cohort C; both remain live classes with members elsewhere in the population (`whitespace` has 2 in Cohort A).
+
+**What this does and does not discharge.** It discharges **AC1** for the 19: every cohort member now carries a per-version shape from a live sweep. It does **not** discharge **AC3**, which asks for a per-version *disposition* — that is produced against the dry-run diff at Stage 12 and is separately flagged as not gradeable as written.
+
+**Consequence for Stage 12.** All 19 are the same mechanical shape, so D-2's per-body-judgement obligation does not attach to any of them; they take the mechanical lane. The 3 lead-in versions (`v1.08` / `v1.09` / `v1.10`) are **not** in Cohort C — they are already-drifted at main, and their blocker was the frontmatter strip, repaired in this release.
+
 ---
 
 ## Decision Record — Collective Review scope-lock (rendered 2026-08-22, operator)
@@ -219,8 +265,9 @@ core/rules/doc-link-maintenance.md                 edit   # strike the instance-
 
 # ── #4747 — external surface + captures + the pre-execute gate ──
 release/releases/_captures/<date>-release-body-reemit/*.published.txt   add   # capture-before-overwrite, one per re-emitted version (AC2) — 58 files (D-4747-D)
-release/tools/preflight-release-body-reemit.py                         add   # the pre-execute gate: 5 fail-closed arms, derived aggregate verdict, 50-assertion self-test
-release/tools/reemit-release-bodies.sh                                 edit  # --execute INVOKES the gate (exit 4 on refusal); self-test Case T keeps it wired. Distinct region from #3698's D-7 comment reconcile below
+release/tools/preflight-release-body-reemit.py                         add   # the pre-execute gate: 5 fail-closed arms, derived aggregate verdict, 69-assertion self-test. A3 asserts capture CORRESPONDENCE (SHA-256 vs the live published body), not presence; strip model tracks the repaired transform
+release/tools/reemit-release-bodies.sh                                 edit  # --execute INVOKES the gate (exit 4 on refusal); self-test Case T keeps it wired. ALSO the §5.1 strip repair (D-4747-D limb 2). Distinct region from #3698's D-7 comment reconcile below
+release/tools/check-release-body-drift.sh                              edit  # the same §5.1 strip repair — this tool is the emitter's post-edit verifier, so the two transforms must move together or a correct emit reports DRIFT forever
 
 # ── Wave 1 independents ──
 core/ADRs/ADR-112-decision-time-adherence-trigger-layer.md   edit   # 4748 claim site 1
@@ -306,8 +353,9 @@ core/governance/OPERATIONS.md             NOT EDITED
 **Read this as the execution contract. The cohort is 58 (D-4747-D), not 39.**
 
 1. **#3698 must already be merged to `origin/main`.** The `#3698 → #4747` edge is a SERIALIZE edge and it is load-bearing on CONTENT (D-4747-D consequence 2). A pre-merge `--execute` publishes the pre-repair links and the next merge re-drifts all 19 of Cohort C.
-2. **Fix the frontmatter strip** so `v1.08` / `v1.09` / `v1.10` do not publish raw YAML. The gate's A4 arm blocks until this lands.
+2. **Fix the frontmatter strip** — **ALREADY DONE at Stage 6** (D-4747-D limb 2; Deviation Log rows 16–17). Both executables now run `sed -n '/^---$/,$p'` before the shipped idiom, and A4 is green across all 195 corpus notes. No action remains at Stage 12; the step is retained so the sequence still reconciles.
 3. **Capture all 58 bodies**, commit, and **merge the captures to `origin/main`**. On-disk captures are not durable; the gate's A3 arm proves durability with `git cat-file` at the ref. `capture-release-bodies.sh` is currently blocked to agent-side invocation by `BLOCK-DESTRUCTIVE-022`; that gap is owned and scheduled under **#5227**. Until it clears, this step is operator-side.
+   > **A3 now also requires the capture to be CURRENT**, not merely durable — SHA-256-identical to the body GitHub publishes at gate time. Two operational consequences. (a) **Capture and emit are one window.** If any body in the cohort is edited between the capture and the gate run, A3 blocks that version as `STALE` and names it; the repair is a NEW dated capture directory, never an overwrite (`capture-release-bodies.sh` refuses to overwrite, and that refusal is correct). Keep the capture → commit → merge → gate → emit sequence tight, and re-run the gate — never reuse an earlier run's exit 0. (b) **The Part A directories can never satisfy A3.** All 29 of their captures are stale against today's bodies; pointing `--capture-dir` at one now yields `A3 BLOCK — 29 STALE` rather than the `A3 PASS` the pre-repair arm printed.
 4. **Run the gate**, and read every arm:
    `python3 release/tools/preflight-release-body-reemit.py --capture-dir release/releases/_captures/<dated-dir> <58 versions>`
    Exit 0 is the only value that authorizes step 5. Paste the output into the execution record.
@@ -385,7 +433,7 @@ core/governance/OPERATIONS.md             NOT EDITED
 
 **The capture population is 58, and the Part A directories are not a substitute.** `release/releases/_captures/2026-08-05-release-body-precapture-partA-ext` already holds captures for 18 of this cohort's versions. They capture the **pre-Part-A** body, all 18 of those foldered versions **aborted** without being overwritten, and the state they describe has since been superseded by this release's note migration. A fresh capture is required for all 58.
 
-**The gate is now on the mechanism.** `reemit-release-bodies.sh --execute` invokes `release/tools/preflight-release-body-reemit.py` itself before the first mutation and refuses (exit 4) unless it passes. Its **A3** arm proves each capture is DURABLE at `origin/main` via `git cat-file` — on-disk existence is not durability — so a capture living only in a working tree cannot satisfy the rollback layer. There is no skip flag.
+**The gate is now on the mechanism.** `reemit-release-bodies.sh --execute` invokes `release/tools/preflight-release-body-reemit.py` itself before the first mutation and refuses (exit 4) unless it passes. Its **A3** arm proves each capture is DURABLE at `origin/main` via `git cat-file` — on-disk existence is not durability — so a capture living only in a working tree cannot satisfy the rollback layer. Since the Stage-6 remediation it also proves each capture is **CURRENT**: SHA-256-identical to the body GitHub publishes at gate time, read with the same `gh release view … --jq .body` command that wrote the capture. Durability alone proved the capture was a committed *file*; currency is what makes it a *rollback source*. A live body that cannot be read is a BLOCK, never a pass. There is no skip flag.
 
 ---
 
@@ -429,6 +477,8 @@ This plan therefore carries the token in its Header **Version** cell, which is t
 | 13 | #4747 cohort = **39** (row 5 above) | **58** — A 26 + B 13 + **C 19**. Cohort C is authored by this release: `b8db817e` rewrites an outbound link in 37 of the 100 migrated notes; 32 of the 37 have a published Release; 19 of those newly drift at the branch tip. 39 is a strict subset of 58. | **D-4747-D**, 2026-08-22 (operator, sub-task #5780) |
 | 14 | #4747 delivers one FCM row (the captures) | **Plus two tool files** — `release/tools/preflight-release-body-reemit.py` (new, the pre-execute gate) and an edit to `release/tools/reemit-release-bodies.sh` wiring the gate into `--execute`. Both are recorded in the FCM at § File Change Matrix. | Stage 6 remediation, 2026-08-22 |
 | 15 | "`b8db817e` rewrites one outbound-link line inside **every** moved note" | **FALSE — 37 of 100.** The conclusion it supported (Cohort C = 19, `b8db817e` is its sole author) is nonetheless correct and was re-derived independently. Corrected at every site in this plan; the claim also stands uncorrected in two issue comments, which are operator-owned. | Stage 7 Dev Testing F-07, sub-task #5781 |
+| 16 | #4747's tool surface is two files (row 14) | **Three.** `release/tools/check-release-body-drift.sh` also takes the §5.1 strip repair. It is the emitter's post-edit verifier: if only the emitter's transform were fixed, a correctly-emitted body would compare against the verifier's unrepaired one and report DRIFT on every run. The two are one transform and must move together. | Stage-6 remediation pass 2 |
+| 17 | D-4747-D limb 2 ("fix the frontmatter-strip") not implemented at the branch tip | **Implemented.** Both executables now run `sed -n '/^---$/,$p'` before the shipped `1,/^---$/d; …` idiom, and the gate's A4 model tracks it. Strict composition, so 192 of 195 corpus notes compute byte-identical bodies; the 3 that change are exactly `v1.08` / `v1.09` / `v1.10`. YAML-leaking bodies 3 → 0, EMPTY bodies 0 → 0. **Not the portability defect** — that is a different defect in the same idiom, tracked separately, and stage 2 retains the idiom verbatim. | Stage-6 remediation pass 2 |
 
 ---
 
