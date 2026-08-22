@@ -22,12 +22,18 @@ honoring the two CHECK-constrained enums:
                        working-context, historical-record}
 
 CLASSIFICATION (folder-driven, per agent-processing-contracts.md Skill 1 +
-frontmatter-schema.md Category 6):
-  * domain           from the folder's NN- prefix   (01-07 -> source; 08 -> generated;
-                       the operations tracker folder -> managed)
+frontmatter-schema.md Category 6 + ADR-080):
+  * domain           from the folder TOKEN — the legacy NN- prefix (01-07 -> source;
+                       08 -> generated; the operations tracker folder -> managed) OR an
+                       ADR-080 closed-set bin name (1-Governance .. 5-Reference, _inbox,
+                       _generated). Both taxonomies resolve during the ADR-080 additive-
+                       union migration window.
   * type             from filename/folder signal, with a folder->default-type
                        FALLBACK (FIX 3) so a confident-domain/low-type file stamps a
-                       defensible default rather than orphaning
+                       defensible default rather than orphaning. Under an ADR-080 bin the
+                       (bin, sub-folder) pair refines the default further, and where the
+                       routing surfaces declare that sub-folder a SINGLE content class the
+                       pair is AUTHORITATIVE and outranks the filename signal.
   * lifecycle_state  the domain's initial state      (source/managed -> created/current;
                        generated -> draft; Archive subtree -> archived)
   * trust_category   the domain default              (source=evidence,
@@ -39,9 +45,12 @@ THREE BLOCKING FIXES folded in from the Stage-5 Collective-Review scope-lock:
            matches ZERO without this, orphaning 100% of the corpus.
   * FIX 2  EXCLUDE_PATTERNS tier fires BEFORE classification. Any path segment in
            the exclusion set (body-backups, Staging, _archived, _unclassified,
-           phase3-scratch, bodies, snapshot) is skipped — not stamped, not orphaned
-           — and logged separately. These are non-authoritative copies that collide
-           on the bare-filename join key.
+           phase3-scratch, bodies, snapshot, _inbox, _superseded) is skipped — not
+           stamped, not orphaned — and logged separately. Most members are
+           non-authoritative copies that collide on the bare-filename join key;
+           `_inbox` is the ADR-080 transient intake area, excluded because an unrouted
+           item is not yet a record; `_superseded` holds RETIRED artifacts, excluded
+           because stamping them would assert they are current.
   * FIX 3  coverage scope D — `--scope active` (default) excludes the `Archive/`
            subtree; `--scope all` includes it (stamped `archived`). Plus the
            folder->default-type fallback above.
@@ -134,10 +143,16 @@ LIFECYCLE_BY_DOMAIN = {
     DOMAIN_GENERATED: "draft",
 }
 
-# The canonical NN- folder prefix -> (domain, canonical-folder-token, default-type).
-# Keyed by the two-digit prefix so project-specific folder *names* (00-Plan,
-# 01-Prior-Art, 02-Findings, 03-Report, 04-PMO-Operations, 09-Prototype) all resolve
-# by their NUMBER, not their exact label. Default-type is the FIX-3 fallback.
+# The canonical folder TOKEN -> (domain, canonical-folder-token, default-type).
+# TWO key families, both live during the ADR-080 additive-union migration window:
+#   * LEGACY — the two-digit prefix, so project-specific folder *names* (00-Plan,
+#     01-Prior-Art, 02-Findings, 03-Report, 04-PMO-Operations, 09-Prototype) all resolve
+#     by their NUMBER, not their exact label.
+#   * ADR-080 — the closed 5-bin set plus the two transient areas, keyed by the LITERAL
+#     lowercased bin name, because those names are a CLOSED set (ADR-080 :31) rather than
+#     a numbering convention: there is no prefix to generalize over and a new bin is a
+#     governance change, not a runtime one.
+# Default-type is the FIX-3 fallback; SUBBIN_DEFAULT_TYPE refines it below.
 FOLDER_PREFIX_MAP = {
     "00": (DOMAIN_SOURCE, "01-governance", "plan"),          # planning/inbound -> source
     "01": (DOMAIN_SOURCE, "01-governance", "reference"),
@@ -149,6 +164,40 @@ FOLDER_PREFIX_MAP = {
     "07": (DOMAIN_SOURCE, "07-reference", "reference"),
     "08": (DOMAIN_GENERATED, "08-generated", "analysis"),    # generated synthesis
     "09": (DOMAIN_SOURCE, "07-reference", "reference"),       # prototype/other -> reference
+    # --- ADR-080 closed 5-bin set + transient areas (additive union window) ---
+    "1-governance": (DOMAIN_SOURCE, "1-Governance", "plan"),
+    "2-delivery":   (DOMAIN_SOURCE, "2-Delivery", "reference"),
+    "3-operations": (DOMAIN_MANAGED, "3-Operations", "tracker"),
+    "4-evidence":   (DOMAIN_SOURCE, "4-Evidence", "reference"),
+    "5-reference":  (DOMAIN_SOURCE, "5-Reference", "reference"),
+    "_generated":   (DOMAIN_GENERATED, "_generated", "analysis"),
+    "_inbox":       (DOMAIN_SOURCE, "_inbox", "reference"),
+}
+
+# Sub-bin type refinement. ADR-080 NAMES the sub-folders (:38 / :40) but pairs none
+# of them with a legacy antecedent -- its own frontmatter (:11) calls the 8->5 map a
+# "RESHAPE ... not a 1:1 rename". The CONTENT CLASS of each sub-folder is stated by
+# the routing/scaffold surfaces instead: file-router/SKILL.md Routing Targets,
+# project-initiator/SKILL.md Step 2, OPERATIONS.md Folder Routing Guidelines, and
+# core/schemas/routing-rules.md. Keyed by (bin-key, sub-folder) BOTH lowercased; the
+# sub-folder must sit IMMEDIATELY under its bin. The emitted `folder` stays the BIN
+# enum value; only `type` refines.
+#
+# The second value is AUTHORITATIVE: True only where those surfaces declare the
+# sub-folder a SINGLE content class, so the path is a complete verdict and outranks
+# FILENAME_TYPE_SIGNALS. Where they declare it MULTI-class the flag is False and the
+# value is an ordinary default -- a filename signal still wins, because forcing a
+# type there would convert a recoverable heuristic miss into an unrecoverable one
+# (_absent_core_keys() writes ABSENT keys only, so a wrong `type` never self-heals).
+SUBBIN_DEFAULT_TYPE = {
+    # multi-class per the routing surfaces -> substitution default, signal still wins
+    ("2-delivery", "design"):       ("fdd", False),        # + process flows, training material
+    ("2-delivery", "testing"):      ("test-plan", False),  # + test artifacts, Jira exports
+    ("2-delivery", "requirements"): ("fdd", False),        # + specs, traceability matrices
+    # single-class per the routing surfaces -> the path IS the verdict
+    ("4-evidence", "transcripts"):  ("transcript", True),
+    ("4-evidence", "emails"):       ("email", True),
+    ("4-evidence", "exports"):      ("export", True),
 }
 
 # The per-domain type taxonomy (frontmatter-schema.md §Type Taxonomy). A file's `type`
@@ -197,19 +246,77 @@ FILENAME_TYPE_SIGNALS = (
 )
 
 # FIX 2 — exclusion tier. Any path segment equal (case-insensitively) to one of these
-# is a non-authoritative copy: skip it BEFORE classification (not stamped, not
-# orphaned). Logged separately.
+# is skipped BEFORE classification (not stamped, not orphaned). Logged separately.
+# Matching is DEPTH-AGNOSTIC and by EXACT segment equality — never substring, never
+# prefix — so a member reserves that word at any depth, corpus-wide.
+# Most members are non-authoritative COPIES that collide on the bare-filename join key.
+# `_inbox` is the exception and is here on its own ground: it is the ADR-080 transient
+# intake area (:31), so its contents are UNROUTED items, not records — the bin resolves
+# in FOLDER_PREFIX_MAP (the token is KNOWN) while the files themselves stay out of the
+# backfill until file-router routes them into a real bin.
 EXCLUDE_PATTERNS = frozenset({
     "body-backups", "staging", "_archived", "_unclassified",
-    "phase3-scratch", "bodies", "snapshot",
+    "phase3-scratch", "bodies", "snapshot", "_inbox",
+    # Retired artifacts. `superseded` IS a legal lifecycle_state and the trust rule
+    # shifts it to historical-record, so stamping these draft/interpretation would
+    # assert they are current. Exact structural sibling of the `_archived` member
+    # above. Honouring `_superseded/` as a lifecycle override is the better long-run
+    # answer, but the directory is not yet a defined platform convention, so blessing
+    # it would be a governance change rather than a tool change: excluding is the
+    # truthful move — the files are ABSENT from the warehouse rather than
+    # mis-described in it.
+    "_superseded",
 })
 
 # The Archive subtree — excluded under scope=active (FIX 3), stamped `archived` under
 # scope=all.
 ARCHIVE_SEGMENT = "archive"
 
-# _config is program-scoped operational config, not project content — never a node.
-NONPROJECT_TOP_SEGMENTS = frozenset({"_config"})
+# Corpus-root segments that are NOT project content and never carry node frontmatter.
+# `_config` is program-scoped operational config; `_pmo` is the ADR-058 shared-entity
+# store, which frontmatter-schema.md § Scope names as an EXCLUSION ("navigation layer
+# pages (`_pmo/`) have their own simplified frontmatter"); `transcripts` is the CLAUDE.md
+# cross-project staging root, which has no project and is outside the schema's declared
+# scope ("all files in `projects/[Project]/01-08/` folders"). Matched POSITIONALLY at
+# segs[0] — the corpus root — so a same-named directory inside a project is unaffected.
+NONPROJECT_TOP_SEGMENTS = frozenset({"_config", "_pmo", "transcripts"})
+
+# Project-scoped directories OUTSIDE the ADR-080 closed bin set whose contents are
+# FORMS, not records. Matched POSITIONALLY at segs[1] -- immediately under a project
+# root -- because ADR-080 governs a project's TOP-LEVEL shape; a same-named directory
+# nested inside a bin (e.g. a vendor template pack under 5-Reference/) is real
+# reference material and is deliberately NOT matched. Corollary of the same
+# positional anchor: the rule is scoped to a LIVE project's position and does not
+# fire once the project is relocated under an archive segment (excluded there under
+# scope=active; see the (i) self-test case that pins this).
+# This set never resolves a `folder` value and never adds a bin: ADR-080 declares the
+# set CLOSED and makes changing it a governance change, so an out-of-taxonomy
+# directory is RECORDED under its own reason class rather than routed into a bin or
+# filed as a backup copy. The reason names the condition in this tool's structured
+# output. It is NOT a ratification of the directory, and no shipped surface reads it
+# today -- ADR-080 names the enforcement instrument for the closed set as a
+# still-unbuilt sibling work item. The corpus condition itself is unchanged.
+NONRECORD_PROJECT_SEGMENTS = frozenset({"templates"})
+
+# D-12 — the PROJECT-ROOT NON-BIN SENTINEL (ADR-139).
+# A project's governance files sit at the project ROOT, not in any bin, so no folder
+# token resolves for them and they orphan. `_project-root` is the `folder` value that
+# names that location. It is a SENTINEL, not a sixth bin: ADR-080 declares the bin set
+# CLOSED, and this value describes a location OUTSIDE the taxonomy rather than adding a
+# member TO it — which is why the underscore prefix (the established marker for a
+# non-bin area, cf. `_inbox` / `_generated`) is load-bearing and `0-Root` would not do.
+PROJECT_ROOT_FOLDER = "_project-root"
+# domain/default-type for the sentinel, mirroring the project-initiator emit contract
+# in agent-processing-contracts.md Skill 6. lifecycle_state and trust_category still
+# flow through LIFECYCLE_BY_DOMAIN / TRUST_BY_DOMAIN, so a BACKFILLED project root
+# reads `current` where a BORN one reads `emerging` — for an established project that
+# is arguably the right answer, and `_absent_core_keys()` never overwrites an existing
+# value, so a born file keeps its own.
+PROJECT_ROOT_CLASSIFICATION = (DOMAIN_MANAGED, PROJECT_ROOT_FOLDER, "project-page")
+# The KNOWN governance basenames. Deliberately a closed set rather than a catch-all:
+# an arbitrary stray at a project root STAYS an orphan, so this branch can never become
+# a silent sink for unclassifiable files.
+PROJECT_ROOT_BASENAMES = frozenset({"project.md", "readme.md", "corrections.md"})
 
 # file_format by suffix (frontmatter-schema.md Category 6). Markdown embeds; the rest
 # get a .meta.yml sidecar.
@@ -248,12 +355,37 @@ def _segments(rel_path):
 
 
 def _folder_prefix(folder_name):
-    """The two-digit NN prefix of a folder name, or None. Case-normalized (FIX 1):
-    `01-Governance` -> `01`."""
+    """The NORMALIZED folder token: the two-digit NN prefix for a digit-leading legacy
+    folder, else the whole lowercased name. Case-normalized (FIX 1): `01-Governance` ->
+    `01`; `1-Governance` -> `1-governance`. Never None — FOLDER_PREFIX_MAP membership is
+    the sole authority on which tokens are KNOWN.
+
+    EXTENDED IN PLACE and never renamed: backfill-relationship-edges.py binds this symbol
+    at import (`_folder_prefix = _node._folder_prefix`), so a rename kills that tool with
+    an AttributeError."""
     name = folder_name.lower()
     if len(name) >= 2 and name[:2].isdigit():
         return name[:2]
-    return None
+    return name
+
+
+def _is_project_root_governance(rel_path):
+    """True for a KNOWN governance file sitting directly at a project root (D-12).
+
+    THREE guards, each load-bearing and none removable:
+      * depth == 2 — a file inside a bin resolves normally, so this must not shadow it;
+      * the basename is in PROJECT_ROOT_BASENAMES — an arbitrary stray at a project
+        root stays an orphan, so the branch is never a catch-all;
+      * the top segment is not `_`-prefixed — `_pmo/` and `_config/` are NOT projects
+        and are claimed by the non-project-top-segment tier. Drop this guard and the
+        shared-entity store's README is mis-claimed as project-root governance.
+
+    Provably disjoint from NONRECORD_PROJECT_SEGMENTS, which requires len(segs) > 2.
+    """
+    parts = rel_path.parts
+    return (len(parts) == 2
+            and parts[1].lower() in PROJECT_ROOT_BASENAMES
+            and not parts[0].startswith("_"))
 
 
 def _project_of(rel_path):
@@ -261,12 +393,19 @@ def _project_of(rel_path):
     return rel_path.parts[0] if rel_path.parts else ""
 
 
-def _classify_type(stem_lower, domain, default_type):
+def _classify_type(stem_lower, domain, default_type, authoritative=False):
     """Filename-signal type when it is valid for the file's domain, else the folder
     default-type (FIX-3 fallback). Domain-awareness enforces the type-taxonomy-matches-
     domain rule — a `project` filename in a source folder does NOT become the domain-B
-    `project-page`; it falls back to the source folder default."""
+    `project-page`; it falls back to the source folder default.
+
+    `authoritative` inverts the precedence for the one case where the PATH is a complete
+    verdict: an ADR-080 (bin, sub-folder) pair the routing surfaces declare SINGLE-class.
+    There the default outranks the filename signal (still domain-validated). Everywhere
+    else the signal keeps priority, because a wrong `type` never self-heals."""
     valid = TYPES_BY_DOMAIN[domain]
+    if authoritative and default_type in valid:
+        return default_type
     for needle, t in FILENAME_TYPE_SIGNALS:
         if needle in stem_lower and t in valid:
             return t
@@ -277,14 +416,18 @@ def classify(path, root, scope):
     """Classify one file into node-frontmatter values, or mark it excluded / orphan.
 
     Order (the fix ordering matters):
-      1. non-project top segment (_config)        -> excluded
-      2. EXCLUDE_PATTERNS segment (FIX 2)          -> excluded (before classification)
-      3. Archive subtree under scope=active (FIX3) -> excluded
-      4. unsupported file_format                   -> orphan
-      5. no resolvable NN- folder prefix           -> orphan (unless a filename signal
+      1.  non-project top segment (_config, _pmo, transcripts) -> excluded
+      1b. out-of-taxonomy project directory at segs[1]         -> excluded (POSITIONAL,
+                                                      before the depth-agnostic pass)
+      2.  EXCLUDE_PATTERNS segment (FIX 2)          -> excluded (before classification)
+      3.  Archive subtree under scope=active (FIX3) -> excluded
+      4.  unsupported file_format                   -> orphan
+      5.  no resolvable folder token                -> orphan (unless a filename signal
                                                       + a domain can still be defended;
                                                       here: orphan — no confident domain)
-      6. else                                      -> full 11-field stamp
+      5a. KNOWN governance file at a project ROOT   -> the `_project-root` NON-BIN
+                                                      sentinel (D-12 / ADR-139)
+      6.  else                                      -> full 11-field stamp
     """
     rel_path = path.relative_to(root)
     c = Classification(path, rel_path)
@@ -294,6 +437,12 @@ def classify(path, root, scope):
     if segs and segs[0] in NONPROJECT_TOP_SEGMENTS:
         c.is_excluded = True
         c.reason = f"non-project top segment ({segs[0]})"
+        return c
+
+    # (1b) project-scoped directory outside the ADR-080 closed set — POSITIONAL.
+    if len(segs) > 2 and segs[1] in NONRECORD_PROJECT_SEGMENTS:
+        c.is_excluded = True
+        c.reason = f"out-of-taxonomy project directory ({segs[1]})"
         return c
 
     # (2) FIX 2 — exclusion tier BEFORE classification.
@@ -319,28 +468,52 @@ def classify(path, root, scope):
         return c
     c.is_sidecar = suffix not in MARKDOWN_SUFFIXES
 
-    # (5) resolve domain via the folder NN- prefix (case-normalized, FIX 1). The
-    # relevant folder is the last path segment that carries an NN- prefix (walk from
-    # the file upward so a nested subfolder under 08-Generated still maps to 08).
+    # (5) resolve domain via the folder TOKEN (case-normalized, FIX 1) — a legacy NN-
+    # prefix or an ADR-080 bin name. The relevant folder is the DEEPEST path segment
+    # whose token is KNOWN (walk from the file upward so a nested subfolder under
+    # 08-Generated still maps to 08). The walk floors at index 1: parts[0] is the
+    # PROJECT directory, and since _folder_prefix() now returns the whole name for a
+    # non-digit-leading folder, an unfloored walk would resolve a project whose own
+    # name happened to collide with a bin token.
     prefix = None
     canonical_folder = None
     default_type = None
     domain = None
-    for part in reversed(rel_path.parts[:-1]):   # exclude the filename itself
-        p = _folder_prefix(part)
+    folder_parts = rel_path.parts[:-1]           # exclude the filename itself
+    bin_idx = None
+    subbin_authoritative = False
+    for i in range(len(folder_parts) - 1, 0, -1):   # i >= 1: parts[0] is the PROJECT
+        p = _folder_prefix(folder_parts[i])
         if p in FOLDER_PREFIX_MAP:
             prefix = p
+            bin_idx = i
             domain, canonical_folder, default_type = FOLDER_PREFIX_MAP[p]
             break
+    # (5a) D-12 — project-root governance file. No folder token resolves at a project
+    # ROOT, so these would orphan. The NON-BIN sentinel classifies them by LOCATION
+    # without adding a bin (see PROJECT_ROOT_FOLDER / ADR-139).
+    if domain is None and _is_project_root_governance(rel_path):
+        domain, canonical_folder, default_type = PROJECT_ROOT_CLASSIFICATION
+
     if domain is None:
         # No confident domain -> orphan candidate (recorded, not guessed).
         c.is_orphan = True
-        c.reason = "no resolvable NN- folder prefix (no confident domain)"
+        c.reason = "no resolvable folder token (no confident domain)"
         return c
+
+    # (5b) sub-bin refinement — the segment IMMEDIATELY under the resolved bin only.
+    # `bin_idx is None` whenever the domain came from somewhere other than the token
+    # walk (today: the D-12 project-root sentinel, which by construction has no bin and
+    # therefore no sub-bin). Guarded rather than assumed — the walk and the sentinel are
+    # two independent domain resolvers writing one variable.
+    if bin_idx is not None and bin_idx + 1 < len(folder_parts):
+        sub = SUBBIN_DEFAULT_TYPE.get((prefix, folder_parts[bin_idx + 1].lower()))
+        if sub is not None:
+            default_type, subbin_authoritative = sub
 
     # (6) full 11-field stamp.
     stem_lower = path.stem.lower()
-    file_type = _classify_type(stem_lower, domain, default_type)
+    file_type = _classify_type(stem_lower, domain, default_type, subbin_authoritative)
     # Archive subtree under scope=all -> archived lifecycle + historical-record trust
     # (trust-lifecycle consistency rule: archived requires historical-record).
     if in_archive:  # only reached under scope=all (active excluded above)
@@ -569,14 +742,23 @@ def run_self_test():
     """Assert the tool's contract against the committed fixture:
       (a) full 11-field core set stamped on a canonical file;
       (b) case-normalization fires on a Capitalized folder (01-Governance);
-      (c) exclusion fires on a backup segment (body-backups);
+      (c) exclusion fires on a backup segment (body-backups) and on the retired-artifact
+          segment (_superseded), and the merged set still carries _inbox;
       (d) Archive/ excluded under scope=active, included (archived) under scope=all;
       (e) idempotent re-run produces zero further changes;
-      (f) orphan list is populated by an unclassifiable file;
+      (f) orphan list is populated by an unclassifiable file, its reason string is the
+          one this tool emits, and the D-12 project-root sentinel classifies a KNOWN
+          governance file at a project root while leaving a stray — and an `_`-prefixed
+          top segment — alone;
       (g) every folder default-type is valid for its domain (type-taxonomy invariant);
       (h) the Stage-12 confirmation-token gate: --stamp WITHOUT --i-am-at-stage-12 refuses
           (exit 3) and writes nothing; --stamp WITH the token writes (mirrors the
-          backfill-relationship-edges --emit gate byte-for-byte).
+          backfill-relationship-edges --emit gate byte-for-byte);
+      (i) the ADR-080 taxonomy arm: literal expected values for every closed-set bin row,
+          every sub-bin row, the authoritative/non-authoritative discriminator, the
+          out-of-taxonomy positional tier (loose, foldered, and its positional negative),
+          the archived-position case, the exclusion classes and the corpus-root guards —
+          plus a scoped COVERAGE GUARD that fails when a table gains a row with no case.
     Runs against a temp COPY of the fixture so --stamp writes are throwaway.
     """
     import contextlib
@@ -598,6 +780,23 @@ def run_self_test():
         if default_type not in TYPES_BY_DOMAIN[dom]:
             failures.append(f"(g) default-type '{default_type}' for prefix {pfx} "
                             f"not valid for domain '{dom}'")
+
+    # (g, sub-bin arm) every SUBBIN_DEFAULT_TYPE row must name a KNOWN bin key, and its
+    # type must be valid for THAT bin's domain. A sub-bin row keyed on a bin that does
+    # not exist would be silently unreachable; a type outside the bin's domain would be
+    # suppressed by _classify_type's domain guard and stamp the bin default instead —
+    # both are silent failures, so they fail loudly here.
+    for (bin_key, sub_key), (sub_type, sub_auth) in SUBBIN_DEFAULT_TYPE.items():
+        if bin_key not in FOLDER_PREFIX_MAP:
+            failures.append(f"(g) sub-bin row ({bin_key}, {sub_key}) names an unknown bin key")
+            continue
+        sub_dom = FOLDER_PREFIX_MAP[bin_key][0]
+        if sub_type not in TYPES_BY_DOMAIN[sub_dom]:
+            failures.append(f"(g) sub-bin type '{sub_type}' for ({bin_key}, {sub_key}) "
+                            f"not valid for domain '{sub_dom}'")
+        if not isinstance(sub_auth, bool):
+            failures.append(f"(g) sub-bin row ({bin_key}, {sub_key}) has a "
+                            f"non-boolean authoritative flag")
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td) / "corpus"
@@ -645,6 +844,15 @@ def run_self_test():
         canonical = "Default/01-Governance/PROJECT.md"
         if canonical not in would:
             failures.append(f"(b) case-norm: {canonical} not classified (would={sorted(would)})")
+        # (b) LEGACY VALUE PIN — literal, not read back from FOLDER_PREFIX_MAP. Membership
+        # alone cannot see a corrupted legacy row: a wrong (domain, folder) still yields a
+        # would-stamp with a full, enum-valid core set. The ADR-080 arm (i) pins the new
+        # key family the same way; this pins the legacy one.
+        c_legacy = classify(root / canonical, root, scope="active")
+        got_legacy = (c_legacy.fields.get("domain"), c_legacy.fields.get("folder"))
+        if got_legacy != ("source", "01-governance"):
+            failures.append(f"(b) legacy row drift: {canonical} expected "
+                            f"(domain,folder)=('source', '01-governance'), got {got_legacy}")
 
         # (c) exclusion: the body-backups copy must be excluded (not stamped, not orphaned).
         backup = "Default/01-Governance/body-backups/PROJECT.md"
@@ -658,10 +866,18 @@ def run_self_test():
         if archived not in excluded:
             failures.append(f"(d) Archive not excluded under scope=active (excluded={sorted(excluded)})")
 
-        # (f) orphan populated: the no-NN-prefix loose file is an orphan candidate.
+        # (f) orphan populated: a loose file directly under the project root carries no
+        # resolvable folder token (the walk floors at index 1), so it stays an orphan.
         orphan_file = "Default/loose-note.md"
         if orphan_file not in orphans:
             failures.append(f"(f) orphan: {orphan_file} not in orphan list (orphans={sorted(orphans)})")
+        # (f) REASON PIN. The reason string is this tool's structured-output contract and
+        # the value changed with the token walk, so it is pinned here — in the tool's own
+        # test, where drift is the risk. Downstream consumers must still read the
+        # `orphans` array structurally rather than grepping this literal.
+        o_reasons = {reason for rel, reason in r_active["orphans"] if rel == orphan_file}
+        if o_reasons != {"no resolvable folder token (no confident domain)"}:
+            failures.append(f"(f) orphan reason drift: got {o_reasons}")
 
         # (a) full 11-field core set on the canonical file (inspect the classification).
         canon_path = root / canonical
@@ -720,6 +936,186 @@ def run_self_test():
         if not sidecar.exists():
             failures.append(f"(a-write) sidecar not created for non-md file: {sidecar.name}")
 
+    # --- (c) merged exclusion set + (f) the D-12 project-root sentinel --------------
+    # Built in-process so the committed fixture stays the LEGACY fixture. The (c) cases
+    # grade the exclusion set at its COMBINED final state — the only state that ships —
+    # so a per-card green with a combined red cannot pass. The (f) cases grade the
+    # non-bin sentinel and, critically, its three NEGATIVES.
+    with tempfile.TemporaryDirectory() as td:
+        droot = Path(td) / "corpus"
+        d_cases = [
+            # (c) retired artifacts, and the merged set still carrying _inbox
+            ("Proj/08-Generated/_superseded/y.md", "EXCL",
+             "excluded path segment (_superseded)"),
+            ("Proj/1-Governance/_inbox/z.md", "EXCL", "excluded path segment (_inbox)"),
+            ("Proj/01-Governance/body-backups/PROJECT.md", "EXCL",
+             "excluded path segment (body-backups)"),
+            # (f) the D-12 sentinel over all three KNOWN governance basenames
+            ("Proj/PROJECT.md", "STAMP", ("_project-root", "project-page")),
+            ("Proj/README.md", "STAMP", ("_project-root", "project-page")),
+            ("Proj/CORRECTIONS.md", "STAMP", ("_project-root", "project-page")),
+            # (f) NEGATIVE 1 — a stray at a project root is NOT swallowed
+            ("Proj/scratch-note.md", "ORPHAN", None),
+            # (f) NEGATIVE 2 — depth: a governance basename INSIDE a bin resolves to
+            # that bin, never to the sentinel
+            ("Proj/01-Governance/README.md", "STAMP", ("01-governance", "reference")),
+            # (f) NEGATIVE 3 — a governance basename BELOW the project root, under a
+            # folder that resolves no token, stays an orphan: the sentinel does not
+            # reach into unresolvable subtrees. NOTE this case does NOT discriminate
+            # the `len(parts) == 2` guard on its own — the predicate indexes parts[1],
+            # so relaxing the depth limb only changes behaviour for a directory literally
+            # NAMED `PROJECT.md`/`README.md`/`CORRECTIONS.md`. The depth limb is kept as
+            # defence-in-depth and is deliberately NOT claimed as independently pinned.
+            ("Proj/notes/README.md", "ORPHAN", None),
+        ]
+        for rel, _v, _e in d_cases:
+            f = droot / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("---\ntitle: t\n---\n", encoding="utf-8")
+        for rel, verdict, expect in d_cases:
+            cd = classify(droot / rel, droot, scope="active")
+            if verdict == "EXCL":
+                if not cd.is_excluded or cd.reason != expect:
+                    failures.append(f"(c) {rel}: expected EXCLUDED {expect!r}, got "
+                                    f"excluded={cd.is_excluded} reason={cd.reason!r}")
+            elif verdict == "STAMP":
+                if cd.is_orphan or cd.is_excluded:
+                    failures.append(f"(f) {rel}: expected STAMP, got "
+                                    f"{'orphan' if cd.is_orphan else 'excluded'} "
+                                    f"({cd.reason})")
+                    continue
+                got = (cd.fields.get("folder"), cd.fields.get("type"))
+                if got != expect:
+                    failures.append(f"(f) {rel}: expected (folder,type)={expect}, got {got}")
+            else:
+                if not cd.is_orphan:
+                    failures.append(f"(f) {rel}: a stray at a project root must stay an "
+                                    f"orphan, got excluded={cd.is_excluded} "
+                                    f"folder={cd.fields.get('folder')!r}")
+        # (f) NEGATIVE 4 — the `_`-prefix guard. `_pmo/README.md` is the shared-entity
+        # store's page, claimed by the non-project-top-segment tier; the sentinel must
+        # NOT take it. This is the guard whose removal turns the residual 6 into 7.
+        pmo = droot / "_pmo" / "README.md"
+        pmo.parent.mkdir(parents=True, exist_ok=True)
+        pmo.write_text("---\ntitle: t\n---\n", encoding="utf-8")
+        c_pmo = classify(pmo, droot, scope="active")
+        if not (c_pmo.is_excluded and c_pmo.reason == "non-project top segment (_pmo)"):
+            failures.append(f"(f) _-prefix guard: _pmo/README.md must be excluded by the "
+                            f"non-project tier, got excluded={c_pmo.is_excluded} "
+                            f"folder={c_pmo.fields.get('folder')!r} reason={c_pmo.reason!r}")
+        if _is_project_root_governance(Path("_pmo/README.md")):
+            failures.append("(f) _-prefix guard: the sentinel predicate claimed an "
+                            "`_`-prefixed top segment")
+
+    # --- (i) ADR-080 taxonomy arm -------------------------------------------------
+    # Built in-process in its own tempdir so the committed legacy fixture stays the
+    # legacy fixture. EXPECTED VALUES ARE LITERAL — never read back from the tables
+    # under test, because a table-driven expectation passes on a drifted table.
+    #   verdict "STAMP" -> (folder, type)   |   "EXCL" -> reason   |   "ORPHAN"
+    i_cases = [
+        # one case per ADR-080 closed-set bin row (bare bin, no sub-folder)
+        ("P/1-Governance/charter.md",                 "STAMP",  ("1-Governance", "plan")),
+        ("P/2-Delivery/notes.md",                     "STAMP",  ("2-Delivery", "reference")),
+        ("P/3-Operations/raid.md",                    "STAMP",  ("3-Operations", "risk-register")),
+        ("P/4-Evidence/notes.md",                     "STAMP",  ("4-Evidence", "reference")),
+        ("P/5-Reference/notes.md",                    "STAMP",  ("5-Reference", "reference")),
+        ("P/_generated/rollup.md",                    "STAMP",  ("_generated", "weekly-rollup")),
+        # one case per sub-bin row
+        ("P/2-Delivery/Design/spec.md",               "STAMP",  ("2-Delivery", "fdd")),
+        ("P/2-Delivery/Testing/matrix.md",            "STAMP",  ("2-Delivery", "test-plan")),
+        ("P/2-Delivery/Requirements/frd.md",          "STAMP",  ("2-Delivery", "fdd")),
+        ("P/4-Evidence/Transcripts/call.md",          "STAMP",  ("4-Evidence", "transcript")),
+        ("P/4-Evidence/Emails/note.md",               "STAMP",  ("4-Evidence", "email")),
+        ("P/4-Evidence/Exports/dump.md",              "STAMP",  ("4-Evidence", "export")),
+        # the AUTHORITATIVE / non-authoritative discriminator pair (AC-9)
+        ("P/4-Evidence/Emails/RE_Cutover_Plan.md",    "STAMP",  ("4-Evidence", "email")),
+        ("P/4-Evidence/Emails/FW_Cutover_Plan.md",    "STAMP",  ("4-Evidence", "email")),
+        ("P/2-Delivery/Design/Cutover_Plan.md",       "STAMP",  ("2-Delivery", "plan")),
+        # ADJACENCY NEGATIVE: a sub-bin match must sit IMMEDIATELY under its bin. One
+        # level deeper the pair does NOT fire and the bare bin default stands.
+        ("P/2-Delivery/Phase1/Design/spec.md",        "STAMP",  ("2-Delivery", "reference")),
+        # out-of-taxonomy positional tier: loose, foldered, and the positional NEGATIVE
+        ("P/templates/blank.md",                      "EXCL",   "out-of-taxonomy project directory (templates)"),
+        ("P/templates/04_Communications/blank.md",    "EXCL",   "out-of-taxonomy project directory (templates)"),
+        ("P/5-Reference/templates/vendor.md",         "STAMP",  ("5-Reference", "reference")),
+        # exclusion classes introduced by this card
+        ("P/_inbox/unrouted.md",                      "EXCL",   "excluded path segment (_inbox)"),
+        ("P/_inbox/_unsorted/unrouted.md",            "EXCL",   "excluded path segment (_inbox)"),
+        ("_pmo/portfolio.md",                         "EXCL",   "non-project top segment (_pmo)"),
+        ("Transcripts/staged.md",                     "EXCL",   "non-project top segment (transcripts)"),
+        # corpus-root positional guards: the walk floors at index 1, so a project
+        # directory whose own name collides with a bin token must NOT resolve
+        ("1-Governance/loose.md",                     "ORPHAN", None),
+        ("P/loose.md",                                "ORPHAN", None),
+    ]
+    with tempfile.TemporaryDirectory() as td:
+        iroot = Path(td) / "adr080"
+        for rel, _verdict, _expect in i_cases:
+            f = iroot / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("---\ntitle: t\n---\n# body\n", encoding="utf-8")
+        for rel, verdict, expect in i_cases:
+            ci = classify(iroot / rel, iroot, scope="active")
+            if verdict == "STAMP":
+                if ci.is_orphan or ci.is_excluded:
+                    failures.append(f"(i) {rel}: expected STAMP, got "
+                                    f"{'orphan' if ci.is_orphan else 'excluded'} ({ci.reason})")
+                    continue
+                got = (ci.fields.get("folder"), ci.fields.get("type"))
+                if got != expect:
+                    failures.append(f"(i) {rel}: expected (folder,type)={expect}, got {got}")
+            elif verdict == "EXCL":
+                if not ci.is_excluded:
+                    failures.append(f"(i) {rel}: expected EXCLUDED ({expect}), "
+                                    f"got orphan={ci.is_orphan} reason={ci.reason!r}")
+                elif ci.reason != expect:
+                    failures.append(f"(i) {rel}: expected reason {expect!r}, got {ci.reason!r}")
+            else:  # ORPHAN
+                if not ci.is_orphan:
+                    failures.append(f"(i) {rel}: expected ORPHAN, got "
+                                    f"{'excluded' if ci.is_excluded else 'stamped'} ({ci.reason})")
+
+        # (i) archived-position case: NONRECORD_PROJECT_SEGMENTS is anchored at segs[1],
+        # so under an archive segment the project sits at index 1 and the rule does not
+        # fire. Under scope=active the Archive tier catches it (exposure 0 today); under
+        # scope=all the foldered blank form STAMPS. Pinned so the property is graded
+        # rather than latent — see the NONRECORD_PROJECT_SEGMENTS comment.
+        arch = iroot / "Archive" / "P" / "templates" / "03-Testing" / "blank.md"
+        arch.parent.mkdir(parents=True, exist_ok=True)
+        arch.write_text("---\ntitle: t\n---\n", encoding="utf-8")
+        c_act = classify(arch, iroot, scope="active")
+        if not (c_act.is_excluded and c_act.reason == "Archive/ excluded under scope=active"):
+            failures.append(f"(i) archived positional case: expected the Archive tier under "
+                            f"scope=active, got excluded={c_act.is_excluded} "
+                            f"reason={c_act.reason!r}")
+        c_all = classify(arch, iroot, scope="all")
+        if c_all.is_orphan or c_all.is_excluded or c_all.fields.get("folder") != "03-testing":
+            failures.append("(i) archived positional case: expected folder=03-testing under "
+                            f"scope=all, got {c_all.fields.get('folder')!r} "
+                            f"(orphan={c_all.is_orphan} excluded={c_all.is_excluded})")
+
+    # (i) COVERAGE GUARD — every ADR-080 map row and every sub-bin row must own a
+    # literal case above. Legacy `NN` rows are exempt (the committed fixture covers
+    # them); `_inbox` is exempt from the STAMP limb by construction (the exclusion tier
+    # fires first) and is required to appear as an EXCLUDED case instead. A table row
+    # added without a case fails the build rather than shipping untested.
+    i_paths = [rel for rel, _v, _e in i_cases]
+    for key in FOLDER_PREFIX_MAP:
+        if key.isdigit():
+            continue                                   # legacy row — committed fixture
+        seg = f"/{FOLDER_PREFIX_MAP[key][1]}/"
+        if key == "_inbox":
+            if not any(seg in rel and v == "EXCL" for rel, v, _e in i_cases):
+                failures.append("(i) coverage: _inbox has no EXCLUDED literal case")
+            continue
+        if not any(seg in rel for rel in i_paths):
+            failures.append(f"(i) coverage: ADR-080 map row '{key}' has no literal case")
+    for bin_key, sub_key in SUBBIN_DEFAULT_TYPE:
+        seg = f"/{FOLDER_PREFIX_MAP[bin_key][1]}/{sub_key}/".lower()
+        if not any(seg in rel.lower() for rel in i_paths):
+            failures.append(f"(i) coverage: sub-bin row ({bin_key}, {sub_key}) "
+                            "has no literal case")
+
     if failures:
         print("self-test FAIL:", file=sys.stderr)
         for f in failures:
@@ -727,7 +1123,7 @@ def run_self_test():
         return 1
     print("stamp-node-frontmatter self-test OK "
           "(a full-core-set / b case-norm / c exclusion / d Archive-scope / e idempotent / "
-          "f orphan / g type-domain-validity / h stage-12-gate)")
+          "f orphan / g type-domain-validity / h stage-12-gate / i ADR-080-taxonomy)")
     return 0
 
 
