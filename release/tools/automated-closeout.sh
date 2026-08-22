@@ -5876,8 +5876,24 @@ phase_publish_github_release() {
     local tag_sha
     tag_sha="$(git_net -C "$REPO_ROOT" rev-list -n1 "$VERSION" 2>/dev/null || echo "")"
     if [[ -n "$tag_sha" && "$tag_sha" != "$MERGE_SHA" ]]; then
-      mark_phase "publish_github_release" "FAIL" "tag $VERSION points at $tag_sha, not the release-PR merge commit $MERGE_SHA — identity mismatch (#1682); do NOT publish a Release bound to the wrong commit (re-cut the tag at the merge SHA, or re-verify the release PR)"
-      return 3
+      # Post-merge ancestry repair (#1682 follow-on). A release PR merged with the
+      # wrong strategy can be repaired after the fact — revert the squash, re-merge
+      # with --no-ff — which restores per-issue rollback and leaves the tag at a
+      # DESCENDANT of the release-PR merge commit with an IDENTICAL tree. That is
+      # not a wrong-commit binding: MERGE_SHA is in the tag's own history and the
+      # content is byte-identical, so a Release cut at the tag ships exactly the
+      # reviewed bytes with strictly better ancestry. Accept EXACTLY that case;
+      # any other divergence still blocks. Both limbs are required — descendancy
+      # alone would admit a tag carrying later commits.
+      local repair_ancestor=1 repair_identical=1
+      git_net -C "$REPO_ROOT" merge-base --is-ancestor "$MERGE_SHA" "$tag_sha" 2>/dev/null || repair_ancestor=0
+      [[ -z "$(git_net -C "$REPO_ROOT" diff --name-only "$MERGE_SHA" "$tag_sha" 2>/dev/null)" ]] || repair_identical=0
+      if [[ "$repair_ancestor" -eq 1 && "$repair_identical" -eq 1 ]]; then
+        mark_phase "publish_github_release" "WARN" "tag $VERSION points at $tag_sha, a DESCENDANT of the release-PR merge commit $MERGE_SHA with an identical tree — accepted as a post-merge ancestry repair (#1682 follow-on), not a wrong-commit binding; publishing at the tag"
+      else
+        mark_phase "publish_github_release" "FAIL" "tag $VERSION points at $tag_sha, not the release-PR merge commit $MERGE_SHA — identity mismatch (#1682); do NOT publish a Release bound to the wrong commit (re-cut the tag at the merge SHA, or re-verify the release PR). Descendant-of-merge=$repair_ancestor identical-tree=$repair_identical"
+        return 3
+      fi
     fi
   fi
 
