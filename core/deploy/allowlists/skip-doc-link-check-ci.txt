@@ -18,8 +18,12 @@
 # doc-link-target-paths.txt; this file is the matching single source on the
 # ignore axis. Sharing only one of the two is not enough — with a shared scope
 # but split allowlists the two callers scan byte-identical files and can still
-# reach opposite verdicts (measured: 0 findings at PR time vs 84 at deploy time
-# when the CHANGELOG.md class below was recorded on the CI path only).
+# reach opposite verdicts. That hazard is not hypothetical: a repo-root
+# CHANGELOG.md entry once lived here on the CI path only, and the two callers
+# read 0 findings at PR time against 84 at deploy time over byte-identical
+# files. The entry has since been retired — CHANGELOG.md's release-notes links
+# resolve against the tracked release/releases/notes/ tree and are checked like
+# any other — but the reason both callers must read THIS file survives it.
 #
 # WHICH FILE DOES AN ENTRY BELONG IN? If the path is skipped because of a fact
 # about the REPOSITORY, it belongs here so both surfaces agree. If it is skipped
@@ -43,17 +47,3 @@
 _archived/
 _snapshots/
 archive/
-
-# ── Repo-root CHANGELOG (pre-existing rot in a newly-scanned tree)
-# When the scan scope was widened to the repo-root `*.md` glob, CHANGELOG.md
-# entered scope. Its per-release entries link to the versioned/theme-named
-# release-notes files under release/releases/notes/ — the instance-side tree
-# that is DELIBERATELY excluded from this doc-link scan (and is the same class
-# release/tools/check-release-links.py is_skippable already treats as
-# intentionally-absent worked-example refs). Those links are therefore
-# expected-broken in the public tree, not real drift, so CHANGELOG.md is
-# allowlisted here rather than failing the widened gate. This is a fact about
-# the REPOSITORY, so it belongs in the tracked base and applies to both the
-# PR-time and deploy-time surfaces (84 deploy-time findings, all this one
-# class, when the entry reached only the CI caller).
-CHANGELOG.md
