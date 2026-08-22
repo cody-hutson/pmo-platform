@@ -74,7 +74,8 @@ readonly STATE_FILE_NAME=".workspace-setup.state"
 readonly STATE_SCHEMA_VERSION="1.0"
 readonly SCRIPT_VERSION="v1.04"
 # Canonical operator config (per composition-surface-spec.md + depersonalization-spec.md §2).
-# XDG-spec location; structured TOML with [meta]/[identity]/[paths]/[platform] sections.
+# XDG-spec location; structured TOML with [meta]/[identity]/[paths]/[platform]/[automation]
+# sections — the five this script's write_operator_toml() emits on a stock install.
 # Per-workspace override (optional). Loaded after operator.toml; fields here win.
 readonly OPERATOR_LOCAL_TOML_BASENAME="operator.local.toml"
 # Hook count safety floor; current expected count is 10. Loop is data-driven.
@@ -616,7 +617,9 @@ detect_state_and_route() {
 }
 
 # --- Section 11: operator.toml read/write (canonical per composition-surface-spec.md) ---
-# Schema: [meta] schema_version, managed_by | [identity] operator_* | [paths] *_path / *_root | [platform] *
+# Schema: [meta] schema_version, managed_by | [identity] operator_* | [paths] *_path / *_root | [platform] * |
+#         [automation] automation_level  — five managed sections (MANAGED_SECTIONS, below); [automation]
+#         has been emitted on every stock install since v4.23.
 # Token mapping (operator.toml field → bracketed token):
 #   [identity].operator_name             → [OPERATOR_NAME]
 #   [identity].operator_email            → [OPERATOR_EMAIL]
