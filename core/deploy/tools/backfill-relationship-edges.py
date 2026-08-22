@@ -93,7 +93,6 @@ _project_of = _node._project_of
 iter_corpus_files = _node.iter_corpus_files
 EXCLUDE_PATTERNS = _node.EXCLUDE_PATTERNS
 NONPROJECT_TOP_SEGMENTS = _node.NONPROJECT_TOP_SEGMENTS
-NONRECORD_PROJECT_SEGMENTS = _node.NONRECORD_PROJECT_SEGMENTS
 ARCHIVE_SEGMENT = _node.ARCHIVE_SEGMENT
 MARKDOWN_SUFFIXES = _node.MARKDOWN_SUFFIXES
 FORMAT_BY_SUFFIX = _node.FORMAT_BY_SUFFIX
@@ -219,13 +218,6 @@ def plan_edges(path, root, scope):
     if segs and segs[0] in NONPROJECT_TOP_SEGMENTS:
         plan.disposition = "excluded"
         plan.reason = f"non-project top segment ({segs[0]})"
-        return plan
-    # (1b) project-scoped directory outside the ADR-080 closed set — POSITIONAL, and
-    # mirrored from the node tool so the edge population is a SUBSET of the node
-    # population (nodes are stamped first; an edge must never FK to an unstamped file).
-    if len(segs) > 2 and segs[1] in NONRECORD_PROJECT_SEGMENTS:
-        plan.disposition = "excluded"
-        plan.reason = f"out-of-taxonomy project directory ({segs[1]})"
         return plan
     # (2) EXCLUDE_PATTERNS (backups/staging/etc.) — before any edge.
     hit = next((s for s in segs if s in EXCLUDE_PATTERNS), None)
@@ -445,29 +437,6 @@ def _self_test():
         f_e.write_text("---\ntitle: bak\n---\n", encoding="utf-8")
         pe = plan_edges(f_e, root, "active")
         assert pe.disposition == "excluded" and not pe.edges, (pe.disposition, pe.edges)
-
-        # (e2) out-of-taxonomy project directory -> excluded, MIRRORED from the node
-        # tool. This arm exists because a missing mirror is invisible without it: with
-        # the tier absent the tool still exits 0 while planning BELONGS_TO edges against
-        # files the node tool never stamps — an FK-orphan edge set. Loose form, foldered
-        # form, and the positional negative (the same word under a bin is real content).
-        f_e2 = root / "Acme" / "templates" / "blank.md"
-        f_e2.parent.mkdir(parents=True)
-        f_e2.write_text("---\ntitle: form\n---\n", encoding="utf-8")
-        pe2 = plan_edges(f_e2, root, "active")
-        assert pe2.disposition == "excluded" and not pe2.edges, (pe2.disposition, pe2.edges)
-        assert pe2.reason == "out-of-taxonomy project directory (templates)", pe2.reason
-        f_e2b = root / "Acme" / "templates" / "04_Communications" / "blank.md"
-        f_e2b.parent.mkdir(parents=True)
-        f_e2b.write_text("---\ntitle: form\n---\n", encoding="utf-8")
-        pe2b = plan_edges(f_e2b, root, "active")
-        assert pe2b.disposition == "excluded" and not pe2b.edges, (pe2b.disposition, pe2b.edges)
-        f_e2c = root / "Acme" / "5-Reference" / "templates" / "vendor.md"
-        f_e2c.parent.mkdir(parents=True)
-        f_e2c.write_text("---\ntitle: real\n---\n", encoding="utf-8")
-        pe2c = plan_edges(f_e2c, root, "active")
-        assert pe2c.disposition != "excluded", pe2c.disposition
-        assert any(e["type"] == "BELONGS_TO" for e in pe2c.edges), pe2c.edges
 
         # (f) Archive under scope=active -> excluded; under scope=all -> processed.
         f_f = root / "Archive" / "OldProj" / "01-Governance" / "OLD.md"

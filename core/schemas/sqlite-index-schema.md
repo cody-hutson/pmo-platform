@@ -48,7 +48,7 @@ CREATE TABLE files (
     domain          TEXT NOT NULL CHECK (domain IN ('source', 'managed', 'generated', 'A', 'B', 'C')),  -- 'A'/'B'/'C' are DEPRECATED aliases of 'source'/'managed'/'generated' (migration window; frontmatter-schema.md Category 6). Union collapses to the 3 human-readable values at tail.
     type            TEXT NOT NULL,                   -- From frontmatter type taxonomy
     project         TEXT NOT NULL,                   -- Project name
-    folder          TEXT NOT NULL,                   -- ADR-080 union: legacy 01-governance…08-generated ∪ new 1-Governance…5-Reference + _inbox/_generated + the non-bin sentinel _project-root (ADR-139; migration window; frontmatter-schema.md § Category 6). No CHECK — folder cardinality left unconstrained at the DB layer; enum validated upstream at write.
+    folder          TEXT NOT NULL,                   -- ADR-080 union: legacy 01-governance…08-generated ∪ new 1-Governance…5-Reference + _inbox/_generated (migration window; frontmatter-schema.md § Category 6). No CHECK — folder cardinality left unconstrained at the DB layer; enum validated upstream at write.
 
     managed_by      TEXT NOT NULL,                   -- Skill name
     parent          TEXT,                            -- Hierarchical parent

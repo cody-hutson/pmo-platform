@@ -185,18 +185,13 @@ toggles):
 
 Set `last_synced_with_confluence: [today's date]` and `status: ACTIVE`.
 
-**Born NODE frontmatter (top of the composed-index template)** — the node axis, NOT the entity
-record. The template opens with the 7-field node block — `type: project-page`, `managed_by:
-project-initiator`, `domain: managed`, `folder: _project-root`, `lifecycle_state: emerging`,
-`trust_category: controlled-truth`, `created_date` — per `frontmatter-schema.md` § Classification/Trust
-and the `agent-processing-contracts.md` Skill-6 contract. Six values are fixed (carried verbatim from
-the template); fill `created_date` with today's date. `folder: _project-root` is the NON-BIN SENTINEL
-(ADR-139) — PROJECT.md sits at the project ROOT, in no bin, and `folder` is a NOT-NULL core field, so
-without this value a newly-scaffolded PROJECT.md is born missing one. `lifecycle_state: emerging` is the
-FILE/NODE content-maturity axis; the Project ENTITY's Axis-1 carrier is `status` (project-schema.md §3b,
-entity-field-schemas.md V-PRJ-03) — the inline `**Status:**` line, which stays inline and distinct. The
-entity-record keys are NOT in this block; they are seeded by the project-schema.md §7 Entity-Seeding
-Protocol, not written at scaffold time.
+**Born entity frontmatter (top of the composed-index template).** The template opens with the 6-field
+entity block — `type: project-page`, `managed_by: project-initiator`, `domain: managed`,
+`lifecycle_state: emerging`, `trust_category: controlled-truth`, `created_date` — per
+`frontmatter-schema.md` § Classification/Trust and the `agent-processing-contracts.md` Skill-6 contract.
+Five values are fixed (carried verbatim from the template); fill `created_date` with today's date. This
+is the born-aligned entity record; keep the project-lifecycle `**Status:**` line inline and distinct
+(the entity `lifecycle_state` is the entity-maturity axis, not the project `Status`).
 
 ### Step 4: Generate Starter Artifacts
 

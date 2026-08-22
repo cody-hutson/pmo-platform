@@ -167,7 +167,7 @@ Each skill contract specifies:
 |-------|-------|
 | **Trigger** | During project initiation (after folder structure creation) |
 | **Reads** | Portfolio structure (existing projects, programs) |
-| **Writes** | The **node-axis** frontmatter block on PROJECT.md: `type: project-page`, `managed_by: project-initiator`, `domain: managed`, `folder: _project-root`, `lifecycle_state: emerging`, `trust_category: controlled-truth`, `created_date`. Navigation page headers for folder indexes. The **entity-axis** keys are a disjoint set with a different writer and are **not** emitted here — including the Project entity's Axis-1 carrier `status` (`entity-field-schemas.md` V-PRJ-03), which the `project-schema.md` §3b persistence dialect defines and the §7 Entity-Seeding Protocol seeds. |
+| **Writes** | Full frontmatter on PROJECT.md: `type: project-page`, `managed_by: project-initiator`, `domain: managed`, `lifecycle_state: emerging`, `trust_category: controlled-truth`. Navigation page headers for folder indexes. |
 | **Relationships Created** | `BELONGS_TO` (project → program → portfolio), `BELONGS_TO` (PROJECT.md → project) |
 | **Lifecycle Transitions** | Sets initial states only |
 | **Ecosystem Tag** | `[ECOSYSTEM_UPDATE: {project}/PROJECT.md | FRONTMATTER_CREATED | project-initiator | scaffold: {folder_count} folders]` |
