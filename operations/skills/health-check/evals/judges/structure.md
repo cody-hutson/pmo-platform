@@ -64,11 +64,25 @@ there is no partial credit.
     reference slot instantiates no relationship rule — counting it in both the fields factor and the
     relationships factor is a double-report and FAILs.
 
+## Stalled-migration escalation
+
+15. **A stalled project emits a well-formed escalation.** Where the fixture seeds a project satisfying
+    the stall predicate, the run emits a stalled-migration FAIL carrying **all four** of: (a) the
+    **specific project**, named; (b) the **blocking factor**; (c) **both** parts of the two-part
+    remediation link — the migration-enforcement protocol's procedure pointer **and** the
+    `project-initiator` migration mode; (d) placement in `## Decisions`. Any one missing is a FAIL.
+16. **A bare count, or a stall finding in `## Auto-Actionable`, is an automatic FAIL.** `2 projects have
+    stalled migrations` FAILs even when the count is correct — it is a summary of findings that were
+    never written. A stall finding routed to `## Auto-Actionable` FAILs **regardless of the confidence
+    it carries and regardless of whether its target state is derivable**: the protocol imposes
+    `## Decisions` on this finding class, so the derivability test governing every other L1 violation
+    does not reach it.
+
 ## Boundary
 
-15. **No migration escalation is emitted.** The stalled-migration escalation is a reserved seam this
-    mode does not implement. A run that emits a stall FAIL is out of contract. If a stall dimension
-    is mentioned at all it must read `UNMEASURED` with its precondition named — never *not stalled*.
+17. **Where the stall predicate is not evaluable, no escalation is emitted** — and the stall dimension
+    reads `UNMEASURED` with its precondition named, never *not stalled* and never a silently absent
+    dimension. An escalation emitted without the required run history is out of contract.
 
 ## Verdict
 

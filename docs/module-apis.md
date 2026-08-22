@@ -37,7 +37,7 @@
 | [`pmo-tier-1-support`](../operations/skills/pmo-tier-1-support/) | invocation | Tier-1 Support Specialist — first-line triage; resolves from a known issue / runbook or escalates to tier-2. |
 | [`pmo-tier-2-support`](../operations/skills/pmo-tier-2-support/) | invocation | Tier-2 Support Specialist — root-causes escalated issues and authors the runbook (RCA + knowledge-loop close). |
 | [`ppm-agent`](../operations/skills/ppm-agent/) | invocation | Strategic PMO brain — pushes actionable items to resolution. |
-| [`project-initiator`](../operations/skills/project-initiator/) | invocation | Project lifecycle scaffolding (init + closure). |
+| [`project-initiator`](../operations/skills/project-initiator/) | invocation | Project lifecycle scaffolding (init + closure + migration). |
 | [`tracker-manager`](../operations/skills/tracker-manager/) | invocation | Generic update engine for operational trackers. |
 | [`weekly-status-rollup`](../operations/skills/weekly-status-rollup/) | invocation | Weekly executive status across active projects. |
 

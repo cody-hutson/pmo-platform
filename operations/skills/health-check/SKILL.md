@@ -1,7 +1,7 @@
 ---
 name: health-check
 description: >
-  Intent-driven project-state drift auditor. Audits a single project for drift between its tracked state and its canonical sources (MCP + local), then emits a categorized 5-section punch list — Confirmed / Auto-Actionable / Decisions / Unknowns / Rollup-Diffs — that is never auto-applied. Nine modes: full (total sweep), timeline (date/milestone drift), attribution (owner drift), comms (comms-coverage drift), plan (one named plan), raid (RAID-log drift), sources (canonical-source inventory), rollup (project↔portfolio rollup compose/refresh), structure (entity-completeness audit). Invokable interactively as /health-check and schedulable for file output. Triggers: "health check this project", "is this project's state still accurate", "run a drift check", "check for stale dates", "audit the timeline", "check ownership drift", "are comms overdue", "did this plan land", "audit the RAID log", "are our sources current", "roll up to portfolio", "refresh this project's rollup", "did anything drift since last cycle", "is the tracked state current", "is this project's data structurally complete", "audit entity completeness", "what is this project's completeness score."
+  Project-state drift auditor. Audits one project for drift between tracked state and canonical sources (MCP + local), then emits a 5-section punch list — Confirmed / Auto-Actionable / Decisions / Unknowns / Rollup-Diffs — never auto-applied. Nine modes: full (total sweep), timeline (dates), attribution (owners), comms (coverage), plan (one plan), raid (RAID log), sources (source freshness), rollup (project↔portfolio), structure (entity completeness). Invokable as /health-check; schedulable to file. Triggers: "health check this project", "is this project's state still accurate", "run a drift check", "check for stale dates", "audit the timeline", "check ownership drift", "are comms overdue", "did this plan land", "audit the RAID log", "are our sources current", "roll up to portfolio", "refresh this project's rollup", "did anything drift since last cycle", "is the tracked state current", "is this project's data structurally complete", "audit entity completeness", "what is this project's completeness score."
 version: v3.23
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
@@ -188,7 +188,7 @@ mode_structure:
 
 **Rule authority is cited, never transcribed.** Rules are read from `core/schemas/entity-field-schemas.md` § 3 (per-entity and Core) and § 4 (cross-entity) by rule ID; **no rule text and no rule count is copied into this skill**, so a rule added there is picked up with no edit here. Every violation is emitted as a specific finding naming the **rule ID + entity + field/relationship** — a bare count is not a finding.
 
-The full contract — the `E1 ∪ E2 ∪ E3` denominator model, the coverage envelope, the ordered first-match-wins routing table, the confidence projection, the migration-telemetry surface and the reserved escalation seam — lives in `references/structure-mode.md`.
+The full contract — the `E1 ∪ E2 ∪ E3` denominator model, the coverage envelope, the ordered first-match-wins routing table, the confidence projection, the migration-telemetry surface and the stalled-migration escalation contract — lives in `references/structure-mode.md`.
 
 ## Output Structure
 

@@ -233,20 +233,73 @@ is cross-run state, and where no prior-run source exists the predicate is specif
 Fewer than `N` recorded runs yields *no verdict*, which is not the verdict `not stalled`. Report it as
 a coverage note in `## Unknowns` naming what was searched.
 
-## 11. Extension seam — stalled-migration escalation (RESERVED)
+## 11. Stalled-migration escalation
 
-**Reserved, not implemented. This mode emits no migration escalation.**
+**Implemented.** This mode emits the stalled-migration escalation. The contract it satisfies is owned by
+the migration-enforcement protocol § 3.4 (`core/standards/migration-enforcement-protocol.md`) and is
+**cited here, never restated** — its per-state emission rows are read from that table, not copied.
 
-The escalation contract is owned by the migration-enforcement protocol § 3.4. When an escalation
-consumer fills this seam, its emission must satisfy both halves of that contract:
+Seven clauses govern the emission. Each is a property of the emission; none re-derives anything this
+mode has already computed.
 
-- the FAIL **names the specific project**, never a bare count, and
-- it **carries a remediation link** to the protocol's procedure pointer, and
-- it routes to `## Decisions` — **never `## Auto-Actionable`**, regardless of the confidence assigned,
-  because a migration remediation is an EXPENSIVE operator-gated write on a tree with no version history.
+**E1 — When it fires.** The stall predicate is the protocol's § 3.2, evaluated over the recorded `MM-0`
+series for the audited project. This mode **evaluates** that predicate; it does not restate its
+threshold, its monotonicity rule, or its evaluation domain. A project satisfying it emits the escalation
+below; a project that does not emits its in-window § 3.4 row and nothing more.
 
-The seam is a named hook point so it can be filled without re-architecting the mode. Nothing in this
-card implements it.
+**E2 — Where it routes.** `## Decisions`. **Never `## Auto-Actionable`** — regardless of the confidence
+the finding carries, and regardless of whether the correct target state is derivable. This is a routing
+rule the protocol *imposes* on the instrument (§ 3.4, Routing rule), not a verdict this mode's own
+derivability filter (§ 8) reaches: a migration remediation is an EXPENSIVE operator-gated write on a
+tree with no version history, and `## Auto-Actionable` is the section an operator approves at a glance.
+§ 7 row 6's derivability test does not apply to this finding class.
+
+**E3 — What it names.** The **specific project**, by its `id`. A bare count is a contract violation, not
+a terse finding — the rule § 9 applies to every other finding in this mode, applied here at the project
+grain. `2 projects have stalled migrations` is not an emission; it is a summary of emissions that were
+never written.
+
+**E4 — The blocking step.** The emission names **which target state is blocking**, resolved as the
+factor whose value is lowest in the `MM-0` composite § 4 already computed — read, never recomputed.
+Where two factors tie, name both. Where the blocking factor is `UNMEASURED`, name it as the blocker and
+say so: an unmeasurable factor *is* what is blocking the score, and reporting it is more useful than
+reporting the next-lowest measured one.
+
+**E5 — The remediation link, two-part.** Both parts are required; either alone is NOT MET.
+
+1. **The procedure pointer** — the migration-enforcement protocol's § 5, which names the gated
+   remediation procedures and the schema that owns them.
+2. **The executing surface** — the `project-initiator` migration mode, which performs the remediation
+   that pointer describes.
+
+Part 1 says what must be done and under whose rule; part 2 says where to go to do it. A finding carrying
+only part 1 tells the operator a procedure exists but not how to run it; only part 2 tells them where to
+click but not what rule binds the result.
+
+**E6 — What it consumes, and must not derive.** The emission reads `MM-0`, its three factor values and
+the coverage envelope **as § 4 and § 6 already produced them**. It computes no metric, re-bands no
+value, and introduces no identifier outside the `MM-*` family the protocol § 4 defines. An emission that
+recomputes any factor has absorbed the measurement surface instead of composing it — the anti-pattern
+the measure-versus-remediate seam exists to prevent.
+
+**E7 — Degradation.** Where the stall predicate is **not evaluable** — fewer than the protocol's `N`
+recorded runs, or no prior-run source at all — **no escalation is produced** and the stall dimension
+renders `UNMEASURED` with its precondition named, per § 10. `UNMEASURED` is never *not stalled*, and the
+absence of an escalation is never evidence that a migration is progressing.
+
+**Emission shape.** One finding per stalled project, so the emitted set grows with the stalled
+population and never with the corpus. The finding carries a confidence and band label per § 8.
+
+```
+MIGRATION STALLED · <project-id> · blocking: <factor> <n>/<d>            [confidence: … · S…]
+  MM-0 <value> — not increased across the last N recorded runs
+  Remediate per: migration-enforcement protocol § 5 (procedure pointer)
+  Run: project-initiator migration mode — EXPENSIVE, operator-gated, snapshot is the reversal path
+```
+
+That render is a **shape, not a format string**. The load-bearing content is the project id, the
+blocking factor, and both link parts; a run carrying all four in a different arrangement satisfies this
+section, and a run dropping any one does not.
 
 ## 12. Degradation
 

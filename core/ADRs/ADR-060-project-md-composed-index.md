@@ -17,6 +17,24 @@ tags: [project-schema, composed-index, wiki-link, shared-entity-layout, gated-mi
 
 Number **060** — the originating release plan and the Stage-5 decision record (#2635) named **052**, but the global ADR sequence spans both `core/ADRs/` and `release/ADRs/` (one sequence; `check-adr-numbers.py` enforces it), and 052–057 were all claimed by concurrent releases by the time this milestone reached Engineering (052/054/055 in `release/ADRs/`; 053 in `core/ADRs/`; 056 in `release/ADRs/`; 057 in `core/ADRs/` — the v3.36 change-domain ADR). Reassigned to the next gap-free slot **060** at Engineering time (058/059 taken by this same milestone's #362/#159 ADRs). Binds atomically at Stage 12.
 
+### Supersession note — snapshot destination only
+
+**Partially superseded.** This ADR's decision stands; one operational detail inside it does not. The
+`08-Generated/_migration-snapshot/` destination named below under `## Consequences` and
+`## Reversibility` — described in both places as *"the only rollback path"* — is **superseded by the
+workspace-root pre-change-snapshot convention** recorded in `core/schemas/project-schema.md` under
+*"Snapshot destination — why the workspace root"*. Read that clause as authoritative wherever this ADR
+names a snapshot path.
+
+The reason is stated there and is not re-argued here: the folder-taxonomy reshape **renames the
+`08-Generated` bin**, so a reversal path the migration itself relocates mid-flight is not a reversal
+path. A dot-leading directory at the workspace root is outside every tree the migration moves and is
+structurally invisible to the corpus iterator rather than merely policy-excluded.
+
+**Scope of this note.** It changes the snapshot *destination* only. The composed-index decision, the
+≤50-line index shape, the inline Methodology/Status back-compat carve, and the EXPENSIVE gated-migration
+posture are unaffected and remain in force.
+
 ## Context
 
 PROJECT.md is the project's context file, but it had grown into the project's **container**: People, Systems, Milestones, Plans, and Workstreams lived as inline markdown tables, re-typed per project. The same shared entity (a Person, a System) appeared duplicated across every project that touched it, and an edit meant hunting the right table cell in the right file. Two adjacent capabilities now make a better shape possible: the `_pmo/` shared-entity SSOT (#362 / ADR-058) gives those entities a single home, and the typed-plan discriminator (#159 / ADR-059) gives plans stable ids. With both, PROJECT.md can become a thin **index** rather than the container.
