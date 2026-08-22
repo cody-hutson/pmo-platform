@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.35] - 2026-08-22
+
+The platform can now recognise files in the new project folder layout, and knows that a project's own governance files sit outside the numbered bins entirely.
+
+[Full notes](release/releases/notes/v4.35_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.35)
+
 ## [v4.34] - 2026-08-21
 
 A release's closing record now matches what it actually delivered, and a close that cannot finish stops loudly instead of quietly.

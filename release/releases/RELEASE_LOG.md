@@ -207,6 +207,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v4.35 | operational-folder-enforcement-and-migration | #5668, #3123, #5741 | #5765 | `f2619f5e22d41372a594d82519ba12ef4c0893d7` | `v4.35` | VERIFIED | 2026-08-22 |
 
 #### Deployment Log v4.35
+**Velocity:** planned 20 pts / delivered 20 pts (1.00); files-changed 17; allocation 0/12/8 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
 
 **Mechanism:** merge-commit, reached in two steps and recorded as such. PR #5765 was first merged with `--squash` at `57f75e3abada132070edb19a820aed1aa13c854a`. That was a **deviation from the documented default**: `pipeline/stage-12-execute.md` A.4.1 states that when a release plan declares no merge strategy — and this plan's Delivery Strategy declares none — **default `gh pr merge --merge` semantics apply per existing convention**. The squash structurally voided the Per-Issue Rollback this release's own Rollback Strategy declares (*"each card's commit is revertible in isolation, in reverse dependency order"*), because ten commits collapsed into one.
 
@@ -217,6 +218,20 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 **Merge conduct:** plain `gh pr merge --merge`; `--admin` was neither used nor needed, consistent with the measured branch-protection posture. Final CI on the release head `9dcb960f` was **47/47 pass, 0 non-pass**; the repair PR was **40/40 pass**.
 
 **Corpus write: NOT EXECUTED — structurally gated, by operator decision.** Two of the three cards mutate the git-ignored Layer-2 corpus, and that write is deliberately deferred. A bare `--stamp` on `main` returns `GATE REFUSED`, naming the Stage-12 window and the `--i-am-at-stage-12` token. Six keys across the Person and Portfolio tiers have no value source anywhere on the branch and carry explicit `UNSOURCED — operator input` markers under an S5 present-or-halt rule, and two target filenames remain an operator decision because `project-entity-model.md` §7 defers physicalization and ADR-138 declined to give the Portfolio record a declared producer. Inventing either would breach No-invention. **#3123's card value is the corpus write; it ships its tooling without its outcome, and that is stated here rather than closed quietly.**
+
+**Result:** SUCCESS — release PR #5765 merged to main; the `v4.35` annotated tag was claimed at `ec62696b` via `claim-version.sh`, and the claim-time stamp fired — resolving `{{RELEASE_VERSION}}` and relocating the plan to its ADR-092 nested home. **Two Stage-12 steps were initially skipped, and both were caught by controls rather than by review.** (1) The merge used `--squash` against the documented `--merge` default, voiding the Per-Issue Rollback this release declares; repaired additively by PR #5813 — net content change zero, two parents restored, so `git revert -m 1` applies. (2) The ADR-092 atomic claim was not performed, surfaced by the close-out smoke as `PLAN-MISSING-FOR-LEDGER-ROW`; `claim-version.sh` then HALTed pre-CAS because the Stage-4 plan described the claim in prose but carried no `{{RELEASE_VERSION}}` token to resolve — a Stage-4 authoring gap the tool refused to guess past. **The Layer-2 corpus write did not execute and remains structurally gated**, tracked at #5815.
+**Outcome:** SUCCESS
+**Close-Class-Telemetry:** retro-conformance N/A — no retro register found for v4.35; lessons-population N/A — no lessons register found; carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence N/A — no retro register found; evidence-preservation 16/16 (1.00); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+
+#### Release Learnings v4.35
+
+**Synthesized at:** 2026-08-22T14:22:48Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v4.35`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-08-22T06:28:27Z`
+
+**Surprise:** 8 of 37 ACs could not fail - one passed identically with and without the change it graded
+**Would-change:** read the governing line before acting on it - 3 hub errors shared that shape
+**Watch-for:** composed-state defects, 3 existed only merged and no per-card review sees them
 
 #### Deployment Log v4.34
 **Files deployed:** `closeout-reports-what-shipped` shipped as one release PR #5759 (`release/closeout-reports-what-shipped → main`, merge commit `11d244bb`), **20 files (+3082/−116)** against the pre-merge mainline `ccd3be07`. Full bucket census of the landed set, enumerated rather than sampled: `release/` × **14**, `packages/` × **4**, `core/` × **2** — the three counts sum to **20**, matching the denominator exactly, so the census is complete rather than a sample that happened to find nothing. Within `release/`: `references/` × 5, `skills/` × 4, `releases/` × 2, `tools/` × 2, `governance/` × 1, summing to 14. By change type the set is **19 modified, 1 added** — the single addition being the release plan itself, landed as Engineering Commit 0. The `packages/` × 4 are the rebuilt `release-executor` and `pmo-release-manager` `.skill` archives plus their `.sha256` content baselines, rebuilt because `FIX-PREFLIGHT` edited a rostered skill's `SKILL.md` **and** a file under its `references/`; the `skill-package-freshness` gate enforces that rebuild pre-merge, so a stale package could not have merged green. **No live install deploy ran in this stage** — Phase B4 fell outside this spoke's B1/B3/B5 scope, so no `deploy-skill` / `deploy-harness` event was emitted (see **Cycle-Time**).
