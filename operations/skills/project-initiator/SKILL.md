@@ -81,6 +81,7 @@ required fields (max 5 questions — everything else becomes `ASSUMPTION – CON
 - Known systems involved
 - Phase timeline (if already defined)
 - Additional stakeholders beyond the minimum three
+- Project terminology — domain shorthand, workstream names, and internal labels the team uses in its documents. Seeds the PROJECT.md `## Routing Signals` Terminology line (Step 3); the durable home is the `Key Terms Glossary.csv` scaffolded at Step 4.
 
 ## Execution Steps
 
@@ -182,6 +183,7 @@ toggles):
 - **Dual-Framing Co-Managed = Yes:** Include Dual-Framing Bridge section with Waterfall milestone framing. Set frontmatter `dual_framing_enabled: true`.
 - **Dual-Framing Co-Managed = No:** Omit Dual-Framing Bridge section entirely.
 - **`delivery_approach` is a 2-element array `[A, B]` (Hybrid-Two, per project-schema §6.5):** scaffold the array form verbatim in the frontmatter (e.g. `delivery_approach: [Scrum, Kanban]`) and include one native track structure per constituent (union per `work-organization-mapping-framework.md` §2.5). This is orthogonal to the Dual-Framing Bridge — a Hybrid-Two project may have `dual_framing_enabled: false`.
+- **`## Routing Signals` (routing-target registration):** populate one line per Layer-2 category, in Layer-2's own order — **Participants · Project keys · Systems · Terminology**. Each line carries **literal match terms, never `[[wiki-link]]`s**: this section is the routing *match index* that `file-router` Layer 2 (project identification) reads, not an entity record, so a wiki-link slug — a token no inbound document carries — scores nothing. Sources: Participants ← Key Stakeholders + any additional stakeholders; Project keys ← Project Name, plus the Jira key and Confluence space when supplied; Systems ← Known systems involved + Implementation Partner; Terminology ← the Project terminology Optional Input. A category with no supplied value is written as `[ASSUMPTION – CONFIRM]` with a proposed value — never left bare, never silently omitted.
 
 Set `last_synced_with_confluence: [today's date]` and `status: ACTIVE`.
 
@@ -260,6 +262,28 @@ After updating PORTFOLIO.md (Step 5), validate the write before proceeding:
 5. **If PORTFOLIO.md was not updated** (e.g., write failed or was skipped): Flag as critical: "⚠️ PORTFOLIO.md does not contain an entry for [Project Name]. This must be resolved before proceeding."
 6. **Record validation result** in the Step 8 summary as: "Portfolio Updated ✓ — [N] fields verified, [M] corrections applied" or "⚠️ Portfolio Update Failed — manual intervention required."
 
+### Step 5b: Routing-Target Registration Check
+
+A newly scaffolded project must be resolvable as a **routing destination**. `file-router` Layer 2
+(project identification) enumerates the active project set at run time and scores each project's
+`PROJECT.md` — there is no separate registry to write to, so registration is by construction and
+this step **verifies** that construction rather than performing a second write.
+
+1. **Assert the by-construction registration.** `projects/[Project]/PROJECT.md` exists, its inline
+   `**Status:**` line reads `ACTIVE`, and the project name is non-empty. These are the three
+   properties Layer-2 enumeration depends on. On failure, **halt and surface** — a project the
+   enumerator cannot see is not scaffolded, and no later step repairs it.
+2. **Score the scaffolded record against Layer 2's four categories**, reading `## Routing Signals`
+   only. A category counts as **populated** when it carries at least one literal term. A bare blank
+   and an `[ASSUMPTION – CONFIRM]` placeholder both count as **unpopulated** — so the verdict cannot
+   be gamed by a placeholder standing in for a term.
+3. **Record the verdict** — `Routing target registered ✓ — N of 4 Layer-2 signal categories
+   populated (CHEAP · confidence: HIGH)` — and carry it into the Step 8 summary.
+4. **Degrade, never block.** `N < 4` is surfaced as `[ASSUMPTION – CONFIRM]` naming each unpopulated
+   category and proposing a value drawn from the Required / Optional Inputs. It does **not** halt the
+   scaffold: an under-populated routing record still resolves, only at lower confidence. That is a
+   quality signal, not a scaffold failure.
+
 ### Step 6: Generate User Setup Checklist
 
 Produce a checklist of actions the user must take in parallel systems. This is NOT optional —
@@ -314,6 +338,7 @@ Present the user with:
 5. Recommended next steps
 6. Any `ASSUMPTION – CONFIRM` items that need verification
 7. `_pmo/` shared-entity store: bootstrapped (if first project) or linked; entities linked by id; any names routed to the Person clarification queue (Step 2b)
+8. Routing-target registration verdict from Step 5b — `Routing target registered ✓ — N of 4 Layer-2 signal categories populated` — naming any unpopulated category and its proposed value
 
 ---
 
@@ -344,9 +369,9 @@ the project is read-only reference material with a complete audit trail.
 ### Step B1: Read Project State
 
 1. Read the project's `PROJECT.md` — confirm status is `ACTIVE` or `CLOSING`
-2. Read `04-PMO-Operations/` trackers: Daily Status Log, RAID Log, Communications Tracker,
+2. Read `3-Operations/` trackers: Daily Status Log, RAID Log, Communications Tracker,
    Open Meetings Tracker, Transcript Register
-3. Inventory all folders (01-08) for content — note which have artifacts vs. empty
+3. Inventory the **closed bin set** (`1-Governance/` · `2-Delivery/` · `3-Operations/` · `4-Evidence/` · `5-Reference/`) **and the two transient underscore areas** — `_inbox/`, **including `_inbox/_unsorted/`**, and `_generated/` — for content; note which have artifacts vs. empty. `_inbox/_unsorted/` is named explicitly because it is the population the Step B2 unsorted-hold reconcile and the Step B5 precondition operate on; an inventory that omits it cannot feed them.
 4. Read `PORTFOLIO.md` — confirm project is listed as active
 
 If PROJECT.md status is already `CLOSED`, stop and notify user: "This project is already
@@ -412,9 +437,19 @@ Review all operational trackers and produce a disposition for every open item:
 - All UNASSIGNED transcripts: flag for user decision (process now or close unprocessed)
 - All PROCESSING transcripts: complete or close with note
 
+**Unsorted Hold (`_inbox/_unsorted/`):**
+
+This is the set of files `file-router` **could not confidently classify** and held for operator review. Archiving it undispositioned is the silent swallow this surface exists to prevent.
+
+1. **Enumerate the directory as ground truth:** every file in `_inbox/_unsorted/` **except `_queue.md` itself**. `_queue.md` is the hold's register, not a held item, and never counts toward the population — a directory containing only `_queue.md` is an **empty** hold.
+2. **Reconcile against `_queue.md`.** A file on disk with no queue row, and a queue row with no file on disk, are each recorded as an explicit **divergence row** — never resolved silently, and never dropped from the population because the register disagrees with the directory.
+3. **Assign every held item exactly one disposition** from the closed set: `CLASSIFIED` · `TRANSFERRED` · `DISCARDED` · `ARCHIVED-AS-UNSORTED`.
+4. `ARCHIVED-AS-UNSORTED` is the **default** — it preserves today's outcome. It is applied only as a **stated choice**, never as a silent fallback, and it is what lets closure complete unattended.
+5. Reversibility: `TRANSFERRED` / `DISCARDED` = **EXPENSIVE · confidence: HIGH**; `ARCHIVED-AS-UNSORTED` = **IRREVERSIBLE · confidence: HIGH** (it rides the Step B5 archive move).
+
 ### Step B3: Produce Project Closure Summary
 
-Generate `[Project]_Closure_Summary.md` in the project's `01-Governance/` folder:
+Generate `[Project]_Closure_Summary.md` in the project's `1-Governance/` folder:
 
 ```markdown
 # Project Closure Summary — [Project Name]
@@ -447,6 +482,13 @@ Generate `[Project]_Closure_Summary.md` in the project's `01-Governance/` folder
 | Issues | | | | | |
 | Dependencies | | | | | |
 
+## Unsorted Hold Disposition
+| Item | `_queue.md` row (or divergence note) | Disposition | Reversibility |
+|------|---------------------------------------|-------------|---------------|
+| | | | |
+
+*Population = every file in `_inbox/_unsorted/` except `_queue.md`. An empty population is recorded as `Unsorted hold: empty — no items held` and the table is omitted.*
+
 ## Items Transferred
 [Table: Item, Type, Transferred To, Context]
 
@@ -472,6 +514,25 @@ Update the project's `PROJECT.md`:
 4. Add `archive_location: projects/Archive/[Project]/`
 
 ### Step B5: Move Project to Archive
+
+**Precondition — Unsorted-Hold Reconcile.** Every item in the Step B2 unsorted-hold
+population carries a disposition before the archive move. An **empty population satisfies this
+with no prompt and no output**. A non-empty population is **surfaced** — each item with its
+`_queue.md` row (or a divergence note) and the closed 4-value set, `ARCHIVED-AS-UNSORTED`
+pre-selected — and the operator may accept the defaults or override per item. **Closure is not
+blocked**: an operator who takes no action archives the hold as recorded, which is today's outcome
+made explicit rather than silent.
+
+```mermaid
+flowchart TD
+    b2([Step B2 dispositions complete]) --> pop{"Undispositioned items?<br/>(files in _unsorted/ excluding _queue.md,<br/>reconciled against _queue.md rows)"}
+    pop -->|None| b5([Step B5 — archive move])
+    pop -->|Some| surf[Surface each item: _queue.md row or divergence note<br/>+ closed 4-set, ARCHIVED-AS-UNSORTED pre-selected]
+    surf --> op{Operator overrides any default?}
+    op -->|Yes| surf
+    op -->|No / accepts| rec[Record dispositions in Closure Summary]
+    rec --> b5
+```
 
 1. Create `projects/Archive/[Project]/` if it doesn't exist
 2. Move the entire project folder from `projects/[Project]/` to `projects/Archive/[Project]/`
@@ -518,6 +579,9 @@ Produce a checklist of actions the user must take in parallel systems:
 **For Hybrid (both):**
 - All items from both lists above
 
+**For all governance models:**
+- [ ] Confirm the **unsorted-hold disposition** recorded at Step B2 (`_inbox/_unsorted/` — `CLASSIFIED` / `TRANSFERRED` / `DISCARDED` / `ARCHIVED-AS-UNSORTED`) is what you intend to carry into the archive [**IRREVERSIBLE · confidence: HIGH** for `ARCHIVED-AS-UNSORTED` — it rides the Step B5 move and cannot be re-triaged from the archive]
+
 ### Step B8: Present Closure Summary
 
 Present the user with:
@@ -528,6 +592,7 @@ Present the user with:
 5. User Teardown Checklist (actionable)
 6. Any items requiring user decision before closure is complete
 7. Any `ASSUMPTION – CONFIRM` items
+8. Unsorted-hold disposition counts — items held, and the count per disposition (`CLASSIFIED` / `TRANSFERRED` / `DISCARDED` / `ARCHIVED-AS-UNSORTED`), plus any divergence rows; report `Unsorted hold: empty — no items held` when the population was empty
 
 ---
 
@@ -564,6 +629,8 @@ level** per `core/specs/reversibility-protocol.md`.
 - Mode B Step B5 (Move Project to Archive) — the archive move itself (governance / portfolio-of-record state change).
 - Mode B Step B7 (User Teardown Checklist) — action recommendations the TPM must execute in parallel systems.
 - Mode B Step B8 (Closure Summary presentation) — items requiring user decision before closure is complete.
+- Mode A Step 5b (Routing-Target Registration Check) — the registration verdict and the `N of 4` populated-category count, plus any proposed values for unpopulated categories (**CHEAP** — the record is editable in place and nothing downstream has consumed it yet).
+- Mode B Step B2 (Unsorted Hold) — the per-item disposition choice: `CLASSIFIED` is CHEAP (the file is routed into a bin and can be re-routed); `TRANSFERRED` and `DISCARDED` are **EXPENSIVE** (the item leaves this project's record, mirroring the RAID `CLOSED – Transferred` tier); `ARCHIVED-AS-UNSORTED` is **IRREVERSIBLE** — it rides the Step B5 archive move into read-only reference material, where the queue-review prompt no longer fires.
 
 **Tier vocabulary (undo threshold + stakeholder impact):**
 
@@ -764,6 +831,36 @@ structural conformance and content quality.
   shell-meta folder lands on disk and in PORTFOLIO.md, and the malformed name becomes a
   post-deploy operator rename that has to cascade through PROJECT.md and every tracker
   filename.
+
+### Mode B archival with an unreconciled unsorted hold — PROC
+
+- **Signature (observable signal):** Mode B Step B5 moves a project to
+  `projects/Archive/[Project]/` while `_inbox/_unsorted/` contains files other than `_queue.md`
+  that carry no disposition — or the Closure Summary has no `## Unsorted Hold Disposition`
+  section (and no `Unsorted hold: empty` record) while held files went into the archive.
+- **Conditional:** do NOT execute the Step B5 archive move when the unsorted hold holds
+  undispositioned items, because that hold is precisely the set of files the router **could not
+  confidently classify** and flagged for operator review — and archiving it does not merely
+  defer the review, it ends it: the project leaves the active set, so `file-router`'s
+  scan-on-invocation queue-review mitigation stops firing for it entirely, and the flagged
+  files become unreachable reference material that no queue will ever re-surface.
+- **Root cause:** The unsorted hold is a *transient* underscore area, and transient areas read
+  as scratch — so a closure inventory scoped to the numbered bins never enumerates it, and the
+  move sweeps it along silently. The failure is invisible at closure time precisely because
+  nothing reports on a queue that no longer has an owner.
+- **Mitigation:** Enumerate the hold at Step B1 item 3 (the inventory names `_inbox/_unsorted/`
+  explicitly), reconcile the directory against `_queue.md` at Step B2 with divergences recorded
+  as explicit rows, assign every held item one of `CLASSIFIED` / `TRANSFERRED` / `DISCARDED` /
+  `ARCHIVED-AS-UNSORTED`, and record the result in the Closure Summary's
+  `## Unsorted Hold Disposition` table before Step B5 runs. **Surface, do not halt** — an empty
+  population passes with no prompt, and `ARCHIVED-AS-UNSORTED` is pre-selected so an operator
+  who takes no action still gets today's outcome, now recorded rather than silent.
+- **Principal response vs. junior response:** Principal surfaces the held items with their
+  queue rows, states that `ARCHIVED-AS-UNSORTED` is IRREVERSIBLE, and records every disposition
+  in the Closure Summary — so a future reader knows what was never triaged and why. Junior runs
+  the archive move on the numbered bins alone, the hold rides along intact, and the unreviewed
+  intake queue is discovered months later inside a read-only archive with no path back to
+  triage.
 
 ## Cross-Skill Integration
 

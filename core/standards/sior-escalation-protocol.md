@@ -136,6 +136,15 @@ project's **free-text `## Key People` table** in PROJECT.md (per
 > fallback, not the primary**: PROJECT.md itself still persists people as free-text prose, and not every
 > project maintains a register, so the prose lookup plus the warn-and-route-to-PgM terminal case remain
 > the graceful degradation when no register exists or no authority resolves.
+>
+> **Cross-reference — the schema's `team_roster` field.** `core/schemas/project-schema.md` §
+> `team_roster` describes the structured people-graph index as that field's **target end-state** for the
+> `## Key People` prose. Read the two clauses together, because each is only half the contract:
+> `team_roster` is the **primary** path, and this clause is the **retained fallback**. The prose path is
+> **not migration debt** and carries no repair obligation — a consumer that reads `## Key People` is
+> implementing the ratified two-path resolution above, not depending on a stale surface. Removing the
+> prose path would delete a designed graceful-degradation route and contradict ADR-025 §5, which is
+> `Accepted` on exactly this mapping.
 
 ## Presentation Neutrality
 
