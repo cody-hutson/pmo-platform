@@ -98,8 +98,10 @@ Group issues by a long-running, multi-milestone initiative. **An initiative labe
 
 | Namespace | Color | Role | Examples (live) |
 |---|---|---|---|
-| `project:*` | `0052CC` (blue) / per-label | Cross-cutting, multi-milestone initiative grouping | `project:skill-suite`, `project:pipeline`, `project:methodology-packs`, `project:knowledge-corpus`, `project:governance-hygiene` |
+| `project:*` | `0052CC` (blue) / per-label | Cross-cutting, multi-milestone initiative grouping | `project:skill-suite`, `project:pipeline`, `project:methodology-packs`, `project:knowledge-corpus`, `project:governance-hygiene`, `project:platform-quality` |
 | `epic:*` | `5319e7` (purple) | Skill-suite thrust grouping (the epics under `project:skill-suite`) | `epic:skill-architecture-spine`, `epic:skill-role-build`, `epic:skill-function-hardening`, `epic:skill-infra-measurement` |
+
+**Finite vs standing initiatives.** An initiative label groups work toward a capability; most do so **finitely** — the roadmap sequences a Now/Next/Later path and archives at sunset. A **standing** initiative is the permitted second shape (`sunset_criteria: permanent`, per [`initiative-roadmap-framework.md`](../standards/initiative-roadmap-framework.md) §6.1(f)): it groups recurring work that never terminates — ongoing defect and hygiene flow — and is therefore governed by **capacity allocation measured against a floor**, never burned down against a scope. `project:platform-quality` is the standing case. The distinction is load-bearing precisely because a standing grouping must not be converted into a container that is expected to close: the prohibition above (an initiative is never materialized as a standalone `type:epic` issue) applies to it with full force, and an epic whose contract is closure cannot hold work whose defining property is that it does not stop.
 
 **Usage pattern:** Apply to the umbrella ticket, all child tickets (new), and any existing tickets absorbed under the initiative scope. Query `gh issue list --label "project:skill-suite"` (or the relevant `epic:*` label) returns the complete landscape of work tied to that initiative. The operator-local roadmap doc § 3 Now/Next/Later sequences all labeled issues into the architected path-to-done.
 
