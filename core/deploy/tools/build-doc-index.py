@@ -551,9 +551,25 @@ def _insert_lifecycle_event(conn: sqlite3.Connection, file_id: int, md: dict) ->
     )
 
 
-# Folder token of a project's governance root — the representative node for a project
-# whose name a BELONGS_TO edge targets (see _project_representatives).
-_GOVERNANCE_FOLDER = "01-governance"
+# Folder tokens that can carry a project's governance root — the representative node for
+# a project whose name a BELONGS_TO edge targets (see _project_representatives).
+#
+# UNION-AWARE over BOTH live taxonomies, because the ADR-080 additive-union migration
+# window means a project's governance root may sit under any of three tokens. This is
+# the same union-awareness gap the node classifier closed one layer upstream: keying a
+# CONSUMER on the legacy token alone silently drops every project that has migrated.
+# The values are the canonical `folder` enum members the node stamper emits, matched
+# EXACTLY (measured: case-insensitive matching resolves the identical project set on the
+# live corpus, so widening to a case fold is unsupported by evidence and not done).
+#
+# ORDER IS PREFERENCE, highest first. Legacy `01-governance` leads deliberately: a
+# legacy project resolves to exactly the representative it resolved to before this
+# union, so the change is strictly additive and regresses no existing edge target.
+_REPRESENTATIVE_FOLDERS = (
+    "01-governance",     # legacy NN- taxonomy governance bin
+    "1-Governance",      # ADR-080 five-bin governance bin
+    "_project-root",     # ADR-139 NON-BIN sentinel — a project's own root governance files
+)
 
 
 def _project_representatives(conn: sqlite3.Connection) -> dict:
@@ -561,19 +577,24 @@ def _project_representatives(conn: sqlite3.Connection) -> dict:
     `BELONGS_TO` edge (whose target is the PROJECT NAME, not a filename — the shape #1770
     emits) can resolve to a real `files(file_id)` the schema's FK requires.
 
-    The representative is the project's governance-root file (`folder='01-governance'`),
-    preferring a lower `file_id` (the deterministic first-by-sorted-path governance file —
-    typically `PROJECT.md`). A project with NO governance-root file has no representative;
-    its `BELONGS_TO` edges stay logged WARN (never fabricated). This is the builder-side
-    resolution of the #1770 `BELONGS_TO → project-name` ↔ schema `target_file_id → file`
-    contract seam — conservative (governance-root only) and non-fabricating."""
-    reps: dict = {}
-    for fid, project in conn.execute(
-            "SELECT file_id, project FROM files WHERE folder = ? ORDER BY file_id",
-            (_GOVERNANCE_FOLDER,)):
-        if project not in reps:      # first (lowest file_id = first sorted path) wins
-            reps[project] = fid
-    return reps
+    The representative is the project's governance-root file, resolved over the
+    `_REPRESENTATIVE_FOLDERS` union in that tuple's PREFERENCE order and, within the
+    winning token, preferring a lower `file_id` (the deterministic first-by-sorted-path
+    governance file — typically `PROJECT.md`). A project with no file under ANY of those
+    tokens has no representative; its `BELONGS_TO` edges stay logged WARN (never
+    fabricated). This is the builder-side resolution of the #1770 `BELONGS_TO →
+    project-name` ↔ schema `target_file_id → file` contract seam — conservative
+    (governance-root only) and non-fabricating."""
+    rank = {tok: i for i, tok in enumerate(_REPRESENTATIVE_FOLDERS)}
+    placeholders = ",".join("?" * len(_REPRESENTATIVE_FOLDERS))
+    best: dict = {}                  # project -> (token_rank, file_id)
+    for fid, project, folder in conn.execute(
+            f"SELECT file_id, project, folder FROM files WHERE folder IN ({placeholders})",
+            _REPRESENTATIVE_FOLDERS):
+        cand = (rank[folder], fid)
+        if project not in best or cand < best[project]:
+            best[project] = cand
+    return {project: fid for project, (_, fid) in best.items()}
 
 
 def _resolve_and_insert_edges(conn: sqlite3.Connection, filename_to_id: dict) -> list:
@@ -1282,6 +1303,54 @@ def run_self_test() -> int:
         if ev < 1:
             failures.append("(FMF-2) update_file did not append a lifecycle_events row on state change")
 
+    # --- (R1) representative resolution is UNION-AWARE over both live taxonomies ---
+    # Exercised directly against an in-memory `files` table rather than the on-disk
+    # fixture, so the arm is deterministic and cannot perturb AC2's byte-identical dump.
+    # Each case names one token of _REPRESENTATIVE_FOLDERS; the COVERAGE GUARD below
+    # fails the build when a token is added to that tuple without a case here, which is
+    # what stops this arm decaying into the legacy-only probe it replaces.
+    r1_conn = _connect(":memory:")
+    _create_schema(r1_conn)
+    # (token, project, filename) — one project per token, plus a no-governance-root
+    # project as the SPECIFICITY arm (it must resolve to NOTHING, never be fabricated).
+    r1_cases = [
+        ("01-governance", "r1-legacy", "PROJECT.md"),
+        ("1-Governance", "r1-fivebin", "PROJECT.md"),
+        ("_project-root", "r1-sentinel", "PROJECT.md"),
+    ]
+    r1_specificity_project = "r1-no-governance-root"
+    r1_rows = r1_cases + [("04-operations", r1_specificity_project, "raid.md")]
+    for i, (folder, project, filename) in enumerate(r1_rows):
+        _insert_file(r1_conn, dict(
+            path=f"{project}/{folder}/{filename}", filename=f"{i}_{filename}",
+            file_format="markdown", domain="source", type="plan", project=project,
+            folder=folder, managed_by="stamp-node-frontmatter", parent=None,
+            lifecycle_state="current", lifecycle_changed=None,
+            trust_category="controlled-truth", evidence_quality=None,
+            created_date="2026-01-01", modified_date="2026-01-01", content_hash="x",
+            approval_state=None, version=None, superseded_by=None,
+            last_evidence_date=None, staleness_threshold_days=None, entry_count=None,
+            trigger_source=None, validation_state=None))
+    r1_reps = _project_representatives(r1_conn)
+    r1_conn.close()
+
+    # SENSITIVITY: every taxonomy in the union resolves a representative.
+    for folder, project, _ in r1_cases:
+        if project not in r1_reps:
+            failures.append(f"(R1) project under folder '{folder}' resolved NO representative "
+                            f"— BELONGS_TO edges for it would all dangle")
+    # SPECIFICITY: a project with no governance-root file is NOT fabricated a representative.
+    if r1_specificity_project in r1_reps:
+        failures.append("(R1) specificity arm fired: a project with no governance-root file "
+                        "was fabricated a representative")
+    # COVERAGE GUARD: a token added to _REPRESENTATIVE_FOLDERS without a case above is a
+    # silent re-introduction of the union-awareness gap. Fail loudly instead.
+    r1_covered = {folder for folder, _, _ in r1_cases}
+    for tok in _REPRESENTATIVE_FOLDERS:
+        if tok not in r1_covered:
+            failures.append(f"(R1 COVERAGE GUARD) _REPRESENTATIVE_FOLDERS carries '{tok}' "
+                            f"with no self-test case — add one to r1_cases")
+
     if failures:
         print("build-doc-index self-test FAIL:", file=sys.stderr)
         for f in failures:
@@ -1290,7 +1359,8 @@ def run_self_test() -> int:
     print("build-doc-index self-test OK "
           "(AC1 tables+indexes / AC2 byte-identical / AC3 <10s / AC4 Q4+Q5 non-empty / "
           "7-queries-execute / F6 staleness :domain contract / "
-          "FMF-2 update_file==rebuild / FMF-3 Q6 temporal discrimination)")
+          "FMF-2 update_file==rebuild / FMF-3 Q6 temporal discrimination / "
+          "R1 union-aware project representatives + coverage guard)")
     return 0
 
 
