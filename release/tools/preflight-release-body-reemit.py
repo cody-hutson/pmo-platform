@@ -6,13 +6,15 @@ WHAT THIS GUARDS. `reemit-release-bodies.sh --execute` overwrites published
 GitHub Release bodies. GitHub keeps no version history for a Release body, so the
 mutation is irreversible except through the pre-overwrite capture written by
 capture-release-bodies.sh. That capture is only a reversibility control if it is
-DURABLE — committed and merged, not sitting in a working tree — and the emitter
-tests only that the file exists on disk. This gate closes that gap, and four
-others, and it FAILS CLOSED: any arm it cannot evaluate is a BLOCK, never a pass.
+DURABLE — committed and merged, not sitting in a working tree — and CURRENT —
+actually reproducing the body it would be restoring over. The emitter tests only
+that the file exists on disk. This gate closes that gap, and four others, and it
+FAILS CLOSED: any arm it cannot evaluate is a BLOCK, never a pass.
 
 Run it immediately before `--execute`, from the repo root, and paste its output
 into the execution record. It mutates nothing: every probe is a git read, a
-filesystem read, or a hermetic fixture run.
+filesystem read, a READ-ONLY `gh release view`, or a hermetic fixture run. It
+never calls `gh release edit`, `gh release create` or `gh release delete`.
 
 THE FIVE ARMS
 -------------
@@ -34,23 +36,72 @@ A2  LAYOUT-VISIBLE (specificity)
     ref, a typo -- would produce an all-empty result that reads exactly like
     "migration complete". A1 alone cannot tell those two apart; A2 can.
 
-A3  CAPTURE-DURABLE
-    Every version in the run must have a non-empty capture reachable at
-    origin/main, proved with `git cat-file`. On-disk existence is NOT durability.
+A3  CAPTURE-CORRESPONDS  (durability AND currency)
+    Every version in the run must have a capture that is
+      (a) DURABLE -- non-empty and reachable at origin/main, proved with
+          `git cat-file`; on-disk existence is NOT durability -- and
+      (b) CURRENT -- byte-identical to the body GitHub publishes RIGHT NOW.
+
+    Why (b) exists. Durability alone proves a capture is a committed artifact.
+    It does not prove the artifact is a ROLLBACK SOURCE, which is the only
+    property that makes the re-emit reversible. A capture taken before some
+    EARLIER edit is durable and non-empty and completely wrong: restoring from
+    it would publish the body as it stood at that earlier moment, silently
+    discarding everything published since. This is not hypothetical -- the
+    repository already carries 29 such captures from a prior repair, 18 of them
+    for versions in this card's cohort, and every one of the 29 is stale against
+    today's published bodies. A gate that printed `A3 PASS -- all 18 capture(s)
+    present and non-empty` over them manufactured confidence in a rollback that
+    would not roll back. Presence is not correspondence.
+
+    HOW THE COMPARISON IS MADE. SHA-256, which is the capture format's own
+    integrity currency: capture-release-bodies.sh records a digest per capture in
+    a canonical `SHA256SUMS` and again in `MANIFEST.md`, so the digests this arm
+    prints cross-reference the capture's own artifacts directly and an operator
+    can reproduce the arm by hand with `shasum -a 256 -c`. The live side is read
+    with EXACTLY the command that wrote the capture --
+    `gh release view <v> --json body --jq .body` -- so both byte streams come
+    from one tool under one normalisation and any difference between them is a
+    real body difference, never a formatting artefact. (Verified: for all 29
+    captures in the repository, the digest of the blob at origin/main equals the
+    digest the capture tool recorded, so the ref read is byte-faithful.)
+
+    FAILS CLOSED. A live body that cannot be read -- gh absent, unauthenticated,
+    no published Release, a failed read -- is a BLOCK, never a pass: an arm that
+    cannot establish correspondence has not established it. The currency limb is
+    taken on EVERY run in which A3 runs, never deferred behind another arm's
+    verdict, because "A3 PASS while a different arm blocks" is precisely the
+    reading that made the original defect dangerous.
+
+    The four outcomes are distinct in the rendered detail, because they are four
+    different repairs: ABSENT (capture the version), EMPTY (re-capture it),
+    STALE (capture a NEW dated directory -- the capture tool refuses to
+    overwrite, and that refusal is correct), UNREADABLE (restore the capability).
 
 A4  EMIT-SAFE
     The bytes that WOULD be published are computed here and asserted to be
     (a) non-empty and (b) free of surviving YAML frontmatter.
 
-    Why (b) exists. The shipped frontmatter strip is `sed '1,/^---$/d; …'`, whose
-    range runs from line 1 to the FIRST `^---$` at line 2 or later. When a note's
-    frontmatter starts on line 1 that is the closing delimiter and the strip is
-    correct. When ANY line precedes the opening delimiter -- a lint directive, a
-    comment, a blank -- the range ends on the OPENING delimiter instead, and the
-    whole YAML block survives into the "body". Publishing that would write raw
-    frontmatter onto a public Release page: precisely the defect the re-emit
+    Why (b) exists. Publishing a body that still carries its YAML block writes
+    raw frontmatter onto a public Release page: precisely the defect the re-emit
     exists to repair, reintroduced by the repair. The emitter guards the empty
     strip and not this one, so the assertion lives here.
+
+    The specific strip defect that motivated the arm is now FIXED at the source.
+    The shipped transform was `sed '1,/^---$/d; …'`, whose range runs from line 1
+    to the FIRST `^---$` at line 2 or later: correct when a note's frontmatter
+    opens on line 1, wrong whenever ANY line precedes the opening delimiter,
+    because the range then ends on the OPENING delimiter and the whole YAML block
+    survives. Three corpus notes (v1.08 / v1.09 / v1.10) carry a lint directive
+    there. The transform now runs `sed -n '/^---$/,$p'` first, so the shipped
+    idiom always sees a stream whose line 1 IS the opening delimiter.
+
+    A4 is NOT weakened by that fix and must not be. `strip_frontmatter` below
+    models the REPAIRED transform byte-faithfully, so A4 still predicts the exact
+    bytes the emitter would publish; the assertion simply now has nothing to
+    catch in the current corpus. It remains armed against any future note shape
+    the transform mis-handles -- a doubled frontmatter block still trips it, and
+    the self-test drives that case so the limb cannot rot into dead code.
 
 A5  EXTRACTION-CAPABILITY (the E-1 gate)
     The drift checker is the emitter's resume ledger AND its post-edit verifier.
@@ -90,6 +141,7 @@ EXIT CODES
 """
 import argparse
 import contextlib
+import hashlib
 import io
 import os
 import shutil
@@ -118,16 +170,92 @@ def _run(args, cwd=None, env=None):
     return p.returncode, p.stdout.decode("utf-8", "replace"), p.stderr.decode("utf-8", "replace")
 
 
-def strip_frontmatter(text):
-    """Byte-faithful model of the shipped `sed '1,/^---$/d; 1,/^---$/d'` strip.
+def _run_raw(args, cwd=None, env=None):
+    """As `_run`, but stdout is returned as RAW BYTES.
 
-    The second command can never re-activate: its addr1 is the literal line 1,
-    which has already passed by the time any line reaches it. The pair therefore
-    collapses to a single deletion range -- line 1 through the first `^---$` at
-    line 2 or later. Modelled exactly, so A4 predicts what the emitter would
-    actually publish rather than what a corrected strip would.
+    A3's correspondence check digests two byte streams. `_run` decodes with
+    errors="replace", which is lossy: two different bodies can decode to the same
+    replacement-char text, and a round trip back through encode() is not the
+    original bytes. Digesting the decoded form would therefore be capable of
+    reporting a stale capture as current -- the exact failure the arm exists to
+    prevent. Bytes in, bytes digested.
+    """
+    p = subprocess.run(args, cwd=cwd, env=env,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return p.returncode, p.stdout, p.stderr.decode("utf-8", "replace")
+
+
+def _find_gh():
+    """Resolve gh off the pinned PATH, mirroring check-release-body-drift.sh.
+
+    Returns "" when gh is not installed. The caller turns that into a BLOCK --
+    never a pass -- because an arm that cannot read the live body cannot assert
+    correspondence with it.
+    """
+    for c in ("/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh",
+              os.path.join(os.path.expanduser("~"), ".local/bin/gh")):
+        if os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    return shutil.which("gh") or ""
+
+
+def live_body_digest(version):
+    """SHA-256 of the body GitHub publishes for `version` RIGHT NOW.
+
+    Returns (hexdigest, None) on success, (None, reason) on any failure.
+
+    Read with EXACTLY the command capture-release-bodies.sh uses to WRITE a
+    capture -- `gh release view <v> --json body --jq .body` -- so the captured
+    bytes and the live bytes are produced by one tool under one normalisation.
+    Any digest difference is then a real body difference, not an artefact of
+    reading the two sides differently.
+
+    This is the PRODUCTION fetcher. `arm_a3` takes it as a default argument so
+    the self-test can inject a hermetic one; no production caller passes that
+    argument. Same fault-injection-seam pattern as `arm_a5`'s `seeder`.
+    """
+    gh = _find_gh()
+    if not gh:
+        return None, "gh is not installed on this host"
+    rc, out, err = _run_raw([gh, "release", "view", version,
+                             "--json", "body", "--jq", ".body"])
+    if rc != 0:
+        reason = err.strip().split("\n")[0][:80] if err.strip() else "exit %d" % rc
+        return None, reason
+    return hashlib.sha256(out).hexdigest(), None
+
+
+def strip_frontmatter(text):
+    """Byte-faithful model of the shipped two-stage strip.
+
+    The shipped transform is
+        sed -n '/^---$/,$p'  |  sed '1,/^---$/d; 1,/^---$/d'
+    in BOTH executables (reemit-release-bodies.sh, check-release-body-drift.sh).
+    A4 exists to predict the bytes the emitter would actually publish, so this
+    models the shipped pair exactly -- never an idealised strip.
+
+    Stage 1 drops any LEAD-IN before the opening delimiter. Stage 2 is the
+    original idiom: its second command can never re-activate (addr1 is the
+    literal line 1, already passed), so the pair collapses to one deletion range
+    -- line 1 through the first `^---$` at line 2 or later.
+
+    Composed, that is: find the opening delimiter, then delete through the first
+    `^---$` strictly after it. When the opening delimiter is line 1, stage 1 is
+    the identity and this is byte-identical to the pre-repair model -- which is
+    why 192 of the 195 corpus notes are unaffected by the repair.
+
+    No opening delimiter, or no closing delimiter after it, yields "" -- the
+    fail-closed outcome the callers' empty-body ABORT is waiting for.
     """
     lines = text.split("\n")
+    # Stage 1: drop everything before the first `---` (the opening delimiter).
+    for start, ln in enumerate(lines):
+        if ln == "---":
+            break
+    else:
+        return ""
+    lines = lines[start:]
+    # Stage 2: delete line 1 through the first `---` at line 2 or later.
     for i in range(1, len(lines)):
         if lines[i] == "---":
             return "\n".join(lines[i + 1:])
@@ -269,27 +397,72 @@ def arm_a1_a2(root, rep):
                 % (PERMITTED_SUBFOLDER, REF))
 
 
-def arm_a3(root, capture_dir, versions, rep):
-    missing, empty = [], []
+def arm_a3(root, capture_dir, versions, rep, fetcher=live_body_digest):
+    """Assert every capture is DURABLE and CURRENT. See A3 in the module docstring.
+
+    `fetcher` is a FAULT-INJECTION seam, not a configuration knob: it lets the
+    hermetic self-test drive all four outcomes without a network. No production
+    caller passes it.
+
+    The currency probe is only spent on captures that cleared durability -- an
+    absent or empty capture already blocks, and its live body would tell us
+    nothing we could act on. That keeps the common real case (no capture
+    directory yet) at zero network reads while leaving the pass path impossible
+    to reach without a completed comparison.
+    """
+    missing, empty, stale, unreadable = [], [], [], []
+    current = 0
     for v in versions:
         path = "%s/%s.published.txt" % (capture_dir.rstrip("/"), v)
         rc, _o, _e = _run(["git", "-C", root, "cat-file", "-e", "%s:%s" % (REF, path)])
         if rc != 0:
             missing.append(v)
             continue
-        rc, out, _e = _run(["git", "-C", root, "show", "%s:%s" % (REF, path)])
-        if rc != 0 or not out.strip():
+        rc, blob, _e = _run_raw(["git", "-C", root, "show", "%s:%s" % (REF, path)])
+        if rc != 0 or not blob.strip():
             empty.append(v)
-    if missing or empty:
-        rep.add("A3", "BLOCK",
-                "capture is NOT durable at %s - %d absent%s, %d empty%s (of %d). "
-                "A capture that lives only in a working tree is not a rollback source."
-                % (REF, len(missing), (" [" + ", ".join(missing[:8]) + "]") if missing else "",
-                   len(empty), (" [" + ", ".join(empty[:8]) + "]") if empty else "",
-                   len(versions)))
-    else:
+            continue
+        captured = hashlib.sha256(blob).hexdigest()
+        live, reason = fetcher(v)
+        if live is None:
+            unreadable.append((v, reason or "unknown"))
+        elif live != captured:
+            stale.append((v, captured, live))
+        else:
+            current += 1
+
+    if not (missing or empty or stale or unreadable):
         rep.add("A3", "PASS",
-                "all %d capture(s) present and non-empty at %s" % (len(versions), REF))
+                "all %d capture(s) CORRESPOND - durable at %s and SHA-256-identical "
+                "to the body published now, so each one is a rollback source rather "
+                "than merely a file" % (len(versions), REF))
+        return
+
+    parts = []
+    if missing:
+        parts.append("%d ABSENT at %s [%s] - capture them"
+                     % (len(missing), REF, ", ".join(missing[:8])))
+    if empty:
+        parts.append("%d EMPTY [%s] - present to `cat-file -e` and worthless as a "
+                     "rollback source" % (len(empty), ", ".join(empty[:8])))
+    if stale:
+        parts.append("%d STALE [%s] - the capture is durable but does NOT reproduce "
+                     "the body published now, so restoring from it would publish an "
+                     "older body and discard everything published since. Take a NEW "
+                     "dated capture directory; capture-release-bodies.sh refuses to "
+                     "overwrite an existing capture and that refusal is correct"
+                     % (len(stale),
+                        ", ".join("%s capture=%s live=%s" % (v, c[:12], l[:12])
+                                  for v, c, l in stale[:6])))
+    if unreadable:
+        parts.append("%d UNREADABLE [%s] - correspondence could not be established, "
+                     "which is a BLOCK and never a pass"
+                     % (len(unreadable),
+                        ", ".join("%s (%s)" % (v, r) for v, r in unreadable[:6])))
+    rep.add("A3", "BLOCK",
+            "; ".join(parts) + " (%d of %d correspond). Digests are the same SHA-256 "
+            "the capture's own SHA256SUMS records - reproduce with `shasum -a 256 -c`."
+            % (current, len(versions)))
 
 
 def arm_a4(root, versions, rep):
@@ -412,7 +585,7 @@ def arm_a5(root, rep, seeder=seed_marker):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def preflight(root, capture_dir, versions):
+def preflight(root, capture_dir, versions, fetcher=live_body_digest):
     rep = Report()
     rc, _o, _e = _run(["git", "-C", root, "rev-parse", "--verify", REF])
     if rc != 0:
@@ -421,7 +594,7 @@ def preflight(root, capture_dir, versions):
         print(rep.render())
         return rep.worst
     arm_a1_a2(root, rep)
-    arm_a3(root, capture_dir, versions, rep)
+    arm_a3(root, capture_dir, versions, rep, fetcher=fetcher)
     arm_a4(root, versions, rep)
     # A5 is evaluated ONLY on a run that could otherwise proceed. Its fixture pair
     # costs a network round-trip per attempt, and a capability verdict taken on a
@@ -467,6 +640,9 @@ type: note
 Body text.
 """
 
+# A line PRECEDES the opening delimiter. Under the pre-repair strip its whole YAML
+# block survived into the body; under the repaired two-stage strip it does not.
+# Three live corpus notes have this shape (v1.08 / v1.09 / v1.10).
 LEADIN_NOTE_TEMPLATE = """<!-- reference-durability: allow-link -->
 ---
 version: %s
@@ -477,6 +653,29 @@ type: note
 
 Body text.
 """
+
+# TWO frontmatter blocks. The strip removes the first and the second survives, so
+# the computed body still LOOKS like frontmatter. This is what keeps A4's
+# frontmatter limb armed after the lead-in defect is fixed at the source: without
+# a fixture that still trips it, the limb would rot into untested dead code and
+# "A4 passes" would stop meaning anything.
+DOUBLED_NOTE_TEMPLATE = """---
+version: %s
+type: note
+---
+version: %s
+type: note
+---
+
+# doubled selftest note
+
+Body text.
+"""
+
+# The exact bytes every sandbox capture holds. Shared with the hermetic fetcher so
+# a "current" capture and the body it is compared against cannot drift apart by
+# accident inside the suite itself.
+SELFTEST_CAPTURE_BODY = "prior published body for %s\n"
 
 # Frontmatter opens on line 1 and NEVER closes, so the shipped strip range finds
 # no terminator and the computed body is EMPTY. Drives A4's empty-strip blocker.
@@ -523,7 +722,8 @@ def _git(root, *args):
     return _run(["git", "-C", root] + list(args))
 
 
-def _seed(work, layout, versions, leadin=(), unclosed=(), unversioned=True):
+def _seed(work, layout, versions, leadin=(), unclosed=(), unversioned=True,
+          doubled=()):
     ndir = os.path.join(work, NOTES_REL)
     bdir = os.path.join(work, BASELINE_REL)
     if not os.path.isdir(bdir):
@@ -534,6 +734,8 @@ def _seed(work, layout, versions, leadin=(), unclosed=(), unversioned=True):
             os.makedirs(d)
         if v in unclosed:
             tpl = UNCLOSED_NOTE_TEMPLATE
+        elif v in doubled:
+            tpl = DOUBLED_NOTE_TEMPLATE
         elif v in leadin:
             tpl = LEADIN_NOTE_TEMPLATE
         else:
@@ -565,7 +767,8 @@ def _commit_push(work):
 
 
 def _sandbox(tmp, layout, versions, captures, leadin=(), tag=None,
-             unclosed=(), unversioned=True, empty_captures=(), checker=None):
+             unclosed=(), unversioned=True, empty_captures=(), checker=None,
+             doubled=()):
     """Build a hermetic sandbox repo with a real bare origin.
 
     `checker` writes a stand-in at DRIFT_TOOL_REL so A5 can run at all:
@@ -582,12 +785,12 @@ def _sandbox(tmp, layout, versions, captures, leadin=(), tag=None,
     if rc != 0:
         _run(["git", "init", "-q", work])
         _git(work, "checkout", "-q", "-b", "main")
-    _seed(work, layout, versions, leadin, unclosed, unversioned)
+    _seed(work, layout, versions, leadin, unclosed, unversioned, doubled)
     capdir = "release/releases/_captures/selftest"
     os.makedirs(os.path.join(work, capdir))
     for v in captures:
         with open(os.path.join(work, capdir, "%s.published.txt" % v), "w") as fh:
-            fh.write("prior published body for %s\n" % v)
+            fh.write(SELFTEST_CAPTURE_BODY % v)
     for v in empty_captures:
         # A tracked but EMPTY capture. Present to `cat-file -e`, worthless as a
         # rollback source -- the distinction A3's second limb exists to make.
@@ -605,15 +808,45 @@ def _sandbox(tmp, layout, versions, captures, leadin=(), tag=None,
     return work, capdir
 
 
-def _preflight_capture(root, capdir, versions):
+def _live(versions, stale=(), unreadable=()):
+    """Build a hermetic stand-in for `live_body_digest`.
+
+    Models what GitHub is publishing for each version, so the suite can drive all
+    four A3 outcomes with no network:
+      default     -- exactly the bytes the sandbox capture holds  -> CURRENT
+      in `stale`  -- those bytes plus one byte                    -> STALE
+      in `unread` -- unreadable                                   -> UNREADABLE
+      not listed  -- unreadable, reason "no published release"
+
+    Deriving CURRENT from SELFTEST_CAPTURE_BODY rather than from a second literal
+    is deliberate: a hand-copied "current" body could drift from the capture the
+    sandbox actually wrote, and the suite would then be asserting agreement
+    between two things it had itself made disagree.
+    """
+    def fetcher(version):
+        if version in unreadable:
+            return None, "hermetic: read failed"
+        if version not in versions:
+            return None, "hermetic: no published release"
+        body = SELFTEST_CAPTURE_BODY % version
+        if version in stale:
+            body = body + "x"
+        return hashlib.sha256(body.encode("utf-8")).hexdigest(), None
+    return fetcher
+
+
+def _preflight_capture(root, capdir, versions, fetcher=None):
     """Run `preflight()` end to end; return (return-code, printed banner text).
 
     The aggregate-level harness. Everything `--execute` is gated on -- the exit
-    code and the rendered verdict line -- passes through here.
+    code and the rendered verdict line -- passes through here. `fetcher` defaults
+    to an all-CURRENT hermetic one so no self-test path can reach the network.
     """
+    if fetcher is None:
+        fetcher = _live(versions)
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        rc = preflight(root, capdir, versions)
+        rc = preflight(root, capdir, versions, fetcher=fetcher)
     return rc, buf.getvalue()
 
 
@@ -624,10 +857,12 @@ def _arm(rep_rows, arm):
     return None, None
 
 
-def _evaluate(root, capdir, versions):
+def _evaluate(root, capdir, versions, fetcher=None):
+    if fetcher is None:
+        fetcher = _live(versions)
     rep = Report()
     arm_a1_a2(root, rep)
-    arm_a3(root, capdir, versions, rep)
+    arm_a3(root, capdir, versions, rep, fetcher=fetcher)
     arm_a4(root, versions, rep)
     return rep
 
@@ -661,36 +896,143 @@ def self_test():
         v1b, d1b = _arm(rep2.rows, "A1")
         check("A1 passes once the layout is flat", v1b == "PASS", d1b or "")
 
-        # Case 3 -- A3 both arms: a captured set passes, an uncaptured one blocks.
-        v3a, _d = _arm(rep2.rows, "A3")
-        check("A3 passes when every capture is on the ref", v3a == "PASS")
+        # ── Case 3 -- A3's FOUR outcomes. Presence is not correspondence: the
+        # arm must separate a capture that reproduces the live body from one that
+        # merely exists, and the two failures are different repairs.
+        v3a, d3a = _arm(rep2.rows, "A3")
+        check("A3 passes when every capture is durable AND current", v3a == "PASS")
+        check("A3's PASS says CORRESPOND, not merely present - a reader must not be "
+              "able to mistake an existence check for a correspondence check",
+              "CORRESPOND" in (d3a or "") and "present and non-empty" not in (d3a or ""),
+              d3a or "")
+
+        # ABSENT.
         work3, capdir3 = _sandbox(tmp, "flat", vs, [vs[0]], tag="partial-capture")
         rep3 = _evaluate(work3, capdir3, vs)
         v3b, d3b = _arm(rep3.rows, "A3")
         check("A3 blocks when a capture is missing from the ref", v3b == "BLOCK", d3b or "")
-        check("A3 counts it as absent, not as empty - the two are different repairs",
-              "1 absent" in (d3b or "") and "0 empty" in (d3b or ""), d3b or "")
+        check("A3 says ABSENT, and does not say STALE - different repairs",
+              "1 ABSENT" in (d3b or "") and "STALE" not in (d3b or ""), d3b or "")
 
-        # Case 4 -- A4 both arms. The lead-in note is the whole point: its strip
-        # leaves the YAML in the body, and publishing that is the defect the
-        # re-emit exists to repair.
+        # STALE -- THE DEFECT THIS LIMB EXISTS FOR. Every capture is present,
+        # non-empty and durable at the ref; the published body has moved on. The
+        # pre-repair arm printed PASS here, over captures that would have restored
+        # the wrong content.
+        rep3s = _evaluate(work2, capdir2, vs, fetcher=_live(vs, stale=[vs[1]]))
+        v3s, d3s = _arm(rep3s.rows, "A3")
+        check("A3 BLOCKS a durable but STALE capture (presence is not correspondence)",
+              v3s == "BLOCK", d3s or "")
+        check("A3 names which version is stale", vs[1] in (d3s or ""), d3s or "")
+        check("A3 says STALE, not ABSENT - the stale capture is on the ref",
+              "1 STALE" in (d3s or "") and "ABSENT" not in (d3s or ""), d3s or "")
+        check("A3 prints both digests so the operator can cross-check SHA256SUMS",
+              "capture=" in (d3s or "") and "live=" in (d3s or ""), d3s or "")
+        check("A3 counts the surviving capture as corresponding, not as a pass",
+              "(1 of 2 correspond)" in (d3s or ""), d3s or "")
+
+        # UNREADABLE -- fails CLOSED. An arm that cannot establish correspondence
+        # has not established it.
+        rep3u = _evaluate(work2, capdir2, vs, fetcher=_live(vs, unreadable=[vs[0]]))
+        v3u, d3u = _arm(rep3u.rows, "A3")
+        check("A3 blocks when the live body cannot be read (fails closed)",
+              v3u == "BLOCK", d3u or "")
+        check("A3 says UNREADABLE and names the version", "UNREADABLE" in (d3u or "")
+              and vs[0] in (d3u or ""), d3u or "")
+
+        # A gh-less host must BLOCK, not pass. This drives the PRODUCTION fetcher's
+        # own capability guard rather than a stand-in for it. `_find_gh` is
+        # replaced rather than PATH being emptied, because `_find_gh` probes
+        # absolute paths and would still find a real gh -- which would put a live
+        # network call inside a suite that must stay hermetic.
+        _real_find_gh = globals()["_find_gh"]
+        try:
+            globals()["_find_gh"] = lambda: ""
+            dig, why = live_body_digest("v0.00")
+        finally:
+            globals()["_find_gh"] = _real_find_gh
+        check("live_body_digest returns no digest, and a stated reason, when gh is "
+              "absent - it can never return a digest it did not compute",
+              dig is None and "gh is not installed" in (why or ""), repr((dig, why)))
+        repgh = Report()
+        arm_a3(work2, capdir2, vs, repgh, fetcher=lambda v: (None, "gh is not installed"))
+        vgh, dgh = _arm(repgh.rows, "A3")
+        check("A3 BLOCKS on a gh-less host rather than passing on presence alone",
+              vgh == "BLOCK" and "UNREADABLE" in (dgh or ""), dgh or "")
+
+        # The comparison digests BYTES, not lossily-decoded text. Without this the
+        # `_run_raw` helper could be replaced by `_run` and every ASCII fixture in
+        # this suite would still pass, while two genuinely different published
+        # bodies collided into one digest and a stale capture read as current.
+        collide_a, collide_b = b"\xff\x41", b"\xfe\x41"
+        check("lossy decoding COLLIDES two distinct bodies, and their bytes do not - "
+              "this is why A3 digests bytes",
+              collide_a.decode("utf-8", "replace") == collide_b.decode("utf-8", "replace")
+              and (hashlib.sha256(collide_a).hexdigest()
+                   != hashlib.sha256(collide_b).hexdigest()))
+        rcb, gotb, _eb = _run_raw([sys.executable, "-c",
+                                   "import sys; sys.stdout.buffer.write(%r)" % collide_a])
+        check("_run_raw returns RAW BYTES, so a non-UTF-8 body survives the read intact",
+              rcb == 0 and gotb == collide_a, repr(gotb))
+
+        # All four outcomes at once: they must remain separable in one render.
+        vs4 = ["v1.01", "v2.02", "v3.03", "v4.04"]
+        work3m, capdir3m = _sandbox(tmp, "flat", vs4, ["v1.01", "v2.02", "v3.03"],
+                                    tag="mixed-a3", empty_captures=["v3.03"])
+        rep3m = _evaluate(work3m, capdir3m, vs4,
+                          fetcher=_live(vs4, stale=["v2.02"]))
+        v3m, d3m = _arm(rep3m.rows, "A3")
+        check("A3 reports ABSENT, EMPTY and STALE as three distinguishable buckets "
+              "in one run", v3m == "BLOCK"
+              and "1 ABSENT" in (d3m or "") and "1 EMPTY" in (d3m or "")
+              and "1 STALE" in (d3m or ""), d3m or "")
+
+        # ── Case 4 -- A4 both arms.
         v4a, _d = _arm(rep2.rows, "A4")
         check("A4 passes for well-formed notes", v4a == "PASS")
+
+        # The lead-in note WAS A4's blocker. The strip is now repaired at the
+        # source, so the same fixture must now pass on merit -- A4 is not
+        # weakened, the defect is gone.
         work4, capdir4 = _sandbox(tmp, "flat", vs, vs, leadin=[vs[0]], tag="leadin")
         rep4 = _evaluate(work4, capdir4, vs)
         v4b, d4b = _arm(rep4.rows, "A4")
-        check("A4 blocks a note whose strip leaves frontmatter", v4b == "BLOCK", d4b or "")
-        check("A4 names the offending version", vs[0] in (d4b or ""), d4b or "")
+        check("A4 PASSES a lead-in note now that the strip is repaired "
+              "(the fix lands, and A4 is not relaxed to get there)",
+              v4b == "PASS", d4b or "")
 
-        # Case 5 -- the strip model itself, both directions.
+        # ...and the frontmatter limb is still armed. A doubled block still
+        # survives the strip, so A4 still blocks on it: the limb is live code.
+        work4d, capdir4d = _sandbox(tmp, "flat", vs, vs, doubled=[vs[0]], tag="doubled")
+        rep4d = _evaluate(work4d, capdir4d, vs)
+        v4d, d4d = _arm(rep4d.rows, "A4")
+        check("A4 still blocks a body that survives the strip still looking like "
+              "frontmatter", v4d == "BLOCK", d4d or "")
+        check("A4 names the offending version", vs[0] in (d4d or ""), d4d or "")
+
+        # Case 5 -- the strip model itself, every direction.
         good = strip_frontmatter(NOTE_TEMPLATE % ("v9.99", "v9.99"))
-        bad = strip_frontmatter(LEADIN_NOTE_TEMPLATE % ("v9.99", "v9.99"))
+        lead = strip_frontmatter(LEADIN_NOTE_TEMPLATE % ("v9.99", "v9.99"))
+        dbl = strip_frontmatter(DOUBLED_NOTE_TEMPLATE % ("v9.99", "v9.99"))
         check("strip model: well-formed note yields prose",
               good.strip().startswith("# v9.99"), repr(good[:40]))
-        check("strip model: lead-in note leaks YAML",
-              bad.strip().startswith("version:"), repr(bad[:40]))
-        check("looks_like_frontmatter: sensitivity", looks_like_frontmatter(bad))
+        check("strip model: lead-in note yields prose, NOT its YAML block",
+              lead.strip().startswith("# v9.99") and "version:" not in lead,
+              repr(lead[:60]))
+        check("strip model: stage 1 is the identity when the delimiter is line 1 - "
+              "a lead-in note and its lead-in-free twin strip to the same bytes",
+              lead == good, repr((lead[:30], good[:30])))
+        check("strip model: a doubled block leaves the second block behind",
+              dbl.strip().startswith("version:"), repr(dbl[:40]))
+        check("strip model: no frontmatter at all yields NOTHING, so the caller's "
+              "empty-body ABORT fires instead of a mis-stripped body publishing",
+              strip_frontmatter("# Heading\n\nprose\n") == "",
+              repr(strip_frontmatter("# Heading\n\nprose\n")))
+        check("strip model: an opening delimiter with no closing one yields NOTHING",
+              strip_frontmatter(UNCLOSED_NOTE_TEMPLATE % ("v9.99", "v9.99")) == "")
+        check("looks_like_frontmatter: sensitivity", looks_like_frontmatter(dbl))
         check("looks_like_frontmatter: specificity", not looks_like_frontmatter(good))
+        check("looks_like_frontmatter: specificity on the repaired lead-in body",
+              not looks_like_frontmatter(lead))
         # `good` returns at the leading-blank guard, so it never reaches the
         # key_like AND terminator test. These two do, one per conjunct.
         check("looks_like_frontmatter: a prose opening is not frontmatter",
@@ -785,8 +1127,8 @@ def self_test():
         rep10 = _evaluate(work10, capdir10, vs)
         v10, d10 = _arm(rep10.rows, "A3")
         check("A3 blocks on a present-but-EMPTY capture", v10 == "BLOCK", d10 or "")
-        check("A3 counts it as empty, not as absent",
-              "1 absent" not in (d10 or "") and "1 empty" in (d10 or ""), d10 or "")
+        check("A3 counts it as EMPTY, not as ABSENT",
+              "1 ABSENT" not in (d10 or "") and "1 EMPTY" in (d10 or ""), d10 or "")
 
         # ── Case 11 -- A4's empty-strip and unresolved limbs.
         work11, capdir11 = _sandbox(tmp, "flat", vs, vs, tag="unclosed",
