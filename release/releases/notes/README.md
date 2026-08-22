@@ -6,9 +6,20 @@ Per-release user-facing release notes live here, one file per release: `vX.Y_REL
 
 `vX.Y_RELEASE_NOTES.md` where `vX.Y` is the release version matching the GitHub Milestone slug suffix.
 
-## Directory layout — major-version subfolders
+## Directory layout — flat, with one permitted subfolder
 
-Note files are organized into per-major-version subfolders (`notes/v1/`, `notes/v2/`, `notes/v3/`), with a single `_unversioned/` bucket for version-less-by-design notes. Only `README.md` stays at the top level. The subfolder-disposition rule and the recursive-discovery tooling contract are documented once in [`../plans/README.md` § Directory layout](../plans/README.md#directory-layout--major-version-subfolders) and apply identically here.
+Note files are **flat** in this directory, alongside `README.md`. The one permitted subfolder is `_unversioned/`, the bucket for version-less-by-design notes — a release that ships with Tag `(none)` has no version stem to name. No other subfolder is permitted; the rule is stated once in [`../../references/standards/release-notes-standard.md`](../../references/standards/release-notes-standard.md) § File Location, Naming, Frontmatter and this section restates only its shape.
+
+```
+notes/
+├── README.md            ← this file
+├── vX.Y_RELEASE_NOTES.md    ← every versioned note, flat
+└── _unversioned/        ← notes of version-less releases (Tag (none))
+```
+
+**Notes are not sharded by major version.** The per-major-version subfolder scheme in [`../plans/README.md` § Directory layout](../plans/README.md#directory-layout--major-version-subfolders) governs `../plans/` **only** — it is ADR-092-backed and enforced by `lint_release_corpus.py --check plan-identity`, and no equivalent placement assertion exists for notes. Both note producers (`../../tools/automated-closeout.sh` `notes_rel_path()` and `../../../core/deploy/tools/generate_release_index.py` `note_link()`) already emit the flat-except-`_unversioned/` form.
+
+The tooling that reads this corpus discovers files **recursively** (`rglob` / `ls-tree -r`), so `_unversioned/` is transparent to it.
 
 ## Authoring contract
 

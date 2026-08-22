@@ -235,13 +235,16 @@ def find_artifact(version_key: str, milestone: str, kind: str) -> str | None:
     keys = [k for k in (vslug, mslug) if k]
     short = vslug.split("-", 1)[0] if vslug else ""
 
-    # rglob (recursive) — plan/note artifacts are foldered into major-version
-    # subdirectories (plans/v1|v2|v3/…, notes/…, plus the _unversioned/ bucket)
-    # per the plans/README.md disposition rule (#230, v3.59). A flat glob would
+    # rglob (recursive) — PLANS are foldered into major-version subdirectories
+    # (plans/v1|v2|v3/…) per the plans/README.md disposition rule (#230, v3.59);
+    # NOTES are flat, with notes/_unversioned/ the one permitted subfolder
+    # (#3698). Both corpora also use the _unversioned/ bucket. A flat glob would
     # miss every subfoldered file and regenerate an all-"—" Release-Notes column
-    # (FM-1 destructive-regenerate). The returned INDEX-relative path carries the
-    # subfolder segment (e.g. "notes/v3/v3.45_RELEASE_NOTES.md") so the link
-    # resolves from release/releases/ where the INDEX lives.
+    # (FM-1 destructive-regenerate). The returned INDEX-relative path carries
+    # whatever subfolder segment the artifact actually has (e.g.
+    # "plans/v3/v3.45_RELEASE_PLAN.md", "notes/v3.45_RELEASE_NOTES.md",
+    # "notes/_unversioned/<slug>_RELEASE_NOTES.md") so the link resolves from
+    # release/releases/ where the INDEX lives.
     for candidate in sorted(directory.rglob(f"*{suffix}")):
         name = candidate.name
         stem_key = name[:-len(suffix)]

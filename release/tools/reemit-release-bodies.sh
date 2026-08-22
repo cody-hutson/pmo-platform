@@ -51,12 +51,18 @@
 # ─── NOTE RESOLUTION IS LAYOUT-INDEPENDENT ─────────────────────────────────────
 # The note is resolved by FILENAME (<version>_RELEASE_NOTES.md) anywhere under
 # release/releases/notes/ — the flat path first, then RECURSIVELY through any
-# subfolder. The corpus foldered its notes into major-version buckets
-# (notes/v1|v2|v3/… plus _unversioned/) per plans/README.md (#230, v3.54), so a
-# flat-path-only resolve reported a FABRICATED "canonical note unreadable" for
-# every foldered note. That is exactly what stopped the v4.12 Part A payload: of
-# the 29 in-scope versions, 18 are foldered (notes/v1/ ×10, notes/v2/ ×8) and all
-# 18 aborted, while the 11 flat v3.* resolved fine.
+# subfolder. The recursion is RETAINED and load-bearing for two independent
+# reasons. (1) notes/_unversioned/ is a live, permitted subfolder holding every
+# version-less release's note. (2) This resolver reads a git REF (REF=origin/main),
+# so it must resolve correctly at PRE-#3698 refs too, where the corpus foldered its
+# notes into major-version buckets (notes/v1|v2|v3/… plus _unversioned/) per
+# plans/README.md (#230, v3.54); a flat-path-only resolve there reported a
+# FABRICATED "canonical note unreadable" for every foldered note. That is exactly
+# what stopped the v4.12 Part A payload: of the 29 in-scope versions, 18 were
+# foldered (notes/v1/ ×10, notes/v2/ ×8) and all 18 aborted, while the 11 flat v3.*
+# resolved fine. #3698 migrated the 100 v1|v2|v3 notes flat, so at post-#3698 refs
+# those same 18 resolve through the FLAT arm; the _unversioned/ notes did not move
+# and still resolve through the recursive arm.
 #
 # This resolver is a PORT of the one already shipped in the sibling verifier
 # check-release-body-drift.sh (`resolve_note_ref` / `resolve_note_worktree`,
@@ -170,8 +176,11 @@ resolve_note_worktree() {
 # DRIFT (exit 1) so control reaches the note-resolution step under test.
 #
 # Case L is the direct analogue of check-release-body-drift.sh's Case L: the note is
-# committed to origin/main ONLY inside a major-version bucket — the shape of all 18
-# foldered notes in the live Part A scope.
+# committed to origin/main ONLY inside a subfolder of the notes tree. That was the
+# shape of the 18 foldered notes in the live Part A scope before #3698 migrated the
+# v1|v2|v3 buckets flat; it remains the live shape of every notes/_unversioned/
+# note, and of every note at a pre-#3698 ref. The fixture builds its own bucket, so
+# the case is layout-independent and needs no edit as the corpus moves.
 
 self_test() {
   local tmp failures=0 GIT=/usr/bin/git
