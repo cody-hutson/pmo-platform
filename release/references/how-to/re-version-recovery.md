@@ -120,7 +120,7 @@ what was done; it does not authorize it.
 
 Self-document the abandoned version in the row's note so the provenance survives. The
 exemplar is the v1.03 release note
-(`release/releases/notes/v1/v1.03-bundle-and-related_RELEASE_NOTES.md`): its frontmatter
+(`release/releases/notes/v1.03-bundle-and-related_RELEASE_NOTES.md`): its frontmatter
 carries `issues: []` plus a leading `#`-comment block explaining that the per-issue
 numbers "did not survive the repository re-versioning" — an empty list meaning *no
 recoverable numbers, not zero scope.* Generalize that pattern: the row states the
