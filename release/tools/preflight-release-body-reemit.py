@@ -61,6 +61,23 @@ A5  EXTRACTION-CAPABILITY (the E-1 gate)
     ARM-T asserts its own byte delta before trusting the result: a seed that
     fails to modify the fixture makes an inert probe read as a passing tool.
 
+THE AGGREGATE VERDICT IS DERIVED, NOT MAINTAINED
+------------------------------------------------
+`Report.worst` is a read-only property recomputed from `Report.rows` on every
+read. It is deliberately NOT a field updated alongside them, because that shape
+has exactly one catastrophic failure and this gate cannot afford it: delete the
+single statement that escalates a maintained aggregate and the gate prints
+`PREFLIGHT PASS - every arm green` and exits 0 while its arms visibly render
+BLOCK. A per-arm test suite cannot see that -- every row is still correct; only
+the summary lies. A derived aggregate has no escalation statement to delete, so
+the summary cannot disagree with the rows it summarises.
+
+The verdict-to-severity map is CLOSED and fails closed: a verdict string the map
+does not know scores HALT, never PASS, so a future arm that invents a verdict
+cannot silently widen the pass set. `preflight()` returns `rep.worst` rather than
+a literal for the same reason -- the process exit code and the printed banner are
+computed from one source.
+
 USAGE
     python3 release/tools/preflight-release-body-reemit.py \\
         --capture-dir release/releases/_captures/<dated-dir> v1.06 v1.08 ...
@@ -72,6 +89,8 @@ EXIT CODES
     2  the gate itself could not run (no git, ref unresolvable, bad arguments)
 """
 import argparse
+import contextlib
+import io
 import os
 import shutil
 import subprocess
@@ -84,6 +103,13 @@ REF = "origin/main"
 DRIFT_TOOL_REL = "release/tools/check-release-body-drift.sh"
 
 PASS, BLOCK, HALT = 0, 1, 2
+
+# Verdict string -> severity. CLOSED map, consulted by the derived aggregate.
+# `SKIP` scores PASS because it is not a verdict on the arm's subject: it records
+# that the arm was deliberately not taken on a run that already cannot proceed.
+# An UNKNOWN verdict scores HALT (see `Report.worst`) -- the aggregate refuses to
+# classify what it does not recognise rather than defaulting it into the pass set.
+VERDICT_SEVERITY = {"PASS": PASS, "SKIP": PASS, "BLOCK": BLOCK, "HALT": HALT}
 
 
 def _run(args, cwd=None, env=None):
@@ -154,18 +180,37 @@ def resolve_note(root, ref, version):
 
 
 class Report(object):
+    """Arm rows plus a DERIVED aggregate verdict.
+
+    See "THE AGGREGATE VERDICT IS DERIVED, NOT MAINTAINED" in the module
+    docstring for why `worst` is a property and not a field. Every row enters
+    through `add` / `halt` / `skip`; nothing appends to `rows` directly, so there
+    is one place a verdict can be introduced and one place it is classified.
+    """
+
     def __init__(self):
         self.rows = []
-        self.worst = PASS
+
+    @property
+    def worst(self):
+        """The severest severity across the rows. Recomputed on every read.
+
+        Read-only ON PURPOSE: an assignment would reintroduce the maintained
+        aggregate this property exists to eliminate, and Python raises
+        AttributeError on the attempt rather than letting it land silently.
+        """
+        return max([VERDICT_SEVERITY.get(v, HALT) for _a, v, _d in self.rows]
+                   or [PASS])
 
     def add(self, arm, verdict, detail):
         self.rows.append((arm, verdict, detail))
-        if verdict != "PASS":
-            self.worst = max(self.worst, BLOCK)
 
     def halt(self, arm, detail):
         self.rows.append((arm, "HALT", detail))
-        self.worst = HALT
+
+    def skip(self, arm, detail):
+        """A non-escalating row for an arm that was deliberately not taken."""
+        self.rows.append((arm, "SKIP", detail))
 
     def render(self):
         out = []
@@ -286,7 +331,23 @@ def arm_a4(root, versions, rep):
                 % len(versions))
 
 
-def arm_a5(root, rep):
+SENSITIVITY_MARKER = "PREFLIGHT-E1-SENSITIVITY-MARKER-NOT-FOR-PUBLICATION"
+
+
+def seed_marker(raw):
+    """ARM-T's fixture seed: append a marker the checker must be able to see."""
+    return raw + "\n" + SENSITIVITY_MARKER + "\n"
+
+
+def arm_a5(root, rep, seeder=seed_marker):
+    """`seeder` is a FAULT-INJECTION seam, not a configuration knob.
+
+    The inert-fixture guard below is defensive code on a branch the production
+    seeder can never take -- appending a marker always grows the text. Untested
+    defensive code is how a broken probe gets reported as a passing tool, so the
+    self-test injects an inert seeder to drive that branch. No production caller
+    passes this argument.
+    """
     tool = os.path.join(root, DRIFT_TOOL_REL)
     if not os.path.exists(tool):
         rep.halt("A5", "the drift checker is absent at %s - the gate cannot assert "
@@ -326,7 +387,7 @@ def arm_a5(root, rep):
         base = os.path.basename(subject_note)
         fx_t = os.path.join(tmp, "t-" + subject_version)
         os.makedirs(fx_t)
-        seeded = raw + "\nPREFLIGHT-E1-SENSITIVITY-MARKER-NOT-FOR-PUBLICATION\n"
+        seeded = seeder(raw)
         if seeded == raw or len(seeded) <= len(raw):
             rep.halt("A5", "ARM-T fixture did not grow - BROKEN PROBE, refusing to "
                            "report its result as evidence")
@@ -358,7 +419,7 @@ def preflight(root, capture_dir, versions):
         rep.halt("A0", "%s is unresolvable - run `git fetch origin main` first. "
                        "Freshness of %s is the caller's contract." % (REF, REF))
         print(rep.render())
-        return HALT
+        return rep.worst
     arm_a1_a2(root, rep)
     arm_a3(root, capture_dir, versions, rep)
     arm_a4(root, versions, rep)
@@ -369,11 +430,11 @@ def preflight(root, capture_dir, versions):
     if rep.worst == PASS:
         arm_a5(root, rep)
     else:
-        rep.rows.append(("A5", "SKIP",
-                         "not evaluated - an earlier arm already BLOCKED, so this run "
-                         "cannot proceed to `--execute`. Re-run the whole gate once the "
-                         "blocking arm is resolved; A5 is only evidence when taken on "
-                         "the run that would actually execute."))
+        rep.skip("A5",
+                 "not evaluated - an earlier arm already BLOCKED, so this run "
+                 "cannot proceed to `--execute`. Re-run the whole gate once the "
+                 "blocking arm is resolved; A5 is only evidence when taken on "
+                 "the run that would actually execute.")
     print("preflight-release-body-reemit - %d version(s), capture dir %s, ref %s"
           % (len(versions), capture_dir, REF))
     print(rep.render())
@@ -384,6 +445,17 @@ def preflight(root, capture_dir, versions):
 # Self-test. Hermetic: a sandbox repo with a real bare origin, a stub checker,
 # and no network. Every assertion carries BOTH arms -- a gate that only ever
 # blocks is indistinguishable from a gate that never works.
+#
+# TWO LEVELS, AND BOTH ARE REQUIRED.
+#   (1) ARM level -- `_evaluate()` builds a Report and reads individual rows.
+#       This is what proves each arm's own logic.
+#   (2) AGGREGATE level -- `_preflight_capture()` calls `preflight()` end to end
+#       and captures its RETURN CODE and its RENDERED BANNER. This is the only
+#       observable `--execute` is actually gated on, and a suite that asserts
+#       only (1) cannot see a summary that disagrees with the rows it summarises.
+#       Both directions are asserted: a blocking run must BLOCK and a passing run
+#       must PASS, so the assertions discriminate rather than always expecting
+#       the same answer.
 # --------------------------------------------------------------------------
 NOTE_TEMPLATE = """---
 version: %s
@@ -406,24 +478,82 @@ type: note
 Body text.
 """
 
+# Frontmatter opens on line 1 and NEVER closes, so the shipped strip range finds
+# no terminator and the computed body is EMPTY. Drives A4's empty-strip blocker.
+UNCLOSED_NOTE_TEMPLATE = """---
+version: %s
+type: note
+title: %s selftest note with no closing delimiter
+"""
+
+BASELINE_REL = "release/releases/_selftest_baseline"
+
+# Hermetic stand-in for check-release-body-drift.sh. Models the real contract --
+# MATCH (0) when the note under NOTES_DIR_OVERRIDE equals the canonical baseline,
+# DRIFT (1) when it does not -- by BYTE EQUALITY, never by recognising the marker
+# string ARM-T seeds. A stub keyed on the marker would pass A5 while being blind
+# to every other divergence, which is precisely the failure A5 exists to detect.
+DRIFT_STUB = """#!/usr/bin/env bash
+set -u
+v=""
+for a in "$@"; do
+  case "$a" in
+    --*) ;;
+    *) if [ -z "$v" ]; then v="$a"; fi ;;
+  esac
+done
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+fixture="${NOTES_DIR_OVERRIDE:-}/${v}_RELEASE_NOTES.md"
+baseline="${root}/%s/${v}_RELEASE_NOTES.md"
+if [ ! -f "$fixture" ]; then exit 3; fi
+if [ ! -f "$baseline" ]; then exit 3; fi
+if cmp -s "$fixture" "$baseline"; then exit 0; fi
+exit 1
+""" % BASELINE_REL
+
+# An INERT checker: reports MATCH unconditionally, so it cannot see the seeded
+# divergence. A5 must BLOCK on it -- accepting it would mean the emitter's
+# post-edit verification runs blind.
+INERT_STUB = """#!/usr/bin/env bash
+exit 0
+"""
+
 
 def _git(root, *args):
     return _run(["git", "-C", root] + list(args))
 
 
-def _seed(work, layout, versions, leadin=()):
+def _seed(work, layout, versions, leadin=(), unclosed=(), unversioned=True):
     ndir = os.path.join(work, NOTES_REL)
+    bdir = os.path.join(work, BASELINE_REL)
+    if not os.path.isdir(bdir):
+        os.makedirs(bdir)
     for v in versions:
         d = ndir if layout == "flat" else os.path.join(ndir, "v" + v[1])
         if not os.path.isdir(d):
             os.makedirs(d)
-        tpl = LEADIN_NOTE_TEMPLATE if v in leadin else NOTE_TEMPLATE
-        with open(os.path.join(d, "%s_RELEASE_NOTES.md" % v), "w") as fh:
-            fh.write(tpl % (v, v))
+        if v in unclosed:
+            tpl = UNCLOSED_NOTE_TEMPLATE
+        elif v in leadin:
+            tpl = LEADIN_NOTE_TEMPLATE
+        else:
+            tpl = NOTE_TEMPLATE
+        text = tpl % (v, v)
+        base = "%s_RELEASE_NOTES.md" % v
+        with open(os.path.join(d, base), "w") as fh:
+            fh.write(text)
+        # The A5 stub's oracle: a byte copy of the note, OUTSIDE notes/ so it
+        # never enters the note enumeration A5 reads.
+        with open(os.path.join(bdir, base), "w") as fh:
+            fh.write(text)
+    if not unversioned:
+        return
     u = os.path.join(ndir, PERMITTED_SUBFOLDER)
     if not os.path.isdir(u):
         os.makedirs(u)
     with open(os.path.join(u, "keep_RELEASE_NOTES.md"), "w") as fh:
+        fh.write(NOTE_TEMPLATE % ("keep", "keep"))
+    with open(os.path.join(bdir, "keep_RELEASE_NOTES.md"), "w") as fh:
         fh.write(NOTE_TEMPLATE % ("keep", "keep"))
 
 
@@ -434,7 +564,15 @@ def _commit_push(work):
     _git(work, "fetch", "-q", "origin")
 
 
-def _sandbox(tmp, layout, versions, captures, leadin=(), tag=None):
+def _sandbox(tmp, layout, versions, captures, leadin=(), tag=None,
+             unclosed=(), unversioned=True, empty_captures=(), checker=None):
+    """Build a hermetic sandbox repo with a real bare origin.
+
+    `checker` writes a stand-in at DRIFT_TOOL_REL so A5 can run at all:
+      None            -- no checker on disk; A5 must HALT (fail closed)
+      "discriminating"-- byte-equality stub; A5 must PASS
+      "inert"         -- always-MATCH stub; A5 must BLOCK
+    """
     name = layout if tag is None else "%s-%s" % (layout, tag)
     work = os.path.join(tmp, "work-%s" % name)
     origin = os.path.join(tmp, "origin-%s.git" % name)
@@ -444,15 +582,39 @@ def _sandbox(tmp, layout, versions, captures, leadin=(), tag=None):
     if rc != 0:
         _run(["git", "init", "-q", work])
         _git(work, "checkout", "-q", "-b", "main")
-    _seed(work, layout, versions, leadin)
+    _seed(work, layout, versions, leadin, unclosed, unversioned)
     capdir = "release/releases/_captures/selftest"
     os.makedirs(os.path.join(work, capdir))
     for v in captures:
         with open(os.path.join(work, capdir, "%s.published.txt" % v), "w") as fh:
             fh.write("prior published body for %s\n" % v)
+    for v in empty_captures:
+        # A tracked but EMPTY capture. Present to `cat-file -e`, worthless as a
+        # rollback source -- the distinction A3's second limb exists to make.
+        with open(os.path.join(work, capdir, "%s.published.txt" % v), "w") as fh:
+            fh.write("")
+    if checker is not None:
+        tool = os.path.join(work, DRIFT_TOOL_REL)
+        if not os.path.isdir(os.path.dirname(tool)):
+            os.makedirs(os.path.dirname(tool))
+        with open(tool, "w") as fh:
+            fh.write(DRIFT_STUB if checker == "discriminating" else INERT_STUB)
+        os.chmod(tool, 0o755)
     _git(work, "remote", "add", "origin", origin)
     _commit_push(work)
     return work, capdir
+
+
+def _preflight_capture(root, capdir, versions):
+    """Run `preflight()` end to end; return (return-code, printed banner text).
+
+    The aggregate-level harness. Everything `--execute` is gated on -- the exit
+    code and the rendered verdict line -- passes through here.
+    """
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = preflight(root, capdir, versions)
+    return rc, buf.getvalue()
 
 
 def _arm(rep_rows, arm):
@@ -506,6 +668,8 @@ def self_test():
         rep3 = _evaluate(work3, capdir3, vs)
         v3b, d3b = _arm(rep3.rows, "A3")
         check("A3 blocks when a capture is missing from the ref", v3b == "BLOCK", d3b or "")
+        check("A3 counts it as absent, not as empty - the two are different repairs",
+              "1 absent" in (d3b or "") and "0 empty" in (d3b or ""), d3b or "")
 
         # Case 4 -- A4 both arms. The lead-in note is the whole point: its strip
         # leaves the YAML in the body, and publishing that is the defect the
@@ -527,13 +691,158 @@ def self_test():
               bad.strip().startswith("version:"), repr(bad[:40]))
         check("looks_like_frontmatter: sensitivity", looks_like_frontmatter(bad))
         check("looks_like_frontmatter: specificity", not looks_like_frontmatter(good))
+        # `good` returns at the leading-blank guard, so it never reaches the
+        # key_like AND terminator test. These two do, one per conjunct.
+        check("looks_like_frontmatter: a prose opening is not frontmatter",
+              not looks_like_frontmatter("Plain prose opening line.\n\nMore text.\n"))
+        check("looks_like_frontmatter: a key-like line with no terminator is not frontmatter",
+              not looks_like_frontmatter("version: v9.99\n\nprose\n"))
 
         # Case 6 -- unresolvable ref halts rather than passing.
         bare = os.path.join(tmp, "norepo")
         os.makedirs(bare)
         _run(["git", "init", "-q", bare])
-        rc = preflight(bare, "nowhere", ["v0.00"])
-        check("unresolvable %s halts (exit 2), never passes" % REF, rc == HALT, "rc=%s" % rc)
+        rc6, out6 = _preflight_capture(bare, "nowhere", ["v0.00"])
+        check("unresolvable %s halts (exit 2), never passes" % REF,
+              rc6 == HALT, "rc=%s" % rc6)
+        check("unresolvable %s renders the HALT banner" % REF,
+              "PREFLIGHT HALT" in out6 and "PREFLIGHT PASS" not in out6, repr(out6[-90:]))
+
+        # ── Case 7 -- THE AGGREGATE VERDICT, both directions. ──────────────
+        # A per-arm suite cannot see a summary that disagrees with its rows.
+        # These assert the two things `--execute` is actually gated on: the
+        # return code and the rendered banner.
+        rc7b, out7b = _preflight_capture(work, capdir, vs)          # foldered => A1 BLOCK
+        check("BLOCKING run: preflight() returns BLOCK", rc7b == BLOCK, "rc=%s" % rc7b)
+        check("BLOCKING run: banner says BLOCKED, never PASS",
+              "PREFLIGHT BLOCKED" in out7b and "PREFLIGHT PASS" not in out7b,
+              repr(out7b[-90:]))
+        check("BLOCKING run: at least one arm rendered BLOCK",
+              "BLOCK" in out7b.split("PREFLIGHT")[0])
+        a5_rows = [ln for ln in out7b.split("\n") if ln.split()[:1] == ["A5"]]
+        check("BLOCKING run: A5 renders SKIP, and SKIP does not veto the BLOCK",
+              len(a5_rows) == 1 and a5_rows[0].split()[1] == "SKIP",
+              repr(a5_rows))
+
+        workp, capdirp = _sandbox(tmp, "flat", vs, vs, tag="pass-aggregate",
+                                  checker="discriminating")
+        rc7p, out7p = _preflight_capture(workp, capdirp, vs)
+        check("PASSING run: preflight() returns PASS", rc7p == PASS,
+              "rc=%s out=%s" % (rc7p, out7p[-400:]))
+        check("PASSING run: banner says PASS, never BLOCKED",
+              "PREFLIGHT PASS" in out7p and "PREFLIGHT BLOCKED" not in out7p,
+              repr(out7p[-90:]))
+        a5p = [ln for ln in out7p.split("\n") if ln.split()[:1] == ["A5"]]
+        check("PASSING run: A5 is actually TAKEN, not skipped",
+              len(a5p) == 1 and a5p[0].split()[1] == "PASS", repr(a5p))
+
+        # ── Case 8 -- the aggregate is DERIVED, not maintained. ────────────
+        r = Report()
+        check("worst of an empty report is PASS", r.worst == PASS)
+        r.add("X1", "PASS", "-")
+        check("worst of all-PASS rows is PASS", r.worst == PASS)
+        r.skip("X2", "-")
+        check("SKIP does not escalate the aggregate", r.worst == PASS)
+        r.add("X3", "BLOCK", "-")
+        check("a BLOCK row escalates the aggregate", r.worst == BLOCK)
+        r.halt("X4", "-")
+        check("a HALT row outranks a BLOCK row", r.worst == HALT)
+        ru = Report()
+        ru.add("X5", "MAYBE", "-")
+        check("an UNKNOWN verdict fails closed to HALT, never PASS",
+              ru.worst == HALT, "worst=%s" % ru.worst)
+        derived = False
+        try:
+            r.worst = PASS
+        except AttributeError:
+            derived = True
+        check("worst cannot be assigned - it is derived, not maintained", derived)
+        rb, rp, rh = Report(), Report(), Report()
+        rb.add("A1", "BLOCK", "-")
+        rp.add("A1", "PASS", "-")
+        rh.halt("A1", "-")
+        check("render(): a BLOCK row prints the BLOCKED banner",
+              "PREFLIGHT BLOCKED" in rb.render() and "PREFLIGHT PASS" not in rb.render())
+        check("render(): all-PASS prints the PASS banner",
+              "PREFLIGHT PASS" in rp.render() and "PREFLIGHT BLOCKED" not in rp.render())
+        check("render(): a HALT row prints the HALT banner",
+              "PREFLIGHT HALT" in rh.render() and "PREFLIGHT PASS" not in rh.render())
+
+        # ── Case 9 -- A2's BLOCK path. Every other sandbox seeds the permitted
+        # subfolder, so without this the specificity arm's own failure is untested.
+        work9, capdir9 = _sandbox(tmp, "flat", vs, vs, tag="no-unversioned",
+                                  unversioned=False)
+        rep9 = _evaluate(work9, capdir9, vs)
+        v9a, d9a = _arm(rep9.rows, "A2")
+        v9b, _d = _arm(rep9.rows, "A1")
+        check("A2 blocks when the permitted subfolder is absent", v9a == "BLOCK", d9a or "")
+        check("A2's block is not A1's - A1 still passes on a flat tree", v9b == "PASS")
+
+        # ── Case 10 -- A3's empty-capture limb. Present to `cat-file -e`,
+        # worthless as a rollback source.
+        work10, capdir10 = _sandbox(tmp, "flat", vs, [vs[0]], tag="empty-capture",
+                                    empty_captures=[vs[1]])
+        rep10 = _evaluate(work10, capdir10, vs)
+        v10, d10 = _arm(rep10.rows, "A3")
+        check("A3 blocks on a present-but-EMPTY capture", v10 == "BLOCK", d10 or "")
+        check("A3 counts it as empty, not as absent",
+              "1 absent" not in (d10 or "") and "1 empty" in (d10 or ""), d10 or "")
+
+        # ── Case 11 -- A4's empty-strip and unresolved limbs.
+        work11, capdir11 = _sandbox(tmp, "flat", vs, vs, tag="unclosed",
+                                    unclosed=[vs[1]])
+        rep11 = _evaluate(work11, capdir11, vs)
+        v11, d11 = _arm(rep11.rows, "A4")
+        check("A4 blocks when the strip produces an EMPTY body", v11 == "BLOCK", d11 or "")
+        check("A4 says EMPTY and names the version",
+              "EMPTY" in (d11 or "") and vs[1] in (d11 or ""), d11 or "")
+        ghost = "v9.99"
+        rep11b = _evaluate(work2, capdir2, [vs[0], ghost])
+        v11b, d11b = _arm(rep11b.rows, "A4")
+        check("A4 blocks a version whose note resolves NOWHERE", v11b == "BLOCK", d11b or "")
+        check("A4 says unresolved and names the ghost version",
+              "unresolved" in (d11b or "") and ghost in (d11b or ""), d11b or "")
+
+        # ── Case 12 -- resolve_note's RECURSIVE fallback. This is the exact
+        # defect that produced this card: a flat-path-only resolver reported a
+        # FABRICATED "absent" for every foldered note. `work` is the foldered
+        # sandbox, where the note exists at NO flat path.
+        nested = resolve_note(work, REF, vs[0])
+        check("resolve_note finds a foldered note via the recursive fallback",
+              nested is not None and nested.endswith("/%s_RELEASE_NOTES.md" % vs[0])
+              and nested != "%s/%s_RELEASE_NOTES.md" % (NOTES_REL, vs[0]),
+              repr(nested))
+        flat = resolve_note(work2, REF, vs[0])
+        check("resolve_note prefers the flat path when one exists",
+              flat == "%s/%s_RELEASE_NOTES.md" % (NOTES_REL, vs[0]), repr(flat))
+        check("resolve_note invents nothing for a version that exists nowhere",
+              resolve_note(work2, REF, ghost) is None)
+        v12, _d = _arm(_evaluate(work, capdir, vs).rows, "A4")
+        check("A4 resolves every note in a FOLDERED corpus (recursion is load-bearing)",
+              v12 == "PASS")
+
+        # ── Case 13 -- A5, which had no coverage at all. Three states.
+        rep13 = Report()
+        arm_a5(workp, rep13)
+        v13, d13 = _arm(rep13.rows, "A5")
+        check("A5 passes against a checker that discriminates", v13 == "PASS", d13 or "")
+        work13, _c13 = _sandbox(tmp, "flat", vs, vs, tag="inert-checker",
+                                checker="inert")
+        rep13b = Report()
+        arm_a5(work13, rep13b)
+        v13b, d13b = _arm(rep13b.rows, "A5")
+        check("A5 blocks a checker that cannot see a seeded divergence",
+              v13b == "BLOCK", d13b or "")
+        rep13c = Report()
+        arm_a5(work2, rep13c)                      # no checker on disk at all
+        v13c, d13c = _arm(rep13c.rows, "A5")
+        check("A5 HALTs when the drift checker is absent (fails closed)",
+              v13c == "HALT" and DRIFT_TOOL_REL in (d13c or ""), d13c or "")
+        rep13d = Report()
+        arm_a5(workp, rep13d, seeder=lambda raw: raw)
+        v13d, d13d = _arm(rep13d.rows, "A5")
+        check("A5 HALTs on an INERT fixture rather than reporting its result",
+              v13d == "HALT" and "BROKEN PROBE" in (d13d or ""), d13d or "")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
