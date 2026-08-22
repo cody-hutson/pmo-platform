@@ -1,0 +1,25 @@
+# Case: structure mode, BROKEN-RELATIONSHIP violation class, against the hypercare-window fixture
+case_id: structure-broken-relationship
+mode: structure
+fixture: fixtures/hypercare-window.md
+judge: judges/structure.md
+prompt: "/health-check structure --scope Synthetic-Hypercare"
+active_project: Synthetic-Hypercare
+violation_class: broken-relationship     # class 3 of 3 — a POPULATED reference that does not resolve
+seeded_shape: "populated FK naming a synthetic non-existent id WHILE the target tier holds >=1 record — a genuine dangling reference, not a tier gap"
+expected_section_membership:
+  Decisions:
+    - "V-CORE-07 · RAID Item R-PROJ-038 · owner_person_id names a Person id with no record, and the cross-project-shared tier IS populated — genuine dangling reference [confidence: MEDIUM · S2]"
+  Unknowns:
+    - "Cross-Project Dependency references unresolvable because the portfolio-level tier holds no record of that type — excluded from the denominator, named in the coverage note, NOT a per-record contradiction"
+tier_unpopulated_outranks_per_record: required   # routing row 1 wins first-match: a TIER gap is never a record defect
+populated_but_unresolvable_is_a_record_defect: required  # the discriminator between the two rows above
+resolving_reference_lands_in_confirmed: required # the seeded clean Person reference resolves BECAUSE the tier is populated
+deferred_constraint_excluded_with_reason: required  # a constraint deferred to lifecycle automation is excluded and declared
+entity_type_coverage_line: required
+tier_banner_is_list_not_singular: required
+all_three_limbs_demonstrated: required
+finding_names_rule_id_entity_relationship: required
+must_not_flag:
+  - "RAID Item R-PROJ-041 — its owner reference resolves to a real Person record"
+pass_rule: "The populated-but-unresolvable reference is a record defect in ## Decisions naming rule ID + entity + relationship; the tier-unpopulated reference routes to ## Unknowns excluded-and-named and is NOT reported as a per-record contradiction (routing row 1 outranks it); the resolving reference lands in ## Confirmed; five sections in order."

@@ -1,0 +1,24 @@
+# Case: structure mode, MISSING-ENTITY violation class, against the hypercare-window fixture
+case_id: structure-missing-entity
+mode: structure
+fixture: fixtures/hypercare-window.md
+judge: judges/structure.md
+prompt: "/health-check structure --scope Synthetic-Hypercare"
+active_project: Synthetic-Hypercare
+violation_class: missing-entity          # class 1 of 3 — a typed edge to an entity that does not exist
+seeded_shape: "typed edge to an absent entity — MTG-104 GENERATES a Decision id that no record instantiates"
+expected_section_membership:
+  Decisions:
+    - "V-CORE-07 · Meeting MTG-104 · relationships[0].target names a Decision record that does not exist — referenced-but-absent entity [confidence: HIGH · S3]"
+  Unknowns:
+    - "System entity type expected via E3 but absent with nothing referencing it — excluded from the denominator and named"
+referenced_but_absent_is_S3: required    # a reference asserting a nonexistent record IS a contradiction finding — the only in-rule path to S3
+expected_but_absent_is_unknowns: required # E3-expected-but-unreferenced is NOT a contradiction — Unknowns, not Decisions
+entity_type_coverage_line: required      # LOAD-BEARING: the guard against a confident 100 over a tiny denominator
+tier_banner_is_list_not_singular: required
+excluded_set_named_not_silent: required
+all_three_limbs_demonstrated: required   # (a) entity present, (b) fields populated, (c) relationships valid
+finding_names_rule_id_entity_field: required   # a bare count FAILs
+must_not_flag:
+  - "RAID Item R-PROJ-041 — schema-clean: owner named, all required fields populated, reference resolves"
+pass_rule: "The typed edge to an absent Decision is reported in ## Decisions at S3 naming rule ID + entity + relationship; the unreferenced absent type routes to ## Unknowns and is excluded-and-named; the entity-type coverage line renders; the seeded-clean RAID record is NOT flagged; five sections in order."

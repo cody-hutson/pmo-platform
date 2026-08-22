@@ -44,6 +44,58 @@ R-PROJ-041  Risk   "[VENDOR-Y] misses the SLA credit deadline, delaying the true
 R-PROJ-038  Issue  "Defect DEF-019 blocks the exit report"   Owner: [OWNER-G]   Mitigation: "Hotfix in regression"   Status: Open   Last-reviewed: 2026-03-05   <!-- SEEDED-DRIFT raid: Last-reviewed 2026-03-05 is >30 days before the hypercare window -> STALE entry (auto-escalate per >30d rule) -->
 ```
 
+## Entity records (local, entity-first layer) — for `structure` mode
+
+Records shown as their field sets, not as files — the audited population is entity records. Three
+DISTINCT structural shapes are seeded so no two cases share one datum.
+
+```
+Project  PRJ-SYNHC        entity_type: Project     id: synthetic-hypercare
+                          status: Hypercare        content_lifecycle_pattern: Living
+                          owning_agent: health-check   created_date: 2026-03-02
+                          <!-- CLEAN E1: the structurally-required Project record is present and well-formed -> the audit RUNS -->
+
+Person   PER-011          entity_type: Person      id: per-011
+                          lifecycle_state: active  content_lifecycle_pattern: Living
+                          owning_agent: project-initiator   created_date: 2026-02-11
+                          <!-- CLEAN, and LOAD-BEARING: this record makes the cross-project-shared tier POPULATED.
+                               Without it every Person reference would be a tier gap; with it, an unresolvable
+                               Person reference is a genuine record defect. It is the discriminator for shape 2. -->
+
+RAID Item R-PROJ-040      entity_type: RAID Item   id: r-proj-040
+                          lifecycle_state: open    created_date: 2026-04-18
+                          owner_person_id:                       <!-- SEEDED SHAPE 1 (empty required field): an EMPTY SLOT.
+                               Presence failure only. An empty slot instantiates NO relationship rule, so it counts
+                               ONCE in the fields factor (MM-2) and must NOT also be counted in MM-3. -->
+                          content_lifecycle_pattern:             <!-- SEEDED (derivable): the frozen schema pins exactly one
+                               value for this entity, so the correct value IS derivable -> ## Auto-Actionable + TRACKER_UPDATES:.
+                               Contrast with the empty owner above, which is NOT derivable -> ## Decisions. -->
+
+RAID Item R-PROJ-038      entity_type: RAID Item   id: r-proj-038
+                          lifecycle_state: open    created_date: 2026-03-05
+                          owner_person_id: per-902               <!-- SEEDED SHAPE 2 (broken relationship): POPULATED but names a
+                               Person id with no record, WHILE the cross-project-shared tier holds PER-011. A genuine
+                               dangling reference -> a record defect in ## Decisions, NOT a coverage gap. -->
+
+RAID Item R-PROJ-041      entity_type: RAID Item   id: r-proj-041
+                          lifecycle_state: open    created_date: 2026-04-01
+                          owner_person_id: per-011               <!-- CLEAN: resolves, precisely BECAUSE the tier is populated -->
+                          content_lifecycle_pattern: Living      owning_agent: delivery-engine
+                          <!-- CLEAN across all three limbs -> must NOT be flagged by structure mode -->
+
+Meeting  MTG-104          entity_type: Meeting     id: mtg-104
+                          lifecycle_state: held    created_date: 2026-04-16
+                          content_lifecycle_pattern: Living      owning_agent: ppm-agent
+                          relationships: [ { type: GENERATES, target: dec-206 } ]
+                          <!-- SEEDED SHAPE 3 (missing entity): a TYPED EDGE to an absent entity. No Decision record
+                               instantiates dec-206 -> referenced-but-absent, a contradiction finding at S3. -->
+
+Cross-Project Dependency  <!-- NO RECORD OF THIS TYPE EXISTS, and the portfolio-level tier holds none either.
+                               A reference into that tier is unresolvable BY TIER, not by record -> routing row 1:
+                               ## Unknowns, excluded from the denominator, named in the coverage note.
+                               This is the specificity control for shape 2 — the two must not be conflated. -->
+```
+
 ## Confluence (MCP-primary) — hypercare page, updated 2026-04-20
 
 ```
@@ -86,4 +138,18 @@ Hypercare exit date: 2026-04-24           <!-- agrees with PROJECT.md (Friday Ap
 - `## Auto-Actionable` — Confluence sync timestamp in PROJECT.md (April 2) is stale vs the live page (edited April 20) → `[confidence: HIGH · S2]` propose updating the recorded sync timestamp.
 - `## Unknowns` / inventory flag — SharePoint listed as **missing-but-expected** (no MCP connector): content unverifiable, link-only — NOT asserted fresh.
 - `## Confirmed` — Jira sync (April 22) current; Smartsheet exit date agrees.
-```
+
+### `structure` mode
+
+Audits all three limbs — (a) entity present, (b) required fields populated, (c) required relationships valid — over the entity-record layer above.
+
+- `## Decisions` — **R-PROJ-040 `owner_person_id` empty** → `[confidence: HIGH · S2]` naming rule ID + entity + field; the correct value is **not derivable** from the frozen schema, so it stays here despite HIGH confidence. **Counted once, in the fields factor only** — an empty slot instantiates no relationship rule.
+- `## Decisions` — **R-PROJ-038 `owner_person_id` names a Person id with no record** while the cross-project-shared tier **is** populated → `[confidence: MEDIUM · S2]` a genuine dangling reference (a record defect, not a coverage gap).
+- `## Decisions` — **MTG-104 `relationships[0].target` names a Decision record that does not exist** → `[confidence: HIGH · S3]` referenced-but-absent; `S3` is reached in-rule because a reference asserting a nonexistent record is a contradiction finding.
+- `## Auto-Actionable` — **R-PROJ-040 `content_lifecycle_pattern` absent**, and the frozen schema pins exactly one value for this entity → the correct value **is** derivable → `TRACKER_UPDATES:` block. This is the derivability discriminator against the first item.
+- `## Unknowns` — **Cross-Project Dependency references unresolvable because the portfolio-level tier holds no record of that type** → excluded from the denominator and **named** in the coverage note; **not** reported as a per-record contradiction (routing row 1 outranks the per-record rows).
+- `## Confirmed` — **R-PROJ-041** clean across all three limbs; its Person reference resolves.
+- **Score render (mandatory):** `MM-0` as a single 0–100 number with `MM-1` / `MM-2` / `MM-3` each as `n/d`, plus the **entity-type coverage line** (types in denominator vs excluded). The tier banner is a **list** and, with all three tiers holding records here, may legitimately be silent — the type line still renders, and its absence is a FAIL.
+- **Must NOT flag:** R-PROJ-041 (clean); any optional field left blank; the seeded-clean COM-032 and the `comms`/`raid`/`sources` items, which belong to other modes.
+- **Out of contract:** no stalled-migration escalation is emitted — that seam is reserved and unimplemented. Any stall dimension mentioned reads `UNMEASURED` with its precondition named.
+
