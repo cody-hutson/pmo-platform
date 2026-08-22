@@ -503,7 +503,21 @@ for V in "$@"; do
     rc_final=1
     continue
   fi
-  BODY="$(printf '%s\n' "$RAW" | sed '1,/^---$/d; 1,/^---$/d')"
+  # ── The §5.1 strip, in TWO stages. Stage 2 is the shipped idiom, byte-
+  #    unchanged; stage 1 drops any LEAD-IN before the opening delimiter so
+  #    stage 2 always sees a stream whose line 1 IS that delimiter — the case it
+  #    handles correctly. Without stage 1, a note with a line before its opening
+  #    `---` (v1.08 / v1.09 / v1.10 carry a lint directive there) ends the
+  #    deletion range on the OPENING delimiter and PUBLISHES its raw YAML block.
+  #    Strict composition: identity when the delimiter is already line 1, so 192
+  #    of the 195 corpus notes compute byte-identical bodies either way.
+  #    /usr/bin/sed is pinned to match check-release-body-drift.sh — this
+  #    emitter's own post-edit verifier — so the two cannot diverge on a host
+  #    with a shimmed sed. Both copies must move together; see the SIBLING
+  #    COPIES note in that file.
+  BODY="$(printf '%s\n' "$RAW" \
+            | /usr/bin/sed -n '/^---$/,$p' \
+            | /usr/bin/sed '1,/^---$/d; 1,/^---$/d')"
   if [[ -z "$BODY" ]]; then
     echo "  ABORT: frontmatter strip produced an EMPTY body — refusing to publish nothing."
     rc_final=1

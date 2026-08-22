@@ -164,8 +164,43 @@ find_gh() {
 # "$@" (not "$1") so ONE transform serves both a file arg (fixture mode) and a
 # stream (`git show … | strip_frontmatter`, canonical mode). With zero args sed
 # reads stdin; safe under set -u. Keeps the §5.1 body-equality logic in one place.
+#
+# ─── TWO STAGES, AND STAGE 1 IS THE LEAD-IN REPAIR ──────────────────────────
+# Stage 2 is the shipped idiom, byte-unchanged. Its deletion range runs from
+# line 1 to the FIRST `^---$` at line 2 or later. When the note's frontmatter
+# opens on line 1 that terminator is the CLOSING delimiter and the strip is
+# correct. When ANY line precedes the opening delimiter — a lint directive, an
+# HTML comment, a blank — the range ends on the OPENING delimiter instead and
+# the whole YAML block survives into the "body". Publishing that writes raw
+# frontmatter onto a public Release page: the §5.1 defect the re-emit exists to
+# repair, reintroduced by the repair.
+#
+# Stage 1 (`-n '/^---$/,$p'`) drops any such lead-in, so stage 2 always sees a
+# stream whose line 1 IS the opening delimiter — the case it already handles
+# correctly. This is a strict COMPOSITION, not a rewrite: when the opening
+# delimiter is already line 1, stage 1 is the identity and the pair is
+# byte-identical to the shipped idiom. Measured over the whole corpus at the
+# branch tip: 192 of 195 notes byte-identical, 3 changed (v1.08 / v1.09 / v1.10
+# — the only notes carrying a lead-in), YAML-leaking bodies 3 → 0, EMPTY bodies
+# 0 → 0.
+#
+# A note carrying NO recognisable frontmatter now yields an EMPTY body, so the
+# caller's empty-body ABORT fires instead of a mis-stripped tail being
+# published. That is a fail-CLOSED change to a case the shipped idiom
+# mis-handled; the live corpus has 0 such notes.
+#
+# NOT the portability defect. The GNU-vs-BSD divergence declared in this file's
+# `selftest-runner` header is a DIFFERENT defect in the same idiom, tracked
+# separately, and is neither fixed nor worsened here: stage 2 retains the
+# shipped idiom verbatim. That residual stands as written.
+#
+# SIBLING COPIES of this transform, which must move together:
+#   release/tools/reemit-release-bodies.sh      (the emitter; same two stages)
+#   release/tools/preflight-release-body-reemit.py `strip_frontmatter()`
+#                                                  (byte-faithful model, A4)
 strip_frontmatter() {
-  /usr/bin/sed '1,/^---$/d; 1,/^---$/d' "$@" 2>/dev/null
+  /usr/bin/sed -n '/^---$/,$p' "$@" 2>/dev/null \
+    | /usr/bin/sed '1,/^---$/d; 1,/^---$/d'
 }
 
 # ─── Normalize a single trailing newline (GitHub round-trip tolerance) ───────
