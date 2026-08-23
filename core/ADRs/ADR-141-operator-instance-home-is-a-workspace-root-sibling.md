@@ -56,11 +56,11 @@ Platform-written runtime state is a peer of the operator's content, never a tena
 
 ## Alternatives Considered
 
-| Alternative | Why not |
+| Alternative | Disposition |
 |---|---|
 | Move the whole personal-area family, including the operator's analysis and harness directories | Those are operator **working material**, not machine-written state — the same distinction that decided this move argues against moving them. Only the runtime-state member relocates. |
 | Retarget the duplicated inline defaults in place rather than converging them | Convergence is the correct end state, but the un-converged FinOps executables resolve through a correct override chain and only duplicate the leaf. Converging them is a wider diff than this release should carry; they were flipped in lockstep and their convergence is routed to a follow-on. |
-| Close the both-forms detection window in the same release | The detector must keep recognizing the retired form while any instance may still be un-migrated. Closing it early strands exactly the instances the migration is for. |
+| Close the both-forms detection window in the same release | **Rejected at design, then adopted by operator decision — this is what shipped.** The reasoning against it is real and still stands: closing the window narrows the predicate, so a bare legacy-form path is no longer flagged on any consuming surface and an instance that has not migrated loses protection on that form. Both the designing spoke and the hub recommended deferring it. The operator weighed that residual risk at Stage 5 and deliberately accepted it, keeping the slice in-release. What makes the acceptance safe is not that the objection went away but that the precondition is gated elsewhere: it cannot be verified from inside the release — no gate here can see an operator's filesystem — so it converts to an **explicit operator attestation at the Stage 12 Execute gate**. If that attestation cannot be given, the slice is dropped in isolation as a single self-contained revert, and re-opening the window is a one-member addition that is safe at any time. |
 | Detect the un-migrated state with a marker file written by the installer | Cleaner, but it covers a strictly smaller set: an operator who deploys the new resolver **without** running the installer never gets the marker, and that is precisely the case the guard exists to catch. |
 
 ## Migration
@@ -82,7 +82,7 @@ Platform-written runtime state is a peer of the operator's content, never a tena
 
 - The installer no longer creates the personal area at all. It never had a reason to beyond housing this family.
 - The install validator's layout assertion asserts the instance home instead of the personal area. A gate that required a directory the installer had stopped creating would fail every healthy install.
-- The path-leak detector recognizes **both** leaf forms for the duration of the migration window. Adding the new form was measured to cost zero new findings in the only gating consumer.
+- The path-leak detector recognized **both** leaf forms while the corpus was being rewritten onto the new form, and the retired form is then **dropped from the recognized set in this same release** — the migration window opens and closes inside this release rather than outliving it. Adding the new form was measured to cost zero new findings in the only gating consumer. Retiring the old one moves the other way: it narrows the predicate, so a bare legacy-form path is no longer flagged on either consuming surface. That narrowing rests on a precondition no gate in this release can observe, and it is therefore governed by an **explicit operator attestation at the Stage 12 Execute gate** — the closure ships only if that attestation is given, and is otherwise reverted in isolation, leaving the rest of the release intact.
 - The resolver retains exactly one spelling of the retired leaf, in a named accessor whose sole purpose is the un-migrated detection above. It is a deliberate, greppable removal target, not residue.
 - Two ADRs now state a default this decision has moved. Both are historical records and are left as written; this ADR is where the current value lives.
 

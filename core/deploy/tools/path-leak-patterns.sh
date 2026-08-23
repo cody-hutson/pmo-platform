@@ -27,8 +27,13 @@
 #                  BOTH-FORMS WINDOW: CLOSED. The operator-instance home relocated
 #                  from the personal namespace to the workspace-root leaf
 #                  `pmo-instance`. Both leaves were recognized simultaneously for the
-#                  length of the migration, and the legacy member is now removed on
-#                  the operator's attestation that the instance has migrated.
+#                  length of the corpus rewrite, and the legacy member is removed here
+#                  PENDING the operator's attestation that the instance has migrated.
+#                  That attestation is NOT yet given: it is an explicit sign-off at the
+#                  Stage 12 Execute gate, still ahead of this release. No gate inside
+#                  the release can see an operator's filesystem, which is exactly why
+#                  the precondition converts to a sign-off there rather than to a check
+#                  here. If it cannot be given, THIS REMOVAL is the thing to drop.
 #
 #                  WHAT THAT COSTS, STATED PLAINLY. A member removal NARROWS what this
 #                  predicate flags. A bare legacy-form path is no longer detected as
