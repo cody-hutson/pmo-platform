@@ -34,3 +34,11 @@ consumers: readers navigating the core/schemas corpus; agents and gates locating
 | [../schemas/touchpoint-phaseout-schema.md](../schemas/touchpoint-phaseout-schema.md) | Operator-touchpoint inventory + phase-out-plan schema (autonomy phase-out grammar) |
 | [../schemas/tracker-schemas.md](../schemas/tracker-schemas.md) | PMO operational tracker schemas (RAID, comms, meetings, …) |
 | [../schemas/work-item-type-schema.md](../schemas/work-item-type-schema.md) | Declarative work-item type-pack meta-schema (the grammar for declaring kinds) |
+
+## Schemas that live outside this directory
+
+A reader looking for "the schema for `operator.toml`" may reasonably start here. It is deliberately homed elsewhere, because it is a **runtime generator input read by install/deploy scripts** rather than a schema *document* — and `core/config/` is the tier that holds those (the Governance File Map names `operator.toml.template` as its exemplar).
+
+| Schema | Home | Coverage area |
+|---|---|---|
+| `operator-toml-schema.json` | `core/config/operator-toml-schema.json` | Canonical declaration of the `operator.toml` key set — key, section, type, valid values, default-or-none, and delivered-vs-opt-in disposition. `setup-workspace.sh` derives its emit from it, `core/deploy/tools/check-operator-toml-schema.sh` lints the template against it, and the update path reconciles an existing instance against it. Rationale and alternatives: ADR-140. |

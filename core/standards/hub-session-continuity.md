@@ -274,7 +274,7 @@ When § 7.2 Step 2 reads *"creating the per-release directory + the file from th
 # core/standards/depersonalization-spec.md §4 — read operator.toml
 # [paths].operator_instance_hub_state_path; empty → canonical default.
 HUB_STATE_PATH="$(read_operator_toml_field paths.operator_instance_hub_state_path)"
-[ -z "${HUB_STATE_PATH}" ] && HUB_STATE_PATH="${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/hub-state"
+[ -z "${HUB_STATE_PATH}" ] && HUB_STATE_PATH="${CLAUDE_WORKSPACE_ROOT}/pmo-instance/hub-state"
 
 RUNTIME_DIR="${HUB_STATE_PATH}/${MILESTONE}"   # slug-keyed (pre-claim; the version is not bound yet)
 RUNTIME_FILE="${RUNTIME_DIR}/${SURFACE}.md"

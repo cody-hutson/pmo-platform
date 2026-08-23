@@ -48,8 +48,8 @@
 #
 # Usage:
 #   ./setup-workspace.sh [--source-repo PATH] [--workspace-root PATH]
-#                        [--init-only-state] [--non-interactive] [--dry-run]
-#                        [--help]
+#                        [--init-only-state] [--reconcile-config]
+#                        [--non-interactive] [--dry-run] [--help]
 #
 # Exit codes (sysexits(3)):
 #   0   — success
@@ -74,8 +74,9 @@ readonly STATE_FILE_NAME=".workspace-setup.state"
 readonly STATE_SCHEMA_VERSION="1.0"
 readonly SCRIPT_VERSION="v1.04"
 # Canonical operator config (per composition-surface-spec.md + depersonalization-spec.md §2).
-# XDG-spec location; structured TOML with [meta]/[identity]/[paths]/[platform]/[automation]
-# sections — the five this script's write_operator_toml() emits on a stock install.
+# XDG-spec location; structured TOML. The key set this script emits is NOT enumerated
+# here — it is DERIVED from core/config/operator-toml-schema.json (the sections whose
+# `delivery` is "delivered"). Enumerating it in prose is what let the schema drift.
 # Per-workspace override (optional). Loaded after operator.toml; fields here win.
 readonly OPERATOR_LOCAL_TOML_BASENAME="operator.local.toml"
 # Hook count safety floor; current expected count is 10. Loop is data-driven.
@@ -128,6 +129,8 @@ INIT_ONLY_STATE=0
 REFRESH_HOOKS=0
 REHOME_HOOK_WIRING=0
 REFRESH_SETTINGS=0
+RECONCILE_CONFIG=0
+RECONCILE_ANSWERS=""        # JSON of prompt answers for undefaulted keys (#5739)
 RESTORE_HOOKS=0
 RESTORE_GENERATION=""       # empty = newest durable generation (#5662)
 LIST_HOOK_SNAPSHOTS=0
@@ -227,6 +230,16 @@ Options:
   --force-regen           Force the settings re-render even when both recorded
                           baselines match (the S-0 no-op skip). The guard still runs
                           first — this never bypasses operator-key migration.
+  --reconcile-config      Converge an EXISTING operator.toml on the declared schema
+                          (core/config/operator-toml-schema.json) and exit. Backfills
+                          a missing key from its declared default, preserves every
+                          non-empty operator-set value, and never removes a key.
+                          A missing key that carries NO default is prompted for;
+                          declining leaves it absent. Under --non-interactive (or a
+                          closed stdin) such a key is left absent and the run exits
+                          66 naming it — no value is ever invented and nothing hangs.
+                          Creates no directories, installs no hooks, deploys no
+                          skills, writes no state file.
   --non-interactive       Resolve every token from its declared default and never
                           read stdin. A required token with no available default
                           fails with a non-zero exit naming the token; no value is
@@ -472,6 +485,8 @@ parse_argv() {
         USER_SETTINGS="$2"; shift 2 ;;
       --refresh-settings)
         REFRESH_SETTINGS=1; shift ;;
+      --reconcile-config)
+        RECONCILE_CONFIG=1; shift ;;
       --force-regen)
         FORCE_REGEN=1; shift ;;
       --non-interactive)
@@ -557,6 +572,15 @@ check_source_repo() {
     err "Verify the source repo is on a branch that includes the config templates."
     exit 66
   fi
+  # NOTE — the operator.toml schema declaration is deliberately NOT required here.
+  # It is needed only by the flows that read or write operator.toml, and gating the
+  # whole script on it aborts flows that never touch that file: --refresh-hooks
+  # builds a partial mirror repo carrying only the two templates above, and a third
+  # required file breaks it with an exit long before the flow it was aborting could
+  # have failed on its own. The guard belongs at the point of use, and it is there:
+  # both read_operator_toml and write_operator_toml exit non-zero with a named
+  # message when the declaration is unreadable, and write_operator_toml additionally
+  # refuses to write a truncated file when the declaration yields an empty key set.
 }
 
 # --- Section 9: Active token set computation (FM-5 absorption) ---
@@ -617,21 +641,27 @@ detect_state_and_route() {
 }
 
 # --- Section 11: operator.toml read/write (canonical per composition-surface-spec.md) ---
-# Schema: [meta] schema_version, managed_by | [identity] operator_* | [paths] *_path / *_root | [platform] * |
-#         [automation] automation_level  — five managed sections (MANAGED_SECTIONS, below); [automation]
-#         has been emitted on every stock install since v4.23.
-# Token mapping (operator.toml field → bracketed token):
-#   [identity].operator_name             → [OPERATOR_NAME]
-#   [identity].operator_email            → [OPERATOR_EMAIL]
-#   [identity].operator_git_email        → [OPERATOR_GIT_EMAIL]
-#   [identity].operator_github           → [OPERATOR_GITHUB]
-#   [identity].operator_phone            → [OPERATOR_PHONE]
-#   [identity].operator_role_title       → [OPERATOR_ROLE_TITLE]
-#   [identity].operator_organization     → [OPERATOR_ORGANIZATION]
-#   [paths].claude_workspace_root        → [CLAUDE_WORKSPACE_ROOT]
-#   [paths].operator_homedir_path        → [OPERATOR_HOMEDIR_PATH]
-#   [paths].cowork_install_path          → [COWORK_INSTALL_PATH_BASE]
+#
+# THE SCHEMA IS DATA, NOT CODE. Both functions below derive everything they know
+# about operator.toml — which keys exist, their type, their default-or-none, which
+# sections are emitted, and the field→token map — from the declaration at
+# core/config/operator-toml-schema.json. Adding a key is one JSON object and zero
+# lines here. See ADR-140.
+#
+# This replaced three hand-maintained lists that had to be edited in lockstep and
+# were not: MANAGED (16 tuples), MANAGED_SECTIONS (5), and field_to_token (10,
+# whose own comment read "Edit BOTH or neither" after the v4.15 blanking defect —
+# [paths].cowork_install_path resolves the token [COWORK_INSTALL_PATH_BASE], and
+# the name asymmetry is exactly what drifted). Deriving them closes that class.
+#
 # [OPERATOR_FIRST_NAME] is derived from OPERATOR_NAME and not stored.
+
+# Absolute path to the schema declaration. Deliberately a function rather than a
+# file-header constant: SOURCE_REPO is not known until parse_argv runs.
+operator_schema_file() {
+  printf '%s\n' "${SOURCE_REPO}/core/config/operator-toml-schema.json"
+}
+
 read_operator_toml() {
   # Read operator.toml (canonical) into TOKENS_FILE. If absent, return 0 (no-op).
   # Per-workspace override at <WORKSPACE_ROOT>/operator.local.toml wins per-field.
@@ -643,21 +673,29 @@ read_operator_toml() {
   S_TOKENS_FILE="${TOKENS_FILE}" \
   S_PRIMARY="${primary}" \
   S_OVERRIDE="${override}" \
+  S_SCHEMA_FILE="$(operator_schema_file)" \
   python3 -c '
 import json, os, sys
 
-field_to_token = {
-    ("identity", "operator_name"):           "[OPERATOR_NAME]",
-    ("identity", "operator_email"):          "[OPERATOR_EMAIL]",
-    ("identity", "operator_git_email"):      "[OPERATOR_GIT_EMAIL]",
-    ("identity", "operator_github"):         "[OPERATOR_GITHUB]",
-    ("identity", "operator_phone"):          "[OPERATOR_PHONE]",
-    ("identity", "operator_role_title"):     "[OPERATOR_ROLE_TITLE]",
-    ("identity", "operator_organization"):   "[OPERATOR_ORGANIZATION]",
-    ("paths",    "claude_workspace_root"):   "[CLAUDE_WORKSPACE_ROOT]",
-    ("paths",    "operator_homedir_path"):   "[OPERATOR_HOMEDIR_PATH]",
-    ("paths",    "cowork_install_path"):     "[COWORK_INSTALL_PATH_BASE]",
-}
+# DERIVED from the declaration — every key whose source is "token", paired with
+# the token it resolves. No second hand-maintained list to drift out of step.
+try:
+    with open(os.environ["S_SCHEMA_FILE"], "r") as f:
+        _schema = json.load(f)
+except (IOError, OSError, ValueError) as e:
+    sys.stderr.write("FATAL: cannot read operator.toml schema declaration at {}: {}\n".format(
+        os.environ.get("S_SCHEMA_FILE", "<unset>"), e))
+    sys.exit(1)
+
+field_to_token = {}
+for _sec in _schema["sections"]:
+    for _k in _sec["keys"]:
+        if _k.get("source") == "token":
+            field_to_token[(_sec["name"], _k["key"])] = _k["token"]
+if not field_to_token:
+    sys.stderr.write("FATAL: schema declaration yielded an EMPTY token map; refusing to "
+                     "silently resolve nothing.\n")
+    sys.exit(1)
 
 def parse_toml(path):
     """Minimal TOML reader: [section] header + key = "value" lines.
@@ -718,9 +756,34 @@ write_operator_toml() {
   S_OUT="${tmp}" \
   S_EXISTING="${OPERATOR_TOML}" \
   S_SCRIPT_VERSION="${SCRIPT_VERSION}" \
+  S_SCHEMA_FILE="$(operator_schema_file)" \
+  S_ANSWERS="${RECONCILE_ANSWERS:-}" \
   python3 -c '
 import json, os, sys
 from datetime import datetime, timezone
+
+# The schema declaration drives the entire emit below. A missing or malformed
+# declaration is a LOUD failure, never a quiet one that writes a truncated
+# operator.toml over a good file.
+try:
+    with open(os.environ["S_SCHEMA_FILE"], "r") as f:
+        schema = json.load(f)
+except (IOError, OSError, ValueError) as e:
+    sys.stderr.write("FATAL: cannot read operator.toml schema declaration at {}: {}\n".format(
+        os.environ.get("S_SCHEMA_FILE", "<unset>"), e))
+    sys.exit(1)
+
+DECL_VERSION = schema["declaration_version"]
+SECTIONS = schema["sections"]
+
+def sec_delivery(sec):
+    return sec.get("delivery", "delivered")
+
+def key_delivery(sec, k):
+    # A key inherits its section disposition unless it overrides it. This is what
+    # lets [paths] deliver 4 keys while its 8 operator_instance_* overrides stay
+    # opt-in.
+    return k.get("delivery", sec_delivery(sec))
 
 with open(os.environ["S_TOKENS_FILE"], "r") as f:
     tokens = json.load(f)
@@ -776,31 +839,93 @@ def ovd(section, key, default):
     pv = prior_val(section, key)
     return pv if (pv is not None and pv != "") else default
 
-MANAGED = {
-    ("meta", "schema_version"), ("meta", "managed_by"),
-    ("identity", "operator_name"), ("identity", "operator_email"),
-    ("identity", "operator_git_email"), ("identity", "operator_github"),
-    ("identity", "operator_phone"), ("identity", "operator_role_title"),
-    ("identity", "operator_organization"),
-    ("paths", "claude_workspace_root"), ("paths", "operator_homedir_path"),
-    ("paths", "cowork_install_path"), ("paths", "pmo_platform_repo_name"),
-    ("platform", "work_board"), ("platform", "comms_platform"),
-    ("automation", "automation_level"),
-}
-MANAGED_SECTIONS = {"meta", "identity", "paths", "platform", "automation"}
-# MANAGED is the ALREADY-EMITTED set the passthrough below skips, not an
-# overwrite set. Membership does NOT mean "re-emitted from tokens": three of its
-# rows (pmo_platform_repo_name, work_board, comms_platform) are emitted through
-# ovd() and keep whatever the operator set. automation_level joins them on
-# exactly that footing -- listed so passthrough does not echo it a second time
-# and produce a duplicate key, emitted through ovd() so a deliberate "off" is
-# never reset by a re-bootstrap.
+# DERIVED, not hand-listed. MANAGED is the ALREADY-EMITTED set the passthrough
+# below skips, not an overwrite set. Membership does NOT mean "re-emitted from
+# tokens": every `operator-or-default` row is emitted through ovd() and keeps
+# whatever the operator set -- listed only so passthrough does not echo it a
+# second time and produce a duplicate key.
+MANAGED = set()
+MANAGED_SECTIONS = set()
+for _sec in SECTIONS:
+    if sec_delivery(_sec) == "delivered":
+        MANAGED_SECTIONS.add(_sec["name"])
+    for _k in _sec["keys"]:
+        if key_delivery(_sec, _k) == "delivered":
+            MANAGED.add((_sec["name"], _k["key"]))
+if not MANAGED or not MANAGED_SECTIONS:
+    sys.stderr.write("FATAL: schema declaration yielded an EMPTY delivered key set; "
+                     "refusing to overwrite operator.toml with a truncated file.\n")
+    sys.exit(1)
 
 def passthrough(section):
     # operator-added keys in a managed section (not in MANAGED) — preserve verbatim
     for (k, v) in prior.get(section, []):
         if (section, k) not in MANAGED:
             out.append("{} = {}".format(k, v))
+
+def fmt_scalar(t, v):
+    # Quoting is driven by the declared TYPE, not by guesswork. A non-string
+    # scalar MUST round-trip unquoted: [meta].schema_version is an int and
+    # [session_retro].enabled is a bool, and quoting either breaks the
+    # consumer-shape arms in test_upgrade_config_durability.sh. A value read
+    # back from the operator file arrives as a string and is emitted verbatim.
+    if t in ("bool", "int"):
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        return str(v).strip()
+    return "\"{}\"".format(esc(v))
+
+# Answers supplied by the --reconcile-config prompt for keys that carry NO
+# declared default. Keyed "section.key". Absent for every normal run.
+ANSWERS = {}
+_raw_answers = os.environ.get("S_ANSWERS", "")
+if _raw_answers:
+    try:
+        for _ak, _av in json.loads(_raw_answers).items():
+            _as, _, _akey = _ak.partition(".")
+            ANSWERS[(_as, _akey)] = _av
+    except ValueError:
+        sys.stderr.write("FATAL: S_ANSWERS is not valid JSON; refusing to guess.\n")
+        sys.exit(1)
+
+def render(section, k):
+    # Returns the rendered RHS, or None meaning DO NOT EMIT THIS KEY.
+    src = k.get("source", "operator-or-default")
+    t = k.get("type", "string")
+    if src == "declaration-version":
+        # Kills the hardcoded literal: the emitted schema_version IS the
+        # declaration version, so the two can never disagree.
+        return fmt_scalar(t, DECL_VERSION)
+    if src == "literal":
+        return fmt_scalar(t, k["default"])
+    if src == "token":
+        # Defence in depth against the blanking class. A token that did not
+        # resolve must NEVER overwrite a non-empty value already on disk: the
+        # additive-only invariant covers token-sourced keys too, not just the
+        # operator-or-default ones. On a normal install prior is empty and the
+        # token wins; on a re-bootstrap or reconcile the token was seeded FROM
+        # that same prior value, so this changes nothing — it only removes the
+        # path by which an unresolved token silently empties a real value.
+        tv = get(k["token"], "")
+        if tv == "":
+            pv = prior_val(section, k["key"])
+            if pv is not None and pv != "":
+                return fmt_scalar(t, pv)
+            return fmt_scalar(t, k.get("default", ""))
+        return fmt_scalar(t, tv)
+    # operator-or-default: keep a non-empty operator value, else the default.
+    pv = prior_val(section, k["key"])
+    if pv is not None and pv != "":
+        return fmt_scalar(t, pv)
+    if "default" in k:
+        return fmt_scalar(t, k["default"])
+    # No declared default and nothing on disk. An answer may have been supplied
+    # by the reconcile prompt; otherwise the key is LEFT ABSENT rather than
+    # written as an empty value. Declining a prompt must be safe.
+    ans = ANSWERS.get((section, k["key"]))
+    if ans is not None and ans != "":
+        return fmt_scalar(t, ans)
+    return None
 
 now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 out = []
@@ -811,49 +936,30 @@ script_version = os.environ["S_SCRIPT_VERSION"]
 out.append("# Generated by setup-workspace.sh {} at {}".format(script_version, now))
 out.append("# Edit directly or re-run setup-workspace.sh to update (operator additions preserved).")
 out.append("")
-out.append("[meta]")
-out.append("schema_version = 1")
-out.append("managed_by = \"pmo-platform\"")
-out.append("")
-out.append("[identity]")
-out.append("operator_name = \"{}\"".format(esc(get("[OPERATOR_NAME]"))))
-out.append("operator_email = \"{}\"".format(esc(get("[OPERATOR_EMAIL]"))))
-out.append("operator_git_email = \"{}\"".format(esc(get("[OPERATOR_GIT_EMAIL]"))))
-out.append("operator_github = \"{}\"".format(esc(get("[OPERATOR_GITHUB]"))))
-out.append("operator_phone = \"{}\"".format(esc(get("[OPERATOR_PHONE]"))))
-out.append("operator_role_title = \"{}\"".format(esc(get("[OPERATOR_ROLE_TITLE]"))))
-out.append("operator_organization = \"{}\"".format(esc(get("[OPERATOR_ORGANIZATION]"))))
-passthrough("identity")
-out.append("")
-out.append("[paths]")
-out.append("claude_workspace_root = \"{}\"".format(esc(get("[CLAUDE_WORKSPACE_ROOT]"))))
-out.append("operator_homedir_path = \"{}\"".format(esc(get("[OPERATOR_HOMEDIR_PATH]"))))
-out.append("cowork_install_path = \"{}\"".format(esc(get("[COWORK_INSTALL_PATH_BASE]"))))
-out.append("pmo_platform_repo_name = \"{}\"".format(esc(ovd("paths", "pmo_platform_repo_name", "pmo-platform"))))
-passthrough("paths")
-out.append("")
-out.append("[platform]")
-out.append("work_board = \"{}\"".format(esc(ovd("platform", "work_board", "github"))))
-out.append("comms_platform = \"{}\"".format(esc(ovd("platform", "comms_platform", ""))))
-passthrough("platform")
-out.append("")
-# The ambient-intake automation ceiling. Seeded so the dial is DISCOVERABLE in
-# the generated file rather than findable only by reading operator.toml.template
-# -- which this generator never reads, so a template-only default reached nobody.
-#
-# Seeding it changes discoverability, not behavior: the dial is advisory today
-# (skills read it and self-limit), and a skill finding the key absent falls back
-# to the same "recommend" documented here. An install with the key and one
-# without behave identically. It is emitted through ovd() so re-running setup on
-# a workspace whose operator deliberately set "off" preserves that choice.
-out.append("[automation]")
-out.append("automation_level = \"{}\"".format(esc(ovd("automation", "automation_level", "recommend"))))
-passthrough("automation")
-out.append("")
-# pass-through every NON-MANAGED operator-added section verbatim (adapters,
-# methodology, projects, and any unknown section) in original file order. The
-# MANAGED_SECTIONS skip immediately below excludes automation: it is emitted
-# above, with its own passthrough(), rather than here.
+
+# THE EMIT. Every delivered section, every delivered key, in declaration order.
+# Nothing here names a key, a section, or a default -- adding a field is one JSON
+# object in the declaration and zero lines here (AC-5). Each section still gets
+# its passthrough() so operator-added keys inside a managed section survive.
+for _sec in SECTIONS:
+    if sec_delivery(_sec) != "delivered":
+        continue
+    _name = _sec["name"]
+    out.append("[{}]".format(_name))
+    for _k in _sec["keys"]:
+        if key_delivery(_sec, _k) != "delivered":
+            continue
+        _rendered = render(_name, _k)
+        if _rendered is None:
+            continue
+        out.append("{} = {}".format(_k["key"], _rendered))
+    passthrough(_name)
+    out.append("")
+
+# pass-through every NON-MANAGED operator-added section verbatim (any section the
+# declaration marks opt-in, plus any unknown section) in original file order. A
+# delivered section is skipped here because it was emitted above WITH its own
+# passthrough(), rather than a second time here.
 for section in prior_order:
     if section in MANAGED_SECTIONS:
         continue
@@ -1124,22 +1230,50 @@ resolve_all_tokens() {
 # authoritative everywhere else this capability touches a path, so a relocation
 # of the operator-instance family rewrites this list and nothing more.
 #
+# The instance home is a workspace-root sibling of projects/ and knowledge/ above,
+# not a subdirectory of personal/. That is a deliberate consequence of the family's
+# relocation and it has one visible effect here: this installer no longer creates
+# personal/ at all. It never had a reason to beyond housing this family, and
+# personal/ is the operator's own area — the platform provisions nothing inside it.
+#
 # Empty directories are the whole of what install provisions for ambient intake.
 # Nothing is registered and nothing runs: the scheduled sweep is an operator-
 # performed registration on an agent-runtime surface this script cannot reach,
 # and it is documented as an activation step in docs/INSTALL.md rather than
 # performed here. A directory has no behavior, which is what makes provisioning
 # them safe to do unprompted.
+#
+# The nine entries under projects/ are the OPERATIONS TIER SCAFFOLD. They sit
+# directly beneath their parent rather than at the end of the list precisely so
+# the ambient trio stays LAST and the first sentence of this header stays true --
+# a membership change that pushes those three off the end turns a correct comment
+# into a stale one, silently. Every tier in that block has a pre-existing governed
+# authority and none is invented here: _config/ is the Governance File Map's
+# program-scoped ops-config row, _pmo/ and its six entity classes are ADR-058 plus
+# the entity field schemas, and Archive/ is RECORDS_POLICY.md, which already names
+# it as the retention destination. The seed READMEs that make each of them
+# self-describing are copied by scaffold_operations_tiers() later in the same
+# flow -- this function creates only the directories, because it runs before the
+# resolver is available and a create-once template copy needs it.
 create_dir_layout() {
   local dirs
   dirs="${WORKSPACE_ROOT}/.claude
 ${WORKSPACE_ROOT}/.claude/hooks
 ${WORKSPACE_ROOT}/projects
+${WORKSPACE_ROOT}/projects/_config
+${WORKSPACE_ROOT}/projects/_pmo
+${WORKSPACE_ROOT}/projects/_pmo/people
+${WORKSPACE_ROOT}/projects/_pmo/systems
+${WORKSPACE_ROOT}/projects/_pmo/vendors
+${WORKSPACE_ROOT}/projects/_pmo/workstreams
+${WORKSPACE_ROOT}/projects/_pmo/decisions
+${WORKSPACE_ROOT}/projects/_pmo/dependencies
+${WORKSPACE_ROOT}/projects/Archive
 ${WORKSPACE_ROOT}/knowledge
-${WORKSPACE_ROOT}/personal/pmo-instance
-${WORKSPACE_ROOT}/personal/pmo-instance/inbox
-${WORKSPACE_ROOT}/personal/pmo-instance/ambient-intake
-${WORKSPACE_ROOT}/personal/pmo-instance/external-sync"
+${WORKSPACE_ROOT}/pmo-instance
+${WORKSPACE_ROOT}/pmo-instance/inbox
+${WORKSPACE_ROOT}/pmo-instance/ambient-intake
+${WORKSPACE_ROOT}/pmo-instance/external-sync"
 
   local d
   while IFS= read -r d; do
@@ -2562,10 +2696,10 @@ install_composition_surface_files() {
 
   if [ "${DRY_RUN}" -eq 0 ]; then
     mkdir -p "${WORKSPACE_ROOT}/.claude" || { err "mkdir failed: ${WORKSPACE_ROOT}/.claude"; exit 73; }
-    mkdir -p "${WORKSPACE_ROOT}/personal/pmo-instance" || { err "mkdir failed: ${WORKSPACE_ROOT}/personal/pmo-instance"; exit 73; }
+    mkdir -p "${WORKSPACE_ROOT}/pmo-instance" || { err "mkdir failed: ${WORKSPACE_ROOT}/pmo-instance"; exit 73; }
     # hub-state-tier parent for <OPERATOR_INSTANCE_HUB_STATE_PATH> templates
     # per core/deploy/composition-surface-manifest.sh hub-state tier.
-    mkdir -p "${WORKSPACE_ROOT}/personal/pmo-instance/hub-state" || { err "mkdir failed: ${WORKSPACE_ROOT}/personal/pmo-instance/hub-state"; exit 73; }
+    mkdir -p "${WORKSPACE_ROOT}/pmo-instance/hub-state" || { err "mkdir failed: ${WORKSPACE_ROOT}/pmo-instance/hub-state"; exit 73; }
     # operations-root-tier parent for the operations-workspace context anchor.
     # Resolved, not spelled: the operations leaf lives in lib-instance-path.sh so
     # a relocation re-points one function rather than every caller. The resolver
@@ -2690,7 +2824,7 @@ scaffold_localized_roster() {
   fi
   # Resolve via the single accessor, keyed on WORKSPACE_ROOT (honors
   # PMO_PEOPLE_ROSTER / PMO_INSTANCE_PATH overrides; falls back to
-  # <workspace-root>/personal/pmo-instance/people-roster.yaml — never the $HOME
+  # <workspace-root>/pmo-instance/people-roster.yaml — never the $HOME
   # default — so a sandboxed --workspace-root is respected).
   local roster_file; roster_file="$(pmo_people_roster_for "${WORKSPACE_ROOT}")"
   if [ -f "${roster_file}" ]; then
@@ -2705,6 +2839,82 @@ scaffold_localized_roster() {
   cp "${template}" "${roster_file}" || { err "roster scaffold copy failed → ${roster_file}"; exit 74; }
   info "INSTALLED roster template: ${roster_file}"
   printf 'rm-file:%s\n' "${roster_file}" >> "${ROLLBACK_OPS_FILE}"
+}
+
+# --- Section 15e: operations-tier seed scaffold (#5829) ---
+# Copy the tracked operations-tier orientation cards into the operator's operations
+# workspace, per file, ONLY IF the target does not already exist (create-once — never
+# clobbers operator data). A third sibling of scaffold_localized_needles() /
+# scaffold_localized_roster(): tracked template in Layer 1, render in the git-ignored
+# Layer 2, resolved via the single accessor and keyed on the passed WORKSPACE_ROOT so a
+# sandboxed --workspace-root install lands inside its sandbox.
+#
+# THE SEED SET IS THE TEMPLATE TREE, WALKED — not a second list enumerated here. A list
+# would be a shadow SSOT for the file set and would drift from the tree the moment a card
+# was added or renamed; walking makes "add a seed" mean "add a file" and makes the two
+# impossible to disagree. Ordering is forced to LC_ALL=C so the install log is stable
+# across machines and a diff of two runs is readable.
+#
+# CALLED FROM BOTH INSTALL FLOWS, and that is load-bearing rather than merely tidy.
+# create_dir_layout runs in fresh_install AND in rebootstrap, so a single call site here
+# would leave every ALREADY-INSTALLED operator — the population re-bootstrap exists to
+# serve, and the population this capability was built for — holding nine empty
+# directories and no orientation whatsoever. The needle and roster scaffolds above are
+# already dual-sited for exactly this reason; a one-site insertion "next to" them would
+# have looked correct and reached only fresh clones.
+#
+# ORIENTATION, NEVER AUTHORITY. Each seed cites the governance that owns its folder and
+# declares that the authority wins on disagreement. That matters because these cards land
+# in the operator's own workspace, where a card read as authoritative becomes a shadow
+# SSOT for the entity model and drifts from the governance it paraphrases.
+scaffold_operations_tiers() {
+  local lib="${SOURCE_REPO}/core/deploy/lib-instance-path.sh"
+  if [ ! -f "${lib}" ]; then
+    warn "Instance-path resolver not found at ${lib}; skipping operations-tier scaffold"
+    return 0
+  fi
+  # shellcheck source=/dev/null
+  source "${lib}"
+  local tree="${SOURCE_REPO}/operations/templates/operations-tiers"
+  if [ ! -d "${tree}" ]; then
+    warn "Operations-tier template tree not found at ${tree}; skipping operations-tier scaffold"
+    return 0
+  fi
+
+  local seeds
+  seeds="$(cd "${tree}" && find . -type f -name '*.md' | sed 's|^\./||' | LC_ALL=C sort)"
+  if [ -z "${seeds}" ]; then
+    warn "Operations-tier template tree carries no seed cards at ${tree}; skipping"
+    return 0
+  fi
+
+  # Resolved, never spelled. Unlike create_dir_layout — which runs before the resolver
+  # exists and therefore MUST inline its literals — this function runs after the source
+  # above, so the operations root comes from the single accessor.
+  local ops_root; ops_root="$(pmo_operations_path_for "${WORKSPACE_ROOT}")"
+  local rel target seeded=0 preserved=0
+  while IFS= read -r rel; do
+    [ -z "${rel}" ] && continue
+    target="${ops_root}/${rel}"
+    # Create-once. An operator who edited a seed keeps their edit on every later run;
+    # an operator who deleted one does not have it silently restored underneath them.
+    if [ -e "${target}" ]; then
+      preserved=$((preserved + 1))
+      continue
+    fi
+    if [ "${DRY_RUN}" -eq 1 ]; then
+      info "[dry-run] would scaffold operations-tier seed → ${target}"
+      seeded=$((seeded + 1))
+      continue
+    fi
+    mkdir -p "$(dirname "${target}")" || { err "mkdir failed: $(dirname "${target}")"; exit 73; }
+    cp "${tree}/${rel}" "${target}" || { err "operations-tier seed copy failed → ${target}"; exit 74; }
+    printf 'rm-file:%s\n' "${target}" >> "${ROLLBACK_OPS_FILE}"
+    seeded=$((seeded + 1))
+  done <<EOF
+${seeds}
+EOF
+  info "Operations-tier scaffold complete (${seeded} seeded, ${preserved} preserved)"
 }
 
 # --- Section 16: Hook behavioral verification (CD-5 absorption) ---
@@ -3016,6 +3226,8 @@ fresh_install() {
   install_composition_surface_files
   scaffold_localized_needles
   scaffold_localized_roster
+  # Call site 1 of 2. The twin is in rebootstrap() — see that call site's note.
+  scaffold_operations_tiers
   if run_verification_gate; then
     write_state_file "true"
     INSTALL_COMPLETE=1
@@ -3054,6 +3266,12 @@ rebootstrap() {
   install_composition_surface_files
   scaffold_localized_needles
   scaffold_localized_roster
+  # Call site 2 of 2, and the one that actually matters. create_dir_layout runs on THIS
+  # flow too, so omitting this line would give every already-installed operator the nine
+  # tier directories and none of their orientation cards — empty folders with no
+  # explanation, which is the failure this capability exists to prevent. Re-bootstrap is
+  # the flow an existing operator takes; fresh-install alone reaches new clones only.
+  scaffold_operations_tiers
   if run_verification_gate; then
     write_state_file "true"
     INSTALL_COMPLETE=1
@@ -3547,6 +3765,254 @@ rehome_hook_wiring_flow() {
   INSTALL_COMPLETE=1
 }
 
+# --- Section 22c-bis: Reconcile-config flow (#5739) ---
+# Converge an EXISTING operator.toml on the declared schema. The narrow-scope
+# sibling of --refresh-settings / --refresh-hooks: it creates no directories,
+# installs no hooks, deploys no skills and writes no state file. It reads the live
+# file, computes what the declaration says should be there and is not, and calls
+# the generator — which already preserves operator values through ovd() and
+# operator-added sections through the passthrough loop.
+#
+# THE SAFETY INVARIANT, stated once: the reconciler is ADDITIVE-ONLY. It never
+# removes a key, and never rewrites a NON-EMPTY value the operator set. (The
+# non-empty qualifier is load-bearing and was corrected at Collective Review:
+# ovd() treats "" as unset, so a deliberately-blanked value does take the
+# declared default. That is existing generator semantics, stated honestly rather
+# than papered over by an absolute the mechanism does not guarantee.)
+#
+# Exit codes: 0 reconciled or already in sync · 66 a required key carries no
+# default and could not be resolved without prompting · 1 hard error.
+operator_toml_delta() {
+  # Emits a human-readable report on stdout. Exit: 0 in sync · 3 missing, all
+  # defaulted · 4 missing incl. a required-undefaulted key · 5 live schema_version
+  # NEWER than this clone's · 6 live OLDER (breaking change; guided recovery).
+  S_SCHEMA_FILE="$(operator_schema_file)" \
+  S_LIVE="${OPERATOR_TOML}" \
+  python3 -c '
+import json, os, re, sys
+
+try:
+    with open(os.environ["S_SCHEMA_FILE"], "r") as f:
+        schema = json.load(f)
+except (IOError, OSError, ValueError) as e:
+    sys.stderr.write("FATAL: cannot read schema declaration: {}\n".format(e))
+    sys.exit(1)
+
+live_path = os.environ["S_LIVE"]
+live = {}
+section = None
+try:
+    with open(live_path, "r") as f:
+        for line in f:
+            s = line.strip()
+            if not s or s.startswith("#"):
+                continue
+            if s.startswith("[") and s.endswith("]"):
+                section = s[1:-1].strip()
+                continue
+            if "=" in s and section is not None:
+                k, _, v = s.partition("=")
+                live[(section, k.strip())] = v.strip()
+except (IOError, OSError) as e:
+    sys.stderr.write("FATAL: cannot read {}: {}\n".format(live_path, e))
+    sys.exit(1)
+
+if not live:
+    sys.stderr.write("FATAL: {} parsed to ZERO keys; refusing to treat that as "
+                     "\"nothing missing\".\n".format(live_path))
+    sys.exit(1)
+
+declared_version = schema["declaration_version"]
+raw_live_version = live.get(("meta", "schema_version"), "").strip().strip("\"")
+try:
+    live_version = int(raw_live_version)
+except ValueError:
+    live_version = None
+
+if live_version is not None and live_version > declared_version:
+    print("Config schema_version {} is NEWER than this clone declares ({}).".format(
+        live_version, declared_version))
+    print("This config was written by a newer platform. Update the clone rather than")
+    print("reconciling backwards; refusing to touch it.")
+    sys.exit(5)
+if live_version is not None and live_version < declared_version:
+    print("Config schema_version {} is OLDER than this clone declares ({}) — a".format(
+        live_version, declared_version))
+    print("BREAKING schema change shipped. Additive reconcile is not sufficient;")
+    print("routing to guided recovery.")
+    sys.exit(6)
+
+missing = []
+for sec in schema["sections"]:
+    sd = sec.get("delivery", "delivered")
+    if sd != "delivered":
+        continue
+    for k in sec["keys"]:
+        if k.get("delivery", sd) != "delivered":
+            continue
+        if (sec["name"], k["key"]) in live:
+            continue
+        missing.append((sec["name"], k["key"], k.get("since", "?"),
+                        "default" in k, bool(k.get("required", False))))
+
+denom = sum(1 for sec in schema["sections"]
+            if sec.get("delivery", "delivered") == "delivered"
+            for k in sec["keys"]
+            if k.get("delivery", sec.get("delivery", "delivered")) == "delivered")
+print("DENOM: {} delivered key(s) declared; {} present in {}".format(
+    denom, denom - len(missing), live_path))
+
+if not missing:
+    print("operator.toml is in sync with the declared schema.")
+    sys.exit(0)
+
+undefaulted_required = [m for m in missing if not m[3] and m[4]]
+for (s, k, since, has_def, req) in missing:
+    print("  MISSING [{}].{}  (declared since v{}){}".format(
+        s, k, since,
+        "" if has_def else "  <- NO DEFAULT" + (", REQUIRED" if req else "")))
+sys.exit(4 if undefaulted_required else 3)
+'
+}
+
+reconcile_config_flow() {
+  INSTALL_MODE="reconcile-config"
+  info "RECONCILE-CONFIG flow — converge operator.toml on the declared schema"
+
+  if [ ! -f "${OPERATOR_TOML}" ]; then
+    err "No operator.toml at ${OPERATOR_TOML} — nothing to reconcile."
+    err "Run a full setup-workspace.sh first."
+    exit 1
+  fi
+
+  # Populate the token map from the LIVE file before anything writes. Non-
+  # interactive by construction — read_operator_toml parses and never prompts.
+  #
+  # THIS CALL IS LOAD-BEARING AND ITS ABSENCE IS SILENT. Every `source: token`
+  # key renders from the token map; with an empty map they all render EMPTY, so
+  # a reconcile would blank the operator's identity and paths while reporting
+  # success. That is precisely the v4.15 cowork_install_path blanking defect
+  # class this card exists to close. It is not hypothetical: the first cut of
+  # this flow omitted this line and Suite RC's RC-4 arm caught it.
+  read_operator_toml
+
+  local report rc
+  report=$(operator_toml_delta) && rc=0 || rc=$?
+  printf '%s\n' "${report}"
+
+  case "${rc}" in
+    0)
+      INSTALL_COMPLETE=1
+      return 0
+      ;;
+    3)
+      info "Backfilling missing keys from their declared defaults (operator-set values preserved)."
+      ;;
+    4)
+      # A delivered key carries NO default and is REQUIRED. Interactive: prompt.
+      # Non-interactive: never invent a value, never hang — name the keys and take
+      # the reserved exit code. This is the population that is EMPTY today: every
+      # delivered key carries a default, so this branch is defined and unreachable
+      # until a future field lands that genuinely needs an operator answer.
+      if [ "${NON_INTERACTIVE}" -eq 1 ] || [ ! -t 0 ]; then
+        warn "A required key carries no default and cannot be resolved without prompting."
+        warn "Non-interactive run: leaving the key(s) ABSENT rather than inventing a value."
+        warn "Set them in ${OPERATOR_TOML} and re-run, or run interactively to be prompted."
+        exit 66
+      fi
+      reconcile_prompt_missing || {
+        warn "Reconcile incomplete — one or more required keys were declined and remain absent."
+        exit 66
+      }
+      ;;
+    5)
+      err "Refusing to reconcile: this config was written by a NEWER platform than this clone."
+      err "Update the clone (git pull) and re-run."
+      exit 1
+      ;;
+    6)
+      err "A breaking schema change shipped; additive reconcile is not sufficient."
+      err "Re-run setup-workspace.sh for guided recovery."
+      exit 1
+      ;;
+    *)
+      err "operator.toml delta computation failed (exit ${rc})."
+      exit 1
+      ;;
+  esac
+
+  write_operator_toml
+  INSTALL_COMPLETE=1
+  info "Reconcile complete."
+  # Re-report so the operator sees the post-state, not just the pre-state. A
+  # non-zero here after a write is a real failure to converge, not noise.
+  local after_rc
+  operator_toml_delta >/dev/null && after_rc=0 || after_rc=$?
+  if [ "${after_rc}" -ne 0 ]; then
+    warn "operator.toml did not fully converge (delta exit ${after_rc}); see the report above."
+  fi
+  return 0
+}
+
+# Prompt for every delivered key that carries no declared default. Generic: it
+# reads the key list from the declaration, so a future undefaulted field needs no
+# code here. Answers are handed to the generator via S_ANSWERS; a declined answer
+# leaves the key absent.
+reconcile_prompt_missing() {
+  local pending
+  pending=$(
+    S_SCHEMA_FILE="$(operator_schema_file)" \
+    S_LIVE="${OPERATOR_TOML}" \
+    python3 -c '
+import json, os, sys
+with open(os.environ["S_SCHEMA_FILE"], "r") as f:
+    schema = json.load(f)
+live = set(); section = None
+with open(os.environ["S_LIVE"], "r") as f:
+    for line in f:
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("[") and s.endswith("]"):
+            section = s[1:-1].strip(); continue
+        if "=" in s and section is not None:
+            live.add((section, s.partition("=")[0].strip()))
+for sec in schema["sections"]:
+    sd = sec.get("delivery", "delivered")
+    if sd != "delivered":
+        continue
+    for k in sec["keys"]:
+        if k.get("delivery", sd) != "delivered":
+            continue
+        if (sec["name"], k["key"]) in live or "default" in k:
+            continue
+        print("{}.{}\t{}".format(sec["name"], k["key"], k.get("description", "")))
+'
+  )
+  [ -z "${pending}" ] && return 0
+
+  local answers="{}" line field desc value all_answered=1
+  while IFS=$'\t' read -r field desc; do
+    [ -z "${field}" ] && continue
+    printf '%s\n' "${desc}" >&2
+    printf '  %s (leave blank to skip): ' "${field}" >&2
+    IFS= read -r value || value=""
+    if [ -z "${value}" ]; then
+      all_answered=0
+      continue
+    fi
+    answers=$(S_ANS="${answers}" S_K="${field}" S_V="${value}" python3 -c '
+import json, os, sys
+a = json.loads(os.environ["S_ANS"])
+a[os.environ["S_K"]] = os.environ["S_V"]
+sys.stdout.write(json.dumps(a))
+')
+  done <<<"${pending}"
+
+  RECONCILE_ANSWERS="${answers}"
+  [ "${all_answered}" -eq 1 ]
+}
+
 # --- Section 22d: Refresh-settings flow (ADR-121) ---
 # Re-render ONLY the managed .claude/settings.json into an EXISTING workspace,
 # under the baseline-anchored guard. The key-granular sibling of --refresh-hooks:
@@ -3664,7 +4130,7 @@ init_only_state_flow() {
   local all_dirs=true d
   for d in "${WORKSPACE_ROOT}/.claude" "${WORKSPACE_ROOT}/.claude/hooks" \
            "${WORKSPACE_ROOT}/projects" "${WORKSPACE_ROOT}/knowledge" \
-           "${WORKSPACE_ROOT}/personal/pmo-instance"; do
+           "${WORKSPACE_ROOT}/pmo-instance"; do
     [ -d "${d}" ] || all_dirs=false
   done
   if [ "${all_dirs}" = "true" ]; then
@@ -3824,6 +4290,11 @@ main() {
 
   if [ "${REFRESH_SETTINGS}" -eq 1 ]; then
     refresh_settings_flow
+    return 0
+  fi
+
+  if [ "${RECONCILE_CONFIG}" -eq 1 ]; then
+    reconcile_config_flow
     return 0
   fi
 

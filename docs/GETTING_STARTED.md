@@ -122,17 +122,17 @@ The filled roster is **operator-instance** — it holds real people's names, so 
 Its path is resolved by the `pmo_people_roster()` accessor in `core/deploy/lib-instance-path.sh`, not hardcoded:
 
 ```
-pmo_people_roster()  →  ${PMO_PEOPLE_ROSTER:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/people-roster.yaml}
+pmo_people_roster()  →  ${PMO_PEOPLE_ROSTER:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance/people-roster.yaml}
 ```
 
-- **Default:** `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/people-roster.yaml`.
+- **Default:** `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance/people-roster.yaml`.
 - **Overridable:** set `PMO_PEOPLE_ROSTER` to point at an explicit file, or `PMO_INSTANCE_PATH` to relocate the whole instance directory (the roster leaf is appended to it).
 - **Never committed:** the file sits *outside* the repository tree (primary protection), is matched by the `**/people-roster.yaml` `.gitignore` rule (catches a stray in-tree copy), and its names are fed into the PII pre-commit needle list. Three layers, all pointing the same way: roster data does not enter git.
 
 To find your seeded copy:
 
 ```bash
-echo "${PMO_PEOPLE_ROSTER:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/people-roster.yaml}"
+echo "${PMO_PEOPLE_ROSTER:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance/people-roster.yaml}"
 ```
 
 ### 7.2 Fill it (post-seed)
@@ -191,7 +191,7 @@ Install created the drop-zone and seeded the dial that governs how much the swee
 Find your drop-zone:
 
 ```bash
-ls -d "${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"/personal/pmo-instance/inbox
+ls -d "${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"/pmo-instance/inbox
 ```
 
 The activation step — which tasks to register, with which prompts and cadence, how the automation ceiling limits them, and how to reverse it — is in [INSTALL.md](INSTALL.md) § 3a.

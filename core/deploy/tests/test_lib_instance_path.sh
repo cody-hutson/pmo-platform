@@ -43,12 +43,12 @@ unset PMO_INSTANCE_PATH CLAUDE_WORKSPACE_ROOT 2>/dev/null || true
 printf '\nCase 1: the no-arg resolver honours CLAUDE_WORKSPACE_ROOT, then falls back to HOME\n'
 CLAUDE_WORKSPACE_ROOT="/tmp/ws-alpha"
 got="$(pmo_instance_path)"
-[ "${got}" = "/tmp/ws-alpha/personal/pmo-instance" ] \
+[ "${got}" = "/tmp/ws-alpha/pmo-instance" ] \
   && report "1a: pmo_instance_path builds from CLAUDE_WORKSPACE_ROOT" 1 \
   || report "1a: pmo_instance_path builds from CLAUDE_WORKSPACE_ROOT" 0 "got ${got}"
 unset CLAUDE_WORKSPACE_ROOT
 got="$(pmo_instance_path)"
-[ "${got}" = "${HOME}/Claude/personal/pmo-instance" ] \
+[ "${got}" = "${HOME}/Claude/pmo-instance" ] \
   && report "1b: with no CLAUDE_WORKSPACE_ROOT it falls back to the HOME-based default" 1 \
   || report "1b: with no CLAUDE_WORKSPACE_ROOT it falls back to the HOME-based default" 0 "got ${got}"
 
@@ -72,8 +72,8 @@ printf '\nCase 3: the two forms DIVERGE, which is the whole reason to pick one d
 CLAUDE_WORKSPACE_ROOT="/tmp/ws-ambient"
 noarg="$(pmo_instance_path)"
 witharg="$(pmo_instance_path_for /tmp/ws-explicit)"
-if [ "${noarg}" = "/tmp/ws-ambient/personal/pmo-instance" ] \
-   && [ "${witharg}" = "/tmp/ws-explicit/personal/pmo-instance" ] \
+if [ "${noarg}" = "/tmp/ws-ambient/pmo-instance" ] \
+   && [ "${witharg}" = "/tmp/ws-explicit/pmo-instance" ] \
    && [ "${noarg}" != "${witharg}" ]; then
   report "3a: under one environment the two forms resolve to DIFFERENT directories" 1
 else

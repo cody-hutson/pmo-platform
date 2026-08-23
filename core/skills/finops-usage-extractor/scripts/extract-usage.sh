@@ -10,7 +10,7 @@
 #
 # Store path resolution (no hardcoded operator path):
 #   env STORE > env FINOPS_STORE_PATH > operator.toml [paths].operator_instance_finops_store_path
-#   > default ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/finops
+#   > default ${CLAUDE_WORKSPACE_ROOT}/pmo-instance/finops
 # Source root resolution:
 #   env FINOPS_SOURCE_ROOT > ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects
 #
@@ -71,7 +71,7 @@ resolve_store() {
     workspace_root="$( { grep -E '^claude_workspace_root' "$operator_toml" 2>/dev/null || true; } | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')"
   fi
   workspace_root="${workspace_root:-${HOME}/Claude}"
-  store="${store:-${workspace_root}/personal/pmo-instance/finops}"
+  store="${store:-${workspace_root}/pmo-instance/finops}"
   printf '%s' "$store"
 }
 

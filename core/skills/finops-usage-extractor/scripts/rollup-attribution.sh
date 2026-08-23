@@ -19,14 +19,14 @@
 #
 # Store path resolution (no hardcoded operator path; same as extract-usage.sh):
 #   env STORE > env FINOPS_STORE_PATH > operator.toml [paths].operator_instance_finops_store_path
-#   > default ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/finops
+#   > default ${CLAUDE_WORKSPACE_ROOT}/pmo-instance/finops
 # Hub-state (Surface C) resolution:
 #   env FINOPS_HUB_STATE_DIR > operator.toml [paths].operator_instance_hub_state_path
-#   > default ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/hub-state
+#   > default ${CLAUDE_WORKSPACE_ROOT}/pmo-instance/hub-state
 # Pipeline event-log (Surface B) resolution:
 #   env FINOPS_PIPELINE_EVENT_LOG
 #   > operator.toml [paths].operator_instance_evals_results_path + /pipeline-event-log.md
-#   > default ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/evals/results/pipeline-event-log.md
+#   > default ${CLAUDE_WORKSPACE_ROOT}/pmo-instance/evals/results/pipeline-event-log.md
 #
 # Usage:
 #   bash rollup-attribution.sh [--emit] [--resolve-prs] [--self-test]
@@ -84,7 +84,7 @@ workspace_root() {
 resolve_store() {
   local store="${STORE:-${FINOPS_STORE_PATH:-}}"
   [ -z "$store" ] && store="$(toml_val operator_instance_finops_store_path)"
-  store="${store:-$(workspace_root)/personal/pmo-instance/finops}"
+  store="${store:-$(workspace_root)/pmo-instance/finops}"
   printf '%s' "$store"
 }
 
@@ -92,7 +92,7 @@ resolve_store() {
 resolve_hub_state_dir() {
   local d="${FINOPS_HUB_STATE_DIR:-}"
   [ -z "$d" ] && d="$(toml_val operator_instance_hub_state_path)"
-  d="${d:-$(workspace_root)/personal/pmo-instance/hub-state}"
+  d="${d:-$(workspace_root)/pmo-instance/hub-state}"
   printf '%s' "$d"
 }
 
@@ -101,7 +101,7 @@ resolve_event_log() {
   local f="${FINOPS_PIPELINE_EVENT_LOG:-}"
   if [ -z "$f" ]; then
     local er; er="$(toml_val operator_instance_evals_results_path)"
-    er="${er:-$(workspace_root)/personal/pmo-instance/evals/results}"
+    er="${er:-$(workspace_root)/pmo-instance/evals/results}"
     f="$er/pipeline-event-log.md"
   fi
   printf '%s' "$f"

@@ -37,6 +37,8 @@ A field set at a higher rung overrides the same field set at a lower rung. A fie
 ## 3. operator.toml fields (environment / identity)
 
 > Canonical: the field comments in [`core/config/operator.toml.template`](../core/config/operator.toml.template).
+>
+> **Which keys exist** is declared as data at `core/config/operator-toml-schema.json` — key, section, type, valid values, default-or-none, and whether the generator delivers the key into every config or leaves it opt-in. The template above carries what each key *means*; the declaration carries what *exists*, and a deploy check asserts the two agree in both directions. If your `operator.toml` is missing a key the platform has added since it was generated, `./update.sh` reconciles it, or run `docs/scripts/setup-workspace.sh --reconcile-config` directly; values you set yourself are preserved.
 
 ### `[adapters]` — host-adapter selectors (the onboarding seam)
 
@@ -74,11 +76,11 @@ A ceiling can only LOWER a per-action autonomy, never raise one. The irreducible
 
 ### `[paths]` — operator-instance data homes
 
-Each field resolves an `<OPERATOR_INSTANCE_*_PATH>` token to an operator-local, git-ignored location: set = explicit override, empty = the canonical default under `${claude_workspace_root}/personal/pmo-instance/`. The full token vocabulary + defaults are canonical in [`core/standards/depersonalization-spec.md`](../core/standards/depersonalization-spec.md) §4.
+Each field resolves an `<OPERATOR_INSTANCE_*_PATH>` token to an operator-local, git-ignored location: set = explicit override, empty = the canonical default under `${claude_workspace_root}/pmo-instance/`. The full token vocabulary + defaults are canonical in [`core/standards/depersonalization-spec.md`](../core/standards/depersonalization-spec.md) §4.
 
 | Field | What it resolves | Default |
 |---|---|---|
-| `operator_instance_finops_store_path` | the Agent-FinOps runtime token-spend store (`usage.jsonl`) — per-session/per-subagent usage records the `finops-usage-extractor` skill writes; git-ignored operator-instance data (never commits on the public repo) | `${claude_workspace_root}/personal/pmo-instance/finops` |
+| `operator_instance_finops_store_path` | the Agent-FinOps runtime token-spend store (`usage.jsonl`) — per-session/per-subagent usage records the `finops-usage-extractor` skill writes; git-ignored operator-instance data (never commits on the public repo) | `${claude_workspace_root}/pmo-instance/finops` |
 
 Other `[paths]` fields (`operator_instance_hub_state_path`, `…_evals_results_path`, etc.) follow the same override-or-default resolution; see the depersonalization-spec §4 vocabulary table for the complete set.
 
@@ -170,7 +172,7 @@ Capability switches for git-native release automation. **All three default OFF**
 
 **Where you can set these: 2 rungs, not 5.** Set a value in the global template (a governed Track A change) or in your individual `~/.config/pmo-platform/platform-config.toml` (Track B). The portfolio / program / project rungs do not apply — the fact being configured is platform-scoped (one release pipeline per install), not per-portfolio or per-project.
 
-**Off the git-based path, everything here is a silent no-op.** The git-based path is detected as: the release working tree is a git work tree, AND `operator.toml` `[adapters].repo_host` resolves `github`, AND `[adapters].ai_tool` resolves `claude-code`. When the predicate is false, every facet — toggled and always-on alike — does nothing: no action, no warning, no error, and no non-zero exit. Note that `[adapters]` is absent from a stock runtime `operator.toml`, so both adapter clauses take their documented fallbacks (`github` / `claude-code`), which are also the only shipped values; today the predicate reduces in practice to the work-tree clause alone. The two adapter clauses are a forward host-agnosticism seam, not a live three-way test.
+**Off the git-based path, everything here is a silent no-op.** The git-based path is detected as: the release working tree is a git work tree, AND `operator.toml` `[adapters].repo_host` resolves `github`, AND `[adapters].ai_tool` resolves `claude-code`. When the predicate is false, every facet — toggled and always-on alike — does nothing: no action, no warning, no error, and no non-zero exit. Note that `[adapters]` is now **delivered** into a stock runtime `operator.toml` (it was absent before the declared-schema work; an existing config gains it on the next update or reconcile). Both keys ship their documented defaults (`github` / `claude-code`), which are also the only shipped values, so the predicate still reduces in practice to the work-tree clause alone — the difference is that the values are now readable in the operator's own config rather than resolved from a fallback. The two adapter clauses are a forward host-agnosticism seam, not a live three-way test.
 
 **Not related to `[automation].automation_level`.** That dial (in `operator.toml`, § 3 above) is the autonomy *ceiling*; these are capability *switches*. Turning one on never raises the ceiling — an action stays clamped by `min(automation_level, per-action max)` — so no toggle here can authorize something `automation_level` forbids. Different files, different readers, and no shared key name or key prefix.
 

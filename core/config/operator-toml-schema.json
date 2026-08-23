@@ -1,0 +1,456 @@
+{
+  "schema": "operator.toml",
+  "declaration_version": 1,
+  "description": "Canonical machine-readable declaration of the operator.toml key set. Single source of truth for which keys exist, their type, their default-or-none, and whether the generator delivers them. docs/scripts/setup-workspace.sh derives write_operator_toml's emit and read_operator_toml's token map from this file; core/deploy/tools/check-operator-toml-schema.sh lints the template against it and reports an instance whose key set is behind. Adding a key is one object here and zero lines of code. See core/ADRs/ADR-140-operator-toml-declared-schema.md.",
+  "conventions": {
+    "delivery": "A section or key with delivery 'delivered' is emitted by the generator into every operator.toml and is inside the reconciler's coverage set. 'opt-in' means the template documents it, the generator never writes it, and the reconciler never touches it. A key may override its section's delivery.",
+    "default": "KEY-ABSENCE means no default. Never write \"default\": \"\" to mean 'no default' — the empty string is a legitimate, load-bearing default meaning 'resolve via the canonical default' (core/standards/depersonalization-spec.md §4 Read-source contract). A delivered key with a default is backfilled silently; a delivered key with required:true and NO default is prompted for, and takes the exit-66 path when non-interactive.",
+    "source": "token = resolved from the bracketed token map at install; operator-or-default = ovd(), keep the operator's non-empty value else the default; literal = emitted verbatim from 'default'; declaration-version = rendered from this file's declaration_version.",
+    "coverage": "This declaration covers ADD only. A rename, removal or retype is a breaking change: it bumps declaration_version and routes to guided recovery rather than silently mutating an operator-owned file."
+  },
+  "sections": [
+    {
+      "name": "meta",
+      "delivery": "delivered",
+      "description": "Schema provenance for this generated file.",
+      "keys": [
+        {
+          "key": "schema_version",
+          "type": "int",
+          "source": "declaration-version",
+          "required": true,
+          "description": "Breaking-change marker, equal to this declaration's declaration_version. Compared on reconcile: equal proceeds, live > declared refuses (the config was written by a newer platform than this clone), live < declared routes to guided recovery. Additive key additions do NOT bump it — per-key 'since' carries the additive history.",
+          "since": "1.0"
+        },
+        {
+          "key": "managed_by",
+          "type": "string",
+          "source": "literal",
+          "default": "pmo-platform",
+          "required": true,
+          "description": "Marks the file as platform-managed.",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "name": "identity",
+      "delivery": "delivered",
+      "description": "Operator identity — the depersonalization token read-source (core/standards/depersonalization-spec.md §1).",
+      "keys": [
+        {
+          "key": "operator_name",
+          "type": "string",
+          "source": "token",
+          "token": "[OPERATOR_NAME]",
+          "default": "",
+          "required": true,
+          "description": "Operator full name. [OPERATOR_FIRST_NAME] is derived from this and not stored.",
+          "since": "1.0"
+        },
+        {
+          "key": "operator_email",
+          "type": "string",
+          "source": "token",
+          "token": "[OPERATOR_EMAIL]",
+          "default": "",
+          "required": true,
+          "description": "Operator contact email.",
+          "since": "1.0"
+        },
+        {
+          "key": "operator_git_email",
+          "type": "string",
+          "source": "token",
+          "token": "[OPERATOR_GIT_EMAIL]",
+          "default": "",
+          "required": true,
+          "description": "Git commit-attribution email. Use a forge no-reply address on a public repo.",
+          "since": "1.0"
+        },
+        {
+          "key": "operator_github",
+          "type": "string",
+          "source": "token",
+          "token": "[OPERATOR_GITHUB]",
+          "default": "",
+          "required": true,
+          "description": "GitHub handle.",
+          "since": "1.0"
+        },
+        {
+          "key": "operator_phone",
+          "type": "string",
+          "source": "token",
+          "token": "[OPERATOR_PHONE]",
+          "default": "",
+          "required": false,
+          "description": "Operator phone number.",
+          "since": "1.0"
+        },
+        {
+          "key": "operator_role_title",
+          "type": "string",
+          "source": "token",
+          "token": "[OPERATOR_ROLE_TITLE]",
+          "default": "",
+          "required": false,
+          "description": "Operator role title.",
+          "since": "1.0"
+        },
+        {
+          "key": "operator_organization",
+          "type": "string",
+          "source": "token",
+          "token": "[OPERATOR_ORGANIZATION]",
+          "default": "",
+          "required": false,
+          "description": "Operator organization name.",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "name": "paths",
+      "delivery": "delivered",
+      "description": "Workspace and instance paths. The four delivered keys are resolved at install; the eight operator_instance_* overrides are opt-in and resolve to a canonical default when unset.",
+      "keys": [
+        {
+          "key": "claude_workspace_root",
+          "type": "string",
+          "source": "token",
+          "token": "[CLAUDE_WORKSPACE_ROOT]",
+          "default": "",
+          "required": true,
+          "description": "Absolute path to the Claude workspace root.",
+          "since": "1.0"
+        },
+        {
+          "key": "operator_homedir_path",
+          "type": "string",
+          "source": "token",
+          "token": "[OPERATOR_HOMEDIR_PATH]",
+          "default": "",
+          "required": true,
+          "description": "Absolute path to the operator's home directory.",
+          "since": "1.0"
+        },
+        {
+          "key": "cowork_install_path",
+          "type": "string",
+          "source": "token",
+          "token": "[COWORK_INSTALL_PATH_BASE]",
+          "default": "",
+          "required": false,
+          "description": "Cowork install base path. NOTE the token name differs from the key name — this asymmetry caused the v4.15 blanking defect when the two hand-maintained lists drifted. Deriving the token map from this declaration closes that defect class.",
+          "since": "1.0"
+        },
+        {
+          "key": "pmo_platform_repo_name",
+          "type": "string",
+          "source": "operator-or-default",
+          "default": "pmo-platform",
+          "required": false,
+          "description": "Directory name of the platform repo clone.",
+          "since": "1.0"
+        },
+        {
+          "key": "operator_instance_hub_state_path",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the hub-state store. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/hub-state.",
+          "since": "4.0"
+        },
+        {
+          "key": "operator_instance_roadmaps_path",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for initiative-roadmap instances. Empty resolves to the canonical default ${claude_workspace_root}/pmo-platform/roadmaps.",
+          "since": "4.0"
+        },
+        {
+          "key": "operator_instance_inbox_path",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the operator inbox. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/inbox.",
+          "since": "4.0"
+        },
+        {
+          "key": "operator_instance_external_sync_snapshot_path",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the external-sync snapshot. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/external-sync/snapshot.json.",
+          "since": "4.0"
+        },
+        {
+          "key": "operator_instance_external_sync_runlog_path",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the external-sync run log. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/external-sync/run-log.jsonl.",
+          "since": "4.0"
+        },
+        {
+          "key": "operator_instance_intake_sweep_runlog_path",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the ambient-intake sweep run log. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/ambient-intake/run-log.jsonl.",
+          "since": "4.0"
+        },
+        {
+          "key": "operator_instance_evals_results_path",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for eval results. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/evals/results.",
+          "since": "4.0"
+        },
+        {
+          "key": "operator_instance_finops_store_path",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the Agent-FinOps token-spend store. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/finops.",
+          "since": "4.0"
+        }
+      ]
+    },
+    {
+      "name": "platform",
+      "delivery": "delivered",
+      "description": "Platform-surface selectors. work_board is a deprecated alias retained per ADR-022 §3.",
+      "keys": [
+        {
+          "key": "work_board",
+          "type": "string",
+          "source": "operator-or-default",
+          "default": "github",
+          "enum": ["github", "jira+github", "gitlab+jira"],
+          "required": false,
+          "deprecated": true,
+          "description": "DEPRECATED ALIAS, superseded by [adapters].ticketing. Retained — NOT removed — per ADR-022 §3, so no future cleanup drops it by omission. New consumers read [adapters].ticketing; when both are set and differ, [adapters].ticketing is authoritative.",
+          "since": "1.0"
+        },
+        {
+          "key": "comms_platform",
+          "type": "string",
+          "source": "operator-or-default",
+          "default": "",
+          "enum": ["", "slack", "teams", "email"],
+          "required": false,
+          "description": "Team-comms surface comms-writer defaults to. Empty means no platform-specific formatting — a legitimate default, not an absent one.",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "name": "automation",
+      "delivery": "delivered",
+      "description": "Ambient-intake automation ceiling — the C0 keystone every ambient-intake child clamps to.",
+      "keys": [
+        {
+          "key": "automation_level",
+          "type": "string",
+          "source": "operator-or-default",
+          "default": "recommend",
+          "enum": ["off", "recommend", "bounded_auto"],
+          "required": false,
+          "description": "CEILING, not a switch: effective autonomy is min(automation_level, per-action max). Emitted through ovd() so a deliberate \"off\" is never reset by a re-bootstrap.",
+          "since": "4.23"
+        }
+      ]
+    },
+    {
+      "name": "adapters",
+      "delivery": "delivered",
+      "description": "Host-adapter selectors — the four external surfaces the platform integrates with. ADR-022 §1/§4 names this the #703 onboarding seam and gives each selector a v1 default.",
+      "keys": [
+        {
+          "key": "repo_host",
+          "type": "string",
+          "source": "operator-or-default",
+          "default": "github",
+          "enum": ["github"],
+          "required": false,
+          "description": "Repository-host adapter — where the git surface and code review live. v1 ships GitHub via the gh CLI; additional hosts are gated on their adapter tickets.",
+          "since": "4.0"
+        },
+        {
+          "key": "ticketing",
+          "type": "string",
+          "source": "operator-or-default",
+          "default": "github",
+          "enum": ["github", "jira+github", "gitlab+jira"],
+          "required": false,
+          "description": "Ticketing adapter — the work-tracking surface the pipeline reads and writes. SUPERSEDES the legacy [platform].work_board.",
+          "since": "4.0"
+        },
+        {
+          "key": "kb",
+          "type": "string",
+          "source": "operator-or-default",
+          "default": "markdown",
+          "required": false,
+          "description": "Knowledge-base adapter — where reference content lives.",
+          "since": "4.0"
+        },
+        {
+          "key": "ai_tool",
+          "type": "string",
+          "source": "operator-or-default",
+          "default": "claude-code",
+          "required": false,
+          "description": "AI-tool adapter — the agent runtime the platform targets.",
+          "since": "4.0"
+        }
+      ]
+    },
+    {
+      "name": "methodology",
+      "delivery": "delivered",
+      "description": "Global delivery-approach default. ADR-022 §1 / ADR-017 §S2 name methodology an operator.toml concern.",
+      "keys": [
+        {
+          "key": "default_delivery_approach",
+          "type": "string",
+          "source": "operator-or-default",
+          "default": "Scrum",
+          "enum": ["Scrum", "Kanban", "XP", "Waterfall", "PRINCE2", "SAFe", "Hybrid", "Custom"],
+          "required": false,
+          "description": "The methodology archetype an install starts from when a project does not set its own delivery_approach. ONLY the global default plus the resolver fallback — the enum and its validation stay canonical in core/schemas/project-schema.md.",
+          "since": "4.0"
+        }
+      ]
+    },
+    {
+      "name": "session_retro",
+      "delivery": "delivered",
+      "description": "Per-session self-retrospective. SHIPPED INERT — enabled=false means the registered Stop hook does nothing until the operator deliberately turns it on.",
+      "keys": [
+        {
+          "key": "enabled",
+          "type": "bool",
+          "source": "operator-or-default",
+          "default": false,
+          "required": false,
+          "description": "Master switch for the automatic trigger. Shipped false — activation is a deliberate operator edit, never something a platform update does. Asking for the retro by name always works and ignores every setting in this block.",
+          "since": "4.0"
+        },
+        {
+          "key": "mode",
+          "type": "string",
+          "source": "operator-or-default",
+          "default": "warn",
+          "enum": ["off", "warn", "enforce"],
+          "required": false,
+          "description": "Warn-then-enforce shakedown posture for the hook.",
+          "since": "4.0"
+        },
+        {
+          "key": "sample",
+          "type": "string",
+          "source": "operator-or-default",
+          "default": "almost_all",
+          "enum": ["all", "almost_all", "significant_only"],
+          "required": false,
+          "description": "Sampling band. The event log is append-only and permanent, so a row emitted for a session that taught nothing permanently dilutes the cross-session signal.",
+          "since": "4.0"
+        },
+        {
+          "key": "min_tool_calls",
+          "type": "int",
+          "source": "operator-or-default",
+          "default": 12,
+          "required": false,
+          "description": "Tool-call floor a session must clear before the hook fires.",
+          "since": "4.0"
+        },
+        {
+          "key": "min_turns",
+          "type": "int",
+          "source": "operator-or-default",
+          "default": 4,
+          "required": false,
+          "description": "Turn floor a session must clear before the hook fires.",
+          "since": "4.0"
+        }
+      ]
+    },
+    {
+      "name": "projects",
+      "delivery": "opt-in",
+      "description": "GitHub Projects (v2) board identifiers. Opaque operator-specific values with no meaningful default — emitting six empty strings would be noise, so they carry NO default and stay opt-in. If a consumer ever lands, they become the first required-undefaulted prompt case.",
+      "keys": [
+        {
+          "key": "board_url",
+          "type": "string",
+          "source": "operator-or-default",
+          "required": false,
+          "description": "Resolves [OPERATOR_GITHUB_PROJECT_URL] — the Projects v2 board URL.",
+          "since": "4.0"
+        },
+        {
+          "key": "node_id",
+          "type": "string",
+          "source": "operator-or-default",
+          "required": false,
+          "description": "Resolves [OPERATOR_PROJECT_NODE_ID] — the board's GraphQL node ID.",
+          "since": "4.0"
+        },
+        {
+          "key": "status_field_id",
+          "type": "string",
+          "source": "operator-or-default",
+          "required": false,
+          "description": "Resolves the Status field ID.",
+          "since": "4.0"
+        },
+        {
+          "key": "stage_field_id",
+          "type": "string",
+          "source": "operator-or-default",
+          "required": false,
+          "description": "Resolves the Stage field ID.",
+          "since": "4.0"
+        },
+        {
+          "key": "priority_field_id",
+          "type": "string",
+          "source": "operator-or-default",
+          "required": false,
+          "description": "Resolves [OPERATOR_PROJECTS_VIEW_FIELD_ID] — the Priority field ID (the token name says VIEW for backward-compat).",
+          "since": "4.0"
+        },
+        {
+          "key": "decision_date_field_id",
+          "type": "string",
+          "source": "operator-or-default",
+          "required": false,
+          "description": "Resolves [OPERATOR_PROJECTS_DATE_FIELD_ID] — the Decision Date field ID.",
+          "since": "4.0"
+        }
+      ]
+    }
+  ]
+}

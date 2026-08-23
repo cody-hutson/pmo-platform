@@ -57,12 +57,13 @@ blocking on a config-schema change.
   structured-state convention (config is TOML-parsed; the lifecycle machine is field-typed).
 - **Location:** operator-instance path token `<OPERATOR_INSTANCE_EXTERNAL_SYNC_SNAPSHOT_PATH>`
   (per `core/standards/depersonalization-spec.md` §4). Canonical default:
-  `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/external-sync/snapshot.json` (gitignored).
+  `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/external-sync/snapshot.json` (gitignored).
   Override: `operator.toml [paths].operator_instance_external_sync_snapshot_path`
   (empty → default; non-empty → verbatim). **Operator-instance, never git-tracked** — it holds
   live external data (Jira keys, statuses) which must not enter the public repo (self-containment /
-  no-PII discipline); same `.gitignored` `personal/pmo-instance/` tree the hub-state, roadmap,
-  and inbox tokens already use.
+  no-PII discipline); same `.gitignored` `pmo-instance/` tree the hub-state and inbox
+  tokens already use. (The roadmaps token is deliberately NOT in that set — it resolves
+  to the shipped in-repo roadmaps home, not to the operator-instance tree.)
 - **Lifecycle:** overwritten last-write-wins at the END of each successful sweep, AFTER the diff
   is computed, so the next run diffs against the most recent observed state. A first run with no
   prior snapshot is a **cold-start**: no diff, snapshot seeded, run-record notes
@@ -108,7 +109,7 @@ Sync run-record (one per scheduled sweep):
   This field is the cross-card discriminator — do not drop or rename it.
 - **Location:** operator-instance path token `<OPERATOR_INSTANCE_EXTERNAL_SYNC_RUNLOG_PATH>`
   (per `core/standards/depersonalization-spec.md` §4). Canonical default:
-  `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/external-sync/run-log.jsonl` (append-only JSONL;
+  `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/external-sync/run-log.jsonl` (append-only JSONL;
   gitignored; same instance tree as the snapshot). Override:
   `operator.toml [paths].operator_instance_external_sync_runlog_path` (empty → default;
   non-empty → verbatim).

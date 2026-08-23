@@ -7,7 +7,7 @@
 ## Table of contents
 
 1. [Why this layout?](#1-why-this-layout)
-2. [The four sibling directories](#2-the-four-sibling-directories)
+2. [The five sibling directories](#2-the-five-sibling-directories)
 3. [What goes where](#3-what-goes-where)
 4. [The operator-instance vs package boundary](#4-the-operator-instance-vs-package-boundary)
 5. [Token resolution](#5-token-resolution)
@@ -40,11 +40,11 @@ A reasonable alternative would be to make `pmo-platform/` itself the workspace r
 - Adding `projects/` to `.gitignore` inside the package only avoids accidental commits; it does not avoid the filesystem-level coexistence problem when a future package release adds a `projects/` subdirectory of its own.
 - The cleanest decoupling makes operator content a **sibling** of the package, not a child. The clone is a self-contained tree; everything operator-private is outside that tree.
 
-This is the design axis the four-sibling model expresses.
+This is the design axis the five-sibling model expresses.
 
 ---
 
-## 2. The four sibling directories
+## 2. The five sibling directories
 
 ```
 [CLAUDE_WORKSPACE_ROOT]/        # operator's POSIX workspace root (default: $HOME/Claude)
@@ -62,9 +62,12 @@ This is the design axis the four-sibling model expresses.
 │   ├── notes/                  # operator's working notes
 │   ├── references/             # external reference material
 │   └── domain/                 # team or company knowledge that could reasonably be shared with colleagues
+├── pmo-instance/               # platform-written runtime state + operator-instance config the package reads
+│   ├── hub-state/              # runtime persistence surfaces
+│   ├── inbox/                  # ambient-intake drop-zone
+│   └── ...                     # exemption lists, .mode files, needles, roster
 └── personal/                   # operator's strictly-private content (NEVER in package)
-    ├── pmo-instance/           # operator-instance config the package reads (exemption lists, .mode files)
-    ├── notes/                  # personal notes (Patreon, billing, correspondence)
+    ├── notes/                  # personal notes (billing, correspondence)
     └── ...                     # anything irrelevant to the platform
 ```
 
@@ -74,7 +77,7 @@ Each directory has a distinct role. The sub-sections below name what each one IS
 
 The package directory. Cloned from the upstream pmo-platform repository. Updated by `git pull`. Read-only from the operator's perspective; modifications are pull requests to the upstream repository.
 
-This is the only one of the four sibling directories that is git-tracked AT THE OPERATOR'S WORKSPACE. The other three are operator-instance content; their git posture (if any) is operator-discretionary and lives in a separate repository the operator may or may not maintain.
+This is the only one of the five sibling directories that is git-tracked AT THE OPERATOR'S WORKSPACE. The other four are operator-instance content; their git posture (if any) is operator-discretionary and lives in a separate repository the operator may or may not maintain.
 
 The package directory hosts:
 
@@ -122,16 +125,17 @@ The operator's content that is **never intended to be shared, even within the op
 |---|---|---|
 | **Intended audience for sharing** | Team, organization, domain peers | Operator only — never shared |
 | **Content example** | Domain glossary, internal systems map, external references | Patreon credentials, billing, personal correspondence, operator-instance platform config |
-| **Mechanism dependency** | Optional; package does not depend on this directory | One sub-directory IS load-bearing: `personal/pmo-instance/` is read by `core/deploy/deploy.sh` |
+| **Mechanism dependency** | Optional; package does not depend on this directory | None. The package neither reads nor writes anything under `personal/` |
 
-The `personal/pmo-instance/` sub-directory is the exception inside an otherwise-private tree — it holds **operator-instance platform config** the package reads at deploy time. Examples:
+**`personal/` is entirely operator-owned, and the platform provisions nothing inside it.** The setup script does not create it, no package code reads it, and no runtime state is written there.
 
-- `personal/pmo-instance/skill-editor-exemption-list.txt` — operator's per-skill exemption list
-- `personal/pmo-instance/deploy-check.mode` — operator's deploy-check enforcement mode (warn / enforce)
+This section previously described the opposite. It documented an exception — a `pmo-instance/` sub-directory *inside* `personal/` that the package read at deploy time — and that convention originated here rather than in any ratified decision. It has been superseded: the operator-instance family is now a workspace-root sibling, `[CLAUDE_WORKSPACE_ROOT]/pmo-instance/`, listed in the tree above.
 
-This split exists so that operator-instance platform config (read by the package, but identity-resolved per operator) lives in a predictable sub-directory the package can resolve via the `[CLAUDE_WORKSPACE_ROOT]/personal/pmo-instance/` path. The rest of `personal/` is operator-discretionary content that the package never touches.
+The distinction that decided the move is **authored content versus machine-written state**. `personal/` holds the operator's own material — notes, correspondence, working files — and an operator is entitled to treat it as theirs. The instance home holds data the platform writes and reads on its own schedule: hub-state, sweep run-logs, the people roster, the PII needle file, exemption lists and `.mode` files. Nesting the second inside the first made the platform a tenant of the operator's private area and made `personal/` look partly platform-managed, which it is not.
 
-`personal/` and `personal/pmo-instance/` are created by `setup-workspace.sh`; the package reads `personal/pmo-instance/` via the `${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}` resolution in `core/deploy/deploy.sh`.
+The instance home is resolved by `core/deploy/lib-instance-path.sh` — the single site that spells the leaf — and its per-token defaults and operator.toml overrides are canonical in [`core/standards/depersonalization-spec.md`](../core/standards/depersonalization-spec.md) §4. This document does not restate them.
+
+**If you installed before this change**, your data is still at the old location. Copy it to the new home, keep the originals until you have confirmed the new home works, then remove them. The PII pre-commit guard detects the un-migrated state and says so rather than silently degrading.
 
 ### 2.5 Tier semantics — quick reference
 
@@ -140,7 +144,8 @@ This split exists so that operator-instance platform config (read by the package
 | 1 (Package) | `pmo-platform/` | Tracked in clone | `git pull` updates from upstream | Package — read-only from operator perspective; modifications via upstream PR |
 | 2 (Operations) | `projects/` | Git-ignored (operator may maintain separate repo) | Operator writes freely | Operator-instance — Cowork-owned per package CLAUDE.md Layer model |
 | 3 (Knowledge) | `knowledge/` | Git-ignored (recommended); operator-discretionary | Operator writes freely | Operator-instance — OPTIONAL; some operators use external systems instead |
-| 4 (Personal) | `personal/` | Git-ignored | Operator writes freely | Operator-instance — strictly out of package scope; `pmo-instance/` sub-directory holds token-resolved config the package reads |
+| 4 (Personal) | `personal/` | Git-ignored | Operator writes freely | Operator-instance — strictly out of package scope; the package neither reads nor writes here |
+| 5 (Instance) | `pmo-instance/` | Git-ignored | Created and written by the platform | Operator-instance — platform-written runtime state plus the token-resolved config the package reads; resolved via `core/deploy/lib-instance-path.sh` |
 
 ### 2.6 The user-scoped tier — ~/.claude/ and ~/.config/pmo-platform/
 
@@ -169,14 +174,14 @@ Canonical artifact-to-directory mapping. When in doubt, use this table.
 | Active project artifacts | `projects/[Project]/` | `projects/[PROJECT_KEY] Implementation/05-Transcripts/` |
 | Cross-project operational config | `projects/_config/` | `projects/_config/PORTFOLIO.md`, `projects/_config/SESSION_STATE.md` |
 | Closed projects (archived) | `projects/Archive/` | `projects/Archive/[OldProject]/` |
-| Operator-instance platform config | `personal/pmo-instance/` | `personal/pmo-instance/skill-editor-exemption-list.txt`, `personal/pmo-instance/deploy-check.mode` |
+| Operator-instance platform config + runtime state | `pmo-instance/` | `pmo-instance/skill-editor-exemption-list.txt`, `pmo-instance/deploy-check.mode`, `pmo-instance/hub-state/` |
 | Operator's personal notes | `personal/notes/` | `personal/notes/billing/`, `personal/notes/patreon/` |
 | Optional team / company knowledge | `knowledge/domain/` | `knowledge/domain/[COMPANY_X]-systems-map.md` |
 | External reference material | `knowledge/references/` | `knowledge/references/scrum-guide-2020.pdf` |
 | Workspace-scoped Claude config | `[CLAUDE_WORKSPACE_ROOT]/.claude/` | `.claude/settings.json` (resolved from template), `.claude/hooks/` |
 | User-scoped Claude config | `~/.claude/` | `~/.claude/.workspace-setup.state` |
 
-A test for any novel artifact: ask whether the package needs to read it. If yes, it belongs in `personal/pmo-instance/` (operator-instance) or `pmo-platform/` (package itself). If no, ask who the intended audience for sharing is. Operator-only → `personal/`. Team or organization → `knowledge/`. Active project work → `projects/[Project]/`.
+A test for any novel artifact: ask whether the package needs to read it. If yes, it belongs in `pmo-instance/` (operator-instance) or `pmo-platform/` (package itself). If no, ask who the intended audience for sharing is. Operator-only → `personal/`. Team or organization → `knowledge/`. Active project work → `projects/[Project]/`.
 
 ---
 
@@ -193,7 +198,7 @@ This is the **parameterization seam** between package and operator-instance: the
 
 The canonical reference for the universality axis (which content classes are package vs operator-instance, and why) lives at [`core/standards/universal-vs-localized-context.md`](../core/standards/universal-vs-localized-context.md). The token vocabulary and per-token resolution semantics live at [`core/standards/depersonalization-spec.md`](../core/standards/depersonalization-spec.md). Both documents are the source-of-truth for content classification; this workspace-setup.md document does not restate them.
 
-The operational consequence of the boundary: when an operator wants to **change platform behavior**, the question is "what tier of content does the change touch?" Changes to package code go upstream as pull requests. Changes to operator-instance values go to the operator's local `personal/pmo-instance/` files or to the resolved `[CLAUDE_WORKSPACE_ROOT]/CLAUDE.md` and `[CLAUDE_WORKSPACE_ROOT]/.claude/settings.json`. The boundary is rarely ambiguous once the universality axis is internalized.
+The operational consequence of the boundary: when an operator wants to **change platform behavior**, the question is "what tier of content does the change touch?" Changes to package code go upstream as pull requests. Changes to operator-instance values go to the operator's local `pmo-instance/` files or to the resolved `[CLAUDE_WORKSPACE_ROOT]/CLAUDE.md` and `[CLAUDE_WORKSPACE_ROOT]/.claude/settings.json`. The boundary is rarely ambiguous once the universality axis is internalized.
 
 ---
 
@@ -221,7 +226,7 @@ For the full canonical token vocabulary — the ~10 tokens the package depersona
 
 ## 6. Customization
 
-Each of the four sibling directories supports operator customization, with different mechanics per directory.
+Each of the five sibling directories supports operator customization, with different mechanics per directory — though `pmo-instance/` is platform-managed, so customization there means editing the config files the package reads, not adding content of your own.
 
 ### Adding a project
 
@@ -233,11 +238,11 @@ Each of the four sibling directories supports operator customization, with diffe
 
 ### Extending personal
 
-`personal/` is operator-discretionary. The one constraint: `personal/pmo-instance/` is reserved for operator-instance platform config the package reads (per Section 2.4). Avoid placing non-platform content there. The rest of `personal/` — `personal/notes/`, `personal/correspondence/`, `personal/<whatever>/` — is unconstrained.
+`personal/` is operator-discretionary and carries no platform constraint at all — `personal/notes/`, `personal/correspondence/`, `personal/<whatever>/` are entirely the operator's. Operator-instance platform config lives in the workspace-root `pmo-instance/` sibling instead (per Section 2.4); that directory is platform-managed, so it is the one place under the workspace root an operator should not treat as free space.
 
 ### Modifying package behavior
 
-Modifications to package code go upstream as pull requests against the canonical pmo-platform repository. The clone in `pmo-platform/` reflects upstream state; do not edit it locally unless preparing a PR. For operator-discretionary behavior changes (which skills to invoke, which hooks to enforce, which checks to run), use operator-instance config in `personal/pmo-instance/` rather than editing package files.
+Modifications to package code go upstream as pull requests against the canonical pmo-platform repository. The clone in `pmo-platform/` reflects upstream state; do not edit it locally unless preparing a PR. For operator-discretionary behavior changes (which skills to invoke, which hooks to enforce, which checks to run), use operator-instance config in `pmo-instance/` rather than editing package files.
 
 For the operational installation procedure (the literal commands), see [INSTALL.md](INSTALL.md) § Configuration.
 

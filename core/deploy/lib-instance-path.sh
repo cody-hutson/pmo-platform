@@ -22,19 +22,19 @@
 #     deploy.sh, the PII pre-commit hook, lib-composition.sh, the composition
 #     manifest, check-canonical-structure.sh, extract-roster-needles.sh, and the
 #     install/update/setup scripts source this lib and call the functions instead
-#     of inlining `${PMO_INSTANCE_PATH:-...personal/pmo-instance}` (ADR-017 §
+#     of inlining `${PMO_INSTANCE_PATH:-.../pmo-instance}` (ADR-017 §
 #     operator-instance surface convergence — collapse the inconsistent literals
 #     into one resolver).
 #
 # Resolution (highest precedence first):
-#   pmo_instance_path()      → ${PMO_INSTANCE_PATH:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance}
+#   pmo_instance_path()      → ${PMO_INSTANCE_PATH:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance}
 #   pmo_operations_path_for()→ <workspace-root>/projects
 #                              (1 tier — no env or config tier; see the function)
 #   pmo_localized_needles()  → ${PMO_LOCALIZED_NEEDLES:-$(pmo_instance_path)/localized-context-needles.txt}
 #   pmo_people_roster()      → ${PMO_PEOPLE_ROSTER:-$(pmo_instance_path)/people-roster.yaml}
 #   pmo_evals_results_path() → $EVALS_RESULTS_PATH, else the operator.toml key
 #                              operator_instance_evals_results_path, else
-#                              <workspace-root>/personal/pmo-instance/evals/results
+#                              <workspace-root>/pmo-instance/evals/results
 #                              where <workspace-root> is itself a four-step
 #                              cascade: $WORKSPACE_ROOT, else
 #                              $CLAUDE_WORKSPACE_ROOT, else the operator.toml key
@@ -47,6 +47,8 @@
 # ignore" is the question every converging consumer must answer before it can
 # safely stop resolving the path itself:
 #   pmo_instance_path()       env: PMO_INSTANCE_PATH, CLAUDE_WORKSPACE_ROOT · toml: none
+#   pmo_instance_path_legacy() env: PMO_INSTANCE_PATH, CLAUDE_WORKSPACE_ROOT · toml: none
+#                             (migration probe only — see its block below)
 #   pmo_instance_path_for()   env: PMO_INSTANCE_PATH                        · toml: none
 #   pmo_operations_path_for() env: none                                     · toml: none
 #   pmo_localized_needles()   env: PMO_LOCALIZED_NEEDLES (+ pmo_instance_path's)
@@ -77,6 +79,34 @@
 
 # Echo the operator-instance base directory (no trailing slash).
 pmo_instance_path() {
+  printf '%s\n' "${PMO_INSTANCE_PATH:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance}"
+}
+
+# Echo the LEGACY (pre-relocation) operator-instance base directory — the home
+# this family occupied before it became a workspace-root sibling.
+#
+# WHY THIS EXISTS, AND WHY IT IS HERE RATHER THAN AT ITS ONE CALLER. The PII
+# pre-commit guard must be able to tell an un-migrated instance from a fresh
+# clone, and those two states differ ONLY by whether the legacy home is still on
+# disk. Its caller therefore needs a value the current resolver, by construction,
+# no longer returns. Spelling that value at the call site would put a second live
+# instance-leaf literal back into core/hooks/ — the exact thing this file exists
+# to prevent (AC1 / AC5), and inside the path-leak detector's gating scan corpus
+# at that. One named function keeps the leaf single-homed and hands the follow-on
+# cleanup a greppable removal target instead of a hunt.
+#
+# DELIBERATELY THE SAME OVERRIDE SHAPE as pmo_instance_path() above, not a bare
+# literal. When PMO_INSTANCE_PATH is set the operator has named their home
+# explicitly, both functions return that one path, and the migration-detection
+# predicate at the caller collapses to "the home you named is missing" — i.e. the
+# legacy branch is unreachable and the pre-existing behaviour stands. That
+# inertness under an explicit override is a property worth having rather than an
+# accident: this function is a MIGRATION probe, and there is no migration to
+# detect on an instance that was never on the default path.
+#
+# REMOVAL: this function and its single caller retire together once the legacy
+# home is no longer expected on any instance.
+pmo_instance_path_legacy() {
   printf '%s\n' "${PMO_INSTANCE_PATH:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance}"
 }
 
@@ -85,12 +115,12 @@ pmo_instance_path() {
 # must keep it (e.g. lib-composition.sh, which sandboxes installs/tests via a
 # passed --workspace-root and therefore cannot fall back to the $HOME-based
 # default). PMO_INSTANCE_PATH still wins when set; otherwise the leaf is appended
-# to the given base. Centralizing the `personal/pmo-instance` leaf here keeps it
+# to the given base. Centralizing the `pmo-instance` leaf here keeps it
 # out of every other *.sh (AC1 / AC5).
 # Usage: pmo_instance_path_for <workspace-root>
 pmo_instance_path_for() {
   local _base="$1"
-  printf '%s\n' "${PMO_INSTANCE_PATH:-${_base}/personal/pmo-instance}"
+  printf '%s\n' "${PMO_INSTANCE_PATH:-${_base}/pmo-instance}"
 }
 
 # Echo the operations-workspace root relative to an EXPLICIT workspace root (no
@@ -158,7 +188,7 @@ pmo_people_roster_for() {
 # not write:
 #   1. $EVALS_RESULTS_PATH                                     (env / direct override)
 #   2. operator.toml  operator_instance_evals_results_path      (instance override)
-#   3. <workspace-root>/personal/pmo-instance/evals/results, where <workspace-root>
+#   3. <workspace-root>/pmo-instance/evals/results, where <workspace-root>
 #      is a four-step cascade in its own right:
 #        3a. $WORKSPACE_ROOT               (pre-existing release-tools convention)
 #        3b. $CLAUDE_WORKSPACE_ROOT        (the ADR-032 canonical variable)
@@ -208,7 +238,7 @@ pmo_evals_results_path() {
   # Rung 3 — the four-step workspace-root cascade (3a..3d in the header above).
   _base="${WORKSPACE_ROOT:-${CLAUDE_WORKSPACE_ROOT:-}}"
   [[ -n "$_base" ]] || _base="$(_pmo_instance_toml_key "claude_workspace_root")"
-  printf '%s\n' "${_base:-$HOME/Claude}/personal/pmo-instance/evals/results"
+  printf '%s\n' "${_base:-$HOME/Claude}/pmo-instance/evals/results"
 }
 
 # --- Ambient-intake member directories -------------------------------------

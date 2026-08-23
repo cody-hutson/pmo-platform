@@ -31,8 +31,8 @@ JQ="/usr/bin/jq"
 [ -x "$HOOK" ] || { echo "FAIL: hook not executable at $HOOK" >&2; exit 1; }
 
 # Referenced body-files for the --body-file / -F body=@ cases. Temp paths are under
-# /var|/tmp (no /Users//home, no personal/pmo-instance) so the PATH the command
-# references never itself trips the scan — only the file CONTENT does.
+# /var|/tmp (no /Users//home, and neither operator-instance leaf form) so the PATH the
+# command references never itself trips the scan — only the file CONTENT does.
 WORK="$(mktemp -d)"
 /usr/bin/printf 'Context line.\nsee /Users/realuser/Claude/notes.md for the detail\n' > "${WORK}/leak_machine.md"
 /usr/bin/printf 'ref /home/realuser/work/output\n'                                    > "${WORK}/leak_home.md"
@@ -68,8 +68,15 @@ test_case() {
 set_mode enforce
 test_case "enforce: gh issue create --body-file machine-path leak BLOCKED" \
   "gh issue create --title T --body-file ${WORK}/leak_machine.md" 2 "BLOCK-GH-PATH-001"
-test_case "enforce: gh issue create --body inline pmo-instance leak BLOCKED" \
-  "gh issue create --title T --body 'see personal/pmo-instance/roadmaps/x.md'" 2 "BLOCK-GH-PATH-001"
+# WINDOW CLOSED on the gh surface too. The legacy leaf no longer blocks, and that is
+# asserted rather than inferred from a deleted case — a removed test and a test that
+# passes for the wrong reason are indistinguishable once the case is gone.
+test_case "enforce: gh issue create --body inline legacy-leaf ALLOWED (window closed)" \
+  "gh issue create --title T --body 'see personal/pmo-instance/roadmaps/x.md'" 0
+# The surviving leaf must still block here, not only in the primitive's own self-test,
+# or the guard would protect nothing on this surface.
+test_case "enforce: gh issue create --body inline new-leaf leak BLOCKED" \
+  "gh issue create --title T --body 'see pmo-instance/roadmaps/x.md'" 2 "BLOCK-GH-PATH-001"
 test_case "enforce: gh pr comment -F body=@ /home leak BLOCKED" \
   "gh pr comment 5 -F body=@${WORK}/leak_home.md" 2 "BLOCK-GH-PATH-001"
 test_case "enforce: gh api issues -f body= machine-path leak BLOCKED" \

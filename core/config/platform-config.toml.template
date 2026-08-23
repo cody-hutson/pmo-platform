@@ -362,10 +362,13 @@ security_class_master_optout = false
 #                      documented consumer fallback "github")
 #                 AND (operator.toml [adapters].ai_tool   resolves "claude-code";
 #                      documented consumer fallback "claude-code")
-# Honesty note: [adapters] is ABSENT from a stock runtime operator.toml, so both adapter
-# clauses take their documented fallbacks, which equal the only shipped values. Today the
-# predicate therefore reduces to the work-tree clause alone. The two adapter clauses are a
-# FORWARD host-agnosticism seam, not a live three-way test.
+# Honesty note: [adapters] is now DELIVERED into a stock runtime operator.toml (it was
+# absent before the declared-schema work; an existing config gains it on the next update
+# or reconcile). Both keys carry their documented defaults, which equal the only shipped
+# values, so the predicate still reduces to the work-tree clause alone — what changed is
+# that the values are readable in the operator's own config rather than resolved from a
+# consumer fallback. The two adapter clauses remain a FORWARD host-agnosticism seam, not
+# a live three-way test.
 #
 # RELATIONSHIP TO operator.toml [automation].automation_level: DISJOINT.
 # automation_level is the autonomy CEILING (with an irreducible Tier-0 floor beneath it);

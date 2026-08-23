@@ -24,7 +24,7 @@ superseded_by: N/A
 > NEVER committed. It lives OUT OF THE REPOSITORY TREE at
 > `$(pmo_instance_path)/people-graph-clarification-queue.md`
 > (resolved via `core/deploy/lib-instance-path.sh`; default
-> `~/Claude/personal/pmo-instance/`), a sibling of the repository — out-of-tree
+> `~/Claude/pmo-instance/`), a sibling of the repository — out-of-tree
 > placement is the PRIMARY protection, because the queue holds UNRESOLVED REAL
 > NAMES awaiting operator confirmation. Only this de-identified template ships.
 >

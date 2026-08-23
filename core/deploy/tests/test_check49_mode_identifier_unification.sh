@@ -69,6 +69,12 @@ resolve_check_mode() {
   local _check_id="$1"
   local _default="${2:-$DEPLOY_CHECK_MODE}"
   local _check_mode_file="$(pmo_instance_path)/${_check_id}.mode"
+  # Legacy-home rung, mirroring deploy.sh: a mode file is hand-created operator-instance
+  # state, so across the instance-home relocation the only copy on an un-migrated
+  # instance sits at the previous home. Kept here because this copy exists to exercise
+  # the SAME predicate — a copy that resolves through fewer rungs than production is a
+  # test asserting behaviour the platform no longer has.
+  [[ -f "$_check_mode_file" ]] || _check_mode_file="$(pmo_instance_path_legacy)/${_check_id}.mode"
   [[ -f "$_check_mode_file" ]] || _check_mode_file=".claude/hooks/${_check_id}.mode"
   if [[ -f "$_check_mode_file" ]]; then
     local _cm
@@ -318,8 +324,9 @@ else
 
   # The operator-guidance path must name a directory the resolver actually reads.
   # core/hooks/ is in NEITHER tier: resolve_check_mode reads
-  # $(pmo_instance_path)/<id>.mode and then .claude/hooks/<id>.mode. Guidance naming an
-  # unreadable directory is the same silent-no-op class this check exists to close.
+  # $(pmo_instance_path)/<id>.mode, then $(pmo_instance_path_legacy)/<id>.mode, then
+  # .claude/hooks/<id>.mode. Guidance naming an unreadable directory is the same
+  # silent-no-op class this check exists to close.
   if /usr/bin/grep -qF 'core/hooks/' <<< "$C49_COMMENTS"; then
     FAIL_COUNT=$((FAIL_COUNT + 1))
     echo "  FAIL block guidance still names core/hooks/, which is in neither resolution tier"

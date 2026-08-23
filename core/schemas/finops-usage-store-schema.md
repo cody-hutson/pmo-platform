@@ -21,7 +21,7 @@ Defines the operator-local Agent-FinOps usage store: WHERE it lives, its FORMAT,
 
 ## Store Location
 
-Resolved from the `<OPERATOR_INSTANCE_FINOPS_STORE_PATH>` token per the depersonalization-spec token vocabulary: (a) the `operator.toml [paths].operator_instance_finops_store_path` override if set, else (b) the default `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/finops`. Store file: `<resolved-path>/usage.jsonl`.
+Resolved from the `<OPERATOR_INSTANCE_FINOPS_STORE_PATH>` token per the depersonalization-spec token vocabulary: (a) the `operator.toml [paths].operator_instance_finops_store_path` override if set, else (b) the default `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/finops`. Store file: `<resolved-path>/usage.jsonl`.
 
 The store is **git-ignored** operator-instance data — its records carry `git_branch`, `worktree` (a directory basename, not a home path — v1.2.0 data-minimization), and work-item identifiers, so on a PUBLIC repo it must never commit. This is enforced two ways: the static `.gitignore` patterns (the `personal/` + `pmo-instance/` homes plus defensive finops stems), AND a resolve-time `git check-ignore` guard in the extractor that refuses to write when the resolved store falls inside a git repository but is not ignored there (see the extractor's exit-code contract).
 

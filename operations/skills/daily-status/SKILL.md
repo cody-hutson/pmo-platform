@@ -63,12 +63,12 @@ Before generating any status update, read these files in order:
      (duplicate-source-discipline — each band has exactly one canonical owner). Read the live
      band from the source row at compute time; never fork a local copy.
 7. **Ambient intake-sweep run-log** — `<OPERATOR_INSTANCE_INTAKE_SWEEP_RUNLOG_PATH>`
-   (default `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/ambient-intake/run-log.jsonl`).
+   (default `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/ambient-intake/run-log.jsonl`).
    Read **only when rendering the Ambient Sweep Digest** (see `## Ambient Sweep Digest`).
    Append-only JSONL; read the latest record (last line). Absent → the sweep is "not
    configured" (not a failure). Producer schema: `core/standards/c2-intake-sweep-path-a.md`.
 8. **Ambient external-sync run-log** — `<OPERATOR_INSTANCE_EXTERNAL_SYNC_RUNLOG_PATH>`
-   (default `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/external-sync/run-log.jsonl`).
+   (default `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/external-sync/run-log.jsonl`).
    Read **only when rendering the Ambient Sweep Digest**. Append-only JSONL; read the latest
    record (last line). Absent → "not configured." Producer schema:
    `core/standards/c3-external-sync-path-b.md`.

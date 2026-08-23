@@ -72,7 +72,7 @@ If your working tree is not clean, commit or stash before proceeding — `update
 The script:
 
 1. **Pre-flight**: verifies `~/.config/pmo-platform/operator.toml` is present. If absent, prompts you to run `docs/scripts/setup-workspace.sh` first.
-2. **Schema diff**: compares `operator.toml` `schema_version` to current template's `schema_version`. On drift, advises manual review.
+2. **Schema reconcile**: compares your `operator.toml` against the declared schema at `core/config/operator-toml-schema.json` and converges it. A key the platform has added since your config was generated is **backfilled from its declared default**; a value you set yourself is **preserved** — a deliberate `automation_level = "off"` is never reset — and no key is ever removed. A key that carries **no** default is prompted for; declining leaves it absent rather than writing a guessed value, and under a non-interactive or unattended run the key is left absent and the update exits **66** naming it, so nothing hangs and nothing is invented. `schema_version` is now the **breaking-change** marker: a config written by a *newer* platform than your clone is refused rather than silently downgraded, and a config older than a breaking change routes to guided recovery. Additive key additions do not bump it — each key's `since` field carries that history.
 3. **Regenerate composition-surface managed sections**: for each file in `core/deploy/composition-surface-manifest.sh`, computes source SHA; if installed `managed_sha` differs, backs up the runtime file then regenerates the MANAGED SECTION fence with current template content (token-substituted from `operator.toml`). OPERATOR ADDITIONS section preserved verbatim. Independently, it also **detects in-fence tampering**: if you hand-edited content inside a MANAGED SECTION, the live managed body no longer matches the stored `installed_sha` anchor, so the file is backed up to `~/Claude/.backup-tampered-<timestamp>/` and regenerated — distinct from the source-changed regeneration path, and caught even when the source template is unchanged. (Files installed before this anchor existed have no `installed_sha`; they are treated as "unknown, not tampered" and the anchor is back-filled on the next regeneration — run `./update.sh --force-regen` once after upgrading to back-fill all anchors immediately.)
 4. **Skill redeploy**: invokes `core/deploy/orchestrate.sh phase_deploy_skills`, which calls `core/deploy/deploy.sh --deploy`. This ensures any new skills shipped in the pulled release land in `~/.claude/skills/` without a separate operator step.
 5. **State update**: writes timestamp to `~/.config/pmo-platform/.last-update`.
@@ -138,7 +138,7 @@ Preview first with `--dry-run` on the same command.
 
 To extend an allowlist (e.g., add a new permitted host to `egress-allowlist.txt`):
 
-1. Open the runtime file: `~/Claude/.claude/egress-allowlist.txt` (hook-tier) or `~/Claude/personal/pmo-instance/<file>.txt` (instance-tier).
+1. Open the runtime file: `~/Claude/.claude/egress-allowlist.txt` (hook-tier) or `~/Claude/pmo-instance/<file>.txt` (instance-tier).
 2. Add entries **inside the OPERATOR ADDITIONS fence** (between `=== BEGIN OPERATOR ADDITIONS ===` and `=== END OPERATOR ADDITIONS ===`).
 3. Save. `update.sh` on future runs will preserve your additions verbatim.
 

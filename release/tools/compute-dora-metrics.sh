@@ -6,7 +6,7 @@
 # Computes the four DORA delivery metrics over a bounded window as a READ-MODEL
 # over the operator-instance pipeline event log at
 # <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md
-# (canonical default: ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/evals/results/)
+# (canonical default: ${CLAUDE_WORKSPACE_ROOT}/pmo-instance/evals/results/)
 # via query-pipeline-event.sh (sibling tool; it resolves the log location), plus a
 # thin `git log --format=%cI` read for the lead-time commit-time numerator.
 #

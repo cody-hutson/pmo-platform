@@ -28,12 +28,12 @@ field set precisely so this heartbeat parses a single shape across both sweeps.
 - **Path-A intake sweep** — canonical schema: `core/standards/c2-intake-sweep-path-a.md`
   section 5. Discriminator `sweep: "intake-path-a"`. Run-log token
   `<OPERATOR_INSTANCE_INTAKE_SWEEP_RUNLOG_PATH>`
-  (default `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/ambient-intake/run-log.jsonl`).
+  (default `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/ambient-intake/run-log.jsonl`).
 - **Path-B external-sync sweep** — canonical schema:
   `core/standards/c3-external-sync-path-b.md` section 5. Discriminator
   `sweep: "external-sync-path-b"`. Run-log token
   `<OPERATOR_INSTANCE_EXTERNAL_SYNC_RUNLOG_PATH>`
-  (default `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/external-sync/run-log.jsonl`).
+  (default `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/external-sync/run-log.jsonl`).
 
 Both run-logs are append-only JSONL; the digest reads the **latest record per file** (the
 last line) and labels each heartbeat row by the record's `sweep` value. The two files are

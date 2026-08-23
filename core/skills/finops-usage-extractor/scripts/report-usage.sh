@@ -35,7 +35,7 @@
 #
 # Store path resolution (no hardcoded operator path; same as extract-usage.sh):
 #   env STORE > env FINOPS_STORE_PATH > operator.toml [paths].operator_instance_finops_store_path
-#   > default ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/finops
+#   > default ${CLAUDE_WORKSPACE_ROOT}/pmo-instance/finops
 # The resolved path VALUE is never printed (it is an operator home path); only
 # the resolution chain is declared in the report header.
 #
@@ -106,7 +106,7 @@ workspace_root() {
 resolve_store() {
   local store="${STORE:-${FINOPS_STORE_PATH:-}}"
   [ -z "$store" ] && store="$(toml_val operator_instance_finops_store_path)"
-  store="${store:-$(workspace_root)/personal/pmo-instance/finops}"
+  store="${store:-$(workspace_root)/pmo-instance/finops}"
   printf '%s' "$store"
 }
 
@@ -613,7 +613,7 @@ def trend_verdict($rows; $grade; $dim_label):
 | { generated_utc: $gen_utc,
     window: { since: $since, until: $until, since_iso: $since_iso,
               until_excl_iso: $until_excl_iso, now: $now, basis: "session.started_utc, UTC" },
-    store: { resolution_chain: "env STORE > env FINOPS_STORE_PATH > operator.toml [paths].operator_instance_finops_store_path > default ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/finops",
+    store: { resolution_chain: "env STORE > env FINOPS_STORE_PATH > operator.toml [paths].operator_instance_finops_store_path > default ${CLAUDE_WORKSPACE_ROOT}/pmo-instance/finops",
              path_printed: false,
              schema_version: ($meta.schema_version // "(absent)"),
              generator_version: ($meta.generator_version // "(absent)") },

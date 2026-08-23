@@ -2,7 +2,7 @@
 #
 # This is the SHIPPED TEMPLATE. The FILLED roster is OPERATOR-INSTANCE and is
 # NEVER committed. It lives OUT OF THE REPOSITORY TREE at
-#   $(pmo_instance_path)/people-roster.yaml   (default ~/Claude/personal/pmo-instance/)
+#   $(pmo_instance_path)/people-roster.yaml   (default ~/Claude/pmo-instance/)
 # which is a sibling of the repository — out-of-tree placement is the PRIMARY
 # protection: a repository commit cannot reach a path outside the repo tree. Two
 # further layers back it up: the `.gitignore` `**/people-roster.yaml` rule catches a

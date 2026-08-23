@@ -205,7 +205,42 @@ build_source_repo() {
 # build_workspace <ws> — a healthy deployed workspace layout.
 build_workspace() {
   local ws="$1" d
-  for d in pmo-platform projects knowledge personal .claude; do
+  # The required set is DERIVED from check_a2_workspace_layout's own declaration, not
+  # re-typed here. It used to be a hand-copied mirror, and that mirror is exactly what
+  # drifted: when the validator gained the operations-tier members, this builder kept
+  # producing a pre-widening workspace, so every "healthy run exits 0" arm went red for
+  # a reason that had nothing to do with what those arms test — and one of them
+  # suppressed Mode B, taking two further arms down with it. A fixture that disagrees
+  # with the implementation reports on itself, not on the product.
+  #
+  # personal/ is NOT a member and never re-enters through this parse: the installer
+  # stopped creating it when the operator-instance family became a workspace-root
+  # sibling, and the declaration it is read from does not list it.
+  #
+  # THE TRADEOFF, STATED RATHER THAN GLOSSED. Deriving makes A2's healthy-baseline arm
+  # true BY CONSTRUCTION here — this fixture can no longer catch an A2 membership bug.
+  # That is deliberate and it costs nothing, because A2's load-bearing coverage is not
+  # here: test_install_end_to_end.sh brackets it against a REAL install — PASS, remove a
+  # required directory, FAIL, restore, PASS. A baseline whose job is to make the OTHER
+  # arms attributable should be healthy by construction; the arm that must be able to
+  # fail lives where a real installer produced the layout.
+  local a2_dirs
+  a2_dirs="$(grep -E '^[[:space:]]*(local[[:space:]]+)?required_dirs=' "${VALIDATE}" \
+    | sed -e 's/^[^=]*="//' -e 's/".*$//' -e 's/\${required_dirs}//' \
+    | tr '\n' ' ')"
+  # A parse that silently yields nothing would build an empty workspace and hand every
+  # arm below a fixture that proves nothing. Fail loudly instead, and pin a member that
+  # has been in the set since before this check existed so the guard cannot be satisfied
+  # by a partial extraction.
+  case " ${a2_dirs} " in
+    *" .claude "*) : ;;
+    *)
+      printf 'FIXTURE ERROR: could not derive A2 required dirs from %s (got: %s)\n' \
+        "${VALIDATE}" "${a2_dirs}" >&2
+      exit 1
+      ;;
+  esac
+  for d in ${a2_dirs}; do
     mkdir -p "${ws}/${d}"
   done
 
@@ -454,9 +489,9 @@ new_arm; SBX="${NEW_ARM}"
 write_skill "${SBX}/.claude/skills/demo-platform-skill/SKILL.md" "demo-platform-skill" 1
 mkdir -p "${SBX}/src/core/deploy"
 cp "${REPO_ROOT}/core/deploy/lib-instance-path.sh" "${SBX}/src/core/deploy/lib-instance-path.sh"
-mkdir -p "${SBX}/Claude/personal/pmo-instance/inbox" \
-         "${SBX}/Claude/personal/pmo-instance/ambient-intake" \
-         "${SBX}/Claude/personal/pmo-instance/external-sync"
+mkdir -p "${SBX}/Claude/pmo-instance/inbox" \
+         "${SBX}/Claude/pmo-instance/ambient-intake" \
+         "${SBX}/Claude/pmo-instance/external-sync"
 
 # Precondition, asserted BEFORE any A5b verdict is read: the resolver really did
 # load, so A5b is exercising its real path and not silently taking the
