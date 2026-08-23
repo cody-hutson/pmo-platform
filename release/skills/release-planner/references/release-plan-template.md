@@ -1,3 +1,9 @@
+<!-- reference-durability: allow-link -->
+<!-- This file is a TEMPLATE: its body is copied verbatim into each release plan, and
+     two of its lines exist specifically to demonstrate the workspace-rooted link form
+     that a plan must use to survive the ADR-092 claim-time rename. Summarizing those
+     links inline (durability-ladder rung 1-2) would delete the very exemplar the
+     Stage-4 authoring contract points authors at. -->
 # Release Plan Template
 
 ## Purpose
