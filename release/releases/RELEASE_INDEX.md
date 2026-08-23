@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.36 | docs-match-shipped-state | 2026-08-23 | — | #5891 | [notes/v4.36_RELEASE_NOTES.md](notes/v4.36_RELEASE_NOTES.md) |
 | v4.35 | operational-folder-enforcement-and-migration | 2026-08-22 | — | #5765 | [notes/v4.35_RELEASE_NOTES.md](notes/v4.35_RELEASE_NOTES.md) |
 | v4.34 | closeout-reports-what-shipped | 2026-08-21 | — | #5759 | [notes/v4.34_RELEASE_NOTES.md](notes/v4.34_RELEASE_NOTES.md) |
 | v4.33 | operator-runtime-state-and-workspace-anchoring | 2026-08-20 | — | #5632 | [notes/v4.33_RELEASE_NOTES.md](notes/v4.33_RELEASE_NOTES.md) |
