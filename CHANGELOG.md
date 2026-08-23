@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.38] - 2026-08-23
+
+Platform working files leave your personal folder, a fresh install builds the standard folders, and settings catch up on every update.
+
+[Full notes](release/releases/notes/v4.38_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.38)
+
 ## [v4.37] - 2026-08-23
 
 Late project migrations now get a deadline, a score and a named fix; new projects register themselves and stop losing unsorted items.
