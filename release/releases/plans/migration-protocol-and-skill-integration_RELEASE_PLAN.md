@@ -15,7 +15,7 @@ consumers: Stage 5-9 spokes; the release hub; Stage 9 Plan Review
 | Field | Value |
 |---|---|
 | Milestone | `migration-protocol-and-skill-integration` |
-| Version | **Not claimed.** Rule-computed at Stage 12 per `claim-version.sh`. Sequenced behind `operational-folder-enforcement-and-migration` per **D-38**, so the next-free value is not determinable at planning time. |
+| Version | **Not claimed.** Rule-computed at Stage 12 per `claim-version.sh`. Sequenced behind `operational-folder-enforcement-and-migration` per **D-38**, so the next-free value is not determinable at planning time. **`v4.36` has since been claimed by milestone #346** (the concurrent release, merged to `main` while this branch was in flight) — this release therefore resolves to **next-free at its own Stage-12 claim** per **ADR-092**. No version is pinned here, and none is owed before Stage 12. |
 | Release Class | `novel` — `class_weight` 1.15 (`core/config/platform-config.toml.template` `[bundling].release_class_capacity_weights`) |
 | Raw points | **22** — #153 M=4 · #5659 M=4 · #5660 S=2 · #158 L=8 · #5671 M=4 |
 | `effective_pts` | **25** — `round_half_up(22 × 1.15)`. In band (15–25), **at the ceiling, zero headroom**. No override required. |
@@ -250,8 +250,31 @@ Revert the merge commit. Reversibility **MODERATE · confidence HIGH** for the r
 | D-23 | #5659 ships writer-only | AC-1 restated to grade the writer-side deliverable | CHEAP · MEDIUM |
 | D-24 | #5660 target path form | Repo-relative canonical target per ratified **ADR-104** | CHEAP · HIGH |
 | D-27 | Project Axis-1 carrier | `status`, not `lifecycle_state`; amendable in-file | CHEAP · HIGH |
-| D-R2 | `project-initiator` rebuild ownership | **OPEN — assign at Commit 0** | CHEAP · HIGH |
-| D-5659-OPTION | Reader-cascade scope | **OPEN — re-cost against the 5-reader population** | CHEAP · MEDIUM |
+| D-R2 | `project-initiator` rebuild ownership | **RESOLVED by D-42** — rule-determined to the last writer, not assigned by hand | CHEAP · HIGH |
+| D-5659-OPTION | Reader-cascade scope | **RESOLVED by D-39** — no reader cascade; B1 is a documentation reconciliation with zero live edit targets | CHEAP · MEDIUM |
+
+## Decisions of Record — this release (D-39 … D-49)
+
+The rows above are the decisions carried **into** this release from planning. The rows below are the
+decisions rendered **during** it, at Stages 5–9. They are recorded here because the release plan is the
+surface a spoke greps: a decision that exists only in the pipeline event log and in issue comments is,
+from inside a spoke, indistinguishable from a decision that was never made. That failure has already
+occurred once on this release — a spoke told a conflict was "known-open per D-48" searched the plan,
+found nothing, and correctly reported the decision non-existent. This section closes that gap.
+
+| # | Decision |
+|---|---|
+| **D-39** | B1 resolves as a **documentation reconciliation**, not a reader-cascade repair. `## Key People` is a **ratified retained fallback** (ADR-025 § 5), so there are **zero live edit targets** and no cascade is owed. Supersedes the open D-5659-OPTION. |
+| **D-40** | B3 is **falsified**. The `= Axis-1` discriminator and the § 3.6 RAID Item exemplar **shipped in v4.35**; `V-CORE-03` reaches **19 of 19**. No routing work is owed. |
+| **D-41** | B4's defect is **real**, but the remedy is the **already-shipped workspace-root snapshot convention**, not a signed exception. Carries an **ADR-060 supersession note**. |
+| **D-42** | Package-rebuild ownership is **rule-determined to the last writer** (#5671) rather than assigned by hand. Lifecycle **Check 7 is always-enforce**, not warn-only. Resolves the open D-R2. |
+| **D-43** | B5 is **partly falsified**. The CI gate **does** exit non-zero; Check 7's absence from the required subset is **by design** — it runs on a dedicated CI mirror. |
+| **D-44** | #5660's hook-blocked `SKILL.md` Step 2c **folds into #5671's combined edit**, per the v4.35 precedent. **No sentinel was minted** for it. |
+| **D-45** | The coordinated rebuild set is extended from **1 package to 6** — the `template-storage.md` mirror consumers. |
+| **D-46** | #158 is **unblocked**: #5815 reached terminal state and the Layer-2 corpus write landed, so the completeness score now measures a **real population** rather than an empty one. |
+| **D-47** | **Amends D-45** — the rebuild set is **7, not 6**. `health-check` is **not** a `template-storage.md` mirror consumer; it was staled independently and must be rebuilt on its own basis. |
+| **D-48** | The **`MM-3` semantic conflict** resolves in favour of the **protocol as definitional home**, per **CIAC-3a**: `MM-3` is **Composed-Index Conformance, a per-project state** (`composed` / `partial` / `monolith`) — **not** a link ratio and **not** "relationships valid". Every downstream surface cites; none redefines. |
+| **D-49** | **Split-debt repaired.** All **10** Stage 7/8 sub-tasks carried pre-D-37 **parent-milestone metadata** (wrong milestone, wrong plan path, wrong Stage-4 pointer). Corrected and **read-back verified**. |
 
 ## Deviation Log
 

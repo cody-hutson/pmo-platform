@@ -84,6 +84,7 @@ assert_resolve "operations/templates/raid-log-template.csv"            "raid-log
 assert_resolve "operations/templates/communications-tracker-template.md" "communications-tracker-template.md" "*-template.md default -> operations"
 assert_resolve "operations/templates/key-terms-glossary-template.csv"  "key-terms-glossary-template.csv"  ".csv default -> operations"
 assert_resolve "operations/templates/people-roster-template.yaml"      "people-roster-template.yaml"      "non-.md non-template-* default -> operations"
+assert_resolve "operations/templates/project-bins/1-governance/README.md" "project-bins/1-governance/README.md" "subpath key -> default arm concatenates (no basename constraint)"
 
 echo ""
 echo "── Every resolved canonical must EXIST on disk ───────────────────────────"
@@ -114,6 +115,7 @@ assert_resolved_exists "tracker-schemas.md"   "#4178 complementary-pair canonica
 assert_resolved_exists "regression-checks.md" "#94 — the basename whose mis-resolution broke a package rebuild at release-cut"
 assert_resolved_exists "template-storage.md"  "arm 2 control"
 assert_resolved_exists "raid-log-template.csv" "default-arm control"
+assert_resolved_exists "project-bins/_inbox/README.md" "subpath-key control — the default arm resolves a subpath to an existing canonical"
 
 echo ""
 echo "── Drift guard: the resolver is single-sourced (no divergent 2nd copy) ───"

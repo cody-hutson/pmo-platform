@@ -1,7 +1,7 @@
 ---
 name: health-check
 description: >
-  Intent-driven project-state drift auditor. Audits a single project for drift between its tracked state and its canonical sources (MCP + local), then emits a categorized 5-section punch list — Confirmed / Auto-Actionable / Decisions / Unknowns / Rollup-Diffs — that is never auto-applied. Eight modes: full (total sweep), timeline (date/milestone drift), attribution (owner drift), comms (comms-coverage drift), plan (one named plan), raid (RAID-log drift), sources (canonical-source inventory), rollup (project↔portfolio rollup compose/refresh). Invokable interactively as /health-check and schedulable for file output. Triggers: "health check this project", "is this project's state still accurate", "run a drift check", "check for stale dates", "audit the timeline", "check ownership drift", "are comms overdue", "did this plan land", "audit the RAID log", "are our sources current", "roll up to portfolio", "refresh this project's rollup", "did anything drift since last cycle", "is the tracked state current."
+  Project-state drift auditor. Audits one project for drift between tracked state and canonical sources (MCP + local), then emits a 5-section punch list — Confirmed / Auto-Actionable / Decisions / Unknowns / Rollup-Diffs — never auto-applied. Nine modes: full (total sweep), timeline (dates), attribution (owners), comms (coverage), plan (one plan), raid (RAID log), sources (source freshness), rollup (project↔portfolio), structure (entity completeness). Invokable as /health-check; schedulable to file. Triggers: "health check this project", "is this project's state still accurate", "run a drift check", "check for stale dates", "audit the timeline", "check ownership drift", "are comms overdue", "did this plan land", "audit the RAID log", "are our sources current", "roll up to portfolio", "refresh this project's rollup", "did anything drift since last cycle", "is the tracked state current", "is this project's data structurally complete", "audit entity completeness", "what is this project's completeness score."
 version: v3.23
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
@@ -44,11 +44,11 @@ The skill reads a **canonical source set** — MCP-primary, local-fallback — g
 ## Modes
 <!-- design-artifact: flow-class=skill-flow; name=health-check; depicts=operations/skills/health-check/SKILL.md -->
 
-The skill is mode-dispatched. Every mode declares a **4-intent block** and emits the same 5-section output. All eight modes are implemented: modes 1–3 are the foundation drift-core (the v1 slice), modes 4–7 are the extended value-heavier set (the v2 slice), and mode 8 (`rollup`) is the on-demand rollup-invocation mode (the v3 slice). The contract — 4-intent block + 5-section output + `TRACKER_UPDATES:` + the S0–S3 confidence band — is identical across all eight.
+The skill is mode-dispatched. Every mode declares a **4-intent block** and emits the same 5-section output. All nine modes are implemented: modes 1–3 are the foundation drift-core (the v1 slice), modes 4–7 are the extended value-heavier set (the v2 slice), mode 8 (`rollup`) is the on-demand rollup-invocation mode (the v3 slice), and mode 9 (`structure`) is the entity-completeness audit (the v4 slice). The contract — 4-intent block + 5-section output + `TRACKER_UPDATES:` + the S0–S3 confidence band — is identical across all nine.
 
 | # | Mode | Slice | What it audits |
 |---|---|---|---|
-| 1 | `full` | v1 | The union of all per-mode surfaces — the default invocation; runs every other mode's checks. |
+| 1 | `full` | v1 | The union of the per-mode surfaces that declare `full`-sweep membership — the default invocation. |
 | 2 | `timeline` | v1 | Every surfaced date — tracked dates vs PROJECT.md / carry-forward / canonical schedule. |
 | 3 | `attribution` | v1 | Every item's owner — recorded owner vs canonical owner. |
 | 4 | `comms` | v2 | Communications Tracker vs sent/draft/ready lifecycle state. |
@@ -56,6 +56,9 @@ The skill is mode-dispatched. Every mode declares a **4-intent block** and emits
 | 6 | `raid` | v2 | RAID Log — closure candidates, orphan IDs, guardrail enforcement. |
 | 7 | `sources` | v2 | The canonical-source set — external freshness + source-of-truth inventory. |
 | 8 | `rollup` | v3 | On-demand project↔portfolio rollup. `--scope portfolio` audits per-project rollup-entity freshness vs PORTFOLIO.md and **composes the PORTFOLIO.md proposal via `weekly-status-rollup` Section 6** (compose-not-absorb), staging it in `08-Generated/_health-check/`. `--scope project --depth full\|status` refreshes one project's rollup entity from a sub-entity scan. |
+| 9 | `structure` | v4 | Entity-completeness audit — every required entity present, every required field populated, every required relationship valid, against the frozen entity model + field schemas. Reports a 0–100 completeness score with a three-factor breakdown and an explicit coverage envelope. Excluded from the `full` sweep (different audit axis). |
+
+The declared `full`-sweep membership table (mode · member · reason-when-false) lives alongside the 4-intent declarations in `references/mode-intents.md`.
 
 The 4-intent declarations per mode live in [`references/mode-intents.md`](references/mode-intents.md) (the queryable form); each mode is summarized below.
 
@@ -69,7 +72,9 @@ mode_full:
   confidence_intent: "Assertive on cross-source agreement; cautious on single-source claims."
 ```
 
-`full` runs every other mode's checks — `timeline`, `attribution`, `comms`, `raid`, and `sources` — and merges their findings into one 5-section report. (`plan <name>` is excluded from the `full` sweep because it requires a named-plan argument; `full` audits the project, not a single named plan.) It is the default when `/health-check` is invoked with no mode.
+`full` runs the checks of **every mode that declares `full`-sweep membership**, and merges their findings into one 5-section report. It is the default when `/health-check` is invoked with no mode.
+
+**The membership rule, stated once — `full` carries no list of exceptions.** A mode is a `full`-sweep member unless it (a) requires an argument `full` cannot supply, or (b) audits a **different axis** from the drift axis `full` sweeps. The per-mode verdict and its reason-when-false are declared in the membership table in `references/mode-intents.md`, which is the authority — so adding a mode does not require editing this paragraph. Today `plan <name>` and `rollup` are non-members under (a), and `structure` under (b).
 
 **Architecture-conformance surfacing step (compose-not-absorb).** As part of the `full` sweep, `full` **reads the committed** `release/releases/architecture-conformance-summary.md` hand-off surface (the tracked headline `pmo-qa-auditor` Mode I overwrites on each run) and surfaces a **platform-context** conformance flag — never re-running the platform audit itself (that is the ADR-019 *absorb* anti-pattern; [`core/ADRs/ADR-019-specialists-compose-not-absorb.md`](../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md)). health-check audits a single project; this flag is **platform-altitude context, not project drift**, and is labeled as such. Because the consumed artifact is **committed** (ships in the repo, present on every clone), the flag delivers signal on any instance — not only the one that produced the audit. The read contract is in [`references/conformance-surface.md`](references/conformance-surface.md); the seam mirrors `rollup`'s composition of `weekly-status-rollup`.
 
@@ -163,6 +168,28 @@ mode_rollup:
 
 **Contract-tolerant (graceful degradation).** The rollup mode binds to the platform's per-project **portfolio-writeback rollup contract** (the publishing schema + the per-project rollup entity `[Project]/04-PMO-Operations/[Project]_Rollup.md`). That contract is **in-flight** (owned by a separate, not-yet-shipped milestone). When the contract standard or a project's rollup entity is **absent**, `rollup` surfaces a `## Unknowns` coverage-gap ("rollup entity not present; the portfolio-writeback contract is not yet shipped — audited what is present, cannot compose the missing entity") — it **never fabricates a rollup entity and never crashes**, mirroring the skill's existing ADR-051 MCP-degradation posture (reduce coverage, never silently downgrade rigor). `references/rollup-mode.md` binds the field mapping by role-name so it resolves cleanly when the contract ships.
 
+### Mode 9 — `structure` (v4)
+
+```yaml
+mode_structure:
+  trigger_intent:    "A high-stakes decision is pending and I need to know whether this project's DATA is complete enough to trust — not whether it drifted, but whether the records, fields and links exist at all."
+  decision_intent:   "Is every required entity present, every required field populated, and every required relationship valid, per the frozen entity model and field schemas?"
+  output_intent:     "A 0-100 completeness score with a three-factor breakdown and a named coverage envelope, plus per-violation findings naming the rule ID, entity and field."
+  confidence_intent: "Assertive on auto-graded L1/L2 schema rules; cautious on subjective completeness (never asserts 'enough' of anything); refuses to score what it could not measure."
+```
+
+`structure` audits the **schema-conformance axis** — does this project's data satisfy the frozen entity model and its field schemas? — for each entity in the expected set: **(a) entity present**, **(b) required fields populated**, **(c) required relationships valid**. This is a different axis from the **drift** axis every other mode audits (tracked state vs canonical sources), which is why it is **excluded from the `full` sweep**: the same empty owner field would otherwise be reported three times in one report, once as a structural gap, once as an attribution gap and once as a RAID guardrail violation.
+
+**Population — entity records, never files.** Every count is over entity records. The boundary axiom in `core/disciplines/project-entity-model.md` § 2 is binding: a logical entity is a data record the PMO tracks, and the file that persists it is a separate concern. No file-grain ratio feeds any score factor.
+
+**Score — `MM-0`, cited not redefined.** The completeness score and its three factors are `MM-0 = MM-1 × MM-2 × MM-3`, **defined** in `core/standards/migration-enforcement-protocol.md` § 4 and computed here. This mode mints no competing metric family; `completeness.entities_present` / `completeness.fields_populated` / `completeness.composed_index` are display labels only, carrying no definition. **`MM-3` is Composed-Index Conformance — a per-project STATE** (`composed` / `partial` / `monolith`) mapped to a 0–100 factor projection before the product is taken. It is **not** a link ratio and **not** the "relationships valid" limb: limb (c) of the audit keeps producing findings, but it supplies no score factor.
+
+**Render contract (load-bearing).** The score never renders as a bare number. The **ratio-valued** factors `MM-1` and `MM-2` each carry their numerator and denominator; **`MM-3` renders as its state**, optionally with its factor projection, and carries no `n/d` — demanding one would re-introduce the `0/0` link ratio that reports an unmigrated monolith as perfectly migrated. The **entity-type coverage line is mandatory** and states how many of the roster's entity types are in the denominator versus excluded; an unpopulated-tier banner is a **list** derived from the tier set, never a singular value and never a hardcoded count; a factor that could not be measured renders `UNMEASURED`, never `0%`, and any `UNMEASURED` factor makes `MM-0` render `UNMEASURED` rather than `0/100`. **Never render the tier banner without the type line** — once every tier holds a record the banner falls silent while most entity types remain unpopulated, and the type line is then the only guard against a confident 100 over a denominator of three.
+
+**Rule authority is cited, never transcribed.** Rules are read from `core/schemas/entity-field-schemas.md` § 3 (per-entity and Core) and § 4 (cross-entity) by rule ID; **no rule text and no rule count is copied into this skill**, so a rule added there is picked up with no edit here. Every violation is emitted as a specific finding naming the **rule ID + entity + field/relationship** — a bare count is not a finding.
+
+The full contract — the `E1 ∪ E2 ∪ E3` denominator model, the coverage envelope, the ordered first-match-wins routing table, the confidence projection, the migration-telemetry surface and the stalled-migration escalation contract — lives in `references/structure-mode.md`.
+
 ## Output Structure
 
 Every mode, every run, emits these **five H2 sections in this exact order** (the headers are the grep target for AC verification — do not rename or reorder them):
@@ -176,6 +203,8 @@ Every mode, every run, emits these **five H2 sections in this exact order** (the
 | 5 | `## Rollup-Diffs` | Tier-1-file (PROJECT.md / PORTFOLIO.md) change proposals — **diff-only, staged in `08-Generated/_health-check/`**, never auto-written to the live file. | each carries a tier |
 
 A run that produces no findings in a section still emits the header with `_(none)_` beneath it, so a clean section is distinguishable from an un-run one.
+
+**The `## Auto-Actionable` derivability filter (schema-conformance findings).** For a finding that compares a record to a **schema** rather than to a second observation, HIGH confidence is not the admitting test — almost every such violation is HIGH, so a confidence gate alone would be a tautology that admits all of them. The operative filter is **derivability**: `## Auto-Actionable` admits a schema-conformance finding **only** where the correct value is derivable from the frozen schema (a field the schema pins to exactly one value for that entity). A violation whose correct value is **not** derivable — an empty owner, an absent date — routes to `## Decisions` even at HIGH confidence. Every `BLOCK-WRITE` and `WARN-HEALTH` disposition routes to `## Decisions` and can never reach `## Auto-Actionable`. This is the same rule-vs-value distinction the confidence framework already applies when a stated rule contradicts a stated value.
 
 ### The run header
 
@@ -235,10 +264,10 @@ Confidence (how-likely-wrong) and band (how-deep) travel together; both are requ
 ## Interactive & Scheduled Invocation
 
 - **Interactive:** `/health-check [mode] [--scope <project>]` invokes this skill directly (and, for `rollup`, `/health-check rollup --scope portfolio|project [--depth full|status]`). Output to chat for live review. Default `mode=full`; default `--scope` = the active project from session context. **The mode token, `--scope`, and `--depth` are parsed per the invocation grammar defined in this SKILL.md** — the skill receives the trailing arguments on invocation and parses them itself; the load-bearing argument grammar is homed here (in-repo, PR-tracked), not in a separate slash-command file.
-  - **Argument grammar (the parse contract):** `mode` ∈ {`full`, `timeline`, `attribution`, `comms`, `plan`, `raid`, `sources`, `rollup`}. For `rollup`, `--scope` names the **direction** ∈ {`portfolio`, `project`}: `portfolio` rolls up across all active projects; `project` rolls up **one** project — the active project from session context (the same default every other mode's `--scope` resolves to when no project is named). For every non-`rollup` mode, `--scope` instead names a **project** (default = active project). `--depth` ∈ {`full`, `status`} and applies **only** to `rollup --scope project` (default `full`; `--depth` on `--scope portfolio` is ignored with a note).
+  - **Argument grammar (the parse contract):** `mode` ∈ {`full`, `timeline`, `attribution`, `comms`, `plan`, `raid`, `sources`, `rollup`, `structure`}. `structure` takes `--scope <project>` only — it accepts no `--depth` and no positional argument. For `rollup`, `--scope` names the **direction** ∈ {`portfolio`, `project`}: `portfolio` rolls up across all active projects; `project` rolls up **one** project — the active project from session context (the same default every other mode's `--scope` resolves to when no project is named). For every non-`rollup` mode, `--scope` instead names a **project** (default = active project). `--depth` ∈ {`full`, `status`} and applies **only** to `rollup --scope project` (default `full`; `--depth` on `--scope portfolio` is ignored with a note).
   - **Unknown argument → actionable error, never a silent default (AC-5).** An unrecognized `--scope` value (e.g. `--scope program`) or an unrecognized `--depth` value (e.g. `--depth summary`) returns an **actionable error that names the valid values** — "unknown `--scope` value `program`; valid values for `rollup` are `portfolio` or `project`" — and the skill **does not run** against a guessed default. This is the same no-silent-default discipline `plan <name>` applies to a missing plan name (see the TRIG failure mode).
   - **Optional out-of-git harness wrapper.** A literal `~/.claude/commands/health-check.md` slash-command file, if one is deployed, is an **optional thin passthrough** to this skill's invocation grammar — a harness artifact outside the git tree (the platform's `commands/*.md` deploy path is harness-sourced), governed separately from this PR. The parse contract above is authoritative regardless of whether that wrapper is present.
-- **Scheduled:** via the existing `schedule` skill, e.g. `/schedule "Daily timeline check" "/health-check timeline --scope '<project>'" daily 0800`. Output is written to **`08-Generated/_health-check/YYYY-MM-DD-<mode>.md`** (project-scoped, auto-write folder). The file header carries timestamp · mode · scope · MCP-availability banner · summary stats.
+- **Scheduled:** via the existing `schedule` skill, e.g. `/schedule "Daily timeline check" "/health-check timeline --scope '<project>'" daily 0800`, or `/schedule "Weekly structure audit" "/health-check structure --scope '<project>'" weekly` for the entity-completeness sweep. Output is written to **`08-Generated/_health-check/YYYY-MM-DD-<mode>.md`** (project-scoped, auto-write folder). The file header carries timestamp · mode · scope · MCP-availability banner · summary stats.
 - **Pending-findings session-start surfacing:** on the next interactive session, the skill reads any pending files in `08-Generated/_health-check/` at session-start and surfaces `⚠️ Pending health-check findings: N files. Review with /health-check pending`. This **reuses the existing session-start read pattern** (the `SWAP_HANDOFF.md` / orphan-scan precedent); it does **not** introduce a new hook. Scheduled runs apply the same approval gates — they never auto-apply.
 
 ## Reversibility Discipline
@@ -269,8 +298,9 @@ This skill consumes governed reference docs by role-name (duplicate-source-disci
 
 | Reference | Owner | What this skill reads from it |
 |---|---|---|
-| [`references/mode-intents.md`](references/mode-intents.md) | this skill | The queryable 4-intent declarations per mode (all 8 modes; v1/v2/v3 slices, all implemented). |
+| [`references/mode-intents.md`](references/mode-intents.md) | this skill | The queryable 4-intent declarations per mode (all 9 modes; v1/v2/v3/v4 slices, all implemented) + the declared `full`-sweep membership table. |
 | [`references/rollup-mode.md`](references/rollup-mode.md) | this skill | The `rollup` mode (mode 8) sub-mode specs + the rollup-contract field mapping + the compose-not-absorb / bridge-file boundary. |
+| `references/structure-mode.md` | this skill | The `structure` mode (mode 9) — the entity/field/relationship check contract, the completeness-score denominator model + coverage envelope, the ordered rule-class → section routing table, and the migration-telemetry surface. |
 | [`references/conformance-surface.md`](references/conformance-surface.md) | this skill | The `full`-mode architecture-conformance surfacing contract — the committed `release/releases/architecture-conformance-summary.md` read shape, the platform-context render rules, and the compose-not-absorb boundary with `pmo-qa-auditor` Mode I. |
 | [`references/evidence-matrix.md`](references/evidence-matrix.md) | this skill | The MCP + local source map per mode + the drift-resolution rule (citing ADR-051). |
 | [`references/confidence-framework.md`](references/confidence-framework.md) | this skill | The finding → confidence + S0–S3 band mapping (citing `staleness-confidence-standard.md`). |
@@ -355,6 +385,14 @@ These domain-specific anti-patterns coexist with `## Guardrails (Platform)` (pla
 - **Root cause:** producer (Mode I → git-ignored `<OPERATOR_INSTANCE_ANALYSIS_PATH>`) and consumer (health-check, deployed everywhere) coupled through an ephemeral, non-committed handoff; the "graceful degradation" then becomes the common path, not the exception.
 - **Mitigation:** consume the committed hand-off surface (`release/releases/architecture-conformance-summary.md`) per [`references/conformance-surface.md`](references/conformance-surface.md); the git-ignored folder is the operator's deep read-once artifact, not the deployed consumer's coupling point. Degrade only when the committed surface is genuinely in its seeded `AWAITING FIRST RUN` state — a real, distinguishable condition, not the default.
 - **Principal response vs. junior response:** Principal asks "where does the consumer run vs. where the producer writes?", catches the git-ignored boundary, and reads the committed surface so the flag works off-instance. Junior wires the latest-folder read, passes the fixture on the producing instance, and ships a flag that is blank everywhere else.
+
+### Completeness score reported without its denominator — OUT
+
+- **Signature (observable signal):** a `structure` run emits `Completeness: 100/100` (or any bare score) with no per-factor `n/d` breakdown and no coverage envelope — on a project where most of the roster's entity types were excluded from the denominator as not-expected, and the excluded set is nowhere named.
+- **Conditional:** do NOT emit a completeness score without its per-factor numerator/denominator and its named excluded set, because the expected-set denominator **shrinks silently** on a sparse project — a bare 100 then reads as "this project's data is complete" when it actually means "complete across the two or three entity types that happened to exist." The operator acts on the first reading.
+- **Root cause:** the denominator is derived by a deterministic predicate, so it feels self-evidently correct and reads as an implementation detail rather than as the load-bearing half of the claim. The failure is reinforced once every storage tier holds at least one record: the `[TIER UNPOPULATED: …]` banner — the guard an author is most likely to remember — falls silent exactly when most entity types are still unpopulated, so the run looks fully covered while the type line that would reveal otherwise is the piece that was dropped.
+- **Mitigation:** render every factor as `n/d`; always emit the **entity-type coverage line** (types in denominator vs excluded) and treat it as mandatory — **never render the tier banner without it**, and never rely on the banner alone; derive the banner as a **list** from the unpopulated-tier set rather than hardcoding a count; and render an unmeasurable factor as `UNMEASURED`, never `0%`. Same coverage-envelope discipline the skill already applies to a missing MCP connector: reduce coverage, never silently downgrade rigor.
+- **Principal response vs. junior response:** Principal writes `MM-0 72/100 · MM-1 entities 8/9 · MM-2 fields 41/45 · MM-3 composed-index partial · 9 of 19 entity types in denominator, 10 excluded (not-expected) · [TIER UNPOPULATED: cross-project-shared]` and the operator can see exactly what was measured. Junior writes `100/100` on a three-entity project, the operator reads it as a clean bill of health, and a go-live decision ships on data that was never measured.
 
 ## Shared Behavioral Rules
 

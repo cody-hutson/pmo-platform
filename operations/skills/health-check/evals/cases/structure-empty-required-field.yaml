@@ -1,0 +1,26 @@
+# Case: structure mode, EMPTY-REQUIRED-FIELD violation class, against the hypercare-window fixture
+case_id: structure-empty-required-field
+mode: structure
+fixture: fixtures/hypercare-window.md
+judge: judges/structure.md
+prompt: "/health-check structure --scope Synthetic-Hypercare"
+active_project: Synthetic-Hypercare
+violation_class: empty-required-field    # class 2 of 3 — a required field present as an EMPTY SLOT
+seeded_shape: "empty slot — RAID Item R-PROJ-040 carries owner_person_id as an empty value (presence failure only; an empty reference slot instantiates NO relationship rule)"
+expected_section_membership:
+  Decisions:
+    - "V-CORE-05 · RAID Item R-PROJ-040 · owning_agent empty — value not derivable from the frozen schema [confidence: HIGH · S2]"
+  Auto-Actionable:
+    - "content_lifecycle_pattern absent on the RAID Item record — the frozen schema pins exactly one value for this entity, so the correct value IS derivable — TRACKER_UPDATES: block emitted"
+counted_once_not_twice: required         # THE load-bearing assertion: an empty slot is a FIELDS failure only.
+                                         # Counting it in the relationships factor too is a double-report and FAILs.
+derivability_is_the_auto_actionable_gate: required   # non-derivable -> Decisions even at HIGH confidence; confidence alone is NOT the gate
+non_derivable_stays_in_decisions: required
+optional_fields_never_in_denominator: required       # a blank optional field is not a violation
+entity_type_coverage_line: required
+all_three_limbs_demonstrated: required
+finding_names_rule_id_entity_field: required
+must_not_flag:
+  - "RAID Item R-PROJ-041 — all required fields populated"
+  - "Any optional (unmarked-required) field left blank on any record"
+pass_rule: "The empty required field is reported ONCE, in the fields factor only, naming rule ID + entity + field; the derivable-value violation routes to ## Auto-Actionable with a TRACKER_UPDATES: block while the non-derivable one stays in ## Decisions; no optional field is flagged; the entity-type coverage line renders; five sections in order."

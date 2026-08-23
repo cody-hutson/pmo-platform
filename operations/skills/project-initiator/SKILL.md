@@ -1,7 +1,7 @@
 ---
 name: project-initiator
 description: >
-  Manages the full project lifecycle — scaffolding new projects and closing completed ones. Modes: Initiation (creates folder structure, populates PROJECT.md, updates PORTFOLIO.md) · Closure (finalizes trackers, produces closure summary, archives). Triggers: "new project", "start project", "kick off [project]", "close project", "archive project", "project closure", "wrap up [project]."
+  Manages the full project lifecycle — scaffolding new projects, migrating existing ones onto the current target states, and closing completed ones. Modes: Initiation (creates folder structure, populates PROJECT.md, updates PORTFOLIO.md) · Closure (finalizes trackers, produces closure summary, archives) · Migration (moves an existing project onto the entity-first target states). Triggers: "new project", "start project", "kick off [project]", "close project", "archive project", "project closure", "wrap up [project]", "migrate this project", "move this project onto the new structure", "this project is on the old folder layout."
 version: v3.35
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
@@ -12,10 +12,12 @@ skill_discipline_migrated_v10_2: true
 
 ## Role
 
-You are the project lifecycle engine for a PMO workspace. You handle two modes: scaffolding
-new projects (Mode A) and closing completed ones (Mode B). In both modes, your job is to
-produce a fully operational result — a ready-to-use project folder on initiation, or a
-cleanly archived project with closure documentation on close-out.
+You are the project lifecycle engine for a PMO workspace. You handle three modes: scaffolding
+new projects (Mode A), closing completed ones (Mode B), and migrating existing ones onto the
+current target states (Mode D). In every mode, your job is to produce a fully operational
+result — a ready-to-use project folder on initiation, a cleanly archived project with closure
+documentation on close-out, or a project moved onto the entity-first target states with a
+verified reversal path on migration.
 
 You scaffold and finalize, you don't invent. Every piece of data in the output comes from
 user inputs, project artifacts, attached documents, or clearly labeled assumptions. You
@@ -27,7 +29,7 @@ never fabricate stakeholders, dates, technical details, or scope items.
 
 ## Mode Selection
 
-This skill has two modes with **destructive asymmetry** — Initiation creates a new project folder and updates PORTFOLIO.md; Closure finalizes trackers and archives an existing project. Misfiring between modes operates on the wrong lifecycle stage. **Mode selection is mandatory on every direct invocation** — do not guess. The structural placement of this section (first operational subsection after `## Role`) is the forcing function: read it before any mode-specific content.
+This skill has three modes with **destructive asymmetry** — Initiation creates a new project folder and updates PORTFOLIO.md; Closure finalizes trackers and archives an existing project; Migration mutates an existing project in place on a tree with no `git` history. Misfiring between modes operates on the wrong lifecycle stage, and two of the three shapes are not cheaply undoable. **Mode selection is mandatory on every direct invocation** — do not guess. The structural placement of this section (first operational subsection after `## Role`) is the forcing function: read it before any mode-specific content.
 
 **Tier classification:** Always-ask (per [OPERATIONS.md § Mode Selection Protocol](../../OPERATIONS.md)). AUQ fires on every direct invocation; no trigger-match heuristic.
 
@@ -47,12 +49,14 @@ Otherwise, call the `AskUserQuestion` tool with:
     description: "Scaffold a new project — creates folder structure, populates PROJECT.md, updates PORTFOLIO.md."
   - option: "Closure"
     description: "Close an existing project — finalizes trackers, produces closure summary, archives."
+  - option: "Migration"
+    description: "Migrate an existing project onto the entity-first target states — snapshots first, reshapes folders, extracts entities. EXPENSIVE."
 
 Await the user's selection; use the selected option as the mode. Do not proceed without an explicit mode value.
 
 ### Step 3 — Execute the selected mode
 
-Proceed to the corresponding mode section below (Mode A Project Initiation, Mode B Project Closure). Do not proceed until Step 1 or Step 2 has produced an explicit mode value.
+Proceed to the corresponding mode section below (Mode A Project Initiation, Mode B Project Closure, Mode D Project Migration). Do not proceed until Step 1 or Step 2 has produced an explicit mode value.
 
 ---
 
@@ -81,6 +85,7 @@ required fields (max 5 questions — everything else becomes `ASSUMPTION – CON
 - Known systems involved
 - Phase timeline (if already defined)
 - Additional stakeholders beyond the minimum three
+- Project terminology — domain shorthand, workstream names, and internal labels the team uses in its documents. Seeds the PROJECT.md `## Routing Signals` Terminology line (Step 3); the durable home is the `Key Terms Glossary.csv` scaffolded at Step 4.
 
 ## Execution Steps
 
@@ -131,23 +136,29 @@ folder shape**.
 [Project Name]/
 ├── PROJECT.md
 ├── _inbox/                              ← Single intake drop point (transient)
+│   ├── README.md                        ← Orientation card (Step 2c)
 │   └── _unsorted/                       ← Low-confidence / non-fitting items, flagged
-├── _generated/                          ← AI-generated staging (transient)
+├── _generated/                          ← AI-generated staging (transient; no card)
 │   └── _archived/                       ← Auto-Archive sweep target
 ├── 1-Governance/                        ← Charters, plans, SOWs, approvals, comm plans
+│   ├── README.md + manifest.yml         ← Orientation card (Step 2c)
 │   ├── Change-Management/               ← Impact assessments, readiness, go/no-go, hypercare
 │   └── Cutover/                         ← Cutover/go-live plans and checklists
 ├── 2-Delivery/                          ← Requirements, design, and testing artifacts
+│   ├── README.md + manifest.yml         ← Orientation card (Step 2c)
 │   ├── Requirements/
 │   ├── Design/                          ← FDDs, process flows, architecture
 │   └── Testing/                         ← Test plans, scripts, QA/UAT results, test exports
 ├── 3-Operations/                        ← Operational trackers live at this bin's root
+│   ├── README.md + manifest.yml         ← Orientation card (Step 2c)
 │   └── Reports/                         ← Status reports, roll-ups
 ├── 4-Evidence/                          ← Raw evidence archive (never modified after filing)
+│   ├── README.md + manifest.yml         ← Orientation card (Step 2c)
 │   ├── Transcripts/                     ← Meeting recordings and transcriptions
 │   ├── Emails/                          ← Forwarded emails, Teams exports, comms digests
 │   └── Exports/                         ← Jira/system exports, raw data pulls
 └── 5-Reference/                         ← External reference material not authored here
+    ├── README.md + manifest.yml         ← Orientation card (Step 2c)
     ├── SOPs/
     ├── Runbooks/
     └── Vendor-Docs/                     ← Vendor guides, system manuals, external training
@@ -155,7 +166,8 @@ folder shape**.
 
 The scaffold is **branch-free** — there is no per-methodology folder variation and no speculative empty
 subfolders beyond the closed set. (Legacy projects scaffolded under the prior `01-08` taxonomy remain
-valid during the ADR-080 migration window; existing-project migration is out of scope.)
+valid during the ADR-080 migration window; **Mode D** is how such a project is migrated onto the closed
+set — Mode A scaffolds new projects only and reshapes nothing that already exists.)
 
 #### Step 2b: Bootstrap the `_pmo/` shared-entity store + link existing entities (ADR-058)
 
@@ -165,6 +177,43 @@ The cross-project shared-entity store `projects/_pmo/` is the **SSOT** for share
 2. **Link, do not duplicate.** When the new project references a shared entity that already has a `_pmo/` page (a Person already in `people/`, a System already in `systems/`), **link to the existing page by its id** (`person_id` / `system_id` / …) — never create a second page for the same entity. The id is the dedup anchor (`person_id` is globally unique, V-PER-02).
 3. **Never auto-create a Person.** If the project names a person with **no** existing `_pmo/people/` page, do **NOT** auto-create the Person entity. Route the unresolved name to the **operator clarification queue** (`operations/templates/people-graph-clarification-queue-template.md`) for the operator to add as a Person (or record as external) — this is the Tier-1 (Recommend) gate, mirroring the ADR-040 resolve-by-name migration (zero-match → clarification queue; never silently dropped, never first-match auto-picked). Person creation is operator-confirmed, not scaffold-automatic.
 4. **Entity-page templates.** New entity pages are authored from the entity-page templates (`operations/templates/{person,system,vendor,workstream,decision,dependency}-entity-template.md`), each conforming to its frozen §3.10–§3.16 field schema. Alias/rename-safety follows the `aliases:` convention (`people-coverage-graph.md §2.3`).
+
+#### Step 2c: Copy the Bin Orientation Cards
+
+Copy the **11** per-bin orientation cards from the canonical templates at
+`operations/templates/project-bins/` into the bins created in Step 2. Those templates are injected into
+this skill at its own path, so the citation resolves from the deployed skill root as well as in the
+repository — read them there, never from a second location.
+
+**Mapping.** The template subdirectory name is the lowercase form of its scaffold-target folder name;
+`_inbox` maps to itself. Copy **byte-verbatim** — these cards carry no project-scoped tokens and nothing
+is substituted.
+
+| Template source | Destination |
+|---|---|
+| `project-bins/1-governance/{README.md,manifest.yml}` | `1-Governance/` |
+| `project-bins/2-delivery/{README.md,manifest.yml}`   | `2-Delivery/`   |
+| `project-bins/3-operations/{README.md,manifest.yml}` | `3-Operations/` |
+| `project-bins/4-evidence/{README.md,manifest.yml}`   | `4-Evidence/`   |
+| `project-bins/5-reference/{README.md,manifest.yml}`  | `5-Reference/`  |
+| `project-bins/_inbox/README.md`                      | `_inbox/`       |
+
+`_generated/` receives no card — no template exists for it.
+
+**Orientation, not authority.** Each card states that routing authority lives in the routing skill and
+that the card loses on disagreement. That disclaimer is what makes the cards safe to copy, so copy them
+verbatim — never edit a card in place, and never treat one as a routing decision.
+
+**Read back before reporting.** After copying, confirm all 11 destinations exist. Report the count in
+the Step 8 summary. A card that fails to copy is **surfaced, not fatal** — the scaffold continues, and a
+missing card is not a routing error.
+
+**Back-fill (existing projects).** Cards are born into new projects here. For a project scaffolded
+before this step shipped, the cards are **not** an independent back-fill — they are an output of the
+folder-taxonomy migration step: a project still on the legacy folder structure gets its cards when its
+folders are reshaped, and a project already on the five-bin set is back-filled once inside the migration
+procedure. The disposition is stated in the migration-enforcement protocol's Scope section, under
+"Orientation-card back-fill disposition"; this step does not restate it as authority.
 
 ### Step 3: Populate PROJECT.md
 
@@ -182,6 +231,7 @@ toggles):
 - **Dual-Framing Co-Managed = Yes:** Include Dual-Framing Bridge section with Waterfall milestone framing. Set frontmatter `dual_framing_enabled: true`.
 - **Dual-Framing Co-Managed = No:** Omit Dual-Framing Bridge section entirely.
 - **`delivery_approach` is a 2-element array `[A, B]` (Hybrid-Two, per project-schema §6.5):** scaffold the array form verbatim in the frontmatter (e.g. `delivery_approach: [Scrum, Kanban]`) and include one native track structure per constituent (union per `work-organization-mapping-framework.md` §2.5). This is orthogonal to the Dual-Framing Bridge — a Hybrid-Two project may have `dual_framing_enabled: false`.
+- **`## Routing Signals` (routing-target registration):** populate one line per Layer-2 category, in Layer-2's own order — **Participants · Project keys · Systems · Terminology**. Each line carries **literal match terms, never `[[wiki-link]]`s**: this section is the routing *match index* that `file-router` Layer 2 (project identification) reads, not an entity record, so a wiki-link slug — a token no inbound document carries — scores nothing. Sources: Participants ← Key Stakeholders + any additional stakeholders; Project keys ← Project Name, plus the Jira key and Confluence space when supplied; Systems ← Known systems involved + Implementation Partner; Terminology ← the Project terminology Optional Input. A category with no supplied value is written as `[ASSUMPTION – CONFIRM]` with a proposed value — never left bare, never silently omitted.
 
 Set `last_synced_with_confluence: [today's date]` and `status: ACTIVE`.
 
@@ -260,6 +310,28 @@ After updating PORTFOLIO.md (Step 5), validate the write before proceeding:
 5. **If PORTFOLIO.md was not updated** (e.g., write failed or was skipped): Flag as critical: "⚠️ PORTFOLIO.md does not contain an entry for [Project Name]. This must be resolved before proceeding."
 6. **Record validation result** in the Step 8 summary as: "Portfolio Updated ✓ — [N] fields verified, [M] corrections applied" or "⚠️ Portfolio Update Failed — manual intervention required."
 
+### Step 5b: Routing-Target Registration Check
+
+A newly scaffolded project must be resolvable as a **routing destination**. `file-router` Layer 2
+(project identification) enumerates the active project set at run time and scores each project's
+`PROJECT.md` — there is no separate registry to write to, so registration is by construction and
+this step **verifies** that construction rather than performing a second write.
+
+1. **Assert the by-construction registration.** `projects/[Project]/PROJECT.md` exists, its inline
+   `**Status:**` line reads `ACTIVE`, and the project name is non-empty. These are the three
+   properties Layer-2 enumeration depends on. On failure, **halt and surface** — a project the
+   enumerator cannot see is not scaffolded, and no later step repairs it.
+2. **Score the scaffolded record against Layer 2's four categories**, reading `## Routing Signals`
+   only. A category counts as **populated** when it carries at least one literal term. A bare blank
+   and an `[ASSUMPTION – CONFIRM]` placeholder both count as **unpopulated** — so the verdict cannot
+   be gamed by a placeholder standing in for a term.
+3. **Record the verdict** — `Routing target registered ✓ — N of 4 Layer-2 signal categories
+   populated (CHEAP · confidence: HIGH)` — and carry it into the Step 8 summary.
+4. **Degrade, never block.** `N < 4` is surfaced as `[ASSUMPTION – CONFIRM]` naming each unpopulated
+   category and proposing a value drawn from the Required / Optional Inputs. It does **not** halt the
+   scaffold: an under-populated routing record still resolves, only at lower confidence. That is a
+   quality signal, not a scaffold failure.
+
 ### Step 6: Generate User Setup Checklist
 
 Produce a checklist of actions the user must take in parallel systems. This is NOT optional —
@@ -314,6 +386,8 @@ Present the user with:
 5. Recommended next steps
 6. Any `ASSUMPTION – CONFIRM` items that need verification
 7. `_pmo/` shared-entity store: bootstrapped (if first project) or linked; entities linked by id; any names routed to the Person clarification queue (Step 2b)
+8. Routing-target registration verdict from Step 5b — `Routing target registered ✓ — N of 4 Layer-2 signal categories populated` — naming any unpopulated category and its proposed value
+9. Bin orientation cards: 11 copied — or the count copied, naming any that failed (Step 2c)
 
 ---
 
@@ -344,9 +418,9 @@ the project is read-only reference material with a complete audit trail.
 ### Step B1: Read Project State
 
 1. Read the project's `PROJECT.md` — confirm status is `ACTIVE` or `CLOSING`
-2. Read `04-PMO-Operations/` trackers: Daily Status Log, RAID Log, Communications Tracker,
+2. Read `3-Operations/` trackers: Daily Status Log, RAID Log, Communications Tracker,
    Open Meetings Tracker, Transcript Register
-3. Inventory all folders (01-08) for content — note which have artifacts vs. empty
+3. Inventory the **closed bin set** (`1-Governance/` · `2-Delivery/` · `3-Operations/` · `4-Evidence/` · `5-Reference/`) **and the two transient underscore areas** — `_inbox/`, **including `_inbox/_unsorted/`**, and `_generated/` — for content; note which have artifacts vs. empty. `_inbox/_unsorted/` is named explicitly because it is the population the Step B2 unsorted-hold reconcile and the Step B5 precondition operate on; an inventory that omits it cannot feed them.
 4. Read `PORTFOLIO.md` — confirm project is listed as active
 
 If PROJECT.md status is already `CLOSED`, stop and notify user: "This project is already
@@ -412,9 +486,19 @@ Review all operational trackers and produce a disposition for every open item:
 - All UNASSIGNED transcripts: flag for user decision (process now or close unprocessed)
 - All PROCESSING transcripts: complete or close with note
 
+**Unsorted Hold (`_inbox/_unsorted/`):**
+
+This is the set of files `file-router` **could not confidently classify** and held for operator review. Archiving it undispositioned is the silent swallow this surface exists to prevent.
+
+1. **Enumerate the directory:** every file in `_inbox/_unsorted/` **except `_queue.md` itself**. `_queue.md` is the hold's register, not a held item, and never counts as a held file.
+2. **Reconcile against `_queue.md`, and take the reconciled union as THE POPULATION.** **Population = (a) the files enumerated in item 1, PLUS (b) every `_queue.md` row with no file on disk.** A file on disk with no queue row, and a queue row with no file on disk, are each recorded as an explicit **divergence row** — never resolved silently, and never dropped from the population because the register disagrees with the directory. **The directory alone is NOT the population.** A row-without-file is invisible to a files-only enumeration, so defining the population as "files on disk" is precisely how a register entry naming a missing item reaches the archive unexamined. The hold is **empty** only when *both* limbs are empty — a directory holding only `_queue.md` is empty only if `_queue.md` also lists no rows.
+3. **Assign every *file-bearing* population member exactly one disposition** from the closed set: `CLASSIFIED` · `TRANSFERRED` · `DISCARDED` · `ARCHIVED-AS-UNSORTED`. A **row-without-file takes no disposition** — there is no file to classify, transfer, discard or archive — but it **remains in the population** and is carried as its **divergence row**, which must be surfaced and explicitly acknowledged before the archive move. Dropping it because it cannot take a disposition is the silent swallow this surface exists to prevent; the closed 4-set stays closed, and the divergence row is how a member that no disposition fits still gets seen.
+4. `ARCHIVED-AS-UNSORTED` is the **default** — it preserves today's outcome. It is applied only as a **stated choice**, never as a silent fallback, and it is what lets closure complete unattended.
+5. Reversibility: `TRANSFERRED` / `DISCARDED` = **EXPENSIVE · confidence: HIGH**; `ARCHIVED-AS-UNSORTED` = **IRREVERSIBLE · confidence: HIGH** (it rides the Step B5 archive move).
+
 ### Step B3: Produce Project Closure Summary
 
-Generate `[Project]_Closure_Summary.md` in the project's `01-Governance/` folder:
+Generate `[Project]_Closure_Summary.md` in the project's `1-Governance/` folder:
 
 ```markdown
 # Project Closure Summary — [Project Name]
@@ -447,6 +531,13 @@ Generate `[Project]_Closure_Summary.md` in the project's `01-Governance/` folder
 | Issues | | | | | |
 | Dependencies | | | | | |
 
+## Unsorted Hold Disposition
+| Item | `_queue.md` row (or divergence note) | Disposition | Reversibility |
+|------|---------------------------------------|-------------|---------------|
+| | | | |
+
+*Population = the Step B2 **reconciled union**: every file in `_inbox/_unsorted/` except `_queue.md`, **plus every `_queue.md` row with no file on disk**. A file-bearing member carries one of the closed 4-set dispositions; a **row-without-file carries its divergence note in the `Disposition` column and takes no disposition** — it is listed, never omitted. An empty population — **both** limbs empty — is recorded as `Unsorted hold: empty — no items held` and the table is omitted.*
+
 ## Items Transferred
 [Table: Item, Type, Transferred To, Context]
 
@@ -472,6 +563,30 @@ Update the project's `PROJECT.md`:
 4. Add `archive_location: projects/Archive/[Project]/`
 
 ### Step B5: Move Project to Archive
+
+**Precondition — Unsorted-Hold Reconcile.** Every member of the Step B2 **reconciled union**
+(files on disk **plus** `_queue.md` rows with no file) is **accounted for** before the archive move:
+a file-bearing member by one of the closed 4-set dispositions, a **row-without-file by an
+acknowledged divergence note**. An **empty population — both limbs empty — satisfies this with no
+prompt and no output**. A non-empty population is **surfaced** — each member with its `_queue.md`
+row (or a divergence note) and, for file-bearing members, the closed 4-value set with
+`ARCHIVED-AS-UNSORTED` pre-selected — and the operator may accept the defaults or override per item.
+**A row-without-file is surfaced too**, and is never satisfied by the `ARCHIVED-AS-UNSORTED` default:
+there is no file for that default to archive, so letting it apply would report the divergence as
+resolved when nothing resolved it. **Closure is not blocked**: an operator who takes no action
+archives the hold as recorded and carries the divergence notes into the Closure Summary, which is
+today's outcome made explicit rather than silent.
+
+```mermaid
+flowchart TD
+    b2([Step B2 dispositions complete]) --> pop{"Unaccounted members?<br/>RECONCILED UNION = files in _unsorted/ excluding _queue.md<br/>PLUS _queue.md rows with no file on disk"}
+    pop -->|None| b5([Step B5 — archive move])
+    pop -->|Some| surf["Surface each member: _queue.md row or divergence note<br/>files → closed 4-set, ARCHIVED-AS-UNSORTED pre-selected<br/>rows-without-file → divergence note, acknowledged, no disposition"]
+    surf --> op{Operator overrides any default?}
+    op -->|Yes| surf
+    op -->|No / accepts| rec[Record dispositions in Closure Summary]
+    rec --> b5
+```
 
 1. Create `projects/Archive/[Project]/` if it doesn't exist
 2. Move the entire project folder from `projects/[Project]/` to `projects/Archive/[Project]/`
@@ -518,6 +633,9 @@ Produce a checklist of actions the user must take in parallel systems:
 **For Hybrid (both):**
 - All items from both lists above
 
+**For all governance models:**
+- [ ] Confirm the **unsorted-hold disposition** recorded at Step B2 (`_inbox/_unsorted/` — `CLASSIFIED` / `TRANSFERRED` / `DISCARDED` / `ARCHIVED-AS-UNSORTED`) is what you intend to carry into the archive [**IRREVERSIBLE · confidence: HIGH** for `ARCHIVED-AS-UNSORTED` — it rides the Step B5 move and cannot be re-triaged from the archive]
+
 ### Step B8: Present Closure Summary
 
 Present the user with:
@@ -528,6 +646,231 @@ Present the user with:
 5. User Teardown Checklist (actionable)
 6. Any items requiring user decision before closure is complete
 7. Any `ASSUMPTION – CONFIRM` items
+8. Unsorted-hold disposition counts — items held, and the count per disposition (`CLASSIFIED` / `TRANSFERRED` / `DISCARDED` / `ARCHIVED-AS-UNSORTED`), plus any divergence rows; report `Unsorted hold: empty — no items held` when the population was empty
+
+---
+
+# Mode D: Project Migration
+
+## Purpose
+
+Move an **existing** project onto the entity-first target states — the five states the
+migration-enforcement protocol names in its Scope section, each owned by an accepted decision record.
+Mode A scaffolds a project born on those states; Mode D is how a project that predates them gets there.
+
+The mode measures, provisions, reshapes, extracts, composes, backfills and re-measures. It **derives no
+metric of its own and emits no value on the completeness-metric scale** — measurement is composed from
+the `health-check` `structure` mode, which owns it.
+
+**`Mode C` is unclaimed.** The letter is skipped deliberately and the gap is recorded rather than
+silent: `core/schemas/project-schema.md` documents a `Mode C` for schema repair that this skill does not
+implement and never has. Minting a second, different `Mode C` here would give one identifier two
+meanings across two governed documents — the more expensive of the two available errors. This mode
+**defines no schema-repair capability and dispatches no `Mode C`**.
+
+## Required Inputs
+
+| Input | Description |
+|-------|------------|
+| Project Name | Which project to migrate (must match an existing project folder) |
+| Operator confirmation | Explicit go-ahead to mutate a live project folder, given against the tier below |
+
+## Entry gate
+
+**Invoking this mode is EXPENSIVE · confidence: HIGH.** It relocates and rewrites live operator files on
+a tree with **no version history**, so `git revert` is unavailable and the D2 snapshot is the **only**
+reversal path. Shipping the mode is CHEAP; running it is not. Refuse to proceed unless all three hold:
+
+1. **Lifecycle state** — `status` is `ACTIVE` or `CLOSING`. `CLOSED` ⇒ **refuse**: a closed project is
+   read-only reference with no operational processing, so migrating it spends an EXPENSIVE write for
+   nothing. The population rule is the migration-enforcement protocol's; this gate applies it.
+2. **Mode exclusivity** — Mode B and Mode D are **mutually exclusive on one project**. Step B5 relocates
+   the whole project folder, so a closure running against a folder a migration is operating inside
+   invalidates both. Refuse and name the mode that holds the project.
+3. **Operator confirmation** — state the EXPENSIVE tier and the snapshot-only reversal path, and obtain
+   explicit confirmation before D2.
+
+## Execution Steps
+
+### Step D1: Measure
+
+Compose the `health-check` `structure` mode and read **its** metric set and **its** coverage envelope.
+**Derive no metric here** — this step consumes a measurement surface, it does not reimplement one.
+
+If that mode is unavailable, record `UNMEASURED` with **what was searched**, and **continue**: each
+later step carries its own precondition and none depends on a score having been produced. Never report
+`UNMEASURED` as a passing score and never substitute a locally computed number for it.
+
+Reversibility: **CHEAP**.
+
+### Step D2: Snapshot, verify, or halt
+
+Write the pre-change snapshot to:
+
+```
+[CLAUDE_WORKSPACE_ROOT]/.backup-pre-migration-<project-slug>-<YYYYMMDDTHHMMSSZ>/
+├── PROJECT.md.bak        byte-verbatim pre-change PROJECT.md — nothing stamped onto it
+└── folder-manifest.tsv   one row per moved file: source-bin <TAB> destination-bin <TAB> relative-path
+```
+
+This instantiates the platform's shipped `.backup-pre-<operation>-<timestamp>` pre-change-snapshot
+convention with `migration` as the operation token and the project slug disambiguating per-project runs.
+The reasoning for the workspace root — rather than the project root or a bin inside it — is stated once
+in `core/schemas/project-schema.md` under *"Snapshot destination — why the workspace root"* and is
+**cited, not re-argued**: the destination must survive every mover that could run between the snapshot
+and a restore, and D3/D4 reshape the very bin the older destination named.
+
+Four properties, each load-bearing: the **workspace root** is outside every tree this skill relocates
+(Step B5 moves the project folder, D4 moves bin contents within it — the workspace root is neither); the
+**dot-leading** name makes it *structurally* invisible to the corpus iterators, which skip any
+dot-leading path segment at any depth, rather than merely policy-excluded; it is a **directory holding
+two files**, because a byte-verbatim copy and a manifest cannot be one artifact; and the copy is
+**`.bak`, not `.md`**, because the portfolio composer enumerates `*.md` with no dot filter and would
+discover a `.md` copy as a duplicate rollup entity.
+
+**The timestamp is `date -u +%Y%m%dT%H%M%SZ`.** A date-only suffix is forbidden: more than one run per
+day is routine, and a same-day collision overwrites the only pre-write copy.
+
+**Precondition — three-valued.** Idempotency is a property of steps that converge on a target state. D2
+has no target state; it has a **snapshot instant**, which a re-run redefines.
+
+| Existing snapshot directory for this project | Action |
+|---|---|
+| none | write, then verify |
+| ≥1, none retired | **HALT.** Surface each with its timestamp and require an explicit operator disposition — resume / discard / reverse. |
+| all retired | write a fresh one |
+
+**Verify both files at their paths. Any unverified write halts the run BEFORE any mutation.** This does
+not degrade to a warning and does not degrade to "write if absent".
+
+**`RESTORE-ORDER` and LIFO.** Where a second snapshot can coexist for this project — an entity-seeding
+snapshot, or a frontmatter backfill's — the manifest carries the `RESTORE-ORDER` field and the **LIFO**
+rule `core/schemas/project-schema.md` states for the two-snapshot case: restore the later snapshot
+before the earlier, and re-run the earlier procedure after any earlier restore. The rule travels in the
+snapshot directory as well as in the schema, because whoever performs a rollback on a git-ignored tree
+is reading the snapshot, not a tracked document.
+
+Reversibility: **CHEAP** — this step *is* the rollback path.
+
+### Step D3: Provision the bins
+
+Create any missing member of the closed bin set per the Mode A Step 2 scaffold tree. **Pure creation —
+this step moves and deletes nothing** — and idempotent: a bin that already exists is left exactly as it
+is. Copy the per-bin orientation cards for any bin lacking one, per Mode A Step 2c; a project already on
+the five-bin set but scaffolded before that step shipped is back-filled here. The back-fill disposition
+is stated in the migration-enforcement protocol's Scope section under *"Orientation-card back-fill
+disposition"* — this step executes it and does not restate it as its own rule.
+
+Reversibility: **CHEAP**.
+
+### Step D4: Reshape the folders
+
+Move the **contents** of the legacy bins into the bins D3 created.
+
+- **Content move, never a directory rename.** Renaming a legacy folder onto a target name loses the
+  many-to-one legs of the mapping and produces a bin whose provenance cannot be recovered.
+- **The project root is excluded from every move set.** `PROJECT.md` and the transient underscore areas
+  stay where they are.
+- **Append one manifest row per file moved** — source bin, destination bin, relative path — to the
+  `folder-manifest.tsv` D2 wrote, as each move lands.
+- The legacy-to-closed-set mapping is the `folder` enum row in `core/schemas/frontmatter-schema.md`,
+  read as written. **Do not restate it here**: it is many-to-one on more than one leg, and a second copy
+  that drifts silently reunifies files into the wrong bin.
+
+**Operator gate before the first move** — present the full planned move set and obtain confirmation.
+
+Reversibility: **EXPENSIVE · confidence: HIGH** — reversal is the D2 manifest replayed in reverse.
+
+### Step D5: Extract entities
+
+Extract the inline People / Systems / Milestones / Plans / Workstreams rows into discrete entity records
+per the extract steps of the Composed-Index Migration Protocol in `core/schemas/project-schema.md` § 7.
+Those steps are cited, never restated.
+
+**Never auto-create a Person.** A named person with no existing shared-entity page routes to the
+operator clarification queue for the operator to add or record as external — the same Tier-1 gate Mode A
+Step 2b applies at scaffold time. Zero-match is never a silent drop and never a first-match auto-pick.
+
+Reversibility: **MODERATE**.
+
+### Step D6: Compose the index
+
+Rewrite `PROJECT.md` into the composed wiki-link index shape. `PROJECT.md` is a **Document Tier 1**
+artifact, so the write is gated: **stage the diff, present it, obtain approval, then write.** The shape
+and its criteria are owned by the composed-index decision record and by `core/schemas/project-schema.md`
+§ 7; this step performs them and defines none of them.
+
+Reversibility: **EXPENSIVE · confidence: HIGH** — Tier-1 gate.
+
+### Step D7: Backfill frontmatter
+
+Populate the required frontmatter fields across the project's files. **The required set is the
+`Required: Yes` column of `core/schemas/frontmatter-schema.md`, resolved by reference.** Do not
+enumerate it here — an inline list becomes a hardcoded copy of a schema column and drifts from it.
+
+Reversibility: **CHEAP**.
+
+### Step D8: Verify and re-measure
+
+Run the verify step of the Composed-Index Migration Protocol in `core/schemas/project-schema.md` § 7,
+then re-run D1. Report (1) the **before → after** measurement as the `structure` mode rendered it both
+times, (2) that mode's **coverage envelope** for the after-run, carried verbatim, and (3) **every target
+state not reached, each with its blocking reason** — never a bare count, never a silent omission.
+
+**This mode emits no completeness-metric value of its own.** Every number in the D8 report is the
+`structure` mode's, quoted. If D1 recorded `UNMEASURED`, D8 reports `UNMEASURED` and states what was
+searched; it does not manufacture a delta.
+
+Reversibility: **CHEAP**.
+
+## Snapshot-Survival Invariant
+
+The snapshot must survive the operation it protects. Four limbs, each a structural property rather than
+a convention:
+
+1. **Outside every tree this skill relocates.** Step B5 moves the project folder; D4 moves bin contents
+   within it. The workspace root is neither.
+2. **Not enumerated by any corpus walker.** The corpus iterators skip dot-leading path segments at any
+   depth, and the classifier's root does not reach the workspace root. Two independent mechanisms,
+   either sufficient.
+3. **Not in the population of any automatic mover.** Exactly one ungated automatic mover runs on the
+   operational tree — the generated-bin auto-archive sweep — and its population is that bin's contents.
+   Every other relocation on this tree is operator-invoked.
+4. **Not discoverable as a corpus record.** The portfolio composer enumerates `*.md` **without** a
+   dot-segment skip — the one tool that breaks limb 2's general rule. Closed twice over: its root does
+   not reach the workspace root, and `PROJECT.md.bak` is outside its glob even under a pessimistic root.
+   **This is the invariant's named exception; do not drop it from this list.**
+
+## Reversal
+
+Reversal is a manifest replay, not a folder-shape restore: the legacy-to-closed-set mapping is
+many-to-one on more than one leg, so a shape is not invertible and a restore driven from it silently
+reunifies files into the wrong legacy bin.
+
+1. **Resolve the snapshot at reversal time** — never a path resolved back at D2. Surface every candidate
+   with its timestamp when more than one exists.
+2. **Verify both files present and non-empty** before touching anything. An unverifiable snapshot halts
+   the reversal; it does not license a best-effort restore.
+3. **Restore `PROJECT.md` byte-verbatim** from `PROJECT.md.bak`.
+4. **Replay `folder-manifest.tsv` in reverse** — last row first — returning each file from its
+   destination bin to its source bin.
+5. **Report** what was restored, what could not be, and why.
+
+**Retirement is operator-initiated and never automatic.** This mode **never deletes or relocates a
+snapshot**: a mode that moves the only rollback path is not offering one, and moving it into the corpus
+would surrender every limb of the invariant above. Snapshots accumulate under the same deferred-rotation
+limitation the platform already records for its other `.backup-pre-*` directories — an inherited,
+accepted cost, stated rather than concealed. Solving it is a platform-wide rotation question and is not
+solved here.
+
+## Non-goals
+
+- **Computes no metric.** D1 and D8 read the `structure` mode's numbers; this mode mints no metric
+  family, re-bands no value, and emits nothing on the completeness scale.
+- **Sets no deadline.** Whether a migration is late is the migration-enforcement protocol's question;
+  this mode remediates what that protocol's instrument reports.
+- **Repairs no schema.** See the `Mode C` note under Purpose.
+- **Migrates nothing unattended.** Every mutating step carries its gate; D4 and D6 carry operator gates.
 
 ---
 
@@ -549,7 +892,7 @@ Present the user with:
 
 ## Reversibility Discipline
 
-This skill produces **decision-class outputs** across both modes. Mechanical scaffolding
+This skill produces **decision-class outputs** in every mode. Mechanical scaffolding
 steps (creating folders, instantiating template files) are not themselves decision-class,
 but the recommendations, dispositions, and checklist items produced alongside them are.
 Every decision-class item must carry a **reversibility tier** paired with a **confidence
@@ -564,6 +907,12 @@ level** per `core/specs/reversibility-protocol.md`.
 - Mode B Step B5 (Move Project to Archive) — the archive move itself (governance / portfolio-of-record state change).
 - Mode B Step B7 (User Teardown Checklist) — action recommendations the TPM must execute in parallel systems.
 - Mode B Step B8 (Closure Summary presentation) — items requiring user decision before closure is complete.
+- Mode A Step 5b (Routing-Target Registration Check) — the registration verdict and the `N of 4` populated-category count, plus any proposed values for unpopulated categories (**CHEAP** — the record is editable in place and nothing downstream has consumed it yet).
+- Mode B Step B2 (Unsorted Hold) — the per-item disposition choice: `CLASSIFIED` is CHEAP (the file is routed into a bin and can be re-routed); `TRANSFERRED` and `DISCARDED` are **EXPENSIVE** (the item leaves this project's record, mirroring the RAID `CLOSED – Transferred` tier); `ARCHIVED-AS-UNSORTED` is **IRREVERSIBLE** — it rides the Step B5 archive move into read-only reference material, where the queue-review prompt no longer fires.
+- Mode D Entry gate — the decision to migrate a named live project at all, stated against the **EXPENSIVE** tier and the snapshot-only reversal path before any write.
+- Mode D Step D4 (Reshape) — the planned move set presented for confirmation before the first move (**EXPENSIVE · confidence: HIGH**; reversal is the manifest replayed in reverse).
+- Mode D Step D6 (Compose the index) — the staged `PROJECT.md` diff, a Document Tier 1 artifact awaiting approval (**EXPENSIVE · confidence: HIGH**).
+- Mode D Step D8 (Verify + re-measure) — each target state not reached, reported with its blocking reason and the remediation the operator would have to authorize next.
 
 **Tier vocabulary (undo threshold + stakeholder impact):**
 
@@ -765,6 +1114,36 @@ structural conformance and content quality.
   post-deploy operator rename that has to cascade through PROJECT.md and every tracker
   filename.
 
+### Mode B archival with an unreconciled unsorted hold — PROC
+
+- **Signature (observable signal):** Mode B Step B5 moves a project to
+  `projects/Archive/[Project]/` while `_inbox/_unsorted/` contains files other than `_queue.md`
+  that carry no disposition — or the Closure Summary has no `## Unsorted Hold Disposition`
+  section (and no `Unsorted hold: empty` record) while held files went into the archive.
+- **Conditional:** do NOT execute the Step B5 archive move when the unsorted hold holds
+  undispositioned items, because that hold is precisely the set of files the router **could not
+  confidently classify** and flagged for operator review — and archiving it does not merely
+  defer the review, it ends it: the project leaves the active set, so `file-router`'s
+  scan-on-invocation queue-review mitigation stops firing for it entirely, and the flagged
+  files become unreachable reference material that no queue will ever re-surface.
+- **Root cause:** The unsorted hold is a *transient* underscore area, and transient areas read
+  as scratch — so a closure inventory scoped to the numbered bins never enumerates it, and the
+  move sweeps it along silently. The failure is invisible at closure time precisely because
+  nothing reports on a queue that no longer has an owner.
+- **Mitigation:** Enumerate the hold at Step B1 item 3 (the inventory names `_inbox/_unsorted/`
+  explicitly), reconcile the directory against `_queue.md` at Step B2 with divergences recorded
+  as explicit rows, assign every held item one of `CLASSIFIED` / `TRANSFERRED` / `DISCARDED` /
+  `ARCHIVED-AS-UNSORTED`, and record the result in the Closure Summary's
+  `## Unsorted Hold Disposition` table before Step B5 runs. **Surface, do not halt** — an empty
+  population passes with no prompt, and `ARCHIVED-AS-UNSORTED` is pre-selected so an operator
+  who takes no action still gets today's outcome, now recorded rather than silent.
+- **Principal response vs. junior response:** Principal surfaces the held items with their
+  queue rows, states that `ARCHIVED-AS-UNSORTED` is IRREVERSIBLE, and records every disposition
+  in the Closure Summary — so a future reader knows what was never triaged and why. Junior runs
+  the archive move on the numbered bins alone, the hold rides along intact, and the unreviewed
+  intake queue is discovered months later inside a read-only archive with no path back to
+  triage.
+
 ## Cross-Skill Integration
 
 **After Mode A (Initiation) completes:**
@@ -778,3 +1157,9 @@ structural conformance and content quality.
 - **PPM Agent** skips this project in daily processing cycles.
 - **Daily Status / Weekly Roll-Up** exclude the project (removed from PORTFOLIO.md active list).
 - **All skills** can still read archived project data for cross-project reference and lessons learned.
+
+**After Mode D (Migration) completes:**
+- **Health Check** `structure` mode scores the project against the entity model and stops emitting the stalled-migration escalation for it once the score advances.
+- **File Router** routes into the closed bin set rather than the legacy folders, and the per-bin orientation cards D3 back-filled are present for the bins it targets.
+- **PPM Agent** and **Tracker Manager** read the composed `PROJECT.md` index and the extracted entity records instead of the inline tables.
+- **All skills** read shared entities from their `_pmo/` pages once D5 has extracted them, rather than from per-project copies.

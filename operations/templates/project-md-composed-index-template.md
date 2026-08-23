@@ -65,3 +65,10 @@ Variables in {{BRACKETS}} are filled at scaffold; {{IF ...}}...{{ENDIF}} blocks 
 
 - **Confluence:** {{CONFLUENCE_SPACE}}{{IF GOVERNANCE_MODEL == Agile OR Hybrid}} · **Jira:** {{JIRA_PROJECT_KEY}}{{ENDIF}}
 - **Operational trackers:** `3-Operations/` (Tier-2 working copies)
+
+## Routing Signals  → read by file-router Layer 2 (project identification)
+
+- **Participants:** {{PARTICIPANT_TERMS}}
+- **Project keys:** `{{PROJECT_NAME}}`{{IF JIRA_PROJECT_KEY}} · `{{JIRA_PROJECT_KEY}}`{{ENDIF}}{{IF CONFLUENCE_SPACE}} · `{{CONFLUENCE_SPACE}}`{{ENDIF}}
+- **Systems:** {{SYSTEM_TERMS}}
+- **Terminology:** {{DOMAIN_TERMS}}  <!-- durable home: 3-Operations/Key Terms Glossary.csv -->

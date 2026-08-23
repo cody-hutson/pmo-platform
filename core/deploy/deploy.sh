@@ -324,6 +324,30 @@ TEMPLATE_SYNC_MAP=(
   # core/deploy/lib-template-sync-source.sh. Without it the basename falls to
   # the default arm and resolves to a path that does not exist.
   "tracker-manager:tracker-schemas.md:core/schemas/tracker-schemas.md"
+  # ── Bin orientation cards: project-initiator (11 entries) ──
+  # Field 2 is a repo-relative SUBPATH under the canonical templates home, not a
+  # bare basename: the resolver's DEFAULT arm concatenates
+  # (operations/templates/$name), so a subpath resolves to the canonical file with
+  # no new arm and no grammar change. The key is the WHOLE of field 2, so the five
+  # README.md / five manifest.yml entries are distinct keys, not a collision.
+  #
+  # The target is the canonical's REPO-RELATIVE path, not a references/ path —
+  # same shape as the tracker-manager entry above and for the same reason (ADR-104):
+  # Mode A Step 2c and file-router's two assertions both name
+  # operations/templates/project-bins/<bin>/, so injecting at that path makes those
+  # citations resolve verbatim from the deployed package root instead of naming a
+  # path the package does not carry.
+  "project-initiator:project-bins/1-governance/README.md:operations/templates/project-bins/1-governance/README.md"
+  "project-initiator:project-bins/1-governance/manifest.yml:operations/templates/project-bins/1-governance/manifest.yml"
+  "project-initiator:project-bins/2-delivery/README.md:operations/templates/project-bins/2-delivery/README.md"
+  "project-initiator:project-bins/2-delivery/manifest.yml:operations/templates/project-bins/2-delivery/manifest.yml"
+  "project-initiator:project-bins/3-operations/README.md:operations/templates/project-bins/3-operations/README.md"
+  "project-initiator:project-bins/3-operations/manifest.yml:operations/templates/project-bins/3-operations/manifest.yml"
+  "project-initiator:project-bins/4-evidence/README.md:operations/templates/project-bins/4-evidence/README.md"
+  "project-initiator:project-bins/4-evidence/manifest.yml:operations/templates/project-bins/4-evidence/manifest.yml"
+  "project-initiator:project-bins/5-reference/README.md:operations/templates/project-bins/5-reference/README.md"
+  "project-initiator:project-bins/5-reference/manifest.yml:operations/templates/project-bins/5-reference/manifest.yml"
+  "project-initiator:project-bins/_inbox/README.md:operations/templates/project-bins/_inbox/README.md"
 )
 
 # ─── Shared Functions ────────────────────────────────────────────────────────
