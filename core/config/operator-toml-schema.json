@@ -283,7 +283,7 @@
     },
     {
       "name": "adapters",
-      "delivery": "opt-in",
+      "delivery": "delivered",
       "description": "Host-adapter selectors — the four external surfaces the platform integrates with. ADR-022 §1/§4 names this the #703 onboarding seam and gives each selector a v1 default.",
       "keys": [
         {
@@ -328,7 +328,7 @@
     },
     {
       "name": "methodology",
-      "delivery": "opt-in",
+      "delivery": "delivered",
       "description": "Global delivery-approach default. ADR-022 §1 / ADR-017 §S2 name methodology an operator.toml concern.",
       "keys": [
         {
@@ -345,7 +345,7 @@
     },
     {
       "name": "session_retro",
-      "delivery": "opt-in",
+      "delivery": "delivered",
       "description": "Per-session self-retrospective. SHIPPED INERT — enabled=false means the registered Stop hook does nothing until the operator deliberately turns it on.",
       "keys": [
         {
