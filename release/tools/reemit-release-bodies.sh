@@ -371,8 +371,11 @@ NOTE
   _gate="$(/usr/bin/grep -n "$_pfn" "$0" | /usr/bin/grep -vE '^[0-9]+:[[:space:]]*#' \
            | /usr/bin/grep -- '--capture-dir' || true)"
   _gate_n="$(printf '%s' "$_gate" | /usr/bin/grep -c . || true)"
-  _gate_ln="$(printf '%s' "$_gate" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
-  _emit_ln="$(printf '%s' "$_flagged" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  # First line's leading field, via parameter expansion: no pipeline, so no
+  # writer-into-short-circuiting-reader hazard. Identical on empty input
+  # (both yield "") and on multi-line input (first line, field before ":").
+  _gate_ln="${_gate%%$'\n'*}";    _gate_ln="${_gate_ln%%:*}"
+  _emit_ln="${_flagged%%$'\n'*}"; _emit_ln="${_emit_ln%%:*}"
   if [[ "$_gate_n" -eq 1 && -n "$_emit_ln" && "$_gate_ln" -lt "$_emit_ln" ]]; then
     printf '  PASS  %-34s gate line %s precedes the first emit line %s\n' \
       "T pre-execute gate is wired" "$_gate_ln" "$_emit_ln" >&2
