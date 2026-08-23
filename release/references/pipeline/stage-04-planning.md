@@ -261,6 +261,27 @@ A6's verdict is advisory — it surfaces capacity risk in the plan. The load-bea
 ## 6. Outputs
 Release plan file (`release/releases/plans/vX.Y_RELEASE_PLAN.md`), committed on release branch. Sections: Implementation Sequence, File Change Matrix, Integration Points, Risk Register, Delivery Strategy, Verification Plan, Rollback Strategy, Quota Budget (Phase A6 output), Cross-Issue Acceptance Criteria (present-when-nonzero — see § below).
 
+**Plan links are workspace-rooted, because the plan moves.** Every intra-repo markdown
+link authored inside a release plan MUST use the workspace-rooted form — a leading `/`,
+e.g. `[text](/release/references/standards/release-notes-standard.md)` — never a `../`
+relative form and never a bare same-directory filename. The plan is authored at
+`release/releases/plans/<slug>_RELEASE_PLAN.md` and shipped one directory deeper at
+`release/releases/plans/v<MAJOR>/<tag>_RELEASE_PLAN.md`: the ADR-092 claim-time stamp in
+`claim-version.sh` git-mv's it at Stage 12. A relative link therefore means one thing while
+the plan is authored and reviewed and a different thing once it ships, and **no relative
+form is correct at both depths** — `../../references/…` resolves before the rename and
+breaks after; `../../../references/…` breaks before and resolves after. Only the
+workspace-rooted form is correct at both (the canonical rule, ADR-085 clause 2, per
+[`doc-link-maintenance-protocol.md`](../../../core/standards/doc-link-maintenance-protocol.md)
+§ Path resolution). This is not a style preference: because the ordinary link check
+evaluates a file at the path it currently occupies, a plan carrying authoring-depth links
+passes every pre-merge gate and breaks only on the post-merge Stage-12 chore PR — the way
+v4.06 and v4.38 both shipped. The `--plan-depth-lint` mode of
+[`check-release-links.py`](../../tools/check-release-links.py) enforces this on the release
+PR, and the exemplars in
+[`release-plan-template.md`](../../skills/release-planner/references/release-plan-template.md)
+are already written in the required form.
+
 **File Change Matrix — new-executable companion obligation.** When the matrix carries an
 `add` row for a tracked executable script — any `*.sh` the platform will invoke via
 `bash <path>` / `sh <path>` / `source <path>` / `. <path>` — the matrix MUST also carry

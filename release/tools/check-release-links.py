@@ -240,6 +240,79 @@ def check_file(md: Path, *, check_anchors: bool, images: bool,
     return broken
 
 
+# --- Depth-invariance lint for pre-claim release plans ----------------------
+# A release plan is authored at `release/releases/plans/<slug>_RELEASE_PLAN.md`
+# and ships at `release/releases/plans/v<MAJOR>/<tag>_RELEASE_PLAN.md`: the
+# ADR-092 claim-time stamp in claim-version.sh git-mv's it ONE DIRECTORY DEEPER
+# partway through its life. Every relative link inside it therefore carries two
+# different meanings -- one while the plan is authored and reviewed, another
+# once it ships -- and NO relative form is correct at both depths:
+#
+#     ../../references/...     resolves at plans/ , breaks   at plans/v4/
+#     ../../../references/...  breaks   at plans/ , resolves at plans/v4/
+#     /release/references/...  resolves at BOTH             (ADR-085 clause 2)
+#
+# The ordinary existence check evaluates a file at the path it currently
+# occupies, so a plan whose links are correct at authoring depth passes every
+# pre-merge gate and only breaks after the stamp -- surfacing on the Stage-12
+# chore PR, post-merge. v4.06 and v4.38 both shipped that way and were fixed
+# forward. This lint asserts the depth-INVARIANT form rather than the
+# resolution, so the defect is caught on the release PR while the fix is still
+# one line.
+PLAN_DIR_REL = "release/releases/plans"
+PLAN_SUFFIX = "_RELEASE_PLAN.md"
+
+
+def is_preclaim_plan(md: Path) -> bool:
+    """True for a release plan sitting at AUTHORING depth -- directly in
+    `release/releases/plans/`, not yet moved into `plans/v<MAJOR>/` by the
+    claim-time stamp.
+
+    A plan already nested under `v<MAJOR>/` will not move again, so its relative
+    links are stable and out of scope. `plans/README.md` is likewise out of
+    scope: it documents the directory, is not a plan, and never moves -- keying
+    on the `_RELEASE_PLAN.md` suffix rather than on "any .md under plans/" is
+    what keeps its nine relative links from reading as findings."""
+    try:
+        rel = md.resolve().relative_to(REPO_ROOT)
+    except ValueError:
+        return False
+    return rel.parent.as_posix() == PLAN_DIR_REL and rel.name.endswith(PLAN_SUFFIX)
+
+
+def check_plan_depth(md: Path, *, added: set[int] | None = None) -> list[str]:
+    """Return depth-sensitivity findings for one pre-claim release plan.
+
+    Reports every intra-repo link target that is NOT workspace-rooted, because
+    each one resolves differently once the plan moves a directory deeper -- a
+    `../` form and a bare same-directory form alike. The skip classes are shared
+    with check_file, so external URLs, pure anchors and template placeholders are
+    untouched, and `added` applies the same net-new-delta posture."""
+    findings: list[str] = []
+    try:
+        text = md.read_text()
+    except Exception:
+        return findings
+    for m in LINK_RE.finditer(text):
+        if added is not None and _line_of(text, m.start()) not in added:
+            continue
+        target = m.group(2).strip()
+        if is_skippable(target):
+            continue
+        target_path, _, _frag = target.partition("#")
+        target_path = unquote(target_path).strip()
+        if not target_path:
+            continue          # pure in-file anchor -- travels with the file
+        if target_path.startswith("/"):
+            continue          # workspace-rooted -- the prescribed, invariant form
+        findings.append(
+            f"  depth-sensitive: {target} -> resolves differently once the "
+            f"ADR-092 claim-time stamp moves this plan into "
+            f"{PLAN_DIR_REL}/v<MAJOR>/; write it workspace-rooted "
+            f"(/release/..., /core/...) so one form is correct at both depths")
+    return findings
+
+
 def added_lines_for(md: Path, diff_base: str) -> set[int]:
     """1-based line numbers in `md` (head/working version) that are net-new
     since `diff_base`, computed from the unified diff's hunk headers. An empty
@@ -497,9 +570,59 @@ def run_self_test() -> int:
     assert SELF_TEST_ABSENT_NOTE in findings[0], (
         f"self-test: fail-closed fixture reported the wrong link: {findings[0]!r}")
 
+    # -- Depth-invariance lint: predicate scope + both finding arms ---------
+    # Two failure directions, both pinned. Under-arming would let a depth-
+    # sensitive link ship (the v4.06 / v4.38 defect this lint exists to catch);
+    # over-arming would flag the plans/ README, an already-stamped plan, or an
+    # ordinary skip class, and a noisy gate gets abandoned. Path predicates are
+    # pure, so the scope arms need no files on disk; the finding arms run on
+    # temp probes, so this self-test still writes nothing inside the repository.
+    plans_dir = REPO_ROOT / PLAN_DIR_REL
+    for in_scope in (plans_dir / "v9.99_RELEASE_PLAN.md",
+                     plans_dir / "some-theme-name_RELEASE_PLAN.md"):
+        assert is_preclaim_plan(in_scope), \
+            f"self-test: pre-claim plan must be in depth-lint scope: {in_scope!r}"
+    for out_of_scope in (
+            plans_dir / "v4" / "v4.38_RELEASE_PLAN.md",  # stamped -- never moves again
+            plans_dir / "README.md",                     # directory README, not a plan
+            REPO_ROOT / "release" / "references" / "pipeline" / "stage-04-planning.md",
+            REPO_ROOT / "release" / "releases" / "notes" / "v3.18_RELEASE_NOTES.md"):
+        assert not is_preclaim_plan(out_of_scope), \
+            f"self-test: file wrongly pulled into depth-lint scope: {out_of_scope!r}"
+
+    with tempfile.TemporaryDirectory() as td:
+        # Negative arm -- every non-workspace-rooted intra-repo form is reported,
+        # the bare same-directory form included (it re-points into plans/v<N>/).
+        flagged_probe = Path(td) / "depth-flagged-probe.md"
+        flagged_probe.write_text(
+            "[a](../../references/standards/release-notes-standard.md)\n"
+            "[b](../../../governance/RELEASE_PROTOCOL.md)\n"
+            "[c](sibling_RELEASE_PLAN.md)\n",
+            encoding="utf-8")
+        flagged_findings = check_plan_depth(flagged_probe)
+        # Positive arm -- the prescribed form and the ordinary skip classes are
+        # silent. Each line here is a near-miss the lint must NOT flag.
+        clean_probe = Path(td) / "depth-clean-probe.md"
+        clean_probe.write_text(
+            "[a](/release/references/standards/release-notes-standard.md)\n"
+            "[b](/core/governance/OPERATIONS.md)\n"
+            "[c](https://example.com/x)\n"
+            "[d](#in-file-anchor)\n"
+            "[e](<slug>_RELEASE_PLAN.md)\n"
+            "[f](release/releases/notes/vX.Y_RELEASE_NOTES.md)\n",
+            encoding="utf-8")
+        clean_findings = check_plan_depth(clean_probe)
+    assert len(flagged_findings) == 3, (
+        f"self-test: depth lint expected 3 findings (two ../ forms + one bare "
+        f"same-dir form); got {len(flagged_findings)}: {flagged_findings!r}")
+    assert not clean_findings, (
+        f"self-test: depth lint flagged the prescribed workspace-rooted form or "
+        f"an ordinary skip class: {clean_findings!r}")
+
     print("self-test OK (release-plan/notes refs are checked not skipped, "
           "placeholder forms still skip, fail-closed fixture reports the "
-          "absent note, skip classes + test-fixture path exclusion hold)")
+          "absent note, skip classes + test-fixture path exclusion hold, "
+          "plan depth-invariance lint scopes and fires correctly)")
     return 0
 
 
@@ -542,6 +665,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
              "added-lines posture the reference-durability gate uses. Omit "
              "(default) to consider every link in the in-scope files.")
     p.add_argument(
+        "--plan-depth-lint", action="store_true",
+        help="Also assert that pre-claim release plans (files directly in "
+             "release/releases/plans/ named *_RELEASE_PLAN.md) carry only "
+             "workspace-rooted intra-repo links, so a link stays correct after "
+             "the ADR-092 claim-time stamp moves the plan into plans/v<MAJOR>/. "
+             "Default OFF -- the bare-invocation contract is unchanged.")
+    p.add_argument(
         "--self-test", action="store_true",
         help="Run the in-process is_skippable smoke test (release-plan/notes "
              "filename-shape consistency + skip-class regression guards) and exit.")
@@ -577,6 +707,8 @@ def main(argv: list[str] | None = None) -> int:
     total_broken = 0
     files_with_broken = 0
     anchor_warns: list[str] = []
+    depth_findings: list[str] = []
+    depth_total = 0
     for md in iter_markdown(args.roots, args.top_level_md, only=only):
         added = added_lines_for(md, args.diff_base) if args.diff_base else None
         if added is not None and not added:
@@ -590,14 +722,28 @@ def main(argv: list[str] | None = None) -> int:
             print(f"\n{md.relative_to(REPO_ROOT)}:")
             for b in broken:
                 print(b)
+        if args.plan_depth_lint and is_preclaim_plan(md):
+            depth = check_plan_depth(md, added=added)
+            if depth:
+                depth_total += len(depth)
+                depth_findings.append(
+                    f"\n{md.relative_to(REPO_ROOT)}:\n" + "\n".join(depth))
     print(f"\n=== {total_broken} broken links across {files_with_broken} files ===")
+    if args.plan_depth_lint:
+        # Printed even at zero: a lint that is silent when clean is
+        # indistinguishable from a lint that never ran.
+        print(f"\n=== {depth_total} depth-sensitive plan links across "
+              f"{len(depth_findings)} files ===")
+        for d in depth_findings:
+            print(d)
     if args.check_anchors and anchor_warns:
         label = "MISSING ANCHORS (hard-fail)" if args.anchors_hard_fail \
             else "missing anchors (warn-mode — not failing the run)"
         print(f"\n=== {len(anchor_warns)} {label} ===")
         for w in anchor_warns:
             print(w)
-    fail = total_broken > 0 or (args.anchors_hard_fail and bool(anchor_warns))
+    fail = (total_broken > 0 or depth_total > 0
+            or (args.anchors_hard_fail and bool(anchor_warns)))
     return 1 if fail else 0
 
 
