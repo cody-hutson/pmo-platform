@@ -2001,8 +2001,21 @@ fi
 # the change. #5273 records the same observation from the coverage side. This suite
 # is the missing population: a config that ALREADY EXISTS and is BEHIND.
 #
-# The fixture is deliberately a PRE-v4.23 key set — 15 keys, no [automation] — which
-# is the literal shape of the instance in the card's Reproduction Steps.
+# The fixture is deliberately a PRE-v4.23 key set with no [automation] at all — the
+# literal shape of the instance in the card's Reproduction Steps.
+#
+# It is behind in BOTH of the two shapes a lagging instance can take, because AC-5
+# asks for the mechanism demonstrated with a SECOND field and two copies of one shape
+# would not be a demonstration:
+#   (a) an absent SECTION            — [automation].automation_level (the #5739 shape)
+#   (b) an absent KEY inside a section the instance ALREADY HAS
+#                                    — [session_retro].min_tool_calls
+# (b) is the shape AC-5 literally describes: a field added TOMORROW to a section that
+# already ships. It is also declared `int` where automation_level is `string`, so it
+# travels write_operator_toml's unquoted fmt_scalar branch — the branch a per-field
+# propagation shim would be likeliest to get wrong. The seeded [session_retro] carries
+# an operator-set `enabled = true` against a declared default of false, so the same
+# arm shows the backfill did not trample the section it landed in.
 printf '\nSuite RC (#5739): pre-existing-instance reconcile against the declared schema\n'
 
 RC_CFG="${SBX}/rc-config"
@@ -2034,6 +2047,10 @@ pmo_platform_repo_name = "rc-fork-name"
 work_board = "github"
 comms_platform = "teams"
 
+[session_retro]
+enabled = true
+mode = "enforce"
+
 [rc_operator_unknown]
 kept_key = "kept-value"
 TOML
@@ -2052,6 +2069,21 @@ if [ "${rc_seeded_missing}" = "0" ] && [ "${rc_before_n}" -gt 0 ]; then
 else
   report "RC-0 control: fixture is genuinely BEHIND (automation_level absent; ${rc_before_n} keys seeded)" 0 \
     "automation_level count ${rc_seeded_missing} (want 0), seeded keys ${rc_before_n} (want >0)"
+fi
+
+# RC-0b (the SECOND key's control arm — the premise RC-2b rests on). Both halves are
+# asserted, not just the absence: the key must be absent AND its section must already
+# be present. Absence alone is ambiguous — if [session_retro] were missing too this
+# would silently be a second copy of RC-0's absent-section case, and RC-2b would grade
+# the same code path twice while reporting a widened denominator. Proving the section
+# is there is what makes it a different case.
+rc_seeded_missing2=$(grep -c '^min_tool_calls' "${RC_TOML}" 2>/dev/null | tr -d ' ')
+rc_seeded_section2=$(grep -Fxc '[session_retro]' "${RC_TOML}" 2>/dev/null | tr -d ' ')
+if [ "${rc_seeded_missing2}" = "0" ] && [ "${rc_seeded_section2}" = "1" ]; then
+  report "RC-0b control: fixture is behind on a SECOND key of a different shape ([session_retro].min_tool_calls absent from a section that IS present)" 1
+else
+  report "RC-0b control: fixture is behind on a SECOND key of a different shape ([session_retro].min_tool_calls absent from a section that IS present)" 0 \
+    "min_tool_calls count ${rc_seeded_missing2} (want 0), [session_retro] header count ${rc_seeded_section2} (want 1)"
 fi
 
 # The reconcile itself: non-interactive, stdin CLOSED. On the current declaration no
@@ -2080,6 +2112,32 @@ if [ "${rc_backfilled}" = "1" ]; then
 else
   report "RC-2 a delivered key missing from a pre-existing instance is BACKFILLED (automation_level, column 0, exactly once)" 0 \
     "automation_level resolved ${rc_backfilled} time(s), want exactly 1"
+fi
+
+# RC-2b (AC-5): the SAME reconcile backfills a SECOND declared key, and no per-field
+# code was written for either — none exists to write. write_operator_toml's emit
+# (docs/scripts/setup-workspace.sh) loops the declaration's sections and keys and names
+# no key, no section and no default; check-operator-toml-schema.sh's C70a computes its
+# delivered set the same way. Adding [session_retro].min_tool_calls to the covered set
+# cost one JSON object in core/config/operator-toml-schema.json and zero lines of
+# propagation code, which is the claim AC-5 makes and this arm is the evidence for.
+#
+# Three probes, one fact about one key, so they report together:
+#   backfilled — it landed exactly once at column 0, as RC-2 requires of the first key;
+#   typed      — it rendered UNQUOTED (`= 12`, not `= "12"`) per its declared int type.
+#                A presence-only grep passes either way, so without this probe the
+#                string-shaped half of the mechanism would be the only half graded;
+#   kept       — the operator's own `enabled = true` in that section survived, against
+#                a declared default of false. Landing a key into a live section must
+#                not reset the section.
+rc_backfilled2=$(grep -c '^min_tool_calls' "${RC_TOML}" 2>/dev/null | tr -d ' ')
+rc_typed2=$(grep -Fxc 'min_tool_calls = 12' "${RC_TOML}" 2>/dev/null | tr -d ' ')
+rc_kept2=$(grep -Fxc 'enabled = true' "${RC_TOML}" 2>/dev/null | tr -d ' ')
+if [ "${rc_backfilled2}" = "1" ] && [ "${rc_typed2}" = "1" ] && [ "${rc_kept2}" = "1" ]; then
+  report "RC-2b AC-5: a SECOND declared key is backfilled by the same declaration-driven emit ([session_retro].min_tool_calls, int, unquoted, into a live section whose operator value survives)" 1
+else
+  report "RC-2b AC-5: a SECOND declared key is backfilled by the same declaration-driven emit ([session_retro].min_tool_calls, int, unquoted, into a live section whose operator value survives)" 0 \
+    "min_tool_calls at column 0 ${rc_backfilled2} (want 1), rendered unquoted as \`min_tool_calls = 12\` ${rc_typed2} (want 1), operator \`enabled = true\` survived ${rc_kept2} (want 1); got: $(grep -E '^(min_tool_calls|enabled)' "${RC_TOML}" | tr '\n' ';')"
 fi
 
 # RC-3 (AC-2): an operator-set value is PRESERVED, not reset to the declared default.
