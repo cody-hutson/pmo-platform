@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.37 (2026-08-23) — A stalled project migration now has a deadline, a score, and a way to finish
+
 ### v4.36 (2026-08-23) — Release notes are reachable from the changelog again
 
 ### v4.35 (2026-08-22) — The platform can now read the new project folder layout

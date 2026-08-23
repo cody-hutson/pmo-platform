@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.37] - 2026-08-23
+
+Late project migrations now get a deadline, a score and a named fix; new projects register themselves and stop losing unsorted items.
+
+[Full notes](release/releases/notes/v4.37_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.37)
+
 ## [v4.36] - 2026-08-23
 
 Release notes are reachable from the changelog again, and the check that catches broken links now actually catches them.
