@@ -22,11 +22,10 @@
 
 set -u
 
-HOOK_DIR="$(cd "$(dirname "$0")/.." && pwd -P)"
-HOOK="${HOOK_DIR}/git-pre-commit-pii.sh"
-STRAY_MODE="${HOOK_DIR}/git-pre-commit-pii.mode"
+SRC_DIR="$(cd "$(dirname "$0")/.." && pwd -P)"
+HOOK_SRC="${SRC_DIR}/git-pre-commit-pii.sh"
 
-[ -r "$HOOK" ] || { echo "FAIL: hook not readable at $HOOK" >&2; exit 1; }
+[ -r "$HOOK_SRC" ] || { echo "FAIL: hook not readable at $HOOK_SRC" >&2; exit 1; }
 
 PASS=0; FAIL=0
 report() { # report <name> <ok:1|0> [detail]
@@ -34,22 +33,53 @@ report() { # report <name> <ok:1|0> [detail]
   else /usr/bin/printf 'FAIL: %s\n  %s\n' "$1" "${3:-}"; FAIL=$((FAIL+1)); fi
 }
 
-# --- PRECONDITION, asserted before any verdict is read -----------------------
-# The hooks-directory rung is the one that can mask every un-migrated arm below.
-# If a stray `.mode` sits there, `needle_mode` resolves from it whenever the
-# instance rungs miss, and A1/A2 would report ENFORCE for the wrong reason — a
-# fixture passing through the very rung it exists to bypass. Assert its absence
-# rather than assuming it.
-if [ -e "$STRAY_MODE" ]; then
-  report "precondition: no stray .mode in the hooks dir (would mask every arm)" 0 \
-    "found $STRAY_MODE — remove it; these arms cannot be trusted while it exists"
-else
-  report "precondition: no stray .mode in the hooks dir (would mask every arm)" 1
-fi
-
 SBX="$(mktemp -d 2>/dev/null)"
 cleanup() { [ -n "${SBX:-}" ] && /bin/rm -rf "$SBX"; }
 trap cleanup EXIT
+
+# --- Build the hook's REAL install geometry, rather than borrowing whatever
+#     geometry this test file happens to have been copied into.
+#
+# This hook is a GIT hook: it is symlinked from .git/hooks/pre-commit back into the
+# repo, so at run time it sits at <repo>/core/hooks/ and finds the resolver at its
+# own ../deploy/ sibling. That is a different shape from the deployed .claude/hooks/
+# posture the PreToolUse hooks run in, where the resolver is co-located as a SIBLING.
+# This suite is executed in both places — from source, and from the materialized CI
+# layout — and in the materialized one ../deploy/ does not exist, so the hook takes
+# its lib-unreachable fallback, every path resolves EMPTY, and every arm that expects
+# a block silently stops being able to fail.
+#
+# So: reconstruct the real geometry in the sandbox from whichever layout we are in,
+# and run THAT. The hook and its resolver are the files under test either way.
+GEOM="${SBX}/geom"
+/bin/mkdir -p "${GEOM}/core/hooks" "${GEOM}/core/deploy"
+LIB_SRC=""
+for _cand in "${SRC_DIR}/../deploy/lib-instance-path.sh" "${SRC_DIR}/lib-instance-path.sh"; do
+  [ -r "$_cand" ] && { LIB_SRC="$_cand"; break; }
+done
+if [ -z "$LIB_SRC" ]; then
+  report "precondition: the resolver lib is findable in this layout" 0 \
+    "no lib-instance-path.sh at ${SRC_DIR}/../deploy/ or ${SRC_DIR}/ — cannot build the hook's geometry"
+  /usr/bin/printf '\nTotal: %d  PASS: %d  FAIL: %d\n' "$((PASS + FAIL))" "$PASS" "$FAIL"
+  exit 1
+fi
+report "precondition: the resolver lib is findable in this layout" 1
+/bin/cp "$HOOK_SRC" "${GEOM}/core/hooks/git-pre-commit-pii.sh"
+/bin/cp "$LIB_SRC" "${GEOM}/core/deploy/lib-instance-path.sh"
+HOOK="${GEOM}/core/hooks/git-pre-commit-pii.sh"
+STRAY_MODE="${GEOM}/core/hooks/git-pre-commit-pii.mode"
+
+# The hooks-directory rung is the one that can mask every un-migrated arm below.
+# If a `.mode` sits there, `needle_mode` resolves from it whenever the instance
+# rungs miss, and A1/A2 would report ENFORCE for the wrong reason — a fixture
+# passing through the very rung it exists to bypass. The geometry is freshly built
+# so this must hold; assert it rather than assume it.
+if [ -e "$STRAY_MODE" ]; then
+  report "precondition: no stray .mode in the hooks dir (would mask every arm)" 0 \
+    "found $STRAY_MODE — these arms cannot be trusted while it exists"
+else
+  report "precondition: no stray .mode in the hooks dir (would mask every arm)" 1
+fi
 
 # run_hook <workspace-root> <staged-line>  -> sets RC and ERR
 # Builds a throwaway git repo, stages one added line, and invokes the real hook
@@ -90,6 +120,26 @@ mk_new() { # mk_new <ws> <mode-or-empty> <needle-or-empty>
   [ -n "${3:-}" ] && /usr/bin/printf '%s\n' "$3" > "$1/pmo-instance/localized-context-needles.txt"
   return 0
 }
+
+# --- PRECONDITION: the resolver actually LOADED ------------------------------
+# The hook degrades to inline stubs when it cannot reach lib-instance-path.sh, and
+# those stubs resolve every path to the EMPTY string. An empty instance dir fails
+# both `-d` tests, so the hook takes the fresh-clone branch and returns 0 — which
+# means every arm below that expects a block would silently stop being able to fail,
+# and every arm that expects exit 0 would pass for the wrong reason. A green suite
+# would then prove nothing at all.
+#
+# Discriminate positively: with a workspace root set and neither home on disk, a
+# LOADED resolver names <ws>/pmo-instance in its NOTE; a stub names the empty string.
+# Asserting the path appears is therefore an assertion that the real resolver ran.
+WS="${SBX}/wsP"; /bin/mkdir -p "$WS"
+run_hook "$WS" "harmless content"
+if /usr/bin/printf '%s' "$ERR" | /usr/bin/grep -qF "${WS}/pmo-instance"; then
+  report "precondition: the resolver LOADED (hook names the resolved home, not empty)" 1
+else
+  report "precondition: the resolver LOADED (hook names the resolved home, not empty)" 0 \
+    "the hook did not name ${WS}/pmo-instance — it is running on its lib-unreachable stubs, so no arm below is evidence. stderr: $(/usr/bin/printf '%s' "$ERR" | /usr/bin/tr '\n' '|')"
+fi
 
 # =============================================================================
 # A — THE UN-MIGRATED FIELD CASE. Legacy home present (carrying the operator's
