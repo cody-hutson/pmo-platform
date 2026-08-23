@@ -36,9 +36,21 @@ there is no partial credit.
 
 ## The score and its envelope (AC-3)
 
-7. **`MM-0` is rendered as a single 0–100 number with all three factors broken out**, each carrying
-   its own numerator and denominator. A bare score with no breakdown FAILs. The `completeness.*`
-   names may appear as display labels; the `MM-*` identifiers must be present.
+7. **`MM-0` is rendered as a single 0–100 number with all three factors broken out.** A bare score with
+   no breakdown FAILs. The `completeness.*` names may appear as display labels; the `MM-*` identifiers
+   must be present. **The breakdown obligation is per-factor and grain-specific — it is not a blanket
+   numerator/denominator requirement:**
+   - **`MM-1` and `MM-2` are ratios** at the entity-record grain. Each MUST carry its own numerator and
+     denominator; a bare percentage for either FAILs.
+   - **`MM-3` is Composed-Index Conformance — a per-project STATE** (`composed` / `partial` /
+     `monolith`), **not** a link ratio and not "relationships valid". It MUST render as its state, and
+     may additionally show the 0–100 factor projection it contributes to `MM-0`. **Rendering `MM-3` as a
+     numerator/denominator ratio is an automatic FAIL.** That form is the zero-denominator trap the
+     three-state definition exists to close: an unmigrated monolith has zero wiki-links, so a link ratio
+     computes `0/0` and renders the least-migrated project as perfectly migrated. A criterion that
+     *required* an n/d for `MM-3` would certify that defect rather than catch it, so this one does not.
+   - A run that renders `MM-3` as a state **passes** this criterion; the absence of an `MM-3` numerator
+     is never itself a finding.
 8. **The entity-type coverage line is present** — how many entity types are in the denominator and
    how many are excluded. **This is load-bearing and its absence is an automatic FAIL even when a
    tier banner is present.** Once every storage tier holds a record the tier banner falls silent
@@ -61,8 +73,11 @@ there is no partial credit.
     frozen schema.** A non-derivable value (an empty owner, an absent date) routes to `## Decisions`
     even though its confidence is HIGH. Confidence alone is not the gate.
 14. **A single underlying gap is reported ONCE.** An empty required field that is also an empty
-    reference slot instantiates no relationship rule — counting it in both the fields factor and the
-    relationships factor is a double-report and FAILs.
+    reference slot instantiates no relationship rule — it is a presence failure, counted once in the
+    fields factor (`MM-2`). Reporting it a second time as a relationship (limb c) violation is a
+    double-report and FAILs. (`MM-3` is not the relationships factor — it is the composed-index state
+    per criterion 7 — so the double-report test is against limb c's finding set, not against a score
+    factor.)
 
 ## Stalled-migration escalation
 

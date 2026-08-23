@@ -132,6 +132,10 @@ Four metrics. `MM-1`, `MM-2` and `MM-3` are the three progress metrics; `MM-0` i
 
 **Stated property.** The product form means any single factor at 0 forces `MM-0 = 0`. A project with complete frontmatter and no entity extraction reads 0, not 33. This is intended — a migration is not partially done in a way that composes additively across the five target states — but it is stated here rather than discovered downstream.
 
+**The `monolith` consequence, stated.** Because § 4.4 pins `MM-3` to a 0 factor for state `monolith`, **any project still on the narrative-table shape reads `MM-0 = 0` regardless of how far `MM-1` and `MM-2` have progressed.** That is the pin firing, not an entity-extraction or frontmatter failure — and it is the case that fires for most of the population, so it is named here rather than left to be inferred from the `MM-1` = 0 illustration above.
+
+**Precedence — `UNMEASURED` outranks 0.** Where **any** factor is `UNMEASURED`, `MM-0` is **`UNMEASURED`, never 0**. The zero-product rule above is scoped to a factor whose *measured* value is 0; it does not reach a factor that could not be measured at all. This precedence is stated because the two rules would otherwise compete unresolved: § 4.6 bound 2 is written against *a metric's denominator*, and `MM-0` — a product of three factor values — has no denominator of its own for that bound to bite on. Bound 4 settles it, by stating that a tier whose entity-record population has not yet been seeded is a case where **bound 2 applies**; the factor is therefore `UNMEASURED`, and an `UNMEASURED` factor propagates to the composite. Rendering an unmeasured migration as 0 would report a project nobody has measured as a project measured to have made no progress, which is the absence-vs-zero error § 3.1 exists to prevent.
+
 ### 4.2 `MM-1` — Entity Extraction Completeness
 
 **Definition.** Entities referenced by the project that **resolve to a materialized entity record at their declared storage-tier home**, divided by entities referenced by the project.

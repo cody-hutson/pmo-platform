@@ -73,20 +73,29 @@ and are **cited here, never redefined**. This mode computes them; it mints no co
 MM-0 = MM-1 × MM-2 × MM-3     each factor as a fraction of 1, product rendered 0–100
 ```
 
-| Factor | Metric | Render label (display only) | Counting unit |
-|---|---|---|---|
-| entities present | **`MM-1`** | `completeness.entities_present` | entity record |
-| fields populated | **`MM-2`** | `completeness.fields_populated` | entity record |
-| relationships valid | **`MM-3`** | `completeness.relationships_valid` | project (a state) |
+| Factor | Metric | Render label (display only) | Counting unit | Value shape |
+|---|---|---|---|---|
+| entities present | **`MM-1`** | `completeness.entities_present` | entity record | ratio (`n/d`) |
+| fields populated | **`MM-2`** | `completeness.fields_populated` | entity record | ratio (`n/d`) |
+| composed-index conformance | **`MM-3`** | `completeness.composed_index` | project | **state**, never a ratio |
 
 The `completeness.*` names are **render labels carrying no definition** — they appear in output for
 human readability and in no cross-reference. `MM-0`–`MM-3` are the load-bearing tokens.
 
-**Grain (binding, per the protocol's grain declaration).** All three factors are computed over the
-**entity-record** population. `MM-2` consumes the Frontmatter Completeness check definition as its
-definitional source of truth and **projects it onto the entity grain**; the file-grain population
-that check is natively defined over does **not** travel with it. `MM-0` never multiplies an
-entity-grain ratio by a file-grain one.
+**`MM-3` is Composed-Index Conformance — it is NOT the relationships limb.** The protocol § 4.4 defines
+it as the three-state per-project value `composed` / `partial` / `monolith`. Limb (c) of § 2 (*required
+relationships valid*) is a genuine audit limb and keeps producing findings, routed by § 7 rows 8–9 — but
+it is **a finding class, not a score factor**, and it does not supply `MM-3`. Binding `MM-3` to a
+relationships ratio is the error § 10 already names and this table now matches: see the zero-denominator
+trap below.
+
+**Grain (binding, per the protocol's grain declaration).** `MM-1` and `MM-2` are computed over the
+**entity-record** population; `MM-3` is computed at the **project** grain and reports a state. `MM-2`
+consumes the Frontmatter Completeness check definition as its definitional source of truth and
+**projects it onto the entity grain**; the file-grain population that check is natively defined over does
+**not** travel with it. `MM-0` never multiplies an entity-grain ratio by a file-grain one, and it never
+treats `MM-3`'s state as a ratio — the state is mapped to its 0–100 factor projection per protocol § 4.4
+before the product is taken.
 
 **Stated property (from the protocol, not invented here).** The product form means any single factor
 at 0 forces `MM-0 = 0`. A project with complete frontmatter and no entity extraction reads 0, not 33.
@@ -120,8 +129,14 @@ fields denominator.
 
 ## 6. Coverage envelope — the render contract
 
-**The score never renders as a bare number.** Every factor carries its numerator and denominator, and
-the excluded set is enumerated. This extends the same degradation discipline
+**The score never renders as a bare number.** The **ratio-valued** factors — `MM-1` and `MM-2` — each
+carry their numerator and denominator, and the excluded set is enumerated. **`MM-3` renders as its state**
+(`composed` / `partial` / `monolith`), optionally with its 0–100 factor projection; it carries **no**
+numerator and denominator, because it is not a ratio. Demanding an `n/d` for `MM-3` would re-introduce the
+link-ratio form the protocol § 4.4 explicitly rejects — an unmigrated monolith has zero wiki-links, so the
+ratio computes `0/0` and reports the least-migrated project as perfectly migrated. At the corpus grain
+`MM-3` does roll up as a count — *projects in state `composed` / in-scope projects* — and that rollup
+carries its numerator and denominator like any other. This extends the same degradation discipline
 [ADR-051](../../../../core/ADRs/ADR-051-health-check-mcp-primary-source-set.md) § 4 applies to a
 missing connector: *reduce coverage, never silently downgrade rigor.*
 
@@ -129,7 +144,7 @@ missing connector: *reduce coverage, never silently downgrade rigor.*
 Completeness (MM-0): 72/100
   MM-1  entities-present      8/9   (89%)   completeness.entities_present
   MM-2  fields-populated     41/45  (91%)   completeness.fields_populated
-  MM-3  relationships-valid  15/17  (88%)   completeness.relationships_valid
+  MM-3  composed-index      partial (88%)  completeness.composed_index
 Coverage envelope: 9 of 19 entity types in denominator · 10 excluded (not-expected: 0 records, 0 inbound refs)
 [TIER UNPOPULATED: cross-project-shared, portfolio-level] — targets unresolvable by tier, not by record
 ```

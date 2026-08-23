@@ -490,9 +490,9 @@ Review all operational trackers and produce a disposition for every open item:
 
 This is the set of files `file-router` **could not confidently classify** and held for operator review. Archiving it undispositioned is the silent swallow this surface exists to prevent.
 
-1. **Enumerate the directory as ground truth:** every file in `_inbox/_unsorted/` **except `_queue.md` itself**. `_queue.md` is the hold's register, not a held item, and never counts toward the population — a directory containing only `_queue.md` is an **empty** hold.
-2. **Reconcile against `_queue.md`.** A file on disk with no queue row, and a queue row with no file on disk, are each recorded as an explicit **divergence row** — never resolved silently, and never dropped from the population because the register disagrees with the directory.
-3. **Assign every held item exactly one disposition** from the closed set: `CLASSIFIED` · `TRANSFERRED` · `DISCARDED` · `ARCHIVED-AS-UNSORTED`.
+1. **Enumerate the directory:** every file in `_inbox/_unsorted/` **except `_queue.md` itself**. `_queue.md` is the hold's register, not a held item, and never counts as a held file.
+2. **Reconcile against `_queue.md`, and take the reconciled union as THE POPULATION.** **Population = (a) the files enumerated in item 1, PLUS (b) every `_queue.md` row with no file on disk.** A file on disk with no queue row, and a queue row with no file on disk, are each recorded as an explicit **divergence row** — never resolved silently, and never dropped from the population because the register disagrees with the directory. **The directory alone is NOT the population.** A row-without-file is invisible to a files-only enumeration, so defining the population as "files on disk" is precisely how a register entry naming a missing item reaches the archive unexamined. The hold is **empty** only when *both* limbs are empty — a directory holding only `_queue.md` is empty only if `_queue.md` also lists no rows.
+3. **Assign every *file-bearing* population member exactly one disposition** from the closed set: `CLASSIFIED` · `TRANSFERRED` · `DISCARDED` · `ARCHIVED-AS-UNSORTED`. A **row-without-file takes no disposition** — there is no file to classify, transfer, discard or archive — but it **remains in the population** and is carried as its **divergence row**, which must be surfaced and explicitly acknowledged before the archive move. Dropping it because it cannot take a disposition is the silent swallow this surface exists to prevent; the closed 4-set stays closed, and the divergence row is how a member that no disposition fits still gets seen.
 4. `ARCHIVED-AS-UNSORTED` is the **default** — it preserves today's outcome. It is applied only as a **stated choice**, never as a silent fallback, and it is what lets closure complete unattended.
 5. Reversibility: `TRANSFERRED` / `DISCARDED` = **EXPENSIVE · confidence: HIGH**; `ARCHIVED-AS-UNSORTED` = **IRREVERSIBLE · confidence: HIGH** (it rides the Step B5 archive move).
 
@@ -536,7 +536,7 @@ Generate `[Project]_Closure_Summary.md` in the project's `1-Governance/` folder:
 |------|---------------------------------------|-------------|---------------|
 | | | | |
 
-*Population = every file in `_inbox/_unsorted/` except `_queue.md`. An empty population is recorded as `Unsorted hold: empty — no items held` and the table is omitted.*
+*Population = the Step B2 **reconciled union**: every file in `_inbox/_unsorted/` except `_queue.md`, **plus every `_queue.md` row with no file on disk**. A file-bearing member carries one of the closed 4-set dispositions; a **row-without-file carries its divergence note in the `Disposition` column and takes no disposition** — it is listed, never omitted. An empty population — **both** limbs empty — is recorded as `Unsorted hold: empty — no items held` and the table is omitted.*
 
 ## Items Transferred
 [Table: Item, Type, Transferred To, Context]
@@ -564,19 +564,24 @@ Update the project's `PROJECT.md`:
 
 ### Step B5: Move Project to Archive
 
-**Precondition — Unsorted-Hold Reconcile.** Every item in the Step B2 unsorted-hold
-population carries a disposition before the archive move. An **empty population satisfies this
-with no prompt and no output**. A non-empty population is **surfaced** — each item with its
-`_queue.md` row (or a divergence note) and the closed 4-value set, `ARCHIVED-AS-UNSORTED`
-pre-selected — and the operator may accept the defaults or override per item. **Closure is not
-blocked**: an operator who takes no action archives the hold as recorded, which is today's outcome
-made explicit rather than silent.
+**Precondition — Unsorted-Hold Reconcile.** Every member of the Step B2 **reconciled union**
+(files on disk **plus** `_queue.md` rows with no file) is **accounted for** before the archive move:
+a file-bearing member by one of the closed 4-set dispositions, a **row-without-file by an
+acknowledged divergence note**. An **empty population — both limbs empty — satisfies this with no
+prompt and no output**. A non-empty population is **surfaced** — each member with its `_queue.md`
+row (or a divergence note) and, for file-bearing members, the closed 4-value set with
+`ARCHIVED-AS-UNSORTED` pre-selected — and the operator may accept the defaults or override per item.
+**A row-without-file is surfaced too**, and is never satisfied by the `ARCHIVED-AS-UNSORTED` default:
+there is no file for that default to archive, so letting it apply would report the divergence as
+resolved when nothing resolved it. **Closure is not blocked**: an operator who takes no action
+archives the hold as recorded and carries the divergence notes into the Closure Summary, which is
+today's outcome made explicit rather than silent.
 
 ```mermaid
 flowchart TD
-    b2([Step B2 dispositions complete]) --> pop{"Undispositioned items?<br/>(files in _unsorted/ excluding _queue.md,<br/>reconciled against _queue.md rows)"}
+    b2([Step B2 dispositions complete]) --> pop{"Unaccounted members?<br/>RECONCILED UNION = files in _unsorted/ excluding _queue.md<br/>PLUS _queue.md rows with no file on disk"}
     pop -->|None| b5([Step B5 — archive move])
-    pop -->|Some| surf[Surface each item: _queue.md row or divergence note<br/>+ closed 4-set, ARCHIVED-AS-UNSORTED pre-selected]
+    pop -->|Some| surf["Surface each member: _queue.md row or divergence note<br/>files → closed 4-set, ARCHIVED-AS-UNSORTED pre-selected<br/>rows-without-file → divergence note, acknowledged, no disposition"]
     surf --> op{Operator overrides any default?}
     op -->|Yes| surf
     op -->|No / accepts| rec[Record dispositions in Closure Summary]

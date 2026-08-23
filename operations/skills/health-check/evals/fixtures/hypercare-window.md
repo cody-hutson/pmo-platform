@@ -66,7 +66,9 @@ RAID Item R-PROJ-040      entity_type: RAID Item   id: r-proj-040
                           lifecycle_state: open    created_date: 2026-04-18
                           owner_person_id:                       <!-- SEEDED SHAPE 1 (empty required field): an EMPTY SLOT.
                                Presence failure only. An empty slot instantiates NO relationship rule, so it counts
-                               ONCE in the fields factor (MM-2) and must NOT also be counted in MM-3. -->
+                               ONCE in the fields factor (MM-2) and must NOT also be reported as a
+                               relationships-limb (limb c) violation. MM-3 is NOT the relationships factor —
+                               it is Composed-Index Conformance, a per-project state. -->
                           content_lifecycle_pattern:             <!-- SEEDED (derivable): the frozen schema pins exactly one
                                value for this entity, so the correct value IS derivable -> ## Auto-Actionable + TRACKER_UPDATES:.
                                Contrast with the empty owner above, which is NOT derivable -> ## Decisions. -->
@@ -149,7 +151,7 @@ Audits all three limbs — (a) entity present, (b) required fields populated, (c
 - `## Auto-Actionable` — **R-PROJ-040 `content_lifecycle_pattern` absent**, and the frozen schema pins exactly one value for this entity → the correct value **is** derivable → `TRACKER_UPDATES:` block. This is the derivability discriminator against the first item.
 - `## Unknowns` — **Cross-Project Dependency references unresolvable because the portfolio-level tier holds no record of that type** → excluded from the denominator and **named** in the coverage note; **not** reported as a per-record contradiction (routing row 1 outranks the per-record rows).
 - `## Confirmed` — **R-PROJ-041** clean across all three limbs; its Person reference resolves.
-- **Score render (mandatory):** `MM-0` as a single 0–100 number with `MM-1` / `MM-2` / `MM-3` each as `n/d`, plus the **entity-type coverage line** (types in denominator vs excluded). The tier banner is a **list** and, with all three tiers holding records here, may legitimately be silent — the type line still renders, and its absence is a FAIL.
+- **Score render (mandatory):** `MM-0` as a single 0–100 number with `MM-1` and `MM-2` each as `n/d` and `MM-3` as its **per-project state** (`composed` / `partial` / `monolith`), optionally with its 0–100 factor projection. `MM-3` is Composed-Index Conformance, **not** a link ratio and not "relationships valid" — rendering it as `n/d` is a **FAIL** (a monolith has zero wiki-links, so a ratio computes `0/0` and reports the least-migrated project as perfectly migrated). Plus the **entity-type coverage line** (types in denominator vs excluded). The tier banner is a **list** and, with all three tiers holding records here, may legitimately be silent — the type line still renders, and its absence is a FAIL.
 - **Must NOT flag:** R-PROJ-041 (clean); any optional field left blank; the seeded-clean COM-032 and the `comms`/`raid`/`sources` items, which belong to other modes.
-- **Out of contract:** no stalled-migration escalation is emitted — that seam is reserved and unimplemented. Any stall dimension mentioned reads `UNMEASURED` with its precondition named.
+- **Out of contract:** no stalled-migration escalation is emitted — the seam is **implemented** (`references/structure-mode.md` § 11), but this fixture seeds **no prior-run `MM-0` series**, so the stall predicate is **not evaluable** (fewer than `N` recorded runs) and E7 degradation applies. Any stall dimension mentioned reads `UNMEASURED` with its precondition named.
 

@@ -139,8 +139,16 @@ project's **free-text `## Key People` table** in PROJECT.md (per
 >
 > **Cross-reference — the schema's `team_roster` field.** `core/schemas/project-schema.md` §
 > `team_roster` describes the structured people-graph index as that field's **target end-state** for the
-> `## Key People` prose. Read the two clauses together, because each is only half the contract:
-> `team_roster` is the **primary** path, and this clause is the **retained fallback**. The prose path is
+> `## Key People` prose. Read the two clauses together, because each is only half the contract — and read
+> the scope of "primary" exactly as that schema sets it: `team_roster` is the primary path **for the
+> people-graph index — team membership**, and this clause is the **retained fallback** for the same prose
+> table. It is **not** the primary path of the authority ladder above, and this cross-reference asserts no
+> authority-primacy for it. `team_roster` carries no decision authority at all: the schema's own
+> reconciliation clause holds that `team_roster` (membership), the **Stakeholder Register** (engagement —
+> *including decision authority*) and Resource (allocation) are three projections of one `person_id` that
+> **MUST NOT be conflated**. Within this section's ladder the structured primary is therefore the
+> **Stakeholder Register** (step 2) and the free-text fallback is `## Key People` (step 3); a populated
+> `team_roster` neither satisfies step 2 nor promotes ahead of it. The prose path is
 > **not migration debt** and carries no repair obligation — a consumer that reads `## Key People` is
 > implementing the ratified two-path resolution above, not depending on a stale surface. Removing the
 > prose path would delete a designed graceful-degradation route and contradict ADR-025 §5, which is
