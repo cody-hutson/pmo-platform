@@ -212,29 +212,111 @@ preflight() {
 }
 
 # --- Phase 2: Schema migration ---
-# Compare current operator.toml schema_version to template schema_version.
-# If template has new fields, prompt for them and append to operator.toml.
+# Reconcile operator.toml against the DECLARED schema
+# (core/config/operator-toml-schema.json) and converge it.
+#
+# WHAT THIS SLOT USED TO BE, AND WHY THAT MATTERS. This function has occupied the
+# reconcile slot since it shipped and has been inert three times over: it compared
+# schema_version against a template constant that has NEVER differed (both have
+# read `1` since Initial public release, so the branch was unreachable-equal); on
+# a mismatch it only warned and continued; and the template told the operator to
+# "run ./update.sh which prompts for missing values" while nothing here ever
+# prompted. Exit code 66 — "Schema migration aborted (operator dismissed prompt)"
+# — has been documented in this file's own help text and emitted by NOTHING.
+# The platform shipped three-quarters of a feature. This completes it rather than
+# inventing a parallel mechanism beside it.
+#
+# THE DETECTOR IS THE KEY-SET DIFF, NOT THE VERSION INTEGER. A version only tells
+# you THAT something changed, never WHAT, and it requires a human to remember to
+# bump it — which is exactly the failure that motivated this work (the commit that
+# added [automation] bumped no version at all). schema_version keeps a narrowed but
+# real contract as the BREAKING-change marker; additive field additions do not
+# bump it, and per-key `since` carries the additive history.
+#
+# WHY THIS CALLS A PRIMITIVE INSTEAD OF PARSING JSON HERE. update.sh carries ZERO
+# JSON parsers — 0 jq, 0 python3, 0 node — and reads TOML with grep and awk. That
+# is a property worth keeping, especially on --surfaces-only, which is the lighter
+# of the two update paths precisely because it depends on less. So the parse lives
+# in core/deploy/tools/check-operator-toml-schema.sh and this function calls it.
+#
+# AND WHY AN UNRESOLVABLE PROBE MUST NOT return 0. This function's two pre-existing
+# early-outs are both `return 0`, which makes a third silent one the path of least
+# resistance. It would also be the worst possible bug here: a delta that computes
+# EMPTY because the probe could not run is indistinguishable from "already
+# reconciled", which would reproduce the exact inertness this card exists to
+# remove. Exit 3 from the primitive is therefore a LOUD warn-and-report, never a
+# quiet success.
 schema_migrate() {
-  info "Phase 2: Schema diff vs template"
+  info "Phase 2: Reconcile operator.toml against the declared schema"
 
-  local template_path; template_path="$(dirname "$0")/core/config/operator.toml.template"
-  if [ ! -f "${template_path}" ]; then
-    warn "Template not found at ${template_path}; skipping schema diff"
+  local decl_path="${REPO_ROOT}/core/config/operator-toml-schema.json"
+  local probe="${REPO_ROOT}/core/deploy/tools/check-operator-toml-schema.sh"
+
+  if [ ! -f "${decl_path}" ]; then
+    warn "Schema declaration not found at ${decl_path}; cannot reconcile."
+    warn "This is a repo defect, not a benign absence — the clone is incomplete."
+    return 0
+  fi
+  if [ ! -f "${probe}" ]; then
+    warn "Schema check primitive not found at ${probe}; cannot compute the key delta."
+    warn "Skipping reconcile. This is a repo defect, not 'nothing to do'."
     return 0
   fi
 
-  local current_schema; current_schema=$(grep -m1 -E '^schema_version' "${OPERATOR_TOML}" | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-  local template_schema; template_schema=$(grep -m1 -E '^schema_version' "${template_path}" | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+  # Compute the delta. 0 = in sync · 1 = keys missing · 3 = the probe could not run.
+  local delta_out delta_rc=0
+  delta_out=$(bash "${probe}" --emit-delta 2>&1) || delta_rc=$?
 
-  if [ "${current_schema}" = "${template_schema}" ]; then
-    info "Schema versions match (${current_schema}); no migration needed."
+  case "${delta_rc}" in
+    0)
+      info "operator.toml is in sync with the declared schema; no migration needed."
+      printf '%s\n' "${delta_out}" | grep '^DENOM:' || true
+      return 0
+      ;;
+    1)
+      : # fall through to reconcile
+      ;;
+    *)
+      warn "Could not compute the operator.toml key delta (probe exit ${delta_rc})."
+      printf '%s\n' "${delta_out}" | sed 's/^/  /'
+      warn "NOT reporting this as 'already reconciled' — the probe did not run, so"
+      warn "the absence of findings here means nothing. Resolve the above and re-run."
+      return 0
+      ;;
+  esac
+
+  printf '%s\n' "${delta_out}" | sed 's/^/  /'
+
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would run: docs/scripts/setup-workspace.sh --reconcile-config"
     return 0
   fi
 
-  warn "Schema version drift: current=${current_schema} template=${template_schema}"
-  warn "Manual review recommended. Open operator.toml and template side-by-side."
-  warn "Auto-migration of schema differences is a separate maintenance step;"
-  warn "update.sh continues with current operator.toml values."
+  local setup="${REPO_ROOT}/docs/scripts/setup-workspace.sh"
+  if [ ! -f "${setup}" ]; then
+    warn "setup-workspace.sh not found at ${setup}; cannot reconcile."
+    return 0
+  fi
+
+  info "Reconciling — backfilling declared defaults, preserving operator-set values."
+  local rec_rc=0
+  bash "${setup}" --reconcile-config --source-repo "${REPO_ROOT}" || rec_rc=$?
+
+  if [ "${rec_rc}" -eq 66 ]; then
+    # The reserved code, finally emitted by something. A delivered key carries no
+    # default and could not be resolved without an operator answer. The key is left
+    # ABSENT rather than invented, and the operator is told which one.
+    err "A required operator.toml key has no default and was not supplied."
+    err "operator.toml was left with the key ABSENT rather than a guessed value."
+    err "Set it in ${OPERATOR_TOML} and re-run, or run setup-workspace.sh"
+    err "--reconcile-config interactively to be prompted."
+    exit 66
+  fi
+  if [ "${rec_rc}" -ne 0 ]; then
+    warn "Reconcile exited ${rec_rc}; operator.toml may still be behind the declaration."
+    return 0
+  fi
+  info "operator.toml reconciled."
 }
 
 # --- Phase 3: Composition-surface regeneration ---
