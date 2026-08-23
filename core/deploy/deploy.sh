@@ -4309,6 +4309,8 @@ cmd_check() {
     # current roster when fields are faithful" regardless of residual divergence.
     local REGISTRY_FIELD_MODE="warn"
     local _rfc_mode_file="$(pmo_instance_path)/registry-field-currency.mode"
+    # Legacy-home rung — see the shared deploy-check.mode block for why.
+    [[ -f "$_rfc_mode_file" ]] || _rfc_mode_file="$(pmo_instance_path_legacy)/registry-field-currency.mode"
     [[ -f "$_rfc_mode_file" ]] || _rfc_mode_file=".claude/hooks/registry-field-currency.mode"
     if [[ -f "$_rfc_mode_file" ]]; then
       local _rfc_mode
@@ -4681,8 +4683,17 @@ cmd_check() {
   # Warn-mode gate for Checks 8-10 (and downstream warn-mode checks).
   # MODE_FILE adapts to an operator-instance path-via-env-var per Spec
   # Surface 5.2 (C); falls back to legacy .claude/ location for compatibility.
+  # The LEGACY-home rung is load-bearing across the instance-home relocation, not
+  # belt-and-braces. Mode files are operator-instance runtime state, hand-created in
+  # the instance dir and never committed — so on an instance that has not yet copied
+  # its data to the new home, the only copy that exists sits at the previous home.
+  # Without this rung the relocation silently reverts an operator's deliberate
+  # `enforce` (and their `off` kill-switch) to the shipped default, for this whole
+  # cohort at once, with no message. Current home first, so a migrated operator's
+  # posture always wins over a stale legacy file.
   local DEPLOY_CHECK_MODE="warn"
   local MODE_FILE="$(pmo_instance_path)/deploy-check.mode"
+  [[ -f "$MODE_FILE" ]] || MODE_FILE="$(pmo_instance_path_legacy)/deploy-check.mode"
   [[ -f "$MODE_FILE" ]] || MODE_FILE=".claude/hooks/deploy-check.mode"
   if [[ -f "$MODE_FILE" ]]; then
     local _mode
@@ -4846,6 +4857,10 @@ cmd_check() {
     local _check_id="$1"
     local _default="${2:-$DEPLOY_CHECK_MODE}"
     local _check_mode_file="$(pmo_instance_path)/${_check_id}.mode"
+    # Legacy-home rung — see the shared deploy-check.mode block for why. This one
+    # covers EVERY check-specific dial at once, including the dedicated posture
+    # files that deliberately outrank the shared mode.
+    [[ -f "$_check_mode_file" ]] || _check_mode_file="$(pmo_instance_path_legacy)/${_check_id}.mode"
     [[ -f "$_check_mode_file" ]] || _check_mode_file=".claude/hooks/${_check_id}.mode"
     if [[ -f "$_check_mode_file" ]]; then
       local _cm
