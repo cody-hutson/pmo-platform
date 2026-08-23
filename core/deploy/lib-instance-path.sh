@@ -47,6 +47,8 @@
 # ignore" is the question every converging consumer must answer before it can
 # safely stop resolving the path itself:
 #   pmo_instance_path()       env: PMO_INSTANCE_PATH, CLAUDE_WORKSPACE_ROOT · toml: none
+#   pmo_instance_path_legacy() env: PMO_INSTANCE_PATH, CLAUDE_WORKSPACE_ROOT · toml: none
+#                             (migration probe only — see its block below)
 #   pmo_instance_path_for()   env: PMO_INSTANCE_PATH                        · toml: none
 #   pmo_operations_path_for() env: none                                     · toml: none
 #   pmo_localized_needles()   env: PMO_LOCALIZED_NEEDLES (+ pmo_instance_path's)
@@ -78,6 +80,34 @@
 # Echo the operator-instance base directory (no trailing slash).
 pmo_instance_path() {
   printf '%s\n' "${PMO_INSTANCE_PATH:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance}"
+}
+
+# Echo the LEGACY (pre-relocation) operator-instance base directory — the home
+# this family occupied before it became a workspace-root sibling.
+#
+# WHY THIS EXISTS, AND WHY IT IS HERE RATHER THAN AT ITS ONE CALLER. The PII
+# pre-commit guard must be able to tell an un-migrated instance from a fresh
+# clone, and those two states differ ONLY by whether the legacy home is still on
+# disk. Its caller therefore needs a value the current resolver, by construction,
+# no longer returns. Spelling that value at the call site would put a second live
+# instance-leaf literal back into core/hooks/ — the exact thing this file exists
+# to prevent (AC1 / AC5), and inside the path-leak detector's gating scan corpus
+# at that. One named function keeps the leaf single-homed and hands the follow-on
+# cleanup a greppable removal target instead of a hunt.
+#
+# DELIBERATELY THE SAME OVERRIDE SHAPE as pmo_instance_path() above, not a bare
+# literal. When PMO_INSTANCE_PATH is set the operator has named their home
+# explicitly, both functions return that one path, and the migration-detection
+# predicate at the caller collapses to "the home you named is missing" — i.e. the
+# legacy branch is unreachable and the pre-existing behaviour stands. That
+# inertness under an explicit override is a property worth having rather than an
+# accident: this function is a MIGRATION probe, and there is no migration to
+# detect on an instance that was never on the default path.
+#
+# REMOVAL: this function and its single caller retire together once the legacy
+# home is no longer expected on any instance.
+pmo_instance_path_legacy() {
+  printf '%s\n' "${PMO_INSTANCE_PATH:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance}"
 }
 
 # Echo the operator-instance base directory relative to an EXPLICIT workspace

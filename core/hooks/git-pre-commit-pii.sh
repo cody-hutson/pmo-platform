@@ -34,6 +34,15 @@
 # not blocked. The fail-closed flip is gated by a `.mode` file (warn|enforce|off)
 # mirroring the bypass-mode-readiness shakedown convention: warn-mode-initial,
 # flip to enforce after warn-log review.
+#
+# Migration safety. The operator-instance home relocated to a workspace-root sibling.
+# Both the needle file AND the `.mode` dial resolve from that one base, so a flip on
+# an instance whose data has not been copied invalidates the guard's data and its
+# severity dial together. Two things follow, and both are implemented below: an
+# instance presenting with the NEW home absent but the LEGACY home present is an
+# un-migrated instance, NOT a fresh clone, so it takes the fail-closed branch; and the
+# legacy home is a `.mode` resolution rung, so a deliberate `enforce` survives the
+# move. Both retire on their own once the operator deletes the originals.
 set -uo pipefail
 
 [[ "${CLAUDE_HOOK_BYPASS:-0}" == "1" ]] && exit 0
@@ -66,6 +75,7 @@ if ! command -v pmo_localized_needles >/dev/null 2>&1; then
   # resolution; downstream this resolves to the "unconfigured" branch (warn, do
   # not block) rather than fabricating a path or silently scanning nothing.
   pmo_instance_path() { printf '%s\n' "${PMO_INSTANCE_PATH:-}"; }
+  pmo_instance_path_legacy() { printf '%s\n' "${PMO_INSTANCE_PATH:-}"; }
   pmo_localized_needles() { printf '%s\n' "${PMO_LOCALIZED_NEEDLES:-}"; }
 fi
 
@@ -77,12 +87,25 @@ hits="$(printf '%s\n' "$added_all" | grep -inE "$always" || true)"
 # Tier 1b — coworker / org needles (gitignored instance file), every file.
 needles="$(pmo_localized_needles)"
 instance_dir="$(pmo_instance_path)"
+# The pre-relocation home. Present ONLY to tell an un-migrated instance from a
+# genuinely fresh clone — see the branch predicate below. Resolved through the lib
+# so the legacy leaf literal stays single-homed (AC1 / AC5).
+legacy_instance_dir="$(pmo_instance_path_legacy)"
 
 # Resolve the fail-closed mode (warn|enforce|off). Operator-instance file first
 # (consistent with deploy.sh's per-check .mode resolution), then a .claude/hooks/
 # fallback, defaulting to warn-mode-initial per the shakedown convention.
+#
+# THE LEGACY RUNG IS LOAD-BEARING, NOT BELT-AND-BRACES. This dial and the needle
+# file resolve from the SAME base, so the home relocation invalidates both in one
+# instant. The operator's `.mode` is hand-created in their instance dir — the file
+# is untracked and nothing writes it — so on an un-migrated instance the only copy
+# that exists sits at the legacy home. Without this rung a flip silently downgrades
+# a deliberate `enforce` to the `warn` default, and the branch below would print
+# BLOCKED and then exit 0: loud, and useless. Current home first, so a migrated
+# operator's posture always wins over a stale legacy file.
 needle_mode="warn"
-for _mode_file in "${instance_dir}/git-pre-commit-pii.mode" "$_pii_hook_dir/git-pre-commit-pii.mode"; do
+for _mode_file in "${instance_dir}/git-pre-commit-pii.mode" "${legacy_instance_dir}/git-pre-commit-pii.mode" "$_pii_hook_dir/git-pre-commit-pii.mode"; do
   if [[ -f "$_mode_file" ]]; then
     _m="$(tr -d '[:space:]' < "$_mode_file" 2>/dev/null || true)"
     case "$_m" in enforce|warn|off) needle_mode="$_m"; break ;; esac
@@ -103,7 +126,19 @@ if [[ "$needle_filled" == "1" ]]; then
   [[ -n "$nhits" ]] && hits="$(printf '%s\n%s\n' "$hits" "$nhits" || true)"
 elif [[ "$needle_mode" != "off" ]]; then
   # Two distinct unconfigured states, distinct messages (#1830 Part 4).
-  if [[ -d "$instance_dir" ]]; then
+  #
+  # AN UN-MIGRATED INSTANCE IS NOT A FRESH CLONE, and the difference is the whole
+  # reason this predicate is not just `-d "$instance_dir"`. After the home
+  # relocation, an instance whose data has not been copied presents with the new
+  # home absent — indistinguishable, on that test alone, from a first-time clone.
+  # It is the opposite: the operator HAS an instance, it is simply still at the old
+  # address. Classifying it as a fresh clone takes the branch that can never block
+  # at any mode, so the relocation would make the guard quieter on exactly the
+  # instances it most needs to protect. The legacy home still being on disk is what
+  # distinguishes the two, and it fails safe: once the operator deletes the
+  # originals (the last step of the migration, after they have confirmed the copy),
+  # this test goes false on its own and the fresh-clone semantics return.
+  if [[ -d "$instance_dir" || -d "$legacy_instance_dir" ]]; then
     # CONFIGURED-BUT-MISSING: the operator HAS an instance dir but the needle
     # surface is missing or holds only comments — fail closed (this is the
     # silent-degrade case the story closes).
@@ -116,11 +151,21 @@ elif [[ "$needle_mode" != "off" ]]; then
       fi
       echo "   $needles"
       echo ""
-      echo "The operator-instance dir exists ($instance_dir) but the coworker/org"
-      echo "needle surface is empty, so the PII guard's organizational-identity tier"
-      echo "is silently disabled. Fill it (one needle per line) from the template:"
-      echo "   core/config/localized-context-needles.txt.example"
-      echo "or run install.sh / update.sh to scaffold it."
+      if [[ ! -d "$instance_dir" && -d "$legacy_instance_dir" ]]; then
+        echo "The operator-instance home has MOVED and this instance has not been"
+        echo "migrated: nothing exists at $instance_dir,"
+        echo "but the previous home is still present at $legacy_instance_dir."
+        echo "Copy the instance contents to the new home (copy, do not move — keep the"
+        echo "originals until you have confirmed the new home works), then re-run"
+        echo "install.sh / update.sh. Your git-pre-commit-pii.mode setting is being"
+        echo "read from the previous home until you do."
+      else
+        echo "The operator-instance dir exists ($instance_dir) but the coworker/org"
+        echo "needle surface is empty, so the PII guard's organizational-identity tier"
+        echo "is silently disabled. Fill it (one needle per line) from the template:"
+        echo "   core/config/localized-context-needles.txt.example"
+        echo "or run install.sh / update.sh to scaffold it."
+      fi
       echo ""
       echo "Bypass for an intentional commit: CLAUDE_HOOK_BYPASS=1 git commit ..."
       echo "Suppress during shakedown: set git-pre-commit-pii.mode to 'warn' or 'off'."
