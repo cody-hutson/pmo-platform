@@ -134,7 +134,7 @@ mk_new() { # mk_new <ws> <mode-or-empty> <needle-or-empty>
 # Asserting the path appears is therefore an assertion that the real resolver ran.
 WS="${SBX}/wsP"; /bin/mkdir -p "$WS"
 run_hook "$WS" "harmless content"
-if /usr/bin/printf '%s' "$ERR" | /usr/bin/grep -qF "${WS}/pmo-instance"; then
+if /usr/bin/grep -qF "${WS}/pmo-instance" <<<"$ERR"; then
   report "precondition: the resolver LOADED (hook names the resolved home, not empty)" 1
 else
   report "precondition: the resolver LOADED (hook names the resolved home, not empty)" 0 \
@@ -158,7 +158,7 @@ fi
 
 WS="${SBX}/wsA2"; mk_legacy "$WS" "enforce"
 run_hook "$WS" "harmless content"
-if /usr/bin/printf '%s' "$ERR" | /usr/bin/grep -q 'BLOCKED'; then
+if /usr/bin/grep -q 'BLOCKED' <<<"$ERR"; then
   report "A2: un-migrated -> loud BLOCKED message, not the soft fresh-clone NOTE" 1
 else
   report "A2: un-migrated -> loud BLOCKED message, not the soft fresh-clone NOTE" 0 \
@@ -169,7 +169,7 @@ fi
 # operator's dial at warn, the message must be loud and the exit must still be 0.
 WS="${SBX}/wsA3"; mk_legacy "$WS" "warn"
 run_hook "$WS" "harmless content"
-if [ "$RC" = 0 ] && /usr/bin/printf '%s' "$ERR" | /usr/bin/grep -q 'BLOCKED'; then
+if [ "$RC" = 0 ] && /usr/bin/grep -q 'BLOCKED' <<<"$ERR"; then
   report "A3: un-migrated + legacy .mode=warn -> loud but non-blocking (exit 0)" 1
 else
   report "A3: un-migrated + legacy .mode=warn -> loud but non-blocking (exit 0)" 0 \
@@ -180,7 +180,7 @@ fi
 # legacy rung — the dial is honoured, not merely defaulted to something louder.
 WS="${SBX}/wsA4"; mk_legacy "$WS" "off"
 run_hook "$WS" "harmless content"
-if [ "$RC" = 0 ] && ! /usr/bin/printf '%s' "$ERR" | /usr/bin/grep -q 'BLOCKED'; then
+if [ "$RC" = 0 ] && ! /usr/bin/grep -q 'BLOCKED' <<<"$ERR"; then
   report "A4: un-migrated + legacy .mode=off -> silent (exit 0, no BLOCKED)" 1
 else
   report "A4: un-migrated + legacy .mode=off -> silent (exit 0, no BLOCKED)" 0 \
@@ -196,7 +196,7 @@ fi
 
 WS="${SBX}/wsB1"; /bin/mkdir -p "$WS"
 run_hook "$WS" "harmless content"
-if [ "$RC" = 0 ] && /usr/bin/printf '%s' "$ERR" | /usr/bin/grep -q 'no operator-instance dir'; then
+if [ "$RC" = 0 ] && /usr/bin/grep -q 'no operator-instance dir' <<<"$ERR"; then
   report "B1: fresh clone (neither home) -> soft NOTE, exit 0" 1
 else
   report "B1: fresh clone (neither home) -> soft NOTE, exit 0" 0 \
@@ -242,7 +242,7 @@ fi
 
 WS="${SBX}/wsD1"; mk_legacy "$WS" "enforce"; mk_new "$WS" "off" ""
 run_hook "$WS" "harmless content"
-if [ "$RC" = 0 ] && ! /usr/bin/printf '%s' "$ERR" | /usr/bin/grep -q 'BLOCKED'; then
+if [ "$RC" = 0 ] && ! /usr/bin/grep -q 'BLOCKED' <<<"$ERR"; then
   report "D1: both homes -> the NEW home's .mode wins over the legacy one" 1
 else
   report "D1: both homes -> the NEW home's .mode wins over the legacy one" 0 \
