@@ -263,7 +263,7 @@ cas_resolve() {     # resolve with every rung-1/2 and env-root lever explicitly 
 # (i) rung 3c — operator.toml claude_workspace_root. Run with TWO distinct values
 #     so a stuck probe returning one constant cannot pass.
 cas_toml_root "${SBX}/wsA"
-got="$(cas_resolve)"; want="${SBX}/wsA/personal/pmo-instance/evals/results"
+got="$(cas_resolve)"; want="${SBX}/wsA/pmo-instance/evals/results"
 if [ "${got}" = "${want}" ]; then
   report "cascade 3c: operator.toml claude_workspace_root honored (value A)" 1
 else
@@ -271,7 +271,7 @@ else
 fi
 
 cas_toml_root "${SBX}/wsB"
-got="$(cas_resolve)"; want="${SBX}/wsB/personal/pmo-instance/evals/results"
+got="$(cas_resolve)"; want="${SBX}/wsB/pmo-instance/evals/results"
 if [ "${got}" = "${want}" ]; then
   report "cascade 3c: tracks a SECOND distinct value (value B — stuck-probe guard)" 1
 else
@@ -283,7 +283,7 @@ fi
 cas_toml_norootkey
 got="$( unset EVALS_RESULTS_PATH PMO_INSTANCE_PATH CLAUDE_WORKSPACE_ROOT
         HOME="${CAS_HOME}"; WORKSPACE_ROOT="${SBX}/wsC"; pmo_evals_results_path )"
-want="${SBX}/wsC/personal/pmo-instance/evals/results"
+want="${SBX}/wsC/pmo-instance/evals/results"
 if [ "${got}" = "${want}" ]; then
   report "cascade 3a: env WORKSPACE_ROOT honored" 1
 else
@@ -294,7 +294,7 @@ fi
 #       toml, so the $HOME-rooted canonical default must stand. This arm passes
 #       before AND after any cascade change; it is what discriminates "the
 #       cascade resolves correctly" from "every limb returns the same string".
-got="$(cas_resolve)"; want="${CAS_HOME}/Claude/personal/pmo-instance/evals/results"
+got="$(cas_resolve)"; want="${CAS_HOME}/Claude/pmo-instance/evals/results"
 if [ "${got}" = "${want}" ]; then
   report "cascade 3d SPECIFICITY: no override anywhere -> HOME-rooted default" 1
 else
@@ -315,11 +315,11 @@ q_out="$( unset EVALS_RESULTS_PATH PMO_INSTANCE_PATH WORKSPACE_ROOT CLAUDE_WORKS
 # pipeline's status — a SUCCESSFUL match reporting failure. A here-string has no
 # writer to signal. The needle is a non-empty absolute path, so the here-string's
 # one-empty-line-for-empty-input behaviour cannot produce a false match.
-if grep -qF -- "${SBX}/wsA/personal/pmo-instance/evals/results/pipeline-event-log.md" <<<"${q_out}"; then
+if grep -qF -- "${SBX}/wsA/pmo-instance/evals/results/pipeline-event-log.md" <<<"${q_out}"; then
   report "cascade: query-pipeline-event.sh sources the resolver and reports the same literal" 1
 else
   report "cascade: query-pipeline-event.sh sources the resolver and reports the same literal" 0 \
-    "expected the tool to name ${SBX}/wsA/personal/pmo-instance/evals/results/pipeline-event-log.md; got: $(printf '%s' "${q_out}" | tr '\n' '|')"
+    "expected the tool to name ${SBX}/wsA/pmo-instance/evals/results/pipeline-event-log.md; got: $(printf '%s' "${q_out}" | tr '\n' '|')"
 fi
 
 # --- R-8 safety proof: live ~/.claude/skills untouched ---

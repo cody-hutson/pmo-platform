@@ -2,7 +2,7 @@
 # append-pipeline-event.sh — Pipeline event log writer
 # Appends one row to the operator-instance pipeline event log at
 # <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md
-# (canonical default: ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/evals/results/),
+# (canonical default: ${CLAUDE_WORKSPACE_ROOT}/pmo-instance/evals/results/),
 # per the schema at release/references/standards/pipeline-event-log-schema.md.
 #
 # Per the pipeline-event spec (Stage 5).
@@ -552,18 +552,18 @@ if [[ "$SELF_TEST" == "true" ]]; then
   printf '[paths]\nclaude_workspace_root = "%s"\n' "$_cas_home/wsK" > "$_cas_home/.config/pmo-platform/operator.toml"
   _cas_got="$( unset EVALS_RESULTS_PATH PMO_INSTANCE_PATH WORKSPACE_ROOT CLAUDE_WORKSPACE_ROOT
                HOME="$_cas_home"; pmo_evals_results_path )"
-  _cas_chk "3c toml claude_workspace_root" "$_cas_home/wsK/personal/pmo-instance/evals/results" "$_cas_got"
+  _cas_chk "3c toml claude_workspace_root" "$_cas_home/wsK/pmo-instance/evals/results" "$_cas_got"
   # 3a — $WORKSPACE_ROOT, with no toml key present
   printf '[paths]\noperator_homedir_path = ""\n' > "$_cas_home/.config/pmo-platform/operator.toml"
   _cas_got="$( unset EVALS_RESULTS_PATH PMO_INSTANCE_PATH CLAUDE_WORKSPACE_ROOT
                HOME="$_cas_home"; WORKSPACE_ROOT="$_cas_home/wsE"; pmo_evals_results_path )"
-  _cas_chk "3a env WORKSPACE_ROOT" "$_cas_home/wsE/personal/pmo-instance/evals/results" "$_cas_got"
+  _cas_chk "3a env WORKSPACE_ROOT" "$_cas_home/wsE/pmo-instance/evals/results" "$_cas_got"
   # 3d — specificity arm: nothing set anywhere, so the HOME-rooted default stands.
   # This arm must pass both before and after any cascade change; it is what
   # discriminates "the cascade works" from "every arm returns the same thing".
   _cas_got="$( unset EVALS_RESULTS_PATH PMO_INSTANCE_PATH WORKSPACE_ROOT CLAUDE_WORKSPACE_ROOT
                HOME="$_cas_home"; pmo_evals_results_path )"
-  _cas_chk "3d default" "$_cas_home/Claude/personal/pmo-instance/evals/results" "$_cas_got"
+  _cas_chk "3d default" "$_cas_home/Claude/pmo-instance/evals/results" "$_cas_got"
   /bin/rm -rf "$_cas_home"
   [[ "$_cas_fail" -eq 0 ]] || die "self-test: workspace-root cascade assertion FAILED (see above)" 1
   echo "self-test: workspace-root cascade OK (3a env / 3c toml / 3d default, value-pinned)"

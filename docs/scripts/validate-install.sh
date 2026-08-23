@@ -648,7 +648,7 @@ check_a3b_composition_surface() {
     basename="$(basename "${src}")"
     case "${tier}" in
       hook)     target="${WORKSPACE_ROOT}/.claude/${basename}" ;;
-      instance) target="${WORKSPACE_ROOT}/personal/pmo-instance/${basename}" ;;
+      instance) target="${WORKSPACE_ROOT}/pmo-instance/${basename}" ;;
       operations-root)
         # A row whose tier this case does not handle falls through the
         # `*) continue ;;` arm below and is therefore verified by NOTHING — which

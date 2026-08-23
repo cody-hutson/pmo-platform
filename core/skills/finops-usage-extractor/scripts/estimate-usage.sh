@@ -45,7 +45,7 @@
 #
 # Store path resolution (no hardcoded operator path; same as extract-usage.sh):
 #   env STORE > env FINOPS_STORE_PATH > operator.toml [paths].operator_instance_finops_store_path
-#   > default ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/finops
+#   > default ${CLAUDE_WORKSPACE_ROOT}/pmo-instance/finops
 # Release-log resolution (in-repo, path-resolved, never an operator root):
 #   env FINOPS_RELEASE_LOG > <repo>/release/releases/RELEASE_LOG.md
 #   plus every sibling <same-stem>_ARCHIVE-*.md in that file's own directory —
@@ -134,7 +134,7 @@ workspace_root() {
 resolve_store() {
   local store="${STORE:-${FINOPS_STORE_PATH:-}}"
   [ -z "$store" ] && store="$(toml_val operator_instance_finops_store_path)"
-  store="${store:-$(workspace_root)/personal/pmo-instance/finops}"
+  store="${store:-$(workspace_root)/pmo-instance/finops}"
   printf '%s' "$store"
 }
 
@@ -521,7 +521,7 @@ def four_leaf: (.tokens.input + .tokens.output + .tokens.cache_creation.total + 
                     elif $unit_mode == "usd" then "token volume + derived $ (a provider record supplies cost/tokens; rate DERIVED from the store's own record, never a price table)."
                     else "token volume. PROVIDER-PRESENT-BUT-UNREADABLE: a provider record exists but carries no readable cost/token pair; rendering token volume only." end),
         "Roll-up gate: coverage record PRESENT (predicate `any(.record==\"coverage\")` — never meta.schema_version).",
-        "Store resolution chain: env STORE > env FINOPS_STORE_PATH > operator.toml [paths].operator_instance_finops_store_path > ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/finops  (the resolved path VALUE is deliberately not printed)",
+        "Store resolution chain: env STORE > env FINOPS_STORE_PATH > operator.toml [paths].operator_instance_finops_store_path > ${CLAUDE_WORKSPACE_ROOT}/pmo-instance/finops  (the resolved path VALUE is deliberately not printed)",
         "Release-log resolution chain: env FINOPS_RELEASE_LOG > <repo>/release/releases/RELEASE_LOG.md",
         "Store provenance: schema_version=\($M.schema_version), store generator_version=\($M.store_generator_version); estimator generator_version=\($M.generator_version).",
         "Matching: tier \($L.tier) — \($L.tier_name) \(if $L.local then "[LOCAL, reproducible]" else "[NETWORK, non-reproducible]" end); key \($L.key).",

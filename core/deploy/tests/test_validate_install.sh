@@ -454,9 +454,9 @@ new_arm; SBX="${NEW_ARM}"
 write_skill "${SBX}/.claude/skills/demo-platform-skill/SKILL.md" "demo-platform-skill" 1
 mkdir -p "${SBX}/src/core/deploy"
 cp "${REPO_ROOT}/core/deploy/lib-instance-path.sh" "${SBX}/src/core/deploy/lib-instance-path.sh"
-mkdir -p "${SBX}/Claude/personal/pmo-instance/inbox" \
-         "${SBX}/Claude/personal/pmo-instance/ambient-intake" \
-         "${SBX}/Claude/personal/pmo-instance/external-sync"
+mkdir -p "${SBX}/Claude/pmo-instance/inbox" \
+         "${SBX}/Claude/pmo-instance/ambient-intake" \
+         "${SBX}/Claude/pmo-instance/external-sync"
 
 # Precondition, asserted BEFORE any A5b verdict is read: the resolver really did
 # load, so A5b is exercising its real path and not silently taking the

@@ -9,7 +9,7 @@
     "basis": "session.started_utc, UTC"
   },
   "store": {
-    "resolution_chain": "env STORE > env FINOPS_STORE_PATH > operator.toml [paths].operator_instance_finops_store_path > default ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/finops",
+    "resolution_chain": "env STORE > env FINOPS_STORE_PATH > operator.toml [paths].operator_instance_finops_store_path > default ${CLAUDE_WORKSPACE_ROOT}/pmo-instance/finops",
     "path_printed": false,
     "schema_version": "1.2.0",
     "generator_version": "v9.9-fixture"

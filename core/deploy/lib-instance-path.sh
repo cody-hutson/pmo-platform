@@ -22,19 +22,19 @@
 #     deploy.sh, the PII pre-commit hook, lib-composition.sh, the composition
 #     manifest, check-canonical-structure.sh, extract-roster-needles.sh, and the
 #     install/update/setup scripts source this lib and call the functions instead
-#     of inlining `${PMO_INSTANCE_PATH:-...personal/pmo-instance}` (ADR-017 §
+#     of inlining `${PMO_INSTANCE_PATH:-.../pmo-instance}` (ADR-017 §
 #     operator-instance surface convergence — collapse the inconsistent literals
 #     into one resolver).
 #
 # Resolution (highest precedence first):
-#   pmo_instance_path()      → ${PMO_INSTANCE_PATH:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance}
+#   pmo_instance_path()      → ${PMO_INSTANCE_PATH:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance}
 #   pmo_operations_path_for()→ <workspace-root>/projects
 #                              (1 tier — no env or config tier; see the function)
 #   pmo_localized_needles()  → ${PMO_LOCALIZED_NEEDLES:-$(pmo_instance_path)/localized-context-needles.txt}
 #   pmo_people_roster()      → ${PMO_PEOPLE_ROSTER:-$(pmo_instance_path)/people-roster.yaml}
 #   pmo_evals_results_path() → $EVALS_RESULTS_PATH, else the operator.toml key
 #                              operator_instance_evals_results_path, else
-#                              <workspace-root>/personal/pmo-instance/evals/results
+#                              <workspace-root>/pmo-instance/evals/results
 #                              where <workspace-root> is itself a four-step
 #                              cascade: $WORKSPACE_ROOT, else
 #                              $CLAUDE_WORKSPACE_ROOT, else the operator.toml key
@@ -77,7 +77,7 @@
 
 # Echo the operator-instance base directory (no trailing slash).
 pmo_instance_path() {
-  printf '%s\n' "${PMO_INSTANCE_PATH:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance}"
+  printf '%s\n' "${PMO_INSTANCE_PATH:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance}"
 }
 
 # Echo the operator-instance base directory relative to an EXPLICIT workspace
@@ -85,12 +85,12 @@ pmo_instance_path() {
 # must keep it (e.g. lib-composition.sh, which sandboxes installs/tests via a
 # passed --workspace-root and therefore cannot fall back to the $HOME-based
 # default). PMO_INSTANCE_PATH still wins when set; otherwise the leaf is appended
-# to the given base. Centralizing the `personal/pmo-instance` leaf here keeps it
+# to the given base. Centralizing the `pmo-instance` leaf here keeps it
 # out of every other *.sh (AC1 / AC5).
 # Usage: pmo_instance_path_for <workspace-root>
 pmo_instance_path_for() {
   local _base="$1"
-  printf '%s\n' "${PMO_INSTANCE_PATH:-${_base}/personal/pmo-instance}"
+  printf '%s\n' "${PMO_INSTANCE_PATH:-${_base}/pmo-instance}"
 }
 
 # Echo the operations-workspace root relative to an EXPLICIT workspace root (no
@@ -158,7 +158,7 @@ pmo_people_roster_for() {
 # not write:
 #   1. $EVALS_RESULTS_PATH                                     (env / direct override)
 #   2. operator.toml  operator_instance_evals_results_path      (instance override)
-#   3. <workspace-root>/personal/pmo-instance/evals/results, where <workspace-root>
+#   3. <workspace-root>/pmo-instance/evals/results, where <workspace-root>
 #      is a four-step cascade in its own right:
 #        3a. $WORKSPACE_ROOT               (pre-existing release-tools convention)
 #        3b. $CLAUDE_WORKSPACE_ROOT        (the ADR-032 canonical variable)
@@ -208,7 +208,7 @@ pmo_evals_results_path() {
   # Rung 3 — the four-step workspace-root cascade (3a..3d in the header above).
   _base="${WORKSPACE_ROOT:-${CLAUDE_WORKSPACE_ROOT:-}}"
   [[ -n "$_base" ]] || _base="$(_pmo_instance_toml_key "claude_workspace_root")"
-  printf '%s\n' "${_base:-$HOME/Claude}/personal/pmo-instance/evals/results"
+  printf '%s\n' "${_base:-$HOME/Claude}/pmo-instance/evals/results"
 }
 
 # --- Ambient-intake member directories -------------------------------------

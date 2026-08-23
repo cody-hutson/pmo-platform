@@ -2,7 +2,7 @@
 # query-pipeline-event.sh — Pipeline event log reader with pre-canned queries
 # Reads the operator-instance pipeline event log at
 # <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md
-# (canonical default: ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/evals/results/),
+# (canonical default: ${CLAUDE_WORKSPACE_ROOT}/pmo-instance/evals/results/),
 # per the schema at release/references/standards/pipeline-event-log-schema.md.
 # Resolves the SAME log location as append-pipeline-event.sh (writer↔reader parity).
 #
@@ -41,7 +41,7 @@
 #
 # Cross-surface JOIN pattern (run manually after this script; <RESULTS> is the
 # resolved <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>, default
-# ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/evals/results):
+# ${CLAUDE_WORKSPACE_ROOT}/pmo-instance/evals/results):
 #   grep -h '#N' <RESULTS>/{pipeline-event-log,calibration-data,iteration-log}.md
 #
 # Exit codes: 0 = success (rows may be 0), 1 = file missing / invalid args
