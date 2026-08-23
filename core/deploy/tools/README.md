@@ -407,7 +407,7 @@ pattern:
 | Layer | Surface | Owner |
 |---|---|---|
 | 1 (primary, operator-choice) | External release-notes tool — GitHub Releases per dual-write Surface 1 (default) + native validation; OR Azure DevOps; OR JIRA; OR Confluence; OR other | Operator's external system |
-| 2 (fallback) | `~/Claude/personal/pmo-instance/tools/check-release-corpus.sh` wrapper invoking `core/deploy/tools/check-doc-links.py` against operator-instance corpus paths | Operator (local) — authoring deferred to P2.5-T1 |
+| 2 (fallback) | `~/Claude/pmo-instance/tools/check-release-corpus.sh` wrapper invoking `core/deploy/tools/check-doc-links.py` against operator-instance corpus paths | Operator (local) — authoring deferred to P2.5-T1 |
 | 3 (release-pipeline gates) | Stage 12 + Stage 13 chip prompts per + Procedure 7 Step 4 completion-verification per fire regardless of Layer 1/2 choice | Hub (release pipeline) |
 
 `deploy.sh` Check 15 block is replaced with a citation comment block.

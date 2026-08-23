@@ -18,7 +18,7 @@ reversibility: CHEAP (spec/token/field) — except the cursor identity scheme (M
 ## 1. Drop-zone declaration
 The ambient inbox is a single watched directory resolved via the operator-instance
 path token `<OPERATOR_INSTANCE_INBOX_PATH>` (per core/standards/depersonalization-spec.md §4).
-- Canonical default: `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/inbox` (gitignored).
+- Canonical default: `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/inbox` (gitignored).
 - Override: `operator.toml [paths].operator_instance_inbox_path` (empty → default; non-empty → verbatim).
 Transcripts and emails land here for ambient ingest. The directory is operator content
 (OPERATOR-INSTANCE class) and is never git-tracked.

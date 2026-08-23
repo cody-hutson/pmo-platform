@@ -25,7 +25,7 @@ The platform does **not** have a single undifferentiated home. It already runs a
 | Class | Home | Where this is implemented |
 |---|---|---|
 | **Configuration** — the operator's declared choices | XDG config root, defaulting to `${HOME}/.config/pmo-platform/` | The workspace-setup script writes `operator.toml` there and self-labels the location canonical; the instance-path library reads every override key back from the same location |
-| **Runtime state** — machine-written data | Workspace-relative, defaulting to `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/` | The instance-path library's base resolver |
+| **Runtime state** — machine-written data | Workspace-relative, defaulting to `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/` | The instance-path library's base resolver |
 
 This matters because the fork set as originally written asked the platform to *choose* between workspace-relative, XDG, and a split — as though none were in force. One already is. The question was therefore never a three-way design choice; it was whether to **ratify** the running split and repair the surfaces that deviate from it.
 

@@ -3,7 +3,7 @@
 
 > **Source:** Stage 13 Close per-release close-out ceremony (Kerth retrospective + PMBOK 7 lessons-learned).
 > **Consumer surface:** [`release/references/pipeline/stage-13-close.md`](../pipeline/stage-13-close.md) § 6 Outputs.
-> **Placement:** This TEMPLATE is public (`release/references/templates/`). The FILLED per-release register writes to the operator-instance corpus root — `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/…` per [ADR-032](../../../core/ADRs/ADR-032-release-corpus-public-vs-instance-split.md) (sibling to the instance `RELEASE_LOG`) — never the tracked tree.
+> **Placement:** This TEMPLATE is public (`release/references/templates/`). The FILLED per-release register writes to the operator-instance corpus root — `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance/releases/…` per [ADR-032](../../../core/ADRs/ADR-032-release-corpus-public-vs-instance-split.md) (sibling to the instance `RELEASE_LOG`) — never the tracked tree.
 
 ---
 
@@ -12,7 +12,7 @@
 One filled register per release, authored by the operator at Stage 13 Close. The register is the human-authored full-ceremony reflection on the release; it **coexists** with the machine-generated `#### Release Learnings v<X.Y>` triple H4 block (emitted by [`synthesize-release-learnings.sh`](../../tools/synthesize-release-learnings.sh) at Stage 13 Phase A7). The relationship is directional: **the triple's three fields are seed inputs the operator transcribes and expands into this register's reflective sections** — the register consumes the triple; the triple has no dependency on the register and is unaffected by its absence.
 
 Fill order:
-1. Copy this template to the operator-instance register path for the closing version (under the `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/` corpus root per ADR-032).
+1. Copy this template to the operator-instance register path for the closing version (under the `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance/releases/` corpus root per ADR-032).
 2. Populate the **Header** (version + the triple's source-row anchors so the register is traceable to its captured events).
 3. Run the **Kerth Retrospective** block (Prime Directive recited first; then the 3-question framework; then the ritual of closure).
 4. Run the **PMBOK 7 Lessons-Learned** block (Situation → Outcome → Lessons → Next-cycle Actions).

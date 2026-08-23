@@ -138,7 +138,7 @@ Preview first with `--dry-run` on the same command.
 
 To extend an allowlist (e.g., add a new permitted host to `egress-allowlist.txt`):
 
-1. Open the runtime file: `~/Claude/.claude/egress-allowlist.txt` (hook-tier) or `~/Claude/personal/pmo-instance/<file>.txt` (instance-tier).
+1. Open the runtime file: `~/Claude/.claude/egress-allowlist.txt` (hook-tier) or `~/Claude/pmo-instance/<file>.txt` (instance-tier).
 2. Add entries **inside the OPERATOR ADDITIONS fence** (between `=== BEGIN OPERATOR ADDITIONS ===` and `=== END OPERATOR ADDITIONS ===`).
 3. Save. `update.sh` on future runs will preserve your additions verbatim.
 

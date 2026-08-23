@@ -158,7 +158,7 @@ This protects against silent corruption from manual edits without blocking updat
 3. Substitute tokens (per [`depersonalization-spec.md § 1`](depersonalization-spec.md) vocabulary).
 4. Wrap substituted content in MANAGED SECTION fence with current `managed_sha`, `installed_sha` (SHA of the post-substitution body just written), and `managed_at`.
 5. Append empty OPERATOR ADDITIONS fence below.
-6. Write to runtime location (`~/Claude/.claude/<file>` for hook-tier; `~/Claude/personal/pmo-instance/<file>` for instance-tier).
+6. Write to runtime location (`~/Claude/.claude/<file>` for hook-tier; `~/Claude/pmo-instance/<file>` for instance-tier).
 
 ### §3.2 Update (`./update.sh`)
 

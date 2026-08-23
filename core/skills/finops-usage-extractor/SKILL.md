@@ -97,7 +97,7 @@ bash core/skills/finops-usage-extractor/scripts/estimate-usage.sh [--class C --p
 
 ## Read-only posture
 
-The extractor **never writes to** `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects` (the source transcripts). It writes exactly one path: `<resolved-store>/usage.jsonl` (via an atomic `usage.jsonl.tmp` → `mv`). The store path resolves from config (`operator.toml [paths].operator_instance_finops_store_path`, default `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/finops`) — no hardcoded operator path.
+The extractor **never writes to** `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects` (the source transcripts). It writes exactly one path: `<resolved-store>/usage.jsonl` (via an atomic `usage.jsonl.tmp` → `mv`). The store path resolves from config (`operator.toml [paths].operator_instance_finops_store_path`, default `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/finops`) — no hardcoded operator path.
 
 The reporting phase writes **nothing at all** — it reads the resolved store and prints to stdout. The **estimation phase writes nothing at all either** — it reads the resolved store *and the in-repo release log* and prints to stdout; `--delta` persists no estimate record, because the leave-one-out re-derivation obtains the same comparison from a pure function of the existing store. Read-only on the source transcripts **and** on the store. That is a deliberate data-hygiene posture, not an omission: with no output file there is no artifact that could be accidentally staged and committed. For the same reason the report never prints the **resolved store path value** (an operator home path) — only the resolution chain, which is what makes a figure reproducible.
 

@@ -165,7 +165,7 @@ Intake-sweep run-record (one per scheduled sweep — JSONL append; field-aligned
   requires to tell RAN-EMPTY from MISSED.
 - **Location:** operator-instance path token `<OPERATOR_INSTANCE_INTAKE_SWEEP_RUNLOG_PATH>` (per
   `core/standards/depersonalization-spec.md` §4). Canonical default:
-  `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/ambient-intake/run-log.jsonl` (append-only JSONL;
+  `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/ambient-intake/run-log.jsonl` (append-only JSONL;
   gitignored). Override: `operator.toml [paths].operator_instance_intake_sweep_runlog_path`
   (empty → default; non-empty → verbatim). Same schema as the C3 sweep's run-log, a **distinct file**
   so the two sweeps' run-records do not interleave (C4 reads both files).

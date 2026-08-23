@@ -76,11 +76,11 @@ A ceiling can only LOWER a per-action autonomy, never raise one. The irreducible
 
 ### `[paths]` — operator-instance data homes
 
-Each field resolves an `<OPERATOR_INSTANCE_*_PATH>` token to an operator-local, git-ignored location: set = explicit override, empty = the canonical default under `${claude_workspace_root}/personal/pmo-instance/`. The full token vocabulary + defaults are canonical in [`core/standards/depersonalization-spec.md`](../core/standards/depersonalization-spec.md) §4.
+Each field resolves an `<OPERATOR_INSTANCE_*_PATH>` token to an operator-local, git-ignored location: set = explicit override, empty = the canonical default under `${claude_workspace_root}/pmo-instance/`. The full token vocabulary + defaults are canonical in [`core/standards/depersonalization-spec.md`](../core/standards/depersonalization-spec.md) §4.
 
 | Field | What it resolves | Default |
 |---|---|---|
-| `operator_instance_finops_store_path` | the Agent-FinOps runtime token-spend store (`usage.jsonl`) — per-session/per-subagent usage records the `finops-usage-extractor` skill writes; git-ignored operator-instance data (never commits on the public repo) | `${claude_workspace_root}/personal/pmo-instance/finops` |
+| `operator_instance_finops_store_path` | the Agent-FinOps runtime token-spend store (`usage.jsonl`) — per-session/per-subagent usage records the `finops-usage-extractor` skill writes; git-ignored operator-instance data (never commits on the public repo) | `${claude_workspace_root}/pmo-instance/finops` |
 
 Other `[paths]` fields (`operator_instance_hub_state_path`, `…_evals_results_path`, etc.) follow the same override-or-default resolution; see the depersonalization-spec §4 vocabulary table for the complete set.
 

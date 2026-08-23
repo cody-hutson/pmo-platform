@@ -15,7 +15,7 @@ name: Release tooling smoke
 #              grepping the comment-stripped text of automated-closeout.sh for
 #              instance-corpus resolution vocabulary — pmo_instance_path,
 #              PMO_INSTANCE_PATH, lib-instance-path, corpus_home, an inlined
-#              .../personal/pmo-instance idiom — or, failing that, on fixture A
+#              .../pmo-instance idiom (either spelling) — or, failing that, on fixture A
 #              exiting 0; while neither holds it reports PENDING-SEAM and exits 0.
 #              Once armed it asserts BY CONTENT rather than by exit code alone:
 #              CH-1, an absent instance-corpus root exits 0 (any non-zero,

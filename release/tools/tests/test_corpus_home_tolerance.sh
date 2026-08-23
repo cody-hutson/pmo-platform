@@ -313,7 +313,9 @@ CLAIMED_IDS="CH-1 CH-2 CH-3 CH-4"
 # Nine resolver idioms were checked against it and all nine match: a
 # `$(pmo_instance_path)` call, a `${PMO_INSTANCE_PATH:-}` read, a
 # `lib-instance-path.sh` source, the inlined ADR-032
-# `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance` idiom, an
+# `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance` idiom (and its pre-relocation
+# `.../personal/pmo-instance` spelling, which the needle still matches because the
+# `pmo[_-]?instance` alternative is indifferent to the parent segment), an
 # `operator.toml [adapters] corpus_home` selector in either read shape, an
 # `instance_root` local, an `INSTANCE_PATH` assignment, and an `OPERATOR_INSTANCE`
 # flag. Extending this list widens detection; it is the single knob that bounds
