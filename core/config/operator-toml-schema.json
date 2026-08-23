@@ -161,7 +161,7 @@
           "delivery": "opt-in",
           "default": "",
           "required": false,
-          "description": "Override for the hub-state store. Empty resolves to the canonical default ${claude_workspace_root}/personal/pmo-instance/hub-state.",
+          "description": "Override for the hub-state store. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/hub-state.",
           "since": "4.0"
         },
         {
@@ -181,7 +181,7 @@
           "delivery": "opt-in",
           "default": "",
           "required": false,
-          "description": "Override for the operator inbox. Empty resolves to the canonical default ${claude_workspace_root}/personal/pmo-instance/inbox.",
+          "description": "Override for the operator inbox. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/inbox.",
           "since": "4.0"
         },
         {
@@ -191,7 +191,7 @@
           "delivery": "opt-in",
           "default": "",
           "required": false,
-          "description": "Override for the external-sync snapshot. Empty resolves to the canonical default ${claude_workspace_root}/personal/pmo-instance/external-sync/snapshot.json.",
+          "description": "Override for the external-sync snapshot. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/external-sync/snapshot.json.",
           "since": "4.0"
         },
         {
@@ -201,7 +201,7 @@
           "delivery": "opt-in",
           "default": "",
           "required": false,
-          "description": "Override for the external-sync run log. Empty resolves to the canonical default ${claude_workspace_root}/personal/pmo-instance/external-sync/run-log.jsonl.",
+          "description": "Override for the external-sync run log. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/external-sync/run-log.jsonl.",
           "since": "4.0"
         },
         {
@@ -211,7 +211,7 @@
           "delivery": "opt-in",
           "default": "",
           "required": false,
-          "description": "Override for the ambient-intake sweep run log. Empty resolves to the canonical default ${claude_workspace_root}/personal/pmo-instance/ambient-intake/run-log.jsonl.",
+          "description": "Override for the ambient-intake sweep run log. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/ambient-intake/run-log.jsonl.",
           "since": "4.0"
         },
         {
@@ -221,7 +221,7 @@
           "delivery": "opt-in",
           "default": "",
           "required": false,
-          "description": "Override for eval results. Empty resolves to the canonical default ${claude_workspace_root}/personal/pmo-instance/evals/results.",
+          "description": "Override for eval results. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/evals/results.",
           "since": "4.0"
         },
         {
@@ -231,7 +231,7 @@
           "delivery": "opt-in",
           "default": "",
           "required": false,
-          "description": "Override for the Agent-FinOps token-spend store. Empty resolves to the canonical default ${claude_workspace_root}/personal/pmo-instance/finops.",
+          "description": "Override for the Agent-FinOps token-spend store. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/finops.",
           "since": "4.0"
         }
       ]
