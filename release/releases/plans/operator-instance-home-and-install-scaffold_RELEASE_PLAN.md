@@ -1,0 +1,401 @@
+---
+title: Release Plan — operator-instance-home-and-install-scaffold
+purpose: Stage-4 release plan for the operator-instance home relocation, the operator.toml schema reconciler, and the operations-tier install scaffold.
+type: release-plan
+status: ACTIVE
+reversibility: MODERATE / Confidence HIGH
+consumers: Stage 5-9 spokes; the release hub; Stage 9 Plan Review
+---
+<!-- reference-durability: allow-link -->
+
+# Release Plan: operator-instance-home-and-install-scaffold — Operator Instance Home and Install Scaffold
+
+## Header
+
+| Field | Value |
+|-------|-------|
+| **Version** | {{RELEASE_VERSION}} |
+| **Bump Class** | minor — the durable determination. The concrete number binds only at the Stage-12 atomic claim (ADR-092). Recomputed at Engineering Commit 0 per the authoritative-version-selection procedure: `max(claimed tags v4.x, RELEASE_LOG v4.x rows) + 1`; tags max **37**, ledger rows max **37**, so next-free is **v4.38** (v4.36 = `docs-match-shipped-state`, v4.37 = `migration-protocol-and-skill-integration`, both claimed while Stage 5 ran). |
+| **Date Created** | 2026-08-23 (Sunday) |
+| **Release Manager** | Agent-assisted |
+| **Status** | Executing |
+| **Branch** | release/operator-instance-home-and-install-scaffold |
+| **PR** | (populated at Stage 6 PR creation) |
+| **Milestone** | operator-instance-home-and-install-scaffold |
+| **Release Class** | `novel` — CONFIRMED at Stage 4 against live evidence (`class_weight` 1.15) |
+| **Raw points** | **29** — #3382 remainder 21 · #5829 M=4 · #5739 M=4 |
+| **Branch topology** | **SINGLE** — one branch, one PR, one merge gate |
+| **Concurrency posture** | **P0 fully-serial**. Force-push on the shared release branch is prohibited, including `--force-with-lease`. |
+| **Baseline** | `origin/main` @ `2c4a2130` — re-anchored at Stage 6 entry from the retired Stage-5 pin `da521541` (operator decision; drift measured and benign) |
+
+## Scope
+
+### Issues Included
+
+| # | Issue | Title | Priority | Category | Labels |
+|---|-------|-------|----------|----------|--------|
+| 1 | #5739 | operator.toml is generated at install and reconciled by nothing, so a generator schema addition never reaches an existing instance | P2 | bug | `bug`, `cluster: system-config`, `size:M`, `project:pipeline` |
+| 2 | #3382 | Relocate operator-instance runtime-state default out of personal/ to a workspace-root home | P2 | improvement | `improvement`, `size:XL`, `project:portability-distribution`, `type:story` |
+| 3 | #5829 | A fresh clone ships no operational structure — install provisions no tiers, no project scaffold | P2 | improvement | `improvement`, `size:M`, `project:portability-distribution`, `type:story` |
+
+### Dependency Graph
+
+Per ADR-1 — Kahn's BFS topological sort, priority-desc → issue-asc tie-breaker. Algorithm spec in `references/dependency-analysis.md` § Dependency Graph Construction Algorithm.
+
+One hard in-bundle edge; everything else is file contention, which is **not** a dependency.
+
+```
+#3382  ──HARD──▶  #5829
+(instance home)   (provisions into it)
+
+#5739  ── independent ──  (no in-bundle dependency in either direction)
+```
+
+#### Topologically Sorted Sequence
+
+| Position | Issue | Priority | Status | Dependencies (in-release) | Edge Type |
+|---|---|---|---|---|---|
+| 1 | #5739 | P2 | bundled | (none — root) | — |
+| 2 | #3382 | P2 | bundled | (none — root) | — |
+| 3 | #5829 | P2 | bundled | #3382 | DEPENDS_ON |
+
+#### Artifact Relationship Graph
+
+Typed per `core/schemas/frontmatter-schema.md` §Category 4 (GENERATES · DEPENDS_ON · BLOCKS · SUPERSEDES) — referenced, not redefined.
+
+| Source | Type | Target | Direction | Derived from |
+|---|---|---|---|---|
+| #5829 | DEPENDS_ON | #3382 | #5829 → #3382 | body Dependencies + milestone `## Composition` Sequence line |
+| #5739 | GENERATES | core/config/operator-toml-schema.json | #5739 → file | File Change Matrix (Create) |
+| #5739 | GENERATES | core/deploy/tools/check-operator-toml-schema.sh | #5739 → file | File Change Matrix (Create) |
+| #3382 | GENERATES | core/ADRs/ADR-NNN-operator-instance-workspace-root-home.md | #3382 → file | File Change Matrix (Create) |
+| #5829 | GENERATES | operations/templates/operations-tiers/ | #5829 → tree | File Change Matrix (Create) |
+
+#### Tie-Breaker Trace
+
+- Position-1/2 tie between #5739 (P2, root) and #3382 (P2, root): both are roots with no in-release dependency. Broken by **file-contention cost**, not by issue number — #5739's edit region in `docs/scripts/setup-workspace.sh` (`write_operator_toml`, `:705–865`) is ~1,690 lines clear of the `install_composition_surface_files` block the other two claim, and sequencing #5739 first also resolves the cross-release Tier-S edge (R2) in this release's favour. #5739 ordered ahead.
+
+### File Change Matrix
+
+`domain_practice: { source: N/A — pipeline-internal release, date: 2026-08-22, domain: software }`
+
+**A3-time classification rationale:** the matrix is dominated by executable platform tooling — the path resolver, the installer/validator scripts, the deploy checks, the path-leak detector, four FinOps scripts and their fixtures — so the deliverable class is `software`, with `governance` secondary.
+
+| File Path | Issues | Change Type | Risk |
+|-----------|--------|------------|------|
+| core/config/operator-toml-schema.json | #5739 | Create | Medium |
+| core/deploy/tools/check-operator-toml-schema.sh | #5739 | Create | Low |
+| core/ADRs/ADR-NNN-operator-toml-declared-schema.md | #5739 | Create | Low |
+| core/ADRs/ADR-NNN-operator-instance-workspace-root-home.md | #3382 | Create | Low |
+| operations/templates/operations-tiers/ | #5829 | Create | Low |
+| docs/scripts/setup-workspace.sh | #5739, #3382, #5829 | Modify | **High** |
+| core/deploy/lib-instance-path.sh | #3382, #5829 | Modify | **High** |
+| core/deploy/deploy.sh | #5739, #3382 | Modify | Medium |
+| core/config/operator.toml.template | #5739, #3382 | Modify | Medium |
+| core/hooks/git-pre-commit-pii.sh | #3382 | Modify | **High** |
+| core/deploy/tools/path-leak-patterns.sh | #3382 | Modify | Medium |
+| core/deploy/allowlists/skip-path-portability-check.txt | #3382 | Modify | Low |
+| docs/scripts/validate-install.sh | #3382, #5829 | Modify | Medium |
+| core/standards/depersonalization-spec.md | #5739, #3382 | Modify | Low |
+| core/deploy/tests/test_upgrade_config_durability.sh | #5739 | Modify | Medium |
+| update.sh | #5739 | Modify | Medium |
+| .github/workflows/repo-integrity.yml | #5739 | Modify | Low |
+| core/schemas/README.md | #5739 | Modify | Low |
+| docs/UPDATE.md | #5739 | Modify | Low |
+| docs/INSTALL.md | #5739 | Modify | Low |
+| docs/platform-config-reference.md | #5739 | Modify | Low |
+| operations/templates/project-bins/4-evidence/manifest.yml | #5829 | Modify | Low |
+| .gitignore | #3382, #5829 | Modify | Low |
+| core/skills/finops-usage-extractor/ (5 files) | #3382 | Modify | Medium |
+
+#### Read-only inputs
+
+| File Path | Issues | Why READ-only |
+|---|---|---|
+| core/ADRs/ADR-022-platform-config-vs-operator-toml-split.md | #5739 | Governs the `[adapters]`/`[methodology]` delivery; refined, not amended |
+| core/hooks/session-retro-trigger.sh | #5739 | Consumer of `[session_retro]`; NOT edited |
+| core/references/reference/operator-instance-home-and-isolation-key.md | #3382 | The shipped fork-record the build consumes |
+
+#### Explicit non-scope — recorded with reason, not omitted
+
+| File Path | Reason |
+|---|---|
+| core/deploy/composition-surface-manifest.sh | **DR-4 (#5739).** `operator.toml` is the token *read-source* those regenerations consume, not one of their targets, and it lives at `~/.config/pmo-platform/` outside every manifest tier. Registering it would invert the dependency. |
+| core/ADRs/ADR-022…:30 | Context-section historical prose describing pre-ADR state — a historical snapshot, out of cascade scope. |
+| release/releases/** (frozen artifacts) | Immutable historical corpus — MUST NOT EDIT. |
+
+### File Contention Map
+
+**Within-release — 7 contended files.**
+
+| File | Issues | Intent Mix | Severity | Recommendation |
+|---|---|---|---|---|
+| `docs/scripts/setup-workspace.sh` | #5739, #3382, #5829 | edit×3 | **MULTI-WAY** | The hot spot. #5739 edits `write_operator_toml` (`:705–865`); #3382 edits `:1131–1134`/`:2557`/`:2560`; #5829 extends `:2568` and adds `scaffold_operations_tiers`. #5739's region is ~1,690 lines clear. **#3382 and #5829 are 11 lines apart inside the same `DRY_RUN` block** — genuine line-range overlap. Serialize #3382 → #5829; #5739 precedes both. |
+| `core/deploy/lib-instance-path.sh` | #3382, #5829 | edit×2 | **BINARY** | Single resolver. #3382 flips `pmo_instance_path()`; #5829 consumes `pmo_operations_path_for()`. **Second literal to catch:** `pmo_evals_results_path()` (`:211`) carries its own `…/personal/pmo-instance/evals/results` default. |
+| `core/deploy/deploy.sh` | #5739, #3382 | edit×2 | **BINARY** | #3382 updates 5 path references; #5739 adds Check 70. Distinct regions; serialize. |
+| `core/config/operator.toml.template` | #5739, #3382 | edit×2 | **BINARY** | #3382 rewrites 8 comment defaults; #5739 may adjust for the C70c parity lint. Graded by **CIAC-2**. |
+| `core/standards/depersonalization-spec.md` | #5739, #3382 | edit×2 | **BINARY** | **Added at Stage 5** (Tier-2 `[SCOPE CHANGE]`, hub-accepted). Sections are disjoint — #5739 §3 item 1 (the fifth stale-prose site) vs #3382 slice 5 §4 canonical-default paths. #5739 first means #3382 rebases onto a settled file. |
+| `docs/scripts/validate-install.sh` | #3382, #5829 | edit×2 | **BINARY** | Validator asserts both the instance home and the scaffold. |
+| `.gitignore` | #3382, #5829 | edit×2 | **BINARY** | append-pattern. #3382 updates the `pmo-instance/` stem; #5829 must not violate the Layer-2 boundary. Informational. |
+
+**Merge order under P0:** `#5739` → `#3382` → `#5829`. Every contended file is written by exactly one issue at a time.
+
+**Parse-quality:** 3 issues parsed cleanly · 0 deferred · 0 parse-failed
+
+### Cross-Milestone Dependency Validation
+
+#### G3-07 Status
+
+`PASS — 1 dependency edge(s) checked, 0 cross-milestone violations`
+
+#### Violations
+
+None. The single hard edge (#3382 → #5829) is intra-milestone.
+
+#### Resolved Edges (B is Done)
+
+N/A — no edge resolves to a closed milestone.
+
+#### Registered Exceptions
+
+N/A — no exceptions registered.
+
+### Bundle Refresh State
+
+N/A — Gate G-BR returned `no-op` at Stage 4 (A0 currency-decision confidence gate: refresh outcome `no-op`, signal corroborated-and-grounded across A0.5 / A0.6 / A0.8). Section retained with the N/A reason rather than suppressed silently.
+
+### Exclusions
+
+- **#5740** (operator-facing settings manager): ejected at the Stage-4 gate — unmilestoned, `status: proposed`. It is **downstream** of #5739 by the milestone's Coordination assignment. #5739 declares the schema; #5740 consumes it in a later release.
+- **ADR-032 supersession note** (R11): out of scope. ADR-032 still reads as though its deferred release-corpus migration is queued, but the fork-record measured it moot. Needs a superseded-by note or a successor card — neither is this bundle's job.
+- **TOML-parser consolidation** (four hand-rolled minimal parsers): routed as a next-release issue. Folding it in would balloon a `size:M`.
+- **`update.sh` multi-line-array corruption** (v4.15 plan finding 2): declared coverage boundary — the declaration's `type` enum excludes `array`, so nothing delivered can hit it. Next-release issue.
+
+## Implementation Sequence
+
+Dependency-ordered implementation plan. **#5739 → #3382 → #5829**, P0 fully-serial, single branch.
+
+### Issue #5739: operator.toml reconciled by nothing
+
+**Change Specification:**
+- **Files modified:** `core/config/operator-toml-schema.json` (add), `core/deploy/tools/check-operator-toml-schema.sh` (add), `core/ADRs/ADR-NNN-operator-toml-declared-schema.md` (add), `docs/scripts/setup-workspace.sh`, `update.sh`, `core/deploy/deploy.sh`, `.github/workflows/repo-integrity.yml`, `core/config/operator.toml.template`, `core/standards/depersonalization-spec.md`, `core/deploy/tests/test_upgrade_config_durability.sh`, `core/schemas/README.md`, `docs/UPDATE.md`, `docs/INSTALL.md`, `docs/platform-config-reference.md`
+- **Change description:** Declare the `operator.toml` schema as typed JSON data (**D-1 / S3**); derive the generator's emit from it, so `MANAGED`, `MANAGED_SECTIONS` and `field_to_token` become **derived and deleted** — a net removal of three hand-maintained lists. Complete the already-wired-but-hollow reconciler at `update.sh:217 schema_migrate()`, which is called from both update paths (`:975`, `:987`), already compares `schema_version`, and reserves exit **66** that nothing emits. Add `setup-workspace.sh --reconcile-config` as the narrow reconcile entrypoint. Add `deploy.sh` **Check 70** over a new primitive with `--self-test`, plus a `repo-integrity.yml` job. **D-2:** deliver `[adapters]`, `[methodology]` and `[session_retro]` — 10 keys, 3 sections, in a declaration-only diff.
+- **Commit plan:** C1 (declaration) → C2 (generator derives emit; byte-identical) → C3 (`--reconcile-config`) → C4 (check primitive) → C5 (Check 70 + CI job) → C6 (`schema_migrate()` extended; exit 66 wired) → C8 (durability Suite R) → C7 (deliver 3 sections — the AC-5 proof) → C9 (prose) → C10 (ADR). Hard edges: C1→C2→C3; C4→C5; (C3 ∧ C4)→C6; C8→C7.
+- **Acceptance criteria:** the 8 unit ACs on #5739, plus release-level CIAC-2 and CIAC-4.
+- **Estimated complexity:** Medium
+- **Dependencies:** None (root)
+
+**M1 binding (Collective Review).** `update.sh` has **zero** JSON parsers (0 `jq`, 0 `python3`, 0 `node`; it parses TOML with `grep` + `awk` — control arms 11 and 7). The schema stays JSON and `update.sh` reads it **through a helper under `core/deploy/tools/`**, matching the existing check-primitive pattern. **`update.sh` gains no new runtime dependency.**
+
+### Issue #3382: Relocate operator-instance runtime-state default
+
+**Change Specification:**
+- **Files modified:** `core/deploy/lib-instance-path.sh`, `core/deploy/tools/path-leak-patterns.sh`, `core/deploy/allowlists/skip-path-portability-check.txt`, `core/hooks/git-pre-commit-pii.sh`, `docs/scripts/setup-workspace.sh`, `docs/scripts/validate-install.sh`, `core/deploy/deploy.sh`, `core/config/operator.toml.template`, `core/standards/depersonalization-spec.md`, `core/skills/finops-usage-extractor/` (5 files), `.gitignore`, `core/ADRs/ADR-NNN-operator-instance-workspace-root-home.md` (add)
+- **Change description:** Execute the shipped fork-record's ordered slice plan, slices **3 → 4 → 5 → 6 → 7 → 8 → 9 → 10** (slices 1–2 shipped in the prior release). Slice 3 (detector) **must** precede slice 4 (resolver flip). Slice 4's `copy → flip → verify-hook-resolves → only then delete` sequence is binding; the delete step must not share a commit with the flip.
+- **D-E2b (accepted, expanded):** the PII-hook hardening ships as its own commit. **Expanded per the Collective Review Blocker:** add the legacy instance home as an additional rung in the `_mode_file` resolution loop (`core/hooks/git-pre-commit-pii.sh:84–90`), **and rebuild the E2-b fixture to place `.mode` at the legacy home** rather than the hooks directory, so the test is capable of failing. Without the extra rung, `needle_mode` falls back to `warn` post-flip and the newly-reached CONFIGURED-BUT-MISSING branch prints `BLOCKED:` and **exits 0**.
+- **D-Slice9 (kept):** slice 9 remains the **last** commit; the Stage-12 operator attestation gate stands. **M3:** Stage 6 evaluates whether #5739's C70a can serve as slice 9's in-release gate; if it can, the attestation becomes a backstop rather than the sole control.
+- **Acceptance criteria:** per the card, as amended by the fork-record.
+- **Estimated complexity:** High
+- **Dependencies:** None (root); blocks #5829
+
+### Issue #5829: A fresh clone ships no operational structure
+
+**Change Specification:**
+- **Files modified:** `operations/templates/operations-tiers/` (add, tracked tree), `docs/scripts/setup-workspace.sh`, `core/deploy/lib-instance-path.sh`, `docs/scripts/validate-install.sh`, `operations/templates/project-bins/4-evidence/manifest.yml`, `.gitignore`
+- **Change description:** **D-3 — S3 hybrid:** directories via the existing `create_dir_layout()`; seed READMEs via a new `scaffold_operations_tiers()` reading a new tracked `operations/templates/operations-tiers/` tree. **M2 (accepted, ~1 line):** `scaffold_operations_tiers` is called from **both** install flows — `fresh_install()` and `rebootstrap()` — because `scaffold_localized_roster` / `create_dir_layout` each have two call sites, and re-bootstrap is the flow every already-installed operator takes. F3's exit gate asserts seed presence after a **re-bootstrap** run, not only after a fresh install.
+- **D-4 — AC-2 REDUCED to verify-only:** #5829 stops building bin-card provisioning and instead verifies PR #5889 satisfies AC-2. **Precondition (FM-5829-B):** "#5889 merged" is checked **before** AC-2 is graded verify-only, reverting to NOT-MET-pending otherwise. #5889 merged as v4.37; `Step 5b` is present on `main`.
+- **Check 6 resolution:** the scaffold creates `Transcripts/`, `Emails/`, `Exports/` per the `project-initiator` SKILL.md tree, and `operations/templates/project-bins/4-evidence/manifest.yml` is corrected **in-release** to match. Measured safe: **no executable or config file parses `subfolders:`** from the bin manifests (probe over 284 tracked `.py`/`.sh`/`.yml`/`.yaml` files; sensitivity arm `manifest` → 38 files, specificity arm → 0).
+- **Do NOT modernize `create_dir_layout` to use the resolver** — the resolver is sourced **function-locally**, after `create_dir_layout` runs in both flows, so the literals at `:1131–1134` are structurally forced.
+- **Acceptance criteria:** per the card, with AC-2 reduced.
+- **Estimated complexity:** Medium
+- **Dependencies:** #3382
+
+## Risk Register
+
+| # | Risk | Likelihood | Impact | Mitigation | Owner |
+|---|------|-----------|--------|-----------|-------|
+| R1 | #3382's `size:L` understated its remaining slice plan by ~2.6× (21 raw remain of a 25-raw slice plan); bundle reads **29 raw** measured against 16 declared, outside the 15–25 band | — | Med | **RESOLVED at Stage 4 (D-Scope):** ship whole at 29 raw; #3382 re-labelled `size:L` → `size:XL`. No carve. Composition is judged on capability-coherence, not fitted to a size band. Only the recorded weight changed. | Operator |
+| R2 | Cross-release Tier-S edge: `release/docs-match-shipped-state` edits the exact `write_operator_toml` region #5739 must change | — | Low | **RESOLVED — DOWNGRADED to CHEAP · HIGH**, bounded to three comment-only hunks. Hub-verified: PR #5891's diff on both overlapping surfaces changes **zero executable lines**. It has since **merged as v4.36**. Base re-anchored to `2c4a2130`; drift assessed benign. | Stage 6 |
+| R3 | PII pre-commit hook fails OPEN on a missing needle file — if the resolver flips before the needle file is copied, PII can reach a commit on a public repo | Low | **IRREVERSIBLE** | **Hard precondition.** Slice 4's `copy → flip → verify → delete` ordering is binding; delete must not share a commit with the flip. **Compounded by the Collective Review Blocker** — the severity dial (`.mode`) resolves from the same relocating path, so E2-b must extend the `_mode_file` loop, not only the branch predicate. Verification is an explicit Stage 7 DT item. | #3382 |
+| R4 | 3-way within-release contention on `docs/scripts/setup-workspace.sh`, incl. an 11-line-apart line-range overlap inside one function | High | Med | P0 fully-serial posture + the stated merge order. No concurrent writes to any contended file. **CF-1:** Stage 6 re-derives `create_dir_layout`'s bounds from the function's braces rather than from any design's stated line numbers — three designs gave three different coordinates and only one (`:1131–1134`) is right. | Stage 6 |
+| R5 | Detector-before-writer inversion — bare new-form paths stop being flagged as operator-local | Med | Med | Slice 3 lands before slices 4–8. Keep **both** forms recognized during migration; close the window at slice 9 only after the operator instance is confirmed migrated. | #3382 |
+| R6 | #3382's body under-enumerates its own surface (25 live files absent from "Affected Files") | — | Low | The FCM above supersedes the card's list. Tier 1 `[ADJUST]` applied at Stage 5 entry. | Stage 5 |
+| R7 | #5829's template-vs-generate fork collides with the Layer-2 git-ignore boundary | — | Med | **RESOLVED (D-3):** S3 hybrid — the tracked template tree lives at `operations/templates/operations-tiers/`; the git-ignored destination receives seeded copies. | #5829 |
+| R8 | Filesystem migration is not git-revertible — `git revert` does not move the operator's instance directory back | Med | **EXPENSIVE** | Copy-first with originals retained until operator confirmation. Reverse procedure documented in the new ADR § Migration. Originals-delete is a separate operator-gated act, post-release. | #3382 |
+| R9 | #5739's no-default field path undefined for non-interactive runs | — | Low | **RESOLVED (D-3 truth table):** exit **66** fires only when a `required: true` key with **no** default is missing. That set is empty today, so the non-interactive path exits **0** unchanged — the mechanism is defined and unreachable at ship. | #5739 |
+| R10 | Three different file counts in circulation for #3382's blast radius (51 / 57 / 60) | — | Low | **RESOLVED: 60** at the baseline, agreed by three independent methods. Use 60. | Stage 4 |
+| R11 | ADR-032 still reads as though its deferred release-corpus migration is queued | Low | Low | **Out of scope.** Surfaced to Recommendations — needs a superseded-by note or a successor card. | Backlog |
+| R12 | #5739 shares substrate with #5740 — both need a declared machine-readable `operator.toml` schema | — | Low | **RESOLVED:** the milestone's Coordination section assigns declaration to #5739, discharged by the #5740 consumption contract in the Stage-5 output. Graded by **CIAC-4**. | #5739 |
+| R13 | **C7 writes 10 new keys into every operator's `operator.toml`** on their next update | High | Low | **MODERATE · HIGH.** Every added key carries a default and is **inert-by-default** — verified: `[session_retro]`'s five caller defaults are byte-identical to the template's, and `[methodology]` already resolves via the template as cascade rung 1. Behaviour is identical before and after. Reverting the code does not un-write the keys, but `passthrough()` preserves them harmlessly. | #5739 |
+| R14 | **CF-2 — E1's "Check 43 findings = 0" was measured at commit 1 of 8** and never re-measured after E2-b and slice 9 move the surface | Med | Med | **M4 disposition: routed to Stage 7** as a re-measurement obligation at branch HEAD, not an E1 per-commit gate. | Stage 7 |
+| R15 | **CF-3 — slice 9 and E2-b encode opposite assumptions about the same fact, and slice 9 executes last** | Low | **High** | The composed silent path breaks at its only silent link once the Blocker fix lands (the `_mode_file` legacy rung). That is why the Blocker is scored Blocker rather than Major. | #3382 |
+
+## Delivery Strategy
+
+| Aspect | Decision |
+|--------|---------|
+| **Implementation approach** | Sequential (dependency-ordered) — **P0 fully-serial** |
+| **Commit strategy** | Grouped commits — one commit per logical slice, dependency-ordered within each issue |
+| **Review approach** | Single PR for entire release (D-C **SINGLE** topology) |
+| **Deployment mechanism** | Git merge + S-2 skill copy + manifest execution |
+| **Stacked-base cleanup posture** | Phase B0 base-shift per dep (default — Option A) |
+
+**Force-push on the shared release branch is prohibited**, including `--force-with-lease`. Stated so a later posture change does not silently drop the constraint.
+
+## Verification Plan
+
+### Per-Issue Verification
+
+| Issue | Verification Method | Expected Result |
+|-------|-------------------|----------------|
+| #5739 | Regenerate a fixture `operator.toml` before and after C2; diff | Zero-byte diff — emit is byte-identical on the unchanged delivered set |
+| #5739 | Seed a config at the pre-v4.23 key set, run the reconcile path | Missing delivered keys backfilled; a deliberate `automation_level = "off"` survives; no key removed |
+| #5739 | Non-interactive: stdin closed, no `required`-undefaulted key missing | **exit 0** (current population). With a synthetic `required`-undefaulted key ⇒ **exit 66**, no hang, no invented value |
+| #5739 | Check 70 `--self-test` both control arms | Stale fixture **fires**; current fixture **silent**; non-zero self-test is a hard FAIL on every mode |
+| #5739 | Typed emit | `[session_retro].enabled` emits **unquoted** `false`; `min_tool_calls`/`min_turns` emit **unquoted** ints |
+| #5739 | AC-5 generic-mechanism proof | C7's file list is declaration-only — **zero changed `.sh` lines** across 10 keys / 3 sections |
+| #3382 | Post-flip PII-hook resolution on an un-migrated instance, `.mode` at the **legacy** home | CONFIGURED-BUT-MISSING branch taken **and `enforce` blocks** (exit 1), not a `BLOCKED:` print with exit 0 |
+| #3382 | Check 43 findings, re-measured at **branch HEAD** | 1 → 0, measured after the full commit set (not at commit 1) |
+| #3382 | Needle-file continuity across `copy → flip → verify → delete` | Guard reads the correct needle file at every intermediate state |
+| #5829 | Re-bootstrap run (not only fresh install) | 9 tier directories **and** their seed READMEs present |
+| #5829 | Idempotence — second install run with sentinels | All sentinels survive across all three surfaces |
+| #5829 | `4-evidence` subfolder set | `Transcripts/`, `Emails/`, `Exports/` created; manifest `subfolders:` agrees |
+
+### Release-Level Verification
+
+Per verification-checklist.md:
+- [ ] File Integrity
+- [ ] Content Correctness
+- [ ] Cross-Reference Validity
+- [ ] Skill Invocation
+- [ ] Output Contract Compliance
+
+### Cross-Issue Acceptance Criteria
+
+Four cohesion constraints the *integrated* release must hold. Graded at Stage 9 QC3.5 on the merged PR.
+
+- [ ] **CIAC-1 (#3382 × #5829 on `install_composition_surface_files`):** the install path creates the instance home **and** the operational tier scaffold from one resolved workspace root, with **zero** spelled `personal/pmo-instance` literals remaining in that function. *Method:* extract the function body and assert `0` occurrences, with a control arm asserting the extraction is non-empty.
+- [ ] **CIAC-2 (#3382 × #5739 on `core/config/operator.toml.template`):** the `<OPERATOR_INSTANCE_*>` comment defaults agree with what the resolver returns, **and** the `operator.toml` reconciler preserves an operator-set instance path rather than resetting it to the new default. *Method:* resolver output vs template default; then a second run with the **old** home set, asserting `ovd()` leaves it intact.
+- [ ] **CIAC-3 (all three, install idempotence):** a second install run changes nothing and destroys no operator content across the relocated instance home, the tier scaffold, and `operator.toml`. *Method:* sandboxed install, sentinel per surface, re-run, diff. A sentinel surviving in two surfaces and not the third **fails** this criterion.
+- [ ] **CIAC-4 (#3382 × #5739 on `core/deploy/deploy.sh`):** `deploy.sh --check` green after both land, **and** the `operator.toml` key-set check does not false-fire on an instance at the relocated home. *Method:* both arms required — current config at the new home must be silent; a deliberately stale config must fire.
+
+## Rollback Strategy
+
+### Per-Issue Rollback
+
+| Issue | Rollback Method | Rollback Complexity |
+|-------|----------------|-------------------|
+| #5739 (C1–C6, C8–C10) | `git revert <commit>` | **CHEAP** — additive-only reconciler over a file the operator owns |
+| #5739 (C7) | `git revert <commit>` | **MODERATE** — reverting the code does not un-write keys already added to an operator's config; residual is cosmetic (every key inert-at-default, `passthrough()` preserves it) |
+| #3382 (corpus) | `git revert <commit>` | **CHEAP** — all FCM files restore atomically |
+| #3382 (filesystem migration) | Flip the resolver back; originals are still present | **EXPENSIVE** — `git revert` does not move the operator's instance directory back. Only safe while the delete step has not run. |
+| #5829 | `git revert <commit>` | **CHEAP** — scaffold is install-if-missing; `rmdir-if-empty` rollback already in the substrate |
+
+### Whole-Release Rollback
+
+| Strategy | Trigger | Procedure |
+|----------|---------|-----------|
+| **Partial Revert** | Isolated issue failure | Revert specific commits per rollback-protocol.md |
+| **Full Restore** | Systemic failure | `git revert -m 1` the merge commit per rollback-protocol.md. **Does not reverse the filesystem migration** — see R8. |
+| **Forward Fix** | Minor issue, fix well-understood | Fix branch per rollback-protocol.md |
+
+## Operational Deployment Manifest
+
+| # | Source (Layer 1) | Target (Layer 2) | Mechanism | Verification |
+|---|-----------------|-----------------|-----------|-------------|
+| 1 | `core/config/operator-toml-schema.json` | read in place by the generator, the check primitive, and `update.sh`'s helper | no copy — read-only generator input | `deploy.sh --check` Check 70 green |
+| 2 | `core/deploy/tools/check-operator-toml-schema.sh` | invoked in place by Check 70 and the CI job | no copy | `--self-test` exit 0 |
+| 3 | `operations/templates/operations-tiers/` | the operator's operations root (git-ignored) | `scaffold_operations_tiers()` install-if-missing | seed READMEs present after re-bootstrap |
+| 4 | operator instance home | relocated workspace-root home | `copy → flip → verify → delete` (operator-gated delete) | PII hook resolves the needle file at the new home |
+
+### Schema Migrations
+
+| # | Migration | Target | Verification |
+|---|-----------|--------|-------------|
+| 1 | `operator.toml` additive key backfill from the declaration | `~/.config/pmo-platform/operator.toml` | Key set converges; operator-set values preserved; `declaration_version` compared, not merely emitted |
+| 2 | Operator-instance runtime-state relocation | operator instance home | Copy-first; originals retained until operator confirmation |
+
+## Verification Evidence
+
+(Populated after Stage 12 execution — see verification-checklist.md for format)
+
+## Deployment Execution Log
+
+(Populated during Stage 12 — see execution-checklist.md)
+
+| Step | Timestamp | Result | Notes |
+|------|-----------|--------|-------|
+| Pre-execution check | | PASS/FAIL | |
+| Merge PR | | PASS/FAIL | |
+| Tag release | | PASS/FAIL | |
+| Skill deployment | | PASS/FAIL | |
+| Manifest execution | | PASS/FAIL | |
+| State anchor update | | PASS/FAIL | |
+| Post-execution verification | | PASS/FAIL | |
+
+## Hub-Rendered D-Decisions
+
+| ID | Decision | Reversibility · Confidence | Where recorded |
+|---|---|---|---|
+| **D-Scope (R1)** | Ship the milestone whole at 29 raw; #3382 re-labelled `size:L` → `size:XL`. No carve. | CHEAP · HIGH | Stage 4 gate, #5871 |
+| **D-Egress** | Accept the Stage-4 spoke output; file a governed bug for the control gap. | CHEAP · HIGH | Stage 4 gate, #5871 |
+| **D-Concurrency Posture** | **P0 fully-serial**, single branch, single PR. | CHEAP · HIGH | Stage 4, #5871 |
+| **D-1 (#5739)** | Adopt **S3** — declare the schema as typed JSON at `core/config/operator-toml-schema.json`; derive the generator's emit; lint the template against it. `MANAGED`, `MANAGED_SECTIONS` and `field_to_token` become derived. | CHEAP · HIGH | #5872 |
+| **D-2 (#5739)** | Deliver `[adapters]`, `[methodology]` and `[session_retro]` — 10 keys, 3 sections (commit C7). | MODERATE · HIGH | #5872 |
+| **D-E2b (#3382)** | The PII-hook hardening ships as its own commit — **expanded** at Collective Review to add the legacy-home rung to the `_mode_file` loop and rebuild the fixture so it can fail. | MODERATE · HIGH | #5873, #5884 |
+| **D-Slice9 (#3382)** | Slice 9 ships in-release as the **last** commit, attestation-gated at Stage 12. | EXPENSIVE · MEDIUM | #5873, #5884 |
+| **D-3 (#5829)** | Adopt **S3 hybrid** — directories via `create_dir_layout()`; seed READMEs via `scaffold_operations_tiers()` reading a tracked template tree. | CHEAP · HIGH | #5874 |
+| **D-4 (#5829)** | AC-2 **reduced to verify-only** against PR #5889 (merged as v4.37). | CHEAP · HIGH | #5874 |
+| **D-Version** | **v4.38** — recomputed at Engineering Commit 0; tags max 37, ledger rows max 37. | CHEAP · HIGH | #5875 |
+| **D-Base** | Re-anchor to current `origin/main` (`2c4a2130`); designs stand as written, no re-validation pass. | MODERATE · HIGH | #5875 |
+
+## Deviation Log
+
+| # | Deviation | Disposition |
+|---|---|---|
+| 1 | **Scope moved four times since Stage 4** — #5740 ejected, E2-b added, AC-2 reduced, E2-b expanded. | Recorded. Scope is **hard-locked through Stage 9**; override requires a Decision Briefing with impact assessment. |
+| 2 | **Check 5 (cross-D upstream-compatibility) is a scan-input gap, not a clean pass.** Eleven D-decisions were rendered conversationally rather than through the D-Gate template, so none carries the `Upstream compatibility` subsection the scan aggregates. | Recorded as a structural gap rather than reported as aligned. |
+| 3 | **Check 7 adversarial review ran as a documented partial** — one consolidated pass across all three Stage-5 outputs rather than an independent review paired with each. Contributing facts: the named `pmo-adversarial` agent is not deployed in this workspace; the account hit its session limit once during this release. | Override logged. The pass ran as a structurally independent session under a different `subagent_type`, and **found a Blocker in a design the hub had verified and the operator had approved** — which is the argument for the check. |
+| 4 | **PR-1 (minor)** — the `type` field's stated justification is falsified (`session-retro-trigger.sh`'s awk strips all quotes before comparing, so quoting cannot break that reader; `:237` is a self-test assertion, not the production read). The conclusion survives on `test_upgrade_config_durability.sh:769–780` (P-6) instead. | Recorded. `type` remains load-bearing on the correct basis. |
+| 5 | **FM-5739-B (minor)** — the safety invariant was stated as "never rewrites a value the operator set", but `ovd()` returns the default whenever the prior value is the empty string. | Restated as *"never removes a key, and never rewrites a **non-empty** value the operator set."* The empty-string case is added to Check 70's specificity fixture. |
+| 6 | **PR-5 / PR-6 / CF-1 (minor)** — the taxonomy-divergence probe measured 2 surfaces when there are 3 (`stamp-node-frontmatter.py:198–200` is a third, **executable**, declaration that agrees with SKILL.md); and three designs gave three different line ranges for `create_dir_layout`. | Recorded. Stage 6 re-derives the bounds from the function's braces and records the measured range once. |
+| 7 | **A spoke died at the account session limit** during this release. | Engineering commits early and often; a pushed branch with partial commits is recoverable, an unpushed worktree is not. |
+
+## Change Description
+
+### Outcome
+
+This release closes three install-time propagation gaps that all share one shape: **a surface generated once at install and refreshed by nothing afterward.** `operator.toml` gains a declared, machine-readable schema and a working reconciler, so a field added to the generator now reaches instances that already exist rather than new installs only. The operator-instance runtime-state home moves out of `personal/` to a workspace-root home, with a copy-first migration and a hardened PII pre-commit guard. And a fresh clone now provisions the operational tier structure it previously left empty.
+
+For the operator, the visible change at Stage 9 and beyond is that `./deploy.sh --check` can finally tell you when your `operator.toml` is behind the platform's schema, and `./update.sh` can bring it forward without resetting anything you set by hand.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #5739 | `operator.toml` has a declared JSON schema; the generator derives its emit from it, the hollow `schema_migrate()` reconciler is completed, and Check 70 reports a stale config | DONE |
+| #3382 | Operator-instance runtime state relocates to a workspace-root home, detector-first with a copy-first migration | PENDING — #3382 Engineering spoke |
+| #5829 | A fresh clone provisions the operations tier scaffold with seed READMEs, on both install flows | PENDING — #5829 Engineering spoke |
+
+### Key decisions
+
+- **D-1:** Adopt S3 — schema as typed JSON data, generator-derived emit. Chosen over template-as-schema because the template declares 40 keys against a generator emitting 16, and template-as-schema needs a fourth hand-rolled TOML parser. Net removal of three hand-maintained lists.
+- **D-2:** Deliver `[adapters]`, `[methodology]` and `[session_retro]` — 10 keys in a declaration-only diff, which is also the AC-5 proof that adding a field needs no per-field propagation code.
+- **D-E2b (expanded):** The PII hook's severity dial resolves from the same relocating path as its needle file, so the hardening adds a legacy-home rung to the `_mode_file` loop — without it, the guard prints `BLOCKED:` and exits 0.
+- **D-Scope:** Ship the milestone whole at 29 raw; #3382 re-labelled `size:XL`. Composition is judged on capability-coherence, not fitted to a size band.
+
+### Reversibility
+
+**MODERATE — HIGH confidence.** `git revert -m 1` the merge commit restores all corpus and code atomically. Two residuals are not git-revertible: #3382's filesystem migration (mitigated by copy-first — originals are retained until the operator confirms, so rollback is "flip the resolver back") and #5739's C7 keys already written into an operator's `operator.toml` (cosmetic — every key is inert-at-default and `passthrough()` preserves it).
+
+### Downstream impact
+
+- **#5740** (operator-facing settings manager) can now render a settings UI from `core/config/operator-toml-schema.json` with no second hand-maintained key list. It must not parse `operator.toml.template` and must not read `write_operator_toml` — both are downstream of the declaration.
+- **#4915** (the `.claude/settings.json` sibling defect) is not made obsolete by this release, but the reusable half transfers: the declaration pattern, the primitive-with-`--self-test` check shape, and the additive-only reconcile invariant.
+- Carry-forward: TOML-parser consolidation (four hand-rolled parsers now exist), `update.sh` multi-line-array corruption, and the ADR-032 supersession note.
+
+### Cross-references
+
+- Release plan: this file, top section
+- Milestone: `operator-instance-home-and-install-scaffold`
+- User-facing release notes: authored at Stage 13 Close per [`release/references/standards/release-notes-standard.md`](../../references/standards/release-notes-standard.md)
