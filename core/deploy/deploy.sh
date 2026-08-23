@@ -9570,8 +9570,11 @@ sys.stdout.write("".join(out) + "|")
   #
   # Flags machine-specific path leaks on the EXECUTABLE surface (scripts / hooks /
   # deploy-tools — where path resolution is operationally load-bearing): an absolute
-  # machine path (/Users/<u>, /home/<u>) or a BARE relative operator-instance path
-  # (personal/pmo-instance/...). The path-portability leakage family — the path-axis
+  # machine path (/Users/<u>, /home/<u>) or a BARE relative operator-instance path in
+  # either recognized leaf form. The two forms, on one line because a marker is
+  # per-line and this line NAMES the shapes rather than leaking one:
+  #   pmo-instance/... (workspace-root home) · personal/pmo-instance/... (legacy home, still recognized during the migration window)   # path-leak: allow
+  # The path-portability leakage family — the path-axis
   # sibling of the host-binding-leak class (core/disciplines/knowledge-architecture.md
   # §4.1). The raw $HOME/Claude root is NOT flagged: it is the portable canonical
   # default. Patterns + the exempt predicate are SHARED with the #1137 gh-issue-ops
@@ -9605,7 +9608,7 @@ sys.stdout.write("".join(out) + "|")
         done < "$c43_f"
       done
       if [[ "$c43_n" -gt 0 ]]; then
-        flag_warn_or_issue "path-portability" "$c43_n path-portability leak(s) on the executable surface — an absolute machine path (/Users//home) or a bare personal/pmo-instance path; use \${CLAUDE_WORKSPACE_ROOT:-\$HOME/Claude}/... , mark the line 'path-leak: allow', or allowlist the file"
+        flag_warn_or_issue "path-portability" "$c43_n path-portability leak(s) on the executable surface — an absolute machine path (/Users//home) or a bare operator-instance path (either leaf form); use \${CLAUDE_WORKSPACE_ROOT:-\$HOME/Claude}/... , mark the line 'path-leak: allow', or allowlist the file"
         head -10 <<<"$c43_findings" | sed 's/^/         /'
       else
         log "  OK:    no path-portability leaks on the executable surface"

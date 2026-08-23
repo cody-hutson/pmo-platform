@@ -31,8 +31,8 @@ JQ="/usr/bin/jq"
 [ -x "$HOOK" ] || { echo "FAIL: hook not executable at $HOOK" >&2; exit 1; }
 
 # Referenced body-files for the --body-file / -F body=@ cases. Temp paths are under
-# /var|/tmp (no /Users//home, no personal/pmo-instance) so the PATH the command
-# references never itself trips the scan — only the file CONTENT does.
+# /var|/tmp (no /Users//home, and neither operator-instance leaf form) so the PATH the
+# command references never itself trips the scan — only the file CONTENT does.
 WORK="$(mktemp -d)"
 /usr/bin/printf 'Context line.\nsee /Users/realuser/Claude/notes.md for the detail\n' > "${WORK}/leak_machine.md"
 /usr/bin/printf 'ref /home/realuser/work/output\n'                                    > "${WORK}/leak_home.md"
@@ -68,8 +68,13 @@ test_case() {
 set_mode enforce
 test_case "enforce: gh issue create --body-file machine-path leak BLOCKED" \
   "gh issue create --title T --body-file ${WORK}/leak_machine.md" 2 "BLOCK-GH-PATH-001"
-test_case "enforce: gh issue create --body inline pmo-instance leak BLOCKED" \
+test_case "enforce: gh issue create --body inline legacy-leaf leak BLOCKED" \
   "gh issue create --title T --body 'see personal/pmo-instance/roadmaps/x.md'" 2 "BLOCK-GH-PATH-001"
+# The BOTH-FORMS window asserted on the gh surface, not only in the primitive's own
+# self-test: the workspace-root leaf must block here too, or the guard protects the
+# home the operator left and not the one they moved to.
+test_case "enforce: gh issue create --body inline new-leaf leak BLOCKED" \
+  "gh issue create --title T --body 'see pmo-instance/roadmaps/x.md'" 2 "BLOCK-GH-PATH-001"
 test_case "enforce: gh pr comment -F body=@ /home leak BLOCKED" \
   "gh pr comment 5 -F body=@${WORK}/leak_home.md" 2 "BLOCK-GH-PATH-001"
 test_case "enforce: gh api issues -f body= machine-path leak BLOCKED" \

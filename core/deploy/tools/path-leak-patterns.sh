@@ -18,11 +18,27 @@
 #                  (/Users/<u>, /home/<u>) — a non-portable local path.
 #   RAWROOT      — a raw workspace root ($HOME/Claude, ${HOME}/Claude, ~/Claude) used
 #                  OUTSIDE the sanctioned ${VAR:-$HOME/Claude...} default-expansion.
-#   INSTANCE_REL — a BARE relative operator-instance path (personal/pmo-instance/...,
-#                  personal/analysis/..., personal/harness/...) with no $HOME/~//Users
-#                  prefix. This is the #1105–1108 originating-leak class that the
-#                  MACHINE/RAWROOT patterns miss; promoted into the shared primitive
-#                  per the operator's scope-lock so BOTH surfaces catch it.
+#   INSTANCE_REL — a BARE relative operator-instance path (pmo-instance/...,
+#                  personal/pmo-instance/..., personal/analysis/...,
+#                  personal/harness/...) with no $HOME/~//Users prefix. This is the
+#                  originating-leak class that the MACHINE/RAWROOT patterns miss;
+#                  promoted into the shared primitive per the operator's scope-lock
+#                  so BOTH surfaces catch it.
+#
+#                  BOTH-FORMS WINDOW. The operator-instance home relocated from the
+#                  personal namespace to the workspace-root leaf `pmo-instance`. Both
+#                  leaves are recognized DELIBERATELY and SIMULTANEOUSLY: the new one
+#                  so the relocated home is protected from the moment it exists, the
+#                  old one so an instance that has not yet migrated keeps its
+#                  protection. Dropping the old member is a separate, later act — do
+#                  it only once every instance has migrated, because a member removal
+#                  NARROWS what this predicate flags (see the alternation note below).
+#
+#                  The two `personal/` SIBLING leaves are retained on purpose. Their
+#                  registered tokens have since moved elsewhere, so they are vestigial
+#                  in the corpus — but they still protect an instance predating those
+#                  moves, and each costs exactly one alternation member. Removing them
+#                  is an unrelated cleanup, not part of the relocation.
 #
 # Run directly with --self-test to verify the patterns + predicate.
 
@@ -43,9 +59,20 @@ PATH_LEAK_RE_MACHINE='(/Users/|/home/)[a-z][a-z0-9._-]+'
 PATH_LEAK_RE_RAWROOT='(\$HOME|\$\{HOME\}|~)/Claude'
 
 # Bare relative operator-instance path (no leading $HOME / ~ / /). Word-boundary
-# anchored: it requires the literal 'personal/pmo-instance' (etc.), so
-# 'personal opinion' / 'personalization' never match.
-PATH_LEAK_RE_INSTANCE_REL='(^|[^A-Za-z0-9._/-])(personal/pmo-instance|personal/analysis|personal/harness)(/|[^A-Za-z]|$)'
+# anchored: it requires the literal 'pmo-instance' / 'personal/pmo-instance' (etc.),
+# so 'personal opinion' / 'personalization' never match. The near-miss guard is the
+# pre/post character class, NOT a trailing-slash anchor — every member is a bare stem
+# and stays symmetric with its siblings.
+#
+# The pre-class excludes '/', so a member never double-matches inside a longer member
+# ('pmo-instance' cannot fire inside 'personal/pmo-instance') and a ROOTED spelling
+# ('${WORKSPACE_ROOT}/pmo-instance') never matches at all. That is the rewrite rule
+# for every site this relocation touches: PRESERVE THE ROOTED SHAPE and the line is
+# exempt by construction, needing no per-line marker.
+#
+# Adding a member can only WIDEN what flags; removing one NARROWS it. Widening is
+# safe at any time; narrowing strands whatever the removed member protected.
+PATH_LEAK_RE_INSTANCE_REL='(^|[^A-Za-z0-9._/-])(pmo-instance|personal/pmo-instance|personal/analysis|personal/harness)(/|[^A-Za-z]|$)'
 
 # path_leak_line_is_exempt <line> → 0 (exempt) / 1 (a real leak).
 # Shared exemptions: an explicit 'path-leak: allow' marker; the sanctioned
@@ -142,6 +169,17 @@ _path_leak_self_test() {
   expect_clean "personal opinion (near-miss)"     'in my personal opinion this is fine'
   expect_clean "personalization (near-miss)"      'see personalization settings'
   expect_clean "rooted /…/personal/pmo-instance"  'f="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance"'
+  # BOTH-FORMS WINDOW — the workspace-root leaf, asserted with the SAME shape as the
+  # legacy leaf above so a future member removal cannot quietly drop one side. The
+  # near-miss arms are the ones that earn their keep: the new member is a bare stem,
+  # so anything that merely CONTAINS the letters must stay clean.
+  expect_leak  "bare pmo-instance/ (new home)"    'lives at pmo-instance/roadmaps/skill-suite.md'
+  expect_leak  "bare pmo-instance, end of line"   'the instance home is pmo-instance'
+  expect_clean "rooted /…/pmo-instance (new)"     'f="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance"'
+  expect_clean "rooted \${WORKSPACE_ROOT}/pmo-instance" 'd="${WORKSPACE_ROOT}/pmo-instance/hub-state"'
+  expect_clean "hyphen-run near-miss"             'the my-pmo-instance directory is unrelated'
+  expect_clean "word-continuation near-miss"      'see pmo-instances plural form'
+  expect_clean "dotted near-miss"                 'the file is called x.pmo-instance.json'
   echo "MARKER:"
   expect_clean "path-leak: allow marker"          'see /Users/operator/x  # path-leak: allow'
 

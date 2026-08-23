@@ -8,10 +8,13 @@
 # path-portability leakage family).
 
 # The detector itself: holds the PATH_LEAK_RE_* pattern definitions and the
-# --self-test fixtures (which deliberately embed /Users/<op> + personal/pmo-instance
-# example strings to verify flagging).
+# --self-test fixtures (which deliberately embed /Users/<op> + both operator-instance
+# leaf forms — the workspace-root `pmo-instance` and the legacy `personal/pmo-instance`
+# — as example strings to verify flagging).
 core/deploy/tools/path-leak-patterns.sh
 
-# The instance-path resolver DEFINES the canonical operator-instance default
-# (the one sanctioned home for the personal/pmo-instance literal). #1830.
+# The instance-path resolver DEFINES the canonical operator-instance default, so it is
+# the one sanctioned home for the instance-leaf literal in either form: the current
+# workspace-root `pmo-instance` and, for as long as the both-forms migration window is
+# open, the legacy `personal/pmo-instance` it replaced.
 core/deploy/lib-instance-path.sh
