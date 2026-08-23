@@ -84,11 +84,11 @@ pmo_platform_repo_name = "pmo-platform"
 # --- Operator-instance path overrides ---
 # Resolve <OPERATOR_INSTANCE_*_PATH> angle-bracket tokens per
 # core/standards/depersonalization-spec.md §4. Empty string → resolve to
-# canonical default (typically ${claude_workspace_root}/personal/pmo-instance/<stem>/).
+# canonical default (typically ${claude_workspace_root}/pmo-instance/<stem>/).
 # Non-empty string → use override verbatim.
 
 # Resolves <OPERATOR_INSTANCE_HUB_STATE_PATH>.
-# Default: ${claude_workspace_root}/personal/pmo-instance/hub-state
+# Default: ${claude_workspace_root}/pmo-instance/hub-state
 # Consumer: core/standards/hub-session-continuity.md §2 (runtime persistence
 # of pending-approvals, action-items, sessions surfaces).
 operator_instance_hub_state_path = ""
@@ -105,28 +105,28 @@ operator_instance_hub_state_path = ""
 operator_instance_roadmaps_path = ""
 
 # Resolves <OPERATOR_INSTANCE_INBOX_PATH>.
-# Default: ${claude_workspace_root}/personal/pmo-instance/inbox
+# Default: ${claude_workspace_root}/pmo-instance/inbox
 # Consumer: the ambient inbox drop-zone (core/standards/c1-ambient-inbox-cursor.md §1)
 # — one watched dir where transcripts/emails land for ambient ingest; the dedup
 # cursor (.cursor.json) lives here. Read by the Path A scheduled intake sweep (C2).
 operator_instance_inbox_path = ""
 
 # Resolves <OPERATOR_INSTANCE_EXTERNAL_SYNC_SNAPSHOT_PATH>.
-# Default: ${claude_workspace_root}/personal/pmo-instance/external-sync/snapshot.json
+# Default: ${claude_workspace_root}/pmo-instance/external-sync/snapshot.json
 # Consumer: the Path-B external-sync sweep (core/standards/c3-external-sync-path-b.md §3)
 # — the persisted poll-state snapshot the sweep diffs against. Holds live external
 # IDs/statuses, so it is operator-instance and never git-tracked.
 operator_instance_external_sync_snapshot_path = ""
 
 # Resolves <OPERATOR_INSTANCE_EXTERNAL_SYNC_RUNLOG_PATH>.
-# Default: ${claude_workspace_root}/personal/pmo-instance/external-sync/run-log.jsonl
+# Default: ${claude_workspace_root}/pmo-instance/external-sync/run-log.jsonl
 # Consumer: the Path-B external-sync sweep (core/standards/c3-external-sync-path-b.md §5)
 # — append-only JSONL run-record (one per sweep; carries sweep="external-sync-path-b").
 # The producer side of the C3->C4 sweep-digest/heartbeat contract.
 operator_instance_external_sync_runlog_path = ""
 
 # Resolves <OPERATOR_INSTANCE_INTAKE_SWEEP_RUNLOG_PATH>.
-# Default: ${claude_workspace_root}/personal/pmo-instance/ambient-intake/run-log.jsonl
+# Default: ${claude_workspace_root}/pmo-instance/ambient-intake/run-log.jsonl
 # Consumer: the Path-A scheduled intake sweep (core/standards/c2-intake-sweep-path-a.md §5)
 # — append-only JSONL run-record (one per sweep; carries sweep="intake-path-a").
 # Field-aligned to the Path-B run-record; the producer side of the C2->C4 sweep-digest/
@@ -134,7 +134,7 @@ operator_instance_external_sync_runlog_path = ""
 operator_instance_intake_sweep_runlog_path = ""
 
 # Resolves <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>.
-# Default: ${claude_workspace_root}/personal/pmo-instance/evals/results
+# Default: ${claude_workspace_root}/pmo-instance/evals/results
 # Consumer: the pipeline event-log writer/reader + release-analytics tools
 # (release/tools/append-pipeline-event.sh, query-pipeline-event.sh,
 # compute-cycle-time.sh, synthesize-release-learnings.sh) read the
@@ -142,7 +142,7 @@ operator_instance_intake_sweep_runlog_path = ""
 operator_instance_evals_results_path = ""
 
 # Resolves <OPERATOR_INSTANCE_FINOPS_STORE_PATH>.
-# Default: ${claude_workspace_root}/personal/pmo-instance/finops
+# Default: ${claude_workspace_root}/pmo-instance/finops
 # Consumer: core/schemas/finops-usage-store-schema.md — the Agent-FinOps runtime
 # token-spend store (per-session/per-subagent usage records extracted from local
 # Claude Code session data by the finops-usage-extractor skill). Git-ignored
