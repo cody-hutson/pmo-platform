@@ -4114,7 +4114,7 @@ cmd_check() {
 
   # Check 4 — Governance presence.
   # RELEASE_LOG.md DROPPED — per Q1 + Spec Surface 5.2 it is operator-instance,
-  # NOT in-repo governance (lives at ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/RELEASE_LOG.md).
+  # NOT in-repo governance (lives at ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance/RELEASE_LOG.md).
   log "Check 4: Governance presence"
   local -a EXPECTED_ENGINEERING=(
     core/governance/OPERATIONS.md
@@ -7736,7 +7736,7 @@ sys.stdout.write("".join(out) + "|")
   # Verifies every released version on or after the configurable cutoff
   # (default v1.00 — the first released version; override via
   # RELEASE_NOTE_CHECK_CUTOFF to scope to a later baseline) has
-  # a corresponding ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/notes/vX.Y_RELEASE_NOTES.md file.
+  # a corresponding ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance/releases/notes/vX.Y_RELEASE_NOTES.md file.
   #
   # Composes with — does NOT replace — Check 20 (note-content lint).
   # Check 20 lints CONTENT of notes that exist; Check 26 detects PRESENCE drift.
@@ -8271,7 +8271,7 @@ sys.stdout.write("".join(out) + "|")
   # in INDEX/DIGEST but absent from the LOG are NOT flagged (the LOG is the closed
   # set of releases; Check 23 separately reconciles LOG<->INDEX drift on the instance
   # corpus). This in-repo target differs deliberately from Check 23/26 (which read the
-  # operator-instance ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance corpus) — the tracked release/releases/
+  # operator-instance ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance corpus) — the tracked release/releases/
   # ledger is the surface where the incident occurred and the one shipped in this repo.
   #
   # NOTES filename resolution (historical-tolerant): the notes file is accepted under
