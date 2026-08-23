@@ -519,7 +519,11 @@ check_a2_workspace_layout() {
   # the installer no longer creates it, it is the operator's own area, and asserting
   # its existence would fail a perfectly healthy install on the say-so of a
   # convention the platform has stopped holding.
-  local required_dirs="pmo-platform projects knowledge pmo-instance .claude"
+  # The marker is required and the rooted-shape escape is unavailable here: these are
+  # directory BASENAMES joined to ${WORKSPACE_ROOT} by the loop below, not paths, so
+  # the instance name necessarily appears bare and the leak detector matches it. It
+  # leaks nothing — a basename is the same string on every operator's machine.
+  local required_dirs="pmo-platform projects knowledge pmo-instance .claude"   # path-leak: allow
   for d in ${required_dirs}; do
     if [ ! -d "${WORKSPACE_ROOT}/${d}" ]; then
       missing="${missing} ${d}"
