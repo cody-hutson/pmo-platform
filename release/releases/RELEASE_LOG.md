@@ -206,14 +206,27 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v4.34 | closeout-reports-what-shipped | #5288, #5066, #4927, #4322, #4222 | #5759 | `11d244bbc498e0006bb68dbd6368c220c8c2d068` | `v4.34` | VERIFIED | 2026-08-21 |
 | v4.35 | operational-folder-enforcement-and-migration | #5668, #3123, #5741 | #5765 | `f2619f5e22d41372a594d82519ba12ef4c0893d7` | `v4.35` | VERIFIED | 2026-08-22 |
 | v4.36 | docs-match-shipped-state | #3698, #4321, #4748, #5271, #5072, #5191, #4323, #5192 | #5891 | `3f6611627e6974f635a649a5e3a2c65b7ab15ab6` | `v4.36` | VERIFIED | 2026-08-23 |
-| v4.37 | migration-protocol-and-skill-integration | #153, #5659, #5660, #158, #5671 | #5889 | `1d9239b5adebcc788e72c600a996d9f5383673f2` | `v4.37` | DEPLOYED | 2026-08-23 |
+| v4.37 | migration-protocol-and-skill-integration | #153, #5659, #5660, #158, #5671 | #5889 | `1d9239b5adebcc788e72c600a996d9f5383673f2` | `v4.37` | VERIFIED | 2026-08-23 |
 
 #### Deployment Log v4.37
 **Files deployed:** Single release PR #5889 merge (5-member release — #153, #5659, #5660, #158, #5671 — topology SINGLE; 35 tracked files, +1434/-41). Surfaces: `core/standards/migration-enforcement-protocol.md`, `core/standards/sior-escalation-protocol.md`, `core/schemas/project-schema.md`, `operations/skills/health-check/**` (new `structure` mode + evals), `operations/skills/project-initiator/SKILL.md`, `operations/templates/`, and 6 rebuilt `.skill` packages.
 **Mechanism:** git merge-commit (PR #5889 → main at `1d9239b5adebcc788e72c600a996d9f5383673f2`), **versioned**, git-native. Version `v4.37` claimed atomically at the merge SHA by `claim-version.sh` (minor bump from anchor v4.36); signed-annotated tag pushed to origin.
 **Timestamp:** 2026-08-23 (PR #5889 merge 2026-08-23T05:05:20Z UTC; MERGE_SHA `1d9239b5adebcc788e72c600a996d9f5383673f2`)
 **Cycle-Time:** N/A — no gate-outcome/plan-review-go and no deployment-status event recorded for v4.37; no interval to measure (mechanism: compute-cycle-time.sh).
+**Velocity:** planned 22 pts / delivered 22 pts (1.00); files-changed 35; allocation 0/10/12 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
 **Result:** SUCCESS — release PR #5889 merged to main via merge commit (`git revert -m 1` rollback convention); signed-annotated tag `v4.37` at the merge SHA. CI 49/49 COMPLETED/SUCCESS at merge time, zero non-passing; branch 0 behind `origin/main` at merge, so no re-merge was needed and all five card commits (`29afaf12`, `c7c98755`, `d1e1e848`, `be36561b`, `b4988849`) remain reachable. Quality-gate ladder T1 (schema) and T2 (cross-reference, `--require-targets`) both PASS, each confirmed against a control arm. One in-flight repair: the pre-claim plan carried no ADR-092 version-placeholder token, so the first claim HALTed at its stamp pre-flight (broken manifest) **before** the CAS — nothing claimed, nothing mutated; the placeholder was restored in the canonical shape used by v4.35/v4.36 and the claim re-run, after which the stamp bound the identity and renamed the plan to `plans/v4/v4.37_RELEASE_PLAN.md`.
+**Outcome:** SUCCESS
+**Close-Class-Telemetry:** retro-conformance N/A — no retro register found for v4.37; lessons-population N/A — no lessons register found; carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence N/A — no retro register found; evidence-preservation 24/24 (1.00); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+
+#### Release Learnings v4.37
+
+**Synthesized at:** 2026-08-23T05:47:44Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v4.37`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-08-23T05:39:32Z`
+
+**Surprise:** 5 Tier-1 fixes routed, 0 recorded as action items - Stage 8 found they never landed
+**Would-change:** emit the action-item row at the moment of routing, not at close
+**Watch-for:** probes that pass for the wrong reason - 13 this release, incl. a note lint clean on a note that did not exist
 
 #### Deployment Log v4.36
 **Files deployed:** Single release PR #5891 merge (8-member release — #3698, #4321, #4748, #5271, #5072, #5191, #4323, #5192 — topology D-C SINGLE; 131 tracked files, +2323/-297). #4747 deferred to a follow-on gated on #5227; not a member of the merged set.
