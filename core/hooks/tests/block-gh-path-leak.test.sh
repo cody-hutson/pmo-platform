@@ -68,11 +68,13 @@ test_case() {
 set_mode enforce
 test_case "enforce: gh issue create --body-file machine-path leak BLOCKED" \
   "gh issue create --title T --body-file ${WORK}/leak_machine.md" 2 "BLOCK-GH-PATH-001"
-test_case "enforce: gh issue create --body inline legacy-leaf leak BLOCKED" \
-  "gh issue create --title T --body 'see personal/pmo-instance/roadmaps/x.md'" 2 "BLOCK-GH-PATH-001"
-# The BOTH-FORMS window asserted on the gh surface, not only in the primitive's own
-# self-test: the workspace-root leaf must block here too, or the guard protects the
-# home the operator left and not the one they moved to.
+# WINDOW CLOSED on the gh surface too. The legacy leaf no longer blocks, and that is
+# asserted rather than inferred from a deleted case — a removed test and a test that
+# passes for the wrong reason are indistinguishable once the case is gone.
+test_case "enforce: gh issue create --body inline legacy-leaf ALLOWED (window closed)" \
+  "gh issue create --title T --body 'see personal/pmo-instance/roadmaps/x.md'" 0
+# The surviving leaf must still block here, not only in the primitive's own self-test,
+# or the guard would protect nothing on this surface.
 test_case "enforce: gh issue create --body inline new-leaf leak BLOCKED" \
   "gh issue create --title T --body 'see pmo-instance/roadmaps/x.md'" 2 "BLOCK-GH-PATH-001"
 test_case "enforce: gh pr comment -F body=@ /home leak BLOCKED" \

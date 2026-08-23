@@ -9585,10 +9585,11 @@ sys.stdout.write("".join(out) + "|")
   #
   # Flags machine-specific path leaks on the EXECUTABLE surface (scripts / hooks /
   # deploy-tools — where path resolution is operationally load-bearing): an absolute
-  # machine path (/Users/<u>, /home/<u>) or a BARE relative operator-instance path in
-  # either recognized leaf form. The two forms, on one line because a marker is
-  # per-line and this line NAMES the shapes rather than leaking one:
-  #   pmo-instance/... (workspace-root home) · personal/pmo-instance/... (legacy home, still recognized during the migration window)   # path-leak: allow
+  # machine path (/Users/<u>, /home/<u>) or a BARE relative operator-instance path:
+  #   pmo-instance/... (the workspace-root home)   # path-leak: allow
+  # The legacy `personal/` leaf was recognized alongside it for the length of the
+  # home relocation; that window is closed and the member removed, so a bare legacy
+  # form is no longer flagged here.
   # The path-portability leakage family — the path-axis
   # sibling of the host-binding-leak class (core/disciplines/knowledge-architecture.md
   # §4.1). The raw $HOME/Claude root is NOT flagged: it is the portable canonical
