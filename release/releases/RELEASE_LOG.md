@@ -205,15 +205,27 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v4.33 | operator-runtime-state-and-workspace-anchoring | #3615, #5161, #5589, #4038, #4896, #3382 | #5632 | `63dcbe8e3fd9c3985d7a603f0d700e2f155a66a5` | `v4.33` | VERIFIED | 2026-08-20 |
 | v4.34 | closeout-reports-what-shipped | #5288, #5066, #4927, #4322, #4222 | #5759 | `11d244bbc498e0006bb68dbd6368c220c8c2d068` | `v4.34` | VERIFIED | 2026-08-21 |
 | v4.35 | operational-folder-enforcement-and-migration | #5668, #3123, #5741 | #5765 | `f2619f5e22d41372a594d82519ba12ef4c0893d7` | `v4.35` | VERIFIED | 2026-08-22 |
-| v4.36 | docs-match-shipped-state | #3698, #4321, #4748, #5271, #5072, #5191, #4323, #5192 | #5891 | `3f6611627e6974f635a649a5e3a2c65b7ab15ab6` | `v4.36` | DEPLOYED | 2026-08-23 |
+| v4.36 | docs-match-shipped-state | #3698, #4321, #4748, #5271, #5072, #5191, #4323, #5192 | #5891 | `3f6611627e6974f635a649a5e3a2c65b7ab15ab6` | `v4.36` | VERIFIED | 2026-08-23 |
 
 #### Deployment Log v4.36
 **Files deployed:** Single release PR #5891 merge (8-member release — #3698, #4321, #4748, #5271, #5072, #5191, #4323, #5192 — topology D-C SINGLE; 131 tracked files, +2323/-297). #4747 deferred to a follow-on gated on #5227; not a member of the merged set.
 **Mechanism:** git merge-commit (PR #5891 → main at `3f6611627e6974f635a649a5e3a2c65b7ab15ab6`), **versioned**, git-native. Version `v4.36` claimed atomically at the merge SHA by `claim-version.sh` (minor bump from v4.35); annotated tag pushed to origin.
 **Timestamp:** 2026-08-23 (PR #5891 merge 2026-08-23T04:03:20Z UTC; MERGE_SHA `3f6611627e6974f635a649a5e3a2c65b7ab15ab6`)
 **Cycle-Time:** N/A — gate-outcome/plan-review-go and the Stage-12 authorization landed in the same session; no deployment-status interval to measure.
+**Velocity:** planned 22 pts / delivered 22 pts (1.00); files-changed 131; allocation 0/22/0 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
 **Result:** SUCCESS — release PR #5891 merged to main via merge commit (D-C SINGLE; `git revert -m 1` rollback convention); tag `v4.36` annotated at the merge SHA. CI 48/48 green at merge. Two pre-merge gates were cleared first: the SIGPIPE-idiom gate (two writer-into-short-circuiting-reader pipelines eliminated via parameter expansion) and the commit-signature gate (one unsigned commit re-signed; the range was rebased onto origin/main, which also dropped two redundant catch-up merges and five duplicated mainline commits).
 **Outcome:** (finalized at Stage 13 VERIFIED) — 8 members auto-closed at the release-PR merge. Accepted residual: #5892 (RELEASE_PROTOCOL.md instructs note foldering the amended standard forbids — an irreducible Tier-0 operator-only edit). Deferred: #4747, gated on #5227.
+**Close-Class-Telemetry:** retro-conformance N/A — no retro register found for v4.36; lessons-population N/A — no lessons register found; carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence N/A — no retro register found; evidence-preservation 37/40 (0.93); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+
+#### Release Learnings v4.36
+
+**Synthesized at:** 2026-08-23T04:29:07Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v4.36`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-08-23T04:23:28Z`
+
+**Surprise:** all-9-cards-undercounted-their-own-population
+**Would-change:** re-open-the-AC-amendment-channel-post-collective-review
+**Watch-for:** token-presence-probes-are-blind-to-omission-defects
 
 #### Deployment Log v4.35
 **Velocity:** planned 20 pts / delivered 20 pts (1.00); files-changed 17; allocation 0/12/8 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
