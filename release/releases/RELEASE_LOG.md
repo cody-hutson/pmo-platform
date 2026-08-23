@@ -205,6 +205,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v4.33 | operator-runtime-state-and-workspace-anchoring | #3615, #5161, #5589, #4038, #4896, #3382 | #5632 | `63dcbe8e3fd9c3985d7a603f0d700e2f155a66a5` | `v4.33` | VERIFIED | 2026-08-20 |
 | v4.34 | closeout-reports-what-shipped | #5288, #5066, #4927, #4322, #4222 | #5759 | `11d244bbc498e0006bb68dbd6368c220c8c2d068` | `v4.34` | VERIFIED | 2026-08-21 |
 | v4.35 | operational-folder-enforcement-and-migration | #5668, #3123, #5741 | #5765 | `f2619f5e22d41372a594d82519ba12ef4c0893d7` | `v4.35` | VERIFIED | 2026-08-22 |
+| v4.36 | docs-match-shipped-state | #3698, #4321, #4748, #5271, #5072, #5191, #4323, #5192 | #5891 | `3f6611627e6974f635a649a5e3a2c65b7ab15ab6` | `v4.36` | DEPLOYED | 2026-08-23 |
 
 #### Deployment Log v4.35
 **Velocity:** planned 20 pts / delivered 20 pts (1.00); files-changed 17; allocation 0/12/8 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
