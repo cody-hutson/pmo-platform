@@ -1990,6 +1990,157 @@ else
     "manifest drift detected under ${LIVE_SKILLS}"
 fi
 
+# --- Suite RC (#5739): PRE-EXISTING-INSTANCE reconcile ---
+#
+# THE GAP THIS CLOSES, STATED PRECISELY. Every other operator.toml arm in this file
+# asserts over a FRESHLY GENERATED file — Suite P installs into an empty config root
+# and grades what the generator wrote. That is exactly the arm that could not have
+# caught the defect #5739 reports: [automation] shipped, every NEW install emitted
+# it, every EXISTING instance kept the key set it was born with, and the install
+# suite was green throughout because it never looked at an instance that predates
+# the change. #5273 records the same observation from the coverage side. This suite
+# is the missing population: a config that ALREADY EXISTS and is BEHIND.
+#
+# The fixture is deliberately a PRE-v4.23 key set — 15 keys, no [automation] — which
+# is the literal shape of the instance in the card's Reproduction Steps.
+printf '\nSuite RC (#5739): pre-existing-instance reconcile against the declared schema\n'
+
+RC_CFG="${SBX}/rc-config"
+RC_TOML="${RC_CFG}/operator.toml"
+mkdir -p "${RC_CFG}" "${SBX}/rc-ws"
+
+cat > "${RC_TOML}" <<TOML
+# operator.toml — pmo-platform operator-instance configuration
+[meta]
+schema_version = 1
+managed_by = "pmo-platform"
+
+[identity]
+operator_name = "Reconcile Operator"
+operator_email = "rc@example.com"
+operator_git_email = "rc-git@example.com"
+operator_github = "rc-handle"
+operator_phone = "555-0199"
+operator_role_title = "Reconcile Role"
+operator_organization = "Reconcile Org"
+
+[paths]
+claude_workspace_root = "${SBX}/rc-ws"
+operator_homedir_path = "${HOME}"
+cowork_install_path = "/tmp/rc-cowork"
+pmo_platform_repo_name = "rc-fork-name"
+
+[platform]
+work_board = "github"
+comms_platform = "teams"
+
+[rc_operator_unknown]
+kept_key = "kept-value"
+TOML
+chmod 600 "${RC_TOML}"
+
+extract_kv "${RC_TOML}" > "${SBX}/rc-before.kv"
+rc_before_n=$(wc -l < "${SBX}/rc-before.kv" | tr -d ' ')
+
+# RC-0 (control arm, and it must come FIRST). The fixture must genuinely LACK a key
+# the declaration marks delivered. If it does not, every assertion below is vacuous —
+# a reconcile that had nothing to do would pass RC-1 trivially. A test whose subject
+# is already in the target state is not a test.
+rc_seeded_missing=$(grep -c '^automation_level' "${RC_TOML}" 2>/dev/null | tr -d ' ')
+if [ "${rc_seeded_missing}" = "0" ] && [ "${rc_before_n}" -gt 0 ]; then
+  report "RC-0 control: fixture is genuinely BEHIND (automation_level absent; ${rc_before_n} keys seeded)" 1
+else
+  report "RC-0 control: fixture is genuinely BEHIND (automation_level absent; ${rc_before_n} keys seeded)" 0 \
+    "automation_level count ${rc_seeded_missing} (want 0), seeded keys ${rc_before_n} (want >0)"
+fi
+
+# The reconcile itself: non-interactive, stdin CLOSED. On the current declaration no
+# delivered key lacks a default, so this MUST exit 0 — it must neither hang nor
+# invent a value (AC-4).
+rc_log=$(GIT_CONFIG_GLOBAL="${SBX}/gitcfg/ok" "${SETUP}" \
+  --source-repo "${REPO_ROOT}" \
+  --workspace-root "${SBX}/rc-ws" \
+  --config-root "${RC_CFG}" \
+  --reconcile-config --non-interactive 0<&- 2>&1)
+rc_exit=$?
+
+if [ "${rc_exit}" -eq 0 ]; then
+  report "RC-1 --reconcile-config exits 0 non-interactively with stdin closed (no hang, no invented value)" 1
+else
+  report "RC-1 --reconcile-config exits 0 non-interactively with stdin closed (no hang, no invented value)" 0 \
+    "exit ${rc_exit}; $(printf '%s' "${rc_log}" | tail -4 | tr '\n' '|')"
+fi
+
+extract_kv "${RC_TOML}" > "${SBX}/rc-after.kv"
+
+# RC-2 (AC-1): the missing delivered key is BACKFILLED, at column 0, exactly once.
+rc_backfilled=$(grep -c '^automation_level' "${RC_TOML}" 2>/dev/null | tr -d ' ')
+if [ "${rc_backfilled}" = "1" ]; then
+  report "RC-2 a delivered key missing from a pre-existing instance is BACKFILLED (automation_level, column 0, exactly once)" 1
+else
+  report "RC-2 a delivered key missing from a pre-existing instance is BACKFILLED (automation_level, column 0, exactly once)" 0 \
+    "automation_level resolved ${rc_backfilled} time(s), want exactly 1"
+fi
+
+# RC-3 (AC-2): an operator-set value is PRESERVED, not reset to the declared default.
+# pmo_platform_repo_name is seeded "rc-fork-name" against a declared default of
+# "pmo-platform" — so a reset is unmistakable rather than inferred.
+if grep -Fxq 'pmo_platform_repo_name = "rc-fork-name"' "${RC_TOML}"; then
+  report "RC-3 an operator-set value survives the reconcile (declared default did NOT overwrite it)" 1
+else
+  report "RC-3 an operator-set value survives the reconcile (declared default did NOT overwrite it)" 0 \
+    "expected the operator value to survive; got: $(grep '^pmo_platform_repo_name' "${RC_TOML}" | tr '\n' ';')"
+fi
+
+# RC-4 (the additive-only invariant): NOTHING is dropped — not a managed key, not an
+# operator-added section. comm -23 = present before, absent after.
+rc_dropped=$(comm -23 "${SBX}/rc-before.kv" "${SBX}/rc-after.kv")
+if [ -z "${rc_dropped}" ] && [ "${rc_before_n}" -gt 0 ]; then
+  report "RC-4 additive-only: zero keys dropped by the reconcile (denominator ${rc_before_n} section/key pairs)" 1
+else
+  report "RC-4 additive-only: zero keys dropped by the reconcile (denominator ${rc_before_n} section/key pairs)" 0 \
+    "dropped: $(printf '%s' "${rc_dropped}" | tr '\n' ';')"
+fi
+
+# RC-5 (idempotence — feeds CIAC-3): a SECOND reconcile changes nothing at all. The
+# generated-at stamp is the one legitimately-varying line, so it is normalised out;
+# everything else must be byte-identical.
+sed 's/^# Generated by .*/# Generated by <NORMALISED>/' "${RC_TOML}" > "${SBX}/rc-pass1.toml"
+GIT_CONFIG_GLOBAL="${SBX}/gitcfg/ok" "${SETUP}" \
+  --source-repo "${REPO_ROOT}" \
+  --workspace-root "${SBX}/rc-ws" \
+  --config-root "${RC_CFG}" \
+  --reconcile-config --non-interactive 0<&- >/dev/null 2>&1
+sed 's/^# Generated by .*/# Generated by <NORMALISED>/' "${RC_TOML}" > "${SBX}/rc-pass2.toml"
+if diff -q "${SBX}/rc-pass1.toml" "${SBX}/rc-pass2.toml" >/dev/null 2>&1; then
+  report "RC-5 idempotent: a second reconcile is a zero-byte change (CIAC-3 input)" 1
+else
+  report "RC-5 idempotent: a second reconcile is a zero-byte change (CIAC-3 input)" 0 \
+    "$(diff "${SBX}/rc-pass1.toml" "${SBX}/rc-pass2.toml" | head -8 | tr '\n' ';')"
+fi
+
+# RC-6 (the check's own two arms, over instance state). The delta primitive must be
+# SILENT on the now-current config, and must FIRE on a deliberately stale one. Both
+# arms are required: a check that never fires and a check that always fires are
+# indistinguishable from a single run.
+RC_PROBE="${REPO_ROOT}/core/deploy/tools/check-operator-toml-schema.sh"
+if [ -f "${RC_PROBE}" ]; then
+  rc_probe_rc=0
+  bash "${RC_PROBE}" --emit-delta --config-root "${RC_CFG}" >/dev/null 2>&1 || rc_probe_rc=$?
+  mkdir -p "${SBX}/rc-stale"
+  grep -v '^automation_level' "${RC_TOML}" > "${SBX}/rc-stale/operator.toml"
+  rc_stale_rc=0
+  bash "${RC_PROBE}" --emit-delta --config-root "${SBX}/rc-stale" >/dev/null 2>&1 || rc_stale_rc=$?
+  if [ "${rc_probe_rc}" -eq 0 ] && [ "${rc_stale_rc}" -eq 1 ]; then
+    report "RC-6 delta check: SILENT on the reconciled config (0) and FIRES on a stale one (1) — both arms" 1
+  else
+    report "RC-6 delta check: SILENT on the reconciled config (0) and FIRES on a stale one (1) — both arms" 0 \
+      "reconciled arm exit ${rc_probe_rc} (want 0), stale arm exit ${rc_stale_rc} (want 1)"
+  fi
+else
+  report "RC-6 delta check: primitive present" 0 "missing ${RC_PROBE}"
+fi
+
 # --- Summary ---
 printf '\n======================================================================\n'
 printf 'test_upgrade_config_durability.sh: %d passed, %d failed (bash %s)\n' \
