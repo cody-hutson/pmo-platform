@@ -4,7 +4,7 @@ The original captured record for the project: meeting transcripts, email forward
 
 **What lands here:** meeting transcripts (AM/PM testing, daily connects, weekly status, touch-base, steering); email forwards and comms digests; raw source exports.
 
-**Sub-folders:** `Transcripts/` (AM-Testing, PM-Testing, Daily-Connects, Weekly-Status, Touch-Base, Topic-Sessions) · `Emails/` · `Exports/`.
+**Sub-folders:** `Transcripts/` (AM-Testing, PM-Testing, Daily-Connects, Weekly-Status, Touch-Base, Topic-Sessions) · `Emails/`.
 
 **Auto-write:** Yes (active project) — raw evidence routes without an approval gate. A cross-project write is always approval-gated.
 

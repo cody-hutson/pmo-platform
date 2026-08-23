@@ -18,7 +18,6 @@ types:
 subfolders:
   - Transcripts/     # AM-Testing, PM-Testing, Daily-Connects, Weekly-Status, Touch-Base, Topic-Sessions
   - Emails/
-  - Exports/         # Jira/system exports, raw data pulls — the `export` type declared above
 promotion_target: null       # terminal routing target; raw evidence is not promoted
 extraction: triggered        # raw evidence routed here triggers PPM Agent extraction (raw -> tracked)
 authority: operations/skills/file-router/SKILL.md
