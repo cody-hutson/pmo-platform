@@ -1825,3 +1825,88 @@ jobs:
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
           exit 1
+
+  operator-toml-schema:
+    name: operator.toml declared-schema gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Assert the operator.toml schema declaration is the single source of truth
+        run: |
+          set -euo pipefail
+
+          # Self-test FIRST — the fixture set proves the probe can DETECT and can
+          # DISCRIMINATE. A scan whose probe cannot be shown to do both proves
+          # nothing by returning zero. Hard-fails unconditionally.
+          bash core/deploy/tools/check-operator-toml-schema.sh --self-test \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+          # --repo-integrity runs the C70b and C70c legs ONLY. The C70a leg reads
+          # operator-instance state, which CI does not have and must never
+          # fabricate — it runs at `deploy.sh --check` on an operator machine.
+          set +e
+          bash core/deploy/tools/check-operator-toml-schema.sh --repo-integrity \
+            | tee /tmp/operator-toml-schema.out
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "### operator.toml declared-schema scan"
+            echo '```'
+            cat /tmp/operator-toml-schema.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # exit 3 = broken probe (unreadable declaration, zero keys extracted, or
+          # an unlocatable generator). Fail loud: a zero whose control arm also
+          # returned zero is never an empty population.
+          if [ "$RC" -eq 3 ]; then
+            echo "::error::operator.toml schema gate could not establish a readable denominator — the scan is unusable, not clean."
+            exit 1
+          fi
+
+          if [ "$RC" -eq 0 ]; then
+            echo ":white_check_mark: operator.toml schema — declaration, template and generator agree" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## :x: operator.toml declared-schema gate FAILED"
+            echo ""
+            echo "Either the declaration and \`operator.toml.template\` disagree about which"
+            echo "keys exist, or a hand-written per-key emit has reappeared beside the"
+            echo "derivation loop in \`write_operator_toml\`. See the scan output above for"
+            echo "the specific keys or \`file:line\`."
+            echo ""
+            echo "### Why this is gated"
+            echo ""
+            echo "\`write_operator_toml\` was install-time only, so a schema addition reached"
+            echo "**new installs only** — the \`[automation]\` dial sat absent from existing"
+            echo "configs for six weeks and nothing surfaced it. The root cause was that the"
+            echo "key set had **no declared form**, so no check could be written against it."
+            echo "\`core/config/operator-toml-schema.json\` is that declared form, and this"
+            echo "gate is what keeps it authoritative."
+            echo ""
+            echo "### The fix"
+            echo ""
+            echo "**Parity failure:** add the missing key record to the declaration, or add"
+            echo "the missing prose block to the template. Both surfaces describe the same"
+            echo "key set by contract — the template carries what a key MEANS, the"
+            echo "declaration carries what EXISTS."
+            echo ""
+            echo "**Literal-emit failure:** delete the hand-written per-key emit and add or"
+            echo "amend the key's record in the declaration instead. A literal beside the"
+            echo "loop re-creates the shadow SSOT the declaration exists to prevent, and it"
+            echo "is invisible to every other consumer."
+            echo ""
+            echo "### Scope note"
+            echo ""
+            echo "The C70a leg — whether the operator's own \`operator.toml\` is behind the"
+            echo "declaration — is deliberately **not** in this job. CI has no operator"
+            echo "instance to read, and a gate must never assert over a population it cannot"
+            echo "observe. That leg runs warn-mode at \`deploy.sh --check\`."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          exit 1

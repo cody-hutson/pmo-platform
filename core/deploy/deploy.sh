@@ -11843,6 +11843,115 @@ sys.stdout.write("".join(out) + "|")
   fi
 
 
+  # Check 70 — operator.toml declared-schema conformance (MIXED MODE) [#5739]
+  #
+  # WHAT IT ASSERTS. core/config/operator-toml-schema.json is the ONE place the
+  # operator.toml key set is declared, and everything downstream agrees with it:
+  # the generator emits from it (C70b), the hand-authored template documents
+  # exactly it (C70c), and the operator's live config carries every key it marks
+  # delivered (C70a).
+  #
+  # WHY IT EXISTS. write_operator_toml was install-time only and invoked from
+  # exactly one place, so a schema addition reached NEW INSTALLS ONLY. The
+  # [automation] dial shipped and sat absent from existing configs for six weeks
+  # with nothing to surface it — no deploy finding, no update finding. The key set
+  # had no declared form, so no check could have been written against it. This is
+  # that check.
+  #
+  # TWO MODES IN ONE CHECK, AND THE SPLIT IS THE POINT.
+  #   C70b/C70c are REPO-INTEGRITY assertions over tracked files. The live corpus
+  #   is clean at this pin (C1/C2 make it so in the same change), so there is no
+  #   pre-existing debt to baseline — Check 64/69's day-one-enforce precedent
+  #   applies rather than Check 63's committed-baseline hedge. They increment
+  #   ISSUES.
+  #   C70a reads OPERATOR-INSTANCE STATE. An operator whose config is behind is
+  #   the VICTIM of this defect, not its author, and red-walling their deploy
+  #   would punish them for a bug the platform shipped. It emits WARN and does
+  #   NOT touch ISSUES. The posture is operator-adjustable to enforce via a
+  #   `operator-toml-schema.mode` file — so "non-blocking" is a current-posture
+  #   property, not a structural one, and is stated as such.
+  #
+  # NOT THE ONLY LOCUS. The same primitive is wired as the `operator-toml-schema`
+  # job in .github/workflows/repo-integrity.yml, which runs PRE-merge on every
+  # pull request and carries the C70b/C70c legs. That job is the load-bearing leg
+  # for repo integrity; this one is the deploy-time companion and the ONLY locus
+  # that can see C70a, because CI has no operator instance to read.
+  #
+  # DECLARED COVERAGE BOUNDARY. Key SETS and the absence of a hand-written emit.
+  # It does NOT assert that a declared `enum` constrains a value already on disk
+  # (enum is declared for the settings-manager consumer and is not yet enforced
+  # anywhere), that a declared `type` matches an on-disk value's type, or anything
+  # about opt-in keys in a live config — those are outside the coverage set by
+  # construction.
+  #
+  # Primitive: core/deploy/tools/check-operator-toml-schema.sh (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    local c70_mode
+    c70_mode="$(resolve_check_mode "operator-toml-schema" "warn")"
+    log "Check 70: operator.toml declared-schema conformance (declaration/template parity + no hand-written emit, enforcing; live-config key delta, ${c70_mode})"
+    local c70_script="core/deploy/tools/check-operator-toml-schema.sh"
+    if [[ ! -f "$c70_script" ]]; then
+      log "  FAIL:  operator-toml-schema — primitive script missing: $c70_script (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
+      ISSUES=$((ISSUES + 1))
+    else
+      # ── control arms FIRST: a probe that cannot be shown to detect proves nothing ──
+      local c70_fx_out c70_fx_rc=0
+      c70_fx_out=$(bash "$c70_script" --self-test 2>&1) || c70_fx_rc=$?
+      log "  CTRL:  operator-toml-schema — $(echo "$c70_fx_out" | tail -1)"
+      if [[ $c70_fx_rc -ne 0 ]]; then
+        log "  FAIL:  operator-toml-schema-fixtures — fixture regression (hard-fail on every mode). A probe that can no longer be shown to detect AND to discriminate proves nothing by returning zero."
+        echo "$c70_fx_out" | sed 's/^/         /'
+        ISSUES=$((ISSUES + 1))
+      else
+        # ── the scan: denominator first, then findings ──────────────────────────
+        local c70_out c70_rc=0
+        c70_out=$(bash "$c70_script" 2>&1) || c70_rc=$?
+        local _c70_denom
+        while IFS= read -r _c70_denom; do
+          [[ -z "$_c70_denom" ]] && continue
+          log "  DENOM: operator-toml-schema — ${_c70_denom}"
+        done < <(echo "$c70_out" | sed -n 's/^DENOM: //p')
+
+        # C70a WARN lines: surfaced, never accumulated — unless the operator has
+        # deliberately flipped this check to enforce.
+        local _c70_warn _c70_warn_n=0
+        while IFS= read -r _c70_warn; do
+          [[ -z "$_c70_warn" ]] && continue
+          _c70_warn_n=$((_c70_warn_n + 1))
+          if [[ "$c70_mode" == "enforce" ]]; then
+            log "  FAIL:  operator-toml-schema — ${_c70_warn#WARN: }"
+            ISSUES=$((ISSUES + 1))
+          else
+            log "  WARN:  operator-toml-schema — ${_c70_warn#WARN: }"
+          fi
+        done < <(echo "$c70_out" | grep '^WARN: ' || true)
+
+        case "$c70_rc" in
+          0)
+            if [[ $_c70_warn_n -eq 0 ]]; then
+              log "  OK:    operator-toml-schema — declaration, template and generator agree; live config carries every delivered key"
+            else
+              log "  OK:    operator-toml-schema — repo-integrity legs clean; ${_c70_warn_n} live-config key(s) behind the declaration (reported above, not counted)"
+            fi
+            ;;
+          1)
+            local _c70_hit
+            while IFS= read -r _c70_hit; do
+              [[ -z "$_c70_hit" ]] && continue
+              log "  FAIL:  operator-toml-schema — ${_c70_hit#FAIL: }"
+              ISSUES=$((ISSUES + 1))
+            done < <(echo "$c70_out" | grep '^FAIL: ' || true)
+            ;;
+          *)
+            log "  FAIL:  operator-toml-schema — $(echo "$c70_out" | grep '^SCAN-ERROR: ' | sed 's/^SCAN-ERROR: //' | paste -sd'; ' -)"
+            ISSUES=$((ISSUES + 1))
+            ;;
+        esac
+      fi
+    fi
+  fi
+
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
