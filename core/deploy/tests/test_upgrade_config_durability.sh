@@ -2116,7 +2116,7 @@ if diff -q "${SBX}/rc-pass1.toml" "${SBX}/rc-pass2.toml" >/dev/null 2>&1; then
   report "RC-5 idempotent: a second reconcile is a zero-byte change (CIAC-3 input)" 1
 else
   report "RC-5 idempotent: a second reconcile is a zero-byte change (CIAC-3 input)" 0 \
-    "$(diff "${SBX}/rc-pass1.toml" "${SBX}/rc-pass2.toml" | head -8 | tr '\n' ';')"
+    "$(diff "${SBX}/rc-pass1.toml" "${SBX}/rc-pass2.toml" | sed -n '1,8p' | tr '\n' ';')"
 fi
 
 # RC-6 (the check's own two arms, over instance state). The delta primitive must be
