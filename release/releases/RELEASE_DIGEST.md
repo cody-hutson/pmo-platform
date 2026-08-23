@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.36 (2026-08-23) — Release notes are reachable from the changelog again
+
 ### v4.35 (2026-08-22) — The platform can now read the new project folder layout
 
 ### v4.34 (2026-08-21) — Closing a release now reports what it actually shipped

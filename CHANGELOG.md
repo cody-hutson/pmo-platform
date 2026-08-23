@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.36] - 2026-08-23
+
+Release notes are reachable from the changelog again, and the check that catches broken links now actually catches them.
+
+[Full notes](release/releases/notes/v4.36_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.36)
+
 ## [v4.35] - 2026-08-22
 
 The platform can now recognise files in the new project folder layout, and knows that a project's own governance files sit outside the numbered bins entirely.
