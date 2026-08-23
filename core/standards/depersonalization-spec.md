@@ -106,7 +106,7 @@ The parameterization seam lives at:
 
 The depersonalization stack depends on a workspace-setup mechanism that creates and populates the per-operator config file:
 
-1. Create `~/.config/pmo-platform/operator.toml` (schema: `[meta]`, `[identity]`, `[paths]`, `[platform]` per `core/config/operator.toml.template`). Permissions: `chmod 600` (operator-only read/write).
+1. Create `~/.config/pmo-platform/operator.toml`. The key set is declared — not enumerated in prose — at `core/config/operator-toml-schema.json`, which is the single source of truth for which keys exist, their type, their default-or-none, and whether the generator delivers them; `core/config/operator.toml.template` carries the operator-facing prose for the same key set, and a deploy check asserts the two agree in both directions. Permissions: `chmod 600` (operator-only read/write).
 2. Optionally create `<workspace>/operator.local.toml` for per-workspace overrides; resolution order is operator.local.toml > operator.toml > template defaults.
 3. `setup-workspace.sh` script populates the config at install time, prompting for missing values.
 4. `update.sh` script regenerates resolved files on package updates per [`composition-surface-spec.md § 3.2`](composition-surface-spec.md).

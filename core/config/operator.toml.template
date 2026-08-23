@@ -14,7 +14,10 @@
 #   - Update time by ./update.sh (regenerate managed sections per composition-surface-spec.md § 3.2)
 #   - Runtime by deploy.sh, core/hooks/*.sh (read [CLAUDE_WORKSPACE_ROOT] etc.)
 #
-# Edit this file directly OR run ./update.sh which prompts for missing values.
+# Edit this file directly OR run ./update.sh, which reconciles your generated
+# operator.toml against the declared schema — backfilling a key the platform has
+# added since your config was written, preserving every value you set yourself,
+# removing nothing, and prompting only for a key that carries no default.
 # After edits, run ./update.sh to regenerate resolved files with new values.
 
 [meta]
@@ -361,11 +364,18 @@ default_delivery_approach = "Scrum"
 #
 # WHERE THE DEFAULT ACTUALLY COMES FROM: setup-workspace.sh seeds this key into
 # the generated operator.toml at install with the default below, and preserves
-# whatever you have set across a re-run or re-bootstrap. It does NOT read this
-# template to do it — the generator emits a fixed schema — so this file
-# documents the dial, it does not deliver it. Before the seed existed the key
-# was absent from every generated config and was findable only by reading this
-# template, which is why the ambient-intake capability was invisible on install.
+# whatever you have set across a re-run, re-bootstrap or reconcile. It does NOT
+# read this template to do it — it reads the declaration at
+# core/config/operator-toml-schema.json, which is where the default and the
+# delivered-vs-opt-in disposition of every key actually live. This file is the
+# operator-facing prose for that same key set, and a deploy check asserts the two
+# agree in both directions.
+#
+# History worth keeping: before the declaration existed, the generator carried a
+# FIXED schema, so a key added to it reached NEW INSTALLS ONLY — this dial was
+# absent from every pre-existing config for six weeks and nothing surfaced it.
+# An existing config now converges on the next ./update.sh, or on demand via
+# setup-workspace.sh --reconcile-config.
 # Change your value in ~/.config/pmo-platform/operator.toml, not here.
 automation_level = "recommend"
 
