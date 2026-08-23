@@ -35,13 +35,21 @@ Read that resolver for the live set; the trees are:
   the explicitly-registered shared standards docs (`output-format.md`,
   `operational-artifacts.md`, `regression-checks.md`). Injected to a
   `references/<file>` path in each consumer.
-- `operations/templates/` — the `*-template.{md,csv}` artifact templates
-  (`*.md` and `*.csv`); the resolver's default arm. Injected to a
-  `references/<file>` path in each consumer.
+- `operations/templates/` — the artifact templates. This tree is the resolver's
+  **bare default arm** (`*)`), not a pattern match: a canonical basename that
+  no explicit arm claims and that does not match `template-*.md` resolves here
+  **whatever its extension**. The tree is therefore NOT confined to
+  `*-template.md` / `*-template.csv` — `people-roster-template.yaml` is a
+  registered canonical of this tree and matches neither. Injection target is
+  **per-entry**, declared by the map entry's third field rather than implied by
+  the tree: entries here use BOTH the `references/templates/<file>` shape and
+  the flat `references/<file>` shape, and the majority use the former. Read the
+  map for a given entry's target; do not infer it from this bullet.
 - `core/schemas/` — the canonical schemas. Registered today:
   `core/schemas/tracker-schemas.md`, consumed by `tracker-manager`. This tree
   differs from the two above in its target form: the map entry targets the
-  canonical's **repo-relative path**, not a `references/` path, so the consuming
+  canonical's **repo-relative path** — not a path under `references/` in
+  either of the two shapes the trees above use — so the consuming
   SKILL.md's existing citations of `core/schemas/tracker-schemas.md` resolve
   verbatim from the package root with no SKILL.md edit. It is registered as the
   canonical half of a COMPLEMENTARY pair in
@@ -79,7 +87,7 @@ Closes the "unregistered shared reference" failure mode at its root: Check 13 on
 
 ## Agent rebuild-on-canonical-edit
 
-Editing a canonical that is single-sourced into skill `references/` mirrors makes every dependent skill's runtime mirror and `.skill` package stale. The trigger is a path-class, not a fixed file list: **any canonical resolvable by `resolve_template_sync_source()`** (`core/deploy/lib-template-sync-source.sh`) — which spans all three canonical source trees named under § Template-mirror policy: `core/standards/` (the `template-*.md` standards docs — `template-taxonomy.md`, `template-storage.md`, `template-protocol.md` — plus the registered shared docs `output-format.md`, `operational-artifacts.md`, `regression-checks.md`), `operations/templates/` (the `*-template.{md,csv}` files), and `core/schemas/` (`tracker-schemas.md`). Read the resolver's arms for the live set rather than treating this sentence as the roster. After editing any such canonical, you MUST re-sync the dependents in the same change:
+Editing a canonical that is single-sourced into skill `references/` mirrors makes every dependent skill's runtime mirror and `.skill` package stale. The trigger is a path-class, not a fixed file list: **any canonical resolvable by `resolve_template_sync_source()`** (`core/deploy/lib-template-sync-source.sh`) — which spans all three canonical source trees named under § Template-mirror policy: `core/standards/` (the `template-*.md` standards docs — `template-taxonomy.md`, `template-storage.md`, `template-protocol.md` — plus the registered shared docs `output-format.md`, `operational-artifacts.md`, `regression-checks.md`), `operations/templates/` (the resolver's bare default arm — every canonical basename the explicit arms and `template-*.md` do not claim, whatever its extension, `people-roster-template.yaml` included), and `core/schemas/` (`tracker-schemas.md`). Read the resolver's arms for the live set rather than treating this sentence as the roster. After editing any such canonical, you MUST re-sync the dependents in the same change:
 
 1. Re-deploy the dependent skills — `./deploy.sh --deploy <skill> …` re-injects the canonical into each runtime mirror (Cowork install + user-local).
 2. Rebuild the dependent skills' `.skill` packages — `bash core/deploy/tools/build-skill-packages.sh <skill> …` re-injects the canonical from `TEMPLATE_SYNC_MAP` at build time (package-freshness is enforced by Check 7).
