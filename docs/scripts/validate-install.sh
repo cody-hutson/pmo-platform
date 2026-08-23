@@ -514,7 +514,12 @@ check_a1_platform() {
 # would be the same dishonest reporting this release exists to remove.
 check_a2_workspace_layout() {
   local missing=""
-  local required_dirs="pmo-platform projects knowledge personal .claude"
+  # The instance home replaced personal/ in this list when the operator-instance
+  # family moved to a workspace-root sibling. personal/ is deliberately NOT here:
+  # the installer no longer creates it, it is the operator's own area, and asserting
+  # its existence would fail a perfectly healthy install on the say-so of a
+  # convention the platform has stopped holding.
+  local required_dirs="pmo-platform projects knowledge pmo-instance .claude"
   for d in ${required_dirs}; do
     if [ ! -d "${WORKSPACE_ROOT}/${d}" ]; then
       missing="${missing} ${d}"

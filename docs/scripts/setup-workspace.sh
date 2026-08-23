@@ -1230,6 +1230,12 @@ resolve_all_tokens() {
 # authoritative everywhere else this capability touches a path, so a relocation
 # of the operator-instance family rewrites this list and nothing more.
 #
+# The instance home is a workspace-root sibling of projects/ and knowledge/ above,
+# not a subdirectory of personal/. That is a deliberate consequence of the family's
+# relocation and it has one visible effect here: this installer no longer creates
+# personal/ at all. It never had a reason to beyond housing this family, and
+# personal/ is the operator's own area — the platform provisions nothing inside it.
+#
 # Empty directories are the whole of what install provisions for ambient intake.
 # Nothing is registered and nothing runs: the scheduled sweep is an operator-
 # performed registration on an agent-runtime surface this script cannot reach,
@@ -1242,10 +1248,10 @@ create_dir_layout() {
 ${WORKSPACE_ROOT}/.claude/hooks
 ${WORKSPACE_ROOT}/projects
 ${WORKSPACE_ROOT}/knowledge
-${WORKSPACE_ROOT}/personal/pmo-instance
-${WORKSPACE_ROOT}/personal/pmo-instance/inbox
-${WORKSPACE_ROOT}/personal/pmo-instance/ambient-intake
-${WORKSPACE_ROOT}/personal/pmo-instance/external-sync"
+${WORKSPACE_ROOT}/pmo-instance
+${WORKSPACE_ROOT}/pmo-instance/inbox
+${WORKSPACE_ROOT}/pmo-instance/ambient-intake
+${WORKSPACE_ROOT}/pmo-instance/external-sync"
 
   local d
   while IFS= read -r d; do
@@ -2668,10 +2674,10 @@ install_composition_surface_files() {
 
   if [ "${DRY_RUN}" -eq 0 ]; then
     mkdir -p "${WORKSPACE_ROOT}/.claude" || { err "mkdir failed: ${WORKSPACE_ROOT}/.claude"; exit 73; }
-    mkdir -p "${WORKSPACE_ROOT}/personal/pmo-instance" || { err "mkdir failed: ${WORKSPACE_ROOT}/personal/pmo-instance"; exit 73; }
+    mkdir -p "${WORKSPACE_ROOT}/pmo-instance" || { err "mkdir failed: ${WORKSPACE_ROOT}/pmo-instance"; exit 73; }
     # hub-state-tier parent for <OPERATOR_INSTANCE_HUB_STATE_PATH> templates
     # per core/deploy/composition-surface-manifest.sh hub-state tier.
-    mkdir -p "${WORKSPACE_ROOT}/personal/pmo-instance/hub-state" || { err "mkdir failed: ${WORKSPACE_ROOT}/personal/pmo-instance/hub-state"; exit 73; }
+    mkdir -p "${WORKSPACE_ROOT}/pmo-instance/hub-state" || { err "mkdir failed: ${WORKSPACE_ROOT}/pmo-instance/hub-state"; exit 73; }
     # operations-root-tier parent for the operations-workspace context anchor.
     # Resolved, not spelled: the operations leaf lives in lib-instance-path.sh so
     # a relocation re-points one function rather than every caller. The resolver
@@ -2796,7 +2802,7 @@ scaffold_localized_roster() {
   fi
   # Resolve via the single accessor, keyed on WORKSPACE_ROOT (honors
   # PMO_PEOPLE_ROSTER / PMO_INSTANCE_PATH overrides; falls back to
-  # <workspace-root>/personal/pmo-instance/people-roster.yaml — never the $HOME
+  # <workspace-root>/pmo-instance/people-roster.yaml — never the $HOME
   # default — so a sandboxed --workspace-root is respected).
   local roster_file; roster_file="$(pmo_people_roster_for "${WORKSPACE_ROOT}")"
   if [ -f "${roster_file}" ]; then
@@ -4018,7 +4024,7 @@ init_only_state_flow() {
   local all_dirs=true d
   for d in "${WORKSPACE_ROOT}/.claude" "${WORKSPACE_ROOT}/.claude/hooks" \
            "${WORKSPACE_ROOT}/projects" "${WORKSPACE_ROOT}/knowledge" \
-           "${WORKSPACE_ROOT}/personal/pmo-instance"; do
+           "${WORKSPACE_ROOT}/pmo-instance"; do
     [ -d "${d}" ] || all_dirs=false
   done
   if [ "${all_dirs}" = "true" ]; then

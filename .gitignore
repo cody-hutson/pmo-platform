@@ -5,7 +5,14 @@ portfolio/
 steering-committee/
 
 # Operator-instance content — never commit
-# (v2-specific: operator's working notes live at ~/Claude/personal/pmo-instance/ per repo-cleanup-modular-monolith.md § 2.4)
+# Two separate things, both ignored, for different reasons:
+#   personal/     the operator's own area (working notes, analysis, harness). The
+#                 platform provisions nothing here and homes no runtime state here.
+#   pmo-instance/ platform-written runtime state — the operator-instance family's
+#                 canonical home, a workspace-root sibling of projects/ and
+#                 knowledge/. Resolved by core/deploy/lib-instance-path.sh.
+# Both stems stay ignored: personal/ because it is operator-owned, and pmo-instance/
+# because it holds machine-written state that must never reach a public commit.
 personal/
 pmo-instance/
 

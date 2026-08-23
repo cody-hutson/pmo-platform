@@ -205,7 +205,11 @@ build_source_repo() {
 # build_workspace <ws> — a healthy deployed workspace layout.
 build_workspace() {
   local ws="$1" d
-  for d in pmo-platform projects knowledge personal .claude; do
+  # Mirrors check_a2_workspace_layout's required set exactly. personal/ is NOT a
+  # member: the installer stopped creating it when the operator-instance family
+  # became a workspace-root sibling, so a fixture that seeds it would assert a
+  # layout no install produces.
+  for d in pmo-platform projects knowledge pmo-instance .claude; do
     mkdir -p "${ws}/${d}"
   done
 
