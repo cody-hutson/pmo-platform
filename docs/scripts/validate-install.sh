@@ -493,8 +493,16 @@ check_a1_platform() {
   emit_pass "A1" "INSTALL-PLATFORM" "$(uname -s) $(uname -r)" "A"
 }
 
-# A2 asserts the workspace layout: the five workspace-root children, plus the
-# three ambient-intake member directories under the operator-instance base.
+# A2 asserts the workspace layout: the workspace-root children and the operations
+# tier scaffold beneath projects/, plus the three ambient-intake member directories
+# under the operator-instance base.
+#
+# The required set's CARDINALITY is derived from the list rather than written out as a
+# numeral in the verdict strings. It used to be a literal `5`, carried in BOTH the
+# healthy and the degraded arm, and a membership change that updated one and missed the
+# other -- or missed both -- would have made A2 report a verdict it did not earn while
+# still passing. Deriving it removes that failure mode instead of re-arming it with a
+# larger number.
 #
 # The ambient half is here rather than in a check of its own on purpose. A2 IS
 # the layout assertion and already emits the "missing dirs" shape this needs, so
@@ -524,7 +532,27 @@ check_a2_workspace_layout() {
   # the instance name necessarily appears bare and the leak detector matches it. It
   # leaks nothing — a basename is the same string on every operator's machine.
   local required_dirs="pmo-platform projects knowledge pmo-instance .claude"   # path-leak: allow
+  # The operations tier scaffold, appended rather than inlined above so the marker line
+  # stays scoped to the instance basename it was written to cover. These three are
+  # NESTED paths, not workspace-root children; the loop below string-concatenates and
+  # never assumed depth 1, so they need nothing from it.
+  #
+  # The six _pmo/ entity subfolders are deliberately NOT listed individually. A2 asserts
+  # LAYOUT, and six more rows would triple the failure message for no failure mode the
+  # parent's absence does not already surface. Stated so the omission reads as a
+  # decision rather than an oversight.
+  #
+  # This WIDENS A2's failure surface, and that is the intended mechanism rather than a
+  # side effect: a workspace missing projects/_pmo/ passes A2 today and fails it after
+  # this change. A2 is not in the pre-existing-workspace SKIP set, so it fires on
+  # workspaces that predate this release -- reporting a FAIL whose named remedy,
+  # re-running setup-workspace.sh, is correct, idempotent, and destroys nothing. A
+  # deliberate remediable widening, recorded here so it is not later read as a
+  # regression.
+  required_dirs="${required_dirs} projects/_config projects/_pmo projects/Archive"
+  local required_count=0
   for d in ${required_dirs}; do
+    required_count=$((required_count + 1))
     if [ ! -d "${WORKSPACE_ROOT}/${d}" ]; then
       missing="${missing} ${d}"
     fi
@@ -560,12 +588,12 @@ check_a2_workspace_layout() {
       "re-run setup-workspace.sh (or ./update.sh to back-fill the ambient dirs)" "A"
   elif [ "${ambient_checked}" -eq 1 ]; then
     emit_pass "A2" "INSTALL-WORKSPACE-LAYOUT" \
-      "5 required dirs + 3 ambient-intake dirs present" "A"
+      "${required_count} required dirs + 3 ambient-intake dirs present" "A"
   else
     # Say what was actually checked. Claiming the ambient dirs when the resolver
     # never loaded would be a verdict the run did not earn.
     emit_pass "A2" "INSTALL-WORKSPACE-LAYOUT" \
-      "5 required dirs present; ambient-intake dirs NOT checked (resolver unavailable at ${ambient_lib})" "A"
+      "${required_count} required dirs present; ambient-intake dirs NOT checked (resolver unavailable at ${ambient_lib})" "A"
   fi
 }
 
