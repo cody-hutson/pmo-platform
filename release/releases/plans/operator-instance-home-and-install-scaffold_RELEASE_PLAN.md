@@ -20,7 +20,7 @@ consumers: Stage 5-9 spokes; the release hub; Stage 9 Plan Review
 | **Release Manager** | Agent-assisted |
 | **Status** | Executing |
 | **Branch** | release/operator-instance-home-and-install-scaffold |
-| **PR** | (populated at Stage 6 PR creation) |
+| **PR** | #5908 (draft; ready-for-review is the Stage 9 gate) |
 | **Milestone** | operator-instance-home-and-install-scaffold |
 | **Release Class** | `novel` — CONFIRMED at Stage 4 against live evidence (`class_weight` 1.15) |
 | **Raw points** | **29** — #3382 remainder 21 · #5829 M=4 · #5739 M=4 |
