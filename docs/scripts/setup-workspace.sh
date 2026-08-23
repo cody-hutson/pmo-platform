@@ -1242,11 +1242,33 @@ resolve_all_tokens() {
 # and it is documented as an activation step in docs/INSTALL.md rather than
 # performed here. A directory has no behavior, which is what makes provisioning
 # them safe to do unprompted.
+#
+# The nine entries under projects/ are the OPERATIONS TIER SCAFFOLD. They sit
+# directly beneath their parent rather than at the end of the list precisely so
+# the ambient trio stays LAST and the first sentence of this header stays true --
+# a membership change that pushes those three off the end turns a correct comment
+# into a stale one, silently. Every tier in that block has a pre-existing governed
+# authority and none is invented here: _config/ is the Governance File Map's
+# program-scoped ops-config row, _pmo/ and its six entity classes are ADR-058 plus
+# the entity field schemas, and Archive/ is RECORDS_POLICY.md, which already names
+# it as the retention destination. The seed READMEs that make each of them
+# self-describing are copied by scaffold_operations_tiers() later in the same
+# flow -- this function creates only the directories, because it runs before the
+# resolver is available and a create-once template copy needs it.
 create_dir_layout() {
   local dirs
   dirs="${WORKSPACE_ROOT}/.claude
 ${WORKSPACE_ROOT}/.claude/hooks
 ${WORKSPACE_ROOT}/projects
+${WORKSPACE_ROOT}/projects/_config
+${WORKSPACE_ROOT}/projects/_pmo
+${WORKSPACE_ROOT}/projects/_pmo/people
+${WORKSPACE_ROOT}/projects/_pmo/systems
+${WORKSPACE_ROOT}/projects/_pmo/vendors
+${WORKSPACE_ROOT}/projects/_pmo/workstreams
+${WORKSPACE_ROOT}/projects/_pmo/decisions
+${WORKSPACE_ROOT}/projects/_pmo/dependencies
+${WORKSPACE_ROOT}/projects/Archive
 ${WORKSPACE_ROOT}/knowledge
 ${WORKSPACE_ROOT}/pmo-instance
 ${WORKSPACE_ROOT}/pmo-instance/inbox
