@@ -24,9 +24,16 @@ Skips (treated as intentional non-links):
 - Template placeholders (`{REPO}`, `<OPERATOR_INSTANCE_*>`, `$VAR`, `~/...`)
 - All-caps bareword placeholders (`URL`, `PATH`, `...`)
 - Version-string placeholders (`vX.Y`)
-- Release-plan / release-notes worked-example refs — any version- OR slug-prefix
-  ending in `_RELEASE_PLAN.md` / `_RELEASE_NOTES.md` (versioned `v3.56_RELEASE_NOTES.md`,
-  theme-named `pda-...RELEASE_PLAN.md`, or hybrid `v3.72-...RELEASE_PLAN.md`)
+
+NOT skipped: release-plan / release-notes refs. A concrete `_RELEASE_PLAN.md` /
+`_RELEASE_NOTES.md` target names a file tracked in this repository under
+`release/releases/`, so a link to one that does not resolve is real drift and is
+reported like any other broken link. A blanket suffix skip for the three live
+filename shapes once suppressed that whole class on the premise that these notes
+were instance-side and need not exist in the public tree; the tracked corpus
+grew to hold them and the premise stopped being true. The genuine placeholder
+forms are still skipped, by the classes above: `vX.Y_RELEASE_NOTES.md` by the
+version-string rule and `<slug>_RELEASE_PLAN.md` by the angle-bracket rule.
 
 Backward-compatibility contract:
   Invoked with NO arguments, this script is byte-for-byte equivalent in behavior
@@ -48,6 +55,7 @@ import argparse
 import collections
 import re
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -82,17 +90,12 @@ def is_skippable(target: str) -> bool:
         return True
     if re.search(r'v[A-Z]\.[A-Z]', target):
         return True
-    # Release-plan / release-notes worked-example refs are instance-side notes
-    # that need not exist in the public tree. Three live filename shapes must be
-    # treated consistently (the skip formerly matched only the versioned shape):
-    #   versioned          v3.56_RELEASE_NOTES.md
-    #   version-less/theme  pda-rollup-and-portfolio_RELEASE_PLAN.md
-    #   hybrid             v3.72-release-hub-mode-r-and-o_RELEASE_PLAN.md
-    # Any version- OR slug-prefix, still anchored on the _RELEASE_PLAN|_RELEASE_NOTES
-    # .md suffix so ordinary links can never over-skip (a link must literally end
-    # in that suffix to match).
-    if re.search(r'[A-Za-z0-9][A-Za-z0-9.\-]*_(?:RELEASE_PLAN|RELEASE_NOTES)\.md', target):
-        return True
+    # NOTE: there is deliberately NO `_RELEASE_PLAN.md` / `_RELEASE_NOTES.md`
+    # suffix skip here. A concrete note/plan target names a tracked file under
+    # release/releases/, so an unresolvable one is real drift. The placeholder
+    # forms that genuinely name no file (`vX.Y_...`, `<slug>_...`) are already
+    # caught by the version-string and angle-bracket rules above; do not
+    # re-broaden those into a suffix rule.
     return False
 
 
@@ -338,20 +341,36 @@ def iter_markdown(roots: list[str], top_level_md: bool,
             yield md
 
 
+# A note-shaped filename that must never exist on disk. Used as the negative arm
+# of the fail-closed fixture in run_self_test; if a real note is ever given this
+# name the fixture asserts loudly rather than passing vacuously.
+SELF_TEST_ABSENT_NOTE = "v0.00-self-test-absent_RELEASE_NOTES.md"
+
+
 def run_self_test() -> int:
     """In-process smoke test for is_skippable — the skip predicate the release
     dead-file-ref gate + release-link-check.yml both consume.
 
-    The load-bearing case is the release-plan / release-notes filename-shape
-    consistency: three shapes exist on disk (versioned, version-less/theme-named,
-    hybrid) and MUST be treated identically as intentionally-instance-side worked
-    examples. Formerly only the versioned shape was skipped, so a theme-named or
-    hybrid note ref was flagged inconsistently. Fixtures also pin that the
-    broadened skip does NOT over-skip ordinary links (it stays anchored on the
-    _RELEASE_PLAN / _RELEASE_NOTES .md suffix), and that the pre-existing skip
-    classes still hold.
+    The load-bearing case is that release-plan / release-notes link targets are
+    CHECKED, not skipped. A concrete `_RELEASE_PLAN.md` / `_RELEASE_NOTES.md`
+    target names a file tracked in this repository under `release/releases/`, so
+    a link to one that does not resolve is real drift. A blanket suffix skip
+    covering the three live filename shapes (versioned, version-less/theme-named,
+    hybrid) once suppressed that whole class, on the premise that these notes
+    were instance-side and need not exist in the public tree. The tracked corpus
+    grew to hold them and the premise stopped being true, so the rule was
+    removed and this test was inverted with it.
+
+    Both arms are pinned, because a skip predicate can fail in two directions:
+    the concrete shapes MUST be checkable (under-arming would restore the
+    suppression), and the genuine placeholder forms MUST still skip
+    (over-arming would flood the gate with template text). A third fixture runs
+    the predicate through check_file end-to-end, so the assertions cannot pass
+    on a boolean that never reaches the existence check.
     """
-    # ── The three live release-plan/notes filename shapes — ALL skippable ──
+    # ── The three live release-plan/notes filename shapes — ALL checkable ──
+    # These name real tracked files under release/releases/. A link to one that
+    # does not resolve is drift, so is_skippable must NOT swallow them.
     plan_note_shapes = [
         # versioned
         "release/releases/notes/v3.56_RELEASE_NOTES.md",
@@ -361,18 +380,35 @@ def run_self_test() -> int:
         "release/releases/notes/declarative-gating-model_RELEASE_NOTES.md",
         # hybrid (version prefix + hyphen-slug)
         "release/releases/plans/v3.72-release-hub-mode-r-and-o_RELEASE_PLAN.md",
-        # bare filename (no directory) — the search anchor still matches
+        # bare filename (no directory)
         "v1.24_RELEASE_NOTES.md",
     ]
     for t in plan_note_shapes:
+        assert not is_skippable(t), \
+            f"self-test: release-plan/notes ref must be CHECKED, not skipped: {t!r}"
+
+    # ── Specificity guard: the genuine placeholder forms MUST still skip ──
+    # This is the anti-over-arming arm. `vX.Y` is a version-string template and
+    # `<slug>` an angle-bracket placeholder; neither names a file on disk, and
+    # both are caught by pre-existing skip classes the rule removal left intact.
+    # If this arm ever fails, the checker has started reporting template prose.
+    placeholder_note_shapes = [
+        "release/releases/notes/vX.Y_RELEASE_NOTES.md",
+        "release/releases/plans/vX.Y_RELEASE_PLAN.md",
+        "release/releases/notes/<slug>_RELEASE_NOTES.md",
+        "release/releases/plans/<version>_RELEASE_PLAN.md",
+    ]
+    for t in placeholder_note_shapes:
         assert is_skippable(t), \
-            f"self-test: expected release-plan/notes ref to be skippable: {t!r}"
+            f"self-test: placeholder note/plan form must still skip: {t!r}"
 
     # ── Regression guard: ordinary links MUST NOT be over-skipped ──
-    # NB: the skip is deliberately NOT end-anchored — is_skippable runs on the
-    # raw target BEFORE the '#anchor' split, so `foo_RELEASE_PLAN.md#sec` must
-    # still skip. These guards therefore test the token/suffix boundary, not a
-    # trailing-content boundary (the original regex was non-anchored too).
+    # These are RELEASE-adjacent filenames that a future re-broadening of the
+    # skip classes could plausibly swallow — the last two are the near-misses
+    # that a loosely-written token rule catches by accident. They were pinned
+    # when the note/plan suffix skip existed and stay pinned now that it does
+    # not, because the shape they guard against is a suffix/token rule of any
+    # generation, not that one rule in particular.
     not_skippable = [
         "release/references/pipeline/stage-13-close.md",
         "../governance/RELEASE_PROTOCOL.md",
@@ -418,8 +454,52 @@ def run_self_test() -> int:
         assert not is_test_fixture(Path(p)), \
             f"self-test: corpus markdown wrongly excluded as a fixture (over-skip): {p!r}"
 
-    print("self-test OK (release-plan/notes shape consistency + skip classes "
-          "+ test-fixture path exclusion)")
+    # ── Fail-closed fixture — end-to-end, both arms ──────────────────────────
+    # The assertions above test a boolean. This one runs a note link through
+    # check_file, so a predicate that says "not skippable" but never reaches the
+    # existence check cannot pass silently. Two links in one probe file:
+    #   negative arm — a note-shaped target naming no file MUST be reported
+    #   positive arm — a note-shaped target naming a real tracked note MUST NOT
+    # If the positive arm were wrongly skipped the finding count would still be
+    # 1, so it is pinned separately against is_skippable rather than inferred.
+    #
+    # Both links use the leading-`/` workspace-root form (ADR-085 clause 2), so
+    # they resolve against REPO_ROOT while the probe file itself lives in the OS
+    # temp dir — this self-test writes nothing inside the repository.
+    notes_dir = REPO_ROOT / "release" / "releases" / "notes"
+    absent_note = notes_dir / SELF_TEST_ABSENT_NOTE
+    assert not absent_note.exists(), (
+        f"self-test: the fail-closed fixture's negative arm names a file that "
+        f"now EXISTS ({SELF_TEST_ABSENT_NOTE!r}) — rename it, or the fixture "
+        f"proves nothing")
+    real_note = next(iter(sorted(notes_dir.rglob("*_RELEASE_NOTES.md"))), None)
+    assert real_note is not None, (
+        "self-test: no *_RELEASE_NOTES.md found under release/releases/notes/ — "
+        "the fail-closed fixture has no positive arm and cannot be trusted")
+    real_target = "/" + real_note.relative_to(REPO_ROOT).as_posix()
+    absent_target = "/" + absent_note.relative_to(REPO_ROOT).as_posix()
+    assert not is_skippable(real_target), \
+        f"self-test: the fixture's positive arm is being skipped: {real_target!r}"
+    assert not is_skippable(absent_target), \
+        f"self-test: the fixture's negative arm is being skipped: {absent_target!r}"
+
+    with tempfile.TemporaryDirectory() as td:
+        probe = Path(td) / "fail-closed-probe.md"
+        probe.write_text(
+            f"[absent]({absent_target})\n[present]({real_target})\n",
+            encoding="utf-8")
+        probe_warns: list[str] = []
+        findings = check_file(probe, check_anchors=False, images=False,
+                              anchor_warns=probe_warns)
+    assert len(findings) == 1, (
+        f"self-test: fail-closed fixture expected exactly 1 finding "
+        f"(the absent note); got {len(findings)}: {findings!r}")
+    assert SELF_TEST_ABSENT_NOTE in findings[0], (
+        f"self-test: fail-closed fixture reported the wrong link: {findings[0]!r}")
+
+    print("self-test OK (release-plan/notes refs are checked not skipped, "
+          "placeholder forms still skip, fail-closed fixture reports the "
+          "absent note, skip classes + test-fixture path exclusion hold)")
     return 0
 
 

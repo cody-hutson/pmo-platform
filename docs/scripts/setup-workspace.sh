@@ -74,7 +74,8 @@ readonly STATE_FILE_NAME=".workspace-setup.state"
 readonly STATE_SCHEMA_VERSION="1.0"
 readonly SCRIPT_VERSION="v1.04"
 # Canonical operator config (per composition-surface-spec.md + depersonalization-spec.md §2).
-# XDG-spec location; structured TOML with [meta]/[identity]/[paths]/[platform] sections.
+# XDG-spec location; structured TOML with [meta]/[identity]/[paths]/[platform]/[automation]
+# sections — the five this script's write_operator_toml() emits on a stock install.
 # Per-workspace override (optional). Loaded after operator.toml; fields here win.
 readonly OPERATOR_LOCAL_TOML_BASENAME="operator.local.toml"
 # Hook count safety floor; current expected count is 10. Loop is data-driven.
@@ -616,7 +617,9 @@ detect_state_and_route() {
 }
 
 # --- Section 11: operator.toml read/write (canonical per composition-surface-spec.md) ---
-# Schema: [meta] schema_version, managed_by | [identity] operator_* | [paths] *_path / *_root | [platform] *
+# Schema: [meta] schema_version, managed_by | [identity] operator_* | [paths] *_path / *_root | [platform] * |
+#         [automation] automation_level  — five managed sections (MANAGED_SECTIONS, below); [automation]
+#         has been emitted on every stock install since v4.23.
 # Token mapping (operator.toml field → bracketed token):
 #   [identity].operator_name             → [OPERATOR_NAME]
 #   [identity].operator_email            → [OPERATOR_EMAIL]
@@ -724,11 +727,14 @@ with open(os.environ["S_TOKENS_FILE"], "r") as f:
 
 # --- #383 lossless round-trip: re-parse the EXISTING operator.toml from disk
 # BEFORE the mv overwrites it (the mv runs after this writes tmp), so operator-
-# added sections/keys outside the managed schema (e.g. [adapters], [automation],
-# [methodology], [paths] override keys) survive a rewrite/re-bootstrap verbatim.
-# Managed keys are re-emitted from tokens; the three operator-or-default fields
-# below (pmo_platform_repo_name, work_board, comms_platform) keep the operator
-# value when set. NOTE: value + section preservation is the load-bearing
+# added sections/keys outside the managed schema (e.g. [adapters], [methodology],
+# [paths] override keys) survive a rewrite/re-bootstrap verbatim. [automation] is
+# NOT an example of that class: since v4.23 it is a managed section this generator
+# emits itself (through ovd(), below), and only operator-ADDED keys inside it ride
+# passthrough("automation").
+# Managed keys are re-emitted from tokens; the four operator-or-default fields
+# below (pmo_platform_repo_name, work_board, comms_platform, automation_level)
+# keep the operator value when set. NOTE: value + section preservation is the load-bearing
 # guarantee; inline comments inside operator-added sections are not retained
 # (documented residual).
 prior = {}        # {section: [(key, raw_quoted_value), ...]} in file order
@@ -844,8 +850,10 @@ out.append("[automation]")
 out.append("automation_level = \"{}\"".format(esc(ovd("automation", "automation_level", "recommend"))))
 passthrough("automation")
 out.append("")
-# pass-through ALL operator-added sections verbatim (adapters, automation,
-# methodology, projects, and any unknown section) in original file order
+# pass-through every NON-MANAGED operator-added section verbatim (adapters,
+# methodology, projects, and any unknown section) in original file order. The
+# MANAGED_SECTIONS skip immediately below excludes automation: it is emitted
+# above, with its own passthrough(), rather than here.
 for section in prior_order:
     if section in MANAGED_SECTIONS:
         continue

@@ -1861,7 +1861,7 @@ next: {one of the closed-enum values per § next: closed enum below}
 | `block:dependency-#{M}` | Spoke cannot proceed until issue #M (or PR #M) lands; substrate dep is unmet | Hub holds the sub-task; re-routes after the dependency closes per `iterate:` re-spawn convention |
 | `complete:sub-task-done` | Terminal sub-task state — no downstream routing remains (e.g., Stage 13 close completed) | Procedure 4 records completion; no further routing for this issue |
 
-**Mechanically-blocked patterns** (these emitted values do NOT match the closed enum; the schema-conformance check at `deploy.sh --check` Check 29 flags them as structural defects):
+**Mechanically-blocked patterns** (these emitted values do NOT match the closed enum; the hub-side routing-time regex test at Procedure 4 entry — gate (a) in § Smoke-test mechanism below — is the gate that sees an emitted return value and flags it as a structural defect):
 
 | Off-ramp pattern (currently possible in free-form returns) | Why it fails closed-enum validation |
 |---|---|
@@ -1900,7 +1900,7 @@ The Agent-tool channel does NOT duplicate or summarize the Handoff Payload; it c
 |---|---|---|
 | (a) After EVERY Agent-tool spoke completion (Procedure 4 entry) | Hub regex-tests the Agent return-value message against the 4-field schema + closed-enum membership; on mismatch, emits `[STRUCTURAL-DEFECT: return-value-non-conformant]` and reads the GitHub comment as fallback authority | Warn-mode initial: log to the shared deploy-check warn log (`$(pmo_instance_path)/deploy-check-warn-log.jsonl`) — **specified, not yet emitting**: no check emits this gate's FAIL row; Check 29 emits agent-definition roster drift, not a return-value row. Flip-to-enforce: hub HALTS routing and surfaces Decision Briefing to operator |
 | (b) Stage 7 DT review (post-cutover spokes) | LLM-graded content check on free-text content after the 4-field block | Tier 1 finding (Engineering fixes via `fix(dt):` commit per the DT↔Engineering iteration loop) |
-| (c) `deploy.sh --check` Check 29 (return-value-conformance lint) | Lints recent Agent-tool return values via sampling parent issue most-recent transcript metadata | Reports drift in `--check` output; warn-mode initial |
+| (c) `deploy.sh --check` Check 29 (return-value-conformance lint) | Scans every `pmo-*.md` agent definition under `release/.claude/agents/` (fallback `.claude/agents/`) for the `## Return Value to Hub` H2 heading AND a `hub-spoke-bridge.md` cross-reference in the same file. It reads agent-definition files exhaustively — it never reads a runtime return value, and it samples nothing | Reports agent-definition roster drift in `--check` output; warn-mode initial |
 
 Gate (a) is the routing-time gate; gate (b) is the review-time gate; gate (c) is the deploy-time roster check.
 
@@ -1923,7 +1923,7 @@ The closed enum lives in **this subsection** as the canonical source of truth. E
 1. An R1 Evidence-Grounding artifact per `core/standards/evidence-grounding-standard.md` enumerating current-state usage of existing enum values and justifying the new value against them.
 2. Collective Review N-way consistency check on the new value across any sibling Stage 5 specs in the same release that reference the enum.
 
-Drift-by-fiat — silently inventing a new enum value in one spoke's return without governed extension — is a structural defect surfaced by Check 29.
+Drift-by-fiat — silently inventing a new enum value in one spoke's return without governed extension — is a structural defect surfaced by the hub-side routing-time regex test (gate (a) in § Smoke-test mechanism).
 
 > **Cutover discipline:** Applies to all releases going forward.
 

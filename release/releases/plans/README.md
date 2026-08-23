@@ -10,7 +10,7 @@ Per-release Stage 4 release plans live here, one file per release. A plan's file
 
 ## Directory layout — major-version subfolders
 
-Plan files are organized into **per-major-version subfolders**, not stored flat. The same scheme applies to `../notes/`. This keeps each directory scannable as the corpus grows.
+Plan files are organized into **per-major-version subfolders**, not stored flat. This keeps each directory scannable as the corpus grows. **This scheme governs plans only** — `../notes/` is flat except for its own `_unversioned/` bucket, per [`../../references/standards/release-notes-standard.md`](../../references/standards/release-notes-standard.md) § File Location, Naming, Frontmatter. The asymmetry is deliberate: plan placement is ADR-092-backed and enforced by `--check plan-identity`, and no equivalent placement assertion exists for notes.
 
 ```
 plans/
@@ -25,7 +25,7 @@ plans/
 
 ### Disposition rule (which subfolder a file belongs to)
 
-Every plan and note resolves to exactly one subfolder by this rule, applied in order:
+Every **plan** resolves to exactly one subfolder by this rule, applied in order. (Notes do not: they are flat except for `../notes/_unversioned/`, and only rule 2's second bullet — the version-less case — has a note analogue.)
 
 0. **Pre-claim / in-flight** (slug-keyed filename, no `RELEASE_LOG.md` row yet — the release is in flight and has not reached the Stage-12 claim) → **stays at the plans/ top level**, slug-keyed, pending the claim. This is the universal pre-claim home for both identity modes; the file has no version stem to subfolder on yet. At the Stage-12 claim, a `versioned` release advances to rule 1 (via `git mv` to `v<MAJOR>/`), a `version-less` release to rule 2 (`_unversioned/`).
 1. **Version-prefixed filename** (`vX.Y…_RELEASE_PLAN.md`) → `v<MAJOR>/` taken from the filename's major (`v3.45…` → `v3/`).
@@ -33,15 +33,17 @@ Every plan and note resolves to exactly one subfolder by this rule, applied in o
    - If the slug appears in a **version-keyed** LOG row (e.g. `22-ticket-information-architecture` is the Milestone cell of the `v2.27` row) → file under that major (`v2/`).
    - If the slug appears only in a **version-less LOG row** (the release shipped VERIFIED with Tag `(none)` and never claimed a version) → file under `_unversioned/`.
 
-`_unversioned/` is the bucket for **un-versioned** plans and notes — both a genuinely version-less shipped release (rule 2, second bullet) and a pre-claim plan an author chooses to stage there rather than at the top level are legitimate residents. When a version-less (or pre-claim) release is later assigned a version, move its plan/note into the matching `v<MAJOR>/` subfolder with `git mv` (the Stage-12 stamp pass does this for a `versioned` claim) and repair that release's INDEX link **by editing its row in place**. Do **not** re-run a bare `../../../core/deploy/tools/generate_release_index.py` to "refresh" the links: a full regenerate rewrites every row, restamping the grandfathered `Date` cells the [`../RELEASE_INDEX.md`](../RELEASE_INDEX.md) header § *Grandfathering* declares must not be rewritten. Confirm the repair with the read-only `../../../core/deploy/tools/generate_release_index.py --verify`. **Grandfathering:** the cutover is forward-only — existing `vX.Y_RELEASE_PLAN.md` files are not renamed to the slug form.
+`_unversioned/` is the bucket for **un-versioned** plans and notes — both a genuinely version-less shipped release (rule 2, second bullet) and a pre-claim plan an author chooses to stage there rather than at the top level are legitimate residents. When a version-less (or pre-claim) release is later assigned a version, move its **plan** into the matching `v<MAJOR>/` subfolder with `git mv` (the Stage-12 stamp pass does this for a `versioned` claim) — and move its **note** to the flat `../notes/` root, since notes shard on nothing — then repair that release's INDEX link **by editing its row in place**. Do **not** re-run a bare `../../../core/deploy/tools/generate_release_index.py` to "refresh" the links: a full regenerate rewrites every row, restamping the grandfathered `Date` cells the [`../RELEASE_INDEX.md`](../RELEASE_INDEX.md) header § *Grandfathering* declares must not be rewritten. Confirm the repair with the read-only `../../../core/deploy/tools/generate_release_index.py --verify`. **Grandfathering:** the cutover is forward-only — existing `vX.Y_RELEASE_PLAN.md` files are not renamed to the slug form.
 
 ### Tooling contract
 
 The generators that read this corpus discover files **recursively** (`rglob`), so subfoldering is transparent to them:
-- [`../../../core/deploy/tools/generate_release_index.py`](../../../core/deploy/tools/generate_release_index.py) — resolves each note link to its subfoldered path (`notes/v<MAJOR>/…`). Run it as `--verify` (read-only) unless an operator has explicitly accepted a full-INDEX restamp — see the regeneration prohibition above.
+- [`../../../core/deploy/tools/generate_release_index.py`](../../../core/deploy/tools/generate_release_index.py) — resolves each note link to the note's actual on-disk path: flat `notes/<name>_RELEASE_NOTES.md`, or `notes/_unversioned/…` for a version-less release. Run it as `--verify` (read-only) unless an operator has explicitly accepted a full-INDEX restamp — see the regeneration prohibition above.
 - [`../../../core/deploy/tools/lint_release_corpus.py`](../../../core/deploy/tools/lint_release_corpus.py) — scans all subfolders for filename **shape** compliance, frontmatter schema, type-coherence, note content, and **plan-identity**. The filename check validates SHAPE ONLY — that a name matches the canonical regex — and says nothing about whether the version it names is the one the release shipped as. That second, independent question is the plan-identity check (`--check plan-identity`): it compares each version-declaring plan filename against its `../RELEASE_LOG.md` row, resolved by a ledger-row identity join, and asserts in the opposite direction that every concrete-version ledger row has a plan at `v<MAJOR>/<VERSION>_RELEASE_PLAN.md`. A plan whose filename declares no version is outside its antecedent and passes without a rule, which is why the pre-claim and `_unversioned/` forms above need no exemption.
 
-The `../RELEASE_LOG.md`, `../RELEASE_DIGEST.md`, and `../RELEASE_INDEX.md` **path pointers** to these files reflect the subfoldered layout. Historical release-plan and release-note bodies retain their as-authored self-referential paths as a frozen record (not rewritten).
+The `../RELEASE_LOG.md`, `../RELEASE_DIGEST.md`, and `../RELEASE_INDEX.md` **path pointers** reflect each artifact's actual layout — subfoldered for plans, flat-except-`_unversioned/` for notes.
+
+**Frozen-record rule, and its one exception.** Historical release-plan and release-note bodies retain their as-authored self-referential paths as a frozen record: a path that records *what the corpus looked like when the artifact was written* is a factual claim and is not rewritten. That rule does **not** cover a body's own outbound **links**. A link that a later corpus move broke is not a factual claim about the past — it is a navigational target that no longer resolves — so it is repaired in the same change that moves the file, to the artifact the author was pointing at. Repairing it restores the author's original intent rather than rewriting history.
 
 ## Authoring contract
 

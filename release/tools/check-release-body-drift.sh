@@ -81,13 +81,17 @@
 #
 # NOTE RESOLUTION IS LAYOUT-INDEPENDENT. The note is resolved by FILENAME
 # (<version>_RELEASE_NOTES.md) anywhere under release/releases/notes/ — the flat
-# path first, then RECURSIVELY through any subfolder. The corpus foldered its notes
-# into major-version buckets (notes/v1|v2|v3/… plus the _unversioned/ bucket) per
-# plans/README.md (#230, v3.54): 60 of 170 notes are flat, 110 are foldered. A
-# flat-path-only resolve reported a FABRICATED ABSENCE (exit 3, "note not found")
-# for all 110 foldered notes — the check was structurally unable to read the
-# majority of the corpus, and every consumer read that as a missing artifact rather
-# than as a resolution failure. This mirrors, in shape, how lint_release_corpus.py
+# path first, then RECURSIVELY through any subfolder. The recursion is RETAINED
+# and load-bearing for two independent reasons. (1) notes/_unversioned/ is a live,
+# permitted subfolder holding every version-less release's note. (2) This resolver
+# reads a git REF (default origin/main), so it must resolve correctly at PRE-#3698
+# refs too, where 110 of 195 notes sat in major-version buckets (notes/v1|v2|v3/…
+# plus _unversioned/) per plans/README.md (#230, v3.54). A flat-path-only resolve
+# reported a FABRICATED ABSENCE (exit 3, "note not found") for all 110 of those —
+# the check was structurally unable to read the majority of the corpus, and every
+# consumer read that as a missing artifact rather than as a resolution failure.
+# #3698 migrated the 100 v1|v2|v3 notes flat; the _unversioned/ 10 did not move,
+# and older refs are unchanged. This mirrors, in shape, how lint_release_corpus.py
 # solved the same problem for its §3.2 note lint (`NOTES_DIR.rglob(
 # "*_RELEASE_NOTES.md")`): discovery keys on the _RELEASE_NOTES.md suffix — the
 # corpus's own type discriminator — and NO bucket literal ("v1"/"v2"/"v3"/
@@ -160,8 +164,43 @@ find_gh() {
 # "$@" (not "$1") so ONE transform serves both a file arg (fixture mode) and a
 # stream (`git show … | strip_frontmatter`, canonical mode). With zero args sed
 # reads stdin; safe under set -u. Keeps the §5.1 body-equality logic in one place.
+#
+# ─── TWO STAGES, AND STAGE 1 IS THE LEAD-IN REPAIR ──────────────────────────
+# Stage 2 is the shipped idiom, byte-unchanged. Its deletion range runs from
+# line 1 to the FIRST `^---$` at line 2 or later. When the note's frontmatter
+# opens on line 1 that terminator is the CLOSING delimiter and the strip is
+# correct. When ANY line precedes the opening delimiter — a lint directive, an
+# HTML comment, a blank — the range ends on the OPENING delimiter instead and
+# the whole YAML block survives into the "body". Publishing that writes raw
+# frontmatter onto a public Release page: the §5.1 defect the re-emit exists to
+# repair, reintroduced by the repair.
+#
+# Stage 1 (`-n '/^---$/,$p'`) drops any such lead-in, so stage 2 always sees a
+# stream whose line 1 IS the opening delimiter — the case it already handles
+# correctly. This is a strict COMPOSITION, not a rewrite: when the opening
+# delimiter is already line 1, stage 1 is the identity and the pair is
+# byte-identical to the shipped idiom. Measured over the whole corpus at the
+# branch tip: 192 of 195 notes byte-identical, 3 changed (v1.08 / v1.09 / v1.10
+# — the only notes carrying a lead-in), YAML-leaking bodies 3 → 0, EMPTY bodies
+# 0 → 0.
+#
+# A note carrying NO recognisable frontmatter now yields an EMPTY body, so the
+# caller's empty-body ABORT fires instead of a mis-stripped tail being
+# published. That is a fail-CLOSED change to a case the shipped idiom
+# mis-handled; the live corpus has 0 such notes.
+#
+# NOT the portability defect. The GNU-vs-BSD divergence declared in this file's
+# `selftest-runner` header is a DIFFERENT defect in the same idiom, tracked
+# separately, and is neither fixed nor worsened here: stage 2 retains the
+# shipped idiom verbatim. That residual stands as written.
+#
+# SIBLING COPIES of this transform, which must move together:
+#   release/tools/reemit-release-bodies.sh      (the emitter; same two stages)
+#   release/tools/preflight-release-body-reemit.py `strip_frontmatter()`
+#                                                  (byte-faithful model, A4)
 strip_frontmatter() {
-  /usr/bin/sed '1,/^---$/d; 1,/^---$/d' "$@" 2>/dev/null
+  /usr/bin/sed -n '/^---$/,$p' "$@" 2>/dev/null \
+    | /usr/bin/sed '1,/^---$/d; 1,/^---$/d'
 }
 
 # ─── Normalize a single trailing newline (GitHub round-trip tolerance) ───────
@@ -350,7 +389,8 @@ STUB
       rc=$?; if [[ "$rc" -eq 3 ]]; then printf '  PASS  %-28s exit 3\n' "F missing (no note)" >&2; else printf '  FAIL  %-28s exit %s (expected 3)\n' "F missing (no note)" "$rc" >&2; failures=$((failures+1)); fi; }
 
   # Case J — FOLDERED note in fixture mode. The note lives ONLY in a subfolder of
-  # the search root, exactly the corpus's notes/v1|v2|v3/… layout.
+  # the search root — the live shape of notes/_unversioned/, and of the
+  # notes/v1|v2|v3/… layout at any pre-#3698 ref.
   #   • FIXED  (recursive resolve): note found → body compares → MATCH (0). PASS.
   #   • BROKEN (flat-path only):    note "not found" → MISSING (3). FAIL.
   # A falsification case for the bucket fallback: it FAILS against the pre-fix
@@ -433,9 +473,11 @@ STUB
     run_canon "I canon drift (vs origin/main)" 1 "REPO_ROOT=$work" "STUB_BODY_FILE=$tmp/drift.txt"
 
     # Case L — THE CANONICAL FOLDERED CASE. Direct analogue of the live defect: the
-    # note is committed to origin/main ONLY inside a major-version bucket
-    # (notes/v0/v0.02_…), never at the flat path — the shape of all 110 foldered
-    # corpus notes (v2.10 at notes/v2/, v3.50 at notes/v3/, …).
+    # note is committed to origin/main ONLY inside a bucket (notes/v0/v0.02_…),
+    # never at the flat path. That was the shape of all 110 foldered corpus notes
+    # before #3698; it is still the shape of the 10 notes/_unversioned/ notes, and
+    # of every v1|v2|v3 note at a pre-#3698 ref — which this resolver must keep
+    # reading, since it resolves at a git REF.
     #   • FIXED  (recursive ls-tree resolve): committed note found → MATCH (0). PASS.
     #   • BROKEN (flat-path only): cat-file -e misses → "note not found on
     #     origin/main or in the working tree" → MISSING (3). FAIL.

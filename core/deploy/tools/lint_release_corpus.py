@@ -761,11 +761,14 @@ def check_note_content() -> list[str]:
     pl_adv_seen = pl_adv_bad = 0
     pl_unreadable = pl_absent = pl_null = 0
 
-    # rglob (recursive) — notes are foldered into major-version subdirectories
-    # (notes/v1|v2|v3/… + the _unversioned/ bucket) per plans/README.md (#230,
-    # v3.54). version_tuple keys off path.name (folder-agnostic), so the cutover
-    # floor and exempt-set logic are unchanged; only discovery must recurse or the
-    # §3.2 content lint silently stops scanning the foldered notes.
+    # rglob (recursive) — notes are FLAT except for the notes/_unversioned/
+    # bucket, per release-notes-standard.md § File Location (#3698). The
+    # major-version foldering this comment used to describe (notes/v1|v2|v3/,
+    # authored by #230, v3.54) was migrated flat; the recursion is RETAINED
+    # because _unversioned/ still needs it. version_tuple keys off path.name
+    # (folder-agnostic), so the cutover floor and exempt-set logic are unchanged;
+    # only discovery must recurse or the §3.2 content lint silently stops
+    # scanning the version-less notes.
     #
     # The pattern keys on the _RELEASE_NOTES.md suffix, NOT on a leading "v",
     # because that suffix is the corpus's own type discriminator — the same token
@@ -981,8 +984,8 @@ def check_note_content() -> list[str]:
 def _find_note_for_version(version: str) -> Path | None:
     """Resolve the note whose version KEY equals `version` (folder-agnostic).
 
-    Mirrors check_note_content()'s discovery idiom: rglob so the foldered
-    notes/v1|v2|v3/… layout is reached, keyed on the _RELEASE_NOTES.md type
+    Mirrors check_note_content()'s discovery idiom: rglob so the
+    notes/_unversioned/ bucket is reached, keyed on the _RELEASE_NOTES.md type
     discriminator so both discovery sites agree, and matched off path.name via
     VERSION_KEY_RE so the folder never participates in the match.
 

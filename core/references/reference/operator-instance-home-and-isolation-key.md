@@ -91,7 +91,7 @@ Under `release/releases/` — **8**:
 7. `release/releases/RELEASE_DIGEST.md`
 8. `release/releases/RELEASE_INDEX.md`
 9. `release/releases/_captures/2026-08-05-release-body-precapture-partA-ext/v2.04.published.txt` — *the release-body pre-capture; second adjudicated case above, and the single file the 13/44 split classifies differently*
-10. `release/releases/notes/v2/v2.04_RELEASE_NOTES.md`
+10. `release/releases/notes/v2.04_RELEASE_NOTES.md`
 11. `release/releases/plans/_unversioned/public-flip-depersonalization-enforcement_RELEASE_PLAN.md`
 12. `release/releases/plans/v2/ci-gate-trustworthiness-and-parallel-pr-safety_RELEASE_PLAN.md`
 13. `release/releases/plans/v3.70_RELEASE_PLAN.md`
