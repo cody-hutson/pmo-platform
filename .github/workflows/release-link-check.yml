@@ -4,8 +4,12 @@ name: Release link check
 #   invariant: every intra-repo link in release/**/*.md resolves — asserted by
 #              check-release-links.py over the changed release corpus.
 #   falsification: on a PR that touches release/**/*.md, add "[x](missing.md)" ->
-#                  this gate fails; on a PR touching no release path it is skipped
-#                  and absence is treated as pass (never blocks required-but-absent).
+#                  this gate fails; add a "../"-relative link to a plan directly in
+#                  release/releases/plans/ -> the depth-invariance step fails; on a
+#                  PR touching no release path it is skipped and absence is treated
+#                  as pass (never blocks required-but-absent).
+#   invariant (2): every intra-repo link in a pre-claim release plan is written
+#              workspace-rooted, so it survives the ADR-092 claim-time rename.
 # Path-filtered (paths: release/**), so it is ADVISORY by skip-semantics: GitHub may
 # report it absent on an unrelated PR, and absence MUST NOT block. (Per gate-efficacy-standard.md (b).)
 
@@ -45,3 +49,15 @@ jobs:
 
       - name: Run release/ link checker
         run: python3 release/tools/check-release-links.py
+
+      - name: Plan depth-invariance lint
+        # A release plan is authored in release/releases/plans/ and shipped one
+        # directory deeper in plans/v<MAJOR>/ -- the ADR-092 claim-time stamp
+        # git-mv's it at Stage 12. The existence check above evaluates the plan
+        # at the path it occupies RIGHT NOW, so a relative link that is correct
+        # at authoring depth passes here and breaks only after the stamp, on the
+        # post-merge chore PR (v4.06 and v4.38 both shipped that way). This step
+        # asserts the depth-INVARIANT form instead, catching it on the release PR.
+        # Separate invocation so the bare call above keeps its byte-for-byte
+        # backward-compatibility contract.
+        run: python3 release/tools/check-release-links.py --plan-depth-lint

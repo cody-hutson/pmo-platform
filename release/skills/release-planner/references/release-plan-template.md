@@ -1,3 +1,9 @@
+<!-- reference-durability: allow-link -->
+<!-- This file is a TEMPLATE: its body is copied verbatim into each release plan, and
+     two of its lines exist specifically to demonstrate the workspace-rooted link form
+     that a plan must use to survive the ADR-092 claim-time rename. Summarizing those
+     links inline (durability-ladder rung 1-2) would delete the very exemplar the
+     Stage-4 authoring contract points authors at. -->
 # Release Plan Template
 
 ## Purpose
@@ -285,7 +291,7 @@ Layer 2 file propagation targets for Stage 12/13:
 
 - Release plan: this file, top section
 - Milestone: <slug>
-- User-facing release notes: [`release/releases/notes/vX.Y_RELEASE_NOTES.md`](release/releases/notes/vX.Y_RELEASE_NOTES.md) (authored at Stage 13 Close per [`release/references/standards/release-notes-standard.md`](../../../references/standards/release-notes-standard.md))
+- User-facing release notes: [`release/releases/notes/vX.Y_RELEASE_NOTES.md`](release/releases/notes/vX.Y_RELEASE_NOTES.md) (authored at Stage 13 Close per [`release/references/standards/release-notes-standard.md`](/release/references/standards/release-notes-standard.md))
 ```
 
 ## Template Usage Rules
@@ -295,5 +301,5 @@ Layer 2 file propagation targets for Stage 12/13:
 3. **Verification Evidence section** is blank at creation and populated after execution.
 4. **Deployment Execution Log** is blank at creation and populated during execution.
 5. **File committed on release branch** at Stage 4 (Planning) and updated through Stage 13 (Close).
-6. **Change Description section** is appended by the Stage 6 release-engineering spoke as part of PR creation per [`release/governance/RELEASE_PROTOCOL.md`](../../../governance/RELEASE_PROTOCOL.md) § Change Description Protocol — ~60 lines, operator-facing voice, 6 sub-sections (Outcome / Issues resolved / Key decisions [conditional] / Reversibility / Downstream impact / Cross-references). Distinct artifact from the user-facing release note at `release/releases/notes/vX.Y_RELEASE_NOTES.md` (authored at Stage 13 per [`release/references/standards/release-notes-standard.md`](../../../references/standards/release-notes-standard.md)).
+6. **Change Description section** is appended by the Stage 6 release-engineering spoke as part of PR creation per [`release/governance/RELEASE_PROTOCOL.md`](/release/governance/RELEASE_PROTOCOL.md) § Change Description Protocol — ~60 lines, operator-facing voice, 6 sub-sections (Outcome / Issues resolved / Key decisions [conditional] / Reversibility / Downstream impact / Cross-references). Distinct artifact from the user-facing release note at `release/releases/notes/vX.Y_RELEASE_NOTES.md` (authored at Stage 13 per [`release/references/standards/release-notes-standard.md`](/release/references/standards/release-notes-standard.md)).
 7. **The Version cell is a machine-read stamp manifest, not prose.** The `**Version**` value contains the literal `{{RELEASE_VERSION}}` token and no other text. Bump class, provisional-versus-claimed status, and any determination narrative belong in the `**Bump Class**` row. `claim-version.sh` resolves this token at the Stage-12 claim and renames the file into `plans/v<MAJOR>/`; a cell without it silently disables both.

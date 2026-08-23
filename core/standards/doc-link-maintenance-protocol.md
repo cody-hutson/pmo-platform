@@ -85,6 +85,24 @@ Exit codes: 0 = no broken refs, 1 = broken refs found
 
 The `#anchor` / `?query` are stripped before path resolution; fenced code blocks (` ``` ` and `~~~`) are excluded from link extraction. The same three-clause rule is implemented by [`release/tools/check-release-links.py`](../../release/tools/check-release-links.py) — the checker the `repo-integrity.yml` Dead-file-reference gate delegates to — so a workspace-rooted link and a relative link each receive an **identical verdict from both checkers**. (Historical note: an earlier bare module-prefix workspace-root fallback was retired per ADR-085 — it masked links that GitHub renders as 404s from non-root files, which is the exact split-verdict this protocol now precludes.)
 
+**Artifacts that move: the depth-invariance rule.** The three clauses above resolve a link
+against the source file's directory *as it is now*. That is correct for a file with a stable
+home, but a corpus artifact that is **relocated partway through its lifecycle** has two
+directories, and a relative link written for one is wrong at the other. The governing case is
+the release plan: authored at `release/releases/plans/<slug>_RELEASE_PLAN.md`, shipped one
+directory deeper at `release/releases/plans/v<MAJOR>/<tag>_RELEASE_PLAN.md` after the ADR-092
+claim-time stamp git-mv's it at Stage 12. No relative form survives that move —
+`../../references/…` resolves before the rename and breaks after, `../../../references/…`
+breaks before and resolves after — so **an artifact that will be relocated MUST use the
+workspace-rooted form (clause 2)**, which is the only depth-invariant one.
+
+This matters because the failure is invisible to an existence check. A checker evaluates the
+file at the path it currently occupies, so a plan whose links are correct at authoring depth
+is green on every pre-merge gate and breaks only once it has moved — surfacing after the
+release has merged. Enforcement is therefore shape-based rather than resolution-based: the
+`--plan-depth-lint` mode of `check-release-links.py` asserts the *form* of the link on the
+release PR instead of waiting for the resolution to fail on the post-merge chore PR.
+
 **Self-test:** `python3 core/deploy/tools/check-doc-links.py --self-test` runs an internal smoke test (parser + resolver + code-block exclusion) and exits 0 on pass.
 
 ### 4.2 Enforcement-surface integration
@@ -95,6 +113,7 @@ The `#anchor` / `?query` are stripped before path resolution; fenced code blocks
 | **Check 15** | `check-doc-links.py` | Release corpus (`release/releases/RELEASE_LOG.md`, `release/releases/plans/*.md`, `release/releases/notes/*.md`) — retired in v2 deploy.sh (see the tools README) | This protocol |
 | **Dead-file-reference gate** (`repo-integrity.yml`, **required**) | `check-release-links.py` | `core release docs .github` + top-level `*.md`, changed-delta only | This protocol (shared canonical rule) |
 | **`release-link-check.yml`** (advisory) | `check-release-links.py` | `release/` full walk (bare invocation) | This protocol (shared canonical rule) |
+| **Plan depth-invariance lint** (`release-link-check.yml`, advisory) | `check-release-links.py --plan-depth-lint` | Pre-claim release plans (`release/releases/plans/*_RELEASE_PLAN.md`) — asserts link *form*, not resolution | This protocol § Artifacts that move |
 
 The `check-doc-links.py` checks invoke one primitive with disjoint `--target-paths` arguments (disjoint scopes per Collective Review CR-D2). `check-release-links.py` — the checker the Dead-file-reference gate delegates to — implements the **same canonical resolution rule** (§4.1), so the two checker families cannot return opposite verdicts on a given link form.
 
