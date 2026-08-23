@@ -572,15 +572,15 @@ check_source_repo() {
     err "Verify the source repo is on a branch that includes the config templates."
     exit 66
   fi
-  # The operator.toml schema declaration drives write_operator_toml's entire emit.
-  # Absent, the generator would have nothing to emit — so it is a preflight failure
-  # here rather than a truncated config file later.
-  if [ ! -f "${SOURCE_REPO}/core/config/operator-toml-schema.json" ]; then
-    err "Required schema declaration not found:"
-    err "  ${SOURCE_REPO}/core/config/operator-toml-schema.json"
-    err "Verify the source repo is on a branch that includes the operator.toml schema."
-    exit 66
-  fi
+  # NOTE — the operator.toml schema declaration is deliberately NOT required here.
+  # It is needed only by the flows that read or write operator.toml, and gating the
+  # whole script on it aborts flows that never touch that file: --refresh-hooks
+  # builds a partial mirror repo carrying only the two templates above, and a third
+  # required file breaks it with an exit long before the flow it was aborting could
+  # have failed on its own. The guard belongs at the point of use, and it is there:
+  # both read_operator_toml and write_operator_toml exit non-zero with a named
+  # message when the declaration is unreadable, and write_operator_toml additionally
+  # refuses to write a truncated file when the declaration yields an empty key set.
 }
 
 # --- Section 9: Active token set computation (FM-5 absorption) ---
@@ -899,7 +899,20 @@ def render(section, k):
     if src == "literal":
         return fmt_scalar(t, k["default"])
     if src == "token":
-        return fmt_scalar(t, get(k["token"], k.get("default", "")))
+        # Defence in depth against the blanking class. A token that did not
+        # resolve must NEVER overwrite a non-empty value already on disk: the
+        # additive-only invariant covers token-sourced keys too, not just the
+        # operator-or-default ones. On a normal install prior is empty and the
+        # token wins; on a re-bootstrap or reconcile the token was seeded FROM
+        # that same prior value, so this changes nothing — it only removes the
+        # path by which an unresolved token silently empties a real value.
+        tv = get(k["token"], "")
+        if tv == "":
+            pv = prior_val(section, k["key"])
+            if pv is not None and pv != "":
+                return fmt_scalar(t, pv)
+            return fmt_scalar(t, k.get("default", ""))
+        return fmt_scalar(t, tv)
     # operator-or-default: keep a non-empty operator value, else the default.
     pv = prior_val(section, k["key"])
     if pv is not None and pv != "":
@@ -3759,6 +3772,17 @@ reconcile_config_flow() {
     err "Run a full setup-workspace.sh first."
     exit 1
   fi
+
+  # Populate the token map from the LIVE file before anything writes. Non-
+  # interactive by construction — read_operator_toml parses and never prompts.
+  #
+  # THIS CALL IS LOAD-BEARING AND ITS ABSENCE IS SILENT. Every `source: token`
+  # key renders from the token map; with an empty map they all render EMPTY, so
+  # a reconcile would blank the operator's identity and paths while reporting
+  # success. That is precisely the v4.15 cowork_install_path blanking defect
+  # class this card exists to close. It is not hypothetical: the first cut of
+  # this flow omitted this line and Suite RC's RC-4 arm caught it.
+  read_operator_toml
 
   local report rc
   report=$(operator_toml_delta) && rc=0 || rc=$?
