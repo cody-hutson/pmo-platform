@@ -279,6 +279,67 @@ for ambient_dir in inbox ambient-intake external-sync; do
   fi
 done
 
+# The OPERATIONS TIER SCAFFOLD must land on a fresh install — the directories AND the
+# seed orientation cards that make them self-describing. Asserted HERE, in the
+# post-install block, for exactly the reason the ambient trio above is: nothing but
+# setup-workspace.sh has run at this point, so a pass is attributable to the installer
+# alone and not to a later update.sh.
+#
+# The expected seed set is read from the SHIPPED TEMPLATE TREE, never re-typed here. A
+# hardcoded list in the test would be a second enumeration of the same set, free to
+# agree with itself while both it and the tree drifted from what the installer walks.
+ops_root="$(pmo_operations_path_for "${SBX}/ws")"
+ops_tree="${REPO_ROOT}/operations/templates/operations-tiers"
+
+seed_total=$(find "${ops_tree}" -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+if [ "${seed_total}" -ge 1 ]; then
+  report "operations-tier template tree ships seed cards (denominator ${seed_total})" 1
+else
+  # Reported, not assumed. With an empty tree every assertion below is vacuous, and a
+  # vacuous arm must never read as a pass.
+  report "operations-tier template tree ships seed cards" 0 \
+    "no *.md under ${ops_tree} — every operations-tier assertion below would be vacuous"
+fi
+
+seed_missing=""
+while IFS= read -r seed_rel; do
+  [ -z "${seed_rel}" ] && continue
+  [ -f "${ops_root}/${seed_rel}" ] || seed_missing="${seed_missing} ${seed_rel}"
+done <<EOF
+$(cd "${ops_tree}" && find . -type f -name '*.md' | sed 's|^\./||' | LC_ALL=C sort)
+EOF
+if [ -z "${seed_missing}" ]; then
+  report "operations-tier seed cards installed on fresh install (${seed_total}/${seed_total})" 1
+else
+  report "operations-tier seed cards installed on fresh install (${seed_total}/${seed_total})" 0 \
+    "absent:${seed_missing}"
+fi
+
+# AC-4 — "every provisioned folder contains a README; an empty unexplained folder
+# fails" — asserted as a PROPERTY over what actually landed rather than against a list
+# this test re-types. A hardcoded expectation can agree with itself while it and the
+# installer both drift; a property over the landed tree cannot, and it also catches the
+# inverse defect a template-driven check would miss: a directory the installer creates
+# that no seed card describes.
+tier_unexplained=""
+tier_count=0
+while IFS= read -r landed_dir; do
+  [ -z "${landed_dir}" ] && continue
+  tier_count=$((tier_count + 1))
+  [ -f "${landed_dir}/README.md" ] || tier_unexplained="${tier_unexplained} ${landed_dir#"${ops_root}/"}"
+done <<EOF
+$(find "${ops_root}" -mindepth 1 -type d 2>/dev/null | LC_ALL=C sort)
+EOF
+# The 9 is deliberate and is a LOUD coupling, not a stale-count trap: a release that
+# adds or drops a tier fails here immediately and updates this numeral alongside the
+# tree, rather than silently widening what the installer provisions unobserved.
+if [ "${tier_count}" -eq 9 ] && [ -z "${tier_unexplained}" ]; then
+  report "9 operations-tier directories present, every one carrying a README (AC-1 + AC-4)" 1
+else
+  report "9 operations-tier directories present, every one carrying a README (AC-1 + AC-4)" 0 \
+    "created=${tier_count} (want 9); unexplained:${tier_unexplained:-none}"
+fi
+
 # The automation ceiling must be discoverable in the GENERATED operator.toml.
 # Presence in core/config/operator.toml.template does not count and is why this
 # assertion exists: write_operator_toml generates from a fixed schema and never
@@ -705,6 +766,114 @@ else
     a2_ok_line=$(grep -m1 '^\[A2\]' <<<"${a2_ok_out}" || printf '(no A2 line emitted)')
     report "A2 PASSes once the drop-zone is restored, and states the ambient denominator" 0 \
       "observed: ${a2_ok_line}"
+  fi
+fi
+
+# --- Stage 6: operations-tier scaffold on the RE-BOOTSTRAP flow + idempotence ---
+# Re-bootstrap is the flow every ALREADY-INSTALLED operator takes, and it is the one a
+# fresh-install-only test structurally cannot speak for. create_dir_layout runs on BOTH
+# flows, so a seed scaffold wired into fresh_install alone would hand that population
+# nine empty directories and no orientation at all — while a fresh-install assertion
+# reported a clean pass. This stage is the arm that goes red if the second call site is
+# ever dropped.
+#
+# Four arms, each keeping another honest:
+#   DELETE-RESTORE — a removed seed must come back. This is the ONLY arm that can tell a
+#                    live second call site from a dead one: every other arm is already
+#                    satisfied by the work the FIRST install did, so a stage without it
+#                    would pass on a scaffold that never ran again.
+#   SENTINEL-EDIT  — an operator-edited seed keeps its edit (create-once, AC-3). The
+#                    restore arm above proves the scaffold ran; this proves it did not
+#                    run over the operator.
+#   SENTINEL-FILE  — operator content placed inside a tier directory survives (AC-3,
+#                    "destroys no operator content" — the directory case, not the file
+#                    case, which skip-if-exists covers separately).
+#   NO-REWRITE     — every untouched seed is byte-identical across the run, so "restored
+#                    exactly the one missing file" is distinguishable from "rewrote them
+#                    all and happened to produce the same bytes for nine of ten".
+printf '\nStage 6: operations-tier scaffold on the re-bootstrap flow + idempotence\n'
+
+reb_edited="${ops_root}/_pmo/people/README.md"
+reb_deleted="${ops_root}/Archive/README.md"
+reb_sentinel="${ops_root}/_config/operator-sentinel.md"
+reb_marker="OPERATOR EDIT SENTINEL — must survive re-bootstrap"
+
+if [ ! -f "${reb_edited}" ] || [ ! -f "${reb_deleted}" ]; then
+  report "Stage 6 precondition: the seeds this stage mutates exist after Stage 1" 0 \
+    "missing one of: ${reb_edited} ${reb_deleted} — every arm below would be vacuous"
+else
+  report "Stage 6 precondition: the seeds this stage mutates exist after Stage 1" 1
+
+  printf '%s\n' "${reb_marker}" >> "${reb_edited}"
+  printf 'operator content that install must never touch\n' > "${reb_sentinel}"
+  rm -f "${reb_deleted}"
+
+  # Fingerprint every surviving seed BEFORE the run so an over-write is measured rather
+  # than assumed. Sorted for a stable comparison across filesystems.
+  # `-exec … +` rather than a pipe into xargs: with an empty file set xargs would run
+  # shasum with no operands, which reads STDIN and hangs the suite. -exec + simply does
+  # not run. Sorted after the fact so the comparison is order-stable.
+  reb_before=$(cd "${ops_root}" && find . -type f -name '*.md' -exec shasum -a 256 {} + 2>/dev/null | LC_ALL=C sort)
+
+  reb_log=$("${SETUP}" \
+    --source-repo "${REPO_ROOT}" \
+    --workspace-root "${SBX}/ws" \
+    --config-root "${SBX}/config" \
+    < <(yes "") 2>&1)
+  reb_exit=$?
+
+  # Asserted explicitly so a red arm below is attributable to the scaffold rather than
+  # to an unrelated failure earlier in the second run.
+  if [ "${reb_exit}" -eq 0 ]; then
+    report "second setup-workspace.sh run exits 0 (re-bootstrap flow)" 1
+  else
+    reb_tail=$(printf '%s' "${reb_log}" | tail -5 | tr '\n' '|')
+    report "second setup-workspace.sh run exits 0 (re-bootstrap flow)" 0 \
+      "exit ${reb_exit}; last lines: ${reb_tail}"
+  fi
+
+  # The run must have taken the re-bootstrap branch, not fresh-install. Without this the
+  # DELETE-RESTORE arm could be satisfied by a fresh_install-only call site.
+  if grep -q 'RE-BOOTSTRAP flow' <<<"${reb_log}"; then
+    report "the second run routed to RE-BOOTSTRAP (not fresh-install)" 1
+  else
+    report "the second run routed to RE-BOOTSTRAP (not fresh-install)" 0 \
+      "no 'RE-BOOTSTRAP flow' line — the arms below would not be testing the re-bootstrap path"
+  fi
+
+  # DELETE-RESTORE ARM
+  if [ -f "${reb_deleted}" ]; then
+    report "re-bootstrap re-seeds a deleted operations-tier card (second call site is LIVE)" 1
+  else
+    report "re-bootstrap re-seeds a deleted operations-tier card (second call site is LIVE)" 0 \
+      "still absent after re-bootstrap: ${reb_deleted} — scaffold_operations_tiers is not wired into rebootstrap()"
+  fi
+
+  # SENTINEL-EDIT ARM
+  if grep -qF "${reb_marker}" "${reb_edited}" 2>/dev/null; then
+    report "an operator-edited seed keeps its edit across re-bootstrap (create-once, AC-3)" 1
+  else
+    report "an operator-edited seed keeps its edit across re-bootstrap (create-once, AC-3)" 0 \
+      "sentinel line absent from ${reb_edited} — the scaffold clobbered operator content"
+  fi
+
+  # SENTINEL-FILE ARM
+  if [ -f "${reb_sentinel}" ]; then
+    report "operator content inside a tier directory survives re-bootstrap (AC-3)" 1
+  else
+    report "operator content inside a tier directory survives re-bootstrap (AC-3)" 0 \
+      "removed by the run: ${reb_sentinel}"
+  fi
+
+  # NO-REWRITE ARM
+  reb_after=$(cd "${ops_root}" && find . -type f -name '*.md' -exec shasum -a 256 {} + 2>/dev/null | LC_ALL=C sort)
+  reb_before_kept=$(printf '%s\n' "${reb_before}" | grep -vF './Archive/README.md')
+  reb_after_kept=$(printf '%s\n' "${reb_after}" | grep -vF './Archive/README.md')
+  if [ "${reb_before_kept}" = "${reb_after_kept}" ]; then
+    report "every seed the run did not restore is byte-identical across it (no blind rewrite)" 1
+  else
+    report "every seed the run did not restore is byte-identical across it (no blind rewrite)" 0 \
+      "checksum set changed beyond the single restored card"
   fi
 fi
 

@@ -2841,6 +2841,82 @@ scaffold_localized_roster() {
   printf 'rm-file:%s\n' "${roster_file}" >> "${ROLLBACK_OPS_FILE}"
 }
 
+# --- Section 15e: operations-tier seed scaffold (#5829) ---
+# Copy the tracked operations-tier orientation cards into the operator's operations
+# workspace, per file, ONLY IF the target does not already exist (create-once — never
+# clobbers operator data). A third sibling of scaffold_localized_needles() /
+# scaffold_localized_roster(): tracked template in Layer 1, render in the git-ignored
+# Layer 2, resolved via the single accessor and keyed on the passed WORKSPACE_ROOT so a
+# sandboxed --workspace-root install lands inside its sandbox.
+#
+# THE SEED SET IS THE TEMPLATE TREE, WALKED — not a second list enumerated here. A list
+# would be a shadow SSOT for the file set and would drift from the tree the moment a card
+# was added or renamed; walking makes "add a seed" mean "add a file" and makes the two
+# impossible to disagree. Ordering is forced to LC_ALL=C so the install log is stable
+# across machines and a diff of two runs is readable.
+#
+# CALLED FROM BOTH INSTALL FLOWS, and that is load-bearing rather than merely tidy.
+# create_dir_layout runs in fresh_install AND in rebootstrap, so a single call site here
+# would leave every ALREADY-INSTALLED operator — the population re-bootstrap exists to
+# serve, and the population this capability was built for — holding nine empty
+# directories and no orientation whatsoever. The needle and roster scaffolds above are
+# already dual-sited for exactly this reason; a one-site insertion "next to" them would
+# have looked correct and reached only fresh clones.
+#
+# ORIENTATION, NEVER AUTHORITY. Each seed cites the governance that owns its folder and
+# declares that the authority wins on disagreement. That matters because these cards land
+# in the operator's own workspace, where a card read as authoritative becomes a shadow
+# SSOT for the entity model and drifts from the governance it paraphrases.
+scaffold_operations_tiers() {
+  local lib="${SOURCE_REPO}/core/deploy/lib-instance-path.sh"
+  if [ ! -f "${lib}" ]; then
+    warn "Instance-path resolver not found at ${lib}; skipping operations-tier scaffold"
+    return 0
+  fi
+  # shellcheck source=/dev/null
+  source "${lib}"
+  local tree="${SOURCE_REPO}/operations/templates/operations-tiers"
+  if [ ! -d "${tree}" ]; then
+    warn "Operations-tier template tree not found at ${tree}; skipping operations-tier scaffold"
+    return 0
+  fi
+
+  local seeds
+  seeds="$(cd "${tree}" && find . -type f -name '*.md' | sed 's|^\./||' | LC_ALL=C sort)"
+  if [ -z "${seeds}" ]; then
+    warn "Operations-tier template tree carries no seed cards at ${tree}; skipping"
+    return 0
+  fi
+
+  # Resolved, never spelled. Unlike create_dir_layout — which runs before the resolver
+  # exists and therefore MUST inline its literals — this function runs after the source
+  # above, so the operations root comes from the single accessor.
+  local ops_root; ops_root="$(pmo_operations_path_for "${WORKSPACE_ROOT}")"
+  local rel target seeded=0 preserved=0
+  while IFS= read -r rel; do
+    [ -z "${rel}" ] && continue
+    target="${ops_root}/${rel}"
+    # Create-once. An operator who edited a seed keeps their edit on every later run;
+    # an operator who deleted one does not have it silently restored underneath them.
+    if [ -e "${target}" ]; then
+      preserved=$((preserved + 1))
+      continue
+    fi
+    if [ "${DRY_RUN}" -eq 1 ]; then
+      info "[dry-run] would scaffold operations-tier seed → ${target}"
+      seeded=$((seeded + 1))
+      continue
+    fi
+    mkdir -p "$(dirname "${target}")" || { err "mkdir failed: $(dirname "${target}")"; exit 73; }
+    cp "${tree}/${rel}" "${target}" || { err "operations-tier seed copy failed → ${target}"; exit 74; }
+    printf 'rm-file:%s\n' "${target}" >> "${ROLLBACK_OPS_FILE}"
+    seeded=$((seeded + 1))
+  done <<EOF
+${seeds}
+EOF
+  info "Operations-tier scaffold complete (${seeded} seeded, ${preserved} preserved)"
+}
+
 # --- Section 16: Hook behavioral verification (CD-5 absorption) ---
 verify_hooks_invokable() {
   local sample_hook="${WORKSPACE_ROOT}/.claude/hooks/block-destructive.sh"
@@ -3150,6 +3226,8 @@ fresh_install() {
   install_composition_surface_files
   scaffold_localized_needles
   scaffold_localized_roster
+  # Call site 1 of 2. The twin is in rebootstrap() — see that call site's note.
+  scaffold_operations_tiers
   if run_verification_gate; then
     write_state_file "true"
     INSTALL_COMPLETE=1
@@ -3188,6 +3266,12 @@ rebootstrap() {
   install_composition_surface_files
   scaffold_localized_needles
   scaffold_localized_roster
+  # Call site 2 of 2, and the one that actually matters. create_dir_layout runs on THIS
+  # flow too, so omitting this line would give every already-installed operator the nine
+  # tier directories and none of their orientation cards — empty folders with no
+  # explanation, which is the failure this capability exists to prevent. Re-bootstrap is
+  # the flow an existing operator takes; fresh-install alone reaches new clones only.
+  scaffold_operations_tiers
   if run_verification_gate; then
     write_state_file "true"
     INSTALL_COMPLETE=1
