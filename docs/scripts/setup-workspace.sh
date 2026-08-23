@@ -48,8 +48,8 @@
 #
 # Usage:
 #   ./setup-workspace.sh [--source-repo PATH] [--workspace-root PATH]
-#                        [--init-only-state] [--non-interactive] [--dry-run]
-#                        [--help]
+#                        [--init-only-state] [--reconcile-config]
+#                        [--non-interactive] [--dry-run] [--help]
 #
 # Exit codes (sysexits(3)):
 #   0   — success
@@ -129,6 +129,8 @@ INIT_ONLY_STATE=0
 REFRESH_HOOKS=0
 REHOME_HOOK_WIRING=0
 REFRESH_SETTINGS=0
+RECONCILE_CONFIG=0
+RECONCILE_ANSWERS=""        # JSON of prompt answers for undefaulted keys (#5739)
 RESTORE_HOOKS=0
 RESTORE_GENERATION=""       # empty = newest durable generation (#5662)
 LIST_HOOK_SNAPSHOTS=0
@@ -228,6 +230,16 @@ Options:
   --force-regen           Force the settings re-render even when both recorded
                           baselines match (the S-0 no-op skip). The guard still runs
                           first — this never bypasses operator-key migration.
+  --reconcile-config      Converge an EXISTING operator.toml on the declared schema
+                          (core/config/operator-toml-schema.json) and exit. Backfills
+                          a missing key from its declared default, preserves every
+                          non-empty operator-set value, and never removes a key.
+                          A missing key that carries NO default is prompted for;
+                          declining leaves it absent. Under --non-interactive (or a
+                          closed stdin) such a key is left absent and the run exits
+                          66 naming it — no value is ever invented and nothing hangs.
+                          Creates no directories, installs no hooks, deploys no
+                          skills, writes no state file.
   --non-interactive       Resolve every token from its declared default and never
                           read stdin. A required token with no available default
                           fails with a non-zero exit naming the token; no value is
@@ -473,6 +485,8 @@ parse_argv() {
         USER_SETTINGS="$2"; shift 2 ;;
       --refresh-settings)
         REFRESH_SETTINGS=1; shift ;;
+      --reconcile-config)
+        RECONCILE_CONFIG=1; shift ;;
       --force-regen)
         FORCE_REGEN=1; shift ;;
       --non-interactive)
@@ -743,6 +757,7 @@ write_operator_toml() {
   S_EXISTING="${OPERATOR_TOML}" \
   S_SCRIPT_VERSION="${SCRIPT_VERSION}" \
   S_SCHEMA_FILE="$(operator_schema_file)" \
+  S_ANSWERS="${RECONCILE_ANSWERS:-}" \
   python3 -c '
 import json, os, sys
 from datetime import datetime, timezone
@@ -860,7 +875,21 @@ def fmt_scalar(t, v):
         return str(v).strip()
     return "\"{}\"".format(esc(v))
 
+# Answers supplied by the --reconcile-config prompt for keys that carry NO
+# declared default. Keyed "section.key". Absent for every normal run.
+ANSWERS = {}
+_raw_answers = os.environ.get("S_ANSWERS", "")
+if _raw_answers:
+    try:
+        for _ak, _av in json.loads(_raw_answers).items():
+            _as, _, _akey = _ak.partition(".")
+            ANSWERS[(_as, _akey)] = _av
+    except ValueError:
+        sys.stderr.write("FATAL: S_ANSWERS is not valid JSON; refusing to guess.\n")
+        sys.exit(1)
+
 def render(section, k):
+    # Returns the rendered RHS, or None meaning DO NOT EMIT THIS KEY.
     src = k.get("source", "operator-or-default")
     t = k.get("type", "string")
     if src == "declaration-version":
@@ -872,7 +901,18 @@ def render(section, k):
     if src == "token":
         return fmt_scalar(t, get(k["token"], k.get("default", "")))
     # operator-or-default: keep a non-empty operator value, else the default.
-    return fmt_scalar(t, ovd(section, k["key"], k.get("default", "")))
+    pv = prior_val(section, k["key"])
+    if pv is not None and pv != "":
+        return fmt_scalar(t, pv)
+    if "default" in k:
+        return fmt_scalar(t, k["default"])
+    # No declared default and nothing on disk. An answer may have been supplied
+    # by the reconcile prompt; otherwise the key is LEFT ABSENT rather than
+    # written as an empty value. Declining a prompt must be safe.
+    ans = ANSWERS.get((section, k["key"]))
+    if ans is not None and ans != "":
+        return fmt_scalar(t, ans)
+    return None
 
 now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 out = []
@@ -896,7 +936,10 @@ for _sec in SECTIONS:
     for _k in _sec["keys"]:
         if key_delivery(_sec, _k) != "delivered":
             continue
-        out.append("{} = {}".format(_k["key"], render(_name, _k)))
+        _rendered = render(_name, _k)
+        if _rendered is None:
+            continue
+        out.append("{} = {}".format(_k["key"], _rendered))
     passthrough(_name)
     out.append("")
 
@@ -3597,6 +3640,243 @@ rehome_hook_wiring_flow() {
   INSTALL_COMPLETE=1
 }
 
+# --- Section 22c-bis: Reconcile-config flow (#5739) ---
+# Converge an EXISTING operator.toml on the declared schema. The narrow-scope
+# sibling of --refresh-settings / --refresh-hooks: it creates no directories,
+# installs no hooks, deploys no skills and writes no state file. It reads the live
+# file, computes what the declaration says should be there and is not, and calls
+# the generator — which already preserves operator values through ovd() and
+# operator-added sections through the passthrough loop.
+#
+# THE SAFETY INVARIANT, stated once: the reconciler is ADDITIVE-ONLY. It never
+# removes a key, and never rewrites a NON-EMPTY value the operator set. (The
+# non-empty qualifier is load-bearing and was corrected at Collective Review:
+# ovd() treats "" as unset, so a deliberately-blanked value does take the
+# declared default. That is existing generator semantics, stated honestly rather
+# than papered over by an absolute the mechanism does not guarantee.)
+#
+# Exit codes: 0 reconciled or already in sync · 66 a required key carries no
+# default and could not be resolved without prompting · 1 hard error.
+operator_toml_delta() {
+  # Emits a human-readable report on stdout. Exit: 0 in sync · 3 missing, all
+  # defaulted · 4 missing incl. a required-undefaulted key · 5 live schema_version
+  # NEWER than this clone's · 6 live OLDER (breaking change; guided recovery).
+  S_SCHEMA_FILE="$(operator_schema_file)" \
+  S_LIVE="${OPERATOR_TOML}" \
+  python3 -c '
+import json, os, re, sys
+
+try:
+    with open(os.environ["S_SCHEMA_FILE"], "r") as f:
+        schema = json.load(f)
+except (IOError, OSError, ValueError) as e:
+    sys.stderr.write("FATAL: cannot read schema declaration: {}\n".format(e))
+    sys.exit(1)
+
+live_path = os.environ["S_LIVE"]
+live = {}
+section = None
+try:
+    with open(live_path, "r") as f:
+        for line in f:
+            s = line.strip()
+            if not s or s.startswith("#"):
+                continue
+            if s.startswith("[") and s.endswith("]"):
+                section = s[1:-1].strip()
+                continue
+            if "=" in s and section is not None:
+                k, _, v = s.partition("=")
+                live[(section, k.strip())] = v.strip()
+except (IOError, OSError) as e:
+    sys.stderr.write("FATAL: cannot read {}: {}\n".format(live_path, e))
+    sys.exit(1)
+
+if not live:
+    sys.stderr.write("FATAL: {} parsed to ZERO keys; refusing to treat that as "
+                     "\"nothing missing\".\n".format(live_path))
+    sys.exit(1)
+
+declared_version = schema["declaration_version"]
+raw_live_version = live.get(("meta", "schema_version"), "").strip().strip("\"")
+try:
+    live_version = int(raw_live_version)
+except ValueError:
+    live_version = None
+
+if live_version is not None and live_version > declared_version:
+    print("Config schema_version {} is NEWER than this clone declares ({}).".format(
+        live_version, declared_version))
+    print("This config was written by a newer platform. Update the clone rather than")
+    print("reconciling backwards; refusing to touch it.")
+    sys.exit(5)
+if live_version is not None and live_version < declared_version:
+    print("Config schema_version {} is OLDER than this clone declares ({}) — a".format(
+        live_version, declared_version))
+    print("BREAKING schema change shipped. Additive reconcile is not sufficient;")
+    print("routing to guided recovery.")
+    sys.exit(6)
+
+missing = []
+for sec in schema["sections"]:
+    sd = sec.get("delivery", "delivered")
+    if sd != "delivered":
+        continue
+    for k in sec["keys"]:
+        if k.get("delivery", sd) != "delivered":
+            continue
+        if (sec["name"], k["key"]) in live:
+            continue
+        missing.append((sec["name"], k["key"], k.get("since", "?"),
+                        "default" in k, bool(k.get("required", False))))
+
+denom = sum(1 for sec in schema["sections"]
+            if sec.get("delivery", "delivered") == "delivered"
+            for k in sec["keys"]
+            if k.get("delivery", sec.get("delivery", "delivered")) == "delivered")
+print("DENOM: {} delivered key(s) declared; {} present in {}".format(
+    denom, denom - len(missing), live_path))
+
+if not missing:
+    print("operator.toml is in sync with the declared schema.")
+    sys.exit(0)
+
+undefaulted_required = [m for m in missing if not m[3] and m[4]]
+for (s, k, since, has_def, req) in missing:
+    print("  MISSING [{}].{}  (declared since v{}){}".format(
+        s, k, since,
+        "" if has_def else "  <- NO DEFAULT" + (", REQUIRED" if req else "")))
+sys.exit(4 if undefaulted_required else 3)
+'
+}
+
+reconcile_config_flow() {
+  INSTALL_MODE="reconcile-config"
+  info "RECONCILE-CONFIG flow — converge operator.toml on the declared schema"
+
+  if [ ! -f "${OPERATOR_TOML}" ]; then
+    err "No operator.toml at ${OPERATOR_TOML} — nothing to reconcile."
+    err "Run a full setup-workspace.sh first."
+    exit 1
+  fi
+
+  local report rc
+  report=$(operator_toml_delta) && rc=0 || rc=$?
+  printf '%s\n' "${report}"
+
+  case "${rc}" in
+    0)
+      INSTALL_COMPLETE=1
+      return 0
+      ;;
+    3)
+      info "Backfilling missing keys from their declared defaults (operator-set values preserved)."
+      ;;
+    4)
+      # A delivered key carries NO default and is REQUIRED. Interactive: prompt.
+      # Non-interactive: never invent a value, never hang — name the keys and take
+      # the reserved exit code. This is the population that is EMPTY today: every
+      # delivered key carries a default, so this branch is defined and unreachable
+      # until a future field lands that genuinely needs an operator answer.
+      if [ "${NON_INTERACTIVE}" -eq 1 ] || [ ! -t 0 ]; then
+        warn "A required key carries no default and cannot be resolved without prompting."
+        warn "Non-interactive run: leaving the key(s) ABSENT rather than inventing a value."
+        warn "Set them in ${OPERATOR_TOML} and re-run, or run interactively to be prompted."
+        exit 66
+      fi
+      reconcile_prompt_missing || {
+        warn "Reconcile incomplete — one or more required keys were declined and remain absent."
+        exit 66
+      }
+      ;;
+    5)
+      err "Refusing to reconcile: this config was written by a NEWER platform than this clone."
+      err "Update the clone (git pull) and re-run."
+      exit 1
+      ;;
+    6)
+      err "A breaking schema change shipped; additive reconcile is not sufficient."
+      err "Re-run setup-workspace.sh for guided recovery."
+      exit 1
+      ;;
+    *)
+      err "operator.toml delta computation failed (exit ${rc})."
+      exit 1
+      ;;
+  esac
+
+  write_operator_toml
+  INSTALL_COMPLETE=1
+  info "Reconcile complete."
+  # Re-report so the operator sees the post-state, not just the pre-state. A
+  # non-zero here after a write is a real failure to converge, not noise.
+  local after_rc
+  operator_toml_delta >/dev/null && after_rc=0 || after_rc=$?
+  if [ "${after_rc}" -ne 0 ]; then
+    warn "operator.toml did not fully converge (delta exit ${after_rc}); see the report above."
+  fi
+  return 0
+}
+
+# Prompt for every delivered key that carries no declared default. Generic: it
+# reads the key list from the declaration, so a future undefaulted field needs no
+# code here. Answers are handed to the generator via S_ANSWERS; a declined answer
+# leaves the key absent.
+reconcile_prompt_missing() {
+  local pending
+  pending=$(
+    S_SCHEMA_FILE="$(operator_schema_file)" \
+    S_LIVE="${OPERATOR_TOML}" \
+    python3 -c '
+import json, os, sys
+with open(os.environ["S_SCHEMA_FILE"], "r") as f:
+    schema = json.load(f)
+live = set(); section = None
+with open(os.environ["S_LIVE"], "r") as f:
+    for line in f:
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("[") and s.endswith("]"):
+            section = s[1:-1].strip(); continue
+        if "=" in s and section is not None:
+            live.add((section, s.partition("=")[0].strip()))
+for sec in schema["sections"]:
+    sd = sec.get("delivery", "delivered")
+    if sd != "delivered":
+        continue
+    for k in sec["keys"]:
+        if k.get("delivery", sd) != "delivered":
+            continue
+        if (sec["name"], k["key"]) in live or "default" in k:
+            continue
+        print("{}.{}\t{}".format(sec["name"], k["key"], k.get("description", "")))
+'
+  )
+  [ -z "${pending}" ] && return 0
+
+  local answers="{}" line field desc value all_answered=1
+  while IFS=$'\t' read -r field desc; do
+    [ -z "${field}" ] && continue
+    printf '%s\n' "${desc}" >&2
+    printf '  %s (leave blank to skip): ' "${field}" >&2
+    IFS= read -r value || value=""
+    if [ -z "${value}" ]; then
+      all_answered=0
+      continue
+    fi
+    answers=$(S_ANS="${answers}" S_K="${field}" S_V="${value}" python3 -c '
+import json, os, sys
+a = json.loads(os.environ["S_ANS"])
+a[os.environ["S_K"]] = os.environ["S_V"]
+sys.stdout.write(json.dumps(a))
+')
+  done <<<"${pending}"
+
+  RECONCILE_ANSWERS="${answers}"
+  [ "${all_answered}" -eq 1 ]
+}
+
 # --- Section 22d: Refresh-settings flow (ADR-121) ---
 # Re-render ONLY the managed .claude/settings.json into an EXISTING workspace,
 # under the baseline-anchored guard. The key-granular sibling of --refresh-hooks:
@@ -3874,6 +4154,11 @@ main() {
 
   if [ "${REFRESH_SETTINGS}" -eq 1 ]; then
     refresh_settings_flow
+    return 0
+  fi
+
+  if [ "${RECONCILE_CONFIG}" -eq 1 ]; then
+    reconcile_config_flow
     return 0
   fi
 
