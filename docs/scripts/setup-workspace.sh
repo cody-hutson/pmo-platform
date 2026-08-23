@@ -74,8 +74,9 @@ readonly STATE_FILE_NAME=".workspace-setup.state"
 readonly STATE_SCHEMA_VERSION="1.0"
 readonly SCRIPT_VERSION="v1.04"
 # Canonical operator config (per composition-surface-spec.md + depersonalization-spec.md §2).
-# XDG-spec location; structured TOML with [meta]/[identity]/[paths]/[platform]/[automation]
-# sections — the five this script's write_operator_toml() emits on a stock install.
+# XDG-spec location; structured TOML. The key set this script emits is NOT enumerated
+# here — it is DERIVED from core/config/operator-toml-schema.json (the sections whose
+# `delivery` is "delivered"). Enumerating it in prose is what let the schema drift.
 # Per-workspace override (optional). Loaded after operator.toml; fields here win.
 readonly OPERATOR_LOCAL_TOML_BASENAME="operator.local.toml"
 # Hook count safety floor; current expected count is 10. Loop is data-driven.
@@ -557,6 +558,15 @@ check_source_repo() {
     err "Verify the source repo is on a branch that includes the config templates."
     exit 66
   fi
+  # The operator.toml schema declaration drives write_operator_toml's entire emit.
+  # Absent, the generator would have nothing to emit — so it is a preflight failure
+  # here rather than a truncated config file later.
+  if [ ! -f "${SOURCE_REPO}/core/config/operator-toml-schema.json" ]; then
+    err "Required schema declaration not found:"
+    err "  ${SOURCE_REPO}/core/config/operator-toml-schema.json"
+    err "Verify the source repo is on a branch that includes the operator.toml schema."
+    exit 66
+  fi
 }
 
 # --- Section 9: Active token set computation (FM-5 absorption) ---
@@ -617,21 +627,27 @@ detect_state_and_route() {
 }
 
 # --- Section 11: operator.toml read/write (canonical per composition-surface-spec.md) ---
-# Schema: [meta] schema_version, managed_by | [identity] operator_* | [paths] *_path / *_root | [platform] * |
-#         [automation] automation_level  — five managed sections (MANAGED_SECTIONS, below); [automation]
-#         has been emitted on every stock install since v4.23.
-# Token mapping (operator.toml field → bracketed token):
-#   [identity].operator_name             → [OPERATOR_NAME]
-#   [identity].operator_email            → [OPERATOR_EMAIL]
-#   [identity].operator_git_email        → [OPERATOR_GIT_EMAIL]
-#   [identity].operator_github           → [OPERATOR_GITHUB]
-#   [identity].operator_phone            → [OPERATOR_PHONE]
-#   [identity].operator_role_title       → [OPERATOR_ROLE_TITLE]
-#   [identity].operator_organization     → [OPERATOR_ORGANIZATION]
-#   [paths].claude_workspace_root        → [CLAUDE_WORKSPACE_ROOT]
-#   [paths].operator_homedir_path        → [OPERATOR_HOMEDIR_PATH]
-#   [paths].cowork_install_path          → [COWORK_INSTALL_PATH_BASE]
+#
+# THE SCHEMA IS DATA, NOT CODE. Both functions below derive everything they know
+# about operator.toml — which keys exist, their type, their default-or-none, which
+# sections are emitted, and the field→token map — from the declaration at
+# core/config/operator-toml-schema.json. Adding a key is one JSON object and zero
+# lines here. See ADR-140.
+#
+# This replaced three hand-maintained lists that had to be edited in lockstep and
+# were not: MANAGED (16 tuples), MANAGED_SECTIONS (5), and field_to_token (10,
+# whose own comment read "Edit BOTH or neither" after the v4.15 blanking defect —
+# [paths].cowork_install_path resolves the token [COWORK_INSTALL_PATH_BASE], and
+# the name asymmetry is exactly what drifted). Deriving them closes that class.
+#
 # [OPERATOR_FIRST_NAME] is derived from OPERATOR_NAME and not stored.
+
+# Absolute path to the schema declaration. Deliberately a function rather than a
+# file-header constant: SOURCE_REPO is not known until parse_argv runs.
+operator_schema_file() {
+  printf '%s\n' "${SOURCE_REPO}/core/config/operator-toml-schema.json"
+}
+
 read_operator_toml() {
   # Read operator.toml (canonical) into TOKENS_FILE. If absent, return 0 (no-op).
   # Per-workspace override at <WORKSPACE_ROOT>/operator.local.toml wins per-field.
@@ -643,21 +659,29 @@ read_operator_toml() {
   S_TOKENS_FILE="${TOKENS_FILE}" \
   S_PRIMARY="${primary}" \
   S_OVERRIDE="${override}" \
+  S_SCHEMA_FILE="$(operator_schema_file)" \
   python3 -c '
 import json, os, sys
 
-field_to_token = {
-    ("identity", "operator_name"):           "[OPERATOR_NAME]",
-    ("identity", "operator_email"):          "[OPERATOR_EMAIL]",
-    ("identity", "operator_git_email"):      "[OPERATOR_GIT_EMAIL]",
-    ("identity", "operator_github"):         "[OPERATOR_GITHUB]",
-    ("identity", "operator_phone"):          "[OPERATOR_PHONE]",
-    ("identity", "operator_role_title"):     "[OPERATOR_ROLE_TITLE]",
-    ("identity", "operator_organization"):   "[OPERATOR_ORGANIZATION]",
-    ("paths",    "claude_workspace_root"):   "[CLAUDE_WORKSPACE_ROOT]",
-    ("paths",    "operator_homedir_path"):   "[OPERATOR_HOMEDIR_PATH]",
-    ("paths",    "cowork_install_path"):     "[COWORK_INSTALL_PATH_BASE]",
-}
+# DERIVED from the declaration — every key whose source is "token", paired with
+# the token it resolves. No second hand-maintained list to drift out of step.
+try:
+    with open(os.environ["S_SCHEMA_FILE"], "r") as f:
+        _schema = json.load(f)
+except (IOError, OSError, ValueError) as e:
+    sys.stderr.write("FATAL: cannot read operator.toml schema declaration at {}: {}\n".format(
+        os.environ.get("S_SCHEMA_FILE", "<unset>"), e))
+    sys.exit(1)
+
+field_to_token = {}
+for _sec in _schema["sections"]:
+    for _k in _sec["keys"]:
+        if _k.get("source") == "token":
+            field_to_token[(_sec["name"], _k["key"])] = _k["token"]
+if not field_to_token:
+    sys.stderr.write("FATAL: schema declaration yielded an EMPTY token map; refusing to "
+                     "silently resolve nothing.\n")
+    sys.exit(1)
 
 def parse_toml(path):
     """Minimal TOML reader: [section] header + key = "value" lines.
@@ -718,9 +742,33 @@ write_operator_toml() {
   S_OUT="${tmp}" \
   S_EXISTING="${OPERATOR_TOML}" \
   S_SCRIPT_VERSION="${SCRIPT_VERSION}" \
+  S_SCHEMA_FILE="$(operator_schema_file)" \
   python3 -c '
 import json, os, sys
 from datetime import datetime, timezone
+
+# The schema declaration drives the entire emit below. A missing or malformed
+# declaration is a LOUD failure, never a quiet one that writes a truncated
+# operator.toml over a good file.
+try:
+    with open(os.environ["S_SCHEMA_FILE"], "r") as f:
+        schema = json.load(f)
+except (IOError, OSError, ValueError) as e:
+    sys.stderr.write("FATAL: cannot read operator.toml schema declaration at {}: {}\n".format(
+        os.environ.get("S_SCHEMA_FILE", "<unset>"), e))
+    sys.exit(1)
+
+DECL_VERSION = schema["declaration_version"]
+SECTIONS = schema["sections"]
+
+def sec_delivery(sec):
+    return sec.get("delivery", "delivered")
+
+def key_delivery(sec, k):
+    # A key inherits its section disposition unless it overrides it. This is what
+    # lets [paths] deliver 4 keys while its 8 operator_instance_* overrides stay
+    # opt-in.
+    return k.get("delivery", sec_delivery(sec))
 
 with open(os.environ["S_TOKENS_FILE"], "r") as f:
     tokens = json.load(f)
@@ -776,31 +824,55 @@ def ovd(section, key, default):
     pv = prior_val(section, key)
     return pv if (pv is not None and pv != "") else default
 
-MANAGED = {
-    ("meta", "schema_version"), ("meta", "managed_by"),
-    ("identity", "operator_name"), ("identity", "operator_email"),
-    ("identity", "operator_git_email"), ("identity", "operator_github"),
-    ("identity", "operator_phone"), ("identity", "operator_role_title"),
-    ("identity", "operator_organization"),
-    ("paths", "claude_workspace_root"), ("paths", "operator_homedir_path"),
-    ("paths", "cowork_install_path"), ("paths", "pmo_platform_repo_name"),
-    ("platform", "work_board"), ("platform", "comms_platform"),
-    ("automation", "automation_level"),
-}
-MANAGED_SECTIONS = {"meta", "identity", "paths", "platform", "automation"}
-# MANAGED is the ALREADY-EMITTED set the passthrough below skips, not an
-# overwrite set. Membership does NOT mean "re-emitted from tokens": three of its
-# rows (pmo_platform_repo_name, work_board, comms_platform) are emitted through
-# ovd() and keep whatever the operator set. automation_level joins them on
-# exactly that footing -- listed so passthrough does not echo it a second time
-# and produce a duplicate key, emitted through ovd() so a deliberate "off" is
-# never reset by a re-bootstrap.
+# DERIVED, not hand-listed. MANAGED is the ALREADY-EMITTED set the passthrough
+# below skips, not an overwrite set. Membership does NOT mean "re-emitted from
+# tokens": every `operator-or-default` row is emitted through ovd() and keeps
+# whatever the operator set -- listed only so passthrough does not echo it a
+# second time and produce a duplicate key.
+MANAGED = set()
+MANAGED_SECTIONS = set()
+for _sec in SECTIONS:
+    if sec_delivery(_sec) == "delivered":
+        MANAGED_SECTIONS.add(_sec["name"])
+    for _k in _sec["keys"]:
+        if key_delivery(_sec, _k) == "delivered":
+            MANAGED.add((_sec["name"], _k["key"]))
+if not MANAGED or not MANAGED_SECTIONS:
+    sys.stderr.write("FATAL: schema declaration yielded an EMPTY delivered key set; "
+                     "refusing to overwrite operator.toml with a truncated file.\n")
+    sys.exit(1)
 
 def passthrough(section):
     # operator-added keys in a managed section (not in MANAGED) — preserve verbatim
     for (k, v) in prior.get(section, []):
         if (section, k) not in MANAGED:
             out.append("{} = {}".format(k, v))
+
+def fmt_scalar(t, v):
+    # Quoting is driven by the declared TYPE, not by guesswork. A non-string
+    # scalar MUST round-trip unquoted: [meta].schema_version is an int and
+    # [session_retro].enabled is a bool, and quoting either breaks the
+    # consumer-shape arms in test_upgrade_config_durability.sh. A value read
+    # back from the operator file arrives as a string and is emitted verbatim.
+    if t in ("bool", "int"):
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        return str(v).strip()
+    return "\"{}\"".format(esc(v))
+
+def render(section, k):
+    src = k.get("source", "operator-or-default")
+    t = k.get("type", "string")
+    if src == "declaration-version":
+        # Kills the hardcoded literal: the emitted schema_version IS the
+        # declaration version, so the two can never disagree.
+        return fmt_scalar(t, DECL_VERSION)
+    if src == "literal":
+        return fmt_scalar(t, k["default"])
+    if src == "token":
+        return fmt_scalar(t, get(k["token"], k.get("default", "")))
+    # operator-or-default: keep a non-empty operator value, else the default.
+    return fmt_scalar(t, ovd(section, k["key"], k.get("default", "")))
 
 now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 out = []
@@ -811,49 +883,27 @@ script_version = os.environ["S_SCRIPT_VERSION"]
 out.append("# Generated by setup-workspace.sh {} at {}".format(script_version, now))
 out.append("# Edit directly or re-run setup-workspace.sh to update (operator additions preserved).")
 out.append("")
-out.append("[meta]")
-out.append("schema_version = 1")
-out.append("managed_by = \"pmo-platform\"")
-out.append("")
-out.append("[identity]")
-out.append("operator_name = \"{}\"".format(esc(get("[OPERATOR_NAME]"))))
-out.append("operator_email = \"{}\"".format(esc(get("[OPERATOR_EMAIL]"))))
-out.append("operator_git_email = \"{}\"".format(esc(get("[OPERATOR_GIT_EMAIL]"))))
-out.append("operator_github = \"{}\"".format(esc(get("[OPERATOR_GITHUB]"))))
-out.append("operator_phone = \"{}\"".format(esc(get("[OPERATOR_PHONE]"))))
-out.append("operator_role_title = \"{}\"".format(esc(get("[OPERATOR_ROLE_TITLE]"))))
-out.append("operator_organization = \"{}\"".format(esc(get("[OPERATOR_ORGANIZATION]"))))
-passthrough("identity")
-out.append("")
-out.append("[paths]")
-out.append("claude_workspace_root = \"{}\"".format(esc(get("[CLAUDE_WORKSPACE_ROOT]"))))
-out.append("operator_homedir_path = \"{}\"".format(esc(get("[OPERATOR_HOMEDIR_PATH]"))))
-out.append("cowork_install_path = \"{}\"".format(esc(get("[COWORK_INSTALL_PATH_BASE]"))))
-out.append("pmo_platform_repo_name = \"{}\"".format(esc(ovd("paths", "pmo_platform_repo_name", "pmo-platform"))))
-passthrough("paths")
-out.append("")
-out.append("[platform]")
-out.append("work_board = \"{}\"".format(esc(ovd("platform", "work_board", "github"))))
-out.append("comms_platform = \"{}\"".format(esc(ovd("platform", "comms_platform", ""))))
-passthrough("platform")
-out.append("")
-# The ambient-intake automation ceiling. Seeded so the dial is DISCOVERABLE in
-# the generated file rather than findable only by reading operator.toml.template
-# -- which this generator never reads, so a template-only default reached nobody.
-#
-# Seeding it changes discoverability, not behavior: the dial is advisory today
-# (skills read it and self-limit), and a skill finding the key absent falls back
-# to the same "recommend" documented here. An install with the key and one
-# without behave identically. It is emitted through ovd() so re-running setup on
-# a workspace whose operator deliberately set "off" preserves that choice.
-out.append("[automation]")
-out.append("automation_level = \"{}\"".format(esc(ovd("automation", "automation_level", "recommend"))))
-passthrough("automation")
-out.append("")
-# pass-through every NON-MANAGED operator-added section verbatim (adapters,
-# methodology, projects, and any unknown section) in original file order. The
-# MANAGED_SECTIONS skip immediately below excludes automation: it is emitted
-# above, with its own passthrough(), rather than here.
+
+# THE EMIT. Every delivered section, every delivered key, in declaration order.
+# Nothing here names a key, a section, or a default -- adding a field is one JSON
+# object in the declaration and zero lines here (AC-5). Each section still gets
+# its passthrough() so operator-added keys inside a managed section survive.
+for _sec in SECTIONS:
+    if sec_delivery(_sec) != "delivered":
+        continue
+    _name = _sec["name"]
+    out.append("[{}]".format(_name))
+    for _k in _sec["keys"]:
+        if key_delivery(_sec, _k) != "delivered":
+            continue
+        out.append("{} = {}".format(_k["key"], render(_name, _k)))
+    passthrough(_name)
+    out.append("")
+
+# pass-through every NON-MANAGED operator-added section verbatim (any section the
+# declaration marks opt-in, plus any unknown section) in original file order. A
+# delivered section is skipped here because it was emitted above WITH its own
+# passthrough(), rather than a second time here.
 for section in prior_order:
     if section in MANAGED_SECTIONS:
         continue
