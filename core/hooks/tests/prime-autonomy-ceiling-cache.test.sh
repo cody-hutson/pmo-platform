@@ -177,7 +177,12 @@ automation_level = "off"
 [automation]
 automation_level = "bounded_auto"' off 0
 
-add_fx M "the LIVE stock shape — no [automation] table is written by the installer" \
+# M is a multi-section operator.toml carrying NO [automation] table. That was the LIVE
+# stock shape only until v4.23; since then setup-workspace.sh seeds [automation] with
+# automation_level = "recommend", so this body is now the PRE-v4.23 install shape — and
+# what remains if an operator deletes the table from a current install. The fallback it
+# asserts is unchanged, and is the same value the installer now writes explicitly.
+add_fx M "multi-section file with no [automation] table (the pre-v4.23 install shape)" \
   '[meta]
 schema_version = 1
 

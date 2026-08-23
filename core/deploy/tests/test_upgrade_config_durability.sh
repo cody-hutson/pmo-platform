@@ -436,7 +436,13 @@ fi
 #
 # WHY these four deltas and not a re-assertion of Suite T: [trackers.<id>]
 # already traverses write_operator_toml's `prior_order` pass-through loop, which
-# is the IDENTICAL code path [adapters] / [methodology] / [automation] traverse.
+# is the IDENTICAL code path [adapters] / [methodology] traverse. [automation] no
+# longer belongs in that list: since v4.23 it is a MANAGED section, so the
+# prior_order loop skips it and the generator emits the [automation] header and
+# automation_level itself, keeping an operator-set value through ovd(). The
+# fixture's automation_level is still asserted durable below, but as a MANAGED key
+# (D4) — with passthrough() carrying any operator-ADDED key inside [automation],
+# of which the fixture seeds none — and not via the prior_order loop.
 # "An unknown operator-added table survives" is therefore already covered. The
 # four genuinely uncovered deltas are:
 #   D1 value-TYPE fidelity  — every Suite T fixture value is a quoted string, so a
@@ -794,10 +800,15 @@ fi
 # three readers are still section-blind, so "column-0" rather than "section-blind" is
 # the property this probe actually rests on, and the one to keep true.
 #
-# SCOPE: the subject is the SEEDED preservation fixture below, not a stock install. On a
-# stock install the count is legitimately 0 (write_operator_toml emits no [automation]
-# table), which is why this asserts against a fixture that seeds the key at column 0
-# rather than against a live operator.toml.
+# SCOPE: the subject is the SEEDED preservation fixture below, not a stock install.
+# Three of the four keys probed here — automation_level, operator_github and
+# pmo_platform_repo_name — ARE emitted at column 0 by a stock write_operator_toml;
+# automation_level has been since v4.23, when [automation] became a managed section
+# the generator seeds with a "recommend" default. The fourth,
+# operator_instance_evals_results_path, is operator-added and the generator never
+# emits it, so on a stock install its count is legitimately 0. That is why this
+# asserts against a fixture seeding all four keys at column 0 rather than against a
+# live operator.toml.
 p7_fail=""
 for p7_key in automation_level operator_github pmo_platform_repo_name operator_instance_evals_results_path; do
   p7_n=$(grep -c "^${p7_key}" "${PRES_TOML}" 2>/dev/null | tr -d ' ')

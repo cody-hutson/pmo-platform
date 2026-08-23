@@ -43,6 +43,7 @@ release/tools/check-selftest-coverage.py
 release/tools/compute-milestone-positions.py
 release/tools/generate-adr-index.py
 release/tools/native-dep-mirror.py
+release/tools/preflight-release-body-reemit.py
 release/tools/renumber-adr.py
 release/tools/sweep-release-corpus.py
 # scope: core/deploy/tools/*.py

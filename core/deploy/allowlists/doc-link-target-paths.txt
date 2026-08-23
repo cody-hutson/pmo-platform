@@ -51,12 +51,17 @@ core/deploy/
 docs/
 # Repo-root docs — the `*.md` glob matches TOP-LEVEL *.md only (README.md,
 # CONTRIBUTING.md, SECURITY.md, CHANGELOG.md); NOT `.` (which would rglob the
-# whole repo). CHANGELOG.md's per-release-notes links point into the
-# instance-side release/releases/notes/ tree (deliberately excluded below), so
-# CHANGELOG.md is routed to the TRACKED base allowlist
-# skip-doc-link-check-ci.txt, which BOTH the CI gate and deploy-time Check 14
-# read — this list single-sources the scan scope, that one single-sources the
-# ignore list, and both are needed for the two callers to agree.
+# whole repo). CHANGELOG.md is fully in scope: its per-release [Full notes]
+# links resolve against the TRACKED release/releases/notes/ tree, so a broken
+# one is real drift and is reported here like any other link. It was once
+# routed to the tracked base allowlist instead, on the premise that those notes
+# were instance-side and need not exist in the public tree — the tree tracks
+# them, so that entry has been retired. CHANGELOG.md being IN scope and
+# release/releases/ being excluded (below) are consistent, not contradictory:
+# the exclusion avoids double-scanning the notes TREE, not the links that point
+# INTO it. Scope and ignore list stay single-sourced — this file single-sources
+# the scan scope, skip-doc-link-check-ci.txt single-sources the ignore list,
+# and both callers read both so their verdicts cannot diverge.
 *.md
 # .github/ holds exactly one .md today (PULL_REQUEST_TEMPLATE.md). This is a
 # single-file tree under --require-targets: if that file is ever removed, the
@@ -66,8 +71,11 @@ docs/
 .github/
 
 # ── DELIBERATELY EXCLUDED ───────────────────────────────────────────────────
-# release/releases/  — 260 md (RELEASE_LOG/INDEX/DIGEST + plans + notes). NOT
-#   added here: it is already walked recursively by release/tools/
-#   check-release-links.py (the Dead-file-reference gate + release-link-check.yml),
-#   and it carries the heaviest pre-existing rot. Adding it would duplicate
-#   coverage while importing that rot into this gate.
+# release/releases/  — the release-tracking corpus (RELEASE_LOG / INDEX /
+#   DIGEST + plans + notes; several hundred .md). NOT added here: it is already
+#   walked recursively by release/tools/check-release-links.py, for both the
+#   Dead-file-reference gate and release-link-check.yml. Adding it would put one
+#   tree under two gates with two allowlists — the duplicate-coverage reason is
+#   the load-bearing one and does not expire. An earlier note also cited this
+#   tree's pre-existing rot as a reason; that one HAS expired — the tree now
+#   resolves clean under check-release-links.py, note/plan links included.

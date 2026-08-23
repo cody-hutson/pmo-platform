@@ -1027,7 +1027,7 @@ Declarative cross-methodology gate conditions — a work-item type-pack gate can
 - **Related-item-status gates.** A gate can depend on the workflow status of a related work item — a child Story can't be groomed to `ready` until its parent Epic is design-approved; a Story can't leave `ready` while a blocking Spike isn't `done`. The condition resolves across the relationship you declare (parent/child, depends-on, blocks).
 - **Set-aggregate gates.** A gate can depend on an aggregate over a set of related items — most importantly a Kanban WIP limit ("no more than N items in-progress at once") — making pull/flow limits first-class instead of inexpressible. Mutually-gating loops are detected and refused rather than deadlocking.
 
-[Full notes](release/releases/notes/declarative-gating-model_RELEASE_NOTES.md)
+[Full notes](release/releases/notes/_unversioned/declarative-gating-model_RELEASE_NOTES.md)
 
 ## [v2.20] - 2026-06-23
 
@@ -1383,7 +1383,7 @@ Version-less release (no `vMAJOR.MINOR` assigned; ships under the slug `parallel
 
 - **The constraint is named correctly — a usage window, not a rate limit.** An overrun is routed to the mitigations that address a cumulative usage limit (run serially, defer, or reduce scope); in-prompt staggering is documented as a rate-limit-only defense, not the usage-window fix. *Why it matters:* the fix you are offered matches the real problem, rather than a timing tweak that does not move a cumulative-usage limit. ([#24](https://github.com/cody-hutson/pmo-platform/issues/24))
 
-[Full notes](release/releases/notes/parallel-launch-quota-budget-gate_RELEASE_NOTES.md)
+[Full notes](release/releases/notes/_unversioned/parallel-launch-quota-budget-gate_RELEASE_NOTES.md)
 
 ## [v1.20] - 2026-06-14
 
@@ -1524,7 +1524,7 @@ Version-less release (no `vMAJOR.MINOR` assigned, no git tag, no GitHub Release)
 
 - **The positional issue-reference check now agrees exactly with the pre-commit hook.** The pull-request check now uses the same line-position logic as the hook. *Why it matters:* the same reference passes or is flagged the same way whether it is checked on your machine or on the pull request. ([#314](https://github.com/cody-hutson/pmo-platform/issues/314))
 
-[Full notes](release/releases/notes/cross-reference-integrity-ci_RELEASE_NOTES.md)
+[Full notes](release/releases/notes/_unversioned/cross-reference-integrity-ci_RELEASE_NOTES.md)
 
 ## [v1.11] - 2026-06-12
 
@@ -1555,7 +1555,7 @@ The agent-to-script promotion framework lands: a five-rung promotion ladder (AS0
 
 Version-less release (no `vMAJOR.MINOR` assigned, no git tag, no GitHub Release) — a verification-only close-out of the memory-to-corpus codification scope. All nine targeted behavioral rules (five workspace guardrails + four git-workflow rules) were verified already present in the tracked corpus with their provenance recorded; the three now-redundant operator memory files were archived and retired from the operator memory store; and the tickets and milestone description were reconciled to live state. No user-visible behavior changes. Shipped single-branch via one [release pull request](https://github.com/cody-hutson/pmo-platform/pull/604) (the release-tracking corpus records the PR and merge SHA).
 
-[Full notes](release/releases/notes/memory-to-corpus-codification_RELEASE_NOTES.md)
+[Full notes](release/releases/notes/_unversioned/memory-to-corpus-codification_RELEASE_NOTES.md)
 
 ## [v1.08] - 2026-06-08
 
