@@ -3,11 +3,14 @@
 # hook-owner: core/standards/canonical-skill-structure.md
 #
 # Gate 2 of the dual-gate skill-discipline enforcement.
-# Rejects direct Write/Edit to pmo-platform/skills/<skill>/SKILL.md, reference/*.md,
-# or references/*.md on migrated skills unless a valid pmo-skill-editor session
+# Rejects direct Write/Edit to pmo-platform/skills/<skill>/SKILL.md, reference/**/*.md,
+# or references/**/*.md on migrated skills unless a valid pmo-skill-editor session
 # sentinel is present. Both singular and plural reference-dir paths are matched
 # during the migration window; post-migration hardening to plural-only is
-# deferred to a future release.
+# deferred to a future release. Reference matching is depth-agnostic: a pack or corpus
+# file nested below reference[s]/ is behavior-defining and gated exactly as a top-level
+# reference file is. See the SCOPE CHECK block for the bounds that keep it from
+# over-matching.
 #
 # Matcher scope: Write, Edit
 #
@@ -176,10 +179,25 @@ if command -v scope_guard_gate >/dev/null 2>&1; then scope_guard_gate "$CWD"; fi
 FILE_PATH="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.file_path // empty')"
 [ -z "$FILE_PATH" ] && exit 0
 
-# --- SCOPE CHECK — act on <root>/skills/<skill>/{SKILL.md | reference[s]/*.md} ---
+# --- SCOPE CHECK — act on <root>/skills/<skill>/{SKILL.md | reference[s]/**/*.md} ---
 # <root> is a SOURCE module: operations | release | core | pmo-platform (legacy).
 # Deploy targets (.claude/skills/) are intentionally NOT in scope.
-SKILL_SCOPE_RE='(^|/)(operations|release|core|pmo-platform)/skills/[^/]+/(SKILL\.md|references?/[^/]+\.md)$'
+#
+# The reference branch matches at ANY DEPTH below reference[s]/ (`.+`, not `[^/]+`).
+# The single-level form left every nested reference subtree ungated — measured at 12
+# behavior-defining files across 3 migrated skills (build-reviewer dimension-packs/,
+# implementation-planner domain-packs/, pmo-wms-specialist corpus/). A dimension pack IS
+# the skill's review behavior and a domain pack IS its classification behavior, so editing
+# one changes what the skill does exactly as editing SKILL.md does. Pack-per-subdirectory
+# is the growth direction for these skills, so a single-level matcher sheds coverage as the
+# corpus grows; depth-agnostic matching is the only form that does not.
+#
+# Deliberately still bounded on three axes, each load-bearing against over-matching:
+#   - the reference[s]/ segment is still REQUIRED, so sibling subtrees under the skill
+#     (assets/, templates/, tests/) stay out of scope;
+#   - the \.md$ anchor is still required, so non-markdown pack assets stay out of scope;
+#   - the <skill> segment is still [^/]+, so skill-directory depth is unchanged.
+SKILL_SCOPE_RE='(^|/)(operations|release|core|pmo-platform)/skills/[^/]+/(SKILL\.md|references?/.+\.md)$'
 if [[ ! "$FILE_PATH" =~ $SKILL_SCOPE_RE ]]; then
   exit 0
 fi
