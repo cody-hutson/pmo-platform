@@ -4,7 +4,7 @@ title: ADR-142 — A backstop records its pre-mutation observation as a witness 
 status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
 date: 2026-08-24
 release: pipeline-spec-self-consistency
-deciders: "Workspace owner (Surface-1 ownership ruled 2026-08-15 at the release-hub Mode R milestone-readiness pre-flight for milestone 350: Stage 12 Phase B5.5 owns the emit). Design decisions D-1 and D-2 rendered at Stage 5 Solutioning on sub-task #6078 and accepted by the hub at Procedure 4."
+deciders: "Workspace owner (Surface-1 ownership ruled 2026-08-15 at the release-hub Mode R milestone-readiness pre-flight for milestone 350: Stage 12 Phase B5.5 owns the emit). Design decisions D-1 and D-2 rendered at Stage 5 Solutioning for the Surface-1 emit-provenance card and accepted by the hub at Procedure 4."
 supersedes: none
 tags: [architecture, release-pipeline, gates, observability, witness-record, provenance, backstop, aggregation-safety, reversibility-cheap]
 source_observations:
@@ -59,7 +59,7 @@ The verdict is **reported, not blocking**, and that is deliberate rather than ti
 
 The circularity objection — *"this has the producer report on itself, which is the defect the ticket names"* — is worth answering directly, because it is the objection a future reader will raise first. The original defect was that the **verifier's question** was rendered vacuous because the producer acted first. This design does not ask the producer to *grade* itself. It asks it to record the State-0/1/2 discrimination it **must** perform to route at all — an observation made strictly **before** any mutation. A witness record of a pre-action observation is how a producer's action becomes auditable; it is categorically different from a producer asserting its own output is correct.
 
-## Alternatives considered
+## Alternatives Considered
 
 The rejections are the load-bearing content of this record. In both decisions the *obvious* option is the wrong one, and in D-1 the obvious option is actively dangerous.
 
@@ -90,6 +90,16 @@ The rejections are the load-bearing content of this record. In both decisions th
 
 **Both arms are proven offline.** The detection question is verified against fixtures on the existing hermetic `$GH`-stub harness — `CREATED`, `NO-OP`, and `EDITED` each driven, plus a specificity arm asserting neither found-arm reports `CREATED`, plus the aggregation arm above. No fixture tag, no public mutation, and the no-op fixture's canonical body is extracted with the phase's own expression and asserted non-empty, so the no-op is a genuine State-2 comparison rather than `""` against `""`.
 
-**Reversibility: CHEAP · confidence HIGH.** Five text-only edits across five tracked files plus this record; no schema migration, no data movement, no path move. Full rollback is `git revert` of the release merge.
-
 **One residual, recorded rather than absorbed.** Phase 15.5's ancestry-repair path previously marked the phase twice and would have swallowed the token, since `get_phase` surfaces the first mark only. The fix folds the repair note and its `WARN` outcome into the single terminal mark. **Net verdict change is zero** — the path reported `WARN` before and reports `WARN` after; what changes is that the phase now marks once and the token survives on that path.
+
+## Reversibility
+
+**CHEAP · confidence HIGH.** Five text-only edits across five tracked files plus this record; no schema migration, no data movement, no path move. Full rollback is `git revert` of the release merge.
+
+## Related ADRs
+
+| ADR | Relationship |
+|---|---|
+| [ADR-094](ADR-094-extend-before-create.md) | **Composes.** D-1 reuses the `CREATED / EDITED / NO-OP` vocabulary already live at two of the three Surface-1 emit paths rather than minting a fourth. Minting one would have given a single state machine two vocabularies across three paths — the spec-versus-reality divergence this work exists to remove, re-created inside the fix. |
+| [ADR-115](ADR-115-adr-number-claim-binds-at-merge.md) | **Composes.** The numbering rule this record's `## Status` block applies — allocate at authorship, bind at merge, take the contiguous next, never reserve past an unmerged sibling claim. |
+| [ADR-117](ADR-117-adr-index-derived-surface-and-scoped-conformance-claim.md) | **Composes.** The derived-surface contract under which this record's index row is projected rather than hand-written. |

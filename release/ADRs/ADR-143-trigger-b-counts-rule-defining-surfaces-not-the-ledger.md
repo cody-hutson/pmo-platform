@@ -69,7 +69,7 @@ Removal also keeps the arithmetic independent of the **close class**. Close-clas
 
 Empirically the loss is nil. Two genuine convention changes exist across 178 tracked plans. One added a `## Velocity` section and also edited two retained members — it counts 2 under the new reading and was declared `novel`, so the strict-letter fire would have been the *wrong* answer even with a real format change on the table. The other added a schema field and fires on four other named surfaces regardless.
 
-## Alternatives considered
+## Alternatives Considered
 
 Five candidates were generated; the originating card named two of them. The rejections are the load-bearing content of this record.
 
@@ -97,4 +97,14 @@ Five candidates were generated; the originating card named two of them. The reje
 
 **Frozen release plans are not corrected.** Ten per-release plans restate the seven-member set. They are immutable audit records of what rule each release was classified under; retroactively editing them would falsify exactly the history the cutover clause exists to preserve.
 
-**Reversibility: CHEAP · confidence HIGH.** One table cell, one referenced block, and one appended anti-pattern sentence in a single tracked file, plus this record. No schema migration, no data movement, no path move. Full rollback is a single-file revert.
+## Reversibility
+
+**CHEAP · confidence HIGH.** One table cell, one referenced block, and one appended anti-pattern sentence in a single tracked file, plus this record. No schema migration, no data movement, no path move. Full rollback is a single-file revert.
+
+## Related ADRs
+
+| ADR | Relationship |
+|---|---|
+| [ADR-027](../../core/ADRs/ADR-027-release-bundle-risk-weight-keys-on-release-class.md) | **Composes.** Release Class is the key that bundle risk-weighting multiplies against, so a trigger that fires spuriously propagates into the point band. This decision narrows trigger (b)'s member set; it changes no class value and therefore moves no weight — the measured effect is zero declared classes changed. |
+| [ADR-115](ADR-115-adr-number-claim-binds-at-merge.md) | **Composes.** The numbering rule this record's `## Status` block applies — allocate at authorship, bind at merge, take the contiguous next, never reserve past an unmerged sibling claim. |
+| [ADR-117](ADR-117-adr-index-derived-surface-and-scoped-conformance-claim.md) | **Composes.** The derived-surface contract under which this record's index row is projected rather than hand-written. |
