@@ -191,6 +191,195 @@ jobs:
       - name: Run sandbox-roots regression (test_sandbox_roots.sh)
         run: bash core/deploy/tests/test_sandbox_roots.sh
 
+      # ---------------------------------------------------------------------
+      # Three committed suites that, until now, NO workflow, runner or script
+      # invoked. They were not skipped and not excluded — they were simply never
+      # reached, which is the one state a green build can never report. A suite
+      # nothing runs is not a regression net; it is a file that agrees with
+      # whatever the code has since become.
+      #
+      # WHY EACH CARRIES timeout-minutes, AND WHY THAT KEY RATHER THAN `timeout`.
+      # These are the first timeout declarations of any kind in this workflow
+      # corpus, so the mechanism is a choice and not a convention to copy:
+      #   - coreutils `timeout` / `gtimeout` is NOT present on the macOS runner
+      #     image these jobs pin, so a shell wrapper would be a guard that can be
+      #     silently absent on the exact runner it exists to guard — which is the
+      #     failure mode this whole change is about;
+      #   - a job-level budget cannot say WHICH suite overran, so it cannot fail
+      #     informatively;
+      #   - step-level timeout-minutes is runner-enforced, needs no binary, and
+      #     turns an overrun into an ordinary step failure — and because NO step
+      #     in this file sets continue-on-error, a step failure fails the job.
+      # The budget of 5 minutes is adopted, not invented: it is
+      # PER_TOOL_TIMEOUT_S = 300 in release/tools/check-selftest-coverage.py, the
+      # platform's existing per-tool self-test budget. Extending that number beats
+      # introducing a second one next to it. Measured headroom is ~16x on the
+      # slowest of the three.
+      #
+      # Security posture is unchanged: like every other step in this file, none of
+      # the steps below consumes any github.event.* input. Each run: block is a
+      # static invocation on workspace files only.
+      # ---------------------------------------------------------------------
+
+      - name: Run session-config hook regression (test_verify_session_config.sh)
+        # The SessionStart model/effort posture hook. Hermetic by construction:
+        # every case stages the hook plus its libs into a private sandbox and
+        # drives behaviour purely through env and stdin, so it touches no operator
+        # state and needs no network.
+        timeout-minutes: 5
+        run: bash core/deploy/tests/test_verify_session_config.sh
+
+      - name: Run needle-file roundtrip regression (test_instance_path_roundtrip.sh)
+        # Proves the localized-context needle file is operator data that update.sh
+        # never regenerates. It drives a real sandboxed install plus two updates
+        # under redirected --config-root / --workspace-root and asserts the live
+        # ~/.claude/skills tree is byte-identical before and after, so it is the
+        # slowest of the three and still an order of magnitude inside the budget.
+        timeout-minutes: 5
+        run: bash core/deploy/tests/test_instance_path_roundtrip.sh
+
+      - name: Run Check-19 event-log integrity — fast arm (test_check19_event_log_integrity.sh --fast)
+        # DELIBERATELY THE FAST ARM, NOT THE WHOLE SUITE, and the reason is a
+        # measurement rather than a preference. The full suite drives five
+        # complete `deploy.sh --check` invocations; one such invocation was
+        # measured at 505 s and again at 533 s, putting the full suite past forty
+        # minutes. This workflow has no paths: filter, by design, so it runs on
+        # every pull request in the repository — forty minutes is not a per-PR
+        # budget, and a timeout loose enough to admit it could not fail loudly.
+        #
+        # It was previously reported as HANGING. It does not hang; it terminates
+        # slowly and emits nothing meanwhile, because the suite filters each whole
+        # deploy run through a sed range. That distinction is what makes a split
+        # the right answer instead of deletion.
+        #
+        # What --fast keeps is the part that carries the regression value: T5, the
+        # standing literal assertion that deploy.sh's Check-19 schema path still
+        # resolves — the guard for a defect where all three of Check 19's path
+        # literals mis-resolved and two of its three arms had never executed on any
+        # release. T5 runs one grep and one file test. The five deploy-driven arms
+        # remain operator-invocable and remain the default: a bare invocation still
+        # runs all seven. Their unreached status is recorded at the suite itself,
+        # where runtime affinity belongs, not in a coverage-exclusions roster.
+        timeout-minutes: 5
+        run: bash core/deploy/tests/test_check19_event_log_integrity.sh --fast
+
+      - name: Falsification probe — each newly-wired suite MUST redden the job when broken
+        # GATE HONESTY for the three steps above, modeled on the "Precision probe"
+        # step in the install-regression job below. Wiring a suite is only worth
+        # anything if a FAILING suite actually fails the job, and that is not
+        # provable by reading this file: "no continue-on-error key anywhere" is
+        # exactly the sort of claim that stays true right up until it quietly
+        # isn't. So break each suite in turn and require a non-zero exit, and
+        # assert the timeout guard structurally rather than trusting it is there.
+        #
+        # THE BREAK IS APPLIED IN THE CHECKOUT AND REVERTED, rather than in a
+        # copied tree, and that is a correctness requirement rather than a
+        # shortcut: each of these suites resolves its own REPO_ROOT from $0
+        # (dirname/../../..), so a copy placed anywhere else resolves a DIFFERENT
+        # root and fails for a reason that has nothing to do with the injected
+        # break — a red result that proves nothing. The runner workspace is
+        # ephemeral, the revert runs from a trap, and a revert that did not restore
+        # the tree fails this step rather than leaking into a later one.
+        #
+        # Consumes no github.event.* input; operates on workspace files only.
+        timeout-minutes: 5
+        run: |
+          set -uo pipefail
+          probe_fail=0
+          restore() { git checkout -- core/deploy/tests/ >/dev/null 2>&1 || true; }
+          trap restore EXIT
+
+          # --- Arm 1: the timeout guard is present on every step wired above ----
+          # Structural, block-scoped read of this workflow's own step list — not a
+          # substring count, which would happily match the word in this comment.
+          python3 - <<'PY'
+          import re, sys
+          SUITES = ["test_verify_session_config.sh",
+                    "test_instance_path_roundtrip.sh",
+                    "test_check19_event_log_integrity.sh"]
+          text = open(".github/workflows/install-tests.yml", errors="replace").read()
+          # A step begins at exactly six spaces + "- "; everything up to the next
+          # such line is that step's block.
+          starts = [m.start() for m in re.finditer(r"(?m)^      - ", text)]
+          starts.append(len(text))
+          blocks = [text[starts[i]:starts[i + 1]] for i in range(len(starts) - 1)]
+          if not blocks:
+              print("::error::probe parsed 0 steps out of the workflow; the probe is broken, not the workflow.")
+              sys.exit(1)
+          missing = []
+          for s in SUITES:
+              owning = [b for b in blocks
+                        if re.search(r"(?m)^\s+run:.*" + re.escape(s), b)]
+              if not owning:
+                  missing.append("%s: no run: step invokes it" % s)
+                  continue
+              for b in owning:
+                  if not re.search(r"(?m)^        timeout-minutes:\s*\d+\s*$", b):
+                      missing.append("%s: owning step carries no timeout-minutes" % s)
+          if missing:
+              for m in missing:
+                  print("::error::timeout guard missing — %s" % m)
+              sys.exit(1)
+          print("Timeout guard OK — all %d newly-wired steps carry timeout-minutes "
+                "(parsed %d step blocks)." % (len(SUITES), len(blocks)))
+          PY
+          if [ "$?" -ne 0 ]; then probe_fail=1; fi
+
+          # --- Arm 2: a broken suite must exit non-zero --------------------------
+          for suite in \
+            core/deploy/tests/test_verify_session_config.sh \
+            core/deploy/tests/test_instance_path_roundtrip.sh \
+            core/deploy/tests/test_check19_event_log_integrity.sh
+          do
+            before="$(shasum -a 256 "$suite" | awk '{print $1}')"
+            # All three share one terminal contract — `[ "${FAIL}" -ne 0 ] && exit 1`
+            # — and one report() signature, so a single injected failing assertion
+            # breaks each of them the same way, at the same place, without the probe
+            # needing to know anything about what the suite asserts.
+            python3 - "$suite" <<'PY'
+          import sys
+          path = sys.argv[1]
+          anchor = '[ "${FAIL}" -ne 0 ] && exit 1'
+          body = open(path, errors="replace").read()
+          if body.count(anchor) != 1:
+              sys.stderr.write("anchor not unique in %s (count=%d)\n"
+                               % (path, body.count(anchor)))
+              sys.exit(2)
+          injected = 'report "falsification probe: deliberately injected failure" 0 "probe"\n'
+          open(path, "w").write(body.replace(anchor, injected + anchor, 1))
+          PY
+            if [ "$?" -ne 0 ]; then
+              echo "::error::probe could not locate the exit contract in ${suite}; the probe is broken, not the suite."
+              probe_fail=1; restore; continue
+            fi
+            after="$(shasum -a 256 "$suite" | awk '{print $1}')"
+            if [ "$before" = "$after" ]; then
+              echo "::error::probe left ${suite} byte-identical; a no-op mutation proves nothing."
+              probe_fail=1; restore; continue
+            fi
+            case "$suite" in
+              *test_check19_event_log_integrity.sh) bash "$suite" --fast >/dev/null 2>&1 ;;
+              *)                                    bash "$suite"        >/dev/null 2>&1 ;;
+            esac
+            rc=$?
+            restore
+            if [ "$rc" -eq 0 ]; then
+              echo "::error::${suite} exited 0 with a deliberately injected failing assertion; this suite's wiring cannot detect a failure."
+              probe_fail=1
+            else
+              echo "Falsification OK — ${suite} correctly failed when broken (exit ${rc})."
+            fi
+          done
+
+          # --- Arm 3: the probe left the checkout clean --------------------------
+          if ! git diff --quiet -- core/deploy/tests/; then
+            echo "::error::the falsification probe left core/deploy/tests/ modified; refusing to hand a mutated tree to later steps."
+            git --no-pager diff --stat -- core/deploy/tests/
+            probe_fail=1
+          fi
+
+          exit "$probe_fail"
+
       - name: Run end-to-end install test (test_install_end_to_end.sh)
         run: bash core/deploy/tests/test_install_end_to_end.sh
 
