@@ -164,16 +164,44 @@ arm "A-7 forward-only — a plan carrying no status: reads empty, which the phas
   "read returned '${got:-<empty>}'; this is what keeps the historical corpus exempt rather than failing"
 
 # A-8 MUTATION — a strict reader must break A-2 while leaving A-1 alive.
-MUT_SRC="${FN_SRC//if i >= len(ls) or ls[i].strip() != \"---\":/if True:}"
+#
+# WHICH LINE THE MUTATION TARGETS, and why it is not the fence check. The
+# comment tolerance lives in ONE limb: the skip loop's `if s == "" or (...)`
+# guard. Neutering that guard yields a reader that requires the file to OPEN
+# with `---` — comment-intolerant, and correct on every other shape. Mutating
+# the fence check instead (`if i >= len(ls) or ...` -> `if True:`) blinds the
+# reader on EVERY shape, so the arm below would go green for a reader that is
+# merely broken rather than one that is comment-intolerant. A mutation that is
+# not reader-SPECIFIC cannot evidence a reader-specific claim.
+#
+# WHY THE ANCHOR CARRIES NO GLOB METACHARACTERS. `${v//pat/rep}` glob-matches
+# its pattern; it does not substring-match it. A pattern containing `ls[i]`
+# therefore matches the literal three characters `lsi` and silently no-ops. The
+# guard line above is free of `* ? [ ]`, so it cannot fail that way.
+MUT_SRC="${FN_SRC//if s == \"\" or (s.startswith(\"<!--\") and s.endswith(\"-->\")):/if False:}"
 if [[ "$MUT_SRC" == "$FN_SRC" ]]; then
   arm "A-8 mutation extraction control" "0" \
-    "the strict-reader anchor was not found in the extracted source — the mutation would no-op and the arm below would be meaningless"
+    "the comment-skip anchor was not found in the extracted source — the mutation would no-op and the arm below would be meaningless"
 else
-  mkplan "$TMP/a8.md" "ACTIVE" "<!-- reference-durability: allow-link -->"
-  mut_out="$(eval "${MUT_SRC/plan_status_rw() \{/plan_status_rw_mut() \{}"; plan_status_rw_mut "$TMP/a8.md" read)"
+  mkplan "$TMP/a8_plain.md" "ACTIVE" ""
+  mkplan "$TMP/a8_marker.md" "ACTIVE" "<!-- reference-durability: allow-link -->"
+  # The mutant is defined and driven inside ONE subshell so it cannot leak into
+  # the suite's shell, and both reads are taken from the SAME mutant.
+  mut_reads="$(eval "${MUT_SRC/plan_status_rw() {/plan_status_rw_mut() {}" 2>/dev/null
+               printf '%s|%s' "$(plan_status_rw_mut "$TMP/a8_plain.md" read 2>/dev/null)" \
+                              "$(plan_status_rw_mut "$TMP/a8_marker.md" read 2>/dev/null)")"
+  mut_plain="${mut_reads%%|*}"
+  mut_marker="${mut_reads##*|}"
+  # The plain-file read is the INSTRUMENT CONTROL, and it is why this arm cannot
+  # pass vacuously. An empty marker read is ambiguous on its own: it is equally
+  # the signature of a mutant that went blind and of a mutant that never ran at
+  # all (a substitution that produced unparseable source evals to nothing, and
+  # the missing function then returns empty for every input). Requiring ACTIVE
+  # on the plain file separates those two: only a live, correctly-defined mutant
+  # can produce it.
   arm "A-8 sensitivity — a reader that cannot see past a marker comment goes BLIND on the OSD-4 shape" \
-    "$([[ -z "$mut_out" ]] && echo 1 || echo 0)" \
-    "the mutant returns '${mut_out:-<empty>}' where the shipped primitive returns ACTIVE — the tolerance is enforced, not merely documented"
+    "$([[ -z "$mut_marker" && "$mut_plain" == "ACTIVE" ]] && echo 1 || echo 0)" \
+    "the mutant returns '${mut_marker:-<empty>}' on the marker shape where the shipped primitive returns ACTIVE, while still reading '${mut_plain:-<empty>}' on a plain plan — the blindness is comment-SPECIFIC, and the live plain read proves the mutant really ran"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
