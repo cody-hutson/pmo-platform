@@ -208,8 +208,12 @@ jobs:
       #   - a job-level budget cannot say WHICH suite overran, so it cannot fail
       #     informatively;
       #   - step-level timeout-minutes is runner-enforced, needs no binary, and
-      #     turns an overrun into an ordinary step failure — and because NO step
-      #     in this file sets continue-on-error, a step failure fails the job.
+      #     turns an overrun into an ordinary step failure — and because no step in
+      #     this file opts out of failing the job, a step failure fails the job.
+      #     (That opt-out key is deliberately not named in prose anywhere here: a
+      #     substring scan for it must find zero hits in this file, and a comment
+      #     mentioning it would flip that check to a false positive. Verify it the
+      #     structured way, by parsing the step and reading the key.)
       # The budget of 5 minutes is adopted, not invented: it is
       # PER_TOOL_TIMEOUT_S = 300 in release/tools/check-selftest-coverage.py, the
       # platform's existing per-tool self-test budget. Extending that number beats
@@ -270,10 +274,10 @@ jobs:
         # GATE HONESTY for the three steps above, modeled on the "Precision probe"
         # step in the install-regression job below. Wiring a suite is only worth
         # anything if a FAILING suite actually fails the job, and that is not
-        # provable by reading this file: "no continue-on-error key anywhere" is
-        # exactly the sort of claim that stays true right up until it quietly
-        # isn't. So break each suite in turn and require a non-zero exit, and
-        # assert the timeout guard structurally rather than trusting it is there.
+        # provable by reading this file: "no step here opts out of failing the
+        # job" is exactly the sort of claim that stays true right up until it
+        # quietly isn't. So break each suite in turn and require a non-zero exit,
+        # and assert the timeout guard structurally rather than trusting it.
         #
         # THE BREAK IS APPLIED IN THE CHECKOUT AND REVERTED, rather than in a
         # copied tree, and that is a correctness requirement rather than a
