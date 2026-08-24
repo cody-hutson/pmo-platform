@@ -238,7 +238,56 @@ Recorded per spoke as deviations arise. A deviation is flagged, never silently t
 
 ## Change Description
 
-Authored at Stage 6 Phase C1 once the implementation sequence has landed, and committed on the release branch before the PR is transitioned to ready-for-review at the Stage 9 gate.
+A self-test that passes now proves the behavior under test actually ran. Nine defects were fixed
+across nine commits, each one an assertion that reported green without being able to report anything
+else.
+
+**What changed, by class of blindness closed:**
+
+| Card | The gate could not fail because… | What now makes it falsifiable |
+|---|---|---|
+| `#5241` | the suite passed with its subject stubbed to a no-op | it executes the real subject and asserts against real output |
+| `#4441` | a SKIP was indistinguishable from a pass | `SKIP != 0` gates the exit, plus a positive and a negative discriminator limb |
+| `#4914` | two pinned behaviors could be deleted with the suite still green | each is pinned independently and reddens its own case alone |
+| `#5273` | the exactly-once predicate had never been exercised in the `>1` direction | two limbs assert whole-file `(section, key)` uniqueness and TOML shape |
+| `#5272` | the seed equalled the template default equalled the asserted value | the seed is derived at run time as a legal mode that differs from the shipped default |
+| `#4913` | the self-test was unreachable behind a boundary check that hard-exits | the boundary predicate accepts the script's own physical checkout root |
+| `#5237` | the coverage arm was blind to suites whose filename did not match its pattern | the glob is widened and the extraction is testable |
+| `#4443` | three suites were committed and invoked by nothing | they are wired, with the expensive arm split behind a fast selector and a bounded timeout |
+| `#5239` | three sibling self-tests ran in CI with no precision probe | each carries a probe matching the two instances already established in that file |
+
+**Cross-cutting properties of the change set.**
+
+Every card was verified by **mutation, not inspection**: the assertion was shown to FAIL under a change
+that breaks its specific subject and PASS unmutated, with both results recorded. Where a card fixed an
+assertion that previously could not fail, a **counterfactual arm** was additionally run — the *old*
+assertion against the *same* mutation — to demonstrate the defect rather than merely the fix.
+
+Mutations are **targeted**: each reddens one assertion while its siblings continue to pass, which
+establishes that assertions bind to their real subjects rather than to a shared banner.
+
+**Three defects of the release's own class were caught inside the fixes for it, before commit**: a guard
+no mutation could falsify; a comment that duplicated an exit-contract literal and would have silently
+disabled a shipped CI probe; and three probes whose markers matched a green run and would therefore have
+passed permanently. Each was found by the author mutating their own work.
+
+**Premise corrections.** Three cards carried premises that were false on live mainline, established by
+measurement rather than assumed: `#4913`'s stated mechanism (the real defect is reachability, not
+hermeticity); `#4443`'s "hangs indefinitely" (it terminates near 42 minutes and was killed at
+approximately its own completion time); and `#5273`'s "no runtime coverage" (coverage shipped six days
+before the card was filed — the residual is that the coverage itself had never been shown able to fail
+in the direction that mattered). Issue bodies were left unamended as historical record; the corrected
+premises live in the Stage 5 and Stage 6 records.
+
+**One architectural decision was recorded.** `#4913` retains a guard ordering that diverges from the
+convention two sibling tools follow, because the rejected alternative would strip the only barrier on
+the one self-test in the corpus that performs real destructive git operations. Unrecorded, the next
+reader reverts it and reopens the defect.
+
+**Scope discipline.** Findings surfaced outside the locked bundle were routed rather than absorbed:
+four follow-up work items were filed, and one security finding is handled fix-forward outside this
+release. No card widened past its acceptance criteria; one design that specified four wiring targets was
+held to the three its own AC names.
 
 ## Issue References
 
