@@ -172,7 +172,9 @@ SUBTYPES_iteration_prefixes="dt-eng-pass- qa-dt-pass-"
 #
 # SCOPE — deliberately narrow, and empirically grounded. Only event types that
 # DECLARE a label set in § 11.8 are validated: `release-synthesis` and
-# `session-retro`, the two grains the synthesizer parses. A census of the live
+# `session-retro`, the two grains the synthesizer parses; § 11.8.1 additionally
+# declares per-subtype sets for `release-synthesis`'s two QC4 subtypes, which are
+# registry entries rather than synthesizer grains. A census of the live
 # event log found the other event types (`decision`, `gate-outcome`, `escalation`,
 # `test-run`) using open free-form payload keys across the great majority of rows;
 # validating those would reject nearly every existing caller for no read-side
@@ -183,8 +185,11 @@ SUBTYPES_iteration_prefixes="dt-eng-pass- qa-dt-pass-"
 # here rather than restating it is what keeps the two from drifting — the drift
 # that shipped a 5-label schema against a 6-label tool.
 
-# Parse the schema § 11.8 table → "key|label label …" lines on stdout, where the
-# key is `event_type` or `event_type/event_subtype`.
+# Parse the schema § 11.8 tables → "key|label label …" lines on stdout, where the
+# key is `event_type` or `event_type/event_subtype`. The scan is SECTION-bounded,
+# not table-bounded, so it covers the `--source` selection table AND the
+# § 11.8.1 subtype payload-vocabulary registry beneath it (a `####` heading does
+# not terminate the scan; a `###` one does).
 # Row shape: | `source` … | `--event-type …` | `l1` / `l2` / … | clustered | zero-state |
 # FS="|" on a leading-pipe row: $2=col1(source) $3=col2(filter) $4=col3(labels).
 #
@@ -202,7 +207,13 @@ parse_schema_labels() {
     in_s && /^#{1,3} / { in_s = 0 }
     # col-1 must START with a backtick token (the source name); trailing prose in
     # the same cell — e.g. "(default — …)" — is ignored.
-    in_s && $2 ~ /^ *`[a-z0-9-]+`/ {
+    #
+    # CHARSET CONTRACT: the token charset here matches the write-side extractor
+    # `payload_labels` ([A-Za-z0-9_-]). A NARROWER charset here does not fail — it
+    # silently DROPS a declared label, and the conforming payload is then rejected
+    # as unrecognized. Keep this a superset of every token § 11.8 / § 11.8.1
+    # declares. The `outcome_excerpt` guard in --self-test fails if it is re-narrowed.
+    in_s && $2 ~ /^ *`[a-z0-9_-]+`/ {
       filt = $3; et = ""; es = ""                       # declared scope from col-2
       if (match(filt, /--event-type +[a-z0-9-]+/)) {
         t = substr(filt, RSTART, RLENGTH); sub(/^--event-type +/, "", t); et = t
@@ -217,7 +228,7 @@ parse_schema_labels() {
       if (et == "") next
       key = (es == "" ? et : et "/" es)
       rest = $4; labels = ""                            # labels from col-3 ONLY
-      while (match(rest, /`[a-z0-9-]+`/)) {
+      while (match(rest, /`[a-z0-9_-]+`/)) {
         tok = substr(rest, RSTART+1, RLENGTH-2)
         labels = (labels == "" ? tok : labels " " tok)
         rest = substr(rest, RSTART+RLENGTH)
@@ -231,13 +242,21 @@ parse_schema_labels() {
 # Asserted against § 11.8 by --self-test, so a one-sided edit fails the test
 # rather than shipping silently.
 #
-# Keys mirror the § 11.8 DECLARED FILTERS, not the col-1 source names:
-# release-synthesis's filter names a subtype, so its key carries one;
+# The registry it mirrors now spans BOTH tables inside § 11.8: the `--source`
+# selection table (§ 11.8) and the subtype payload-vocabulary registry
+# (§ 11.8.1), whose col-1 is a registry key rather than a `--source` value.
+# The parser does not distinguish them — both are col-2-keyed rows inside the
+# § 11.8 scan — so this mirror carries every row from both.
+#
+# Keys mirror the DECLARED FILTERS, not the col-1 source names or registry keys:
+# release-synthesis's § 11.8 filter names a subtype, so its key carries one;
 # session-retro's filter names none, so its key stays type-level and all three
 # of its subtypes resolve through the type-level rung of labels_for().
 _FALLBACK_LABEL_SETS="$(printf '%s\n' \
   "release-synthesis/learnings-triple	surprise would-change watch-for" \
-  "session-retro	session source theme domain learning reason")"
+  "session-retro	session source theme domain learning reason" \
+  "release-synthesis/qc4-05-result	invariant verdict files" \
+  "release-synthesis/qc4-06-result	verdict outcome_excerpt evidence_anchor")"
 
 _schema_labels="$(parse_schema_labels 2>/dev/null || true)"
 if [[ -n "$_schema_labels" ]]; then
@@ -746,21 +765,47 @@ if [[ "$SELF_TEST" == "true" ]]; then
   # These two subtypes are declared in § 3 and required by the Stage-13 emit
   # table, but carry payload shapes their sibling learnings-triple does not.
   # Under event_type-only scoping they were structurally un-emittable: zero rows
-  # across the log's entire history. The fixtures assert EMITTABILITY; they do
-  # NOT canonicalize a payload-label convention for these subtypes.
+  # across the log's entire history. § 11.8.1 now DECLARES both vocabularies, so
+  # these two accepts no longer pass vacuously through the "no declared set"
+  # short-circuit — they pass because the set resolves and the payload matches it.
+  # Each accept is paired with a reject below; an accept without its paired
+  # reject would not demonstrate that the registration binds anything.
   validate_payload_labels "release-synthesis" "qc4-05-result" \
     "invariant:AV-1; verdict:PASS; files:release/tools/append-pipeline-event.sh" \
     || die "self-test: a conforming qc4-05-result payload must emit — label scoping is not subtype-aware"
   validate_payload_labels "release-synthesis" "qc4-06-result" \
     "verdict:ATTAINED; outcome_excerpt:post-deploy main exhibits the AFTER state; evidence_anchor:release-plan-change-description" \
     || die "self-test: a conforming qc4-06-result payload must emit — label scoping is not subtype-aware"
+  # The paired SPECIFICITY arms. A vocabulary that cannot reject an off-vocabulary
+  # label has not bound the gate — before § 11.8.1 both of these PASSED, because
+  # the pair resolved to no declared set and validation short-circuited.
+  if ( validate_payload_labels "release-synthesis" "qc4-06-result" \
+       "verdict:ATTAINED; mood:excited" ) 2>/dev/null; then
+    die "self-test: an off-vocabulary label on qc4-06-result must be rejected — a registration that cannot fail has not bound the gate"
+  fi
+  if ( validate_payload_labels "release-synthesis" "qc4-05-result" \
+       "invariant:AV-1; mood:excited" ) 2>/dev/null; then
+    die "self-test: an off-vocabulary label on qc4-05-result must be rejected — a registration that cannot fail has not bound the gate"
+  fi
   # Resolution-rung liveness: exact returns a set, type-level falls back, and an
   # undeclared subtype resolves to EMPTY (not validated). Asserting all three
   # rungs is what stops a partial implementation reading as green.
   [[ -n "$(labels_for release-synthesis learnings-triple)" ]] \
     || die "self-test: exact rung dead — release-synthesis/learnings-triple must resolve"
-  [[ -z "$(labels_for release-synthesis qc4-06-result)" ]] \
-    || die "self-test: qc4-06-result must resolve to NO declared set (§ 11.8 declares none)"
+  [[ -n "$(labels_for release-synthesis qc4-06-result)" ]] \
+    || die "self-test: qc4-06-result must resolve to its § 11.8.1 declared set"
+  # THE CHARSET GUARD. `outcome_excerpt` is snake_case, and the registry parser's
+  # token charset must be a superset of the write-side extractor's or it DROPS the
+  # label silently — leaving `verdict` alone, after which the conforming fixture
+  # above is rejected. The `-n` rung immediately above still passes on `verdict`
+  # alone, so it cannot catch that; this assertion is the one that can.
+  is_in_list "outcome_excerpt" "$(labels_for release-synthesis qc4-06-result)" \
+    || die "self-test: 'outcome_excerpt' missing from the qc4-06-result set — the registry charset silently dropped a snake_case label"
+  # EMPTY-RUNG REPLACEMENT. All three release-synthesis subtypes are now declared,
+  # so the empty rung lost its only live assertion. Re-point it at a (type, subtype)
+  # pair that declares no set; without this the rung silently drops out of coverage.
+  [[ -z "$(labels_for decision scope-lock)" ]] \
+    || die "self-test: empty rung dead — an undeclared (type, subtype) must resolve to NO set"
   [[ "$(labels_for session-retro learning)" == "$(labels_for session-retro)" ]] \
     || die "self-test: type-level fallback rung dead — session-retro/<subtype> must fall back to the type set"
 
@@ -787,13 +832,15 @@ if [[ "$SELF_TEST" == "true" ]]; then
   #     DECLARED subtype, so the union is exactly its set; that same identity
   #     is why it passes this reject;
   #   · dropping the release-synthesis gate entirely fails this reject.
-  # `verdict:` is the token that would discriminate a union with something to
-  # widen INTO: it appears in both qc4 accept payloads above, so once § 11.8
-  # declares qc4 label sets the union carries it and union scoping accepts it
-  # here, while the `mood:` arm above still rejects. That asymmetry is LATENT,
-  # not live — today the two are symmetric: both are rejected on
-  # learnings-triple and both EMIT on the qc4 subtypes, which resolve to no
-  # declared set at all (qc4-06-result's EMPTY resolution is asserted above).
+  # `verdict:` is the token that discriminates a union with something to widen
+  # INTO: it appears in both qc4 accept payloads above, and § 11.8.1 now
+  # declares both qc4 label sets, so a union-of-all-subtypes scoping would
+  # carry `verdict` and ACCEPT it here, while the `mood:` arm above still
+  # rejects. That asymmetry is LIVE, not latent — the two arms are no longer
+  # symmetric: `verdict:` is ACCEPTED on the qc4 subtypes (their own declared
+  # sets, asserted above) and must still be REJECTED on learnings-triple. This
+  # reject is therefore strictly sharper than before: it discriminates union
+  # scoping on live evidence rather than latently.
   # Breaking (event_type, event_subtype) resolution therefore fails this test
   # by construction, with no hand-edit required to demonstrate it.
   if ( validate_payload_labels "release-synthesis" "learnings-triple" \

@@ -68,6 +68,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-142](ADR-142-surface-1-emit-provenance-not-existence.md) | A backstop records its pre-mutation observation as a witness token, and the downstream check asks provenance rather than existence | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
 | [ADR-143](ADR-143-trigger-b-counts-rule-defining-surfaces-not-the-ledger.md) | A release-class predicate counts rule-defining surfaces, not the ledger the release is mandated to write | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
 | [ADR-144](ADR-144-g1-03-admits-a-second-evidence-shape.md) | G1-03 admits a second evidence shape: label-position probe markers, two co-present, Evidence-section-scoped | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
+| [ADR-145](ADR-145-subtype-payload-vocabulary-registry-disjoint-from-the-source-enum.md) | Subtype payload vocabularies are declared in a registry disjoint from the `--source` enum | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.

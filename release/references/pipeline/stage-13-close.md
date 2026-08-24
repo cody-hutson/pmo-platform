@@ -536,7 +536,7 @@ This stage emits the following events to [`pipeline-event-log.md`](<OPERATOR_INS
 | Event type | Subtype | When | Actor |
 |---|---|---|---|
 | `release-synthesis` | `learnings-triple` | Per-release surprise / would-change / watch-for synthesis row emitted at Phase C (Release Close-Out); the Stage 13 synthesizer reads this row at Phase A7 to compose the per-release `#### Release Learnings v<X.Y>` sibling H4 block in `RELEASE_LOG.md` per [`pipeline-event-log-schema.md § 11`](../standards/pipeline-event-log-schema.md) | `hub` |
-| `release-synthesis` | `qc4-05-result` | QC4-05 invariant re-verification outcome per Phase A4; one row per AV-N invariant with `payload` carrying invariant ID + verdict (PASS/FAIL) + affected files | `spoke:#N` |
+| `release-synthesis` | `qc4-05-result` | QC4-05 invariant re-verification outcome per Phase A4; one row per AV-N invariant with `payload` carrying `invariant` (the AV-N identifier) + `verdict` (PASS/FAIL) + `files` (affected files) | `spoke:#N` |
 | `release-synthesis` | `qc4-06-result` | QC4-06 goal-attainment verdict per Phase A10; one row per release with `payload` carrying `verdict` (ATTAINED / PARTIALLY-ATTAINED / NOT-ATTAINED) + `outcome_excerpt` (Outcome AFTER paragraph quote) + `evidence_anchor` (Change Description URL or Success Indicator output) | `spoke:#N` |
 
 **Close-class telemetry + DORA restore-class anchors (read-model note — emits NO new event).** Two read-models consume Stage 13's surfaces without adding any emit-table row:
