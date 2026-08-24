@@ -776,6 +776,221 @@ test_case "BLOCK-022 source residual control: ~/ operand with .sh suffix still b
   2 "BLOCK-DESTRUCTIVE-022"
 
 # ==========================================================================
+# BLOCK-022 trailing-punctuation normalization + arm parity
+# ==========================================================================
+#
+# THE DEFECT THIS BLOCK PINS. normalize_script_token used to strip exactly one
+# quote character from each end. A token that is the TAIL of a command
+# substitution carries the substitution's own closing punctuation -- `)`, `)"`,
+# or a closing backtick -- so one strip left residual punctuation attached. The
+# interpreter arm's operand filter is SUFFIX-anchored (`*.sh`), so the residual
+# defeated it and check_script_target was never called: the matcher fired, then
+# silently skipped, and the allowlist was never consulted. The source/. arm
+# survived the identical input because its filter carries PREFIX alternatives
+# (`/*`, `./*`, `../*`) that trailing punctuation does not disturb. That is a
+# measured asymmetry between two arms of one rule, and it is what this block
+# turns into a standing assertion.
+#
+# THE FIX IS NORMALIZATION, NOT FILTER UNIFICATION -- and that is a constraint,
+# not a preference. The shipped comment above the source arm forbids unifying
+# the two filters in either direction: narrowing the source arm to `*.sh`
+# silently drops `/*`, `~/*` and `*.bash` coverage, and widening the interpreter
+# arm to `/*` opens a false-positive surface with no defect behind it. So the
+# arms KEEP different operand domains by design, and a parity claim over their
+# UNION would be false. The claim asserted here is parity over their SHARED
+# domain -- `.sh`-suffixed operands, which both filters accept -- and it is
+# paired below with a domain-boundary control that asserts the arms still
+# DIFFER outside that domain. Those two together are what make "symmetric"
+# falsifiable: unify the filters and the boundary control turns red; regress the
+# normalization and the parity rows turn red.
+#
+# THE TABLE IS THREE-ARM BY CONSTRUCTION. `exec` is registered as an arm here
+# with status `pending`, not omitted, because a third execution arm is a known
+# forthcoming change to this same rule. Its rows announce themselves as skipped
+# WITH THE REASON on every run rather than being silently absent -- an absent
+# arm reads as a covered arm, which is the failure mode this whole milestone
+# exists to close. Activating it is a one-word edit to B022_ARMS: no case in
+# this block is re-authored.
+
+echo ""
+echo "BLOCK-022 trailing-punctuation normalization + arm parity"
+echo "---"
+
+# Arm registry -- "<key>|<verb>|<status>". status is `active` or `pending:<why>`.
+B022_ARMS=(
+  "interp|bash|active"
+  "source|source|active"
+  "exec|exec|pending:the exec arm is not implemented yet"
+)
+
+# Operand spellings in the arms' SHARED domain. Each is a real raw-argv shape a
+# shell produces; the last three are the command-substitution tails that carry
+# residual punctuation onto the operand token.
+B022_SHAPES="bare dquote squote half-dquote paren paren-dquote backtick"
+
+# Render one command line. Single-quoted formats keep `$(` and the backtick
+# literal -- these strings are payload text, never evaluated here.
+b022_cmd() { # $1 shape  $2 verb  $3 path
+  case "$1" in
+    bare)         /usr/bin/printf '%s %s'                        "$2" "$3" ;;
+    dquote)       /usr/bin/printf '%s "%s"'                      "$2" "$3" ;;
+    squote)       /usr/bin/printf "%s '%s'"                      "$2" "$3" ;;
+    half-dquote)  /usr/bin/printf '%s %s"'                       "$2" "$3" ;;
+    paren)        /usr/bin/printf 'echo $(cd /tmp && %s %s)'     "$2" "$3" ;;
+    paren-dquote) /usr/bin/printf 'echo "$(cd /tmp && %s %s)"'   "$2" "$3" ;;
+    backtick)     /usr/bin/printf 'echo `cd /tmp && %s %s`'      "$2" "$3" ;;
+  esac
+}
+
+# Run the hook and record the exit code in B022_RC, asserting the expectation in
+# the same pass so the hook is invoked once per case rather than twice.
+B022_RC=""
+b022_case() { # $1 name  $2 payload  $3 expected_exit
+  local rc=0
+  /usr/bin/printf '%s' "$2" | /bin/bash "$HOOK" >/dev/null 2>&1 || rc="$?"
+  B022_RC="$rc"
+  if [ "$rc" = "$3" ]; then
+    /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  expected_exit=%s actual_exit=%s\n' "$1" "$3" "$rc"; FAIL=$((FAIL + 1))
+  fi
+}
+
+B022_EVIL="/tmp/evil.sh"                 # must-flag   -- never allowlisted
+B022_OK="core/deploy/deploy.sh"          # must-not-flag -- allowlisted, bare-relative form
+B022_ACTIVE_ARMS=0
+B022_PENDING_ARMS=0
+
+for b022_arm in "${B022_ARMS[@]}"; do
+  case "${b022_arm##*|}" in
+    active) B022_ACTIVE_ARMS=$((B022_ACTIVE_ARMS + 1)) ;;
+    *)      B022_PENDING_ARMS=$((B022_PENDING_ARMS + 1)) ;;
+  esac
+done
+
+for b022_shape in $B022_SHAPES; do
+  b022_flag_verdicts=""
+  b022_notflag_verdicts=""
+
+  for b022_arm in "${B022_ARMS[@]}"; do
+    b022_key="${b022_arm%%|*}"
+    b022_rest="${b022_arm#*|}"
+    b022_verb="${b022_rest%%|*}"
+    b022_status="${b022_rest##*|}"
+
+    if [ "$b022_status" != "active" ]; then
+      /usr/bin/printf 'SKIP: BLOCK-022 parity %s/%s -- %s. No verdict asserted; this arm is declared, not covered.\n' \
+        "$b022_shape" "$b022_key" "${b022_status#pending:}"
+      continue
+    fi
+
+    # must-flag: a non-allowlisted script must be BLOCKED in every spelling.
+    # This is the specificity arm -- the fix must make these tokens REACH the
+    # allowlist, never pass it.
+    b022_case "BLOCK-022 parity $b022_shape/$b022_key: non-allowlisted blocks" \
+      "$(bash_payload "$(b022_cmd "$b022_shape" "$b022_verb" "$B022_EVIL")")" \
+      2
+    b022_flag_verdicts="$b022_flag_verdicts $b022_key=$B022_RC"
+
+    # must-not-flag: an allowlisted script must still be permitted in the same
+    # spelling. Without this the whole set is satisfiable by a hook that denies
+    # everything.
+    b022_case "BLOCK-022 parity $b022_shape/$b022_key: allowlisted allows" \
+      "$(bash_payload "$(b022_cmd "$b022_shape" "$b022_verb" "$B022_OK")")" \
+      0
+    b022_notflag_verdicts="$b022_notflag_verdicts $b022_key=$B022_RC"
+  done
+
+  # The parity assertion itself: every ACTIVE arm reached the same verdict for
+  # this spelling, in both directions. Distinct from the per-arm expectations
+  # above -- those can both be red while still agreeing, and this row is what
+  # names the disagreement when they do not.
+  for b022_dir in flag notflag; do
+    case "$b022_dir" in
+      flag)    b022_v="$b022_flag_verdicts" ;;
+      *)       b022_v="$b022_notflag_verdicts" ;;
+    esac
+    b022_distinct="$(/usr/bin/printf '%s' "$b022_v" | /usr/bin/tr ' ' '\n' \
+      | /usr/bin/sed -n 's/.*=//p' | /usr/bin/sort -u | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+    if [ "$b022_distinct" = "1" ]; then
+      /usr/bin/printf 'PASS: BLOCK-022 parity %s/%s: all %s active arms agree (%s)\n' \
+        "$b022_shape" "$b022_dir" "$B022_ACTIVE_ARMS" "$b022_v"
+      PASS=$((PASS + 1))
+    else
+      /usr/bin/printf 'FAIL: BLOCK-022 parity %s/%s: active arms DISAGREE\n  verdicts:%s\n' \
+        "$b022_shape" "$b022_dir" "$b022_v"
+      FAIL=$((FAIL + 1))
+    fi
+  done
+done
+
+/usr/bin/printf 'PASS: BLOCK-022 parity arm coverage: %s active, %s pending (declared, not covered)\n' \
+  "$B022_ACTIVE_ARMS" "$B022_PENDING_ARMS"
+PASS=$((PASS + 1))
+
+# Emitted as RESIDUAL, not as a bare echo, because test-runner.sh forwards only
+# `^RESIDUAL` and `^FAIL` lines from a suite's captured output. A per-shape SKIP
+# line is visible when this file is run standalone and invisible at the
+# authoritative runner -- so on a green CI run the pending arm would leave no
+# trace at all, which is precisely the "absent reads as covered" failure this
+# block is built to avoid. This line qualifies the green.
+if [ "$B022_PENDING_ARMS" -gt 0 ]; then
+  /usr/bin/printf 'RESIDUAL: BLOCK-022 arm parity is asserted over %s of %s registered arms. %s arm(s) are DECLARED BUT NOT COVERED; a green run here does not speak for them.\n' \
+    "$B022_ACTIVE_ARMS" "$((B022_ACTIVE_ARMS + B022_PENDING_ARMS))" "$B022_PENDING_ARMS"
+  for b022_arm in "${B022_ARMS[@]}"; do
+    b022_status="${b022_arm##*|}"
+    case "$b022_status" in
+      active) ;;
+      *) /usr/bin/printf 'RESIDUAL: BLOCK-022 arm `%s` not covered -- %s.\n' \
+           "${b022_arm%%|*}" "${b022_status#pending:}" ;;
+    esac
+  done
+fi
+
+# --- domain-boundary control (MANDATORY) ----------------------------------
+# The arms' operand domains differ BY DESIGN and must keep differing. These
+# operands are outside the shared `.sh` domain: the source arm adjudicates them
+# through its `*.bash` and `/*` alternatives, the interpreter arm does not.
+# Asserting the DIFFERENCE is what stops the parity rows above from being
+# satisfiable by unifying the two filters -- the exact edit the shipped comment
+# on the source arm forbids. If someone narrows source to `*.sh`, the first pair
+# goes red; if someone widens interp to `/*`, the second pair goes red.
+test_case "BLOCK-022 domain boundary: .bash operand blocks on source (outside interp's domain)" \
+  "$(bash_payload 'echo $(cd /tmp && source /tmp/evil.bash)')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 domain boundary: .bash operand allows on interp (interp keeps its *.sh domain)" \
+  "$(bash_payload 'echo $(cd /tmp && bash /tmp/evil.bash)')" \
+  0
+
+test_case "BLOCK-022 domain boundary: extensionless absolute blocks on source (/* arm)" \
+  "$(bash_payload 'echo $(cd /tmp && source /tmp/evil)')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 domain boundary: extensionless absolute allows on interp (no *.sh match)" \
+  "$(bash_payload 'echo $(cd /tmp && bash /tmp/evil)')" \
+  0
+
+# --- normalization unit-shape controls -------------------------------------
+# Trailing punctuation must be stripped as a RUN, not one character. A single
+# strip was the whole defect, so a case with TWO trailing punctuation
+# characters is the one that distinguishes a run-strip from an off-by-one fix.
+test_case "BLOCK-022 trailing run: two trailing punctuation chars still block" \
+  "$(bash_payload 'echo "$(cd /tmp && bash /tmp/evil.sh)"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 trailing run control: two trailing punctuation chars on an allowlisted path allow" \
+  "$(bash_payload 'echo "$(cd /tmp && bash core/deploy/deploy.sh)"')" \
+  0
+
+# Stripping must never manufacture an allow: a variable-bearing path keeps its
+# fail-closed verdict once the punctuation is gone, rather than normalizing into
+# something the filter skips.
+test_case "BLOCK-022 trailing run: variable-bearing path with trailing punctuation still fails closed" \
+  "$(bash_payload 'echo "$(cd /tmp && bash $W/evil.sh)"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ==========================================================================
 # BLOCK-022 command-position invariance under assignment prefixes
 # ==========================================================================
 #

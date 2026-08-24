@@ -281,18 +281,59 @@ is_script_allowlisted() {
   return 1
 }
 
-# Strip one leading and one trailing quote from a token, independently.
-# Quoting a path is ordinary usage, and an unstripped quote leaves the token not
-# ending in `.sh` — which silently disabled BLOCK-DESTRUCTIVE-022 altogether
-# (`bash "/tmp/evil.sh"` matched nothing and fell through to allow). The two ends
-# are stripped independently so a half-quoted token left by segment splitting
-# (`/tmp/evil.sh"`) normalizes too. A path legitimately containing a quote
-# normalizes to a string that will not be in the allowlist — i.e. it fails toward
-# blocking, never toward allowing.
+# Strip a leading quote and a TRAILING RUN of shell syntax characters from a
+# token. Quoting a path is ordinary usage, and an unstripped quote leaves the
+# token not ending in `.sh` — which silently disabled BLOCK-DESTRUCTIVE-022
+# altogether (`bash "/tmp/evil.sh"` matched nothing and fell through to allow).
+# A half-quoted token left by segment splitting (`/tmp/evil.sh"`) normalizes for
+# the same reason.
+#
+# WHY THE TRAILING SIDE IS A RUN AND NOT ONE CHARACTER. Stripping exactly one
+# trailing quote left a second defect open. A token that is the TAIL of a
+# command substitution carries the substitution's own closing punctuation, so
+# `echo "$(cd /tmp && bash /tmp/evil.sh)"` presents the operand as
+# `/tmp/evil.sh)"` — one strip leaves `/tmp/evil.sh)`, which the interpreter
+# arm's SUFFIX-anchored `*.sh` filter does not match. The matcher fired and then
+# skipped, and check_script_target was never called. The `source`/`.` arm
+# survived the identical input only because its filter carries PREFIX
+# alternatives (`/*`, `./*`, `../*`) that trailing punctuation does not disturb
+# — a measured asymmetry between two arms of one rule, not a design.
+#
+# WHY NORMALIZATION AND NOT A FILTER CHANGE. Unifying the two arms' operand
+# filters is forbidden in both directions by the comment on the source arm
+# below: narrowing drops `/*`, `~/*` and `*.bash` coverage, and widening the
+# interpreter arm opens a false-positive surface with no defect behind it.
+# Normalizing here fixes the asymmetry ahead of BOTH filters and leaves each
+# arm's declared operand domain exactly as it was.
+#
+# THE STRIPPED SET IS SHELL SYNTAX, NOT "PUNCTUATION". It is the POSIX shell
+# metacharacters `| & ; < > ( )` plus the three quoting characters `" ' \``.
+# Every one of them, appearing UNESCAPED in raw argv, is syntax rather than part
+# of a filename — a filename containing one must be quoted or escaped, and that
+# spelling carries a quote character this function already handles. Characters
+# that ARE legal unquoted in a word (`{ } [ ] , . -`) are deliberately NOT
+# stripped: removing those could rewrite one real path into a different real
+# path, which is the one direction that could manufacture an allow.
+#
+# DIRECTION OF ERROR. Stripping only ever makes a token MORE likely to reach the
+# allowlist, never more likely to bypass it: a token that no longer matches an
+# operand filter is skipped ENTIRELY (allowed without adjudication), whereas a
+# normalized token is compared against the allowlist and denied when absent. A
+# path legitimately containing one of these characters normalizes to a string
+# that will not be in the allowlist — i.e. it fails toward blocking.
+#
+# The leading side stays a single quote character. Every command-substitution
+# shape puts the substitution's OPENING punctuation on the verb token, not on
+# the operand, so there is no measured leading-run defect — and widening a
+# matcher with no defect behind it is the same trade the source-arm comment
+# below declines.
 normalize_script_token() {
-  local t="$1"
+  local t="$1" prev=""
   t="${t#[\"\']}"
-  t="${t%[\"\']}"
+  while [ "$t" != "$prev" ]; do
+    prev="$t"
+    t="${t%[\"\'\`\(\)\;\&\|\<\>]}"
+  done
   "$PRINTF" '%s' "$t"
 }
 
