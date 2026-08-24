@@ -283,6 +283,12 @@ Enforced pre-merge by the skill-package-freshness CI gate. The rebuild lands in 
 
 **Correction 1 — `deploy.sh` has four in-release writers, not two or three.** The Stage-4 map recorded two, corrected at D-6 back to three (#4734, #4992, #4720). #4931's design then landed a Check 71 block in the same file, making four. The hunks remain line-disjoint and marker-anchored, so conflicts should be textual rather than semantic — but a four-writer file under P0 serial execution is the release's largest sequencing constraint after the blast-radius pair, and the build order above already separates the four writers by three positions or more.
 
+**Landed hunks in `deploy.sh`, recorded as each writer lands** — so the three writers after each entry can confirm line-disjointness against measured lines rather than against the plan's estimate.
+
+| Writer | Position | Landed region (post-edit) | Anchor |
+|---|---|---|---|
+| **#4720** | 2 | **`10638`–`10687`**, one contiguous block (pre-edit `10638`–`10654`; +33 lines) | Inside the Check-56 M3 leg, entirely AFTER the `C56-EMIT-END` sentinel at `:10615`, so the extraction-test region is untouched. Anchored on the `CAVEAT:` comment text and on the existing `awk -F'\t' '$1=="…"'` reads, never on a line number. |
+
 **Correction 2 — `gate-efficacy-standard.md` is a two-writer surface.** #4440's design added it at DEC-5 as a spoke-level expansion; #5252 already carried it as its sole non-workflow row. Both edits are additive and target different rows — #4440 appends to the falsification column of one gate's row, #5252 amends register membership. The overlap was classified weak and logged by #4440's spoke rather than escalated. **It is recorded here because the Stage-4 Contention Map does not carry it**, and the build order places #4440 at position 7 and #5252 at position 8 — adjacent, which is the sequencing that makes an additive collision cheapest to resolve.
 
 **Cross-PR Overlap Audit — baseline `8dc00db1`.**
@@ -361,6 +367,26 @@ Populated per Engineering chip as each card lands, in the order of § Implementa
 | Full `deploy.sh --check` | regression | 4 FAIL rows, **none in this change set** — a stale package for a skill this card does not touch, release-body drift across previously logged releases, and a count-structure finding in a file from an earlier release. Probe: 0 of 6 changed paths intersect any FAIL subject; control arm fires at 3 for the subject this card does own. |
 
 **AC-4 resolves via its second limb.** No committed-scripts lint arm ships. The population is measured at zero, and a new executable would carry an allowlist row and CI wiring for no yield. The flip trigger is recorded in ADR-142: the first live occurrence of the forbidden form in a committed script re-opens the decision.
+
+---
+
+#### #4720 — transport truncation · position 2 · landed `bee56cdf`
+
+| Check | Family | Observed |
+|---|---|---|
+| Self-test suite | per-issue (AC-3) | **104 legs, 104 green.** Fourteen are this card's: T-S1 / T-S1c / T-S1c2 / T-S2 / T-S3 / T-S4 / T-S4c / T-S5 / T-S6 / T-S7 / T-S8-ctrl / T-S9 / T-S11 / T-S11c, plus the rc-bearing T-S10 / T-S10b / T-S10c. |
+| Mutation kill-map, both directions | per-issue (AC-3) | **11 mutations, each run against the ASSEMBLED suite**, not against the function in isolation. Every one reddens the legs its row names, and in all 11 the suite stayed intact at 104 rendered legs — so a red leg is attributable to the mutation rather than to an aborted run. The two rows this release turns on: **restoring `_gh` at the call site reddens exactly `{T-S10, T-S10b}` and nothing else** — every rc-0 arm unchanged, which is what makes it attributable to the one token; **dropping the `ndocs == 0` guard reddens `{T-S8-ctrl, T-S10}`**. |
+| FM-2 (`max(totalCount)`) | per-issue (operator-folded) | **Fixed and covered.** T-S11 drives a two-document stream whose second page reports a HIGHER `totalCount`; it reads `fetched` under first-page binding and `truncated` under `max()`. Restoring `max()` reddens **T-S11 alone**. Near-miss control T-S11c (a genuinely short walk) stays **truncated** under both, so T-S11 is not satisfiable by a mutation that reads `fetched` everywhere. |
+| CD2-2 / AC2-5 (degraded path emits) | per-issue | **Discharged, measured on stdout rather than asserted from code shape.** The degraded `--leg M3` path now emits **2 rows** (`M3_SCAN degraded - - -`, `M4_SCAN not-run - - scope:m3-only`) and then exits 3; **no `COUNT_M3*` row is emitted** (PV-7b absence-not-zero). Control arm over the SAME code path with a measured walk emits **4 rows** including `M3_SCAN fetched 1 1 1` and both `COUNT_M3*` rows, and exits 0 — so neither arm is vacuous and the difference is the measurement state, not the path. |
+| Emit-on-every-path | per-issue | Fixture run emits `M3_SCAN fixture - - - scope:fixture`; `--leg M1` emits `M3_SCAN not-run - - - scope:leg-M1` with no M3 rows and no counters. |
+| Doc-link integrity | integration | `deploy.sh --check` Check 14 — **OK, no broken cross-refs in scope.** |
+| PV-7a Register B spelling (Check 69) | integration (CIAC-1) | **OK, and the check is ENFORCING, not warn-mode.** 1,770 tracked files enumerated, 13 carrying a token rendering, control 81 sanctioned occurrences observed non-zero, 0 unsanctioned. The `DEGRADED` token this card adds to `deploy.sh` is the sanctioned spelling. |
+| Runtime suite | self-verification | **Rows 2 and 4 selected** (`core/deploy/**` and `core/deploy/tools/*.py`). Row 4 run: `check-selftest-coverage.py --run` — **ARM A PASSED, 62 of 62** discovered tools, and the modified tool is IN that set with its 104 legs green (verified by name in the run log, not assumed). Row 2 (`install-tests.yml` deploy steps) not run locally — a CI-hosted job; it gates pre-merge. |
+| Full `deploy.sh --check` | regression | **4 issues = 2 FAIL + 2 DRIFT, none in this change set.** FAIL: a stale `release-planner` package (that skill is unchanged on this branch — `git log 8dc00db1..HEAD` over its tree is empty) and a `count-structure` finding in `core/references/reference/operator-instance-home-and-isolation-key.md`. DRIFT: `pmo-qa-auditor` installed-copy drift, which is position 1's change not yet deployed to the operator install — operator-instance, never CI. Probe: **0 of 3 changed paths intersect any FAIL subject**; sensitivity control fires at 1 on a seeded row naming this card's file, specificity control returns 0 on a near-miss filename. |
+
+**Accepted Verification 2 and 3 are NOT satisfied and are owed to Stage 7.** The run above could not exercise the new walk live: the GitHub GraphQL quota was exhausted (0 remaining) for the whole session, and **five** gh-dependent checks reported input failure — including Check 56 itself. The live `M3_SCAN` row reading `fetched`, and `matched` exceeding 1,000, are the two assertions that state the card's whole claim as a number the run emits, and neither has been observed. Stage 7 must run them once quota recovers; a green self-test is not a substitute.
+
+**One live observation the rate limit handed us for free.** Check 56's exit 3 came from `fetch_milestones` — the FIRST raise-on-rc fetcher — three calls before the stage-title walk was attempted. That is the empirical premise D-4720-B′ rests on, observed rather than argued: a genuine global input failure never reaches this fetcher, which is why a failure that DOES reach it is a per-leg measurement outage.
 
 ---
 
