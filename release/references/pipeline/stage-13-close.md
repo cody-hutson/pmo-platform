@@ -186,7 +186,7 @@ The flow-block stays embedded here (NOT centralized at `core/standards/_examples
 
 **Scaffold-independent completeness superset (Check 48).** Lane (2) gains a completeness umbrella over Check 32: `deploy.sh --check` **Check 48** iterates every `VERIFIED` `RELEASE_LOG` row and asserts the *complete* Step 4 output-set on main — NOTES presence + §3.2 note-content (delegating to `lint_release_corpus.py --check note-content`) + INDEX + DIGEST + CHANGELOG + `.version` + tag + Surface-1 Release + §5.1 body-drift (delegating to `check-release-body-drift.sh`) — re-implementing none of those engines. It is the scaffold-independent enforcement of the rigor-invariance principle (`hub-spoke-bridge.md` Procedure 1): the gate fires regardless of whether the close ran as a spoke, hub-direct, or via the Phase B chore-PR fallback, because it reads main's state rather than the execution path. Check 48 stays beside Check 32 (rather than folding into it) so Check 32's in-flight warn-mode shakedown — DEPLOYED-companion-presence — is undisturbed while Check 48 owns the VERIFIED-full-set-completeness contract; it inherits Check 32's LOG-row blind spot (a never-written LOG row is invisible — owned by the Step 4 table). Ships warn-mode-initial, cutover-anchored strictly after its introducing release's merge (reflexive-pipeline-loop discipline).
 
-*Gate status — **ARMED** (row cutover).* The row cutover ships as a committed default in `core/deploy/deploy.sh`, so Check 48 evaluates on every `deploy.sh --check` and every `close-completeness.yml` run with no second operator action — the committed-default convention, adopted because a literal awaiting a later stamping step can be forgotten, leaving a gate permanently dormant (which is exactly what happened to this gate between its introduction and its arming). Posture remains **warn** on both surfaces: the CI/gate surface reads `.github/close-completeness.enforce`, the lifecycle surface resolves `close-completeness.mode`; the flip-to-enforce threshold and the branch-protection step are recorded in that sentinel file. The **network** cutover — a separate sentinel governing the Surface-1 published-Release and §5.1 body-drift sub-assertions — **remains dormant**, so "armed" here means the row cutover only, and the closer should still verify those two surfaces by the Step 4 table rather than assuming Check 48 covered them.
+*Gate status — **ARMED** (row cutover).* The row cutover ships as a committed default in `core/deploy/deploy.sh`, so Check 48 evaluates on every `deploy.sh --check` and every `close-completeness.yml` run with no second operator action — the committed-default convention, adopted because a literal awaiting a later stamping step can be forgotten, leaving a gate permanently dormant (which is exactly what happened to this gate between its introduction and its arming). Posture remains **warn** on both surfaces: the CI/gate surface reads `.github/close-completeness.enforce`, the lifecycle surface resolves `close-completeness.mode`; the flip-to-enforce threshold and the branch-protection step are recorded in that sentinel file. The **network** cutover — the separate sentinel governing the Surface-1 published-Release and §5.1 body-drift sub-assertions — is **also ARMED**, at the committed `CLOSE_COMPLETENESS_RELEASE_CUTOFF` default in `core/deploy/deploy.sh`; setting it to `__none__` is the explicit re-dormant escape hatch. Both cutovers therefore evaluate on every `deploy.sh --check` and every `close-completeness.yml` run. Posture remains **warn** on both surfaces.
 
 *A8 cutover: The outcome-bound close-out completeness mandate applies to all releases going forward.*
 
@@ -338,8 +338,9 @@ Stage 13 — Close (per pipeline/stage-13-close.md — THIS FILE)
 │   ├── Phase B5.5 — Edit CHANGELOG.md: prepend ## [v<X.Y>] H2 per K-a-C 1.1.0 (Surface 2 NEW per Layer-1 dual-write)
 │   │                Idempotency: grep -qE "^## \[?v<X.Y>\]?[[:space:]]" (exact-version-match)
 │   │                Pre-CHANGELOG SKIP: if CHANGELOG.md absent at repo root, SKIP with PASS
-│   ├── Phase B5.6 — Verify Surface 1 exists: gh release view v<X.Y> exit 0
-│   │                Missing Surface 1 → operator routing (Mode F publish OR accept residual)
+│   ├── Phase B5.6 — Verify Surface 1 PROVENANCE (not existence): read phase 15.5's
+│   │                SURFACE1-STATE token. CREATED => Stage-12 omission (report, non-blocking);
+│   │                EDITED | NO-OP => Stage 12 emitted it (genuine pass)
 │   ├── Phase B5.7 — Edit .version: write .version = v<X.Y> (release-cut-owned version source-of-truth)
 │   │                Read by the SessionStart version-skew hook (notify-version-skew.sh)
 │   │                Idempotency: no-op if .version already == v<X.Y>
@@ -357,7 +358,7 @@ Stage 13 — Close (per pipeline/stage-13-close.md — THIS FILE)
         ✓ Milestone state closed                    (Phase C this stage)
         ✓ RELEASE_LOG row at VERIFIED               (Phase B1 this stage — Surface 3)
         ✓ All release sub-issues closed             (auto-close from release PR)
-        ✓ GitHub Release published                  (Phase B5.6 — Surface 1 NEW)
+        ✓ GitHub Release published                  (Stage 12 Phase B5.5 emits; Stage 13 phase 15.5 backstops)
         ✓ CHANGELOG.md entry present                (Phase B5.5 — Surface 2 NEW; N/A pre-CHANGELOG-init)
         ✓ .version stamped to vX.Y                  (Phase B5.7 — release-cut-owned; N/A for version-less)
 ```
@@ -414,38 +415,52 @@ Classification of the four ledgers (and the two regions *within* `RELEASE_LOG.md
 
 **Reversibility (Surface 2):** CHEAP / HIGH confidence — `git revert <Stage-13-chore-PR-SHA>` reverts the CHANGELOG.md prepend atomically alongside INDEX/DIGEST/NOTES + the RELEASE_LOG VERIFIED transition. The atomic landing matches the existing chore-PR rollback semantics; no special revert path needed.
 
-**Phase B5.6 — Surface 1 verification (cross-stage check):** Phase B5.5 (CHANGELOG append, Surface 2) commits in the chore PR. Before the chore PR merge step, Stage 13 spoke verifies Surface 1 (GitHub Release for v<X.Y>) exists per the Stage 12 Phase B5.5 emit, AND that the live posted Release is well-formed on the two surfaces Check 20 cannot see — the posted title composition and the published body's link resolvability:
+**Phase B5.6 — Surface 1 provenance verification (cross-stage check):** Stage 12 Phase B5.5 owns the Surface-1 emit. `automated-closeout.sh` phase 15.5 is an idempotent backstop that converges Surface 1 when Stage 12 did not. By the time this phase runs, Surface 1 is present either way — so an **existence** check here is vacuous and this phase does not perform one. It verifies **provenance**: which path produced Surface 1, read from the token the backstop recorded before it acted. It then verifies that the live posted Release is well-formed on the two surfaces Check 20 cannot see — the posted title composition and the published body's link resolvability:
 
 ```bash
-# Verify Surface 1 (GitHub Release) exists per Stage 12 Phase B5.5
-if ! gh release view "v<X.Y>" --repo {REPO} >/dev/null 2>&1; then
-  echo "WARN — Surface 1 (GitHub Release v<X.Y>) not present; Stage 12 Phase B5.5 may not have completed"
-  echo "Routing options: (A) invoke release-executor Mode F to publish Surface 1 standalone; (B) Tier 2 [SCOPE CHANGE] per release-process.md § Inter-Stage Feedback Protocol"
-  # Operator decision required before proceeding
-else
-  # Posted-surface verify — reads the LIVE Release page, distinct from the
-  # in-repo Check 20 lint. Catches the defects invisible to a structural lint:
-  # a bare-H1 (un-versioned) posted title, and a repo-relative body link that
-  # resolves in the file tree but 404s on releases/tag/vX.Y.
-  # (1) Posted TITLE is versioned vX.Y — <headline>
-  gh release view "v<X.Y>" --repo {REPO} --json name --jq '.name' \
-    | grep -qE '^v[0-9]+\.[0-9]+([a-z]|-[0-9a-z][-0-9a-z]*)? — .' \
-    || echo "BLOCK — posted Release TITLE is not versioned (expected 'vX.Y — <headline>', not the bare H1)"
-  # (2) Posted BODY has no repo-relative link (would 404 on the Release page)
-  gh release view "v<X.Y>" --repo {REPO} --json body --jq '.body' \
-    | grep -nE '\]\((\.\.?/|release/|core/|docs/)' \
-    && echo "BLOCK — posted Release BODY has the repo-relative link(s) above (404 on the Release page); re-emit from the corrected canonical note" \
-    || true   # no match = pass
-  # (3) Posted BODY == frontmatter-stripped in-repo note (release-notes-standard.md §5.1
-  # enforced-transform invariant). Single source of the equality logic; detective-only
-  # (it never re-emits). Exit 0 = match; 1 = DRIFT (re-emit per §5.6); 2 = N/A (gh offline);
-  # 3 = Surface 1 / note absent (the existence branch above owns that case).
-  REPO={REPO} ./release/tools/check-release-body-drift.sh "v<X.Y>" \
-    || echo "WARN — Surface 1 body drifted from the in-repo note (§5.1); re-emit the body via the §5.6 deterministic transform (gh release edit --notes \"\$(sed '1,/^---\$/d; 1,/^---\$/d' ...)\") or release-executor Mode F"
-fi
+# Read phase 15.5's recorded state machine path from the close-out record.
+# The token is written by the producer BEFORE it mutates anything (the State-0/1/2
+# discrimination is what routes the state machine), so it is a witness record, not
+# a self-grade.
+S1_STATE="$(printf '%s' "$CLOSEOUT_PHASE_DETAIL_publish_github_release" \
+  | sed -n 's/.*SURFACE1-STATE=\([A-Z-]*\).*/\1/p')"
+case "$S1_STATE" in
+  EDITED|NO-OP)
+    echo "PASS — Surface 1 was present before close-out ran; Stage 12 Phase B5.5 emitted it (SURFACE1-STATE=$S1_STATE)"
+    ;;
+  CREATED)
+    echo "DEFECT — Stage 12 Phase B5.5 did NOT emit Surface 1; the Stage-13 backstop created it (SURFACE1-STATE=CREATED)."
+    echo "This is a Stage-12 omission, not the normal path. Surface 1 IS present — no publish action is required."
+    echo "Route: Tier 2 [SCOPE CHANGE] per release-process.md § Inter-Stage Feedback Protocol. Do not treat the backstop as the remedy."
+    ;;
+  *)
+    echo "UNVERIFIED — no SURFACE1-STATE token in the close-out record for v<X.Y>; provenance not established (never read as PASS)."
+    ;;
+esac
+
+# Posted-surface verify — reads the LIVE Release page, distinct from the
+# in-repo Check 20 lint. Catches the defects invisible to a structural lint:
+# a bare-H1 (un-versioned) posted title, and a repo-relative body link that
+# resolves in the file tree but 404s on releases/tag/vX.Y.
+# (1) Posted TITLE is versioned vX.Y — <headline>
+gh release view "v<X.Y>" --repo {REPO} --json name --jq '.name' \
+  | grep -qE '^v[0-9]+\.[0-9]+([a-z]|-[0-9a-z][-0-9a-z]*)? — .' \
+  || echo "BLOCK — posted Release TITLE is not versioned (expected 'vX.Y — <headline>', not the bare H1)"
+# (2) Posted BODY has no repo-relative link (would 404 on the Release page)
+gh release view "v<X.Y>" --repo {REPO} --json body --jq '.body' \
+  | grep -nE '\]\((\.\.?/|release/|core/|docs/)' \
+  && echo "BLOCK — posted Release BODY has the repo-relative link(s) above (404 on the Release page); re-emit from the corrected canonical note" \
+  || true   # no match = pass
+# (3) Posted BODY == frontmatter-stripped in-repo note (release-notes-standard.md §5.1
+# enforced-transform invariant). Single source of the equality logic; detective-only
+# (it never re-emits). Exit 0 = match; 1 = DRIFT (re-emit per §5.6); 2 = N/A (gh offline);
+# 3 = Surface 1 / note absent — unreachable on the mandated path, since phase 15.5 has
+# already converged Surface 1 by the time this runs.
+REPO={REPO} ./release/tools/check-release-body-drift.sh "v<X.Y>" \
+  || echo "WARN — Surface 1 body drifted from the in-repo note (§5.1); re-emit the body via the §5.6 deterministic transform (gh release edit --notes \"\$(sed '1,/^---\$/d; 1,/^---\$/d' ...)\") or release-executor Mode F"
 ```
 
-Surface 1 verification at Stage 13 catches partial-deploy scenarios where Stage 12 Phase B5.5 failed silently or was skipped. The existence check is non-blocking by default — operator decides routing (publish via Mode F, or accept residual + bundle into next release); when Surface 1 is missing, Stage 13 chore PR still proceeds with Surfaces 2+3 and Surface 1 backfill is a separate operator action via Mode F. The three posted-surface assertions (title-format, body-link resolvability, and body-source-of-record drift) are the posted-surface companion to the in-repo whole-body link-purity lint (release-notes-standard.md §3.2 check 13) — they read the LIVE Release page, which the structural Check 20 lint cannot see. The body-drift assertion (3) enforces the §5.1 invariant that the published body is the deterministic transform of the in-repo note; it shares its equality logic with `deploy.sh` Check 47 via the single `check-release-body-drift.sh` tool and is detective-only (it flags, never re-emits). A failure blocks closure: the canonical note is corrected first, then all surfaces re-emit from it per §5.6. Cutover: applies to releases entering Stage 13 going forward; the introducing release closes under the pre-merge runbook (reflexive-pipeline-loop discipline).
+Surface 1 provenance verification is the check Stage 13 can structurally perform. The prior form asked whether Surface 1 existed and routed a missing Surface 1 to `release-executor` Mode F as a normal remedy — a question that is vacuously true after the backstop, and a remedy that reframed a Stage-12 omission as routine Stage-13 work. **A `CREATED` verdict is reported as a defect and is deliberately non-blocking**: the release's outputs are complete, and blocking a close on an upstream omission the backstop already repaired is the reflexive-pipeline-loop pathology this file's own exit-2/3 rationale names. Absence of the token resolves `UNVERIFIED`, never PASS — a provenance that could not be read establishes nothing. The three posted-surface assertions (title-format, body-link resolvability, and body-source-of-record drift) are the posted-surface companion to the in-repo whole-body link-purity lint (release-notes-standard.md §3.2 check 13) — they read the LIVE Release page, which the structural Check 20 lint cannot see. The body-drift assertion (3) enforces the §5.1 invariant that the published body is the deterministic transform of the in-repo note; it shares its equality logic with `deploy.sh` Check 47 via the single `check-release-body-drift.sh` tool and is detective-only (it flags, never re-emits). A failure blocks closure: the canonical note is corrected first, then all surfaces re-emit from it per §5.6. Cutover: applies to releases entering Stage 13 going forward; the introducing release closes under the pre-merge runbook (reflexive-pipeline-loop discipline).
 
 **Phase B5.7 — `.version` stamp (release-cut-owned version source-of-truth):** The Stage 13 chore PR commit includes a write to the repo-root `.version` file, stamping it to the shipped version (`.version = v<X.Y>`). `.version` is the platform's version source-of-truth: the SessionStart version-skew hook ([`core/hooks/notify-version-skew.sh`](../../../core/hooks/notify-version-skew.sh)) reads it and compares against the latest published GitHub Release; `update.sh` Phase 5b and `setup-workspace.sh` install_hooks propagate it to the deployed `<ws>/.claude/.version` snapshot. The bump has no other owner in the pipeline — Stage 12 Phase B3 owns the git *tag*, not the `.version` *file* — so absent this phase the file freezes at a stale value and the version-skew banner reports a perpetual "update available" no `update.sh` can clear. Owned by `automated-closeout.sh` `phase_bump_version`: it writes atomically (temp + `mv`), is **idempotent** (no-op when `.version` already equals `v<X.Y>`), and **SKIPs with PASS** for a *version-less* / non-`vX.Y` release — there is nothing to stamp, so the file is intentionally left untouched and the SKIP is recorded in the close-out report (auditable, not silent). **Cutover / grandfather:** applies to releases entering Stage 13 strictly AFTER this phase's introducing-release merge SHA; the introducing release itself is exempt (reflexive-pipeline-loop discipline — it is version-less), and `.version` inside historical tags is immutable accepted-residual (only HEAD/`main` is correctable). **Reversibility:** CHEAP / HIGH — the `.version` write reverts atomically with the rest of the Stage 13 chore PR via `git revert <Stage-13-chore-PR-SHA>`. Drift backstop: `deploy.sh --check` Check 39 anchors `.version` against the latest published GitHub Release (warn-mode-initial).
 
