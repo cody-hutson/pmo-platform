@@ -30,7 +30,13 @@ core/deploy/tools/build-skill-packages.sh  # no --self-test dispatch; the P3 she
 # --- ::warning:: naming them on every run for exactly that reason. Each is a
 # --- hermeticity defect in the tool, owned by that tool's card — the disposition is
 # --- "fix the tool", never "narrow the scope", and it stays visible until it is fixed.
-release/tools/cleanup-orphan-state.sh  # F4 non-hermetic: workspace_boundary_check runs unconditionally after arg parsing and before the --self-test dispatch, so the suite is unreachable anywhere outside the operator workspace root. Measured on ubuntu-latest at first enablement: "ERROR: invoked from /home/runner/work/pmo-platform/pmo-platform - outside workspace /home/runner/Claude (defense-in-depth boundary)", exit 2. NOT OS-bound, so a "# selftest-runner:" declaration would be a false claim - the macOS runner fails identically. Remediation is at the tool (exempt the hermetic fixture run from the destructive-scope guard, or resolve the root from the checkout), owned by that tool's card; deepening the checkout cannot reach it.
+# --- (No F4 entries currently. The section header and its doctrine above are
+# --- RETAINED deliberately: they document the class, not any one instance, and the
+# --- next F4 candidate needs the written boundary. parse_exclusions ignores
+# --- "#"-leading lines, so an empty section is well-formed and costs nothing.
+# --- Last F4 entry retired: release/tools/cleanup-orphan-state.sh, whose guard was
+# --- widened to accept the script's own checkout root rather than exempting the
+# --- fixture from the destructive-scope guard. See release/ADRs/ADR-142.)
 
 # --- release/tools/tests/** and its siblings: OUT of the --self-test discovery scope
 # --- by design (FORK 2, decided at Stage 5). These are bare-invocation suites, not

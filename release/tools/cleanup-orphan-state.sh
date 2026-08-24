@@ -128,6 +128,13 @@ export PATH="/usr/bin:/bin"
 
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
+# Physically-resolved twin of REPO_ROOT, consumed ONLY by workspace_boundary_check.
+# The guard compares against `pwd -P`, so a LOGICAL root silently fails to match
+# behind a symlinked checkout — the macOS /tmp → /private/tmp case this file's own
+# physical_path() documents, and which physical_path() itself cannot serve here
+# because it is defined further down. REPO_ROOT is left byte-identical so every
+# existing $REPO_ROOT consumer is untouched.
+REPO_ROOT_PHYS="$( cd "$SCRIPT_DIR/../.." && pwd -P )"
 
 # WORKSPACE_ROOT resolution (env-override → operator.toml → default).
 # Operators can override by exporting WORKSPACE_ROOT or CLAUDE_WORKSPACE_ROOT.
@@ -209,12 +216,27 @@ usage() {
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
+# Defense-in-depth boundary. Accepts a UNION of two roots:
+#   (1) $WORKSPACE_ROOT   — the operator workspace, resolved by the cascade above;
+#   (2) $REPO_ROOT_PHYS   — the script's own physical checkout, so the tool stays
+#                           reachable on a CI runner or any clone where
+#                           WORKSPACE_ROOT resolves somewhere else entirely.
+# Arm (2) is ADDITIVE: nothing accepted before it existed can now be rejected, so
+# the Stage-13 automated-closeout invocation and every operator path are unaffected
+# by construction. It admits no unrelated clone either — REPO_ROOT_PHYS derives from
+# $0, not from the environment.
+# Matching is SEPARATOR-ANCHORED. The former bare `"$ROOT"*` prefix also matched a
+# SIBLING directory whose name merely extends the root (…/Claude-scratch passed for
+# root …/Claude); a second arm would have doubled that surface, so both arms match
+# the root exactly or the root followed by "/".
+# See release/ADRs/ADR-142 for why the guard is widened rather than exempted.
 workspace_boundary_check() {
   local cwd
   cwd="$(pwd -P)"
   case "$cwd" in
-    "$WORKSPACE_ROOT"*) return 0 ;;
-    *) echo "ERROR: invoked from $cwd — outside workspace $WORKSPACE_ROOT (defense-in-depth boundary)" >&2; exit 2 ;;
+    "$WORKSPACE_ROOT"|"$WORKSPACE_ROOT"/*) return 0 ;;
+    "$REPO_ROOT_PHYS"|"$REPO_ROOT_PHYS"/*) return 0 ;;
+    *) echo "ERROR: invoked from $cwd — outside workspace $WORKSPACE_ROOT and outside checkout $REPO_ROOT_PHYS (defense-in-depth boundary)" >&2; exit 2 ;;
   esac
 }
 
@@ -1902,6 +1924,42 @@ verify_apply() {
 
 # ─── Self-test ───────────────────────────────────────────────────────────────
 
+# ── SKIP ledger (#4913) ──
+# A green self-test that SKIPPED half its checks is indistinguishable, in a CI log,
+# from a green self-test that ran all of them — which is the very failure class this
+# suite exists to catch, one level up. Several checks gate on ambient state that a
+# shallow PR checkout does not have (the origin/main remote-tracking ref, lsof, gh),
+# so a runner can legitimately reach "self-test: PASS" having exercised a fraction of
+# the suite. The ledger does not make those SKIPs go away; it makes a shallow-green
+# run DISTINGUISHABLE from a complete-green one, and it is the evidence a future
+# hermetic-fixture rewrite would be sized from.
+#
+# Counting invariant: at most ONE entry can be recorded per check, so the ledger can
+# never exceed its denominator. Every recording site either returns immediately or
+# returns after its cleanup, and the only two sites that do not end their check
+# (selftest_verify_and_prune) are mutually exclusive branches of a single if/else.
+SELFTEST_CHECK_COUNT=16
+SELFTEST_SKIPS=()
+
+# Records a check-level SKIP and emits the historical message shape VERBATIM:
+# `self-test: <label> SKIPPED — <reason>`. Output is unchanged by construction, so
+# no existing consumer of these lines can regress.
+selftest_skip() {
+  local label="$1"; shift
+  SELFTEST_SKIPS+=("${label} — $*")
+  echo "self-test: ${label} SKIPPED — $*" >&2
+}
+
+# Prints the ledger immediately before the terminal verdict.
+selftest_skip_ledger() {
+  local n="${#SELFTEST_SKIPS[@]}" s
+  echo "self-test: SKIP ledger — ${n} of ${SELFTEST_CHECK_COUNT} checks SKIPPED" >&2
+  for s in "${SELFTEST_SKIPS[@]:-}"; do
+    [[ -z "$s" ]] && continue
+    echo "self-test:   SKIPPED ${s}" >&2
+  done
+}
+
 # Apply-path regression guard. Reproduces the v1.02 defect class in miniature: an
 # isolated, fully-merged throwaway branch is run through the REAL apply path and must
 # come back actually DELETED, and the emitters must return 0 in --apply mode (the
@@ -1912,12 +1970,12 @@ selftest_apply_path() {
   local base tmp
   base=$(git rev-parse --verify --quiet HEAD 2>/dev/null || true)
   if [[ -z "$base" ]]; then
-    echo "self-test: apply-path check SKIPPED — no HEAD commit to branch from" >&2
+    selftest_skip "apply-path check" "no HEAD commit to branch from"
     return 0
   fi
   tmp="cleanup-selftest/orphan-$$"   # PID-scoped; merged into HEAD so `git branch -d` (non-force) deletes it
   if ! git branch "$tmp" "$base" >/dev/null 2>&1; then
-    echo "self-test: apply-path check SKIPPED — could not create throwaway branch '$tmp'" >&2
+    selftest_skip "apply-path check" "could not create throwaway branch '$tmp'"
     return 0
   fi
 
@@ -1964,11 +2022,11 @@ selftest_verify_and_prune() {
   # ── AC4: survivor reclassification ──
   base=$(git rev-parse --verify --quiet HEAD 2>/dev/null || true)
   if [[ -z "$base" ]]; then
-    echo "self-test: verify-path check SKIPPED — no HEAD commit to branch from" >&2
+    selftest_skip "verify-path check" "no HEAD commit to branch from"
   else
     tmp="cleanup-selftest/survivor-$$"
     if ! git branch "$tmp" "$base" >/dev/null 2>&1; then
-      echo "self-test: verify-path check SKIPPED — could not create throwaway branch '$tmp'" >&2
+      selftest_skip "verify-path check" "could not create throwaway branch '$tmp'"
     else
       # Seed a candidate the apply phase CLAIMS it removed, but leave the branch in place.
       LOCAL_BRANCH_CANDIDATES=("${tmp}"$'\t'"0"$'\t'"selftest"$'\t'""$'\t'"(none)"$'\t'"REMOVED")
@@ -2020,10 +2078,10 @@ selftest_self_guard() {
   wt="${REPO_ROOT}/.claude/worktrees/${slug}"
   base=$(git rev-parse --verify --quiet HEAD 2>/dev/null || true)
   if [[ -z "$base" ]]; then
-    echo "self-test: SELF-guard check SKIPPED — no HEAD commit" >&2; return 0
+    selftest_skip "SELF-guard check" "no HEAD commit"; return 0
   fi
   if ! git worktree add -b "$branch" "$wt" "$base" >/dev/null 2>&1; then
-    echo "self-test: SELF-guard check SKIPPED — could not create throwaway worktree" >&2; return 0
+    selftest_skip "SELF-guard check" "could not create throwaway worktree"; return 0
   fi
 
   out_inside=$(cd "$wt" && "$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
@@ -2064,7 +2122,7 @@ selftest_self_guard() {
 selftest_liveness_gate() {
   resolve_lsof_bin
   if [[ -z "$LSOF_BIN" ]]; then
-    echo "self-test: liveness check SKIPPED — lsof not found (runtime is fail-closed on this host)" >&2
+    selftest_skip "liveness check" "lsof not found (runtime is fail-closed on this host)"
     return 0
   fi
   ensure_liveness_map
@@ -2088,7 +2146,7 @@ selftest_liveness_gate() {
   wt="${REPO_ROOT}/.claude/worktrees/${slug}"
   base=$(git rev-parse --verify --quiet HEAD 2>/dev/null || true)
   if [[ -z "$base" ]] || ! git worktree add -b "$branch" "$wt" "$base" >/dev/null 2>&1; then
-    echo "self-test: liveness end-to-end SKIPPED — could not create throwaway worktree" >&2
+    selftest_skip "liveness end-to-end" "could not create throwaway worktree"
     return 0
   fi
 
@@ -2132,13 +2190,13 @@ selftest_liveness_gate() {
 # precedent).
 selftest_fixed_point() {
   if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
-    echo "self-test: fixed-point check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    selftest_skip "fixed-point check" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref"
     return 0
   fi
   local script_abs slug branch wt base out fail=0
   base=$(git merge-base HEAD "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
   if [[ -z "$base" ]]; then
-    echo "self-test: fixed-point check SKIPPED — no merge-base between HEAD and ${REMOTE_NAME}/${MAIN_BRANCH}" >&2
+    selftest_skip "fixed-point check" "no merge-base between HEAD and ${REMOTE_NAME}/${MAIN_BRANCH}"
     return 0
   fi
   script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
@@ -2146,11 +2204,11 @@ selftest_fixed_point() {
   branch="chore/${slug}"
   wt="${REPO_ROOT}/.claude/worktrees/${slug}"
   if ! git worktree add -b "$branch" "$wt" "$base" >/dev/null 2>&1; then
-    echo "self-test: fixed-point check SKIPPED — could not create throwaway worktree" >&2
+    selftest_skip "fixed-point check" "could not create throwaway worktree"
     return 0
   fi
   if is_protected "$branch"; then
-    echo "self-test: fixed-point check SKIPPED — operator protect-list matches '$branch'" >&2
+    selftest_skip "fixed-point check" "operator protect-list matches '$branch'"
     git worktree remove --force "$wt" >/dev/null 2>&1 || true
     git branch -D "$branch" >/dev/null 2>&1 || true
     return 0
@@ -2192,7 +2250,7 @@ selftest_fixed_point() {
 # documented Stage-4 defect. Net-zero teardown via git porcelain.
 selftest_version_prefix_release() {
   if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
-    echo "self-test: version-prefix check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    selftest_skip "version-prefix check" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref"
     return 0
   fi
   local script_abs slug branch out fail=0
@@ -2200,11 +2258,11 @@ selftest_version_prefix_release() {
   slug="cleanup-selftest-vp-$$"
   branch="release/v0.0-${slug}"            # version-prefixed: bare release/${slug}* would MISS this
   if is_protected "$branch"; then
-    echo "self-test: version-prefix check SKIPPED — operator protect-list matches '$branch'" >&2
+    selftest_skip "version-prefix check" "operator protect-list matches '$branch'"
     return 0
   fi
   if ! git branch "$branch" "${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
-    echo "self-test: version-prefix check SKIPPED — could not create throwaway branch '$branch'" >&2
+    selftest_skip "version-prefix check" "could not create throwaway branch '$branch'"
     return 0
   fi
 
@@ -2233,7 +2291,7 @@ selftest_version_prefix_release() {
 # and asserts the scope includes (1) and excludes (2). Net-zero teardown.
 selftest_stage_branch_release_close() {
   if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
-    echo "self-test: stage-branch check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    selftest_skip "stage-branch check" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref"
     return 0
   fi
   local script_abs slug wanted decoy out fail=0
@@ -2242,15 +2300,15 @@ selftest_stage_branch_release_close() {
   wanted="chore/v0.1-stage-12-cleanup-selftest-$$"
   decoy="chore/v0.11-stage-12-cleanup-selftest-$$"
   if is_protected "$wanted" || is_protected "$decoy"; then
-    echo "self-test: stage-branch check SKIPPED — operator protect-list matches a fixture branch" >&2
+    selftest_skip "stage-branch check" "operator protect-list matches a fixture branch"
     return 0
   fi
   if ! git branch "$wanted" "${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
-    echo "self-test: stage-branch check SKIPPED — could not create '$wanted'" >&2
+    selftest_skip "stage-branch check" "could not create '$wanted'"
     return 0
   fi
   if ! git branch "$decoy" "${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
-    echo "self-test: stage-branch check SKIPPED — could not create decoy '$decoy'" >&2
+    selftest_skip "stage-branch check" "could not create decoy '$decoy'"
     git branch -D "$wanted" >/dev/null 2>&1 || true
     return 0
   fi
@@ -2300,7 +2358,7 @@ selftest_stage_branch_release_close() {
 #       vanish. Net-zero teardown via git porcelain on every exit path.
 selftest_behind_head_apply() {
   if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
-    echo "self-test: behind-HEAD apply check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    selftest_skip "behind-HEAD apply check" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref"
     return 0
   fi
   local script_abs tip base slug merged_branch attach_wt inv_wt out fail=0
@@ -2308,7 +2366,7 @@ selftest_behind_head_apply() {
   tip=$(git rev-parse --verify --quiet "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
   base=$(git rev-parse --verify --quiet "${REMOTE_NAME}/${MAIN_BRANCH}~1" 2>/dev/null || true)
   if [[ -z "$tip" || -z "$base" ]]; then
-    echo "self-test: behind-HEAD apply check SKIPPED — ${REMOTE_NAME}/${MAIN_BRANCH} has no parent to anchor a behind-HEAD checkout" >&2
+    selftest_skip "behind-HEAD apply check" "${REMOTE_NAME}/${MAIN_BRANCH} has no parent to anchor a behind-HEAD checkout"
     return 0
   fi
 
@@ -2318,15 +2376,15 @@ selftest_behind_head_apply() {
   attach_wt="${REPO_ROOT}/.claude/worktrees/cleanup-selftest-bh-$$"
   inv_wt="${REPO_ROOT}/.claude/worktrees/cleanup-selftest-bhinv-$$"
   if is_protected "$merged_branch"; then
-    echo "self-test: behind-HEAD apply check SKIPPED — operator protect-list matches '$merged_branch'" >&2
+    selftest_skip "behind-HEAD apply check" "operator protect-list matches '$merged_branch'"
     return 0
   fi
   if ! git worktree add -b "$merged_branch" "$attach_wt" "$tip" >/dev/null 2>&1; then
-    echo "self-test: behind-HEAD apply check SKIPPED — could not create attached worktree at origin/main" >&2
+    selftest_skip "behind-HEAD apply check" "could not create attached worktree at origin/main"
     return 0
   fi
   if ! git worktree add --detach "$inv_wt" "$base" >/dev/null 2>&1; then
-    echo "self-test: behind-HEAD apply check SKIPPED — could not create behind-HEAD invoking worktree" >&2
+    selftest_skip "behind-HEAD apply check" "could not create behind-HEAD invoking worktree"
     git worktree remove --force "$attach_wt" >/dev/null 2>&1 || true
     git branch -D "$merged_branch" >/dev/null 2>&1 || true
     return 0
@@ -2391,18 +2449,18 @@ selftest_behind_head_apply() {
 # Without the guard the count is 2 (verified). Net-zero teardown via git porcelain.
 selftest_dedup_local_branches() {
   if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
-    echo "self-test: dedup check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    selftest_skip "dedup check" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref"
     return 0
   fi
   local script_abs branch out count fail=0
   script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
   branch="claude/cleanup-selftest-dedup-$$"     # claude/* so detect_spawn_task rows it; merged+unattached so detect_historical also rows it
   if is_protected "$branch"; then
-    echo "self-test: dedup check SKIPPED — operator protect-list matches '$branch'" >&2
+    selftest_skip "dedup check" "operator protect-list matches '$branch'"
     return 0
   fi
   if ! git branch "$branch" "${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
-    echo "self-test: dedup check SKIPPED — could not create throwaway branch '$branch'" >&2
+    selftest_skip "dedup check" "could not create throwaway branch '$branch'"
     return 0
   fi
 
@@ -2447,7 +2505,7 @@ selftest_pr_map_identity() {
     [[ "$n" -ge 8 ]] && break
   done
   if [[ "$n" -eq 0 ]]; then
-    echo "self-test: pr-map identity check SKIPPED — no local branches to sample" >&2
+    selftest_skip "pr-map identity check" "no local branches to sample"
     return 0
   fi
 
@@ -2528,14 +2586,14 @@ selftest_help_surface() {
 # Net-zero teardown via `git worktree remove --force`.
 selftest_agent_detached_sweep() {
   if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
-    echo "self-test: agent-* sweep check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    selftest_skip "agent-* sweep check" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref"
     return 0
   fi
   local script_abs base wt_rm wt_skip out fail=0
   script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
   base=$(git rev-parse --verify --quiet "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
   if [[ -z "$base" ]]; then
-    echo "self-test: agent-* sweep check SKIPPED — could not resolve ${REMOTE_NAME}/${MAIN_BRANCH}" >&2
+    selftest_skip "agent-* sweep check" "could not resolve ${REMOTE_NAME}/${MAIN_BRANCH}"
     return 0
   fi
   # Dir basename MUST be agent-* so the path-keyed *:::agent-* arm reaches it.
@@ -2544,17 +2602,17 @@ selftest_agent_detached_sweep() {
 
   # (1) detached at origin/main (0 ahead) — REMOVE-eligible
   if ! git worktree add --detach "$wt_rm" "$base" >/dev/null 2>&1; then
-    echo "self-test: agent-* sweep check SKIPPED — could not create detached worktree (1)" >&2
+    selftest_skip "agent-* sweep check" "could not create detached worktree (1)"
     return 0
   fi
   # (2) detached at origin/main + 1 throwaway commit (1 ahead) — EDIT 5 SKIP
   if ! git worktree add --detach "$wt_skip" "$base" >/dev/null 2>&1; then
-    echo "self-test: agent-* sweep check SKIPPED — could not create detached worktree (2)" >&2
+    selftest_skip "agent-* sweep check" "could not create detached worktree (2)"
     git worktree remove --force "$wt_rm" >/dev/null 2>&1 || true
     return 0
   fi
   if ! git -C "$wt_skip" commit --allow-empty -m "cleanup-selftest detached-unmerged fixture $$" >/dev/null 2>&1; then
-    echo "self-test: agent-* sweep check SKIPPED — could not add throwaway commit to detached worktree (2)" >&2
+    selftest_skip "agent-* sweep check" "could not add throwaway commit to detached worktree (2)"
     git worktree remove --force "$wt_rm" >/dev/null 2>&1 || true
     git worktree remove --force "$wt_skip" >/dev/null 2>&1 || true
     return 0
@@ -2647,11 +2705,11 @@ selftest_orphan_tag_reap() {
   local fail=0 tag="cleanup-selftest-rv-$$" slug="cleanup-selftest-slug-$$" action
   base=$(git rev-parse --verify --quiet HEAD 2>/dev/null || true)
   if [[ -z "$base" ]]; then
-    echo "self-test: orphan-tag reap check SKIPPED — no HEAD commit" >&2
+    selftest_skip "orphan-tag reap check" "no HEAD commit"
     return 0
   fi
   if ! mkdir -p "$fix_base" >/dev/null 2>&1; then
-    echo "self-test: orphan-tag reap check SKIPPED — could not create fixture dir '$fix_base'" >&2
+    selftest_skip "orphan-tag reap check" "could not create fixture dir '$fix_base'"
     return 0
   fi
 
@@ -2927,31 +2985,31 @@ selftest_orphan_tag_reap() {
 # integration check, not a fixture. Net-zero teardown via git porcelain.
 selftest_release_close_merged_pr() {
   if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
-    echo "self-test: merged-PR rescue check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    selftest_skip "merged-PR rescue check" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref"
     return 0
   fi
   local script_abs base slug branch wt out fail=0
   script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
   base=$(git rev-parse --verify --quiet "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
   if [[ -z "$base" ]]; then
-    echo "self-test: merged-PR rescue check SKIPPED — could not resolve ${REMOTE_NAME}/${MAIN_BRANCH}" >&2
+    selftest_skip "merged-PR rescue check" "could not resolve ${REMOTE_NAME}/${MAIN_BRANCH}"
     return 0
   fi
   slug="cleanup-selftest-mpr-$$"
   branch="release/v0.0-${slug}"            # version-prefixed so detect_release_close enumerates it
   if is_protected "$branch"; then
-    echo "self-test: merged-PR rescue check SKIPPED — operator protect-list matches '$branch'" >&2
+    selftest_skip "merged-PR rescue check" "operator protect-list matches '$branch'"
     return 0
   fi
   # A throwaway worktree at origin/main + 1 unique commit: source commit is NOT an
   # ancestor of main (the squash-merge shape), so the ancestry SKIP would fire.
   wt="${REPO_ROOT}/.claude/worktrees/${slug}"
   if ! git worktree add -b "$branch" "$wt" "$base" >/dev/null 2>&1; then
-    echo "self-test: merged-PR rescue check SKIPPED — could not create throwaway worktree" >&2
+    selftest_skip "merged-PR rescue check" "could not create throwaway worktree"
     return 0
   fi
   if ! git -C "$wt" commit --allow-empty -m "cleanup-selftest merged-PR-rescue fixture $$" >/dev/null 2>&1; then
-    echo "self-test: merged-PR rescue check SKIPPED — could not add unique commit" >&2
+    selftest_skip "merged-PR rescue check" "could not add unique commit"
     git worktree remove --force "$wt" >/dev/null 2>&1 || true
     git branch -D "$branch" >/dev/null 2>&1 || true
     return 0
@@ -3049,7 +3107,7 @@ selftest_gh_bin_resolves() {
   GH_BIN=""; GH_BIN_RESOLVED=0
   resolve_gh_bin
   if [[ -z "$GH_BIN" ]]; then
-    echo "self-test: gh-reachability check SKIPPED — no gh binary at /opt/homebrew/bin/gh, /usr/local/bin/gh, or /usr/bin/gh (offline/CI)" >&2
+    selftest_skip "gh-reachability check" "no gh binary at /opt/homebrew/bin/gh, /usr/local/bin/gh, or /usr/bin/gh (offline/CI)"
     GH_BIN="$saved_bin"; GH_BIN_RESOLVED="$saved_res"
     return 0
   fi
@@ -3058,16 +3116,40 @@ selftest_gh_bin_resolves() {
     echo "self-test: gh-reachability check FAILED — resolve_gh_bin set GH_BIN='$GH_BIN' but it is not executable" >&2
     fail=1
   fi
-  # Live query under the pinned PATH: proves the absolute-path binary is
-  # reachable where a bare `gh` would exit 127. --limit 1 keeps it cheap;
-  # any non-zero exit (incl. auth failure) fails the fixture loudly.
-  if [[ "$fail" -eq 0 ]] && ! "$GH_BIN" pr list --repo "$REPO_SLUG" --limit 1 --json number >/dev/null 2>&1; then
-    echo "self-test: gh-reachability check FAILED — live \"\$GH_BIN\" pr list did not resolve (auth or reachability)" >&2
+  # ── Hermetic arm (UNCONDITIONAL) ──
+  # The #2790 subject is binary REACHABILITY under the pinned PATH=/usr/bin:/bin —
+  # a bare `gh` would exit 127. `--version` asserts exactly that production symptom
+  # with no network, no credential and no repo slug. This is the arm that must hold
+  # on every host, and it is the reason the fixture no longer needs an auth token.
+  if [[ "$fail" -eq 0 ]] && ! "$GH_BIN" --version >/dev/null 2>&1; then
+    echo "self-test: gh-reachability check FAILED — \"\$GH_BIN\" --version did not run under the pinned PATH" >&2
     fail=1
+  fi
+  # ── Credential-bearing arm (CONDITIONALLY ARMED) ──
+  # Auth, network reachability and REPO_SLUG validity are NOT the #2790 subject —
+  # they are incidental couplings that made this fixture non-hermetic and turned an
+  # unauthenticated runner red. Armed only when a credential is present AND
+  # REPO_SLUG actually carries owner/name: on CI the slug falls through to the bare
+  # literal "pmo-platform" (no operator.toml), so the query fails EVEN WITH a token.
+  # When unarmed the arm is REPORTED SKIPPED with its reason — never silently dropped.
+  local live="RAN" live_why=""
+  if [[ "$fail" -eq 0 ]]; then
+    if [[ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]] && ! "$GH_BIN" auth status >/dev/null 2>&1; then
+      live="SKIPPED"; live_why="no credential (GH_TOKEN/GITHUB_TOKEN unset and \`gh auth status\` non-zero)"
+    elif [[ ! "$REPO_SLUG" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+      live="SKIPPED"; live_why="REPO_SLUG='$REPO_SLUG' is not owner/name"
+    elif ! "$GH_BIN" pr list --repo "$REPO_SLUG" --limit 1 --json number >/dev/null 2>&1; then
+      echo "self-test: gh-reachability check FAILED — live \"\$GH_BIN\" pr list did not resolve (auth or reachability)" >&2
+      fail=1
+    fi
   fi
   GH_BIN="$saved_bin"; GH_BIN_RESOLVED="$saved_res"
   if [[ "$fail" -ne 0 ]]; then exit 1; fi
-  echo "self-test: gh-reachability check PASS — resolve_gh_bin found an executable gh by absolute path AND a live \"\$GH_BIN\" pr list resolved under the pinned PATH (#2790)" >&2
+  if [[ "$live" == "RAN" ]]; then
+    echo "self-test: gh-reachability check PASS — resolve_gh_bin found an executable gh by absolute path; \"\$GH_BIN\" --version ran under the pinned PATH; live \"\$GH_BIN\" pr list resolved (#2790)" >&2
+  else
+    echo "self-test: gh-reachability check PASS — resolve_gh_bin found an executable gh by absolute path; \"\$GH_BIN\" --version ran under the pinned PATH; live pr-list arm SKIPPED — ${live_why} (#2790)" >&2
+  fi
   return 0
 }
 
@@ -3110,6 +3192,7 @@ self_test() {
   selftest_orphan_tag_reap
   echo "self-test: exercising --help protective-guarantee surface (--force / SELF / --self-test) (#669)..." >&2
   selftest_help_surface
+  selftest_skip_ledger
   echo "self-test: PASS" >&2
   exit 0
 }
@@ -3144,6 +3227,16 @@ done
 
 # ─── Main ────────────────────────────────────────────────────────────────────
 
+# ORDERING IS DELIBERATE — do NOT "fix" this to match the sibling tools.
+# audit-epic-rollup-close.sh and automated-closeout.sh both dispatch --self-test
+# BEFORE their boundary check, exempting the fixture run. Their justification is
+# that the self-test is hermetic — "no network, no workspace, no gh". That premise
+# is FALSE here: this self-test creates 9 worktrees and runs `git branch -D`,
+# `git worktree remove --force` and `git push --delete` against a fixture remote.
+# It is the one self-test in the corpus that performs real destructive git
+# operations, i.e. precisely the case the guard exists for. Reachability on a CI
+# runner is restored by WIDENING the boundary (arm 2 of workspace_boundary_check),
+# never by exempting the fixture. Recorded in release/ADRs/ADR-142.
 workspace_boundary_check
 [[ "$SELF_TEST" == "1" ]] && self_test
 load_protect_list
