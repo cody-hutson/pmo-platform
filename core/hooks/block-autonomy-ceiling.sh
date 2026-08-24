@@ -106,6 +106,85 @@ readonly SHASUM="/usr/bin/shasum"
 # absolute path inline; a constant here would be unreferenced.
 readonly PYTHON3="/usr/bin/python3"
 
+# --- PATH RESOLUTION (Write/Edit file_path → absolute) ---
+# Defined HERE, above ${PRIMARY_ROOT}, rather than beside the rules that consume it: the
+# anchor and the target must be resolved by the SAME function or they cannot meet. See
+# the ANCHOR/TARGET RESOLUTION PARITY note on PRIMARY_ROOT below.
+
+# resolve_path_shell — dependency-free physical resolution using only the pinned tool
+# path. Resolves the parent chain with `cd … && pwd -P` (which collapses `..` and every
+# symlinked directory component) and then follows a symlinked FINAL component with
+# readlink, up to a stated hop bound.
+#
+# It exists because the python3 arm below has THREE doors to the raw path, not one:
+# python3 absent for an existing target, python3 absent for a not-yet-existing target,
+# and python3 present-but-non-functional — a Mac carrying the Command Line Tools stub at
+# /usr/bin/python3 without the tools installed satisfies `[ -x ]` and still fails to
+# execute. A raw path is the TEXTUAL reading of the target, and every classification in
+# this hook (the -001 governance set, both cross-domain rules, the ceiling's projects/
+# mapping) is a path comparison — so a raw path silently reclassifies an aliased target
+# to whatever domain its string happens to name. That is the difference between a
+# repo-reaching write being an always-block floor and being mode-gated.
+#
+# STATED BOUND, not an implied one: a symlink chain is followed at most
+# RESOLVE_LINK_HOPS times; a longer chain is returned PARTIALLY resolved. Chains of one
+# and two hops are asserted in Suite A of the test file; the bound itself is not, and
+# this comment claims no more than that.
+readonly RESOLVE_LINK_HOPS=16
+resolve_path_shell() {
+  local fp="$1"
+  local hops=0
+  local parent base parent_abs link d_abs
+  while [ "$hops" -le "$RESOLVE_LINK_HOPS" ]; do
+    # A directory resolves whole — this is also what normalizes a trailing `/`, a
+    # trailing `/.`, a relative path and a symlinked alias, which is why ${PRIMARY_ROOT}
+    # can be run through the same function as a file target.
+    if [ -d "$fp" ]; then
+      d_abs="$(cd "$fp" 2>/dev/null && pwd -P)" || d_abs=""
+      if [ -z "$d_abs" ]; then d_abs="$fp"; fi
+      "$PRINTF" '%s' "$d_abs"
+      return 0
+    fi
+    parent="$(/usr/bin/dirname "$fp" 2>/dev/null || "$PRINTF" '.')"
+    base="$(/usr/bin/basename "$fp" 2>/dev/null || "$PRINTF" '%s' "$fp")"
+    if [ -d "$parent" ]; then
+      parent_abs="$(cd "$parent" 2>/dev/null && pwd -P)" || parent_abs=""
+      if [ -z "$parent_abs" ]; then parent_abs="$parent"; fi
+    else
+      # No existing ancestor to stand on — the same give-up point the prior code had.
+      parent_abs="$parent"
+    fi
+    fp="${parent_abs%/}/${base}"
+    if [ ! -L "$fp" ]; then break; fi
+    link="$(/usr/bin/readlink "$fp" 2>/dev/null || "$PRINTF" '')"
+    if [ -z "$link" ]; then break; fi
+    case "$link" in
+      /*) fp="$link" ;;
+      *)  fp="${parent_abs%/}/${link}" ;;
+    esac
+    hops=$((hops + 1))
+  done
+  "$PRINTF" '%s' "$fp"
+}
+
+# resolve_path — python3 os.path.realpath when it is usable, the shell resolver
+# otherwise. The python arm is kept as the primary because it resolves a whole symlink
+# chain in one call and needs no hop bound; the fallback is what stops an unusable
+# python3 from degrading a resolved comparison into a textual one.
+resolve_path() {
+  local fp="$1"
+  [ -z "$fp" ] && return 0
+  local abs=""
+  if [ -e "$fp" ] && [ -x "$PYTHON3" ]; then
+    abs="$("$PYTHON3" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$fp" 2>/dev/null || "$PRINTF" '')"
+  fi
+  case "$abs" in
+    /*) ;;                                   # python3 answered with an absolute path
+    *)  abs="$(resolve_path_shell "$fp")" ;; # absent, unusable, or a non-absolute answer
+  esac
+  "$PRINTF" '%s' "$abs"
+}
+
 # --- METADATA ---
 readonly HOOK_NAME="block-autonomy-ceiling"
 HOOK_DIR_RAW="$(cd "$(dirname "$0")" && pwd -P)"
@@ -118,7 +197,21 @@ readonly MODE_FILE="${HOOK_DIR}/.autonomy-mode"
 
 # Workspace root (the deployed-hook convention — block-destructive PRIMARY_ROOT /
 # block-rm WORKSPACE_ROOT). Governance + cross-domain path detection anchors here.
-readonly PRIMARY_ROOT="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"
+#
+# ANCHOR/TARGET RESOLUTION PARITY. Every anchored comparison in this hook tests a
+# REALPATH-RESOLVED target against this value, so the two must be resolved by the same
+# function or they cannot meet. Consumed RAW, four benign shapes of
+# CLAUDE_WORKSPACE_ROOT — a trailing slash, a trailing `/.`, a relative path, and a
+# symlinked alias — each make EVERY anchored pattern miss. The failure is TOTAL rather
+# than partial: the -001 governance floor, the -002 disclosure floor, -004 and the
+# ceiling's projects/ mapping are all anchored on this one value, so a single trailing
+# slash disables the hook outright while every log line still reads normal. Anchoring the
+# -001 document entries took the anchored-entry count from 3 to 11 and widened that
+# exposure accordingly. An anchored pattern with a mis-resolving anchor is worse than an
+# unanchored one, because it reads as safe. resolve_path() is therefore defined ABOVE
+# this line, and the four shapes are armed in Suite N of the test file.
+PRIMARY_ROOT_RAW="$(resolve_path "${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}")"
+readonly PRIMARY_ROOT="$PRIMARY_ROOT_RAW"
 
 # Runtime config + cache locations (the notify-version-skew.sh runtime-read
 # convention; XDG cache dir).
@@ -275,9 +368,16 @@ log_block() {
     >> "$BLOCK_LOG" 2>/dev/null || true
 }
 
-# apply_block — mode-gated block for the CEILING check (warn / off / enforce).
-# Used ONLY by the ceiling check, NOT by the irreducible Tier-0 floor (the floor
-# uses always_block below, which ignores mode).
+# apply_block — mode-gated block (warn / off / enforce). Used by BOTH mode-gated rules:
+# BLOCK-AUTONOMY-004 (the low-risk cross-domain direction) and the STEP-2 ceiling check
+# (BLOCK-AUTONOMY-003). NOT used by the irreducible Tier-0 floor (BLOCK-AUTONOMY-001/002),
+# which uses always_block below and ignores mode entirely.
+#
+# This comment read "Used ONLY by the ceiling check" until -004 was added as a second
+# caller and the sentence was left behind. It is corrected rather than annotated because a
+# declaration that over-claims what it governs is this milestone's own defect class — the
+# same shape as the -002 comment that asserted a direction was impossible, and the reason
+# a bypass shipped. If a third caller is added, this line changes with it.
 apply_block() {
   local rule_id="$1"; local reason="$2"; local override="$3"
   local mode; mode="$(get_mode)"
@@ -378,33 +478,91 @@ resolve_ceiling_num() {
   level_to_num "$(resolve_level_direct)"
 }
 
-# --- PATH RESOLUTION (Write/Edit file_path → absolute) ---
-# Mirrors block-destructive.sh Write/Edit branch: Python os.path.realpath when
-# available (resolves ../, symlinks; tolerates not-yet-existing files via parent
-# resolution); graceful degradation to the raw path string.
-resolve_path() {
-  local fp="$1"
-  [ -z "$fp" ] && return 0
-  local abs=""
-  if [ -e "$fp" ] && [ -x "$PYTHON3" ]; then
-    abs="$("$PYTHON3" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$fp" 2>/dev/null || echo "$fp")"
-  elif [ -e "$fp" ]; then
-    abs="$fp"
-  elif [ -x "$PYTHON3" ]; then
-    # Not-yet-existing target — resolve parent dir, re-attach basename.
-    local parent base parent_abs
-    parent="$(/usr/bin/dirname "$fp")"
-    base="$(/usr/bin/basename "$fp")"
-    if [ -d "$parent" ]; then
-      parent_abs="$(cd "$parent" 2>/dev/null && pwd -P || echo "$parent")"
-      abs="${parent_abs}/${base}"
-    else
-      abs="$fp"
+# --- REPOSITORY MEMBERSHIP (second stage of the -001 governance set) ---
+# is_platform_worktree <resolved-absolute-path> → 0 when the path sits inside a working
+# tree OF THIS REPOSITORY, wherever on disk that tree happens to live; 1 otherwise.
+# (resolve_path, which this uses for the relative-pointer form, is defined near the top
+# of the file so that ${PRIMARY_ROOT} can be resolved by it.)
+#
+# WHY A SECOND MECHANISM AT ALL. Anchoring the -001 document entries to
+# ${PRIMARY_ROOT}/pmo-platform correctly ended the era when a file merely NAMED CLAUDE.md
+# was blocked wherever on disk it sat — an unrelated product repository's root doc was
+# being treated as this platform's charter, and always_block left no configuration that
+# could permit the write. But the anchor it chose is the platform CHECKOUT, which covers
+# every worktree NESTED under the checkout and no worktree anywhere else. Linked worktrees
+# are routinely created elsewhere: a spawned session receives one under its own scratchpad.
+#
+# The on-disk copy in such a tree is transient, which is what made the gap look tolerable.
+# The COMMIT made from that copy is not, and it pushes to the same public repository this
+# floor exists to guard. Transience of the working tree is not transience of the
+# disclosure, and it is the disclosure axis these rules model.
+#
+# No path prefix can close this, because the whole content of the gap is that the location
+# is arbitrary. What is NOT arbitrary is repository MEMBERSHIP: a linked worktree's `.git`
+# is a one-line pointer at an administrative directory inside the checkout's own .git, and
+# a primary checkout's `.git` IS that directory. That is the invariant tested here.
+#
+# IT DOES NOT REOPEN THE DEFECT THE ANCHORING FIXED. An unrelated repository resolves to
+# its OWN administrative directory and is rejected here exactly as the anchored patterns
+# reject it. NEAREST TREE WINS: the walk stops at the first `.git` it meets and returns a
+# verdict there rather than continuing upward, so a foreign repository checked out inside a
+# platform worktree is allowed — git cannot track its contents through the platform repo,
+# so its root doc is not platform governance. Suite W arms all four shapes: a foreign
+# repo's root doc, a foreign WORKTREE whose .git file is identical in form, a nested
+# foreign repo inside a platform worktree, and a loose copy in no repository at all.
+#
+# COST. This is entered only for a Write/Edit whose resolved basename is already one of
+# the three governance documents AND which the anchored patterns did not match — a handful
+# of calls in a session, never the hot path that every Bash and mcp call takes. The walk
+# itself is a bounded upward loop of `[ -d ]` / `[ -f ]` tests with NO subprocess per
+# level (parameter expansion, not dirname), plus at most one small file read.
+readonly WORKTREE_WALK_MAX=64
+is_platform_worktree() {
+  local platform_gitdir="${PRIMARY_ROOT}/pmo-platform/.git"
+  local dir="${1%/*}"          # start at the target's directory; the target is a file
+  local depth=0
+  local gitdir line
+  # Membership is only decidable for an absolute path. A relative one means resolution
+  # failed outright — in which case the anchored patterns above could not have matched
+  # either, and fall-through is already the pre-existing behaviour. Stated as a guard
+  # rather than left to the walk bound, which would otherwise strip nothing from a
+  # slash-free string and spin to WORKTREE_WALK_MAX.
+  case "$dir" in /*) ;; *) return 1 ;; esac
+  while [ -n "$dir" ] && [ "$depth" -lt "$WORKTREE_WALK_MAX" ]; do
+    if [ -d "${dir}/.git" ]; then
+      # A primary checkout. Nearest tree wins: a foreign repo met first is a REJECTION,
+      # never a "keep looking further up".
+      if [ "${dir}/.git" = "$platform_gitdir" ]; then return 0; fi
+      return 1
     fi
-  else
-    abs="$fp"
-  fi
-  "$PRINTF" '%s' "$abs"
+    if [ -f "${dir}/.git" ] && [ -r "${dir}/.git" ]; then
+      gitdir=""
+      while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+          "gitdir: "*) gitdir="${line#gitdir: }"; break ;;
+        esac
+      done < "${dir}/.git"
+      if [ -n "$gitdir" ]; then
+        # git 2.48+ may write this pointer RELATIVE to the worktree (worktree.
+        # useRelativePaths / `git worktree add --relative-paths`). A membership test that
+        # only understood the absolute form would silently allow every worktree on such an
+        # instance, so both forms are resolved through the same resolver the target used
+        # and the two meet on physical paths. Armed as W-7 rather than assumed.
+        case "$gitdir" in
+          /*) ;;
+          *)  gitdir="${dir}/${gitdir}" ;;   # W7: relative-pointer join
+        esac
+        gitdir="$(resolve_path "$gitdir")"
+        case "$gitdir" in
+          "$platform_gitdir"|"${platform_gitdir}/"*) return 0 ;;
+        esac
+      fi
+      return 1
+    fi
+    dir="${dir%/*}"
+    depth=$((depth + 1))
+  done
+  return 1
 }
 
 # ==========================================================================
@@ -510,18 +668,26 @@ if [ -n "$ABS_TARGET" ]; then
       #   ${PRIMARY_ROOT}              — the workspace root. The charter itself, plus the
       #                                  deployed .claude/ security surface.
       #   ${PRIMARY_ROOT}/pmo-platform — the platform checkout. Its in-repo governance
-      #                                  documents at ANY depth, which keeps worktrees
-      #                                  nested under it covered — the paragraph above is
-      #                                  explicit that this floor grants no worktree
-      #                                  exemption.
+      #                                  documents at ANY depth, which covers worktrees
+      #                                  NESTED UNDER THE CHECKOUT.
       # Each in-repo basename therefore carries BOTH a checkout-root and a subpath
       # pattern, for the reason BLOCK-AUTONOMY-002 below spells out in its own comment:
       # the trailing-slash glob alone would miss a target sitting directly at the root.
       #
-      # This narrows the rule deliberately. A CLAUDE.md that is NOT at one of these
-      # locations — another repository's root doc, a backup copy — now falls through to
-      # the normal mode- and level-dependent path, where the rest of the hook suite still
-      # applies. That fall-through IS the fix, not a hole.
+      # THE ANCHORS DO NOT COVER EVERY WORKTREE, and this comment used to compose into a
+      # claim that they did. "Worktrees nested under the checkout stay covered" and "a
+      # same-named file anywhere else falls through" are each true in isolation and read
+      # together as "all worktrees are covered" — which is false for any worktree created
+      # outside ${PRIMARY_ROOT}/pmo-platform, the shape a spawned session actually gets.
+      # That case is covered by the SECOND STAGE below (is_platform_worktree), which tests
+      # repository membership rather than location. This floor grants no worktree
+      # exemption; before that stage existed, it silently had one.
+      #
+      # The location anchoring narrows the rule deliberately. A CLAUDE.md that is NOT at
+      # one of these locations AND not inside a working tree of this repository — another
+      # repository's root doc, a backup copy — falls through to the normal mode- and
+      # level-dependent path, where the rest of the hook suite still applies. That
+      # fall-through IS the fix, not a hole.
       #
       # THE OPERATIONS CONTEXT ANCHOR IS AN EXPLICIT THIRD LOCATION — see #5293.
       # ${PRIMARY_ROOT}/projects/CLAUDE.md is the operations context anchor:
@@ -549,6 +715,29 @@ if [ -n "$ABS_TARGET" ]; then
           always_block "BLOCK-AUTONOMY-001" \
             "governance-file modification is an irreducible Tier-0 action (operator-only per 'No ungoverned changes'); blocked regardless of automation_level. Target: ${ABS_TARGET}" \
             "governance changes require Issue + plan + operator approval — make the change through the governed flow, or set CLAUDE_HOOK_BYPASS=1 only if you ARE the operator acting intentionally"
+          ;;
+      esac
+
+      # --- BLOCK-AUTONOMY-001, SECOND STAGE: working trees of THIS repository that
+      #     live OUTSIDE the checkout anchor ---
+      # The anchored case above is the fast path and settles ${PRIMARY_ROOT} and every path
+      # beneath the checkout. It cannot settle a linked worktree created elsewhere, because
+      # no prefix can name an arbitrary location. This stage asks the one question that
+      # survives relocation — does this working tree belong to THIS repository — and asks
+      # it ONLY for the three governance basenames, so the walk never touches the hot path.
+      #
+      # SCOPE IS THE THREE DOCUMENTS, deliberately, and not the .claude/ entries above.
+      # Those name the DEPLOYED security surface at the workspace root; the repository
+      # tracks no .claude/ files at all, so there is no worktree copy of them to reach.
+      # Stating that here rather than leaving it to be inferred: the coverage this stage
+      # adds is exactly CLAUDE.md, OPERATIONS.md and RELEASE_PROTOCOL.md.
+      case "$ABS_TARGET" in
+        */CLAUDE.md|*/OPERATIONS.md|*/RELEASE_PROTOCOL.md)
+          if is_platform_worktree "$ABS_TARGET"; then
+            always_block "BLOCK-AUTONOMY-001" \
+              "governance-file modification is an irreducible Tier-0 action (operator-only per 'No ungoverned changes'); blocked regardless of automation_level. This target sits in a working tree of the platform repository located outside ${PRIMARY_ROOT}/pmo-platform — the working copy is transient, the commit it feeds is not. Target: ${ABS_TARGET}" \
+              "governance changes require Issue + plan + operator approval — make the change through the governed flow, or set CLAUDE_HOOK_BYPASS=1 only if you ARE the operator acting intentionally"
+          fi
           ;;
       esac
 

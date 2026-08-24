@@ -876,6 +876,353 @@ fi
 # Suite R's to remove. Only the operator.toml fixture Suite R authored is cleaned up.
 /bin/rm -f "${R_CFG}/operator.toml"
 
+# run_hook_env VAR=VAL... -- payload  → sets $RHE_EXIT and $RHE_STDERR.
+# test_case pins HOME and inherits the exported CLAUDE_WORKSPACE_ROOT, which is exactly
+# right for every arm above and exactly wrong for Suite N, whose whole subject is what
+# happens when CLAUDE_WORKSPACE_ROOT arrives in a different shape. This runs the same
+# hook with an arbitrary per-case environment prefix instead.
+RHE_EXIT=0
+RHE_STDERR=""
+run_hook_env() {
+  local payload="$1"; shift
+  local err; err="$(/usr/bin/mktemp)"
+  RHE_EXIT=0
+  /usr/bin/printf '%s' "$payload" \
+    | HOME="$TEST_HOME" /usr/bin/env "$@" /bin/bash "$HOOK" 2>"$err" >/dev/null || RHE_EXIT="$?"
+  RHE_STDERR="$(/bin/cat "$err")"; /bin/rm -f "$err"
+}
+
+# assert_hook name expected_exit expected_pattern — grade the last run_hook_env call.
+assert_hook() {
+  local name="$1"; local want_exit="$2"; local want_pat="${3:-}"
+  local ok=1
+  [ "$RHE_EXIT" != "$want_exit" ] && ok=0
+  if [ -n "$want_pat" ] && ! /usr/bin/printf '%s' "$RHE_STDERR" | /usr/bin/grep -qE "$want_pat"; then ok=0; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$name"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s (exit=%s expected=%s)\n  stderr: %s\n' "$name" "$RHE_EXIT" "$want_exit" "$RHE_STDERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# =====================================================================
+# SUITE W — the -001 governance set must reach working trees of THIS
+#           repository that live OUTSIDE ${PRIMARY_ROOT}/pmo-platform
+# =====================================================================
+# WHY THIS SUITE EXISTS. #5812 anchored the -001 case set to ${PRIMARY_ROOT}, correctly
+# ending the era when a file merely NAMED CLAUDE.md was blocked wherever on disk it sat.
+# The anchor it chose for the three in-repo documents is ${PRIMARY_ROOT}/pmo-platform —
+# the platform CHECKOUT — which covers every worktree nested beneath the checkout and no
+# worktree anywhere else. Linked worktrees are routinely created outside that subtree: a
+# spawned session receives one under its own scratchpad. The on-disk copy is transient,
+# which is what made the gap look tolerable; the COMMIT made from that copy is not, and
+# it pushes to the same public repository this floor exists to guard. Transience of the
+# working tree is not transience of the disclosure.
+#
+# The discrimination pinned here is NOT a path prefix. No prefix can express "wherever
+# that tree happens to live", which is precisely why the #5812 anchoring could not also
+# solve this. It is REPOSITORY MEMBERSHIP: a working tree belongs to this repository when
+# its git administrative directory resolves inside ${PRIMARY_ROOT}/pmo-platform/.git. A
+# linked worktree's `.git` is a one-line pointer at exactly that directory, so the test is
+# a bounded upward walk plus one small file read — and it runs only for a Write/Edit whose
+# resolved basename is already one of the three governance documents.
+#
+# Every block arm is paired with an allow arm of identical shape, differing only in which
+# repository the enclosing tree belongs to. A lone block arm would pass unchanged against
+# a hook that had simply reverted to matching basenames, which is the regression that
+# matters most here — #5812's fix must not be undone in the course of restoring coverage.
+echo ""
+echo "Suite W — -001 reaches out-of-anchor working trees of this repo (#5812 F1)"
+echo "---"
+set_mode "enforce"
+set_ceiling 2
+
+# A scratchpad OUTSIDE ${PRIMARY_ROOT} entirely — the shape a spawned session actually
+# gets, not a contrived sibling of the checkout.
+W_SCRATCH="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"
+
+# The platform checkout's administrative directory, plus the per-worktree admin dir
+# beneath it that `git worktree add` creates. Nothing else about the checkout is needed:
+# membership is decided by where the admin directory lives, not by the tree's contents.
+/bin/mkdir -p "${TEST_WS}/pmo-platform/.git/worktrees/wt1"
+/bin/mkdir -p "${W_SCRATCH}/wt/core/governance" "${W_SCRATCH}/wt/release/governance"
+/usr/bin/printf 'gitdir: %s\n' "${TEST_WS}/pmo-platform/.git/worktrees/wt1" > "${W_SCRATCH}/wt/.git"
+
+# An UNRELATED repository, with its own real administrative directory. This is #5812's
+# subject and it must keep falling through.
+/bin/mkdir -p "${W_SCRATCH}/product-repo/.git"
+
+# A plain directory that is not a repository at all — the backup-copy case.
+/bin/mkdir -p "${W_SCRATCH}/loose"
+
+W_CWD="${W_SCRATCH}/wt"
+
+# W-1..W-3 — all three governance basenames, in a working tree of this repository that
+# sits outside the checkout anchor. These are the arms #5812 dropped.
+run_hook_env "$(write_payload "${W_SCRATCH}/wt/CLAUDE.md" "$W_CWD")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "W-1 out-of-anchor worktree: CLAUDE.md → BLOCK (-001)" 2 "BLOCK-AUTONOMY-001"
+
+run_hook_env "$(edit_payload "${W_SCRATCH}/wt/core/governance/OPERATIONS.md" "$W_CWD")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "W-2 out-of-anchor worktree: OPERATIONS.md → BLOCK (-001)" 2 "BLOCK-AUTONOMY-001"
+
+run_hook_env "$(edit_payload "${W_SCRATCH}/wt/release/governance/RELEASE_PROTOCOL.md" "$W_CWD")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "W-3 out-of-anchor worktree: RELEASE_PROTOCOL.md → BLOCK (-001)" 2 "BLOCK-AUTONOMY-001"
+
+# W-4 — #5812 NON-REGRESSION, and the single most important arm in this suite. An
+# unrelated repository's root doc must keep falling through to the mode- and
+# level-dependent path. This arm passes against the hook BEFORE this change as well as
+# after; that is the point of it. If restoring worktree coverage cost us this, the cure
+# would be the disease #5812 diagnosed.
+run_hook_env "$(write_payload "${W_SCRATCH}/product-repo/CLAUDE.md" "${W_SCRATCH}/product-repo")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "W-4 #5812 non-regression: an unrelated REPO's root CLAUDE.md → ALLOW" 0 ""
+
+# W-5 — the backup-copy case: a governance basename in a directory that is not a working
+# tree of anything. The upward walk must terminate without a verdict rather than blocking.
+run_hook_env "$(write_payload "${W_SCRATCH}/loose/OPERATIONS.md" "${W_SCRATCH}/loose")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "W-5 a loose copy in no repository at all → ALLOW" 0 ""
+
+# W-6 — SPECIFICITY, and the arm that proves the rule keys on WHICH repository rather
+# than on "is a linked worktree". A worktree of some OTHER repo carries a `.git` file of
+# exactly the same shape; only the target of the pointer differs.
+/bin/mkdir -p "${W_SCRATCH}/foreign-wt" "${W_SCRATCH}/foreign-repo/.git/worktrees/w"
+/usr/bin/printf 'gitdir: %s\n' "${W_SCRATCH}/foreign-repo/.git/worktrees/w" > "${W_SCRATCH}/foreign-wt/.git"
+run_hook_env "$(write_payload "${W_SCRATCH}/foreign-wt/CLAUDE.md" "${W_SCRATCH}/foreign-wt")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "W-6 specificity: a worktree of a DIFFERENT repository → ALLOW" 0 ""
+
+# W-7 — a RELATIVE gitdir pointer. git 2.48+ writes one under `worktree.useRelativePaths`
+# / `git worktree add --relative-paths`, and a membership test that only understood the
+# absolute form would silently allow every worktree on such an instance. Asserted rather
+# than assumed, because "the pointer is always absolute" is exactly the shape of
+# unverified premise this release shipped a bypass on.
+#
+# The tree is placed as a SIBLING of the pinned workspace so the relative pointer can be
+# written exactly, with no path arithmetic: one level up, then down by basename. It is
+# still out-of-anchor (it is not under ${TEST_WS}/pmo-platform), which is what the arm is
+# about. An earlier draft of this fixture composed a relative path that resolved nowhere,
+# and the arm failed for that reason rather than the hook's — worth recording, because a
+# fixture that fails for its own defect is indistinguishable from a real finding until it
+# is read.
+W_TS_PARENT="$(/usr/bin/dirname "$TEST_WS")"
+W_TS_BASE="$(/usr/bin/basename "$TEST_WS")"
+W_RELWT="${W_TS_PARENT}/relwt-$$"
+/bin/mkdir -p "$W_RELWT"
+/usr/bin/printf 'gitdir: ../%s/pmo-platform/.git/worktrees/wt1\n' "$W_TS_BASE" > "${W_RELWT}/.git"
+run_hook_env "$(write_payload "${W_RELWT}/CLAUDE.md" "$W_RELWT")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "W-7 relative gitdir pointer still resolves to this repo → BLOCK (-001)" 2 "BLOCK-AUTONOMY-001"
+
+# W-7 DIFFERENTIAL. W-1..W-3 and Suite N were each demonstrated failing against the hook
+# as it stood before this change, which is what makes their passing mean something. W-7
+# cannot borrow that evidence: the membership test it exercises did not exist to fail, so
+# a pre-change run says only "no coverage at all", not "the absolute-only reading is
+# insufficient". The naive implementation this arm actually discriminates against is a
+# membership test that understands ONLY the absolute pointer form — so build exactly that
+# in a sandbox by deleting the relative-pointer join, and require W-7's payload to be
+# ALLOWED against it. A fixture is worth having only if some reachable implementation
+# fails it.
+W7_SANDBOX="$(/usr/bin/mktemp -d)"
+/bin/mkdir -p "${W7_SANDBOX}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${W7_SANDBOX}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK_DIR}/lib/"*.awk "${W7_SANDBOX}/lib/" 2>/dev/null || true
+/usr/bin/sed -e '/# W7: relative-pointer join/d' "$HOOK" > "${W7_SANDBOX}/block-autonomy-ceiling.sh"
+/bin/chmod +x "${W7_SANDBOX}/block-autonomy-ceiling.sh"
+/usr/bin/printf 'enforce' > "${W7_SANDBOX}/.autonomy-mode"
+w7_removed=$(( $(/usr/bin/wc -l < "$HOOK") - $(/usr/bin/wc -l < "${W7_SANDBOX}/block-autonomy-ceiling.sh") ))
+w7_err="$(/usr/bin/mktemp)"; w7_exit=0
+/usr/bin/printf '%s' "$(write_payload "${W_RELWT}/CLAUDE.md" "$W_RELWT")" \
+  | HOME="$TEST_HOME" /bin/bash "${W7_SANDBOX}/block-autonomy-ceiling.sh" 2>"$w7_err" >/dev/null || w7_exit="$?"
+w7_stderr="$(/bin/cat "$w7_err")"; /bin/rm -f "$w7_err"; /bin/rm -rf "$W7_SANDBOX"
+# Guard the differential itself: if sed removed nothing, the "sandbox" IS the shipped hook
+# and its verdict would be meaningless. Require both a real edit and a real divergence.
+if [ "$w7_removed" = 1 ] && [ "$w7_exit" = 0 ]; then
+  echo "PASS: W-7 differential — an absolute-only membership test ALLOWS the relative-pointer worktree; the shipped one blocks it"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: W-7 differential inconclusive (lines removed=%s expected=1, sandbox exit=%s expected=0)\n  stderr: %s\n' \
+    "$w7_removed" "$w7_exit" "$w7_stderr"; FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$W_RELWT"
+
+# W-8 — NEAREST-ENCLOSING. A separate repository checked out INSIDE a platform worktree
+# has its own administrative directory, so git cannot track its contents through the
+# platform repo and its root doc is not platform governance. The walk must stop at the
+# nearest enclosing tree rather than continuing up to the platform one. This is the same
+# discrimination as W-4, one directory level down, and it is the arm that would catch a
+# walk written to search for the platform gitdir instead of resolving the nearest.
+/bin/mkdir -p "${W_SCRATCH}/wt/vendor/nested/.git"
+run_hook_env "$(write_payload "${W_SCRATCH}/wt/vendor/nested/CLAUDE.md" "$W_CWD")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "W-8 nearest-enclosing: a nested foreign repo inside the worktree → ALLOW" 0 ""
+
+# W-9 — the in-anchor worktree is unchanged. Paired with W-1 on the same governance
+# basename, this is what shows the change ADDED reach rather than MOVING it.
+run_hook_env "$(edit_payload "${TEST_WS}/pmo-platform/.claude/worktrees/wt/core/governance/OPERATIONS.md" "${TEST_WS}/pmo-platform")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "W-9 in-anchor worktree still BLOCKS (coverage added, not relocated)" 2 "BLOCK-AUTONOMY-001"
+
+# =====================================================================
+# SUITE N — ${PRIMARY_ROOT} must be resolved the way ABS_TARGET is
+# =====================================================================
+# The hook compares a REALPATH-RESOLVED target against ${PRIMARY_ROOT} taken RAW from
+# CLAUDE_WORKSPACE_ROOT. Four benign shapes of that variable therefore make every anchored
+# pattern compare a resolved path against an unresolved prefix, and NONE of them match.
+# The failure is total rather than partial: the -001 floor, the -002 floor, -004 and the
+# ceiling's projects/ mapping are all anchored on the same value, so a single trailing
+# slash silently disables the whole hook while every log line still reads normal.
+#
+# #5812 widened the exposure — the anchored entry count went from 3 to 11 — which is what
+# turns a latent defect into one worth arming. An anchored pattern with a mis-resolving
+# anchor is worse than an unanchored one, because it reads as safe.
+#
+# Each arm drives the SAME governance write that the control arm blocks, changing only the
+# shape of CLAUDE_WORKSPACE_ROOT. The control is what stops the four from being an inert
+# zero: it proves the payload blocks when the anchor arrives clean.
+echo ""
+echo "Suite N — CLAUDE_WORKSPACE_ROOT normalization (anchor/target resolution parity)"
+echo "---"
+set_mode "enforce"
+set_ceiling 2
+
+/bin/mkdir -p "${TEST_WS}/pmo-platform/core/governance"
+N_PAYLOAD="$(edit_payload "${TEST_WS}/pmo-platform/core/governance/OPERATIONS.md" "${TEST_WS}/pmo-platform")"
+
+# N-0 control — the clean anchor blocks. Every arm below is only meaningful against this.
+run_hook_env "$N_PAYLOAD" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "N-0 control: clean anchor → BLOCK (-001)" 2 "BLOCK-AUTONOMY-001"
+
+# N-1 trailing slash. '${WS}/' + '/pmo-platform' yields a doubled separator that matches
+# nothing, and the hook allows a governance write at the highest ceiling.
+run_hook_env "$N_PAYLOAD" CLAUDE_WORKSPACE_ROOT="${TEST_WS}/"
+assert_hook "N-1 trailing slash anchor → STILL BLOCK (-001)" 2 "BLOCK-AUTONOMY-001"
+
+# N-2 trailing '/.'. Valid, idiomatic, and produces '${WS}/./pmo-platform'.
+run_hook_env "$N_PAYLOAD" CLAUDE_WORKSPACE_ROOT="${TEST_WS}/."
+assert_hook "N-2 trailing '/.' anchor → STILL BLOCK (-001)" 2 "BLOCK-AUTONOMY-001"
+
+# N-3 symlinked alias. The operator points the variable at a symlink to the workspace —
+# the single most likely real-world malformation, and invisible in every log line.
+N_ALIAS="$(/usr/bin/mktemp -d)/ws-alias"
+/bin/ln -s "$TEST_WS" "$N_ALIAS"
+run_hook_env "$N_PAYLOAD" CLAUDE_WORKSPACE_ROOT="$N_ALIAS"
+assert_hook "N-3 symlinked-alias anchor → STILL BLOCK (-001)" 2 "BLOCK-AUTONOMY-001"
+
+# N-4 relative anchor, resolved against the hook process's own cwd — the same base
+# resolve_path() uses for a relative file_path, so anchor and target agree by construction.
+N_PARENT="$(/usr/bin/dirname "$TEST_WS")"
+N_BASE="$(/usr/bin/basename "$TEST_WS")"
+n4_err="$(/usr/bin/mktemp)"; n4_exit=0
+( cd "$N_PARENT" && /usr/bin/printf '%s' "$N_PAYLOAD" \
+    | HOME="$TEST_HOME" CLAUDE_WORKSPACE_ROOT="$N_BASE" /bin/bash "$HOOK" 2>"$n4_err" >/dev/null ) || n4_exit="$?"
+n4_stderr="$(/bin/cat "$n4_err")"; /bin/rm -f "$n4_err"
+if [ "$n4_exit" = 2 ] && /usr/bin/printf '%s' "$n4_stderr" | /usr/bin/grep -qE "BLOCK-AUTONOMY-001"; then
+  echo "PASS: N-4 relative anchor → STILL BLOCK (-001)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: N-4 relative anchor (exit=%s expected=2, want BLOCK-AUTONOMY-001)\n  stderr: %s\n' \
+    "$n4_exit" "$n4_stderr"; FAIL=$((FAIL + 1))
+fi
+
+# =====================================================================
+# SUITE A — path ALIASING, and the resolver degradation beneath it
+# =====================================================================
+# #5293 demoted the pmo-platform → projects/ direction from an always-block floor to a
+# mode-gated signal, on the stated premise that the demoted direction CANNOT reach the
+# tracked repository. That premise is load-bearing — it is the entire justification for
+# the demotion — and it was asserted in a comment, an ADR and a registry fragment without
+# a single arm behind it. This release shipped a bypass from exactly that shape: a comment
+# asserting a direction was impossible, with nothing testing it.
+#
+# The premise holds only because classification runs on the RESOLVED path. Arms A-1..A-5
+# pin that: five aliases that read as one domain and resolve into the other, each required
+# to be classified by where it LANDS. A-6/A-7 then attack the resolver itself, which
+# degrades to the raw path when python3 is unavailable — and a raw path is precisely the
+# textual reading these five arms exist to reject.
+echo ""
+echo "Suite A — aliasing, and resolver degradation (#5293 premise)"
+echo "---"
+set_mode "enforce"
+set_ceiling 2
+
+/bin/mkdir -p "${TEST_WS}/projects/Default" "${TEST_WS}/pmo-platform/core/governance"
+/usr/bin/printf 'x\n' > "${TEST_WS}/pmo-platform/core/governance/OPERATIONS.md"
+/usr/bin/printf 'x\n' > "${TEST_WS}/pmo-platform/core/foo.md"
+
+# A-1 traversal into the repo from a projects cwd — must be the FLOOR (-002), not -004
+# and not an allow. The literal string names projects/; the landing site is the repo.
+run_hook_env "$(write_payload "${TEST_WS}/projects/../pmo-platform/core/foo.md" "${TEST_WS}/projects/Default")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "A-1 traversal projects/../pmo-platform → -002 (classified where it lands)" 2 "BLOCK-AUTONOMY-002"
+
+# A-2 traversal onto a governance document — -001 outranks the cross-domain rules.
+run_hook_env "$(edit_payload "${TEST_WS}/projects/Default/../../pmo-platform/core/governance/OPERATIONS.md" "${TEST_WS}/projects/Default")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "A-2 traversal onto OPERATIONS.md → -001" 2 "BLOCK-AUTONOMY-001"
+
+# A-3 symlinked DIRECTORY inside projects/ pointing at the repo.
+/bin/ln -s "${TEST_WS}/pmo-platform" "${TEST_WS}/projects/repolink"
+run_hook_env "$(write_payload "${TEST_WS}/projects/repolink/core/foo.md" "${TEST_WS}/projects/Default")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "A-3 symlinked directory projects/repolink → -002" 2 "BLOCK-AUTONOMY-002"
+
+# A-4 symlinked LEAF — the file itself is the alias. Strictly harder than A-3: the parent
+# directory is genuinely in projects/ and only the final component crosses.
+/bin/ln -s "${TEST_WS}/pmo-platform/core/governance/OPERATIONS.md" "${TEST_WS}/projects/gov.md"
+run_hook_env "$(edit_payload "${TEST_WS}/projects/gov.md" "${TEST_WS}/projects/Default")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "A-4 symlinked leaf projects/gov.md → -001" 2 "BLOCK-AUTONOMY-001"
+
+# A-5 REVERSE symlink — a path that reads in-repo and lands in projects/. The mirror of
+# A-3, and the arm that shows resolution is not merely biased toward blocking: it must
+# also DEMOTE a repo-looking target that leaves the repo, to -004 rather than same-domain.
+/bin/ln -s "${TEST_WS}/projects" "${TEST_WS}/pmo-platform/opslink"
+run_hook_env "$(write_payload "${TEST_WS}/pmo-platform/opslink/Default/notes.md" "${TEST_WS}/pmo-platform")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "A-5 reverse symlink pmo-platform/opslink → -004 (demoted, not same-domain)" 2 "BLOCK-AUTONOMY-004"
+
+# --- A-6 / A-7: the resolver degradation the five arms above sit on top of ---
+# resolve_path() falls back to the RAW path string whenever python3 cannot be used, and
+# there are three such doors, not one: PYTHON3 absent for an existing target, PYTHON3
+# absent for a not-yet-existing target, and PYTHON3 present but non-functional (the
+# `|| echo "$fp"` arm — reachable on a Mac carrying the Command Line Tools stub without
+# the tools installed, where `[ -x ]` is TRUE and execution still fails).
+#
+# On the raw path A-1 stops being a floor: the string names projects/ and is classified
+# there, which demotes a repo-reaching write from always-block to mode-gated. The sandbox
+# below reproduces the degradation honestly rather than asserting it cannot happen.
+A_SANDBOX="$(/usr/bin/mktemp -d)"
+/bin/mkdir -p "${A_SANDBOX}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${A_SANDBOX}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK_DIR}/lib/"*.awk "${A_SANDBOX}/lib/" 2>/dev/null || true
+# Point PYTHON3 at a path that does not exist. Nothing else is touched.
+/usr/bin/sed -e 's#^readonly PYTHON3="/usr/bin/python3"#readonly PYTHON3="/nonexistent/python3"#' \
+             "$HOOK" > "${A_SANDBOX}/block-autonomy-ceiling.sh"
+/bin/chmod +x "${A_SANDBOX}/block-autonomy-ceiling.sh"
+/usr/bin/printf 'enforce' > "${A_SANDBOX}/.autonomy-mode"
+
+a_edited=0
+/usr/bin/grep -q '/nonexistent/python3' "${A_SANDBOX}/block-autonomy-ceiling.sh" && a_edited=1
+
+# A-6 — traversal under an unusable python3. The floor must survive the degradation.
+a6_err="$(/usr/bin/mktemp)"; a6_exit=0
+/usr/bin/printf '%s' "$(write_payload "${TEST_WS}/projects/../pmo-platform/core/foo.md" "${TEST_WS}/projects/Default")" \
+  | HOME="$TEST_HOME" /bin/bash "${A_SANDBOX}/block-autonomy-ceiling.sh" 2>"$a6_err" >/dev/null || a6_exit="$?"
+a6_stderr="$(/bin/cat "$a6_err")"; /bin/rm -f "$a6_err"
+if [ "$a_edited" = 1 ] && [ "$a6_exit" = 2 ] && /usr/bin/printf '%s' "$a6_stderr" | /usr/bin/grep -qE "BLOCK-AUTONOMY-002"; then
+  echo "PASS: A-6 python3 unusable → traversal STILL classified where it lands (-002)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: A-6 python3-degraded traversal (sandbox edited=%s, exit=%s expected=2, want BLOCK-AUTONOMY-002)\n  stderr: %s\n' \
+    "$a_edited" "$a6_exit" "$a6_stderr"; FAIL=$((FAIL + 1))
+fi
+
+# A-7 — the symlinked LEAF under the same degradation. This is the harder half of the
+# same claim and it is armed separately, because the shell fallback resolves the parent
+# directory and the leaf by different means. Stating "resolution is preserved" while only
+# testing A-6 would be the same over-claim this milestone keeps producing.
+a7_err="$(/usr/bin/mktemp)"; a7_exit=0
+/usr/bin/printf '%s' "$(edit_payload "${TEST_WS}/projects/gov.md" "${TEST_WS}/projects/Default")" \
+  | HOME="$TEST_HOME" /bin/bash "${A_SANDBOX}/block-autonomy-ceiling.sh" 2>"$a7_err" >/dev/null || a7_exit="$?"
+a7_stderr="$(/bin/cat "$a7_err")"; /bin/rm -f "$a7_err"
+if [ "$a_edited" = 1 ] && [ "$a7_exit" = 2 ] && /usr/bin/printf '%s' "$a7_stderr" | /usr/bin/grep -qE "BLOCK-AUTONOMY-001"; then
+  echo "PASS: A-7 python3 unusable → symlinked LEAF still resolves (-001)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: A-7 python3-degraded symlinked leaf (sandbox edited=%s, exit=%s expected=2, want BLOCK-AUTONOMY-001)\n  stderr: %s\n' \
+    "$a_edited" "$a7_exit" "$a7_stderr"; FAIL=$((FAIL + 1))
+fi
+
+/bin/rm -rf "$A_SANDBOX"
+/bin/rm -rf "$W_SCRATCH"
+
 # =====================================================================
 # Summary
 # =====================================================================
