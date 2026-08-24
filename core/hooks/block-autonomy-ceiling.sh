@@ -469,10 +469,43 @@ if [ -n "$ABS_TARGET" ]; then
       # sentinel. The assertion moves from "no agent may edit a skill" to "no agent may
       # edit a skill outside a sanctioned session" — which is what the surrounding design
       # already assumed was true.
+      #
+      # EVERY ENTRY IS LOCATION-ANCHORED — see #5812.
+      # A governance file is identified by WHERE it sits, never by its basename alone.
+      # The three document entries used to be bare basename globs (*/CLAUDE.md,
+      # */OPERATIONS.md, */RELEASE_PROTOCOL.md) while the settings/hooks/rules entries
+      # were already ${PRIMARY_ROOT}-anchored. That asymmetry was the defect: */CLAUDE.md
+      # matches ANY file so named anywhere on disk, so an unrelated product repository
+      # whose root doc carries the conventional name CLAUDE.md had that file blocked as
+      # though it were this platform's charter — and because always_block ignores mode
+      # and level, no configuration could permit the write. The observable result was the
+      # same broken contract the SKILL.md removal above describes: an agent holding an
+      # approved edit, with no sanctioned path and no bypass it is permitted to take.
+      #
+      # Two anchors, both load-bearing:
+      #   ${PRIMARY_ROOT}              — the workspace root. The charter itself, plus the
+      #                                  deployed .claude/ security surface.
+      #   ${PRIMARY_ROOT}/pmo-platform — the platform checkout. Its in-repo governance
+      #                                  documents at ANY depth, which keeps worktrees
+      #                                  nested under it covered — the paragraph above is
+      #                                  explicit that this floor grants no worktree
+      #                                  exemption.
+      # Each in-repo basename therefore carries BOTH a checkout-root and a subpath
+      # pattern, for the reason BLOCK-AUTONOMY-002 below spells out in its own comment:
+      # the trailing-slash glob alone would miss a target sitting directly at the root.
+      #
+      # This narrows the rule deliberately. A CLAUDE.md that is NOT at one of these
+      # locations — another repository's root doc, a backup copy — now falls through to
+      # the normal mode- and level-dependent path, where the rest of the hook suite still
+      # applies. That fall-through IS the fix, not a hole.
       case "$ABS_TARGET" in
-        */CLAUDE.md \
-        | */OPERATIONS.md \
-        | */RELEASE_PROTOCOL.md \
+        "${PRIMARY_ROOT}/CLAUDE.md" \
+        | "${PRIMARY_ROOT}/pmo-platform/CLAUDE.md" \
+        | "${PRIMARY_ROOT}/pmo-platform/"*"/CLAUDE.md" \
+        | "${PRIMARY_ROOT}/pmo-platform/OPERATIONS.md" \
+        | "${PRIMARY_ROOT}/pmo-platform/"*"/OPERATIONS.md" \
+        | "${PRIMARY_ROOT}/pmo-platform/RELEASE_PROTOCOL.md" \
+        | "${PRIMARY_ROOT}/pmo-platform/"*"/RELEASE_PROTOCOL.md" \
         | "${PRIMARY_ROOT}/.claude/settings.json" \
         | "${PRIMARY_ROOT}/.claude/hooks/"* \
         | "${PRIMARY_ROOT}/.claude/rules/"*)

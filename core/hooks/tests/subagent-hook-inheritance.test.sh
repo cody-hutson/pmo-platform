@@ -77,7 +77,13 @@ done
 # anchors. A temp HOME pins block-autonomy-ceiling's ceiling cache (it resolves the
 # cache under ${HOME}/.cache/pmo-platform/) so the ceiling is deterministic; the
 # C6 case targets the Tier-0 floor which is always-block regardless of ceiling/mode.
-TEST_WS="$(/usr/bin/mktemp -d)"
+#
+# TEST_WS is pinned to its PHYSICALLY RESOLVED path (`cd … && pwd -P`) for the same
+# reason block-autonomy-ceiling.test.sh does: C6 asserts against a ${PRIMARY_ROOT}-
+# anchored governance matcher, and the hook compares a realpath-resolved ABS_TARGET.
+# On macOS mktemp returns /var/folders/… while /var symlinks to /private/var, so an
+# unresolved root would compare a resolved target against an unresolved prefix.
+TEST_WS="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"
 TEST_HOME="$(/usr/bin/mktemp -d)"
 /bin/mkdir -p "${TEST_HOME}/.cache/pmo-platform"
 CACHE_FILE="${TEST_HOME}/.cache/pmo-platform/autonomy-ceiling"

@@ -35,7 +35,18 @@ if [ ! -x "$HOOK" ]; then echo "FAIL: hook not executable at $HOOK" >&2; echo "T
 # cache dir controls the resolved ceiling. We override the cache path by pointing
 # HOME at a temp dir for the duration of each hook invocation (the hook resolves
 # the cache under ${HOME}/.cache/pmo-platform/).
-TEST_WS="$(/usr/bin/mktemp -d)"
+#
+# TEST_WS is pinned to its PHYSICALLY RESOLVED path (`cd … && pwd -P`), not the raw
+# mktemp string. The hook compares ABS_TARGET — which resolve_path() has already run
+# through realpath / `cd "$parent" && pwd -P` — against ${PRIMARY_ROOT}. On macOS
+# mktemp hands back /var/folders/… while /var is a symlink to /private/var, so an
+# unresolved root makes every anchored comparison compare a resolved target against an
+# unresolved prefix and never match. That latent mismatch was invisible while the
+# governance entries were bare basename globs (they matched any prefix) and while the
+# already-anchored fixtures happened to name parents that do not exist on disk (for
+# which resolve_path returns the raw string untouched). Resolving here is what makes
+# the anchored assertions genuine rather than accidentally-passing.
+TEST_WS="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"
 TEST_HOME="$(/usr/bin/mktemp -d)"
 /bin/mkdir -p "${TEST_HOME}/.cache/pmo-platform"
 CACHE_FILE="${TEST_HOME}/.cache/pmo-platform/autonomy-ceiling"
@@ -202,6 +213,55 @@ test_case "Tier-0 override under warn: CLAUDE.md Write, mode=warn → STILL BLOC
 set_mode "off"
 test_case "Tier-0 override under off: OPERATIONS.md Write, mode=off → STILL BLOCK" \
   "$(write_payload "${TEST_WS}/pmo-platform/core/governance/OPERATIONS.md" "${TEST_WS}/pmo-platform")" \
+  2 "BLOCK-AUTONOMY-001"
+
+# --- Location anchoring of the -001 governance set (#5812) ---
+# The three document entries were bare basename globs until #5812, so a file merely
+# NAMED CLAUDE.md was blocked wherever on disk it lived. The suite could not see that:
+# every pre-existing arm asserts a block, and a basename glob satisfies all of them, so
+# the whole set passed identically before and after anchoring. The missing half is a
+# must-NOT-block arm, and a lone allow-assertion is worthless without something that
+# proves the hook was live when it allowed.
+#
+# Each pair below is therefore discriminating by construction: identical payload shape
+# and identical cwd, with ONLY the target path differing. The block arm is what stops
+# its partner's exit 0 from being an inert zero — it proves the -001 case arm was
+# reached and evaluated for both payloads. (It holds even when this file is run outside
+# test-runner.sh: the Tier-0 floor is evaluated BEFORE the master-activation and
+# workspace-scope gates, so the block arm cannot be short-circuited by either.)
+set_mode "enforce"
+set_ceiling 2
+
+test_case "#5812 sensitivity: the anchored charter still BLOCKS (pair control)" \
+  "$(write_payload "${TEST_WS}/CLAUDE.md" "${TEST_WS}/personal/product-repo")" \
+  2 "BLOCK-AUTONOMY-001"
+
+test_case "#5812 specificity: another repo's root CLAUDE.md → ALLOW (it is not the charter)" \
+  "$(write_payload "${TEST_WS}/personal/product-repo/CLAUDE.md" "${TEST_WS}/personal/product-repo")" \
+  0 ""
+
+# RELEASE_PROTOCOL.md carried no fixture at all before #5812, so its scope was
+# unasserted in BOTH directions. Same discriminating-pair shape.
+test_case "#5812 sensitivity: RELEASE_PROTOCOL.md in the platform checkout → BLOCK" \
+  "$(edit_payload "${TEST_WS}/pmo-platform/release/governance/RELEASE_PROTOCOL.md" "${TEST_WS}/pmo-platform")" \
+  2 "BLOCK-AUTONOMY-001"
+
+test_case "#5812 specificity: a RELEASE_PROTOCOL.md outside the checkout → ALLOW" \
+  "$(edit_payload "${TEST_WS}/personal/product-repo/RELEASE_PROTOCOL.md" "${TEST_WS}/personal/product-repo")" \
+  0 ""
+
+# Anchoring must not have quietly re-introduced the worktree exemption this rule's own
+# comment says it does not grant. A governance file inside a worktree NESTED under the
+# platform checkout stays blocked, because the checkout anchor matches at any depth.
+test_case "#5812: OPERATIONS.md inside a nested worktree → STILL BLOCK (no worktree exemption)" \
+  "$(edit_payload "${TEST_WS}/pmo-platform/.claude/worktrees/wt/core/governance/OPERATIONS.md" "${TEST_WS}/pmo-platform/.claude/worktrees/wt")" \
+  2 "BLOCK-AUTONOMY-001"
+
+# A governance basename sitting directly AT the checkout root — the one-path gap the
+# BLOCK-AUTONOMY-002 comment below calls out for its own domain globs. Covered by the
+# paired checkout-root pattern, and asserted so a future tidy-up cannot drop it.
+test_case "#5812: OPERATIONS.md at the platform checkout root → BLOCK (root-level arm)" \
+  "$(edit_payload "${TEST_WS}/pmo-platform/OPERATIONS.md" "${TEST_WS}/pmo-platform")" \
   2 "BLOCK-AUTONOMY-001"
 
 # Cross-domain bridge write: pmo-platform cwd writing to projects/ → Tier-0 block.
