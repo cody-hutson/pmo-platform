@@ -94,8 +94,13 @@ Restamp the canonical version across every surface the abandoned row touches:
 - the RELEASE_INDEX row,
 - the RELEASE_DIGEST entry,
 - the release-note and release-plan frontmatter,
-- **the release-plan FILENAME — rename the plan to the canonical version and move it to
-  `release/releases/plans/v<MAJOR>/<CANONICAL>_RELEASE_PLAN.md`,**
+- **the release-plan FILENAME — but only when the plan is already version-named
+  (post-claim). In that case rename the plan to the canonical version and move it to
+  `release/releases/plans/v<MAJOR>/<CANONICAL>_RELEASE_PLAN.md`.** When the plan is still
+  **slug-primary** (pre-claim — the abandonment gave up a provisional name and no version
+  stem was ever bound into the filename, per ADR-092), there is **no rename to perform**:
+  the filename carries no version to roll forward, so the frontmatter above is the only
+  plan surface that moves,
 - CHANGELOG,
 - `.version`.
 
@@ -108,7 +113,11 @@ did not ship as is a defect under that decision regardless of which residue clas
 falls in. The empirical record agrees — of the four re-version rows in
 `../../releases/RELEASE_REVERSIONS.md` that mention the plan file, **three renamed it and
 one did not**; the rename is the convention and the retention is the outlier. It was
-simply never written down, which is how the one retention arose.
+simply never written down, which is how the one retention arose. All four of those rows
+predate ADR-092, so every plan they describe was version-named at authoring time: the
+empirical base is **post-claim by construction** and carries no evidence about the
+pre-claim case, which is why the bullet above is qualified by claim state rather than
+generalized from these four.
 
 Skipping it is not cosmetic. Rolling the plan's *frontmatter* forward while leaving its
 *filename* at the abandoned version is exactly the shape the ADR-092 plan-identity close
