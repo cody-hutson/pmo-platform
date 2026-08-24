@@ -494,11 +494,18 @@ fi
 # Without this the mode selector would be an UNFALSIFIABLE limb. A guard that
 # skips MORE than it should takes that arm's PASS lines away with it, so the suite
 # still prints an all-green tally and still exits 0; there is no count to compare
-# against, because the count is itself a function of what ran. That was measured,
-# not assumed: before this block existed, making --fast skip T5 as well reddened
-# nothing. So the assertion is on REACHEDNESS, which a shrinking tally cannot
-# fake. Under --fast it asserts the converse too, so a selector that quietly
-# stopped skipping is caught as a failure rather than merely as a slow run.
+# against, because the count is itself a function of what ran. Follow the exit
+# contract at the foot of this file to see it: a skipped arm makes no report()
+# call, so PASS falls while FAIL stays at zero, and a contract that keys on FAIL
+# alone therefore never fires. So the assertion is on REACHEDNESS, which a
+# shrinking tally cannot fake. Under --fast it asserts the converse too, so a
+# selector that quietly stopped skipping is caught as a failure rather than merely
+# as a slow run.
+#
+# (Deliberately paraphrased rather than quoting that contract line: it must occur
+# EXACTLY ONCE in this file. The CI falsification probe locates it by literal
+# match to inject a failing assertion, and treats a non-unique match as a broken
+# probe — so a second verbatim copy in a comment would disable the probe.)
 # ─────────────────────────────────────────────────────────────────────────────
 printf '\nARM REACH: the selected mode reached the arms it declares\n'
 if [ "${FAST}" -eq 1 ]; then

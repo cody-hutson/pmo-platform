@@ -213,8 +213,11 @@ jobs:
       # The budget of 5 minutes is adopted, not invented: it is
       # PER_TOOL_TIMEOUT_S = 300 in release/tools/check-selftest-coverage.py, the
       # platform's existing per-tool self-test budget. Extending that number beats
-      # introducing a second one next to it. Measured headroom is ~16x on the
-      # slowest of the three.
+      # introducing a second one next to it. Headroom against the slowest of the
+      # three measured ~18x on a developer machine (17 s against a 300 s budget). A
+      # cold or contended runner narrows that, which is exactly why the budget is
+      # the platform's existing per-tool figure rather than a tight fit to a local
+      # timing.
       #
       # Security posture is unchanged: like every other step in this file, none of
       # the steps below consumes any github.event.* input. Each run: block is a
