@@ -345,6 +345,23 @@ All nine cards' acceptance criteria are file-path-plus-state or explicit-predica
 
 Populated per Engineering chip as each card lands, in the order of § Implementation Sequence. Each entry records the card, the checks run, their observed results, and the landing commit.
 
+#### #4981 — probe validity and engine parity · position 1 · landed `90189947`
+
+| Check | Family | Observed |
+|---|---|---|
+| Defect-idiom census, re-measured at fix time | per-issue (AC-3) | **0** across both script-class populations — 231 files / 143,805 lines, and 296 files / 152,375 lines with workflow YAML. Tree-wide: exactly **1**, and it is prose in an archived release plan warning about this defect, not an invocation. |
+| Detector sensitivity arm | per-issue (AC-2) | 5 seeded must-flag lines carrying the full defect idiom, 2 of them with a git global option between command and subcommand. Original predicate flags **2 of 5**; repaired predicate flags **5 of 5**. PASS — NON-ZERO. Arm input 161 bytes, non-empty. |
+| Detector specificity arm | per-issue (AC-2) | 6 near-miss lines, each differing from a true positive in exactly one property. Both predicates flag **0 of 6**. PASS — ZERO. Arm input 178 bytes, non-empty. |
+| Cascade-completeness sweep | per-issue | 14 patterns over 3 files / 1,402 lines / 151,169 bytes, engine `python3` `re.search`, file-scoped. Every UPDATE target moved to 0; every PRESERVE target intact — `7 classes` 1, the boundary labels 2, the element-range string 1, `15 rules` 1. Control arms: sensitivity 4 and 8, specificity 0. |
+| Doc-link integrity | integration | `deploy.sh --check` Check 14 — **OK, no broken cross-refs in scope.** |
+| ADR number integrity | integration | `check-adr-numbers.py` — **PASS**, 142 ADRs contiguous, no duplicates. |
+| ADR durability lint | integration | `check-adr-durability.py` — ADR-142 clean; the 2 residual findings are pre-existing on another record. |
+| Skill-package freshness | regression | `pmo-qa-auditor` rebuilt and **fresh**; package plus content-baseline sidecar committed in the same commit as the reference edit. |
+| Runtime suite | self-verification | **`suite-skip`** — the honest no-op. No changed path matches rows 1–5 of the runtime-suite selection map; the change is doc, governance and spec only. Control: a `core/deploy/deploy.sh` probe selects row 2, so the selector discriminates. |
+| Full `deploy.sh --check` | regression | 4 FAIL rows, **none in this change set** — a stale package for a skill this card does not touch, release-body drift across previously logged releases, and a count-structure finding in a file from an earlier release. Probe: 0 of 6 changed paths intersect any FAIL subject; control arm fires at 3 for the subject this card does own. |
+
+**AC-4 resolves via its second limb.** No committed-scripts lint arm ships. The population is measured at zero, and a new executable would carry an allowlist row and CI wiring for no yield. The flip trigger is recorded in ADR-142: the first live occurrence of the forbidden form in a committed script re-opens the decision.
+
 ---
 
 ## Delivery Strategy
