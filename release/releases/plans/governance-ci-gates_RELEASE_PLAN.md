@@ -2,7 +2,7 @@
 title: Release Plan — governance-ci-gates (promote load-bearing governance checks to warn-mode pre-merge CI gates)
 type: release-plan
 plan_type: release
-status: ACTIVE
+status: CLOSED
 release: version-less (theme-named; no tag claimed)
 milestone: 93-governance-ci-gates
 release_class: cross-cutting

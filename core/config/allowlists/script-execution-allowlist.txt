@@ -257,6 +257,19 @@ release/tools/tests/test_domain_blast_radius.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_lint_release_corpus_versionless.sh
 ./release/tools/tests/test_lint_release_corpus_versionless.sh
 release/tools/tests/test_lint_release_corpus_versionless.sh
+# test_plan_status_terminal_transition.sh — regression suite for the release-plan
+# `status:` lifecycle: the close-out transition (automated-closeout.sh Phase 6.9) and
+# the two lint limbs that police it. Its Group-A arms EXTRACT the shipped write
+# primitive and re-evaluate a mutated copy of it, and its Group-B arms drive the lint
+# against a seeded fixture corpus — so a blocked agent-side invocation leaves exactly
+# the arms that prove the fix works unrunnable. The seeded fixtures are the whole
+# point: after this release's sweep the live corpus holds zero positives, so a green
+# run over it proves nothing and only these arms can discriminate.
+[PMO_PLATFORM_ROOT]/release/tools/tests/test_plan_status_terminal_transition.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_plan_status_terminal_transition.sh
+./release/tools/tests/test_plan_status_terminal_transition.sh
+release/tools/tests/test_plan_status_terminal_transition.sh
+*/release/tools/tests/test_plan_status_terminal_transition.sh
 [PMO_PLATFORM_ROOT]/release/tools/tests/test_renumber_adr.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_renumber_adr.sh
 ./release/tools/tests/test_renumber_adr.sh

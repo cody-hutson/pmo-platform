@@ -2,7 +2,7 @@
 title: Release Plan — governance-ci-checks (governance self-validates)
 type: release-plan
 plan_type: release
-status: ACTIVE
+status: CLOSED
 release: version-less (theme-named; no tag claimed)
 milestone: 266-governance-ci-checks
 release_class: cross-cutting
