@@ -293,12 +293,12 @@ is_script_allowlisted() {
   return 1
 }
 
-# Strip a leading quote and a TRAILING RUN of shell syntax characters from a
-# token. Quoting a path is ordinary usage, and an unstripped quote leaves the
-# token not ending in `.sh` — which silently disabled BLOCK-DESTRUCTIVE-022
-# altogether (`bash "/tmp/evil.sh"` matched nothing and fell through to allow).
-# A half-quoted token left by segment splitting (`/tmp/evil.sh"`) normalizes for
-# the same reason.
+# Resolve one raw-argv token to the filename the shell will actually operate on.
+# Quoting a path is ordinary usage, and an unstripped quote leaves the token not
+# ending in `.sh` — which silently disabled BLOCK-DESTRUCTIVE-022 altogether
+# (`bash "/tmp/evil.sh"` matched nothing and fell through to allow). A
+# half-quoted token left by segment splitting (`/tmp/evil.sh"`) needs the same
+# treatment.
 #
 # WHY THE TRAILING SIDE IS A RUN AND NOT ONE CHARACTER. Stripping exactly one
 # trailing quote left a second defect open. A token that is the TAIL of a
@@ -320,33 +320,101 @@ is_script_allowlisted() {
 #
 # THE STRIPPED SET IS SHELL SYNTAX, NOT "PUNCTUATION". It is the POSIX shell
 # metacharacters `| & ; < > ( )` plus the three quoting characters `" ' \``.
-# Every one of them, appearing UNESCAPED in raw argv, is syntax rather than part
-# of a filename — a filename containing one must be quoted or escaped, and that
-# spelling carries a quote character this function already handles. Characters
-# that ARE legal unquoted in a word (`{ } [ ] , . -`) are deliberately NOT
-# stripped: removing those could rewrite one real path into a different real
-# path, which is the one direction that could manufacture an allow.
+# Every one of them, appearing UNESCAPED AND UNQUOTED in raw argv, is syntax
+# rather than part of a filename. Characters that ARE legal unquoted in a word
+# (`{ } [ ] , . -`) are deliberately NOT stripped: removing those could rewrite
+# one real path into a different real path, which is the one direction that can
+# manufacture an allow. Arms `F1-CARVE-*` assert those four still block.
 #
-# DIRECTION OF ERROR. Stripping only ever makes a token MORE likely to reach the
-# allowlist, never more likely to bypass it: a token that no longer matches an
-# operand filter is skipped ENTIRELY (allowed without adjudication), whereas a
-# normalized token is compared against the allowlist and denied when absent. A
-# path legitimately containing one of these characters normalizes to a string
-# that will not be in the allowlist — i.e. it fails toward blocking.
+# DIRECTION OF ERROR — CORRECTED, THIS PARAGRAPH USED TO BE FALSE. A previous
+# revision asserted that stripping "only ever makes a token MORE likely to reach
+# the allowlist, never more likely to bypass it", and that a path legitimately
+# containing a stripped character "fails toward blocking". Backwards, and
+# measurably so. The trailing loop ran straight THROUGH a self-quoted token's own
+# closing quote and kept eating characters that were literal filename content:
+# `source './core/deploy/deploy.sh)'` runs a file named `deploy.sh)` — NOT
+# allowlisted — and normalized to `deploy.sh`, which IS. All TEN declared-stripped
+# characters flipped BLOCK to ALLOW in that one spelling. The paragraph's own
+# reasoning (a strip that rewrites one real path into another manufactures an
+# allow) was correct and was simply never carried to the stripped set: the
+# carve-out set was audited for it, the stripped set was not. Arms
+# `F1-QUOTED-*` are one per stripped character, and each was demonstrated failing
+# against the pre-fix hook.
 #
-# The leading side stays a single quote character. Every command-substitution
-# shape puts the substitution's OPENING punctuation on the verb token, not on
-# the operand, so there is no measured leading-run defect — and widening a
-# matcher with no defect behind it is the same trade the source-arm comment
-# below declines.
+# THE RULE THAT REPLACES IT: DENY WHAT YOU CANNOT FULLY RESOLVE — "denied by
+# construction rather than best-effort-sanitized", the Injection resistance
+# concept in core/standards/domain-best-practices/software.md, whose named
+# exemplar is block-fs-boundary.sh's strict branch. Best-effort sanitizing until
+# a token happens to match an allowlist row is how the defect above was built. So
+# the token is now read as the shell reads it, and the two cases are kept apart:
+#
+#   SELF-QUOTED (the token OPENS its own quote). Everything from the opening
+#   quote to its MATCHING close is literal filename and must not be touched.
+#   Resolution is exact when that close is the token's LAST character, and only
+#   then. `'./x.sh)'` resolves to `./x.sh)` — a real filename, which then fails
+#   the allowlist on its own merits rather than being sanitized into passing it.
+#
+#   NOT SELF-QUOTED. The trailing characters cannot be filename content: an
+#   unquoted, unescaped metacharacter ends the word, and a filename that contains
+#   one must be quoted or escaped (the quoted spelling is the case above; the
+#   escaped spelling leaves a `\` the strip does not remove, so it fails the
+#   allowlist). The trailing-run strip is therefore sound HERE and only here, and
+#   it is unchanged — this is the whole of what the command-substitution-tail fix
+#   contributed and arm `F1-ALLOW-tail` pins that it still passes.
+#
+# WHAT "CANNOT FULLY RESOLVE" MEANS CONCRETELY. Two shapes: the token opens a
+# quote it never closes (`bash 'my` — segment splitting cut a space-bearing path
+# in half), or it closes and then CONTINUES (`'./a''`, `'./a'b`) so the real name
+# is a concatenation whose other half is outside this token. Both set
+# script_norm_ok=0 and the caller denies. The value returned alongside is a
+# FILTER PROBE, not a path: it exists so the arm can ask "is my operand domain
+# even implicated?" before denying. Without that probe every `bash -c 'a; …'`
+# would deny, because segment splitting hands the `-c` arm the fragment `'a`.
+# The probe keeps the deny inside each arm's declared operand domain — arm
+# `F1-FP-cmode` is the false-positive control for exactly that.
+#
+# NOT CLAIMED: that a quote-bearing filename always resolves. `"./x\".sh"`
+# resolves to `./x\` and fails the allowlist. That is the safe direction, it is
+# a residual rather than a guarantee, and it is stated here rather than papered
+# over — a comment in this function has already asserted one impossible direction.
+#
+# OUTPUT CONTRACT — GLOBALS, NOT STDOUT. Two facts must leave this function: the
+# path AND whether the resolution is trustworthy. `$( … )` runs in a SUBSHELL, so
+# a status set inside a command substitution cannot reach the caller at all; and
+# packing the pair into one stdout string would need a delimiter that a filename
+# may legally contain. So the function assigns and the caller reads.
+#   script_norm_out — the path to adjudicate (or the filter probe when ok=0)
+#   script_norm_ok  — 1 resolves to exactly ONE literal filename; 0 it does not
 normalize_script_token() {
-  local t="$1" prev=""
-  t="${t#[\"\']}"
+  local t="$1" q="" body="" prev=""
+  script_norm_ok=1
+  case "$t" in
+    \"*|\'*)
+      q="${t:0:1}"
+      t="${t:1}"
+      case "$t" in
+        *"$q"*)
+          body="${t%%"$q"*}"
+          if [ "${body}${q}" = "$t" ]; then
+            script_norm_out="$body"          # matching close is the last char
+          else
+            script_norm_ok=0                 # closes, then continues
+            script_norm_out="$body"          # filter probe only
+          fi
+          ;;
+        *)
+          script_norm_ok=0                   # opened, never closed
+          script_norm_out="$t"               # filter probe only
+          ;;
+      esac
+      return 0
+      ;;
+  esac
   while [ "$t" != "$prev" ]; do
     prev="$t"
     t="${t%[\"\'\`\(\)\;\&\|\<\>]}"
   done
-  "$PRINTF" '%s' "$t"
+  script_norm_out="$t"
 }
 
 # Adjudicate one candidate script path against the allowlist. Blocks (exit 2) on
@@ -354,8 +422,23 @@ normalize_script_token() {
 # unexpanded argv, so a variable-bearing path cannot be resolved here. Denying is
 # the same fail-closed posture as the dependency gate above — a security control
 # that cannot evaluate its input must deny, never guess.
+#
+# THERE ARE NOW TWO UNRESOLVABLE CLASSES AND THEY ARE SEPARATE ARGUMENTS. The
+# variable-bearing one is a property of the PATH TEXT and is detected here.
+# The quoting one is a property of the TOKEN the path was extracted from — by the
+# time a path reaches this function the quotes are gone, so it CANNOT be detected
+# here and must be carried in. $2 is that carry: 1 (the default, for the callers
+# that hold a path with no token behind it) means resolved, 0 means
+# normalize_script_token could not close the token's own quote and $1 is a filter
+# probe rather than a filename. Defaulting to 1 keeps every existing one-argument
+# call site byte-identical in behaviour.
 check_script_target() {
-  local path="$1"
+  local path="$1" resolved="${2:-1}"
+  if [ "$resolved" -eq 0 ]; then
+    block "BLOCK-DESTRUCTIVE-022" \
+      "unresolvable script path (quoting): the operand's quotes do not close within its own token, so the filename the shell will run cannot be determined from argv (nearest resolvable prefix: $path)." \
+      "invoke with a fully-quoted literal path (bash '/abs/path.sh'), or add the resolved path to .claude/script-execution-allowlist.txt, or set CLAUDE_HOOK_BYPASS=1"
+  fi
   case "$path" in
     *'$'*)
       block "BLOCK-DESTRUCTIVE-022" \
@@ -465,11 +548,15 @@ log_would_fire_022() {
 # validates the enum so a typo surfaces as a check finding rather than as a silent
 # posture change.
 destructive_022_exec_verdict() {
-  local path="$1"
+  local path="$1" resolved="${2:-1}"
   local cause="not-allowlisted"
   case "$path" in
     *'$'*) cause="unresolvable" ;;
   esac
+  # A token whose own quote does not close is `unresolvable` for the same reason
+  # a variable-bearing one is — the drain must not label it `not-allowlisted`,
+  # because that sends the operator to an allowlist that can never match it.
+  if [ "$resolved" -eq 0 ]; then cause="unresolvable"; fi
   if [ "$cause" = "not-allowlisted" ] && is_script_allowlisted "$path"; then
     return 0
   fi
@@ -486,7 +573,7 @@ destructive_022_exec_verdict() {
       ;;
   esac
   log_would_fire_022 "enforce" "$cause" "$path"
-  check_script_target "$path"
+  check_script_target "$path" "$resolved"
 }
 
 # --------------------------------------------------------------------------
@@ -1154,14 +1241,46 @@ case "$TOOL_NAME" in
         bash|sh|zsh) script_verb="interp" ;;
         source|.)    script_verb="source" ;;
         *)
-          script_word="$(normalize_script_token "${script_tokens[$script_hidx]}")"
+          normalize_script_token "${script_tokens[$script_hidx]}"
+          script_word="$script_norm_out"
           case "$script_word" in
-            # System bins, adopted VERBATIM from ANCHOR_PREFIX_BASH's prefix set so
-            # this file keeps ONE definition of "system bin". `/sbin` and
-            # `/usr/sbin` are deliberately absent: adding them would create a
-            # second, divergent definition, and neither is a script-laundering
-            # route an agent reaches.
-            /bin/*|/usr/bin/*|/usr/local/bin/*|/opt/homebrew/bin/*|/opt/local/bin/*) continue ;;
+            # THIS SET IS NOT ANCHOR_PREFIX_BASH'S, AND THE DIVERGENCE IS THE
+            # POINT. It used to be — adopted verbatim "so this file keeps ONE
+            # definition of system bin" — and that reuse was a defect, because the
+            # two uses ask INVERTED security questions. Where ANCHOR_PREFIX_BASH
+            # originates, the prefix identifies the INTERPRETER BINARY being
+            # invoked: a trusted-SOURCE question, and listing a directory there
+            # only widens what the anchor recognises as a command start (it can
+            # add coverage, never remove it). HERE the prefix exempts the
+            # EXECUTION TARGET from adjudication: an untrusted-TARGET question,
+            # where listing a directory REMOVES coverage. One list cannot answer
+            # both, and sharing it silently exported an anchor-widening decision
+            # into the exemption set.
+            #
+            # THE PREDICATE THIS SET ANSWERS: can the agent write into the
+            # directory without elevation? If it can, "system bin" is not a
+            # trust statement about the target — the agent could place the script
+            # there itself, which is precisely the script-laundering route -022
+            # exists to close. Measured on the reference host:
+            #   /bin /usr/bin /usr/local/bin /opt/local/bin  drwxr-xr-x root:wheel
+            #   /opt/homebrew/bin                            drwxrwxr-x <user>:admin
+            # `/opt/homebrew/bin` is group-writable by an admin user and so is
+            # agent-writable without elevation — `/opt/homebrew/bin/x.sh` executed
+            # directly was never adjudicated while `bash /opt/homebrew/bin/x.sh`
+            # was blocked. It is therefore REMOVED here. Arm `F1-EXEC-homebrew`
+            # asserts the removal; arms `F1-EXEC-ctl-*` assert the four that
+            # remain keep their exemption, so this is a narrowing and not a
+            # rewrite.
+            #
+            # ANCHOR_PREFIX_BASH ITSELF IS DELIBERATELY UNCHANGED. Other rules in
+            # this file depend on it in its original trusted-source role, where
+            # dropping a prefix would narrow a matcher rather than an exemption —
+            # the opposite of the direction intended here.
+            #
+            # `/sbin` and `/usr/sbin` stay absent, unchanged: adding them would
+            # WIDEN the exemption, and neither is a script-laundering route an
+            # agent reaches.
+            /bin/*|/usr/bin/*|/usr/local/bin/*|/opt/local/bin/*) continue ;;
             */*) script_verb="exec" ;;
             *)   continue ;;
           esac
@@ -1187,9 +1306,14 @@ case "$TOOL_NAME" in
       # adjudicate `bash /tmp/evil` either. One residual across three arms,
       # recorded once, and pinned by a test so a future widening is a deliberate
       # act rather than a drift.
+      # THE OPERAND FILTER STILL GATES AN UNRESOLVABLE TOKEN, and that ordering is
+      # deliberate. `$script_word` is a filter probe when script_norm_ok=0, so
+      # asking the filter first keeps the deny inside this arm's declared operand
+      # domain instead of turning every unclosed quote at command position into a
+      # verdict.
       if [ "$script_verb" = "exec" ]; then
         case "$script_word" in
-          *.sh|*.bash) destructive_022_exec_verdict "$script_word" ;;
+          *.sh|*.bash) destructive_022_exec_verdict "$script_word" "$script_norm_ok" ;;
         esac
         continue
       fi
@@ -1221,9 +1345,10 @@ case "$TOOL_NAME" in
 
       if [ "$script_cmode" -eq 1 ]; then
         while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
-          script_cand="$(normalize_script_token "${script_tokens[$script_idx]}")"
+          normalize_script_token "${script_tokens[$script_idx]}"
+          script_cand="$script_norm_out"
           case "$script_cand" in
-            *.sh) check_script_target "$script_cand" ;;
+            *.sh) check_script_target "$script_cand" "$script_norm_ok" ;;
           esac
           script_idx=$(( script_idx + 1 ))
         done
@@ -1231,7 +1356,11 @@ case "$TOOL_NAME" in
         # normalize BEFORE the filter on both verbs — a quoted path does not end in
         # `.sh` and does not start with `/`, so an unstripped quote matches no
         # pattern and falls through to ALLOW without the allowlist being consulted.
-        script_cand="$(normalize_script_token "${script_tokens[$script_idx]}")"
+        # The filter still runs FIRST on an unresolvable token: `$script_cand` is a
+        # probe in that case, and asking the filter keeps each arm's deny inside
+        # the operand domain that arm declares.
+        normalize_script_token "${script_tokens[$script_idx]}"
+        script_cand="$script_norm_out"
         if [ "$script_verb" = "source" ]; then
           # `source`/`.` take ANY file, not only a script suffix. This filter is
           # preserved verbatim from the mechanism it replaces. Do NOT unify it with
@@ -1239,11 +1368,11 @@ case "$TOOL_NAME" in
           # `*.bash` coverage, and widening the interpreter arm to `/*` opens a
           # false-positive surface with no defect behind it.
           case "$script_cand" in
-            /*|./*|../*|~/*|*.sh|*.bash) check_script_target "$script_cand" ;;
+            /*|./*|../*|~/*|*.sh|*.bash) check_script_target "$script_cand" "$script_norm_ok" ;;
           esac
         else
           case "$script_cand" in
-            *.sh) check_script_target "$script_cand" ;;
+            *.sh) check_script_target "$script_cand" "$script_norm_ok" ;;
           esac
         fi
       fi

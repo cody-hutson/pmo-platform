@@ -1368,6 +1368,269 @@ case "${b022_probe_rc}:${b022_probe_err}" in
 esac
 
 # ==========================================================================
+# BLOCK-022 F1 — normalization must not MANUFACTURE an allow (deny-don't-sanitize)
+# ==========================================================================
+#
+# THE BYPASS THIS BLOCK PINS, and it is the inverse of the one the parity block
+# above pins. There, normalization was too WEAK: residual punctuation defeated a
+# suffix-anchored filter and a real target was never adjudicated. Here it was too
+# STRONG: the trailing-strip loop ran through a SELF-QUOTED token's own closing
+# quote and kept eating characters that were literal filename content.
+#
+#     source './core/deploy/deploy.sh)'
+#
+# runs a file named `deploy.sh)` — not allowlisted, must BLOCK. The hook
+# normalized it to `deploy.sh` — allowlisted — and permitted. All TEN characters
+# the function declares it strips flip BLOCK to ALLOW in that spelling, so this
+# block carries one arm per character rather than one arm for the class: the
+# class claim is what the shipped comment made, and it was the per-character
+# measurement that falsified it.
+#
+# WHY THE SHIPPED COMMENT DID NOT CATCH IT. It asserted a DIRECTION OF ERROR —
+# that stripping "only ever makes a token MORE likely to reach the allowlist,
+# never more likely to bypass it" — and had no arm behind that assertion. The
+# reasoning was sound for the CARVE-OUT set (`{ } [ ] , . -`, which it explicitly
+# audited) and was never carried to the stripped set. So the carve-out arms below
+# are not decoration: they are the half of the claim that was always true, kept
+# beside the half that was not, and the pair is what makes the corrected comment
+# falsifiable in both directions.
+#
+# THE TWO INPUTS THIS BLOCK MUST HOLD APART. They are one character different and
+# a naive rule collapses them:
+#
+#   'core/deploy/deploy.sh)'   real file `…/deploy.sh)`  -> BLOCK (F1-DISCRIM-block)
+#   core/deploy/deploy.sh)"    real file `…/deploy.sh`   -> ALLOW (F1-DISCRIM-allow)
+#
+# The second is the command-substitution tail the parity block above exists to
+# fix. Collapsing them in the safe direction would discard that fix entirely, so
+# F1-DISCRIM-allow is a MUST-NOT-REGRESS arm and is asserted at the same rank as
+# the must-block arms. The discriminator is whether the token OPENED its own
+# quote: if it did, everything to the matching close is filename; if it did not,
+# the trailing run is foreign syntax and strips as before.
+
+echo ""
+echo "BLOCK-022 F1 deny-don't-sanitize (self-quoted token normalization)"
+echo "---"
+
+F1_OK='./core/deploy/deploy.sh'         # allowlisted in every form used below
+F1_EVIL='./core/deploy/notallowed.sh'   # never allowlisted
+
+# The ten characters normalize_script_token declares it strips, and the four it
+# declares it does NOT. Kept as data so a future edit to the stripped set that
+# forgets to extend this table is visible as a count mismatch rather than as
+# silent under-coverage.
+F1_STRIPPED=( '"' "'" '`' '(' ')' ';' '&' '|' '<' '>' )
+F1_STRIPPED_NAMES=( dquote squote backtick lparen rparen semi amp pipe lt gt )
+F1_CARVE=( '.' '-' ']' ',' )
+F1_CARVE_NAMES=( dot dash rbracket comma )
+
+if [ "${#F1_STRIPPED[@]}" != "10" ] || [ "${#F1_CARVE[@]}" != "4" ]; then
+  /usr/bin/printf 'FAIL: F1 table arity: stripped=%s(want 10) carve=%s(want 4)\n' \
+    "${#F1_STRIPPED[@]}" "${#F1_CARVE[@]}"
+  FAIL=$((FAIL + 1))
+fi
+
+# `<verb> '<path><char>'` — the self-quoted spelling. printf keeps the quotes
+# literal; nothing here is evaluated by this shell.
+f1_quoted_cmd() { /usr/bin/printf "%s '%s%s'" "$1" "$2" "$3"; }
+
+# --- MUST-BLOCK: one arm per declared-stripped character.
+#
+# THESE RUN ON THE SOURCE ARM, AND THE CHOICE IS FORCED, NOT CONVENIENT. The
+# source arm's operand filter carries PREFIX alternatives (`/*`, `./*`, `../*`,
+# `~/*`), so every one of these ten spellings lands inside its declared operand
+# domain and the arm is obliged to adjudicate all ten. The interpreter arm's
+# filter is SUFFIX-anchored (`*.sh`), so a correctly-resolved `…/deploy.sh)` is
+# outside ITS declared domain — see the residual pair below, which pins that
+# boundary rather than hiding it. Running the table on the arm whose domain
+# contains every case is what keeps a red arm meaning "the fix regressed" instead
+# of "this arm never covered it".
+f1_i=0
+while [ "$f1_i" -lt "${#F1_STRIPPED[@]}" ]; do
+  f1_c="${F1_STRIPPED[$f1_i]}"
+  f1_n="${F1_STRIPPED_NAMES[$f1_i]}"
+  test_case "F1-QUOTED-${f1_n}/source: quoted allowlisted path + '${f1_n}' is a DIFFERENT file, blocks" \
+    "$(bash_payload "$(f1_quoted_cmd source "$F1_OK" "$f1_c")")" \
+    2 "BLOCK-DESTRUCTIVE-022"
+  f1_i=$((f1_i + 1))
+done
+
+# --- THE INTERPRETER ARM, AND THE BOUNDARY OF ITS DECLARED DOMAIN.
+#
+# Four of the ten characters reach the interpreter arm even though its filter is
+# suffix-anchored, and they do so for two nameable reasons rather than by luck:
+#   `;` `&` `|` are SEPARATORS, so the segment splitter truncates the token
+#       before normalization sees it and the operand arrives as `'…/deploy.sh` —
+#       an unclosed quote whose filter probe is the bare `.sh` path;
+#   `'`     RE-OPENS a quote after the first one closes, so the token resolves to
+#       nothing single and its filter probe is again the bare `.sh` path.
+# In all four the probe is inside `*.sh` and the arm denies. Each was
+# demonstrated failing against the pre-fix hook.
+for f1_pair in "squote:'" "semi:;" "amp:&" "pipe:|"; do
+  test_case "F1-QUOTED-${f1_pair%%:*}/interp: unresolvable token with an in-domain probe blocks" \
+    "$(bash_payload "$(f1_quoted_cmd bash "$F1_OK" "${f1_pair#*:}")")" \
+    2 "BLOCK-DESTRUCTIVE-022"
+done
+
+# The other six resolve CLEANLY to a filename ending in the character — and that
+# filename is not `.sh`-suffixed, so it falls outside the interpreter arm's
+# declared operand domain and the arm does not adjudicate it. This arm expects
+# ALLOW and it passed before the fix as well, so it is NOT evidence the fix
+# works; it is a PIN on a pre-existing residual, in the same spirit as T-EXEC-9.
+#
+# THE RESIDUAL IT PINS is the one already recorded for this rule: both the
+# interpreter and exec arms are suffix-anchored, so an operand outside `*.sh`
+# escapes them (`bash /tmp/evil` escapes for the identical reason). The fix
+# CHANGED THE MECHANISM without changing this verdict: before, the hook actively
+# matched a DIFFERENT file against the allowlist and permitted on that match;
+# now it declines to adjudicate a target outside its filter. The first is a
+# bypass, the second is a declared boundary — but the executed file is still not
+# blocked HERE, and the source arm is what covers it.
+#
+# Closing it means widening the interpreter arm's filter, which the shipped
+# comment on the source arm forbids and which is outside this change. Widen it
+# and this arm turns red, which is the point of having it.
+test_case "F1-INTERP-RESIDUAL (pin, not fix-evidence): a resolved non-.sh filename is outside the interpreter arm's domain" \
+  "$(bash_payload "bash './core/deploy/deploy.sh)'")" \
+  0
+
+# The same input on the SOURCE arm, stated immediately beside it so the pair
+# reads as one fact: the residual is a property of the interpreter arm's filter,
+# not of the normalization. Same token, same resolution, opposite verdict,
+# because one arm's declared domain contains the target and the other's does not.
+test_case "F1-INTERP-RESIDUAL pair: the identical token on the source arm DOES block" \
+  "$(bash_payload "source './core/deploy/deploy.sh)'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# --- CARVE-OUT: the four characters the function declares it does NOT strip.
+# These blocked before the fix and must keep blocking after it. They are the
+# control that proves the probe DISCRIMINATES — a probe that reported BLOCK for
+# every trailing character would report the fix as working while proving nothing.
+f1_i=0
+while [ "$f1_i" -lt "${#F1_CARVE[@]}" ]; do
+  test_case "F1-CARVE-${F1_CARVE_NAMES[$f1_i]}: unstripped character keeps blocking (control)" \
+    "$(bash_payload "$(f1_quoted_cmd source "$F1_OK" "${F1_CARVE[$f1_i]}")")" \
+    2 "BLOCK-DESTRUCTIVE-022"
+  f1_i=$((f1_i + 1))
+done
+
+# --- THE DISCRIMINATION PAIR, stated as two named arms so a reader can find it.
+test_case "F1-DISCRIM-block: self-quoted token whose real filename ends ')' blocks" \
+  "$(bash_payload "source './core/deploy/deploy.sh)'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "F1-DISCRIM-allow: command-substitution tail on an allowlisted path still ALLOWS" \
+  "$(bash_payload 'bash ./core/deploy/deploy.sh)"')" \
+  0
+
+# --- MUST-NOT-REGRESS: every legitimate spelling the normalization was built for.
+test_case "F1-ALLOW-tail: enclosed substitution tail, allowlisted, allows" \
+  "$(bash_payload 'echo "$(cd /tmp && bash ./core/deploy/deploy.sh)"')" \
+  0
+
+test_case "F1-ALLOW-halfdquote: half-quoted tail, allowlisted, allows" \
+  "$(bash_payload 'bash ./core/deploy/deploy.sh"')" \
+  0
+
+test_case "F1-ALLOW-dquote: plainly double-quoted allowlisted path allows" \
+  "$(bash_payload 'bash "./core/deploy/deploy.sh"')" \
+  0
+
+test_case "F1-ALLOW-squote: plainly single-quoted allowlisted path allows" \
+  "$(bash_payload "bash './core/deploy/deploy.sh'")" \
+  0
+
+test_case "F1-ALLOW-source-squote: plainly single-quoted allowlisted path allows on the source arm" \
+  "$(bash_payload "source './core/deploy/deploy.sh'")" \
+  0
+
+# --- SENSITIVITY CONTROLS for the must-allow arms. Without these the whole
+# must-allow set is satisfiable by a hook that allows everything in those shapes.
+test_case "F1-CTL-tail: the same tail shape with a NON-allowlisted path blocks" \
+  "$(bash_payload 'bash ./core/deploy/notallowed.sh)"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "F1-CTL-enclosed: the same enclosed shape with a NON-allowlisted path blocks" \
+  "$(bash_payload 'echo "$(cd /tmp && bash ./core/deploy/notallowed.sh)"')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "F1-CTL-squote: the same single-quoted shape with a NON-allowlisted path blocks" \
+  "$(bash_payload "bash './core/deploy/notallowed.sh'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# --- FALSE-POSITIVE CONTROL for the deny channel, and the reason the unresolvable
+# verdict is gated behind each arm's operand filter rather than raised the moment a
+# quote fails to close. Segment splitting hands the `-c` arm the fragment `'echo`,
+# which opens a quote it never closes. Denying on that alone would block every
+# `bash -c '… ; …'` in the workspace. Raise the deny above the filter and this
+# arm goes red, which is the point of having it.
+test_case "F1-FP-cmode: bash -c with a separator inside the program string still allows" \
+  "$(bash_payload "bash -c 'echo a; echo b'")" \
+  0
+
+test_case "F1-FP-spacepath: an unclosed quote outside the operand domain is not a verdict" \
+  "$(bash_payload "git commit -m 'two words'")" \
+  0
+
+# ==========================================================================
+# BLOCK-022 F1 — the exec arm's exemption set is not ANCHOR_PREFIX_BASH's
+# ==========================================================================
+#
+# THE GAP THIS BLOCK PINS. The exec arm exempted five "system bin" prefixes,
+# adopted verbatim from ANCHOR_PREFIX_BASH "so this file keeps ONE definition of
+# system bin". One of the five, `/opt/homebrew/bin`, is mode 0775 owned by the
+# operator's admin group on the reference host — writable by the agent WITHOUT
+# elevation. So `/opt/homebrew/bin/x.sh` executed directly was exempt from
+# adjudication entirely, while `bash /opt/homebrew/bin/x.sh` blocked: the
+# allowlist was bypassable by dropping the interpreter word and writing into a
+# directory the agent already owns, which is the exact script-laundering route
+# the rule's own block message names.
+#
+# THE ROOT CAUSE IS THE REUSE, NOT THE ENTRY. ANCHOR_PREFIX_BASH's prefixes
+# identify the INTERPRETER BINARY — a trusted-SOURCE question where adding a
+# directory only widens what counts as a command start. The exec arm used them to
+# exempt the EXECUTION TARGET — an untrusted-TARGET question where adding a
+# directory REMOVES coverage. One list cannot answer both inverted questions, so
+# the exec arm now owns its own set and the anchor is deliberately unchanged.
+#
+# WHY THESE ARMS READ THE DRAIN. Same reason as the exec block above: the arm
+# ships at `warn`, so both an adjudicated and an exempt input exit 0. Only the
+# drain delta separates "evaluated and denied" from "never evaluated", which is
+# exactly the distinction this gap is about.
+
+echo ""
+echo "BLOCK-022 F1 exec-arm exemption set (agent-writable prefix is not a system bin)"
+echo "---"
+
+exec_warn_case "F1-EXEC-homebrew must-flag: direct execution under the agent-writable /opt/homebrew/bin is adjudicated" \
+  '/opt/homebrew/bin/pmo-probe-not-allowlisted-xyz.sh' 'not-allowlisted'
+
+exec_warn_case "F1-EXEC-homebrew-flag must-flag: same prefix with a flag" \
+  '/opt/homebrew/bin/pmo-probe-not-allowlisted-xyz.sh --check' 'not-allowlisted'
+
+# The asymmetry that made the gap visible: the SAME file via an interpreter was
+# always blocked. If this arm ever goes green-by-allow the exemption has leaked
+# back into the interpreter arm too.
+test_case "F1-EXEC-homebrew-interp control: the same file via an interpreter blocks" \
+  "$(bash_payload 'bash /opt/homebrew/bin/pmo-probe-not-allowlisted-xyz.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# The four root-owned prefixes KEEP their exemption. This is what makes the
+# change a narrowing rather than a rewrite: drop one of these by accident and the
+# corresponding arm turns red.
+exec_notflag_case "F1-EXEC-ctl-usr-bin must-not-flag: /usr/bin stays exempt (root:wheel, 0755)" \
+  '/usr/bin/pmo-probe-not-allowlisted-xyz.sh'
+
+exec_notflag_case "F1-EXEC-ctl-bin must-not-flag: /bin stays exempt (root:wheel, 0755)" \
+  '/bin/pmo-probe-not-allowlisted-xyz.sh'
+
+exec_notflag_case "F1-EXEC-ctl-usr-local-bin must-not-flag: /usr/local/bin stays exempt (root:wheel, 0755)" \
+  '/usr/local/bin/pmo-probe-not-allowlisted-xyz.sh'
+
+exec_notflag_case "F1-EXEC-ctl-opt-local-bin must-not-flag: /opt/local/bin stays exempt (root:wheel, 0755)" \
+  '/opt/local/bin/pmo-probe-not-allowlisted-xyz.sh'
+
+# ==========================================================================
 # BLOCK-022 AC-FP — the verdict must not depend on non-executing text
 # ==========================================================================
 #
