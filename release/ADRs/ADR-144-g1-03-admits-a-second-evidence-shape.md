@@ -73,7 +73,7 @@ Scoping only the new arm would have produced an unexplainable predicate — brac
 
 The risk was measured rather than asserted. The nine affected bodies sit across eight other milestones; **zero** are in the deploying milestone. The gate evaluates only the deploying milestone, so this release's own gate run is unaffected, and the check ships in **warn** mode, where the emitter structurally does not increment the issue counter. First surfacing on those milestones is a WARN line, never a block.
 
-## Alternatives considered
+## Alternatives Considered
 
 Eight co-presence rules were generated and measured over 239 applicable cards, 203 Evidence sections, and six fixtures — three live, three synthetic. Six arms had to land correctly: two live must-PASS fixtures, one live must-FAIL, a prose near-miss that must FAIL, a single-marker body that must FAIL, and a bracket-only regression that must PASS.
 
@@ -106,4 +106,18 @@ Three predicate-scope options were considered separately. Keeping whole-body sco
 
 **A related defect is routed out rather than folded in.** Three surfaces disagree on which criteria constitute the Gate 1→2 structural set — the criterion table lists six, the version-history entries list five, and the check enforces a different five. That is squarely this release's defect class, but fixing it would change the `structural_pass_rate` denominator, which this decision explicitly holds constant. It is routed as separate work.
 
-**Reversibility: CHEAP · confidence HIGH.** One criterion cell, one self-repair row, one predicate function, one header comment, one authoring section, and two template description blocks — plus this record. No schema migration, no data movement, no path move, no package rebuild. Full rollback is a revert of five files.
+## Reversibility
+
+**CHEAP · confidence HIGH.** One criterion cell, one self-repair row, one predicate function, one self-test group, one header comment, one authoring section, and two template description blocks — plus this record. No schema migration, no data movement, no path move, no package rebuild, and no change to any aggregation rule or gate threshold. Full rollback is a revert of the five source files; the criterion reverts to its bracket-only predicate with no residue, because shape (a) was never modified and the criterion's identity columns never moved.
+
+The one asymmetry worth naming: reverting after authors have begun writing probe-record evidence would re-fail those bodies. That is a *content* migration cost, not a structural one, and it is bounded — the nine bodies whose scope changed are named, and the check ships in warn mode, so nothing blocks either way.
+
+## Related ADRs
+
+| ADR | Relationship |
+|---|---|
+| [ADR-120](../../core/ADRs/ADR-120-g1-enforcement-authority-is-class-scoped-and-release-scoped.md) | **Composes.** Establishes the Layer-B(d) / Layer-B(g) authority split this decision lands inside. The widening touches the Layer-B(g) predicate only, and it is ADR-120's release-scoping that makes the nine affected bodies a warning on other milestones rather than a block here. |
+| [ADR-094](ADR-094-extend-before-create.md) | **Composes.** The predicate extends the existing check branch and reuses the existing Evidence-section extraction idiom rather than adding a check; the extracted function is an extraction of that branch, not a parallel mechanism. |
+| [ADR-062](../../core/ADRs/ADR-062-substrate-vs-canonical-precedent.md) | **Composes.** Governs the reconciliation direction when the canonical criterion text and the implementing tool disagree: the criterion row was already correct about Evidence-section scope, so the tool moved to it. |
+| [ADR-115](ADR-115-adr-number-claim-binds-at-merge.md) | **Composes.** The numbering rule this record's `## Status` block applies — allocate at authorship, bind at merge, take the contiguous next, never reserve past an unmerged sibling claim. |
+| [ADR-117](ADR-117-adr-index-derived-surface-and-scoped-conformance-claim.md) | **Composes.** The derived-surface contract under which this record's index row is projected rather than hand-written. |
