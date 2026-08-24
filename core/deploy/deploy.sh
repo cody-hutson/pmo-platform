@@ -11971,6 +11971,136 @@ sys.stdout.write("".join(out) + "|")
   fi
 
 
+  # Check 71 — BLOCK-DESTRUCTIVE-022 exec-arm rollout graduation (MIXED MODE) [#5250]
+  #
+  # WHAT IT ASSERTS. That the -022 exec arm's warn-mode rollout is DECIDED rather
+  # than left running. It reads the arm's four committed constants and, past the
+  # review window, forces a verdict: advance the phase, retreat the phase, or
+  # re-date the arming constant. Every one of those is a one-line edit, and the
+  # edited line IS the audit record of the decision.
+  #
+  # WHY IT EXISTS, AND WHY A REGISTRY ENTRY WOULD NOT HAVE DONE. A warn phase
+  # without a graduation trigger is not a rollout, it is an indefinite fail-open
+  # that reads as working. The in-repo precedent is BLOCK-EGRESS-007: it shipped a
+  # widening drain with a documented intent to graduate on evidence, and that drain
+  # holds two rows in total. Nothing surfaces the stall, so the pipeline stays green
+  # while the control silently permits. A registry entry cannot force a decision
+  # because nothing reads it on a schedule; this check does, on every --check.
+  #
+  # THE SPLIT IS THE WHOLE DESIGN, AND IT IS NOT SYMMETRIC.
+  #   DEADLINE ARM (repo-derivable, ENFORCING): a committed constant plus today's
+  #   date. It needs no drain, so it works in CI and in a fresh clone, and it is the
+  #   real forcing function. This is the arm that answers the flip register's own
+  #   stated blocker — that the shakedown signal is "git-ignored and absent in a
+  #   fresh checkout / CI, so it is not readable by a pull-request agent."
+  #   EVIDENCE ARM (operator-local, ADVISORY): the drain row count. It SKIPs when
+  #   the drain is absent and never touches ISSUES, so a fresh clone and CI see no
+  #   behaviour change from it at all. It informs the decision; it never triggers it.
+  #
+  # A ZERO DRAIN IS A FINDING, NOT A REASON TO WAIT. The three-way verdict is
+  # emitted with the due notice so the reading cannot default to "no evidence yet":
+  # zero rows reads as INSTRUMENTATION-SUSPECT and sends the operator to run the
+  # must-flag control, because a zero whose instrument was never connected measures
+  # the wiring and not the behaviour.
+  #
+  # DECLARED COVERAGE BOUNDARY. It asserts the constants are readable, that the
+  # phase is one of the three enum values, and that the review window has not
+  # elapsed unaddressed. It does NOT assert that the arm behaves as the phase says
+  # — that is the test suite's job (T-EXEC-10 pins the phase gate) — and it does not
+  # read, classify or grade drain CONTENT.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 71: BLOCK-DESTRUCTIVE-022 exec-arm rollout graduation (deadline arm repo-derivable + enforcing; evidence arm operator-local + advisory)"
+    local c71_hook="core/hooks/block-destructive.sh"
+    if [[ ! -f "$c71_hook" ]]; then
+      log "  FAIL:  destructive-022-exec-graduation — hook source missing: $c71_hook (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
+      ISSUES=$((ISSUES + 1))
+    else
+      local c71_phase c71_armed c71_days c71_rows_thr c71_esc
+      c71_phase="$(sed -n 's/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p' "$c71_hook" | head -1)"
+      c71_armed="$(sed -n 's/^readonly DESTRUCTIVE_022_EXEC_ARMED="\([0-9-]*\)".*/\1/p' "$c71_hook" | head -1)"
+      c71_days="$(sed -n 's/^readonly DESTRUCTIVE_022_EXEC_REVIEW_DAYS=\([0-9]*\).*/\1/p' "$c71_hook" | head -1)"
+      c71_rows_thr="$(sed -n 's/^readonly DESTRUCTIVE_022_EXEC_REVIEW_ROWS=\([0-9]*\).*/\1/p' "$c71_hook" | head -1)"
+      c71_esc="$(sed -n 's/^readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=\([0-9]*\).*/\1/p' "$c71_hook" | head -1)"
+
+      # ── control arm FIRST: a probe that cannot be shown to detect proves nothing.
+      # The extractor must return a KNOWN value from a synthetic line and must
+      # return EMPTY for a constant that is not there. Without both, an extractor
+      # silently returning empty would read as "no finding" on every run.
+      local c71_ctrl_hit c71_ctrl_miss
+      c71_ctrl_hit="$(printf 'readonly DESTRUCTIVE_022_EXEC_PHASE="shadow"\n' \
+        | sed -n 's/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p')"
+      c71_ctrl_miss="$(printf 'readonly SOMETHING_ELSE=1\n' \
+        | sed -n 's/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p')"
+      log "  CTRL:  destructive-022-exec-graduation — extractor sensitivity='${c71_ctrl_hit}' (want shadow), specificity='${c71_ctrl_miss}' (want empty)"
+      if [[ "$c71_ctrl_hit" != "shadow" || -n "$c71_ctrl_miss" ]]; then
+        log "  FAIL:  destructive-022-exec-graduation — constant extractor no longer discriminates; every verdict below would be unattributable"
+        ISSUES=$((ISSUES + 1))
+      elif [[ -z "$c71_phase" || -z "$c71_armed" || -z "$c71_days" || -z "$c71_rows_thr" || -z "$c71_esc" ]]; then
+        log "  FAIL:  destructive-022-exec-graduation — one or more rollout constants unreadable in $c71_hook (phase='${c71_phase}' armed='${c71_armed}' days='${c71_days}' rows='${c71_rows_thr}' escalate='${c71_esc}'). A gate that cannot read its own input must not pass."
+        ISSUES=$((ISSUES + 1))
+      else
+        case "$c71_phase" in
+          shadow|warn|enforce) ;;
+          *)
+            log "  FAIL:  destructive-022-exec-graduation — DESTRUCTIVE_022_EXEC_PHASE='${c71_phase}' is not one of shadow|warn|enforce. An unrecognised value falls through to enforce in the hook, so a typo silently hardens a rule firing 28% of the layer's blocks."
+            ISSUES=$((ISSUES + 1))
+            ;;
+        esac
+        local c71_elapsed
+        c71_elapsed="$(python3 -c 'import datetime,sys
+a=datetime.date.fromisoformat(sys.argv[1])
+print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || printf '')"
+        local c71_drain="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/.claude/hooks/destructive-warn-log.jsonl"
+        local c71_rows="SKIP"
+        if [[ -f "$c71_drain" ]]; then
+          # `wc -l`, not `grep -c ''`: on an EMPTY drain grep prints 0 AND exits 1,
+          # so an `|| printf 0` fallback concatenates a second zero and every
+          # numeric comparison below dies on `0\n0`. Caught by running this check
+          # against a zero-row drain — which is the state the graduation verdict
+          # cares most about getting right.
+          c71_rows="$(wc -l < "$c71_drain" 2>/dev/null | tr -d '[:space:]')"
+          [[ -n "$c71_rows" ]] || c71_rows=0
+        fi
+        log "  DENOM: destructive-022-exec-graduation — phase=${c71_phase} armed=${c71_armed} elapsed=${c71_elapsed}d thresholds=${c71_days}d/${c71_rows_thr}rows escalate=${c71_esc}d drain_rows=${c71_rows}"
+
+        if [[ "$c71_phase" == "enforce" ]]; then
+          log "  OK:    destructive-022-exec-graduation — the exec arm has GRADUATED to enforce; the rollout is decided and this gate is discharged"
+        elif [[ -z "$c71_elapsed" ]]; then
+          log "  FAIL:  destructive-022-exec-graduation — DESTRUCTIVE_022_EXEC_ARMED='${c71_armed}' is not a resolvable ISO date, so the deadline arm cannot be evaluated. This is the failure mode a placeholder arming stamp produces."
+          ISSUES=$((ISSUES + 1))
+        else
+          # The three-way verdict, emitted WITH any due notice so a zero drain is
+          # read as a finding rather than as an absence of one.
+          local c71_verdict
+          if [[ "$c71_rows" == "SKIP" ]]; then
+            c71_verdict="drain absent on this instance (operator-local, git-ignored) — the evidence arm SKIPs; read it where the sessions actually ran"
+          elif [[ "$c71_rows" -eq 0 ]]; then
+            c71_verdict="0 rows → INSTRUMENTATION-SUSPECT, not 'no evidence'. Run the must-flag control (block-destructive.test.sh T-EXEC-1). If it writes a row the surface is genuinely quiet — graduate at near-zero risk or remove the arm as dead code. If it does not, the drain is BROKEN and that is a defect."
+          elif [[ "$c71_rows" -lt "$c71_rows_thr" ]]; then
+            c71_verdict="${c71_rows} rows (< ${c71_rows_thr}) → INSUFFICIENT-TRAFFIC. Choose one and record it: graduate on the small sample, retreat to shadow, or extend ONCE by re-dating DESTRUCTIVE_022_EXEC_ARMED."
+          else
+            c71_verdict="${c71_rows} rows (>= ${c71_rows_thr}) → classify the sample true-positive / benign-shape / mandated-tool-blocked with its denominator, then GRADUATE to enforce or NARROW the predicate. Never auto-promoted by count."
+          fi
+
+          if [[ "$c71_elapsed" -ge "$c71_esc" ]]; then
+            log "  FAIL:  destructive-022-exec-graduation — GRADUATION-OVERDUE: ${c71_elapsed} days at phase='${c71_phase}', past the ${c71_esc}-day escalation. ${c71_verdict}"
+            log "         Turn this green by RECORDING A DECISION in core/hooks/block-destructive.sh: advance DESTRUCTIVE_022_EXEC_PHASE, retreat it to shadow, or re-date DESTRUCTIVE_022_EXEC_ARMED. Doing nothing is the one option this gate removes."
+            ISSUES=$((ISSUES + 1))
+          elif [[ "$c71_elapsed" -ge "$c71_days" ]]; then
+            log "  WARN:  destructive-022-exec-graduation — GRADUATION-DUE (deadline): ${c71_elapsed} days since arming (threshold ${c71_days}d; escalates to a finding at ${c71_esc}d). ${c71_verdict}"
+          elif [[ "$c71_rows" != "SKIP" && "$c71_rows" -ge "$c71_rows_thr" ]]; then
+            log "  WARN:  destructive-022-exec-graduation — GRADUATION-DUE (evidence): ${c71_verdict}"
+          else
+            # Silent below threshold: omission IS the non-ceremony signal. Nothing
+            # is emitted beyond the DENOM line above.
+            log "  OK:    destructive-022-exec-graduation — within the review window (${c71_elapsed}d of ${c71_days}d, drain=${c71_rows})"
+          fi
+        fi
+      fi
+    fi
+  fi
+
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
