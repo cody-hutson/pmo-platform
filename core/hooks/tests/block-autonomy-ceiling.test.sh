@@ -51,6 +51,26 @@ TEST_HOME="$(/usr/bin/mktemp -d)"
 /bin/mkdir -p "${TEST_HOME}/.cache/pmo-platform"
 CACHE_FILE="${TEST_HOME}/.cache/pmo-platform/autonomy-ceiling"
 
+# --- MASTER ACTIVATION, seeded ON for the whole suite ---
+# The HOME pin above is what makes the ceiling cache host-independent, but HOME is
+# ALSO where lib/master-enable.sh looks for its activation state:
+#   ${PMO_PLATFORM_CONFIG_ROOT:-${HOME}/.config/pmo-platform}/platform-config.toml
+# Pinning HOME to a bare temp dir therefore pointed that read at a file that does not
+# exist, master resolved to the shipped 'off' default, and the master-gated STEP-2
+# ceiling check went inert for every case that did not seed its own config. The suite
+# was internally inconsistent as a result: R-8 below DOCUMENTS master-OFF as rendering
+# the ceiling inert, while five non-R ceiling cases above it silently depended on the
+# ceiling being live and failed. Seeding activation here is what makes the ceiling
+# assertions test the ceiling rather than the activation gate.
+#
+# The two arms that genuinely need master-OFF (R-8, R-9, and the -004 master-OFF arm)
+# opt out explicitly by pointing PMO_PLATFORM_CONFIG_ROOT at an empty directory, which
+# takes precedence over this file. Activation is therefore ON by default and OFF only
+# where an arm says so — the inverse of the accidental posture it replaces.
+CONFIG_ROOT="${TEST_HOME}/.config/pmo-platform"
+/bin/mkdir -p "$CONFIG_ROOT"
+/usr/bin/printf '[security_hooks]\nmaster_enabled = true\n' > "${CONFIG_ROOT}/platform-config.toml"
+
 export CLAUDE_WORKSPACE_ROOT="$TEST_WS"
 
 # --- Save + restore the hook's own mode file ---
@@ -102,11 +122,25 @@ edit_payload() {
   /usr/bin/jq -n --arg fp "$1" --arg cwd "$2" \
     '{tool_name: "Edit", tool_input: {file_path: $fp, old_string: "a", new_string: "b"}, cwd: $cwd}'
 }
+# mcp_payload tool [cwd] / bash_payload command [cwd]
+#
+# The cwd defaults INSIDE the pinned workspace root, and that default is load-bearing.
+# Both builders hard-coded cwd "/tmp" until now, which put every mcp and Bash payload
+# OUTSIDE the governed tree — and the #4436 workspace-scope gate early-exits 0 for an
+# out-of-tree cwd, before the ceiling check runs. Three ceiling assertions on these two
+# builders were therefore being answered by the scope gate rather than by the ceiling
+# they name, and an mcp arm that expects a BLOCK could never see one. This is a second,
+# independent cause of the same symptom as the HOME-pin defect fixed at setup: both made
+# a gate ABOVE the ceiling answer a question about the ceiling.
+#
+# An arm that genuinely wants an out-of-tree cwd passes one explicitly.
 mcp_payload() {
-  /usr/bin/jq -n --arg tool "$1" '{tool_name: $tool, tool_input: {}, cwd: "/tmp"}'
+  /usr/bin/jq -n --arg tool "$1" --arg cwd "${2:-${TEST_WS}/pmo-platform}" \
+    '{tool_name: $tool, tool_input: {}, cwd: $cwd}'
 }
 bash_payload() {
-  /usr/bin/jq -n --arg cmd "$1" '{tool_name: "Bash", tool_input: {command: $cmd}, cwd: "/tmp"}'
+  /usr/bin/jq -n --arg cmd "$1" --arg cwd "${2:-${TEST_WS}/pmo-platform}" \
+    '{tool_name: "Bash", tool_input: {command: $cmd}, cwd: $cwd}'
 }
 
 echo "================================"
@@ -264,23 +298,254 @@ test_case "#5812: OPERATIONS.md at the platform checkout root → BLOCK (root-le
   "$(edit_payload "${TEST_WS}/pmo-platform/OPERATIONS.md" "${TEST_WS}/pmo-platform")" \
   2 "BLOCK-AUTONOMY-001"
 
-# Cross-domain bridge write: pmo-platform cwd writing to projects/ → Tier-0 block.
+# --- The operations context anchor is a governance file (#5293) ---
+# projects/CLAUDE.md is the operations context anchor: installer-produced,
+# pointer-only, and agent-unwritable per operations-bridge.md § Context-Load Contract.
+# Location-anchoring the -001 set (#5812) narrowed the old bare */CLAUDE.md glob, which
+# had been covering this file incidentally. BLOCK-AUTONOMY-002 does NOT cover it either
+# — -002 blocks a projects-cwd session writing INTO pmo-platform, not a projects-rooted
+# session editing its own anchor, and after the directional split below the converse
+# direction is not a floor at all. Without an explicit arm the anchor would be the one
+# governance surface the anchoring left unguarded, so it carries its own entry and its
+# own must-block case.
+#
+# Same-domain by construction (projects cwd → projects target), which is what makes this
+# a -001 assertion rather than a cross-domain one: if the arm were ever removed from the
+# governance set this payload would fall through to the ceiling check and ALLOW.
+test_case "#5293: projects/CLAUDE.md (the operations anchor) → BLOCK (-001)" \
+  "$(edit_payload "${TEST_WS}/projects/CLAUDE.md" "${TEST_WS}/projects/Default")" \
+  2 "BLOCK-AUTONOMY-001"
+
+# Specificity partner: a CLAUDE.md one level deeper is a PROJECT's own file, not the
+# anchor, and is not in the governance set. Without this arm the entry above could be
+# a path prefix rather than the exact anchor and no case would notice.
+test_case "#5293 specificity: a project-level CLAUDE.md is NOT the anchor → ALLOW" \
+  "$(edit_payload "${TEST_WS}/projects/Default/CLAUDE.md" "${TEST_WS}/projects/Default")" \
+  0 ""
+
+# =====================================================================
+# CROSS-DOMAIN BRIDGE WRITES — the directional split (#5293)
+# =====================================================================
+# The two directions are NOT symmetric and no longer share a rule.
+#
+#   projects cwd  -> pmo-platform target : BLOCK-AUTONOMY-002, always_block.
+#       Operations content entering a PUBLIC git repo, where it becomes committable
+#       and pushable. Irreducible Tier-0: mode-independent, level-independent, and
+#       above the master gate.
+#
+#   pmo-platform cwd -> projects target  : BLOCK-AUTONOMY-004, apply_block.
+#       An engineering checkout writing into the untracked sibling operations tree.
+#       Nothing can reach the repo — git cannot see the target — so this is a
+#       layer-discipline signal, not a disclosure control. Mode-gated, and below the
+#       master and scope gates.
+#
+# The matrix below asserts the asymmetry in both directions and under every mode,
+# because the failure that matters is not "-004 is too strict" but "-002 got widened
+# by one path while nobody was looking".
+echo ""
+echo "cross-domain bridge writes — directional split (#5293)"
+echo "---"
+set_ceiling 2
+
+XD_HIGH_RISK="$(write_payload "${TEST_WS}/pmo-platform/core/foo.md" "${TEST_WS}/projects/Default")"
+XD_LOW_RISK="$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/pmo-platform")"
+
+# --- -002: the high-risk direction blocks under EVERY mode, including off ---
+# always_block does not consult get_mode(), so all three arms must return the same
+# verdict. Asserting all three (rather than one) is the guard against a future edit
+# routing this direction through apply_block, which would pass a single enforce-mode
+# arm unchanged while silently opening the direction under warn and off.
+for xd_mode in enforce warn off; do
+  set_mode "$xd_mode"
+  test_case "-002 high-risk (projects cwd → pmo-platform), mode=${xd_mode} → BLOCK" \
+    "$XD_HIGH_RISK" 2 "BLOCK-AUTONOMY-002"
+done
+
+# --- -002 must not fire on the direction it no longer owns ---
+# The pre-#5293 rule blocked this payload as -002. If a future edit restores the
+# symmetric branch, this arm fails on the rule id even though the exit status matches.
+set_mode "enforce"
+test_case "-002 no longer claims the low-risk direction (rule id is -004, not -002)" \
+  "$XD_LOW_RISK" 2 "BLOCK-AUTONOMY-004"
+
+# --- -004: the low-risk direction is mode-gated ---
+set_mode "enforce"
+test_case "-004 low-risk (pmo-platform cwd → projects), mode=enforce → BLOCK" \
+  "$XD_LOW_RISK" 2 "BLOCK-AUTONOMY-004"
+
+# The -004 override text must name the relaunch remedy and must NOT lead with the
+# whole-session security-hook disable. Asserted on the enforce arm because that is the
+# only mode that prints an Override line.
+test_case "-004 override names the relaunch remedy, not CLAUDE_HOOK_BYPASS" \
+  "$XD_LOW_RISK" 2 "Override: .*relaunch"
+
+set_mode "warn"
+WARN4_BEFORE=0
+[ -f "$WARN_LOG" ] && WARN4_BEFORE="$(/usr/bin/wc -l < "$WARN_LOG" | /usr/bin/tr -d '[:space:]')"
+test_case "-004 low-risk, mode=warn → ALLOW + WARN (friction removed)" \
+  "$XD_LOW_RISK" 0 "BLOCK-AUTONOMY-004.*WARN|WARN.*BLOCK-AUTONOMY-004"
+WARN4_AFTER=0
+[ -f "$WARN_LOG" ] && WARN4_AFTER="$(/usr/bin/wc -l < "$WARN_LOG" | /usr/bin/tr -d '[:space:]')"
+if [ "$WARN4_AFTER" -gt "$WARN4_BEFORE" ]; then
+  echo "PASS: -004 warn arm appended to autonomy-warn-log.jsonl ($WARN4_BEFORE → $WARN4_AFTER)"; PASS=$((PASS + 1))
+else
+  echo "FAIL: -004 warn arm did NOT append to autonomy-warn-log.jsonl"; FAIL=$((FAIL + 1))
+fi
+
+set_mode "off"
+test_case "-004 low-risk, mode=off → ALLOW" \
+  "$XD_LOW_RISK" 0
+
+# --- -004 under master-OFF: allowed, and NOT logged ---
+# -004 sits below the master-activation gate, so master-OFF makes it inert — the hook
+# exits 0 at the gate and no warn row is written. That is intended, and it is the exact
+# boundary of the "-004 preserves an audit trail" claim: the trail exists only where the
+# operator has opted into the security-hook suite. Master-OFF is the SHIPPED default.
+#
+# Exit status alone cannot distinguish this from the warn arm above (both exit 0), so
+# the discriminating assertion is the ABSENCE of a new warn row. Paired with the -002
+# arm immediately below, which proves the hook was live and the payload was reachable.
+set_mode "warn"
+XD_MASTER_OFF="$(/usr/bin/mktemp -d)"
+WARNM_BEFORE=0
+[ -f "$WARN_LOG" ] && WARNM_BEFORE="$(/usr/bin/wc -l < "$WARN_LOG" | /usr/bin/tr -d '[:space:]')"
+xdm_err="$(/usr/bin/mktemp)"; xdm_exit=0
+/usr/bin/printf '%s' "$XD_LOW_RISK" \
+  | HOME="$TEST_HOME" PMO_PLATFORM_CONFIG_ROOT="$XD_MASTER_OFF" /bin/bash "$HOOK" 2>"$xdm_err" >/dev/null || xdm_exit="$?"
+xdm_stderr="$(/bin/cat "$xdm_err")"; /bin/rm -f "$xdm_err"
+WARNM_AFTER=0
+[ -f "$WARN_LOG" ] && WARNM_AFTER="$(/usr/bin/wc -l < "$WARN_LOG" | /usr/bin/tr -d '[:space:]')"
+if [ "$xdm_exit" = 0 ] && [ "$WARNM_AFTER" = "$WARNM_BEFORE" ]; then
+  echo "PASS: -004 under master-OFF → exit 0 AND no warn row (the audit trail needs master ON)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: -004 master-OFF (exit=%s expected=0, warn rows %s → %s expected unchanged)\n  stderr: %s\n' \
+    "$xdm_exit" "$WARNM_BEFORE" "$WARNM_AFTER" "$xdm_stderr"; FAIL=$((FAIL + 1))
+fi
+
+# -002 on the SAME master-OFF config: still blocks. This is what proves the arm above
+# is -004 going inert rather than the whole hook going inert, and it is the security
+# assertion of the pair — the disclosure-bearing direction survives master-OFF.
+xdm2_err="$(/usr/bin/mktemp)"; xdm2_exit=0
+/usr/bin/printf '%s' "$XD_HIGH_RISK" \
+  | HOME="$TEST_HOME" PMO_PLATFORM_CONFIG_ROOT="$XD_MASTER_OFF" /bin/bash "$HOOK" 2>"$xdm2_err" >/dev/null || xdm2_exit="$?"
+xdm2_stderr="$(/bin/cat "$xdm2_err")"; /bin/rm -f "$xdm2_err"; /bin/rm -rf "$XD_MASTER_OFF"
+if [ "$xdm2_exit" = 2 ] && /usr/bin/printf '%s' "$xdm2_stderr" | /usr/bin/grep -qE "BLOCK-AUTONOMY-002"; then
+  echo "PASS: -002 under master-OFF → STILL BLOCKS (the floor is above the master gate)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: -002 under master-OFF (exit=%s expected=2, want BLOCK-AUTONOMY-002)\n  stderr: %s\n' \
+    "$xdm2_exit" "$xdm2_stderr"; FAIL=$((FAIL + 1))
+fi
+
+# --- Same-domain and empty-cwd_domain writes are untouched by the split ---
 set_mode "enforce"
 set_ceiling 2
-test_case "Tier-0: pmo-platform cwd writing projects/ → BLOCK (cross-domain)" \
-  "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/pmo-platform")" \
-  2 "BLOCK-AUTONOMY-002"
 
-# Cross-domain bridge write (converse): projects/ cwd writing pmo-platform/ → block.
-test_case "Tier-0: projects cwd writing pmo-platform/ → BLOCK (cross-domain converse)" \
-  "$(write_payload "${TEST_WS}/pmo-platform/core/foo.md" "${TEST_WS}/projects/Default")" \
-  2 "BLOCK-AUTONOMY-002"
-
-# Same-domain write (projects cwd writing projects) is NOT cross-domain — and a
-# non-governance projects path at bounded_auto is at/below ceiling → allow.
 test_case "same-domain: projects cwd writing projects/ (non-gov) at bounded_auto → ALLOW" \
   "$(write_payload "${TEST_WS}/projects/Default/08-Generated/x.md" "${TEST_WS}/projects/Default")" \
   0
+
+test_case "same-domain: pmo-platform cwd writing pmo-platform/ → ALLOW" \
+  "$(write_payload "${TEST_WS}/pmo-platform/core/notes.md" "${TEST_WS}/pmo-platform")" \
+  0
+
+# Empty cwd_domain: a session rooted AT the workspace root belongs to neither domain,
+# so neither rule can fire. The target is a projects/ path, so a rule that tested the
+# target alone would block here — this arm is what pins the mismatch to a PAIR.
+test_case "empty cwd_domain: workspace-root cwd writing projects/ → ALLOW (no domain to cross)" \
+  "$(write_payload "${TEST_WS}/projects/Default/08-Generated/y.md" "${TEST_WS}")" \
+  0
+
+# --- A governance target still hits -001 first, in BOTH directions ---
+# -001 is evaluated before either cross-domain rule, so the rule id in stderr must be
+# -001 even on a payload that ALSO satisfies a cross-domain condition. Both directions
+# are asserted because the two rules now sit on opposite sides of the master gate, and
+# only -001's precedence keeps their ordering irrelevant for governance targets.
+test_case "precedence: governance target, projects cwd → -001 (not -002)" \
+  "$(edit_payload "${TEST_WS}/pmo-platform/core/governance/OPERATIONS.md" "${TEST_WS}/projects/Default")" \
+  2 "BLOCK-AUTONOMY-001"
+
+test_case "precedence: governance target, pmo-platform cwd → -001 (not -004)" \
+  "$(write_payload "${TEST_WS}/projects/CLAUDE.md" "${TEST_WS}/pmo-platform")" \
+  2 "BLOCK-AUTONOMY-001"
+
+# --- CLAUDE_HOOK_BYPASS is unaffected by the split ---
+xdb_err="$(/usr/bin/mktemp)"; xdb_exit=0
+/usr/bin/printf '%s' "$XD_LOW_RISK" \
+  | HOME="$TEST_HOME" CLAUDE_HOOK_BYPASS=1 /bin/bash "$HOOK" 2>"$xdb_err" >/dev/null || xdb_exit="$?"
+/bin/rm -f "$xdb_err"
+if [ "$xdb_exit" = 0 ]; then
+  echo "PASS: CLAUDE_HOOK_BYPASS=1 allows the -004 payload (bypass precedes every rule)"; PASS=$((PASS + 1))
+else
+  echo "FAIL: bypass did not allow the -004 payload (exit=$xdb_exit)"; FAIL=$((FAIL + 1))
+fi
+
+# =====================================================================
+# H1 — the -004 read must be SAFE for payloads that never enter Write|Edit
+# =====================================================================
+# The hook runs `set -euo pipefail`. target_domain and cwd_domain are assigned inside
+# the `case "$TOOL_NAME"` Write|Edit branch, but -004 is evaluated BELOW that branch,
+# after the master and scope gates. A -004 condition that reads either variable without
+# an unconditional declaration therefore aborts the hook with `unbound variable` on
+# every Bash and every mcp call — the two highest-traffic matchers on this hook — and
+# an aborted PreToolUse hook is a fail-OPEN.
+#
+# The arms below are the regression guard. They are only meaningful with an in-workspace
+# cwd: an out-of-tree cwd is answered by the scope gate BEFORE -004 is reached, which is
+# precisely why the pre-existing /tmp-cwd permissive cases could not have caught this.
+echo ""
+echo "H1 — unbound-variable safety below the Write|Edit branch (#5293)"
+echo "---"
+set_mode "enforce"
+set_ceiling 0
+
+test_case "H1: Bash payload, in-workspace cwd → ALLOW (not an unbound-variable abort)" \
+  "$(bash_payload 'ls -la /tmp' "${TEST_WS}/pmo-platform")" \
+  0
+
+test_case "H1: non-write mcp payload, in-workspace cwd → ALLOW (not an unbound-variable abort)" \
+  "$(mcp_payload 'mcp__atlassian__search' "${TEST_WS}/pmo-platform")" \
+  0
+
+# H1 discriminating control. A lone pair of allow-assertions is an inert zero: they pass
+# identically against a hook with no -004 in it at all. This arm proves the payloads
+# above actually REACH the -004 evaluation point under the same cwd, by sending a Write
+# through it and requiring the block. If -004 were unreachable for this cwd, this fails
+# and the two arms above are correctly read as untrustworthy.
+set_ceiling 2
+test_case "H1 control: same cwd, Write payload → -004 fires (proves the arms above reach it)" \
+  "$XD_LOW_RISK" 2 "BLOCK-AUTONOMY-004"
+
+# H1 differential. The two arms above pass against the PRE-#5293 hook too — it has no
+# -004 to crash on — so on their own they demonstrate nothing about this change. This
+# block builds the naive placement (the -004 branch with the declaration removed) in a
+# sandbox and asserts the arms FAIL against it. That is the discrimination: the fixture
+# is only worth having if some reachable implementation fails it.
+H1_SANDBOX="$(/usr/bin/mktemp -d)"
+/bin/mkdir -p "${H1_SANDBOX}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${H1_SANDBOX}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK_DIR}/lib/"*.awk "${H1_SANDBOX}/lib/" 2>/dev/null || true
+# Delete the unconditional declaration; leave everything else byte-identical.
+/usr/bin/sed -e '/^target_domain=""[[:space:]]*#[[:space:]]*H1:/d' \
+             -e '/^cwd_domain=""[[:space:]]*#[[:space:]]*H1:/d' \
+             "$HOOK" > "${H1_SANDBOX}/block-autonomy-ceiling.sh"
+/bin/chmod +x "${H1_SANDBOX}/block-autonomy-ceiling.sh"
+/usr/bin/printf 'enforce' > "${H1_SANDBOX}/.autonomy-mode"
+/usr/bin/printf '[security_hooks]\nmaster_enabled = true\n' > "${CONFIG_ROOT}/platform-config.toml"
+
+h1_removed=$(( $(/usr/bin/grep -c . < "$HOOK") - $(/usr/bin/grep -c . < "${H1_SANDBOX}/block-autonomy-ceiling.sh") ))
+h1_err="$(/usr/bin/mktemp)"; h1_exit=0
+/usr/bin/printf '%s' "$(bash_payload 'ls -la /tmp' "${TEST_WS}/pmo-platform")" \
+  | HOME="$TEST_HOME" /bin/bash "${H1_SANDBOX}/block-autonomy-ceiling.sh" 2>"$h1_err" >/dev/null || h1_exit="$?"
+h1_stderr="$(/bin/cat "$h1_err")"; /bin/rm -f "$h1_err"
+/bin/rm -rf "$H1_SANDBOX"
+# Guard the differential itself: if sed removed nothing, the "sandbox" IS the real hook
+# and its exit 0 would be meaningless. Require both a real edit and a real failure.
+if [ "$h1_removed" = 2 ] && [ "$h1_exit" != 0 ]; then
+  echo "PASS: H1 differential — naive placement (declaration deleted) aborts the Bash payload (exit=$h1_exit); the shipped placement does not"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: H1 differential inconclusive (lines removed=%s expected=2, sandbox exit=%s expected non-zero)\n  stderr: %s\n' \
+    "$h1_removed" "$h1_exit" "$h1_stderr"; FAIL=$((FAIL + 1))
+fi
 
 # =====================================================================
 # WARN-MODE + OFF-MODE ceiling behavior (NOT the Tier-0 floor)
@@ -486,12 +751,10 @@ echo "Suite R — direct-resolve path (cache absent)"
 echo "---"
 set_mode "enforce"
 
-R_CFG="${TEST_HOME}/.config/pmo-platform"
-/bin/mkdir -p "$R_CFG"
-# Master ON for this suite when running standalone. Under test-runner.sh,
-# PMO_PLATFORM_CONFIG_ROOT is already exported master-ON and takes precedence; this
-# write covers the standalone case without conflicting with it.
-/usr/bin/printf '[security_hooks]\nmaster_enabled = true\n' > "${R_CFG}/platform-config.toml"
+# Master activation for this suite is the suite-wide seed written at setup ($CONFIG_ROOT,
+# same path) — this suite no longer writes its own. Under test-runner.sh,
+# PMO_PLATFORM_CONFIG_ROOT is exported master-ON and takes precedence over both.
+R_CFG="$CONFIG_ROOT"
 
 # seed_operator_toml <body> — write the fixture and DELETE the cache, so the hook must
 # take the direct-resolve path. Deleting the cache is the whole point of the suite.
@@ -609,7 +872,9 @@ else
   /usr/bin/printf 'FAIL: R-9 floor under master-OFF (exit=%s expected=2, want BLOCK-AUTONOMY-001)\n  stderr: %s\n' "$r9_exit" "$r9_stderr"; FAIL=$((FAIL + 1))
 fi
 
-/bin/rm -f "${R_CFG}/operator.toml" "${R_CFG}/platform-config.toml"
+# Leave platform-config.toml in place — it is the suite-wide activation seed, not
+# Suite R's to remove. Only the operator.toml fixture Suite R authored is cleaned up.
+/bin/rm -f "${R_CFG}/operator.toml"
 
 # =====================================================================
 # Summary

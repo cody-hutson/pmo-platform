@@ -429,13 +429,37 @@ fi
 # --------------------------------------------------------------------------
 # Only the payload-detectable classes are enforced here:
 #   item 6 — governance-file modification (Write/Edit file_path → governance path)
-#   item 7 — cross-domain bridge writes (Write/Edit file_path crossing the
-#            pmo-platform ↔ projects boundary)
+#   item 7 — cross-domain bridge writes, HIGH-RISK DIRECTION ONLY (a projects/ cwd
+#            writing into pmo-platform/). Item 7 is no longer a single symmetric
+#            class: per core/specs/autonomy-tiers.md § Irreducible Human Tasks item 7
+#            it splits by direction, and only the direction that can place operations
+#            content into the tracked public repo is a Tier-0 floor. The converse
+#            direction (a pmo-platform cwd writing into the untracked sibling
+#            projects/ tree) is BLOCK-AUTONOMY-004, a mode-gated layer-discipline
+#            signal evaluated BELOW the master and scope gates — see #5293 and the
+#            comment at that rule.
 # Items 1/2/3 (financial / account-creation / security-permission) and items 4/5
 # (Stage 9 / Stage 12 gates) are NOT mechanically detectable from a tool payload
 # — operator-irreducible by convention, documented, not enforced here.
 # Item 8 (destructive outside the workspace) is ALREADY owned by
 # block-rm-prefer-trash (BLOCK-TRASH-001/003) — C5 does NOT duplicate it.
+
+# --- Cross-domain locals, declared UNCONDITIONALLY (#5293) ---
+# These two are ASSIGNED inside the Write|Edit branch below, but BLOCK-AUTONOMY-004
+# READS them further down — after the master-activation and workspace-scope gates,
+# outside any `case "$TOOL_NAME"` branch. This hook runs `set -euo pipefail` (see the
+# top of the file), so under `nounset` a read of an unassigned name is not an empty
+# string: it aborts the shell. Every Bash call and every mcp__* call skips the Write|Edit
+# branch entirely, which would make the -004 read fatal for the two highest-traffic
+# matchers this hook declares — and an aborted PreToolUse hook does not deny, it fails
+# OPEN. Declaring here costs two lines and closes that class outright.
+#
+# The branch below re-initialises both before its own `case` statements. That is
+# deliberate redundancy, not a leftover: this declaration exists solely to make the
+# read below the gates safe, and the branch stays self-contained so it does not
+# silently depend on a line eighty lines above it.
+target_domain=""   # H1: see above — read below the gates, so it cannot be branch-local
+cwd_domain=""      # H1: see above — read below the gates, so it cannot be branch-local
 
 if [ -n "$ABS_TARGET" ]; then
   case "$TOOL_NAME" in
@@ -498,8 +522,21 @@ if [ -n "$ABS_TARGET" ]; then
       # locations — another repository's root doc, a backup copy — now falls through to
       # the normal mode- and level-dependent path, where the rest of the hook suite still
       # applies. That fall-through IS the fix, not a hole.
+      #
+      # THE OPERATIONS CONTEXT ANCHOR IS AN EXPLICIT THIRD LOCATION — see #5293.
+      # ${PRIMARY_ROOT}/projects/CLAUDE.md is the operations context anchor:
+      # installer-produced, pointer-only, and agent-unwritable per operations-bridge.md
+      # § Context-Load Contract. The bare */CLAUDE.md glob had been covering it
+      # incidentally, so anchoring dropped it — and nothing else picks it up.
+      # BLOCK-AUTONOMY-002 does not: -002 guards a projects cwd writing INTO
+      # pmo-platform, whereas editing the anchor is a projects-rooted session writing
+      # inside its OWN domain, which is not a cross-domain write in either direction.
+      # It is therefore named here, at its exact path, rather than left to a prefix:
+      # a project's own ${PRIMARY_ROOT}/projects/<Project>/CLAUDE.md is NOT the anchor
+      # and is correctly outside this set.
       case "$ABS_TARGET" in
         "${PRIMARY_ROOT}/CLAUDE.md" \
+        | "${PRIMARY_ROOT}/projects/CLAUDE.md" \
         | "${PRIMARY_ROOT}/pmo-platform/CLAUDE.md" \
         | "${PRIMARY_ROOT}/pmo-platform/"*"/CLAUDE.md" \
         | "${PRIMARY_ROOT}/pmo-platform/OPERATIONS.md" \
@@ -515,13 +552,34 @@ if [ -n "$ABS_TARGET" ]; then
           ;;
       esac
 
-      # --- BLOCK-AUTONOMY-002 — Tier-0 item 7: cross-domain bridge writes ---
-      # Layer separation: Claude Code (a pmo-platform cwd) never writes to
-      # projects/ ; Cowork (a projects/ cwd) never writes to pmo-platform/.
-      # Detected by cwd-domain ↔ target-domain mismatch. Path-boundary match
-      # against the two domain roots under the workspace.
-      # Match the domain ROOT itself OR any subpath (the trailing-slash glob alone
-      # would miss a cwd/target that IS exactly `${ROOT}/pmo-platform`).
+      # --- BLOCK-AUTONOMY-002 — Tier-0 item 7, HIGH-RISK DIRECTION ONLY ---
+      # Layer separation between Engineering (pmo-platform) and Operations (projects),
+      # detected by cwd-domain ↔ target-domain mismatch. Path-boundary match against the
+      # two domain roots under the workspace. Match the domain ROOT itself OR any subpath
+      # (the trailing-slash glob alone would miss a cwd/target that IS exactly
+      # `${ROOT}/pmo-platform`).
+      #
+      # THE TWO DIRECTIONS ARE NOT THE SAME CONTROL — see #5293.
+      # The domains are SIBLING directories, not nested: pmo-platform is a git repo and
+      # is public; projects is not a git repo and is not in the repo's path space at all.
+      # Only ONE direction can therefore put content somewhere it can be committed and
+      # pushed:
+      #
+      #   projects cwd -> pmo-platform target  — operations content entering the tracked
+      #       PUBLIC repo. A genuine disclosure control, and an irreducible Tier-0 floor:
+      #       always_block, mode- and level-independent, above the master gate. THIS rule.
+      #
+      #   pmo-platform cwd -> projects target  — an engineering checkout writing into the
+      #       untracked sibling operations tree. git cannot see the target, so nothing can
+      #       reach the repo. This is a layer-discipline signal with no disclosure
+      #       component, and enforcing it at always_block severity made the control
+      #       blunter than the risk it models. It is now BLOCK-AUTONOMY-004, mode-gated,
+      #       below the master and scope gates.
+      #
+      # Narrowing this rule to one direction must not widen it by even one path, which is
+      # why the condition names both domains explicitly rather than testing inequality:
+      # an inequality test would silently re-admit the other direction if a third domain
+      # were ever added.
       target_domain=""
       case "$ABS_TARGET" in
         "${PRIMARY_ROOT}/pmo-platform"|"${PRIMARY_ROOT}/pmo-platform/"*) target_domain="pmo-platform" ;;
@@ -532,10 +590,10 @@ if [ -n "$ABS_TARGET" ]; then
         "${PRIMARY_ROOT}/pmo-platform"|"${PRIMARY_ROOT}/pmo-platform/"*) cwd_domain="pmo-platform" ;;
         "${PRIMARY_ROOT}/projects"|"${PRIMARY_ROOT}/projects/"*) cwd_domain="projects" ;;
       esac
-      if [ -n "$target_domain" ] && [ -n "$cwd_domain" ] && [ "$target_domain" != "$cwd_domain" ]; then
+      if [ "$cwd_domain" = "projects" ] && [ "$target_domain" = "pmo-platform" ]; then
         always_block "BLOCK-AUTONOMY-002" \
-          "cross-domain bridge write is an irreducible Tier-0 action (Layer separation; ${cwd_domain} cwd writing to ${target_domain}); blocked regardless of automation_level. Target: ${ABS_TARGET}" \
-          "Engineering (pmo-platform) and Operations (projects) are separate layers — do not cross-write; route the change through the owning agent, or set CLAUDE_HOOK_BYPASS=1 only if intentional"
+          "cross-domain bridge write into the tracked platform repository is an irreducible Tier-0 action (Layer separation; an Operations cwd writing into pmo-platform/, where the content becomes committable and pushable on a public repository); blocked regardless of automation_level or mode. Target: ${ABS_TARGET}" \
+          "platform-engineering changes belong to an engineering session — relaunch in the pmo-platform checkout and make the change there, where it is reviewable as a diff; if you ARE the operator acting intentionally, CLAUDE_HOOK_BYPASS=1 disables every security hook for this one call"
       fi
       ;;
   esac
@@ -543,10 +601,14 @@ fi
 
 # --- Master-activation gate (#310) — layer 2. CLASS=workflow, but DELIBERATELY placed
 # HERE — after the STEP-1 Tier-0 always-block floor (BLOCK-AUTONOMY-001/002) and before
-# the mode-gated STEP-2 ceiling check — so master-OFF disables ONLY the mode-gated ceiling,
-# NEVER the irreducible floor (D-R9: the Tier-0 floor is always-enforce, like the security
-# class; a governance-file / cross-domain-bridge write stays blocked even under master-OFF).
-# Precedence for this hook: bypass -> floor -> master -> .autonomy-mode -> ceiling.
+# everything mode-gated — so master-OFF disables ONLY the mode-gated rules, NEVER the
+# irreducible floor (D-R9: the Tier-0 floor is always-enforce, like the security class; a
+# governance-file write, or a cross-domain bridge write INTO the tracked repo, stays
+# blocked even under master-OFF).
+# Everything below this line is mode-gated: BLOCK-AUTONOMY-004 as well as the STEP-2
+# ceiling. Under master-OFF neither is reached — see the -004 comment for why that is
+# the intended semantics for the low-risk direction and not a regression (#5293).
+# Precedence for this hook: bypass -> floor -> master -> SCOPE -> -004 -> ceiling.
 # Fail-toward-current-behavior: a missing lib does NOT gate. ---
 readonly MASTER_ENABLE_CLASS="workflow"
 readonly MASTER_LIB="${HOOK_DIR}/lib/master-enable.sh"
@@ -559,13 +621,55 @@ if command -v master_enable_gate >/dev/null 2>&1; then master_enable_gate "$MAST
 # the same reason. The Tier-0 floor is PATH-scoped, not session-scoped: it blocks
 # writes INTO the governed tree (governance files, the Engineering/Operations bridge),
 # so bounding it by the SESSION's working directory would gate it on the wrong axis and
-# open the floor to an out-of-tree session. Scope therefore gates only the mode-gated
-# STEP-2 ceiling. Precedence for this hook: bypass -> floor -> master -> SCOPE ->
-# .autonomy-mode -> ceiling. Inverted fail direction on the cwd axis, NOT on the lib
-# axis. See lib/scope-guard.sh. ---
+# open the floor to an out-of-tree session. Scope therefore gates the mode-gated rules
+# only — BLOCK-AUTONOMY-004 as well as the STEP-2 ceiling (#5293; -004 IS session-scoped
+# by nature, since a session outside the governed tree has no layer boundary to observe).
+# Precedence for this hook: bypass -> floor -> master -> SCOPE -> -004 -> ceiling.
+# Inverted fail direction on the cwd axis, NOT on the lib axis. See lib/scope-guard.sh. ---
 readonly SCOPE_GUARD_LIB="${HOOK_DIR}/lib/scope-guard.sh"
 if [ -r "$SCOPE_GUARD_LIB" ]; then . "$SCOPE_GUARD_LIB" 2>/dev/null || true; fi
 if command -v scope_guard_gate >/dev/null 2>&1; then scope_guard_gate "$CWD"; fi
+
+# --------------------------------------------------------------------------
+# BLOCK-AUTONOMY-004 — cross-domain bridge writes, LOW-RISK DIRECTION (#5293)
+# --------------------------------------------------------------------------
+# Fires when a pmo-platform cwd writes into projects/ — an engineering checkout
+# writing the untracked sibling operations tree. See the BLOCK-AUTONOMY-002 comment
+# in STEP 1 for why the two directions are not one control; in short, this one cannot
+# reach the tracked repository, so it is a layer-discipline signal rather than a
+# disclosure floor. Routed through apply_block, so it honours .autonomy-mode:
+# warn → warn-log + allow · enforce → block · off → allow.
+#
+# THREE PROPERTIES OF THIS PLACEMENT, ALL DELIBERATE, ALL WORTH STATING:
+#
+# 1. It is BELOW the master-activation gate, so master-OFF disables -004 while leaving
+#    -002 (above the gate) fully enforced. That asymmetry is the whole point of the
+#    directional split and is not a regression. Note the consequence honestly: master-OFF
+#    is the SHIPPED default, so on a fresh install -004 contributes nothing at all — not
+#    a block, not a warn, not a log row. The warn-log audit trail this rule offers exists
+#    only where the operator has enabled the security-hook suite.
+#
+# 2. It is also below the WORKSPACE-SCOPE gate, which means -004 is inert for a session
+#    rooted outside the governed tree. Correct for a layer-discipline signal — a session
+#    with no layer has no layer to discipline — but it makes the scope-gate comment
+#    directly above incomplete as written: scope no longer gates ONLY the STEP-2 ceiling.
+#    The hook's full precedence is: bypass -> floor -> master -> SCOPE -> -004 -> ceiling.
+#
+# 3. apply_block exits in every mode branch, so a -004 firing means STEP 2 never runs and
+#    BLOCK-AUTONOMY-003 is structurally unreachable on this path. The observable
+#    divergence is confined to enforce-mode with a permissive ceiling, where a
+#    pmo-platform → projects/ write blocks at -004 though the same target from a projects
+#    cwd would pass the ceiling. That is the layer signal out-ranking the tier ceiling,
+#    which is the intended ordering.
+#
+# target_domain / cwd_domain are read here but ASSIGNED in STEP 1's Write|Edit branch.
+# They are declared unconditionally near the top of STEP 1 because `set -u` would
+# otherwise abort this hook on every Bash and mcp call — see the H1 comment there.
+if [ "$cwd_domain" = "pmo-platform" ] && [ "$target_domain" = "projects" ]; then
+  apply_block "BLOCK-AUTONOMY-004" \
+    "cross-domain bridge write out of the platform checkout (an Engineering cwd writing into projects/, the Cowork-owned operations workspace). The target is outside the repository, so this is a layer-discipline signal, not a disclosure control. Target: ${ABS_TARGET}" \
+    "operations work should be launched from the operations workspace (${PRIMARY_ROOT}/projects/…), not a repo checkout — relaunch there and this write is in-domain; to change the posture instead, set .autonomy-mode to warn"
+fi
 
 # --------------------------------------------------------------------------
 # STEP 2 — CEILING CHECK (mode-gated; permissive default)

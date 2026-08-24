@@ -26,7 +26,13 @@ Claude Code MAY READ these Layer 2 files for context:
 - `projects/_config/SESSION_STATE.md` — session continuity
 - `projects/_config/CORRECTIONS.md` — active behavioral redirects
 
-Claude Code does NOT WRITE to any Layer 2 file.
+Claude Code does NOT WRITE to any Layer 2 file. The two domains are **sibling
+directories, not nested**, and the boundary is enforced asymmetrically because the
+risks are asymmetric: an Operations session writing into `pmo-platform/` puts content
+into a **public git repository** and is blocked unconditionally, while an Engineering
+session writing into `projects/` cannot reach the repository at all and is a
+layer-ownership signal rather than a disclosure control. Both remain prohibited to the
+agent; only the enforcement severity differs.
 
 **The agent is not the only writer, and the distinction is the point.** The
 installer and the update path ARE sanctioned Layer-2 seed-writers, under
@@ -64,8 +70,15 @@ context file instructs the agent to read it. The anchor exists to make the secon
 layer reachable from roots where the first may not carry the charter.
 
 ## Rules for Claude Code
-1. NEVER modify Layer 2 files. They are the Operations domain.
-2. Cross-domain reads are read-only. Never write to `projects/` files.
+1. NEVER modify Layer 2 files. They are the Operations domain. The correct response to
+   needing one changed is to relaunch the work in the operations workspace, where it is
+   in-domain — not to cross-write from a repo checkout.
+2. Cross-domain reads are read-only. Never write to `projects/` files. Enforced as a
+   mode-gated layer-discipline signal (`BLOCK-AUTONOMY-004`), because the target sits
+   outside the repository and no write there can reach git. The converse direction — an
+   Operations session writing into `pmo-platform/` — is the one that CAN, and it is an
+   unconditional Tier-0 block (`BLOCK-AUTONOMY-002`) that no mode or automation level
+   relaxes. See `core/specs/autonomy-tiers.md` § Irreducible Human Tasks items 7 / 7a.
 3. Improvements are tracked as GitHub Issues (not files). No bridge file mechanism needed.
 4. If `git diff` shows a Layer 1 file was modified outside git (by Cowork):
    a. Review the diff — is the change intentional?
