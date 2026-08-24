@@ -198,6 +198,32 @@ release/tools/automated-closeout.sh
 ./release/tools/compute-close-class-telemetry.sh
 release/tools/compute-close-class-telemetry.sh
 */release/tools/compute-close-class-telemetry.sh
+# --- FIFTH FORM: cwd-relative, for the six telemetry producers ---------------
+#
+# The four-form convention above spells each tool from the REPO ROOT. It has no
+# form for the invocation an operator or spoke actually types while standing in
+# the tool's own directory: `./compute-dora-metrics.sh` from `release/tools/`.
+# That spelling matches none of the four, so it is BLOCK-DESTRUCTIVE-022-blocked
+# on the interpreter arm TODAY — a pre-existing gap, not one this change creates.
+#
+# It is registered now because BLOCK-DESTRUCTIVE-022's exec arm ships at `warn`
+# behind a drain, and the drain's whole job is to size the widening's real
+# false-positive surface. Six known-benign, already-documented invocations left
+# unregistered would land in the drain as would-fire rows and inflate the reading
+# with a surface that was never in question — the graduation decision would then
+# be made against noise. Clearing them first is what makes the drain measure the
+# widening rather than a known gap.
+#
+# These are the cwd-relative form ONLY. Three of the six carry no other form at
+# all (front-cluster, middle-cluster, release-velocity); completing them to the
+# standard four is the pre-graduation allowlist work recorded in the AC-3
+# assessment, not this slice's scope.
+./compute-dora-metrics.sh
+./compute-cycle-time.sh
+./compute-release-velocity.sh
+./compute-close-class-telemetry.sh
+./compute-front-cluster-telemetry.sh
+./compute-middle-cluster-telemetry.sh
 # audit-epic-rollup-close.sh — epic rollup-close detective audit (report-only).
 # Invoked agent-side by the Stage 13 spoke AND chained from automated-closeout.sh
 # phase 16.7, so all four invocation forms per the per-tool form convention above

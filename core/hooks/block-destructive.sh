@@ -30,6 +30,18 @@ readonly HOOK_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 readonly ERROR_LOG="${HOOK_DIR}/hook-errors.log"
 readonly BLOCK_LOG="${HOOK_DIR}/block-log.jsonl"
 readonly BYPASS_LOG="${HOOK_DIR}/bypass-log.jsonl"
+# Rollout drain for the BLOCK-DESTRUCTIVE-022 exec arm — the FIRST drain this hook
+# has ever had. Named `<hook-stem>-warn-log.jsonl` because nine hooks in this bundle
+# already use that shape, and because `.gitignore` covers `core/hooks/*.jsonl` and
+# `.claude/hooks/*.jsonl`, so it is git-ignored by construction with no ignore-rule
+# edit. Declaring it here does NOT make this hook mode-capable: the write is gated
+# on DESTRUCTIVE_022_EXEC_PHASE alone and never on a mode dial. That distinction is
+# load-bearing — block-fs-boundary.sh:53 and block-shell-injection.sh:53 each declare
+# a drain whose write is conditional on the shared `.mode`, which is never in the
+# writing position, so those drains are declared-but-dead and indistinguishable from
+# absent. This one is live on day one because the arm ships at `warn` and `warn`
+# writes.
+readonly WARN_LOG="${HOOK_DIR}/destructive-warn-log.jsonl"
 readonly PRIMARY_ROOT="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"
 readonly SCRIPT_ALLOWLIST="${HOOK_DIR}/../script-execution-allowlist.txt"
 
@@ -356,6 +368,125 @@ check_script_target() {
       "subprocess script execution not in allowlist: $path (Red Team C1 — script-laundering mitigation)." \
       "add to .claude/script-execution-allowlist.txt (glob patterns supported), or set CLAUDE_HOOK_BYPASS=1"
   fi
+}
+
+# --------------------------------------------------------------------------
+# BLOCK-DESTRUCTIVE-022 EXEC ARM — rollout phase, drain, and verdict router.
+#
+# WHAT THE ARM IS. Direct execution of a script (`./x.sh`, no interpreter token)
+# carries no `bash`/`sh`/`zsh`/`source` verb, so it matched no arm of this rule
+# and the allowlist was never consulted — the allowlist was bypassable by making
+# the file executable and dropping the interpreter word. Operator decision
+# D-ScriptScope (rendered 2026-08-23) resolves that this allowlist governs
+# EXECUTION CAPABILITY, not interpreter invocations only, so direct execution is
+# in scope. Rollout is phased; the scope change is not.
+#
+# WHY A PER-RULE CONSTANT AND NOT THE SHARED `.mode`. This hook is
+# mode-independent by design and its unconditional posture is the basis on which
+# the mode-capable cohort was permitted to degrade at all. Coupling this arm to
+# `.mode` would soften seven unrelated hooks to tune one arm of one rule.
+# block-egress.sh states the same precedent for -007: the dial is a cohort
+# instrument and this is a per-rule decision.
+#
+# WHY A 3-VALUE ENUM AND NOT A BOOLEAN. Retreat must be as cheap as advance. A
+# boolean offers on/off; the enum offers a rung BELOW `warn` (`shadow`: keep
+# measuring, stop emitting) so a noisy warn phase does not force a choice between
+# notice-spam and going blind. Advance and retreat are each a one-word edit, and
+# the edited word IS the audit record of the decision.
+#
+# ENTRY RUNG IS `warn`, DELIBERATELY, AND IT IS NOT A SKIPPED RUNG. The hook
+# layer's own ladder is warn/enforce/off; `warn` is its entry rung. The enum
+# nonetheless carries `shadow` so the cheap retreat exists.
+readonly DESTRUCTIVE_022_EXEC_PHASE="warn"   # shadow | warn | enforce
+
+# Arming date for the graduation criterion, in UTC. SELF-ARMED at the commit that
+# introduced the arm — never a placeholder for a later editor to fill. The
+# platform has a worked failure behind that rule: Check 48 shipped expecting a
+# stamp that was never written and gated nothing for 62 releases.
+#
+# THE GRADUATION CRITERION IS SPLIT BY READABILITY, AND THE REPO-DERIVABLE HALF
+# CARRIES THE TEETH. The evidence arm reads the drain, which is git-ignored and
+# absent in a fresh checkout or CI — so nothing in the pipeline can read it, and a
+# row-count criterion alone can force nothing. That is exactly why
+# BLOCK-EGRESS-007's widening drain has sat at 2 rows and can never graduate on
+# evidence. The DEADLINE arm reads a committed constant and today's date, so it
+# works in CI and in a fresh clone. deploy.sh Check 71 is its enforcement surface:
+# silent below threshold, warning at REVIEW_DAYS or REVIEW_ROWS, and at
+# ESCALATE_DAYS with this phase constant unchanged it increments ISSUES so
+# `--check --strict` exits 1. Doing nothing turns the pipeline red, and every way
+# of turning it green is a recorded decision.
+readonly DESTRUCTIVE_022_EXEC_ARMED="2026-08-24"
+readonly DESTRUCTIVE_022_EXEC_REVIEW_DAYS=60    # deadline arm — repo-derivable
+readonly DESTRUCTIVE_022_EXEC_REVIEW_ROWS=25    # evidence arm — operator-local
+readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=90  # deadline arm turns ISSUES red
+
+# Rollout telemetry for the exec arm: evaluate, record, take no action. Carries
+# the CAUSE CLASS as well as the path, because an operator reading this drain must
+# separate `not-allowlisted` (add an allowlist entry) from `unresolvable` (spell
+# the path out literally) — conflating those two is the trap -007 was filed about.
+#
+# `jq -nc`: ONE object per LINE, which is what the `.jsonl` extension claims and
+# what any row count depends on. This hook's existing log_block emits jq's default
+# PRETTY form, spanning several lines per entry — which is why the block-log
+# needed a streaming JSON parser rather than a line count. That shape is
+# deliberately NOT copied here.
+log_would_fire_022() {
+  local phase="$1"
+  local cause="$2"
+  local path="$3"
+  local ts
+  ts="$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo 'unknown')"
+  "$JQ" -nc --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "BLOCK-DESTRUCTIVE-022" \
+    --arg tool "$TOOL_NAME" --arg phase "$phase" --arg cause "$cause" \
+    --arg path "$path" --arg cwd "$CWD" \
+    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, phase:$phase, reason:"would-fire", cause:$cause, path:$path, cwd:$cwd}' \
+    >> "$WARN_LOG" 2>/dev/null || true
+}
+
+# Adjudicate one direct-execution candidate under the rollout phase.
+#
+# THE TWO EXISTING ARMS DO NOT ROUTE THROUGH THIS. They keep calling
+# check_script_target directly, with their call sites unedited, so their verdicts
+# are byte-preserved rather than argued to be equivalent. This function is reached
+# only from the exec arm.
+#
+# An allowlisted, resolvable path returns silently and writes NOTHING. A drain
+# that records permitted traffic measures the corpus rather than the widening, and
+# the graduation reading would be unusable.
+#
+# At `enforce` the verdict is delegated to check_script_target rather than
+# reimplemented, so both block messages keep exactly ONE definition in this file
+# and cannot drift from the interpreter arm's. The drain keeps writing at
+# `enforce` so the graduation record does not go dark at the moment it becomes the
+# block record.
+#
+# An unrecognised phase value falls through to `enforce`. That is the same
+# fail-closed direction block-egress.sh takes for -007, and deploy.sh Check 71
+# validates the enum so a typo surfaces as a check finding rather than as a silent
+# posture change.
+destructive_022_exec_verdict() {
+  local path="$1"
+  local cause="not-allowlisted"
+  case "$path" in
+    *'$'*) cause="unresolvable" ;;
+  esac
+  if [ "$cause" = "not-allowlisted" ] && is_script_allowlisted "$path"; then
+    return 0
+  fi
+  case "$DESTRUCTIVE_022_EXEC_PHASE" in
+    shadow)
+      log_would_fire_022 "shadow" "$cause" "$path"
+      return 0
+      ;;
+    warn)
+      log_would_fire_022 "warn" "$cause" "$path"
+      "$PRINTF" '[CLAUDE-HOOK:%s:BLOCK-DESTRUCTIVE-022] WARN (would-block, rollout=warn, cause=%s): direct script execution %s\n' \
+        "$HOOK_NAME" "$cause" "$path" >&2
+      return 0
+      ;;
+  esac
+  log_would_fire_022 "enforce" "$cause" "$path"
+  check_script_target "$path"
 }
 
 # --------------------------------------------------------------------------
@@ -922,7 +1053,28 @@ case "$TOOL_NAME" in
       # shellcheck disable=SC2206
       script_tokens=( $script_seg )
       set +f
-      [ "${#script_tokens[@]}" -ge 2 ] || continue
+      # ARITY IS PER-ARM, AND RESOLVING IT BEFORE THE VERB IS WHAT HID DIRECT
+      # EXECUTION. This guard used to require `-ge 2`, and the guard below used to
+      # require an operand AFTER the verb — both applied before the verb was known.
+      # A bare `./x.sh` is ONE token and failed the first outright, so the `*)
+      # continue` in the verb `case` was never even the thing hiding it. Neither
+      # requirement is a property of the rule: they are the interpreter and source
+      # arms' operand arity, hoisted above the point where the arm is decided. The
+      # order is now walk → resolve → per-arm arity, which is the order the shell
+      # itself resolves a simple command in.
+      #
+      # BEHAVIOUR-PRESERVING FOR BOTH EXISTING ARMS, and the proof is a predicate
+      # identity rather than a claim. Let n = token count and h = the assignment
+      # walk's result. The old gate was (n >= 2) AND (h+1 < n); the new gate for
+      # those two arms is (n >= 1) AND (h < n) AND (h+1 < n). But (h+1 < n) implies
+      # both n >= 2 and h < n, so each conjunction reduces to exactly (h+1 < n) —
+      # the same predicate over the same two values. The walk is a pure function of
+      # the token array and is re-initialised every iteration, so moving it above
+      # the arity test cannot change h. The verb `case` mutates neither h nor the
+      # array, so moving (h+1 < n) below it is order-independent. The only
+      # observable delta is which segments now reach a THIRD arm that did not
+      # previously exist.
+      [ "${#script_tokens[@]}" -ge 1 ] || continue
 
       # Resolve COMMAND POSITION before reading the verb. POSIX Shell Command
       # Language 2.9.1 defines a simple command as `prefix* word suffix*`, where a
@@ -959,8 +1111,12 @@ case "$TOOL_NAME" in
           *) break ;;
         esac
       done
-      # need a verb AND at least one operand after it
-      [ $(( script_hidx + 1 )) -lt "${#script_tokens[@]}" ] || continue
+      # A command word must EXIST. The walk can consume every token (`FOO=1` as a
+      # whole segment), and this is the weakest predicate that keeps the
+      # dereference below in bounds under `set -u`. The old `-ge 2` guard reached
+      # that dereference only incidentally, via the operand requirement that has
+      # now moved to where it belongs.
+      [ "$script_hidx" -lt "${#script_tokens[@]}" ] || continue
 
       # Verb at command position. Basename match subsumes every absolute form
       # (/bin/bash, /usr/local/bin/zsh, /bin/.) that ANCHOR_PREFIX_BASH enumerated
@@ -968,12 +1124,81 @@ case "$TOOL_NAME" in
       # `source`/`.` are adjudicated HERE rather than by a second mechanism —
       # sourcing executes the file's contents in the current shell, which is the
       # same execution capability the interpreter arm guards, not a lesser one.
+      #
+      # THREE ARMS. The first two match on the BASENAME and are unedited — same
+      # subject expression, same patterns, same verbs — so any token that resolved
+      # to `interp` or `source` before resolves to it now. The third arm is the
+      # `*)` fallthrough, and it is deliberately the LAST branch: `/bin/bash` and
+      # `/bin/.` both contain a slash, and they must keep resolving to their own
+      # arms rather than being captured by the exec discriminator.
+      #
+      # THE EXEC DISCRIMINATOR IS THE SHELL'S OWN. POSIX Shell Command Language
+      # 2.9.1.1: a command name containing at least one slash is executed as a
+      # pathname; otherwise the shell performs a PATH search. So the slash IS the
+      # execute-this-file test, and using anything else here (a suffix test, an
+      # exec-bit stat, a prefix allowlist) would be a proxy for it. This is the
+      # same grammar authority the assignment-prefix walk above already cites, not
+      # a second one. It also excludes every PATH-resolved utility — `ls`, `git`,
+      # `grep` — by construction, which is what keeps the widening from
+      # degenerating into "adjudicate every command".
+      #
+      # NORMALIZATION IS SCOPED TO THIS BRANCH ON PURPOSE. The exec discriminator
+      # reads the WHOLE token, so it needs the quote/punctuation residue stripped;
+      # the two arms above read a basename against a fixed verb set and must not.
+      # Normalizing their subject would newly resolve `"bash" x.sh` to the
+      # interpreter arm — a tightening, but a behaviour change to a shipped arm,
+      # which this slice must not make.
       script_verb=""
+      script_word=""
       case "${script_tokens[$script_hidx]##*/}" in
         bash|sh|zsh) script_verb="interp" ;;
         source|.)    script_verb="source" ;;
-        *) continue ;;
+        *)
+          script_word="$(normalize_script_token "${script_tokens[$script_hidx]}")"
+          case "$script_word" in
+            # System bins, adopted VERBATIM from ANCHOR_PREFIX_BASH's prefix set so
+            # this file keeps ONE definition of "system bin". `/sbin` and
+            # `/usr/sbin` are deliberately absent: adding them would create a
+            # second, divergent definition, and neither is a script-laundering
+            # route an agent reaches.
+            /bin/*|/usr/bin/*|/usr/local/bin/*|/opt/homebrew/bin/*|/opt/local/bin/*) continue ;;
+            */*) script_verb="exec" ;;
+            *)   continue ;;
+          esac
+          ;;
       esac
+
+      # EXEC ARM. No flag walk and no operand arity: the command word IS the file
+      # that executes, so there is nothing after it to resolve.
+      #
+      # THE OPERAND FILTER IS A SEPARATE `case`, NOT A REUSE OF EITHER ARM'S. It
+      # mirrors the interpreter arm's expression, widened only by `*.bash`, and it
+      # is written out here so that an edit to one arm's filter cannot silently
+      # retarget another's. It is NOT the source arm's filter: borrowing that
+      # would put this arm WIDER than the interpreter arm and create a fresh
+      # asymmetry between arms of one rule — the mirror image of the defect the
+      # normalization fix above exists to remove. Measured on the doc corpus, the
+      # wider filter finds the SAME 15 real tokens while adding 10 awk/sed-fragment
+      # false positives and one unresolvable hard-block, and buys only
+      # extensionless-executable coverage, of which this repo has zero.
+      #
+      # NAMED RESIDUAL, INHERITED NOT INTRODUCED: `./x` with no extension escapes
+      # this arm — and already escapes the interpreter arm, which does not
+      # adjudicate `bash /tmp/evil` either. One residual across three arms,
+      # recorded once, and pinned by a test so a future widening is a deliberate
+      # act rather than a drift.
+      if [ "$script_verb" = "exec" ]; then
+        case "$script_word" in
+          *.sh|*.bash) destructive_022_exec_verdict "$script_word" ;;
+        esac
+        continue
+      fi
+
+      # PER-ARM ARITY. The interpreter and source arms take a script as an
+      # OPERAND, so they need a token after the verb; the exec arm, handled above,
+      # does not. This is the predicate the old pre-verb guard applied, unchanged,
+      # now applied where the arm is known.
+      [ $(( script_hidx + 1 )) -lt "${#script_tokens[@]}" ] || continue
 
       # walk past flags to the first operand. `-c` takes a program STRING rather
       # than a path, so every .sh-bearing token after it is a candidate instead of

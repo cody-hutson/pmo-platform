@@ -809,18 +809,44 @@ test_case "BLOCK-022 source residual control: ~/ operand with .sh suffix still b
 # forthcoming change to this same rule. Its rows announce themselves as skipped
 # WITH THE REASON on every run rather than being silently absent -- an absent
 # arm reads as a covered arm, which is the failure mode this whole milestone
-# exists to close. Activating it is a one-word edit to B022_ARMS: no case in
-# this block is re-authored.
+# exists to close.
+#
+# ACTIVATION COST, CORRECTED. The note this paragraph replaced predicted that
+# activating `exec` would be a one-word edit to B022_ARMS with no case
+# re-authored. The one-word edit is real -- `pending:...` -> `active`, and the
+# empty verb field renders the arm's command line with no re-authoring of
+# b022_cmd, because direct execution IS the path at command position. What the
+# prediction missed is that the exec arm ships PHASE-GATED at `warn`, so at the
+# shipped phase it deliberately returns exit 0 on a must-flag input while the
+# other two return 2. Two things follow, and both are additions rather than
+# rewrites:
+#
+#   (1) the must-flag EXPECTED EXIT is now per-arm, read from the hook's own
+#       DESTRUCTIVE_022_EXEC_PHASE constant rather than hardcoded; and
+#   (2) the parity aggregate compares the ADJUDICATION DECISION (deny/allow),
+#       not the raw exit code.
+#
+# (2) is the more faithful claim, not a weakened one. What parity was always
+# about is whether every arm carries its operand to the ALLOWLIST and decides
+# the same way; the exit code was only ever a proxy for that decision, and it
+# stops being one the moment an arm is allowed to decide `deny` and act `allow`.
+# At `warn` the exec arm's decision is evidenced by a drain row, so the drain
+# delta is read as the verdict. Set the phase constant to `enforce` and the
+# decision and the exit code coincide again with no edit here.
 
 echo ""
 echo "BLOCK-022 trailing-punctuation normalization + arm parity"
 echo "---"
 
 # Arm registry -- "<key>|<verb>|<status>". status is `active` or `pending:<why>`.
+# The exec arm's verb is EMPTY by construction: direct execution has no verb
+# token, the path itself sits at command position. b022_cmd's formats render
+# that as a leading space, which the hook trims with the same leading-whitespace
+# trim every segment gets -- so no format needs a third variant.
 B022_ARMS=(
   "interp|bash|active"
   "source|source|active"
-  "exec|exec|pending:the exec arm is not implemented yet"
+  "exec||active"
 )
 
 # Operand spellings in the arms' SHARED domain. Each is a real raw-argv shape a
@@ -842,13 +868,62 @@ b022_cmd() { # $1 shape  $2 verb  $3 path
   esac
 }
 
+# The exec arm's rollout drain. Read from the hook's own HOOK_DIR so the test
+# and the hook cannot disagree about where the drain lives.
+B022_DRAIN="${HOOK%/*}/destructive-warn-log.jsonl"
+
+b022_drain_rows() {
+  if [ -f "$B022_DRAIN" ]; then
+    /usr/bin/wc -l < "$B022_DRAIN" | /usr/bin/tr -d '[:space:]'
+  else
+    /usr/bin/printf '0'
+  fi
+}
+
+# The shipped rollout phase, read OUT OF THE HOOK SOURCE rather than restated
+# here. Restating it would let the constant and the expectation drift in
+# opposite directions and still go green -- the test would then be asserting its
+# own copy of the posture instead of the hook's.
+B022_EXEC_PHASE="$(/usr/bin/sed -n 's/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p' "$HOOK" | /usr/bin/head -1)"
+if [ -z "$B022_EXEC_PHASE" ]; then
+  /usr/bin/printf 'FAIL: BLOCK-022 exec phase constant not readable from %s (the suite cannot state an expectation it cannot resolve)\n' "$HOOK"
+  FAIL=$((FAIL + 1))
+  B022_EXEC_PHASE="unreadable"
+fi
+case "$B022_EXEC_PHASE" in
+  enforce) B022_EXEC_FLAG_EXIT=2 ;;
+  *)       B022_EXEC_FLAG_EXIT=0 ;;
+esac
+/usr/bin/printf 'PASS: BLOCK-022 exec arm rollout phase resolved from the hook source: %s (must-flag expects exit %s)\n' \
+  "$B022_EXEC_PHASE" "$B022_EXEC_FLAG_EXIT"
+PASS=$((PASS + 1))
+
+# Map one arm's observed behaviour to the ADJUDICATION DECISION. For the two
+# always-enforcing arms the exit code IS the decision. For the phase-gated exec
+# arm below `enforce` it is not: the arm decides `deny` and then acts `allow` by
+# design, and the drain row is the record of the decision. Reading the drain is
+# what keeps the parity claim about adjudication rather than about exit status.
+b022_decide() { # $1 arm key  $2 rc  $3 drain delta -> prints deny|allow
+  if [ "$1" = "exec" ] && [ "$B022_EXEC_PHASE" != "enforce" ]; then
+    if [ "$3" -gt 0 ]; then /usr/bin/printf 'deny'; else /usr/bin/printf 'allow'; fi
+    return 0
+  fi
+  if [ "$2" = "2" ]; then /usr/bin/printf 'deny'; else /usr/bin/printf 'allow'; fi
+}
+
 # Run the hook and record the exit code in B022_RC, asserting the expectation in
-# the same pass so the hook is invoked once per case rather than twice.
+# the same pass so the hook is invoked once per case rather than twice. The
+# drain delta is captured around the same single invocation, so the decision
+# reading below costs no extra hook run.
 B022_RC=""
+B022_DRAIN_DELTA=0
 b022_case() { # $1 name  $2 payload  $3 expected_exit
-  local rc=0
+  local rc=0 before after
+  before="$(b022_drain_rows)"
   /usr/bin/printf '%s' "$2" | /bin/bash "$HOOK" >/dev/null 2>&1 || rc="$?"
+  after="$(b022_drain_rows)"
   B022_RC="$rc"
+  B022_DRAIN_DELTA=$(( after - before ))
   if [ "$rc" = "$3" ]; then
     /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
   else
@@ -884,27 +959,38 @@ for b022_shape in $B022_SHAPES; do
       continue
     fi
 
-    # must-flag: a non-allowlisted script must be BLOCKED in every spelling.
-    # This is the specificity arm -- the fix must make these tokens REACH the
-    # allowlist, never pass it.
-    b022_case "BLOCK-022 parity $b022_shape/$b022_key: non-allowlisted blocks" \
+    # must-flag: a non-allowlisted script must be ADJUDICATED AND DENIED in
+    # every spelling. This is the specificity arm -- the fix must make these
+    # tokens REACH the allowlist, never pass it. The expected EXIT is per-arm:
+    # the two always-enforcing arms block, and the phase-gated exec arm exits 0
+    # below `enforce` while still recording the denial in its drain.
+    if [ "$b022_key" = "exec" ]; then
+      b022_expect_flag="$B022_EXEC_FLAG_EXIT"
+    else
+      b022_expect_flag=2
+    fi
+    b022_case "BLOCK-022 parity $b022_shape/$b022_key: non-allowlisted denied (expect exit $b022_expect_flag)" \
       "$(bash_payload "$(b022_cmd "$b022_shape" "$b022_verb" "$B022_EVIL")")" \
-      2
-    b022_flag_verdicts="$b022_flag_verdicts $b022_key=$B022_RC"
+      "$b022_expect_flag"
+    b022_flag_verdicts="$b022_flag_verdicts $b022_key=$(b022_decide "$b022_key" "$B022_RC" "$B022_DRAIN_DELTA")"
 
     # must-not-flag: an allowlisted script must still be permitted in the same
     # spelling. Without this the whole set is satisfiable by a hook that denies
-    # everything.
+    # everything. Exit 0 on every arm -- an allowlisted path is permitted at
+    # every phase, and on the exec arm it must not even be recorded, which the
+    # decision reading below asserts as `allow`.
     b022_case "BLOCK-022 parity $b022_shape/$b022_key: allowlisted allows" \
       "$(bash_payload "$(b022_cmd "$b022_shape" "$b022_verb" "$B022_OK")")" \
       0
-    b022_notflag_verdicts="$b022_notflag_verdicts $b022_key=$B022_RC"
+    b022_notflag_verdicts="$b022_notflag_verdicts $b022_key=$(b022_decide "$b022_key" "$B022_RC" "$B022_DRAIN_DELTA")"
   done
 
-  # The parity assertion itself: every ACTIVE arm reached the same verdict for
-  # this spelling, in both directions. Distinct from the per-arm expectations
-  # above -- those can both be red while still agreeing, and this row is what
-  # names the disagreement when they do not.
+  # The parity assertion itself: every ACTIVE arm reached the same ADJUDICATION
+  # DECISION for this spelling, in both directions. Distinct from the per-arm
+  # expectations above -- those can all be red while still agreeing, and this
+  # row is what names the disagreement when they do not. The verdicts compared
+  # are `deny`/`allow`, not exit codes, because one arm is phase-gated and its
+  # exit code is deliberately not its decision below `enforce`.
   for b022_dir in flag notflag; do
     case "$b022_dir" in
       flag)    b022_v="$b022_flag_verdicts" ;;
@@ -1104,6 +1190,182 @@ test_case "BLOCK-022 R5: env-prefixed pipeline tool allows" \
 test_case "BLOCK-022 R5 control: unregistered sibling in core/hooks/tests/ blocks" \
   "$(bash_payload 'bash core/hooks/tests/zz_unregistered_control.sh')" \
   2 "BLOCK-DESTRUCTIVE-022"
+
+# ==========================================================================
+# BLOCK-022 exec arm — direct script execution, phase-gated
+# ==========================================================================
+#
+# THE BYPASS THIS BLOCK PINS. `bash /tmp/x.sh` blocked; `/tmp/x.sh` -- the same
+# script, the same allowlist state, the ordinary way to run an executable --
+# was not adjudicated by any rule in any hook. The allowlist was bypassable by
+# making the file executable and dropping the interpreter word, on a rule whose
+# own block message reads "Red Team C1 -- script-laundering mitigation".
+#
+# WHY EVERY ASSERTION HERE READS THE DRAIN AND NOT ONLY THE EXIT CODE. The arm
+# ships at `warn`, so it returns 0 on a would-fire input. A case asserting exit
+# 0 alone would pass against a hook that never evaluated the arm at all -- it
+# would pass right now against the pre-change hook, and it would keep passing if
+# the arm were deleted. The drain delta is what makes evaluation a NECESSARY
+# condition of a green run rather than an incidental one.
+#
+# The pair T-EXEC-1 / T-EXEC-9 is the must-flag / must-not-flag pair AC-3 asks
+# for, and both were demonstrated against the PRE-change hook before this block
+# was written: T-EXEC-1 returned exit 0 with no drain row (nothing adjudicated
+# it), and T-EXEC-9 also returned exit 0 -- so a naive widening that adopted the
+# source arm's operand filter would newly flag it. A control that passes both
+# before and after proves nothing.
+
+echo ""
+echo "BLOCK-022 exec arm (direct execution, rollout=${B022_EXEC_PHASE})"
+echo "---"
+
+# A would-fire case. Asserts the exit code the SHIPPED phase implies, that the
+# drain grew by exactly one row, that the row carries that phase and the
+# expected cause class, and -- at `warn` only -- that the operator saw a notice.
+exec_warn_case() { # $1 name  $2 command  $3 expected cause
+  local rc=0 before after last err tmp_err ok=1 why=""
+  before="$(b022_drain_rows)"
+  tmp_err="$(/usr/bin/mktemp)"
+  /usr/bin/printf '%s' "$(bash_payload "$2")" | /bin/bash "$HOOK" >/dev/null 2>"$tmp_err" || rc="$?"
+  after="$(b022_drain_rows)"
+  err="$(/bin/cat "$tmp_err")"; /bin/rm -f "$tmp_err"
+
+  [ "$rc" = "$B022_EXEC_FLAG_EXIT" ] || { ok=0; why="$why exit=$rc(want $B022_EXEC_FLAG_EXIT)"; }
+  [ "$(( after - before ))" = "1" ] || { ok=0; why="$why drain_delta=$(( after - before ))(want 1)"; }
+  last="$(/usr/bin/tail -1 "$B022_DRAIN" 2>/dev/null || /usr/bin/printf '')"
+  case "$last" in
+    *"\"phase\":\"${B022_EXEC_PHASE}\""*) ;;
+    *) ok=0; why="$why phase-field!=${B022_EXEC_PHASE}" ;;
+  esac
+  case "$last" in
+    *"\"cause\":\"$3\""*) ;;
+    *) ok=0; why="$why cause!=$3" ;;
+  esac
+  case "$last" in
+    *'"reason":"would-fire"'*) ;;
+    *) ok=0; why="$why reason-field-missing" ;;
+  esac
+  # `shadow` surfaces nothing by design -- the drain IS the observation -- so a
+  # notice there would be the defect, not the assertion.
+  case "$B022_EXEC_PHASE" in
+    warn)
+      case "$err" in
+        *'BLOCK-DESTRUCTIVE-022] WARN (would-block, rollout=warn'*) ;;
+        *) ok=0; why="$why no-stderr-notice" ;;
+      esac
+      ;;
+    shadow)
+      case "$err" in
+        *'BLOCK-DESTRUCTIVE-022'*) ok=0; why="$why shadow-must-be-silent" ;;
+        *) ;;
+      esac
+      ;;
+  esac
+
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  %s\n  last_drain_row: %s\n' "$1" "$why" "$last"; FAIL=$((FAIL + 1))
+  fi
+}
+
+# A must-not-flag case. Exit 0 AND the drain unchanged -- the second half is the
+# load-bearing one. An arm that logged every candidate and then allowed it would
+# satisfy exit 0 while making the drain unreadable, which is the failure that
+# turns a graduation reading into noise.
+exec_notflag_case() { # $1 name  $2 command
+  local rc=0 before after ok=1 why=""
+  before="$(b022_drain_rows)"
+  /usr/bin/printf '%s' "$(bash_payload "$2")" | /bin/bash "$HOOK" >/dev/null 2>&1 || rc="$?"
+  after="$(b022_drain_rows)"
+  [ "$rc" = "0" ] || { ok=0; why="$why exit=$rc(want 0)"; }
+  [ "$(( after - before ))" = "0" ] || { ok=0; why="$why drain_delta=$(( after - before ))(want 0)"; }
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  %s\n' "$1" "$why"; FAIL=$((FAIL + 1))
+  fi
+}
+
+# --- MUST-FLAG ---------------------------------------------------------------
+exec_warn_case "T-EXEC-1 must-flag: direct execution of a non-allowlisted script (the reproduction)" \
+  '/tmp/pmo-probe-not-allowlisted-xyz.sh' 'not-allowlisted'
+
+exec_warn_case "T-EXEC-2 must-flag: relative direct execution with a flag" \
+  './tmp/evil.sh --flag' 'not-allowlisted'
+
+# Every segment is adjudicated, not just the first, so a direct execution cannot
+# hide behind an innocuous command ahead of it.
+exec_warn_case "T-EXEC-3 must-flag: direct execution chained after another command" \
+  'git status; /tmp/evil.sh' 'not-allowlisted'
+
+# The cause classes must stay separate in the drain. `unresolvable` has NO
+# allowlist remedy -- sending an operator to edit an allowlist that can never
+# match is the exact trap BLOCK-EGRESS-007 was filed about -- so a drain that
+# conflated the two would misdirect the graduation decision.
+exec_warn_case "T-EXEC-4 must-flag: variable-bearing direct execution records cause=unresolvable" \
+  '$TMPDIR/probe.sh' 'unresolvable'
+
+# The operand filter is `*.sh|*.bash`, matching the interpreter arm's domain
+# widened only by `.bash`. This case is what distinguishes it from a bare `*.sh`.
+exec_warn_case "T-EXEC-2b must-flag: .bash operand on the exec arm" \
+  './tmp/evil.bash' 'not-allowlisted'
+
+# --- MUST-NOT-FLAG -----------------------------------------------------------
+exec_notflag_case "T-EXEC-5 must-not-flag: allowlisted tool by direct execution (form 3)" \
+  './core/deploy/deploy.sh --check'
+
+# The BLOCK-SHELL-INJECTION-002 read-across, and the single most important
+# structural constraint on this arm. A markdown table row shreds on `|` into
+# fragments whose head token can contain `/` and end `.sh`. The arm is safe only
+# because it sits INSIDE the quoted-fragment suppression and is evaluated only
+# for segments at true command position. Hoist it above that block and this case
+# goes red -- which is the point of having it.
+exec_notflag_case "T-EXEC-6 must-not-flag: markdown table row with a backticked .sh path in a carrier argument" \
+  'gh issue comment 1 --body "| step | `./tmp/x.sh` | run it |"'
+
+exec_notflag_case "T-EXEC-7 must-not-flag: system-bin interpreter for another language" \
+  '/usr/bin/python3 script.py'
+
+exec_notflag_case "T-EXEC-8 must-not-flag: PATH-resolved utility, no slash (arm never reached)" \
+  'git status'
+
+exec_notflag_case "T-EXEC-8b must-not-flag: PATH-resolved utility with flags" \
+  'ls -la'
+
+# RECORDED RESIDUAL, PINNED. `./x` with no extension escapes this arm -- and
+# already escapes the interpreter arm, which does not adjudicate `bash /tmp/evil`
+# either. It is one residual shared by three arms, not a new gap. Pinning it here
+# means a future widening to the source arm's `/*` domain is a deliberate act
+# that turns this case red, rather than a drift nobody notices.
+exec_notflag_case "T-EXEC-9 must-not-flag: extensionless direct execution (recorded residual, pinned)" \
+  './tmp/evil'
+
+# --- PHASE DISCRIMINATION ----------------------------------------------------
+# Everything above is satisfiable by an arm that adjudicates and then always
+# allows. This case is what proves the phase gate is a gate: the SAME must-flag
+# input against a copy of the hook whose only difference is the phase constant
+# must exit 2. The copy lives beside the hook so HOOK_DIR still resolves lib/ and
+# the allowlist; it is removed immediately after.
+B022_PHASE_PROBE="${HOOK%/*}/.block-destructive-phase-probe.sh"
+/usr/bin/sed 's/^readonly DESTRUCTIVE_022_EXEC_PHASE=.*/readonly DESTRUCTIVE_022_EXEC_PHASE="enforce"/' \
+  "$HOOK" > "$B022_PHASE_PROBE"
+/bin/chmod +x "$B022_PHASE_PROBE"
+b022_probe_rc=0
+b022_probe_err="$(/usr/bin/printf '%s' "$(bash_payload '/tmp/pmo-probe-not-allowlisted-xyz.sh')" \
+  | /bin/bash "$B022_PHASE_PROBE" 2>&1 >/dev/null)" || b022_probe_rc="$?"
+/bin/rm -f "$B022_PHASE_PROBE"
+case "${b022_probe_rc}:${b022_probe_err}" in
+  2:*BLOCK-DESTRUCTIVE-022*)
+    /usr/bin/printf 'PASS: T-EXEC-10 phase discrimination: the same input blocks at rollout=enforce\n'
+    PASS=$((PASS + 1))
+    ;;
+  *)
+    /usr/bin/printf 'FAIL: T-EXEC-10 phase discrimination: expected exit 2 + BLOCK-DESTRUCTIVE-022 at rollout=enforce\n  rc=%s stderr=%s\n' \
+      "$b022_probe_rc" "$b022_probe_err"
+    FAIL=$((FAIL + 1))
+    ;;
+esac
 
 # ==========================================================================
 # BLOCK-022 AC-FP — the verdict must not depend on non-executing text
