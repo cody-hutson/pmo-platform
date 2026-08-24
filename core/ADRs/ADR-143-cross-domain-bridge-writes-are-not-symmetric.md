@@ -91,7 +91,9 @@ The safeguard is in the difference between the two moves. Re-scoping is visible,
 
 ## Verification
 
-Fixtures were written before the hook edit and failed against the unmodified hook (11 failing arms), which is what makes their subsequent passing meaningful. The matrix asserts, in both directions and under every mode:
+Fixtures were written before the hook edit and failed against the unmodified hook (11 failing arms), which is what makes their subsequent passing meaningful.
+
+The matrix asserts, in both directions and under every mode:
 
 - `-002` blocks under `warn` / `enforce` / `off`, **and** under master-OFF — the retained direction survives every dial.
 - `-004` blocks under `enforce`, warns-and-allows under `warn` **with an asserted warn-log append**, allows under `off`, and under master-OFF exits 0 **with no warn row** — the discriminating assertion for the conditional-trail consequence, since exit status alone cannot separate that case from the warn case.
