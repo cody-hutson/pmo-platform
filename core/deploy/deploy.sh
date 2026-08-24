@@ -10635,22 +10635,55 @@ sys.stdout.write("".join(out) + "|")
         # `$1=="SKIP_MS"` count silently folds the M1 skips into this denominator —
         # measured live, that is 75 rows instead of 34.
         #
-        # CAVEAT: both counts inherit the primitive's stage-title fetch, which reads
-        # against a 1000-result search cap with no truncation guard (measured population
-        # 3677), so the split is currently APPROXIMATE and varies run to run. Reporting an
-        # approximate denominator is still strictly better than reporting none — the
-        # failure this replaces was silence, not imprecision — but the numbers firm up
-        # only when that fetch paginates.
+        # The primitive's stage-title fetch is now an UNCAPPED, cursor-paginated
+        # issues-connection walk that asserts its own completeness against the
+        # connection's totalCount, so both counts below are EXACT and stable run
+        # to run. The comment this replaces recorded the opposite — an APPROXIMATE
+        # split inherited from a 1000-result search cap — and named its own
+        # retirement condition; that condition is met.
+        #
+        # READ M3_SCAN FIRST (PV-7b). The walk reports its own measurement state,
+        # and the three states get three postures. Branch on the status BEFORE
+        # reading any counter: reading a count without branching consumes "I saw
+        # part of it" as "that is all there is" — the exact defect this check
+        # exists to catch, reproduced inside the catcher.
         local c56_m3 c56_m3_adv c56_marker c56_m3_skipped c56_m3_eval
+        local c56_m3_scan c56_m3_partial=""
         c56_m3=$(echo "$c56_out" | awk -F'\t' '$1=="M3"{print "ms#"$2":"$3" "$4}' | paste -sd'; ' -)
         c56_m3_adv=$(echo "$c56_out" | awk -F'\t' '$1=="COUNT_M3_ADV"{print $2}')
         c56_marker=$(echo "$c56_out" | awk -F'\t' '$1=="SCAFFOLD_MARKER"{print "ms#"$2" "$3}' | paste -sd', ' -)
         c56_m3_skipped=$(echo "$c56_out" | awk -F'\t' '$1=="SKIP_MS" && $3=="not-yet-scaffolded"{n++} END{print n+0}')
         c56_m3_eval=$(echo "$c56_out" | awk -F'\t' '$1=="M3_DENOM"{n++} END{print n+0}')
-        if [[ -n "$c56_m3" ]]; then
-          flag_advisory_only "milestone-scaffold-completeness" "M3 scaffold completeness — load-bearing finding(s): $c56_m3 [${c56_m3_eval} evaluated, ${c56_m3_skipped} not-yet-scaffolded; advisory ${c56_m3_adv:-0}; marker adoption ${c56_marker:-none}]"
+        c56_m3_scan=$(echo "$c56_out" | awk -F'\t' '$1=="M3_SCAN"{print $2}')
+        # degraded  -> NOT measured. flag_not_evaluated is the emitter with the
+        #              structural guarantee PV-7c requires: no mode `case`, no
+        #              resolve_check_mode, no ISSUES increment in its body, and
+        #              its line already carries the mandated "withheld verdict,
+        #              never a clean one". flag_warn_or_issue is the WRONG emitter
+        #              here — its enforce branch increments ISSUES, so an M3
+        #              measurement outage would fail the M1/M2 verdict. The M3
+        #              rows are ABSENT on this path, so this is the ONE finding
+        #              naming the cause (PV-7c fan-in).
+        # truncated -> measured, partially. The Register B human token is
+        #              DEGRADED — not the Register A token, which is the
+        #              machine-readable field, and spelling a sixth human token
+        #              here would coin a member of a closed set. It stays an
+        #              inline annotation on the normal advisory emit.
+        # fetched   -> unchanged.
+        #
+        # The `else` wrapper is LOAD-BEARING, not cosmetic: leaving the
+        # findings-vs-OK branch reachable on a degraded run would print "0
+        # load-bearing finding(s)" over a population that was never read — the
+        # false-green in its purest form.
+        if [[ "$c56_m3_scan" == "degraded" ]]; then
+          flag_not_evaluated "milestone-scaffold-completeness" "M3 stage-title population unreadable (status=degraded) — scaffold completeness was NOT measured this run; every M3 verdict is withheld and no COUNT_M3* row was emitted; this is not a clean result"
         else
-          log "  OK:    milestone scaffold completeness (M3) — 0 load-bearing finding(s) over ${c56_m3_eval} evaluated milestone(s); ${c56_m3_skipped} not-yet-scaffolded (NOT evaluated, non-gating) (${c56_m3_adv:-0} advisory; marker adoption ${c56_marker:-none})"
+          [[ "$c56_m3_scan" == "truncated" ]] && c56_m3_partial=" [DEGRADED — the stage-title scan was truncated, so every count here is a LOWER BOUND; this is not a clean result]"
+          if [[ -n "$c56_m3" ]]; then
+            flag_advisory_only "milestone-scaffold-completeness" "M3 scaffold completeness — load-bearing finding(s): $c56_m3 [${c56_m3_eval} evaluated, ${c56_m3_skipped} not-yet-scaffolded; advisory ${c56_m3_adv:-0}; marker adoption ${c56_marker:-none}]${c56_m3_partial}"
+          else
+            log "  OK:    milestone scaffold completeness (M3) — 0 load-bearing finding(s) over ${c56_m3_eval} evaluated milestone(s); ${c56_m3_skipped} not-yet-scaffolded (NOT evaluated, non-gating) (${c56_m3_adv:-0} advisory; marker adoption ${c56_marker:-none})${c56_m3_partial}"
+          fi
         fi
         # M4 — sub-task milestone orphans. WARN-capable with a real enforce path,
         # so it routes through flag_warn_or_issue behind an EXPLICIT mode branch
