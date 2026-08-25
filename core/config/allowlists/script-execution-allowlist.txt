@@ -180,6 +180,16 @@ release/tools/cleanup-orphan-state.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/query-pipeline-event.sh
 ./release/tools/query-pipeline-event.sh
 release/tools/query-pipeline-event.sh
+# check-event-record-integrity.sh — READ-ONLY population validator over the pipeline
+# event log + the action-item ledgers. It opens both surfaces read-only and NEVER
+# appends, truncates, or edits: § 4.1 makes the log append-only and § 7 makes it Vital.
+# Invoked agent-side at Procedure 4a step 4b (population reconciliation before Close)
+# and by its own --self-test in CI. Without these rows BLOCK-DESTRUCTIVE-022 blocks it
+# for every agent — verified live during design.
+[PMO_PLATFORM_ROOT]/release/tools/check-event-record-integrity.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/check-event-record-integrity.sh
+./release/tools/check-event-record-integrity.sh
+release/tools/check-event-record-integrity.sh
 [PMO_PLATFORM_ROOT]/release/tools/automated-closeout.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/automated-closeout.sh
 ./release/tools/automated-closeout.sh
