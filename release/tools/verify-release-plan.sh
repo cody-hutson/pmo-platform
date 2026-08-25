@@ -38,7 +38,11 @@ readonly CLI_VERSION="0.2.0"
 # 1 -> 2: the `fcm-delivery` check family enters the emitted stream from a THIRD
 # record source, so every consumer now sees records it has never seen before.
 # That is exactly what this constant exists to make detectable rather than silent.
-readonly SCHEMA_VERSION="2"
+# 2 -> 3: the `provenance-survival` check family enters the stream from a FOURTH
+# record source (PROV-COVERAGE / PROV-PRESENCE / PROV-GRAMMAR / PROV-DELTA), for
+# the same reason. No verdict value is added and no record field is renamed, so
+# the Gate-6 verification-evidence grep contract is preserved across the bump.
+readonly SCHEMA_VERSION="3"
 
 # ---------------------------------------------------------------------------
 # Pinned PATH for tool discipline (per bypass-mode-readiness.md posture).
@@ -73,6 +77,7 @@ ARG_EMIT_EVENTS=0   # opt-in: actually write test-run events via the event write
 ARG_FCM_MERGE_BASE=""   # explicit base ref for the fcm-delivery diff range
 ARG_FCM_HEAD=""         # explicit head ref for the fcm-delivery diff range
 ARG_FCM_DIFF_FILE=""    # TEST-ONLY determinism seam; refused against a real plan
+ARG_STAGE4_COMMENT=""   # provenance DELTA limb evidence; absent -> NAMED SKIP, never PASS
 
 # Scratch array populated by tokenize_cmd (quote-aware command splitter).
 declare -a TOKENS=()
@@ -126,6 +131,9 @@ OPTIONS
                     <status>TAB<path> file instead of git. REFUSED (ERROR) when
                     the plan target lives under release/releases/plans/ — a real
                     release must never be graded against an authored diff set.
+  --stage4-comment P   Path to a file containing the Stage-4 planning sub-task
+                    comment, for the provenance DELTA limb. Absent → the delta
+                    limb emits a NAMED SKIP; it never emits PASS.
   --no-color        Disable ANSI color in table output
   -h, --help        Show this help and exit
   --version         Show CLI version + schema version and exit
@@ -144,6 +152,17 @@ CHECK FAMILIES (dispatched by predicate-class hint, else method keyword)
                                                        not plan-declared, so it
                                                        cannot be omitted by not
                                                        being asked for)
+  provenance-survival
+                 the domain_practice label survived   (absolute PRESENCE + closed
+                 Commit-0 transcription                source: GRAMMAR read from
+                                                       the plan alone; DELTA vs
+                                                       the Stage-4 comment when
+                                                       --stage4-comment is given.
+                                                       ALSO ALWAYS-ON, same
+                                                       rationale as fcm-delivery.
+                                                       The absolute limb is what
+                                                       makes it non-vacuous when
+                                                       BOTH surfaces are empty)
 
 EXIT CODES
   0  all checks PASS or SKIP
@@ -184,6 +203,8 @@ parse_args() {
       --head)         shift; ARG_FCM_HEAD="${1:-}" ;;
       --fcm-diff-file=*) ARG_FCM_DIFF_FILE="${1#--fcm-diff-file=}" ;;
       --fcm-diff-file)   shift; ARG_FCM_DIFF_FILE="${1:-}" ;;
+      --stage4-comment=*) ARG_STAGE4_COMMENT="${1#--stage4-comment=}" ;;
+      --stage4-comment)   shift; ARG_STAGE4_COMMENT="${1:-}" ;;
       --no-color)     ARG_NO_COLOR=1 ;;
       --)             shift; break ;;
       -*)             err "unknown option: $1"; usage >&2; exit "$EXIT_INTERNAL" ;;
@@ -1392,6 +1413,257 @@ handle_fcm_delivery() {
 }
 
 # ===========================================================================
+# Component 7 — provenance-survival: the domain_practice provenance label,
+# asserted ABSOLUTELY on the plan file and, when the Stage-4 comment is supplied,
+# as a set-difference across the Commit-0 transcription boundary.
+#
+# WHY THIS EXISTS. The label is determined at Stage 4 (Phase A1.5) and read back
+# from the PLAN FILE by four downstream consumers -- the Stage-13 close-class
+# resolver at rung 1, the Stage-5 impact-method selector, the design-review guide
+# resolution, and Stage-7 Phase A/C. Between those two surfaces sits one manual
+# step: the Commit-0 transcription. Nothing asserted that the label survived it,
+# so a drop was silent and the close-class resolver fell through to its default
+# branch with nobody notified.
+#
+# WHY THERE IS AN ABSOLUTE LIMB AND NOT ONLY A DELTA. The obvious mechanism is a
+# comment-vs-plan set-difference. It is VACUOUS on the shape that actually
+# recurred: v4.37 was hub-authored directly, so its Stage-4 sub-task comment
+# carried no label EITHER. Comment 0, plan 0, set-difference empty -- a delta-only
+# check reports CLEAN on the one release that failed. That is the same defect
+# class fcm-delivery names for itself above, one family over. A check that cannot
+# fail on the case that motivated it is not a check, so PROV-PRESENCE reads the
+# plan ALONE and does not care what the comment said.
+#
+# WHY THE DELTA SET IS ONLY ROWS 1-5 OF THE SURVIVAL SET. Run by hand end-to-end
+# on v4.31 first, both surfaces, before any of this was mechanised: 0 casualties
+# across 6 grammar-bearing elements, and the naive token-level probe produced TWO
+# false positives (the baseline pin and the version determination) that resolved
+# to legitimate re-renderings. Only an element whose serialization is FROZEN by a
+# named schema is mechanically comparable; the rest are re-rendered prose, where a
+# token comparison manufactures findings instead of finding them. Rows 6-9 are
+# reviewer-read by design, and the exclusion is stated in PROV-COVERAGE so the
+# limb scope is visible rather than inferred.
+#
+# WHY --stage4-comment IS NOT REFUSED THE WAY --fcm-diff-file IS. fcm-delivery
+# refuses its seam against a live plan because a live git-derived source exists,
+# so honoring caller-supplied evidence would be an off-switch on a control that
+# can run without it. NO host-reachable source exists for a GitHub comment, so the
+# same refusal would not harden this limb -- it would delete it. The
+# caller-supplied-evidence risk is neutralized by the DIRECTION OF THE DEFAULT
+# instead: absent evidence yields a NAMED SKIP, never PASS, so withholding the
+# comment cannot manufacture a pass.
+# ===========================================================================
+
+# --- Extraction -------------------------------------------------------------
+#
+# The presence pattern is the Stage-7 Phase-A pattern reused VERBATIM
+# (stage-07-dev-testing.md), so no second rendering set is minted. The {0,24}
+# decoration bound and the "content, not typographic setting" tolerance are owned
+# by stage-04-planning.md 5.7; this handler CITES that clause and enumerates
+# nothing. The discriminator is a schema field INSIDE the brace body, which is why
+# a narrative mention carrying no body is not a match.
+#
+# Extraction is index-based rather than regex-based once the line is known: the
+# interval expression lives in `grep -E` (portable on both CI runners) and the body
+# carve-out uses index()/substr(), so no awk interval support is assumed.
+_prov_label_lines() {
+  # $1 = file. Prints  <lineno> TAB <brace-body>  per conformant single-line label.
+  grep -nE 'domain_practice[^{]{0,24}\{[^}]*source:' "$1" 2>/dev/null | awk '
+    {
+      p = index($0, ":")
+      if (p == 0) next
+      ln = substr($0, 1, p - 1)
+      rest = substr($0, p + 1)
+      k = index(rest, "domain_practice")
+      if (k == 0) next
+      tail = substr(rest, k)
+      ob = index(tail, "{")
+      if (ob == 0) next
+      body = substr(tail, ob + 1)
+      cb = index(body, "}")
+      if (cb > 0) body = substr(body, 1, cb - 1)
+      gsub(/\t/, " ", body)
+      printf "%s\t%s\n", ln, body
+    }'
+}
+
+# _prov_field <body> <key> — the value of <key> in a label body, up to the next
+# top-level comma. Matches the census extractor the grammar was derived from.
+_prov_field() {
+  printf '%s' "$1" | awk -v k="$2" '
+    {
+      key = k ":"
+      p = index($0, key)
+      if (p == 0) { exit }
+      v = substr($0, p + length(key))
+      c = index(v, ",")
+      if (c > 0) v = substr(v, 1, c - 1)
+      gsub(/^[ \t]+|[ \t]+$/, "", v)
+      print v
+    }'
+}
+
+# _prov_normalize_source — trim, then fold any dash used as the N/A separator to a
+# single U+2014. Census at introduction: 85 of 85 exemption tokens already use
+# U+2014, so the fold is PROPHYLACTIC -- its purpose is that a typographic slip is
+# never reported as a semantic finding.
+_prov_normalize_source() {
+  printf '%s' "$1" | sed -E \
+    -e 's/^[[:space:]]+//' \
+    -e 's/[[:space:]]+$//' \
+    -e 's/^N\/A[[:space:]]*(—|–|--|-)[[:space:]]*/N\/A — /'
+}
+
+# _prov_source_form <normalized> — prints A | B | X | NONE.
+_prov_source_form() {
+  case "$1" in
+    'N/A — pipeline-internal release') printf 'X'; return 0 ;;
+    'UNSOURCED-DOMAIN')                printf 'B'; return 0 ;;
+  esac
+  if printf '%s' "$1" | grep -qE '^https?://[^[:space:]]+'; then printf 'A'; return 0; fi
+  if printf '%s' "$1" | grep -qE '^[A-Za-z0-9._/-]+\.(md|sh|py|toml|json|yml|yaml|txt)([[:space:](].*)?$'; then printf 'A'; return 0; fi
+  printf 'NONE'
+}
+
+# _prov_elements_present <file> — one token per Survival-Set row 1..5 element the
+# file carries. Rows 6-9 are absent BY CONSTRUCTION; see the header note.
+_prov_elements_present() {
+  local f="$1"
+  if grep -qE 'domain_practice[^{]{0,24}\{[^}]*source:' "$f" 2>/dev/null; then printf 'domain_practice-label\n'; fi
+  if grep -qE 'File Change Matrix' "$f" 2>/dev/null;  then printf 'file-change-matrix\n';   fi
+  if grep -qE 'CIAC-[0-9]' "$f" 2>/dev/null;          then printf 'ciac\n';                 fi
+  if grep -qE 'Verification Plan' "$f" 2>/dev/null;   then printf 'verification-plan\n';    fi
+  if grep -qF '{{RELEASE_VERSION}}' "$f" 2>/dev/null; then printf 'release-version-stamp\n'; fi
+  return 0
+}
+
+handle_provenance_survival() {
+  local plan="$1"
+  local ISS='PROV (provenance)' FAM='provenance-survival'
+  local method='domain_practice provenance label: absolute presence + closed source grammar read from the plan alone, plus a Commit-0 set-difference against the Stage-4 comment when supplied'
+
+  emit_prov() { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ISS" "$1" "$FAM" "$method" "$2" "$3" "$4"; }
+
+  # (1) Applicability. Same corpus gate as fcm-delivery, verbatim: the governed
+  #     population is defined by LOCATION. A target outside it is a NAMED skip, and
+  #     it can never hide a real release, because a real release plan lives inside
+  #     the corpus and takes the graded arms below.
+  local in_corpus=0
+  case "$plan" in */release/releases/plans/*) in_corpus=1 ;; esac
+  if [ "$in_corpus" -eq 0 ]; then
+    emit_prov "PROV-COVERAGE" "release-plan target" "$VERDICT_SKIP" \
+      "prov-not-a-release-plan (target outside release/releases/plans/; no provenance obligation)"
+    return 0
+  fi
+
+  # (2) Plan readability — fail closed. An absent or empty plan is NOT zero
+  #     obligations; it is an unreadable state, and it says so.
+  if [ ! -r "$plan" ] || [ ! -s "$plan" ]; then
+    emit_prov "PROV-COVERAGE" "a readable plan file" "$VERDICT_ERROR" \
+      "prov-plan-unreadable (plan absent or empty; an unreadable plan is NOT a plan with no obligations)"
+    return 0
+  fi
+
+  local plan_lines; plan_lines="$(awk 'END{print NR}' "$plan")"
+
+  # (3) Label extraction.
+  local hits; hits="$(_prov_label_lines "$plan")"
+  local labels_found; labels_found="$(printf '%s' "$hits" | grep -c . || true)"
+
+  # (4) Delta-evidence resolution. Absent evidence is a NAMED SKIP, never PASS.
+  local delta_source="absent" comment_state="none"
+  if [ -n "$ARG_STAGE4_COMMENT" ]; then
+    if [ ! -r "$ARG_STAGE4_COMMENT" ] || [ ! -s "$ARG_STAGE4_COMMENT" ]; then
+      comment_state="unreadable"
+    else
+      comment_state="ok"
+      delta_source="$(basename "$ARG_STAGE4_COMMENT")"
+    fi
+  fi
+
+  # (5) Coverage record — ALWAYS emitted, so "the family never ran" is not
+  #     byte-identical to "the family found nothing". Carries its denominators.
+  local cov_note=""
+  if [ "$labels_found" -gt 1 ]; then
+    local lns; lns="$(printf '%s\n' "$hits" | awk -F'\t' 'NF{printf "%s%s", (n++?",":""), $1}')"
+    # A plan whose Risk Register QUOTES the label pattern in prose lands here. It is
+    # surfaced as a visible ambiguity for the reviewer with its line numbers, rather
+    # than resolved silently in either direction.
+    cov_note=" prov-multiple-labels:$labels_found at lines $lns (GRAMMAR grades the first)"
+  fi
+  emit_prov "PROV-COVERAGE" "an examined plan surface" "$VERDICT_PASS" \
+    "labels_found=$labels_found plan_lines=$plan_lines delta_source=$delta_source delta_set=survival-rows-1-5-only (rows 6-9 are re-rendered prose and are reviewer-read by design)${cov_note}"
+
+  # (6) PRESENCE — the absolute limb. Reads the plan ALONE. This is the arm that
+  #     fires on the v4.37 shape, where the delta limb is genuinely empty.
+  if [ "$labels_found" -eq 0 ]; then
+    emit_prov "PROV-PRESENCE" "at least one conformant single-line label" "$VERDICT_FAIL" \
+      "prov-label-absent (no domain_practice label in the 5.7 schema form on any single line; the Stage-13 close-class rung-1 read has no input)"
+  else
+    emit_prov "PROV-PRESENCE" "at least one conformant single-line label" "$VERDICT_PASS" \
+      "prov-label-present:$labels_found"
+  fi
+
+  # (7) GRAMMAR — four limbs on the FIRST conformant label.
+  if [ "$labels_found" -eq 0 ]; then
+    emit_prov "PROV-GRAMMAR" "date + in-label domain + a Form A/B/X source" "$VERDICT_SKIP" \
+      "prov-no-label-to-grade (PROV-PRESENCE FAILed; there is no label to grade)"
+  else
+    local body; body="$(printf '%s\n' "$hits" | awk -F'\t' 'NR==1{print $2}')"
+    local d_val s_val s_norm s_form r_val fail=""
+    d_val="$(_prov_field "$body" date)"
+    s_val="$(_prov_field "$body" source)"
+    r_val="$(_prov_field "$body" rationale)"
+    s_norm="$(_prov_normalize_source "$s_val")"
+    s_form="$(_prov_source_form "$s_norm")"
+
+    if ! printf '%s' "$d_val" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+      fail="limb=date value=[$d_val] (mandatory in BOTH modes so staleness is detectable)"
+    elif ! printf '%s' "$body" | grep -qE '(^|[,{[:space:]])domain:[[:space:]]*[A-Za-z]'; then
+      fail="limb=domain value=[$body] (the mandatory in-label class field is absent, or the body is wrapped across lines so it fell off the matched line)"
+    elif [ "$s_form" = "NONE" ]; then
+      fail="limb=source value=[$s_norm] (not one of the three codified forms; route it per the 5.7 routing rule rather than minting a fourth)"
+    elif [ "$s_form" = "B" ] && [ -z "$r_val" ]; then
+      fail="limb=rationale value=[$s_norm] (Form B UNSOURCED-DOMAIN carries no rationale sibling; the flag is the carrier of a genuine gap and must say what the gap is)"
+    fi
+
+    if [ -n "$fail" ]; then
+      emit_prov "PROV-GRAMMAR" "date + in-label domain + a Form A/B/X source" "$VERDICT_FAIL" \
+        "prov-grammar-nonconformant $fail"
+    else
+      emit_prov "PROV-GRAMMAR" "date + in-label domain + a Form A/B/X source" "$VERDICT_PASS" \
+        "prov-grammar-conformant form=$s_form date=$d_val"
+    fi
+  fi
+
+  # (8) DELTA — the relative limb, over Survival-Set rows 1-5 only.
+  if [ "$comment_state" = "unreadable" ]; then
+    emit_prov "PROV-DELTA" "a readable Stage-4 comment" "$VERDICT_ERROR" \
+      "prov-comment-unreadable (--stage4-comment supplied but the path is missing or empty; never infer an empty comment from an unreadable one)"
+  elif [ "$comment_state" = "none" ]; then
+    emit_prov "PROV-DELTA" "no survival element lost at transcription" "$VERDICT_SKIP" \
+      "prov-no-stage4-comment-supplied (delta limb has no producer surface to compare; it does NOT pass by default)"
+  else
+    local c_elems p_elems lost
+    c_elems="$(_prov_elements_present "$ARG_STAGE4_COMMENT")"
+    p_elems="$(_prov_elements_present "$plan")"
+    lost="$(printf '%s\n' "$c_elems" | awk -v have="$p_elems" '
+      BEGIN { n = split(have, a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") seen[a[i]] = 1 }
+      NF && !(seen[$0]) { printf "%s%s", (m++?",":""), $0 }')"
+    local c_n; c_n="$(printf '%s' "$c_elems" | grep -c . || true)"
+    if [ -n "$lost" ]; then
+      emit_prov "PROV-DELTA" "no survival element lost at transcription" "$VERDICT_FAIL" \
+        "prov-elements-lost:$lost (present in the Stage-4 comment, absent from the plan; denominator=$c_n)"
+    else
+      emit_prov "PROV-DELTA" "no survival element lost at transcription" "$VERDICT_PASS" \
+        "prov-no-loss (comment_elements=$c_n all present in the plan)"
+    fi
+  fi
+
+  return 0
+}
+
+# ===========================================================================
 # Component 5 — emit_evidence(): render verdict records in the requested format.
 # Records arrive on stdin as: issue \t id \t family \t method \t expected \t verdict \t observed
 # ===========================================================================
@@ -1554,6 +1826,21 @@ main() {
   fcm_records="$(handle_fcm_delivery "$PLAN_ABS" || true)"
   if [ -n "$fcm_records" ]; then
     stream="${stream}${fcm_records}
+"
+  fi
+
+  # 2d) provenance-survival — the FOURTH record source.
+  #
+  # ALWAYS-ON, for the same reason 2c is. A provenance gate a release could omit by
+  # simply not declaring it would reproduce, one layer up, the exact defect it exists
+  # to catch: the label went missing because nothing was watching, and a plan-declared
+  # watcher can go missing the same way. So this family is not plan-declared either —
+  # it fires on every invocation, and when it has nothing to assert it says so in a
+  # record rather than by being absent.
+  local prov_records
+  prov_records="$(handle_provenance_survival "$PLAN_ABS" || true)"
+  if [ -n "$prov_records" ]; then
+    stream="${stream}${prov_records}
 "
   fi
 
