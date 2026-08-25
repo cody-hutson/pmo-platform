@@ -233,19 +233,27 @@ Resolves the four Stage-4 `CONDITIONAL:tier-a-disposition` / `CONDITIONAL:tier-b
 
 **This card is a two-writer on `core/standards/gate-efficacy-standard.md` (Contention Map rank 4) and it landed second.** #4440's single in-place line change is byte-identical and intact; its coordinate moved 176 → 198. See § Verification Evidence for the full landing coordinates and for the merge-conflict hunks against concurrent draft PR #6119, which edits two of the same workflow files.
 
-### #4931 — issue-body section-anchor validation
+### #4931 — issue-body section-anchor validation (7 declared → **9 as built**)
 
 ```
-core/deploy/tools/<check-issue-body-anchors>.sh                           add    (D-4931-Landing: new tool)
-core/deploy/tools/tests/fixtures/<anchor-fixtures>                        add
-core/config/allowlists/script-execution-allowlist.txt                     edit   (companion)
+core/deploy/tools/check-issue-body-anchors.sh                             add    (D-4931-Landing: new tool)
+core/deploy/tools/fixtures/issue-body-anchors/                            add    (11 files: README + 7 bodies + 3 targets)
+core/config/allowlists/script-execution-allowlist.txt                     edit   (companion; 4 rows, per-tool form)
+core/deploy/allowlists/selftest-coverage-manifest.txt                     edit   (1 row; REGENERATED via --emit-manifest)
 core/deploy/deploy.sh                                                     edit   (Check 71 block)
-release/references/how-to/intake-style-guide.md                           edit
-core/standards/reference-durability-standard.md                           edit
-core/ADRs/ADR-<n>-issue-body-anchor-resolution.md                         add    (number at Commit 0)
+release/references/pipeline/stage-02-triage.md                            edit   (A4.8 advisory criterion)
+release/references/how-to/intake-style-guide.md                           edit   (new §2d + one §6 cross-ref row)
+core/standards/reference-durability-standard.md                           edit   (one appended paragraph)
+core/ADRs/ADR-145-anchor-resolution-is-a-surfacing-instrument-not-a-gate.md  add
 ```
 
-Resolves Stage-4 `CONDITIONAL:d-4931-new-file` — **fires**. D-4931-Landing resolved to a new tool rather than an extension of the existing issue-reference validator, so the required branch-protection context is untouched and blast radius on required contexts stays zero. The `CONDITIONAL:d-4931-extend` row does **not** fire and is struck. The new-executable companion obligation is mandatory in the same release: the allowlist row plus stated CI wiring. Concrete filenames bind when the #4931 chip runs.
+Resolves Stage-4 `CONDITIONAL:d-4931-new-file` — **fires**. D-4931-Landing resolved to a new tool rather than an extension of the existing issue-reference gate; `CONDITIONAL:d-4931-extend` resolves **NOT-TAKEN** and is struck. The required branch-protection context is **not touched**.
+
+**D-14 settled by measurement, not by choosing a number.** The Stage-5 §A DR-6 row said "5 changed + 4 read-only" and the operator's D-14 record said "8 changed + 4 read-only"; the amendment's `unchanged` list carried the superseded 5 forward, which is pass-2 finding AC-5. Measured against the branch base, the as-built count is **8 changed** on §G's own counting convention (the fixture tree as one row) **plus the ADR = 9**. D-14's figure was the correct one.
+
+**Two rows are net-new to the plan block, both pre-declared in the Stage-5 §G matrix rather than discovered late:** the regenerated selftest-coverage manifest row, and `stage-02-triage.md`. One declared path moved: the fixture corpus lands at `core/deploy/tools/fixtures/issue-body-anchors/` rather than under `tools/tests/fixtures/`, matching where the selftest-discovery engine's `core/deploy/tools/*.sh` scope directive actually looks.
+
+**Two-writer note.** This card is the fourth writer on `core/deploy/deploy.sh` this release and it landed last, appending after Check 70 at a distance of roughly 3,500 lines from the nearest sibling hunk. No sibling shares any other path with it.ence validator, so the required branch-protection context is untouched and blast radius on required contexts stays zero. The `CONDITIONAL:d-4931-extend` row does **not** fire and is struck. The new-executable companion obligation is mandatory in the same release: the allowlist row plus stated CI wiring. Concrete filenames bind when the #4931 chip runs.
 
 ### Read-only inputs
 
@@ -575,6 +583,54 @@ Every figure below is **re-measured on the shipping tree** at build time, never 
 - **AC-2's denominator is 6, not 7.** `release-corpus-completeness.yml` passes Limb 1 and is out of AC-2's reach; grading it as an unfixed disagree-case would be a false NOT MET. Of the six: 3 filters removed, 3 scopes explicitly bound.
 - **AC-3's denominator is 22, not 21**, and **its fixture hand-off is corrected per FM-1.** The Stage-5 output offered "PR-1's specificity fixture" — a `paths:`-token-inside-a-`run:`-step near-miss built for the *population* probe, which cannot fail on a *declaration* mismatch. Use a **declaration**-mismatch fixture instead: a filtered workflow declaring `always-reports`, or a filter-free one declaring `skip-semantics`. Both are implemented as arms A1/A2 of the shipped ratchet and can be re-run directly.
 - **AC-4 is satisfiable and was re-read live** (9 contexts, none of the seven). Re-read the endpoint again at Stage 8 rather than trusting this row — branch protection is out-of-tree mutable state.
+
+#### #4931 — issue-body section-anchor validation · position 9 · landed `414b49e5` + `1a46f6e6` + `9a60ad83` + `0b5d49aa` + `e5bd8c5b`
+
+**Baseline pin for every count below: 457 open issues / 1,769,763 body bytes / 1,786 tracked paths, 2026-08-25.** The population moved 519 → 515 → 506 → 505 → **457** across five pins in this release alone, so re-measure at merge rather than carrying these figures (audit-baseline discipline).
+
+| What | Scope | Result |
+|---|---|---|
+| **AC-3 partition, re-measured** | correction item (adversarial AC-3, Major) | The amendment handed Stage 8 a baseline of **229 verdicted / 15 not-run** that a *correct* implementation cannot produce. Measured under the shipped predicate: **204** resolved · **2** UNRESOLVED · **19** degraded-not-tracked · **8** degraded-basename-ambiguous · **7** not-run non-markdown · **2** not-run unnumbered — **242** in-grammar bound citations, of which **206** are verdicted. The `degraded` class is **27 of 242 (11%)** and was absent from the amendment's arithmetic entirely. Adding the named arm (**211**), the out-of-model-prefix class (**181**) and bound-to-no-path (**216**) gives **850** sites entering some Register A member. |
+| **P2-1 residual, measured** | correction item (adversarial P2-1, Major) | The CIAC-4 header declared each boundary item as *"carrying its measured baseline count"* with no measurement behind it. Taken: **181** bound citations behind a prefix outside the modelled five, of which **54** name a **real ATX heading** in the tracked markdown file they cite. Every count in the tool's declared coverage boundary is now a number that was taken, reproducible via `--census`. |
+| **CD2-1 decided as one scope question with P2-1** | correction item | **CD-B adopted** — publish the measured residual; do **not** widen the citation grammar. Reason, verified independently rather than inherited: admitting the dominant unmodelled prefixes to the citation side **alone** flags correct citations, because §E4's target-side extractor does not model them either. Widening both grammars together is the better instrument and is a larger move than D-20 authorizes. |
+| **AC-4 reproduced** | correction item | The amendment re-asserted **#5278** as "the expected finding" in the same paragraph that says re-measure. It is not reachable: all four of its glyph anchors fail B1's connective-only head rule (the gaps carry the word tokens `edit` / `update`), so it lands in `not-run: anchor bound to no path`. The whole-population finding set at this pin is **{#5822 ×2}**. A grader told to expect #5278 would mark correct work as failing. |
+| **AC-5 settled by measurement** | correction item (settles **D-14**) | `git diff --stat` against the branch base: **8 changed rows** on §G's counting convention, **plus the ADR = 9**. The operator-recorded D-14 figure ("8 changed + 4 read-only") was correct; the amendment's "5 changed" was the superseded DR-6 row carried forward. |
+| **AC-2 discharged** | correction item | The mandated *"this is not a clean result"* clause is in the **detail string**, not assumed from the emitter. Verified at source: the emitter's own log line does not carry it, and its contract comment places the obligation on the detail. Both Check 71 detail strings end in the clause, matching the sibling on #6000 and the sole live existing caller. |
+| **FM2-1 discharged** | correction item (**D-20 edit 4**) | A4.8 now states its exit-3 handling: emit a NOT-EVALUATED feasibility flag naming the cause, withhold every per-issue verdict, never report an issue as anchor-clean. The two consumers shared one exit code and only the deploy limb had a stated branch. |
+| **D-20, all four edits, and only those** | operator ruling | (1) the dead `resolve_check_mode` call is absent; (2) no warn-shakedown / `.mode`-flip prose in the Check 71 block; (3) the symmetric omission on the A4.8 triage limb; (4) the FM2-1 clause. **F-2 is unchanged, FM-1 was not re-opened, and no other accepted §E5 text was touched.** |
+| **Locale defect, found by measuring** | self-verification | The heading extractor addressed the section glyph as its UTF-8 bytes, so under a character-oriented locale it returned a **short** number set rather than erroring — **18** numbers under `LC_ALL=C` vs **2** under `en_US.UTF-8` on the same tracked file. A short set makes real sections invisible and reports correct citations into them as UNRESOLVED. Locale is pinned; a dedicated self-test control arm asserts `fx-alpha.md → 1,2,2.1,3`. |
+| **Field-collapse defect, found by the self-test** | self-verification | The grammar emitted an **empty** path field for an unbound anchor; the consumer reads those rows with `IFS=<tab> read`, which collapses runs of IFS whitespace, shifting every later field left. The section number landed in the path slot, resolved as a filename, and was recorded as `degraded: target not tracked`. Both counters stayed plausible and the totals still reconciled. At this baseline it silently recoded **216** citations. Fixed with an explicit sentinel; proven both ways in one run (`a\tb\t\tc` → `(a,b,c,∅)`; `a\tb\t-\tc` → `(a,b,-,c)`). **No assertion was loosened to reach green.** |
+| Check-number next-free | integration | **71.** 69 registrations / 68 distinct, min 1, max 70, gaps `[15, 24]` (both RETIRED-RESERVED, never refilled). Specificity control `log "Check 999:` → 0. |
+| Check 57 extraction contract | integration | Both halves present: a `# Check 71` def-block **and** a `log "Check 71:"` emitter, so the documented derive-from-source command stays complete. |
+| §H cascade sweep — **verified, not carried** | integration | Stage 5 flagged one dependency for Engineering to verify rather than assume. Probed all **1,774** tracked paths (**1,719** read / 34,051,256 bytes): **no tracked file states an authoritative total count of deploy checks**; the single near-hit disclaims one outright (*"NOT 'all ~38 checks'"*). **T1 does not fire.** Sensitivity control `Check 70` fired non-zero; specificity control `Check 9zzqqx` → 0. |
+| Lifecycle-table row | integration | **None required, and this resolves the one #6120 contention point.** The table's stated maintenance rule adds a row only when a check is *retired* or *dormant*; Check 71 is live. |
+| Selftest-coverage manifest | integration | **Regenerated** with `--emit-manifest`, never hand-edited. Diff is exactly one line. `--reconcile`: **ARM B / ARM C / ARM D all PASSED** (67 paths; runner partition total and disjoint). |
+| Static analysis | integration | `shellcheck --severity=warning` **clean** on the new tool and `--severity=error` **clean** on `deploy.sh`. Five real findings fixed en route (an unemitted baseline pin, an unused Register B token, a dropped body-line in the finding payload); one suppressed with a stated reason (`--json number,body` is one argument, not two array elements). |
+| ADR numbering | integration | **ADR-145.** The oracle returns 142 because it reads the mainline; 142/143/144 are claimed by siblings on this branch. `check-adr-numbers.py`: **PASS — 145 ADRs, contiguous 001..145, no duplicates.** `check-adr-durability.py`: 145 scanned, **0 findings attributable to this record**. |
+| Self-containment | integration | The authored diff introduces **0** bare `#NNNN` references and **0** absolute user paths into repo files; issue references appear only in this plan file and in commit trailers, per the branch convention. |
+
+**Landing hunks — recorded so merge resolution against the two concurrent draft PRs is mechanical.** Both are pure insertions with zero deletions.
+
+| File | Hunk | Lines | Collision |
+|---|---|---|---|
+| `core/deploy/deploy.sh` | `@@ -12203,0 +12204,73 @@` | 14,414 → **14,488** | **None.** #6120 touches `main:3924` and `main:13265`; the branch's prior landed hunks are at 4436–4482 and 13947. My block appends after Check 70, ≥3,500 lines from the nearest sibling hunk, and needs **no** lifecycle-table row — so #6120's insertion at the lifecycle/`cmd_check` boundary is not contended after all. |
+| `core/deploy/allowlists/selftest-coverage-manifest.txt` | `@@ -76,6 +76,7 @@` | +1 at line 79 | **Three-way surface**, union merge. #6119 and #6120 each add one line; all three paths are distinct. |
+| `core/config/allowlists/script-execution-allowlist.txt` | `@@ -355,0 +356,17 @@` | +17 | None declared. |
+
+**Deviations, disclosed rather than absorbed.**
+
+1. **The five commits omit the `Refs #4931` trailer** that the branch convention carries. Not corrected by rewriting: § Delivery Strategy prohibits force-push on the shared release branch, *including* `--force-with-lease`, and the commits were already pushed. Same disposition as #5252's first deviation.
+2. **The `--self-test` harness and the live scan were NOT executed by this spoke**, and the suite is reported **un-run rather than run unsandboxed**. `BLOCK-DESTRUCTIVE-022` blocks `bash <path>` for any tool absent from the *deployed* allowlist, and the four governed rows this card adds land in the repo source — the deployed copy refreshes at deploy, not at commit. No bypass was set and no second tool was used to reach the same effect. What *was* executed: the shipped `grammar.awk` and `headings.awk`, extracted byte-for-byte from the tool rather than retyped, driven over both the live 457-issue corpus and the fixture corpus. The fixture run reproduces the self-test's assertion table exactly — resolved 4 · unresolved 2 · non-markdown 1 · out-of-model-prefix 1 · not-tracked 1 · no-path 1, locale arm `1,2,2.1,3`. **The bash orchestration layer around those cores is unexercised and is Stage 7's first obligation.**
+3. **The fixture corpus landed at `core/deploy/tools/fixtures/issue-body-anchors/`**, not under `tools/tests/fixtures/` as the plan block declared — matching where the selftest-discovery `core/deploy/tools/*.sh` scope directive actually looks.
+4. **The File Change Matrix grew 7 → 9.** Both additions were pre-declared in the Stage-5 §G matrix; recorded under this card's § Change Description block.
+
+**Acceptance-criteria corrections carried forward to Stage 8.**
+
+- **AC-1 is broader than the delivered scope on three axes, and grading it literally would fail correct work.** Grade as: *in-grammar numeric anchors into tracked markdown targets are resolved; every other class is counted and declared, none silently dropped.* The three narrowings are (a) numeric only — named anchors are a counted `not-run` (**211** at this pin); (b) five modelled prefixes — anything else is counted and declared (**181**, of which **54** name real headings); (c) verdicts only for tracked **markdown** targets (**7** non-markdown at this pin). This narrowing is the design's central evidence-grounded decision, not a shortfall.
+- **AC-2 ships as specified.** Verify the existing-sections payload is the **full** sorted number set rather than a sample, and note the finding row also carries the body line number.
+- **AC-3 ships as specified** via the Register A state model. Verify the distinction survives the TSV/JSON boundary — a consumer reading only the finding count must not be able to conflate a degraded read with a clean one.
+- **AC-4 ships as §2d** of the intake style guide.
+- **The card's motivating exemplar is still not flagged, and that is correct.** `roadmaps/skill-matrix.md` is git-ignored, so it lands in `degraded: target not tracked` (**19** such at this pin). The shipped check does not catch the case that started the card, by design — EG-1 chose tracked-in-git over filesystem-present so the same citation cannot resolve locally and read unreadable in CI.
 
 ---
 
