@@ -223,7 +223,7 @@ Populated by each Engineering spoke as its card lands, and by the plan-verificat
 
 **How to read these blocks.** Every figure below is a transcribed measurement from a Stage 6 or Stage 7 run — no figure is derived, rounded, or inferred. **Unmutated** is the clean-tree arm the assertion must pass. **Mutated** is the arm that breaks the specific behavior under test and must fail; where a mutation is described as *targeted*, it reddens one named assertion while its siblings keep passing, which is what establishes that assertions bind to their real subjects rather than to a shared banner. **Counterfactual**, where present, runs the *pre-change* assertion against the *same* mutation, so the record demonstrates the defect and not merely the fix. **CI arm** records whether the authoritative CI locus executed; a CI arm that did not run is stated as unestablished rather than substituted with a local run. **Iteration** records arms added by the Stage-7 `fix(dt):` pass.
 
-**CIAC-2 tally: 9 of 9 cards carry a two-arm record.** Two cards carry a limb whose figure is single-source or unexecuted; both are named in *Arms not established* at the end of this section rather than being filled in.
+**CIAC-2 tally: 9 of 9 cards carry a two-arm record.** All nine additionally carry at least one limb that is single-source, warn-only, or unexecuted — counted and stated, not glossed: each is named in *Arms not established* at the end of this section rather than being filled in.
 
 #### `#5241` — status-label-invariant suite never reads its own subject
 - **Unmutated:** 11 passed / 0 failed, exit 0. Reproduced three times independently — Stage 6, Stage 7 (fresh session, re-derived rather than accepted), and again after the Stage-7 `fix(dt):` here-string conversion.
