@@ -95,6 +95,32 @@ A hand-edit to any of the INDEX's five derived columns **fails** Check 23. A han
 
 **A projector must never silently regenerate to clear a finding.** `--verify` is read-only; the remedy is a separate `--write` invocation the author runs and commits. A check that repaired what it measured could not distinguish a stale index from a corrupted one.
 
+### Row classes
+
+A `RELEASE_LOG.md` table row belongs to exactly one of two **row classes**, determined by its Version cell: **`versioned`** when the cell is a `vX.Y` token, **`version-less`** when it is a slug carrying the ` (version-less)` marker. Both classes are release records of equal standing. A version-less release is the ordinary product of the D-Version determination when a milestone title claims no version — it ships, it closes, and it earns the same close-out output set as any other release, minus the outputs a version is required to produce.
+
+**Every enumerator over this table resolves enumerate-versus-exclude per LIMB, against the row's class — never by filtering the class out of the row selector.** The distinction is load-bearing, because a row selector that encodes the class is also, unavoidably, deriving the resolution key: a version-less row's first cell is not a version, so a selector written to match `v[0-9]` is simultaneously the data-row filter, the class filter, and the key. Fusing the three is what makes the exclusion invisible — and what makes widening the selector break the key rather than fix the coverage.
+
+**Two keys, and they are complementary rather than alternatives:**
+
+| Key | Value | Resolves |
+|---|---|---|
+| **row key** | the Version cell verbatim, marker included | the LOG table itself and `RELEASE_INDEX.md`, which carry the same marked cell |
+| **corpus key** | the row key with a trailing ` (version-less)` marker removed | `RELEASE_DIGEST.md`, `CHANGELOG.md`, the notes file, and every `#### ` block heading — all of which carry the bare slug |
+
+For a `versioned` row the two keys are **byte-identical**, so a reader that derives both changes nothing about how a `vX.Y` row resolves. Any key reaching a regular-expression matcher is escaped across the full metacharacter set first: a slug key carries parentheses, and escaping only `.` leaves them live, where they silently match nothing and a satisfied surface reads as a missing one.
+
+**Which limbs enumerate, and which declare exclusion:**
+
+| Limb | Class `version-less` |
+|---|---|
+| INDEX row · DIGEST entry · notes file · CHANGELOG section · `#### ` Deployment-Log block · note-content lint | **ENUMERATED** — asserted identically for both classes |
+| signed tag · published GitHub Release · published-body drift · `.version` stamp equality | **DECLARED EXCLUDED** — counted and reported, never silently skipped |
+
+The four exclusions are structural, not conveniences. The determination that produces a version-less release assigns no version, and therefore cuts no signed tag, publishes no GitHub Release, and stamps no `.version`. A check asserting those on such a row asserts the existence of something that determination forbids — the finding would be accurate about the corpus and wrong about the contract.
+
+**An excluded class is reported, never absent.** Every enumerator over this table emits its denominator alongside its findings, in the form *enumerated / declared-excluded / not-in-scope / total*, such that the parts sum to the total. This is what makes a zero-finding result readable: without the denominator, "no findings on version-less rows" and "no version-less row was examined" produce identical output, and a reader has no way to tell a clean class from an unexamined one. A row that fell into no bucket at all shows up as arithmetic that does not balance, rather than as an absence nobody notices.
+
 ## Archive Segments
 
 An **archive segment** is a same-directory, same-schema continuation of a ledger, holding block bodies that have aged out of that ledger's hot working set. It is a fourth artifact class alongside SOURCE and DERIVED surfaces, and it is neither: it is the **same record as its parent, relocated**.
