@@ -221,6 +221,83 @@ No deployed-copy propagation target: this release edits test suites, repo tools,
 
 Populated by each Engineering spoke as its card lands, and by the plan-verification executor at Stage 6 Phase C4. Per the release outcome statement and CIAC-2, each per-issue block records both the unmutated-pass and the mutated-fail observation.
 
+**How to read these blocks.** Every figure below is a transcribed measurement from a Stage 6 or Stage 7 run — no figure is derived, rounded, or inferred. **Unmutated** is the clean-tree arm the assertion must pass. **Mutated** is the arm that breaks the specific behavior under test and must fail; where a mutation is described as *targeted*, it reddens one named assertion while its siblings keep passing, which is what establishes that assertions bind to their real subjects rather than to a shared banner. **Counterfactual**, where present, runs the *pre-change* assertion against the *same* mutation, so the record demonstrates the defect and not merely the fix. **CI arm** records whether the authoritative CI locus executed; a CI arm that did not run is stated as unestablished rather than substituted with a local run. **Iteration** records arms added by the Stage-7 `fix(dt):` pass.
+
+**CIAC-2 tally: 9 of 9 cards carry a two-arm record.** Two cards carry a limb whose figure is single-source or unexecuted; both are named in *Arms not established* at the end of this section rather than being filled in.
+
+#### `#5241` — status-label-invariant suite never reads its own subject
+- **Unmutated:** 11 passed / 0 failed, exit 0. Reproduced three times independently — Stage 6, Stage 7 (fresh session, re-derived rather than accepted), and again after the Stage-7 `fix(dt):` here-string conversion.
+- **Mutated (literal AC-2):** `deploy.sh` stubbed to a no-op — 5 passed / 6 failed, exit 1, leading with `subject never reached Check 16 — no banner in output`.
+- **Mutated (targeted):** the I4 jq predicate broken alone — 9 passed / 2 failed, exit 1, with I1/I2/I3 still PASS.
+- **Counterfactual:** the pre-fix suite under the byte-identical no-op mutation — 4 passed / 0 failed, **exit 0**. The defect, reproduced.
+- **Iteration (`fix(dt):`):** jq guard forced to fire — 0 passed / 1 failed, exit 1 (fails closed); the pre-fix guard under the identical mutation prints `SKIP: jq unavailable` and exits 0 having run zero assertions. Targeted break of the converted here-string reader — 10 passed / 1 failed, exit 1, ten siblings green.
+- **CI arm:** step 31 of `Shell harness (macOS)`. Did not run on `c7022376` — the job aborted at step 11. Re-enabled by the `fix(dt):` probe commit; the post-fix run is recorded on the release PR.
+
+#### `#4441` — package-freshness PF-2 passes where no content verdict ran
+- **Unmutated:** 11 passed / 0 failed / 0 skipped, exit 0. Reproduced at Stage 7 and again after the Stage-7 `fix(dt):` pass.
+- **Mutated (degraded packager, content verdict intact):** the **old** suite exits **0** with PF-2 still PASS and its content assertion never run; the **new** suite exits **1** with PF-2b and PF-2c red, naming 55 degraded skills. Stage 7 reproduced this assertion-for-assertion through a *different* degradation mechanism.
+- **Mutated (SKIP gate, truth table over the shipped expression):** the decisive row `(FAIL=0, SKIP=1) → 1`; the pre-change expression returns **0** on that same row.
+- **Iteration (`fix(dt):`):** builder path made absent and the normalization branch forced — the head suite prints the builder's real last line; the pre-fix suite under the identical two mutations prints a **blank** in the same position, which is the `(last line: )` defect reproduced.
+- **CI arm:** step 25 of `Shell harness (macOS)`, conclusion `skipped` on `c7022376`. Did not run; carried forward unestablished at Stage 7 rather than substituted. Re-enabled by the `fix(dt):` probe commit.
+
+#### `#4914` — work-hierarchy self-test pins neither the SKIP row nor the exit guard
+- **Unmutated:** 71 passed / 71, exit 0.
+- **Mutated (targeted ×2):** deleting the SKIP row fails **G1 alone**; deleting the exit guard fails **G2 alone**.
+- **Counterfactual:** pre-change, at `909230dd`, *both* mutations returned **69 / 69, exit 0** — the deletes were green.
+- **Derivation probe:** adding a fourth scan root keeps `configured - 1` green while hardcoding the same number reddens it, so the value is genuinely derived rather than shaped to look derived.
+- **CI arm:** split across two workflows. The A8 gate ran **12 / 12, zero skipped** in `Close-out automation smoke`; the routed regression sits at step 31 of the aborted `Shell harness (macOS)` job and did not run on `c7022376`.
+
+#### `#5273` — re-bootstrap duplicate-key class has no runtime coverage
+- **Unmutated:** 59 passed / 0 failed, both locally and in CI.
+- **Mutated:** the suppression lever — 58 passed / 1 failed, duplicate count **2**. Limb 1 and limb 2 each redden **alone**.
+- **Lever validity:** both forms of the card's literal lever are invalid and were measured as such — count **1** is a false green, count **0** never touches the duplicate direction. AC-3 is graded on the suppression lever for that reason.
+- **Generalisation established at Stage 7:** a duplicate placed in a *different* section still reddens limb 1 (whole-file class), and the fail-closed dispatch was verified by execution rather than read.
+- **CI arm:** step 12 of `Shell harness (macOS)`, skipped on `c7022376`. Its own designated A8 runner; did not run.
+
+#### `#5272` — refresh-hooks asserts a seed equal to the template default
+- **Unmutated:** 45 passed / 0 failed, exit 0, with both `.mode preserved (operator choice)` and `mode template present (fixture precondition)` present. Reproduced independently at Stage 7 and again at the `fix(dt):` pass.
+- **Mutated:** the `.mode` clobber — 44 passed / 1 failed, exit 1.
+- **Counterfactual:** the prior hardcoded-seed assertion **PASSES** under the identical clobber that reddens the new derived-seed assertion.
+- **Exhaustive limb:** the seed derivation was exercised across five template-default values (`warn`, `enforce`, `off`, `banana`, empty); seed ≠ default in all five, and the branch is binary, so this is exhaustive over the reachable space rather than a sample.
+- **Iteration (`fix(dt):`):** the fixture-precondition assertion, previously justified by code reading, was falsified by mutation — with the shipped template renamed away it fails **alone** (44 / 1) while `.mode preserved` still reports PASS, which is exactly the vacuous pass the precondition exists to report.
+- **CI arm:** step 13 of `Shell harness (macOS)`, conclusion `skipped` on `c7022376` (read from the Actions API, not inferred from the workflow file).
+
+#### `#4913` — cleanup-orphan-state self-test is unreachable behind its boundary guard
+- **Unmutated:** the reachability arms pass on the clean tree; the manifest regenerates to a stable projection proven by SHA, line count and partition delta.
+- **Mutated:** five targeted arms, each reddening its own subject, **including a pre-fix counterfactual**; the wrong-order silent no-op was deliberately reproduced rather than argued.
+- **CI arm:** ran, and discharged an open item — the SKIP ledger emits **8 of 16** in CI against **7** locally, and the 8th entry is one the local empty-bare-origin harness could not have produced. AC-4 limb (a) was upgraded from code-reading to measured on that evidence.
+- **Iteration (`fix(dt):`):** the derived ADR index was stale — `SCANNED 42 / ROWS 41 / MISSING ADR-142`, gate red. Regenerated with the tool's own `--write`: `SCANNED 42 / ROWS 42`, COUNT 0, exit 0, and the `ADR-number integrity gate` is green on the post-fix head. Falsification is the projector's own and ran in both directions.
+
+#### `#5237` — coverage Arm D is blind to suites not matching its filename pattern
+- **Unmutated:** the shipped gate engine runs clean on the unmodified tree.
+- **Mutated:** five arms, each reddening **one** assertion alone. Arm D population visibility **15 → 16**.
+- **Decisive isolation (Stage 7):** the pre- and post-change engines were run against the *identical* shipped tree, and the **only** output delta across the whole run was the Arm D line.
+- **Deviation reproduced, not accepted:** removing `is_file()` and `T-33c` together yields **35 / 35, exit 0** — nothing reddens — confirming the Stage-5 design had specified a guard no mutation could falsify, which is why the Stage-6 spoke added a third assertion.
+
+#### `#4443` — three suites wired to nothing; the expensive one misdiagnosed as a hang
+- **Unmutated:** all three newly-wired suites executed and succeeded in CI (`Shell harness (macOS)` steps 8, 9, 10) — they did not merely acquire a referrer, they ran. `--fast` executed for the first time in CI: `5 passed, 0 failed`, `T5 … PASS`, both `ARM REACH` PASS lines.
+- **Mutated:** the timeout limb — 4 of 4 arms redden, each naming the affected suite. Structural block-scoped parse: 50 step blocks, each of the three newly-wired steps carrying exactly one owning `run:` step with `timeout-minutes: 5`; a fabricated suite yields 0 owning steps.
+- **Census:** population **35** (33 `.sh` + 2 `.py`), **31/35 → 34/35**, sole remaining unwired suite `test_lib_instance_path.sh` (hub-excluded, own card). Sensitivity and specificity arms both fired.
+- **Iteration (`fix(dt):`):** the falsification probe could not falsify — under `/bin/bash -e {0}` the intended non-zero exit was not in a tested context, so the step aborted before capturing it and the probe reddened the job exactly when a suite correctly detected the injected failure. Made a tested context. Control (untested shape, reduced) aborts before the capture; treatment captures the identical status and continues. `Workflow SAST (actionlint)`: 2 findings before, 0 after, measured with the CI flag; green on the post-fix head.
+
+#### `#5239` — three finops sibling self-tests run in CI with no precision probe
+- **Unmutated:** each of the three siblings passes on the clean tree; the shipped step bodies were executed **verbatim from the YAML** rather than paraphrased.
+- **Mutated:** 12 local arms (3 subjects × verbatim / guard-2 specificity / anchor guard / blindness), each with a control; each subject reddens **alone** while the other two stay green in the same mutated tree.
+- **CI arm:** ran, and is the one card in this bundle whose CI evidence is complete — a different workflow *and* job from the aborted one, **9 / 9 steps success, 0 skipped**, each probe's log line carrying the subject's real exit code.
+- **Iteration (`fix(dt):`):** no code change. A claim about this card was falsified at Stage 7 and the PR body is corrected accordingly — see *Arms not established*.
+
+### Arms not established
+
+Stated rather than implied, per the release's own outcome statement. Each of these is a limb that was **not** measured; none is filled in with a substitute.
+
+- **`#5237`** — Arm D is warn-only, so its exit code is invariant: 0 before, 0 after, and still 0 if the widening were wrong. AC-1 is gradable on the `UNWIRED SUITE:` line and the population delta, never on the exit code, the green CI, or the absence of a warning.
+- **`#4443`** — the `--fast` path was never executed at authoring time; a script-execution control refused all three subject suites and the spoke abandoned and surfaced rather than editing the allowlist. CI was its first execution, and it passed — but one of those five assertions (`GUARD 2`) self-labels a **vacuous PASS** on CI, so the tally is 4 substantive + 1 vacuous.
+- **`#4913`** — a local SKIP count is a harness artefact of an empty bare origin, not what CI emits; AC-2 is carried on Stage-6 evidence and was not upgraded at Stage 7.
+- **`#5239`** — no base-vs-head differential was measured for the long-running check, so "pre-existing" is strong inference rather than a measured delta.
+- **`#5272`** — AC-2's red and counterfactual arms are Stage-6-attested and were not independently re-established at Stage 7, because reproducing them requires mutating source and the Dev Testing spoke is scope-barred from doing so. The green arm was independently reproduced.
+- **`#5273`** — the **false-green** form of the card's literal lever (schema flip against a prior config already carrying `[automation]`, count 1, suite 59/0) was not independently reproduced; it needs a bespoke pre-seeded fixture whose construction would change the subject under test. Carried from Stage 6 as-stated. Separately, AC-2's *"a successful TOML parse"* is delivered as the operator-ratified **shape** parse: the shipped limb pair **admits** `automation_level = "off` (unterminated string), `custom_array = ["a", "b"` (unclosed array) and `k =` (empty value), all of which `tomllib` rejects, and **rejects** `"quoted.key" = 1`, which is valid TOML. Tightening the predicate is explicitly out of scope — it is a design decision, and the Stage-5 blast radius is a job that gates every pull request in the repository.
+- **`#5241` · `#4441` · `#4914` · `#5272` · `#5273`** — each card's CI arm sat at a step of `Shell harness (macOS)` (31, 25, 31, 13, 12 respectively) that the step-11 abort skipped, so none of the five ran on `c7022376`. Every affected spoke carried the arm forward as unestablished and labelled its local run a fallback. The `fix(dt):` probe repair re-enables all five; the post-fix result is recorded on the release PR.
+
 ## Hub-Rendered D-Decisions
 
 | # | Decision | Verdict | Reversibility |
