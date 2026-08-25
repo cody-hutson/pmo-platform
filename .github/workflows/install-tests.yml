@@ -56,12 +56,35 @@ name: Install tests
 #                                  arms (mutex / presence / proposed+milestone /
 #                                  orphaned bundle) MIRROR Check 16's inline jq filters
 #                                  and must stay in lockstep with them. Lives here, not
-#                                  in release-tooling-smoke.yml, because that workflow's
-#                                  paths: filter omits core/deploy/deploy.sh — the very
-#                                  file the suite mirrors — while this workflow has no
-#                                  paths: filter and so fires on every pull request. It
-#                                  also relies on the Ensure jq step: the suite's own jq
+#                                  in release-tooling-smoke.yml, on GENRE grounds: this
+#                                  job is the established home for deploy.sh
+#                                  check-fixture suites. The TRIGGER ground once given
+#                                  alongside it — that release-tooling-smoke.yml's
+#                                  paths: filter omitted core/deploy/deploy.sh — no
+#                                  longer holds: that roster now lists deploy.sh, so
+#                                  the sibling workflow does fire on a deploy.sh edit.
+#                                  This workflow still carries no paths: filter at all
+#                                  and so fires on every pull request. It also relies
+#                                  on the Ensure jq step: the suite's own jq
 #                                  guard exits 0 when jq is absent
+#   - test_gate_efficacy_declarations.py  every workflow's `gate-efficacy:` header
+#                                  agrees with its own trigger: always-reports=yes
+#                                  <=> no on.<event>.paths, skip-semantics=
+#                                  absent-is-pass <=> a filter present, the two
+#                                  never co-occur, and every workflow carries a
+#                                  header. Lives in THIS job because the ratchet
+#                                  must not itself be path-filtered — a gate on
+#                                  trigger conformance that a trigger change can
+#                                  skip is the exact defect it exists to catch.
+#                                  Its anti-vacuity harness runs by DEFAULT on
+#                                  every invocation (six sensitivity arms, one per
+#                                  finding branch, plus a specificity arm), so a
+#                                  detector that stopped discriminating fails the
+#                                  job rather than reporting the clean it can no
+#                                  longer tell from a real one. Depends on the
+#                                  Ensure PyYAML step: the trigger read is
+#                                  STRUCTURAL, and it exits 2 rather than guessing
+#                                  if yaml is unimportable
 #
 # hook-tests — runs the core/hooks/tests/*.test.sh bypass-mode hook tests +
 # their test-runner.sh against a sandbox that materializes the DEPLOYED hook
@@ -387,21 +410,27 @@ jobs:
         # lockstep; it simply agrees with a Check 16 that has moved on.
         #
         # WHY THIS JOB and not the closeout-smoke job in release-tooling-smoke.yml,
-        # where the sibling release/tools/tests/ suites live. Three reasons, the third
-        # decisive:
+        # where the sibling release/tools/tests/ suites live. Two reasons stand, the
+        # second decisive; a third has been RETIRED and is recorded as retired rather
+        # than deleted, because it was once called decisive and a reader who remembers
+        # it deserves to know what happened to it:
         #   1. Governed routing. The runtime suite-selection map routes core/deploy/**
         #      to the deploy run: steps in THIS workflow. The narrower row that could
         #      have claimed it globs core/deploy/tools/*.sh, and `*` does not cross `/`,
         #      so it does not reach this tests/ subtree.
-        #   2. Genre. shell-tests is already the established home for deploy.sh
-        #      check-fixture-efficacy suites (Checks 22, 31, 36, 39, 45); this is the
-        #      Check 16 member of that family. "Close-out automation smoke" is not.
-        #   3. TRIGGER. release-tooling-smoke.yml is path-filtered and its filter does
-        #      NOT list core/deploy/deploy.sh — the very file this suite mirrors. Wiring
-        #      a Check 16 mirror-test there would bind it to a trigger blind to its own
-        #      subject: it would run when the MIRROR changed and never when the ORIGINAL
-        #      did, inverting its purpose. This workflow has no paths: filter at all, so
-        #      every pull request runs it.
+        #   2. Genre — DECISIVE. shell-tests is already the established home for
+        #      deploy.sh check-fixture-efficacy suites (Checks 22, 31, 36, 39, 45); this
+        #      is the Check 16 member of that family. "Close-out automation smoke" is
+        #      not, and that is unaffected by anything below.
+        #   3. TRIGGER — RETIRED, no longer true. This reason read: release-tooling-
+        #      smoke.yml is path-filtered and its filter does NOT list
+        #      core/deploy/deploy.sh, so wiring a Check 16 mirror-test there would bind
+        #      it to a trigger blind to its own subject. That gap has since been closed
+        #      at the source — core/deploy/deploy.sh is now in BOTH of that workflow's
+        #      rosters — so the sibling workflow does fire on a deploy.sh edit and this
+        #      reason no longer discriminates. Reason 2 alone now carries the placement.
+        #      This workflow still carries no paths: filter at all, so every pull
+        #      request runs it; that half was never contingent on reason 3.
         #
         # Depends on the "Ensure jq" step above, and that dependency is load-bearing:
         # the suite's own jq guard exits 0 when jq is absent, so without a guaranteed jq
@@ -411,6 +440,49 @@ jobs:
         # Hermetic: synthetic in-memory fixtures only; no gh, no network, no write to
         # the checkout. Consumes no workflow event input. Gates on exit code.
         run: bash core/deploy/tools/tests/test-status-label-invariant.sh
+
+      - name: Run gate-efficacy declaration conformance ratchet (test_gate_efficacy_declarations.py)
+        # Asserts the biconditional that core/standards/gate-efficacy-standard.md
+        # Requirement (b) states and that § Verdict-Input Closure makes load-bearing:
+        # always-reports=yes <=> no on.<event>.paths, skip-semantics=absent-is-pass <=>
+        # a filter is present, the two fields never co-occur, and every workflow carries
+        # a gate-efficacy: header at all.
+        #
+        # WHAT ROTS WITHOUT IT: before this step nothing in the tree asserted that
+        # relationship. `skip-semantics` occurred in exactly two non-workflow tracked
+        # files and both occurrences were PROSE, so a header and a trigger were two
+        # independent strings kept in agreement by hand. The change that breaks the
+        # invariant — adding a paths: key without touching the header, or deleting one
+        # and leaving skip-semantics=absent-is-pass behind — was precisely the change no
+        # gate could see, and under absent-is-pass the resulting miss reads as a pass.
+        # A one-time measurement is not a ratchet; this step is the ratchet.
+        #
+        # WHY THIS JOB. The ratchet must NOT be path-filtered. A conformance gate on
+        # trigger declarations, hosted behind a trigger filter, would be skippable by
+        # the very class of change it polices — the defect reproduced one level up. This
+        # workflow carries no paths: filter at all, so the step runs on every pull
+        # request. It is a step in an existing job rather than a new job, so it adds no
+        # runner and no branch-protection context: the marginal cost is the scan itself.
+        #
+        # NOT VACUOUS BY CONSTRUCTION, and the harness runs by DEFAULT rather than behind
+        # a flag — a falsification harness nothing passes a flag to runs once, at
+        # implementation, and certifies nothing thereafter. Every invocation mutates
+        # in-memory copies of the LIVE workflow population and requires the detector to
+        # react: six sensitivity arms, ONE PER FINDING BRANCH (that arm-per-branch
+        # constraint was added after mutation-grading found two branches deletable with
+        # the suite still green), plus a specificity arm on the same non-empty input that
+        # must stay clean. Arms are derived from the live population at run time, never
+        # from hardcoded workflow names, so a rename cannot silently empty one, and a
+        # partition too small to build an arm is a reported NOSET rather than a skip.
+        #
+        # Exit contract: 0 clean / 1 declared-vs-actual mismatch / 2 the harness could
+        # not assert (fail-closed). Depends on the Ensure PyYAML step above: the trigger
+        # read is STRUCTURAL, because a raw-text scan for 'paths:' over-counts comment
+        # and run:-body occurrences. It exits 2 rather than guessing if yaml is missing.
+        #
+        # Hermetic: reads the workflow files, mutates only in-memory copies, writes
+        # nothing. No gh, no network. Consumes no workflow event input.
+        run: /usr/bin/python3 core/deploy/tests/test_gate_efficacy_declarations.py
 
   hook-tests:
     name: Hook test harness (macOS)

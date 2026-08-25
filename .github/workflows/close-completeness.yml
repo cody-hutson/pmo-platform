@@ -40,6 +40,24 @@ name: Close-completeness (pre-merge Stage-13 output-set gate)
 # token governs blocking (warn reports, enforce blocks) and is read by the probe
 # itself; flipping it to `enforce` plus adding this job to required_status_checks
 # (branch protection, out-of-tree) arms the merge gate.
+#
+# GRADUATION CLAUSE — THE FLIP ALSO REQUIRES DELETING THE paths: FILTER BELOW, and
+# that third step is not optional. A path-filtered context registered in branch
+# protection leaves every non-matching PR permanently PENDING, so the two steps above
+# cannot by themselves deliver the enforcement this header declares: always-reports is
+# a PREREQUISITE of a required posture, not a later optimization. Stated here because
+# a graduation clause naming only the sentinel and the registration is incomplete, and
+# whoever performs the flip reads this clause rather than the standard.
+# (Per core/standards/gate-efficacy-standard.md § Verdict-Input Closure.)
+#
+# VIC CLOSURE BASIS (why the filter is a legitimate cost control until then). The
+# verdict's subject side is structurally confined to release/releases/**, already
+# rostered. Its ENGINE side is two named files that _cc_compute_verdict delegates to
+# by default — release/tools/check-release-body-drift.sh (CC_DRIFT, deploy.sh:1055)
+# and core/deploy/tools/lint_release_corpus.py (CC_LINT, deploy.sh:1054). A PR editing
+# either changes what this gate asserts, so both are rostered below. The gap was
+# exactly those two files and is now closed; any future widening of Check 48's input
+# set obliges a matching roster widening IN THE SAME COMMIT.
 # (Per core/standards/gate-efficacy-standard.md (b)/(b'); warn-mode-initial per
 # core/rules/git-workflow.md § Repository-Integrity Gates.)
 #
@@ -60,6 +78,12 @@ on:
     paths:
       - 'release/releases/**'
       - 'core/deploy/deploy.sh'
+      # VIC engine members: _cc_compute_verdict delegates the §5.1 published-body
+      # compare to CC_DRIFT and the note-content lint to CC_LINT. Editing either
+      # changes what this gate ASSERTS, so either must also TRIGGER it — the
+      # trigger-vs-verdict binding the closure basis in the header records.
+      - 'release/tools/check-release-body-drift.sh'
+      - 'core/deploy/tools/lint_release_corpus.py'
       - '.github/workflows/close-completeness.yml'
       - '.github/close-completeness.enforce'
   push:

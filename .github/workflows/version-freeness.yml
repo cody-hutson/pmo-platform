@@ -58,9 +58,28 @@ name: Version freeness (pre-merge collision gate)
 # cannot deliver. The flip mechanism remains one committed token away and is
 # reconsiderable only after the carried-version comparison lands AND a drain window
 # accrues; it is never auto-promoted by hit count.
-# (Per core/standards/gate-efficacy-standard.md (b); the ratification and its
-# reconsideration conditions are recorded in that file's § Flip-decision status
-# register — the durable decision record for this gate.)
+#
+# VIC CLOSURE BASIS. This job's verdict is NOT the Check 41 freeness result alone: the
+# falsification-arms step below ends in `exit "$RC"`, so the arm suite's exit code
+# gates the job too. That makes core/deploy/tests/test_version_freeness_injection.sh a
+# verdict INPUT, and it was outside this roster — measured, not assumed: the suite is
+# named by exactly ONE workflow (this one), and it is absent from
+# core/deploy/tests/run-install-regression.sh's member set, so NO filter-free runner
+# reaches it. A PR editing the arm suite could therefore change this job's verdict
+# without triggering it. It is rostered below and the gap is closed.
+#
+# THE SENTINEL ENTRY IS A REVERSAL TRIPWIRE, NOT A STEP TOWARD ARMING.
+# .github/version-freeness.enforce is deliberately uncommitted and its absence IS the
+# 2026-08-04 ratification, per the standard's § Flip-decision status row. Rostering a
+# path that does not exist is not a dead entry: under the VIC C-class an
+# untracked-but-UNIGNORED control file can appear in a PR, because CREATING it is the
+# PR. So if the ratification is ever reversed, the arming commit triggers the very gate
+# whose behaviour the arming switches — which today it would not. Adding this line
+# does not arm anything and must not be read as preparing to; it makes the reversal
+# observable at the gate it affects.
+# (Per core/standards/gate-efficacy-standard.md (b) and § Verdict-Input Closure; the
+# ratification and its reconsideration conditions are recorded in that file's
+# § Flip-decision status register — the durable decision record for this gate.)
 #
 # This is the AUTOMATED/CI sibling of the manual Stage-9-A6.5 / Stage-12-Phase-A.5
 # pre-merge freeness check. PREVENTION is the claim mechanism (claim-version.sh);
@@ -85,12 +104,19 @@ on:
       - 'release/tools/version-grammar.sh'
       - 'release/tools/claim-version.sh'
       - 'core/deploy/deploy.sh'
+      # VIC engine member: the falsification-arms step exits with this suite's RC, so
+      # the suite gates the job. No filter-free workflow runs it.
+      - 'core/deploy/tests/test_version_freeness_injection.sh'
+      # VIC control member — reversal tripwire, not an arming step. See the header.
+      - '.github/version-freeness.enforce'
       - '.github/workflows/version-freeness.yml'
   push:
     branches: [main]
     paths:
       - 'release/releases/RELEASE_LOG.md'
       - 'release/tools/version-grammar.sh'
+      - 'core/deploy/tests/test_version_freeness_injection.sh'
+      - '.github/version-freeness.enforce'
 
 permissions:
   contents: read
