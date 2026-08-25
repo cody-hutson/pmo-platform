@@ -65,6 +65,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-133](ADR-133-the-material-edit-test-names-an-effect-not-a-field.md) | The material-edit test names an effect, not a field | Proposed | 2026-08-15 | skill-suite-conformance |
 | [ADR-135](ADR-135-a-gate-ships-armed-by-a-committed-default.md) | A gate ships armed by a committed default; arming is never deferred to a later step that can be forgotten | Proposed | 2026-08-14 | stage9-gate-integrity |
 | [ADR-137](ADR-137-close-out-measurements-reconstruct-what-the-close-removes.md) | A chore-PR-borne close-out measurement reconstructs what the close removes; it does not assume its evidence is invariant | Proposed | 2026-08-21 | closeout-reports-what-shipped |
+| [ADR-142](ADR-142-resolve-the-root-do-not-exempt-the-fixture.md) | Self-test reachability at a destructive-scope boundary is restored by resolving the root, not by exempting the fixture | Proposed | 2026-08-24 | selftests-actually-test |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
