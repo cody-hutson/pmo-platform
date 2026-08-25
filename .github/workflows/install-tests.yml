@@ -296,10 +296,23 @@ jobs:
           restore() { git checkout -- core/deploy/tests/ >/dev/null 2>&1 || true; }
           trap restore EXIT
 
+          # EVERY COMMAND WHOSE FAILURE THIS PROBE INTENDS TO SURVIVE IS WRITTEN AS A
+          # TESTED CONTEXT — `if ! cmd`, or `cmd || rc=$?`. That is a correctness
+          # requirement, not a style choice, and reverting any of them re-breaks the
+          # probe silently. GitHub resolves `run:` to `/bin/bash -e {0}`; the
+          # `set -uo pipefail` above adds `-u` and `pipefail` but does NOT clear `-e`.
+          # An untested non-zero exit therefore kills the step at the first failure,
+          # which for Arm 2 is the DELIBERATELY BROKEN SUITE — so the probe reddened
+          # the job exactly when a suite correctly detected the injected failure, could
+          # never print `Falsification OK`, never mutated suites 2 and 3, never reached
+          # Arm 3, and left `probe_fail`/`continue` unreachable. Measured: the untested
+          # shape aborts before `rc=$?` (no capture; step rc = the suite's own status),
+          # the tested shape captures the same status and continues.
+
           # --- Arm 1: the timeout guard is present on every step wired above ----
           # Structural, block-scoped read of this workflow's own step list — not a
           # substring count, which would happily match the word in this comment.
-          python3 - <<'PY'
+          if ! python3 - <<'PY'
           import re, sys
           SUITES = ["test_verify_session_config.sh",
                     "test_instance_path_roundtrip.sh",
@@ -330,7 +343,7 @@ jobs:
           print("Timeout guard OK — all %d newly-wired steps carry timeout-minutes "
                 "(parsed %d step blocks)." % (len(SUITES), len(blocks)))
           PY
-          if [ "$?" -ne 0 ]; then probe_fail=1; fi
+          then probe_fail=1; fi
 
           # --- Arm 2: a broken suite must exit non-zero --------------------------
           for suite in \
@@ -343,7 +356,7 @@ jobs:
             # — and one report() signature, so a single injected failing assertion
             # breaks each of them the same way, at the same place, without the probe
             # needing to know anything about what the suite asserts.
-            python3 - "$suite" <<'PY'
+            if ! python3 - "$suite" <<'PY'
           import sys
           path = sys.argv[1]
           anchor = '[ "${FAIL}" -ne 0 ] && exit 1'
@@ -355,7 +368,7 @@ jobs:
           injected = 'report "falsification probe: deliberately injected failure" 0 "probe"\n'
           open(path, "w").write(body.replace(anchor, injected + anchor, 1))
           PY
-            if [ "$?" -ne 0 ]; then
+            then
               echo "::error::probe could not locate the exit contract in ${suite}; the probe is broken, not the suite."
               probe_fail=1; restore; continue
             fi
@@ -364,11 +377,14 @@ jobs:
               echo "::error::probe left ${suite} byte-identical; a no-op mutation proves nothing."
               probe_fail=1; restore; continue
             fi
+            # THE INTENDED FAILURE. `|| rc=$?` is the tested context that lets the
+            # broken suite's non-zero exit be RECORDED rather than abort the step;
+            # `rc=0` primes it so a passing suite (the finding) leaves rc unset-free.
+            rc=0
             case "$suite" in
-              *test_check19_event_log_integrity.sh) bash "$suite" --fast >/dev/null 2>&1 ;;
-              *)                                    bash "$suite"        >/dev/null 2>&1 ;;
+              *test_check19_event_log_integrity.sh) bash "$suite" --fast >/dev/null 2>&1 || rc=$? ;;
+              *)                                    bash "$suite"        >/dev/null 2>&1 || rc=$? ;;
             esac
-            rc=$?
             restore
             if [ "$rc" -eq 0 ]; then
               echo "::error::${suite} exited 0 with a deliberately injected failing assertion; this suite's wiring cannot detect a failure."
