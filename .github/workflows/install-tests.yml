@@ -54,14 +54,16 @@ name: Install tests
 #   - core/deploy/tools/tests/test-status-label-invariant.sh  deploy.sh Check 16
 #                                  status-label invariant fixture self-test: the four
 #                                  arms (mutex / presence / proposed+milestone /
-#                                  orphaned bundle) MIRROR Check 16's inline jq filters
-#                                  and must stay in lockstep with them. Lives here, not
-#                                  in release-tooling-smoke.yml, because that workflow's
+#                                  orphaned bundle) EXECUTE deploy.sh and assert
+#                                  against Check 16's real emissions; the suite holds
+#                                  no copy of the inline jq filters, so there is
+#                                  nothing to keep in lockstep. Lives here, not in
+#                                  release-tooling-smoke.yml, because that workflow's
 #                                  paths: filter omits core/deploy/deploy.sh — the very
-#                                  file the suite mirrors — while this workflow has no
+#                                  file the suite executes — while this workflow has no
 #                                  paths: filter and so fires on every pull request. It
-#                                  also relies on the Ensure jq step: the suite's own jq
-#                                  guard exits 0 when jq is absent
+#                                  also relies on the Ensure jq step: the suite's jq
+#                                  guard fails CLOSED, so an absent jq reddens the step
 #
 # hook-tests — runs the core/hooks/tests/*.test.sh bypass-mode hook tests +
 # their test-runner.sh against a sandbox that materializes the DEPLOYED hook
@@ -592,11 +594,13 @@ jobs:
         # Invokes core/deploy/tools/tests/test-status-label-invariant.sh (4 fixture
         # arms: I1 mutex, I2 presence, I3 proposed+milestone, I4 orphaned bundle).
         #
-        # What rots without it: the suite MIRRORS deploy.sh Check 16's four inline jq
-        # filters, and its own header states the obligation — "the filters here MUST
-        # mirror deploy.sh Check 16 … if Check 16's filters change, update this test in
-        # lockstep." A mirror that nothing runs cannot report that it has fallen out of
-        # lockstep; it simply agrees with a Check 16 that has moved on.
+        # What rots without it: the suite EXECUTES deploy.sh Check 16 and asserts
+        # against the real emissions of that run. It carries NO copy of Check 16's
+        # four inline jq filters — the copies were deleted, and nothing here obliges a
+        # future editor to re-create them or to keep any copy "in lockstep". What is
+        # lost when nothing runs it is the only thing that can catch Check 16 moving:
+        # the assertions bind to the subject's observable output, so they report a
+        # drift in the subject only when they are executed against it.
         #
         # WHY THIS JOB and not the closeout-smoke job in release-tooling-smoke.yml,
         # where the sibling release/tools/tests/ suites live. Three reasons, the third
@@ -609,16 +613,17 @@ jobs:
         #      check-fixture-efficacy suites (Checks 22, 31, 36, 39, 45); this is the
         #      Check 16 member of that family. "Close-out automation smoke" is not.
         #   3. TRIGGER. release-tooling-smoke.yml is path-filtered and its filter does
-        #      NOT list core/deploy/deploy.sh — the very file this suite mirrors. Wiring
-        #      a Check 16 mirror-test there would bind it to a trigger blind to its own
-        #      subject: it would run when the MIRROR changed and never when the ORIGINAL
-        #      did, inverting its purpose. This workflow has no paths: filter at all, so
-        #      every pull request runs it.
+        #      NOT list core/deploy/deploy.sh — the very file this suite executes. Wiring
+        #      it there would bind it to a trigger blind to its own subject: it would run
+        #      when the TEST changed and never when the SUBJECT did, inverting its
+        #      purpose. This workflow has no paths: filter at all, so every pull request
+        #      runs it.
         #
         # Depends on the "Ensure jq" step above, and that dependency is load-bearing:
-        # the suite's own jq guard exits 0 when jq is absent, so without a guaranteed jq
-        # it could report success while asserting nothing. This job installs jq
-        # defensively; closeout-smoke only assumes the image ships it.
+        # the suite's jq guard fails CLOSED (exit 1, "0 passed, 1 failed"), so an
+        # environment without jq reddens this step instead of reporting a success it
+        # never earned. This job installs jq defensively; closeout-smoke only assumes
+        # the image ships it.
         #
         # Hermetic: synthetic in-memory fixtures only; no gh, no network, no write to
         # the checkout. Consumes no workflow event input. Gates on exit code.

@@ -77,7 +77,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 DEPLOY_SH="${REPO_ROOT}/core/deploy/deploy.sh"
 
-command -v jq >/dev/null 2>&1 || { echo "SKIP: jq unavailable"; exit 0; }
+# jq fails CLOSED, matching core/deploy/tests/test_validate_install.sh's preflight.
+# Every assertion below reads Check 16's emissions through jq, so without it this
+# suite runs zero assertions — and the header two lines above declares "Exit 0 =
+# all assertions pass". A skip that exits 0 makes that sentence also mean "no
+# assertion ran", which is the vacuity this suite exists to rule out. CI's
+# "Ensure jq" step guarantees the dependency before invoking the runner.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "FAIL: jq is required — every assertion here reads Check 16's emissions through it"
+  echo ""
+  echo "status-label-invariant subject-execution suite: 0 passed, 1 failed"
+  exit 1
+fi
 [[ -f "$DEPLOY_SH" ]] || { echo "FAIL: subject not found at ${DEPLOY_SH}"; exit 1; }
 
 pass=0; fail=0
@@ -185,7 +196,15 @@ assert_set() {
 
 assert_contains() {
   local label="$1" haystack="$2" needle="$3"
-  if printf '%s\n' "$haystack" | grep -qF -- "$needle"; then
+  # Here-string, not `printf | grep -q`. `grep -q` stops reading at the first
+  # match while the writer is still writing; under the `set -o pipefail` at the
+  # head of this file the writer's broken-pipe status is promoted to the
+  # pipeline's, so a SUCCESSFUL match reports failure once the residual after the
+  # matched line exceeds the ~64 KiB pipe buffer. A here-string has no pipe and
+  # no second process, so the reader's own status is the only status. Semantics
+  # are identical to `printf '%s\n'`: `<<<` appends the same single newline, on
+  # the empty-haystack arm too.
+  if grep -qF -- "$needle" <<<"$haystack"; then
     echo "  PASS  $label"
     pass=$((pass+1))
   else
@@ -202,7 +221,7 @@ echo "  [timing] Arm A subject run: $(( $(date +%s) - _t0 ))s"
 
 # The banner is the proof the subject reached Check 16 at all. Its absence is the
 # no-op-subject signature and is reported as such rather than as a set mismatch.
-if printf '%s\n' "$OUT_VIOLATING" | grep -q 'Check 16:'; then
+if grep -q 'Check 16:' <<<"$OUT_VIOLATING"; then
   echo "  PASS  subject reached Check 16 (banner emitted)"
   pass=$((pass+1))
 else
@@ -240,7 +259,7 @@ assert_set "no-op subject emits no I1" "$(emitted_for I1 "$OUT_NOOP")" ""
 assert_set "no-op subject emits no I2" "$(emitted_for I2 "$OUT_NOOP")" ""
 assert_set "no-op subject emits no I3" "$(emitted_for I3 "$OUT_NOOP")" ""
 assert_set "no-op subject emits no I4" "$(emitted_for I4 "$OUT_NOOP")" ""
-if printf '%s\n' "$OUT_NOOP" | grep -q 'Check 16:'; then
+if grep -q 'Check 16:' <<<"$OUT_NOOP"; then
   echo "  FAIL  no-op subject produced a Check 16 banner — the harness is not reading the subject"
   fail=$((fail+1))
 else
