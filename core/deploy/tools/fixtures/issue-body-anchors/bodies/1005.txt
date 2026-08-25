@@ -1,0 +1,1 @@
+Residual class: `core/deploy/tools/fixtures/issue-body-anchors/targets/fx-alpha.md` Procedure 3 uses a prefix outside the modelled five, so it is counted rather than verdicted.

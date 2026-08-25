@@ -1,0 +1,2 @@
+Lower-case prefix: `core/deploy/tools/fixtures/issue-body-anchors/targets/fx-beta.md` phase 1 is the case-insensitivity arm.
+Bare basename: `fx-alpha.md` @@SEC@@3 resolves by unique match against the tracked set.

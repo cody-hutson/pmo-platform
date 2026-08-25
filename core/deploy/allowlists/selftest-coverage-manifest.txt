@@ -76,6 +76,7 @@ core/deploy/tools/check-canonical-structure.sh
 core/deploy/tools/check-citation-anchors.sh
 core/deploy/tools/check-convention.sh
 core/deploy/tools/check-enum-parity.sh
+core/deploy/tools/check-issue-body-anchors.sh
 core/deploy/tools/check-issue-ref-validity.sh
 core/deploy/tools/check-operator-toml-schema.sh
 core/deploy/tools/check-pv7-vocabulary.sh
