@@ -77,7 +77,7 @@ The writer's `--self-test` runs against a private temporary copy seeded from the
 
 *A payload-only convention with no subtype.* Rejected because it is **unqueryable by construction**: no payload predicate existed, so the marker would be invisible to every structured read the platform ships, findable only by a raw `grep` that is `ugrep`-shimmed here and returns a plausible zero on a rejected pattern. That is "present but not findable" — the card's own defect, proposed as its remedy.
 
-*Mutating the superseded row in place.* Rejected: § 4.1 forbids it, and 25 rows in the live log already show exactly this having happened while the row-count control did not move.
+*Mutating the superseded row in place.* Rejected: § 4.1 forbids it, and 25 rows in the live log as of 2026-08-24 already show exactly this having happened while the row-count control did not move.
 
 **On the validator's home.**
 
