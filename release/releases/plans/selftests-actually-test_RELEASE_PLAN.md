@@ -310,7 +310,7 @@ Stated rather than implied, per the release's own outcome statement. Each of the
 
 | # | Decision | Verdict | Reversibility |
 |---|----------|---------|---------------|
-| D1 | Release plan approved; scope committed | **APPROVED** — Composition amended 10 issues/24 pts → 9 issues/22 pts | MODERATE · HIGH |
+| D1 | Release plan approved; scope committed | **APPROVED** — Composition amended as a sequence, recorded here in full because two of its three figures are quoted elsewhere: **10 issues / 24 pts → 9 issues / 22 pts** at D1 (dropping `#5238`) **→ 9 issues / 20 pts** once D3's `size:M` → `size:S` re-label lands in the same amendment. **20 pts is the effective total**, and is the figure carried by the Header `Raw points` row, `## Scope`, D3 below, and the milestone's `## Composition` and `### Composition Amendment` blocks. Every figure in the sequence sits inside the 15–25 pt band, so no step was out of band. | MODERATE · HIGH |
 | D2 | Release Class | **`routine`** — confirms the Stage 3 declaration. Rests on the zero-new-files trigger; the *≥1 D-class decision* trigger fires mechanically on every release via the recurring version and concurrency-posture entries, and is treated as non-discriminating. | CHEAP · MEDIUM |
 | D3 | `#5273` scope | **RE-SCOPED** to *add two limbs to the existing re-bootstrap block*; `size:M` → `size:S`. Release effective total → 20 pts (in band). | CHEAP · MEDIUM |
 | D4 | `#5272` AC-3 discharge | **RECORD-ONLY** — discharged by recording the sibling-collapse finding rather than editing that file under `#5272`. Dissolves the cross-card write collision. | CHEAP · MEDIUM |
