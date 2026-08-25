@@ -352,7 +352,18 @@ function numpart(t,   c) { c = t; sub(/^[^0-9]*/, "", c); return c }
       if (ok) { bound = 1; bpath = lastpath }
     }
     if (bound) { lastbound = i; lastpath = bpath }
-    print issue, lineno, akind[i], apfx[i], (bound ? bpath : ""), numpart(atext[i]), atext[i]
+    # THE UNBOUND PATH IS EMITTED AS A SENTINEL, NEVER AS AN EMPTY FIELD.
+    # The consumer reads these rows with `IFS=<tab> read`, and a tab is an IFS
+    # WHITESPACE character: bash collapses runs of it, so two adjacent tabs
+    # become one delimiter and every field after the gap shifts LEFT. An unbound
+    # anchor would arrive with its section NUMBER sitting in the path slot,
+    # "resolve" that number as a filename, and land in `degraded: target not
+    # tracked` instead of `not-run: anchor bound to no path`. Measured: that is
+    # 216 citations mis-partitioned at the introducing baseline — the single
+    # largest not-run class silently recoded as a degraded one. Verified both
+    # ways: `printf 'a\tb\t\tc'` reads as (a,b,c,) while `printf 'a\tb\t-\tc'`
+    # reads as (a,b,-,c).
+    print issue, lineno, akind[i], apfx[i], (bound ? bpath : "-"), numpart(atext[i]), atext[i]
   }
 }
 AWKEOF
@@ -498,6 +509,9 @@ run_scan() {
     # residual would swamp the declared boundary count with noise and make the
     # header's number meaningless. Only a prefix that actually BINDS A PATH is a
     # citation this predicate declined to model.
+    # "-" is the unbound sentinel the grammar emits; see the note at its print
+    # statement for why an empty field cannot be used here.
+    [[ "$path" == "-" ]] && path=""
     if [[ "$kind" == "outofmodel" && -z "$path" ]]; then continue; fi
     n_total=$((n_total + 1))
     printf '%s\t%s\n' "$kind" "$pfx" >> "$WORK/census.tsv"
