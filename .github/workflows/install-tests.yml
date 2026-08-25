@@ -449,8 +449,10 @@ jobs:
         # a gate-efficacy: header at all.
         #
         # WHAT ROTS WITHOUT IT: before this step nothing in the tree asserted that
-        # relationship. `skip-semantics` occurred in exactly two non-workflow tracked
-        # files and both occurrences were PROSE, so a header and a trigger were two
+        # relationship. Outside .github/workflows/, `skip-semantics` occurred in exactly
+        # two tracked files — the standard itself, and one gate-efficacy: annotation in
+        # deploy.sh — and NOT ONE occurrence was an assertion; every one was prose or a
+        # declaration ABOUT the field. A header and a trigger were therefore two
         # independent strings kept in agreement by hand. The change that breaks the
         # invariant — adding a paths: key without touching the header, or deleting one
         # and leaving skip-semantics=absent-is-pass behind — was precisely the change no
