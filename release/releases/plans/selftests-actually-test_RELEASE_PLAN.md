@@ -231,7 +231,7 @@ Populated by each Engineering spoke as its card lands, and by the plan-verificat
 - **Mutated (targeted):** the I4 jq predicate broken alone — 9 passed / 2 failed, exit 1, with I1/I2/I3 still PASS.
 - **Counterfactual:** the pre-fix suite under the byte-identical no-op mutation — 4 passed / 0 failed, **exit 0**. The defect, reproduced.
 - **Iteration (`fix(dt):`):** jq guard forced to fire — 0 passed / 1 failed, exit 1 (fails closed); the pre-fix guard under the identical mutation prints `SKIP: jq unavailable` and exits 0 having run zero assertions. Targeted break of the converted here-string reader — 10 passed / 1 failed, exit 1, ten siblings green.
-- **CI arm:** step 31 of `Shell harness (macOS)`. Did not run on `c7022376` — the job aborted at step 11. Re-enabled by the `fix(dt):` probe commit; the post-fix run is recorded on the release PR.
+- **CI arm:** step 34 of `Shell harness (macOS)`. Did not run on `c7022376` — the job aborted at step 11. Re-enabled by the `fix(dt):` probe commit; the post-fix run is recorded on the release PR.
 
 #### `#4441` — package-freshness PF-2 passes where no content verdict ran
 - **Unmutated:** 11 passed / 0 failed / 0 skipped, exit 0. Reproduced at Stage 7 and again after the Stage-7 `fix(dt):` pass.
@@ -245,7 +245,7 @@ Populated by each Engineering spoke as its card lands, and by the plan-verificat
 - **Mutated (targeted ×2):** deleting the SKIP row fails **G1 alone**; deleting the exit guard fails **G2 alone**.
 - **Counterfactual:** pre-change, at `909230dd`, *both* mutations returned **69 / 69, exit 0** — the deletes were green.
 - **Derivation probe:** adding a fourth scan root keeps `configured - 1` green while hardcoding the same number reddens it, so the value is genuinely derived rather than shaped to look derived.
-- **CI arm:** split across two workflows. The A8 gate ran **12 / 12, zero skipped** in `Close-out automation smoke`; the routed regression sits at step 31 of the aborted `Shell harness (macOS)` job and did not run on `c7022376`.
+- **CI arm:** split across two workflows. The A8 gate ran **12 / 12, zero skipped** in `Discovered tool self-tests (Ubuntu)`; the routed regression sits at step 31 of the aborted `Shell harness (macOS)` job and did not run on `c7022376`.
 
 #### `#5273` — re-bootstrap duplicate-key class has no runtime coverage
 - **Unmutated:** 59 passed / 0 failed, both locally and in CI.
@@ -284,7 +284,7 @@ Populated by each Engineering spoke as its card lands, and by the plan-verificat
 - **Unmutated:** each of the three siblings passes on the clean tree; the shipped step bodies were executed **verbatim from the YAML** rather than paraphrased.
 - **Mutated:** 12 local arms (3 subjects × verbatim / guard-2 specificity / anchor guard / blindness), each with a control; each subject reddens **alone** while the other two stay green in the same mutated tree.
 - **CI arm:** ran, and is the one card in this bundle whose CI evidence is complete — a different workflow *and* job from the aborted one, **9 / 9 steps success, 0 skipped**, each probe's log line carrying the subject's real exit code.
-- **Iteration (`fix(dt):`):** no code change. A claim about this card was falsified at Stage 7 and the PR body is corrected accordingly — see *Arms not established*.
+- **Iteration (`fix(dt):`):** no code change. A claim about this card was falsified at Stage 7 — that an unprefixed marker would have shipped three permanently-passing probes. Measured, the steps still exit 1 via guard 1; the prefix protects guard 2's wrong-reason discrimination. Retracted in the PR body's Summary. This card's entry under *Arms not established* is a separate matter (the unmeasured base-vs-head differential).
 
 ### Arms not established
 
@@ -296,7 +296,7 @@ Stated rather than implied, per the release's own outcome statement. Each of the
 - **`#5239`** — no base-vs-head differential was measured for the long-running check, so "pre-existing" is strong inference rather than a measured delta.
 - **`#5272`** — AC-2's red and counterfactual arms are Stage-6-attested and were not independently re-established at Stage 7, because reproducing them requires mutating source and the Dev Testing spoke is scope-barred from doing so. The green arm was independently reproduced.
 - **`#5273`** — the **false-green** form of the card's literal lever (schema flip against a prior config already carrying `[automation]`, count 1, suite 59/0) was not independently reproduced; it needs a bespoke pre-seeded fixture whose construction would change the subject under test. Carried from Stage 6 as-stated. Separately, AC-2's *"a successful TOML parse"* is delivered as the operator-ratified **shape** parse: the shipped limb pair **admits** `automation_level = "off` (unterminated string), `custom_array = ["a", "b"` (unclosed array) and `k =` (empty value), all of which `tomllib` rejects, and **rejects** `"quoted.key" = 1`, which is valid TOML. Tightening the predicate is explicitly out of scope — it is a design decision, and the Stage-5 blast radius is a job that gates every pull request in the repository.
-- **`#5241` · `#4441` · `#4914` · `#5272` · `#5273`** — each card's CI arm sat at a step of `Shell harness (macOS)` (31, 25, 31, 13, 12 respectively) that the step-11 abort skipped, so none of the five ran on `c7022376`. Every affected spoke carried the arm forward as unestablished and labelled its local run a fallback. The `fix(dt):` probe repair re-enables all five; the post-fix result is recorded on the release PR.
+- **`#5241` · `#4441` · `#4914` · `#5272` · `#5273`** — each card's CI arm sat at a step of `Shell harness (macOS)` (34, 25, 31, 13, 12 respectively) that the step-11 abort skipped, so none of the five ran on `c7022376`. Every affected spoke carried the arm forward as unestablished and labelled its local run a fallback. The `fix(dt):` probe repair re-enables all five; the post-fix result is recorded on the release PR.
 
 ## Hub-Rendered D-Decisions
 
