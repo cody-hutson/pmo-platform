@@ -258,16 +258,23 @@ count_fixed() {
 }
 
 # Rebuild package(s) inside the sandbox. No args => every rostered skill.
-# Echoes the builder's exit code; its output is captured to $BUILD_LOG.
+# Echoes the builder's exit code; its output is KEPT, at ${BUILD_LOG}.
+#
+# A FILE, for exactly the reason stated for ${PROBE_LOG} above: every call site is
+# a command substitution (`[ "$(sandbox_build)" != "0" ]`), so a variable assigned
+# in here dies with that subshell and the caller reads an empty string that looks
+# exactly like a builder that printed nothing. That is what the readers observed —
+# `(last line: )` — and this card made the diagnostic load-bearing by reddening CI
+# on SKIP, where that reason line is the operator's only pointer to the cause.
 BUILD_LOG=""
 sandbox_build() {
   local rc=0
-  BUILD_LOG="$(
+  (
     cd "${SBX}" || exit 127
     export HOME="${SBX_HOME}"
     [ -n "${PY_USER_BASE}" ] && export PYTHONUSERBASE="${PY_USER_BASE}"
     bash core/deploy/tools/build-skill-packages.sh "$@" 2>&1
-  )"
+  ) >"${BUILD_LOG:-/dev/null}" 2>&1
   rc=$?
   printf '%s' "${rc}"
 }
@@ -295,9 +302,10 @@ command -v git >/dev/null 2>&1 \
 SBX=$(mktemp -d -t pkgfresh-sbx.XXXXXX) || die_loud "mktemp failed (sandbox)"
 SBX_HOME=$(mktemp -d -t pkgfresh-home.XXXXXX) || die_loud "mktemp failed (home)"
 
-# Must be set before the first probe_rc call below; it lives under SBX_HOME so
-# cleanup() carries it away with the rest of the fixture.
+# Must be set before the first probe_rc / sandbox_build call below; both live under
+# SBX_HOME so cleanup() carries them away with the rest of the fixture.
 PROBE_LOG="${SBX_HOME}/probe.log"
+BUILD_LOG="${SBX_HOME}/build.log"
 
 if ! (cd "${REPO_ROOT}" && git archive HEAD) | tar -x -C "${SBX}" 2>/dev/null; then
   die_loud "git archive HEAD | tar -x failed — could not build the sandbox fixture"
@@ -324,7 +332,7 @@ if [ "${RC_ARCHIVED}" = "0" ]; then
 else
   printf '  as-archived tree is not fresh (rc=%s) — rebuilding every package in the sandbox\n' "${RC_ARCHIVED}"
   if [ "$(sandbox_build)" != "0" ]; then
-    printf '%s\n' "${BUILD_LOG}" | tail -20 >&2
+    [ -s "${BUILD_LOG}" ] && tail -20 "${BUILD_LOG}" >&2
     die_loud "sandbox package rebuild failed — cannot establish the FRESH baseline"
   fi
   RC_ARCHIVED=$(probe_rc)
@@ -414,7 +422,7 @@ printf '\n<!-- package-freshness exit-code regression fixture (remedy arm) -->\n
   || die_loud "could not re-append to the stale target"
 if [ "$(sandbox_build "${PROBE_SKILL}")" != "0" ]; then
   report_skip "PF-5 rebuild -> exit 0 (documented remedy clears the gate)" \
-    "build-skill-packages.sh could not run on this host (last line: $(printf '%s' "${BUILD_LOG}" | tail -1)). \
+    "build-skill-packages.sh could not run on this host (last line: $(tail -1 "${BUILD_LOG}" 2>/dev/null)). \
 The packager is a host capability, not a property of the contract under test; PF-1..PF-4 above still ran."
 else
   RC5=$(probe_rc)
@@ -437,7 +445,7 @@ cp "${PRISTINE_COPY}" "${STALE_TARGET}" || die_loud "could not restore the stale
 RC_RENORM=$(probe_rc)
 if [ "${RC_RENORM}" != "0" ]; then
   if [ "$(sandbox_build)" != "0" ]; then
-    printf '%s\n' "${BUILD_LOG}" | tail -20 >&2
+    [ -s "${BUILD_LOG}" ] && tail -20 "${BUILD_LOG}" >&2
     die_loud "sandbox rebuild failed before PF-6 — cannot establish the FRESH baseline"
   fi
   RC_RENORM=$(probe_rc)
