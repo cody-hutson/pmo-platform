@@ -74,7 +74,7 @@ The one obligation the spec's open family actually imposes — that a **newly au
 
 ## Consequences
 
-Reach is 100% of the declared subject; both delimiter families are scanned, across every tracked file. Gating coverage at ship is the square family — 644 of 1,097 occurrence lines.
+Reach is 100% of the declared subject; both delimiter families are scanned, across every tracked file. Gating coverage is the square family; the angle family is reached but not gated. The split measured 644 against 453 occurrence lines at this release's baseline — a historical anchor, not a live figure: the population grows, and the ratio is re-derived by the check itself on every run rather than read from here.
 
 **The angle family is observed, not gated, and this ADR says so rather than implying otherwise.** That sentence is the cost of the decision and it is stated plainly: at deploy time the open family is reported and never fails. This is a reduction in *claimed* enforcement, not in reach, and it replaces a gate that did not gate with an advisory that does not pretend to.
 
