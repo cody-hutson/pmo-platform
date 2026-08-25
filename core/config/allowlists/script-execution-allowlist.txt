@@ -283,6 +283,18 @@ release/tools/tests/test_structural_blast_radius.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_verify_release_plan.sh
 ./release/tools/tests/test_verify_release_plan.sh
 release/tools/tests/test_verify_release_plan.sh
+# verify-release-plan.sh — the plan-driven verification executor the suite
+# immediately above GRADES, and the tool Stage-6 C4 self-verification runs to
+# produce the PR-body Verification Evidence block. Its regression suite was
+# allowlisted while the tool itself was not, so the suite was reachable and the
+# thing it grades was not: every agent-side invocation died on
+# BLOCK-DESTRUCTIVE-022, which blocked four builds in one release from running
+# the validator at all. Four forms, matching the suite above. (CI runs no Claude
+# hooks, so these entries are for the agent-side path, not the workflow.)
+[PMO_PLATFORM_ROOT]/release/tools/verify-release-plan.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/verify-release-plan.sh
+./release/tools/verify-release-plan.sh
+release/tools/verify-release-plan.sh
 # version-grammar.sh — sourced SSOT library (validate/parse/compare); consumers
 # source it, so all four invocation forms (incl. source/.) must be allowlisted
 # (BLOCK-DESTRUCTIVE-022 gates both `bash <path>` execution and `source <path>`).
