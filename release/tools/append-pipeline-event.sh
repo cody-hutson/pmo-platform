@@ -21,7 +21,10 @@
 #
 # Flags:
 #   --dry-run     : validate + print row without appending
-#   --self-test   : append a test row, verify, then revert; exit 0 on success
+#   --self-test   : exercise the append path against a PRIVATE TEMP COPY of the
+#                   log; the live log is never opened for write. Exit 0 on
+#                   success. (It used to append to the live log and revert by
+#                   truncation — see #6116.)
 #   --help        : print usage
 #
 # Cutover: events captured strictly AFTER the cutover merge SHA. Writers are
@@ -315,7 +318,10 @@ VERSION_KEY_NONE='(none)'
 die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
 
 usage() {
-  /usr/bin/sed -n '10,25p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  # RANGE IS LOAD-BEARING: it must span the whole Usage + Flags block above. A
+  # stale range prints the wrong help SILENTLY. Widened 25 -> 28 when the
+  # --self-test flag description grew (#6116).
+  /usr/bin/sed -n '10,28p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -339,6 +345,16 @@ seed_if_absent() {
 
 # truncate_to_lines <file> <n> — keep the first <n> lines of <file>. Handles n=0
 # (BSD `head -n 0` is an error, so empty the file directly).
+#
+# ⚠️ UNREFERENCED, AND UNSAFE UNDER CONCURRENCY (#6116). Call-site census after
+# the self-test redirect landed: ZERO. Do NOT re-introduce a caller on any shared
+# surface. This is not a truncate — it is a non-atomic read-modify-write with an
+# INODE SWAP (`head > tmp && mv tmp f`), so (a) any append landing in the read →
+# rename window is destroyed, not merely rows above <n>, and (b) the `mv`
+# replaces the inode, so a concurrent writer holding an open descriptor keeps
+# writing into an orphan that nothing will ever read — losing its rows with no
+# error on either side. Retained rather than deleted per the #6116 design (S-5);
+# any future caller belongs on #6116's follow-up, not on a silent re-use here.
 truncate_to_lines() {
   local f="$1" n="$2"
   if [[ "$n" -le 0 ]]; then
@@ -587,11 +603,80 @@ if [[ "$SELF_TEST" == "true" ]]; then
   [[ "$_cas_fail" -eq 0 ]] || die "self-test: workspace-root cascade assertion FAILED (see above)" 1
   echo "self-test: workspace-root cascade OK (3a env / 3c toml / 3d default, value-pinned)"
 
-  # Assert the resolved path's parent is reachable, then seed if absent.
-  [[ -d "$(dirname "$LOG_FILE")" ]] || /bin/mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null \
-    || die "self-test: resolved log parent dir not creatable: $(dirname "$LOG_FILE")" 2
+  # ── LIVE-LOG ASSERTION (S-4) — non-mutating, named, attributable ──────────
+  # The append path below runs against a PRIVATE TEMP COPY (S-1), so nothing in
+  # this run may open the live log for write. This step restores — and widens —
+  # the coverage the old append-then-revert cycle provided incidentally: it
+  # asserts the path RESOLVES, that its parent is reachable, and that both
+  # surfaces are WRITABLE, without appending a byte. The original never asserted
+  # writability at all; it wrote and hoped.
+  _live_log="$LOG_FILE"
+  _live_write_log="$WRITE_LOG"
+  _live_dir="$(dirname "$_live_log")"
+  [[ -n "$_live_log" ]] || die "self-test: live LOG_FILE resolved empty" 2
+  [[ -d "$_live_dir" ]] || /bin/mkdir -p "$_live_dir" 2>/dev/null \
+    || die "self-test: resolved log parent dir not creatable: $_live_dir" 2
+  [[ -w "$_live_dir" ]] \
+    || die "self-test: resolved log parent dir is NOT writable: $_live_dir" 2
+  for _lf in "$_live_log" "$_live_write_log"; do
+    if [[ -e "$_lf" ]]; then
+      [[ -w "$_lf" ]] || die "self-test: live surface exists but is NOT writable: $_lf" 2
+    fi
+  done
+  echo "self-test: live-log assertion OK (resolved + parent reachable + writable; NOT opened for write)"
+
+  # ── SHARED TEMP CLEANUP ──────────────────────────────────────────────────
+  # ONE EXIT trap for the whole self-test. `trap ... EXIT` REPLACES any prior
+  # EXIT trap, so the forced-fallback block below registers its tree here rather
+  # than installing a second trap that would silently orphan this one's dir.
+  _SELFTEST_TMPDIRS=()
+  _selftest_cleanup() {
+    local _d
+    for _d in ${_SELFTEST_TMPDIRS[@]+"${_SELFTEST_TMPDIRS[@]}"}; do
+      [[ -n "$_d" ]] && /bin/rm -rf "$_d"
+    done
+  }
+  trap _selftest_cleanup EXIT
+
+  # ── LIVE-LOG INTEGRITY GUARD (the #6116 regression guard) ────────────────
+  # Snapshot every byte the live log holds RIGHT NOW. Re-checked at the end of
+  # the run. A concurrent append only ADDS lines, so comparing the first N lines
+  # is stable under concurrency — but a truncation, an in-place rewrite, or an
+  # inode swap changes it. A whole-file checksum would be FLAKY here for exactly
+  # the reason this defect matters: other sessions legitimately append while the
+  # self-test runs, and a guard that fails on a legitimate concurrent append
+  # would be a second concurrency bug wearing the first one's uniform.
+  _guard_tmp="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/append-pipeline-event-selftest-XXXXXX")" \
+    || die "self-test: cannot create self-test temp dir" 2
+  _SELFTEST_TMPDIRS+=("$_guard_tmp")
+  _live_head_lines=0
+  if [[ -f "$_live_log" ]]; then
+    _live_head_lines=$(/usr/bin/wc -l < "$_live_log" | /usr/bin/tr -d ' ')
+    /usr/bin/head -n "$_live_head_lines" "$_live_log" > "$_guard_tmp/live-head-before" \
+      || die "self-test: cannot snapshot the live log for the integrity guard" 2
+  else
+    : > "$_guard_tmp/live-head-before"
+  fi
+
+  # ── SELF-TEST WRITE REDIRECT (S-1) ───────────────────────────────────────
+  # Every write below lands in a private temp instance seeded from the live
+  # files. This is Option D from the #6116 design: it REMOVES the mutation of the
+  # live surface rather than guarding it, so there is no lock to honour, no
+  # read-modify-write window to lose a row in, and no contract for a future
+  # caller to violate. An INTERNAL reassignment, deliberately not a public
+  # `--log-file` flag: a public flag is a new supported surface with its own
+  # abuse cases, and no caller has asked for one.
+  EVALS_RESULTS_PATH="$_guard_tmp/evals"
+  /bin/mkdir -p "$EVALS_RESULTS_PATH" || die "self-test: cannot create self-test evals dir" 2
+  LOG_FILE="$EVALS_RESULTS_PATH/pipeline-event-log.md"
+  WRITE_LOG="$EVALS_RESULTS_PATH/pipeline-event-log-write.log"
+  [[ -f "$_live_log" ]] && /bin/cp "$_live_log" "$LOG_FILE"
+  [[ -f "$_live_write_log" ]] && /bin/cp "$_live_write_log" "$WRITE_LOG"
+  # Still exercises seed_if_absent — now against a fresh instance when the live
+  # files are absent, which is the case it exists to cover.
   seed_if_absent
-  echo "self-test: resolved LOG_FILE=$LOG_FILE"
+  echo "self-test: live LOG_FILE=$_live_log (read-only this run)"
+  echo "self-test: writes REDIRECTED to a private temp copy — the live log is never opened for write (#6116)"
   echo "self-test: enum source=$([[ -n "$_schema_rows" ]] && echo schema-§3-data-driven || echo static-fallback) ($(printf '%s\n' $EVENT_TYPES | grep -c . ) event types)"
 
   # ── § 3 ↔ static-fallback lockstep, asserted in BOTH directions ──────────
@@ -633,7 +718,7 @@ if [[ "$SELF_TEST" == "true" ]]; then
   # nothing else covers. _APE_SELFTEST_FALLBACK_CHILD bounds recursion at depth 1.
   if [[ -z "${_APE_SELFTEST_FALLBACK_CHILD:-}" ]]; then
     _ft_tmp="$(/usr/bin/mktemp -d)" || die "self-test: cannot create forced-fallback temp tree" 2
-    trap '/bin/rm -rf "$_ft_tmp"' EXIT
+    _SELFTEST_TMPDIRS+=("$_ft_tmp")
     /bin/mkdir -p "$_ft_tmp/release/tools" "$_ft_tmp/core/deploy" || die "self-test: cannot populate forced-fallback temp tree" 2
     /bin/cp "${BASH_SOURCE[0]}" "$_ft_tmp/release/tools/append-pipeline-event.sh" \
       || die "self-test: cannot copy script into forced-fallback temp tree" 2
@@ -937,10 +1022,17 @@ if [[ "$SELF_TEST" == "true" ]]; then
   [[ "$(_arity 'triggers:[T1\|T2\|T3]')" -eq 10 ]] || die "self-test: escaped payload broke row arity"
   [[ "$(_arity 'triggers:[T1 | T2]')"    -eq 11 ]] || die "self-test: arity oracle miscalibrated"
 
-  # Append a sentinel row, then revert. The key is SLUG-shaped: the fixture must
-  # not model the version-shaped form § 2a forbids, or the tool's own test data
-  # teaches the defect the tool now rejects.
-  TEST_ROW="| ${TS_TEST} | selftest-sentinel-release | 5 | decision | scope-lock | hub | sub-task:#1 | CHEAP | resolved | selftest-row;will-be-reverted |"
+  # Append a sentinel row to the PRIVATE TEMP COPY. The key is SLUG-shaped: the
+  # fixture must not model the version-shaped form § 2a forbids, or the tool's
+  # own test data teaches the defect the tool now rejects.
+  #
+  # NO REVERT (S-2). There is nothing to revert: LOG_FILE and WRITE_LOG were
+  # redirected to a private temp instance above, and the temp dir is discarded by
+  # the EXIT trap. The delta predicate below survives unchanged (S-3) and is now
+  # STRONGER than it was: against a private copy the delta is deterministic,
+  # whereas against the shared live log a concurrent append made `+1` a race the
+  # old code resolved by DESTROYING the other writer's row.
+  TEST_ROW="| ${TS_TEST} | selftest-sentinel-release | 5 | decision | scope-lock | hub | sub-task:#1 | CHEAP | resolved | selftest-row;temp-copy-only |"
   TEST_WRITE_LINE="${TS_TEST}	selftest-sha	hub	decision:scope-lock"
 
   printf '%s\n' "$TEST_ROW" >> "$LOG_FILE"
@@ -948,20 +1040,30 @@ if [[ "$SELF_TEST" == "true" ]]; then
 
   POST_LINES=$(/usr/bin/wc -l < "$LOG_FILE" | /usr/bin/tr -d ' ')
   if [[ "$POST_LINES" -ne $((PRE_LINES + 1)) ]]; then
-    # Cleanup attempt
-    truncate_to_lines "$LOG_FILE" "$PRE_LINES"
-    truncate_to_lines "$WRITE_LOG" "$PRE_WRITE_LINES"
-    die "self-test: append produced unexpected line count delta (expected +1, got $((POST_LINES - PRE_LINES)))"
+    die "self-test: append produced unexpected line count delta on the temp copy (expected +1, got $((POST_LINES - PRE_LINES)))"
+  fi
+  POST_WRITE_LINES=$(/usr/bin/wc -l < "$WRITE_LOG" | /usr/bin/tr -d ' ')
+  if [[ "$POST_WRITE_LINES" -ne $((PRE_WRITE_LINES + 1)) ]]; then
+    die "self-test: write-log append produced unexpected line count delta on the temp copy (expected +1, got $((POST_WRITE_LINES - PRE_WRITE_LINES)))"
   fi
 
-  # Revert
-  truncate_to_lines "$LOG_FILE" "$PRE_LINES"
-  truncate_to_lines "$WRITE_LOG" "$PRE_WRITE_LINES"
-
-  # Confirm revert
-  REVERT_LINES=$(/usr/bin/wc -l < "$LOG_FILE" | /usr/bin/tr -d ' ')
-  if [[ "$REVERT_LINES" -ne "$PRE_LINES" ]]; then
-    die "self-test: revert failed (expected $PRE_LINES lines, got $REVERT_LINES)"
+  # ── LIVE-LOG INTEGRITY GUARD, re-checked (the #6116 regression guard) ─────
+  # Every byte the live log held at entry must still be there, in order. This
+  # arm is what fails if anyone ever re-introduces a revert-by-truncation: the
+  # old code shortened this file, and `cmp` sees that. Concurrent appends are
+  # invisible to it by construction (they land past line N), so the guard cannot
+  # go flaky — it can only catch destruction.
+  if [[ -f "$_live_log" ]]; then
+    _live_now_lines=$(/usr/bin/wc -l < "$_live_log" | /usr/bin/tr -d ' ')
+    if [[ "$_live_now_lines" -lt "$_live_head_lines" ]]; then
+      die "self-test: THE LIVE LOG SHRANK during the self-test ($_live_head_lines -> $_live_now_lines lines) — rows were destroyed (#6116)"
+    fi
+    /usr/bin/head -n "$_live_head_lines" "$_live_log" \
+      | /usr/bin/cmp -s - "$_guard_tmp/live-head-before" \
+      || die "self-test: the live log's committed rows CHANGED during the self-test — an in-place rewrite or truncation occurred (#6116)"
+    echo "self-test: live-log integrity guard OK ($_live_head_lines committed rows byte-identical; $((_live_now_lines - _live_head_lines)) concurrent append(s) observed and preserved)"
+  else
+    echo "self-test: live-log integrity guard N/A (no live log on this instance) — EXPLICIT zero-state, not a silent pass"
   fi
 
   echo "self-test: PASS"
@@ -970,7 +1072,7 @@ if [[ "$SELF_TEST" == "true" ]]; then
   echo "  no-learning rows reject 'theme:' by enforcement; undeclared-label-set types stay free-form"
   echo "  § 2a release join key enforced: version-grammar values + unresolved tokens rejected, slugs accepted"
   echo "  positive + negative tests passed"
-  echo "  append + revert cycle confirmed (log + write-log)"
+  echo "  append cycle confirmed on a private temp copy (log + write-log); live log never opened for write"
   exit 0
 fi
 
