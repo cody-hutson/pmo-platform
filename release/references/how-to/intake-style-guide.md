@@ -104,6 +104,20 @@ For these, acceptance requires an **explicit anchor** *and* a one-line **blast-r
 
 ---
 
+## 2d. Section-anchor citations
+
+A precondition that cites a file **plus a section anchor** cites a section that **exists in that file at authoring time**. Write the anchor only after looking at the target's headings — not from memory of how that document is usually organized, and not from how a sibling document is organized.
+
+**An inherited citation is re-verified, never carried forward on the strength of looking precise.** When you copy a precondition from another ticket, a prior release plan, or an earlier comment in the same thread, the file may have been restructured since it was written. A section number is the most confident-looking thing in a ticket body and the least self-checking: `§ 4.1` reads as though someone verified it, and nothing about a stale one looks stale. Open the file and confirm the section is there. If it is not, cite the section that now carries the content rather than deleting the anchor — a bare file reference sends every future reader through the whole document.
+
+**A citation into a file outside the tracked repository is marked as such.** Operator-local files, generated artifacts, and anything git-ignored cannot be resolved by any reader who is not you, and cannot be resolved by any check. Say so inline — *"(operator-local, not tracked)"* — so a reader who cannot open it knows immediately that the problem is their checkout and not their search.
+
+**Prefer the section's number and its name together** (`§ 4.1 Operand resolution`) over the number alone. If the document is renumbered, the name still locates the content; if the section is renamed, the number still does. Either half surviving is the difference between a citation that degrades and one that dies.
+
+**Where this is surfaced.** Numeric anchors in open issue bodies are resolved against their target's actual headings by the **Section-Anchor Resolution (A4.8)** determination at Stage 2 Triage, and by `deploy.sh` **Check 71**. Both are **advisory and report-only** — they surface a citation that does not resolve, they never block. Neither covers every citation form: the predicate models numeric anchors behind five prefixes and declares the classes it does not model, with counts, in its own header. Treat a clean run as *"nothing was found in the modelled classes"*, never as *"every anchor here is good."*
+
+---
+
 ## 3. Applied Examples
 
 The 5 tests applied to 5 sampled tickets spanning the quality spectrum (from the audit corpus). All 5 verdicts match the weighted-score classification directionally — the rule routes tickets *before* they enter the intake stream.
@@ -512,6 +526,7 @@ This guide is the doctrine. The following docs are the enforcement surfaces:
 | `core/disciplines/root-cause-analysis.md` | §2 (trigger), §4 (invocation points) | The proven `owner:` / `to close:` form (for the bug/unknown-cause class) that §5c generalizes to every intake assumption. |
 | `release/references/standards/solutioning-output-template.md` | § 3.5 (The Solutioning Pre-Read) | Intake-authority mirror pair: this guide's §5c governs intake-*emitted* `[ASSUMPTION – CONFIRM]` assumptions (directional, owned downstream); § 3.5 governs Stage-5-*emitted* advisory pre-reads (non-binding, the issue body stays the contract). Same theme, different emitting stage — the two complete the WHAT-vs-HOW-vs-advisory authority boundary. |
 | `release/references/pipeline/stage-02-triage.md` | § Scope-Altitude Determination (A4.7 / `SA-G1`) | Enforcement surface for §4c. A **stage-local, advisory, non-gate-blocking** criterion — not a `gate-criteria-spec.md` registry criterion, outside the Layer-2 judgment aggregate, riding the existing A6 `feasibility flags` field. It carries the predicate (Limb A ∨ Limb B), the SA1–SA3 bar, the operand-resolution rules and the closed N1–N7 guard list; §4c carries the authoring doctrine and cites them. |
+| `release/references/pipeline/stage-02-triage.md` + `core/deploy/deploy.sh` Check 71 | § Section-Anchor Resolution (A4.8) | Surfacing surfaces for §2d. Both are **advisory, report-only, never gate-blocking**: numeric section anchors in open issue bodies are resolved against the cited file's actual headings, and an anchor that resolves to nothing is surfaced as a `feasibility flags` bullet (triage) or an `ADVISORY:` line (deploy). The predicate declares the citation classes it does not model, with measured counts, in `core/deploy/tools/check-issue-body-anchors.sh`'s header — a clean run means nothing was found in the modelled classes, not that every anchor resolves. |
 | `core/schemas/gate-criteria-spec.md` | G1-04 (Proposed Change specificity), G1-05 (AC verifiability — branch (i) per-bullet quality, branch (ii) capability-class usability-AC coverage per §4b) | Triage gates that operationalize T2 (G1-04) and T3 (G1-05); G1-05b branch (ii) is the enforcement surface for §4b, whose § Capability-Class Usability-AC Requirement block carries the predicate, the exempt classes, and the conformance tests. |
 | `core/schemas/gate-criteria-spec.md` + `core/deploy/deploy.sh` Check 22 | G1-01 (title informativeness floor) | Enforcement surfaces for the §7 title rubric. The gate enforces the **syntactic floor only** (no bracket prefix + substance floor); the §7 rubric carries the semantic informativeness bar (judgment, not gate-enforced). |
 | `<OPERATOR_INSTANCE_ANALYSIS_PATH>/intake-quality-review-2026-04-19/best-practices-rubric.md` | D4 (Intake/Design Boundary) | Rubric dimension that scores intake/design boundary respect; T2 maps to D4. |
