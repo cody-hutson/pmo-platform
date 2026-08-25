@@ -7,11 +7,14 @@ set -euo pipefail
 #   (F1) DEFAULT-PATH REGRESSION — blast-radius.sh output on a FROZEN 3-file doc corpus
 #        matches a COMMITTED normalized golden. The golden is the pre-shared-lib-refactor
 #        tool's output on that corpus, so a match proves the refactor remains a
-#        behavior-preserving no-op. normalize() strips four fields that are not the
+#        behavior-preserving no-op. normalize() strips FIVE fields that are not the
 #        subject of the assertion — three non-deterministic (scanned_at / scan_root /
-#        stats.elapsed_seconds) plus cli_version, a tool-identity label whose bump is not
-#        a behaviour change. Fixture + spec constants + regeneration protocol live in
-#        release/tools/tests/fixtures/blast-radius-f1/README.md.
+#        stats.elapsed_seconds), plus cli_version, a tool-identity label whose bump is not
+#        a behaviour change, plus stats.scan_scope_status_reason, which is neither: it is
+#        scan-root-CLASS-dependent (a git-tracked root emits no reason, a mktemp copy
+#        emits one), so leaving it inside the compared surface would pin the golden to one
+#        root class without saying so. Fixture + spec constants + regeneration protocol
+#        live in release/tools/tests/fixtures/blast-radius-f1/README.md.
 #
 #        F1 previously reconstructed the pre-refactor script from git history at run
 #        time. That path is deleted. It could not run in a shallow checkout; its
@@ -20,10 +23,16 @@ set -euo pipefail
 #        POST-refactor blob as pre-refactor; and the misclassified blob then died with
 #        empty output — which the old code reported as a PASS. This suite now makes ZERO
 #        git HISTORY reads (no `git log`, no `git show`). Stated precisely because it is
-#        checkable: a GIT_TRACE run still shows `git rev-parse --show-toplevel` calls,
-#        but those come from domain-blast-radius.sh resolving its own scan root in the
-#        dispatch group, which passes no --root. They are not history reads and resolve
-#        fine in a shallow clone.
+#        checkable: a GIT_TRACE run DOES show git calls, and they are these three, none
+#        of them a history read and all three fine in a shallow clone —
+#          (1) `git rev-parse --show-toplevel` from domain-blast-radius.sh resolving its
+#              own scan root in the dispatch group, which passes no --root;
+#          (2) `git rev-parse --is-inside-work-tree` and, where that succeeds,
+#              `git ls-files -z` from blast-radius.sh scoping its enumeration to tracked
+#              files. On F1's runtime root — a mktemp copy — (2) resolves NOT-a-work-tree,
+#              which is why the golden records scan_scope=all-files / not-run;
+#          (3) `git rev-parse --short HEAD`, in --regenerate-golden ONLY, to stamp the
+#              producing SHA into the Regeneration Log row.
 #   (AC#3) SOFTWARE IMPORT-GRAPH — domain-blast-radius.sh --domain=software on a code
 #        fixture yields a NON-EMPTY schema-v1 first_order[] (the A3.1 code/software row's
 #        method has a runnable counterpart).
@@ -84,11 +93,22 @@ skip() {
 #     surface would red F1 on a no-op and make golden regeneration routine, which is the
 #     very reflex the regeneration protocol exists to prevent. Its PRESENCE in the
 #     envelope is still asserted — that guarantee moved to the S6 raw-skeleton guard.
-normalize() { jq -S 'del(.scanned_at, .scan_root, .stats.elapsed_seconds, .cli_version)'; }
+#   stats.scan_scope_status_reason                 — scan-root-CLASS-dependent, not
+#     non-deterministic. This is the fifth field and the newest: the golden's runtime root
+#     is a `mktemp` copy (non-git => `not-run` + a reason), while the README's generation
+#     recipe used to point at the in-repo corpus (git-tracked => `fetched` + NO reason).
+#     With the free-text reason inside the compared surface those two roots produce
+#     goldens 101 bytes apart; normalized out, they differ by 2. The REAL fix is the
+#     repaired recipe below — this deletion is defence in depth, and it is only safe
+#     BECAUSE the recipe is repaired. A quiet 2-byte gap with a mismatched digest reads
+#     as noise; a 101-byte one announces itself.
+normalize() { jq -S 'del(.scanned_at, .scan_root, .stats.elapsed_seconds, .cli_version, .stats.scan_scope_status_reason)'; }
 
 # Keep in sync with normalize() above. S6 asserts live-minus-golden equals EXACTLY this
 # set, so widening normalize() without widening this list fails the guard by design.
-F1_DELSET='["cli_version","scan_root","scanned_at","stats.elapsed_seconds"]'
+# ORDER IS LOAD-BEARING: S6 compares by STRING equality against a `jq -c … | unique`
+# rendering, so this literal must be jq's `unique` ordering, never a hand-sorted set.
+F1_DELSET='["cli_version","scan_root","scanned_at","stats.elapsed_seconds","stats.scan_scope_status_reason"]'
 
 require_jq() {
   if ! command -v jq >/dev/null 2>&1; then

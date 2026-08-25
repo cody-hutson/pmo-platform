@@ -130,11 +130,24 @@ test_s2_field_semantics() {
   any_true="$(printf '%s' "$out" | jq -r '[.first_order[].is_mirror] | any(. == true)')"
   if [ "$any_true" = "false" ]; then ok "S2: is_mirror is constant false (no mirror concept for a path sweep)"; else bad "S2: an is_mirror==true appeared (should always be false)"; fi
 
-  # (5) second_order scoped OUT: empty array AND count 0.
-  local so_len so_count
+  # (5) second_order scoped OUT — and scoped out POSITIVELY, not as a zero.
+  #
+  # This assertion used to require `second_order_count == 0`. That predicate was the
+  # defect: a structural sweep never ATTEMPTS a second-order traversal, so a 0 there was
+  # a not-computed value wearing a measured value's clothes, indistinguishable from a
+  # depth-2 run that examined the corpus and found nothing. The scope-out is now carried
+  # by `second_order_status: "not-run"` and the counter is ABSENT from the emit — PV-7b's
+  # "absence, not zero". Asserting `has(...) == false` is what pins the absence; asserting
+  # the status is what pins that the absence is DECLARED rather than merely missing.
+  local so_len so_has_count so_status
   so_len="$(printf '%s' "$out" | jq -r '.second_order | length')"
-  so_count="$(printf '%s' "$out" | jq -r '.stats.second_order_count')"
-  if [ "$so_len" = "0" ] && [ "$so_count" = "0" ]; then ok "S2: second_order scoped out ([] + count 0)"; else bad "S2: second_order not scoped out (length=$so_len, count=$so_count)"; fi
+  so_has_count="$(printf '%s' "$out" | jq -r '.stats | has("second_order_count")')"
+  so_status="$(printf '%s' "$out" | jq -r '.stats.second_order_status')"
+  if [ "$so_len" = "0" ] && [ "$so_has_count" = "false" ] && [ "$so_status" = "not-run" ]; then
+    ok "S2: second_order scoped out POSITIVELY ([] + status not-run + counter ABSENT, not 0)"
+  else
+    bad "S2: second_order not scoped out positively (length=$so_len, has(second_order_count)=$so_has_count, status=$so_status)"
+  fi
 
   # (6) matches[] snippet carries the actual hard-coded reference text.
   local snip

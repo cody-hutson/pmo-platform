@@ -83,11 +83,46 @@ ARG_MAX_EXPAND="$DEFAULT_MAX_EXPAND"
 PARTIAL=0
 PARTIAL_REASON=""
 
-# Self-test fixture root. Script-scope on purpose: the EXIT trap that removes it fires
+# ---------------------------------------------------------------------------
+# Measurement state for the SECOND-ORDER counter (#5260). PV-7a Register A, verbatim:
+# `fetched` | `truncated` | `degraded` | `not-run`. Emitted on EVERY path as
+# stats.second_order_status, so a consumer never has to infer a measurement state from
+# a value. Before this field, `second_order_count: 0` at --depth=1 (NOT COMPUTED) and at
+# --depth=2 over an empty surface (MEASURED EMPTY) were byte-identical except for the
+# `depth` echo — an input, not a measurement.
+#
+# The status DEFAULTS to `fetched` and is narrowed downward; it is never initialised
+# beside the counter it governs. See compute_second_order for why that matters.
+# ---------------------------------------------------------------------------
+SECOND_ORDER_STATUS="fetched"
+SECOND_ORDER_STATUS_REASON=""
+
+# ---------------------------------------------------------------------------
+# Enumeration-scope state (#5074). `scan_scope` is a POPULATION LABEL
+# (`tracked` | `all-files`) and is deliberately NOT a Register A member — Register A can
+# say WHETHER a measurement happened, but has no member for "measured, over a different
+# population". `scan_scope_status` is Register A verbatim and reports whether TRACKED
+# scoping was achieved.
+#
+# Initialised to the FALLBACK values, so a path that forgets to set them degrades to the
+# honest label rather than asserting the stronger `tracked` claim.
+# ---------------------------------------------------------------------------
+SCAN_SCOPE="all-files"
+SCAN_SCOPE_STATUS="not-run"
+SCAN_SCOPE_STATUS_REASON=""
+
+# Readability census over SCAN_LIST_FILE, computed once in build_scan_list and read by
+# both emit paths (#5260 S-13). Counts SCAN-LISTED files that could not be READ. It is
+# NOT an enumeration-completeness measure — see the DF-6 note on build_scan_list.
+UNREADABLE_COUNT=0
+
+# Self-test fixture roots. Script-scope on purpose: the EXIT trap that removes them fires
 # AFTER run_self_test has returned, so a `local` would already be out of scope and
 # `set -u` would turn the cleanup into an unbound-variable error — which would make a
-# 13/13 PASS suite still exit non-zero.
+# fully-PASSing suite still exit non-zero.
 SELFTEST_TMPDIR=""
+SELFTEST_GIT_TMPDIR=""
+SELFTEST_RO_TMPDIR=""
 
 # ---------------------------------------------------------------------------
 # Default exclusions (hardcoded; --exclude adds to these)
@@ -449,11 +484,144 @@ path_under_exclusion() {
 }
 
 # ---------------------------------------------------------------------------
-# Build scan file list (newline-delimited absolute paths)
-# Writes to: SCAN_LIST_FILE
+# Scanned-type test (returns 0 if the path carries one of SCANNED_TYPES).
+#
+# SCANNED_TYPES stays the SINGLE home of the type list: this hardcodes nothing and
+# iterates the array. It exists because build_scan_list now has TWO candidate sources
+# and two sources must not grow two filter implementations — `find`'s -name predicates
+# express the type filter for one source only.
+# ---------------------------------------------------------------------------
+path_has_scanned_type() {
+  local p="$1"
+  local ext
+  for ext in "${SCANNED_TYPES[@]}"; do
+    case "$p" in
+      *".${ext}") return 0 ;;
+    esac
+  done
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# Tracked-file candidate source (#5074). Writes newline-delimited ROOT-RELATIVE
+# candidates to $1 and returns 0; or returns 1 having set SCAN_SCOPE_STATUS and
+# SCAN_SCOPE_STATUS_REASON.
+#
+# Four branches, in order. Branch 1 is `not-run` rather than `degraded` on purpose:
+# check_deps requires ONLY jq, and resolve_root already guards git with `command -v`, so
+# git is an optional, supported-absent dependency here. Register A's `not-run` means
+# "deliberately not attempted", which is exactly this. Reserving `degraded` for branch 3
+# keeps it meaning the one thing a consumer should worry about: git present, repo
+# present, and the read blew up.
+#
+# `git -C <root>`, not `cd`: on a subdirectory --root, `git -C <dir> ls-files` is
+# path-scoped to that directory AND emits directory-relative paths — exactly what the
+# shared filter below needs, with no prefix arithmetic.
+# ---------------------------------------------------------------------------
+try_git_tracked_candidates() {
+  local outfile="$1"
+
+  # Branch 1 — git unavailable.
+  if ! command -v git >/dev/null 2>&1; then
+    SCAN_SCOPE_STATUS="not-run"
+    SCAN_SCOPE_STATUS_REASON="git unavailable on PATH; tracked scoping not attempted"
+    return 1
+  fi
+
+  # Branch 2 — the scan root is not a git work tree. This is the sanctioned fixture case
+  # (every self-test root and the F1 golden root is a mktemp copy), so it must stay a
+  # first-class supported invocation and must NOT gate.
+  if ! git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    SCAN_SCOPE_STATUS="not-run"
+    SCAN_SCOPE_STATUS_REASON="scan root is not a git work tree; tracked scoping not attempted"
+    return 1
+  fi
+
+  # Branch 3 — the read failed. git's status is captured from git ITSELF, never from a
+  # pipeline: a pipeline would conflate git's exit with `tr`'s and the reason string
+  # would name the wrong process.
+  #
+  # `-z` then `tr` is load-bearing, not cosmetic. Under the default core.quotePath git
+  # C-quotes a non-ASCII path ("docs/caf\303\251.md"), and a quoted path then fails the
+  # existence test below as a SILENT under-count. `-z` emits raw bytes. Do not optimise
+  # the `tr` away — the invariant is currently vacuous in this repo (0 non-ASCII index
+  # entries) and is written down so it survives a future editor, not because it bites today.
+  local raw="$WORK_DIR/git-ls-files.raw"
+  local rc=0
+  git -C "$REPO_ROOT" ls-files -z > "$raw" 2>/dev/null || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    SCAN_SCOPE_STATUS="degraded"
+    SCAN_SCOPE_STATUS_REASON="git ls-files failed in the scan root (exit ${rc}); the tracked population is UNMEASURED"
+    return 1
+  fi
+  tr '\0' '\n' < "$raw" > "$outfile"
+
+  # Branch 4 — exit 0, but the list is EMPTY. An empty tracked list is a VACUOUS ZERO,
+  # not a measurement: without this branch a --root on an untracked subtree reports a
+  # clean zero blast radius over an empty haystack, which is the same absent-is-pass
+  # shape this card exists to remove.
+  if [ ! -s "$outfile" ]; then
+    SCAN_SCOPE_STATUS="not-run"
+    SCAN_SCOPE_STATUS_REASON="scan root is a git work tree with no tracked files under it; tracked scoping not applicable"
+    return 1
+  fi
+
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# Drop classifier (#5074 A-6). $1 = root-relative path of a DROPPED candidate.
+# Returns 0 (true) ONLY for an enumeration OUTAGE — a candidate that exists in the index
+# but cannot be reached because an ancestor directory is not traversable.
+#
+# `[ -f ]` fails for two separable reasons and the naive `[ -x parent ]` test cannot tell
+# them apart: for a tracked DIRECTORY deleted from the worktree, `-d parent` and
+# `-x parent` are both false — exactly as they are for a file behind a shut ancestor —
+# so a one-line test emits a false `degraded` on any ordinary recursive delete.
+#
+# This walks upward to the NEAREST ancestor that stats successfully. Every ancestor above
+# a traversable directory stats unambiguously, so this separates EACCES from ENOENT
+# without ever asking `test` to distinguish them.
+# ---------------------------------------------------------------------------
+scan_drop_is_outage() {
+  local d="${1%/*}"
+  [ "$d" = "$1" ] && d=""            # candidate sits at the scan root
+  while [ -n "$d" ] && [ "$d" != "." ]; do
+    if [ -e "$REPO_ROOT/$d" ]; then  # nearest ancestor that stats: unambiguous
+      if [ -x "$REPO_ROOT/$d" ]; then return 1; else return 0; fi
+    fi
+    [ "${d%/*}" = "$d" ] && break
+    d="${d%/*}"
+  done
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# Build scan file list (newline-delimited repo-relative paths)
+# Writes to: SCAN_LIST_FILE.  Sets: SCAN_SCOPE, SCAN_SCOPE_STATUS,
+# SCAN_SCOPE_STATUS_REASON, TOTAL_FILES_SCANNED, UNREADABLE_COUNT.
+#
+# Structure: CANDIDATE SOURCE -> SHARED FILTER. The tracked source is preferred because
+# the git index IS the tracked set (nothing to keep in sync) and because it excludes
+# git-ignored trees by construction, which is what makes a cited count reproducible
+# across machines. The `find` fallback keeps every non-git root working unchanged.
+#
+# DF-6 (carried, authored on #5074) — the residual this function does NOT close:
+# files an enumerator never produced are invisible to the readability census below, on
+# either source. `find` cannot descend an untraversable directory, so under this file's
+# `set -euo pipefail` the all-files path ABORTS LOUDLY (rc 1) rather than under-counting
+# — but the stderr naming the directory is discarded at the `2>/dev/null`, so the abort
+# is undiagnosable. On the tracked path the index still lists the file and the existence
+# test drops it; scan_drop_is_outage is what makes THAT drop observable. Capturing the
+# enumerator's discarded stderr is a follow-on card, out of this release.
 # ---------------------------------------------------------------------------
 build_scan_list() {
   SCAN_LIST_FILE="$WORK_DIR/scan-list.txt"
+  local candidates="$WORK_DIR/scan-candidates.txt"
+  local unreachable="$WORK_DIR/scan-unreachable.txt"
+  local unreachable_count
+  : > "$unreachable"
+
   local find_args=( "$REPO_ROOT" )
   find_args+=( -type f )
 
@@ -470,17 +638,63 @@ build_scan_list() {
   done
   find_args+=( ")" )
 
-  # Stream find output, filter via path_under_exclusion in shell loop, write repo-relative
-  find "${find_args[@]}" 2>/dev/null \
-    | while IFS= read -r abs; do
-        local rel="${abs#"$REPO_ROOT"/}"
-        if ! path_under_exclusion "$rel"; then
-          printf '%s\n' "$rel"
-        fi
-      done \
-    | sort -u > "$SCAN_LIST_FILE"
+  if try_git_tracked_candidates "$candidates"; then
+    SCAN_SCOPE="tracked"; SCAN_SCOPE_STATUS="fetched"; SCAN_SCOPE_STATUS_REASON=""
+  else
+    SCAN_SCOPE="all-files"          # status + reason already set by the helper
+    find "${find_args[@]}" 2>/dev/null \
+      | sed "s|^${REPO_ROOT}/||" > "$candidates"
+  fi
+
+  # Shared filter — ONE implementation for both sources, which is also what keeps the
+  # two populations exactly comparable. `path_under_exclusion` is retained on the tracked
+  # path: most prefixes are inert there (a git-ignored tree never reaches `ls-files`), but
+  # the *.lock filter and operator-supplied --exclude=GLOB additions must keep working
+  # under both scopes.
+  #
+  # The existence test is MANDATORY, not cosmetic: `git ls-files` lists a tracked file
+  # DELETED from the working tree, which `find` structurally cannot. Without it a phantom
+  # path reaches the basename-uniqueness pre-count and the batched grep operand list.
+  while IFS= read -r rel; do
+    path_has_scanned_type "$rel" || continue
+    path_under_exclusion  "$rel" && continue
+    if [ -f "$REPO_ROOT/$rel" ]; then
+      printf '%s\n' "$rel"
+    elif scan_drop_is_outage "$rel"; then
+      printf '%s\n' "$rel" >> "$unreachable"
+    fi
+  done < "$candidates" | sort -u > "$SCAN_LIST_FILE"
+
+  # The loop above is the LEFT side of a pipeline and therefore runs in a SUBSHELL: a
+  # counter incremented inside it is lost (measured: 0 against a ground truth of 3). The
+  # count goes to a file and is read back here — the same idiom SCAN_LIST_FILE uses.
+  unreachable_count=$(wc -l < "$unreachable" | tr -d ' ')
+  if [ "$unreachable_count" -gt 0 ] && [ "$SCAN_SCOPE_STATUS" = "fetched" ]; then
+    # Fires ONLY from `fetched`. A status already set by try_git_tracked_candidates is
+    # never overwritten: a scoping attempt that never happened cannot be reported as an
+    # incomplete one. INCOMPLETE deliberately contrasts with branch 3's UNMEASURED —
+    # branch 3 never established a tracked population; this established one and it is short.
+    SCAN_SCOPE_STATUS="degraded"
+    SCAN_SCOPE_STATUS_REASON="${unreachable_count} enumerated file(s) unreachable behind an untraversable directory; the tracked population is INCOMPLETE"
+  fi
 
   TOTAL_FILES_SCANNED=$(wc -l < "$SCAN_LIST_FILE" | tr -d ' ')
+
+  # Readability census (#5260 S-13). Decided BEFORE any scan runs and independently of
+  # anything grep or xargs discards, which is why it can license `fetched` where a
+  # captured pipeline status cannot: `xargs` collapses grep's rc=2 (unreadable) to rc=1
+  # (clean no-match), so an rc-based predicate is itself a broken probe.
+  #
+  # This loop takes its input by REDIRECTION, not through a pipe, so it runs in the
+  # current shell and the increment survives.
+  UNREADABLE_COUNT=0
+  local census_rel
+  while IFS= read -r census_rel; do
+    [ -z "$census_rel" ] && continue
+    if [ ! -r "$REPO_ROOT/$census_rel" ]; then
+      UNREADABLE_COUNT=$((UNREADABLE_COUNT + 1))
+    fi
+  done < "$SCAN_LIST_FILE"
 }
 
 # ---------------------------------------------------------------------------
@@ -800,9 +1014,15 @@ find_structural_consumers() {
   FILTERED_MIRRORS_JSON="$(printf '%s' "$bundle" | jq -c '.filtered_mirrors_detail')"
   FILTERED_MIRRORS_COUNT="$(printf '%s' "$bundle" | jq -r '.filtered_mirrors_count')"
 
-  # second_order scoped out for a path-literal consumer sweep.
+  # second_order scoped out for a path-literal consumer sweep. The scope-out is now
+  # POSITIVELY EMITTED as `not-run` rather than expressed as a zero: "deliberately not
+  # attempted" is a different claim from "measured, and empty", and a bare 0 makes them
+  # indistinguishable. The counter itself is deleted from the emit downstream (PV-7b —
+  # ABSENT, never 0, never null) by the null sentinel build_json passes.
   SECOND_ORDER_JSON="$(jq -n '[]')"
   SECOND_ORDER_COUNT=0
+  SECOND_ORDER_STATUS="not-run"
+  SECOND_ORDER_STATUS_REASON="mode=structural: second-order is out of scope for a path-literal consumer sweep"
 }
 
 # ---------------------------------------------------------------------------
@@ -861,7 +1081,20 @@ compute_second_order() {
   SECOND_ORDER_JSON="$(jq -n '[]')"
   SECOND_ORDER_COUNT=0
 
+  # The status DEFAULTS to `fetched` and is overwritten to `not-run` ONLY inside the
+  # depth-gate branch below. This function carries FOUR `return` statements and only the
+  # first is non-measuring: an empty first-order set, an empty raw second-order sweep and
+  # an empty post-filter set are all MEASURED-EMPTY results. Initialising the status
+  # beside the counter it replaces — the obvious place — would make every early return
+  # inherit the non-measuring default, so a depth-2 run over a file nothing references
+  # would report `not-run` and delete a counter that was in fact measured. That is
+  # mirroring the defective idiom while fixing it.
+  SECOND_ORDER_STATUS="fetched"
+  SECOND_ORDER_STATUS_REASON=""
+
   if [ "$ARG_DEPTH" -lt 2 ]; then
+    SECOND_ORDER_STATUS="not-run"
+    SECOND_ORDER_STATUS_REASON="depth<2: second-order traversal not attempted (--depth=${ARG_DEPTH})"
     return
   fi
 
@@ -902,6 +1135,11 @@ compute_second_order() {
       fo_paths="$(head -n "$ARG_MAX_EXPAND" <<<"$fo_paths")"
       PARTIAL=1
       PARTIAL_REASON="second-order expansion capped at --max-expand=${ARG_MAX_EXPAND} of ${fo_total} first-order referrers"
+      # Register A's `truncated`: the enumeration is a SAMPLE. The counter is RETAINED
+      # (the precedent's non-measuring set is exactly {degraded, not-run}; `truncated`
+      # keeps its counters), so the pre-existing exit-6 / .partial contract is untouched
+      # and the two markers agree rather than compete.
+      SECOND_ORDER_STATUS="truncated"
       err "PARTIAL RESULT: ${PARTIAL_REASON}"
     fi
   fi
@@ -1040,6 +1278,33 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# Resolve the final second-order status under the S-14 precedence:
+#     not-run  >  degraded  >  truncated  >  fetched
+#
+# `not-run` outranks `degraded` because a traversal that was never attempted cannot have
+# been corrupted by an unreadable file — naming unreadable files as the cause of a
+# non-measurement that was never scheduled would be a FALSE CAUSE.
+#
+# `degraded` outranks `truncated` because `degraded` deletes the counter and `truncated`
+# retains it: when the population is both sampled AND incompletely read, the safe
+# emission is the one that WITHHOLDS the number.
+#
+# The negative this buys is the load-bearing one: `fetched` cannot survive a non-zero
+# census. Note precisely what that warrants — `fetched` warrants that every SCAN-LISTED
+# member was read, NOT that the scan list is complete (DF-6, above).
+# ---------------------------------------------------------------------------
+resolve_second_order_status() {
+  if [ "$SECOND_ORDER_STATUS" = "not-run" ]; then
+    return 0
+  fi
+  if [ "${UNREADABLE_COUNT:-0}" -gt 0 ]; then
+    SECOND_ORDER_STATUS="degraded"
+    SECOND_ORDER_STATUS_REASON="degraded: ${UNREADABLE_COUNT} of ${TOTAL_FILES_SCANNED} scan-listed file(s) were unreadable; the referrer sweep did not examine the full scan list"
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # Assemble the v1 JSON output document
 # ---------------------------------------------------------------------------
 build_json() {
@@ -1057,9 +1322,45 @@ build_json() {
     exit "$EXIT_INTERNAL"
   fi
 
+  resolve_second_order_status
+
+  # Assemble the OPTIONAL stats_extra object ($16). Both cards' key sets merge HERE, at
+  # the single build_json_v1 call site, and the library merges once — one seam, not two
+  # competing mechanisms in one emit block.
+  #
+  # Two assembly rules that are not stylistic:
+  #  * A `_reason` member is OMITTED, never emitted as "". An interpolated empty string
+  #    is a PRESENT member, so `has(...)` returns true and the absence discriminator
+  #    silently breaks. (The library drops empty `_reason` members too; this is the
+  #    caller half of the same guarantee, not a duplicate of it.)
+  #  * `second_order_count` is passed as the null SENTINEL on a non-measuring status,
+  #    which deletes the base member. `total_files_scanned` is deliberately NOT in this
+  #    object at all: it is MEASURED on every path — the all-files fallback genuinely
+  #    counts a population, just a different one, and `scan_scope` is the field that
+  #    names WHICH. Register A can say whether a measurement happened; it has no member
+  #    for "measured, over a different population".
+  local stats_extra
+  stats_extra="$(jq -n \
+    --arg so_status     "$SECOND_ORDER_STATUS" \
+    --arg so_reason     "$SECOND_ORDER_STATUS_REASON" \
+    --argjson unreadable "${UNREADABLE_COUNT:-0}" \
+    --arg scope         "$SCAN_SCOPE" \
+    --arg scope_status  "$SCAN_SCOPE_STATUS" \
+    --arg scope_reason  "$SCAN_SCOPE_STATUS_REASON" \
+    '{
+       second_order_status: $so_status,
+       unreadable_files:    $unreadable,
+       scan_scope:          $scope,
+       scan_scope_status:   $scope_status
+     }
+     + (if $so_status == "not-run" or $so_status == "degraded"
+        then { second_order_count: null } else {} end)
+     + (if $so_reason    == "" then {} else { second_order_status_reason: $so_reason } end)
+     + (if $scope_reason == "" then {} else { scan_scope_status_reason: $scope_reason } end)')"
+
   # Delegate the envelope assembly to the shared library (single home of the
-  # schema-v1 top-level document). Behavior is byte-identical to the prior inline
-  # jq — the assembly was extracted verbatim (regression-guarded).
+  # schema-v1 top-level document). A caller passing only the first 15 arguments gets a
+  # byte-identical envelope, which is why domain-blast-radius.sh needs no edit.
   build_json_v1 \
     "$CLI_VERSION" \
     "$TARGET_REL" \
@@ -1075,7 +1376,8 @@ build_json() {
     "$FIRST_ORDER_JSON" \
     "$SECOND_ORDER_JSON" \
     "$FILTERED_MIRRORS_JSON" \
-    "$SCHEMA_VERSION"
+    "$SCHEMA_VERSION" \
+    "$stats_extra"
 }
 
 # ---------------------------------------------------------------------------
@@ -1085,19 +1387,39 @@ render_table() {
   local json="$1"
   local target depth include_mirrors total first_count second_count filtered elapsed
 
+  local scope scope_status scope_reason so_status so_reason
+
   target=$(printf '%s' "$json" | jq -r '.target')
   depth=$(printf '%s' "$json" | jq -r '.depth')
   include_mirrors=$(printf '%s' "$json" | jq -r '.include_mirrors')
   total=$(printf '%s' "$json" | jq -r '.stats.total_files_scanned')
   first_count=$(printf '%s' "$json" | jq -r '.stats.first_order_count')
-  second_count=$(printf '%s' "$json" | jq -r '.stats.second_order_count')
+  # `// "-"` so the read is safe when the counter is legitimately ABSENT. The numeric
+  # guard below MUST NOT run on that sentinel, which is why every consumer of
+  # $second_count sits behind a status branch.
+  second_count=$(printf '%s' "$json" | jq -r '.stats.second_order_count // "-"')
   filtered=$(printf '%s' "$json" | jq -r '.stats.filtered_mirrors')
   elapsed=$(printf '%s' "$json" | jq -r '.stats.elapsed_seconds')
+  # `//` defaults keep the presenter safe against an older payload that carries no status.
+  scope=$(printf '%s' "$json" | jq -r '.stats.scan_scope // "all-files"')
+  scope_status=$(printf '%s' "$json" | jq -r '.stats.scan_scope_status // "fetched"')
+  scope_reason=$(printf '%s' "$json" | jq -r '.stats.scan_scope_status_reason // ""')
+  so_status=$(printf '%s' "$json" | jq -r '.stats.second_order_status // ""')
+  so_reason=$(printf '%s' "$json" | jq -r '.stats.second_order_status_reason // ""')
 
   c_bold; printf 'Blast radius — '; c_reset; printf '%s\n' "$target"
-  c_dim;  printf '  depth=%s  include_mirrors=%s  scanned=%s files  elapsed=%ss  filtered_mirrors=%s\n' \
-    "$depth" "$include_mirrors" "$total" "$elapsed" "$filtered"
+  c_dim;  printf '  depth=%s  include_mirrors=%s  scanned=%s files (%s)  elapsed=%ss  filtered_mirrors=%s\n' \
+    "$depth" "$include_mirrors" "$total" "$scope" "$elapsed" "$filtered"
   c_reset
+
+  # A count is only comparable against another count over the SAME population, so the
+  # scope label rides beside it above — and a non-`fetched` scope gets a VISIBLE line,
+  # not a dim one, because that is the state a reader must not skim past.
+  if [ "$scope_status" != "fetched" ]; then
+    c_red
+    printf '  !! Scan scope: %s — %s\n' "$scope_status" "$scope_reason"
+    c_reset
+  fi
 
   # Visible on the degraded path so a human reading the table cannot mistake a truncated
   # run for a complete one (the JSON marker and exit 6 cover machine consumers).
@@ -1120,7 +1442,21 @@ render_table() {
     '
   fi
 
-  if [ "$depth" -ge 2 ]; then
+  # Branch on the STATUS first, never on the depth. Suppressing the whole block at
+  # depth 1 — the old behaviour — showed a human NOTHING, which reads as "nothing there".
+  # Silence is the human-facing twin of the ambiguous zero this card removes, so a
+  # non-measuring status now says so out loud.
+  if [ "$so_status" = "not-run" ] || [ "$so_status" = "degraded" ]; then
+    printf '\n'
+    c_bold; printf 'Second-order referrers\n'; c_reset
+    c_red
+    if [ "$so_status" = "not-run" ]; then
+      printf '  NOT COMPUTED — %s\n' "$so_reason"
+    else
+      printf '  DEGRADED — %s\n' "$so_reason"
+    fi
+    c_reset
+  elif [ "$depth" -ge 2 ]; then
     printf '\n'
     c_bold; printf 'Second-order referrers (%s)\n' "$second_count"; c_reset
     if [ "$second_count" -eq 0 ]; then
@@ -1156,15 +1492,22 @@ render_md() {
   local json="$1"
   local target depth include_mirrors total first_count second_count filtered elapsed scanned_at
 
+  local scope scope_status scope_reason so_status so_reason
+
   target=$(printf '%s' "$json" | jq -r '.target')
   depth=$(printf '%s' "$json" | jq -r '.depth')
   include_mirrors=$(printf '%s' "$json" | jq -r '.include_mirrors')
   total=$(printf '%s' "$json" | jq -r '.stats.total_files_scanned')
   first_count=$(printf '%s' "$json" | jq -r '.stats.first_order_count')
-  second_count=$(printf '%s' "$json" | jq -r '.stats.second_order_count')
+  second_count=$(printf '%s' "$json" | jq -r '.stats.second_order_count // "-"')
   filtered=$(printf '%s' "$json" | jq -r '.stats.filtered_mirrors')
   elapsed=$(printf '%s' "$json" | jq -r '.stats.elapsed_seconds')
   scanned_at=$(printf '%s' "$json" | jq -r '.scanned_at')
+  scope=$(printf '%s' "$json" | jq -r '.stats.scan_scope // "all-files"')
+  scope_status=$(printf '%s' "$json" | jq -r '.stats.scan_scope_status // "fetched"')
+  scope_reason=$(printf '%s' "$json" | jq -r '.stats.scan_scope_status_reason // ""')
+  so_status=$(printf '%s' "$json" | jq -r '.stats.second_order_status // ""')
+  so_reason=$(printf '%s' "$json" | jq -r '.stats.second_order_status_reason // ""')
 
   printf '# Blast radius — `%s`\n\n' "$target"
 
@@ -1179,8 +1522,25 @@ render_md() {
   printf '| depth | %s |\n' "$depth"
   printf '| include_mirrors | %s |\n' "$include_mirrors"
   printf '| total_files_scanned | %s |\n' "$total"
+  # Scope rows are UNCONDITIONAL on purpose. A conditional label is an absent-is-pass
+  # shape: a reader must never be able to infer `tracked` from a missing row.
+  printf '| scan_scope | %s |\n' "$scope"
+  printf '| scan_scope_status | %s |\n' "$scope_status"
+  if [ -n "$scope_reason" ]; then
+    printf '| scan_scope_status_reason | %s |\n' "$scope_reason"
+  fi
   printf '| first_order_count | %s |\n' "$first_count"
-  printf '| second_order_count | %s |\n' "$second_count"
+  if [ -n "$so_status" ]; then
+    printf '| second_order_status | %s |\n' "$so_status"
+  fi
+  # This row is where the false zero was most visible to a human: at depth 1 the old
+  # presenter printed `second_order_count | 0` unconditionally, over a traversal that
+  # never ran.
+  if [ "$so_status" = "not-run" ] || [ "$so_status" = "degraded" ]; then
+    printf '| second_order_count | _(not computed — %s)_ |\n' "$so_reason"
+  else
+    printf '| second_order_count | %s |\n' "$second_count"
+  fi
   printf '| filtered_mirrors | %s |\n' "$filtered"
   printf '| elapsed_seconds | %s |\n\n' "$elapsed"
 
@@ -1196,7 +1556,14 @@ render_md() {
     '
   fi
 
-  if [ "$depth" -ge 2 ]; then
+  if [ "$so_status" = "not-run" ] || [ "$so_status" = "degraded" ]; then
+    printf '\n## Second-order referrers\n\n'
+    if [ "$so_status" = "not-run" ]; then
+      printf '> **NOT COMPUTED** — %s\n' "$so_reason"
+    else
+      printf '> **DEGRADED** — %s\n' "$so_reason"
+    fi
+  elif [ "$depth" -ge 2 ]; then
     printf '\n## Second-order referrers (%s)\n\n' "$second_count"
     if [ "$second_count" -eq 0 ]; then
       printf '_(none)_\n'
@@ -1220,11 +1587,28 @@ render_md() {
 }
 
 # ---------------------------------------------------------------------------
+# Self-test fixture cleanup. A mode-000 directory cannot be enumerated by a recursive
+# remover, so the T5 outage fixture is chmod'd back before removal or the temp tree
+# leaks. Ends in `return 0` because it runs as an EXIT trap under `set -e`.
+# ---------------------------------------------------------------------------
+selftest_cleanup() {
+  local d
+  for d in "${SELFTEST_GIT_TMPDIR:-}" "${SELFTEST_RO_TMPDIR:-}"; do
+    if [ -n "$d" ] && [ -d "$d" ]; then
+      chmod -R u+rwX "$d" 2>/dev/null || true
+    fi
+  done
+  rm -rf "${SELFTEST_TMPDIR:-}" "${SELFTEST_GIT_TMPDIR:-}" "${SELFTEST_RO_TMPDIR:-}"
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # Built-in regression suite (--self-test)
 #
-# 13 assertions in 3 groups. HERMETIC: every fixture lives in an isolated mktemp tree
-# scanned via --root, so counts never depend on the surrounding repo. No network, no gh,
-# no git. Runs in ~2s.
+# 36 assertions in 5 groups. HERMETIC: every fixture lives in an isolated mktemp tree
+# scanned via --root, so counts never depend on the surrounding repo. No network, no gh.
+# The T5 group creates its OWN throwaway git repo under mktemp — it never reads the
+# surrounding checkout — and is skipped, visibly, when git is absent.
 #
 # The suite asserts STRUCTURE and COUNTS, never wall-clock. A timing assertion on a
 # shared CI runner is a flake generator; asserting the defect shape directly is
@@ -1238,13 +1622,26 @@ render_md() {
 # unmarked; T3 forces the bounded path and proves the marker fires, names the true
 # total, and truncates for real. T2e and T3e are the specificity arms proving the
 # marker is not always-on.
+#
+# T4 (second-order measurement state) and T5 (enumeration scope) each pair every
+# defect assertion with a SPECIFICITY arm on the same fixture, because the whole point
+# of both groups is that a degraded state and a clean state must not be confusable — an
+# assertion that only ever sees the degraded arm cannot prove that.
+#
+# A SKIP is a DISTINCT OUTCOME, never a PASS. Two arms carry preconditions that a root
+# shell silently defeats (`chmod 000` does not block a uid-0 read), and the T5 group
+# needs git, which this tool treats as optional. An arm whose precondition fails prints
+# SKIP and increments a visible counter — a silently-skipped assertion is precisely the
+# absent-is-pass shape this release exists to remove, and shipping one inside the suite
+# that polices it would be self-refuting.
 # ---------------------------------------------------------------------------
 run_self_test() {
   local self="${BASH_SOURCE[0]}"
-  local pass=0 fail=0
+  local pass=0 fail=0 skipped=0
 
   st_ok()   { pass=$((pass + 1)); printf '  PASS  %s\n' "$1"; }
   st_bad()  { fail=$((fail + 1)); printf '  FAIL  %s\n' "$1"; }
+  st_skip() { skipped=$((skipped + 1)); printf '  SKIP  %s\n' "$1"; }
   st_eq()   { # st_eq <expected> <actual> <label>
     if [ "$1" = "$2" ]; then st_ok "$3 [$2]"; else st_bad "$3 — expected '$1', got '$2'"; fi
   }
@@ -1293,10 +1690,15 @@ run_self_test() {
   # -------------------------------------------------------------------------
   local fx i
   SELFTEST_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/blast-radius-selftest.XXXXXX")"
-  trap 'rm -rf "${SELFTEST_TMPDIR:-}"' EXIT
+  trap 'selftest_cleanup' EXIT
   fx="$SELFTEST_TMPDIR"
-  mkdir -p "$fx/docs" "$fx/refs" "$fx/so"
+  mkdir -p "$fx/docs" "$fx/refs" "$fx/so" "$fx/iso"
   printf 'the target; it references nothing\n' > "$fx/docs/target.md"
+  # T4e's measured-empty control surface. Deliberately isolated: neither file mentions
+  # docs/target.md, refs/r01.md or refs/r12.md, and neither basename collides with an
+  # existing one, so T2c (fo=12) and T2d (so=7) are unaffected by construction.
+  printf 'isolated base; it references nothing\n' > "$fx/iso/base.md"
+  printf 'isolated referrer -> iso/base.md\n'     > "$fx/iso/ref.md"
   for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
     printf 'first-order referrer %s -> docs/target.md\n' "$i" > "$fx/refs/r${i}.md"
   done
@@ -1360,7 +1762,289 @@ run_self_test() {
   { [ "$rc" = "0" ] && [ "$partial" = "false" ] && [ "$so" = "7" ]; } || rc2=1
   st_true "$rc2" "T3e SPECIFICITY: --max-expand=0 (unlimited) exits 0, no marker, full so=7"
 
-  printf '\n%s/%s assertions passed\n' "$pass" "$((pass + fail))"
+  # -------------------------------------------------------------------------
+  # T4 — second-order MEASUREMENT STATE (#5260). The defect: at --depth=1 (NOT COMPUTED)
+  # and at --depth=2 over an empty surface (MEASURED EMPTY) the envelope was identical
+  # except for the `depth` echo — an input, not a measurement.
+  # -------------------------------------------------------------------------
+  local so_status so_reason has_count unreadable
+  rc=0
+  bash "$self" --root "$fx" --format=json --depth=1 docs/target.md > "$out" 2>"$err_out" || rc=$?
+
+  so_status="$(jq -r '.stats.second_order_status' "$out" 2>/dev/null || echo ERR)"
+  st_eq "not-run" "$so_status" "T4a depth-1 emits second_order_status"
+
+  has_count="$(jq -r '.stats | has("second_order_count")' "$out" 2>/dev/null || echo ERR)"
+  st_eq "false" "$has_count" "T4b THE DEFECT ASSERTION: depth-1 DELETES second_order_count — absent, not 0"
+
+  so_reason="$(jq -r '.stats.second_order_status_reason // ""' "$out" 2>/dev/null || echo "")"
+  rc=0
+  { [ -n "$so_reason" ] && grep -q -F -e '--depth=1' <<<"$so_reason"; } || rc=1
+  st_true "$rc" "T4c depth-1 reason names the depth [${so_reason}]"
+
+  bytes="$(wc -c < "$out" | tr -d ' ')"
+  rc=0; [ "${bytes:-0}" -gt 200 ] || rc=1
+  st_true "$rc" "T4g EXTRACTION control: the depth-1 output is ${bytes:-0} bytes, so T4b's has()==false is a real absence"
+
+  rc=0
+  bash "$self" --root "$fx" --format=json --depth=2 docs/target.md > "$out" 2>"$err_out" || rc=$?
+  so_status="$(jq -r '.stats.second_order_status' "$out" 2>/dev/null || echo ERR)"
+  so="$(jq -r '.stats.second_order_count' "$out" 2>/dev/null || echo ERR)"
+  rc=0
+  { [ "$so_status" = "fetched" ] && [ "$so" = "7" ]; } || rc=1
+  st_true "$rc" "T4d SENSITIVITY: same target/root at --depth=2 measures (status=$so_status, so=$so)"
+
+  # The card's AC-1 control, verbatim: a genuinely empty second-order surface must report
+  # the MEASURED state, never `not-run`. Absence of a status is not a measurement.
+  rc=0
+  bash "$self" --root "$fx" --format=json --depth=2 iso/base.md > "$out" 2>"$err_out" || rc=$?
+  so_status="$(jq -r '.stats.second_order_status' "$out" 2>/dev/null || echo ERR)"
+  so="$(jq -r '.stats.second_order_count' "$out" 2>/dev/null || echo ERR)"
+  rc=0
+  { [ "$so_status" = "fetched" ] && [ "$so" = "0" ]; } || rc=1
+  st_true "$rc" "T4e SPECIFICITY (AC-1 control): a MEASURED-EMPTY depth-2 run reports fetched + count 0, not not-run (status=$so_status, so=$so)"
+
+  rc=0
+  bash "$self" --root "$fx" --mode=structural --format=json release/releases/notes > "$out" 2>"$err_out" || rc=$?
+  so_status="$(jq -r '.stats.second_order_status' "$out" 2>/dev/null || echo ERR)"
+  has_count="$(jq -r '.stats | has("second_order_count")' "$out" 2>/dev/null || echo ERR)"
+  so_reason="$(jq -r '.stats.second_order_status_reason // ""' "$out" 2>/dev/null || echo "")"
+  rc=0
+  { [ "$so_status" = "not-run" ] && [ "$has_count" = "false" ] \
+    && grep -q -F -e 'mode=structural' <<<"$so_reason"; } || rc=1
+  st_true "$rc" "T4f --mode=structural: status=$so_status, has(second_order_count)=$has_count, reason names the mode"
+
+  rc=0
+  bash "$self" --root "$fx" --format=json --depth=2 --max-expand=3 docs/target.md > "$out" 2>"$err_out" || rc=$?
+  so_status="$(jq -r '.stats.second_order_status' "$out" 2>/dev/null || echo ERR)"
+  so="$(jq -r '.stats.second_order_count' "$out" 2>/dev/null || echo ERR)"
+  partial="$(jq -r '.partial // false' "$out" 2>/dev/null || echo ERR)"
+  rc2=0
+  { [ "$so_status" = "truncated" ] && [ "$so" = "5" ] && [ "$partial" = "true" ] && [ "$rc" = "6" ]; } || rc2=1
+  st_true "$rc2" "T4h truncated is NOT folded into not-run: status=$so_status, so=$so PRESENT, partial=$partial, exit=$rc"
+
+  # T4i/T4j — `degraded` reachability. The census decides readability BEFORE the scan and
+  # independently of grep's status, which xargs collapses (rc=2 unreadable becomes rc=1
+  # clean-no-match), so an rc-based predicate could not discriminate here at all.
+  local rofx rolocked
+  SELFTEST_RO_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/blast-radius-selftest-ro.XXXXXX")"
+  rofx="$SELFTEST_RO_TMPDIR/corpus"
+  rolocked="$rofx/locked.md"
+  mkdir -p "$rofx/docs"
+  printf 'the target; it references nothing\n' > "$rofx/docs/target.md"
+  printf 'readable referrer -> docs/target.md\n' > "$rofx/r1.md"
+  printf 'locked referrer -> docs/target.md\n'   > "$rolocked"
+  chmod 000 "$rolocked" 2>/dev/null || true
+
+  # MANDATORY precondition guard. `[ -r ]` resolves through access(2), which SUCCEEDS for
+  # uid 0 on a mode-000 file — so under root this arm would observe `fetched` and pass as
+  # a clean result, reproducing the exact failure class the release exists to remove.
+  # On guard failure: SKIP loudly, never assert a verdict.
+  if [ -r "$rolocked" ]; then
+    st_skip "T4i/T4j SKIPPED — the mode-000 precondition does not hold (running as uid $(id -u)?); the degraded-vs-fetched assertions were NOT RUN"
+    skipped=$((skipped + 1))   # two arms skipped, not one
+  else
+    rc=0
+    bash "$self" --root "$rofx" --format=json --depth=2 docs/target.md > "$out" 2>"$err_out" || rc=$?
+    so_status="$(jq -r '.stats.second_order_status' "$out" 2>/dev/null || echo ERR)"
+    has_count="$(jq -r '.stats | has("second_order_count")' "$out" 2>/dev/null || echo ERR)"
+    unreadable="$(jq -r '.stats.unreadable_files' "$out" 2>/dev/null || echo ERR)"
+    so_reason="$(jq -r '.stats.second_order_status_reason // ""' "$out" 2>/dev/null || echo "")"
+    rc2=0
+    { [ "$so_status" = "degraded" ] && [ "$has_count" = "false" ] && [ "$unreadable" = "1" ] \
+      && grep -q -F -e '1 of ' <<<"$so_reason"; } || rc2=1
+    st_true "$rc2" "T4i SENSITIVITY: an unreadable scan-listed file yields degraded (status=$so_status, has(second_order_count)=$has_count, unreadable_files=$unreadable)"
+
+    chmod 644 "$rolocked" 2>/dev/null || true
+    rc=0
+    bash "$self" --root "$rofx" --format=json --depth=2 docs/target.md > "$out" 2>"$err_out" || rc=$?
+    so_status="$(jq -r '.stats.second_order_status' "$out" 2>/dev/null || echo ERR)"
+    has_count="$(jq -r '.stats | has("second_order_count")' "$out" 2>/dev/null || echo ERR)"
+    unreadable="$(jq -r '.stats.unreadable_files' "$out" 2>/dev/null || echo ERR)"
+    rc2=0
+    { [ "$so_status" = "fetched" ] && [ "$has_count" = "true" ] && [ "$unreadable" = "0" ]; } || rc2=1
+    st_true "$rc2" "T4j SPECIFICITY: the SAME corpus, file made readable, reports fetched + count present (status=$so_status, unreadable_files=$unreadable)"
+  fi
+
+  # T4k — the PV-7b LIBRARY invariant, called directly. This is R3-2's canary: the
+  # guarantee that a counter can never be emitted beside its own non-measuring status
+  # must be enforced by a LINE, not by caller convention, for every present and future
+  # caller. The control limb is mandatory and is not decoration — an arm without it would
+  # also pass against a clause that deleted every zero, which would destroy this card's
+  # entire purpose (a MEASURED empty must be reported as 0).
+  local k_bad k_good k_reg krc
+  k_bad="$(build_json_v1 x t 2026-01-01T00:00:00Z /r 2 false 3 2 0 0 "0.0" '[]' '[]' '[]' 1 \
+    '{"second_order_status":"not-run","second_order_count":0}' | jq -r '.stats | has("second_order_count")')"
+  k_good="$(build_json_v1 x t 2026-01-01T00:00:00Z /r 2 false 3 2 0 0 "0.0" '[]' '[]' '[]' 1 \
+    '{"second_order_status":"fetched","second_order_count":0}' | jq -r '.stats.second_order_count')"
+  krc=0
+  ( build_json_v1 x t 2026-01-01T00:00:00Z /r 2 false 3 2 0 0 "0.0" '[]' '[]' '[]' 1 \
+    '{"not_a_registered_key":1}' ) >/dev/null 2>&1 || krc=$?
+  k_reg="$krc"
+  rc2=0
+  { [ "$k_bad" = "false" ] && [ "$k_good" = "0" ] && [ "$k_reg" != "0" ]; } || rc2=1
+  st_true "$rc2" "T4k library PV-7b invariant: not-run+0 deletes the counter [$k_bad], CONTROL fetched+0 SURVIVES as [$k_good], unregistered key exits [$k_reg]"
+
+  # -------------------------------------------------------------------------
+  # T5 — ENUMERATION SCOPE (#5074). Guarded on `command -v git` because branch 1 of
+  # try_git_tracked_candidates says git-absence is a SUPPORTED configuration; the suite
+  # must not convert an optional dependency into a required one. A skip is visible.
+  # -------------------------------------------------------------------------
+  if ! command -v git >/dev/null 2>&1; then
+    st_skip "T5* SKIPPED (git unavailable) — tracked-scoping assertions NOT RUN"
+    skipped=$((skipped + 11))   # T5z..T5k, minus the one counted by st_skip
+  else
+    local gfx gout g_tracked g_scope g_scope_status g_reason g_tfs g_fo g_findmd
+    SELFTEST_GIT_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/blast-radius-selftest-git.XXXXXX")"
+    gfx="$SELFTEST_GIT_TMPDIR/repo"
+    gout="$SELFTEST_GIT_TMPDIR/gout.json"     # OUTSIDE $gfx: the tool's own output must
+    mkdir -p "$gfx/docs" "$gfx/ign"           # never enter the scanned tree
+    printf 'the target; it references nothing\n'    > "$gfx/docs/target.md"
+    printf 'tracked referrer A -> docs/target.md\n' > "$gfx/t1.md"
+    printf 'tracked referrer B -> docs/target.md\n' > "$gfx/t2.md"
+    printf 'ignored referrer C -> docs/target.md\n' > "$gfx/ign/i1.md"
+    printf 'ignored referrer D -> docs/target.md\n' > "$gfx/ign/i2.md"
+    printf 'ign/\n' > "$gfx/.gitignore"
+    # The config/HOME overrides are a per-command PREFIX and are never exported: a global
+    # core.excludesFile would otherwise change the fixture's tracked set and make the
+    # suite machine-dependent, and an exported HOME would leak into the tool under test.
+    # No `git commit` — `ls-files` reads the INDEX, which `add` populates, so no user
+    # identity is required.
+    env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+        HOME="$gfx" XDG_CONFIG_HOME="$gfx/.config" git -C "$gfx" init -q >/dev/null 2>&1 || true
+    env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+        HOME="$gfx" XDG_CONFIG_HOME="$gfx/.config" git -C "$gfx" add -A >/dev/null 2>&1 || true
+
+    g_tracked="$(git -C "$gfx" ls-files 2>/dev/null | grep -c . || true)"
+    rc=0; [ "${g_tracked:-0}" -ge 4 ] || rc=1
+    st_true "$rc" "T5z EXTRACTION control: the git fixture really is a work tree with tracked content (${g_tracked:-0} paths)"
+
+    # Hermeticity guard (Stage-4 R-1): the EXISTING non-git fixtures keep working.
+    rc=0
+    bash "$self" --root "$fx" --format=json --depth=2 docs/target.md > "$out" 2>"$err_out" || rc=$?
+    g_scope="$(jq -r '.stats.scan_scope' "$out" 2>/dev/null || echo ERR)"
+    g_scope_status="$(jq -r '.stats.scan_scope_status' "$out" 2>/dev/null || echo ERR)"
+    rc2=0
+    { [ "$g_scope" = "all-files" ] && [ "$g_scope_status" = "not-run" ]; } || rc2=1
+    st_true "$rc2" "T5a HERMETICITY: the non-git fixture resolves all-files / not-run (scope=$g_scope, status=$g_scope_status)"
+
+    g_tfs="$(jq -r '.stats.total_files_scanned' "$out" 2>/dev/null || echo ERR)"
+    rc=0; [ "${g_tfs:-0}" -gt 0 ] || rc=1
+    st_true "$rc" "T5b R-1 REGRESSION GUARD: counts do NOT collapse to zero on a non-git root (total_files_scanned=$g_tfs)"
+
+    rc=0
+    bash "$self" --root "$gfx" --format=json --depth=2 docs/target.md > "$gout" 2>"$err_out" || rc=$?
+    g_scope="$(jq -r '.stats.scan_scope' "$gout" 2>/dev/null || echo ERR)"
+    g_scope_status="$(jq -r '.stats.scan_scope_status' "$gout" 2>/dev/null || echo ERR)"
+    g_reason="$(jq -r '.stats | has("scan_scope_status_reason")' "$gout" 2>/dev/null || echo ERR)"
+    rc2=0
+    { [ "$g_scope" = "tracked" ] && [ "$g_scope_status" = "fetched" ] && [ "$g_reason" = "false" ]; } || rc2=1
+    st_true "$rc2" "T5c git fixture: tracked / fetched, and the reason is ABSENT — not an empty string (scope=$g_scope, status=$g_scope_status, has_reason=$g_reason)"
+
+    g_fo="$(jq -r '.stats.first_order_count' "$gout" 2>/dev/null || echo ERR)"
+    st_eq "2" "$g_fo" "T5d SENSITIVITY: the tracked path genuinely finds referrers"
+
+    g_tfs="$(jq -r '.stats.total_files_scanned' "$gout" 2>/dev/null || echo ERR)"
+    rc2=0
+    { [ "$g_tfs" = "3" ] \
+      && ! jq -e '[.first_order[].path] | map(startswith("ign/")) | any' "$gout" >/dev/null 2>&1; } || rc2=1
+    st_true "$rc2" "T5e THE DEFECT ASSERTION (AC-2): git-ignored referrers are excluded (total_files_scanned=$g_tfs, no first_order path under ign/)"
+
+    g_findmd="$(find "$gfx" -type f -name '*.md' 2>/dev/null | grep -c . || true)"
+    rc=0; [ "${g_findmd:-0}" -gt "${g_tfs:-0}" ] || rc=1
+    st_true "$rc" "T5f NON-VACUITY control: find sees ${g_findmd:-0} .md files, strictly more than the ${g_tfs:-0} reported — the fixture exercises the filter"
+
+    rc=0
+    bash "$self" --root "$gfx" --mode=structural --format=json release/releases/notes > "$gout" 2>"$err_out" || rc=$?
+    g_scope="$(jq -r '.stats.scan_scope' "$gout" 2>/dev/null || echo ERR)"
+    st_eq "tracked" "$g_scope" "T5g both build_scan_list call sites covered (--mode=structural)"
+
+    # T5h/T5i — `degraded` REACHABILITY. A garbage .git/index makes ls-files exit non-zero
+    # on every git that validates the DIRC signature, while rev-parse still succeeds — so
+    # branch 3 is reached and branch 2 is not. PV-7a requires a distinct member for every
+    # REACHABLE state; this is what stops `degraded` shipping untested.
+    cp "$gfx/.git/index" "$SELFTEST_GIT_TMPDIR/index.bak" 2>/dev/null || true
+    printf 'not a git index\n' > "$gfx/.git/index"
+    rc=0
+    bash "$self" --root "$gfx" --format=json --depth=2 docs/target.md > "$gout" 2>"$err_out" || rc=$?
+    g_scope="$(jq -r '.stats.scan_scope' "$gout" 2>/dev/null || echo ERR)"
+    g_scope_status="$(jq -r '.stats.scan_scope_status' "$gout" 2>/dev/null || echo ERR)"
+    g_reason="$(jq -r '.stats.scan_scope_status_reason // ""' "$gout" 2>/dev/null || echo "")"
+    if [ "$g_scope_status" = "degraded" ]; then
+      rc2=0; grep -q -F -e 'ls-files failed' <<<"$g_reason" || rc2=1
+      st_true "$rc2" "T5h degraded is REACHABLE: a corrupt index yields degraded, reason names the exit [${g_reason}]"
+    else
+      # Do not ship an untested member: if the forcing is unreliable on this git, say so
+      # loudly rather than recording a pass for an assertion whose subject never ran.
+      st_skip "T5h SKIPPED — could not force ls-files to fail on this git (observed scan_scope_status=$g_scope_status); the degraded member is UNTESTED here"
+    fi
+
+    g_tfs="$(jq -r '.stats.total_files_scanned' "$gout" 2>/dev/null || echo ERR)"
+    rc2=0
+    { [ "$rc" = "0" ] && [ "$g_scope" = "all-files" ] && [ "${g_tfs:-0}" -gt 0 ]; } || rc2=1
+    st_true "$rc2" "T5i PV-7c (must never gate): the degraded run exits 0, falls back to all-files, and does not zero the count (exit=$rc, scope=$g_scope, tfs=$g_tfs)"
+
+    cp "$SELFTEST_GIT_TMPDIR/index.bak" "$gfx/.git/index" 2>/dev/null || true
+
+    # T5j/T5k — enumeration OUTAGE vs an ordinary worktree deletion. Its own fixture, so
+    # the T5z-T5i constants above are untouched.
+    local g2 g2_shut g2_undamaged
+    g2="$SELFTEST_GIT_TMPDIR/repo2"
+    g2_shut="$g2/shut"
+    mkdir -p "$g2/docs" "$g2_shut" "$g2/gone"
+    printf 'the target; it references nothing\n'    > "$g2/docs/target.md"
+    printf 'tracked referrer A -> docs/target.md\n' > "$g2/t1.md"
+    printf 'shut referrer -> docs/target.md\n'      > "$g2_shut/s1.md"
+    printf 'doomed referrer -> docs/target.md\n'    > "$g2/gone/g1.md"
+    printf 'doomed file -> docs/target.md\n'        > "$g2/d1.md"
+    env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+        HOME="$g2" XDG_CONFIG_HOME="$g2/.config" git -C "$g2" init -q >/dev/null 2>&1 || true
+    env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+        HOME="$g2" XDG_CONFIG_HOME="$g2/.config" git -C "$g2" add -A >/dev/null 2>&1 || true
+
+    rc=0
+    bash "$self" --root "$g2" --format=json --depth=2 docs/target.md > "$gout" 2>"$err_out" || rc=$?
+    g2_undamaged="$(jq -r '.stats.total_files_scanned' "$gout" 2>/dev/null || echo 0)"
+
+    chmod 000 "$g2_shut" 2>/dev/null || true
+    if [ -x "$g2_shut" ]; then
+      st_skip "T5j SKIPPED — a mode-000 directory is still traversable (running as uid $(id -u)?); the outage assertion was NOT RUN"
+    else
+      rc=0
+      bash "$self" --root "$g2" --format=json --depth=2 docs/target.md > "$gout" 2>"$err_out" || rc=$?
+      g_scope="$(jq -r '.stats.scan_scope' "$gout" 2>/dev/null || echo ERR)"
+      g_scope_status="$(jq -r '.stats.scan_scope_status' "$gout" 2>/dev/null || echo ERR)"
+      g_reason="$(jq -r '.stats.scan_scope_status_reason // ""' "$gout" 2>/dev/null || echo "")"
+      g_tfs="$(jq -r '.stats.total_files_scanned' "$gout" 2>/dev/null || echo ERR)"
+      rc2=0
+      { [ "$g_scope" = "tracked" ] && [ "$g_scope_status" = "degraded" ] \
+        && grep -q -E -e '[1-9][0-9]* enumerated file' <<<"$g_reason" \
+        && [ "$g_tfs" = "$((g2_undamaged - 1))" ] && [ "$rc" = "0" ]; } || rc2=1
+      st_true "$rc2" "T5j OUTAGE SENSITIVITY: a tracked file behind an untraversable directory yields degraded + a short count (status=$g_scope_status, tfs=$g_tfs of $g2_undamaged, exit=$rc)"
+    fi
+    chmod 755 "$g2_shut" 2>/dev/null || true
+
+    # The arm that catches a naive `[ -x parent ]` classifier. A tracked DIRECTORY deleted
+    # from the worktree is indistinguishable from a shut one under `-d`/`-x` alike, so a
+    # one-line test would emit a false `degraded` on every ordinary recursive delete and
+    # nothing would go red. This arm is not optional.
+    rm -rf "$g2/gone"
+    rm -f "$g2/d1.md"
+    rc=0
+    bash "$self" --root "$g2" --format=json --depth=2 docs/target.md > "$gout" 2>"$err_out" || rc=$?
+    g_scope_status="$(jq -r '.stats.scan_scope_status' "$gout" 2>/dev/null || echo ERR)"
+    g_reason="$(jq -r '.stats | has("scan_scope_status_reason")' "$gout" 2>/dev/null || echo ERR)"
+    g_tfs="$(jq -r '.stats.total_files_scanned' "$gout" 2>/dev/null || echo ERR)"
+    rc2=0
+    { [ "$g_scope_status" = "fetched" ] && [ "$g_reason" = "false" ] \
+      && [ "$g_tfs" = "$((g2_undamaged - 2))" ]; } || rc2=1
+    st_true "$rc2" "T5k EXPECTED-DROP SPECIFICITY: an ordinary deletion of a tracked FILE and a tracked DIRECTORY leaves fetched (status=$g_scope_status, has_reason=$g_reason, tfs=$g_tfs of $g2_undamaged)"
+  fi
+
+  printf '\n%s/%s assertions passed, %s skipped\n' "$pass" "$((pass + fail))" "$skipped"
+  if [ "$skipped" -gt 0 ]; then
+    printf 'blast-radius --self-test: %s assertion(s) SKIPPED — their subject was NOT evaluated. A skip is not a pass.\n' "$skipped" >&2
+  fi
   if [ "$fail" -gt 0 ]; then
     printf 'blast-radius --self-test: FAILED (%s)\n' "$fail" >&2
     return 1
