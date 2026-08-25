@@ -117,6 +117,31 @@ before routing continues. Neither alone is sufficient (`core/standards/hub-sessi
    | `POST > PRE + N` | a surplus row of this class exists | **BLOCKED** — structural defect. Do NOT emit again; reconcile the surplus first. |
    | no integer on stdout, or a non-zero exit | the probe could not answer | **BLOCKED** — unverified, which is neither a zero nor a pass. Fix the invocation and re-read. |
 
+   **Assert on CONTENT when the class carries an identifier.** A delta is a COUNT,
+   and a count cannot ATTRIBUTE. Measured on the live population: **42.1% of
+   (release, stage, type, subtype) classes carry more than one row**, **74.8% of all
+   rows sit in a collision-capable class**, and **303 classes hold two or more rows
+   written in the same second**. `POST == PRE + N` is therefore satisfiable by a
+   sibling row while the write under test is missing entirely — the delta is right
+   and the conclusion is wrong. When the emitted row carries its own identifier
+   (`D-N`, `AI-NNN`), assert on that token, with both arms:
+
+   ```bash
+   Q="release/tools/query-pipeline-event.sh --release <SLUG> --event-type <t> --event-subtype <s> --stage <N>"
+   $Q --payload-contains "<ID>"     --count   # subject     — MUST equal the rows emitted for <ID>
+   $Q                               --count   # sensitivity — MUST be >= subject (the reader is live on this class)
+   $Q --payload-contains "<ID>-zz"  --count   # specificity — MUST be 0
+   ```
+
+   **A subject zero whose SENSITIVITY arm is also zero is a BROKEN PROBE, not a
+   failed emission.** Report the probe unusable and fix the invocation; do not
+   record a zero you cannot distinguish from a dead reader. `--payload-contains` is
+   a fixed-string test precisely so a rejected pattern cannot manufacture that zero.
+
+   When the class carries NO identifier the `PRE`/`POST` delta remains the only
+   available check. Attest it **and state that it does not attribute**. Never
+   present a non-attributing delta as a content verification.
+
    **Why a surplus blocks, and why "emit the row" is not the reflex remedy.**
    `gate-outcome/plan-review-go` is consumed downstream as the EARLIEST matching row
    of the release, so a second row of it silently re-anchors the release's measured
@@ -144,6 +169,24 @@ before routing continues. Neither alone is sufficient (`core/standards/hub-sessi
    reused), run § 4a.1 first if the file does not exist, and emit the matching
    `decision`/`action-item-opened` row. Every subsequent status transition emits
    its mapped `action-item-*` subtype per that standard's § 3.
+6. **Population reconciliation** — at Procedure 7 Close, and after any session that
+   direct-edited either surface. Run:
+
+   ```bash
+   release/tools/check-event-record-integrity.sh
+   ```
+
+   Report the denominators it prints. **A post-cutover violation BLOCKS close.**
+
+   This is not a duplicate of step 4, and the difference is structural: a per-write
+   assertion can only see writes that were ATTEMPTED. It cannot detect a row that
+   was never emitted at all, a row edited in place afterwards, or a ledger whose
+   status advanced while the log stayed silent — no per-write check can, because
+   nothing invoked it at the moment the omission happened. Only a sweep over the
+   whole population can, and only a sweep that grades CONTENT rather than counting
+   rows: on the live data a row-count comparison sees **109** discrepancies where a
+   content join sees **134 + 25 = 159**, because a count NETS two opposite failures
+   into one smaller number and reports the difference as health.
 
 <!-- Restated from core/standards/hub-action-tracking.md § 2.1, which is NOT
      deployed: this file ships inside packages/release-hub.skill and is read at
@@ -152,6 +195,14 @@ before routing continues. Neither alone is sufficient (`core/standards/hub-sessi
 category enum: deferred-edit / reminder / cleanup / decision-to-post /
                cross-issue-merge / verification / decision-deferred
 -->
+
+**Retiring a decision is an emission, never an edit.** When a rendered decision is
+reversed, retired or retracted, append a `decision`/`decision-superseded` row naming BOTH
+ids per the § 11.8.1 vocabulary (`superseded:` = the retired id, `by:` = the one retiring
+it, `reason:`). Do NOT mutate the original row: § 4.1 forbids it, and the row-count
+parity control cannot see an in-place rewrite, so the edit would be both prohibited and
+invisible to the check that would otherwise catch it. Full convention:
+`release/references/standards/pipeline-event-log-schema.md` § 3.
 
 A routing step that advances with a rendered decision and no emitted row is incomplete.
 
@@ -296,6 +347,7 @@ when their gate fires.
 | orphan-cleanup-apply | 7 | decision | d-class | operator | CONDITIONAL |
 | self-repair | 4 | self-repair | retry | hub | CONDITIONAL |
 | delegation-fork | 2 | decision | delegation | hub | CONDITIONAL |
+| decision-supersession | 4a | decision | decision-superseded | hub | CONDITIONAL |
 <!-- EMISSION-CONTRACT:END -->
 
 **Why exactly three `MUST` rows.** The partition predicate is *structural guarantee in a
