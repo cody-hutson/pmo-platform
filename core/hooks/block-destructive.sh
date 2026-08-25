@@ -365,13 +365,21 @@ is_script_allowlisted() {
 # WHAT "CANNOT FULLY RESOLVE" MEANS CONCRETELY. Two shapes: the token opens a
 # quote it never closes (`bash 'my` — segment splitting cut a space-bearing path
 # in half), or it closes and then CONTINUES (`'./a''`, `'./a'b`) so the real name
-# is a concatenation whose other half is outside this token. Both set
+# is a concatenation of the quoted run with whatever follows it. Both set
 # script_norm_ok=0 and the caller denies. The value returned alongside is a
 # FILTER PROBE, not a path: it exists so the arm can ask "is my operand domain
-# even implicated?" before denying. Without that probe every `bash -c 'a; …'`
+# even implicated?" before denying. Without that question every `bash -c 'a; …'`
 # would deny, because segment splitting hands the `-c` arm the fragment `'a`.
-# The probe keeps the deny inside each arm's declared operand domain — arm
-# `F1-FP-cmode` is the false-positive control for exactly that.
+# Keeping the deny inside each arm's declared operand domain is what arm
+# `F1-FP-cmode` controls for.
+#
+# THE PROBE IS A PREFIX, AND ON ITS OWN IT CANNOT ANSWER THAT QUESTION. In the
+# second shape above the rest of the real filename is still in the RAW TOKEN,
+# and the probe has truncated it away: `'/tmp/'evil.sh` runs `/tmp/evil.sh` and
+# probes to `/tmp/`. Every arm's domain asks a SUFFIX question, so a probe-only
+# test reported "not my operand" and skipped a deny it was never meant to gate.
+# Callers therefore go through script_operand_implicated, which asks the probe
+# AND the raw token; this function is unchanged and is NOT where that was fixed.
 #
 # NOT CLAIMED: that a quote-bearing filename always resolves. `"./x\".sh"`
 # resolves to `./x\` and fails the allowlist. That is the safe direction, it is
@@ -385,9 +393,16 @@ is_script_allowlisted() {
 # may legally contain. So the function assigns and the caller reads.
 #   script_norm_out — the path to adjudicate (or the filter probe when ok=0)
 #   script_norm_ok  — 1 resolves to exactly ONE literal filename; 0 it does not
+#   script_norm_raw — the token EXACTLY as argv presented it, always. Added
+#     because the probe is a strict PREFIX of the real filename, and an arm whose
+#     operand filter is SUFFIX-anchored cannot answer its own question from a
+#     prefix — see script_operand_implicated below, which is the only reader.
+#     This function's resolution logic is unchanged; this is a third output, not
+#     a different answer.
 normalize_script_token() {
   local t="$1" q="" body="" prev=""
   script_norm_ok=1
+  script_norm_raw="$1"
   case "$t" in
     \"*|\'*)
       q="${t:0:1}"
@@ -415,6 +430,148 @@ normalize_script_token() {
     t="${t%[\"\'\`\(\)\;\&\|\<\>]}"
   done
   script_norm_out="$t"
+}
+
+# Decide whether the token just normalized falls inside ONE arm's declared operand
+# domain — the question each arm's `case` filter was already written to answer.
+#
+# THE SUBJECT RULE, WHICH IS THE WHOLE OF THIS FUNCTION. When the token RESOLVED
+# (script_norm_ok=1) script_norm_out IS the filename the shell will operate on, it
+# is the only subject, and nothing here changes. When it did NOT resolve,
+# script_norm_out is a strict PREFIX of that filename and nothing more. Every
+# domain below asks at least one SUFFIX question (`*.sh`, `*.bash`), and a suffix
+# question CANNOT be answered from a prefix — it reports "outside my domain" for a
+# token whose real name ends in `.sh`, the arm skips, and the deny
+# check_script_target was about to raise is never reached.
+#
+# That is precisely how `bash '/tmp/'evil.sh` — ordinary quote-adjacent shell
+# concatenation, which runs the real and non-allowlisted /tmp/evil.sh — went from
+# DENY to a silent ALLOW: the token opens a quote, closes it, then continues, so
+# the resolution correctly declines and hands back the probe `/tmp/`, which ends
+# in no suffix at all. The resolution was right. The subject the filter then read
+# was a prefix, and the filter asked it a suffix question.
+#
+# So an unresolvable token is tested against BOTH views this hook holds — the
+# resolved prefix AND the raw argv token — and the domain counts as implicated if
+# EITHER matches. The direction is forced: a partial view of a token may ADD
+# coverage, it may never VETO it. Neither view alone is sufficient, and they are
+# not interchangeable — that is why both are asked and not just the better one:
+#   probe only  is the defect above (`'/tmp/'evil.sh` -> probe `/tmp/`, no suffix)
+#   raw only    loses arm F1-QUOTED-squote/interp (`'<path>.sh''` -> the raw token
+#               ends `''` and matches no suffix, while its probe `<path>.sh` does)
+#
+# THE DENY IS STILL GATED ON THE DOMAIN, AND THAT GATE IS LOAD-BEARING. Raising
+# the unresolvable deny ABOVE the domain test — denying the moment a quote fails
+# to close — blocks every `bash -c '… ; …'` in the workspace, because segment
+# splitting hands the `-c` arm the fragment `'echo`. Arm F1-FP-cmode is that
+# control and it stays green through this change: `'echo` matches no domain under
+# EITHER view, so nothing is denied. The correction is to stop a truncated subject
+# from EXCLUDING a token — not to remove the exclusion test.
+#
+# WHY ONE FUNCTION NOW. This same shape of defect has been fixed three times at
+# three layers of this one rule, each fix correcting one layer's input and leaving
+# the next layer deciding on the wrong thing. The three domain bodies stay
+# SEPARATE (below) so an edit to one arm's domain still cannot retarget another's;
+# what is shared is the subject rule, so there is one place to get it right.
+script_operand_implicated() {   # $1 = interp | source | exec
+  if script_operand_domain_hit "$1" "$script_norm_out"; then return 0; fi
+  if [ "$script_norm_ok" -eq 0 ] \
+     && script_operand_domain_hit "$1" "$script_norm_raw"; then return 0; fi
+  return 1
+}
+
+# The three declared operand domains, one `case` body each, carried over verbatim
+# from the arms they came from. `interp` takes a script suffix; `source` takes ANY
+# file and so carries PREFIX alternatives too; `exec` mirrors `interp` widened only
+# by `*.bash`. Do NOT unify them — the shipped reasoning on each arm forbids it in
+# both directions, and the bodies are adjacent here only so the subject rule above
+# has a single implementation.
+script_operand_domain_hit() {   # $1 = domain  $2 = subject
+  case "$1" in
+    interp) case "$2" in *.sh) return 0 ;; esac ;;
+    source) case "$2" in /*|./*|../*|~/*|*.sh|*.bash) return 0 ;; esac ;;
+    exec)   case "$2" in *.sh|*.bash) return 0 ;; esac ;;
+  esac
+  return 1
+}
+
+# THE EXEC ARM'S SYSTEM-BIN EXEMPTION SET. One definition, asked twice below —
+# once of the token and once of what the token resolves to. Having it in one place
+# is what makes "both views, one set" readable instead of a pair of literals that
+# can drift apart.
+script_under_system_bin() {   # $1 = a path
+  case "$1" in
+    /bin/*|/usr/bin/*|/usr/local/bin/*|/opt/local/bin/*) return 0 ;;
+  esac
+  return 1
+}
+
+# Resolve a path the way this hook ALREADY resolves one, for the single decision
+# that needs a location rather than a token.
+#
+# SAME PRIMITIVE AS THE Write|Edit BRANCH: `$PYTHON3` + os.path.realpath, which
+# that branch documents as the portable stand-in for `realpath -m` (macOS ships no
+# GNU realpath). It collapses `..` and `.`, follows symlinks, and does not require
+# the path to exist.
+#
+# THE CALL SITES ARE DELIBERATELY NOT UNIFIED, AND THE REASON IS THE FAILURE
+# DIRECTION. Write|Edit degrades gracefully when python is unavailable — it falls
+# back to the raw path and keeps checking its boundary, which for a CHECK is the
+# safe direction. An EXEMPTION cannot borrow that: falling back to the raw path is
+# the exact defect being corrected here. So this wrapper fails CLOSED — non-zero
+# and no output — and its one caller reads that as "not exempt".
+script_realpath() {
+  local _p="$1" _r=""
+  [ -x "$PYTHON3" ] || return 1
+  _r="$("$PYTHON3" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$_p" 2>/dev/null)" \
+    || return 1
+  [ -n "$_r" ] || return 1
+  "$PRINTF" '%s' "$_r"
+}
+
+# Is the file this token will ACTUALLY execute located under one of the exempted
+# root-owned system-bin directories?
+#
+# WHAT THE EXEMPTION USED TO COMPARE, AND WHY IT WAS THE WRONG THING. It was a
+# glob against the raw token. A token is not a location: `/usr/bin/../../tmp/
+# evil.sh` matches `/usr/bin/*` and executes `/tmp/evil.sh`. The exec arm exempted
+# it and never adjudicated it, while `bash /usr/bin/../../tmp/evil.sh` — the same
+# file, through the other arm of the same rule — blocked. Same file, opposite
+# verdicts. What this exemption governs is a FILE LOCATION, so a file location is
+# what it must read.
+#
+# BOTH VIEWS MUST AGREE, AND THE `AND` IS THE POINT. The token test is kept as the
+# ENTRY gate and the resolved test is added on top, so the predicate can only
+# NARROW. Resolving FIRST and testing only the result would newly exempt things
+# that never were: a relative `./usr/bin/x.sh` evaluated under `/` resolves INTO
+# the set. Widening an exemption is the one direction that manufactures an allow.
+#
+# AN UNRESOLVABLE TOKEN IS NEVER EXEMPT — the rule the rest of this arm already
+# follows. If the filename cannot be determined from argv it cannot be shown to
+# live in a trusted directory, and without this the probe `/usr/bin/` left by
+# `'/usr/bin/'../../tmp/evil.sh` would satisfy the entry glob on its own.
+#
+# STATED LIMIT — THIS SET IS NOT PORTABLE, AND NOTHING IN THIS REPO DETECTS THAT.
+# The four prefixes were MEASURED `root:wheel drwxr-xr-x` on the reference host
+# (Apple Silicon macOS), where `/opt/homebrew/bin` measured `drwxrwxr-x` owned by
+# the operator's admin group and was removed from this set for exactly that
+# reason. But `/usr/local/bin` is root-owned THERE only because Homebrew lives at
+# `/opt/homebrew`. On INTEL macOS Homebrew installs into `/usr/local`, where
+# `/usr/local/bin` is group-writable by `admin` — the same agent-writable
+# condition that disqualified `/opt/homebrew/bin`. So on an Intel host this set
+# exempts a directory the agent can write into without elevation, and no check in
+# this repo measures the mode of these directories at deploy or CI time. This is
+# recorded as a known limit, not solved: a runtime stat of each prefix is a
+# different change carrying its own failure modes (a stat that fails, a mounted
+# volume, a container with no such directory), and naming the boundary is worth
+# more than a half-portable guess made inside an unrelated fix.
+script_exempt_system_bin() {   # $1 = normalized token  $2 = script_norm_ok
+  local _tok="$1" _ok="${2:-1}" _real=""
+  [ "$_ok" -eq 1 ] || return 1
+  if ! script_under_system_bin "$_tok"; then return 1; fi
+  _real="$(script_realpath "$_tok")" || return 1
+  if script_under_system_bin "$_real"; then return 0; fi
+  return 1
 }
 
 # Adjudicate one candidate script path against the allowlist. Blocks (exit 2) on
@@ -1084,6 +1241,12 @@ case "$TOOL_NAME" in
     script_qtaint=0
     script_carrier=0
     script_head=""
+    # normalize_script_token sets all three before any reader runs. Initialised
+    # anyway because an unset read under `set -u` exits 1, and exit 1 is
+    # NON-blocking in the PreToolUse contract — i.e. it would fail OPEN.
+    script_norm_out=""
+    script_norm_raw=""
+    script_norm_ok=1
 
     # Heredocs are outside the model — see THE INVARIANT above. Latch suppression
     # off for the whole command rather than reason about a body line. This reuses
@@ -1280,9 +1443,47 @@ case "$TOOL_NAME" in
             # `/sbin` and `/usr/sbin` stay absent, unchanged: adding them would
             # WIDEN the exemption, and neither is a script-laundering route an
             # agent reaches.
-            /bin/*|/usr/bin/*|/usr/local/bin/*|/opt/local/bin/*) continue ;;
+            #
+            # THE PREFIX BELOW IS AN ENTRY GATE, NOT THE VERDICT. Matching it only
+            # asks the question; script_exempt_system_bin answers it on the
+            # RESOLVED path, because a token that merely starts with an exempted
+            # prefix can execute a file anywhere (`/usr/bin/../../tmp/evil.sh`).
+            # That function also carries the STATED PORTABILITY LIMIT of this set
+            # — it is measured on an Apple Silicon host and `/usr/local/bin` is
+            # agent-writable on Intel macOS, which nothing here detects.
+            /bin/*|/usr/bin/*|/usr/local/bin/*|/opt/local/bin/*)
+              if script_exempt_system_bin "$script_word" "$script_norm_ok"; then
+                continue
+              fi
+              # Not exempt after resolution. Every token reaching this arm holds a
+              # slash, so this is the same verdict the `*/*` branch below would
+              # have reached — the exemption is declined, not re-routed.
+              script_verb="exec"
+              ;;
             */*) script_verb="exec" ;;
-            *)   continue ;;
+            *)
+              # SAME SUBJECT RULE AS script_operand_implicated, one layer up. This
+              # branch asks "is the command word a pathname" — POSIX 2.9.1.1's
+              # slash test — and when the token did not resolve, `$script_word` is
+              # a PREFIX that can have lost the slash entirely (`''/tmp/evil.sh`
+              # probes to the empty string). Ask the raw argv token too, so a
+              # truncated view cannot exclude a pathname execution.
+              #
+              # [SCOPED ADDITION — flagged for Stage 9.] This is the exec-side twin
+              # of the ITEM 1 defect, inside the same `case` this change already
+              # edits. It is included rather than left because shipping a known
+              # instance of the defect being fixed, in the statement being fixed,
+              # is how this rule reached a third remediation. Arm F1-CONCAT-exec-
+              # empty pins it. Reverting it is this one branch.
+              if [ "$script_norm_ok" -eq 0 ]; then
+                case "$script_norm_raw" in
+                  */*) script_verb="exec" ;;
+                  *)   continue ;;
+                esac
+              else
+                continue
+              fi
+              ;;
           esac
           ;;
       esac
@@ -1306,15 +1507,19 @@ case "$TOOL_NAME" in
       # adjudicate `bash /tmp/evil` either. One residual across three arms,
       # recorded once, and pinned by a test so a future widening is a deliberate
       # act rather than a drift.
-      # THE OPERAND FILTER STILL GATES AN UNRESOLVABLE TOKEN, and that ordering is
-      # deliberate. `$script_word` is a filter probe when script_norm_ok=0, so
-      # asking the filter first keeps the deny inside this arm's declared operand
+      # THE OPERAND FILTER STILL GATES AN UNRESOLVABLE TOKEN, and that gate is
+      # still deliberate: it keeps the deny inside this arm's declared operand
       # domain instead of turning every unclosed quote at command position into a
-      # verdict.
+      # verdict. WHAT CHANGED IS THE SUBJECT, NOT THE ORDER. When script_norm_ok=0
+      # `$script_word` is a PREFIX of the filename and this filter is
+      # suffix-anchored, so asking it about the prefix alone EXCLUDED tokens whose
+      # real name ends `.sh` — `'/tmp/'evil.sh` probes to `/tmp/` and was skipped
+      # outright. script_operand_implicated asks the raw argv token as well; the
+      # reasoning is on that function under THE SUBJECT RULE.
       if [ "$script_verb" = "exec" ]; then
-        case "$script_word" in
-          *.sh|*.bash) destructive_022_exec_verdict "$script_word" "$script_norm_ok" ;;
-        esac
+        if script_operand_implicated exec; then
+          destructive_022_exec_verdict "$script_word" "$script_norm_ok"
+        fi
         continue
       fi
 
@@ -1347,33 +1552,43 @@ case "$TOOL_NAME" in
         while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
           normalize_script_token "${script_tokens[$script_idx]}"
           script_cand="$script_norm_out"
-          case "$script_cand" in
-            *.sh) check_script_target "$script_cand" "$script_norm_ok" ;;
-          esac
+          # This loop is the reason the domain gate exists at all: under `-c` the
+          # tokens are WORDS OF A PROGRAM STRING, not declared operands, and
+          # segment splitting routinely hands it fragments like `'echo`. The gate
+          # keeps those inert (arm F1-FP-cmode) while a fragment whose real name
+          # ends `.sh` is still adjudicated.
+          if script_operand_implicated interp; then
+            check_script_target "$script_cand" "$script_norm_ok"
+          fi
           script_idx=$(( script_idx + 1 ))
         done
       else
         # normalize BEFORE the filter on both verbs — a quoted path does not end in
         # `.sh` and does not start with `/`, so an unstripped quote matches no
         # pattern and falls through to ALLOW without the allowlist being consulted.
-        # The filter still runs FIRST on an unresolvable token: `$script_cand` is a
-        # probe in that case, and asking the filter keeps each arm's deny inside
-        # the operand domain that arm declares.
+        # The domain gate still runs BEFORE the deny on an unresolvable token, so
+        # each arm's deny stays inside the operand domain that arm declares — but
+        # it now reads BOTH the probe and the raw argv token, because the probe is
+        # a PREFIX and the interpreter arm's domain is a SUFFIX test. Asking the
+        # prefix alone is what let `bash '/tmp/'evil.sh` through: probe `/tmp/`,
+        # no `.sh`, arm skipped, deny never reached. See THE SUBJECT RULE on
+        # script_operand_implicated.
         normalize_script_token "${script_tokens[$script_idx]}"
         script_cand="$script_norm_out"
         if [ "$script_verb" = "source" ]; then
-          # `source`/`.` take ANY file, not only a script suffix. This filter is
-          # preserved verbatim from the mechanism it replaces. Do NOT unify it with
-          # the interpreter arm's `*.sh`: narrowing silently drops `/*`, `~/*` and
-          # `*.bash` coverage, and widening the interpreter arm to `/*` opens a
-          # false-positive surface with no defect behind it.
-          case "$script_cand" in
-            /*|./*|../*|~/*|*.sh|*.bash) check_script_target "$script_cand" "$script_norm_ok" ;;
-          esac
+          # `source`/`.` take ANY file, not only a script suffix. Its domain is
+          # preserved verbatim from the mechanism it replaces — it lives in
+          # script_operand_domain_hit's `source` body, still its own `case`. Do NOT
+          # unify it with the interpreter arm's `*.sh`: narrowing silently drops
+          # `/*`, `~/*` and `*.bash` coverage, and widening the interpreter arm to
+          # `/*` opens a false-positive surface with no defect behind it.
+          if script_operand_implicated source; then
+            check_script_target "$script_cand" "$script_norm_ok"
+          fi
         else
-          case "$script_cand" in
-            *.sh) check_script_target "$script_cand" "$script_norm_ok" ;;
-          esac
+          if script_operand_implicated interp; then
+            check_script_target "$script_cand" "$script_norm_ok"
+          fi
         fi
       fi
     done <<< "$script_segments"

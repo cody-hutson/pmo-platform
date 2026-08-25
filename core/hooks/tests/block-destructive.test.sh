@@ -1573,6 +1573,104 @@ test_case "F1-FP-spacepath: an unclosed quote outside the operand domain is not 
   0
 
 # ==========================================================================
+# BLOCK-022 F1 CONCAT — quote-adjacent concatenation: the filter's SUBJECT
+# ==========================================================================
+#
+# THE DEFECT THESE ARMS PIN. `bash '/tmp/'evil.sh` is ordinary shell
+# concatenation — the shell runs the real, non-allowlisted /tmp/evil.sh. The
+# token opens a quote, closes it, then CONTINUES, so normalize_script_token
+# correctly declines to resolve it (script_norm_ok=0) and returns `/tmp/` as a
+# FILTER PROBE. That probe is a strict PREFIX. The interpreter arm's operand
+# filter is SUFFIX-anchored (`*.sh`). `/tmp/` ends in no suffix, so the arm read
+# the token as outside its own domain and skipped — and the deny that the ok=0
+# verdict had ALREADY reached was never raised. `main` and the first remediation
+# both DENIED this input; the second remediation regressed it to a silent ALLOW,
+# and 1079 green assertions coexisted with the regression because no arm in this
+# file covered the shape.
+#
+# WHY A FAMILY AND NOT ONE ARM. The quote can sit at five different places in the
+# token and each truncates the probe differently — to `/tmp/`, to `/tmp/evil`, to
+# `/`, and to the empty string. One arm pins one truncation and leaves the rest
+# free to regress independently.
+#
+# THE SIXTH ROW IS A CONTROL AND IS NOT FIX-EVIDENCE. `/tmp/'evil'.sh` does not
+# OPEN its own quote, so it resolves cleanly, its subject ends `.sh`, and it
+# blocked before this fix as well. It is here because a probe that reported BLOCK
+# for every quote-bearing spelling would report the fix as working while proving
+# nothing about the truncation.
+#
+# THE OPPOSITE DIRECTION IS PINNED TOO, and it is why the domain gate reads BOTH
+# the probe and the raw argv token rather than swapping one for the other:
+#   probe-only  is the defect above;
+#   raw-only    would lose F1-QUOTED-squote/interp above, whose RAW token ends
+#               `''` and whose PROBE is the half that lands inside the domain.
+# Those arms and these must stay green together, or the subject rule has been
+# replaced rather than corrected.
+
+echo ""
+echo "BLOCK-022 F1 CONCAT (quote-adjacent concatenation reaches the deny)"
+echo "---"
+
+# Every arm below executes the SAME real file, /tmp/pmo-concat-probe-na.sh, which
+# is not allowlisted in any spelling. Only the quote position moves.
+test_case "F1-CONCAT-squote-prefix: bash '<dir>/'name.sh blocks (probe truncates to the dir)" \
+  "$(bash_payload "bash '/tmp/'pmo-concat-probe-na.sh")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "F1-CONCAT-dquote-prefix: bash \"<dir>/\"name.sh blocks (same, double-quoted)" \
+  "$(bash_payload 'bash "/tmp/"pmo-concat-probe-na.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "F1-CONCAT-squote-stem: bash '<dir>/<stem>'.sh blocks (probe keeps the stem, loses the suffix)" \
+  "$(bash_payload "bash '/tmp/pmo-concat-probe-na'.sh")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "F1-CONCAT-empty-squote: bash ''<path> blocks (probe truncates to the EMPTY string)" \
+  "$(bash_payload "bash ''/tmp/pmo-concat-probe-na.sh")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "F1-CONCAT-squote-root: bash '/'<rest> blocks (probe truncates to the root slash)" \
+  "$(bash_payload "bash '/'tmp/pmo-concat-probe-na.sh")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# CONTROL — this one never flipped. It resolves cleanly because the token does not
+# open its own quote, so it is a discrimination control, NOT evidence for the fix.
+test_case "F1-CONCAT-ctl-inner (control, not fix-evidence): an inner-quoted token resolves and blocks" \
+  "$(bash_payload "bash /tmp/'pmo-concat-probe-na'.sh")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# The SOURCE arm never had this defect, and stating that as an arm is what keeps
+# the asymmetry visible: its domain carries PREFIX alternatives (`/*`), so the
+# truncated probe `/tmp/` lands inside it and the arm always denied. If this ever
+# goes red the source arm's domain has been narrowed toward the interpreter arm's,
+# which the shipped comment on that arm forbids.
+test_case "F1-CONCAT-source (asymmetry pin): the same spelling on the source arm blocks" \
+  "$(bash_payload "source '/tmp/'pmo-concat-probe-na.sh")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# The EXEC-arm twins. Same defect, same rule, different arm — and because the arm
+# ships at `warn` both an adjudicated and a skipped input exit 0, so only the drain
+# separates "evaluated" from "never evaluated". `unresolvable` is the correct cause
+# class here: there is no allowlist row that could ever match an unclosed token.
+exec_warn_case "F1-CONCAT-exec must-flag: quote-adjacent concatenation at command position is adjudicated" \
+  "'/tmp/'pmo-concat-probe-na.sh" 'unresolvable'
+
+# The empty-probe spelling reaches the exec arm one layer EARLIER than the operand
+# filter — at the POSIX 2.9.1.1 slash test that decides whether the command word is
+# a pathname at all. Its probe is the empty string, which holds no slash, so the
+# candidate was dropped before any filter saw it.
+exec_warn_case "F1-CONCAT-exec-empty must-flag: an empty probe does not hide a pathname execution" \
+  "''/tmp/pmo-concat-probe-na.sh" 'unresolvable'
+
+# FALSE-POSITIVE CONTROL for the widened subject. The raw token is now consulted
+# whenever a token fails to resolve, so a `.sh` appearing in NON-executing text
+# inside a suppressed quoted argument must still not produce a verdict. Without
+# this arm the widening is satisfiable by a hook that denies on any `.sh` anywhere.
+test_case "F1-CONCAT-fp-quoted-arg: a .sh named inside a suppressed quoted argument is not a verdict" \
+  "$(bash_payload "gh issue comment 1 --body 'see /tmp/pmo-concat-probe-na.sh; done'")" \
+  0
+
+# ==========================================================================
 # BLOCK-022 F1 — the exec arm's exemption set is not ANCHOR_PREFIX_BASH's
 # ==========================================================================
 #
@@ -1629,6 +1727,57 @@ exec_notflag_case "F1-EXEC-ctl-usr-local-bin must-not-flag: /usr/local/bin stays
 
 exec_notflag_case "F1-EXEC-ctl-opt-local-bin must-not-flag: /opt/local/bin stays exempt (root:wheel, 0755)" \
   '/opt/local/bin/pmo-probe-not-allowlisted-xyz.sh'
+
+# --- THE EXEMPTION MUST DECIDE ON A RESOLVED PATH, NOT ON THE TOKEN.
+#
+# THE GAP THESE ARMS PIN. The exemption above was a GLOB against the raw token, and
+# a token is not a location. `/usr/bin/../../tmp/evil.sh` matches `/usr/bin/*` and
+# executes `/tmp/evil.sh`: the exec arm exempted it and never adjudicated it, while
+# `bash /usr/bin/../../tmp/evil.sh` — the same file, through the interpreter arm of
+# the SAME rule — blocked. Same file, same hook, opposite verdicts. An exemption
+# must read the thing whose behaviour it claims to govern, and what this one
+# governs is a file LOCATION.
+#
+# ONE ARM PER EXEMPTED PREFIX, because the prefixes are four independent rows in
+# one `case` and a fix that resolves only the first would leave three live.
+#
+# WHY THESE READ THE DRAIN. Same reason as the block above: the arm ships at
+# `warn`, so an exempted input and an adjudicated one both exit 0. Only the drain
+# delta separates "evaluated and denied" from "never evaluated" — which is exactly
+# the distinction this gap is about.
+exec_warn_case "F1-EXEC-esc-usr-bin must-flag: a traversal out of /usr/bin is not exempt" \
+  '/usr/bin/../../tmp/pmo-probe-not-allowlisted-xyz.sh' 'not-allowlisted'
+
+exec_warn_case "F1-EXEC-esc-bin must-flag: a traversal out of /bin is not exempt" \
+  '/bin/../tmp/pmo-probe-not-allowlisted-xyz.sh' 'not-allowlisted'
+
+exec_warn_case "F1-EXEC-esc-usr-local-bin must-flag: a traversal out of /usr/local/bin is not exempt" \
+  '/usr/local/bin/../../../tmp/pmo-probe-not-allowlisted-xyz.sh' 'not-allowlisted'
+
+exec_warn_case "F1-EXEC-esc-opt-local-bin must-flag: a traversal out of /opt/local/bin is not exempt" \
+  '/opt/local/bin/../../../tmp/pmo-probe-not-allowlisted-xyz.sh' 'not-allowlisted'
+
+# The asymmetry that made the gap visible, stated as an arm: the SAME file through
+# the interpreter arm always blocked. If this ever goes green-by-allow the
+# exemption has leaked across into the interpreter arm too.
+test_case "F1-EXEC-esc-interp control: the identical traversal via an interpreter blocks" \
+  "$(bash_payload 'bash /usr/bin/../../tmp/pmo-probe-not-allowlisted-xyz.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# An UNRESOLVABLE token can never be exempt: if the filename cannot be determined
+# from argv it cannot be shown to live in a trusted directory. Without that rule
+# the probe `/usr/bin/` left by this token satisfies the entry glob on its own,
+# and the exemption is reachable by quoting rather than by location.
+exec_warn_case "F1-EXEC-esc-unresolvable must-flag: an unresolvable token is never exempt" \
+  "'/usr/bin/'../../tmp/pmo-probe-not-allowlisted-xyz.sh" 'unresolvable'
+
+# MUST-NOT-FLAG SENSITIVITY CONTROL, and it is the one that proves the check
+# RESOLVES rather than merely rejecting every `..`. This traversal leaves and
+# re-enters the exempted directory, so the file it executes really is under
+# /usr/bin and the exemption must still hold. An implementation that blanket-denied
+# `..` would satisfy every must-flag arm above and fail here.
+exec_notflag_case "F1-EXEC-ctl-inner-dotdot must-not-flag: a traversal that RESOLVES back under /usr/bin stays exempt" \
+  '/usr/bin/../bin/pmo-probe-not-allowlisted-xyz.sh'
 
 # ==========================================================================
 # BLOCK-022 AC-FP — the verdict must not depend on non-executing text
