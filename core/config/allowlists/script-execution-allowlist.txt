@@ -207,6 +207,23 @@ release/tools/compute-close-class-telemetry.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/audit-epic-rollup-close.sh
 ./release/tools/audit-epic-rollup-close.sh
 release/tools/audit-epic-rollup-close.sh
+# verify-release-plan.sh — the plan-driven verification executor Stage 6 self-
+# verification and Stage 7 Dev Testing run against a release plan. Its TEST SUITE
+# was registered below while the TOOL ITSELF carried ZERO rows, so the pipeline
+# stage that is specified to invoke it could not: `bash release/tools/verify-
+# release-plan.sh <plan>` is BLOCK-DESTRUCTIVE-022-blocked agent-side. Observed
+# live twice — a Stage 5 spoke hit the block during ordinary probing, and the
+# Stage 6 spoke hit it again on `bash -n` — which made both the release's
+# cross-issue criterion and the originating card's own re-run criterion
+# unsatisfiable as worded, since each prescribes running this tool. The generic
+# suffix glob is the fifth form because release spokes execute from a worktree
+# outside the platform root, which forms 1-2 do not reach.
+# (CI runs no Claude hooks; these rows are for the agent-side path, not the workflow.)
+[PMO_PLATFORM_ROOT]/release/tools/verify-release-plan.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/verify-release-plan.sh
+./release/tools/verify-release-plan.sh
+release/tools/verify-release-plan.sh
+*/release/tools/verify-release-plan.sh
 # test_corpus_home_tolerance.sh — corpus-home adapter tolerance conformance suite
 # (CH-1..CH-4 of release/references/standards/corpus-home-adapter-constraints.md).
 # Runs in the closeout-smoke CI job AND is invoked agent-side at Stage 7 Dev Testing
