@@ -32,6 +32,20 @@ set -euo pipefail
 #        mutation of the thing it claims to check is not a control — it is a
 #        control-shaped assertion, and this release exists because ten of those
 #        were found in one milestone.
+#   (G7) PROVENANCE SURVIVAL — the `domain_practice` label across the Commit-0
+#        transcription boundary. The P1–P12 ladder, plus five mutation arms.
+#
+#        P5a IS THE LOAD-BEARING CASE and the reason the family has an absolute
+#        limb at all. On the v4.37 shape BOTH surfaces are empty, so the delta
+#        limb PASSes — honestly, because nothing was lost — and a delta-only
+#        mechanism therefore reports CLEAN on the one release that failed. P5a
+#        asserts the delta PASS and the presence FAIL and the exit 3 together.
+#        A check that cannot fail on the case that motivated it is not a check.
+#
+#        Every grammar arm is paired: P6 (five real non-conformant values, all
+#        FAIL) is meaningless without P7 (Forms A/B/X, all PASS), because a
+#        predicate that rejects everything satisfies P6 alone. Same for P9 and
+#        its truncated-token control.
 #
 # Offline + deterministic: fixtures are committed under tests/fixtures/ and all
 # methods are fast local greps against the repo tree (no deploy.sh --check here —
@@ -530,6 +544,337 @@ mutant_differs "M8 Deviation-Log read removed" \
       "$M8" fcm-deviation-recorded.md "$DIFF_ABSENT" FCM-1 "deviation-recorded"
 
 rm -rf "$MUTD"
+
+# ---------------------------------------------------------------------------
+# G7 — PROVENANCE SURVIVAL (the domain_practice label across Commit-0).
+#
+# WHY THE FIXTURES ARE STAGED INTO A TEMP TREE. This family's applicability gate
+# is a PATH test: a target outside */release/releases/plans/* is a named SKIP.
+# A fixture sitting at release/tools/tests/fixtures/ therefore takes the SKIP arm
+# and NOTHING below it can ever be graded. The options were to weaken the gate
+# with a test-only override, or to commit fixtures into the live plan corpus, or
+# to stage a committed fixture into a temp tree whose PATH satisfies the gate.
+# The third is the only one that neither installs an off-switch on the control
+# nor pollutes the corpus the control governs, so that is what prov_stage does.
+#
+# WHY EACH PLAN FIXTURE DECLARES A READ ROW AND NO ADDS. These fixtures are real
+# release-plan targets as far as the tool is concerned, so fcm-delivery grades
+# them too. Without a parseable matrix every run would carry an fcm ERROR, every
+# exit code would be 3 for a reason having nothing to do with provenance, and the
+# exit-code arms below would assert nothing.
+# ---------------------------------------------------------------------------
+echo "G7 — provenance-survival: the label across the Commit-0 transcription"
+
+PROVD="$(mktemp -d -t verify-plan-prov.XXXXXX)"
+PROV_PLANS="$PROVD/release/releases/plans"
+mkdir -p "$PROV_PLANS"
+
+PROV_N=0
+# prov_stage <fixture> [<replacement-source-value>] — copy a committed fixture
+# into the gate-satisfying temp tree, optionally rewriting ONLY the source: value.
+# Every other field and the rest of the file stay byte-identical, so a value arm
+# differs from its base in exactly the field under test.
+prov_stage() {
+  local fx="$1" newsrc="${2:-}" dst
+  PROV_N=$((PROV_N+1))
+  dst="$PROV_PLANS/staged-$PROV_N-$fx"
+  cp "$REPO_ROOT/$FIXD/$fx" "$dst"
+  if [ -n "$newsrc" ]; then
+    sed -i.bak -E "s|(domain_practice: \{ source: )[^,]*|\1$newsrc|" "$dst"
+    rm -f "$dst.bak"
+  fi
+  printf '%s' "$dst"
+}
+
+# prov_run <tool> <plan-path> [<comment-path>] — sets PROV_JSON and PROV_RC in the
+# CURRENT shell, for the same reason fcm_run does: capturing through $(...) runs
+# the function in a subshell where PROV_RC is assigned and then discarded, and
+# every exit-code assertion silently grades a stale 0.
+PROV_JSON=""
+PROV_RC=0
+prov_run() {
+  local tool="$1" plan="$2" comment="${3:-}"
+  set +e
+  if [ -n "$comment" ]; then
+    PROV_JSON="$("$tool" --format=json --stage4-comment "$comment" "$plan" 2>/dev/null)"
+  else
+    PROV_JSON="$("$tool" --format=json "$plan" 2>/dev/null)"
+  fi
+  PROV_RC=$?
+  set -e
+}
+
+C_LABEL="$REPO_ROOT/$FIXD/prov-comment-with-label.txt"
+C_THIN="$REPO_ROOT/$FIXD/prov-comment-thin.txt"
+
+# --- P1: conformant plan, no comment supplied. ---
+P_CONF="$(prov_stage prov-conformant.md)"
+prov_run "$VERIFY" "$P_CONF"; J_P1="$PROV_JSON"; RC_P1="$PROV_RC"
+[ "$(verdict_of "$J_P1" PROV-PRESENCE)" = PASS ] && ok "P1 conformant plan → PRESENCE PASS" || bad "P1 PRESENCE expected PASS, got '$(verdict_of "$J_P1" PROV-PRESENCE)'"
+[ "$(verdict_of "$J_P1" PROV-GRAMMAR)" = PASS ] && ok "P1 conformant plan → GRAMMAR PASS" || bad "P1 GRAMMAR expected PASS, got '$(verdict_of "$J_P1" PROV-GRAMMAR)' obs='$(observed_of "$J_P1" PROV-GRAMMAR)'"
+[ "$(verdict_of "$J_P1" PROV-DELTA)" = SKIP ] && ok "P1 no comment supplied → DELTA SKIP" || bad "P1 DELTA expected SKIP, got '$(verdict_of "$J_P1" PROV-DELTA)'"
+[ "$RC_P1" -eq 0 ] && ok "P1 a fully conformant plan does not red-line the run" || bad "P1 expected exit 0, got $RC_P1 (cov='$(observed_of "$J_P1" FCM-COVERAGE)')"
+
+# --- P2: the v4.37 shape. THE NEGATIVE ARM. ---
+P_ABS="$(prov_stage prov-label-absent.md)"
+prov_run "$VERIFY" "$P_ABS"; J_P2="$PROV_JSON"; RC_P2="$PROV_RC"
+[ "$(verdict_of "$J_P2" PROV-PRESENCE)" = FAIL ] && ok "P2 MUST-FLAG — a plan carrying no label FAILs presence" || bad "P2 PRESENCE expected FAIL, got '$(verdict_of "$J_P2" PROV-PRESENCE)'"
+case "$(observed_of "$J_P2" PROV-PRESENCE)" in
+  prov-label-absent*) ok "P2 the finding names itself (prov-label-absent)" ;;
+  *) bad "P2 expected prov-label-absent, got '$(observed_of "$J_P2" PROV-PRESENCE)'" ;;
+esac
+[ "$RC_P2" -eq 3 ] && ok "P2 the presence FAIL reaches the exit predicate" || bad "P2 expected exit 3, got $RC_P2"
+[ "$(verdict_of "$J_P2" PROV-GRAMMAR)" = SKIP ] && ok "P2 GRAMMAR SKIPs honestly when there is no label to grade" || bad "P2 GRAMMAR expected SKIP, got '$(verdict_of "$J_P2" PROV-GRAMMAR)'"
+
+# --- P3: both surfaces carry the label → no loss. ---
+prov_run "$VERIFY" "$P_CONF" "$C_LABEL"; J_P3="$PROV_JSON"
+[ "$(verdict_of "$J_P3" PROV-DELTA)" = PASS ] && ok "P3 comment + plan both carry the label → DELTA PASS" || bad "P3 DELTA expected PASS, got '$(verdict_of "$J_P3" PROV-DELTA)' obs='$(observed_of "$J_P3" PROV-DELTA)'"
+
+# --- P4: emitted at Stage 4, dropped at Commit 0. THE CARD'S OWN SYMPTOM. ---
+prov_run "$VERIFY" "$P_ABS" "$C_LABEL"; J_P4="$PROV_JSON"
+[ "$(verdict_of "$J_P4" PROV-DELTA)" = FAIL ] && ok "P4 MUST-FLAG — label in the comment, absent from the plan → DELTA FAIL" || bad "P4 DELTA expected FAIL, got '$(verdict_of "$J_P4" PROV-DELTA)'"
+case "$(observed_of "$J_P4" PROV-DELTA)" in
+  *domain_practice-label*) ok "P4 the lost element is NAMED, not merely counted" ;;
+  *) bad "P4 expected the lost element named, got '$(observed_of "$J_P4" PROV-DELTA)'" ;;
+esac
+# The partial-loss control: file-change-matrix is present on BOTH surfaces and must
+# NOT be reported lost, or the arm is a stuck-on probe reporting everything.
+case "$(observed_of "$J_P4" PROV-DELTA)" in
+  *file-change-matrix*) bad "P4 CONTROL — a surviving element was reported lost; the delta set is stuck-on" ;;
+  *) ok "P4 CONTROL — the element present on BOTH surfaces is not reported lost" ;;
+esac
+
+# --- P5a: THE LOAD-BEARING CASE. Both surfaces empty. ---
+# The delta limb PASSes here, honestly and correctly — nothing was lost, because
+# nothing was ever there. A delta-only mechanism reports this release CLEAN. The
+# run must still FAIL, and it must fail on PRESENCE.
+prov_run "$VERIFY" "$P_ABS" "$C_THIN"; J_P5A="$PROV_JSON"; RC_P5A="$PROV_RC"
+[ "$(verdict_of "$J_P5A" PROV-DELTA)" = PASS ] \
+  && ok "P5a the delta limb PASSes on the v4.37 shape (this is the vacuity, demonstrated)" \
+  || bad "P5a DELTA expected PASS, got '$(verdict_of "$J_P5A" PROV-DELTA)'"
+[ "$(verdict_of "$J_P5A" PROV-PRESENCE)" = FAIL ] \
+  && ok "P5a LOAD-BEARING — the run still FAILs, on the absolute limb" \
+  || bad "P5a PRESENCE expected FAIL, got '$(verdict_of "$J_P5A" PROV-PRESENCE)'"
+[ "$RC_P5A" -eq 3 ] \
+  && ok "P5a AC2 SATISFIED — a release where NEITHER surface carries the field exits 3" \
+  || bad "P5a expected exit 3, got $RC_P5A"
+
+# --- P5b: withholding the evidence must not manufacture a pass. ---
+prov_run "$VERIFY" "$P_ABS"; J_P5B="$PROV_JSON"
+[ "$(verdict_of "$J_P5B" PROV-DELTA)" = SKIP ] && ok "P5b absent evidence → SKIP, never PASS" || bad "P5b DELTA expected SKIP, got '$(verdict_of "$J_P5B" PROV-DELTA)'"
+case "$(observed_of "$J_P5B" PROV-DELTA)" in
+  prov-no-stage4-comment-supplied*) ok "P5b the SKIP is NAMED (it says why it could not assert)" ;;
+  *) bad "P5b expected prov-no-stage4-comment-supplied, got '$(observed_of "$J_P5B" PROV-DELTA)'" ;;
+esac
+[ "$(verdict_of "$J_P5B" PROV-PRESENCE)" = FAIL ] && ok "P5b presence still FAILs without any comment at all" || bad "P5b PRESENCE expected FAIL, got '$(verdict_of "$J_P5B" PROV-PRESENCE)'"
+
+# --- P6: the five observed non-conformant source values. NEGATIVE ARM. ---
+# Every one of these was authored into a real release plan. None is a fourth form:
+# each has a codified home it should have routed to, which is why the grammar
+# ROUTES rather than EXTENDS. All five must FAIL, and on the source limb.
+P6_VALUES="N/A — in-repo precedent governs; no external practice consulted
+N/A — governance/skill-corpus release; conventions already encoded
+N/A — pipeline-internal
+release-hub Mode O Stage-13 fold-in
+UNSOURCED-DOMAIN ... domain: governance"
+P6_FAILS=0
+P6_TOTAL=0
+while IFS= read -r v; do
+  [ -z "$v" ] && continue
+  P6_TOTAL=$((P6_TOTAL+1))
+  P6_PLAN="$(prov_stage prov-conformant.md "$v")"
+  prov_run "$VERIFY" "$P6_PLAN"
+  if [ "$(verdict_of "$PROV_JSON" PROV-GRAMMAR)" = FAIL ]; then
+    P6_FAILS=$((P6_FAILS+1))
+  else
+    bad "P6 non-conformant source accepted: '$v' → '$(verdict_of "$PROV_JSON" PROV-GRAMMAR)'"
+  fi
+done <<< "$P6_VALUES"
+[ "$P6_FAILS" -eq "$P6_TOTAL" ] && [ "$P6_TOTAL" -eq 5 ] \
+  && ok "P6 all $P6_FAILS/$P6_TOTAL observed non-conformant source values FAIL the grammar" \
+  || bad "P6 only $P6_FAILS of $P6_TOTAL non-conformant values failed (expected 5/5)"
+
+# --- P7: Forms A / B / X all PASS. THE SENSITIVITY ARM. ---
+# Without this, P6 is satisfied by a predicate that rejects everything.
+prov_run "$VERIFY" "$(prov_stage prov-form-a.md)"; J_FA="$PROV_JSON"
+[ "$(verdict_of "$J_FA" PROV-GRAMMAR)" = PASS ] && ok "P7-A SENSITIVITY — Form A (repo-relative path + anchor) is accepted" || bad "P7-A expected PASS, got '$(verdict_of "$J_FA" PROV-GRAMMAR)' obs='$(observed_of "$J_FA" PROV-GRAMMAR)'"
+prov_run "$VERIFY" "$(prov_stage prov-form-b.md)"; J_FB="$PROV_JSON"
+[ "$(verdict_of "$J_FB" PROV-GRAMMAR)" = PASS ] && ok "P7-B SENSITIVITY — Form B with a rationale sibling is accepted" || bad "P7-B expected PASS, got '$(verdict_of "$J_FB" PROV-GRAMMAR)' obs='$(observed_of "$J_FB" PROV-GRAMMAR)'"
+[ "$(verdict_of "$J_P1" PROV-GRAMMAR)" = PASS ] && ok "P7-X SENSITIVITY — Form X (the exemption token) is accepted" || bad "P7-X expected PASS via P1"
+prov_run "$VERIFY" "$(prov_stage prov-conformant.md 'https://example.invalid/practice-guide')"; J_FURL="$PROV_JSON"
+[ "$(verdict_of "$J_FURL" PROV-GRAMMAR)" = PASS ] && ok "P7-A SENSITIVITY — the URL spelling of Form A is accepted" || bad "P7-A URL expected PASS, got '$(verdict_of "$J_FURL" PROV-GRAMMAR)'"
+
+# --- P8: Form B with no rationale sibling. ---
+prov_run "$VERIFY" "$(prov_stage prov-form-b-no-rationale.md)"; J_FBN="$PROV_JSON"
+[ "$(verdict_of "$J_FBN" PROV-GRAMMAR)" = FAIL ] && ok "P8 Form B with no rationale FAILs" || bad "P8 expected FAIL, got '$(verdict_of "$J_FBN" PROV-GRAMMAR)'"
+case "$(observed_of "$J_FBN" PROV-GRAMMAR)" in
+  *limb=rationale*) ok "P8 the failing LIMB is named (limb=rationale), not just the verdict" ;;
+  *) bad "P8 expected limb=rationale, got '$(observed_of "$J_FBN" PROV-GRAMMAR)'" ;;
+esac
+
+# --- P9: dash variants normalize. A typographic slip is not a semantic finding. ---
+P9_OK=0
+P9_TOTAL=0
+for d in "N/A - pipeline-internal release" "N/A -- pipeline-internal release" "N/A – pipeline-internal release"; do
+  P9_TOTAL=$((P9_TOTAL+1))
+  prov_run "$VERIFY" "$(prov_stage prov-conformant.md "$d")"
+  if [ "$(verdict_of "$PROV_JSON" PROV-GRAMMAR)" = PASS ]; then P9_OK=$((P9_OK+1)); else bad "P9 dash variant rejected: '$d'"; fi
+done
+[ "$P9_OK" -eq "$P9_TOTAL" ] && ok "P9 all $P9_OK/$P9_TOTAL dash variants normalize to Form X" || bad "P9 only $P9_OK of $P9_TOTAL normalized"
+
+# --- P9 CONTROL: normalization must not swallow a genuinely different value. ---
+prov_run "$VERIFY" "$(prov_stage prov-conformant.md 'N/A — pipeline-internal')"; J_P9C="$PROV_JSON"
+[ "$(verdict_of "$J_P9C" PROV-GRAMMAR)" = FAIL ] \
+  && ok "P9 CONTROL — the truncated token is still rejected (normalization folds the DASH, not the value)" \
+  || bad "P9 CONTROL — normalization accepted a truncated token; it is folding too much"
+
+# --- The date limb, both arms. ---
+prov_run "$VERIFY" "$(prov_stage prov-conformant.md)"; J_DOK="$PROV_JSON"
+[ "$(verdict_of "$J_DOK" PROV-GRAMMAR)" = PASS ] && ok "date limb CONTROL — a well-formed date passes" || bad "date limb control expected PASS"
+P_BADDATE="$(prov_stage prov-conformant.md)"
+sed -i.bak 's/date: 2026-08-24/date: August 2026/' "$P_BADDATE"; rm -f "$P_BADDATE.bak"
+prov_run "$VERIFY" "$P_BADDATE"; J_BD="$PROV_JSON"
+[ "$(verdict_of "$J_BD" PROV-GRAMMAR)" = FAIL ] && ok "date limb — a malformed date FAILs" || bad "date limb expected FAIL, got '$(verdict_of "$J_BD" PROV-GRAMMAR)'"
+case "$(observed_of "$J_BD" PROV-GRAMMAR)" in
+  *limb=date*) ok "date limb — the failing limb is named" ;;
+  *) bad "expected limb=date, got '$(observed_of "$J_BD" PROV-GRAMMAR)'" ;;
+esac
+
+# --- The in-label domain limb: a wrapped body satisfies presence and fails here. ---
+P_NODOM="$(prov_stage prov-conformant.md)"
+sed -i.bak 's/, domain: governance }/ }/' "$P_NODOM"; rm -f "$P_NODOM.bak"
+prov_run "$VERIFY" "$P_NODOM"; J_ND="$PROV_JSON"
+[ "$(verdict_of "$J_ND" PROV-PRESENCE)" = PASS ] && ok "domain limb — the label still satisfies PRESENCE" || bad "domain limb: presence expected PASS"
+[ "$(verdict_of "$J_ND" PROV-GRAMMAR)" = FAIL ] && ok "domain limb — the missing mandatory class field FAILs GRAMMAR" || bad "domain limb expected FAIL, got '$(verdict_of "$J_ND" PROV-GRAMMAR)'"
+case "$(observed_of "$J_ND" PROV-GRAMMAR)" in
+  *limb=domain*) ok "domain limb — the failing limb is named" ;;
+  *) bad "expected limb=domain, got '$(observed_of "$J_ND" PROV-GRAMMAR)'" ;;
+esac
+
+# --- Multi-label (the v1.16 shape): surfaced with line numbers, not resolved. ---
+prov_run "$VERIFY" "$(prov_stage prov-quoted-in-prose.md)"; J_MULTI="$PROV_JSON"
+case "$(observed_of "$J_MULTI" PROV-COVERAGE)" in
+  *prov-multiple-labels:2*) ok "multi-label — both matches are reported with their line numbers" ;;
+  *) bad "expected prov-multiple-labels:2, got '$(observed_of "$J_MULTI" PROV-COVERAGE)'" ;;
+esac
+case "$(observed_of "$J_P1" PROV-COVERAGE)" in
+  *prov-multiple-labels*) bad "multi-label CONTROL — the single-label plan also reported multiple labels" ;;
+  *) ok "multi-label CONTROL — a single-label plan does NOT carry the note (not stuck-on)" ;;
+esac
+
+# --- P10: outside the plan corpus → a NAMED skip, and nothing else graded. ---
+prov_run "$VERIFY" "$REPO_ROOT/$FIXD/prov-conformant.md"; J_OUT="$PROV_JSON"
+case "$(observed_of "$J_OUT" PROV-COVERAGE)" in
+  prov-not-a-release-plan*) ok "P10 a target outside the plan corpus is a NAMED skip" ;;
+  *) bad "P10 expected prov-not-a-release-plan, got '$(observed_of "$J_OUT" PROV-COVERAGE)'" ;;
+esac
+[ -z "$(verdict_of "$J_OUT" PROV-PRESENCE)" ] \
+  && ok "P10 REGRESSION BOUND — no other provenance record is emitted off-corpus" \
+  || bad "P10 a graded record leaked outside the corpus: '$(verdict_of "$J_OUT" PROV-PRESENCE)'"
+
+# --- P11: an unreadable comment is ERROR, never PASS. ---
+prov_run "$VERIFY" "$P_CONF" "$PROVD/does-not-exist.txt"; J_P11="$PROV_JSON"
+[ "$(verdict_of "$J_P11" PROV-DELTA)" = ERROR ] \
+  && ok "P11 SPECIFICITY — --stage4-comment naming a non-existent path is ERROR, never PASS" \
+  || bad "P11 DELTA expected ERROR, got '$(verdict_of "$J_P11" PROV-DELTA)'"
+
+# --- Coverage record carries its denominators. ---
+case "$(observed_of "$J_P1" PROV-COVERAGE)" in
+  *labels_found=*plan_lines=*delta_source=*) ok "COVERAGE reports its denominators (labels_found / plan_lines / delta_source)" ;;
+  *) bad "COVERAGE denominators missing: '$(observed_of "$J_P1" PROV-COVERAGE)'" ;;
+esac
+case "$(observed_of "$J_P1" PROV-COVERAGE)" in
+  *survival-rows-1-5-only*) ok "COVERAGE states the delta-limb SCOPE, so it is visible rather than inferred" ;;
+  *) bad "COVERAGE does not state the delta set scope: '$(observed_of "$J_P1" PROV-COVERAGE)'" ;;
+esac
+
+# --- P12: NON-SYNTHETIC historical replay. The releases that motivated the card. ---
+V431="release/releases/plans/v4/v4.31_RELEASE_PLAN.md"
+V437="release/releases/plans/v4/v4.37_RELEASE_PLAN.md"
+# PRECONDITION, load-bearing for the same reason A10/A11's is: a missing target
+# yields empty output, and an empty verdict would grade as "not FAIL" on the v4.31
+# arm — a false green produced by a file that was never read.
+if [ ! -f "$REPO_ROOT/$V431" ] || [ ! -f "$REPO_ROOT/$V437" ]; then
+  bad "P12 PRECONDITION — a replay target is absent (v4.31/v4.37 relocated or renamed?); the arms below cannot grade"
+else
+  prov_run "$VERIFY" "$REPO_ROOT/$V431"; J_431="$PROV_JSON"
+  prov_run "$VERIFY" "$REPO_ROOT/$V437"; J_437="$PROV_JSON"
+  printf '       replay: v4.31 %s\n       replay: v4.37 %s\n' \
+    "$(observed_of "$J_431" PROV-COVERAGE)" "$(observed_of "$J_437" PROV-COVERAGE)"
+  [ "$(verdict_of "$J_437" PROV-PRESENCE)" = FAIL ] \
+    && ok "P12 HISTORICAL REPLAY — v4.37 (merged with no label) FAILs presence" \
+    || bad "P12 v4.37 did not fail presence (got '$(verdict_of "$J_437" PROV-PRESENCE)') — the live recurrence is not caught"
+  [ "$(verdict_of "$J_431" PROV-PRESENCE)" = PASS ] \
+    && ok "P12 CONTROL — v4.31 (which DID carry the label) still passes (not a stuck-on probe)" \
+    || bad "P12 v4.31 failed presence too — the replay flags everything and proves nothing"
+fi
+
+# ---------------------------------------------------------------------------
+# G7-M — MUTATION ARMS for provenance-survival. Same contract as G6-M: each
+# deletes ONE observing step and asserts an arm changes its answer.
+# ---------------------------------------------------------------------------
+echo "G7-M — provenance mutation arms (each deletes one observing step)"
+PMUTD="$(mktemp -d -t verify-plan-prov-mut.XXXXXX)"
+pmutate() {
+  local name="$1"; shift
+  local dst="$PMUTD/$name.sh"
+  cp "$VERIFY" "$dst"
+  local e
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  printf '%s' "$dst"
+}
+
+# M9 — the must-flag emission. Reads the VERDICT, not the prose: flipping the
+# verdict while leaving the observed text intact is exactly how a neutered control
+# still looks healthy in an evidence table.
+M9="$(pmutate m9-presence-neutered 's/"at least one conformant single-line label" "\$VERDICT_FAIL"/"at least one conformant single-line label" "$VERDICT_PASS"/')"
+prov_run "$M9" "$P_ABS"
+[ "$(verdict_of "$PROV_JSON" PROV-PRESENCE)" != FAIL ] \
+  && ok "M9 presence FAIL emission neutered — mutation detected (verdict moved to '$(verdict_of "$PROV_JSON" PROV-PRESENCE)')" \
+  || bad "M9 SURVIVED — the label-absent plan still FAILs with the FAIL emission removed"
+[ "$PROV_RC" -eq 0 ] \
+  && ok "M9 CONTROL — the neutered build also stops exiting 3 (the verdict really is load-bearing)" \
+  || bad "M9 control — the neutered build still exits $PROV_RC"
+
+# M10 — WIRING. With the main() record source removed the family emits NOTHING.
+M10="$(pmutate m10-unwired 's/prov_records="\$\(handle_provenance_survival "\$PLAN_ABS" \|\| true\)"/prov_records=""/')"
+prov_run "$M10" "$P_ABS"; J_M10="$PROV_JSON"
+[ -z "$(observed_of "$J_M10" PROV-COVERAGE)" ] && [ -z "$(verdict_of "$J_M10" PROV-PRESENCE)" ] \
+  && ok "M10 WIRING — the unwired mutant emits no provenance records at all" \
+  || bad "M10 the unwired mutant still emitted provenance records — the mutation did not take"
+grep -q 'PROV-COVERAGE' <<<"$J_P2" \
+  && ok "M10 CONTROL — the wired build DOES emit the coverage record (absence is detectable)" \
+  || bad "M10 control — the wired build emitted no coverage record either; M10 proves nothing"
+
+# M11 — the DIRECTION OF THE DEFAULT. This is the arm that proves withholding the
+# Stage-4 comment cannot buy a pass. It is the substitute for the fixture-refusal
+# guard fcm-delivery has, and it is the whole reason that refusal was not copied.
+M11="$(pmutate m11-absent-comment-passes 's/"no survival element lost at transcription" "\$VERDICT_SKIP"/"no survival element lost at transcription" "$VERDICT_PASS"/')"
+prov_run "$M11" "$P_ABS"
+[ "$(verdict_of "$PROV_JSON" PROV-DELTA)" != SKIP ] \
+  && ok "M11 absent-evidence SKIP flipped to PASS — mutation detected (withholding would buy a pass)" \
+  || bad "M11 SURVIVED — the absent-comment arm still SKIPs with the SKIP emission removed"
+
+# M12 — the grammar must-flag emission.
+M12="$(pmutate m12-grammar-neutered 's/source" "\$VERDICT_FAIL"/source" "$VERDICT_PASS"/')"
+prov_run "$M12" "$(prov_stage prov-form-b-no-rationale.md)"
+[ "$(verdict_of "$PROV_JSON" PROV-GRAMMAR)" != FAIL ] \
+  && ok "M12 grammar FAIL emission neutered — mutation detected" \
+  || bad "M12 SURVIVED — a non-conformant label still FAILs with the FAIL emission removed"
+
+# M13 — the delta SET. Removing the label detector from the element sweep must move
+# P4, or the delta limb is not really computing a set difference.
+M13="$(pmutate m13-no-label-element '/domain_practice-label/d')"
+prov_run "$M13" "$P_ABS" "$C_LABEL"
+case "$(observed_of "$PROV_JSON" PROV-DELTA)" in
+  *domain_practice-label*) bad "M13 SURVIVED — the lost element is still reported with its detector deleted" ;;
+  *) ok "M13 delta element detector removed — mutation detected (observed moved to '$(observed_of "$PROV_JSON" PROV-DELTA)')" ;;
+esac
+
+rm -rf "$PMUTD"
+rm -rf "$PROVD"
 
 # ---------------------------------------------------------------------------
 # Summary
