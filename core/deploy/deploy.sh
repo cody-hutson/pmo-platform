@@ -12201,6 +12201,79 @@ sys.stdout.write("".join(out) + "|")
   fi
 
 
+  # Check 71 — issue-body section-anchor drift (ADVISORY ONLY) [#4931]
+  #
+  # A precondition that cites a file plus a numbered section anchor should cite a
+  # section that EXISTS in that file. Two things break that silently: a section
+  # number that is correct for some OTHER file, and a target restructured long
+  # after the citing issue was written — no signal reaches the issue either way.
+  # Nothing else here asks the question. check-issue-ref-validity.sh is the
+  # INVERSE on both axes (it scans changed repo markdown and resolves #N against
+  # GitHub issues), and check-citation-anchors.sh (Check 66) names this predicate
+  # in its own declared coverage boundary as one it does NOT run.
+  #
+  # *** THIS CHECK IS NEVER ENFORCE-CAPABLE — STRUCTURALLY, NOT BY DEFAULT ***
+  # Note what is absent: no resolve_check_mode call, no mode branch, and no
+  # reference to flag_warn_or_issue anywhere in this block. Both emitters used
+  # here — flag_advisory_only and flag_not_evaluated — are structurally incapable
+  # of reaching ISSUES, so the no-gate property survives a cohort mode flip
+  # without anyone re-reading this comment. That is deliberate and it is the
+  # whole posture: there is no warn->enforce shakedown ladder for this check and
+  # no `.mode` file that controls anything, because no enforce flip is planned.
+  # The residual is STRUCTURAL, not a threshold to tune — the corpus labels
+  # sections in conventions the predicate cannot enumerate (measured: 181 bound
+  # citations behind an unmodelled prefix, 54 of them naming a real heading), so
+  # a citation naming a real-but-unmodelled label is indistinguishable from one
+  # naming nothing. Surfacing is this predicate's correct role; verdicting is not.
+  #
+  # OFFLINE: gh absent => SKIP with a logged reason, mirroring Checks 39/40/51/
+  # 52/53/55. A backlog invariant must never read green because it could not run.
+  # Primitive: core/deploy/tools/check-issue-body-anchors.sh (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 71: Issue-body section-anchor drift (numeric anchors in OPEN issue bodies vs their target's headings; ADVISORY — never enforce-capable)"
+    local c71_script="core/deploy/tools/check-issue-body-anchors.sh"
+    if [[ ! -f "$c71_script" ]]; then
+      flag_not_evaluated "issue-body-anchor-drift" "primitive script missing: $c71_script — the population was not read and no citation was resolved; this is not a clean result"
+    elif ! command -v gh >/dev/null 2>&1; then
+      log "  SKIP:  issue-body-anchor-drift — gh not on PATH; the OPEN-issue population is unreachable offline, so no anchor was resolved (skipped, not clean)"
+    else
+      local c71_out c71_exit=0
+      c71_out=$(bash "$c71_script" --output-format tsv 2>&1) || c71_exit=$?
+      if [[ $c71_exit -eq 3 ]]; then
+        # PV-7c: ONE finding naming ONE root cause, through the emitter that
+        # carries no mode branch and no ISSUES increment. One outage never
+        # becomes one finding per issue. The DETAIL carries the mandated
+        # discriminator clause — flag_not_evaluated's own contract comment
+        # places that obligation on the detail, and its log line does not
+        # supply it, so a detail that omits it ships an unmarked withheld
+        # verdict that nothing downstream can tell from a clean one.
+        flag_not_evaluated "issue-body-anchor-drift" "measurement outage (exit 3): $(head -1 <<<"$c71_out") — status degraded, all per-citation verdicts withheld and no counter emitted; this is not a clean result"
+      else
+        # The coverage counts are emitted on EVERY evaluated run, findings or
+        # not. A leg that measured nothing must render as unmeasured, never as
+        # clean — which is this release's own outcome statement applied to the
+        # check introducing it.
+        local _c71_row
+        while IFS= read -r _c71_row; do
+          [[ -z "$_c71_row" ]] && continue
+          log "  DENOM: issue-body-anchor-drift — ${_c71_row}"
+        done < <(echo "$c71_out" | awk -F'\t' '$1=="STATUS"{printf "%s = %s\n", $2, $3}')
+        if [[ $c71_exit -eq 0 ]]; then
+          local _c71_seen
+          _c71_seen=$(echo "$c71_out" | awk -F'\t' '$1=="DENOM"{print $3}')
+          log "  OK:    issue-body-anchor-drift — no unresolved anchors over ${_c71_seen:-?} citation site(s); see the DENOM rows above for what was NOT evaluated"
+        else
+          local _c71_hit
+          while IFS= read -r _c71_hit; do
+            [[ -z "$_c71_hit" ]] && continue
+            flag_advisory_only "issue-body-anchor-drift" "$_c71_hit"
+          done < <(echo "$c71_out" | awk -F'\t' '$1=="UNRESOLVED"{printf "#%s (body line %s) cites %s section %s, which that file does not carry; it does carry: %s\n", $2, $3, $4, $5, $7}')
+        fi
+      fi
+    fi
+  fi
+
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
