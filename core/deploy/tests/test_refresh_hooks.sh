@@ -112,6 +112,13 @@ printf '\nCase 1-3: stale hook refreshed · missing hook libs co-deployed (awk +
 # absent, so a deleted or renamed template would leave .mode untouched and make the
 # preserve assertion below pass VACUOUSLY. Assert the template exists so that vacancy is
 # reported rather than mistaken for a pass.
+#
+# FALSIFIED BY MUTATION, NOT ARGUED. Rename ${MODE_TEMPLATE} away and re-run: THIS
+# assertion fails ALONE — 44 passed / 1 failed — while `.mode preserved (operator
+# choice)` immediately below still reports PASS, because the seed the refresh never
+# touched still equals MODE_SEED. That surviving PASS is precisely the vacuous pass
+# this precondition exists to report, so the mutation demonstrates both arms at once.
+# Unmutated on the same tree: 45 passed / 0 failed.
 [ -f "${MODE_TEMPLATE}" ] \
   && report "mode template present (fixture precondition)" 1 \
   || report "mode template present (fixture precondition)" 0 "absent: ${MODE_TEMPLATE}"
