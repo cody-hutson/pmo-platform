@@ -2180,6 +2180,168 @@ _c32_compute_verdict() {
   return 0
 }
 
+# ─── Skill mode-declaration extraction (D1) — shared by Check 35 and Check 5(d) ──
+# THE SUBJECT BOUND, defined ONCE. A frontmatter mode DECLARATION is a `Modes:` /
+# `Mode:` token appearing INSIDE the YAML frontmatter block — between the opening
+# `---` and its closing `---`. Body prose that merely contains the token (a cross-
+# reference such as `§ Domain-Specific Failure Modes:`) declares nothing, and is
+# unreachable here BY CONSTRUCTION rather than by a pattern hoping prose stays away.
+# That distinction is the whole point: the predicate this replaced asked "does the
+# string appear in this file?" when the question it meant to ask was "does this skill
+# DECLARE modes?", and a single prose sentence was enough to separate the two.
+#
+# Within the block the token is deliberately NOT line-start-anchored: folded YAML
+# (`description: >`) wraps the declaration mid-line, and a `^[[:space:]]*Modes:`
+# anchor was measured to drop 22 genuine multi-mode skills. LOCATION is the bound;
+# line position is not, and never was.
+#
+# ONE awk, NO pipeline. The frontmatter bound and the first-match selection happen in
+# the same pass, so there is no pipe into a short-circuiting reader for the enforcing
+# repo-integrity SIGPIPE-idiom job to match, and no suppression comment is owed. A
+# single process also replaces the two the old two-stage shape needed.
+#
+#   $1  SKILL.md path
+#   $2  awk ERE for the declaration token. Check 35 passes `Modes:`; Check 5(d)
+#       passes `Modes?:`, where the optional `s` is LOAD-BEARING — one role-
+#       Specialist (release/skills/pmo-software-engineer) declares a singular
+#       `Mode: Development`, and folding 5(d) onto a strict `Modes:` would silently
+#       drop that row from a set-equality it is supposed to assert. The reuse unit
+#       is the frontmatter BOUND, not the token: parameterizing the token is what
+#       lets one extractor serve both consumers without either losing a member.
+#
+# Echoes the FIRST matching line inside the block, or nothing at all.
+_skill_fm_decl_line() {
+  /usr/bin/awk -v _tok="$2" '
+    NR==1               { if ($0 !~ /^---[[:space:]]*$/) exit; next }
+    /^---[[:space:]]*$/ { exit }
+    $0 ~ _tok           { print; exit }
+  ' "$1" 2>/dev/null || true
+}
+
+# ─── Mode-invocation drift (Check 35) — #26 ─────────────────────────────────────
+# The mode-declaration predicate, factored to TOP LEVEL so it is shared by two
+# surfaces with ONE body (DD1, like _vf_/_cc_/_c38_/_c32_/_c7_compute_verdict): the
+# lifecycle Check 35 (inside cmd_check, routing the verdict through
+# flag_warn_or_issue / DEPLOY_CHECK_MODE — deploy-time warn-mode unchanged) and the
+# --report mirror (inside cmd_report, mapping the verdict to PASS/FAIL counters under
+# unvarnished enforce semantics). No predicate is re-encoded on either surface
+# (single-engine, CIAC-2). Two-site parity stops being something the next editor has
+# to remember and becomes something the file's shape guarantees.
+#
+# THE SUBJECT. Check 35's subject is a skill that DECLARES >=2 modes. A mode
+# declaration takes exactly two forms, each bound to a location:
+#   D1 — frontmatter declaration: a `Modes:` token INSIDE the YAML frontmatter block,
+#        followed by a `·`-separated list. Extracted by _skill_fm_decl_line above,
+#        which is where that bound is stated and enforced.
+#   D2 — body-heading declaration: >=2 DISTINCT `# Mode <ident><delim>` headings, at
+#        any heading level H1-H6, identifier alphanumeric, anchored to a `:`/`—`/`-`
+#        delimiter immediately after the identifier.
+# The delimiter anchor is the precondition that separates a DECLARATION
+# (`## Mode A — Elicit`) from a SECTION HEADING (`## Mode Selection`, `## Modes`,
+# `## Domain-Specific Failure Modes`). It is load-bearing and must not be dropped:
+# dropping it and matching any heading mentioning "mode" was measured to admit 12
+# files of which 10 are false positives — including the single-mode skill whose
+# misclassification this check was repaired for, which it would re-admit and make
+# spuriously PASS. Widening the LEVEL and the IDENTIFIER CHARSET while KEEPING the
+# anchor admits exactly 2 files, both genuine, with zero new false positives.
+#
+# WHAT THE BOUND DOES NOT REACH, stated rather than left for the next false positive
+# to discover. The recognizer sees declarations in the two forms above and nothing
+# else. `description:` prose inside the frontmatter block remains INSIDE the D1 bound
+# (the bound is the block, not the key), so a prose sentence there that happens to
+# read `Nine modes: full (total sweep)…` is a standing near-miss — one capitalised
+# letter away from being read as a declaration. As of the repairing release, measured
+# with an oracle INDEPENDENT of this recognizer, 5 skills declare >=2 modes wholly
+# outside the scanned population — artifact-generator, daily-status, eval-writer,
+# pmo-skill-refiner, prompt-builder — declaring in natural-language prose or in a
+# `| Mode |` table, and NO heading widening reaches them. Two further skills
+# (pmo-wms-specialist, project-initiator) are in scope via the frontmatter arm but
+# contribute a body-heading enum of 0. That residual is a KNOWN, ENUMERATED class,
+# not an assertion that nothing else declares a mode; core/deploy/tools/
+# check-mode-declaration-residual.py is the checked-in instrument that measures it,
+# and it is expected to report a NON-ZERO count. A run reporting zero means the
+# oracle was re-derived from this recognizer and is broken.
+#
+# body-heading is authoritative when present (the description list can be a stale
+# subset, F-AC3-3); a skill recognizable by EITHER convention PASSes, and only a skill
+# that advertises modes yet exposes no machine-recognizable enum by either path is a
+# finding. It does NOT demand a new frontmatter field — it asserts the EXISTING prose
+# is parseable by a documented rule.
+#
+# Config-drift surface of the mode-invocation composite detection mechanism —
+# companion to the Procedure 3 Spoke Template `### Mode Provenance` block (runtime-
+# drift surface) and the Stage 8 QA LLM-graded review (hub-emit surface). Where Check
+# 27 + the `### Model Provenance` block catch model drift, this check + the
+# `### Mode Provenance` block catch mode drift (a spoke silently skipping or
+# mis-selecting a required mode).
+#
+# Check 35 has no network anchor, so the surface argument does not change the verdict;
+# it is accepted for signature parity with the other _cNN_compute_verdict bodies.
+#
+# Echoes ONE protocol line on stdout (the CALLER maps it to a warn-emit or a PASS/FAIL
+# counter); per-file detail goes to stderr, ALREADY INDENTED, in ONE wording:
+#   FAIL <detail>            population empty — audit-baseline guard; not evaluable
+#   CLEAN <n>                n multi-mode skill(s), all exposing a recognizable enum
+#   INCOMPLETE <f> <n>       f finding(s) across n scanned — detail to stderr
+#
+# The detail string and its indent are defined HERE and only here. Before the
+# factoring the two surfaces emitted DIFFERENT text at DIFFERENT indents for the same
+# finding, and because the finding branch is unreachable on a clean corpus that
+# divergence was invisible. A single-engine collapse that silently reconciles two
+# emission contracts is worth naming: the contract is now one string, one indent, one
+# definition, and a change to either is a change both surfaces see.
+_c35_compute_verdict() {
+  local surface="${1:-lifecycle}"   # accepted for signature parity; verdict is surface-invariant
+  local c35_findings=0 c35_scanned=0 c35_output=""
+  local c35_skill_md c35_body_enum c35_decl_line c35_decl_after c35_decl_dots c35_decl_arity
+  for c35_skill_md in operations/skills/*/SKILL.md release/skills/*/SKILL.md core/skills/*/SKILL.md; do
+    [[ -f "$c35_skill_md" ]] || continue
+    # D2 — body-heading enum: DISTINCT delimiter-anchored mode identifiers, any
+    # heading level, alphanumeric identifier. De-duplication is over the captured
+    # `Mode <ident>` token, unchanged in shape from the narrower form it replaces.
+    c35_body_enum=$(/usr/bin/grep -oE '^#{1,6} Mode [A-Z0-9][A-Za-z0-9]*[[:space:]]*[:—-]' "$c35_skill_md" 2>/dev/null \
+                    | /usr/bin/grep -oE 'Mode [A-Z0-9][A-Za-z0-9]*' | /usr/bin/sort -u | /usr/bin/wc -l | /usr/bin/tr -d ' ') || c35_body_enum=0
+    # D1 — frontmatter declaration, via the single shared extractor. The `·` count is
+    # taken on the substring AFTER the token so `·` separators elsewhere in the
+    # description (a Triggers list, say) cannot inflate the arity.
+    c35_decl_line=$(_skill_fm_decl_line "$c35_skill_md" 'Modes:') || c35_decl_line=""
+    c35_decl_arity=0
+    if [[ -n "$c35_decl_line" ]]; then
+      c35_decl_after=$(printf '%s' "$c35_decl_line" | /usr/bin/sed -E 's/.*Modes:(.*)/\1/')
+      c35_decl_dots=$(printf '%s' "$c35_decl_after" | /usr/bin/grep -oE '·' | /usr/bin/wc -l | /usr/bin/tr -d ' ')
+      c35_decl_arity=$(( c35_decl_dots + 1 ))
+    fi
+    # In scope iff the skill DECLARES modes: a frontmatter declaration is present OR
+    # it carries >=2 delimiter-anchored body headings.
+    if [[ -n "$c35_decl_line" || "$c35_body_enum" -ge 2 ]]; then
+      c35_scanned=$((c35_scanned + 1))
+      # Recognizable iff a clean body-heading enum (>=2) OR a parseable list (>=2).
+      if [[ "$c35_body_enum" -ge 2 || "$c35_decl_arity" -ge 2 ]]; then
+        : # PASS — mode-enum machine-recognizable by at least one convention
+      else
+        c35_output+="${c35_skill_md}: advertises modes but exposes no machine-recognizable mode-enum (neither ≥2 delimited \`### Mode X\` headings nor a parseable (≥2 \`·\`-separated) \`Modes:\` list)"$'\n'
+        c35_findings=$((c35_findings + 1))
+      fi
+    fi
+  done
+
+  if [[ "$c35_scanned" -eq 0 ]]; then
+    # Audit-baseline guard: the multi-mode population could be transiently empty if a
+    # refactor moves skills, so an empty scan is itself suspect. `≥9` is a
+    # deliberately conservative FLOOR from the introducing audit, not an equality —
+    # BOTH declaration forms contribute to the population, and re-pinning the floor to
+    # today's exact decomposition would install the same drift trap this check was
+    # repaired for.
+    printf 'FAIL no multi-mode SKILL.md files found — expected ≥9 per the mode-enum audit floor (audit-baseline guard)\n'
+  elif [[ "$c35_findings" -eq 0 ]]; then
+    printf 'CLEAN %s\n' "$c35_scanned"
+  else
+    printf '%s' "$c35_output" | /usr/bin/sed -e '/^$/d' -e 's/^/         /' >&2 || true
+    printf 'INCOMPLETE %s %s\n' "$c35_findings" "$c35_scanned"
+  fi
+  return 0
+}
+
 # ─── Skill package content-freshness (Check 7 / --check-package-freshness) — #2656 ──
 # The content-manifest freshness predicate, factored to TOP LEVEL so it is shared by
 # two surfaces with ONE body (DD1, like _vf_/_cc_/_c38_/_c32_compute_verdict): the
@@ -4436,7 +4598,17 @@ cmd_check() {
         #   • modes        → SET-EQUALITY (order-insensitive ` · `-split member
         #                    set) — modes are an exact structural lift of the
         #                    SKILL.md `Modes:`/`Mode:` clause; reuses the Check-35
-        #                    `Modes?:` extraction idiom.
+        #                    `Modes?:` extraction idiom LITERALLY, by calling the
+        #                    same _skill_fm_decl_line extractor Check 35 calls
+        #                    (parameterized on the token, so the singular `Mode:`
+        #                    one role-Specialist declares is preserved). Before
+        #                    that reuse was made literal this line was aspirational:
+        #                    5(d) carried its own unbounded copy, which would read a
+        #                    BODY line as a declaration for any role-Specialist
+        #                    lacking a frontmatter one and diff it against the
+        #                    registry cell — a spurious divergence sourced from
+        #                    prose. Latent rather than live (every role-Specialist
+        #                    currently declares in frontmatter), and closed here.
         #   • dependencies → skill-name-SET-EQUALITY — the registry re-encodes
         #                    `Composes a + b` as `DEPENDS_ON a · DEPENDS_ON b`
         #                    (different surface form, same edge set); compare the
@@ -4471,11 +4643,24 @@ cmd_check() {
 
           if [[ "$_row_kind" == "role-Specialist" ]]; then
             # --- modes: set-equality (registry cell ↔ SKILL.md Modes?: clause) ---
-            # SKILL.md side: text after `Modes:`/`Mode:` on its line, trimmed of
-            # the trailing sentence (`. Use…`/`. Triggers…`/etc.) and any final dot.
-            local _smd_modes _reg_modes_sorted _smd_modes_sorted
-            # sigpipe-idiom: allow — U3. `grep -o` emits N matches per LINE and `-m` counts LINES, so `-m1` would keep every match on the first line, not the first match.
-            _smd_modes=$(/usr/bin/grep -oE 'Modes?:[^.]*' "$_row_skill_md" 2>/dev/null | /usr/bin/head -1 | /usr/bin/sed -E 's/^Modes?:[[:space:]]*//') || _smd_modes=""
+            # SKILL.md side: text after the `Modes:`/`Mode:` DECLARATION — bounded to
+            # the YAML frontmatter block by the shared _skill_fm_decl_line extractor,
+            # so body prose containing the token can never be lifted into a registry
+            # comparison — trimmed of the trailing sentence (`. Use…`/`. Triggers…`)
+            # and any final dot. The `.*` is greedy, matching the arity arithmetic in
+            # _c35_compute_verdict: same idiom, one bound, two consumers.
+            #
+            # The extractor returns exactly ONE line, so the `head -1` that once
+            # selected the first of `grep -o`'s per-line matches has nothing left to
+            # select and is gone. The U3 SIGPIPE-idiom suppression comment that
+            # justified it went with it rather than being carried: `sed` without a
+            # `q` is not a matched reader, so no suppression is owed here, and a
+            # retained one would assert a rationale for a pipeline that no longer
+            # exists — and, because the repo-integrity job matches that comment form
+            # un-anchored, would silently suppress whatever landed beneath it.
+            local _smd_decl _smd_modes _reg_modes_sorted _smd_modes_sorted
+            _smd_decl=$(_skill_fm_decl_line "$_row_skill_md" 'Modes?:') || _smd_decl=""
+            _smd_modes=$(printf '%s' "$_smd_decl" | /usr/bin/sed -E 's/.*Modes?:[[:space:]]*//; s/\..*$//') || _smd_modes=""
             _reg_modes_sorted=$(printf '%s' "$_row_modes" | /usr/bin/tr '·' '\n' | /usr/bin/sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | /usr/bin/grep -v '^$' | /usr/bin/sort -u) || _reg_modes_sorted=""
             _smd_modes_sorted=$(printf '%s' "$_smd_modes" | /usr/bin/tr '·' '\n' | /usr/bin/sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | /usr/bin/grep -v '^$' | /usr/bin/sort -u) || _smd_modes_sorted=""
             if [[ "$_reg_modes_sorted" != "$_smd_modes_sorted" ]]; then
@@ -8832,89 +9017,45 @@ sys.stdout.write("".join(out) + "|")
   fi
 
 
-  # Check 35 — Mode-invocation drift (warn-mode initial, #26). Config-drift
-  # surface of the mode-invocation composite detection mechanism — companion to
-  # the Procedure 3 Spoke Template `### Mode Provenance` block (runtime-drift
-  # surface) and the Stage 8 QA LLM-graded review (hub-emit surface). Where Check
-  # 27 + the `### Model Provenance` block catch model drift, this check + the
-  # `### Mode Provenance` block catch mode drift (a spoke silently skipping or
-  # mis-selecting a required mode).
+  # Check 35 — Mode-invocation drift (warn-mode initial, #26). Scans the SKILL.md
+  # population across all three module skill dirs and asserts every skill that
+  # DECLARES >=2 modes carries a MACHINE-RECOGNIZABLE mode-enum, so the runtime
+  # block's "Invoked mode" can be validated against a real enum rather than free
+  # prose.
   #
-  # Scans the multi-mode SKILL.md population across all three module skill dirs
-  # and asserts each multi-mode skill carries a MACHINE-RECOGNIZABLE mode-enum,
-  # so the runtime block's "Invoked mode" can be validated against a real enum
-  # rather than free prose. It does NOT demand a new frontmatter field — it
-  # asserts the EXISTING prose is parseable by a documented rule.
-  #
-  # Mode declaration is non-uniform across the corpus (the AC3 audit finding), so
-  # the recognizer handles BOTH conventions:
-  #   (1) body-heading enum — DISTINCT mode letters from `### Mode X:` / `### Mode
-  #       X —` section headings, anchored to a `:`/`—`/`-` delimiter immediately
-  #       after the letter so failure-mode anti-pattern headings
-  #       (`### Mode A execution without a Dry-Run Record — PROC`) do NOT match.
-  #   (2) description-list fallback — the `·`-separated list after the `Modes:`
-  #       token inside the frontmatter `description`. NOTE: the `Modes:` token in
-  #       the two desc-only skills (release/skills/pmo-skill-editor,
-  #       operations/skills/project-initiator) is INLINE mid-line in a folded-YAML
-  #       `description: >` block, NOT at line-start — so the match is NOT
-  #       line-start-anchored (a `^[[:space:]]*Modes:` anchor would silently
-  #       false-negative those two multi-mode skills, treating them as
-  #       single-mode). The `·` count is taken on the substring AFTER `Modes:`
-  #       so `·` separators elsewhere in the description (e.g. a Triggers list)
-  #       cannot inflate the arity.
-  # body-heading is authoritative when present (the description list can be a
-  # stale subset, F-AC3-3); the check PASSes a skill recognizable by EITHER
-  # convention and warns only on a skill that advertises modes (a `Modes:` token,
-  # or ≥2 body headings) yet exposes no machine-recognizable enum by either path.
-  # Cutover comment family-standard: applies to ./deploy.sh --check invocations
-  # on/after the introducing release's merge SHA in RELEASE_LOG.md; that release
-  # itself exempt — reflexive-pipeline-loop discipline.
+  # The subject statement, the two declaration forms and their location bounds, the
+  # delimiter-anchor precondition, and the enumerated residual class the recognizer
+  # deliberately does not reach all live at _c35_compute_verdict — read that header
+  # before editing either surface. Cutover comment family-standard: applies to
+  # ./deploy.sh --check invocations on/after the introducing release's merge SHA in
+  # RELEASE_LOG.md; that release itself exempt — reflexive-pipeline-loop discipline.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 35: Mode-invocation drift (multi-mode SKILL.md mode-enum recognizability) (#26)"
-    local c35_findings=0
-    local c35_scanned=0
-    local c35_output=""
-    local c35_skill_md c35_body_enum c35_desc_line c35_desc_after c35_desc_dots c35_desc_arity
-    for c35_skill_md in operations/skills/*/SKILL.md release/skills/*/SKILL.md core/skills/*/SKILL.md; do
-      [[ -f "$c35_skill_md" ]] || continue
-      # (1) body-heading enum — distinct, delimiter-anchored mode letters.
-      c35_body_enum=$(/usr/bin/grep -oE '^### Mode [A-Z][[:space:]]*[:—-]' "$c35_skill_md" 2>/dev/null \
-                      | /usr/bin/grep -oE 'Mode [A-Z]' | /usr/bin/sort -u | /usr/bin/wc -l | /usr/bin/tr -d ' ') || c35_body_enum=0
-      # (2) description-list arity — `Modes:` matched ANYWHERE on the line (folded
-      #     YAML puts it mid-line); `·` counted on the substring after `Modes:`.
-      c35_desc_line=$(/usr/bin/grep -m1 -E 'Modes:' "$c35_skill_md" 2>/dev/null) || c35_desc_line=""
-      c35_desc_arity=0
-      if [[ -n "$c35_desc_line" ]]; then
-        c35_desc_after=$(printf '%s' "$c35_desc_line" | /usr/bin/sed -E 's/.*Modes:(.*)/\1/')
-        c35_desc_dots=$(printf '%s' "$c35_desc_after" | /usr/bin/grep -oE '·' | /usr/bin/wc -l | /usr/bin/tr -d ' ')
-        c35_desc_arity=$(( c35_desc_dots + 1 ))
-      fi
-      # In scope iff the skill advertises modes: a `Modes:` token is present OR it
-      # carries ≥2 delimited body headings.
-      if [[ -n "$c35_desc_line" || "$c35_body_enum" -ge 2 ]]; then
-        c35_scanned=$((c35_scanned + 1))
-        # Recognizable iff a clean body-heading enum (≥2) OR a parseable desc list (≥2).
-        if [[ "$c35_body_enum" -ge 2 || "$c35_desc_arity" -ge 2 ]]; then
-          : # PASS — mode-enum machine-recognizable by at least one convention
-        else
-          c35_output+="${c35_skill_md}: advertises modes but exposes no machine-recognizable mode-enum (neither ≥2 delimited \`### Mode X\` headings nor a parseable (≥2 \`·\`-separated) \`Modes:\` list)"$'\n'
-          c35_findings=$((c35_findings + 1))
-        fi
-      fi
-    done
-    if [[ "$c35_scanned" -eq 0 ]]; then
-      # Audit-baseline guard: the multi-mode population could be transiently empty
-      # if a refactor moves skills. Baseline = ≥9 multi-mode skills (7 body-heading
-      # + 2 desc-only) at the introducing release; an empty scan is itself suspect.
-      flag_warn_or_issue "mode-invocation-drift" \
-        "no multi-mode SKILL.md files found — expected ≥9 per the mode-enum audit (7 body-heading + 2 desc-only)"
-    elif [[ "$c35_findings" -eq 0 ]]; then
-      log "  OK:    all $c35_scanned multi-mode skill(s) expose a machine-recognizable mode-enum"
-    else
-      flag_warn_or_issue "mode-invocation-drift" \
-        "$c35_findings of $c35_scanned multi-mode skill(s) lack a recognizable mode-enum — see release/references/how-to/hub-spoke-bridge.md § Procedure 3 Spoke Template \`### Mode Provenance\`"
-      printf '%s' "$c35_output" | /usr/bin/sed 's/^/         /'
-    fi
+    # Verdict computed by the shared _c35_compute_verdict body (DD1) so the --report
+    # mirror and this lifecycle check cannot diverge. The body emits per-file detail
+    # to stderr, already indented; this block maps the verdict to the deploy-time
+    # emit (warn-mode via flag_warn_or_issue / DEPLOY_CHECK_MODE — unchanged).
+    local c35_verdict c35_tok c35_rest c35_f c35_n
+    c35_verdict="$(_c35_compute_verdict "lifecycle")"
+    c35_tok="${c35_verdict%% *}"
+    case "$c35_tok" in
+      CLEAN)
+        log "  OK:    all ${c35_verdict#CLEAN } multi-mode skill(s) expose a machine-recognizable mode-enum"
+        ;;
+      INCOMPLETE)
+        # "INCOMPLETE <findings> <scanned>" — per-file detail already on stderr.
+        c35_rest="${c35_verdict#INCOMPLETE }"
+        c35_f="${c35_rest%% *}"; c35_n="${c35_rest##* }"
+        flag_warn_or_issue "mode-invocation-drift" \
+          "$c35_f of $c35_n multi-mode skill(s) lack a recognizable mode-enum — see release/references/how-to/hub-spoke-bridge.md § Procedure 3 Spoke Template \`### Mode Provenance\` (per-file detail above)"
+        ;;
+      FAIL)
+        flag_warn_or_issue "mode-invocation-drift" "${c35_verdict#FAIL }"
+        ;;
+      *)
+        flag_warn_or_issue "mode-invocation-drift" "unexpected verdict: $c35_verdict"
+        ;;
+    esac
   fi
 
 
@@ -8982,7 +9123,7 @@ sys.stdout.write("".join(out) + "|")
         while IFS= read -r c36_file; do
           [[ -n "$c36_file" ]] || continue
           # First #N tie per memory file (the eviction-pointer / issue tie).
-          # sigpipe-idiom: allow — U3. Same `grep -o` line-vs-match divergence as the Modes probe: `-m1` would keep every issue ref on the first matching line.
+          # sigpipe-idiom: allow — U3. `grep -o` emits N matches per LINE while `-m` counts LINES, so `-m1` would keep every issue ref on the first matching line rather than the first match.
       c36_n=$(/usr/bin/grep -oE '#[0-9]+' "$c36_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '#') || c36_n=""
           [[ -n "$c36_n" ]] || continue
           # dead-ref tie: probe resolution; NEVER compare magnitude.
@@ -13980,47 +14121,37 @@ cmd_report() {
   # Mirrors cmd_check's Check 35 (multi-mode SKILL.md mode-enum recognizability,
   # #26) into report PASS/FAIL form. As with Check 18, the report uses unvarnished
   # enforce-mode semantics regardless of cmd_check warn-mode — the "what would
-  # happen in enforce-mode" view, suitable for Stage 13 evidence. Dual-convention
-  # recognizer: delimiter-anchored distinct body-heading enum, with a non-line-
-  # start-anchored `Modes:` description-list fallback (the desc-only skills carry
-  # `Modes:` inline mid-line in folded YAML; `·` counted after `Modes:`). An empty
-  # population reports FAIL (audit-baseline guard — the scan could not be
+  # happen in enforce-mode" view, suitable for Stage 13 evidence. Verdict computed
+  # by the shared _c35_compute_verdict body (DD1) so this mirror and the lifecycle
+  # check cannot diverge; the predicate, the subject statement and the finding-detail
+  # wording all live there and are NOT re-encoded here (single-engine, CIAC-2).
+  # An empty population reports FAIL (audit-baseline guard — the scan could not be
   # evaluated); recognizable-everywhere reports PASS; finding rows report FAIL.
   echo "--- Mode-invocation drift (Check 35) ---"
-  local c35r_findings=0 c35r_scanned=0 c35r_output=""
-  local c35r_skill_md c35r_body_enum c35r_desc_line c35r_desc_after c35r_desc_dots c35r_desc_arity
-  for c35r_skill_md in operations/skills/*/SKILL.md release/skills/*/SKILL.md core/skills/*/SKILL.md; do
-    [[ -f "$c35r_skill_md" ]] || continue
-    c35r_body_enum=$(/usr/bin/grep -oE '^### Mode [A-Z][[:space:]]*[:—-]' "$c35r_skill_md" 2>/dev/null \
-                     | /usr/bin/grep -oE 'Mode [A-Z]' | /usr/bin/sort -u | /usr/bin/wc -l | /usr/bin/tr -d ' ') || c35r_body_enum=0
-    c35r_desc_line=$(/usr/bin/grep -m1 -E 'Modes:' "$c35r_skill_md" 2>/dev/null) || c35r_desc_line=""
-    c35r_desc_arity=0
-    if [[ -n "$c35r_desc_line" ]]; then
-      c35r_desc_after=$(printf '%s' "$c35r_desc_line" | /usr/bin/sed -E 's/.*Modes:(.*)/\1/')
-      c35r_desc_dots=$(printf '%s' "$c35r_desc_after" | /usr/bin/grep -oE '·' | /usr/bin/wc -l | /usr/bin/tr -d ' ')
-      c35r_desc_arity=$(( c35r_desc_dots + 1 ))
-    fi
-    if [[ -n "$c35r_desc_line" || "$c35r_body_enum" -ge 2 ]]; then
-      c35r_scanned=$((c35r_scanned + 1))
-      if [[ "$c35r_body_enum" -ge 2 || "$c35r_desc_arity" -ge 2 ]]; then
-        :
-      else
-        c35r_output+="${c35r_skill_md}: advertises modes but exposes no machine-recognizable mode-enum"$'\n'
-        c35r_findings=$((c35r_findings + 1))
-      fi
-    fi
-  done
-  if [[ "$c35r_scanned" -eq 0 ]]; then
-    echo "[FAIL] mode-invocation-drift — no multi-mode SKILL.md files found — expected ≥9 (audit-baseline guard)"
-    FAIL=$((FAIL + 1))
-  elif [[ "$c35r_findings" -eq 0 ]]; then
-    echo "[PASS] mode-invocation-drift — all $c35r_scanned multi-mode skill(s) expose a machine-recognizable mode-enum"
-    PASS=$((PASS + 1))
-  else
-    echo "[FAIL] mode-invocation-drift — ${c35r_findings} of ${c35r_scanned} multi-mode skill(s) lack a recognizable mode-enum — see release/references/how-to/hub-spoke-bridge.md § Procedure 3 Spoke Template \`### Mode Provenance\`"
-    FAIL=$((FAIL + 1))
-    printf '%s' "$c35r_output" | /usr/bin/sed 's/^/  /' || true
-  fi
+  local c35r_verdict c35r_tok c35r_rest c35r_f c35r_n
+  c35r_verdict="$(_c35_compute_verdict "report")"
+  c35r_tok="${c35r_verdict%% *}"
+  case "$c35r_tok" in
+    CLEAN)
+      echo "[PASS] mode-invocation-drift — all ${c35r_verdict#CLEAN } multi-mode skill(s) expose a machine-recognizable mode-enum"
+      PASS=$((PASS + 1))
+      ;;
+    INCOMPLETE)
+      # "INCOMPLETE <findings> <scanned>" — per-file detail already on stderr.
+      c35r_rest="${c35r_verdict#INCOMPLETE }"
+      c35r_f="${c35r_rest%% *}"; c35r_n="${c35r_rest##* }"
+      echo "[FAIL] mode-invocation-drift — ${c35r_f} of ${c35r_n} multi-mode skill(s) lack a recognizable mode-enum — see release/references/how-to/hub-spoke-bridge.md § Procedure 3 Spoke Template \`### Mode Provenance\` (per-file detail above)"
+      FAIL=$((FAIL + 1))
+      ;;
+    FAIL)
+      echo "[FAIL] mode-invocation-drift — ${c35r_verdict#FAIL }"
+      FAIL=$((FAIL + 1))
+      ;;
+    *)
+      echo "[FAIL] mode-invocation-drift — unexpected verdict: $c35r_verdict"
+      FAIL=$((FAIL + 1))
+      ;;
+  esac
   echo ""
 
   # --- Platform .version drift vs latest published Release (Check 39) ---
