@@ -139,7 +139,7 @@ parse_schema_enum() {
 # than shipping silently.
 _FALLBACK_SUBTYPES_LINES="$(printf '%s\n' \
   "gate-outcome	g1-g2 g3-release-readiness dt-pass dt-conditional-pass dt-return qa-acceptance qa-rejection plan-review-go plan-review-no-go plan-review-readiness-scan goal-conformance" \
-  "decision	d-class adr-closed adr-opened scope-lock a6-new-track-rationale a7-bundle-amend a7-bundle-rebundle a7-bundle-defer cross-d-upstream-compat empirical-verification-finding action-item-opened action-item-started action-item-resolved action-item-cancelled action-item-superseded queued-pending-approval approval-deferred cascade-sweep-block outcome-statement-authored delegation recommendation-choice-delta" \
+  "decision	d-class adr-closed adr-opened scope-lock a6-new-track-rationale a7-bundle-amend a7-bundle-rebundle a7-bundle-defer cross-d-upstream-compat empirical-verification-finding action-item-opened action-item-started action-item-resolved action-item-cancelled action-item-superseded queued-pending-approval approval-deferred cascade-sweep-block outcome-statement-authored delegation recommendation-choice-delta decision-superseded" \
   "escalation	tier-0 tier-1 tier-2 tier-3" \
   "self-repair	retry escalate rollback" \
   "iteration	" \
@@ -259,7 +259,8 @@ _FALLBACK_LABEL_SETS="$(printf '%s\n' \
   "release-synthesis/learnings-triple	surprise would-change watch-for" \
   "session-retro	session source theme domain learning reason" \
   "release-synthesis/qc4-05-result	invariant verdict files" \
-  "release-synthesis/qc4-06-result	verdict outcome_excerpt evidence_anchor")"
+  "release-synthesis/qc4-06-result	verdict outcome_excerpt evidence_anchor" \
+  "decision/decision-superseded	superseded by reason")"
 
 _schema_labels="$(parse_schema_labels 2>/dev/null || true)"
 if [[ -n "$_schema_labels" ]]; then
@@ -763,6 +764,7 @@ if [[ "$SELF_TEST" == "true" ]]; then
   validate_subtype "decision" "scope-lock" || die "self-test: subtype validation failed"
   validate_subtype "decision" "cascade-sweep-block" || die "self-test: decision cascade-sweep-block subtype check failed"
   validate_subtype "decision" "delegation" || die "self-test: decision delegation subtype check failed"
+  validate_subtype "decision" "decision-superseded" || die "self-test: decision decision-superseded subtype check failed"
   validate_subtype "self-repair" "retry" || die "self-test: self-repair subtype check failed"
   validate_subtype "iteration" "dt-eng-pass-2" || die "self-test: iteration prefix check failed"
   validate_subtype "test-run" "suite-pass" || die "self-test: test-run suite-pass subtype check failed"
@@ -891,6 +893,54 @@ if [[ "$SELF_TEST" == "true" ]]; then
   # pair that declares no set; without this the rung silently drops out of coverage.
   [[ -z "$(labels_for decision scope-lock)" ]] \
     || die "self-test: empty rung dead — an undeclared (type, subtype) must resolve to NO set"
+
+  # ── decision/decision-superseded — the supersession vocabulary ─────────────
+  # A supersession is a JOIN between two decision IDs, so the row is worthless
+  # unless BOTH ends are recognized. Sensitivity: the set resolves and a
+  # conforming payload emits.
+  [[ -n "$(labels_for decision decision-superseded)" ]] \
+    || die "self-test: decision/decision-superseded must resolve to its § 11.8.1 declared set"
+  # THE ARM THAT MATTERS. Without it, a future re-narrowing of the registry's
+  # label charset drops `by` silently while the -n rung above still passes on
+  # `superseded` alone — leaving a vocabulary that can name the retired decision
+  # but not the one that retired it, which is the exact defect this subtype
+  # exists to close. Same failure shape as the `outcome_excerpt` charset guard.
+  is_in_list "by" "$(labels_for decision decision-superseded)" \
+    || die "self-test: 'by' missing from the decision-superseded set — a supersession naming only ONE id is the defect this subtype exists to close"
+  is_in_list "superseded" "$(labels_for decision decision-superseded)" \
+    || die "self-test: 'superseded' missing from the decision-superseded set — the retired-id end of the join is gone"
+  validate_payload_labels "decision" "decision-superseded" \
+    "superseded:D-7; by:D-37; reason:band-expansion-retired" \
+    || die "self-test: a conforming decision-superseded payload must emit"
+  # The issue-keyed ID convention must emit too: the vocabulary is a join, not a
+  # rename, and live data carries BOTH conventions.
+  validate_payload_labels "decision" "decision-superseded" \
+    "superseded:D-4767-Scope; by:D-4801-Scope; reason:scope-recut" \
+    || die "self-test: an issue-keyed decision id must emit — the vocabulary joins ids, it does not canonicalize them"
+  # THE `ms:` ARM. Free-form decision subtypes open their payload with `ms:#N;`
+  # per the playbook's § 4a.2 habit. This subtype declares a CLOSED vocabulary,
+  # so that habit must be REJECTED here rather than silently tolerated — the two
+  # conventions cannot both hold, and the vocabulary is the one with teeth. Pins
+  # the decision so a future author cannot re-add `ms:` to the convention text
+  # without this arm failing.
+  if ( validate_payload_labels "decision" "decision-superseded" \
+       "ms:#251; superseded:D-7; by:D-37; reason:x" ) 2>/dev/null; then
+    die "self-test: an 'ms:' prefix on decision-superseded must be rejected — the declared vocabulary is closed, and a row written to the free-form habit does not emit"
+  fi
+  # Specificity: an off-vocabulary label must be REJECTED. A registration that
+  # cannot fail has not bound the gate.
+  if ( validate_payload_labels "decision" "decision-superseded" \
+       "superseded:D-7; mood:relieved" ) 2>/dev/null; then
+    die "self-test: an off-vocabulary label on decision-superseded must be rejected — a registration that cannot fail has not bound the gate"
+  fi
+  # SIBLING NON-REGRESSION. Registering ONE decision subtype must not bind the
+  # other 21. `decision` declares no type-level set, so every sibling must still
+  # resolve EMPTY and stay free-form; if this ever fails, an exact-pair
+  # registration has leaked up to the type rung and silently gated 21 subtypes.
+  [[ -z "$(labels_for decision d-class)" ]] \
+    || die "self-test: registering decision/decision-superseded must not bind sibling decision subtypes"
+  validate_payload_labels "decision" "d-class" "verdict:approved; anything:goes" \
+    || die "self-test: sibling decision subtypes must stay free-form after the exact-pair registration"
   [[ "$(labels_for session-retro learning)" == "$(labels_for session-retro)" ]] \
     || die "self-test: type-level fallback rung dead — session-retro/<subtype> must fall back to the type set"
 
