@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """check-mode-declaration-residual.py — Check 35's residual class, measured by an
-oracle INDEPENDENT of Check 35's own recognizer (#4734, AC-10).
+oracle INDEPENDENT of Check 35's own recognizer.
 
 WHY THIS EXISTS, AND WHY ITS ZERO WOULD BE A BUG
 ------------------------------------------------
