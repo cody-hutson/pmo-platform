@@ -197,14 +197,43 @@ FILE_PATH="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.file_path // empty'
 #     (assets/, templates/, tests/) stay out of scope;
 #   - the \.md$ anchor is still required, so non-markdown pack assets stay out of scope;
 #   - the <skill> segment is still [^/]+, so skill-directory depth is unchanged.
+#
+# Those three bound what THIS REGEX MATCHES. They do not bound what a SECOND pattern over
+# the same path would match, and that distinction is load-bearing here: `.+` admits `/`, so
+# an in-scope path may carry a further <root>/skills/<segment> inside its reference subtree.
+# Scope stays correct on such a path — it is the skill-directory EXTRACTION below that a
+# second pattern gets wrong, and the greedy one this replaced anchored on the LAST
+# occurrence rather than on the one that put the file in scope. The extraction now reads
+# the matched substring instead of re-matching. Armed by tests 27 (nested) and 28 (ordinary).
 SKILL_SCOPE_RE='(^|/)(operations|release|core|pmo-platform)/skills/[^/]+/(SKILL\.md|references?/.+\.md)$'
-if [[ ! "$FILE_PATH" =~ $SKILL_SCOPE_RE ]]; then
+if [[ "$FILE_PATH" =~ $SKILL_SCOPE_RE ]]; then
+  SCOPE_MATCH="${BASH_REMATCH[0]}"
+else
   exit 0
 fi
 
-# --- EXTRACT SKILL DIRECTORY + NAME (from the edited file's own path, any root) ---
-skill_dir="$("$PRINTF" '%s' "$FILE_PATH" | /usr/bin/sed -nE 's@^(.*(operations|release|core|pmo-platform)/skills/[^/]+)/.*@\1@p')"
-skill="$("$PRINTF" '%s' "$skill_dir" | /usr/bin/sed -nE 's|.*/skills/([^/]+)$|\1|p')"
+# --- EXTRACT SKILL DIRECTORY + NAME (read off the scope match, never re-derived) ---
+# Derived from SCOPE_MATCH — the substring the scope regex actually matched — rather than
+# from a second pattern over $FILE_PATH. Any second pattern can select a DIFFERENT
+# <root>/skills/<skill> than the one that put the file in scope; the greedy one this
+# replaced selected the last (test 27 pins the case). Reading the match removes the class
+# rather than trading one disagreeing pattern for another: the extracted directory is by
+# construction the one the matcher accepted. Note the target is NOT simply the first
+# `/skills/` in the path — it is the segment THIS match began at, which on some shapes is
+# a later one. The scope regex is $-anchored, so SCOPE_MATCH is a suffix of FILE_PATH and
+# the prefix is recovered by suffix removal.
+# The condition above is written in POSITIVE form deliberately: BASH_REMATCH must be
+# consumed with no intervening [[ =~ ]] able to clobber it, and control flow should show
+# that dependency rather than leave it to a comment.
+SCOPE_PREFIX="${FILE_PATH%"$SCOPE_MATCH"}"
+SCOPE_BODY="$SCOPE_MATCH"
+case "$SCOPE_BODY" in
+  /*) SCOPE_PREFIX="${SCOPE_PREFIX}/"; SCOPE_BODY="${SCOPE_BODY#/}" ;;  # the (^|/) alternative
+esac
+skill_root="${SCOPE_BODY%%/*}"
+skill="${SCOPE_BODY#*/skills/}"
+skill="${skill%%/*}"
+skill_dir="${SCOPE_PREFIX}${skill_root}/skills/${skill}"
 if [ -z "$skill" ] || [ -z "$skill_dir" ]; then
   log_error "SCOPE-PARSE-ERROR: could not extract skill dir from $FILE_PATH"
   exit 0  # fail-open on parse failure (defensive)

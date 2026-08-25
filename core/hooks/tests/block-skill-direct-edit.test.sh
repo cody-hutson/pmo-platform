@@ -428,6 +428,64 @@ test_case_absent "Test 26: nested pack edit WITH valid sentinel → sanctioned (
   0 "BLOCK-SKILL-EDIT-00[12]"
 /bin/rm -f "${MIGRATED_SKILL_DIR}/.editor-session"
 
+# --- EXTRACTION (27-28): WHICH skill directory the in-scope path resolves to ---
+# Tests 15-26 pin WHETHER a nested path is in scope. Nothing pinned WHICH skill the hook
+# then resolved it to, and the two came apart once `.+` admitted `/`: an in-scope path may
+# carry a further <root>/skills/<segment> inside its reference subtree, and the greedy
+# extraction anchored on the LAST one. skill_dir and skill then address a directory that
+# does not exist, so the sentinel, target-skill and exemption lookups all address the wrong
+# skill — which is the work stoppage Test 26 exists to prevent, arriving by a different
+# route: a valid test-migrated session cannot satisfy this gate, because the gate is not
+# looking at test-migrated. Reachability in the corpus is currently 0; these arms are the
+# reason it stays a non-event if a pack ever nests such a subtree.
+#
+# Both arms read the extracted skill_dir out of the block message, which interpolates it,
+# so they assert the resolved VALUE and not merely that something fired. Fixed-string
+# matching (grep -F): the sandbox path is interpolated and must not be read as a regex.
+test_case_extraction() {
+  local name="$1"; local payload="$2"; local expected_exit="$3"
+  local required="$4"; local forbidden="$5"
+  local tmp_stderr; tmp_stderr="$(/usr/bin/mktemp)"
+  local actual_exit=0
+  /usr/bin/printf '%s' "$payload" | /bin/bash "$HOOK" 2>"$tmp_stderr" >/dev/null || actual_exit="$?"
+  local actual_stderr; actual_stderr="$(/bin/cat "$tmp_stderr")"; /bin/rm -f "$tmp_stderr"
+  local ok=1
+  [ "$actual_exit" != "$expected_exit" ] && ok=0
+  if ! /usr/bin/printf '%s' "$actual_stderr" | /usr/bin/grep -qF "$required"; then ok=0; fi
+  if [ -n "$forbidden" ] && /usr/bin/printf '%s' "$actual_stderr" | /usr/bin/grep -qF "$forbidden"; then ok=0; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$name"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s (exit=%s expected=%s)\n  required: %s\n  forbidden: %s\n  stderr: %s\n' \
+      "$name" "$actual_exit" "$expected_exit" "$required" "${forbidden:-<none>}" "$actual_stderr"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# Test 27 (MUST PASS — fails against the greedy extraction): a reference subtree that
+# itself contains <root>/skills/<segment>. The edit belongs to test-migrated; the trailing
+# `core/skills/other` is reference CONTENT, not a skill directory. Measured against the
+# greedy form, the hook still exits 2 with BLOCK-SKILL-EDIT-002 — so exit code and rule
+# marker BOTH look correct — while naming
+#   .../test-migrated/references/core/skills/other/.editor-session
+# as the session it wanted. That is why this arm asserts the resolved directory and not
+# the verdict: the verdict was never the part that broke.
+test_case_extraction "Test 27: nested references/core/skills/**/*.md → resolves to test-migrated, not the inner segment" \
+  "$(payload Edit "${MIGRATED_SKILL_DIR}/references/core/skills/other/x.md")" \
+  "$BLOCK_EXIT" \
+  "${MIGRATED_SKILL_DIR}/.editor-session" \
+  "${MIGRATED_SKILL_DIR}/references/core/skills/other/.editor-session"
+
+# Test 28 (NON-REGRESSION — passes both before and after): the ordinary single-`skills/`
+# path must keep resolving exactly as it did. Test 27 changes how skill_dir is computed for
+# every in-scope path, not only nested ones, so the unnested case needs its resolved value
+# pinned too rather than inferred from Test 15 still being green.
+test_case_extraction "Test 28: ordinary references/dimension-packs/*.md → resolves to test-migrated (non-regression)" \
+  "$(payload Edit "${MIGRATED_SKILL_DIR}/references/dimension-packs/pmo-platform-dimensions.md")" \
+  "$BLOCK_EXIT" \
+  "${MIGRATED_SKILL_DIR}/.editor-session" \
+  ""
+
 # Summary
 echo ""
 echo "================================"
