@@ -9776,44 +9776,100 @@ sys.stdout.write("".join(out) + "|")
 
   # Check 44 — Depersonalization-token conformance (warn-mode initial) [#323]
   #
-  # Two single-responsibility assertions over the Layer-1 corpus markdown:
+  # Three single-responsibility assertions over the TRACKED corpus:
   #  (a) PVT*-reintroduction ratchet — flag a literal GitHub Projects ID
   #      (PVT_ / PVTI_ / PVTF_ / PVTSSF_ + >=4 ID chars) reintroduced outside the
   #      guide. Part-a (the cleanup) shipped via #600; this is the forward ratchet.
   #      The {4,} floor exempts the guide's bare PVT_ example shapes; the guide file
   #      is additionally exempt.
-  #  (b) bracket-token conformance — flag any [OPERATOR_*] square-bracket token used
-  #      in tracked corpus that is NOT registered in depersonalization-spec.md
-  #      §1/§1.1. Reads the registry (self-updating). Excludes release/releases/
-  #      (release-corpus / ledger surface). A legitimately-illustrative token carries
-  #      a 'depersonalization-token: allow' line marker.
+  #  (b) SQUARE-bracket token conformance — GATING. Flag any [<PREFIX>_*] square token
+  #      used in tracked corpus whose name is absent from the §1/§1.1 tables of
+  #      depersonalization-spec.md. §1.3 declares those two TABLES the closed
+  #      registered set, so for this family "absent" is a finding.
+  #  (d) ANGLE-bracket inventory — ADVISORY, structurally never gating. §4 "Convention
+  #      scope" declares the angle family OPEN and incrementally codified: an
+  #      un-codified angle token INHERITS the resolution-rule convention and is
+  #      sanctioned by the spec, so flagging it would fail correct work. The inventory
+  #      is DERIVED LIVE as (tracked-corpus angle tokens) MINUS (§4 table) and reads no
+  #      stored tolerated-set file. There is deliberately NO arm (c): a stored baseline
+  #      of tolerated tokens is extendable by the very change it would gate, so it buys
+  #      the word "ratchet" and not the property. Per ADR-144.
+  #
+  # SCOPE, and why none of it is hardcoded — this is the defect the check carried until
+  # ADR-144, when it reached one prefix, one file extension and three roots of its own
+  # declared subject. The PREFIX set and BOTH DELIMITER families are DERIVED from the
+  # registry tables at runtime, and the registry read and the usage scan consume ONE
+  # derived value, so the two limbs are structurally incapable of disagreeing. FILE
+  # SCOPE is the tracked file set (git ls-files): no --include extension filter and no
+  # root list, so a new prefix, extension, root or registry row needs zero edits here.
+  # release/releases/ (release-corpus / ledger surface) stays excluded, and a
+  # legitimately-illustrative token carries a 'depersonalization-token: allow' line
+  # marker. When the root is not a git work tree the enumeration cannot run: the check
+  # emits flag_not_evaluated and withholds its verdict — it never narrows the scan
+  # silently, and it never prints OK on an outage.
   # Companion to #324 (token registration); kept SEPARATE from #529's path-portability
   # check (distinct concern). Warn-mode initial per bypass-mode-readiness.md §Shakedown.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 44: Depersonalization-token conformance (PVT* + [OPERATOR_*] vocabulary)"
+    log "Check 44: Depersonalization-token conformance (PVT* + registry-derived vocabulary, both delimiter families, all tracked files)"
     local c44_spec="core/standards/depersonalization-spec.md"
-    local c44_pvt c44_unreg=""
+    local c44_pvt c44_unreg="" c44_uncod="" c44_scanned="no"
     # (a) PVT*-literal reintroduction (exempt the guide + marker lines)
     c44_pvt="$(grep -rEn 'PVT(SSF|F|I)?_[A-Za-z0-9]{4,}' --include='*.md' core release operations 2>/dev/null | grep -vE 'github-projects-guide\.md|depersonalization-token: allow' || true)"
     if [[ -n "$c44_pvt" ]]; then
       flag_warn_or_issue "depersonalization-token" "literal GitHub Projects ID (PVT*) reintroduced outside the guide — tokenize to an [OPERATOR_PROJECT*] token: $(head -3 <<<"$c44_pvt" | tr '\n' ';')"
     fi
-    # (b) [OPERATOR_*] bracket-token conformance against the §1/§1.1 registry
+    # (b)/(d) registry-derived token conformance, both delimiter families
     if [[ -f "$c44_spec" ]]; then
-      local c44_reg c44_tok
-      c44_reg="$(grep -ohE '\[OPERATOR_[A-Z0-9_]+\]' "$c44_spec" | sort -u)"
-      while IFS= read -r c44_tok; do
-        [[ -z "$c44_tok" ]] && continue
-        grep -qxF "$c44_tok" <<<"$c44_reg" || c44_unreg="${c44_unreg}${c44_tok} "
-      done < <(grep -rEn '\[OPERATOR_[A-Z0-9_]+\]' --include='*.md' core release operations 2>/dev/null | grep -vE 'release/releases/' | grep -v 'depersonalization-token: allow' | grep -ohE '\[OPERATOR_[A-Z0-9_]+\]' | sort -u)
-      if [[ -n "$c44_unreg" ]]; then
-        flag_warn_or_issue "depersonalization-token" "unregistered [OPERATOR_*] token(s) in corpus, absent from depersonalization-spec.md §1: ${c44_unreg}— register them (with a config home) or mark an illustrative use 'depersonalization-token: allow'"
+      local c44_sq_reg c44_ang_reg c44_pfx c44_tok c44_ang_hits c44_owned
+      local c44_uncod_n=0 c44_uncod_raw=0
+      # Registry read — TABLE-SCOPED. §1.3 says "the §1 and §1.1 TABLES are the closed
+      # registered set", so only the FIRST CELL of a markdown table row registers. That
+      # excludes §4's schema metavariable (prose, not a row) by construction rather
+      # than by a name-specific exception a future edit would have to remember.
+      c44_sq_reg="$(sed -n 's/^|[[:space:]]*`\(\[[A-Z][A-Z0-9_]*\]\)`[[:space:]]*|.*/\1/p' "$c44_spec" | sort -u)"
+      c44_ang_reg="$(sed -n 's/^|[[:space:]]*`\(<[A-Z][A-Z0-9_]*>\)`[[:space:]]*|.*/\1/p' "$c44_spec" | sort -u)"
+      # Derived prefix alternation — ONE value, read by BOTH limbs below.
+      c44_pfx="$(printf '%s\n%s\n' "$c44_sq_reg" "$c44_ang_reg" | tr -d '[]<>' | sed -n 's/^\([A-Z0-9][A-Z0-9]*\)_.*/\1/p' | sort -u | tr '\n' '|' | sed 's/|$//')"
+      if [[ -z "$c44_pfx" ]]; then
+        flag_not_evaluated "depersonalization-token" "the §1/§1.1/§4 tables of $c44_spec parsed to an EMPTY prefix set, so the derived vocabulary is unavailable and arms (b)/(d) did not run — this is not a clean result"
+      elif ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        flag_not_evaluated "depersonalization-token" "deploy root is not a git work tree, so the tracked-file enumeration (git ls-files) could not run and arms (b)/(d) did not run — a narrowed scan here would be a false clean, so no verdict is issued"
+      else
+        c44_scanned="yes"
+        # (b) SQUARE family — corpus-scoped, GATING against the closed §1/§1.1 set.
+        while IFS= read -r c44_tok; do
+          [[ -z "$c44_tok" ]] && continue
+          grep -qxF "$c44_tok" <<<"$c44_sq_reg" || c44_unreg="${c44_unreg}${c44_tok} "
+        done < <(git ls-files -z -- . ':(exclude)release/releases/' 2>/dev/null | xargs -0 grep -IhE "\[($c44_pfx)_[A-Z0-9_]+\]" 2>/dev/null | grep -v 'depersonalization-token: allow' | grep -ohE "\[($c44_pfx)_[A-Z0-9_]+\]" | sort -u || true)
+        if [[ -n "$c44_unreg" ]]; then
+          flag_warn_or_issue "depersonalization-token" "unregistered square-bracket token(s) in tracked corpus, absent from the closed §1/§1.1 registry tables of depersonalization-spec.md: ${c44_unreg}— register each (with a read-source and a config home) or mark an illustrative use 'depersonalization-token: allow'"
+        fi
+        # (d) ANGLE family — DERIVED LIVE (corpus MINUS §4 table), advisory only. This
+        # arm reads no file but the spec and the tree, so its payload cannot drift from
+        # the registry and its decline as rows are codified IS the progress signal.
+        c44_ang_hits="$(git ls-files -z -- . ':(exclude)release/releases/' 2>/dev/null | xargs -0 grep -IhE "<($c44_pfx)_[A-Z0-9_]+>" 2>/dev/null | grep -v 'depersonalization-token: allow' | grep -ohE "<($c44_pfx)_[A-Z0-9_]+>" || true)"
+        while IFS= read -r c44_tok; do
+          [[ -z "$c44_tok" ]] && continue
+          grep -qxF "$c44_tok" <<<"$c44_ang_reg" || c44_uncod="${c44_uncod}${c44_tok} "
+        done < <(sort -u <<<"$c44_ang_hits")
+        if [[ -n "$c44_uncod" ]]; then
+          # Counts accumulate in a MAIN-SHELL for-loop, never inside a pipeline's
+          # right-hand loop — that body runs in a subshell and the counter reads back 0.
+          for c44_tok in $c44_uncod; do
+            c44_uncod_n=$((c44_uncod_n + 1))
+            c44_uncod_raw=$((c44_uncod_raw + $(grep -cxF "$c44_tok" <<<"$c44_ang_hits" || true)))
+          done
+          c44_owned="<OPERATOR_INSTANCE_RELEASE_LOG_PATH>"  # depersonalization-token: allow — illustrative naming of the one un-codified token that has a tracked owner
+          flag_advisory_only "depersonalization-token" "angle-bracket token inventory: ${c44_uncod_n} un-codified token(s) / ${c44_uncod_raw} raw match(es) in tracked corpus. These are SANCTIONED, not defects — depersonalization-spec.md §4 'Convention scope' states un-codified angle tokens inherit the resolution-rule convention and that codification is incremental. Closure path is the §4 rule itself (a token's row is added when its consumer lands), and this arm's own decline is the progress signal; do NOT hunt for a per-token owner, only ${c44_owned} has one (#5824). Inventory: ${c44_uncod}"
+        fi
       fi
     else
       flag_warn_or_issue "depersonalization-token" "registry missing: $c44_spec"
     fi
-    if [[ -z "$c44_pvt" && -z "$c44_unreg" && -f "$c44_spec" ]]; then
-      log "  OK:    no PVT* reintroduction; all [OPERATOR_*] tokens registered"
+    # Terminal OK is guarded on arm (b) being empty AND the enumeration having RUN.
+    # Arm (d) is an inventory, not a verdict, and deliberately does not participate.
+    if [[ -z "$c44_pvt" && -z "$c44_unreg" && -f "$c44_spec" && "$c44_scanned" == "yes" ]]; then
+      log "  OK:    no PVT* reintroduction; every square-bracket token in tracked corpus is registered"
     fi
   fi
 

@@ -1199,7 +1199,7 @@ resolve_all_tokens() {
         # Both this resolver and the manifest carry the REGISTERED token name
         # (depersonalization-spec.md §1; compose.py maps
         # [paths].cowork_install_path to it). Before this pairing the resolver
-        # stored [COWORK_INSTALL_PATH] while write_operator_toml read
+        # stored [COWORK_INSTALL_PATH] while write_operator_toml read  # depersonalization-token: allow — historical narrative about the wrong variant; this line is Check 44's standing negative control
         # [COWORK_INSTALL_PATH_BASE], so cowork_install_path was written EMPTY on
         # every first install and the token re-prompted forever (read_operator_toml
         # skips empty values, so the cache never hit). Edit BOTH or neither.
