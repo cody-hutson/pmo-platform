@@ -1,0 +1,6 @@
+2026-08-24T10:00:00Z	e7bf92b126607841d816650fd67b15353fb0954e	hub	decision:action-item-opened
+2026-08-24T10:00:01Z	bfa2615c0e798053a0e5929cd7e472680fde0cfe	hub	decision:action-item-resolved
+2026-08-24T10:00:02Z	0c736b0697e6cd6322494caa53cd17f907fd98d5	hub	decision:action-item-opened
+2026-08-24T10:00:03Z	101135c737326ddaccae276b559fa9323d755c5b	hub	decision:decision-superseded
+2026-08-24T10:00:04Z	6103d0230e635e806cc21d6493cc3d11a2f731a9	operator	gate-outcome:plan-review-go
+2026-08-24T10:00:05Z	dddddddddddddddddddddddddddddddddddddddd	hub	decision:scope-lock
