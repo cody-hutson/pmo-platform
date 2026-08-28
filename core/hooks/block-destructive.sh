@@ -458,10 +458,19 @@ script_qadvance() {
 }
 
 # Resolve the command word of a segment into script_head (empty when the segment
-# has none), using the POSIX 2.9.1 prefix walk the main loop uses: a simple
-# command is `prefix* word suffix*`, and a prefix is a variable assignment.
-# Shared so the carrier test and the verb test resolve command position the same
-# way — an assignment prefix must not change either answer.
+# has none), using the POSIX 2.9.1 prefix walk: a simple command is
+# `prefix* word suffix*`, and a prefix is a variable assignment. An assignment
+# prefix must not change either the carrier answer or the verb answer.
+#
+# DELIBERATE ASYMMETRY with the verb walk in the main loop, which ALSO steps over a
+# bounded set of command-wrapper words (`sudo`, `env`, `exec`, …). This walk does
+# not, and the two are NOT to be harmonized: they fail in opposite directions.
+# Widening the VERB walk adjudicates MORE invocations — fail-closed. Widening THIS
+# walk would resolve `sudo gh …` to the carrier `gh` and SUPPRESS more fragments —
+# fail-open, against the suppression set's stated gating direction that a missing
+# entry may only ever cost a false positive. The price of the asymmetry is exactly
+# that price: a wrapper in front of a carrier verb keeps the pre-existing false
+# positive on a quoted argument. Pay it here rather than on the other side.
 script_resolve_head() {
   script_head=""
   local _i
@@ -895,31 +904,60 @@ case "$TOOL_NAME" in
       # not even fail safe.
       #
       # A token is a prefix assignment IFF it contains `=` AND its NAME part
-      # (everything before the FIRST `=`) is a valid shell name. Anything else
-      # TERMINATES the run and is the command word — so `a-b=1` and `--body=x` both
-      # stop the walk, and the skip cannot degrade into a general "advance past any
-      # token containing `=`". The two tests are ordered: `${tok%%=*}` returns the
-      # whole token when there is no `=`, so the pattern test must gate it.
+      # (everything before the FIRST `=`) is a valid shell name. A token that is
+      # neither an assignment nor a listed wrapper (below) TERMINATES the run and is
+      # the command word — so `a-b=1` and `--body=x` both stop the walk, and the skip
+      # cannot degrade into a general "advance past any token containing `=`". The
+      # two tests are ordered: `${tok%%=*}` returns the whole token when there is no
+      # `=`, so the pattern test must gate it.
       #
-      # NOT skipped, by construction: `env`, `command`, `exec`, `nohup`, `timeout`,
-      # `xargs`, `eval`. Under the same grammar their head token IS a real command
-      # word, not a prefix. Covering them requires a denylist of evaluating verbs,
-      # and a denylist inside a fail-closed control is itself a fail-open surface
-      # (miss one and the evasion is silent). Deliberate, recorded residual.
+      # A COMMAND-WRAPPER prefix is walked the same way, from a BOUNDED ENUMERATION
+      # that mirrors lib/command-position.awk's PREFIX set — one set, two walks, so
+      # the shared canonicalizer and this local walk cannot drift apart. `sudo bash
+      # <script>`, `env bash <script>` and `then bash <script>` are the SAME operation
+      # as `bash <script>`; without this the wrapper resolved as the command word, no
+      # verb matched, and the invocation fell through to ALLOW with the allowlist
+      # never consulted — the verdict tracking lexical position instead of the action.
+      # Matched on the BASENAME, as the verb below is, so `/usr/bin/env bash <script>`
+      # resolves too.
+      #
+      # This is NOT the denylist-of-evaluating-verbs that the earlier note here ruled
+      # out, and its failure direction is the opposite one. That note was reasoning
+      # about the SUPPRESSION set below, where a missed entry silently admits a real
+      # execution. Here a word MISSING from the set means the wrapper resolves as the
+      # command word and the invocation is simply not adjudicated — the status quo,
+      # never a newly-admitted evasion — and a word wrongly IN it over-blocks, which
+      # is recoverable. Membership criterion: the word must be a TRANSPARENT prefix —
+      # a shell keyword, or a wrapper that execs the rest of the argv unchanged.
+      #
+      # Still NOT skipped, deliberately: `eval` and `timeout`. `eval` re-parses a
+      # program string this lexical matcher cannot resolve (the same nested-shell
+      # residual lib/command-position.awk records for `bash -c '…'`), and `timeout`
+      # carries a duration operand the walk would additionally have to consume.
+      # Recorded residuals, not half-closed cases.
       script_hidx=0
+      script_xargs=0
       while [ "$script_hidx" -lt "${#script_tokens[@]}" ]; do
-        case "${script_tokens[$script_hidx]}" in
+        script_ptok="${script_tokens[$script_hidx]}"
+        case "$script_ptok" in
           [A-Za-z_]*=*)
-            case "${script_tokens[$script_hidx]%%=*}" in
+            case "${script_ptok%%=*}" in
               *[!A-Za-z0-9_]*) break ;;
             esac
+            script_hidx=$(( script_hidx + 1 ))
+            continue
+            ;;
+        esac
+        case "${script_ptok##*/}" in
+          sudo|env|command|builtin|exec|nohup|time|xargs|then|do|else|elif|'in'|'!')
+            if [ "${script_ptok##*/}" = "xargs" ]; then script_xargs=1; fi
             script_hidx=$(( script_hidx + 1 ))
             ;;
           *) break ;;
         esac
       done
-      # need a verb AND at least one operand after it
-      [ $(( script_hidx + 1 )) -lt "${#script_tokens[@]}" ] || continue
+      # need a verb at command position (an all-prefix segment has none)
+      [ "$script_hidx" -lt "${#script_tokens[@]}" ] || continue
 
       # Verb at command position. Basename match subsumes every absolute form
       # (/bin/bash, /usr/local/bin/zsh, /bin/.) that ANCHOR_PREFIX_BASH enumerated
@@ -933,6 +971,24 @@ case "$TOOL_NAME" in
         source|.)    script_verb="source" ;;
         *) continue ;;
       esac
+
+      # An interpreter/source verb needs at least one operand ON ARGV to adjudicate.
+      # When `xargs` was consumed by the prefix walk and no argv operand follows, the
+      # operand list arrives on STDIN — which a PreToolUse hook cannot see — so the
+      # executed target is UNRESOLVABLE. Deny, for the same reason check_script_target
+      # denies a variable-bearing path: a control that cannot evaluate its input must
+      # deny rather than guess. Falling through to `continue` here would be a silent
+      # allow on the one construct the prefix walk just proved it cannot resolve.
+      # With an argv operand present, `xargs <verb> <path> …` executes <path>, so the
+      # ordinary adjudication below is correct and an allowlisted target still allows.
+      if [ $(( script_hidx + 1 )) -ge "${#script_tokens[@]}" ]; then
+        if [ "$script_xargs" -eq 1 ]; then
+          block "BLOCK-DESTRUCTIVE-022" \
+            "unresolvable script target: xargs feeds '${script_tokens[$script_hidx]}' from stdin, so no argv path exists for this hook to adjudicate." \
+            "pass the script path on the command line (xargs <interpreter> <path> ...), or set CLAUDE_HOOK_BYPASS=1"
+        fi
+        continue
+      fi
 
       # walk past flags to the first operand. `-c` takes a program STRING rather
       # than a path, so every .sh-bearing token after it is a candidate instead of
