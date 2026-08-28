@@ -92,6 +92,14 @@ This is deliberately **not** "put the mode test first." The literal-first-line s
 
 **The fix widens dry-run's reach in one direction only.** After it, a dry-run can reach phases it previously could not; it cannot skip a phase it previously ran, and it cannot pass a state it previously failed. The bounded conjunction at the fourth site is what keeps that true: any gap other than the exact one the no-op produces reports in both modes, unchanged.
 
+## Reversibility
+
+**CHEAP / Confidence HIGH.** Both changes are control-flow edits inside one shell tool — a four-line relocation in one function, and a bounded conjunction extracted as a helper in another. No schema change, no data migration, no host-side state, no published artifact. `git revert` restores the prior bytes exactly, and because the `--apply` paths are byte-identical either way, a revert cannot strand a partially-applied close: a close that ran under this change wrote exactly what a close under the prior code would have written.
+
+One property is worth naming because it is unusual and favourable: **the revert is self-announcing.** The paired arms shipped alongside the fix fail on the reverted code — that is precisely what they were built to detect — so an accidental or partial revert turns the suite red rather than silently restoring the defect. The cost of being wrong is therefore bounded to what the decision already concedes in its Consequences (the lost dry-run preview in the resume case), and cannot include a quiet regression to the original mode-blindness.
+
+The **in-file consolidation** is prose and reverts with the same commit. The **ADR itself** is immutable by convention: superseding it is a Status transition plus a new record, never an in-place edit or a deletion.
+
 ## Related ADRs
 
 - **[ADR-142](ADR-142-resolve-the-root-do-not-exempt-the-fixture.md)** — resolve the root, do not exempt the fixture. The same posture on a different surface: this decision reconciles the misleading in-code comment rather than deleting it, and closes the class rather than exempting the instance that surfaced it.
