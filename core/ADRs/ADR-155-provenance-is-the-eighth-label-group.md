@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-149 — Provenance is the eighth label group: how a work item entered the tracker is its own axis"
+title: "ADR-155 — Provenance is the eighth label group: how a work item entered the tracker is its own axis"
 status: Accepted
 date: 2026-08-27
 release: ci-stable-under-transient-conditions
@@ -16,13 +16,15 @@ source_observations:
   - "The grammar doc forbids a pack from defining a new group or rule, so the group definition had to land in the grammar and the concrete row in the pack. The two edits are not substitutes; either alone leaves the row either homeless or ungoverned."
 ---
 
-# ADR-149 — Provenance is the eighth label group
+# ADR-155 — Provenance is the eighth label group
 
 ## Status
 
 **Accepted.** Authored at Engineering for the `ci-stable-under-transient-conditions` release, against the Collective Review scope-lock that ratified the label-grammar conditional as FIRING.
 
 **Numbering provenance — `143 → 149`.** Held **ADR-143** branch-local; renumbered to **ADR-149** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 143. In-release citations that read "ADR-143" denote this record.
+
+**Numbering provenance — `149 → 155`.** Held **ADR-149** branch-local; renumbered to **ADR-155** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 149. In-release citations that read "ADR-149" denote this record.
 
 ## Context
 
