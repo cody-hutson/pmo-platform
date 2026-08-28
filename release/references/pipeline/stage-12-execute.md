@@ -147,8 +147,8 @@ Empirical motivation: a prior release's Stage 12 Finding F-1 (2026-05-15) — th
 
 | State | Pre-condition | Action | Post-condition |
 |---|---|---|---|
-| **State 0 — no release for tag** | `gh release view v<X.Y>` returns "release not found" (exit code 1) | `gh release create v<X.Y> --notes "$BODY" --title "<H1-headline>" --target "$MERGE_SHA"` where `BODY="$(sed '1,/^---$/d; 1,/^---$/d' <canonical-note-path>)"` — the frontmatter-stripped note body per the §5.1 enforced-transform invariant, NOT `--notes-file <canonical-note-path>` (which would publish the YAML frontmatter as raw text). On success → State 2; on transient failure (network / 5xx) → retry once (production-cap=2 per [`autonomous-execution-model.md`](../../../core/disciplines/autonomous-execution-model.md)) → on second failure → HALT and post Tier 2 [SCOPE CHANGE] per [`release/governance/release-process.md`](../../governance/release-process.md) § Inter-Stage Feedback Protocol | release present at desired content; auditable via `gh release view` |
-| **State 1 — release exists; content may differ** | `gh release view v<X.Y> --json body` returns body content (any value) | Compare returned body against canonical note body (excluding frontmatter). If MATCH → State 2 PASS no-op. If DIFFER → `gh release edit v<X.Y> --notes "$BODY"` where `BODY="$(sed '1,/^---$/d; 1,/^---$/d' <canonical-note-path>)"` — the same frontmatter-stripped body per the §5.1 invariant, NOT `--notes-file <canonical-note-path>` (idempotent) → State 2 | release present at desired content |
+| **State 0 — no release for tag** | `gh release view v<X.Y>` returns "release not found" (exit code 1) | `gh release create v<X.Y> --notes "$BODY" --title "<H1-headline>" --target "$MERGE_SHA"` where `BODY="$(strip_frontmatter <canonical-note-path>)"` — the frontmatter-stripped note body per the §5.1 enforced-transform invariant, NOT `--notes-file <canonical-note-path>` (which would publish the YAML frontmatter as raw text). **Refuse an empty `$BODY`** per § 5.1 S4. On success → State 2; on transient failure (network / 5xx) → retry once (production-cap=2 per [`autonomous-execution-model.md`](../../../core/disciplines/autonomous-execution-model.md)) → on second failure → HALT and post Tier 2 [SCOPE CHANGE] per [`release/governance/release-process.md`](../../governance/release-process.md) § Inter-Stage Feedback Protocol | release present at desired content; auditable via `gh release view` |
+| **State 1 — release exists; content may differ** | `gh release view v<X.Y> --json body` returns body content (any value) | Compare returned body against canonical note body (excluding frontmatter). If MATCH → State 2 PASS no-op. If DIFFER → `gh release edit v<X.Y> --notes "$BODY"` where `BODY="$(strip_frontmatter <canonical-note-path>)"` — the same frontmatter-stripped body per the §5.1 invariant, NOT `--notes-file <canonical-note-path>` (idempotent) → State 2. **Refuse an empty `$BODY`**: this edit overwrites a live Release body and GitHub keeps no body history | release present at desired content |
 | **State 2 — release present with current content** | view + diff verification passes | No mutation needed; PASS; proceed to Phase C post-deploy verification | sequence complete for Surface 1 |
 
 **Canonical command form (Phase B5.5 — Stage 12 spoke executes after Phase B5 chore-PR merged + Phase B3 tag push verified):**
@@ -172,7 +172,20 @@ fi
 # Surface 1 body = the note with its YAML frontmatter stripped (the committed
 # vX.Y_RELEASE_NOTES.md is the source of record; the Release page is the rendered
 # copy people read). Publish the body, NOT the file verbatim. Per § 5.1.
-CANONICAL_BODY=$(sed '1,/^---$/d; 1,/^---$/d' "$NOTES_PATH" 2>/dev/null)  # strip frontmatter
+#
+# Source the shared transform — do NOT inline one here. The § 5.1 strip has a
+# single implementation precisely because inline copies drifted, and one of the
+# forms they drifted into returns an EMPTY body on GNU userlands.
+. "$REPO_ROOT/release/tools/lib/frontmatter-strip.sh"
+CANONICAL_BODY=$(strip_frontmatter "$NOTES_PATH" 2>/dev/null)
+
+# EMPTY-BODY GUARD (§ 5.1 S4). The strip is fail-closed, so an empty result means
+# the note is malformed — never that the body is legitimately empty. Publishing it
+# would blank a live Release body, and GitHub keeps no body history to restore.
+if [[ -z "$CANONICAL_BODY" ]]; then
+  echo "HALT — frontmatter strip produced an EMPTY body from $NOTES_PATH; refusing to publish nothing"
+  exit 1
+fi
 
 # View-then-create-or-edit decision (idempotency guard)
 if gh release view "v<X.Y>" --repo {REPO} >/dev/null 2>&1; then

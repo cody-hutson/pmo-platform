@@ -25,7 +25,7 @@ The tooling that reads this corpus discovers files **recursively** (`rglob` / `l
 
 - **Authored by:** Stage 13 close spoke (per the Release-Notes Authoring Discipline in [`../../references/how-to/hub-spoke-bridge.md`](../../references/how-to/hub-spoke-bridge.md) § Procedure 3 §Stage 13 Chip Pattern)
 - **Committed by:** Stage 13 chore PR (`chore(vX.Y): Stage 13 — INDEX + DIGEST + RELEASE_NOTES`)
-- **Read by:** GitHub Release Surface 1 at Stage 12 Phase B5.5 — emitted as `gh release create --notes "$BODY"` where `BODY="$(sed '1,/^---$/d; 1,/^---$/d' release/releases/notes/vX.Y_RELEASE_NOTES.md)"`. The emit passes the frontmatter-stripped body, NEVER `--notes-file <path>`: `--notes-file` would publish the YAML frontmatter as raw text on the public Release page, violating the §5.1 enforced-transform invariant.
+- **Read by:** GitHub Release Surface 1 at Stage 12 Phase B5.5 — emitted as `gh release create --notes "$BODY"` where `BODY="$(strip_frontmatter release/releases/notes/vX.Y_RELEASE_NOTES.md)"`, the shared transform in [`../../tools/lib/frontmatter-strip.sh`](../../tools/lib/frontmatter-strip.sh). The emit passes the frontmatter-stripped body, NEVER `--notes-file <path>`: `--notes-file` would publish the YAML frontmatter as raw text on the public Release page, violating the §5.1 enforced-transform invariant. An **empty** strip is refused rather than published (§5.1 S4) — a note needs both an opening and a closing `---` fence.
 
 ## Format
 

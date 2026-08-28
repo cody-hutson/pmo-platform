@@ -1,16 +1,25 @@
 #!/usr/bin/env bash
 # selftest-runner: macos
-#   Read by release/tools/check-selftest-coverage.py. Same non-portable
-#   frontmatter-strip idiom as check-release-body-drift.sh: on the Linux runner the
-#   strip yields an empty body and legs A / L / L2 hit the tool's own
-#   "ABORT: frontmatter strip produced an EMPTY body" guard. Measured at the
-#   discovery gate's first enablement; green on macOS. The tool stays IN SCOPE and
-#   ENFORCED on the runner where it is known good, rather than dropped from
-#   discovery — the disposition the enforcement card forbids.
+#   Read by release/tools/check-selftest-coverage.py.
 #
-#   RESIDUAL: unlike its sibling, this tool FAILS SAFE on Linux (it aborts rather
-#   than publishing an empty body), so the non-portability costs availability, not
-#   correctness. Repairing the shared strip idiom is separate, tracked work.
+#   THE ORIGINAL REASON FOR THIS PIN IS DISCHARGED. The shared strip idiom was
+#   non-portable: on the Linux runner it yielded an empty body and legs A / L / L2
+#   hit this tool's own "ABORT: frontmatter strip produced an EMPTY body" guard —
+#   a fail-SAFE, costing availability rather than correctness, but a failure. The
+#   transform is now the shared awk state machine in lib/frontmatter-strip.sh,
+#   which carries no host-divergent construct, and Case S below binds it to
+#   committed bytes.
+#
+#   THE PIN NEVERTHELESS STAYS, for the same narrower reason as its sibling: the
+#   falsification that would license moving this suite to a partition it has never
+#   run on — does it degrade under the ubuntu job's depth-1 checkout? — was NOT
+#   EXECUTED. A static sweep found this suite reads no ambient ref (its run_case
+#   helper exports REPO_ROOT into a sandbox it builds in $tmp), which favours "no
+#   degradation" — but a static sweep is not the falsification.
+#
+#   TO LIFT IT: run this suite under a depth-1 single-branch checkout with
+#   origin/main absent. If every arm executes and passes, delete this block; the
+#   partition is DERIVED from this declaration, so no other file changes.
 # reemit-release-bodies.sh — re-emit published GitHub Release bodies from their
 # canonical in-repo notes, per release-notes-standard.md § 5.6 step 2.
 #

@@ -20,10 +20,15 @@
 # fixture can. Same call as ADR-068 made for the schema-v1 emitter.
 #
 # ─── WHY awk AND NOT sed ────────────────────────────────────────────────────
-# The idiom this replaces — `sed '1,/^---$/d; 1,/^---$/d'` — yields an EMPTY
+# The idiom this replaces was a `sed` script applying the SAME line-1-through-
+# first-fence deletion range twice in one invocation. That form yields an EMPTY
 # body on the Linux CI runner while returning the body on macOS. Measured at the
 # discovery gate's first enablement; the consequence was a Stage-13 gate that
 # reported "no drift" because it was comparing nothing against nothing.
+#
+# The literal is deliberately NOT reproduced here. It is the exact string the
+# repo-wide sweep greps for, and a copy sitting inside the library that removed
+# it would register as a surviving call site on every future audit.
 #
 # The repair does not reason about which sed is right. Two competent readings of
 # that address construct disagree, and no GNU sed is reachable from the authoring

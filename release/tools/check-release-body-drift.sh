@@ -1,20 +1,31 @@
 #!/usr/bin/env bash
 # selftest-runner: macos
-#   Read by release/tools/check-selftest-coverage.py. This suite's frontmatter-strip
-#   path is NOT portable: on the Linux runner the strip yields an EMPTY body, so the
-#   DRIFT legs (B, I) compare nothing against nothing and return 0 where 1 is
-#   expected. Measured at the discovery gate's first enablement; the same invocation
-#   is green on macOS, and was green for many releases as a named step in this repo's
-#   macOS smoke job. So the tool stays IN SCOPE and stays ENFORCED — on the runner
-#   where it is known good — rather than being dropped from discovery, which is the
-#   one disposition the enforcement card forbids.
+#   Read by release/tools/check-selftest-coverage.py.
 #
-#   RESIDUAL, stated because a runner declaration must not be mistaken for a fix:
-#   the non-portability is real. On Linux this tool reports "no drift" when drift
-#   exists — a FAIL-OPEN in a Stage-13 gate, not a cosmetic difference. Repairing
-#   the strip (here, and in the sibling tools that share the idiom) is separate,
-#   tracked work owned by this tool's card. This declaration buys enforcement today;
-#   it does not discharge that defect.
+#   THE ORIGINAL REASON FOR THIS PIN IS DISCHARGED. The strip was non-portable: on
+#   the Linux runner it yielded an EMPTY body, so the DRIFT legs (B, I) compared
+#   nothing against nothing and returned 0 where 1 was expected — a FAIL-OPEN in a
+#   live Stage-13 gate. That is repaired: the transform is now the shared awk state
+#   machine in lib/frontmatter-strip.sh, which carries no host-divergent construct,
+#   and Case S below binds it to committed bytes so an empty strip can no longer
+#   agree with a non-empty expectation on any host.
+#
+#   THE PIN NEVERTHELESS STAYS, for a different and narrower reason: moving this
+#   suite to the ubuntu partition is a change to WHERE IT HAS NEVER RUN, and the
+#   falsification that would license it — does this suite degrade under the ubuntu
+#   job's depth-1 checkout? — was NOT EXECUTED. Two in-repo sources disagree: the
+#   smoke workflow's fetch-depth justification asserts this suite exits 0 while
+#   degrading its git arms to N/A, while every canonical-mode case here (G/H/I,
+#   N1/N2, K) exports REPO_ROOT into a bare-origin sandbox it builds in $tmp and so
+#   reads no ambient ref at all. A static sweep of the suite found zero ambient
+#   history reads, which favours the second reading — but a static sweep is not the
+#   falsification, and removing a runner pin on unexecuted evidence would trade one
+#   fail-open for another.
+#
+#   TO LIFT IT: run this suite under a depth-1 single-branch checkout with
+#   origin/main absent. If every arm executes and passes, delete this block; the
+#   tool then joins the ubuntu partition automatically (the partition is DERIVED
+#   from this declaration — no manifest or workflow edit participates).
 # check-release-body-drift.sh — Release body-source-of-record drift check.
 # Per release/references/standards/release-notes-standard.md § 5.1 / § 5.6.
 #

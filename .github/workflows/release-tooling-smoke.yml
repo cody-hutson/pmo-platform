@@ -78,17 +78,20 @@ name: Release tooling smoke
 #              authority; this paragraph is NOT a maintained census, so read the live
 #              split from the engine — `check-selftest-coverage.py --list --runner
 #              macos` (or `--runner ubuntu`) — rather than trusting a count written
-#              here. Measured when this note was last reconciled: 57 discovered = 54
+#              here. Measured when this note was last reconciled: 66 discovered = 63
 #              ubuntu + 3 macOS. All three macOS declarers live in release/tools/:
 #              automated-closeout.sh (hard-exits at LOAD time, before argument
 #              parsing, unless gh resolves at a Homebrew path), plus
-#              check-release-body-drift.sh and reemit-release-bodies.sh (which share a
-#              non-portable frontmatter-strip idiom that yields an EMPTY body under
-#              GNU sed on the Linux runner). The drift check is worth naming rather
-#              than leaving to a count: it is a live Stage-13 gate whose drift legs
-#              (B, I) FAIL OPEN on Linux — reporting "no drift" when drift exists — so
-#              an F1 triage that reads it as part of the ubuntu partition
-#              misattributes both where it runs and how it fails.
+#              check-release-body-drift.sh and reemit-release-bodies.sh. Those two
+#              were pinned because they shared a frontmatter-strip idiom that yielded
+#              an EMPTY body on the Linux runner; that idiom is REPAIRED (both now
+#              source the portable awk transform in release/tools/lib/), so the
+#              original basis for their pins is discharged. Their pins persist only
+#              because the falsification that would license moving them onto a
+#              partition they have never run on — do their suites degrade under this
+#              repo's depth-1 selftest-discovery checkout? — has not been executed;
+#              each tool's own header states what would lift it. Until then, treating
+#              either as part of the ubuntu partition misattributes where it runs.
 #              SCOPE BOUNDARY, stated because it is real: release/tools/tests/** and
 #              core/deploy/tools/tests/** are OUTSIDE this discovery scope. Those are
 #              bare-invocation suites, not --self-test dispatchers — and the boundary
@@ -332,11 +335,17 @@ jobs:
           #      note on main; does the close-out state match main's release corpus).
           #      Making them hermetic would delete what they check, not fix them.
           #   3. The failure mode is SILENT, which is why this cannot be left to discover
-          #      itself. Verified: in a depth-1 single-branch checkout with origin/main
-          #      absent, check-release-body-drift.sh --self-test still EXITS 0 while
-          #      degrading its git-reading arms to "N/A (never FAIL)". Dropping this line
-          #      turns those assertions into silent no-ops, not into failures — the exact
-          #      success-without-checking shape #3818 exists to remove.
+          #      itself. The claim recorded here was: in a depth-1 single-branch checkout
+          #      with origin/main absent, check-release-body-drift.sh --self-test still
+          #      EXITS 0 while degrading its git-reading arms to "N/A (never FAIL)".
+          #      CONTESTED, and not re-verified since: every canonical-mode case in that
+          #      suite (G/H/I, N1/N2, K) exports REPO_ROOT into a bare-origin sandbox it
+          #      builds in $tmp, and a static sweep of both suites found ZERO ambient
+          #      history reads — which would mean a shallow checkout cannot degrade them.
+          #      The two readings have not been adjudicated by execution. Until they are,
+          #      this line stays: the conservative posture costs checkout time, and the
+          #      other posture risks re-creating the success-without-checking shape #3818
+          #      exists to remove.
           #   4. The cost argument is job-scoped and stays satisfied: the
           #      selftest-discovery job keeps its shallow checkout, so nothing there is
           #      slowed to accommodate anything here.
@@ -366,11 +375,19 @@ jobs:
       - name: Discovered --self-tests, macOS partition (offline; discovery-based)
         # The macOS half of the discovery gate. A tool lands here ONLY by declaring
         # '# selftest-runner: macos' in its own first 40 lines; everything else runs in
-        # the ubuntu selftest-discovery job. Today exactly one tool declares it —
-        # automated-closeout.sh, which pins PATH to /usr/bin:/bin and resolves `gh` at
-        # /opt/homebrew/bin or /usr/local/bin AT LOAD TIME, before its argument parser
-        # is reached, so `--self-test` is literally unreachable on a runner that
-        # installs gh elsewhere.
+        # the ubuntu selftest-discovery job. Do not trust a count written here — read
+        # the live split from the engine (`check-selftest-coverage.py --list --runner
+        # macos`). At the last reconciliation THREE tools declared it, for two
+        # different reasons:
+        #   - automated-closeout.sh, which pins PATH to /usr/bin:/bin and resolves `gh`
+        #     at /opt/homebrew/bin or /usr/local/bin AT LOAD TIME, before its argument
+        #     parser is reached, so `--self-test` is literally unreachable on a runner
+        #     that installs gh elsewhere. This one is structural and is not expected to
+        #     move.
+        #   - check-release-body-drift.sh and reemit-release-bodies.sh, whose original
+        #     basis (a non-portable frontmatter strip) is REPAIRED, and whose pins now
+        #     stand only until the depth-1-checkout falsification named in their own
+        #     headers is executed. These two are expected to move to ubuntu.
         #
         # That is why the declaration lives at the tool rather than as a workflow
         # exclusion: the requirement is a property of the script, and an exclusion
