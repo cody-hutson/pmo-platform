@@ -57,7 +57,7 @@ rollup green. Mirrors the pre-merge conflict check at
 [`stage-12-execute.md`](stage-12-execute.md) Phase A.6.3 rather than authoring a second
 conflict predicate.
 
-**P2 — Denominator-floored check classification.** Read the denominator first: the
+**P2 — Denominator floor, count stability, then classification.** Read the denominator first: the
 branch-protection required-context count for the pull request's own base branch, `gh api
 repos/{REPO}/branches/<baseRefName>/protection --jq '.required_status_checks.contexts |
 length'`, resolving `<baseRefName>` from the pull request rather than hardcoding the
@@ -66,7 +66,18 @@ name,state,bucket,link`;
 in this `--json` form the command exits **0** even when a required row is failing or
 pending — the exit code signals only an unresolvable PR or an authentication failure —
 so branch on the parsed rows and never on the exit code.
-Classify to exactly one state per the six-state precedence table in
+**Settle the count before comparing it, and compare it BEFORE classifying.** The required
+roster is dispatch-dependent, so poll on `status` — settled means no check reports a status
+other than `COMPLETED`, and an incomplete check returns an *empty* conclusion, so a
+predicate waiting on `PENDING` / `IN_PROGRESS` / `QUEUED` matches nothing and exits early —
+and require the count stable across consecutive polls, against the same head. A count still
+rising is unsettled, not a shortfall. Once settled, a row count below the required-context
+count fails entry here, terminally, without consulting § 5.1: § 5.1's state 1
+`checks-failing` is evaluated first and is *existential*, so a collapsed population holding
+one red row would match it and be recorded as merely informational. See
+[`stage-07-dev-testing.md`](stage-07-dev-testing.md) § Required-gate + mergeability read for
+the full statement of that inversion; Stage 8 mirrors the ordering rather than restating it.
+Otherwise classify to exactly one state per the six-state precedence table in
 [`release-readiness-scan-spec.md`](../specs/release-readiness-scan-spec.md) § 5.1,
 applying its settle allowance and its `isDraft`-only draft predicate; Stage 8 authors no
 new state name and no new precedence order.
@@ -74,9 +85,10 @@ The `Issue-reference validity gate` is the worked example: the two classes it en
 are a bare `#N`-form issue reference placed outside a designated reference block with no
 inline provenance marker, and a deprecated `IMP-NNN` reference.
 
-**Disposition.** A P1 conflict, or § 5.1 state 2 `checks-unreadable` — an observed
-required-row count below the denominator, or a read that did not complete — **fails
-Phase A entry validation** and routes per the Inter-Stage Feedback Protocol. Stage 8 does
+**Disposition.** A P1 conflict, a settled row count below the required-context count (the
+predicate above, evaluated ahead of § 5.1), or § 5.1 state 2 `checks-unreadable` — a read
+that did not complete — **fails Phase A entry validation** and routes per the Inter-Stage
+Feedback Protocol. Stage 8 does
 not open Phase B against a pull request whose gates did not run. States 1, 3 and 6 do not
 fail entry and are recorded in the Acceptance Report as informational findings: a
 `bucket` of `fail` on any required row names that gate — and, for the issue-reference
