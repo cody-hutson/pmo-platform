@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-146 — Dry-run predicts, apply asserts: mode-branch placement in phased close-out tooling"
+title: "ADR-152 — Dry-run predicts, apply asserts: mode-branch placement in phased close-out tooling"
 status: Accepted
 date: 2026-08-27
 release: ci-stable-under-transient-conditions
@@ -16,11 +16,13 @@ source_observations:
   - "The runner aborts the whole run on any non-zero phase, so a single mode-blind abort makes every later phase unreachable for any release that has not already closed — which is why these instances stayed invisible until the first genuine unclosed-release dry-run."
 ---
 
-# ADR-146 — Dry-run predicts, apply asserts: mode-branch placement in phased close-out tooling
+# ADR-152 — Dry-run predicts, apply asserts: mode-branch placement in phased close-out tooling
 
 ## Status
 
 **Accepted.** Authored at Engineering for the `ci-stable-under-transient-conditions` release, under the Collective Review scope-lock that admitted the second class member into this card's scope.
+
+**Numbering provenance — `146 → 152`.** Held **ADR-146** branch-local; renumbered to **ADR-152** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 146. In-release citations that read "ADR-146" denote this record.
 
 ## Context
 

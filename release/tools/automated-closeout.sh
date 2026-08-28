@@ -67,7 +67,7 @@
 # because it had lived only as three comments buried in three separate phase
 # bodies — which is why three instances of ONE defect were found one at a time, by
 # three different stages, across three releases. See
-# release/ADRs/ADR-146-dry-run-predicts-apply-asserts-mode-branch-placement.md.
+# release/ADRs/ADR-152-dry-run-predicts-apply-asserts-mode-branch-placement.md.
 #
 # WHY IT BITES. Every phase is dispatched as `phase_x || { generate_report; exit 3; }`,
 # so ONE non-zero phase kills the run and no later phase enumerates. A phase that
