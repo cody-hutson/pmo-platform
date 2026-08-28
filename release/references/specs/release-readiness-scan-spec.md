@@ -8,6 +8,8 @@ reversibility: CHEAP
 consumers:
   - hub-spoke-bridge.md § Procedure 5 Gate Handling (Stage 9 Decision Briefing)
   - pipeline/stage-09-plan-review.md § 5 Phase A6 + § 11 Audit-Trail Capture
+  - pipeline/stage-07-dev-testing.md § 5 Phase A required-gate + mergeability read (cites § 5.1)
+  - pipeline/stage-08-qa-testing.md § 5 Phase A required-gate + mergeability read (cites § 5.1)
   - gate-criteria-spec.md § Gate 9 G-PR1
   - engagement-charter.md § 2 Stage 9 GO worked example
   - pmo-qa-auditor (downstream consumer; Stage 13 retrospective)
