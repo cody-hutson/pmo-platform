@@ -56,10 +56,19 @@ echo "────────────────────────�
 # ── A. Extract the shipped evaluation region ────────────────────────────────
 build_runner() {
   # $1 = deploy.sh to extract from, $2 = output runner path
-  local _src="$1" _out="$2" _b _e
+  local _src="$1" _out="$2" _b _e _g103
   _b=$(/usr/bin/grep -m1 -n '>>> C22-EVAL-BEGIN' "$_src" | cut -d: -f1)
   _e=$(/usr/bin/grep -m1 -n '>>> C22-EVAL-END' "$_src" | cut -d: -f1)
   [[ -n "$_b" && -n "$_e" && "$_e" -gt "$_b" ]] || return 1
+  # The G1-03 predicate lives at top level in deploy.sh so that Check 22 and
+  # `--self-test` group EV share one code path — which puts it OUTSIDE the
+  # C22-EVAL region extracted below, while the region still calls it. Splice
+  # the SHIPPED definition in, the same way the region's other dependencies
+  # are synthesised. Never stub it: a stub would grade a re-implementation,
+  # which is the exact failure this harness exists to prevent. Empty
+  # extraction fails loudly, like a moved sentinel.
+  _g103=$(/usr/bin/sed -n '/^_g1_03_evaluate() {$/,/^}$/p' "$_src")
+  [[ -n "$_g103" ]] || return 1
   {
     echo '#!/usr/bin/env bash'
     echo 'set -uo pipefail'
@@ -67,6 +76,7 @@ build_runner() {
     echo 'recommend_g1_enforcement() { printf "REC\t%s\n" "$2"; }'
     echo "_audit_src_root=\"\${FIXTURE_SRC_ROOT:-${SRC_ROOT}}\""
     echo 'G1_TITLE_MIN_CHARS=12'
+    printf '%s\n' "$_g103"
     echo 'run_c22() {'
     echo '  local c22_issues_json c22_issue_count c22_finding_count'
     echo '  c22_issues_json=$(cat "$1")'
