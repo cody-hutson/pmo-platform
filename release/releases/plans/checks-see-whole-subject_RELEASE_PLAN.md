@@ -149,7 +149,7 @@ Every path is an internal platform artifact — deploy and CI tooling, pipeline 
 core/disciplines/review-discipline-principles.md                          edit
 release/references/pipeline/stage-05-solutioning.md                       edit
 core/skills/pmo-qa-auditor/references/cascade-completeness-detection.md   edit
-core/ADRs/ADR-142-word-boundary-matching-is-engine-parity-not-syntax.md   add
+core/ADRs/ADR-146-word-boundary-matching-is-engine-parity-not-syntax.md   add
 ```
 
 Resolves Stage-4 `CONDITIONAL:4981-probe-in-skill` — the row **fires**, but on a re-stated condition. The worked probe record lands in the discipline file, not the skill reference; the skill reference is edited for the gate-clause change instead. Editing a skill's `references/` is a skill edit: the `.skill` package and its content-baseline sidecar rebuild in the same PR.
@@ -324,7 +324,7 @@ Enforced pre-merge by the skill-package-freshness CI gate. The rebuild lands in 
 
 **Re-check discharged at position 8 — the n=0 baseline is INVALIDATED, exactly as the obligation anticipated.** Re-measured against the same whole-repo denominator: **n=1**. Draft PR **#6119** (`release/selftests-actually-test` → `main`) is open and **overlaps this release on two files, both of them #5252's**: `.github/workflows/install-tests.yml` (+236/−19) and `.github/workflows/release-tooling-smoke.yml` (+174/−2). The operator ruled **PROCEED and handle at merge**, so no disposition was adjusted to avoid the overlap and no file was left un-reconciled in order to keep a diff small. What position 8 owes instead is legibility, and it is discharged in § Verification Evidence: exact landing hunks in both files in new-file coordinates, plus a statement of what does *not* move — no job, matrix, trigger, step ordering or existing `run:` line in `install-tests.yml`; no step added, removed or reordered in `release-tooling-smoke.yml`.
 
-**A second collision this re-check surfaced, belonging to neither card and routed rather than actioned.** PR #6119 claims `release/ADRs/ADR-142-…` while this branch already carries `core/ADRs/ADR-142-…` from position 1. ADR numbering spans BOTH directories, so that is a **duplicate claim between two unmerged releases** — a duplicate is tooled at merge where a gap would block, but it is a real conflict and someone should own it. It is not #5252's to resolve: that number belongs to position 1 and to another release, and #5252 authored no ADR.
+**A second collision this re-check surfaced, belonging to neither card and routed rather than actioned.** PR #6119 claims `release/ADRs/ADR-146-…` while this branch already carries `core/ADRs/ADR-146-…` from position 1. ADR numbering spans BOTH directories, so that is a **duplicate claim between two unmerged releases** — a duplicate is tooled at merge where a gap would block, but it is a real conflict and someone should own it. It is not #5252's to resolve: that number belongs to position 1 and to another release, and #5252 authored no ADR.
 
 ---
 
@@ -430,12 +430,12 @@ Populated per Engineering chip as each card lands, in the order of § Implementa
 | Cascade-completeness sweep | per-issue | 14 patterns over 3 files / 1,402 lines / 151,169 bytes, engine `python3` `re.search`, file-scoped. Every UPDATE target moved to 0; every PRESERVE target intact — `7 classes` 1, the boundary labels 2, the element-range string 1, `15 rules` 1. Control arms: sensitivity 4 and 8, specificity 0. |
 | Doc-link integrity | integration | `deploy.sh --check` Check 14 — **OK, no broken cross-refs in scope.** |
 | ADR number integrity | integration | `check-adr-numbers.py` — **PASS**, 142 ADRs contiguous, no duplicates. |
-| ADR durability lint | integration | `check-adr-durability.py` — ADR-142 clean; the 2 residual findings are pre-existing on another record. |
+| ADR durability lint | integration | `check-adr-durability.py` — ADR-146 clean; the 2 residual findings are pre-existing on another record. |
 | Skill-package freshness | regression | `pmo-qa-auditor` rebuilt and **fresh**; package plus content-baseline sidecar committed in the same commit as the reference edit. |
 | Runtime suite | self-verification | **`suite-skip`** — the honest no-op. No changed path matches rows 1–5 of the runtime-suite selection map; the change is doc, governance and spec only. Control: a `core/deploy/deploy.sh` probe selects row 2, so the selector discriminates. |
 | Full `deploy.sh --check` | regression | 4 FAIL rows, **none in this change set** — a stale package for a skill this card does not touch, release-body drift across previously logged releases, and a count-structure finding in a file from an earlier release. Probe: 0 of 6 changed paths intersect any FAIL subject; control arm fires at 3 for the subject this card does own. |
 
-**AC-4 resolves via its second limb.** No committed-scripts lint arm ships. The population is measured at zero, and a new executable would carry an allowlist row and CI wiring for no yield. The flip trigger is recorded in ADR-142: the first live occurrence of the forbidden form in a committed script re-opens the decision.
+**AC-4 resolves via its second limb.** No committed-scripts lint arm ships. The population is measured at zero, and a new executable would carry an allowlist row and CI wiring for no yield. The flip trigger is recorded in ADR-146: the first live occurrence of the forbidden form in a committed script re-opens the decision.
 
 ---
 
