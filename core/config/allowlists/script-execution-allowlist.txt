@@ -217,23 +217,6 @@ release/tools/compute-close-class-telemetry.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/audit-epic-rollup-close.sh
 ./release/tools/audit-epic-rollup-close.sh
 release/tools/audit-epic-rollup-close.sh
-# verify-release-plan.sh — the plan-driven verification executor Stage 6 self-
-# verification and Stage 7 Dev Testing run against a release plan. Its TEST SUITE
-# was registered below while the TOOL ITSELF carried ZERO rows, so the pipeline
-# stage that is specified to invoke it could not: `bash release/tools/verify-
-# release-plan.sh <plan>` is BLOCK-DESTRUCTIVE-022-blocked agent-side. Observed
-# live twice — a Stage 5 spoke hit the block during ordinary probing, and the
-# Stage 6 spoke hit it again on `bash -n` — which made both the release's
-# cross-issue criterion and the originating card's own re-run criterion
-# unsatisfiable as worded, since each prescribes running this tool. The generic
-# suffix glob is the fifth form because release spokes execute from a worktree
-# outside the platform root, which forms 1-2 do not reach.
-# (CI runs no Claude hooks; these rows are for the agent-side path, not the workflow.)
-[PMO_PLATFORM_ROOT]/release/tools/verify-release-plan.sh
-[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/verify-release-plan.sh
-./release/tools/verify-release-plan.sh
-release/tools/verify-release-plan.sh
-*/release/tools/verify-release-plan.sh
 # test_corpus_home_tolerance.sh — corpus-home adapter tolerance conformance suite
 # (CH-1..CH-4 of release/references/standards/corpus-home-adapter-constraints.md).
 # Runs in the closeout-smoke CI job AND is invoked agent-side at Stage 7 Dev Testing
@@ -319,12 +302,19 @@ release/tools/tests/test_verify_release_plan.sh
 # allowlisted while the tool itself was not, so the suite was reachable and the
 # thing it grades was not: every agent-side invocation died on
 # BLOCK-DESTRUCTIVE-022, which blocked four builds in one release from running
-# the validator at all. Four forms, matching the suite above. (CI runs no Claude
-# hooks, so these entries are for the agent-side path, not the workflow.)
+# the validator at all. Observed live a further three times in a later release —
+# a Stage 5 spoke during ordinary probing, a Stage 6 spoke on `bash -n`, and a
+# Stage 7 spoke — which made that release's cross-issue criterion and a card's
+# own re-run criterion unsatisfiable as worded, since each prescribes running
+# this tool. FIVE forms: the generic suffix glob is the fifth because release
+# spokes execute from a worktree outside the platform root, which forms 1-2 do
+# not reach — the same case already carried by two suites below. (CI runs no
+# Claude hooks, so these entries are for the agent-side path, not the workflow.)
 [PMO_PLATFORM_ROOT]/release/tools/verify-release-plan.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/verify-release-plan.sh
 ./release/tools/verify-release-plan.sh
 release/tools/verify-release-plan.sh
+*/release/tools/verify-release-plan.sh
 # version-grammar.sh — sourced SSOT library (validate/parse/compare); consumers
 # source it, so all four invocation forms (incl. source/.) must be allowlisted
 # (BLOCK-DESTRUCTIVE-022 gates both `bash <path>` execution and `source <path>`).
