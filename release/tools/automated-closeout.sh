@@ -275,17 +275,27 @@ REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 # different bytes for three live notes than the verifier that grades it. One
 # implementation makes that class of divergence unrepresentable.
 #
-# Sourced UNGUARDED, unlike the version-grammar source further down. That one
-# tolerates a pre-#1676 checkout and degrades; this one must not. A missing
-# transform yields an EMPTY body, and an empty body reaching Phase 15.5 is the
-# irreversible failure this file's empty-body guards exist to stop — so an absent
-# library is a hard load-time failure, not a silent degrade.
-if [[ ! -r "$SCRIPT_DIR/lib/frontmatter-strip.sh" ]]; then
-  echo "FATAL: release/tools/lib/frontmatter-strip.sh is missing or unreadable — refusing to run a release close-out that cannot derive a Release body." >&2
-  exit 2
+# Sourced TOLERANTLY, and the refusal lives at the point of use rather than here.
+#
+# The first version of this block hard-exited 2 at LOAD time when the library was
+# unreadable, reasoning that a close-out unable to derive a Release body should
+# not start. That was over-reach and CI caught it: this script's own conformance
+# fixtures stage exactly two files into a synthetic tree — this script and the
+# instance-path resolver — so a load-time dependency on a third file aborted
+# every fixture before it ran, and `--check-paths` began exiting 2 where
+# corpus-home-adapter-constraints.md CH-1 requires it to tolerate absence and
+# exit 0. A read-only probe must not be gated on a library only the publish path
+# needs.
+#
+# Fail-closed is preserved where it belongs: phase_publish_github_release asserts
+# the transform is defined before using it, and refuses the phase if it is not.
+# That is strictly stronger than the version-grammar degrade pattern below, which
+# substitutes a weaker implementation — this one substitutes nothing and declines
+# to publish.
+if [[ -r "$SCRIPT_DIR/lib/frontmatter-strip.sh" ]]; then
+  # shellcheck source=lib/frontmatter-strip.sh
+  source "$SCRIPT_DIR/lib/frontmatter-strip.sh"
 fi
-# shellcheck source=lib/frontmatter-strip.sh
-source "$SCRIPT_DIR/lib/frontmatter-strip.sh"
 # WORKSPACE_ROOT resolution (env-override → operator.toml → default) per the
 # cleanup-orphan-state.sh precedent. workspace_boundary_check() keys on this; the
 # default uses ${HOME} (no embedded operator identity).
@@ -6073,6 +6083,16 @@ phase_publish_github_release() {
 
   local notes_path; notes_path="$(notes_abs_path)"
 
+  # TRANSFORM-PRESENT GUARD. The §5.1 strip is sourced from release/tools/lib/ and
+  # that source is deliberately tolerant, so a checkout or fixture missing the
+  # library reaches here with strip_frontmatter undefined. Refuse the phase rather
+  # than let an undefined function produce an empty body: this is the publish path,
+  # and an empty body here is the one irreversible outcome in the whole close-out.
+  if ! declare -F strip_frontmatter >/dev/null 2>&1; then
+    mark_phase "publish_github_release" "FAIL" "release/tools/lib/frontmatter-strip.sh is missing or unreadable, so the §5.1 body transform is unavailable — refusing to publish or edit the Release body for $VERSION without it (restore the library and re-run Phase 15.5)"
+    return 3
+  fi
+
   # Preflight 1: tag must exist on origin (Stage 12 Phase B3 push pre-requisite).
   # git_net layers the gh-backed credential helper (locked-Keychain degradation).
   if ! git_net -C "$REPO_ROOT" ls-remote --tags origin "$VERSION" 2>/dev/null | /usr/bin/grep -q "$VERSION"; then
@@ -10044,6 +10064,33 @@ STUB
       # times and report clean, which is the shape of a green suite proving nothing.
       [[ "$_fx_n" -ge 7 ]] || { echo "FAIL: 4h-i — fixture iterated only $_fx_n case(s); a short iteration passes vacuously"; failures=$((failures+1)); }
     fi
+
+    # (j) TRANSFORM-PRESENT GUARD, and the reason it has an arm at all: the first
+    # version of the library source hard-exited 2 at LOAD time when the library was
+    # absent, which aborted this script's own corpus-home fixtures — they stage only
+    # this file and the instance-path resolver — and broke the CH-1 contract that
+    # --check-paths tolerates absence and exits 0. The source is now tolerant and the
+    # refusal moved here. Both halves are asserted: the phase must FAIL without the
+    # transform, and the SCRIPT must still load and answer --check-paths without it.
+    unset -f strip_frontmatter
+    RELEASE_NOTES_DIR="$_gb_dir"; GH="$_eb_stub"
+    /bin/rm -f "$_eb_editfile"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
+    phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
+    [[ "$_pg_rc" -ne 0 ]] || { echo "FAIL: 4h-j — with strip_frontmatter undefined the publish phase must refuse, got rc=0"; failures=$((failures+1)); }
+    [[ "$(get_phase publish_github_release | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: 4h-j — a missing §5.1 transform must mark publish FAIL, got '$(get_phase publish_github_release)'"; failures=$((failures+1)); }
+    [[ ! -f "$_eb_editfile" ]] || { echo "FAIL: 4h-j — gh release edit was invoked with no transform available; the guard must precede the mutation"; failures=$((failures+1)); }
+    # DISCRIMINATOR, and the arm is worthless without it. With the transform-present
+    # guard removed, an undefined function still yields an empty capture, so the
+    # EMPTY-BODY guard fires and the phase still FAILs — measured: the three
+    # assertions above all pass on code with no transform-present guard at all.
+    # Only the DETAIL distinguishes which guard ran, so the arm grades the detail.
+    /usr/bin/grep -qF -- 'frontmatter-strip.sh is missing or unreadable' <<<"$(get_phase publish_github_release)" || { echo "FAIL: 4h-j — the phase must refuse via the TRANSFORM-PRESENT guard and say the library is missing; a detail naming an empty body means the guard was bypassed and the empty-body backstop caught it instead, got '$(get_phase publish_github_release)'"; failures=$((failures+1)); }
+    # Restore it, and prove the restore worked — otherwise every later arm in this
+    # suite would run against an undefined transform and (j) would have broken them.
+    # shellcheck source=lib/frontmatter-strip.sh
+    source "$SCRIPT_DIR/lib/frontmatter-strip.sh"
+    declare -F strip_frontmatter >/dev/null 2>&1 || { echo "FAIL: 4h-j — could not restore strip_frontmatter after the guard arm; later arms would be measuring an unset function"; failures=$((failures+1)); }
 
     GH="$_ms_pub_stub"
     NO_MERGE="$_pg_saved_nomerge"
