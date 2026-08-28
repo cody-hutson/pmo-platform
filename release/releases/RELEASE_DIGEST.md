@@ -8,6 +8,7 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### hooks-block-their-declared-subject (2026-08-28, version-less) — Security controls now cover what they say they cover
 ### v4.40 (2026-08-28) — Seven pipeline rules that disagreed with themselves now agree
 
 ### v4.39 (2026-08-28) — The platform's self-checks can now actually fail

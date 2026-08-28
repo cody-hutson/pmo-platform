@@ -210,6 +210,27 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v4.38 | operator-instance-home-and-install-scaffold | #5739, #3382, #5829 | #5908 | `811962941cbe86472de95513b8ad876e4f7c9711` | `v4.38` | VERIFIED | 2026-08-23 |
 | v4.39 | selftests-actually-test | #5241, #4441, #4914, #5273, #5272, #4913, #5237, #4443, #5239 | #6119 | `15e6bf01ea411319cc6dd7df01c0e306fa53d186` | `v4.39` | VERIFIED | 2026-08-27 |
 | v4.40 | pipeline-spec-self-consistency | #4732, #4719, #4923, #4978, #5069, #5523, #5816 | #6120 | `0fbf275957f854a23411644879fc7b20c2dd073e` | `v4.40` | VERIFIED | 2026-08-28 |
+| hooks-block-their-declared-subject (version-less) | hooks-block-their-declared-subject | #4977, #5250, #5293, #5515, #5568, #5593, #5812 | #6189 | `b528f47d2a6fcf7ff3813e7634dfa2a81818ceec` | (none) | VERIFIED | 2026-08-28 |
+
+#### Deployment Log hooks-block-their-declared-subject
+**Files deployed:** `core/hooks/block-autonomy-ceiling.sh`, `core/hooks/block-destructive.sh` and `core/hooks/block-skill-direct-edit.sh` re-deployed to the workspace hook path by the security-hook bundle refresh (22 hooks processed). `core/rules/bypass-mode-readiness.md` and its `block-destructive.md` fragment ship as repo source only — the `.claude/rules/` mirror has no producer, a pre-existing coverage hole documented at `core/deploy/deploy.sh` § deploy-rules-mirror, so those two surfaces take effect on merge rather than on deploy.
+**Mechanism:** git merge-commit (PR #6189 → main at `b528f47d2a6fcf7ff3813e7634dfa2a81818ceec`), **version-less**, git-native; plus the hook-bundle refresh via `./update.sh` Phase 5c, which retained a 45-file durable snapshot and preserved `.mode` and `.autonomy-mode` operator state.
+**Timestamp:** 2026-08-28 (Friday) (PR #6189 merge 2026-08-28T17:57:31Z UTC; MERGE_SHA `b528f47d2a6fcf7ff3813e7634dfa2a81818ceec`; hook bundle snapshot 2026-08-28T17:59:16Z UTC)
+**Cycle-Time:** 1h15m (T_GO = the Stage-9 `gate-outcome/plan-review-go` row; T_DEPLOY = the latest `deployment-status/deploy-harness` row carrying outcome=resolved; mechanism: compute-cycle-time.sh)
+**Velocity:** planned 18 pts / delivered 18 pts (1.00); files-changed 22; allocation 0/18/0 pts (feature/debt/protocol-slack); class routine; mechanism: compute-release-velocity.sh
+**Result:** SUCCESS — release PR #6189 merged to main via merge commit (two parents, so the `git revert -m 1` rollback convention remains available). No tag: the version-less identity mode claims no version key, so none is stamped and `.version` is untouched. All four affected hooks were verified in sync with source **by content hash rather than by exit status**, per the plan's R6 mitigation — `--refresh-hooks` can exit 0 having deployed nothing on a stale baseline.
+**Outcome:** SUCCESS
+**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 0/2 (0.00); carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 32/33 (0.97); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+
+#### Release Learnings hooks-block-their-declared-subject
+
+**Synthesized at:** 2026-08-28T18:15:38Z
+**Source events:** 2 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`hooks-block-their-declared-subject`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-08-28T18:03:31Z`, `2026-08-28T18:03:31Z`
+
+**Surprise:** repo-integrity PR gates are invisible to every stage before 12 - 21 sigpipe and 1 issue-ref finding stayed green through 7 DT and 7 QA passes [from 2026-08-28T18:03:31Z]; the merge produced a silent allow from two individually-correct guards on one predicate (per-arm arity and xargs-stdin deny) [from 2026-08-28T18:03:31Z]
+**Would-change:** open a draft PR at Stage 7 so they fire early [from 2026-08-28T18:03:31Z]; compose guards that share a predicate, never sequence them [from 2026-08-28T18:03:31Z]
+**Watch-for:** -007 drain 2 rows/6d cannot graduate; 2 schemas overstate counts 9-105x [from 2026-08-28T18:03:31Z]; recurs wherever a merge orders two correct guards [from 2026-08-28T18:03:31Z]
 
 #### Deployment Log v4.40
 **Files deployed:** `release/skills/release-hub/references/orchestration-playbook.md` (a references-only skill-surface change) re-mirrored to the Cowork install path, and the rebuilt `packages/release-hub.skill` package deployed. Denominator: 61 files changed by the release merge (34 `M` / 27 `A`); exactly **1** touches a `skills/**` surface, **2** touch `packages/**`, and **0** touch `core/rules/` (nothing to sync — the rules mirror is already synced on-branch). Per `core/rules/skill-deployment.md` § References-only change propagation this resolves to disposition **(a) propagate** — the default — and is explicitly **not** a no-op: the installed copy was measurably stale before the deploy (24,834 B installed vs 28,104 B source), which is the sensitivity arm for the zero-diff claim below.
