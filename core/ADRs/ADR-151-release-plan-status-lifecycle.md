@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-142 — A release plan's status field records the document's own lifecycle, not the release's deployment state"
+title: "ADR-151 — A release plan's status field records the document's own lifecycle, not the release's deployment state"
 status: Proposed — flips to Accepted when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
 date: 2026-08-24
 release: release-identity-and-plan-lifecycle
@@ -17,11 +17,13 @@ source_observations:
   - "The semantically obvious home for the new assertion, the linter's `--check schema` mode, has ZERO live callers: its only occurrences are the tool's own usage docstring, historical corpus prose, and one agent-invoked skill checklist. A check placed there would have been green and enforcing nothing — the exact outcome the originating card's own acceptance criteria forbid."
 ---
 
-# ADR-142 — A release plan's status field records the document's own lifecycle
+# ADR-151 — A release plan's status field records the document's own lifecycle
 
 ## Status
 
 **Proposed** — flips to **Accepted** when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified.
+
+**Numbering provenance — `142 → 151`.** Held **ADR-142** branch-local; renumbered to **ADR-151** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 142. In-release citations that read "ADR-142" denote this record.
 
 ## Context
 
