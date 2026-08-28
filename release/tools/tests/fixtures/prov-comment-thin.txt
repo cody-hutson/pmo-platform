@@ -1,0 +1,21 @@
+## Stage 4 Planning — output of record
+
+Plan authored directly by the hub for this release; this comment is the output of
+record for the Stage 4 sub-task. See the release plan on the release branch.
+
+---
+
+FIXTURE NOTE (provenance-survival, case P5a — THE LOAD-BEARING CASE).
+
+This is the v4.37 producer surface, reproduced in shape: a thin "output of
+record" stub left when the plan was hub-authored directly rather than
+transcribed from a spoke comment. It carries NONE of Survival-Set rows 1-5.
+
+Paired with prov-label-absent.md it is the demonstration that a delta-only
+mechanism is vacuous. Comment 0, plan 0, set-difference empty — PROV-DELTA
+PASSES, honestly and correctly, because nothing was lost between the surfaces.
+Nothing was lost because nothing was ever there.
+
+A check built only on that comparison reports CLEAN on the exact release that
+failed. PROV-PRESENCE reads the plan alone and FAILs here, which is why the
+absolute limb is not optional decoration on top of the delta.

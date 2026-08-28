@@ -1,0 +1,20 @@
+## Stage 4 Planning — FIXTURE producer surface (provenance-survival)
+
+A Stage-4 planning sub-task comment that DID emit the provenance determination,
+standing in for the normal spoke-authored path. Used by P3 (paired with
+prov-conformant.md → delta PASS) and P4 (paired with prov-label-absent.md →
+delta FAIL naming the lost element).
+
+It carries Survival-Set rows 1 and 2 and deliberately not rows 3-5, so the delta
+limb has a real denominator rather than an all-or-nothing one: P4 must report
+domain_practice-label as lost while file-change-matrix survives. A comment that
+carried every element would not distinguish "one element lost" from "everything
+lost."
+
+### Domain Practice Provenance
+
+domain_practice: { source: N/A — pipeline-internal release, date: 2026-08-24, domain: governance }
+
+### File Change Matrix
+
+release/tools/verify-release-plan.sh                                        READ

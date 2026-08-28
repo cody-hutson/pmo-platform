@@ -3924,6 +3924,70 @@ CHECK  STATE     DISPOSITION                         REACTIVATION / AUTHORITY
 LIFECYCLE
 }
 
+# ─── G1-03 predicate (shared: Check 22 + --self-test group EV) ───────────────
+#
+#   _g1_03_evaluate <body>  ->  0 = PASS | 1 = FAIL
+#
+# The one executable statement of gate-criteria-spec.md § Gate 1 G1-03. Evidence
+# is admissible in EITHER of two shapes:
+#   (a) evidence-label form — a bracket-form evidence token
+#       ([SOURCE]/[INFERRED]/[CONTEXT]/[ASSUMPTION – CONFIRM]/[RECOMMENDED]);
+#   (b) probe-record form  — >=2 DISTINCT markers from the closed set
+#       probe/denominator/control/sensitivity/specificity/verdict, EACH IN
+#       LABEL POSITION, per review-discipline-principles.md § 8.2, whose field
+#       labels this set is derived from (two § 8.2 fields are excluded on
+#       measured corpus absence, not preference).
+#
+# BOTH shapes are scoped to the `### Evidence` SECTION, never the whole body:
+# the criterion says "Evidence carries", and a bracket token sitting in
+# `Proposed Change` is not evidence for a claim in `Evidence`. Do NOT widen
+# back to the whole body — that reintroduces the spec-vs-tool divergence this
+# function exists to close (9 of 239 open F1 bodies passed on an
+# out-of-Evidence token alone).
+#
+# Shape (b) requires two markers in LABEL position, not merely the words.
+# Label-shape is what separates a body REPORTING a probe from one DISCUSSING
+# probes; the >=2 count then rejects a bare `Verdict:` with no probe behind it.
+# Loosening EITHER half converts a real control into a never-FAIL check — see
+# ADR-144. The negative arm is not optional: --self-test group EV asserts the
+# evidence-free and prose-near-miss bodies still FAIL.
+#
+# Extracted as a function rather than left inline in Check 22 because Check
+# 22's live query reaches only OPEN issues in the DEPLOYING milestone, so it
+# structurally cannot exercise its own fixture set. Group EV drives the SAME
+# code path the gate uses — a parallel reimplementation would grade itself.
+_g1_03_evaluate() {
+  local _body="${1-}"
+  local _ev_sec _n _m
+  # `### Evidence` section only — heading-level-agnostic across the ##..####
+  # band, from the heading (exclusive) to the next heading in that band
+  # (exclusive), or to EOF when Evidence is the final section. The band is
+  # written as an alternation rather than an ERE interval `{2,4}` because
+  # interval expressions are not portable across every awk this script runs
+  # under; the two forms are equivalent over this band.
+  _ev_sec="$(/usr/bin/awk '
+    /^(##|###|####)[[:space:]]*Evidence[[:space:]]*$/ { _in = 1; next }
+    _in && /^(##|###|####)[[:space:]]/                { _in = 0 }
+    _in                                               { print }
+  ' <<<"$_body")"
+  # shape (a) — evidence-label form
+  if /usr/bin/grep -qE '\[(SOURCE|INFERRED|CONTEXT|RECOMMENDED|ASSUMPTION)' <<<"$_ev_sec"; then
+    return 0
+  fi
+  # shape (b) — count DISTINCT label-position probe-record markers
+  _n=0
+  for _m in 'probes?' 'denominator' 'controls?' \
+            'sensitivity([[:space:]]+arm)?' 'specificity([[:space:]]+arm)?' 'verdict'; do
+    if /usr/bin/grep -qiE "(^|[[:space:]*_>|(])\**[[:space:]]*${_m}([[:space:]]*[0-9]+)?([[:space:]]*[-—–][[:space:]]*[A-Za-z][A-Za-z -]{0,24})?([[:space:]]+arm)?[[:space:]]*\**[[:space:]]*[:—–]" <<<"$_ev_sec"; then
+      _n=$((_n + 1))
+    fi
+  done
+  if [[ "$_n" -ge 2 ]]; then
+    return 0
+  fi
+  return 1
+}
+
 # ─── Mode: --check ───────────────────────────────────────────────────────────
 
 cmd_check() {
@@ -6247,9 +6311,10 @@ cmd_check() {
   #   G1-01  title prefix `[Category]:` (improvement) / `[Bug]:` (bug per
   #          Adapter G1-01-Bug) / `[Observation]:` (observation per Adapter
   #          G1-01-Obs)
-  #   G1-03  evidence-quality labels present in body — at least one
-  #          [SOURCE]/[INFERRED]/[CONTEXT]/[ASSUMPTION ...]/[RECOMMENDED];
-  #          n/a for observation
+  #   G1-03  evidence present in either admissible shape (evidence-label form
+  #          or probe-record form), Evidence-section-scoped — set and
+  #          co-presence rule per gate-criteria-spec.md § Gate 1 G1-03;
+  #          predicate in `_g1_03_evaluate`. n/a for observation
   #   G1-05a AC structural pattern — each AC checkbox bullet must match one of
   #          the three G1-05a patterns: verb-first (verify/check/confirm/
   #          assert/ensure/validate) | backtick-wrapped path + state verb
@@ -7169,15 +7234,20 @@ sys.stdout.write("".join(out) + "|")
             "issue #${_num} — G1-01 FAIL: title not an informative summary — ${_title_reason} (see intake-style-guide.md §7)"
         fi
 
-        # G1-03 — evidence-quality labels in body. F1: improvement + bug, NOT
-        # observation, per the applies-to triple. F2: iff the body declares an
-        # `### Evidence` section — the kind forms declare no Evidence field, so
-        # demanding an evidence label of them would fail a card for omitting a
-        # field its form never offered.
+        # G1-03 — evidence in EITHER admissible shape. F1: improvement + bug,
+        # NOT observation, per the applies-to triple. F2: iff the body declares
+        # an `### Evidence` section — the kind forms declare no Evidence field,
+        # so demanding evidence of them would fail a card for omitting a field
+        # its form never offered.
+        #
+        # The predicate itself lives in `_g1_03_evaluate` (top of file) so the
+        # gate and `--self-test` group EV exercise ONE code path; the set and
+        # the co-presence rule are stated once in gate-criteria-spec.md § Gate 1
+        # G1-03 and are NOT restated here.
         if [[ "$_ap_evidence" == "true" ]]; then
-          if ! /usr/bin/grep -qE '\[(SOURCE|INFERRED|CONTEXT|RECOMMENDED|ASSUMPTION)' <<<"$_body" ; then
+          if ! _g1_03_evaluate "$_body"; then
             _c22_emit_structural \
-              "issue #${_num} — G1-03 FAIL: no evidence-quality labels found in body ([SOURCE]/[INFERRED]/[CONTEXT]/[ASSUMPTION – CONFIRM]/[RECOMMENDED])"
+              "issue #${_num} — G1-03 FAIL: the Evidence section carries neither an evidence label ([SOURCE]/[INFERRED]/[CONTEXT]/[ASSUMPTION – CONFIRM]/[RECOMMENDED]) nor a probe record (>=2 of Probe:/Denominator:/Control:/Sensitivity:/Specificity:/Verdict: in label position) — see gate-criteria-spec.md § Gate 1 G1-03"
           fi
         fi
 
@@ -13265,6 +13335,140 @@ STUB
   unset DS_MODULE
   /bin/rm -rf "$_d" 2>/dev/null || true
 
+  # ─── Assertion group EV — G1-03 evidence shapes (Check 22) [#4923] ───────────
+  #
+  # Offline, hermetic, in-process: every arm drives `_g1_03_evaluate` — the SAME
+  # function Check 22 calls — against an in-memory body. No network, no gh, no
+  # sandbox tree. This group exists because Check 22's live query reaches only
+  # OPEN issues in the DEPLOYING milestone, so the gate structurally CANNOT
+  # exercise its own fixture set; grading the widening through a live check run
+  # would grade nothing. The predicate was extracted to a function precisely so
+  # this group and the gate cannot drift apart.
+  #
+  # EV-1/EV-2 are the POSITIVE arms for the shape this card adds: a probe record
+  # carrying NO bracket token, which the pre-widening predicate rejected. EV-2
+  # sits deliberately AT the >=2 boundary (exactly two markers) — it is the arm
+  # that turns red if the co-presence count is ever raised to 3.
+  #
+  # EV-4/EV-5 are the NEGATIVE arms, and they are the POINT of this group.
+  # Widening an evidence predicate without a falsification arm converts a real
+  # control into a never-FAIL check. EV-4 is the discrimination claim: a body
+  # carrying ALL SIX marker words as running prose — a body DISCUSSING probes
+  # rather than REPORTING one — must still FAIL. A predicate that passed EV-4
+  # would admit prose about evidence as evidence, which is the loose-word-match
+  # option this design rejected on measured corpus behaviour.
+  #
+  # EV-7/EV-8 kill the two mutants the rejected options represent. EV-7 (exactly
+  # ONE label-position marker -> FAIL) kills the `>=1` mutant: a bare `Verdict:`
+  # with no probe behind it is not a probe record. EV-8 (a bracket token present
+  # but OUTSIDE `### Evidence` -> FAIL) kills the whole-body mutant: paired with
+  # EV-6, which carries the SAME token INSIDE Evidence and must PASS, it is the
+  # arm that turns red the moment the predicate is widened back off the section.
+  echo "self-test: starting assertion group EV (G1-03 evidence shapes, #4923)" >&2
+
+  _ev_assert() {
+    # $1 = arm id · $2 = expected PASS|FAIL · $3 = body
+    local _got
+    if _g1_03_evaluate "$3"; then _got=PASS; else _got=FAIL; fi
+    if [[ "$_got" != "$2" ]]; then
+      echo "FAIL: $1 expected G1-03 $2, got $_got"
+      failures=$((failures+1))
+    fi
+  }
+
+  # EV-1 — probe record, six label-position markers, ZERO bracket tokens.
+  _ev_assert "EV-1 multi-marker probe record" PASS "$(/bin/cat <<'EOF'
+### Evidence
+
+**Probe:** fixed-string sweep for the criterion id across the tracked corpus.
+**Denominator:** 1768 tracked files.
+**Control — sensitivity:** the live criterion id returned 15 hits (non-zero).
+**Control — specificity:** a fabricated criterion id returned 0.
+**Verdict:** CLEAN.
+
+### Next Section
+EOF
+)"
+
+  # EV-2 — BOUNDARY arm: exactly two label-position markers, zero brackets.
+  _ev_assert "EV-2 two-marker boundary" PASS "$(/bin/cat <<'EOF'
+### Evidence
+
+Probe: re-ran the marker sweep over the open intake queue.
+Sensitivity arm: the same invocation returned 58, so the probe fires.
+
+### Next Section
+EOF
+)"
+
+  # EV-3 — no Evidence section declared at all.
+  _ev_assert "EV-3 no Evidence section" FAIL "$(/bin/cat <<'EOF'
+## Summary
+
+The behaviour does not match the documented contract.
+
+## Proposed Change
+
+Reconcile the two surfaces.
+EOF
+)"
+
+  # EV-4 — DISCRIMINATION ARM: all six marker words, none in label position.
+  _ev_assert "EV-4 prose-about-probes near-miss" FAIL "$(/bin/cat <<'EOF'
+### Evidence
+
+This card is about how we write a probe and choose a denominator; the control
+arm question (sensitivity versus specificity) is exactly what a reviewer must
+weigh before reaching any verdict at all. Nothing here reports a measurement.
+
+### Next Section
+EOF
+)"
+
+  # EV-5 — Evidence section declared but carrying no evidence in either shape.
+  _ev_assert "EV-5 evidence-free body" FAIL "$(/bin/cat <<'EOF'
+### Evidence
+
+None yet.
+
+### Next Section
+EOF
+)"
+
+  # EV-6 — REGRESSION arm: shape (a) still passes on its own.
+  _ev_assert "EV-6 bracket-only regression" PASS "$(/bin/cat <<'EOF'
+### Evidence
+
+[SOURCE: core/schemas/gate-criteria-spec.md] the criterion row is normative.
+
+### Next Section
+EOF
+)"
+
+  # EV-7 — kills the `>=1` mutant: one label-position marker is not a record.
+  _ev_assert "EV-7 single-marker must not pass" FAIL "$(/bin/cat <<'EOF'
+### Evidence
+
+Verdict: this is broken.
+
+### Next Section
+EOF
+)"
+
+  # EV-8 — kills the whole-body mutant. Same token as EV-6, wrong section.
+  _ev_assert "EV-8 out-of-Evidence bracket token" FAIL "$(/bin/cat <<'EOF'
+## Summary
+
+[SOURCE: core/schemas/gate-criteria-spec.md] the claim lives out here.
+
+### Evidence
+
+Nothing measured yet.
+
+### Next Section
+EOF
+)"
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failure(s))" >&2
     return 1
@@ -13286,6 +13490,8 @@ STUB
   echo "    RR-5 absent standard NOSET / RR-1 all pointers resolve CLEAN|2 / RR-2 runner no longer carries its anchor UNRESOLVED|1|2 (the shipped defect, in fixture form) / RR-3 absent runner-definition file UNRESOLVED|2|2 / RR-4 zero pointers NOSET / RR-6 prose-only token mentions parse to zero (parser control)" >&2
   echo "  deployment-status emitter validated (#4215, group DS):" >&2
   echo "    DS-1 well-formed slug OK / DS-2 empty + pipe-bearing + whitespace-bearing slugs rejected / DS-3 outcome derivation incl. DS-3c the degraded-but-not-in-FAILURES union term (FAILURES is the exit-code oracle, not the deploy-health oracle) / DS-4 SILENCE DEFAULT — absent --release emits ZERO rows, DS-4b malformed slug likewise / DS-5 CONTROL — the same call WITH a slug emits exactly 1 row carrying the fixed 10-column contract / DS-6 escalated row survives with result:FAIL + DS-6c payload pipe-forging guard + DS-6d 300-char bound / DS-7 THE OBSERVING STEP — targets-with-no-flag WARNs, zero-targets does NOT (honest no-op), release-stamped does NOT / DS-8 exactly 3 emitting subtypes, producer-less subtypes never emitted, with a firing control arm / DS-9 a failing event writer must not fail the deploy / DS-10 the CANONICAL writer accepts all three subtypes via --dry-run, and rejects an out-of-enum subtype and a version-shaped release key (two control arms). Every write in this group routes through the DS_WRITER stub seam — no assertion can append to the real append-only log." >&2
+  echo "  G1-03 evidence shapes validated (#4923, group EV):" >&2
+  echo "    EV-1 six-marker probe record PASSes with zero bracket tokens (the shape this card admits) / EV-2 the >=2 BOUNDARY holds at exactly two markers (turns red if the count is raised) / EV-3 no Evidence section FAILs / EV-4 DISCRIMINATION — all six marker words as running prose still FAIL, so prose ABOUT evidence is not evidence / EV-5 an evidence-free Evidence section FAILs (the falsification arm: the widened predicate is not a never-FAIL check) / EV-6 shape (a) bracket-only still PASSes (regression) / EV-7 a lone label-position marker FAILs, killing the >=1 mutant / EV-8 the SAME token as EV-6 placed OUTSIDE the Evidence section FAILs, killing the whole-body mutant. Every arm drives _g1_03_evaluate, the same function Check 22 calls — no parallel reimplementation to drift." >&2
   return 0
 }
 
