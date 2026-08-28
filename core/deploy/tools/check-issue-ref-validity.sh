@@ -237,6 +237,44 @@ resolve_issue() {
 # SEAM (input selection). Which files are in scope.
 #   delta -> every changed .md between BASE and HEAD (CI parity)
 #   path  -> exactly the files named on the command line
+# Is this path TEST DATA rather than corpus prose?
+#
+# A `.md` under `**/tests/fixtures/**` is an INPUT to a test, not a document anyone
+# navigates — the same rule, and deliberately the same words, as
+# `release/tools/check-release-links.py`'s `is_test_fixture()`. Its `:365` note ("this
+# checker simply had not needed it before, because no fixture markdown had carried a
+# link") is exactly this checker's situation: event-log fixtures carry `sub-task:#N`,
+# `milestone:#N` and `members:[#1\|…\|#7]` because that IS the schema grammar the
+# fixture exists to exercise, and one of them is the D-1 escaped-pipe regression guard
+# whose entire point is its bare-pipe count. Reading those `#N` as prose references and
+# "fixing" them would corrupt the fixtures the tests depend on.
+#
+# Deliberately NARROW, mirroring the precedent: BOTH a `tests` and a `fixtures` path
+# SEGMENT are required, `fixtures` must FOLLOW `tests`, and `fixtures` must be a
+# directory rather than the filename. A `fixtures/` directory with no `tests` ancestor
+# is still scanned — which is what keeps THIS gate's own corpus at
+# `core/deploy/tools/fixtures/issue-ref/` in scope, and so does not realise the hazard
+# named in the header: a gate that exempted its own fixtures would return zero
+# vacuously. Both directions are pinned in run_self_test()'s over-skip guard.
+#
+# The `--equivalence` arm is unaffected: every destination in the shared fixture
+# manifest sits under `docs/`, `.github/`, `core/rules/` or `release/releases/`, so
+# this predicate is a no-op there and the report text is unchanged in both directions.
+#
+# Bash 3.2: no `[[ =~ ]]`, no arrays — segment matching by `case` and prefix stripping.
+is_test_fixture_path() {
+  case "$1" in
+    */tests/*|tests/*) : ;;
+    *) return 1 ;;
+  esac
+  local _rest="${1#*tests/}"   # everything after the first `tests/` segment
+  _rest="${_rest%/*}"          # drop the filename, so `tests/fixtures.md` cannot match
+  case "/${_rest}/" in
+    */fixtures/*) return 0 ;;
+  esac
+  return 1
+}
+
 collect_files() {
   if [ "$INPUT_MODE" = "path" ]; then
     if [ "${#PATHS[@]}" -gt 0 ]; then printf '%s\n' "${PATHS[@]}"; fi
@@ -292,6 +330,9 @@ run_scan() {
       core/rules/git-workflow.md|.github/PULL_REQUEST_TEMPLATE.md) continue ;;  # self-doc (file-top allow-issue-ref)
       release/releases/*) continue ;;  # tracking surface (RELEASE_LOG/INDEX/DIGEST/NOTES/plans) — #N + PR-refs are native provenance; exempt, mirroring the reference-durability gate
     esac
+    # Test data, not corpus prose — see is_test_fixture_path(). Not a `case` arm
+    # because the rule is segment-structural rather than a prefix glob.
+    if is_test_fixture_path "$f"; then continue; fi
     # whole-file override
     if grep -qE "$OVERRIDE" "$f"; then
       echo "::notice::repo-integrity issue-ref: a changed file carries allow-issue-ref — skipped." | tee -a "$GITHUB_STEP_SUMMARY"
@@ -760,6 +801,45 @@ run_self_test() {
   write_gh_shim "$bin"
   export FIXTURE_VERDICT_MAP="$FX_MAP"
   export PATH="$bin:$PATH"
+
+  # ── Test-fixture path exclusion, with its own over-skip guard ──────────────
+  # A skip that is not itself tested can broaden silently and swallow a real
+  # reference, so BOTH directions are pinned: what MUST be excluded, and what must
+  # NOT be. Mirrors check-release-links.py's guard, including its own cases.
+  local p
+  echo "--- scope predicate: is_test_fixture_path, both arms ---"
+  for p in \
+    release/tools/tests/fixtures/event-record/log-clean.md \
+    release/tools/tests/fixtures/event-record/log-escapedpipe-clean.md \
+    core/deploy/tests/fixtures/nested/deep/y.md \
+    tests/fixtures/top-level.md \
+    a/tests/sub/fixtures/deep.md ; do
+    assertions=$((assertions + 1))
+    if ! is_test_fixture_path "$p"; then
+      echo "    FAIL  [scope] expected test-fixture markdown to be excluded: $p"
+      failures=$((failures + 1))
+    fi
+  done
+  # Over-skip guard — corpus prose that MUST still be scanned. The last entry is
+  # this gate's OWN fixture corpus: it carries a `fixtures` segment but no `tests`
+  # ancestor, so it stays in scope. That is the header's "the whole suite would
+  # return zero vacuously" hazard, pinned as an assertion rather than reasoned about.
+  for p in \
+    release/references/pipeline/stage-06-engineering.md \
+    core/disciplines/architecture-overview.md \
+    release/tools/tests/README.md \
+    docs/fixtures/setup.md \
+    release/tools/tests/fixtures.md \
+    core/deploy/tools/fixtures/issue-ref/cases/z1-override.md ; do
+    assertions=$((assertions + 1))
+    if is_test_fixture_path "$p"; then
+      echo "    FAIL  [scope] corpus markdown wrongly excluded as a fixture (over-skip): $p"
+      failures=$((failures + 1))
+    fi
+  done
+  if [ "$failures" -eq 0 ]; then
+    echo "    PASS  [scope]  must-exclude=5  must-scan=6"
+  fi
 
   echo "--- fixture matrix: 2 invocation forms x 2 input modes x 2 resolvers = 8 cells ---"
   for form in ci direct; do

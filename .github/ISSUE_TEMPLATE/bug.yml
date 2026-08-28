@@ -60,9 +60,16 @@ body:
     attributes:
       label: Evidence
       description: |
-        Label every factual claim. Use [SOURCE] for citations, [INFERRED] for deductions,
-        [ASSUMPTION – CONFIRM] for unverified claims, [CONTEXT] for background.
-      placeholder: "[SOURCE: ./deploy.sh L42] — the CHANGED_PACKAGES var is assigned only inside the if-block."
+        Evidence is admissible in EITHER of two shapes — use either, or both.
+        (a) Evidence-label form — label every factual claim. Use [SOURCE] for citations,
+        [INFERRED] for deductions, [ASSUMPTION – CONFIRM] for unverified claims, [CONTEXT] for background.
+        (b) Probe-record form — if you measured something (how often it reproduces, over what
+        population), report the measurement: at least two of Probe: / Denominator: / Control: /
+        Sensitivity: / Specificity: / Verdict:, each as a label. No bracket labels needed.
+        Both shapes are read from THIS section only. See release/references/how-to/intake-style-guide.md §8.
+      placeholder: |
+        [SOURCE: ./deploy.sh L42] — the CHANGED_PACKAGES var is assigned only inside the if-block.
+        Probe: re-ran the deploy on a clean checkout, 20 times. Denominator: 20 runs. Control — specificity: the same runs with the flag unset reproduced 0 times. Verdict: reproduces 20/20 when armed.
     validations:
       required: true
 

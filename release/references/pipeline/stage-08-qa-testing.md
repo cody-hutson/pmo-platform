@@ -215,7 +215,16 @@ Stage 8's Step 0 is **strictly stronger** than Stage 7's and is keyed on the per
 
 **Why stronger than Stage 7:** Stage 7's Step 0 permits an in-scope **Blocker** to be auto-dispositioned **fix-now** by the weighted layer and is silent on override records. Stage 8 (a) keys on the **contractual `NOT MET`** verdict, (b) forbids *any non-fix* disposition of it absent operator sign-off, and (c) requires that sign-off to be **recorded** — because an acceptance criterion is a commitment from issue creation, and deferring/accepting it is a conscious scope change, not routine prioritization.
 
-**Operator Override Record** (required for any deferred-or-accepted NOT-MET, or AC-blocking PARTIAL, criterion):
+**Operator Override Record — trigger.** *Single normative statement. Every other mention of this obligation — elsewhere in this file, in other stage specs, in skills, and in templates — **cites** this statement rather than restating it, per [`duplicate-source-discipline.md`](../../../core/standards/duplicate-source-discipline.md) §1 condition 2 (consolidate to one canonical source with cross-references).*
+
+A record is required when, and only when, a criterion is dispositioned **`Defer`** or **`Accept`** AND either:
+
+1. its Phase B verdict is **`NOT MET`**; or
+2. its Phase B verdict is **`PARTIAL`** and its unmet remainder is **AC-blocking** — classified by the Test in § PARTIAL deferral criteria below.
+
+**Explicitly: a `PARTIAL` whose unmet remainder is non-AC-blocking requires NO record** — it is dispositioned by the Step 1 weighted layer per § PARTIAL deferral criteria. A **`fix-now`** disposition requires no record at any verdict, and the drift verdicts are out of this gate (see the Step 0 bullets above).
+
+Record fields:
 
 | Field | Content |
 |---|---|
@@ -225,15 +234,22 @@ Stage 8's Step 0 is **strictly stronger** than Stage 7's and is keyed on the per
 | **Operator rationale** | why the conscious scope change is acceptable (1–3 sentences; "routine prioritization" is **not** a valid rationale) |
 | **Reversibility + landing** | reversibility tier + where the gap lands: **Defer** → a next-release issue number (the gap gets a tracked home); **Accept** → recorded in the Acceptance Report fitness assessment |
 
-The agent **surfaces** the NOT-MET/PARTIAL gap and the *requirement* for an Override Record; it does **not** self-author the override (Tier 3 — acceptance is human judgment per § 8). A **CONDITIONAL ACCEPT** at Phase E that covers a NOT-MET/PARTIAL AC **must** carry an Override Record per criterion — this is the existing "documented rationale" of that verdict made specific. CONDITIONAL ACCEPT is the **named vehicle** for an accepted NOT-MET/PARTIAL AC; no parallel verdict is invented.
+The agent **surfaces** the gap and the *requirement* for an Override Record wherever the trigger above fires; it does **not** self-author the override (Tier 3 — acceptance is human judgment per § 8). **CONDITIONAL ACCEPT** is the **named vehicle** for an accepted criterion the trigger reaches: at Phase E such a verdict **must** carry one Override Record per **triggering** criterion — this is the existing "documented rationale" of that verdict made specific. Whether a given criterion triggers is decided by the trigger above and is not restated here; no parallel verdict is invented.
 
 #### PARTIAL deferral criteria
 
 A `PARTIAL` keys the gate by its **unmet remainder**:
 
-- **Unmet remainder is non-AC-blocking** (cosmetic, outside the AC's contractual scope, or aspirational with no documented commitment) → routes the **Step 1 weighted layer**; **may be deferred or accepted without an operator override** (a deferral opens a next-release issue; an acceptance carries the one-line weighted-layer rationale). This is the "substantially met, minor remainder" case CONDITIONAL ACCEPT contemplates.
-- **Unmet remainder is itself an acceptance commitment** (a contractual sub-criterion is undelivered) → **escalates to the Step-0 NOT-MET gate**: fix-now (Lane 2 → DT return) is the only no-override disposition; defer/accept requires the Operator Override Record.
+- **Unmet remainder is non-AC-blocking** (cosmetic, outside the AC's contractual scope, or aspirational with no documented commitment) → routes the **Step 1 weighted layer**: a deferral opens a next-release issue; an acceptance carries the one-line weighted-layer rationale. The § Step 0 trigger does **not** fire, so no Override Record attaches. This is the "substantially met, minor remainder" case CONDITIONAL ACCEPT contemplates.
+- **Unmet remainder is itself an acceptance commitment** (a contractual sub-criterion is undelivered) → **escalates to the Step-0 NOT-MET gate**: fix-now (Lane 2 → DT return) is the only no-override disposition; defer/accept fires the § Step 0 trigger and requires the Operator Override Record.
 - **Test:** *"Is the unmet portion something we agreed to deliver?"* — **yes → NOT-MET gate**; **no → weighted layer.**
+
+**Worked example — both arms.**
+
+- **Non-AC-blocking remainder → no record.** A criterion reads *"the reconciled rule carries a worked example."* At acceptance the example is present and matches the rule, but sits one subsection above where the author intended. Verdict `PARTIAL`. Test — *is the unmet portion something we agreed to deliver?* **No**: the criterion committed to the example existing and matching, not to its placement. Remainder is **non-AC-blocking** → Step 1 weighted layer → `accept` with the one-line weighted rationale, recorded in the fitness assessment. **No Operator Override Record.**
+- **AC-blocking remainder → record required.** A criterion reads *"the rule states explicitly whether the non-triggering case requires a record."* At acceptance the rule states the triggering case and leaves the non-triggering case to inference. Verdict `PARTIAL`. Test: **Yes** — naming that case *is* the criterion's contractual content, and it is undelivered. Remainder is **AC-blocking** → escalates to the Step-0 gate → `fix-now` is the only no-override disposition; `defer` or `accept` **requires the Operator Override Record** per the § Step 0 trigger.
+
+The pair is this gate's falsification arm: the first case shows the trigger **declining to fire**, the second shows it **firing**. A trigger that only ever fires is not a trigger.
 
 #### Disposition × three-lane composition
 
@@ -243,7 +259,7 @@ The lane says WHERE a finding routes; the disposition says WHEN it is addressed;
 |---|---|
 | **Lane 1 — Cosmetic** (non-AC) | **Accept (informational)** by default — the existing "Note — log, no action required" *is* the accept disposition; the weighted layer is not exercised and Step 0 does not fire (no AC at stake). |
 | **Lane 2 — AC Gap** (`NOT MET`, fixable) | **Step 0 fires.** Default = **fix-now** → the existing QA Return to Dev Testing path. **Defer or Accept is legal only with the Operator Override Record.** The override gate lives here. |
-| **Lane 3 — Acceptance Judgment** (subjective AC, fitness) | **Tier-3 disposition by the operator at Phase E.** A subjective/fitness AC judged acceptable-as-is is an **Accept** carrying the Override Record when the underlying verdict is NOT-MET/PARTIAL. The weighted layer is advisory input to the judgment. |
+| **Lane 3 — Acceptance Judgment** (subjective AC, fitness) | **Tier-3 disposition by the operator at Phase E.** A subjective/fitness AC judged acceptable-as-is is an **Accept**; it carries the Override Record exactly when the § Step 0 trigger fires for that criterion. The weighted layer is advisory input to the judgment. |
 
 #### Stage 7 ↔ Stage 8 differentiation (what is shared vs. what QA overrides)
 
@@ -255,7 +271,7 @@ This is the inverse view of the differentiation note in [`stage-07-dev-testing.m
 | Step 1 weighted disposition + Step 2 tie-break (§ 4) | references the shared framework | **inherited unchanged** (references the same shared framework) |
 | Step 0 hard precedence | open **Blocker** → fix-now-or-escalate; never silent defer/accept; **Note** → Accept | **STRENGTHENED:** **NOT-MET AC** → fix-now is the only no-override disposition; defer/accept needs a **recorded operator override**. Strictly stronger — Stage 7 permits in-scope Blocker auto-fix-now and records no override; Stage 8 forbids any non-fix disposition of a NOT-MET AC absent recorded sign-off. |
 | Finding vocabulary | DT severity (Blocker / Warning / Note) | QA per-criterion verdict (`MET / NOT MET / PARTIAL`); NOT-MET keys the gate, PARTIAL keys by unmet remainder; drift verdicts are out-of-gate |
-| Routing on Defer | new next-release issue | **same**, plus a deferred NOT-MET/PARTIAL-AC-blocking criterion additionally requires the Operator Override Record |
+| Routing on Defer | new next-release issue | **same**, plus a deferred criterion that the § Step 0 trigger reaches additionally requires the Operator Override Record |
 
 **Phase D — Iteration Loop:**
 QA Pass 1 → Route findings per lanes → Lane actions executed (Lane 2 triggers QA→DT Return per [DT↔QA Handoff Protocol](stage-07-dev-testing.md#dtqa-handoff-protocol); DT runs full re-review per the DT-Eng iteration loop, iterates with Engineering, emits Verified Signal on PASS) → QA Pass 2 (full re-review per Stage 8 §5 Phase D) triggered by Verified Signal → If new findings, route again → Escalation at iteration count > 2 (flag to operator). Iteration cap rationale: more than 2 passes indicates a systemic issue, not incremental fixes.
@@ -267,7 +283,7 @@ QA Pass 1 → Route findings per lanes → Lane actions executed (Lane 2 trigger
 
 The tier binding is by the *nature* of the requested change, never by the fact that it arrived as a comment. **Single-operator posture:** under the single-operator reviewer convention the PR ships with no assigned external reviewer, so no *trusted-reviewer* comments arrive in steady state and this path is exercised rarely — rarely, not never: on a public repository unsolicited third-party comments can arrive at any time. The author-association trust boundary (per the protocol reference above) gates entry to the tier-mapping — a comment outside the trusted set is surfaced to the operator as untrusted third-party content and is never absorbed as a QA finding, requirement, or instruction. **Cutover discipline:** Applies to all releases entering Stage 8 going forward.
 
-**Phase E — Human Review (Tier 3):** 3 verdicts — ACCEPT (all AC met, fitness confirmed), CONDITIONAL ACCEPT (minor gaps with documented rationale), REJECT (AC gaps requiring Engineering rework) / HOLD (scope question requiring Planning review). For each finding, apply the **Finding Disposition Decision Framework** to render disposition (fix-now / defer / accept); a CONDITIONAL ACCEPT covering a `NOT MET` or AC-blocking `PARTIAL` criterion MUST carry an Operator Override Record per that framework's Step 0.
+**Phase E — Human Review (Tier 3):** 3 verdicts — ACCEPT (all AC met, fitness confirmed), CONDITIONAL ACCEPT (minor gaps with documented rationale), REJECT (AC gaps requiring Engineering rework) / HOLD (scope question requiring Planning review). For each finding, apply the **Finding Disposition Decision Framework** to render disposition (fix-now / defer / accept); a CONDITIONAL ACCEPT covering any criterion the framework's § Step 0 trigger reaches MUST carry an Operator Override Record per that trigger.
 
 ##### Phase E3 — REJECT/HOLD upstream re-scope routing (requirements-clarity vs implementation)
 

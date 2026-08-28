@@ -221,6 +221,16 @@ Stage 7 Dev Testing's Domain-Practice Provenance Verification Step verifies agai
 
   The label form for an exempt release: `domain_practice: { source: N/A — pipeline-internal release, date: <YYYY-MM-DD>, domain: <governance|software|...> }`. The `domain:` value points the downstream consumer at the guide that encodes that domain's practice; the guide IS the encoding the "already encoded" presumption presumed.
 
+**`source:` value grammar (closed — exactly three forms).** Normalize the value before matching: trim surrounding whitespace, and fold any of `—` (U+2014) / `–` (U+2013) / `--` / `-` used as the `N/A` separator to a single U+2014. *(Census at introduction: 85 of 85 exemption-token occurrences use U+2014 today; the fold is prophylactic, so a typographic slip is never reported as a semantic finding.)*
+
+| Form | Normalized value must… | Companion obligation |
+|---|---|---|
+| **A — SOURCED** | *begin with* an `https://`/`http://` URL **or** a repo-relative path ending in a tracked extension (`.md` `.sh` `.py` `.toml` `.json` `.yml` `.yaml` `.txt`). A trailing section anchor or parenthetical qualifier is permitted after the path | `name:` present |
+| **B — UNSOURCED** | equal exactly `UNSOURCED-DOMAIN` | `rationale:` present in the same body |
+| **X — EXEMPT** | equal exactly `N/A — pipeline-internal release` | none |
+
+**Any other value is non-conformant** and routes to one of the three above. **Routing rule for the recurring "in-repo precedent governs" case:** it is **not** a fourth form. When the File Change Matrix consists entirely of internal pmo-platform artifacts, the release is sourcing-exempt and takes **Form X verbatim**. When the matrix is not entirely internal but in-repo precedent nonetheless governed the design, that precedent is a repo-relative citation and takes **Form A**, naming the concrete path — the domain guide at `core/standards/domain-best-practices/<domain>.md` when that is what governed, otherwise the precedent file's own path. The two properties this spec already separates — *sourcing-exempt* (where the files live) versus *what informed the design* — partition the case with no residue, which is why no fourth token is minted. The grammar is asserted mechanically by the `provenance-survival` check family in [`verify-release-plan.sh`](../../tools/verify-release-plan.sh).
+
 **Cross-PR Overlap Audit (A4 extension):** A4 file contention resolution covers two distinct operations. (1) **Within-release contention**: files claimed by multiple change-specs in the current release plan; resolved via sequencing or scope split. (2) **Cross-PR contention**: files in the current change-spec also being modified by recently-merged or open PRs outside this release; surfaced via baseline-pinned analysis (last-N merged PRs + open PRs at audit-start commit SHA per `<OPERATOR_INSTANCE_ANALYSIS_PATH>/file-overlap-audit-<date>/`). Cross-PR contention informs sequencing (defer until upstream merges) or risk-register entries. **Distinction discipline**: this audit is NOT byte-identity verification of release-plan files at Engineering Commit 0 — that check confirms internal consistency of the plan; this check identifies external collisions across PRs. Both check forms operate at A4 but answer different questions. **Append-pattern detection (per [ADR-005](../../ADRs/ADR-005-append-pattern-aware-cross-pr-contention-scoring.md))**: post-cutover audits classify each contended file with an `overlap_class` enum (`append-pattern` / `line-range-overlap` / `single-pr`) computed from per-PR `line_ranges` (hunk-range JSON arrays); files with `overlap_class = append-pattern` are informational (structurally HIGH, operationally LOW — append-pattern PRs almost never conflict at merge time), while `line-range-overlap` retains the ADR-001 sequencing/scope-split mitigation guidance. Canonical implementation: `python3 release/tools/check-line-range-overlap.py` (optional for ≤3-PR audits; recommended for ≥3-PR cases for reproducibility). Cutover: applies to releases entering Stage 4 on or after the ADR-001 introducing-release merge SHA recorded in `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`; pre-cutover releases are exempt. Append-pattern detection (ADR-005) applies to releases entering Stage 4 strictly AFTER the ADR-005 introducing-release merge SHA; **the ADR-005 introducing release itself is exempt** (reflexive-pipeline-loop discipline — the rule shipping in a release cannot fire on its own bundling).
 
 **Structural-blast-radius sub-audit (A4 extension — cross-release mover collision).** Beyond the same-path overlap scans above, A4 models the **structural blast radius** of a file-mover release per the Stage 3 Bundle spec § A9.6.1 axis — A4 is the first pipeline point a release branch exists, so it is the **authoritative** structural-detection surface (Stage 3 is advisory pre-branch). Procedure: (1) compute this release's mover-set via the 4-token git mover-classifier (`git diff --name-status --find-renames <base>..<head>`); (2) compute `SURFACE(R)` via the F1–F6 ref-form sweep per [`doc-corpus-reorg-ref-forms.md`](../protocols/doc-corpus-reorg-ref-forms.md) parameterized by the mover-set's old/new path pairs — **consume the Stage 5 Phase A3.2 sweep output when it has already fired** for this release rather than recomputing; the cross-release surface is the union of F1 / F2 / F3 / F5 + the in-tree half of F6 (**F4 mover-internal-outbound is EXCLUDED** — it is the release's own A3.2 rewrite obligation, not an edit to the target files, and including it over-serializes against high-traffic governance files), plus the **version-slot virtual-path token `Δversion/<claim-key>`** per the Stage 3 Bundle spec § A9.6.1 Step 2a — the provisional version is bound at the Stage 4 D-Version gate, so A4 is the **first authoritative** firing of the version axis (Stage 3 is advisory pre-binding); (3) for each open/planned sibling milestone, test `EDITSET(sibling) ∩ SURFACE(R) ≠ ∅` from the sibling's File Change Matrix (a sibling intending the same provisional version slot contributes the same `Δversion/<claim-key>` token, so a version collision surfaces as a Tier-S serialization edge here exactly as a mover collision does). A true intersection is a **serialization point** (one merges, the other re-baselines) recorded as a Tier-S edge in the Parallelization Map and in the Risk Register — not a parallel candidate. The surface is bounded to the mover-set's own rewrite/break surface (never the whole repo), so a sibling editing a path outside the surface is explicitly not serialized. **Scope:** corpus mover-sets (the code-mover case uses the Phase A3.1 domain-aware impact-analysis branch, not this corpus sweep). **Cutover:** applies to releases entering Stage 4 strictly AFTER this protocol's introducing-release merge SHA recorded in the release log; the introducing release itself is exempt (reflexive-pipeline-loop discipline).
@@ -259,7 +269,7 @@ A6's verdict is advisory — it surfaces capacity risk in the plan. The load-bea
 **Framework dimensions touched:** Work Breakdown (sub-task decomposition); State Persistence (release plan). Per [execution-framework.md](../../../core/disciplines/execution-framework.md).
 
 ## 6. Outputs
-Release plan file (`release/releases/plans/vX.Y_RELEASE_PLAN.md`), committed on release branch. Sections: Implementation Sequence, File Change Matrix, Integration Points, Risk Register, Delivery Strategy, Verification Plan, Rollback Strategy, Quota Budget (Phase A6 output), Cross-Issue Acceptance Criteria (present-when-nonzero — see § below).
+Release plan file (`release/releases/plans/<slug>_RELEASE_PLAN.md` while in flight; renamed to `release/releases/plans/v<MAJOR>/v<X.Y>_RELEASE_PLAN.md` at the Stage-12 atomic claim per ADR-092), committed on release branch. Sections: Implementation Sequence, File Change Matrix, Integration Points, Risk Register, Delivery Strategy, Verification Plan, Rollback Strategy, Quota Budget (Phase A6 output), Cross-Issue Acceptance Criteria (present-when-nonzero — see § below).
 
 **Plan links are workspace-rooted, because the plan moves.** Every intra-repo markdown
 link authored inside a release plan MUST use the workspace-rooted form — a leading `/`,
@@ -351,6 +361,41 @@ rather than treated as absent**, and a plan with uninterpreted rows cannot reach
 8. **Fenced blocks may carry `#` comment labels.** The FCM extractor is fence-aware, so a
    `# ── label ──` line inside a fence is read as a block label rather than as a heading
    that ends the section. Authors do not need to avoid it.
+
+**Commit-0 Survival Set — what the plan file must carry out of Stage 4.** The Stage-4
+sub-task comment is the working reference only until Engineering Commit 0 lands
+([`hub-spoke-bridge.md`](../how-to/hub-spoke-bridge.md) Procedure 0 § Canonical location);
+from that commit the plan file is the durable surface every later stage reads. The elements
+below are determined at Stage 4 **and** read from the plan file by a named downstream
+consumer, so a transcription that drops one is a **spec violation, not an oversight**. Each
+row names the consumer that would silently lose its input, and the guard that would notice.
+
+| # | Survival element | Determined at | Consumer that reads it from the plan | Mechanical guard today |
+|---|---|---|---|---|
+| 1 | `domain_practice` label (`source` · `date` · in-label `domain` · Mode-B `rationale`) | A1.5 (§ 5.7) | Stage-13 close-class rung 1 ([`stage-13-close.md`](stage-13-close.md)); Stage-5 A3.1 impact-method selector; design-review checklist § 4.6 guide resolution; Stage-7 Phase A + Phase C | **`provenance-survival`** family in `verify-release-plan.sh` |
+| 2 | File Change Matrix (machine-readable) | A3 | `fcm-delivery`; Stage-7/8/9 chip path extraction | `fcm-delivery` family |
+| 3 | Cross-Issue Acceptance Criteria (`CIAC-N`) | A5 | Stage-9 QC3.5 / Phase A3.6 | `parse_ciac` → `integration` family |
+| 4 | Verification Plan | A5 | Stage-6 C4 self-verification; Stage-7 re-execution | `parse_verification_plan` → per-issue families |
+| 5 | `{{RELEASE_VERSION}}` stamp manifest | D-Version | Stage-12 atomic claim | `claim-version.sh --verify-stamp` |
+| 6 | Stage Applicability Matrix | A2 | Procedure 1 scaffolding (which sub-tasks exist) | none — a miss is visible as an absent sub-task |
+| 7 | Release Class declaration | D-ReleaseClass | Stage-9 review depth; engagement density | none — reviewer-read |
+| 8 | Implementation Sequence | A2 | Stage-6 dispatch order | none — reviewer-read |
+| 9 | Baseline pin (`origin/main` SHA) | A0 | Stage-9 A6.5 mid-pipeline divergence re-check | none — reviewer-read |
+
+> **Rows 1–5 are mechanically guarded; rows 6–9 are reviewer-read.** That split is the
+> answer to *"was anything else dropped?"*: the elements with a frozen, machine-locatable
+> serialization can be checked, and the ones re-rendered into different prose between the
+> two surfaces cannot be — a token-level comparison of a re-rendered element produces false
+> findings, not coverage. Row 1 was the only mechanically-guardable element with **no**
+> guard; rows 6–9 are guarded by review by design, and adding a regex to them would
+> manufacture failures rather than find them.
+>
+> *Cutover (introducing-release-exempt): this enumeration binds releases entering Stage 4
+> strictly AFTER this clause's introducing-release merge SHA recorded in
+> [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>). **The
+> introducing release itself is exempt** — its own Stage 4 ran before the enumeration
+> existed (reflexive-pipeline-loop discipline). All releases that entered Stage 4 prior to
+> the introducing release are also exempt.*
 
 The `### Quota Budget` section records the Phase A6 Checkpoint A estimate. Scaffold:
 

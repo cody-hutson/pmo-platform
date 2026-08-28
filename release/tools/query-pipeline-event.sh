@@ -20,6 +20,7 @@
 #   ./query-pipeline-event.sh --event-type session-retro                       # per-session self-retro rows (all 3 subtypes)
 #   ./query-pipeline-event.sh --event-type session-retro --event-subtype operator-feedback  # no-decision operator-feedback learnings only
 #   ./query-pipeline-event.sh --r-class                                        # EXPENSIVE + IRREVERSIBLE decisions
+#   ./query-pipeline-event.sh --payload-contains "D-37"                        # PAYLOAD substring — attribute a write to its own identifier
 #   ./query-pipeline-event.sh --count                                          # row count summary
 #
 # Flags can compose:
@@ -33,6 +34,16 @@
 #   are always announced on stderr, and escalate to an `INDETERMINATE:` notice when the
 #   matched rows provably span more than one milestone. Ambiguity is REPORTED, never
 #   resolved by guessing.
+#
+# --payload-contains <literal> (schema § 11.8 / orchestration-playbook § 4a step 4):
+#   FIXED-STRING substring test on the payload column. Never a regex, and that is a
+#   measured choice: this platform's `grep` is ugrep-shimmed, so a pattern it rejects
+#   yields a PLAUSIBLE ZERO rather than an error — indistinguishable from "no matches".
+#   awk's index() has no pattern to reject, so that failure mode cannot occur. Copies
+#   the shipped --subject form verbatim rather than inventing a second one.
+#   It exists so a write can be attributed to its OWN identifier: a PRE/POST row-count
+#   delta is a COUNT, and a count cannot attribute — a sibling row in the same class
+#   satisfies it while the write under test is missing.
 #
 # --window N mixed-arity caveat: --window restricts to the trailing N DISTINCT `version`
 #   values. Post-cutover that column holds milestone slugs BESIDE legacy `vX.Y` values,
@@ -94,7 +105,7 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 usage() {
   # Line range tracks the Usage + Flags-compose + --release/--window notes block above.
   # Update BOTH when that block moves — a stale range prints the wrong help silently.
-  /usr/bin/sed -n '11,40p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '11,51p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -107,6 +118,7 @@ EVENT_SUBTYPE=""
 R_CLASS=false
 COUNT=false
 WINDOW=""
+PAYLOAD_CONTAINS=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -116,6 +128,7 @@ while [[ $# -gt 0 ]]; do
     --subject) SUBJECT="$2"; shift 2 ;;
     --event-type) EVENT_TYPE="$2"; shift 2 ;;
     --event-subtype) EVENT_SUBTYPE="$2"; shift 2 ;;
+    --payload-contains) PAYLOAD_CONTAINS="$2"; shift 2 ;;
     --r-class) R_CLASS=true; shift ;;
     --count) COUNT=true; shift ;;
     --window) WINDOW="$2"; shift 2 ;;
@@ -205,6 +218,8 @@ BEGIN { FS = " \\| "; OFS = " | " }
   if (event_type != "" && $4 != event_type) next
   if (event_subtype != "" && $5 != event_subtype) next
   if (subject != "" && index($7, subject) == 0) next
+  # FIXED-STRING payload predicate. index(), never a regex — see the header note.
+  if (payload_contains != "" && index($10, payload_contains) == 0) next
   if (r_class == "true" && $8 != "EXPENSIVE" && $8 != "IRREVERSIBLE") next
   print line
 }'
@@ -221,6 +236,7 @@ FILTERED=$(echo "$DATA_ROWS" | /usr/bin/awk \
   -v event_type="$EVENT_TYPE" \
   -v event_subtype="$EVENT_SUBTYPE" \
   -v subject="$SUBJECT" \
+  -v payload_contains="$PAYLOAD_CONTAINS" \
   -v r_class="$R_CLASS" \
   "$filter_awk")
 

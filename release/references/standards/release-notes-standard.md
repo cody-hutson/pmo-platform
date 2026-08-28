@@ -617,6 +617,8 @@ Stage 13 — Close (existing per pipeline/stage-13-close.md)
 └── Phase C — Milestone close (Standing-GO Tier-1)
 ```
 
+**The Stage-13 backstop, and why it is not a second anchor.** `automated-closeout.sh` phase 15.5 runs the same § 5.5 state machine at Stage 13. It is an idempotent **backstop** for a Surface 1 that Stage 12 did not emit — the stage anchor above is unaffected, because a backstop firing is the record of an anomaly, not an alternative emit point. Phase 15.5 records its path as `SURFACE1-STATE=CREATED | EDITED | NO-OP`; `CREATED` is a Stage-12 omission and is reported as such at [`stage-13-close.md § Phase B5.6`](../pipeline/stage-13-close.md).
+
 **Pipeline-shard codification:** The Stage 12 + Stage 13 pipeline shards (`release/references/pipeline/stage-12-execute.md` + `release/references/pipeline/stage-13-close.md`), the `release-executor` SKILL.md Mode update, and the `hub-spoke-bridge.md` Stage 12/13 chip pattern amendments are owned by the sibling pipeline-shard codification ticket. Readers seeking the pipeline-execution detail consult that ticket's deliverables; this standard records the contract (sequence, transforms, failure semantics) only.
 
 ### 5.5 Idempotency + retry semantics — Surface 1 view-then-create-or-edit pattern

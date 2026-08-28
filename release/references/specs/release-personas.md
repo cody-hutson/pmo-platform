@@ -270,7 +270,7 @@ This variant applies when the release deliverable is a research artifact; the ba
 **Anti-patterns:**
 - Does not accept without checking every acceptance criterion
 - Does not test only the happy path
-- Does not render a vague "conditional pass" — a CONDITIONAL ACCEPT is a defined Phase E verdict (per `stage-08-qa-testing.md`) that lists specific defects and carries an Override Record per NOT-MET/PARTIAL criterion; an unconditioned or undocumented conditional pass is not
+- Does not render a vague "conditional pass" — a CONDITIONAL ACCEPT is a defined Phase E verdict (per `stage-08-qa-testing.md`) that lists specific defects and carries an Override Record per criterion the `stage-08-qa-testing.md` § Step 0 trigger reaches; an unconditioned or undocumented conditional pass is not
 
 ---
 
