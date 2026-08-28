@@ -316,7 +316,23 @@ One deployed-copy propagation target: the `release-planner` skill package (`pack
 
 ## Verification Evidence
 
-Populated by each Engineering spoke as its card lands, and by the plan-verification executor at Stage 6 Phase C4.
+**CI at `6ae3b4bc`:** **76 of 76** `statusCheckRollup` rows SUCCESS, zero non-passing; **9 of 9** required contexts green; `mergeStateStatus` **CLEAN**; branch **0 behind** `origin/main`.
+
+*Read from `statusCheckRollup`, not `gh pr checks`* — the two disagree at the same instant, 76 against 50, because they count different things. Every CI figure in this plan is the rollup.
+
+| Gate | Result |
+|---|---|
+| **Stage 7 — Dev Testing** | **9 of 9 PASS.** Zero blockers; zero cards returned for rework at exit. |
+| **Stage 8 — QA acceptance** | **9 of 9 accepted** — 4 ACCEPT, 5 ACCEPT-WITH-CONDITIONS. One Lane-2 return and one QA Pass 2, both discharged inside the Phase-D cap of 2. |
+| **Corpus regression floor** | `lint_release_corpus.py` exit **1**, exactly one blocking `FILENAME-NONCOMPLIANT` on `v3.96_agent-finops-foundation_RELEASE_PLAN.md`, present identically at `origin/main`. **At floor**, confirmed independently seven times. |
+| **ADR-number integrity** | **PASS — 155 ADRs, contiguous 001..155, no duplicates.** The branch carried a `GAP` through Stages 7–8 while it held 155 without `main`'s 149–154; the reconciliation merge resolved it as predicted. |
+| **Plan-status lifecycle** | 37 of 183 plans carry a frontmatter `status:`; **33 CLOSED**, 29 reach the terminal-coherence antecedent, **0 violations**. |
+| **Regression suite** | `test_plan_status_terminal_transition.sh` — **23 assertions, 0 failures**, now wired into `release-tooling-smoke.yml`. It shipped with no executor at all; QA caught that. |
+| **Package freshness** | **55 of 55** rostered packages content-fresh, verified by source reconstruction rather than by the warn-mode gate's exit code. |
+
+**An evidence-quality statement that belongs on the record rather than in a comment.** Stages 7 and 8 rendered **every** verdict without CI evidence. The branch conflicted with `main`, so no merge ref existed and only 4 push-triggered rows ran; each spoke recorded "0 required rows" as **NOT clean** rather than reading it as green. CI first ran after Stage 8 closed.
+
+**The 76/76 green is therefore independent of those verdicts, not corroborating them.** Two evidence streams that agree is worth more than one — and it is not the same thing as the gates having been green while the work was graded. A reader deciding how much weight to put on this section should know which of those two it is.
 
 ## Hub-Rendered D-Decisions
 
@@ -357,9 +373,33 @@ A deviation is flagged, never silently taken. Recorded per spoke as deviations a
 
 The corrected reference-mapping result still sat one slot below the planned version. The gap is resolved by the adapter contract itself: `repo-host-adapter-versioning.md` § 2.2 makes it **normative** that `claimed_set()` include in-flight claims — *"the held-but-unclaimed window is exactly where a naive implementation would miss a contender"* — while § 4's three-surface table is explicitly labelled a reference mapping and *"not part of the contract"*. A measurement of in-flight holds found the sibling release `selftests-actually-test` carrying a committed Engineering-Commit-0 plan that records the intervening slot as its own recomputed next-free. Including that in-flight hold, the recomputed next-free equals the planned version, both HALT conjuncts hold, and the version half returns **PROCEED**. Recorded because the intermediate result would otherwise read as an unexplained divergence.
 
+**DEV-1 (Stage 9 Phase A3.7, hub) — a declared ADD was not delivered, and no row said so.** The File Change Matrix declares `release/tools/tests/test_verify_release_plan_field_parity.sh` as an `add` under #4713. **It does not exist at HEAD.** Measured: 0 occurrences in the tracked tree, against a control confirming a sibling declared-add from the same release (`test_plan_status_terminal_transition.sh`) is present at 1 — so the zero is the file's absence, not a broken probe.
+
+The plan verification executor emitted this as `FCM-2 FAIL — declared-add-not-delivered` and it went unrecorded through Stages 6, 7 and 8. **Two separate reasons it survived**, both worth naming: the executor's `--format=json` output is unparseable (#6224) and its per-issue rows mis-attribute under a field collapse (#6234), so its verdicts were read narratively rather than mechanically; and Stage-7 and Stage-8 scope-boundary checks are **one-directional** — both confirm nothing *outside* the matrix was touched, and neither confirms everything *inside* it landed. Phase A3.7 exists precisely for that asymmetry, and this is the first release in which it has caught something.
+
+**Disposition: recorded as NOT DELIVERED, not retro-fitted.** #4713's five acceptance criteria were graded MET at Stage 8 on evidence that does not depend on this file — AC5's CI-execution limb is satisfied by `test_verify_release_plan.sh`, which exists, is wired into `release-tooling-smoke.yml`, and runs 146 assertions green. Building an undeclared suite at Stage 9 to satisfy a matrix row would be adding scope past the Collective Review lock to make a record look tidy. The honest artifact is this row.
+
+**Extending A3.7 across all 34 main-matrix rows found 7 undelivered, 4 unconditional.** Three are `edit` rows under #4218 — `append-pipeline-event.sh`, `compute-cycle-time.sh`, `reemit-release-bodies.sh` — which **G-PR11 structurally cannot see, because its predicate grades ADDs only**. `compute-cycle-time.sh` has positive evidence of deliberate non-edit (Stage 6 measured it already conforming, and #4218's AC5 explicitly forbids "fixing" it). The other two are unmentioned in any #4218 thread and are recorded here as genuinely unexplained rather than assumed benign.
+
 ## Change Description
 
-Authored at Stage 6 Phase C1 once the implementation sequence has landed, and committed on the release branch before the PR is transitioned to ready-for-review at the Stage 9 gate.
+**67 files, +3,161 / −218 across 25 non-merge commits** (27 with merges), against `origin/main` at 0 behind.
+
+The release makes a plan's identity and lifecycle state consistent from claim through close, and widens the instruments that verify them so they see every release rather than a version-shaped subset. Nine cards, each a delivery slice on one branch:
+
+- **#4562** repoints two citations of a script that does not exist at mechanisms that do, preserving audit-trail occurrences in shipped plans rather than deleting history.
+- **#4749** makes `RELEASE_PROTOCOL.md` § Versioning → Phase 1 the single named home of the plan-file and branch naming convention, with a five-row projection register, and ratifies ADR-092 against *this* release's Collective Review rather than backdating it to one that never had it on the agenda.
+- **#5549** introduces the terminal status value `CLOSED`, a close-out writer at Phase 6.9 ordered to make the existing Phase 9.3 lint a completeness backstop, a 32-file corpus transition, and a regression suite.
+- **#5234** converts five version-anchored `RELEASE_LOG` enumerators to read the whole ledger, each emitting its denominator so a zero stays distinguishable from an unread population.
+- **#4445** registers Check 59's efficacy with an executable falsification repro.
+- **#4713** repairs escaped-pipe field splitting and the CIAC hit counter in the plan verifier.
+- **#4218** converts the residual version-keyed read sites and adds a linter dimension that distinguishes a deliberate one from an unconverted one.
+- **#4563** brings the `release-planner` skill's gate enumeration to the full five by citation rather than restatement, and rebuilds the shipped package.
+- **#5092** binds each verification-method row to the criterion it tests.
+
+**Nine `fix(dt): [ADJUST]` commits** carry findings Dev Testing and QA routed back — among them a regression suite that shipped with **no CI executor at all**, an allowlist registration duplicated by a concurrent merge, and a reporting line announcing an exclusion for limbs a default had gated off.
+
+**Two package rebuilds where the plan declared one**, the second because a later fix edited a package member. Disclosed in that commit rather than left to be discovered.
 
 ## Issue References
 
