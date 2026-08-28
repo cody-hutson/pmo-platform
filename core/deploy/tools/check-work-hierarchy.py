@@ -1392,6 +1392,76 @@ def self_test():
         check("SSOT empty vocabulary still exits 3 with the zero-kinds cause",
               rc == 3 and "zero kinds" in err and "PARTIAL" not in err)
 
+    # ── G1-G2: main()'s H1-SIDE EMISSIONS, driven through the shipped CLI ────
+    # The R-series drives the LIBRARY — `unresolved_surfaces` (R10, R11, R13) and
+    # `run_h1`. Neither the `SKIP H1` row nor the `scanned == 0` fail-loud arm
+    # lives there: BOTH live in main(), and both were previously deletable with
+    # the whole suite still green. R13's own comment says it covers the INPUT to
+    # the exit-3 arm; nothing covered the arm. These two cases cover the arms.
+    #
+    # `_h3_cli` above is the generic CLI driver despite its H3-flavoured name — it
+    # runs this tool's shipped command line, which is the only surface these two
+    # emissions have. `--skip-backlog` keeps both arms offline.
+    #
+    # The two are INDEPENDENT by construction, so each attributes to its own
+    # subject: G1 scans a NON-empty population (the exit-3 arm never fires there),
+    # and G2 asserts on stderr and on the absence of the TSV, neither of which the
+    # G1 loop writes. Deleting either subject reddens exactly one of them.
+
+    # G1: an unresolved CONFIGURED surface must be NAMED on stdout rather than
+    # swallowed. The fixture builds every shipped scan root EXCEPT one, plus every
+    # extra file, so the expected output is exactly ONE row. That exactness is the
+    # specificity arm: a loop emitting a row per CONFIGURED surface rather than per
+    # UNRESOLVED one reports four rows and fails here, and a deleted loop reports
+    # none and fails here. Asserted through the SHIPPED constants, so dropping this
+    # root from DEFAULT_SCAN_ROOTS reddens the case too — correctly, since it would
+    # then be asserting about a surface nothing configures.
+    ABSENT_ROOT = "operations"
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _mkroot(tmp, "nothing is asserted on this line\n")
+        for scan_root in DEFAULT_SCAN_ROOTS:
+            if scan_root != ABSENT_ROOT:
+                os.makedirs(os.path.join(tmp, scan_root), exist_ok=True)
+        for extra in EXTRA_SCAN_FILES:
+            full = os.path.join(tmp, extra)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w", encoding="utf-8") as fh:
+                fh.write("nothing is asserted here either\n")
+        rc, out_s, _err = _h3_cli(root, ("--skip-backlog",))
+        skips = [ln for ln in out_s.split("\n") if ln.startswith("SKIP\tH1\t")]
+        check("G1 main() emits one SKIP H1 row naming the unresolved surface",
+              rc == 0
+              and skips == ["SKIP\tH1\tunresolved scan surface: root:" + ABSENT_ROOT])
+
+    # G2: main()'s `scanned == 0` fail-loud arm — the guard that stops an H1 scan
+    # over an EMPTY population from reading green, which is this check's OWN
+    # failure shape one level up. A pack-only tree resolves a vocabulary but holds
+    # no scannable file, so the population is empty by construction while the run
+    # still gets far enough to reach the guard.
+    #
+    # Four conjuncts, each pinning a distinct property the guard's own comment
+    # claims: it exits 3; the cause is SELF-CONTAINED on the FIRST line (deploy.sh
+    # captures this run with 2>&1 and reports `head -1`, so a later line would not
+    # survive the trip); the TSV is NOT printed ahead of it (which would hand the
+    # operator `VOCAB ...` as the diagnosis); and it names only the surfaces that
+    # actually failed to resolve rather than every configured one — the partial
+    # case the DERIVED wording exists to report correctly. `core` resolves in this
+    # fixture and must therefore not be named.
+    with tempfile.TemporaryDirectory() as tmp:
+        root, _ = _pack_root(tmp, SELF_TEST_PACK)
+        rc, out_s, err_s = _h3_cli(root, ("--skip-backlog",))
+        first = err_s.split("\n")[0]
+        configured = len(DEFAULT_SCAN_ROOTS) + len(EXTRA_SCAN_FILES)
+        # _pack_root creates exactly ONE configured surface (`core`), so every
+        # other configured surface is unresolved.
+        check("G2 an empty H1 population exits 3, self-contained on line 1",
+              rc == 3
+              and first.startswith("ERROR\tH1 scan population is empty")
+              and ("%d of %d configured scan surfaces unresolved"
+                   % (configured - 1, configured)) in first
+              and "root:core" not in first
+              and "VOCAB" not in out_s)
+
     failed = [n for n, ok in results if not ok]
     for name, ok in results:
         print(("  PASS  " if ok else "  FAIL  ") + name)
