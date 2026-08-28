@@ -160,7 +160,7 @@ Exits non-zero on any mismatch and prints the localizing diff.
 > constructions landed on exactly that byte count with four different digests. Treat
 > *size matches but digest differs* as the **highest**-suspicion signal, not the lowest —
 > it is the signature of a missing `jq -S`, a wrong `--depth`, a polluted scan root, or
-> (since #5074) a **git-tracked scan root where the recipe calls for a `mktemp` copy**.
+> (since [#5074](#provenance)) a **git-tracked scan root where the recipe calls for a `mktemp` copy**.
 
 ## Regeneration protocol
 
@@ -186,4 +186,20 @@ reason, a golden diff, and a log row, all in the same diff.
 | Date | Reason | Producing SHA | Bytes | sha256 (16) |
 |---|---|---|---|---|
 | 2026-08-06 | Initial fixture creation — replaces the `git show <sha>:…` history recovery. Golden generated from current `blast-radius.sh`; verified byte-identical to the pre-refactor blob and to the pre-fan-out-cap tool on the same corpus, 30/30 across 3 unrelated scan roots. | (this PR) | 751 | `2ae110de972f292b` |
-| 2026-08-25 | #5260 + #5074 — blast-radius.sh now emits stats.second_order_status (PV-7a Register A) so a not-computed second-order result is distinguishable from a measured-empty one, plus stats.unreadable_files, stats.scan_scope and stats.scan_scope_status (tracked-vs-all-files enumeration scoping). The F1 corpus is a non-git mktemp copy, so it correctly reports scan_scope=all-files / scan_scope_status=not-run; the depth-2 run is MEASURED, so second_order_status=fetched and second_order_count stays present at 0, and total_files_scanned stays 3. normalize() now also deletes the scan-root-class-dependent scan_scope_status_reason. | b39a8dc7 | 883 | `ec46e8a7cd67b2b9` |
+| 2026-08-25 | [#5260](#provenance) + [#5074](#provenance) — blast-radius.sh now emits stats.second_order_status (PV-7a Register A) so a not-computed second-order result is distinguishable from a measured-empty one, plus stats.unreadable_files, stats.scan_scope and stats.scan_scope_status (tracked-vs-all-files enumeration scoping). The F1 corpus is a non-git mktemp copy, so it correctly reports scan_scope=all-files / scan_scope_status=not-run; the depth-2 run is MEASURED, so second_order_status=fetched and second_order_count stays present at 0, and total_files_scanned stays 3. normalize() now also deletes the scan-root-class-dependent scan_scope_status_reason. | b39a8dc7 | 883 | `ec46e8a7cd67b2b9` |
+
+## Provenance
+
+The issues whose `blast-radius.sh` behaviour changes this fixture records. Each is
+referenced inline above and links here; this block is their designated home.
+
+- **#5074 — git-ignored-tree enumeration inflating every impact denominator.** Made the
+  scan-root class observable in the tool's output (`stats.scan_scope`,
+  `stats.scan_scope_status`). That is why *size matches but digest differs* now carries a
+  fourth candidate cause: a git-tracked scan root where the recipe calls for a `mktemp`
+  copy. The F1 corpus is a non-git `mktemp` copy, so it reports
+  `scan_scope=all-files` / `scan_scope_status=not-run`.
+- **#5260 — `second_order_count` 0 at depth 1, indistinguishable from a measured empty
+  set.** Added `stats.second_order_status`, so a not-computed second-order result is
+  distinguishable from a measured-empty one. The F1 depth-2 run is MEASURED, so it
+  reports `second_order_status=fetched` with `second_order_count` present at 0.
