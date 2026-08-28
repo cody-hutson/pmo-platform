@@ -547,20 +547,39 @@ if [[ "$SELF_TEST" == "true" ]]; then
   # findings on a file it could not open would be the defect this card is about.
   arm 2 "unreadable log surface exits 2"           "/nonexistent/log.md"  "/nonexistent"          "/nonexistent"       "$PAST" log
 
+  # SIGPIPE-REWRITE, covering this arm and the specificity arm below. Both were
+  # `run_engine … | /usr/bin/grep -q …`, which under this file's `set -euo pipefail`
+  # (:56) lets `grep -q`'s early exit break the pipe so the pipeline reports the
+  # WRITER's status instead of the match. They failed in opposite directions and the
+  # second one is the dangerous one: the denominator arm would report a denominator
+  # missing that is present (a false failure), while the specificity arm would
+  # silently DROP a genuine AI-999 sighting — a probe that cannot fire, shipped
+  # inside the validator whose whole subject is population integrity. Both are
+  # size-dependent, so they stay inert on small fixtures and wake up on the live log.
+  #
+  # NOT a here-string here. `grep -q … <<<"$(run_engine …)"` discards run_engine's
+  # exit status inside the command substitution. Unlike a `printf` writer this one
+  # carries a real status (1 = findings, 2 = unreadable surface), so it is captured
+  # the way every other arm in this harness captures it — see `arm()` at :499 — and
+  # reported on failure, which is also what makes an engine that never ran
+  # distinguishable from an engine that ran and printed the wrong thing.
+
   # A denominator must actually be printed — a finding count with no population
   # is not a measurement, and CIAC-4 grades on the denominator's presence.
   ARMS=$((ARMS + 1))
-  if ! run_engine "$F/log-clean.md" "$F/writelog-clean.log" "$F/ledger-clean.md" "$PAST" both table "$SCHEMA_FILE" \
-       | /usr/bin/grep -q "of .* log rows"; then
-    echo "ERROR: self-test arm FAILED: report must print a DENOMINATOR for every check" >&2
+  _dn_rc=0
+  _dn_out="$(run_engine "$F/log-clean.md" "$F/writelog-clean.log" "$F/ledger-clean.md" "$PAST" both table "$SCHEMA_FILE")" || _dn_rc=$?
+  if ! /usr/bin/grep -q "of .* log rows" <<<"$_dn_out"; then
+    echo "ERROR: self-test arm FAILED: report must print a DENOMINATOR for every check (engine rc=$_dn_rc)" >&2
     FAILED=$((FAILED + 1))
   fi
   # A specificity arm on a fabricated identifier must return nothing. If this
   # ever fires, the AI-id extractor is matching something it should not.
   ARMS=$((ARMS + 1))
-  if run_engine "$F/log-clean.md" "$F/writelog-clean.log" "$F/ledger-clean.md" "$PAST" both table "$SCHEMA_FILE" \
-       | /usr/bin/grep -q "AI-999"; then
-    echo "ERROR: self-test arm FAILED: fabricated AI-999 must not appear in any finding" >&2
+  _sp_rc=0
+  _sp_out="$(run_engine "$F/log-clean.md" "$F/writelog-clean.log" "$F/ledger-clean.md" "$PAST" both table "$SCHEMA_FILE")" || _sp_rc=$?
+  if /usr/bin/grep -q "AI-999" <<<"$_sp_out"; then
+    echo "ERROR: self-test arm FAILED: fabricated AI-999 must not appear in any finding (engine rc=$_sp_rc)" >&2
     FAILED=$((FAILED + 1))
   fi
   # The cutover parser must reject a value it cannot read, rather than defaulting.
