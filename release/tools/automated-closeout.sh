@@ -11382,10 +11382,22 @@ FOLOG
   # tag<->Release limbs ever ran, which is the mode-blindness defect inverted.
   # `declare -f` emits the parsed body with comments stripped, so prose cannot
   # satisfy or defeat this.
-  if declare -f phase_assert_anchor_hygiene | /usr/bin/grep -qF 'mark_phase "assert_anchor_hygiene" "DRY-RUN"'; then
+  #
+  # The body is captured ONCE into a variable and matched from a HERE-STRING, not
+  # piped. `declare -f X | grep -q P` is a writer into a short-circuiting reader:
+  # grep exits on its first match, the writer's next write hits a broken pipe, and
+  # under pipefail that non-zero status becomes the PIPELINE's — so a successful
+  # match reports failure. On a runner that inherits SIGPIPE as SIG_IGN the status
+  # is 1, indistinguishable from "no match", which silently inverts both arms
+  # below into passes. There is no writer to signal when the haystack is a string.
+  local _fo_body; _fo_body="$(declare -f phase_assert_anchor_hygiene)"
+  # ANTI-VACUITY on the capture itself: an empty body would satisfy the negative
+  # arm and fail the positive one for the wrong reason.
+  [[ -n "$_fo_body" ]] || { echo "FAIL: h8 — could not capture phase_assert_anchor_hygiene's parsed body; both structural arms below would be measuring nothing"; failures=$((failures+1)); }
+  if /usr/bin/grep -qF 'mark_phase "assert_anchor_hygiene" "DRY-RUN"' <<<"$_fo_body"; then
     echo "FAIL: h8 — phase 15.55 must NOT take the whole-phase dry-run relocation; two of its three limbs are mode-invariant and must keep running at --dry-run"; failures=$((failures+1))
   fi
-  declare -f phase_assert_anchor_hygiene | /usr/bin/grep -qF 'ledger_gap_is_this_close' || { echo "FAIL: h8 — the parity limb must route through ledger_gap_is_this_close; an inlined mode test is not the arm set above"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'ledger_gap_is_this_close' <<<"$_fo_body" || { echo "FAIL: h8 — the parity limb must route through ledger_gap_is_this_close; an inlined mode test is not the arm set above"; failures=$((failures+1)); }
 
   MODE="$_fo_saved_mode"; VERSION="$_fo_saved_version"
 
