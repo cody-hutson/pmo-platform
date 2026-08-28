@@ -1057,7 +1057,7 @@ jobs:
         # ::group:: per tool, and exits non-zero if any failed.
         run: python3 release/tools/check-selftest-coverage.py --run --runner=ubuntu
 
-      - name: Arms B/C/D — the meta-assertions
+      - name: The meta-assertions (--reconcile)
         # Arm B is the answer to "a tool advertising --self-test but not discovered
         # must fail the gate", and it is deliberately NOT computed from the same glob
         # as Arm A. If both sides came from one grep, "advertises but is not
@@ -1076,6 +1076,10 @@ jobs:
         # suites are OUTSIDE this gate's scope by decision, not because they are empty
         # of dispatch — at least one of them does dispatch — so surveillance, not
         # silence, is the honest treatment.
+        # Arm E (HARD) reconciles core/deploy/tools/ against its README inventory over
+        # the DIRECTORY listing — never the self-test manifest, whose population is
+        # smaller by design. No predicate, glob or roster enters this YAML: the thin
+        # caller below reaches the new arm with no functional change.
         run: python3 release/tools/check-selftest-coverage.py --reconcile
 
       - name: Precision probe — a deliberately broken self-test MUST fail the gate

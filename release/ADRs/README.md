@@ -70,6 +70,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-145](ADR-145-wave-width-is-a-second-checkpoint-b-output-not-a-verdict.md) | Wave width is a second Checkpoint B output, not a verdict | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
 | [ADR-146](ADR-146-dry-run-predicts-apply-asserts-mode-branch-placement.md) | Dry-run predicts, apply asserts: mode-branch placement in phased close-out tooling | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
 | [ADR-147](ADR-147-one-frontmatter-strip-bound-to-a-conformance-fixture.md) | One frontmatter-strip transform: a shared library bound to a committed conformance fixture, over replication governed by a registry comment | Accepted | 2026-08-28 | ci-stable-under-transient-conditions |
+| [ADR-148](ADR-148-arm-e-population-is-the-directory-never-the-manifest.md) | The tool-coverage engine hosts a second invariant whose population is the directory, never the manifest | Accepted | 2026-08-28 | ci-stable-under-transient-conditions |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
