@@ -13049,10 +13049,20 @@ EOF
       _c32_compute_verdict lifecycle 2>/dev/null
   }
   _rc_denom() {
-    C32_LOG="$_rclog" C32_INDEX="$_rcindex" C32_DIGEST="$_rcdigest" \
-    C32_NOTES_DIR="$_rcnotes" C32_ALLOWLIST="$_rct/no-such-allowlist.txt" \
-    RELEASE_CORPUS_CHECK_CUTOFF="${1:-v9.80}" RELEASE_CORPUS_RELEASE_CUTOFF="__none__" \
-      _c32_compute_verdict lifecycle 2>&1 >/dev/null | /usr/bin/grep -m1 'DENOM'
+    # The DENOM line is emitted on stderr, so the stream is swapped and stdout dropped.
+    # Read that stream into a variable FIRST, then match from a here-string: a
+    # `producer | grep -m1` stops reading the instant the match lands, the producer's
+    # next write takes EPIPE, and `pipefail` promotes that to the pipeline's status —
+    # a SUCCESSFUL match reporting failure under this file's `set -euo pipefail`.
+    # Measured here at 141. Respelling `-m1` as `-m 1` / `--max-count=1` does NOT help
+    # (every bounded read short-circuits identically); removing the PIPE is the fix.
+    # repo-integrity GATE 10.
+    local _dn
+    _dn="$(C32_LOG="$_rclog" C32_INDEX="$_rcindex" C32_DIGEST="$_rcdigest" \
+      C32_NOTES_DIR="$_rcnotes" C32_ALLOWLIST="$_rct/no-such-allowlist.txt" \
+      RELEASE_CORPUS_CHECK_CUTOFF="${1:-v9.80}" RELEASE_CORPUS_RELEASE_CUTOFF="__none__" \
+        _c32_compute_verdict lifecycle 2>&1 >/dev/null)"
+    /usr/bin/grep -m1 'DENOM' <<<"$_dn"
   }
 
   local _rcv _rcd _rce _rcn _rcrc _rct_total
@@ -13133,8 +13143,15 @@ EOF
   # versioned row `row_key` and `corpus_key` are BYTE-IDENTICAL, so nothing about such a
   # row's resolution can move. KILLS: any marker-stripping rule that also rewrites a
   # `vX.Y` key.
-  local _rcrow _rck1 _rck2
-  _rcrow="$(_rl_data_rows "$_rclog" | /usr/bin/grep -m1 '^versioned|')"
+  local _rcrow _rck1 _rck2 _rcrows
+  # Read the rows into a variable, then match from a here-string — the same shape the
+  # five other `_rl_data_rows` callers in this file already use. Piping a producer into
+  # a bounded read lets the reader stop early, EPIPEs the producer's next write, and
+  # `pipefail` promotes that to the pipeline's status, so a FOUND row reports failure.
+  # `-m` instead of `-m1` short-circuits identically; dropping the PIPE is the fix.
+  # repo-integrity GATE 10.
+  _rcrows="$(_rl_data_rows "$_rclog")"
+  _rcrow="$(/usr/bin/grep -m1 '^versioned|' <<<"$_rcrows")"
   _rck1="$(/usr/bin/cut -d'|' -f2 <<<"$_rcrow")"
   _rck2="$(/usr/bin/cut -d'|' -f3 <<<"$_rcrow")"
   [[ "$_rck1" == "v9.80" && "$_rck2" == "v9.80" ]] || { echo "FAIL: RC-6 a versioned row's row_key and corpus_key must both be the verbatim cell 'v9.80', got '$_rck1' / '$_rck2'"; failures=$((failures+1)); }
