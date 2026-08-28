@@ -22,9 +22,20 @@
 #     --self-test    run built-in assertions against the synthetic test-fixtures; no
 #                    source or operator-store access.
 #
-# Exit codes: 0 ok · 2 usage error · 3 source unreadable, or incremental carry-forward
-#             read failure (store left unchanged) · 4 store-not-git-ignored
-#             (fail-closed public-repo exfil guard) · 5 missing dependency (jq/git).
+# Exit codes: 0 ok · 2 usage error · 3 fail-closed read failure (four causes, below)
+#             · 4 store-not-git-ignored (fail-closed public-repo exfil guard)
+#             · 5 missing dependency (jq/git).
+#
+# Exit 3 has FOUR distinct causes, not one. Every one leaves an existing store
+# UNCHANGED, and every one prints its own `FATAL (exit 3):` line naming itself — so
+# the cause is READ OFF STDERR and never inferred from the code alone:
+#     - session-data source root unreadable            (both modes, pre-dispatch)
+#     - --incremental drop-set read failed over the re-extracted records
+#     - --incremental drop-set could not be assembled
+#     - --incremental carry-forward could not read the store
+# The carry-forward cause came from #4188; the two drop-set causes are new in #5240.
+# A caller that branches on the exit code alone cannot tell "there was nothing to
+# read" from "the store is intact but now stale" — match the message, not just 3.
 
 set -uo pipefail
 
