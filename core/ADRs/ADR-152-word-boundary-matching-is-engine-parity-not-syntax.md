@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-146 — Whole-token matching under `git grep` is an engine-parity problem, not a syntax problem"
+title: "ADR-152 — Whole-token matching under `git grep` is an engine-parity problem, not a syntax problem"
 status: Proposed — flips to Accepted at this release's operator gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
 date: 2026-08-24
 release: checks-see-whole-subject
@@ -17,13 +17,15 @@ source_observations:
   - "An intermediate design tried to establish engine capability by comparing a pattern against its construct-stripped twin over the corpus being measured, and treating identical result sets as proof the construct was literalised. Measured, that rule condemned 18 of 30 real corpus tokens on a fully working engine — a 60% false-alarm rate — plus every true zero, plus the design's own control arm."
 ---
 
-# ADR-146 — Whole-token matching under `git grep` is an engine-parity problem, not a syntax problem
+# ADR-152 — Whole-token matching under `git grep` is an engine-parity problem, not a syntax problem
 
 ## Status
 
 **Proposed.** Authored at Stage 6 Engineering for the `checks-see-whole-subject` release. It flips to Accepted when the operator ratifies it at the release gate; the flip is recorded in this file's `status:` field.
 
 **Numbering provenance — `142 → 146`.** Held **ADR-142** branch-local; renumbered to **ADR-146** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 142. In-release citations that read "ADR-142" denote this record.
+
+**Numbering provenance — `146 → 152`.** Held **ADR-146** branch-local; renumbered to **ADR-152** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 146. In-release citations that read "ADR-146" denote this record.
 
 ## Context
 

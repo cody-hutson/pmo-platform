@@ -94,4 +94,4 @@ Two residuals are recorded rather than closed. The exemption marker is a **line 
 
 ## Related ADRs
 
-- **ADR-146** — whole-token matching is an engine-parity problem. Same release. Its corrected probe-form guidance is the standard this check's verification evidence is graded against, and the two decisions share a root: a matcher whose declared subject and actual reach had silently diverged.
+- **ADR-152** — whole-token matching is an engine-parity problem. Same release. Its corrected probe-form guidance is the standard this check's verification evidence is graded against, and the two decisions share a root: a matcher whose declared subject and actual reach had silently diverged.
