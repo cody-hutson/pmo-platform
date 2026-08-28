@@ -22,6 +22,7 @@ release/tools/check-emission-contract-subset.sh
 release/tools/check-event-record-integrity.sh
 release/tools/check-release-body-drift.sh
 release/tools/claim-version.sh
+release/tools/cleanup-orphan-state.sh
 release/tools/compute-close-class-telemetry.sh
 release/tools/compute-cycle-time.sh
 release/tools/compute-dora-metrics.sh
