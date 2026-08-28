@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-143 — A release-class predicate counts rule-defining surfaces, not the ledger the release is mandated to write
-status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
+status: Accepted — ratified by the operator at the v4.40 release close gate (2026-08-28). The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
 date: 2026-08-24
 release: pipeline-spec-self-consistency
 deciders: "Workspace owner. Design decision rendered at Stage 5 Solutioning for the release-class trigger-(b) card and accepted by the hub at Procedure 4; the card itself argued both framings and resolved neither, which is why this record exists."
@@ -23,7 +23,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the release close gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
+**Accepted** — ratified by the operator at the v4.40 release close gate (2026-08-28). The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
 
 **Numbering.** `143` was derived at Engineering time, immediately before this file was authored, via `release/tools/renumber-adr.py`. The oracle's `--next-free` reads the mainline anchor and returned `142`; that number is already bound on this same release branch by the record authored one build earlier, and `--detect` confirms it `BINDS`. `143` is therefore this branch's contiguous next, with the mainline reaching `ADR-141` and no hole beneath either claim. The number was deliberately **not** reserved at design time: the oracle is a *read*, not a reservation. A sibling unmerged release branch also claims `143`; that claim is **detection-only and does not bind**, and stepping past it to `144` would land a gap at `143` if that branch never merges. The asymmetry is the whole rule — a duplicate is mechanically renumberable by this same tool at merge time, whereas a **gap blocks the repo**, because the next release's `anchor + 1` lands under a hole. That is why allocation happens here, takes the contiguous next, and never reserves high.
 
