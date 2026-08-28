@@ -103,7 +103,20 @@
 #              Each of those five is its own COUNTED row, because collapsing
 #              them would hide which coverage boundary a citation fell off.
 #   truncated  the issue enumeration hit a page ceiling              -> NO verdict
+#              EMITTED BY: fetch_bodies, when the single-page `gh issue list`
+#              returns at or above PAGE_LIMIT. Routed through the outage emitter,
+#              so the counters are ABSENT rather than computed over a cut
+#              population. `--issues` is exempt: it has no page to fill.
 #   fixture    --resolver fixture                          -> verdict, marked
+#              EMITTED BY: the run_scan emit block, as the FIRST row/field on
+#              both faces. The verdict is real; the mark is what stops a fixture
+#              result being read as a corpus one.
+#
+# EVERY TOKEN ABOVE HAS AN EMITTER, and each names it. Two of them did not: a
+# declared status no code path can produce is unfalsifiable — it reads as
+# coverage, is asserted by nothing, and cannot be distinguished from a status
+# that simply never fired. Adding a token here obliges adding the emitter and an
+# assertion in --self-test in the same commit.
 # On any non-measuring status the counters are ABSENT, not zero (PV-7b).
 #
 # PV-7c. A genuine OUTAGE — the gh fetch fails, git ls-files returns nothing, or
@@ -146,6 +159,9 @@ SELF_NAME="check-issue-body-anchors.sh"
 NOT_EVAL_TOKEN="NOT-EVALUATED"
 
 STATE="open"
+# The enumeration is a SINGLE page with a hard ceiling. It has ONE home so the
+# `truncated` detection below and the request that can hit it cannot drift apart.
+PAGE_LIMIT=900
 ISSUES_ARG=""
 MILESTONE=""
 REPO=""
@@ -196,6 +212,12 @@ done
 
 case "$RESOLVER" in gh|fixture) ;; *) die3 "--resolver must be gh or fixture (got '$RESOLVER')" ;; esac
 case "$OUT_FMT" in tsv|json) ;; *) die3 "--output-format must be tsv or json (got '$OUT_FMT')" ;; esac
+# --state was UNVALIDATED, and it is the flag that reaches the page ceiling: the
+# declared population is OPEN issues, and `--state all` returns several thousand
+# against a --limit of PAGE_LIMIT. An unvalidated value is also handed straight
+# to gh, so a typo became a gh-side error reported as a resolver outage rather
+# than as the input failure it is. Validated to the three values gh accepts.
+case "$STATE" in open|closed|all) ;; *) die3 "--state must be open, closed, or all (got '$STATE')" ;; esac
 
 if [[ -z "$ROOT" ]]; then
   ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
@@ -395,6 +417,37 @@ infence { next }
 }
 AWKEOF
 
+# ── anchor-number ordering (§ E3) ────────────────────────────────────────────
+# Reads extracted heading numbers on stdin; emits them DE-DUPLICATED and in
+# dotted-numeric order. The de-duplication is a WHOLE-LINE operation and is
+# deliberately separated from the ordering keys.
+#
+# WHY NOT `sort -u -t. -k1,1n -k2,2n -k3,3n`, which is what this was.
+# `-u` suppresses lines whose KEYS compare equal, and the last-resort whole-line
+# comparison is NOT applied under -u. A letter-suffixed sibling carries the same
+# NUMERIC key as its stem in every field — `-k1,1n` reads "2c" as 2, exactly as
+# it reads "2" — so `2 2c 2d 3 3a` came back as `2 3`. Real headings vanished
+# from the set, and the consequence was not a missing row: correct citations
+# INTO those headings were reported UNRESOLVED, and the finding payload then
+# published the short set as the file's full heading inventory. Two of the four
+# live findings the tool reported were this defect, not a real drift.
+#
+# This is the THIRD silent short-set in this one file by a third mechanism (the
+# IFS tab-collapse, fixed by a sentinel; locale-dependent byte matching, fixed
+# by the LC_ALL=C pin above; now sort-key collapse). The existing LOCALE ARM
+# CANNOT see this one — it calls the extractor directly, without any sort, and
+# its expected set carries no letter-suffixed sibling — so a dedicated COLLAPSE
+# ARM guards this function in --self-test. A fix whose regression no arm can
+# catch is half a fix.
+#
+# The ordering keys stay numeric so the payload reads 2, 2.1, 2.2, 2.10, 10
+# rather than lexically; the trailing LEXICAL keys make the order among numeric
+# ties determined rather than dependent on sort stability; and the whole-line
+# de-dupe runs afterwards, where it cannot collapse two distinct anchors.
+sort_anchor_nums() {
+  sort -t. -k1,1n -k2,2n -k3,3n -k1,1 -k2,2 -k3,3 | awk '!seen[$0]++'
+}
+
 # ── target resolution index: basename -> tracked paths ───────────────────────
 build_index() {
   ( cd "$ROOT" && git ls-files ) > "$WORK/tracked.txt" 2>/dev/null || true
@@ -445,7 +498,7 @@ fetch_bodies() {
   command -v gh >/dev/null 2>&1 || { outage "gh is not on PATH"; return 1; }
   # shellcheck disable=SC2054  # `number,body` is ONE argument to gh's --json
   # flag, not two array elements; splitting on the comma breaks the call.
-  local args=(issue list --state "$STATE" --limit 900 --json number,body)
+  local args=(issue list --state "$STATE" --limit "$PAGE_LIMIT" --json number,body)
   [[ -n "$REPO" ]] && args+=(--repo "$REPO")
   [[ -n "$MILESTONE" ]] && args+=(--milestone "$MILESTONE")
   if [[ -n "$ISSUES_ARG" ]]; then
@@ -466,6 +519,34 @@ fetch_bodies() {
       outage "gh issue list failed (network, auth, or rate limit)"; return 1; }
   fi
   [[ -s "$WORK/raw.json" ]] || { outage "issue enumeration returned an empty document"; return 1; }
+
+  # ── REGISTER A `truncated` (§ E1). The enumeration is a SINGLE page with a
+  # hard ceiling, so a return AT the ceiling may have been cut — and the tool
+  # cannot know WHICH issues it did not see, which is exactly what makes the
+  # remainder unverdictable. A partial scan reporting "0 unresolved anchors"
+  # would be a silent short-set over an unstated population: this check's own
+  # subject matter, arriving through its own front door.
+  #
+  # So the status is EMITTED and the verdict is WITHHELD — counters absent,
+  # never zero (PV-7b) — through the same one-root-cause outage emitter the
+  # other non-measuring paths use (PV-7c). This token was declared in Register A
+  # from the start with NO emitter and no detection mechanism behind it; the
+  # declaration is what is being made true here.
+  #
+  # The `--issues` path is exempt: it enumerates an explicit list one call at a
+  # time, so it has no page ceiling to hit.
+  local n_recs
+  n_recs="$(/usr/bin/python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' \
+             "$WORK/raw.json" 2>/dev/null)" || n_recs=""
+  if [[ -z "$n_recs" ]]; then
+    outage "issue enumeration did not parse as JSON, so its completeness is unknowable"
+    return 1
+  fi
+  if [[ -z "$ISSUES_ARG" && "$n_recs" -ge "$PAGE_LIMIT" ]]; then
+    printf 'STATUS\ttruncated\t%s\n' "$n_recs"
+    outage "issue enumeration returned $n_recs record(s) at the --limit $PAGE_LIMIT page ceiling (--state $STATE) — the population may be cut and the unseen issues are not identifiable from here, so no citation was verdicted"
+    return 1
+  fi
 
   # Fenced code blocks are stripped before scanning (§ E2).
   /usr/bin/python3 - "$WORK/raw.json" "$out" <<'PYEOF'
@@ -536,7 +617,7 @@ run_scan() {
     [[ -f "$ROOT/$target" ]] || { n_untracked=$((n_untracked + 1)); continue; }
 
     local nums
-    nums="$(awk -f "$HEADINGS_AWK" "$ROOT/$target" | sort -u -t. -k1,1n -k2,2n -k3,3n | paste -sd, -)"
+    nums="$(awk -f "$HEADINGS_AWK" "$ROOT/$target" | sort_anchor_nums | paste -sd, -)"
     if [[ -z "$nums" ]]; then n_unnumbered=$((n_unnumbered + 1)); continue; fi
     if printf '%s' ",$nums," | grep -qF ",$num,"; then
       n_resolved=$((n_resolved + 1))
@@ -554,6 +635,13 @@ run_scan() {
     # The header block's declared counts were taken at BASELINE_PIN. Emitting it
     # beside the live numbers is what makes the two comparable: a reader can see
     # at a glance whether the declaration is still describing this population.
+    # REGISTER A `fixture` (§ E1): a fixture-resolver run DOES emit a verdict,
+    # but the register declares that verdict "marked" — and nothing marked it.
+    # An unmarked fixture verdict is indistinguishable from a live one in the
+    # output, which is how a self-test result gets read as a corpus result. The
+    # mark is emitted FIRST, with the status rows, because a consumer must be
+    # able to branch on it before reading a counter.
+    [[ "$RESOLVER" == "fixture" ]] && printf 'STATUS\tfixture\t%s\n' "$FIXTURE_DIR"
     printf 'BASELINE\theader_counts_measured_at\t%s\n' "$BASELINE_PIN"
     printf 'DENOM\tcitations_bound_or_seen\t%s\n' "$n_total"
     printf 'STATUS\tfetched_resolved\t%s\n' "$n_resolved"
@@ -574,7 +662,11 @@ run_scan() {
       printf 'UNRESOLVED\t%s\t%s\t%s\t%s\t%s\t%s\n' "$issue" "$lno" "$target" "$num" "$raw" "$nums"
     done < "$WORK/findings.tsv"
   else
-    printf '{"denominator":%s,"verdicted":%s,' "$n_total" "$verdicted"
+    printf '{'
+    # The same Register A `fixture` mark on the machine-readable face, first
+    # field, for the same reason it is the first row on the TSV face.
+    [[ "$RESOLVER" == "fixture" ]] && printf '"fixture":"%s",' "$FIXTURE_DIR"
+    printf '"denominator":%s,"verdicted":%s,' "$n_total" "$verdicted"
     printf '"status":{"fetched_resolved":%s,"fetched_unresolved":%s,' "$n_resolved" "$n_unresolved"
     printf '"degraded_target_not_tracked":%s,"degraded_basename_ambiguous":%s,' "$n_untracked" "$n_ambiguous"
     printf '"not_run_out_of_model_non_markdown":%s,"not_run_out_of_model_unnumbered":%s,' "$n_nonmd" "$n_unnumbered"
@@ -668,13 +760,118 @@ selftest() {
     exit 3
   fi
 
+  # ── COLLAPSE ARM. Guards sort_anchor_nums — the de-duplication of the heading
+  # set, which is a DIFFERENT silent short-set from the one the locale arm
+  # covers, by a different mechanism, and the locale arm STRUCTURALLY CANNOT SEE
+  # IT: that arm calls the extractor directly with no sort in the pipeline, and
+  # its expected set carries no letter-suffixed sibling. A key-collapsing sort
+  # passes every other assertion in this file while dropping real headings.
+  #
+  # The arm drives the REAL function, not a copy of it — a control arm that
+  # exercises a transcription of the code under test cannot catch that code
+  # regressing. It asserts the SET (membership, against a plain `sort -u`
+  # control) and the ORDER (the dotted-numeric contract the finding payload
+  # depends on) separately, because they fail independently.
+  local cin cget cset cctl cdefect
+  cin='2
+2c
+2d
+3
+3a
+2c
+10
+2.10
+2.2'
+  cget="$(printf '%s\n' "$cin" | sort_anchor_nums | paste -sd, -)"
+  cset="$(printf '%s\n' "$cin" | sort_anchor_nums | sort | paste -sd, -)"
+  cctl="$(printf '%s\n' "$cin" | sort -u | paste -sd, -)"
+  echo "  CTRL collapse:    9 numbers in, 8 distinct -> ${cget:-<none>}"
+  if [[ "$cset" != "$cctl" ]]; then
+    echo "  COLLAPSE ARM FAILED — the ordering function's output SET does not match" >&2
+    echo "  a plain \`sort -u\` over the same input." >&2
+    echo "    got:     $cset" >&2
+    echo "    control: $cctl" >&2
+    echo "  Letter-suffixed siblings are being dropped: real headings go invisible" >&2
+    echo "  and CORRECT citations into them are reported UNRESOLVED. Exiting 3." >&2
+    exit 3
+  fi
+  if [[ "$cget" != "2,2c,2d,2.2,2.10,3,3a,10" ]]; then
+    echo "  COLLAPSE ARM FAILED — the set is right but the dotted-numeric ORDER is" >&2
+    echo "  not: got '$cget'. The finding payload publishes this sequence as the" >&2
+    echo "  file's heading inventory, so its order is part of the contract. Exiting 3." >&2
+    exit 3
+  fi
+  # The arm's OWN discrimination check. A probe that cannot go red proves
+  # nothing, so the DEFECTIVE form is run against the same fixture and must
+  # disagree with the control. If it ever agrees, this fixture has stopped being
+  # able to see the failure and the arm is decorative — which is reported as a
+  # broken probe rather than passed over.
+  cdefect="$(printf '%s\n' "$cin" | sort -u -t. -k1,1n -k2,2n -k3,3n | sort | paste -sd, -)"
+  if [[ "$cdefect" == "$cctl" ]]; then
+    echo "  COLLAPSE ARM CANNOT DISCRIMINATE — the key-collapsing sort this arm" >&2
+    echo "  exists to catch produced the SAME set as the control on this fixture," >&2
+    echo "  so a pass here would mean nothing. BROKEN PROBE. Exiting 3." >&2
+    exit 3
+  fi
+  echo "  CTRL collapse-neg: defective key-sort yields ${cdefect} (must differ from control)"
+
   # ── the fixture matrix (§ E7) ──────────────────────────────────────────────
+  # ALL NINE Register A partition members are asserted, not six. The emit block
+  # publishes a nine-member partition; asserting six of them left three rows
+  # ungoverned, so a change that started routing citations INTO one of the three
+  # would move a count nothing was watching. Misclassification is the failure
+  # mode here, and it is invisible to a total: a partition can re-file records
+  # into the wrong member and still sum correctly. So the members are pinned
+  # INDIVIDUALLY, and the sum is asserted separately below — the two catch
+  # different faults and neither substitutes for the other.
   assert_row "fetched_resolved"                    "4"
   assert_row "fetched_unresolved"                  "2"
+  assert_row "degraded_target_not_tracked"         "1"
   assert_row "not_run_out_of_model_non_markdown"   "1"
   assert_row "not_run_prefix_out_of_model"         "1"
-  assert_row "degraded_target_not_tracked"         "1"
   assert_row "not_run_bound_to_no_path"            "1"
+  # The three that were unasserted. Their fixture value is 0, and the ZERO IS
+  # DECLARED RATHER THAN IMPLIED: the corpus carries no named anchor, no
+  # ambiguous bare basename, and no unnumbered markdown target, so these three
+  # rows pin the partition's SHAPE but do NOT demonstrate that their class can
+  # fire. That residual is stated here rather than left for a reader to infer
+  # from a passing test — a zero whose class was never exercised is not evidence
+  # the class works, and `not_run_named_arm` is the LARGEST class in the live
+  # population (211 sites at the baseline pin) while being 0 here.
+  assert_row "degraded_basename_ambiguous"         "0"
+  assert_row "not_run_out_of_model_unnumbered"     "0"
+  assert_row "not_run_named_arm"                   "0"
+  # Register A `fixture`: the mark the register declares must actually be on the
+  # output. Asserted, because an unmarked fixture verdict reads exactly like a
+  # live one and this run IS a fixture run.
+  assert_row "fixture"                             "$fx"
+
+  # ── PARTITION CLOSURE. The nine members must ACCOUNT FOR the denominator. A
+  # member silently dropped from the emit, or a citation counted into no member
+  # at all, leaves the sum short while every individual assertion above still
+  # passes. This is the complement of those assertions, not a restatement: they
+  # catch a record filed in the wrong member, this catches a record filed in no
+  # member. Both are needed because a reconciling total is not evidence of
+  # correct classification, and correct per-class counts are not evidence the
+  # classes are exhaustive.
+  local part_sum part_denom part_verdicted
+  part_sum="$(printf '%s\n' "$out" | awk -F'\t' '
+    $1=="STATUS" && $2!="verdicted" && $2!="fixture" && $2!="truncated" { s += $3 }
+    END { print s+0 }')"
+  part_denom="$(printf '%s\n' "$out" | awk -F'\t' '$1=="DENOM"{print $3}')"
+  part_verdicted="$(printf '%s\n' "$out" | awk -F'\t' '$2=="verdicted"{print $3}')"
+  checks=$((checks + 1))
+  if [[ "$part_sum" != "$part_denom" ]]; then
+    echo "  FAIL: partition closure — the nine status members sum to $part_sum but the"
+    echo "        denominator is ${part_denom:-<absent>}; some citation was counted into no member"
+    fails=$((fails + 1))
+  fi
+  checks=$((checks + 1))
+  if [[ "$part_verdicted" != "6" ]]; then
+    echo "  FAIL: verdicted expected 6 (resolved 4 + unresolved 2), got ${part_verdicted:-<absent>}"
+    fails=$((fails + 1))
+  fi
+  echo "  CTRL partition:   9 members sum to $part_sum = denominator $part_denom; verdicted $part_verdicted"
 
   echo "  self-test: $checks assertion(s), $fails failure(s)"
   [[ $fails -eq 0 ]] || return 1

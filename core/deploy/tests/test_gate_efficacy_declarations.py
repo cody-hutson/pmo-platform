@@ -65,8 +65,19 @@ def repo_root() -> Path:
     sys.exit(2)
 
 
-def parse_header(text: str) -> dict[str, str] | None:
-    """Field map from the `gate-efficacy:` header, or None when there is no header.
+def parse_headers(text: str) -> list[tuple[int, dict[str, str]]]:
+    """EVERY `gate-efficacy:` declaration in the file, as (1-based line, field map).
+
+    EVERY ONE, NOT THE FIRST. A workflow may carry more than one declaration — one
+    per job or per named gate — and in this tree two do (five declarations between
+    them). The earlier reader returned on its first match, so those extra
+    declarations were never graded: the suite reported agreement over a count of
+    FILES while its reach was a count of DECLARATIONS, and injecting a contradictory
+    field into a second declaration survived every arm in the harness. That is the
+    same declared-vs-actual reach overstatement this suite exists to catch, arriving
+    inside the catcher. The trigger is a FILE-level property, so every declaration in
+    a file is graded against that one trigger; what varies per declaration is the
+    claim, and each claim is now read.
 
     Split on the 2-or-more-space field layout rather than on whitespace: the compound
     posture token `required(warn-mode-initial)` must survive intact, and an earlier
@@ -77,7 +88,8 @@ def parse_header(text: str) -> dict[str, str] | None:
     tree carries its header behind a multi-line rationale block, and a windowed search
     reports it as header-less.
     """
-    for line in text.splitlines():
+    found: list[tuple[int, dict[str, str]]] = []
+    for lineno, line in enumerate(text.splitlines(), 1):
         match = HEADER_RE.match(line.strip())
         if not match:
             continue
@@ -86,8 +98,8 @@ def parse_header(text: str) -> dict[str, str] | None:
             if "=" in token:
                 key, value = token.split("=", 1)
                 fields[key.strip()] = value.strip()
-        return fields
-    return None
+        found.append((lineno, fields))
+    return found
 
 
 def has_path_filter(text: str) -> bool:
@@ -108,11 +120,21 @@ def has_path_filter(text: str) -> bool:
     )
 
 
-def evaluate(sources: dict[str, str]) -> tuple[list[str], list[str], list[str]]:
-    """Return (findings, filtered_names, filter_free_names) over {name: text}."""
+def evaluate(
+    sources: dict[str, str],
+) -> tuple[list[str], list[str], list[str], int]:
+    """Return (findings, filtered_names, filter_free_names, declaration_count).
+
+    The fourth element is the REACH of this run — how many declarations were actually
+    graded. It is returned rather than derived by the caller so the number the suite
+    publishes and the number it graded are the same number, taken at the same place.
+    A magnitude reported over a population it was not measured on is the defect this
+    file guards; reporting `len(sources)` as a declaration count was that defect.
+    """
     findings: list[str] = []
     filtered: list[str] = []
     filter_free: list[str] = []
+    n_declarations = 0
 
     for name in sorted(sources):
         text = sources[name]
@@ -124,39 +146,48 @@ def evaluate(sources: dict[str, str]) -> tuple[list[str], list[str], list[str]]:
 
         (filtered if filtered_now else filter_free).append(name)
 
-        fields = parse_header(text)
-        if fields is None:
+        declarations = parse_headers(text)
+        if not declarations:
             findings.append(
                 f"{name}: no `gate-efficacy:` header — Requirement (b) obliges one on "
                 f"every workflow"
             )
             continue
 
-        if filtered_now:
-            if fields.get("skip-semantics") != "absent-is-pass":
-                findings.append(
-                    f"{name}: carries a paths filter but its header does not declare "
-                    f"skip-semantics=absent-is-pass (got "
-                    f"{fields.get('skip-semantics')!r})"
-                )
-            if "always-reports" in fields:
-                findings.append(
-                    f"{name}: carries a paths filter yet declares always-reports — the "
-                    f"two fields are mutually exclusive"
-                )
-        else:
-            if fields.get("always-reports") != "yes":
-                findings.append(
-                    f"{name}: carries NO paths filter but its header does not declare "
-                    f"always-reports=yes (got {fields.get('always-reports')!r})"
-                )
-            if "skip-semantics" in fields:
-                findings.append(
-                    f"{name}: carries NO paths filter yet declares skip-semantics — "
-                    f"absence cannot occur, so the declaration is false"
-                )
+        # EVERY declaration is graded against the file's trigger — a differential over
+        # the whole declaration set, not a spot check on its first member. The finding
+        # is keyed by `file:line` so a mismatch on the third declaration in a file
+        # points at the third declaration.
+        for lineno, fields in declarations:
+            n_declarations += 1
+            site = f"{name}:{lineno}"
+            if filtered_now:
+                if fields.get("skip-semantics") != "absent-is-pass":
+                    findings.append(
+                        f"{site}: carries a paths filter but this declaration does not "
+                        f"declare skip-semantics=absent-is-pass (got "
+                        f"{fields.get('skip-semantics')!r})"
+                    )
+                if "always-reports" in fields:
+                    findings.append(
+                        f"{site}: carries a paths filter yet this declaration declares "
+                        f"always-reports — the two fields are mutually exclusive"
+                    )
+            else:
+                if fields.get("always-reports") != "yes":
+                    findings.append(
+                        f"{site}: carries NO paths filter but this declaration does not "
+                        f"declare always-reports=yes (got "
+                        f"{fields.get('always-reports')!r})"
+                    )
+                if "skip-semantics" in fields:
+                    findings.append(
+                        f"{site}: carries NO paths filter yet this declaration declares "
+                        f"skip-semantics — absence cannot occur, so the declaration is "
+                        f"false"
+                    )
 
-    return findings, filtered, filter_free
+    return findings, filtered, filter_free, n_declarations
 
 
 def load(root: Path) -> dict[str, str]:
@@ -167,16 +198,25 @@ def load(root: Path) -> dict[str, str]:
     return {p.name: p.read_text(encoding="utf-8") for p in workflows}
 
 
-def edit_header(text: str, old: str, new: str) -> str:
+def edit_header(text: str, old: str, new: str, occurrence: int = 1) -> str:
     """Replace `old` with `new` INSIDE the gate-efficacy header line only.
 
     Scoped to the header rather than to the file because at least one workflow
     restates its own posture string in body prose; a whole-file replace would mutate
     the narrative copy and the arm would then assert against an unchanged declaration.
+
+    `occurrence` selects WHICH declaration to mutate, 1-based over the header lines
+    that contain `old`. It defaults to the first, which is what every arm but A8
+    wants; A8 passes 2 deliberately, because an arm that only ever mutates the first
+    declaration cannot tell a whole-set grader from a first-match-only one.
     """
     lines = text.splitlines()
+    seen = 0
     for index, line in enumerate(lines):
         if HEADER_RE.match(line.strip()) and old in line:
+            seen += 1
+            if seen < occurrence:
+                continue
             lines[index] = line.replace(old, new, 1)
             break
     return "\n".join(lines) + "\n"
@@ -206,7 +246,7 @@ def harness(sources: dict[str, str], filtered: list[str],
             failures.append(f"A-CTRL: mutation of {name} changed nothing — the arm "
                             f"asserts against an unmutated input")
             return False
-        found, _, _ = evaluate(mutated)
+        found, _, _, _ = evaluate(mutated)
         return bool(found)
 
     if not filtered:
@@ -267,6 +307,44 @@ def harness(sources: dict[str, str], filtered: list[str],
             failures.append(f"A5: a fabricated non-governed header field on {victim} "
                             f"WAS flagged — the detector over-matches")
 
+    # A8 — REACH. Every arm above mutates a file's FIRST declaration, so every one of
+    # them passes against a grader that reads only the first one: the whole set of
+    # them could not see the blind spot they were meant to cover. This arm mutates a
+    # LATER declaration in a file that carries more than one, and it is the only arm
+    # that goes red if the grader regresses to first-match-only. It was written after
+    # exactly that mutation was found to survive the six arms above.
+    multi = [n for n in sorted(sources) if len(parse_headers(sources[n])) > 1]
+    if not multi:
+        failures.append("NOSET: no workflow carries more than one gate-efficacy "
+                        "declaration, so arm A8 cannot be built — reported rather "
+                        "than skipped")
+    else:
+        built = False
+        for victim in multi:
+            # Inject the field the file's trigger FORBIDS, so the mutation lands on a
+            # real finding branch rather than on a value the biconditional permits.
+            if victim in filtered:
+                old, add = "skip-semantics=absent-is-pass", "always-reports=yes"
+            else:
+                old, add = "always-reports=yes", "skip-semantics=absent-is-pass"
+            victim_lines = sources[victim].splitlines()
+            carrying = [ln for ln, _ in parse_headers(sources[victim])
+                        if old in victim_lines[ln - 1]]
+            if len(carrying) < 2:
+                continue  # cannot reach a NON-FIRST declaration in this file
+            built = True
+            if not flags(victim, lambda t, o=old, n=f"{old}  {add}": edit_header(
+                    t, o, n, occurrence=2)):
+                failures.append(
+                    f"A8: injecting {add} into the SECOND gate-efficacy declaration "
+                    f"of {victim} (line {carrying[1]}) was NOT flagged — the grader "
+                    f"is reading only one declaration per file")
+            break
+        if not built:
+            failures.append("NOSET: no workflow carries the same governed field on two "
+                            "of its declarations, so arm A8 cannot be built — reported "
+                            "rather than skipped")
+
     return failures
 
 
@@ -304,10 +382,15 @@ def main() -> int:
               "population is not a clean", file=sys.stderr)
         return 2
 
-    findings, filtered, filter_free = evaluate(sources)
+    findings, filtered, filter_free, n_declarations = evaluate(sources)
 
+    # BOTH counts, always. The file count and the declaration count are different
+    # numbers in this tree, and reporting agreement over the file count while grading
+    # declarations is precisely the declared-vs-actual reach overstatement this suite
+    # exists to catch. State the population with the magnitude.
     print(f"population: {len(sources)} workflow file(s) — "
-          f"{len(filtered)} path-filtered, {len(filter_free)} filter-free")
+          f"{len(filtered)} path-filtered, {len(filter_free)} filter-free; "
+          f"{n_declarations} gate-efficacy declaration(s) graded")
 
     harness_failures = harness(sources, filtered, filter_free)
     if harness_failures:
@@ -317,8 +400,9 @@ def main() -> int:
             print(f"  {failure}", file=sys.stderr)
         return 2
     print("anti-vacuity: sensitivity arms A1/A2/A3/A4/A6/A7 all flagged — one per "
-          "finding branch, so no branch can be deleted silently; specificity arm A5 "
-          "stayed clean on the same non-empty input")
+          "finding branch, so no branch can be deleted silently; A8 flagged a mutation "
+          "of a NON-FIRST declaration, so the grader's reach is the whole declaration "
+          "set; specificity arm A5 stayed clean on the same non-empty input")
 
     if findings:
         print(f"FAIL: {len(findings)} declared-vs-actual mismatch(es).", file=sys.stderr)
@@ -330,8 +414,8 @@ def main() -> int:
               file=sys.stderr)
         return 1
 
-    print(f"OK — {len(sources)}/{len(sources)} workflow declarations agree with their "
-          f"triggers.")
+    print(f"OK — {n_declarations}/{n_declarations} gate-efficacy declaration(s) across "
+          f"{len(sources)} workflow file(s) agree with their triggers.")
     return 0
 
 

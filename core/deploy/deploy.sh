@@ -2319,7 +2319,17 @@ _c35_compute_verdict() {
       if [[ "$c35_body_enum" -ge 2 || "$c35_decl_arity" -ge 2 ]]; then
         : # PASS — mode-enum machine-recognizable by at least one convention
       else
-        c35_output+="${c35_skill_md}: advertises modes but exposes no machine-recognizable mode-enum (neither ≥2 delimited \`### Mode X\` headings nor a parseable (≥2 \`·\`-separated) \`Modes:\` list)"$'\n'
+        # THE MESSAGE MUST DESCRIBE THE RECOGNIZER, NOT ITS PREDECESSOR. This
+        # line used to demand "≥2 delimited \`### Mode X\` headings" — naming an
+        # H3 level and a single-letter identifier — and BOTH of those are exactly
+        # what the D2 recognizer above was widened to stop requiring. The
+        # consequence ran in both directions: an author whose \`## Mode 1\`
+        # headings correctly PASS never learned the level and charset were free,
+        # and an author debugging a real failure was told to change the two
+        # things that were never wrong. The recognizer, its header contract at
+        # the top of this check, and this message are one declaration in three
+        # places; they change together.
+        c35_output+="${c35_skill_md}: advertises modes but exposes no machine-recognizable mode-enum (neither ≥2 delimited \`Mode <ident>\` headings — any level H1-H6, alphanumeric identifier, anchored to a \`:\`/\`—\`/\`-\` delimiter — nor a parseable (≥2 \`·\`-separated) \`Modes:\` list)"$'\n'
         c35_findings=$((c35_findings + 1))
       fi
     fi
@@ -10872,6 +10882,22 @@ sys.stdout.write("".join(out) + "|")
         # findings-vs-OK branch reachable on a degraded run would print "0
         # load-bearing finding(s)" over a population that was never read — the
         # false-green in its purest form.
+        #
+        # EMITTER CLASS, RESTATED HERE ON PURPOSE. Both emitters below are
+        # non-gating by construction: flag_advisory_only carries no mode `case`,
+        # no enforce branch and no ISSUES increment, so the M3 leg reports and
+        # never gates whatever the dial says, and flag_not_evaluated carries the
+        # same structural guarantee on the degraded path.
+        #
+        # The restatement is placed HERE, in the block ADJACENT to the call it
+        # governs, rather than left only in the M3 preamble above — because
+        # adjacency is what makes the claim checkable. The standing regression in
+        # core/deploy/tests/test_check56_m2_advisory.sh (Arm F) reads each
+        # emitter call site's NEAREST PRECEDING CONTIGUOUS comment block; the
+        # `local`/`awk` assignments between the preamble and this point break
+        # that contiguity, so an emitter-class claim stranded on the far side of
+        # them is a claim no probe can verify. Keep any future restatement on
+        # this side of the intervening code.
         if [[ "$c56_m3_scan" == "degraded" ]]; then
           flag_not_evaluated "milestone-scaffold-completeness" "M3 stage-title population unreadable (status=degraded) — scaffold completeness was NOT measured this run; every M3 verdict is withheld and no COUNT_M3* row was emitted; this is not a clean result"
         else
