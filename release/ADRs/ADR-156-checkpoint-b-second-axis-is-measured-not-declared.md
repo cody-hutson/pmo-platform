@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-150 — Checkpoint B's second axis is measured, not declared: scoping refuse-to-synthesize to the usage-window axis"
+title: "ADR-156 — Checkpoint B's second axis is measured, not declared: scoping refuse-to-synthesize to the usage-window axis"
 status: Accepted
 date: 2026-08-27
 release: ci-stable-under-transient-conditions
@@ -16,13 +16,15 @@ source_observations:
   - "The governing hub skill justified gating every singleton launch on the ground that the gate costs zero tool calls. Making the gate measured falsifies that ground, so the justification had to be re-stated rather than left standing."
 ---
 
-# ADR-150 — Checkpoint B's second axis is measured, not declared
+# ADR-156 — Checkpoint B's second axis is measured, not declared
 
 ## Status
 
 **Accepted.** Authored at Engineering for the `ci-stable-under-transient-conditions` release, against the Collective Review scope-lock that admitted the governing hub skill's zero-tool-calls assertion into this card's scope.
 
 **Numbering provenance — `144 → 150`.** Held **ADR-144** branch-local; renumbered to **ADR-150** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 144. In-release citations that read "ADR-144" denote this record.
+
+**Numbering provenance — `150 → 156`.** Held **ADR-150** branch-local; renumbered to **ADR-156** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 150. In-release citations that read "ADR-150" denote this record.
 
 ## Context
 
