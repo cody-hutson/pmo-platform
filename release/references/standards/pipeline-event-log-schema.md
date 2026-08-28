@@ -167,6 +167,16 @@ invocation that routes through the READ ladder proves its own conformance, so it
 no decoration and carries none. A marker therefore always means *deliberate*, and never
 *false positive suppressed*.
 
+**The exemption is applied lexically, not semantically.** The detector exempts a line on
+which the token `--release` appears **anywhere** — in an invocation, in prose, in a
+comment, or inside a marker's own reason string. It does not parse the statement to
+decide whether the flag is actually being passed. Two consequences follow, and both bite
+in practice: a line that merely *mentions* the flag is exempted even though it routes
+through nothing, and — the one that has already occurred — **a marker whose reason text
+names `--release` silently exempts its own line, so the marker never fires and the site
+leaves the suppressed-count denominator instead of entering it, with no failure either
+way.** When writing a marker reason, name the flag by description rather than by token.
+
 **What is scanned.** Four enumerated shapes, and nothing else: a query invocation
 carrying the raw-column flag with no `--release` on the same statement; a documented
 read recipe that filters the log on the backticked version column; the § 11.3 rendered

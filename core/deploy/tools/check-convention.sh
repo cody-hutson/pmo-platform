@@ -337,9 +337,14 @@ if [ "$SELF_TEST" -eq 1 ]; then
   [ "$(el_field 4 "$eld/rows.md")" = "2" ]; check "EL-2 sensitivity: X1 counts fixture data rows" 0 $?
   [ "$(el_hits "$eld/rows.md")" = "0" ]; check "EL-2b: a fixture data row is not a finding" 0 $?
 
-  # EL-3 SPECIFICITY — a --release-keyed invocation is not flagged.
+  # EL-3 SPECIFICITY — an invocation carrying BOTH flags is exempted by --release.
   # Mutation that must turn this red: drop E1's negated --release match.
-  printf '%s\n' './query-pipeline-event.sh --release <milestone-slug> --stage 12' > "$eld/rel.md"
+  # The fixture must carry --version for that mutation to be able to fire at all:
+  # E1 is tool AND --version AND NOT --release, so a fixture without --version
+  # fails the second conjunct and stays green under the mutation regardless —
+  # the arm would pass vacuously with respect to the guard it names. EL-4 covers
+  # the same exemption for the PROSE shape; this arm covers a real invocation.
+  printf '%s\n' './query-pipeline-event.sh --release <milestone-slug> --version v4.07 --stage 12' > "$eld/rel.md"
   [ "$(el_hits "$eld/rel.md")" = "0" ]; check "EL-3 specificity: --release invocation not flagged" 0 $?
 
   # EL-4 SPECIFICITY — the shipped prose shape that NAMES --version to warn against
