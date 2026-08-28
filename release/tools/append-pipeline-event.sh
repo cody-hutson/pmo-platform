@@ -216,7 +216,7 @@ parse_schema_labels() {
     # silently DROPS a declared label, and the conforming payload is then rejected
     # as unrecognized. Keep this a superset of every token § 11.8 / § 11.8.1
     # declares. The `outcome_excerpt` guard in --self-test fails if it is re-narrowed.
-    in_s && $2 ~ /^ *`[a-z0-9_-]+`/ {
+    in_s && $2 ~ /^ *`[A-Za-z0-9_-]+`/ {
       filt = $3; et = ""; es = ""                       # declared scope from col-2
       if (match(filt, /--event-type +[a-z0-9-]+/)) {
         t = substr(filt, RSTART, RLENGTH); sub(/^--event-type +/, "", t); et = t
@@ -231,7 +231,7 @@ parse_schema_labels() {
       if (et == "") next
       key = (es == "" ? et : et "/" es)
       rest = $4; labels = ""                            # labels from col-3 ONLY
-      while (match(rest, /`[a-z0-9_-]+`/)) {
+      while (match(rest, /`[A-Za-z0-9_-]+`/)) {
         tok = substr(rest, RSTART+1, RLENGTH-2)
         labels = (labels == "" ? tok : labels " " tok)
         rest = substr(rest, RSTART+RLENGTH)
