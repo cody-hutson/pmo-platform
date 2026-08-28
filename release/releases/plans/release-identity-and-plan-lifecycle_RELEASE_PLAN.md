@@ -151,7 +151,7 @@ Default is all stages apply. Stage 5 skips only on triviality; Stages 7-8 skip o
 | `release/references/standards/release-corpus-schema.md` | 2× | #4749, #5549 | Serialize 4749 → 5549. #4749 makes it the sole naming-convention home; #5549 adds the `status:` enum. **Same frontmatter-contract section** — highest genuine merge-conflict probability of the five. Graded by CIAC-1. |
 | `release/skills/release-planner/SKILL.md` | 2× | #4563, #5092 | Resolved by the 8↔9 swap — a single edit and a single package rebuild, owned by #4563 at position 9. |
 | `release/tools/automated-closeout.sh` | 2× | #5549, #4218 | Serialize 5549 → 4218. Disjoint concerns, same file. Graded by CIAC-5. |
-| `release/governance/release-process.md` | 2× | #4562, #4749 | Serialize 4562 → 4749. #4562 edits the A7 T4 Mechanism cell; #4749 edits the canonical-home pointer. Disjoint regions. |
+| `release/governance/release-process.md` | **3×** | #4562, #4749, #4563 | **Serialize 4562 → 4749 → 4563.** #4562 edits the A7 T4 Mechanism cell; #4749 edits the canonical-home pointer; #4563 inserts the `G-PL` gate enumeration per **D14**, which folded the second diverged surface into it. Disjoint regions — verified three-way at Stage 7, with #4563's insert at the gate-enumeration site and a later mainline edit ~200 lines below it. This row read `2×` until Stage 7; the plan's own D14 recorded the third writer from the outset, so the matrix, not the decision, was the stale half. |
 
 Contended paths: **6**. All serialized by the Implementation Sequence above.
 
@@ -223,6 +223,7 @@ release/skills/release-planner/SKILL.md                                edit
 
 # ── #4563  release-planner SKILL.md gate enumeration ──
 release/skills/release-planner/SKILL.md                                edit
+release/governance/release-process.md                                  edit
 packages/release-planner.skill                                         edit
 packages/release-planner.skill.sha256                                  edit
 ```
