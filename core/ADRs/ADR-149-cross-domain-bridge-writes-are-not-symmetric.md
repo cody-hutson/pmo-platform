@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-143 — Cross-domain bridge writes are not symmetric, and Tier-0 permanence attaches to a correctly-scoped item"
+title: "ADR-149 — Cross-domain bridge writes are not symmetric, and Tier-0 permanence attaches to a correctly-scoped item"
 status: Accepted
 date: 2026-08-24
 release: hooks-block-their-declared-subject
@@ -17,13 +17,15 @@ source_observations:
   - "The test suite's verdict depended on how it was invoked. Standalone it read 41 PASS / 5 FAIL; under test-runner.sh the same suite read 46 PASS / 0 FAIL, because the runner exports a master-ON config root and pins the scope root to '/'. Two independent harness defects — a HOME pin redirecting the master-activation read to a nonexistent file, and mcp/Bash payload builders hard-coding an out-of-tree cwd — were each masked by the runner and visible only standalone."
 ---
 
-# ADR-143 — Cross-domain bridge writes are not symmetric
+# ADR-149 — Cross-domain bridge writes are not symmetric
 
 ## Status
 
 **Accepted.** Authored at Engineering for the `hooks-block-their-declared-subject` release, against the Stage 5 design verification and the operator's Collective Review scope-lock.
 
 **Amends in part:** [ADR-031](ADR-031-autonomy-ceiling-unified-payload-triggered-hook.md), which records the hook's irreducible set as *"governance-file modification and cross-domain bridge writes"*. That second member is no longer a single class. ADR-031 is not superseded — its trigger design, its payload-over-session-detection decision, and its floor/ceiling architecture all stand unchanged, and this record is built entirely out of mechanisms ADR-031 established. Only the membership of the irreducible set is amended.
+
+**Numbering provenance — `143 → 149`.** Held **ADR-143** branch-local; renumbered to **ADR-149** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 143. In-release citations that read "ADR-143" denote this record.
 
 ## Context
 
