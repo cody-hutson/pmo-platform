@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-151 — A release plan's status field records the document's own lifecycle, not the release's deployment state"
+title: "ADR-155 — A release plan's status field records the document's own lifecycle, not the release's deployment state"
 status: Proposed — flips to Accepted when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
 date: 2026-08-24
 release: release-identity-and-plan-lifecycle
@@ -8,7 +8,7 @@ deciders: "Stage 5 Solutioning spoke (design, evidence-grounding) + hub Procedur
 tags: [release-corpus, frontmatter-schema, duplicate-source, close-out, plan-lifecycle, lint, ADR-092]
 source_observations:
   - "Measured across the whole plan corpus at the release baseline: 179 plan files, 33 carrying a frontmatter `status:`, and every one of the 33 reading `ACTIVE`. Zero terminal values existed anywhere. This is not drift from a correct state — no plan had ever reached one, and the transition had never fired for any release in the history of the corpus."
-  - "Nineteen of the affected plans belong to releases the ledger records as VERIFIED. A reader opening such a plan and reading `status: ACTIVE` would conclude the release was still running, and the plan is the surface most likely to be opened first."
+  - "Many of the affected plans belong to releases the ledger records as complete, and the count must be read with its baseline attached rather than carried: the shipped linter's `PLAN-STATUS-DENOM` emit is the instrument, reporting 28 of the status-carrying plans resolving to a ledger row and so reaching the terminal-coherence antecedent at the branch tip (35 of 181 carriers, 32 reading CLOSED). An earlier draft of this observation stated `nineteen`, a figure inherited from the originating card's superseded 167/23 baseline and falsified by the observation directly above; it is corrected here rather than reconciled, because the durable content is the instrument, not the number. A reader opening such a plan and reading `status: ACTIVE` would conclude the release was still running, and the plan is the surface most likely to be opened first."
   - "Two things were missing and they are separable: no schema, template or exemplar stated what a closed plan's status should read, and nothing performed the transition. An implementer told to 'transition the status to its terminal value' had nothing to copy."
   - "The root cause is deeper than 'close-out does not touch plan frontmatter'. No tracked file emits the plan frontmatter block at all — the plan template carries no YAML frontmatter, and the field propagates by copy-paste from the previous release's plan. Nothing wrote it, so nothing was ever going to transition it."
   - "THREE status surfaces exist, not one: the frontmatter field (33 files, one value), a body `| **Status** |` header-table row (36 files, 12 distinct free-prose values, template-mandated with a 6-value enum that is not obeyed), and the RELEASE_LOG `State` column. Twenty-two files carry two of these in disagreement."
@@ -17,13 +17,15 @@ source_observations:
   - "The semantically obvious home for the new assertion, the linter's `--check schema` mode, has ZERO live callers: its only occurrences are the tool's own usage docstring, historical corpus prose, and one agent-invoked skill checklist. A check placed there would have been green and enforcing nothing — the exact outcome the originating card's own acceptance criteria forbid."
 ---
 
-# ADR-151 — A release plan's status field records the document's own lifecycle
+# ADR-155 — A release plan's status field records the document's own lifecycle
 
 ## Status
 
 **Proposed** — flips to **Accepted** when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified.
 
 **Numbering provenance — `142 → 151`.** Held **ADR-142** branch-local; renumbered to **ADR-151** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 142. In-release citations that read "ADR-142" denote this record.
+
+**Numbering provenance — `151 → 155`.** Held **ADR-151** branch-local; renumbered to **ADR-155** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 151. In-release citations that read "ADR-151" denote this record.
 
 ## Context
 
