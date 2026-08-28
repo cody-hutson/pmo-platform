@@ -847,7 +847,9 @@ A skipped **release-scoped** sub-task uses the same format with the milestone na
 
    #### Step 5.5: Quota check before parallel launch
 
-   Before issuing **any** Agent invocation — N in one hub response, or a single one at any stage including the write-serialized 6 / 13 — the hub runs **Checkpoint B** of the quota-budget protocol ([`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4) against the *remaining* per-account 5-hour usage-window envelope. This is the load-bearing, ongoing check — it fires before *every launch*, not once at Stage 4, because each launch faces a potentially different remaining envelope (mid-release quota drift; 5-hour boundary crosses; per-spoke costs varying from the Stage 4 baseline). A singleton is gated too: being serial bounds the concurrent-batch surface, not the envelope, and a lone spoke on a near-tail window dies mid-run exactly the way the gate exists to prevent. Verdict depth varies by launch shape — the full PROCEED / SERIALIZE / DEFER / REDUCE-scope hierarchy for a wave (§ 4.3), the reduced PROCEED / DEFER form for a singleton (§ 4.3a). The check costs zero tool calls, which is what makes per-launch firing affordable.
+   Before issuing **any** Agent invocation — N in one hub response, or a single one at any stage including the write-serialized 6 / 13 — the hub runs **Checkpoint B** of the quota-budget protocol ([`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4) against the *remaining* per-account 5-hour usage-window envelope. This is the load-bearing, ongoing check — it fires before *every launch*, not once at Stage 4, because each launch faces a potentially different remaining envelope (mid-release quota drift; 5-hour boundary crosses; per-spoke costs varying from the Stage 4 baseline). A singleton is gated too: being serial bounds the concurrent-batch surface, not the envelope, and a lone spoke on a near-tail window dies mid-run exactly the way the gate exists to prevent. Verdict depth varies by launch shape — the full PROCEED / SERIALIZE / DEFER / REDUCE-scope hierarchy for a wave (§ 4.3), the reduced PROCEED / DEFER form for a singleton (§ 4.3a).
+
+   **Two axes, either sufficient to block.** Checkpoint B weighs **two independent axes**: the per-account usage-window envelope (above) and the **host-API quota** — the host's separate REST (`core`) and GraphQL pools, read with `gh api rate_limit` once per routing turn and reused for every launch issued in that turn. The host-API axis renders PROCEED / DEFER on a 20 %-remaining floor (protocol § 4.3b) and combines with the usage-window verdict by **DEFER-dominant disjunction**: a host-API DEFER makes Checkpoint B render DEFER; otherwise the usage-window verdict passes through unchanged. **No new verdict token is minted**, so behavior is unchanged whenever the pools are healthy. The axis matters because a depleted GraphQL pool does not slow a Stage 5 / 7 / 8 spoke down — it destroys the deliverable, whose entire output channel is a GitHub Issue comment, *after* the usage-window draw is already spent. A probe that fails **fails open** (basis `UNSTATED`, axis PROCEED, reason rendered): the rate-limit endpoint is unmetered, so exhaustion presents as a successful read returning zero and a probe *failure* therefore carries no exhaustion signal. **Cost:** the usage-window axis is zero tool calls; the host-API axis is one read per routing turn, free against the pools it measures. Per-launch firing stays affordable, so no launch shape is too small to gate.
 
    The hub computes `N_planned × per-spoke-cost-estimate` (Checkpoint A baseline refined by observed per-spoke actuals from prior waves this release) and compares it against the remaining envelope (operator-stated state at hub start, adjusted for elapsed-window time and any per-batch override — see the protocol § 6), then renders one verdict on the usage-window axis:
 
@@ -858,7 +860,7 @@ A skipped **release-scoped** sub-task uses the same format with the milestone na
    | **DEFER** | Hold the batch for the next window; surface a reset-time estimate (reduces cumulative draw entirely) |
    | **REDUCE-scope** | Launch with a smaller per-wave footprint — compact prompts, narrower scope, fewer canonical reads (reduces per-wave consumption) |
 
-   On **SERIALIZE / DEFER / REDUCE-scope**, the hub produces a Decision Briefing surfacing the verdict + recommendation to the operator **BEFORE** launching any spoke in the wave. **STAGGER** (an in-prompt `sleep` stagger) is a *labeled secondary* rate-limit-only defense — it does not change cumulative consumption and is never the mitigation for a usage-window overrun (§ Per-Account Usage Window Constraint).
+   On **SERIALIZE / DEFER / REDUCE-scope**, the hub produces a Decision Briefing surfacing the verdict + recommendation to the operator **BEFORE** launching any spoke in the wave. A **host-API DEFER routes into this same briefing path with no new token** — it renders as DEFER, which this rule already enumerates, so nothing here changes to accommodate the second axis. **STAGGER** (an in-prompt `sleep` stagger) is a *labeled secondary* rate-limit-only defense — it does not change cumulative consumption and is never the mitigation for a usage-window overrun (§ Per-Account Usage Window Constraint).
 
    On **DEFER**, the hub offers the operator an explicit **override-to-PROCEED exit** — the escape hatch for a wrong-stated-envelope deadlock. The override is operator-initiated (the hub renders DEFER as *recommended*; the operator chooses to override), is **deviation-logged** as a recorded auditable choice, and is a one-batch exit (it does not reopen the gate at every wave). When DEFER holds, the hub MAY emit an action-item entry per [`../../../core/standards/hub-action-tracking.md`](../../../core/standards/hub-action-tracking.md) (e.g., "Resume Stage N batch after window-reset at HH:MM") so the deferred batch is tracked and resumed.
 
@@ -1743,6 +1745,33 @@ every spoke renders on every run including when nothing fired — a firing you
 record is auditable afterwards, and a null line you are obliged to render is
 what makes silence mean something. Treat this as discipline you owe, not a guard
 that will catch you.
+
+**Cutover discipline:** Applies to all releases going forward.
+
+## Write-Early Discipline (all spokes)
+
+Produce output early and bank it as you go. A spoke that front-loads its reading
+and writes only at the end produces **nothing** when interrupted; a spoke that
+wrote early survives the same interruption with work banked. Order your work so
+an interruption costs you the least-valuable part.
+
+The form depends on your output channel:
+
+- **Commit channel (Stages 6 / 12 / 13)** — commit and push each coherent slice
+  rather than saving one terminal push. A pushed commit is durable, and a
+  re-spawn resumes from the release branch with your banked work present.
+- **Comment channel (Stages 5 / 7 / 8)** — your output comment is ONE atomic
+  write by design, and post-then-edit is wrong on a public repository (edit
+  history is permanent and unscrubable). Your form is **ordering, not
+  incrementality**: finish the load-bearing analysis before the elaborative
+  reads, and accrue composed output into `$SPOKE_OUT` as evidence lands.
+
+**Honest scope — a discipline, not an interlock, and bounded.** Nothing asserts
+this per launch. For a comment-channel spoke it bounds loss **within a resumable
+session only** — it does not bank work across a re-spawn, because a fresh spawn
+resolves a fresh run directory and § Run-Directory Discipline forbids reading
+another run's artifacts. Full rule and the observed failure it encodes:
+§ Per-Account Usage Window Constraint, mitigation 6.
 
 **Cutover discipline:** Applies to all releases going forward.
 
@@ -2870,11 +2899,15 @@ canonical anchor for the cumulative-draw failure mode.
 
 1. **Pre-flight quota check.** Before launching N parallel spokes, the hub
    checks the remaining-window quota and defers the batch if it would be
-   insufficient for the estimated cumulative consumption. *(Note: remaining-
-   window quota is not queryable from within a session today; this is the check
-   the state-aware usage-window gate — sister work that references this
-   constraint — is designed to provide. Until it is queryable, the hub relies on
-   the budgeting and timing mitigations below plus serialize-on-failure.)*
+   insufficient for the estimated cumulative consumption. *(Note: the remaining
+   **platform usage-window** quota is not queryable from within a session today;
+   this is the check the state-aware usage-window gate — sister work that
+   references this constraint — is designed to provide. Until it is queryable,
+   the hub relies on the budgeting and timing mitigations below plus
+   serialize-on-failure. The **host-API** quota is a different matter and IS
+   queryable today — `gh api rate_limit` returns the REST and GraphQL pools —
+   which is why the quota-budget protocol's second axis can measure where this
+   one can only project.)*
 2. **Quota-budgeting per release.** Estimate `tokens_per_spoke × N` against the
    typical 5-hour-window allotment. If that estimate exceeds a fresh window's
    allotment, split the batch across multiple windows rather than launching all
@@ -2889,6 +2922,41 @@ canonical anchor for the cumulative-draw failure mode.
 5. **Reduce per-spoke consumption.** Lower `tokens_per_spoke` with more compact
    prompts, fewer canonical reads, and narrower analysis scope, so a given
    window absorbs more spokes.
+6. **Write early, bank incrementally.** Mitigations 1–5 all try to prevent an
+   interruption. This one bounds what an interruption *costs* once it happens
+   anyway, and it is the residual mitigation for **both** axes — including the
+   case where the host-API probe returned basis `UNSTATED` and the gate could
+   not see the pool state at all (quota-budget protocol § 4.3b).
+
+   **The observed failure it prevents.** Spokes that front-loaded their reading
+   before producing any output produced **nothing** when interrupted — the whole
+   draw was spent and no work survived. Spokes that had written early survived
+   the same interruption **with work banked**. That contrast, not a general
+   preference for efficiency, is what this mitigation encodes: a generic "be
+   efficient" instruction does not produce it, because the failing spokes were
+   being efficient — they were reading before writing, which is ordinarily
+   correct.
+
+   **The form differs by output channel, and the difference is load-bearing.**
+
+   - **Commit-channel spokes (Stages 6 / 12 / 13).** Commit and push each
+     coherent slice rather than saving one terminal push. A pushed commit is
+     durable: a re-spawn resumes from `origin/release/<milestone>` with the
+     banked work already present. This is the strong form.
+   - **Comment-channel spokes (Stages 5 / 7 / 8).** The output comment is **one
+     atomic write by design**, and post-then-edit is the wrong remedy on a
+     public repository — a partial comment's edit history is permanent and
+     unscrubable. The applicable form is therefore **ordering, not
+     incrementality**: finish the load-bearing analysis before the elaborative
+     reads, and accrue the composed output into the run directory as each piece
+     of evidence lands, so an interruption costs formatting rather than
+     findings.
+
+   **Honest boundary — what the comment-channel form does NOT buy.** For a
+   comment-channel spoke this bounds loss **within a resumable session only**.
+   It does not bank work across a re-spawn: a fresh spawn resolves a fresh run
+   directory, and § Run-Directory Discipline forbids reading another run's
+   artifacts. Claiming otherwise would be false, so it is not claimed.
 
 **Secondary note — in-prompt `sleep` stagger (rate-limit only, not load-bearing
 here).** A hub may add an in-prompt `sleep <position × delay>` stagger to spread
