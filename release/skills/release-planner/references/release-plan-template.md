@@ -199,7 +199,11 @@ Dependency-ordered implementation plan. Each issue includes file-level change sp
 | #N | AC-2 | [Reproducible probe] | [Null expectation: zero / none / absent] · control: [same instrument, same target, a pattern that must hit] → [observed non-zero] |
 | #M | AC-1 | [Reproducible probe] | [Expected result] |
 
-One row per acceptance criterion, in the criterion list's order; the `AC` cell holds the identifier only. A criterion this release deliberately will not verify still carries its row, with the method cell reading `[DEFERRED — <reason>]`. Record the **AC baseline** below the table — per-issue criterion counts as read at plan time, and the commit SHA read against.
+One row per acceptance criterion, in the criterion list's order; the `AC` cell holds the identifier only. A criterion this release deliberately will not verify still carries its row, with the method cell reading `[DEFERRED — <reason>]`.
+
+**AC baseline** — per-issue criterion counts as read at plan time, and the commit SHA read against. Stage 9's AC-coverage read compares the emitted `AC-<n>` set against this line; **without it that read has nothing to compare and emits `N/A — no baseline recorded`**, so an omitted baseline silently forfeits the check rather than failing it.
+
+`ac_baseline: { #N: <count>, #M: <count>, read_at: <commit-sha> }`
 
 ### Release-Level Verification
 
