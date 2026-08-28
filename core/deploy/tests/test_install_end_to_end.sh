@@ -808,6 +808,26 @@ else
   printf 'operator content that install must never touch\n' > "${reb_sentinel}"
   rm -f "${reb_deleted}"
 
+  # Seed the automation dial to a NON-DEFAULT enum member before the second run, so the
+  # duplicate-key arm below cannot be satisfied by the seed and the generator default
+  # coinciding. `off` is declared in operator-toml-schema.json alongside the default
+  # `recommend`, so the two are distinguishable by construction. The seed REPLACES in
+  # place and never appends — an appending seed would manufacture the very duplicate the
+  # arm exists to detect. The pre-run line is captured for the failure detail, which is
+  # what keeps "the seed did not apply", "the generator reset the value" and "the key was
+  # duplicated" three distinguishable readings of one red arm rather than one ambiguous
+  # one. No assertion fires here: a no-op seed surfaces at the arm below as a wrong value,
+  # so the value predicate is its own control and a separate precondition arm would only
+  # restate it.
+  #
+  # `tr`, not `head`: tr consumes the whole stream, so the upstream grep cannot take a
+  # SIGPIPE from a short-circuiting reader. Stage 1 emits the key exactly once, so the
+  # joined form is a single line in practice and a visible multi-line join if it is not —
+  # which is itself the diagnostic this capture exists to provide.
+  reb_pre_level=$(grep -E '^automation_level[[:space:]]*=' "${SBX}/config/operator.toml" 2>/dev/null | tr '\n' ';')
+  sed -i '' -E 's/^automation_level[[:space:]]*=.*/automation_level = "off"/' \
+    "${SBX}/config/operator.toml"
+
   # Fingerprint every surviving seed BEFORE the run so an over-write is measured rather
   # than assumed. Sorted for a stable comparison across filesystems.
   # `-exec … +` rather than a pipe into xargs: with an empty file set xargs would run
@@ -840,6 +860,124 @@ else
     report "the second run routed to RE-BOOTSTRAP (not fresh-install)" 0 \
       "no 'RE-BOOTSTRAP flow' line — the arms below would not be testing the re-bootstrap path"
   fi
+
+  # DUPLICATE-KEY ARM
+  # The Stage 1 exactly-once assertion covers the FRESH-install path. The duplicate this
+  # arm exists for arises only on the SECOND bootstrap, where write_operator_toml emits
+  # every delivered key and passthrough() then echoes the prior file for anything outside
+  # its already-emitted set. Placed here, directly after the routing assertion, a red arm
+  # is already attributable: the two arms above have established that the second run
+  # exited 0 AND took the re-bootstrap branch, so a duplicate cannot be misread as "the
+  # second run did not happen".
+  #
+  # Generalised from one key to whole-file (section, key) uniqueness. The hazard is a
+  # property of the passthrough-versus-already-emitted relationship, which holds for every
+  # managed key identically — automation_level is one instance of a class, and the durable
+  # predicate is the class. A single-key count would report one of however many keys a
+  # broken guard duplicates. automation_level is still named and counted so the arm stays
+  # attributable to the regression that motivated it.
+  reb_dup=$(python3 -c '
+import re, sys
+try:
+    body = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+except Exception as exc:
+    print("ERROR|%s" % exc); sys.exit(0)
+sec, n, seen, lvl, stray = "", 0, {}, [], 0
+for raw in body.split("\n"):
+    line = raw.strip()
+    # A comment is decided by the FIRST non-space character only. Trailing # is not
+    # stripped: the generator emits no trailing comments, and stripping one would
+    # corrupt a quoted value that legitimately contains a hash.
+    if not line or line.startswith("#"):
+        continue
+    m = re.match(r"^\[\[([^\]]+)\]\]$", line)
+    if m:
+        # Array-of-tables: each occurrence opens a FRESH context, so repeated members
+        # are not miscounted as duplicates.
+        n += 1; sec = "%s/%d" % (m.group(1), n); continue
+    m = re.match(r"^\[([^\]]+)\]$", line)
+    if m:
+        sec = m.group(1); continue
+    if "=" not in line:
+        continue
+    k, v = [p.strip() for p in line.split("=", 1)]
+    if not sec:
+        stray += 1
+    seen[(sec, k)] = seen.get((sec, k), 0) + 1
+    if k == "automation_level":
+        lvl.append(v)
+dups = sorted("%s.%s x%d" % (s, kk, c) for (s, kk), c in seen.items() if c > 1)
+val = lvl[0].strip(chr(34)) if lvl else "<absent>"
+if dups or len(lvl) != 1 or val != "off" or stray:
+    print("BAD|duplicated: %s; automation_level lines=%d value=%s; pre-section key lines=%d; pairs scanned=%d"
+          % (", ".join(dups) or "none", len(lvl), val, stray, len(seen)))
+else:
+    print("OK|%d" % len(seen))
+' "${SBX}/config/operator.toml" 2>/dev/null)
+
+  case "${reb_dup}" in
+    OK\|*)
+      report "re-bootstrap emits no duplicated key (automation_level exactly once, operator value preserved; ${reb_dup#OK|} pairs)" 1 ;;
+    BAD\|*)
+      report "re-bootstrap emits no duplicated key (automation_level exactly once, operator value preserved)" 0 \
+        "${reb_dup#BAD|}; pre-run line was: ${reb_pre_level:-<none>}" ;;
+    *)
+      # Never a silent pass — an uncomputable uniqueness verdict is a FAIL, not the
+      # absence of one.
+      report "re-bootstrap key uniqueness is computable" 0 "${reb_dup:-no output}" ;;
+  esac
+
+  # TOML-SHAPE ARM
+  # Occurrence-count alone does not localize the defect and a shape scan alone does not
+  # name it, so both limbs ship: a duplicated key leaves the shape valid, which is
+  # exactly why the arm above is the one that goes red for it.
+  #
+  # tomllib is the obvious parser and is unavailable here — the operator baseline is
+  # Python 3.9 and tomllib is 3.11+, the same constraint check-work-hierarchy.py and
+  # check-label-parity.py each record at their own regex parses. Guarding it behind
+  # try/except would degrade this arm to a vacuous SKIP on the very host the baseline
+  # describes, which is worse than not shipping it. Shape here plus uniqueness above is
+  # what makes the pair a real parse rather than a line-shape check: tomllib itself
+  # raises on a duplicate key, so a scan that admits one is not equivalent to a parse.
+  reb_shape=$(python3 -c '
+import re, sys
+try:
+    body = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+except Exception as exc:
+    print("ERROR|%s" % exc); sys.exit(0)
+bad, n = [], 0
+for i, raw in enumerate(body.split("\n")):
+    line = raw.strip()
+    if not line:
+        continue
+    n += 1
+    if line.startswith("#"):
+        continue
+    if re.match(r"^\[\[?[^\]]+\]\]?$", line):
+        continue
+    # Split on the FIRST = only, so an array or a value containing = is not mis-shaped.
+    if re.match(r"^[A-Za-z_][A-Za-z0-9_.-]*[ \t]*=", line):
+        continue
+    bad.append("%d:%s" % (i + 1, line[:48]))
+if n == 0:
+    print("SHAPE_BAD|no non-blank lines — an empty emit is not a well-formed config")
+elif bad:
+    print("SHAPE_BAD|%d of %d non-blank lines are neither comment, section header, nor key = value: %s"
+          % (len(bad), n, "; ".join(bad[:3])))
+else:
+    print("SHAPE_OK|%d" % n)
+' "${SBX}/config/operator.toml" 2>/dev/null)
+
+  case "${reb_shape}" in
+    SHAPE_OK\|*)
+      report "re-bootstrap emits an operator.toml whose every line parses (${reb_shape#SHAPE_OK|} non-blank lines)" 1 ;;
+    SHAPE_BAD\|*)
+      report "re-bootstrap emits an operator.toml whose every line parses" 0 "${reb_shape#SHAPE_BAD|}" ;;
+    *)
+      # Never a silent pass — an uncomputable shape verdict is a FAIL, not the absence
+      # of one.
+      report "re-bootstrap TOML shape is computable" 0 "${reb_shape:-no output}" ;;
+  esac
 
   # DELETE-RESTORE ARM
   if [ -f "${reb_deleted}" ]; then
