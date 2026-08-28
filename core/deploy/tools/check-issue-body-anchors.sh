@@ -619,7 +619,17 @@ run_scan() {
     local nums
     nums="$(awk -f "$HEADINGS_AWK" "$ROOT/$target" | sort_anchor_nums | paste -sd, -)"
     if [[ -z "$nums" ]]; then n_unnumbered=$((n_unnumbered + 1)); continue; fi
-    if printf '%s' ",$nums," | grep -qF ",$num,"; then
+    # SIGPIPE-REWRITE. Was: `printf '%s' ",$nums," | grep -qF ",$num,"`. This
+    # file sets `pipefail`, so the broken-pipe status is load-bearing: `grep -q`
+    # exits at its first match and closes the pipe, `printf` then takes SIGPIPE
+    # (141), and pipefail promotes that to the pipeline's status — so the `if`
+    # reads a MATCH as a non-match and books a resolving anchor as an unresolved
+    # FINDING. The here-string has no writer process to signal, which removes the
+    # hazard rather than narrowing it. The one documented caveat does not apply:
+    # `<<<""` would emit one empty line where `printf '%s' ""` emits none, but
+    # `$nums` is guaranteed non-empty by the `[[ -z "$nums" ]]` guard on the line
+    # above, and the needle is comma-delimited so it cannot match an empty line.
+    if grep -qF ",$num," <<<",$nums,"; then
       n_resolved=$((n_resolved + 1))
     else
       n_unresolved=$((n_unresolved + 1))
