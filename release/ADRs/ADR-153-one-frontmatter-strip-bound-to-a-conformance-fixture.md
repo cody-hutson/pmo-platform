@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-147 — One frontmatter-strip transform: a shared library bound to a committed conformance fixture, over replication governed by a registry comment"
+title: "ADR-153 — One frontmatter-strip transform: a shared library bound to a committed conformance fixture, over replication governed by a registry comment"
 status: Accepted
 date: 2026-08-28
 release: ci-stable-under-transient-conditions
@@ -16,11 +16,13 @@ source_observations:
   - "The conformance fixture's expectations had to be hand-authored. Generating them from any implementation would have made the fixture agree with that implementation by construction, which is the failure mode the fixture exists to prevent."
 ---
 
-# ADR-147 — One frontmatter-strip transform: a shared library bound to a committed conformance fixture, over replication governed by a registry comment
+# ADR-153 — One frontmatter-strip transform: a shared library bound to a committed conformance fixture, over replication governed by a registry comment
 
 ## Status
 
 **Accepted.** Authored at Engineering for the `ci-stable-under-transient-conditions` release, under the Collective Review scope-lock that admitted the publisher's empty-body guard into this card's scope.
+
+**Numbering provenance — `147 → 153`.** Held **ADR-147** branch-local; renumbered to **ADR-153** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 147. In-release citations that read "ADR-147" denote this record.
 
 ## Context
 
