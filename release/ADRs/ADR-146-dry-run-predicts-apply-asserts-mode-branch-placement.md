@@ -94,5 +94,5 @@ This is deliberately **not** "put the mode test first." The literal-first-line s
 
 ## Related ADRs
 
-- **[ADR-092](ADR-092-release-plan-identity-slug-primary.md)** — establishes the slug-primary identity the close-out tool's plan-identity phase asserts. This ADR does not disturb that phase; it is one of the five with no mode branch, and the sweep dispositioned it correct-by-design because its input is authored on the release branch and is present in both modes.
-- **[ADR-142](ADR-142-resolve-the-root-do-not-exempt-the-fixture.md)** — resolve the root, do not exempt the fixture. The same posture applied to a different surface: this decision reconciles the misleading in-code comment rather than deleting it, and fixes the class rather than exempting the instance that surfaced it.
+- **[ADR-142](ADR-142-resolve-the-root-do-not-exempt-the-fixture.md)** — resolve the root, do not exempt the fixture. The same posture on a different surface: this decision reconciles the misleading in-code comment rather than deleting it, and closes the class rather than exempting the instance that surfaced it.
+- **[ADR-092](../../core/ADRs/ADR-092-plan-file-claim-time-stamping.md)** — plan-file identity binds at claim-time stamping. The close-out phase that asserts that identity is one of the five phases with **no** mode branch, and the sweep dispositioned it correct-by-design for a reason worth recording: its input is authored on the release branch and is therefore present in both modes, so it is not a class member. This ADR does not disturb it.
