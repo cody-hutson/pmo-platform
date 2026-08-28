@@ -4121,7 +4121,7 @@ LIFECYCLE
 # Label-shape is what separates a body REPORTING a probe from one DISCUSSING
 # probes; the >=2 count then rejects a bare `Verdict:` with no probe behind it.
 # Loosening EITHER half converts a real control into a never-FAIL check — see
-# ADR-144. The negative arm is not optional: --self-test group EV asserts the
+# ADR-150. The negative arm is not optional: --self-test group EV asserts the
 # evidence-free and prose-near-miss bodies still FAIL.
 #
 # Extracted as a function rather than left inline in Check 22 because Check
@@ -9873,10 +9873,10 @@ sys.stdout.write("".join(out) + "|")
   #      is DERIVED LIVE as (tracked-corpus angle tokens) MINUS (§4 table) and reads no
   #      stored tolerated-set file. There is deliberately NO arm (c): a stored baseline
   #      of tolerated tokens is extendable by the very change it would gate, so it buys
-  #      the word "ratchet" and not the property. Per ADR-144.
+  #      the word "ratchet" and not the property. Per ADR-150.
   #
   # SCOPE, and why none of it is hardcoded — this is the defect the check carried until
-  # ADR-144, when it reached one prefix, one file extension and three roots of its own
+  # ADR-150, when it reached one prefix, one file extension and three roots of its own
   # declared subject. The PREFIX set and BOTH DELIMITER families are DERIVED from the
   # registry tables at runtime, and the registry read and the usage scan consume ONE
   # derived value, so the two limbs are structurally incapable of disagreeing. FILE
