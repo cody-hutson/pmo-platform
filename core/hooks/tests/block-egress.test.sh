@@ -702,6 +702,152 @@ else
     "$_bl_exit" "$_bl_before" "$_bl_after" "$_bl_tail"; FAIL=$((FAIL + 1))
 fi
 
+# =====================================================================
+# AC-E007-M* — mutation differential on the path-extraction step (#5568 AC-4)
+# =====================================================================
+# Every -007 arm above this block is an OUTCOME assertion against the shipped hook,
+# and no outcome arm can separate "the path-extraction step works" from "some other
+# property of this hook happens to reach the same verdict". An assertion that passes
+# against a broken implementation as readily as a correct one measures nothing. AC-4
+# asks for the discriminating form: the control demonstrated FAILING on a fixture
+# whose path-extraction step is removed, and PASSING on the conformant control.
+#
+# WHAT IS MUTATED, AND WHY THAT IS THE PATH-EXTRACTION STEP. The operand walk exists
+# to identify WHICH argument is the path rather than take one by position. The
+# value-taking-flag enumeration is the part that does that work: it advances past a
+# flag AND its value, so a flag's VALUE is never mistaken for the path. That is the
+# exact defect #5568 reported (`--method` read as the path) and the one the hook's own
+# comment records for the repo's dominant `gh api -X POST <path>` spelling. Delete the
+# enumeration and the walk reverts to positional extraction — `-H` falls through to the
+# generic flag arm, its value lands in the first-non-flag slot, and an ALLOWLISTED call
+# is denied on a token that was never a path. The mutated hook's own message names it:
+# `path: Accept:application/vnd.github+json`. That is the card's root cause reproduced
+# verbatim — a matcher whose input is not the thing it claims to match.
+#
+# HERMETIC BY CONSTRUCTION. The sandbox carries its own allowlist, its own .mode and
+# its own scope root — the hook self-locates all three from ${HOOK_DIR}/.. and
+# ${HOOK_DIR}/../.. — and the payload cwd points inside it. This block therefore reads
+# NOTHING from $MODE_FILE, nothing from the ambient core/egress-allowlist.txt (absent
+# in a source checkout until setup-ci-layout.sh materializes it, which is why the
+# allowlisted-path arms above fail in a bare checkout), and nothing from the runner's
+# exported PMO_SCOPE_GUARD_ROOT / PMO_PLATFORM_CONFIG_ROOT. It returns the same verdict
+# standalone and under test-runner.sh, because a suite whose verdict depends on how it
+# is invoked is not a gate.
+echo ""
+echo "gh api — mutation differential on the path-extraction step (AC-E007-M*)"
+echo "---"
+
+E007_M_ROOT="$(/usr/bin/mktemp -d)"
+E007_M_CLAUDE="${E007_M_ROOT}/.claude"
+E007_M_HOOKS="${E007_M_CLAUDE}/hooks"
+/bin/mkdir -p "${E007_M_HOOKS}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh  "${E007_M_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK_DIR}/lib/"*.awk "${E007_M_HOOKS}/lib/" 2>/dev/null || true
+
+# One allowlist entry, owned by this block, so the differential turns on the sed and
+# on nothing else.
+/usr/bin/printf 'repos/mut-test-owner/mut-test-repo/issues*\n' > "${E007_M_CLAUDE}/egress-allowlist.txt"
+/usr/bin/printf 'enforce' > "${E007_M_HOOKS}/.mode"
+
+/bin/cp "$HOOK" "${E007_M_HOOKS}/block-egress.sh"
+/usr/bin/sed -e '/-H|--header|-q|--jq|-t|--template|--hostname|--cache|-p|--preview)/,/;;/d' \
+  "$HOOK" > "${E007_M_HOOKS}/block-egress-mut.sh"
+/bin/chmod +x "${E007_M_HOOKS}/block-egress.sh" "${E007_M_HOOKS}/block-egress-mut.sh"
+
+# Run one payload through one of the two sandbox copies. Both live in the SAME
+# directory, so they resolve the same allowlist, the same .mode and the same scope
+# root: the sed is the only difference between them, which is what makes the pair a
+# differential rather than two unrelated runs.
+E007_M_EXIT=0
+E007_M_ERR=""
+e007_m_run() {
+  local which="$1" cmd="$2" tmp
+  tmp="$(/usr/bin/mktemp)"
+  E007_M_EXIT=0
+  /usr/bin/printf '%s' "$(/usr/bin/jq -n --arg cmd "$cmd" --arg cwd "$E007_M_ROOT" \
+      '{tool_name: "Bash", tool_input: {command: $cmd}, cwd: $cwd}')" \
+    | /bin/bash "${E007_M_HOOKS}/${which}" 2>"$tmp" >/dev/null || E007_M_EXIT="$?"
+  E007_M_ERR="$(/bin/cat "$tmp")"
+  /bin/rm -f "$tmp"
+}
+
+E007_M_ALLOWED="gh api -H 'Accept: application/vnd.github+json' -X PATCH repos/mut-test-owner/mut-test-repo/issues/1 -f state=closed"
+E007_M_DENIED="gh api -H 'Accept: application/vnd.github+json' -X PATCH repos/evil-org/secret/issues/1 -f state=closed"
+
+# M1 — guard the mutation itself. If the sed matched nothing, the "mutated" copy IS
+# the shipped hook and every arm below is an inert tautology. Pinning the exact count
+# also means a future edit that adds a flag to the enumerated list turns this red
+# rather than silently neutering the fixture: re-point the sed, do not delete the arm.
+E007_M_REMOVED=$(( $(/usr/bin/wc -l < "${E007_M_HOOKS}/block-egress.sh") - $(/usr/bin/wc -l < "${E007_M_HOOKS}/block-egress-mut.sh") ))
+if [ "$E007_M_REMOVED" = 3 ]; then
+  /usr/bin/printf 'PASS: AC-E007-M1: fixture sed removed exactly the 3-line value-taking-flag arm\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-E007-M1: fixture sed removed %s lines, expected 3 — it no longer targets the path-extraction step; re-point the sed\n' \
+    "$E007_M_REMOVED"; FAIL=$((FAIL + 1))
+fi
+
+# M2 — the mutated copy must still PARSE. A fixture that fails because it no longer
+# runs proves nothing about the step it deleted; this arm is what makes M4's failure
+# attributable to changed behaviour rather than to a broken file.
+E007_M_SYNTAX=0
+/bin/bash -n "${E007_M_HOOKS}/block-egress-mut.sh" 2>/dev/null || E007_M_SYNTAX="$?"
+if [ "$E007_M_SYNTAX" = 0 ]; then
+  /usr/bin/printf 'PASS: AC-E007-M2: mutated copy is still valid bash (its failure below is behavioural, not a parse error)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-E007-M2: mutated copy does not parse (bash -n exit=%s) — the differential would be meaningless\n' \
+    "$E007_M_SYNTAX"; FAIL=$((FAIL + 1))
+fi
+
+# M3 — the CONFORMANT control. The shipped extraction identifies the path past the
+# header flag and its value, so an allowlisted call is permitted.
+e007_m_run block-egress.sh "$E007_M_ALLOWED"
+if [ "$E007_M_EXIT" = 0 ]; then
+  /usr/bin/printf 'PASS: AC-E007-M3: conformant control — shipped hook PERMITS the allowlisted call behind -H\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-E007-M3: conformant control denied an allowlisted call (exit=%s)\n  stderr: %s\n' \
+    "$E007_M_EXIT" "$E007_M_ERR"; FAIL=$((FAIL + 1))
+fi
+
+# M4 — the DIFFERENTIAL. Same payload, same sandbox, path-extraction step removed.
+# The stderr assertion is the load-bearing half: it requires the deny to name the
+# MIS-EXTRACTED token as the path, which is the reported defect, rather than merely
+# requiring some deny to happen.
+e007_m_run block-egress-mut.sh "$E007_M_ALLOWED"
+if [ "$E007_M_EXIT" = 2 ] \
+  && [ -n "$E007_M_ERR" ] && /usr/bin/grep -q 'BLOCK-EGRESS-007' <<<"$E007_M_ERR" \
+  && [ -n "$E007_M_ERR" ] && /usr/bin/grep -q 'Accept' <<<"$E007_M_ERR"; then
+  /usr/bin/printf 'PASS: AC-E007-M4: differential — with the extraction step removed the SAME allowlisted call is DENIED on the header value\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-E007-M4: differential inconclusive (exit=%s, expected 2 naming BLOCK-EGRESS-007 and the mis-extracted token)\n  stderr: %s\n' \
+    "$E007_M_EXIT" "$E007_M_ERR"; FAIL=$((FAIL + 1))
+fi
+
+# M5 — liveness of the mutated copy. M4 asserts a deny, and a hook that aborts early
+# for an unrelated reason can also produce one. This arm requires the mutated copy to
+# still enforce a rule the sed did not touch, so M4's deny is attributable to the
+# removed step and not to a dead sandbox.
+e007_m_run block-egress-mut.sh 'cat ~/.ssh/id_rsa'
+if [ "$E007_M_EXIT" = 2 ] && [ -n "$E007_M_ERR" ] && /usr/bin/grep -q 'BLOCK-EGRESS-001' <<<"$E007_M_ERR"; then
+  /usr/bin/printf 'PASS: AC-E007-M5: mutated copy still enforces an untouched rule (-001), so M4 is a live verdict\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-E007-M5: mutated copy did not enforce -001 (exit=%s) — M4 may be an artefact of a broken sandbox\n  stderr: %s\n' \
+    "$E007_M_EXIT" "$E007_M_ERR"; FAIL=$((FAIL + 1))
+fi
+
+# M6 — specificity of the conformant control. M3's exit 0 is only meaningful if this
+# sandbox can deny at all: an inert hook (scope gate, master gate, absent allowlist)
+# would produce M3's exit 0 for entirely the wrong reason. Same hook, same sandbox,
+# non-allowlisted path — this MUST block.
+e007_m_run block-egress.sh "$E007_M_DENIED"
+if [ "$E007_M_EXIT" = 2 ] && [ -n "$E007_M_ERR" ] && /usr/bin/grep -q 'BLOCK-EGRESS-007' <<<"$E007_M_ERR"; then
+  /usr/bin/printf 'PASS: AC-E007-M6: same sandbox denies a NON-allowlisted path, so M3 is an allowlist decision and not an inert hook\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-E007-M6: sandbox did not deny a non-allowlisted path (exit=%s) — the hook is inert here and M3 proves nothing\n  stderr: %s\n' \
+    "$E007_M_EXIT" "$E007_M_ERR"; FAIL=$((FAIL + 1))
+fi
+
+/bin/rm -rf "$E007_M_ROOT"
+
 # ----- Raw network tools (BLOCK-EGRESS-008/009/010/011) -----
 
 echo ""
