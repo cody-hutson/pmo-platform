@@ -8,6 +8,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
 | hooks-block-their-declared-subject (version-less) | hooks-block-their-declared-subject | 2026-08-28 | Seven security controls whose declared scope had drifted from what they actually adjudicate — a single-level skill-gate pattern, direct script execution outside the allowlist, a cross-domain block applied in both directions when only one carries the risk, a spec naming a file its hook never covered, path matching defeated by quoting and argument order, an operand filter defeated by trailing punctuation, and a governance matcher that identified files by name rather than by location | #6189 | [notes/_unversioned/hooks-block-their-declared-subject_RELEASE_NOTES.md](notes/_unversioned/hooks-block-their-declared-subject_RELEASE_NOTES.md) |
+| v4.40 | pipeline-spec-self-consistency | 2026-08-28 | — | #6120 | [notes/v4.40_RELEASE_NOTES.md](notes/v4.40_RELEASE_NOTES.md) |
 | v4.39 | selftests-actually-test | 2026-08-27 | — | #6119 | [notes/v4.39_RELEASE_NOTES.md](notes/v4.39_RELEASE_NOTES.md) |
 | v4.38 | operator-instance-home-and-install-scaffold | 2026-08-23 | — | #5908 | [notes/v4.38_RELEASE_NOTES.md](notes/v4.38_RELEASE_NOTES.md) |
 | v4.37 | migration-protocol-and-skill-integration | 2026-08-23 | — | #5889 | [notes/v4.37_RELEASE_NOTES.md](notes/v4.37_RELEASE_NOTES.md) |
