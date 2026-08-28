@@ -1144,6 +1144,190 @@ test_case "BLOCK-022 prefix precision: flag-shaped =-bearing token does not adva
   0
 
 # ==========================================================================
+# BLOCK-022 command-position invariance under COMMAND-WRAPPER prefixes
+# ==========================================================================
+#
+# Same invariant as the assignment block above, on the other half of the prefix
+# grammar. The walk resolved assignment prefixes ONLY, so a transparent command
+# wrapper ahead of the verb resolved AS the command word: no verb matched, and
+# the invocation fell through to ALLOW with the allowlist never consulted. The
+# operation is identical to the bare form, so the verdict must be too.
+#
+# The set is a BOUNDED enumeration mirroring core/hooks/lib/command-position.awk.
+# Every must-flag case below is paired with the SAME wrapper spelling over an
+# ALLOWLISTED target, so an implementation that simply blocked anything carrying
+# a leading wrapper word would fail the controls rather than pass the suite.
+
+echo ""
+echo "BLOCK-022 command-wrapper-prefix invariance"
+echo "---"
+
+test_case "BLOCK-022 wrapper: sudo before bash, non-allowlisted, blocks" \
+  "$(bash_payload 'sudo bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 wrapper: env before bash, non-allowlisted, blocks" \
+  "$(bash_payload 'env bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 wrapper: command before bash, non-allowlisted, blocks" \
+  "$(bash_payload 'command bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 wrapper: exec before bash, non-allowlisted, blocks" \
+  "$(bash_payload 'exec bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 wrapper: nohup before bash, non-allowlisted, blocks" \
+  "$(bash_payload 'nohup bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 wrapper: time before bash, non-allowlisted, blocks" \
+  "$(bash_payload 'time bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# absolute wrapper form -- the wrapper is matched on its BASENAME, as the verb is.
+test_case "BLOCK-022 wrapper: /usr/bin/env before bash, non-allowlisted, blocks" \
+  "$(bash_payload '/usr/bin/env bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# compound-command keywords are command-start positions too, and the segment
+# splitter puts them at the head of their segment.
+test_case "BLOCK-022 wrapper: 'then' keyword before bash blocks" \
+  "$(bash_payload 'if [ -f /tmp/x ]; then bash /tmp/evil.sh; fi')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 wrapper: 'do' keyword before bash blocks" \
+  "$(bash_payload 'for f in a; do bash /tmp/evil.sh; done')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 wrapper: '!' negation before bash blocks" \
+  "$(bash_payload '! bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# the source/. arm resolves command position through the same walk.
+test_case "BLOCK-022 wrapper: sudo before source, non-allowlisted, blocks" \
+  "$(bash_payload 'sudo source /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 wrapper: builtin before source, non-allowlisted, blocks" \
+  "$(bash_payload 'builtin source /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 wrapper: env before '.', non-allowlisted, blocks" \
+  "$(bash_payload 'env . /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# the two prefix families interleave in one walk, in either order.
+test_case "BLOCK-022 wrapper: wrapper then assignment before bash blocks" \
+  "$(bash_payload 'sudo ENVV=1 bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 wrapper: assignment then wrapper before bash blocks" \
+  "$(bash_payload 'ENVV=1 sudo bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# a wrapper does not shield a later command any more than an allowlisted one does.
+test_case "BLOCK-022 wrapper chain: wrapper laundering behind an allowlisted first command blocks" \
+  "$(bash_payload 'bash core/deploy/deploy.sh; sudo bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 wrapper chain: wrapper after '&&' blocks" \
+  "$(bash_payload 'echo hi && env bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# xargs, both directions. With an argv path the executed script IS that path and
+# is adjudicated normally; with none, the operand list arrives on stdin and the
+# target is UNRESOLVABLE -- which denies, matching the variable-bearing posture,
+# rather than falling through to allow.
+test_case "BLOCK-022 wrapper: xargs with a non-allowlisted argv path blocks" \
+  "$(bash_payload 'echo x | xargs bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 wrapper: xargs feeding an interpreter from stdin blocks (unresolvable)" \
+  "$(bash_payload 'echo /tmp/evil.sh | xargs bash')" \
+  2 "unresolvable script target"
+
+# must-not-flag controls -- the SAME wrapper spellings over ALLOWLISTED targets.
+# Without these the wrapper walk could have been implemented as "block anything
+# behind a wrapper word" and the suite would still be green.
+test_case "BLOCK-022 wrapper control: sudo before bash, allowlisted, allows" \
+  "$(bash_payload 'sudo bash core/deploy/deploy.sh')" \
+  0
+
+test_case "BLOCK-022 wrapper control: env before bash, allowlisted, allows" \
+  "$(bash_payload 'env bash core/deploy/deploy.sh')" \
+  0
+
+test_case "BLOCK-022 wrapper control: exec before bash, allowlisted, allows" \
+  "$(bash_payload 'exec bash core/deploy/deploy.sh')" \
+  0
+
+test_case "BLOCK-022 wrapper control: time before bash, allowlisted, allows" \
+  "$(bash_payload 'time bash core/deploy/deploy.sh')" \
+  0
+
+test_case "BLOCK-022 wrapper control: sudo before source, allowlisted, allows" \
+  "$(bash_payload 'sudo source core/deploy/deploy.sh')" \
+  0
+
+test_case "BLOCK-022 wrapper control: wrapper + assignment, allowlisted, allows" \
+  "$(bash_payload 'sudo ENVV=1 bash core/deploy/deploy.sh')" \
+  0
+
+test_case "BLOCK-022 wrapper control: xargs with an allowlisted argv path allows" \
+  "$(bash_payload 'echo x | xargs bash core/deploy/deploy.sh')" \
+  0
+
+test_case "BLOCK-022 wrapper control: wrapper before a non-interpreter verb allows" \
+  "$(bash_payload 'sudo grep -r needle /tmp/evil.sh')" \
+  0
+
+# skip-precision controls. The walk must advance past a word in the BOUNDED SET,
+# not past "any leading word". Each token below is an unlisted word, so it IS the
+# command word -- not an interpreter -- and the verdict is UNCHANGED from before
+# the wrapper walk existed. If the skip ever loosens into advance-past-anything,
+# these flip to blocking and fail.
+test_case "BLOCK-022 wrapper precision: unlisted leading word does not advance" \
+  "$(bash_payload 'mytool bash /tmp/evil.sh')" \
+  0
+
+test_case "BLOCK-022 wrapper precision: near-miss on a listed word does not advance" \
+  "$(bash_payload 'sudoedit bash /tmp/evil.sh')" \
+  0
+
+test_case "BLOCK-022 wrapper precision: wrapper flag terminates the walk" \
+  "$(bash_payload 'command -v bash /tmp/evil.sh')" \
+  0
+
+test_case "BLOCK-022 wrapper precision: wrapper word off the segment head does not advance" \
+  "$(bash_payload 'echo sudo bash /tmp/evil.sh')" \
+  0
+
+# recorded residuals, asserted so the stated coverage boundary is measured rather
+# than assumed. `eval` re-parses a program string this lexical matcher cannot
+# resolve; `timeout` carries an operand the walk would additionally have to
+# consume. Both are deliberately OUT of the bounded set. If either is ever added,
+# these two cases fail and the rule doc must be updated with them.
+test_case "BLOCK-022 wrapper residual: eval is not a skipped prefix (allows)" \
+  "$(bash_payload 'eval bash /tmp/evil.sh')" \
+  0
+
+test_case "BLOCK-022 wrapper residual: timeout is not a skipped prefix (allows)" \
+  "$(bash_payload 'timeout 5 bash /tmp/evil.sh')" \
+  0
+
+# false-positive controls -- the wrapper walk must not disturb the quoted-fragment
+# suppression that keeps DESCRIBED executions from being read as performed ones.
+test_case "BLOCK-022 wrapper FP: carrier-quoted fragment with a wrapper allows" \
+  "$(bash_payload "gh issue comment 1 --body 'note; sudo bash /tmp/evil.sh'")" \
+  0
+
+test_case "BLOCK-022 wrapper FP: wrapper invocation quoted as echo text allows" \
+  "$(bash_payload "echo 'sudo bash /tmp/evil.sh'")" \
+  0
+
+# ==========================================================================
 # BLOCK-022 R5 — the pipeline's own invocation shapes must not be blocked
 # ==========================================================================
 #
