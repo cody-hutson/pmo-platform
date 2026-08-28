@@ -3921,10 +3921,22 @@ phase_append_changelog() {
   # anything is inserted, and 9.55 assert_derived_surfaces remains the post-append
   # detector. What is lost is the preview, and only in that case.
   #
-  # The detail carries no '|' (it would corrupt the RESULT|detail record and the
-  # --markdown phase table) and no literal `would FAIL` (_output_set_dryrun_class
-  # reads that token to classify a producer would-absent, and at --apply this phase
-  # writes). Both constraints are asserted by the F-9.5-S-dry self-test arm.
+  # The detail carries no '|' and no literal `would FAIL`. The two constraints
+  # bind DIFFERENTLY, and the difference is worth stating so neither is dropped
+  # for the wrong reason:
+  #   - no '|' is load-bearing TODAY for every phase without exception — the record
+  #     is `RESULT|detail` and --markdown renders it as a table row, so an embedded
+  #     pipe corrupts get_phase and the report.
+  #   - no `would FAIL` is CONVENTION CONFORMANCE, not a live coupling at this
+  #     baseline. _output_set_dryrun_class reads that token, but it is called only
+  #     over the 9.56 output-set manifest, and append_changelog is not one of its
+  #     three members (velocity-field / learnings-block / close-class-telemetry) —
+  #     measured, not assumed. The constraint is kept because CHANGELOG is a
+  #     Stage-13 output and a plausible future member: were it added, a detail
+  #     carrying that token would classify this producer would-absent while
+  #     --apply in fact writes. Holding the vocabulary now costs nothing and makes
+  #     that addition a one-row change instead of a silent misclassification.
+  # Both are asserted by the F-9.5-S-dry self-test arm, each with its own control.
   if [[ "$MODE" == "dry-run" ]]; then
     mark_phase "append_changelog" "DRY-RUN" "would prepend the projected ## [${VERSION}] section to CHANGELOG.md (summary sourced from ${notes_path} frontmatter per release-notes-standard.md § 5.3 transform). Not evaluated under --dry-run: the projector emission itself. Its input is the release note, which phase_scaffold_release_notes deliberately does not write under --dry-run, so resolving it here would only fail on this script's own no-op. The projection runs for real at --apply, after the note is scaffolded and before anything is inserted"
     return 0
@@ -7280,11 +7292,15 @@ EOF
 
   # Fixture S — NOTE PRESENT, CHANGELOG entry absent: the resume-after-partial-apply
   # case, and the one where --apply genuinely succeeds. It pins the two constraints
-  # the DRY-RUN detail carries. It must contain no '|' — the record is `RESULT|detail`
-  # and --markdown renders it as a table row — and no literal `would FAIL`, the token
-  # _output_set_dryrun_class reads to classify a producer would-absent, which this
-  # phase is NOT (at --apply it writes). A future reword of the detail cannot
-  # silently flip phase 9.56's output-set classification.
+  # the DRY-RUN detail carries, which bind differently (see the phase body):
+  #   - no '|' — LIVE for every phase; the record is `RESULT|detail` and --markdown
+  #     renders it as a table row, so an embedded pipe corrupts both.
+  #   - no `would FAIL` — CONVENTION CONFORMANCE at this baseline, not a live
+  #     coupling: _output_set_dryrun_class reads that token but runs only over the
+  #     9.56 manifest, whose three members do not include append_changelog
+  #     (measured, not assumed). Held so that adding CHANGELOG as a member later is
+  #     a one-row change rather than a silent would-absent misclassification of a
+  #     producer that in fact writes at --apply.
   RELEASE_NOTES_DIR="$_ai_tmp/notes"
   /usr/bin/printf '# Changelog\n\n## [Unreleased]\n\n' > "$_ai_tmp/CHANGELOG.md"
   [[ -f "${RELEASE_NOTES_DIR}/v9.97_RELEASE_NOTES.md" ]] || { echo "FAIL: F-9.5-S fixture — the v9.97 note must be PRESENT for the resume-case arms; without it this is fixture N again"; failures=$((failures+1)); }
@@ -7295,7 +7311,7 @@ EOF
   _cl_detail="$(get_phase append_changelog)"
   [[ "${_cl_detail%%|*}" == "DRY-RUN" ]] || { echo "FAIL: F-9.5-S-dry — the outcome must be literally DRY-RUN, got '$_cl_detail'"; failures=$((failures+1)); }
   if /usr/bin/grep -qF 'would FAIL' <<<"$_cl_detail"; then
-    echo "FAIL: F-9.5-S-dry — the DRY-RUN detail must NOT contain the literal 'would FAIL'; _output_set_dryrun_class reads that token and would classify the CHANGELOG output-set member would-absent, but --apply writes it"; failures=$((failures+1))
+    echo "FAIL: F-9.5-S-dry — the DRY-RUN detail must NOT contain the literal 'would FAIL'; that token is the producers' two-valued dry-run vocabulary read by _output_set_dryrun_class, and this phase WRITES at --apply. append_changelog is not a 9.56 manifest member today, so this is convention conformance rather than a live coupling — held so adding CHANGELOG as a member stays a one-row change"; failures=$((failures+1))
   fi
   [[ "$(/usr/bin/awk -F'|' '{print NF; exit}' <<<"$_cl_detail")" == "2" ]] || { echo "FAIL: F-9.5-S-dry — the RESULT|detail record must carry EXACTLY one '|'; a pipe inside the detail corrupts get_phase and the --markdown phase table, got '$_cl_detail'"; failures=$((failures+1)); }
   ! /usr/bin/grep -q '\[v9\.97\]' "$_ai_tmp/CHANGELOG.md" || { echo "FAIL: F-9.5-S-dry — a --dry-run must write NOTHING to CHANGELOG.md"; failures=$((failures+1)); }
