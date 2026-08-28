@@ -529,6 +529,7 @@ This guide is the doctrine. The following docs are the enforcement surfaces:
 | `release/references/pipeline/stage-02-triage.md` + `core/deploy/deploy.sh` Check 71 | § Section-Anchor Resolution (A4.8) | Surfacing surfaces for §2d. Both are **advisory, report-only, never gate-blocking**: numeric section anchors in open issue bodies are resolved against the cited file's actual headings, and an anchor that resolves to nothing is surfaced as a `feasibility flags` bullet (triage) or an `ADVISORY:` line (deploy). The predicate declares the citation classes it does not model, with measured counts, in `core/deploy/tools/check-issue-body-anchors.sh`'s header — a clean run means nothing was found in the modelled classes, not that every anchor resolves. |
 | `core/schemas/gate-criteria-spec.md` | G1-04 (Proposed Change specificity), G1-05 (AC verifiability — branch (i) per-bullet quality, branch (ii) capability-class usability-AC coverage per §4b) | Triage gates that operationalize T2 (G1-04) and T3 (G1-05); G1-05b branch (ii) is the enforcement surface for §4b, whose § Capability-Class Usability-AC Requirement block carries the predicate, the exempt classes, and the conformance tests. |
 | `core/schemas/gate-criteria-spec.md` + `core/deploy/deploy.sh` Check 22 | G1-01 (title informativeness floor) | Enforcement surfaces for the §7 title rubric. The gate enforces the **syntactic floor only** (no bracket prefix + substance floor); the §7 rubric carries the semantic informativeness bar (judgment, not gate-enforced). |
+| `core/schemas/gate-criteria-spec.md` + `core/deploy/deploy.sh` Check 22 | G1-03 (evidence in either admissible shape) | Enforcement surfaces for the §8 evidence rubric. The G1-03 criterion row is the **one normative statement** of the admissible set and the co-presence rule; §8 carries the authoring doctrine and the quality bar (judgment, not gate-enforced) and cites the row rather than restating it. |
 | `<OPERATOR_INSTANCE_ANALYSIS_PATH>/intake-quality-review-2026-04-19/best-practices-rubric.md` | D4 (Intake/Design Boundary) | Rubric dimension that scores intake/design boundary respect; T2 maps to D4. |
 | `.github/ISSUE_TEMPLATE/improvement.yml` | Description, Proposed Change fields | Field descriptions point authors to this guide for the 5-test rule. |
 | `.github/ISSUE_TEMPLATE/observation.yml` | All fields | Lightweight intake form used when T3/T4/T5 fail and the author cannot fix at authoring time. |
@@ -570,3 +571,46 @@ This section is the doctrine. The **enforcement** surfaces (gate G1-01 + `deploy
 - ✗ `[Enhancement]: titles` (bracket prefix + bare area — fails F1 + F2)
 - ✗ `fix-titles` (slug, one token — fails F2)
 - ✗ `Update the gate` (clears the floor, but names no object — fails the *disambiguation* heuristic, which the gate cannot enforce; this is exactly where author/`intake-desk` judgment is the only control)
+
+## 8. Evidence Shapes
+
+Evidence is a **record of how you know**, not a gesture at knowing. A claim is evidenced when a reader can re-run what you did and land where you landed. The platform admits **two shapes** for that record, and they are equally valid — a body may use either, or both. The second shape exists because the platform's own measurement discipline produces probe records, and a gate that recognised only bracket labels was returning conforming authors to rewrite evidence that was already better than the form it demanded.
+
+This section is the doctrine. The **enforcement** surfaces (gate G1-03 + `deploy.sh` Check 22) enforce only the **structural floor** below — that a recognisable shape is present, never whether the values inside it are any good; the **quality bar** (the heuristics and worked examples that follow) is judgment — `intake-desk` elicits to it, and a reviewer reads it; neither the gate nor any LLM scores it. A body can clear the floor and still be worthless evidence (`Probe: yes` over `Verdict: fine` clears the floor and tells a reader nothing — the floor cannot catch that; this rubric can).
+
+### Structural floor (the mechanical minimum — what the gate enforces)
+
+| # | Floor rule | Rationale |
+|---|---|---|
+| F1 | **The `### Evidence` section carries the evidence.** Both shapes are read from that section alone, not from the rest of the body. | A bracket token sitting in `Proposed Change` is not evidence for a claim in `Evidence`. |
+| F2 | **Shape (a) — evidence-label form.** At least one bracket-form token: `[SOURCE]` / `[INFERRED]` / `[CONTEXT]` / `[ASSUMPTION – CONFIRM]` / `[RECOMMENDED]`. | Labels the *confidence class* of each claim, so a reader knows which claims are load-bearing and which are still open. |
+| F3 | **Shape (b) — probe-record form.** At least **2 distinct** markers from `probe` · `denominator` · `control` · `sensitivity` · `specificity` · `verdict`, **each in label position** (the marker word terminated by `:` or a dash, optionally emphasised), per the probe record at [`review-discipline-principles.md` § 8.2](../../../core/disciplines/review-discipline-principles.md). | A measurement's credibility rests on its denominator and its control arms; naming them in label position is what makes the record re-runnable. |
+
+**Why label position, and why two.** Label position is what separates a body *reporting* a probe from one *discussing* probes — a paragraph that happens to contain the words "probe", "control" and "verdict" in running prose is commentary, not evidence. The **2-marker** floor then rejects a lone `Verdict:` with nothing behind it. This is the same co-presence discipline G1-05a pattern (d) applies to `predicate:` + `method:`. Neither half is decorative: drop the label requirement and prose about evidence passes; drop the count and a bare verdict passes.
+
+### Quality heuristics (the bar — `intake-desk` elicits to these; NOT gate-enforced)
+
+| Heuristic | Bad | Good |
+|---|---|---|
+| A zero needs a control arm that fired | `Verdict: 0 occurrences — clean.` | `Control — sensitivity: the live token returned 15 (non-zero), so the probe fires. Verdict: 0 is a real absence.` |
+| Name the denominator, not just the count | `Probe: found 9 offenders.` | `Denominator: 239 applicable cards, 203 of which declare an Evidence section.` |
+| Label the confidence class honestly | `[SOURCE]` on a number you actually inferred | `[INFERRED]` — over-using `[SOURCE]` on uncertain claims is a calibration failure |
+| Quote the match rather than asserting it | `[SOURCE: deploy.sh]` the check is warn-mode | `[SOURCE: core/deploy/deploy.sh]` the warn branch contains no ISSUES increment |
+| Mix shapes when the body does both | a probe record with an unlabelled proposed value | the probe record **plus** `[RECOMMENDED]` on the value being introduced |
+
+### Worked good/bad set
+
+- ✓ **Shape (a), evidence-label form** — `[SOURCE: core/schemas/gate-criteria-spec.md § Gate 1]` the G1-03 row is the normative statement. `[ASSUMPTION – CONFIRM]` the two downstream surfaces are stale; Triage should confirm.
+- ✓ **Shape (b), probe-record form** — no bracket token anywhere, and admissible:
+
+  ```
+  Probe: fixed-string sweep for the criterion id across the tracked corpus.
+  Denominator: 1768 tracked files.
+  Control — sensitivity: the live criterion id returned 15 hits (non-zero).
+  Control — specificity: a fabricated criterion id returned 0.
+  Verdict: CLEAN.
+  ```
+
+- ✗ `This card is about how we write a probe and choose a denominator; the control arm question (sensitivity versus specificity) is what a reviewer must weigh before reaching any verdict.` — carries all six marker **words** and not one **label**. Prose *about* evidence is not evidence (fails F3).
+- ✗ `Verdict: this is broken.` — one label, nothing behind it (fails F3's 2-marker floor).
+- ✗ A body whose only bracket token sits in `Proposed Change` while `### Evidence` says "None yet" (fails F1 — the section the gate reads is empty).
