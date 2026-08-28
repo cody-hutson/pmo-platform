@@ -1520,8 +1520,16 @@ _prov_source_form() {
     'N/A — pipeline-internal release') printf 'X'; return 0 ;;
     'UNSOURCED-DOMAIN')                printf 'B'; return 0 ;;
   esac
-  if printf '%s' "$1" | grep -qE '^https?://[^[:space:]]+'; then printf 'A'; return 0; fi
-  if printf '%s' "$1" | grep -qE '^[A-Za-z0-9._/-]+\.(md|sh|py|toml|json|yml|yaml|txt)([[:space:](].*)?$'; then printf 'A'; return 0; fi
+  # SIGPIPE-REWRITE, same mechanism and same fix as the fcm-delivery site above —
+  # see the note at `recorded=1` for why `writer | grep -q` inverts under this
+  # file's `set -o pipefail`. Stated once there, cited here.
+  # The writer was `printf` on a variable, which has no status worth preserving, so
+  # a here-string is exact: it removes the pipe rather than relocating the hazard.
+  # `printf '%s'` emits no trailing newline and `<<<` adds one; grep reads a final
+  # incomplete line identically, and on the empty value both forms decline to match
+  # (every alternative here requires at least one character).
+  if grep -qE '^https?://[^[:space:]]+' <<<"$1"; then printf 'A'; return 0; fi
+  if grep -qE '^[A-Za-z0-9._/-]+\.(md|sh|py|toml|json|yml|yaml|txt)([[:space:](].*)?$' <<<"$1"; then printf 'A'; return 0; fi
   printf 'NONE'
 }
 
@@ -1617,9 +1625,15 @@ handle_provenance_survival() {
     s_norm="$(_prov_normalize_source "$s_val")"
     s_form="$(_prov_source_form "$s_norm")"
 
-    if ! printf '%s' "$d_val" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+    # SIGPIPE-REWRITE ×2 — see the note at `recorded=1` above for the mechanism.
+    # These two are the INVERTED (`if ! writer | grep -q`) form, where the failure is
+    # worse than a missed finding: a conformant date or domain field is what makes
+    # `grep -q` short-circuit, so the writer takes the broken pipe on exactly the
+    # inputs that should PASS, and the limb reports a grammar FAIL against a
+    # well-formed label. A here-string has no writer to signal.
+    if ! grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' <<<"$d_val"; then
       fail="limb=date value=[$d_val] (mandatory in BOTH modes so staleness is detectable)"
-    elif ! printf '%s' "$body" | grep -qE '(^|[,{[:space:]])domain:[[:space:]]*[A-Za-z]'; then
+    elif ! grep -qE '(^|[,{[:space:]])domain:[[:space:]]*[A-Za-z]' <<<"$body"; then
       fail="limb=domain value=[$body] (the mandatory in-label class field is absent, or the body is wrapped across lines so it fell off the matched line)"
     elif [ "$s_form" = "NONE" ]; then
       fail="limb=source value=[$s_norm] (not one of the three codified forms; route it per the 5.7 routing rule rather than minting a fourth)"
