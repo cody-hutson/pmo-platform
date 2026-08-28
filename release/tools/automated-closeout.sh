@@ -60,6 +60,55 @@
 #                          COMPLETED terminal state, for operator disposition. Signal-only — gates nothing.
 #   17 generate_report     structured markdown or JSON close-out report
 #
+# ─── MODE-BRANCH PLACEMENT — the class rule every phase_* above obeys ────────
+#
+# ASSERT AT --apply, PREDICT AT --dry-run. Ratified by #4765 at phase 9.55,
+# applied by #5142 at 15.5, swept to 9.5 and 15.55 by #5268. Recorded HERE, once,
+# because it had lived only as three comments buried in three separate phase
+# bodies — which is why three instances of ONE defect were found one at a time, by
+# three different stages, across three releases. See
+# release/ADRs/ADR-146-dry-run-predicts-apply-asserts-mode-branch-placement.md.
+#
+# WHY IT BITES. Every phase is dispatched as `phase_x || { generate_report; exit 3; }`,
+# so ONE non-zero phase kills the run and no later phase enumerates. A phase that
+# resolves an input ABOVE its mode test, where that input is written by an earlier
+# phase which no-ops under --dry-run, therefore aborts the whole dry-run on this
+# script's own no-op — invisibly, until the first dry-run over a release that has
+# not already closed.
+#
+# THE RULE. The `MODE == dry-run` test is placed
+#   - BELOW every guard whose inputs are mode-INVARIANT and whose --apply behaviour
+#     is something other than performing the phase's write (a SKIP, a deferral, a
+#     malformed-input FAIL). Predicting "would do X" below such a guard would be a
+#     FALSE prediction, and surfacing a genuinely bad input at --dry-run is what
+#     --dry-run is for; and
+#   - ABOVE every statement whose input is written by a phase that no-ops under
+#     --dry-run.
+# It is NOT "put the mode test first": a phase whose --apply path SKIPs must not
+# predict that it will write.
+#
+# TWO CONSTRAINTS THAT MAKE IT SAFE.
+#   1. The prediction is STATIC. It states what --apply will do; it does not
+#      pre-evaluate any of it. A dry-run limb that stats a file, reaches a remote,
+#      or reads a projector exit code is the same defect in a new shape.
+#   2. The DRY-RUN detail is a two-valued vocabulary. It carries no '|' (the record
+#      is `RESULT|detail` and --markdown renders it as a table row), and it carries
+#      the literal `would FAIL` if and ONLY if --apply would fail —
+#      _output_set_dryrun_class reads that token to classify a producer.
+#
+# WHERE A PHASE HAS NO SINGLE BRANCH POINT — because some limbs are mode-invariant
+# and must keep running — scope the ONE mode-dependent limb instead of relocating
+# the whole phase (phase_preflight, phase_assert_output_set,
+# phase_assert_anchor_hygiene). Scope it as a CONJUNCTION bounded to the exact state
+# the no-op produces, never as a mode-wide suppression. A whole-phase relocation
+# there is the mode-blindness defect inverted.
+#
+# EVERY FIX UNDER THIS RULE SHIPS A PAIRED ARM. The dry arm must reach the limb and
+# record literally DRY-RUN; the apply arm, on the IDENTICAL fixture, must still
+# abort with its message preserved. A presence check ("does a MODE test exist in
+# this function?") PASSES ON THE DEFECTIVE CODE — the branch was always there, just
+# stranded below the abort.
+#
 # Usage:
 #   ./automated-closeout.sh --pr <N> --version v<X.Y> --milestone <N> [--dry-run|--apply] [--markdown|--json] [--no-pattern-scan]
 #   ./automated-closeout.sh --self-test
@@ -3833,14 +3882,59 @@ phase_append_changelog() {
     return 3
   fi
 
+  # ASSERT AT --apply, PREDICT AT --dry-run (#4765 convention, swept here by #5268).
+  # The projector capture below used to sit ABOVE this mode test, under a comment
+  # claiming the ordering was deliberate — "resolved BEFORE the dry-run branch so
+  # dry-run shows the exact bytes --apply will write, including the failure."
+  # That comment (39284a2d, 2026-08-04) is a git ANCESTOR of the commit that
+  # ratified the convention (da363fdd, #4765, 2026-08-09) and of the one that
+  # applied it at 15.5 (6cb75e8e, #5142, 2026-08-10). It was never an exemption
+  # from the rule; it is an unreconciled predecessor the two ratifying commits
+  # never swept back over — which is why this was found third, separately, by a
+  # different stage. Its stated benefit is also unreachable in the case that
+  # matters: the projector reads the release note, and phase_scaffold_release_notes
+  # deliberately writes none under --dry-run, so on a first close the pre-branch
+  # capture showed not the apply bytes but a failure state --apply never enters.
+  # Every --dry-run therefore aborted here, the runner exited 3, and no phase after
+  # this one enumerated — the identical defect #4765 fixed at 9.55 and #5142 fixed
+  # at 15.5, with the identical consequence for the dry-run review gate
+  # stage-13-close.md Phase A8 mandates. The capture is correct and is kept
+  # byte-for-byte; only its mode-blindness was the defect.
+  #
+  # The prediction is STATIC. It states what --apply will do; it does not
+  # pre-evaluate any of it. Do NOT "improve" it by having the dry-run limb stat the
+  # note or read a projector exit code — a dry-run that computes a result is the
+  # mode-blindness defect wearing a different shape.
+  #
+  # ORDERING — this is 15.5's shape, NOT 9.55's literal-first-line shape. The four
+  # guards above stay ABOVE the mode test on purpose. Three of them (version-less,
+  # CHANGELOG-absent, idempotency) SKIP at --apply, so predicting "would prepend"
+  # below them would be a FALSE prediction. The fourth (REPO_SLUG well-formedness)
+  # reads a module-load value no phase writes, so it evaluates identically in both
+  # modes, and surfacing a permanently broken Release URL at --dry-run is exactly
+  # what --dry-run is for. The mode test belongs above the ONE statement whose input
+  # a dry-run-no-op phase owns — the projector capture — and no higher.
+  #
+  # Residual, accepted and named: --dry-run no longer PREVIEWS a projector failure
+  # in the resume case (a close re-run after the note landed but the CHANGELOG entry
+  # did not). The gate loses nothing — the capture still runs at --apply, before
+  # anything is inserted, and 9.55 assert_derived_surfaces remains the post-append
+  # detector. What is lost is the preview, and only in that case.
+  #
+  # The detail carries no '|' (it would corrupt the RESULT|detail record and the
+  # --markdown phase table) and no literal `would FAIL` (_output_set_dryrun_class
+  # reads that token to classify a producer would-absent, and at --apply this phase
+  # writes). Both constraints are asserted by the F-9.5-S-dry self-test arm.
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "append_changelog" "DRY-RUN" "would prepend the projected ## [${VERSION}] section to CHANGELOG.md (summary sourced from ${notes_path} frontmatter per release-notes-standard.md § 5.3 transform). Not evaluated under --dry-run: the projector emission itself. Its input is the release note, which phase_scaffold_release_notes deliberately does not write under --dry-run, so resolving it here would only fail on this script's own no-op. The projection runs for real at --apply, after the note is scaffolded and before anything is inserted"
+    return 0
+  fi
+
   # PROJECT the block (#4455). The note's frontmatter `summary:` (with its silent
   # "(see release notes)" fallback) and the run-scoped CLOSE-OUT anchor are the
   # projector's job now; this phase owns only the INSERTION. An unresolvable note
-  # is a LOUD failure here — this phase runs AFTER the note is scaffolded, so an
-  # absent note is a real anomaly rather than an ordering artifact.
-  #
-  # Resolved BEFORE the dry-run branch so dry-run shows the exact bytes --apply
-  # will write, including the failure.
+  # is a LOUD failure at --apply — by then phase_scaffold_release_notes has run, so
+  # an absent note is a real anomaly rather than an ordering artifact.
   # Sentinel-preserved capture. This is the site where losing it corrupts the
   # artifact: the emitted block ENDS with a blank line, and that blank line is
   # the separation between two release entries. See phase_append_release_index.
@@ -3850,11 +3944,6 @@ phase_append_changelog() {
   if [[ $_emit_rc -ne 0 ]]; then
     mark_phase "append_changelog" "FAIL" "release-corpus projector could not emit the CHANGELOG block for $VERSION (exit $_emit_rc) — see the diagnostic above (release note unreadable or missing); refusing to insert an unprojected or empty block"
     return 3
-  fi
-
-  if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "append_changelog" "DRY-RUN" "would prepend the projected ## [${VERSION}] section to CHANGELOG.md (summary sourced from ${notes_path} frontmatter per release-notes-standard.md § 5.3 transform)"
-    return 0
   fi
 
   # Insertion point, Keep-a-Changelog 1.1.0 convention — the SAME three branches,
@@ -6068,6 +6157,53 @@ anchor_parity_violations() {
   done < <(/usr/bin/comm -13 "$ann_file" "$rel_file")
 }
 
+# #5268 — the ONE bounded --dry-run state in which an INDEX/LOG version-row gap is
+# this script's own no-op rather than corpus drift, and is therefore PREDICTED
+# rather than reported. Returns 0 to predict, 1 to report. Emits nothing.
+# Args: <idx_count> <log_count> <index_file> <log_file> <version> <mode>
+#
+# ASSERT AT --apply, PREDICT AT --dry-run (#4765 convention). Phase 15.55 had NO
+# mode branch at all, and this limb is structurally off-by-one on every first
+# close: Stage 12 Phase B5 lands the RELEASE_LOG row BEFORE close-out runs
+# (phase_preflight hard-FAILs without it), while the RELEASE_INDEX row is added by
+# phase_append_release_index at 8.x — which deliberately writes nothing under
+# --dry-run. So at --dry-run _idx == _log - 1 BY CONSTRUCTION, a finding
+# accumulated, the phase returned 1, and the runner exited 3 one phase-group short
+# of Phase 16. Fixing 9.5 alone only MOVED the halt here.
+#
+# This is the V4 per-limb downgrade shape (phase_preflight, phase_assert_output_set),
+# NOT the 9.55/15.5 whole-phase relocation, and the difference is load-bearing: the
+# tagger-identity and tag<->Release limbs are mode-INVARIANT and must keep running
+# at --dry-run. Only this limb is scoped, and it is scoped as a CONJUNCTION bounded
+# to the exact state the no-op produces — never a mode-wide suppression. Predict
+# only when ALL FOUR hold:
+#
+#   (1) MODE is dry-run
+#   (2) the gap is EXACTLY one row, with LOG ahead of INDEX
+#   (3) the RELEASE_LOG carries a version row for THIS version (Stage 12 wrote it)
+#   (4) the RELEASE_INDEX carries NO row for THIS version (8.x adds it at --apply)
+#
+# Any other gap — two rows, INDEX ahead, a one-row gap that is not this version's,
+# or ANY gap at --apply — reports exactly as before. Version-less releases fall out
+# on (3): neither ledger's version-row regex matches a slug key, so the counts do
+# not move and the limb never fires for them either way.
+#
+# Takes both ledger paths and the version as ARGUMENTS rather than reading the
+# globals, for the same reason anchor_parity_violations takes files: the self-test
+# drives every leg from fixtures, offline, with no close-out state.
+ledger_gap_is_this_close() {
+  local _i="$1" _l="$2" _idx_file="$3" _log_file="$4" _ver="$5" _mode="$6"
+  [[ "$_mode" == "dry-run" ]] || return 1
+  [[ "$_i" =~ ^[0-9]+$ && "$_l" =~ ^[0-9]+$ ]] || return 1
+  (( _l - _i == 1 )) || return 1
+  # Row keys in the two ledgers' OWN shipped idioms — find_log_row's first-column
+  # match for the LOG, phase_append_release_index's idempotency regex for the INDEX
+  # — so a schema change moves all three together rather than leaving this behind.
+  /usr/bin/grep -qE "^\| ${_ver//./\\.}(-[a-z0-9.-]+)? \|" "$_log_file" 2>/dev/null || return 1
+  ! /usr/bin/grep -qE "^\|[[:space:]]*${_ver//./\\.}([[:space:]]+\(version-less\))?[[:space:]]*\|" "$_idx_file" 2>/dev/null || return 1
+  return 0
+}
+
 phase_assert_anchor_hygiene() {
   local findings="" tmp
   tmp="$(/usr/bin/mktemp -d -t anchorhygiene.XXXXXX)"
@@ -6079,14 +6215,20 @@ phase_assert_anchor_hygiene() {
   # (2) AC4a — INDEX/LOG row parity. Offline; always runs. COMPUTED, never hardcoded:
   # a sibling card backfills ledger rows in this same release, so a pinned magnitude
   # would go stale inside one merge.
-  local _idx _log
+  local _idx _log _parity_pred=""
   # grep_count, never a raw count with an appended fallback: that shape captures
   # `0\n0` on a present-but-empty ledger, which makes the `-ne` below throw and
   # evaluate FALSE, silently taking the PASS branch (#3113 QA F-QA-3).
   _idx="$(grep_count -E '^\|[[:space:]]*v[0-9]' "$RELEASE_INDEX")"
   _log="$(grep_count -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$RELEASE_LOG")"
   if [[ "$_idx" -ne "$_log" ]]; then
-    findings="${findings}LEDGER-ROW-PARITY RELEASE_INDEX has ${_idx} version rows, RELEASE_LOG has ${_log}"$'\n'
+    # #5268 — PREDICT the one bounded dry-run gap this close would itself close;
+    # REPORT every other gap, in both modes. See ledger_gap_is_this_close above.
+    if ledger_gap_is_this_close "$_idx" "$_log" "$RELEASE_INDEX" "$RELEASE_LOG" "$VERSION" "$MODE"; then
+      _parity_pred="; LEDGER-ROW-PARITY PREDICTED not asserted under --dry-run — the single missing INDEX row is ${VERSION}'s own, and phase_append_release_index adds it at --apply while deliberately writing nothing here, so the gap is this script's own no-op. Parity is asserted for real at --apply, after the 8.x append lands"
+    else
+      findings="${findings}LEDGER-ROW-PARITY RELEASE_INDEX has ${_idx} version rows, RELEASE_LOG has ${_log}"$'\n'
+    fi
   fi
 
   # (3) AC4b — annotated-tag <-> published-Release set parity. NETWORK. A gh failure is
@@ -6113,10 +6255,15 @@ phase_assert_anchor_hygiene() {
   # Same idiom, same fix: an empty tag list made this render as `0\n0` inside the
   # PASS/SKIPPED detail line (a mangled status message, not a wrong verdict).
   local _annn; _annn="$(grep_count . <<< "$(annotated_tags_of "$REPO_ROOT")")"
+  # The parity clause must never claim `INDEX n == LOG n` on the predicted path —
+  # the counts genuinely differ there, and a status line that says otherwise is the
+  # plausible-looking wrong row this file rejects everywhere else.
+  local _ledger_txt="INDEX ${_idx} == LOG ${_log} rows"
+  [[ -n "$_parity_pred" ]] && _ledger_txt="INDEX ${_idx} vs LOG ${_log} rows${_parity_pred}"
   if [[ -n "$_net_note" ]]; then
-    mark_phase "assert_anchor_hygiene" "SKIPPED" "offline assertions clean (${_annn} annotated tags; INDEX ${_idx} == LOG ${_log} rows)${_net_note}"
+    mark_phase "assert_anchor_hygiene" "SKIPPED" "offline assertions clean (${_annn} annotated tags; ${_ledger_txt})${_net_note}"
   else
-    mark_phase "assert_anchor_hygiene" "PASS" "release anchors in step (${_annn} annotated tags; tag<->Release sets equal modulo ${#ANCHOR_PARITY_EXEMPT_TAGS[@]} recorded exemptions; INDEX ${_idx} == LOG ${_log} rows)"
+    mark_phase "assert_anchor_hygiene" "PASS" "release anchors in step (${_annn} annotated tags; tag<->Release sets equal modulo ${#ANCHOR_PARITY_EXEMPT_TAGS[@]} recorded exemptions; ${_ledger_txt})"
   fi
   return 0
 }
@@ -7088,6 +7235,87 @@ EOF
   # the fixture sets REPO_SLUG above, so this tracks it and embeds no repo name.
   ! /usr/bin/grep -q "github.com/${REPO_SLUG}/" "$_ai_tmp/CHANGELOG.md" || { echo "FAIL: a FAILed append_changelog must write no broken Release URL"; failures=$((failures+1)); }
   REPO_SLUG="$_ai_saved_slug2"
+
+  # (g) REACHABILITY OF THE DRY-RUN LIMB (#5268; #4765 convention; modelled on the
+  # #5142 F-01-N pair at phase_publish_github_release). Phase 9.5's dry-run branch
+  # used to sit BELOW the projector capture's `return 3`, so on a first close every
+  # --dry-run aborted here before the mode was ever read and no phase after it
+  # enumerated.
+  #
+  # These arms assert REACHABILITY, not presence. A presence check (does a
+  # `MODE == dry-run` branch exist in this function?) passes on the DEFECTIVE code —
+  # the branch was always there, just stranded below the abort. Each fixture is
+  # therefore driven through BOTH modes: the dry arm must reach the limb and return
+  # 0 with the literal outcome DRY-RUN, and the apply arm on the IDENTICAL fixture
+  # must behave exactly as before. Without the apply arm the dry arm is satisfiable
+  # by gutting the capture or by a fixture that does not actually omit what it
+  # claims to omit; without the literal-DRY-RUN assertion it is satisfiable by a
+  # vacuous PASS.
+  local _cl_rc _cl_detail
+
+  # Fixture N — NOTE ABSENT. This is the artifact phase_scaffold_release_notes
+  # deliberately does not write under --dry-run, so on the real dry-run path the
+  # projector capture fires on this script's own no-op. All four guards above the
+  # mode test are satisfied here (versioned, CHANGELOG present, version absent from
+  # it, REPO_SLUG owner/repo-shaped), so the capture is provably the abort under test.
+  VERSION="v9.97"
+  RELEASE_NOTES_DIR="$_ai_tmp/empty-notes"; /bin/mkdir -p "$RELEASE_NOTES_DIR"
+  /usr/bin/printf '# Changelog\n\n## [Unreleased]\n\n' > "$_ai_tmp/CHANGELOG.md"
+  # FIXTURE PRECONDITIONS — a fixture that failed to omit the note, or that already
+  # carries the entry, would make both arms below pass for the wrong reason.
+  [[ -z "$(/bin/ls -A "$RELEASE_NOTES_DIR" 2>/dev/null)" ]] || { echo "FAIL: F-9.5-N fixture — RELEASE_NOTES_DIR must be EMPTY; a present note exercises the wrong branch"; failures=$((failures+1)); }
+  ! /usr/bin/grep -q '\[v9\.97\]' "$_ai_tmp/CHANGELOG.md" || { echo "FAIL: F-9.5-N fixture — the CHANGELOG must NOT already carry the entry, or the idempotency guard SKIPs above the mode test"; failures=$((failures+1)); }
+
+  MODE="dry-run"; PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _cl_rc=0
+  phase_append_changelog >/dev/null 2>&1 || _cl_rc=$?
+  [[ "$_cl_rc" -eq 0 ]] || { echo "FAIL: F-9.5-N-dry — under --dry-run the phase must reach its mode branch and return 0 when the note is absent (it is absent by construction; phase_scaffold_release_notes wrote nothing), got rc=$_cl_rc"; failures=$((failures+1)); }
+  [[ "$(get_phase append_changelog | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: F-9.5-N-dry — the outcome must be literally DRY-RUN (a vacuous PASS also returns 0 and must not count), got '$(get_phase append_changelog)'"; failures=$((failures+1)); }
+  ! /usr/bin/grep -q '\[v9\.97\]' "$_ai_tmp/CHANGELOG.md" || { echo "FAIL: F-9.5-N-dry — a --dry-run must write NOTHING to CHANGELOG.md"; failures=$((failures+1)); }
+
+  MODE="apply"; PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _cl_rc=0
+  phase_append_changelog >/dev/null 2>&1 || _cl_rc=$?
+  [[ "$_cl_rc" -ne 0 ]] || { echo "FAIL: F-9.5-N-apply anti-vacuity — the SAME note-absent fixture MUST still abort under --apply; rc=0 means the projector capture was gutted rather than mode-scoped, or the fixture is not actually missing the note"; failures=$((failures+1)); }
+  _cl_detail="$(get_phase append_changelog)"
+  /usr/bin/grep -qF 'release-corpus projector could not emit the CHANGELOG block' <<<"$_cl_detail" || { echo "FAIL: F-9.5-N-apply — the --apply failure message must be preserved verbatim (the apply limb is unchanged), got '$_cl_detail'"; failures=$((failures+1)); }
+
+  # Fixture S — NOTE PRESENT, CHANGELOG entry absent: the resume-after-partial-apply
+  # case, and the one where --apply genuinely succeeds. It pins the two constraints
+  # the DRY-RUN detail carries. It must contain no '|' — the record is `RESULT|detail`
+  # and --markdown renders it as a table row — and no literal `would FAIL`, the token
+  # _output_set_dryrun_class reads to classify a producer would-absent, which this
+  # phase is NOT (at --apply it writes). A future reword of the detail cannot
+  # silently flip phase 9.56's output-set classification.
+  RELEASE_NOTES_DIR="$_ai_tmp/notes"
+  /usr/bin/printf '# Changelog\n\n## [Unreleased]\n\n' > "$_ai_tmp/CHANGELOG.md"
+  [[ -f "${RELEASE_NOTES_DIR}/v9.97_RELEASE_NOTES.md" ]] || { echo "FAIL: F-9.5-S fixture — the v9.97 note must be PRESENT for the resume-case arms; without it this is fixture N again"; failures=$((failures+1)); }
+
+  MODE="dry-run"; PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _cl_rc=0
+  phase_append_changelog >/dev/null 2>&1 || _cl_rc=$?
+  [[ "$_cl_rc" -eq 0 ]] || { echo "FAIL: F-9.5-S-dry — with the note PRESENT the dry-run must still return 0, got rc=$_cl_rc"; failures=$((failures+1)); }
+  _cl_detail="$(get_phase append_changelog)"
+  [[ "${_cl_detail%%|*}" == "DRY-RUN" ]] || { echo "FAIL: F-9.5-S-dry — the outcome must be literally DRY-RUN, got '$_cl_detail'"; failures=$((failures+1)); }
+  if /usr/bin/grep -qF 'would FAIL' <<<"$_cl_detail"; then
+    echo "FAIL: F-9.5-S-dry — the DRY-RUN detail must NOT contain the literal 'would FAIL'; _output_set_dryrun_class reads that token and would classify the CHANGELOG output-set member would-absent, but --apply writes it"; failures=$((failures+1))
+  fi
+  [[ "$(/usr/bin/awk -F'|' '{print NF; exit}' <<<"$_cl_detail")" == "2" ]] || { echo "FAIL: F-9.5-S-dry — the RESULT|detail record must carry EXACTLY one '|'; a pipe inside the detail corrupts get_phase and the --markdown phase table, got '$_cl_detail'"; failures=$((failures+1)); }
+  ! /usr/bin/grep -q '\[v9\.97\]' "$_ai_tmp/CHANGELOG.md" || { echo "FAIL: F-9.5-S-dry — a --dry-run must write NOTHING to CHANGELOG.md"; failures=$((failures+1)); }
+  # SPECIFICITY CONTROL for the pipe arm: the probe must return >2 on a record that
+  # genuinely carries an embedded pipe, or a broken awk would score every detail as
+  # conformant and the arm above would be measuring nothing.
+  [[ "$(/usr/bin/awk -F'|' '{print NF; exit}' <<<"DRY-RUN|a|b")" == "3" ]] || { echo "FAIL: F-9.5-S-dry control — the pipe-count probe does not detect an embedded pipe; the constraint arm above is vacuous"; failures=$((failures+1)); }
+
+  # F-9.5-S-apply — the PREDICTION-IS-TRUE control. The dry arm above asserts the
+  # phase predicts "would prepend"; this asserts that on the IDENTICAL fixture
+  # --apply actually does prepend. Without it, "would prepend" could be a false
+  # prediction over a fixture --apply cannot satisfy, and the whole pair would be
+  # asserting reachability of a lie.
+  MODE="apply"; PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _cl_rc=0
+  phase_append_changelog >/dev/null 2>&1 || _cl_rc=$?
+  [[ "$_cl_rc" -eq 0 ]] || { echo "FAIL: F-9.5-S-apply — the resume-case fixture must PASS at --apply; the dry-run prediction 'would prepend' is only true if it does, got rc=$_cl_rc"; failures=$((failures+1)); }
+  [[ "$(get_phase append_changelog | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: F-9.5-S-apply — the outcome must be PASS, got '$(get_phase append_changelog)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^## \[v9\.97\] - ' "$_ai_tmp/CHANGELOG.md" || { echo "FAIL: F-9.5-S-apply — --apply must actually prepend the ## [v9.97] section the dry-run predicted"; failures=$((failures+1)); }
+
+  MODE="$_ai_saved_mode"; VERSION="v9.97"; RELEASE_NOTES_DIR="$_ai_tmp/notes"
 
   /bin/rm -rf "$_ai_tmp" 2>/dev/null || true
   REPO_ROOT="$_ai_saved_root"; MODE="$_ai_saved_mode"; VERSION="$_ai_saved_version"
@@ -11023,6 +11251,128 @@ FOLOG
   /usr/bin/printf 'x="$(/usr/bin/gre%s -cE foo bar || ech%s 0)"\n' 'p' 'o' > "$_fo_tmp/needle-control"
   [[ "$(grep_count -E "$_fo_needle" "$_fo_tmp/needle-control")" == "1" ]] || { echo "FAIL: AC4-g6 — the reintroduction needle does not match a known-bad line; the whole-file sweep is vacuous"; failures=$((failures+1)); }
 
+  # (h) #5268 — PHASE 15.55 MODE-SCOPING of the LEDGER-ROW-PARITY limb. The limb is
+  # structurally off-by-one at --dry-run on a first close: Stage 12 lands the LOG row
+  # before close-out runs, while phase_append_release_index adds the INDEX row at 8.x
+  # and writes nothing under --dry-run. Before this, the phase returned 1 there and
+  # the runner exited 3 one phase-group short of Phase 16 — so fixing 9.5 alone only
+  # MOVED the halt here.
+  #
+  # The scoping is a CONJUNCTION, not a mode-wide suppression, and these arms are
+  # what make that difference observable: ONE positive (the bounded state) against
+  # FOUR negatives that must each still report, plus an apply-side anti-vacuity arm
+  # on the identical fixture and a sibling-limb arm proving --dry-run still FAILs on
+  # a violation this scoping has no business masking.
+  local _fo_saved_mode="$MODE" _fo_saved_version="$VERSION"
+
+  # Ledger fixtures. LOG_3 carries v9.60/v9.61/v9.62; the close under test is v9.62.
+  /usr/bin/printf '| v9.60 | a-slug | 2026-01-01 | #1 | merge | v9.60 | VERIFIED | 2026-01-01 |\n| v9.61 | b-slug | 2026-01-02 | #2 | merge | v9.61 | VERIFIED | 2026-01-02 |\n' > "$_fo_tmp/IDX_2"
+  /usr/bin/printf '| v9.60 | a-slug | 2026-01-01 | #1 | merge | v9.60 | VERIFIED | 2026-01-01 |\n' > "$_fo_tmp/IDX_1"
+  /usr/bin/printf '| v9.61 | b-slug | 2026-01-02 | #2 | merge | v9.61 | VERIFIED | 2026-01-02 |\n| v9.62 | c-slug | 2026-01-03 | #3 | merge | v9.62 | VERIFIED | 2026-01-03 |\n' > "$_fo_tmp/IDX_2_OTHER"
+  /usr/bin/printf '| v9.60 | a-slug | 2026-01-01 | #1 | merge | v9.60 | VERIFIED | 2026-01-01 |\n| v9.61 | b-slug | 2026-01-02 | #2 | merge | v9.61 | VERIFIED | 2026-01-02 |\n' > "$_fo_tmp/LOG_2"
+
+  # FIXTURE PRECONDITIONS — every arm below is a count comparison, so a fixture that
+  # did not build at the declared magnitude would make the arms measure nothing.
+  [[ "$(grep_count -E '^\|[[:space:]]*v[0-9]' "$_fo_tmp/IDX_2")" == "2" ]] || { echo "FAIL: h fixture — IDX_2 must carry exactly 2 version rows"; failures=$((failures+1)); }
+  [[ "$(grep_count -E '^\|[[:space:]]*v[0-9]' "$_fo_tmp/IDX_1")" == "1" ]] || { echo "FAIL: h fixture — IDX_1 must carry exactly 1 version row"; failures=$((failures+1)); }
+  [[ "$(grep_count -E '^\|[[:space:]]*v[0-9]' "$_fo_tmp/IDX_2_OTHER")" == "2" ]] || { echo "FAIL: h fixture — IDX_2_OTHER must carry exactly 2 version rows"; failures=$((failures+1)); }
+  # ...and IDX_2_OTHER must differ from IDX_2 in WHICH row is missing, or the
+  # this-version leg (h4) is indistinguishable from the gap-magnitude leg (h1).
+  /usr/bin/grep -q 'v9\.62' "$_fo_tmp/IDX_2_OTHER" || { echo "FAIL: h fixture — IDX_2_OTHER must CONTAIN v9.62 (its missing row is v9.60's); otherwise h4 duplicates h1"; failures=$((failures+1)); }
+  ! /usr/bin/grep -q 'v9\.62' "$_fo_tmp/IDX_2" || { echo "FAIL: h fixture — IDX_2 must OMIT v9.62 (the row this close would add)"; failures=$((failures+1)); }
+
+  VERSION="v9.62"; RELEASE_LOG="$_fo_tmp/LOG_3"
+
+  # (h1) THE BOUNDED STATE — one-row gap, and the missing row is this close's own.
+  # Must PREDICT: rc 0, no LEDGER-ROW-PARITY finding, and a detail that reports the
+  # two counts honestly rather than claiming they are equal.
+  RELEASE_INDEX="$_fo_tmp/IDX_2"; MODE="dry-run"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _fo_rc=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _fo_rc=$?
+  [[ "$_fo_rc" -eq 0 ]] || { echo "FAIL: h1 — under --dry-run a one-row INDEX gap that is THIS version's own row is this script's own no-op and must NOT halt the run, got rc=$_fo_rc"; failures=$((failures+1)); }
+  local _fo_d; _fo_d="$(get_phase assert_anchor_hygiene)"
+  /usr/bin/grep -qF 'LEDGER-ROW-PARITY PREDICTED' <<<"$_fo_d" || { echo "FAIL: h1 — the phase must RECORD the prediction rather than pass silently (a silent pass is indistinguishable from a deleted limb), got '$_fo_d'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'INDEX 2 vs LOG 3 rows' <<<"$_fo_d" || { echo "FAIL: h1 — the detail must report the two counts as they ARE; rendering 'INDEX 2 == LOG 3' would be a plausible-looking wrong row, got '$_fo_d'"; failures=$((failures+1)); }
+
+  # (h2) ANTI-VACUITY — the IDENTICAL fixture at --apply must STILL FAIL and still
+  # name both counts. rc=0 here would mean the limb was deleted, not mode-scoped.
+  MODE="apply"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _fo_rc=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _fo_rc=$?
+  [[ "$_fo_rc" -ne 0 ]] || { echo "FAIL: h2 anti-vacuity — the SAME one-row-gap fixture MUST still FAIL under --apply; rc=0 means the parity limb was gutted rather than mode-scoped"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'LEDGER-ROW-PARITY RELEASE_INDEX has 2 version rows, RELEASE_LOG has 3' <<<"$(get_phase assert_anchor_hygiene)" || { echo "FAIL: h2 — the --apply finding must be preserved verbatim, got '$(get_phase assert_anchor_hygiene)'"; failures=$((failures+1)); }
+
+  # (h3) GAP MAGNITUDE — a TWO-row gap at --dry-run is corpus drift, not this close's
+  # no-op, and must still FAIL. Without this, the scoping is a mode-wide suppression.
+  RELEASE_INDEX="$_fo_tmp/IDX_1"; MODE="dry-run"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _fo_rc=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _fo_rc=$?
+  [[ "$_fo_rc" -ne 0 ]] || { echo "FAIL: h3 — a TWO-row gap at --dry-run is real drift and must still FAIL; only a gap of exactly one is this close's own no-op"; failures=$((failures+1)); }
+
+  # (h4) ROW IDENTITY — a ONE-row gap at --dry-run whose missing row is NOT this
+  # version's must still FAIL. This is the arm a bare `gap == 1` test cannot pass,
+  # and it is what makes h1 a statement about THIS close rather than about arithmetic.
+  RELEASE_INDEX="$_fo_tmp/IDX_2_OTHER"; MODE="dry-run"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _fo_rc=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _fo_rc=$?
+  [[ "$_fo_rc" -ne 0 ]] || { echo "FAIL: h4 — a one-row gap whose missing INDEX row is NOT ${VERSION}'s must still FAIL; the scoping is bound to THIS close's row, not to the gap magnitude"; failures=$((failures+1)); }
+
+  # (h5) DIRECTION — INDEX AHEAD of LOG is never this close's no-op (8.x only ever
+  # adds the row the LOG already has) and must still FAIL in both modes.
+  RELEASE_INDEX="$_fo_tmp/IDX_3"; RELEASE_LOG="$_fo_tmp/LOG_2"; MODE="dry-run"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _fo_rc=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _fo_rc=$?
+  [[ "$_fo_rc" -ne 0 ]] || { echo "FAIL: h5 — an INDEX-ahead gap at --dry-run must still FAIL; the prediction is directional"; failures=$((failures+1)); }
+  RELEASE_LOG="$_fo_tmp/LOG_3"
+
+  # (h6) UNIT — ledger_gap_is_this_close, driven directly. One positive against four
+  # negatives, one per conjunct, so a conjunct silently dropped in a later edit fails
+  # a NAMED arm instead of widening the prediction unnoticed.
+  ledger_gap_is_this_close 2 3 "$_fo_tmp/IDX_2" "$_fo_tmp/LOG_3" "v9.62" "dry-run" || { echo "FAIL: h6-a — the bounded state must predict (dry-run, gap 1, LOG has v9.62, INDEX does not)"; failures=$((failures+1)); }
+  if ledger_gap_is_this_close 2 3 "$_fo_tmp/IDX_2" "$_fo_tmp/LOG_3" "v9.62" "apply"; then
+    echo "FAIL: h6-b — conjunct (1): --apply must never predict"; failures=$((failures+1))
+  fi
+  if ledger_gap_is_this_close 1 3 "$_fo_tmp/IDX_1" "$_fo_tmp/LOG_3" "v9.62" "dry-run"; then
+    echo "FAIL: h6-c — conjunct (2): a two-row gap must never predict"; failures=$((failures+1))
+  fi
+  if ledger_gap_is_this_close 2 3 "$_fo_tmp/IDX_2" "$_fo_tmp/LOG_3" "v9.99" "dry-run"; then
+    echo "FAIL: h6-d — conjunct (3): a version with NO RELEASE_LOG row must never predict"; failures=$((failures+1))
+  fi
+  if ledger_gap_is_this_close 2 3 "$_fo_tmp/IDX_2_OTHER" "$_fo_tmp/LOG_3" "v9.62" "dry-run"; then
+    echo "FAIL: h6-e — conjunct (4): an INDEX that ALREADY carries this version must never predict"; failures=$((failures+1))
+  fi
+
+  # (h7) SIBLING LIMBS ARE UNTOUCHED AT --dry-run. This is the claim the per-limb
+  # shape was chosen for, and the one a whole-phase relocation would have broken:
+  # with a REAL tagger-identity violation present AND the bounded parity gap present,
+  # --dry-run must STILL FAIL, and on the tagger finding — the scoping bounds itself
+  # to its own trigger and cannot mask a co-tenanted violation.
+  if [[ -n "${_ah_repo:-}" && -d "${_ah_repo}/.git" ]]; then
+    local _fo_saved_root2="$REPO_ROOT"
+    REPO_ROOT="$_ah_repo"; RELEASE_INDEX="$_fo_tmp/IDX_2"; MODE="dry-run"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    _fo_rc=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _fo_rc=$?
+    [[ "$_fo_rc" -ne 0 ]] || { echo "FAIL: h7 — a tagger-identity violation must STILL FAIL at --dry-run; the parity scoping must not suppress the mode-invariant limbs"; failures=$((failures+1)); }
+    _fo_d="$(get_phase assert_anchor_hygiene)"
+    /usr/bin/grep -qF 'TAGGER-IDENTITY' <<<"$_fo_d" || { echo "FAIL: h7 — the --dry-run failure must name TAGGER-IDENTITY, got '$_fo_d'"; failures=$((failures+1)); }
+    if /usr/bin/grep -qF 'LEDGER-ROW-PARITY RELEASE_INDEX has' <<<"$_fo_d"; then
+      echo "FAIL: h7 — the co-tenanted parity gap is this close's own no-op and must still be PREDICTED, not reported, even on a run that FAILs for another reason; got '$_fo_d'"; failures=$((failures+1))
+    fi
+    REPO_ROOT="$_fo_saved_root2"
+  fi
+
+  # (h8) STRUCTURAL — the fix must keep the PER-LIMB shape. A whole-phase dry-run
+  # relocation (the 9.55/15.5 shape) would return 0 before the tagger and
+  # tag<->Release limbs ever ran, which is the mode-blindness defect inverted.
+  # `declare -f` emits the parsed body with comments stripped, so prose cannot
+  # satisfy or defeat this.
+  if declare -f phase_assert_anchor_hygiene | /usr/bin/grep -qF 'mark_phase "assert_anchor_hygiene" "DRY-RUN"'; then
+    echo "FAIL: h8 — phase 15.55 must NOT take the whole-phase dry-run relocation; two of its three limbs are mode-invariant and must keep running at --dry-run"; failures=$((failures+1))
+  fi
+  declare -f phase_assert_anchor_hygiene | /usr/bin/grep -qF 'ledger_gap_is_this_close' || { echo "FAIL: h8 — the parity limb must route through ledger_gap_is_this_close; an inlined mode test is not the arm set above"; failures=$((failures+1)); }
+
+  MODE="$_fo_saved_mode"; VERSION="$_fo_saved_version"
+
   RELEASE_INDEX="$_fo_saved_idx"; RELEASE_LOG="$_fo_saved_log"
   REPO_ROOT="$_fo_saved_root"; GH="$_fo_saved_gh"
   /bin/rm -rf "$_fo_tmp" 2>/dev/null || true
@@ -12237,6 +12587,8 @@ EOF
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
   echo "  phase_rebuild_skill_packages detection + files=() composition validated (#4722 — core/schemas sensitivity / core/standards control / rule-a direct-source / specificity negative / C1 dry-run WARN vs apply FAIL / delegation structure / P1 staging-array guard; #4755 — a5 _shared filter sensitivity (a non-skill dir under a skills/ root resolves NO candidate) / a6 _templates second-directory proving the filter is a roster-resolvability test and not a hardcoded _shared exclusion / a7 mixed set keeps the buildable candidate and drops the unbuildable one (anti-over-filtering) / d1 --apply anti-regression: a roster-resolvable skill that cannot build still returns 3, marks FAIL, and names ITSELF / d2 the converse in the same sandbox and mode: a filtered-out candidate reaches the N/A limb at rc 0 / c5 build-invocation shape — per-skill loop over \$candidates, --root passed on the BUILD call, failures accumulated by name in _rb_failed)" >&2
   echo "  release-anchor hygiene validated (AC4/AC5 — recorded divergences exempt / a NEW divergence reported in BOTH directions / EQUAL-COUNT-UNEQUAL-SET fixture still reported (the count-parity false negative) / non-noreply tagger flagged, noreply tagger not, recorded exemption suppressed, lightweight tag excluded by objecttype / guard is comm-based by construction)" >&2
+  echo "  phase_append_changelog dry-run REACHABILITY validated (#5268, arms F-9.5-N/S — the mode branch now sits ABOVE the projector capture and BELOW the four mode-invariant guards, in 15.5's shape: N-dry reaches the limb and records literally DRY-RUN with a note absent by construction and writes nothing / N-apply anti-vacuity, the IDENTICAL fixture still aborts at --apply with its message verbatim, so the dry arm cannot be satisfied by gutting the capture / S-dry pins both detail constraints, no embedded '|' and no literal would-FAIL token, each with its own firing control / S-apply proves the prediction TRUE by actually prepending the predicted section, so 'would prepend' is not a false forecast)" >&2
+  echo "  phase_assert_anchor_hygiene LEDGER-ROW-PARITY mode-scoped (#5268, group h — the second class member: 15.55 had NO mode branch, so fixing 9.5 alone only MOVED the halt here, one phase-group short of Phase 16. Per-limb V4 downgrade, not a whole-phase relocation: h1 the bounded state predicts and RECORDS the prediction with honest counts / h2 anti-vacuity, same fixture at --apply still FAILs verbatim / h3 a two-row gap still FAILs / h4 a one-row gap that is NOT this version's row still FAILs, the arm a bare gap==1 test cannot pass / h5 INDEX-ahead still FAILs / h6 the predicate driven directly, one positive against one negative per conjunct / h7 a co-tenanted TAGGER-IDENTITY violation still FAILs at --dry-run while the parity gap stays predicted, so the scoping bounds itself to its own trigger / h8 structural: the whole-phase DRY-RUN relocation is refused by construction)" >&2
   echo "  LEDGER-ROW-PARITY fail-open closed (#3113 F-QA-3 — present-but-empty INDEX vs 3-row LOG now FAILs naming both counts / equal populated ledgers still PASS / both-empty 0==0 correctly clean / missing INDEX still FAILs / grep_count single-integer contract on empty-file, missing-file, match and empty-stdin shapes / reintroduction blocked structurally, needle proven against a known-bad control)" >&2
   echo "  phase_sync_primary_checkout validated (AC7 — behind-primary-on-main fast-forwards and HEAD verifiably MOVES to origin/main / non-main primary SKIPPED and NOT moved / absent primary clean no-op (CI hermeticity) / dry-run no-write / source carries no reset-stash-checkout-push-force-cd)" >&2
   echo "  scaffold-residue detector + pre-authored-note tolerance validated (AC1/AC2 — T1 round-trip: the REAL scaffold trips the REAL token set (anti-drift) / T2 authored note clean / T4 this-version CHANGELOG+DIGEST residue FAILs naming surface:line / T3 audit-baseline control: another version's residue does NOT block / T6 mode-awareness: --dry-run over ABSENT entries returns 0 and marks literally DRY-RUN, never a vacuous PASS / T7 anti-vacuity: the SAME absent-entry fixture under --apply still returns non-zero, FAILs, and preserves the dropped-write message verbatim / AC2 tolerance: this-version untracked note passes, other-version + modified-tracked + unrelated-untracked all still block)" >&2
