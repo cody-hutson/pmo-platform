@@ -5,7 +5,7 @@ status: Accepted
 date: 2026-08-27
 release: ci-stable-under-transient-conditions
 deciders: "Stage 5 Solutioning spoke (six-candidate design exploration) + Collective Review (scope-lock; the bridge's consuming rules were admitted into scope) + Stage 6 Engineering spoke (build, interface reconciliation)"
-tags: [quota-budget, checkpoint-b, wave-width, parallelism, interruption-cost, exposure-bound, hub-spoke, ordinal-band, ADR-102, ADR-144]
+tags: [quota-budget, checkpoint-b, wave-width, parallelism, interruption-cost, exposure-bound, hub-spoke, ordinal-band, ADR-102, ADR-150]
 source_observations:
   - "Observed on a prior release: a three-wide Stage-7 wave hit the account session limit and all three spokes terminated simultaneously, none having posted. Recovery worked — each resumed from transcript — but the same interruption in a serial arrangement would have cost one spoke and banked two completed results."
   - "That release recorded eight session-limit interruptions across its run; the only three-wide wave was the one that lost every spoke in it at once. The hub revised its own posture to strictly serial mid-release on that evidence, by hand, with no rule telling it to."
@@ -21,7 +21,7 @@ source_observations:
 
 ## Status
 
-**Accepted.** Authored at Engineering for the `ci-stable-under-transient-conditions` release, against the Collective Review scope-lock that admitted the hub-and-spoke bridge's consuming rules into this card's scope. Sequenced after the host-API axis decision recorded at ADR-144, on the same protocol section.
+**Accepted.** Authored at Engineering for the `ci-stable-under-transient-conditions` release, against the Collective Review scope-lock that admitted the hub-and-spoke bridge's consuming rules into this card's scope. Sequenced after the host-API axis decision recorded at ADR-150, on the same protocol section.
 
 ## Context
 
@@ -33,7 +33,7 @@ The gap has a shape worth naming: the verdict hierarchy already **brackets both 
 
 Two forces made the absence actively harmful rather than merely incomplete.
 
-**First, the gate permits a reasoning error.** "Parallel-safe" is a *file-contention* property: it says a stage's spokes share no write surface. The protocol is explicit that this is orthogonal to the usage-window envelope. But with no width output anywhere, a hub reading "Stage 7 is parallel-safe" has nothing to consult about arrangement, and the coordination property is the nearest thing to hand. That substitution is what produced the wave that lost every spoke in it. The host-API axis added at ADR-144 introduces the *identical* substitution one axis over: a healthy pool is an **availability** property too, and reads just as easily as permission to go wide.
+**First, the gate permits a reasoning error.** "Parallel-safe" is a *file-contention* property: it says a stage's spokes share no write surface. The protocol is explicit that this is orthogonal to the usage-window envelope. But with no width output anywhere, a hub reading "Stage 7 is parallel-safe" has nothing to consult about arrangement, and the coordination property is the nearest thing to hand. That substitution is what produced the wave that lost every spoke in it. The host-API axis added at ADR-150 introduces the *identical* substitution one axis over: a healthy pool is an **availability** property too, and reads just as easily as permission to go wide.
 
 **Second, plan-time capping had already been tried and had already failed.** Several shipped release plans invented a local width cap at planning time. The release that lost a three-wide wave had planned that width itself, and its plan-time verdict was PASS. A plan-time number has no runtime authority; nothing narrowed the wave when the envelope tightened under it.
 
@@ -89,6 +89,6 @@ Six candidates were generated before any was specified; five were rejected.
 
 ## Related ADRs
 
-- **ADR-144** — the host-API second axis on the same checkpoint. Sequenced immediately before this decision on the same protocol section; its opaque pass-through is what carries this decision's width output through the combination step unedited. Its scoping of refuse-to-synthesize to the usage-window axis is what preserves this decision's ordinal-table justification.
+- **ADR-150** — the host-API second axis on the same checkpoint. Sequenced immediately before this decision on the same protocol section; its opaque pass-through is what carries this decision's width output through the combination step unedited. Its scoping of refuse-to-synthesize to the usage-window axis is what preserves this decision's ordinal-table justification.
 - **ADR-102** — the quota-budget successor substrate. Owns the telemetry-event decision this record's residual depends on; the width values stay uncalibrated until that substrate carries a per-launch record.
 - **ADR-026** — the declared-but-unwired startup-reservation telemetry event, superseded in its substrate choice by ADR-102 for the cost-estimate section only.

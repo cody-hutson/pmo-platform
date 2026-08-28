@@ -67,7 +67,6 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-137](ADR-137-close-out-measurements-reconstruct-what-the-close-removes.md) | A chore-PR-borne close-out measurement reconstructs what the close removes; it does not assume its evidence is invariant | Proposed | 2026-08-21 | closeout-reports-what-shipped |
 | [ADR-142](ADR-142-resolve-the-root-do-not-exempt-the-fixture.md) | Self-test reachability at a destructive-scope boundary is restored by resolving the root, not by exempting the fixture | Accepted | 2026-08-24 | selftests-actually-test |
 | [ADR-143](ADR-143-trigger-b-counts-rule-defining-surfaces-not-the-ledger.md) | A release-class predicate counts rule-defining surfaces, not the ledger the release is mandated to write | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
-| [ADR-144](ADR-144-checkpoint-b-second-axis-is-measured-not-declared.md) | Checkpoint B's second axis is measured, not declared: scoping refuse-to-synthesize to the usage-window axis | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
 | [ADR-144](ADR-144-g1-03-admits-a-second-evidence-shape.md) | G1-03 admits a second evidence shape: label-position probe markers, two co-present, Evidence-section-scoped | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
 | [ADR-145](ADR-145-subtype-payload-vocabulary-registry-disjoint-from-the-source-enum.md) | Subtype payload vocabularies are declared in a registry disjoint from the `--source` enum | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
 | [ADR-145](ADR-145-wave-width-is-a-second-checkpoint-b-output-not-a-verdict.md) | Wave width is a second Checkpoint B output, not a verdict | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
@@ -77,6 +76,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-147](ADR-147-one-frontmatter-strip-bound-to-a-conformance-fixture.md) | One frontmatter-strip transform: a shared library bound to a committed conformance fixture, over replication governed by a registry comment | Accepted | 2026-08-28 | ci-stable-under-transient-conditions |
 | [ADR-148](ADR-148-arm-e-population-is-the-directory-never-the-manifest.md) | The tool-coverage engine hosts a second invariant whose population is the directory, never the manifest | Accepted | 2026-08-28 | ci-stable-under-transient-conditions |
 | [ADR-148](ADR-148-surface-1-emit-provenance-not-existence.md) | A backstop records its pre-mutation observation as a witness token, and the downstream check asks provenance rather than existence | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
+| [ADR-150](ADR-150-checkpoint-b-second-axis-is-measured-not-declared.md) | Checkpoint B's second axis is measured, not declared: scoping refuse-to-synthesize to the usage-window axis | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
