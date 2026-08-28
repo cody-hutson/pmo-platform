@@ -149,10 +149,27 @@ grep -q '"issue":"#802"' <<<"$ISSUECOL_JSON" && ok "issue-column form: #802 grou
 echo "G3 — exit code + schema version"
 [ "$CANON_RC" -eq 3 ] && ok "fixture carrying a FAIL exits 3" || bad "canonical fixture expected exit 3, got $CANON_RC"
 
-# SCHEMA_VERSION 1 -> 2 with the fcm-delivery family. This assertion is pinned to the
-# literal, so the bump cannot land silently — which is the whole point of the constant.
+# The expectation is DERIVED from the tool's own SCHEMA_VERSION — never pinned to a
+# literal. A hardcoded `schema v2` is a PRESENCE predicate against a CURRENCY fact: it
+# holds for exactly one release and then asserts the wrong thing forever. That is the
+# defect family this release exists to close, and this line is how it red-lined its own
+# CI at the 2 -> 3 bump — the constant moved in one file and its assertion did not move
+# in the other. Deriving binds the pair mechanically instead of by memory.
+#
+# THE NON-EMPTY ARM BELOW IS LOAD-BEARING, so do not "simplify" it away. If the
+# extractor ever stops matching — the constant reformatted, renamed, or moved — then
+# EXPECT_SCHEMA goes empty, `schema v` matches ANY version, and the assertion passes
+# vacuously in a way no reader can distinguish from a real pass. Deriving trades a
+# STALE assertion for a SILENT one unless the derivation is itself asserted.
+EXPECT_SCHEMA="$(sed -n 's/^readonly SCHEMA_VERSION="\([0-9][0-9]*\)".*/\1/p' "$VERIFY")"
+if [ -n "$EXPECT_SCHEMA" ]; then
+  ok "schema expectation DERIVED from the tool's own constant (SCHEMA_VERSION=$EXPECT_SCHEMA)"
+else
+  bad "could not derive SCHEMA_VERSION from $VERIFY — without this arm the check below would pass vacuously"
+  EXPECT_SCHEMA='<UNDERIVABLE>'   # cannot match: fail LOUDLY below rather than vacuously
+fi
 VER_OUT="$("$VERIFY" --version)"
-grep -q 'schema v2' <<<"$VER_OUT" && ok "--version prints SCHEMA_VERSION (schema v2)" || bad "--version missing schema version: '$VER_OUT'"
+grep -q "schema v${EXPECT_SCHEMA}" <<<"$VER_OUT" && ok "--version prints SCHEMA_VERSION (schema v${EXPECT_SCHEMA})" || bad "--version missing schema version: '$VER_OUT' (expected 'schema v${EXPECT_SCHEMA}')"
 
 # Clean all-PASS/SKIP synthetic → exit 0.
 CLEAN_FIX="$(mktemp -t verify-plan-3175-clean.XXXXXX.md)"
