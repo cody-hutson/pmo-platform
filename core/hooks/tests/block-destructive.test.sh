@@ -1780,6 +1780,154 @@ exec_notflag_case "F1-EXEC-ctl-inner-dotdot must-not-flag: a traversal that RESO
   '/usr/bin/../bin/pmo-probe-not-allowlisted-xyz.sh'
 
 # ==========================================================================
+# BLOCK-022 F1 QTOK — the FLAG WALK's and the VERB RESOLVER's subject
+# ==========================================================================
+#
+# THE DEFECT THESE ARMS PIN, AND IT IS THE SAME SHAPE AS EVERY F1 BLOCK ABOVE:
+# a matcher deciding on a token that is not the thing whose behaviour it claims
+# to govern. Normalization was introduced one layer at a time — first at the
+# operand, then at the exec arm's exemption — and TWO readers upstream of both
+# were left reading raw argv:
+#
+#   THE FLAG WALK reads the raw token to decide "is this a flag I skip past".
+#   `'-x'` does not START with `-`, so the walk stopped there and adjudicated
+#   `-x` as though it were the operand. `-x` is in no arm's operand domain, so
+#   nothing was adjudicated and the REAL script — the next token — was never
+#   looked at. `bash '-x' <script>` allowed; `bash -x <script>` blocked. One
+#   quote apart, opposite verdicts.
+#
+#   THE VERB RESOLVER reads the raw basename to decide which arm owns the
+#   segment. `"bash"` is not `bash`, so the interpreter arm was never entered;
+#   the token fell through to the exec `*)` branch, which normalized it, found a
+#   command word with no `.sh`/`.bash` suffix, and correctly declined. Both arms
+#   declined and the invocation was never adjudicated by either.
+#
+# THESE ARE TWO ROOT CAUSES, NOT ONE, and they are pinned as two families so a
+# fix to one cannot be read as covering the other.
+#
+# WHY THE SKIP IS THE DANGEROUS HALF, AND WHAT CONSTRAINS THE FIX. Skipping a
+# token REMOVES it from adjudication, so the flag walk is an exemption in the
+# same sense `script_exempt_system_bin` is — and an exemption may only ever
+# NARROW. A naive "normalize, then test `-*`" widens it instead, and flips a
+# shipped BLOCK to an ALLOW: `bash '-x.sh'` normalizes to `-x.sh`, which is
+# flag-shaped, so a naive fix skips it — and `-x.sh` is exactly the token the
+# interpreter arm's operand domain already claimed and already blocked. Arm
+# F1-QFLAG-ctl-domain is that over-correction control and it was GREEN before
+# this change: a fix that turns it red has swapped the subject rather than added
+# a view, which is the failure mode three prior remediations of this rule share.
+#
+# THE RESIDUAL THIS BLOCK DOES NOT CLOSE is pinned at the bottom
+# (F1-QTOK-RESIDUAL-space) rather than left to be discovered.
+
+echo ""
+echo "BLOCK-022 F1 QTOK (quoted flag / quoted verb reach their arms)"
+echo "---"
+
+# Never allowlisted in any spelling. Only the quoting of the FLAG moves.
+QTOK_NA='/tmp/pmo-qtok-probe-na.sh'
+
+# --- FAMILY 1: the quoted FLAG (the flag walk's subject) ---------------------
+test_case "F1-QFLAG-x: bash '-x' <script> blocks (quoted flag is still a flag)" \
+  "$(bash_payload "bash '-x' ${QTOK_NA}")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "F1-QFLAG-v: bash '-v' <script> blocks" \
+  "$(bash_payload "bash '-v' ${QTOK_NA}")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "F1-QFLAG-ddash: bash '--' <script> blocks (quoted end-of-options)" \
+  "$(bash_payload "bash '--' ${QTOK_NA}")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# The double-quoted spelling is a SEPARATE arm for the same reason the F1-QUOTED
+# block carries one arm per stripped character: the class claim is what the code
+# asserted, and only a per-spelling measurement falsifies it.
+test_case "F1-QFLAG-dq: bash \"-x\" <script> blocks (double-quoted flag)" \
+  "$(bash_payload "bash \"-x\" ${QTOK_NA}")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# The flag walk is SHARED by the source arm, so the defect was too.
+test_case "F1-QFLAG-source: source '-x' <file> blocks (shared flag walk)" \
+  "$(bash_payload "source '-x' ${QTOK_NA}")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# --- FAMILY 2: the quoted VERB (the verb resolver's subject) -----------------
+test_case "F1-QVERB-dq-bash: \"bash\" <script> blocks (quoted interpreter verb)" \
+  "$(bash_payload "\"bash\" ${QTOK_NA}")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "F1-QVERB-sq-sh: 'sh' <script> blocks" \
+  "$(bash_payload "'sh' ${QTOK_NA}")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# The ABSOLUTE quoted spelling failed through a SECOND mechanism and is therefore
+# its own arm: `"/bin/bash"` missed the verb set on its raw basename, fell to the
+# exec `*)` branch, and was then EXEMPTED there as a system-bin path — so the
+# interpreter binary itself carried the operand past both arms.
+test_case "F1-QVERB-abs: \"/bin/bash\" <script> blocks (quoted absolute interpreter)" \
+  "$(bash_payload "\"/bin/bash\" ${QTOK_NA}")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "F1-QVERB-source: 'source' <file> blocks (quoted source verb)" \
+  "$(bash_payload "'source' ${QTOK_NA}")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# --- OVER-CORRECTION CONTROLS -----------------------------------------------
+# THE one that matters. GREEN BEFORE THIS CHANGE. `'-x.sh'` normalizes to a
+# flag-shaped token that is ALSO inside the interpreter arm's operand domain.
+# The domain claim wins: it is an operand, not a flag, and it must keep blocking.
+# A fix that normalizes and then tests `-*` skips it and turns this red.
+test_case "F1-QFLAG-ctl-domain (over-correction control): a normalized flag-shaped token INSIDE the operand domain is still an operand" \
+  "$(bash_payload "bash '-x.sh'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# The RAW view must keep deciding first and alone. `-x.sh` is raw-flag-shaped and
+# has always been skipped; the domain guard above must not retroactively reach it,
+# or the change stops being additive and starts re-adjudicating shipped shapes.
+test_case "F1-QFLAG-ctl-rawflag (over-correction control): a RAW flag-shaped token is skipped exactly as before" \
+  "$(bash_payload 'bash -x.sh')" \
+  0
+
+# Availability control: the fix must reach the ALLOWLIST, not deny the class.
+test_case "F1-QFLAG-ctl-allow: an allowlisted script behind a quoted flag still ALLOWS" \
+  "$(bash_payload "bash '-x' core/deploy/deploy.sh")" \
+  0
+
+# A quoted `-c` now enters cmode, where the tokens are WORDS OF A PROGRAM STRING.
+# The operand-domain gate must keep them inert — the same property F1-FP-cmode
+# pins for the unquoted spelling, restated for the route this change opens.
+test_case "F1-QFLAG-ctl-cmode: quoted -c enters cmode without over-blocking its program string" \
+  "$(bash_payload "bash '-c' 'echo a; echo b'")" \
+  0
+
+# The verb widening must ADD a view, never STEAL tokens from the exec arm. A
+# quoted non-verb command word must still reach exec and still flag. GREEN BEFORE
+# THIS CHANGE — a fix that reroutes quoted command words wholesale turns it red.
+exec_warn_case "F1-QVERB-ctl-exec (over-correction control): a quoted NON-verb command word still reaches the exec arm" \
+  "\"/tmp/pmo-qtok-probe-na.sh\"" 'not-allowlisted'
+
+# False-positive control for the verb widening: an interpreter named in
+# NON-executing text inside a suppressed quoted argument is still not a verdict.
+test_case "F1-QVERB-ctl-fp: a quoted verb named inside a suppressed quoted argument is not a verdict" \
+  "$(bash_payload "gh issue comment 1 --body 'run \"bash\" ${QTOK_NA} now'")" \
+  0
+
+# --- DECLARED RESIDUAL (pin, NOT fix-evidence) ------------------------------
+# A SPACE-BEARING quoted path is a different root cause from either family above
+# and is NOT closed by this change. Tokenization splits raw argv on whitespace
+# BEFORE any normalization runs, so the operand token is `'/tmp/pmo` — the real
+# filename's first fragment. Neither the probe nor the raw token ends `.sh`, so
+# no arm's operand domain is implicated and nothing is adjudicated. Closing it
+# requires QUOTE-AWARE TOKENIZATION, which is a change to the primitive every arm
+# traverses; it is declared in
+# core/rules/bypass-mode-readiness/block-destructive.md rather than half-closed
+# here. This arm asserts the CURRENT verdict so that widening it later is a
+# deliberate act rather than a drift — the same convention as F1-INTERP-RESIDUAL.
+test_case "F1-QTOK-RESIDUAL-space (pin, not fix-evidence): a space-bearing quoted operand is split before normalization and is NOT adjudicated" \
+  "$(bash_payload "bash '/tmp/pmo qtok probe na.sh'")" \
+  0
+
+# ==========================================================================
 # BLOCK-022 AC-FP — the verdict must not depend on non-executing text
 # ==========================================================================
 #

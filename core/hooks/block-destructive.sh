@@ -1241,6 +1241,11 @@ case "$TOOL_NAME" in
     script_qtaint=0
     script_carrier=0
     script_head=""
+    # The flag walk's effective subject (raw token, or its normalized view when
+    # that view is a flag outside every operand domain). Initialised for the same
+    # reason as the three below: an unset read under `set -u` exits 1, and exit 1
+    # is NON-blocking in the PreToolUse contract — i.e. it would fail OPEN.
+    script_ftok=""
     # normalize_script_token sets all three before any reader runs. Initialised
     # anyway because an unset read under `set -u` exits 1, and exit 1 is
     # NON-blocking in the PreToolUse contract — i.e. it would fail OPEN.
@@ -1392,19 +1397,68 @@ case "$TOOL_NAME" in
       # `grep` — by construction, which is what keeps the widening from
       # degenerating into "adjudicate every command".
       #
-      # NORMALIZATION IS SCOPED TO THIS BRANCH ON PURPOSE. The exec discriminator
-      # reads the WHOLE token, so it needs the quote/punctuation residue stripped;
-      # the two arms above read a basename against a fixed verb set and must not.
-      # Normalizing their subject would newly resolve `"bash" x.sh` to the
-      # interpreter arm — a tightening, but a behaviour change to a shipped arm,
-      # which this slice must not make.
+      # NORMALIZATION IS NO LONGER SCOPED TO THE EXEC BRANCH, AND THIS COMMENT USED
+      # TO SAY THE OPPOSITE. It read: "the two arms above read a basename against a
+      # fixed verb set and must not [normalize]. Normalizing their subject would
+      # newly resolve `"bash" x.sh` to the interpreter arm — a tightening, but a
+      # behaviour change to a shipped arm, which this slice must not make." That was
+      # a correct description of a DEFERRAL, and it was recorded as though it were a
+      # boundary. The deferral has since been decided the other way: `"bash" <script>`
+      # and `'sh' <script>` are ordinary shell spellings that execute exactly what the
+      # unquoted spellings execute, and a rule that adjudicates one and not the other
+      # is one quote away from being no rule at all. The prior wording is kept here
+      # rather than deleted, because a reader who remembers it needs to know it was
+      # reversed deliberately — the same reason the exec arm's scope reversal is
+      # recorded rather than silently replaced.
+      #
+      # THE RAW VIEW STILL DECIDES FIRST, AND IT IS UNCHANGED. The normalized view is
+      # asked ONLY when the raw basename matched no verb, so every token that resolved
+      # to `interp` or `source` before resolves to it now, by construction. This is the
+      # SUBJECT RULE from script_operand_implicated applied one layer up: a second view
+      # of a token may ADD coverage, it may never VETO it.
+      #
+      # AND IT COSTS THE EXEC ARM NOTHING — provable, not asserted. A token only
+      # reaches the new view if its NORMALIZED BASENAME is exactly `bash`, `sh`, `zsh`,
+      # `source` or `.`. None of those carries a `.sh` or `.bash` suffix, so no such
+      # token could ever have satisfied the exec arm's operand domain: the exec arm
+      # never returned a verdict and never wrote a drain row for any of them. Arm
+      # F1-QVERB-ctl-exec is the control — a quoted NON-verb command word must still
+      # reach exec and still flag — and it was green before this change.
+      #
+      # ORDER IS LOAD-BEARING, UNCHANGED: the exec discriminator stays LAST, so
+      # `/bin/bash` and `/bin/.` keep resolving to their own arms rather than being
+      # captured by the slash test. The quoted absolute spelling `"/bin/bash"` is why
+      # that matters here: it missed the raw verb set AND was then exempted by the exec
+      # arm's system-bin set, so the interpreter binary itself carried its operand past
+      # both arms (arm F1-QVERB-abs).
       script_verb=""
       script_word=""
       case "${script_tokens[$script_hidx]##*/}" in
         bash|sh|zsh) script_verb="interp" ;;
         source|.)    script_verb="source" ;;
-        *)
-          normalize_script_token "${script_tokens[$script_hidx]}"
+      esac
+      if [ -z "$script_verb" ]; then
+        normalize_script_token "${script_tokens[$script_hidx]}"
+        # AN UNRESOLVABLE TOKEN HAS NO KNOWABLE BASENAME, so it is not asked. When
+        # script_norm_ok=0 `$script_norm_out` is a strict PREFIX, and a prefix can
+        # name a verb the whole token does not (`'bash'x` probes to `bash`). Reading
+        # it would route a token to an arm on evidence that does not identify it —
+        # the exact subject error this block exists to stop, in the other direction.
+        # That leaves the unresolvable-verb spelling a declared residual, stated in
+        # core/rules/bypass-mode-readiness/block-destructive.md rather than half-closed.
+        if [ "$script_norm_ok" -eq 1 ]; then
+          case "${script_norm_out##*/}" in
+            bash|sh|zsh) script_verb="interp" ;;
+            source|.)    script_verb="source" ;;
+          esac
+        fi
+      fi
+      # EXEC ARM (the former `*)` branch of the verb `case`). Its body is carried
+      # over at its ORIGINAL indentation deliberately: re-indenting it would rewrite
+      # ~60 unchanged lines and bury this change's three real edits in the diff.
+      # `normalize_script_token` has already run above — reaching here requires the
+      # raw verb test to have declined, which is the branch that calls it.
+      if [ -z "$script_verb" ]; then
           script_word="$script_norm_out"
           case "$script_word" in
             # THIS SET IS NOT ANCHOR_PREFIX_BASH'S, AND THE DIVERGENCE IS THE
@@ -1485,8 +1539,7 @@ case "$TOOL_NAME" in
               fi
               ;;
           esac
-          ;;
-      esac
+      fi
 
       # EXEC ARM. No flag walk and no operand arity: the command word IS the file
       # that executes, so there is nothing after it to resolve.
@@ -1534,10 +1587,64 @@ case "$TOOL_NAME" in
       # just one — and `-c` is meaningless for `source`, so cmode is gated on the
       # interpreter verb. Walking `-*` on the source arm is strictly TIGHTER than
       # not walking it: otherwise `. -x <path>` presents `-x` as the operand.
+      #
+      # THE WALK'S SUBJECT, AND WHY IT IS AN EXEMPTION RATHER THAN A MATCHER. Every
+      # token this walk steps over is a token it REMOVES from adjudication, so its
+      # failure direction is the exemption's, not the matcher's: it may only ever
+      # NARROW. It used to test the RAW argv token, and a quoted flag does not start
+      # with `-`. `bash '-x' <script>` therefore stopped the walk at `'-x'`, handed
+      # `-x` to the operand adjudicator, found `-x` inside no arm's operand domain,
+      # and adjudicated NOTHING — while `bash -x <script>`, one quote away and the
+      # same execution, blocked. Same defect shape as the three F1 fixes above: a
+      # decision taken on a token that is not the thing whose behaviour it governs.
+      #
+      # THE FIX IS ADDITIVE AND THE FIRST DISJUNCT IS THE OLD PREDICATE VERBATIM. A
+      # raw token that already looked like a flag is still skipped, on the raw view
+      # alone, before anything else runs. Only a token the old predicate REJECTED can
+      # reach the second view, so nothing that was skipped stops being skipped.
+      #
+      # THE NEW VIEW IS GATED ON THE OPERAND DOMAIN, AND THAT GATE IS THE WHOLE
+      # CORRECTION. "Normalize, then test `-*`" is the naive fix and it WIDENS the
+      # exemption: `bash '-x.sh'` normalizes to `-x.sh`, which is flag-shaped AND is
+      # exactly the token the interpreter arm's operand domain already claimed and
+      # already blocked. Skipping it flips a shipped BLOCK to an ALLOW — the precise
+      # failure two earlier remediations of this rule shipped. So a normalized token
+      # is treated as a flag only when it is flag-shaped AND lands in NO arm's
+      # declared operand domain: a domain claim beats a flag shape, because the arm
+      # that claims the token is the arm that will adjudicate it. Arm
+      # F1-QFLAG-ctl-domain is that control and was green before this change.
+      #
+      # AN UNRESOLVABLE TOKEN IS NEVER SKIPPED, for the reason every exemption in
+      # this file already gives: a filename that cannot be determined from argv
+      # cannot be shown to be a flag either. It breaks the walk and becomes the
+      # operand, where script_operand_implicated reads BOTH views and the
+      # unresolvable deny is reachable.
+      #
+      # NET DIRECTION, which is the property to check any edit against: a token can
+      # move from "operand that no arm claimed" to "skipped", and the walk then
+      # reaches a LATER token that may be adjudicated. It can never move a token out
+      # of a domain that claimed it. So the change can only turn an ALLOW into a
+      # BLOCK, never the reverse.
       script_idx=$(( script_hidx + 1 ))
       script_cmode=0
       while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
-        case "${script_tokens[$script_idx]}" in
+        script_ftok="${script_tokens[$script_idx]}"
+        case "$script_ftok" in
+          -*) ;;   # raw view already decides — unchanged, and asked first
+          *)
+            normalize_script_token "$script_ftok"
+            if [ "$script_norm_ok" -eq 1 ]; then
+              case "$script_norm_out" in
+                -*)
+                  if ! script_operand_implicated "$script_verb"; then
+                    script_ftok="$script_norm_out"
+                  fi
+                  ;;
+              esac
+            fi
+            ;;
+        esac
+        case "$script_ftok" in
           --) script_idx=$(( script_idx + 1 )); break ;;
           -c)
             if [ "$script_verb" = "interp" ]; then script_cmode=1; fi
