@@ -203,9 +203,9 @@ row must carry the Operator Override Record pointer per `stage-08-qa-testing.md`
 
 ### Fitness assessment
 
-<Does this meet needs? — the §1 fitness question. Records any Accept-dispositioned
-NOT-MET / PARTIAL AC together with its Operator Override Record per
-`stage-08-qa-testing.md` §5.>
+<Does this meet needs? — the §1 fitness question. Records every Accept-dispositioned
+criterion, and — for those the `stage-08-qa-testing.md` § Step 0 trigger reaches —
+its Operator Override Record.>
 
 ### Lane distribution
 

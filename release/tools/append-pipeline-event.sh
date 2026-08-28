@@ -21,7 +21,10 @@
 #
 # Flags:
 #   --dry-run     : validate + print row without appending
-#   --self-test   : append a test row, verify, then revert; exit 0 on success
+#   --self-test   : exercise the append path against a PRIVATE TEMP COPY of the
+#                   log; the live log is never opened for write. Exit 0 on
+#                   success. (It used to append to the live log and revert by
+#                   truncation — see #6116.)
 #   --help        : print usage
 #
 # Cutover: events captured strictly AFTER the cutover merge SHA. Writers are
@@ -136,7 +139,7 @@ parse_schema_enum() {
 # than shipping silently.
 _FALLBACK_SUBTYPES_LINES="$(printf '%s\n' \
   "gate-outcome	g1-g2 g3-release-readiness dt-pass dt-conditional-pass dt-return qa-acceptance qa-rejection plan-review-go plan-review-no-go plan-review-readiness-scan goal-conformance" \
-  "decision	d-class adr-closed adr-opened scope-lock a6-new-track-rationale a7-bundle-amend a7-bundle-rebundle a7-bundle-defer cross-d-upstream-compat empirical-verification-finding action-item-opened action-item-started action-item-resolved action-item-cancelled action-item-superseded queued-pending-approval approval-deferred cascade-sweep-block outcome-statement-authored delegation recommendation-choice-delta" \
+  "decision	d-class adr-closed adr-opened scope-lock a6-new-track-rationale a7-bundle-amend a7-bundle-rebundle a7-bundle-defer cross-d-upstream-compat empirical-verification-finding action-item-opened action-item-started action-item-resolved action-item-cancelled action-item-superseded queued-pending-approval approval-deferred cascade-sweep-block outcome-statement-authored delegation recommendation-choice-delta decision-superseded" \
   "escalation	tier-0 tier-1 tier-2 tier-3" \
   "self-repair	retry escalate rollback" \
   "iteration	" \
@@ -172,7 +175,9 @@ SUBTYPES_iteration_prefixes="dt-eng-pass- qa-dt-pass-"
 #
 # SCOPE — deliberately narrow, and empirically grounded. Only event types that
 # DECLARE a label set in § 11.8 are validated: `release-synthesis` and
-# `session-retro`, the two grains the synthesizer parses. A census of the live
+# `session-retro`, the two grains the synthesizer parses; § 11.8.1 additionally
+# declares per-subtype sets for `release-synthesis`'s two QC4 subtypes, which are
+# registry entries rather than synthesizer grains. A census of the live
 # event log found the other event types (`decision`, `gate-outcome`, `escalation`,
 # `test-run`) using open free-form payload keys across the great majority of rows;
 # validating those would reject nearly every existing caller for no read-side
@@ -183,8 +188,11 @@ SUBTYPES_iteration_prefixes="dt-eng-pass- qa-dt-pass-"
 # here rather than restating it is what keeps the two from drifting — the drift
 # that shipped a 5-label schema against a 6-label tool.
 
-# Parse the schema § 11.8 table → "key|label label …" lines on stdout, where the
-# key is `event_type` or `event_type/event_subtype`.
+# Parse the schema § 11.8 tables → "key|label label …" lines on stdout, where the
+# key is `event_type` or `event_type/event_subtype`. The scan is SECTION-bounded,
+# not table-bounded, so it covers the `--source` selection table AND the
+# § 11.8.1 subtype payload-vocabulary registry beneath it (a `####` heading does
+# not terminate the scan; a `###` one does).
 # Row shape: | `source` … | `--event-type …` | `l1` / `l2` / … | clustered | zero-state |
 # FS="|" on a leading-pipe row: $2=col1(source) $3=col2(filter) $4=col3(labels).
 #
@@ -202,7 +210,13 @@ parse_schema_labels() {
     in_s && /^#{1,3} / { in_s = 0 }
     # col-1 must START with a backtick token (the source name); trailing prose in
     # the same cell — e.g. "(default — …)" — is ignored.
-    in_s && $2 ~ /^ *`[a-z0-9-]+`/ {
+    #
+    # CHARSET CONTRACT: the token charset here matches the write-side extractor
+    # `payload_labels` ([A-Za-z0-9_-]). A NARROWER charset here does not fail — it
+    # silently DROPS a declared label, and the conforming payload is then rejected
+    # as unrecognized. Keep this a superset of every token § 11.8 / § 11.8.1
+    # declares. The `outcome_excerpt` guard in --self-test fails if it is re-narrowed.
+    in_s && $2 ~ /^ *`[A-Za-z0-9_-]+`/ {
       filt = $3; et = ""; es = ""                       # declared scope from col-2
       if (match(filt, /--event-type +[a-z0-9-]+/)) {
         t = substr(filt, RSTART, RLENGTH); sub(/^--event-type +/, "", t); et = t
@@ -217,7 +231,7 @@ parse_schema_labels() {
       if (et == "") next
       key = (es == "" ? et : et "/" es)
       rest = $4; labels = ""                            # labels from col-3 ONLY
-      while (match(rest, /`[a-z0-9-]+`/)) {
+      while (match(rest, /`[A-Za-z0-9_-]+`/)) {
         tok = substr(rest, RSTART+1, RLENGTH-2)
         labels = (labels == "" ? tok : labels " " tok)
         rest = substr(rest, RSTART+RLENGTH)
@@ -231,13 +245,22 @@ parse_schema_labels() {
 # Asserted against § 11.8 by --self-test, so a one-sided edit fails the test
 # rather than shipping silently.
 #
-# Keys mirror the § 11.8 DECLARED FILTERS, not the col-1 source names:
-# release-synthesis's filter names a subtype, so its key carries one;
+# The registry it mirrors now spans BOTH tables inside § 11.8: the `--source`
+# selection table (§ 11.8) and the subtype payload-vocabulary registry
+# (§ 11.8.1), whose col-1 is a registry key rather than a `--source` value.
+# The parser does not distinguish them — both are col-2-keyed rows inside the
+# § 11.8 scan — so this mirror carries every row from both.
+#
+# Keys mirror the DECLARED FILTERS, not the col-1 source names or registry keys:
+# release-synthesis's § 11.8 filter names a subtype, so its key carries one;
 # session-retro's filter names none, so its key stays type-level and all three
 # of its subtypes resolve through the type-level rung of labels_for().
 _FALLBACK_LABEL_SETS="$(printf '%s\n' \
   "release-synthesis/learnings-triple	surprise would-change watch-for" \
-  "session-retro	session source theme domain learning reason")"
+  "session-retro	session source theme domain learning reason" \
+  "release-synthesis/qc4-05-result	invariant verdict files" \
+  "release-synthesis/qc4-06-result	verdict outcome_excerpt evidence_anchor" \
+  "decision/decision-superseded	superseded by reason")"
 
 _schema_labels="$(parse_schema_labels 2>/dev/null || true)"
 if [[ -n "$_schema_labels" ]]; then
@@ -296,7 +319,10 @@ VERSION_KEY_NONE='(none)'
 die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
 
 usage() {
-  /usr/bin/sed -n '10,25p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  # RANGE IS LOAD-BEARING: it must span the whole Usage + Flags block above. A
+  # stale range prints the wrong help SILENTLY. Widened 25 -> 28 when the
+  # --self-test flag description grew (#6116).
+  /usr/bin/sed -n '10,28p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -320,6 +346,16 @@ seed_if_absent() {
 
 # truncate_to_lines <file> <n> — keep the first <n> lines of <file>. Handles n=0
 # (BSD `head -n 0` is an error, so empty the file directly).
+#
+# ⚠️ UNREFERENCED, AND UNSAFE UNDER CONCURRENCY (#6116). Call-site census after
+# the self-test redirect landed: ZERO. Do NOT re-introduce a caller on any shared
+# surface. This is not a truncate — it is a non-atomic read-modify-write with an
+# INODE SWAP (`head > tmp && mv tmp f`), so (a) any append landing in the read →
+# rename window is destroyed, not merely rows above <n>, and (b) the `mv`
+# replaces the inode, so a concurrent writer holding an open descriptor keeps
+# writing into an orphan that nothing will ever read — losing its rows with no
+# error on either side. Retained rather than deleted per the #6116 design (S-5);
+# any future caller belongs on #6116's follow-up, not on a silent re-use here.
 truncate_to_lines() {
   local f="$1" n="$2"
   if [[ "$n" -le 0 ]]; then
@@ -568,11 +604,80 @@ if [[ "$SELF_TEST" == "true" ]]; then
   [[ "$_cas_fail" -eq 0 ]] || die "self-test: workspace-root cascade assertion FAILED (see above)" 1
   echo "self-test: workspace-root cascade OK (3a env / 3c toml / 3d default, value-pinned)"
 
-  # Assert the resolved path's parent is reachable, then seed if absent.
-  [[ -d "$(dirname "$LOG_FILE")" ]] || /bin/mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null \
-    || die "self-test: resolved log parent dir not creatable: $(dirname "$LOG_FILE")" 2
+  # ── LIVE-LOG ASSERTION (S-4) — non-mutating, named, attributable ──────────
+  # The append path below runs against a PRIVATE TEMP COPY (S-1), so nothing in
+  # this run may open the live log for write. This step restores — and widens —
+  # the coverage the old append-then-revert cycle provided incidentally: it
+  # asserts the path RESOLVES, that its parent is reachable, and that both
+  # surfaces are WRITABLE, without appending a byte. The original never asserted
+  # writability at all; it wrote and hoped.
+  _live_log="$LOG_FILE"
+  _live_write_log="$WRITE_LOG"
+  _live_dir="$(dirname "$_live_log")"
+  [[ -n "$_live_log" ]] || die "self-test: live LOG_FILE resolved empty" 2
+  [[ -d "$_live_dir" ]] || /bin/mkdir -p "$_live_dir" 2>/dev/null \
+    || die "self-test: resolved log parent dir not creatable: $_live_dir" 2
+  [[ -w "$_live_dir" ]] \
+    || die "self-test: resolved log parent dir is NOT writable: $_live_dir" 2
+  for _lf in "$_live_log" "$_live_write_log"; do
+    if [[ -e "$_lf" ]]; then
+      [[ -w "$_lf" ]] || die "self-test: live surface exists but is NOT writable: $_lf" 2
+    fi
+  done
+  echo "self-test: live-log assertion OK (resolved + parent reachable + writable; NOT opened for write)"
+
+  # ── SHARED TEMP CLEANUP ──────────────────────────────────────────────────
+  # ONE EXIT trap for the whole self-test. `trap ... EXIT` REPLACES any prior
+  # EXIT trap, so the forced-fallback block below registers its tree here rather
+  # than installing a second trap that would silently orphan this one's dir.
+  _SELFTEST_TMPDIRS=()
+  _selftest_cleanup() {
+    local _d
+    for _d in ${_SELFTEST_TMPDIRS[@]+"${_SELFTEST_TMPDIRS[@]}"}; do
+      [[ -n "$_d" ]] && /bin/rm -rf "$_d"
+    done
+  }
+  trap _selftest_cleanup EXIT
+
+  # ── LIVE-LOG INTEGRITY GUARD (the #6116 regression guard) ────────────────
+  # Snapshot every byte the live log holds RIGHT NOW. Re-checked at the end of
+  # the run. A concurrent append only ADDS lines, so comparing the first N lines
+  # is stable under concurrency — but a truncation, an in-place rewrite, or an
+  # inode swap changes it. A whole-file checksum would be FLAKY here for exactly
+  # the reason this defect matters: other sessions legitimately append while the
+  # self-test runs, and a guard that fails on a legitimate concurrent append
+  # would be a second concurrency bug wearing the first one's uniform.
+  _guard_tmp="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/append-pipeline-event-selftest-XXXXXX")" \
+    || die "self-test: cannot create self-test temp dir" 2
+  _SELFTEST_TMPDIRS+=("$_guard_tmp")
+  _live_head_lines=0
+  if [[ -f "$_live_log" ]]; then
+    _live_head_lines=$(/usr/bin/wc -l < "$_live_log" | /usr/bin/tr -d ' ')
+    /usr/bin/head -n "$_live_head_lines" "$_live_log" > "$_guard_tmp/live-head-before" \
+      || die "self-test: cannot snapshot the live log for the integrity guard" 2
+  else
+    : > "$_guard_tmp/live-head-before"
+  fi
+
+  # ── SELF-TEST WRITE REDIRECT (S-1) ───────────────────────────────────────
+  # Every write below lands in a private temp instance seeded from the live
+  # files. This is Option D from the #6116 design: it REMOVES the mutation of the
+  # live surface rather than guarding it, so there is no lock to honour, no
+  # read-modify-write window to lose a row in, and no contract for a future
+  # caller to violate. An INTERNAL reassignment, deliberately not a public
+  # `--log-file` flag: a public flag is a new supported surface with its own
+  # abuse cases, and no caller has asked for one.
+  EVALS_RESULTS_PATH="$_guard_tmp/evals"
+  /bin/mkdir -p "$EVALS_RESULTS_PATH" || die "self-test: cannot create self-test evals dir" 2
+  LOG_FILE="$EVALS_RESULTS_PATH/pipeline-event-log.md"
+  WRITE_LOG="$EVALS_RESULTS_PATH/pipeline-event-log-write.log"
+  [[ -f "$_live_log" ]] && /bin/cp "$_live_log" "$LOG_FILE"
+  [[ -f "$_live_write_log" ]] && /bin/cp "$_live_write_log" "$WRITE_LOG"
+  # Still exercises seed_if_absent — now against a fresh instance when the live
+  # files are absent, which is the case it exists to cover.
   seed_if_absent
-  echo "self-test: resolved LOG_FILE=$LOG_FILE"
+  echo "self-test: live LOG_FILE=$_live_log (read-only this run)"
+  echo "self-test: writes REDIRECTED to a private temp copy — the live log is never opened for write (#6116)"
   echo "self-test: enum source=$([[ -n "$_schema_rows" ]] && echo schema-§3-data-driven || echo static-fallback) ($(printf '%s\n' $EVENT_TYPES | grep -c . ) event types)"
 
   # ── § 3 ↔ static-fallback lockstep, asserted in BOTH directions ──────────
@@ -614,7 +719,7 @@ if [[ "$SELF_TEST" == "true" ]]; then
   # nothing else covers. _APE_SELFTEST_FALLBACK_CHILD bounds recursion at depth 1.
   if [[ -z "${_APE_SELFTEST_FALLBACK_CHILD:-}" ]]; then
     _ft_tmp="$(/usr/bin/mktemp -d)" || die "self-test: cannot create forced-fallback temp tree" 2
-    trap '/bin/rm -rf "$_ft_tmp"' EXIT
+    _SELFTEST_TMPDIRS+=("$_ft_tmp")
     /bin/mkdir -p "$_ft_tmp/release/tools" "$_ft_tmp/core/deploy" || die "self-test: cannot populate forced-fallback temp tree" 2
     /bin/cp "${BASH_SOURCE[0]}" "$_ft_tmp/release/tools/append-pipeline-event.sh" \
       || die "self-test: cannot copy script into forced-fallback temp tree" 2
@@ -659,6 +764,7 @@ if [[ "$SELF_TEST" == "true" ]]; then
   validate_subtype "decision" "scope-lock" || die "self-test: subtype validation failed"
   validate_subtype "decision" "cascade-sweep-block" || die "self-test: decision cascade-sweep-block subtype check failed"
   validate_subtype "decision" "delegation" || die "self-test: decision delegation subtype check failed"
+  validate_subtype "decision" "decision-superseded" || die "self-test: decision decision-superseded subtype check failed"
   validate_subtype "self-repair" "retry" || die "self-test: self-repair subtype check failed"
   validate_subtype "iteration" "dt-eng-pass-2" || die "self-test: iteration prefix check failed"
   validate_subtype "test-run" "suite-pass" || die "self-test: test-run suite-pass subtype check failed"
@@ -746,21 +852,95 @@ if [[ "$SELF_TEST" == "true" ]]; then
   # These two subtypes are declared in § 3 and required by the Stage-13 emit
   # table, but carry payload shapes their sibling learnings-triple does not.
   # Under event_type-only scoping they were structurally un-emittable: zero rows
-  # across the log's entire history. The fixtures assert EMITTABILITY; they do
-  # NOT canonicalize a payload-label convention for these subtypes.
+  # across the log's entire history. § 11.8.1 now DECLARES both vocabularies, so
+  # these two accepts no longer pass vacuously through the "no declared set"
+  # short-circuit — they pass because the set resolves and the payload matches it.
+  # Each accept is paired with a reject below; an accept without its paired
+  # reject would not demonstrate that the registration binds anything.
   validate_payload_labels "release-synthesis" "qc4-05-result" \
     "invariant:AV-1; verdict:PASS; files:release/tools/append-pipeline-event.sh" \
     || die "self-test: a conforming qc4-05-result payload must emit — label scoping is not subtype-aware"
   validate_payload_labels "release-synthesis" "qc4-06-result" \
     "verdict:ATTAINED; outcome_excerpt:post-deploy main exhibits the AFTER state; evidence_anchor:release-plan-change-description" \
     || die "self-test: a conforming qc4-06-result payload must emit — label scoping is not subtype-aware"
+  # The paired SPECIFICITY arms. A vocabulary that cannot reject an off-vocabulary
+  # label has not bound the gate — before § 11.8.1 both of these PASSED, because
+  # the pair resolved to no declared set and validation short-circuited.
+  if ( validate_payload_labels "release-synthesis" "qc4-06-result" \
+       "verdict:ATTAINED; mood:excited" ) 2>/dev/null; then
+    die "self-test: an off-vocabulary label on qc4-06-result must be rejected — a registration that cannot fail has not bound the gate"
+  fi
+  if ( validate_payload_labels "release-synthesis" "qc4-05-result" \
+       "invariant:AV-1; mood:excited" ) 2>/dev/null; then
+    die "self-test: an off-vocabulary label on qc4-05-result must be rejected — a registration that cannot fail has not bound the gate"
+  fi
   # Resolution-rung liveness: exact returns a set, type-level falls back, and an
   # undeclared subtype resolves to EMPTY (not validated). Asserting all three
   # rungs is what stops a partial implementation reading as green.
   [[ -n "$(labels_for release-synthesis learnings-triple)" ]] \
     || die "self-test: exact rung dead — release-synthesis/learnings-triple must resolve"
-  [[ -z "$(labels_for release-synthesis qc4-06-result)" ]] \
-    || die "self-test: qc4-06-result must resolve to NO declared set (§ 11.8 declares none)"
+  [[ -n "$(labels_for release-synthesis qc4-06-result)" ]] \
+    || die "self-test: qc4-06-result must resolve to its § 11.8.1 declared set"
+  # THE CHARSET GUARD. `outcome_excerpt` is snake_case, and the registry parser's
+  # token charset must be a superset of the write-side extractor's or it DROPS the
+  # label silently — leaving `verdict` alone, after which the conforming fixture
+  # above is rejected. The `-n` rung immediately above still passes on `verdict`
+  # alone, so it cannot catch that; this assertion is the one that can.
+  is_in_list "outcome_excerpt" "$(labels_for release-synthesis qc4-06-result)" \
+    || die "self-test: 'outcome_excerpt' missing from the qc4-06-result set — the registry charset silently dropped a snake_case label"
+  # EMPTY-RUNG REPLACEMENT. All three release-synthesis subtypes are now declared,
+  # so the empty rung lost its only live assertion. Re-point it at a (type, subtype)
+  # pair that declares no set; without this the rung silently drops out of coverage.
+  [[ -z "$(labels_for decision scope-lock)" ]] \
+    || die "self-test: empty rung dead — an undeclared (type, subtype) must resolve to NO set"
+
+  # ── decision/decision-superseded — the supersession vocabulary ─────────────
+  # A supersession is a JOIN between two decision IDs, so the row is worthless
+  # unless BOTH ends are recognized. Sensitivity: the set resolves and a
+  # conforming payload emits.
+  [[ -n "$(labels_for decision decision-superseded)" ]] \
+    || die "self-test: decision/decision-superseded must resolve to its § 11.8.1 declared set"
+  # THE ARM THAT MATTERS. Without it, a future re-narrowing of the registry's
+  # label charset drops `by` silently while the -n rung above still passes on
+  # `superseded` alone — leaving a vocabulary that can name the retired decision
+  # but not the one that retired it, which is the exact defect this subtype
+  # exists to close. Same failure shape as the `outcome_excerpt` charset guard.
+  is_in_list "by" "$(labels_for decision decision-superseded)" \
+    || die "self-test: 'by' missing from the decision-superseded set — a supersession naming only ONE id is the defect this subtype exists to close"
+  is_in_list "superseded" "$(labels_for decision decision-superseded)" \
+    || die "self-test: 'superseded' missing from the decision-superseded set — the retired-id end of the join is gone"
+  validate_payload_labels "decision" "decision-superseded" \
+    "superseded:D-7; by:D-37; reason:band-expansion-retired" \
+    || die "self-test: a conforming decision-superseded payload must emit"
+  # The issue-keyed ID convention must emit too: the vocabulary is a join, not a
+  # rename, and live data carries BOTH conventions.
+  validate_payload_labels "decision" "decision-superseded" \
+    "superseded:D-4767-Scope; by:D-4801-Scope; reason:scope-recut" \
+    || die "self-test: an issue-keyed decision id must emit — the vocabulary joins ids, it does not canonicalize them"
+  # THE `ms:` ARM. Free-form decision subtypes open their payload with `ms:#N;`
+  # per the playbook's § 4a.2 habit. This subtype declares a CLOSED vocabulary,
+  # so that habit must be REJECTED here rather than silently tolerated — the two
+  # conventions cannot both hold, and the vocabulary is the one with teeth. Pins
+  # the decision so a future author cannot re-add `ms:` to the convention text
+  # without this arm failing.
+  if ( validate_payload_labels "decision" "decision-superseded" \
+       "ms:#251; superseded:D-7; by:D-37; reason:x" ) 2>/dev/null; then
+    die "self-test: an 'ms:' prefix on decision-superseded must be rejected — the declared vocabulary is closed, and a row written to the free-form habit does not emit"
+  fi
+  # Specificity: an off-vocabulary label must be REJECTED. A registration that
+  # cannot fail has not bound the gate.
+  if ( validate_payload_labels "decision" "decision-superseded" \
+       "superseded:D-7; mood:relieved" ) 2>/dev/null; then
+    die "self-test: an off-vocabulary label on decision-superseded must be rejected — a registration that cannot fail has not bound the gate"
+  fi
+  # SIBLING NON-REGRESSION. Registering ONE decision subtype must not bind the
+  # other 21. `decision` declares no type-level set, so every sibling must still
+  # resolve EMPTY and stay free-form; if this ever fails, an exact-pair
+  # registration has leaked up to the type rung and silently gated 21 subtypes.
+  [[ -z "$(labels_for decision d-class)" ]] \
+    || die "self-test: registering decision/decision-superseded must not bind sibling decision subtypes"
+  validate_payload_labels "decision" "d-class" "verdict:approved; anything:goes" \
+    || die "self-test: sibling decision subtypes must stay free-form after the exact-pair registration"
   [[ "$(labels_for session-retro learning)" == "$(labels_for session-retro)" ]] \
     || die "self-test: type-level fallback rung dead — session-retro/<subtype> must fall back to the type set"
 
@@ -787,13 +967,15 @@ if [[ "$SELF_TEST" == "true" ]]; then
   #     DECLARED subtype, so the union is exactly its set; that same identity
   #     is why it passes this reject;
   #   · dropping the release-synthesis gate entirely fails this reject.
-  # `verdict:` is the token that would discriminate a union with something to
-  # widen INTO: it appears in both qc4 accept payloads above, so once § 11.8
-  # declares qc4 label sets the union carries it and union scoping accepts it
-  # here, while the `mood:` arm above still rejects. That asymmetry is LATENT,
-  # not live — today the two are symmetric: both are rejected on
-  # learnings-triple and both EMIT on the qc4 subtypes, which resolve to no
-  # declared set at all (qc4-06-result's EMPTY resolution is asserted above).
+  # `verdict:` is the token that discriminates a union with something to widen
+  # INTO: it appears in both qc4 accept payloads above, and § 11.8.1 now
+  # declares both qc4 label sets, so a union-of-all-subtypes scoping would
+  # carry `verdict` and ACCEPT it here, while the `mood:` arm above still
+  # rejects. That asymmetry is LIVE, not latent — the two arms are no longer
+  # symmetric: `verdict:` is ACCEPTED on the qc4 subtypes (their own declared
+  # sets, asserted above) and must still be REJECTED on learnings-triple. This
+  # reject is therefore strictly sharper than before: it discriminates union
+  # scoping on live evidence rather than latently.
   # Breaking (event_type, event_subtype) resolution therefore fails this test
   # by construction, with no hand-edit required to demonstrate it.
   if ( validate_payload_labels "release-synthesis" "learnings-triple" \
@@ -890,10 +1072,17 @@ if [[ "$SELF_TEST" == "true" ]]; then
   [[ "$(_arity 'triggers:[T1\|T2\|T3]')" -eq 10 ]] || die "self-test: escaped payload broke row arity"
   [[ "$(_arity 'triggers:[T1 | T2]')"    -eq 11 ]] || die "self-test: arity oracle miscalibrated"
 
-  # Append a sentinel row, then revert. The key is SLUG-shaped: the fixture must
-  # not model the version-shaped form § 2a forbids, or the tool's own test data
-  # teaches the defect the tool now rejects.
-  TEST_ROW="| ${TS_TEST} | selftest-sentinel-release | 5 | decision | scope-lock | hub | sub-task:#1 | CHEAP | resolved | selftest-row;will-be-reverted |"
+  # Append a sentinel row to the PRIVATE TEMP COPY. The key is SLUG-shaped: the
+  # fixture must not model the version-shaped form § 2a forbids, or the tool's
+  # own test data teaches the defect the tool now rejects.
+  #
+  # NO REVERT (S-2). There is nothing to revert: LOG_FILE and WRITE_LOG were
+  # redirected to a private temp instance above, and the temp dir is discarded by
+  # the EXIT trap. The delta predicate below survives unchanged (S-3) and is now
+  # STRONGER than it was: against a private copy the delta is deterministic,
+  # whereas against the shared live log a concurrent append made `+1` a race the
+  # old code resolved by DESTROYING the other writer's row.
+  TEST_ROW="| ${TS_TEST} | selftest-sentinel-release | 5 | decision | scope-lock | hub | sub-task:#1 | CHEAP | resolved | selftest-row;temp-copy-only |"
   TEST_WRITE_LINE="${TS_TEST}	selftest-sha	hub	decision:scope-lock"
 
   printf '%s\n' "$TEST_ROW" >> "$LOG_FILE"
@@ -901,20 +1090,30 @@ if [[ "$SELF_TEST" == "true" ]]; then
 
   POST_LINES=$(/usr/bin/wc -l < "$LOG_FILE" | /usr/bin/tr -d ' ')
   if [[ "$POST_LINES" -ne $((PRE_LINES + 1)) ]]; then
-    # Cleanup attempt
-    truncate_to_lines "$LOG_FILE" "$PRE_LINES"
-    truncate_to_lines "$WRITE_LOG" "$PRE_WRITE_LINES"
-    die "self-test: append produced unexpected line count delta (expected +1, got $((POST_LINES - PRE_LINES)))"
+    die "self-test: append produced unexpected line count delta on the temp copy (expected +1, got $((POST_LINES - PRE_LINES)))"
+  fi
+  POST_WRITE_LINES=$(/usr/bin/wc -l < "$WRITE_LOG" | /usr/bin/tr -d ' ')
+  if [[ "$POST_WRITE_LINES" -ne $((PRE_WRITE_LINES + 1)) ]]; then
+    die "self-test: write-log append produced unexpected line count delta on the temp copy (expected +1, got $((POST_WRITE_LINES - PRE_WRITE_LINES)))"
   fi
 
-  # Revert
-  truncate_to_lines "$LOG_FILE" "$PRE_LINES"
-  truncate_to_lines "$WRITE_LOG" "$PRE_WRITE_LINES"
-
-  # Confirm revert
-  REVERT_LINES=$(/usr/bin/wc -l < "$LOG_FILE" | /usr/bin/tr -d ' ')
-  if [[ "$REVERT_LINES" -ne "$PRE_LINES" ]]; then
-    die "self-test: revert failed (expected $PRE_LINES lines, got $REVERT_LINES)"
+  # ── LIVE-LOG INTEGRITY GUARD, re-checked (the #6116 regression guard) ─────
+  # Every byte the live log held at entry must still be there, in order. This
+  # arm is what fails if anyone ever re-introduces a revert-by-truncation: the
+  # old code shortened this file, and `cmp` sees that. Concurrent appends are
+  # invisible to it by construction (they land past line N), so the guard cannot
+  # go flaky — it can only catch destruction.
+  if [[ -f "$_live_log" ]]; then
+    _live_now_lines=$(/usr/bin/wc -l < "$_live_log" | /usr/bin/tr -d ' ')
+    if [[ "$_live_now_lines" -lt "$_live_head_lines" ]]; then
+      die "self-test: THE LIVE LOG SHRANK during the self-test ($_live_head_lines -> $_live_now_lines lines) — rows were destroyed (#6116)"
+    fi
+    /usr/bin/head -n "$_live_head_lines" "$_live_log" \
+      | /usr/bin/cmp -s - "$_guard_tmp/live-head-before" \
+      || die "self-test: the live log's committed rows CHANGED during the self-test — an in-place rewrite or truncation occurred (#6116)"
+    echo "self-test: live-log integrity guard OK ($_live_head_lines committed rows byte-identical; $((_live_now_lines - _live_head_lines)) concurrent append(s) observed and preserved)"
+  else
+    echo "self-test: live-log integrity guard N/A (no live log on this instance) — EXPLICIT zero-state, not a silent pass"
   fi
 
   echo "self-test: PASS"
@@ -923,7 +1122,7 @@ if [[ "$SELF_TEST" == "true" ]]; then
   echo "  no-learning rows reject 'theme:' by enforcement; undeclared-label-set types stay free-form"
   echo "  § 2a release join key enforced: version-grammar values + unresolved tokens rejected, slugs accepted"
   echo "  positive + negative tests passed"
-  echo "  append + revert cycle confirmed (log + write-log)"
+  echo "  append cycle confirmed on a private temp copy (log + write-log); live log never opened for write"
   exit 0
 fi
 
