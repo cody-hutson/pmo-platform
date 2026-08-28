@@ -150,7 +150,9 @@ git grep -l 'MODE_FILE="${HOOK_DIR}/\.mode"' -- ':(glob)core/hooks/*.sh'
 | `off` | Hook exits 0 immediately (disables the hook) |
 | `LIB-MISSING` (any value) | **Mode-coupled.** When `lib/dep-resolve.sh` is absent, unreadable, unparseable or stale, a hook with a mode surface denies (`exit 2`, `BLOCKED (fail-closed)`) in `enforce`, and in `warn`/`off` exits 0 after emitting a `[CLAUDE-HOOK:<hook>:LIB-MISSING] WARN (degraded, …)` notice on stderr. The notice is emitted in `off` as well as `warn`: `off` disables *rule enforcement*, not *install-integrity reporting*, and a silent degrade would leave nothing for an operator to notice. Recovery is a bundle reinstall — see § Recovery Procedures. |
 
-**Destructive + credential-read + rm-prefer-trash hooks always enforce** (high-confidence, narrow rules, low false-positive risk) and have no mode surface at all. The seven `.mode` readers listed above have warn-mode, as do the four hooks reading their own mode file.
+**Destructive + credential-read + rm-prefer-trash hooks always enforce** (high-confidence, narrow rules, low false-positive risk) and have no mode surface at all.
+
+**One exception, and it is a per-RULE-ARM exception rather than a hook-level one.** `block-destructive.sh` reads no mode file and is not part of any `.mode` cohort — that is unchanged. But BLOCK-DESTRUCTIVE-022's third arm (direct execution, added when the rule's scope was widened to execution capability) is gated by a per-rule constant `DESTRUCTIVE_022_EXEC_PHASE` declared in the hook and currently reading `warn`, so that one arm records rather than blocks. The distinction matters when reading this section: "always-enforce" still describes the hook's relationship to the shared dial, and it no longer describes every arm of every rule inside it. A per-rule rollout constant is deliberately not a fifth condition on the four-condition coverage boundary — it is a property of one arm, and it is stated in that rule's own fragment where its coverage boundary lives. The seven `.mode` readers listed above have warn-mode, as do the four hooks reading their own mode file.
 
 **The always-enforce three keep an unconditional `LIB-MISSING` deny, and that is load-bearing rather than incidental.** Their matchers span Read, Bash, Write and Edit, so a missing helper stays immediately visible even while the mode-capable cohort is degrading — which is the property that makes degrading the cohort acceptable in the first place. `core/hooks/tests/check-hook-dep-hardening.sh` CHECK-4 fails if one of the three acquires a mode-coupled guard.
 
@@ -191,7 +193,8 @@ The hook fails **CLOSED**: `deny_missing_dep` emits a `DEPENDENCY-MISSING` block
 ### Warn-mode shakedown — flip to enforce
 
 After the shakedown period:
-1. Review logs: `cat .claude/hooks/egress-warn-log.jsonl`, `cat .claude/hooks/mcp-warn-log.jsonl`, `cat .claude/hooks/shell-injection-warn-log.jsonl`, `cat .claude/hooks/fs-boundary-warn-log.jsonl`
+1. Review logs: `cat .claude/hooks/egress-warn-log.jsonl`, `cat .claude/hooks/mcp-warn-log.jsonl`, `cat .claude/hooks/shell-injection-warn-log.jsonl`, `cat .claude/hooks/fs-boundary-warn-log.jsonl`, `cat .claude/hooks/destructive-warn-log.jsonl`
+   - **`destructive-warn-log.jsonl` is listed here to be READ, not to be flipped by this procedure.** It is the BLOCK-DESTRUCTIVE-022 exec arm's drain, and that arm is gated by its own per-rule constant (`DESTRUCTIVE_022_EXEC_PHASE`), not by `.mode` — flipping `.mode` neither advances nor retreats it. It appears in this list because a drain nobody is told to read is the failure this whole subsection exists to prevent. Its own graduation is forced by `deploy.sh` Check 71, on a committed deadline rather than on this review.
 2. Add any legitimate patterns to the respective allowlists
 3. Flip `.claude/hooks/.mode` from `warn` to `enforce`
 4. Monitor `.claude/hooks/block-log.jsonl` for 48 hours
@@ -244,9 +247,10 @@ Before flipping `.mode` from `warn` to `enforce`:
 - [ ] `mcp-warn-log.jsonl` reviewed — same criteria
 - [ ] `shell-injection-warn-log.jsonl` reviewed — same criteria
 - [ ] `fs-boundary-warn-log.jsonl` reviewed — all entries are either in `.claude/fs-boundary-allowlist.txt` or intentional blocks
+- [ ] `destructive-warn-log.jsonl` reviewed — **read-only for this flip.** It belongs to the BLOCK-DESTRUCTIVE-022 exec arm, which graduates on its own constant and its own deadline (`deploy.sh` Check 71), not on `.mode`. Reviewing it here keeps it from going unread; flipping `.mode` does not move it.
 - [ ] `allowlist-additions.log` reviewed — all additions have plausible reasons
 - [ ] No critical false-positive patterns remaining (i.e., any legitimate action has a working allowlist entry)
-- [ ] `block-destructive`, `block-credential-reads`, and `block-rm-prefer-trash` hooks have been exercised without false positives (these are always-enforce)
+- [ ] `block-credential-reads` and `block-rm-prefer-trash` hooks have been exercised without false positives (these are always-enforce). **`block-destructive` is no longer wholly in that category and must not be checked off as if it were:** its interpreter and source arms are always-enforce, but its exec arm is phase-gated at `warn`, so "exercised without false positives" cannot be asserted for the rule as a whole from a run in which one arm could not produce a block. Assess the two enforcing arms here and read the exec arm's drain for the third.
 - [ ] Operator confirms readiness via commit to `.mode` change (note: this flip affects **every** hook whose `MODE_FILE` names the shared `.mode`, simultaneously — currently seven: `block-egress`, `block-mcp-writes`, `block-shell-injection`, `block-fs-boundary`, **plus the three registry-external readers** `block-skill-direct-edit`, `block-fragile-refs`, `block-draft-files`. It does **not** affect the four hooks carrying their own mode file, each of which graduates on its own evidence. Re-derive the cohort before flipping — see § Warn-Mode vs. Enforce-Mode for the command)
 
 ## Related
