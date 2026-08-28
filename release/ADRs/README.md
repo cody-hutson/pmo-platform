@@ -69,7 +69,6 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-143](ADR-143-trigger-b-counts-rule-defining-surfaces-not-the-ledger.md) | A release-class predicate counts rule-defining surfaces, not the ledger the release is mandated to write | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
 | [ADR-144](ADR-144-g1-03-admits-a-second-evidence-shape.md) | G1-03 admits a second evidence shape: label-position probe markers, two co-present, Evidence-section-scoped | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
 | [ADR-145](ADR-145-subtype-payload-vocabulary-registry-disjoint-from-the-source-enum.md) | Subtype payload vocabularies are declared in a registry disjoint from the `--source` enum | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
-| [ADR-145](ADR-145-wave-width-is-a-second-checkpoint-b-output-not-a-verdict.md) | Wave width is a second Checkpoint B output, not a verdict | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
 | [ADR-146](ADR-146-dry-run-predicts-apply-asserts-mode-branch-placement.md) | Dry-run predicts, apply asserts: mode-branch placement in phased close-out tooling | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
 | [ADR-146](ADR-146-supersession-is-an-append-and-integrity-is-a-dated-read-only-sweep.md) | Supersession is an append-only event with a two-id vocabulary, and log integrity is validated by a read-only cutover-dated population sweep | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
 | [ADR-147](ADR-147-domain-practice-source-grammar-routes-it-does-not-extend.md) | The domain_practice source grammar is a closed three-form set that ROUTES the unmatched case, and survival across Commit-0 is asserted absolutely rather than only by delta | Proposed | 2026-08-25 | pipeline-spec-self-consistency |
@@ -77,6 +76,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-148](ADR-148-arm-e-population-is-the-directory-never-the-manifest.md) | The tool-coverage engine hosts a second invariant whose population is the directory, never the manifest | Accepted | 2026-08-28 | ci-stable-under-transient-conditions |
 | [ADR-148](ADR-148-surface-1-emit-provenance-not-existence.md) | A backstop records its pre-mutation observation as a witness token, and the downstream check asks provenance rather than existence | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
 | [ADR-150](ADR-150-checkpoint-b-second-axis-is-measured-not-declared.md) | Checkpoint B's second axis is measured, not declared: scoping refuse-to-synthesize to the usage-window axis | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
+| [ADR-151](ADR-151-wave-width-is-a-second-checkpoint-b-output-not-a-verdict.md) | Wave width is a second Checkpoint B output, not a verdict | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.

@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-145 — Wave width is a second Checkpoint B output, not a verdict"
+title: "ADR-151 — Wave width is a second Checkpoint B output, not a verdict"
 status: Accepted
 date: 2026-08-27
 release: ci-stable-under-transient-conditions
@@ -17,11 +17,13 @@ source_observations:
   - "Every release plan surveyed recorded its usage-window band as unstated or conservative-default, so the unstated row is the modal case rather than an edge case."
 ---
 
-# ADR-145 — Wave width is a second Checkpoint B output, not a verdict
+# ADR-151 — Wave width is a second Checkpoint B output, not a verdict
 
 ## Status
 
 **Accepted.** Authored at Engineering for the `ci-stable-under-transient-conditions` release, against the Collective Review scope-lock that admitted the hub-and-spoke bridge's consuming rules into this card's scope. Sequenced after the host-API axis decision recorded at ADR-150, on the same protocol section.
+
+**Numbering provenance — `145 → 151`.** Held **ADR-145** branch-local; renumbered to **ADR-151** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 145. In-release citations that read "ADR-145" denote this record.
 
 ## Context
 
