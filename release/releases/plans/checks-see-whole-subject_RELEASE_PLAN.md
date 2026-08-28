@@ -244,7 +244,7 @@ core/deploy/deploy.sh                                                     edit  
 release/references/pipeline/stage-02-triage.md                            edit   (A4.8 advisory criterion)
 release/references/how-to/intake-style-guide.md                           edit   (new §2d + one §6 cross-ref row)
 core/standards/reference-durability-standard.md                           edit   (one appended paragraph)
-core/ADRs/ADR-145-anchor-resolution-is-a-surfacing-instrument-not-a-gate.md  add
+core/ADRs/ADR-151-anchor-resolution-is-a-surfacing-instrument-not-a-gate.md  add
 ```
 
 Resolves Stage-4 `CONDITIONAL:d-4931-new-file` — **fires**. D-4931-Landing resolved to a new tool rather than an extension of the existing issue-reference gate; `CONDITIONAL:d-4931-extend` resolves **NOT-TAKEN** and is struck. The required branch-protection context is **not touched**.
@@ -644,7 +644,7 @@ Every figure below is **re-measured on the shipping tree** at build time, never 
 | Lifecycle-table row | integration | **None required, and this resolves the one #6120 contention point.** The table's stated maintenance rule adds a row only when a check is *retired* or *dormant*; Check 71 is live. |
 | Selftest-coverage manifest | integration | **Regenerated** with `--emit-manifest`, never hand-edited. Diff is exactly one line. `--reconcile`: **ARM B / ARM C / ARM D all PASSED** (67 paths; runner partition total and disjoint). |
 | Static analysis | integration | `shellcheck --severity=warning` **clean** on the new tool and `--severity=error` **clean** on `deploy.sh`. Five real findings fixed en route (an unemitted baseline pin, an unused Register B token, a dropped body-line in the finding payload); one suppressed with a stated reason (`--json number,body` is one argument, not two array elements). |
-| ADR numbering | integration | **ADR-145.** The oracle returns 142 because it reads the mainline; 142/143/144 are claimed by siblings on this branch. `check-adr-numbers.py`: **PASS — 145 ADRs, contiguous 001..145, no duplicates.** `check-adr-durability.py`: 145 scanned, **0 findings attributable to this record**. |
+| ADR numbering | integration | **ADR-151.** The oracle returns 142 because it reads the mainline; 142/143/144 are claimed by siblings on this branch. `check-adr-numbers.py`: **PASS — 145 ADRs, contiguous 001..145, no duplicates.** `check-adr-durability.py`: 145 scanned, **0 findings attributable to this record**. |
 | Self-containment | integration | Over the **985** authored lines outside this plan file (19 files): **0** absolute user paths, **0** email addresses, and **1** `#NNNN` reference — the `[#4931]` provenance tag in the Check 71 def-block header, which is the established convention for that surface (**17** pre-existing check headers carry the same tag form). Sensitivity control: 358 in-scope lines contain `#`, so the zero-findings result is not vacuous; specificity control on a fabricated token → 0. |
 
 **Landing hunks — recorded so merge resolution against the two concurrent draft PRs is mechanical.** Both are pure insertions with zero deletions.

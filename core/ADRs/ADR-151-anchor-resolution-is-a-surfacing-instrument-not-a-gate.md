@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-145 — Issue-body anchor resolution is a numeric-only surfacing instrument, not a gate"
+title: "ADR-151 — Issue-body anchor resolution is a numeric-only surfacing instrument, not a gate"
 status: Proposed
 date: 2026-08-25
 release: checks-see-whole-subject
@@ -15,11 +15,13 @@ source_observations:
   - "The unbound-path field was emitted empty into a tab-separated row read with `IFS=<tab> read`, which collapses runs of IFS whitespace; every field after the gap shifted left and 216 citations were recoded from one Register A class into another with both counters still reading plausible."
 ---
 
-# ADR-145 — Issue-body anchor resolution is a numeric-only surfacing instrument, not a gate
+# ADR-151 — Issue-body anchor resolution is a numeric-only surfacing instrument, not a gate
 
 ## Status
 
 **Proposed.** Authored at Engineering for the `checks-see-whole-subject` release; ratified at that release's plan-review gate.
+
+**Numbering provenance — `145 → 151`.** Held **ADR-145** branch-local; renumbered to **ADR-151** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 145. In-release citations that read "ADR-145" denote this record.
 
 ## Context
 
