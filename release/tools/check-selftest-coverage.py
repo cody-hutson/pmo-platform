@@ -113,10 +113,17 @@ DEFAULT_RUNNER = "ubuntu"
 RUNNER_DECL_RE = re.compile(r"^\s*#\s*selftest-runner:\s*([A-Za-z0-9_-]+)\s*$")
 RUNNER_DECL_SCAN_LINES = 40
 
-# Test-suite naming conventions surveilled by Arm D (NOT the advertise predicate).
+# Test-suite TREES surveilled by Arm D (NOT the advertise predicate). Entries are
+# name-agnostic on purpose: a committed suite is invisible to Arm D if its filename
+# does not match, which is a SILENT miss — the class this arm exists to close, and
+# the reason `release/tools/tests/test_*` was widened here. Deliberately NON-recursive:
+# a '**' form reaches release/tools/tests/fixtures/, whose structural-move fixtures are
+# named after real tools (deploy.sh), and referenced_by_workflow() matches a bare stem —
+# so a recursive glob would report a FIXTURE as WIRED. The .sh/.py filter is likewise
+# load-bearing: this tree also holds .json fixtures.
 TEST_SUITE_GLOBS = (
-    "release/tools/tests/test_*.sh",
-    "release/tools/tests/test_*.py",
+    "release/tools/tests/*.sh",
+    "release/tools/tests/*.py",
     "core/deploy/tools/tests/*.sh",
     "core/deploy/tools/tests/*.py",
 )
@@ -358,6 +365,21 @@ def referenced_by_workflow(rel: str, wf_text: str) -> bool:
     base = os.path.basename(rel)
     stem = os.path.splitext(base)[0]
     return base in wf_text or re.search(rf"(?<![\w./-]){re.escape(stem)}(?![\w-])", wf_text) is not None
+
+
+def test_suites(root: Path) -> list[str]:
+    """Arm D's population. Named so the self-test asserts against the SAME
+    enumeration the gate runs — a test that re-implements this loop would assert
+    against a copy while the real gate diverges (the vacuity this module's header
+    names for Arms A/B). is_file() mirrors Ctx.scope_members: the globs are
+    name-agnostic, so a directory could otherwise enter the population.
+    """
+    suites: list[str] = []
+    for glob in TEST_SUITE_GLOBS:
+        suites.extend(
+            p.relative_to(root).as_posix() for p in sorted(root.glob(glob)) if p.is_file()
+        )
+    return sorted(set(suites))
 
 
 def tracked_scripts(root: Path) -> list[str]:
@@ -631,11 +653,9 @@ def mode_reconcile(ctx: Ctx) -> int:
     # trees are OUT of the --self-test discovery scope (they are bare-invocation entry
     # points, not --self-test dispatchers), so a suite there that no workflow runs is
     # invisible to Arms A-C. Naming them on every in-scope PR beats a coordination note.
-    suites = []
-    for glob in TEST_SUITE_GLOBS:
-        suites.extend(p.relative_to(root).as_posix() for p in sorted(root.glob(glob)))
+    suites = test_suites(root)
     unwired = [
-        rel for rel in sorted(set(suites)) if not referenced_by_workflow(rel, wf_text)
+        rel for rel in suites if not referenced_by_workflow(rel, wf_text)
     ]
     if unwired:
         warn(
@@ -1054,6 +1074,41 @@ def _selftest() -> int:
             referenced_by_workflow("release/tools/tests/test_wired.sh", wf)
             and not referenced_by_workflow("release/tools/tests/test_unwired.sh", wf),
             "T-22 Arm D distinguishes a wired suite from an unwired one",
+        )
+    finally:
+        fx.close()
+
+    # ---- Arm D's population must be NAME-AGNOSTIC. A suite invisible to the glob is
+    # a SILENT miss; ac3_concurrent_load.sh was live proof. The control arm is the
+    # conventionally-named sibling: if BOTH were absent the assertion would be vacuous.
+    fx = _Fixture()
+    try:
+        fx.write("release/tools/a.sh", _PASS_SH)
+        fx.write("release/tools/tests/test_conventional.sh", _PASS_SH)
+        fx.write("release/tools/tests/odd_name_load.sh", _PASS_SH)
+        fx.write("release/tools/tests/fixtures/nested.sh", _PASS_SH)
+        fx.write("release/tools/tests/data.json", "{}\n")
+        fx.manifest(["release/tools/*.sh"], ["release/tools/a.sh"])
+        pop = test_suites(fx.root)
+        check(
+            "release/tools/tests/odd_name_load.sh" in pop
+            and "release/tools/tests/test_conventional.sh" in pop,
+            "T-33 Arm D's population is name-agnostic (a non-test_* suite is surveilled)",
+        )
+        check(
+            "release/tools/tests/fixtures/nested.sh" not in pop
+            and "release/tools/tests/data.json" not in pop,
+            "T-33b Arm D's population is non-recursive and extension-filtered "
+            "(a fixture subtree and a .json are NOT suites)",
+        )
+        # A DIRECTORY whose name ends in .sh matches the widened glob; only the
+        # is_file() guard keeps it out of the population. Asserted separately because
+        # the guard is otherwise untested: with this arm absent, deleting is_file()
+        # reddens nothing in this suite — a guard no mutation can falsify.
+        (fx.root / "release/tools/tests/dir_shaped.sh").mkdir(parents=True)
+        check(
+            "release/tools/tests/dir_shaped.sh" not in test_suites(fx.root),
+            "T-33c Arm D's population is files-only (a directory named *.sh is NOT a suite)",
         )
     finally:
         fx.close()

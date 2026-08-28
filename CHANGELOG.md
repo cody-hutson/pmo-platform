@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.39] - 2026-08-28
+
+Nine platform self-checks that reported a pass they could not have withheld now fail when the behaviour they test is broken.
+
+[Full notes](release/releases/notes/v4.39_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.39)
+
 ## [v4.38] - 2026-08-23
 
 Platform working files leave your personal folder, a fresh install builds the standard folders, and settings catch up on every update.

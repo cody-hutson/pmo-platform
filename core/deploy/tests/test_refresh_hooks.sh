@@ -11,7 +11,11 @@
 #      primitives (positional-issueref.awk and fragile-ref-patterns.sh), because the
 #      co-deploy list in setup-workspace.sh is enumerated per named file, so each primitive
 #      is a separate way for the list to be incomplete
-#   3. the operator's .mode is preserved (install-if-missing)
+#   3. the operator's .mode is preserved (install-if-missing) -- asserted with a seed
+#      DERIVED to differ from the shipped template default, so "preserved" and
+#      "overwritten from the template" leave observably different state. Do not
+#      re-hardcode this seed: a literal equal to the template default makes the
+#      assertion pass in both directions, which is how it shipped uncovered.
 #   4. an operator-EDITED hook (diverged from its recorded baseline) is preserved, not clobbered
 #   5. a true no-op (all hooks match source) emits ZERO "REFRESHED" (so update.sh's EX_NOCHANGE
 #      contract is not broken by the hook phase)
@@ -66,6 +70,18 @@ report() {
 }
 sha() { shasum -a 256 "$1" | awk '{print $1}'; }
 
+# Operator .mode seed. The preserve contract is only OBSERVABLE when the seeded value
+# differs from what the refresh would install from the template: if they are equal,
+# "preserved" and "overwritten from the template" leave byte-equivalent state and the
+# Case 1-3 assertion passes either way. Derive the seed from the shipped template at run
+# time rather than hardcoding it, so a future change to the template default cannot
+# silently re-create that collapse. Legal mode values are the closed set
+# {warn, enforce, off}; prefer the fail-closed member unless it IS the default.
+MODE_TEMPLATE="${REPO_ROOT}/core/hooks/.mode.template"
+MODE_DEFAULT="$(tr -d '[:space:]' < "${MODE_TEMPLATE}" 2>/dev/null || true)"
+if [ "${MODE_DEFAULT}" = "enforce" ]; then MODE_SEED="off"; else MODE_SEED="enforce"; fi
+readonly MODE_TEMPLATE MODE_DEFAULT MODE_SEED
+
 # deploy_ws <dir> — materialize a workspace with the CURRENT hook bundle + a baseline state.
 deploy_ws() {
   local ws="$1" h
@@ -73,7 +89,7 @@ deploy_ws() {
   for h in "${REPO_ROOT}/core/hooks/"*.sh; do cp "${h}" "${ws}/.claude/hooks/"; done
   cp "${REPO_ROOT}/core/hooks/lib/positional-issueref.awk" "${REPO_ROOT}/core/hooks/lib/dep-resolve.sh" "${REPO_ROOT}/core/hooks/lib/fragile-ref-patterns.sh" "${ws}/.claude/hooks/lib/"
   cp "${REPO_ROOT}/core/deploy/tools/path-leak-patterns.sh" "${ws}/.claude/hooks/" 2>/dev/null || true
-  printf 'warn\n' > "${ws}/.claude/hooks/.mode"
+  printf '%s\n' "${MODE_SEED}" > "${ws}/.claude/hooks/.mode"
   # record baselines = current source SHAs
   python3 - "${REPO_ROOT}" "${ws}/.claude/.workspace-setup.state" <<'PY'
 import hashlib, json, glob, os, sys
@@ -92,6 +108,20 @@ restore() { bash "${SETUP}" --restore-hooks --workspace-root "$1" --source-repo 
 n_bundle_files() { find "$1" -type f 2>/dev/null | wc -l | tr -d ' '; }
 
 printf '\nCase 1-3: stale hook refreshed · missing hook libs co-deployed (awk + constants) · .mode preserved\n'
+# Fixture precondition. install_mode_template_if_missing returns early when its SOURCE is
+# absent, so a deleted or renamed template would leave .mode untouched and make the
+# preserve assertion below pass VACUOUSLY. Assert the template exists so that vacancy is
+# reported rather than mistaken for a pass.
+#
+# FALSIFIED BY MUTATION, NOT ARGUED. Rename ${MODE_TEMPLATE} away and re-run: THIS
+# assertion fails ALONE — 44 passed / 1 failed — while `.mode preserved (operator
+# choice)` immediately below still reports PASS, because the seed the refresh never
+# touched still equals MODE_SEED. That surviving PASS is precisely the vacuous pass
+# this precondition exists to report, so the mutation demonstrates both arms at once.
+# Unmutated on the same tree: 45 passed / 0 failed.
+[ -f "${MODE_TEMPLATE}" ] \
+  && report "mode template present (fixture precondition)" 1 \
+  || report "mode template present (fixture precondition)" 0 "absent: ${MODE_TEMPLATE}"
 WS="${SBX}/ws1"; deploy_ws "${WS}"
 printf '#!/bin/bash\n# STALE\nexit 0\n' > "${WS}/.claude/hooks/block-gh-path-leak.sh"   # stale
 rm -f "${WS}/.claude/hooks/lib/positional-issueref.awk"                                 # never-deployed
@@ -122,7 +152,21 @@ grep -q 'path_leak_scan_line' "${WS}/.claude/hooks/block-gh-path-leak.sh" && rep
 # refresh flow asserted it landed. All FOUR anchor-carrying hooks read it at startup and fail
 # CLOSED without it, so its absence is the widest-blast-radius entry in the co-deploy list.
 [ -f "${WS}/.claude/hooks/lib/command-position.awk" ] && report "never-deployed command-position.awk co-deployed" 1 || report "never-deployed command-position.awk co-deployed" 0
-[ "$(cat "${WS}/.claude/hooks/.mode")" = "warn" ] && report ".mode preserved (operator choice)" 1 || report ".mode preserved (operator choice)" 0
+# Mode-file preserve cohort -- the enumeration this assertion's siblings owe.
+# setup-workspace.sh installs FOUR mode defaults install-if-missing (.mode,
+# deploy-check.mode, .gh-path-leak-mode, .autonomy-mode) and --refresh-hooks routes
+# through that same install path, so all four carry the identical preserve-vs-overwrite
+# contract. Only .mode is asserted -- here. The other three have NO preserve assertion in
+# any suite: that is a RECORDED gap, not an assumed-absent one, and the durable remedy is
+# a single assertion driven from the tracked mode-template set rather than a per-file
+# enumeration -- tracked separately, in the same shape as the co-deploy list limitation
+# noted at the top of this file. A fifth tracked template, .verify-session-config-mode,
+# has no install call site at all, so it carries no preserve contract to assert; that is
+# a different defect and is likewise tracked separately.
+[ "$(cat "${WS}/.claude/hooks/.mode")" = "${MODE_SEED}" ] \
+  && report ".mode preserved (operator choice)" 1 \
+  || report ".mode preserved (operator choice)" 0 \
+       "seeded ${MODE_SEED}, found $(cat "${WS}/.claude/hooks/.mode"); template default is ${MODE_DEFAULT}"
 
 printf '\nCase 4: operator-edited hook preserved (not clobbered)\n'
 WS="${SBX}/ws2"; deploy_ws "${WS}"

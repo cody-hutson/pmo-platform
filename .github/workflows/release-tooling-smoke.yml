@@ -165,7 +165,14 @@ name: Release tooling smoke
 #                  step fails; drop the reserved "unknown" seed from extract-usage.sh's
 #                  dim_agg so sum(by_X.*.tokens) no longer reconciles to session.tokens
 #                  -> the finops-selftest job fails (its own precision probe asserts
-#                  exactly that, in a temp copy); regress a node-graph tool's
+#                  exactly that, in a temp copy); neuter rollup-attribution.sh's
+#                  count-once overlap map so a colliding spoke is summed twice, disable
+#                  report-usage.sh's {turns, tokens} wrapper branch so every by-skill
+#                  slice renders zero, or aggregate estimate-usage.sh's comparables with
+#                  the arithmetic mean instead of the median -> the finops-selftest job
+#                  fails via that script's OWN named assertion (FM-2 / SM-3b / SE-4
+#                  respectively), each in a temp copy and each proven in BOTH directions
+#                  before it was committed; regress a node-graph tool's
 #                  --self-test -> the selftest-discovery job fails (those six tools are
 #                  now covered by discovery rather than by the retired roster); on an
 #                  unrelated PR all three jobs are skipped and absence is treated as pass.
@@ -805,7 +812,9 @@ jobs:
         # The mutation is anchor-guarded: if the assertion moves, the probe reports that
         # and fails, instead of silently testing nothing.
         #
-        # Same idiom as the four other precision probes in this workflow.
+        # Same idiom as the other precision probes in this workflow. (Stated without a
+        # count deliberately: the tally was already stale before this line was last read,
+        # and a number here rots every time a probe is added.)
         run: |
           set -euo pipefail
           probe="$(mktemp -d)"; trap 'rm -rf "$probe"' EXIT
@@ -1386,3 +1395,166 @@ jobs:
           fi
 
           echo "Carry-forward precision probe OK — the re-introduced mis-binding correctly failed the carry-forward assertions (exit $probe_rc)."
+
+      # ── The three steps below close the gap the two probes above left open: until now
+      #    ONLY extract-usage.sh had a probe, while its three siblings ran --self-test
+      #    with nothing proving those runs could report anything but green. Each step
+      #    below breaks ONE invariant that belongs to ONE sibling, so a red arm names the
+      #    script that regressed rather than reddening the job as a whole.
+      #
+      #    No control arm sits INSIDE these steps, for the same reason the two probes
+      #    above carry none: the "finops script --self-tests" step earlier in this job
+      #    already ran all four self-tests UNMUTATED and gated on their exit code, so an
+      #    unmutated failure reddens the job before any probe below is reached. The
+      #    control arm is structurally upstream, not absent.
+      #
+      #    Each second guard greps for the marker WITH its "FAIL: " prefix. That prefix is
+      #    load-bearing: every assertion id below also appears in the self-test's own
+      #    "  PASS: ..." line, so a marker without the prefix would match a GREEN run and
+      #    the guard would pass no matter what the probe did. Do not shorten these.
+      - name: Precision probe — the rollup self-test actually FAILS on a broken count-once
+        # Breaks FM-2 count-once in a THROWAWAY copy: the map that detects a sidechain
+        # `subagent` colliding with a standalone `session` is forced empty, so the
+        # overlapping spoke spend is summed TWICE into the hub's roll-up — precisely the
+        # double-count the invariant exists to prevent. A pass here would mean the
+        # roll-up could silently double-count an operator's spend and this job would
+        # report green over it.
+        run: |
+          # -e is ON for every setup step: a failed mktemp / cp / injection must ABORT,
+          # never fall through to a probe that silently tests nothing. It is relaxed
+          # only around the one invocation that is EXPECTED to fail.
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          cp -R core/skills/finops-usage-extractor "$probe/finops-usage-extractor"
+          target="$probe/finops-usage-extractor/scripts/rollup-attribution.sh"
+
+          # The anchor must match exactly once. If the implementation moves, this
+          # exits non-zero and -e aborts the job — a probe that can no longer find
+          # what it breaks reports that, rather than quietly passing.
+          python3 - "$target" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
+          old = '| select(any($sids[]; . == $sub.subagent_id)) ]'
+          new = '| select(false) ]'
+          if s.count(old) != 1:
+              sys.exit("probe anchor not found exactly once in rollup-attribution.sh "
+                       "(count=%d) — the probe would silently stop testing anything" % s.count(old))
+          p.write_text(s.replace(old, new), encoding="utf-8")
+          PY
+
+          set +e
+          bash "$target" --self-test > "$probe/probe.out" 2>&1
+          probe_rc=$?
+          set -e
+
+          if [ "$probe_rc" -eq 0 ]; then
+            echo "::error::Precision probe FAILED — rollup-attribution.sh --self-test returned 0 with the count-once overlap map forced empty. A spoke counted twice does not fail the roll-up; this gate is blind."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+
+          if ! grep -q 'FAIL: FM-2 count-once' "$probe/probe.out"; then
+            echo "::error::Precision probe returned non-zero (exit $probe_rc) but NOT via the FM-2 count-once assertion — the self-test may be failing for an unrelated reason, which would mask a real double-count regression."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+
+          echo "Precision probe OK — a neutered count-once overlap map correctly failed the FM-2 assertion (exit $probe_rc)."
+
+      - name: Precision probe — the report self-test actually FAILS on the SA-3 silent-zero
+        # Re-introduces the exact historical defect SA-3 documents: a v1.2.0 by_X entry is
+        # the {turns, tokens} WRAPPER, so an accessor that does not reach `.tokens` first
+        # falls through to `else 0` and renders every by-skill / by-mcp / by-model slice
+        # as zero — no error, no exit code, a plausible-looking all-zero report. Disabling
+        # the wrapper branch in a THROWAWAY copy must make the by-skill slice read 0 and
+        # trip SM-3b. A pass here would mean the report could render an all-zero cost
+        # breakdown and this job would call it green.
+        run: |
+          # -e is ON for every setup step: a failed mktemp / cp / injection must ABORT,
+          # never fall through to a probe that silently tests nothing. It is relaxed
+          # only around the one invocation that is EXPECTED to fail.
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          cp -R core/skills/finops-usage-extractor "$probe/finops-usage-extractor"
+          target="$probe/finops-usage-extractor/scripts/report-usage.sh"
+
+          # The anchor must match exactly once. If the implementation moves, this
+          # exits non-zero and -e aborts the job — a probe that can no longer find
+          # what it breaks reports that, rather than quietly passing.
+          python3 - "$target" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
+          old = 'if type == "object" and has("tokens") then (.tokens | leaf_sum)'
+          new = 'if false then (.tokens | leaf_sum)'
+          if s.count(old) != 1:
+              sys.exit("probe anchor not found exactly once in report-usage.sh "
+                       "(count=%d) — the probe would silently stop testing anything" % s.count(old))
+          p.write_text(s.replace(old, new), encoding="utf-8")
+          PY
+
+          set +e
+          bash "$target" --self-test > "$probe/probe.out" 2>&1
+          probe_rc=$?
+          set -e
+
+          if [ "$probe_rc" -eq 0 ]; then
+            echo "::error::Precision probe FAILED — report-usage.sh --self-test returned 0 with the {turns, tokens} wrapper branch disabled. An all-zero by-skill slice does not fail the report; this gate is blind."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+
+          if ! grep -q 'FAIL: SM-3b SA-3' "$probe/probe.out"; then
+            echo "::error::Precision probe returned non-zero (exit $probe_rc) but NOT via the SM-3b SA-3 assertion — the self-test may be failing for an unrelated reason, which would mask a real silent-zero regression."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+
+          echo "Precision probe OK — the re-introduced wrapper mis-read correctly failed the SM-3b silent-zero assertion (exit $probe_rc)."
+
+      - name: Precision probe — the estimate self-test actually FAILS on mean-not-median
+        # Breaks honesty-contract rule 2 (MEDIAN, never the mean) in a THROWAWAY copy by
+        # aggregating the comparables with the arithmetic mean instead. Token spend is
+        # right-skewed, so one long work item drags a mean without widening its
+        # dispersion — the estimate silently inflates while every confidence signal still
+        # reads tight. SE-4 exists to catch exactly that, and this proves it can.
+        run: |
+          # -e is ON for every setup step: a failed mktemp / cp / injection must ABORT,
+          # never fall through to a probe that silently tests nothing. It is relaxed
+          # only around the one invocation that is EXPECTED to fail.
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          cp -R core/skills/finops-usage-extractor "$probe/finops-usage-extractor"
+          target="$probe/finops-usage-extractor/scripts/estimate-usage.sh"
+
+          # The anchor must match exactly once. If the implementation moves, this
+          # exits non-zero and -e aborts the job — a probe that can no longer find
+          # what it breaks reports that, rather than quietly passing.
+          python3 - "$target" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
+          old = '| ($values | median) as $med'
+          new = '| ($values | (add / length)) as $med'
+          if s.count(old) != 1:
+              sys.exit("probe anchor not found exactly once in estimate-usage.sh "
+                       "(count=%d) — the probe would silently stop testing anything" % s.count(old))
+          p.write_text(s.replace(old, new), encoding="utf-8")
+          PY
+
+          set +e
+          bash "$target" --self-test > "$probe/probe.out" 2>&1
+          probe_rc=$?
+          set -e
+
+          if [ "$probe_rc" -eq 0 ]; then
+            echo "::error::Precision probe FAILED — estimate-usage.sh --self-test returned 0 with the median replaced by the arithmetic mean. A mean-based aggregation does not fail the estimator; this gate is blind."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+
+          if ! grep -q 'FAIL: SE-4 MEDIAN' "$probe/probe.out"; then
+            echo "::error::Precision probe returned non-zero (exit $probe_rc) but NOT via the SE-4 median assertion — the self-test may be failing for an unrelated reason, which would mask a real mean-based aggregation regression."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+
+          echo "Precision probe OK — a mean-based aggregation correctly failed the SE-4 median assertion (exit $probe_rc)."
