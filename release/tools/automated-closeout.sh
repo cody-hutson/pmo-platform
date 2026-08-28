@@ -13139,6 +13139,127 @@ EOF
   STATE_OUTPUT_SET_ROWS=""
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # ── (CA) CLASS-LEVEL mode-branch conformance (#5268 AC3) ────────────────────
+  # AC3 asks for a detector for the CLASS. Every arm above it — F-9.5-N/S, group h,
+  # m11 — names ONE phase, so a 37th phase reintroducing the pattern passes all of
+  # them in silence. That is the failure this card exists to end: three instances of
+  # ONE defect were found one at a time, by three different stages, across three
+  # releases, precisely because no arm ever enumerated the population.
+  #
+  # WHAT THIS ARM ASSERTS, AND WHAT IT DELIBERATELY REFUSES TO GUESS.
+  # The full placement rule (see the MODE-BRANCH PLACEMENT header) orders the mode
+  # test against each guard by whether that guard's INPUT is mode-variant — and that
+  # ordering is NOT recoverable from the text. phase_append_release_index aborts
+  # ABOVE its mode test on a missing RELEASE_LOG row (a Stage-12 artifact: mode-
+  # INVARIANT, and conformant); pre-fix 15.55 aborted above its mode test on an
+  # INDEX/LOG parity gap (this script's OWN no-op: mode-VARIANT, and the defect).
+  # The two are textually identical. Four candidate orderings were measured against
+  # the shipped population before this arm was written and every one was falsified
+  # by conformant phases — "no abort above the short-circuit" false-fires on 9,
+  # "short-circuit is the first MODE reference" on 7, "no ledger read above the
+  # short-circuit" on 3, "a SKIP guard must sit above the short-circuit" on 9. A
+  # detector that guessed the ordering would be a false-alarm generator, which is
+  # strictly worse than one that does not try. So this arm asserts the two
+  # properties that ARE total over the population, and leaves the ordering half to
+  # the per-phase paired arms that can see the fixture.
+  #
+  #   CA-1  the population is BIJECTIVE with the guarded top-level dispatch. The
+  #         placement rule only bites because `phase_x || { generate_report; exit 3; }`
+  #         makes one non-zero phase fatal, so a phase defined but not dispatched
+  #         under that guard — or dispatched twice — voids the premise every other
+  #         arm in this file rests on.
+  #   CA-2  a phase that MUTATES must be mode-disposed. The exempt set is DERIVED
+  #         (bodies carrying no write signature), never enumerated, so a 37th
+  #         mutating phase with no mode branch fires here on the day it lands.
+  #
+  # `declare -f` emits the PARSED body with comments stripped, so a prose mention of
+  # MODE cannot satisfy CA-2 and a commented-out write cannot defeat it. Bodies are
+  # captured into variables and matched from HERE-STRINGS, never piped into a
+  # short-circuiting reader — see h8 for why that inversion turns a match into a
+  # reported failure under pipefail.
+  local _ca_pop _ca_n _ca_disp
+  _ca_pop="$(declare -F | /usr/bin/awk '{print $3}' | /usr/bin/grep '^phase_' | /usr/bin/sort || true)"
+  _ca_n="$(/usr/bin/printf '%s\n' "$_ca_pop" | /usr/bin/grep -c . || true)"
+  # ANTI-VACUITY on the enumeration itself: a broken extraction would satisfy every
+  # arm below by having nothing to check.
+  [[ "${_ca_n:-0}" -ge 30 ]] || { echo "FAIL: CA anti-vacuity — enumerated only ${_ca_n:-0} phase_* functions (floor 30); the class arm would be measuring almost nothing"; failures=$((failures+1)); }
+
+  # (CA-1) Definition set == guarded-dispatch set, as sorted multisets. A double
+  # dispatch changes the list length, so equality covers "exactly once" too.
+  # Both guarded exit classes count: the ledger phases dispatch `exit 3`, the two
+  # entry gates (preflight, detect_open_issues) dispatch `exit 2`. The premise the
+  # placement rule rests on is that the dispatch is GUARDED and fatal, not which
+  # code it exits with — so keying on `exit 3` alone would have reported two
+  # conformant phases as undispatched.
+  _ca_disp="$(/usr/bin/grep -oE '^phase_[A-Za-z0-9_]+ \|\| \{ generate_report; exit [0-9]+; \}' "${BASH_SOURCE[0]}" | /usr/bin/awk '{print $1}' | /usr/bin/sort || true)"
+  [[ -n "$_ca_disp" ]] || { echo "FAIL: CA-1 anti-vacuity — the dispatch extraction returned nothing, so the bijection below would compare two empty sets"; failures=$((failures+1)); }
+  if [[ "$_ca_pop" != "$_ca_disp" ]]; then
+    echo "FAIL: CA-1 — the phase_* population is not bijective with the guarded top-level dispatch. Defined-not-dispatched or dispatched-twice breaks the fail-fast premise the placement rule depends on."; failures=$((failures+1))
+    /usr/bin/diff <(/usr/bin/printf '%s\n' "$_ca_pop") <(/usr/bin/printf '%s\n' "$_ca_disp") >&2 || true
+  fi
+
+  # (CA-2) The classifier. Emits `name<TAB>mutates<TAB>mode-disposed` per phase.
+  _ca_classify() {
+    local _p _body _mut _mod
+    while IFS= read -r _p; do
+      [[ -n "$_p" ]] || continue
+      _body="$(declare -f "$_p" 2>/dev/null || true)"
+      [[ -n "$_body" ]] || continue
+      _mut=0; _mod=0
+      # Write verbs are matched as WHOLE WORDS. An unanchored alternation reads
+      # `--json mergeCommit` as the verb `merge` and classifies the read-only
+      # phase_read_state as a mutator — measured, not hypothesised.
+      if /usr/bin/grep -qE '>>[[:space:]]*"?\$|>[[:space:]]*"\$|/bin/mv |/bin/cp |/usr/bin/sed -i|/usr/bin/tee|\$GIT[^;]*[[:space:]](checkout|commit|add|push|tag|branch|switch)[[:space:]]|\$GH[^;]*[[:space:]](create|edit|close|delete|merge|comment)[[:space:]]|-X[[:space:]]+(POST|PATCH|PUT|DELETE)|_write_|write_file' <<<"$_body"; then _mut=1; fi
+      if /usr/bin/grep -qE '\$\{?MODE\b' <<<"$_body"; then _mod=1; fi
+      /usr/bin/printf '%s\t%s\t%s\n' "$_p" "$_mut" "$_mod"
+    done <<<"$1"
+  }
+  _ca_violators() { _ca_classify "$1" | /usr/bin/awk -F'\t' '$2==1 && $3==0 {print $1}' || true; }
+
+  local _ca_tab _ca_mut _ca_ro _ca_bad
+  _ca_tab="$(_ca_classify "$_ca_pop" || true)"
+  _ca_mut="$(/usr/bin/printf '%s\n' "$_ca_tab" | /usr/bin/awk -F'\t' '$2==1' | /usr/bin/grep -c . || true)"
+  _ca_ro="$(/usr/bin/printf '%s\n' "$_ca_tab" | /usr/bin/awk -F'\t' '$2==0' | /usr/bin/grep -c . || true)"
+  # ANTI-VACUITY, both directions: a write signature matching NOTHING makes CA-2
+  # vacuous, and one matching EVERYTHING collapses the derived exemption and would
+  # fail the genuinely read-only phases. The detector must discriminate.
+  [[ "${_ca_mut:-0}" -ge 15 ]] || { echo "FAIL: CA-2 anti-vacuity — the write signature matched only ${_ca_mut:-0} phases (floor 15); it is not detecting mutation"; failures=$((failures+1)); }
+  [[ "${_ca_ro:-0}" -ge 4 ]] || { echo "FAIL: CA-2 anti-vacuity — the write signature matched all but ${_ca_ro:-0} phases (floor 4), so the derived read-only exemption has collapsed and the arm is drifting toward a presence check"; failures=$((failures+1)); }
+
+  _ca_bad="$(_ca_violators "$_ca_pop" || true)"
+  if [[ -n "$_ca_bad" ]]; then
+    echo "FAIL: CA-2 — phase(s) that mutate but carry NO mode disposition: $(/usr/bin/printf '%s' "$_ca_bad" | /usr/bin/tr '\n' ' ')"; failures=$((failures+1))
+  fi
+
+  # (CA-2m) MUTATION PROOF. A synthetic 37th phase that writes and has no mode
+  # branch — the exact shape a future contributor would add — must be REPORTED,
+  # and its removal must return the arm to silence. Without both halves a green
+  # CA-2 is indistinguishable from a CA-2 that can never fire.
+  eval 'phase_ca_synthetic_violator() { local _f="$1"; /usr/bin/printf "x" >> "$_f"; return 0; }'
+  local _ca_pop_m _ca_bad_m
+  _ca_pop_m="$(declare -F | /usr/bin/awk '{print $3}' | /usr/bin/grep '^phase_' | /usr/bin/sort || true)"
+  _ca_bad_m="$(_ca_violators "$_ca_pop_m" || true)"
+  /usr/bin/grep -qx 'phase_ca_synthetic_violator' <<<"$_ca_bad_m" || { echo "FAIL: CA-2m SENSITIVITY — a synthetic mutating phase with no mode disposition was NOT reported; the class detector cannot fire and every green run above it is uninformative"; failures=$((failures+1)); }
+  unset -f phase_ca_synthetic_violator
+  _ca_pop_m="$(declare -F | /usr/bin/awk '{print $3}' | /usr/bin/grep '^phase_' | /usr/bin/sort || true)"
+  _ca_bad_m="$(_ca_violators "$_ca_pop_m" || true)"
+  if /usr/bin/grep -qx 'phase_ca_synthetic_violator' <<<"$_ca_bad_m"; then
+    echo "FAIL: CA-2m — the synthetic violator is still reported after removal; the detector is latching rather than measuring the live population"; failures=$((failures+1))
+  fi
+
+  # (CA-2c) SPECIFICITY CONTROL — must NOT fire. A synthetic read-only phase with
+  # no mode branch is CONFORMANT (the four shipped read-only phases are exactly this
+  # shape). An arm that flagged it would be asserting "every phase needs a mode
+  # branch", which is a presence check and false of the shipped population.
+  eval 'phase_ca_synthetic_readonly() { local _f="$1"; /usr/bin/grep -q x "$_f" || return 0; }'
+  _ca_pop_m="$(declare -F | /usr/bin/awk '{print $3}' | /usr/bin/grep '^phase_' | /usr/bin/sort || true)"
+  _ca_bad_m="$(_ca_violators "$_ca_pop_m" || true)"
+  if /usr/bin/grep -qx 'phase_ca_synthetic_readonly' <<<"$_ca_bad_m"; then
+    echo "FAIL: CA-2c SPECIFICITY — a read-only phase with no mode branch was flagged; the derived exemption has collapsed into a presence check"; failures=$((failures+1))
+  fi
+  unset -f phase_ca_synthetic_readonly
+  unset -f _ca_classify _ca_violators 2>/dev/null || true
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failures)" >&2
     exit 1
@@ -13166,6 +13287,7 @@ EOF
   echo "  release-anchor hygiene validated (AC4/AC5 — recorded divergences exempt / a NEW divergence reported in BOTH directions / EQUAL-COUNT-UNEQUAL-SET fixture still reported (the count-parity false negative) / non-noreply tagger flagged, noreply tagger not, recorded exemption suppressed, lightweight tag excluded by objecttype / guard is comm-based by construction)" >&2
   echo "  phase_append_changelog dry-run REACHABILITY validated (#5268, arms F-9.5-N/S — the mode branch now sits ABOVE the projector capture and BELOW the four mode-invariant guards, in 15.5's shape: N-dry reaches the limb and records literally DRY-RUN with a note absent by construction and writes nothing / N-apply anti-vacuity, the IDENTICAL fixture still aborts at --apply with its message verbatim, so the dry arm cannot be satisfied by gutting the capture / S-dry pins both detail constraints, no embedded '|' and no literal would-FAIL token, each with its own firing control / S-apply proves the prediction TRUE by actually prepending the predicted section, so 'would prepend' is not a false forecast)" >&2
   echo "  phase_assert_anchor_hygiene LEDGER-ROW-PARITY mode-scoped (#5268, group h — the second class member: 15.55 had NO mode branch, so fixing 9.5 alone only MOVED the halt here, one phase-group short of Phase 16. Per-limb V4 downgrade, not a whole-phase relocation: h1 the bounded state predicts and RECORDS the prediction with honest counts / h2 anti-vacuity, same fixture at --apply still FAILs verbatim / h3 a two-row gap still FAILs / h4 a one-row gap that is NOT this version's row still FAILs, the arm a bare gap==1 test cannot pass / h5 INDEX-ahead still FAILs / h6 the predicate driven directly, one positive against one negative per conjunct / h7 a co-tenanted TAGGER-IDENTITY violation still FAILs at --dry-run while the parity gap stays predicted, so the scoping bounds itself to its own trigger / h8 structural: the whole-phase DRY-RUN relocation is refused by construction)" >&2
+  echo "  CLASS-level mode-branch conformance validated (#5268 AC3, group CA — the arm every other mode-branch arm in this file is missing: they each name ONE phase, so a 37th phase reintroducing the pattern passes all of them silently, which is exactly how three instances of one defect were found one at a time across three releases. The population is ENUMERATED from declare -F, never listed: CA-1 the phase_* set is bijective with the guarded top-level dispatch, both exit classes, with an anti-vacuity floor on each side / CA-2 a phase that MUTATES must be mode-disposed, with the exempt set DERIVED from write-signature absence rather than named, and two-sided anti-vacuity so the signature can neither match nothing nor match everything / CA-2m the mutation proof: a synthetic mutating phase with no mode branch IS reported, and its removal returns the arm to silence, so a green CA-2 is distinguishable from one that can never fire / CA-2c the specificity control: a synthetic READ-ONLY phase with no mode branch is NOT flagged, which is what keeps the derived exemption from collapsing into the presence check the placement header warns passes on the defective code. Bound stated honestly in the block comment: the ORDERING half of the placement rule is not decidable from text — four candidate orderings were measured against the shipped population and each was falsified by conformant phases — so it stays with the per-phase paired arms)" >&2
   echo "  LEDGER-ROW-PARITY fail-open closed (#3113 F-QA-3 — present-but-empty INDEX vs 3-row LOG now FAILs naming both counts / equal populated ledgers still PASS / both-empty 0==0 correctly clean / missing INDEX still FAILs / grep_count single-integer contract on empty-file, missing-file, match and empty-stdin shapes / reintroduction blocked structurally, needle proven against a known-bad control)" >&2
   echo "  phase_sync_primary_checkout validated (AC7 — behind-primary-on-main fast-forwards and HEAD verifiably MOVES to origin/main / non-main primary SKIPPED and NOT moved / absent primary clean no-op (CI hermeticity) / dry-run no-write / source carries no reset-stash-checkout-push-force-cd)" >&2
   echo "  scaffold-residue detector + pre-authored-note tolerance validated (AC1/AC2 — T1 round-trip: the REAL scaffold trips the REAL token set (anti-drift) / T2 authored note clean / T4 this-version CHANGELOG+DIGEST residue FAILs naming surface:line / T3 audit-baseline control: another version's residue does NOT block / T6 mode-awareness: --dry-run over ABSENT entries returns 0 and marks literally DRY-RUN, never a vacuous PASS / T7 anti-vacuity: the SAME absent-entry fixture under --apply still returns non-zero, FAILs, and preserves the dropped-write message verbatim / AC2 tolerance: this-version untracked note passes, other-version + modified-tracked + unrelated-untracked all still block)" >&2
