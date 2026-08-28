@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-142 — Self-test reachability at a destructive-scope boundary is restored by resolving the root, not by exempting the fixture
-status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure, from a green close-out, or from a review comment.
+status: Accepted — ratified by the operator at the v4.39 release close gate (2026-08-28). The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure, from a green close-out, or from a review comment.
 date: 2026-08-24
 release: selftests-actually-test
 deciders: "Workspace owner, at the D8 scope-lock gate. Option set generated and narrowed by the Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment) against the ADR authoring guide's when-to-write rubric; implemented at Stage 6 Engineering of the same release."
@@ -22,7 +22,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the release close gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified. A green close-out does not imply the flip landed.
+**Accepted** — ratified by the operator at the v4.39 release close gate on 2026-08-28. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified. A green close-out does not imply the flip landed.
 
 **Numbering.** `142` is the next-free number derived across **both** record directories (`core/ADRs/` and `release/ADRs/`) via the `release/tools/renumber-adr.py --next-free` oracle, run at Stage 6 authoring time. Stage 5 deliberately declined to pin a number at design time: a number reserved at design and merged later is a reservation hazard against a sibling's unmerged claim, and a numbering gap blocks the repo while a duplicate is tooled. The design's own provisional guess would have collided with an already-committed `ADR-141` in the sibling directory — which is the concrete reason the oracle, not inspection, is the authority.
 
