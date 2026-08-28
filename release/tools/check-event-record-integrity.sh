@@ -13,6 +13,7 @@
 #   ./check-event-record-integrity.sh [--surface=log|ledger|both] [--since ISO]
 #                                     [--format=table|json]
 #   ./check-event-record-integrity.sh --self-test
+#   ./check-event-record-integrity.sh --assert-bound
 #
 # Flags:
 #   --surface=log|ledger|both : which population to sweep (default: both)
@@ -23,6 +24,14 @@
 #   --format=table|json       : report shape (default: table)
 #   --self-test               : run every check against committed fixtures, both
 #                               arms, and exit 0 when all arms hold
+#   --assert-bound            : exit 1 while `integrity_cutover:` is still the
+#                               reserved sentinel `(unset)`, 0 once an instant is
+#                               bound. This is the ONLY mode that treats (unset)
+#                               as a failure; every other mode honours the § 4.1
+#                               value contract, where (unset) grades nothing at
+#                               exit 0. Stage 12 runs it after binding the merge
+#                               instant, so a SKIPPED binding fails loudly rather
+#                               than leaving this validator green forever.
 #   --version                 : print the tool version
 #   --help                    : print usage
 #
@@ -101,7 +110,7 @@ die() { echo "ERROR: $*" >&2; exit "${2:-2}"; }
 usage() {
   # RANGE IS LOAD-BEARING: it must span the whole Usage + Flags block above. A
   # stale range prints the wrong help SILENTLY.
-  /usr/bin/sed -n '12,27p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '12,36p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -454,6 +463,7 @@ SURFACE="both"
 SINCE=""
 FORMAT="table"
 SELF_TEST=false
+ASSERT_BOUND=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -463,6 +473,7 @@ while [[ $# -gt 0 ]]; do
     --format=*) FORMAT="${1#*=}"; shift ;;
     --format) FORMAT="$2"; shift 2 ;;
     --self-test) SELF_TEST=true; shift ;;
+    --assert-bound) ASSERT_BOUND=true; shift ;;
     --version) echo "check-event-record-integrity.sh $TOOL_VERSION"; exit 0 ;;
     --help|-h) usage ;;
     *) die "Unknown flag: $1" 2 ;;
@@ -595,6 +606,24 @@ if [[ "$SELF_TEST" == "true" ]]; then
   ARMS=$((ARMS + 1))
   validate_cutover "2026-08-24T00:00:00Z" || { echo "ERROR: self-test arm FAILED: a well-formed instant must be accepted" >&2; FAILED=$((FAILED + 1)); }
 
+  # --assert-bound, BOTH arms. Without the negative arm this mode could exit 0
+  # unconditionally and nothing would notice — which is the exact shape of the
+  # defect it exists to detect, so asserting only the positive direction would be
+  # self-defeating. The mode dispatches below this block, so it is exercised as a
+  # SUBPROCESS of this same file rather than re-implemented. `--since` overrides
+  # the parsed cutover (its documented probing use), so neither arm edits the
+  # schema, and both exit before any surface is opened — the live log is untouched.
+  ARMS=$((ARMS + 1))
+  if bash "${BASH_SOURCE[0]}" --assert-bound --since "(unset)" >/dev/null 2>&1; then
+    echo "ERROR: self-test arm FAILED: --assert-bound must exit non-zero while the cutover is (unset)" >&2
+    FAILED=$((FAILED + 1))
+  fi
+  ARMS=$((ARMS + 1))
+  if ! bash "${BASH_SOURCE[0]}" --assert-bound --since "2026-01-01T00:00:00Z" >/dev/null 2>&1; then
+    echo "ERROR: self-test arm FAILED: --assert-bound must exit 0 once an instant is bound" >&2
+    FAILED=$((FAILED + 1))
+  fi
+
   echo "self-test: $((ARMS - FAILED))/$ARMS assertion(s) passed"
   if [[ "$FAILED" -ne 0 ]]; then
     echo "ERROR: self-test: $FAILED arm(s) FAILED" >&2
@@ -606,6 +635,7 @@ if [[ "$SELF_TEST" == "true" ]]; then
   echo "  C3 asserted in BOTH directions on separate fixtures — a net count sees neither"
   echo "  C4 asserted on state agreement, not presence: the divergent pair joins 1:1 and still fails"
   echo "  cutover contract live: pre-cutover findings are LEGACY at exit 0; (unset) grades nothing"
+  echo "  --assert-bound asserted BOTH ways: non-zero while (unset), zero once an instant is bound"
   echo "  unreadable surface exits 2 — never reported as clean"
   exit 0
 fi
@@ -613,6 +643,31 @@ fi
 # ─── Population sweep ────────────────────────────────────────────────────────
 CUTOVER="${SINCE:-$(parse_cutover)}"
 validate_cutover "$CUTOVER"
+
+# ─── --assert-bound ──────────────────────────────────────────────────────────
+#
+# THE BINDING IS THE THING THAT CAN BE SKIPPED, so it is the thing that gets a
+# check. § 4.1 defers the instant to Stage 12 on a correct argument — the boundary
+# is the merge instant, which does not exist while the change is being built — but
+# a deferral with no executor is just a sentence. While the key reads `(unset)`
+# every finding is LEGACY, the tool exits 0, and the § 7 Close-time "a post-cutover
+# violation BLOCKS close" clause cannot fire: there are no post-cutover rows by
+# construction. That reads exactly like a healthy validator from outside, which is
+# the failure family this whole release exists to close.
+#
+# This mode is the inverse assertion, and it is deliberately the ONLY place where
+# `(unset)` is a non-zero: the value contract in § 4.1 stays intact for every other
+# invocation. Stage 12 binds the instant and then runs this; if the binding is
+# skipped the step fails loudly instead of leaving a green-forever check behind.
+if [[ "$ASSERT_BOUND" == "true" ]]; then
+  if [[ "$CUTOVER" == "(unset)" ]]; then
+    echo "integrity_cutover is UNBOUND ((unset)) — this validator grades nothing and exits 0 on every input." >&2
+    echo "Bind the merge instant in ${SCHEMA_FILE#"$REPO_ROOT"/} § 4.1 (\`integrity_cutover: YYYY-MM-DDTHH:MM:SSZ\`), then re-run." >&2
+    exit 1
+  fi
+  echo "integrity_cutover BOUND at ${CUTOVER} — rows at or after it are graded; a violation fails this tool."
+  exit 0
+fi
 
 if [[ "$SURFACE" != "ledger" && ! -r "$LOG_FILE" ]]; then
   die "event log unreadable at the resolved instance path (surface=$SURFACE)" 2
