@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.39 | selftests-actually-test | 2026-08-27 | — | #6119 | [notes/v4.39_RELEASE_NOTES.md](notes/v4.39_RELEASE_NOTES.md) |
 | v4.38 | operator-instance-home-and-install-scaffold | 2026-08-23 | — | #5908 | [notes/v4.38_RELEASE_NOTES.md](notes/v4.38_RELEASE_NOTES.md) |
 | v4.37 | migration-protocol-and-skill-integration | 2026-08-23 | — | #5889 | [notes/v4.37_RELEASE_NOTES.md](notes/v4.37_RELEASE_NOTES.md) |
 | v4.36 | docs-match-shipped-state | 2026-08-23 | — | #5891 | [notes/v4.36_RELEASE_NOTES.md](notes/v4.36_RELEASE_NOTES.md) |

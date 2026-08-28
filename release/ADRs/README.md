@@ -65,7 +65,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-133](ADR-133-the-material-edit-test-names-an-effect-not-a-field.md) | The material-edit test names an effect, not a field | Proposed | 2026-08-15 | skill-suite-conformance |
 | [ADR-135](ADR-135-a-gate-ships-armed-by-a-committed-default.md) | A gate ships armed by a committed default; arming is never deferred to a later step that can be forgotten | Proposed | 2026-08-14 | stage9-gate-integrity |
 | [ADR-137](ADR-137-close-out-measurements-reconstruct-what-the-close-removes.md) | A chore-PR-borne close-out measurement reconstructs what the close removes; it does not assume its evidence is invariant | Proposed | 2026-08-21 | closeout-reports-what-shipped |
-| [ADR-142](ADR-142-resolve-the-root-do-not-exempt-the-fixture.md) | Self-test reachability at a destructive-scope boundary is restored by resolving the root, not by exempting the fixture | Proposed | 2026-08-24 | selftests-actually-test |
+| [ADR-142](ADR-142-resolve-the-root-do-not-exempt-the-fixture.md) | Self-test reachability at a destructive-scope boundary is restored by resolving the root, not by exempting the fixture | Accepted | 2026-08-24 | selftests-actually-test |
 | [ADR-144](ADR-144-checkpoint-b-second-axis-is-measured-not-declared.md) | Checkpoint B's second axis is measured, not declared: scoping refuse-to-synthesize to the usage-window axis | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
 | [ADR-145](ADR-145-wave-width-is-a-second-checkpoint-b-output-not-a-verdict.md) | Wave width is a second Checkpoint B output, not a verdict | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
 <!-- ADR-INDEX:END -->
