@@ -85,7 +85,7 @@ The safeguard is in the difference between the two moves. Re-scoping is visible,
 
 **A1 — Allow the low-risk direction outright, with an audit row.** Removes the same friction. Rejected: it discards the layer-discipline signal permanently and offers no path back to enforcement. Mode-gating keeps the signal and keeps the operator's ability to tighten it by editing one file.
 
-**A2 — A `#3728`-style scoped operator sentinel.** Per-release sentinel scoping is warranted where the blast radius is the corpus itself. Rejected here: the target is an untracked sibling tree, so a sentinel is ceremony without a corresponding risk. (`#3728` itself closed `NOT_PLANNED`, and neither hook copy carries its token — verified, so no collision.)
+**A2 — A scoped operator sentinel, of the kind a prior proposal weighed.** Per-release sentinel scoping is warranted where the blast radius is the corpus itself. Rejected here: the target is an untracked sibling tree, so a sentinel is ceremony without a corresponding risk. (That proposal itself closed `NOT_PLANNED`, and neither hook copy carries its token — verified, so no collision.)
 
 **A3 — Place `-004` in STEP 1, above the master gate, via `apply_block`.** This is the option that would have made the audit-trail claim true as originally written, and it was rejected on that merit rather than ignored. It would create the hook's only mode-gated rule above the master-activation gate — a fourth posture with no precedent in this hook or its siblings — and every existing placement comment in the file exists to protect the invariant that everything below the gate is master-gated. Paying a novel posture in a security hook to rescue a sentence was the wrong trade; the sentence was corrected instead.
 
@@ -104,3 +104,7 @@ The matrix asserts, in both directions and under every mode:
 - Bash and mcp payloads with an in-workspace cwd exit 0, paired with a same-cwd Write that must fire `-004` — the control proving those allow-arms reach the evaluation point rather than being answered by a gate above it.
 
 The suite's own harness was repaired in the same change, for a reason worth recording: its verdict depended on how it was invoked. Standalone it read 41 PASS / 5 FAIL; under `test-runner.sh` the identical suite read 46 PASS / 0 FAIL, because the runner exports a master-ON config root and pins the scope root to `/`. Two independent defects — a `HOME` pin redirecting the master-activation read to a nonexistent file, and payload builders hard-coding an out-of-tree `cwd` — were each masked by the runner. Both made a gate *above* the ceiling answer a question *about* the ceiling. A suite that passes under one invocation and fails under another is not a gate, and the fix makes the two agree.
+
+## References
+
+- Prior scoped-operator-sentinel proposal weighed and rejected in A2 (closed `NOT_PLANNED`; neither hook copy carries its token): `#3728`.

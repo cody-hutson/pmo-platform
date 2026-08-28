@@ -884,7 +884,7 @@ b022_drain_rows() {
 # here. Restating it would let the constant and the expectation drift in
 # opposite directions and still go green -- the test would then be asserting its
 # own copy of the posture instead of the hook's.
-B022_EXEC_PHASE="$(/usr/bin/sed -n 's/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p' "$HOOK" | /usr/bin/head -1)"
+B022_EXEC_PHASE="$(/usr/bin/sed -n '/^readonly DESTRUCTIVE_022_EXEC_PHASE=/{s/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p;q;}' "$HOOK")"
 if [ -z "$B022_EXEC_PHASE" ]; then
   /usr/bin/printf 'FAIL: BLOCK-022 exec phase constant not readable from %s (the suite cannot state an expectation it cannot resolve)\n' "$HOOK"
   FAIL=$((FAIL + 1))

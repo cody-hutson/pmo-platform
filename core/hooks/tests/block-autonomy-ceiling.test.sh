@@ -429,7 +429,7 @@ xdm2_err="$(/usr/bin/mktemp)"; xdm2_exit=0
 /usr/bin/printf '%s' "$XD_HIGH_RISK" \
   | HOME="$TEST_HOME" PMO_PLATFORM_CONFIG_ROOT="$XD_MASTER_OFF" /bin/bash "$HOOK" 2>"$xdm2_err" >/dev/null || xdm2_exit="$?"
 xdm2_stderr="$(/bin/cat "$xdm2_err")"; /bin/rm -f "$xdm2_err"; /bin/rm -rf "$XD_MASTER_OFF"
-if [ "$xdm2_exit" = 2 ] && /usr/bin/printf '%s' "$xdm2_stderr" | /usr/bin/grep -qE "BLOCK-AUTONOMY-002"; then
+if [ "$xdm2_exit" = 2 ] && [ -n "$xdm2_stderr" ] && /usr/bin/grep -qE "BLOCK-AUTONOMY-002" <<<"$xdm2_stderr"; then
   echo "PASS: -002 under master-OFF → STILL BLOCKS (the floor is above the master gate)"; PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: -002 under master-OFF (exit=%s expected=2, want BLOCK-AUTONOMY-002)\n  stderr: %s\n' \
@@ -897,7 +897,7 @@ assert_hook() {
   local name="$1"; local want_exit="$2"; local want_pat="${3:-}"
   local ok=1
   [ "$RHE_EXIT" != "$want_exit" ] && ok=0
-  if [ -n "$want_pat" ] && ! /usr/bin/printf '%s' "$RHE_STDERR" | /usr/bin/grep -qE "$want_pat"; then ok=0; fi
+  if [ -n "$want_pat" ] && ! { [ -n "$RHE_STDERR" ] && /usr/bin/grep -qE "$want_pat" <<<"$RHE_STDERR"; }; then ok=0; fi
   if [ "$ok" = 1 ]; then
     /usr/bin/printf 'PASS: %s\n' "$name"; PASS=$((PASS + 1))
   else
@@ -1111,7 +1111,7 @@ n4_err="$(/usr/bin/mktemp)"; n4_exit=0
 ( cd "$N_PARENT" && /usr/bin/printf '%s' "$N_PAYLOAD" \
     | HOME="$TEST_HOME" CLAUDE_WORKSPACE_ROOT="$N_BASE" /bin/bash "$HOOK" 2>"$n4_err" >/dev/null ) || n4_exit="$?"
 n4_stderr="$(/bin/cat "$n4_err")"; /bin/rm -f "$n4_err"
-if [ "$n4_exit" = 2 ] && /usr/bin/printf '%s' "$n4_stderr" | /usr/bin/grep -qE "BLOCK-AUTONOMY-001"; then
+if [ "$n4_exit" = 2 ] && [ -n "$n4_stderr" ] && /usr/bin/grep -qE "BLOCK-AUTONOMY-001" <<<"$n4_stderr"; then
   echo "PASS: N-4 relative anchor → STILL BLOCK (-001)"; PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: N-4 relative anchor (exit=%s expected=2, want BLOCK-AUTONOMY-001)\n  stderr: %s\n' \
@@ -1198,7 +1198,7 @@ a6_err="$(/usr/bin/mktemp)"; a6_exit=0
 /usr/bin/printf '%s' "$(write_payload "${TEST_WS}/projects/../pmo-platform/core/foo.md" "${TEST_WS}/projects/Default")" \
   | HOME="$TEST_HOME" /bin/bash "${A_SANDBOX}/block-autonomy-ceiling.sh" 2>"$a6_err" >/dev/null || a6_exit="$?"
 a6_stderr="$(/bin/cat "$a6_err")"; /bin/rm -f "$a6_err"
-if [ "$a_edited" = 1 ] && [ "$a6_exit" = 2 ] && /usr/bin/printf '%s' "$a6_stderr" | /usr/bin/grep -qE "BLOCK-AUTONOMY-002"; then
+if [ "$a_edited" = 1 ] && [ "$a6_exit" = 2 ] && [ -n "$a6_stderr" ] && /usr/bin/grep -qE "BLOCK-AUTONOMY-002" <<<"$a6_stderr"; then
   echo "PASS: A-6 python3 unusable → traversal STILL classified where it lands (-002)"; PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: A-6 python3-degraded traversal (sandbox edited=%s, exit=%s expected=2, want BLOCK-AUTONOMY-002)\n  stderr: %s\n' \
@@ -1213,7 +1213,7 @@ a7_err="$(/usr/bin/mktemp)"; a7_exit=0
 /usr/bin/printf '%s' "$(edit_payload "${TEST_WS}/projects/gov.md" "${TEST_WS}/projects/Default")" \
   | HOME="$TEST_HOME" /bin/bash "${A_SANDBOX}/block-autonomy-ceiling.sh" 2>"$a7_err" >/dev/null || a7_exit="$?"
 a7_stderr="$(/bin/cat "$a7_err")"; /bin/rm -f "$a7_err"
-if [ "$a_edited" = 1 ] && [ "$a7_exit" = 2 ] && /usr/bin/printf '%s' "$a7_stderr" | /usr/bin/grep -qE "BLOCK-AUTONOMY-001"; then
+if [ "$a_edited" = 1 ] && [ "$a7_exit" = 2 ] && [ -n "$a7_stderr" ] && /usr/bin/grep -qE "BLOCK-AUTONOMY-001" <<<"$a7_stderr"; then
   echo "PASS: A-7 python3 unusable → symlinked LEAF still resolves (-001)"; PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: A-7 python3-degraded symlinked leaf (sandbox edited=%s, exit=%s expected=2, want BLOCK-AUTONOMY-001)\n  stderr: %s\n' \

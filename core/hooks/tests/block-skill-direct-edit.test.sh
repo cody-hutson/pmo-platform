@@ -310,7 +310,7 @@ test_case_absent() {
   local actual_stderr; actual_stderr="$(/bin/cat "$tmp_stderr")"; /bin/rm -f "$tmp_stderr"
   local ok=1
   [ "$actual_exit" != "$expected_exit" ] && ok=0
-  if /usr/bin/printf '%s' "$actual_stderr" | /usr/bin/grep -qE "$forbidden_pattern"; then ok=0; fi
+  if [ -n "$actual_stderr" ] && /usr/bin/grep -qE "$forbidden_pattern" <<<"$actual_stderr"; then ok=0; fi
   if [ "$ok" = 1 ]; then
     /usr/bin/printf 'PASS: %s\n' "$name"; PASS=$((PASS + 1))
   else
@@ -398,7 +398,7 @@ mutant_stderr() {
 # Test 24 control for Test 20: drop the reference[s]/ requirement → sibling subtree fires.
 MUT_NO_REFDIR='(^|/)(operations|release|core|pmo-platform)/skills/[^/]+/(SKILL\.md|.+\.md)$'
 mut_out="$(mutant_stderr "$MUT_NO_REFDIR" "${MIGRATED_SKILL_DIR}/templates/nested/tmpl.md")"
-if /usr/bin/printf '%s' "$mut_out" | /usr/bin/grep -qE 'BLOCK-SKILL-EDIT-002'; then
+if [ -n "$mut_out" ] && /usr/bin/grep -qE 'BLOCK-SKILL-EDIT-002' <<<"$mut_out"; then
   echo "PASS: Test 24 (control): reference-dir-blind matcher DOES block templates/ — Test 20 is informative"
   PASS=$((PASS + 1))
 else
@@ -409,7 +409,7 @@ fi
 # Test 25 control for Test 19: drop the \.md$ anchor → the JSON asset fires.
 MUT_NO_MD='(^|/)(operations|release|core|pmo-platform)/skills/[^/]+/(SKILL\.md|references?/.+)$'
 mut_out="$(mutant_stderr "$MUT_NO_MD" "${MIGRATED_SKILL_DIR}/references/dimension-packs/pack-config.json")"
-if /usr/bin/printf '%s' "$mut_out" | /usr/bin/grep -qE 'BLOCK-SKILL-EDIT-002'; then
+if [ -n "$mut_out" ] && /usr/bin/grep -qE 'BLOCK-SKILL-EDIT-002' <<<"$mut_out"; then
   echo "PASS: Test 25 (control): extension-blind matcher DOES block pack-config.json — Test 19 is informative"
   PASS=$((PASS + 1))
 else
@@ -451,8 +451,8 @@ test_case_extraction() {
   local actual_stderr; actual_stderr="$(/bin/cat "$tmp_stderr")"; /bin/rm -f "$tmp_stderr"
   local ok=1
   [ "$actual_exit" != "$expected_exit" ] && ok=0
-  if ! /usr/bin/printf '%s' "$actual_stderr" | /usr/bin/grep -qF "$required"; then ok=0; fi
-  if [ -n "$forbidden" ] && /usr/bin/printf '%s' "$actual_stderr" | /usr/bin/grep -qF "$forbidden"; then ok=0; fi
+  if ! { [ -n "$actual_stderr" ] && /usr/bin/grep -qF "$required" <<<"$actual_stderr"; }; then ok=0; fi
+  if [ -n "$forbidden" ] && [ -n "$actual_stderr" ] && /usr/bin/grep -qF "$forbidden" <<<"$actual_stderr"; then ok=0; fi
   if [ "$ok" = 1 ]; then
     /usr/bin/printf 'PASS: %s\n' "$name"; PASS=$((PASS + 1))
   else

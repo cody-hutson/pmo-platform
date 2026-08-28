@@ -814,8 +814,8 @@ fi
 # requiring some deny to happen.
 e007_m_run block-egress-mut.sh "$E007_M_ALLOWED"
 if [ "$E007_M_EXIT" = 2 ] \
-  && /usr/bin/printf '%s' "$E007_M_ERR" | /usr/bin/grep -q 'BLOCK-EGRESS-007' \
-  && /usr/bin/printf '%s' "$E007_M_ERR" | /usr/bin/grep -q 'Accept'; then
+  && [ -n "$E007_M_ERR" ] && /usr/bin/grep -q 'BLOCK-EGRESS-007' <<<"$E007_M_ERR" \
+  && [ -n "$E007_M_ERR" ] && /usr/bin/grep -q 'Accept' <<<"$E007_M_ERR"; then
   /usr/bin/printf 'PASS: AC-E007-M4: differential — with the extraction step removed the SAME allowlisted call is DENIED on the header value\n'; PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: AC-E007-M4: differential inconclusive (exit=%s, expected 2 naming BLOCK-EGRESS-007 and the mis-extracted token)\n  stderr: %s\n' \
@@ -827,7 +827,7 @@ fi
 # still enforce a rule the sed did not touch, so M4's deny is attributable to the
 # removed step and not to a dead sandbox.
 e007_m_run block-egress-mut.sh 'cat ~/.ssh/id_rsa'
-if [ "$E007_M_EXIT" = 2 ] && /usr/bin/printf '%s' "$E007_M_ERR" | /usr/bin/grep -q 'BLOCK-EGRESS-001'; then
+if [ "$E007_M_EXIT" = 2 ] && [ -n "$E007_M_ERR" ] && /usr/bin/grep -q 'BLOCK-EGRESS-001' <<<"$E007_M_ERR"; then
   /usr/bin/printf 'PASS: AC-E007-M5: mutated copy still enforces an untouched rule (-001), so M4 is a live verdict\n'; PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: AC-E007-M5: mutated copy did not enforce -001 (exit=%s) — M4 may be an artefact of a broken sandbox\n  stderr: %s\n' \
@@ -839,7 +839,7 @@ fi
 # would produce M3's exit 0 for entirely the wrong reason. Same hook, same sandbox,
 # non-allowlisted path — this MUST block.
 e007_m_run block-egress.sh "$E007_M_DENIED"
-if [ "$E007_M_EXIT" = 2 ] && /usr/bin/printf '%s' "$E007_M_ERR" | /usr/bin/grep -q 'BLOCK-EGRESS-007'; then
+if [ "$E007_M_EXIT" = 2 ] && [ -n "$E007_M_ERR" ] && /usr/bin/grep -q 'BLOCK-EGRESS-007' <<<"$E007_M_ERR"; then
   /usr/bin/printf 'PASS: AC-E007-M6: same sandbox denies a NON-allowlisted path, so M3 is an allowlist decision and not an inert hook\n'; PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: AC-E007-M6: sandbox did not deny a non-allowlisted path (exit=%s) — the hook is inert here and M3 proves nothing\n  stderr: %s\n' \

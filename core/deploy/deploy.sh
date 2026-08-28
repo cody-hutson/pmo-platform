@@ -12086,11 +12086,11 @@ sys.stdout.write("".join(out) + "|")
       ISSUES=$((ISSUES + 1))
     else
       local c71_phase c71_armed c71_days c71_rows_thr c71_esc
-      c71_phase="$(sed -n 's/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p' "$c71_hook" | head -1)"
-      c71_armed="$(sed -n 's/^readonly DESTRUCTIVE_022_EXEC_ARMED="\([0-9-]*\)".*/\1/p' "$c71_hook" | head -1)"
-      c71_days="$(sed -n 's/^readonly DESTRUCTIVE_022_EXEC_REVIEW_DAYS=\([0-9]*\).*/\1/p' "$c71_hook" | head -1)"
-      c71_rows_thr="$(sed -n 's/^readonly DESTRUCTIVE_022_EXEC_REVIEW_ROWS=\([0-9]*\).*/\1/p' "$c71_hook" | head -1)"
-      c71_esc="$(sed -n 's/^readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=\([0-9]*\).*/\1/p' "$c71_hook" | head -1)"
+      c71_phase="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_PHASE=/{s/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p;q;}' "$c71_hook")"
+      c71_armed="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_ARMED=/{s/^readonly DESTRUCTIVE_022_EXEC_ARMED="\([0-9-]*\)".*/\1/p;q;}' "$c71_hook")"
+      c71_days="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_REVIEW_DAYS=/{s/^readonly DESTRUCTIVE_022_EXEC_REVIEW_DAYS=\([0-9]*\).*/\1/p;q;}' "$c71_hook")"
+      c71_rows_thr="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_REVIEW_ROWS=/{s/^readonly DESTRUCTIVE_022_EXEC_REVIEW_ROWS=\([0-9]*\).*/\1/p;q;}' "$c71_hook")"
+      c71_esc="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=/{s/^readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=\([0-9]*\).*/\1/p;q;}' "$c71_hook")"
 
       # ── control arm FIRST: a probe that cannot be shown to detect proves nothing.
       # The extractor must return a KNOWN value from a synthetic line and must
