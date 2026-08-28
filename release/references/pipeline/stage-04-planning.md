@@ -370,7 +370,7 @@ The committed release-plan file is durable corpus and is governed by the referen
 
 ### Verification-Plan AC→method mapping
 
-Planning maps each in-scope issue's acceptance criteria to a verification-method class, which the per-issue Verification table (the `release-planner` plan template's § Verification Plan → `### Per-Issue Verification` table, columns `Issue | Verification Method | Expected Result`) then records. The recognized method classes mirror the G1-05a admissible AC-predicate patterns:
+Planning maps each in-scope issue's acceptance criteria to a verification-method class, which the per-issue Verification table (the `release-planner` plan template's § Verification Plan → `### Per-Issue Verification` table, columns `Issue | AC | Verification Method | Expected Result`) then records. Each row is bound to the criterion it grades by the **AC-Binding** mechanism stated at the close of this section. The recognized method classes mirror the G1-05a admissible AC-predicate patterns:
 
 | AC predicate class | Verification method class | Example |
 |---|---|---|
@@ -381,6 +381,26 @@ Planning maps each in-scope issue's acceptance criteria to a verification-method
 A behavioral/domain AC's verification method is whatever its `method:` field declares; Planning records the declared method as the issue's Verification Method even when the executor for that method is not yet built. This block names the recognized method classes; it does not restate the per-issue table — that table is owned by the plan template's § Verification Plan and is populated per release.
 
 **Declared, verification deferred (honesty note).** A behavioral/domain AC may be admitted with its verification method **declared** even before an executor for that method exists. Declaration is what makes the AC honest at intake/planning; building and running the executor is a separate, later concern (Stage 7/8). A declared-but-not-yet-executable method is a valid method for gate purposes — it is recorded, surfaced, and tracked, not silently dropped or lossily rewritten. This is the canonical statement of the note; the G1-05a and G3-05 self-repair cells in `core/schemas/gate-criteria-spec.md` carry the short inline form and defer here for the full rationale.
+
+**AC-Binding — what binds a verification row to the criterion it tests.** A method row and its criterion drift independently for exactly two reasons: the plan holds a **second copy** of the criterion's text, which rots on its own; or the row asserts a **null result** with no way to tell *found nothing* from *looked in the wrong place*. `AC-Binding` has one limb per cause, and it is stated **here, where the method is authored** — not only where the method is graded. A binding rule stated at grading time is discovered after the rot has already shipped into the plan.
+
+**Limb 1 — identity. The row names its criterion; it never restates it.**
+
+- The `### Per-Issue Verification` table carries a **required `AC` column, positioned immediately after `Issue`**. The cell holds an identifier and nothing else — `AC-<n>`, or `AC-<n><suffix>` for a sub-criterion, where `<n>` is the **1-based ordinal** of the criterion in the issue body's `### Acceptance Criteria` checkbox list. No restatement of the criterion's words, no pipe character (escaped or bare), no backticks. The identifier is the join key; the criterion's text keeps its single home in the issue body.
+- The **`Verification Method` cell carries a reproducible probe** — a command, or a named read of a named surface. Never a paraphrase of the criterion. The paraphrase *is* the second copy, and a narrowed paraphrase grades a conforming release NOT MET.
+- The column's **position is load-bearing, not stylistic**: a cell to the left of an escaped pipe is unaffected when the row's fields are split, so binding at column 2 and forbidding a pipe inside the cell keeps the identifier readable however the rest of the row splits.
+- **Coverage: one row per criterion, in the criterion list's order.** A criterion the release deliberately will not verify still carries its row, with the method cell reading `[DEFERRED — <reason>]` — an honest absence that grades SKIP, never a fabricated verdict, and the same declared-verification-deferred posture the honesty note above establishes. Omitting the row is what lets a plan read clean by silence.
+- **AC baseline.** The plan records once, in its Verification Plan section, the per-issue acceptance-criterion **counts as read at plan time** together with the **commit SHA** that read was taken against. The ordinal is a positional reference, so the baseline is the half that converts ordinal drift from silent into countable: a criterion count that no longer matches its baseline is a mechanical signal to re-bind. The baseline is a pinned measurement and carries no verdict.
+- **Amending a criterion obliges updating its bound row in the same change.** This binds whichever actor amends either side, including the actor amending the criterion. The amendment surface and the verification surface are otherwise unlinked, which is how an actor who knows the rule still forgets the other half of it.
+- Extra columns (a `Predicate class` column, for example) remain **permitted**; every column is located by header name, so column order beyond the required `Issue | AC` pair is free.
+
+**Limb 2 — a null result carries its arms.**
+
+- When a row's `Expected Result` is a **null** — zero, none, absent, empty, unchanged — the cell additionally names a **control arm run on the same instrument against the same target**, and that arm must return a non-zero observed result. Shape: `<null expectation> · control: <invocation> → <observed non-zero>`.
+- **Same instrument, same target** is the load-bearing half. A control that probes a *different* file proves only that the pattern compiles; it does not prove the path resolves — and an unresolvable path is precisely what returns zero and reads as clean.
+- **A section declaring a null result states the population it enumerated**, not merely that it found nothing. A bare *"N/A — no items"* is byte-identical whether the author reasoned over every class or over three of four; *"enumerated over classes {…}; none present"* is what exposes the class nobody considered.
+
+**Limb 2 exists for the false-PASS direction specifically, because the two drift directions are not symmetric.** A method **narrower** than its criterion grades a conforming release NOT MET — a false FAIL, which someone disputes and repairs within one release. A method that probes a path which does not exist, or that still tests what an amended criterion no longer asks, returns zero and grades **MET while testing nothing** — and every downstream stage inherits that green as evidence. The false-PASS direction is the one that survives, so Limb 2 refuses to let a null verdict stand on a single arm.
 
 ### Cross-Issue Acceptance Criteria (release-scoped)
 
@@ -394,7 +414,7 @@ Each CIAC entry carries five fields:
 | **Issues spanned** | `#X, #Y[, …]` — ≥2 issues, no dependency edge required |
 | **Predicate** | A gradable assertion over the ≥2 issues' outputs — answerable MET / NOT MET / PARTIAL from the merged PR content |
 | **Shared surface** | The concrete file / table / schema / anchor / capability where the issues must agree |
-| **Verification method** | A reproducible command — typically `grep` (verbatim-citation / co-occurrence) or anchor-resolution; OR `dispatch the runtime-suite for <domain>` for a behavioral/runtime predicate; OR "declared, verification deferred to #<executor>" when the executor is a script not yet built (the same declared-verification-deferred honesty the note above establishes for behavioral ACs) |
+| **Verification method** | A reproducible command — typically `grep` (verbatim-citation / co-occurrence) or anchor-resolution; OR `dispatch the runtime-suite for <domain>` for a behavioral/runtime predicate; OR "declared, verification deferred to #<executor>" when the executor is a script not yet built (the same declared-verification-deferred honesty the note above establishes for behavioral ACs). **A null predicate carries its arms**, per AC-Binding Limb 2: a CIAC expecting zero / none / absent also names a control arm run on the same instrument against the same target, returning a non-zero observed result. **Author the command exactly as the matcher must receive it** — the scaffold below is a bullet, a bullet is never divided on pipes, and nothing in it is unescaped on the way to the matcher. A pipe escaped for markdown here does not survive as a markdown escape; it reaches the matcher as regex syntax and changes what the pattern means. |
 
 Scaffold (one row per CIAC — the section is present only when the release declares ≥1):
 
