@@ -2416,8 +2416,21 @@ _c32_compute_verdict() {
   # landed in neither shows as a broken identity rather than as an unnoticed absence.
   # STDERR ONLY: the stdout protocol lines below are parsed by string surgery at three
   # call sites (the lifecycle check, the CI probe, and the self-test).
-  printf 'release-corpus: DENOM — %s row(s) enumerated (of which %s version-less: version-only limbs (d)+(e) declared EXCLUDED, not silently skipped) / %s row(s) not in scope (pre-cutoff or allowlisted) / %s total LOG data row(s)\n' \
-    "$c32_targets" "$c32_vl_targets" "$((c32_rows_total - c32_targets))" "$c32_rows_total" >&2
+  # The "declared EXCLUDED" clause is only true of the version-less rows if limbs (d)+(e)
+  # actually ran for the versioned ones. They are gated on a release cutoff that DEFAULTS
+  # to the __none__ sentinel, and under that default _release_eligible stays 0 for EVERY
+  # row — so the limbs assert nothing at all. Emitting the unconditional clause there
+  # tells a reader that the version-less rows were selectively excluded and the remaining
+  # rows were asserted, when in fact nothing was asserted: a silent skip wearing the
+  # label of a deliberate exclusion, which is the precise failure this check exists to
+  # prevent. Report the unrun case as unrun.
+  if [[ "$c32_release_cutoff" == "__none__" ]]; then
+    _c32_vl_clause="version-less; limbs (d)+(e) DID NOT RUN for any row — no release cutoff is set, so they are inapplicable here rather than selectively excluded"
+  else
+    _c32_vl_clause="version-less: version-only limbs (d)+(e) declared EXCLUDED, not silently skipped"
+  fi
+  printf 'release-corpus: DENOM — %s row(s) enumerated (of which %s %s) / %s row(s) not in scope (pre-cutoff or allowlisted) / %s total LOG data row(s)\n' \
+    "$c32_targets" "$c32_vl_targets" "$_c32_vl_clause" "$((c32_rows_total - c32_targets))" "$c32_rows_total" >&2
 
   if [[ $c32_findings -eq 0 ]]; then
     printf 'CLEAN %s\n' "$c32_targets"
