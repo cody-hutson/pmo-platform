@@ -367,13 +367,27 @@ Five predicates span ≥2 members each. All graded at Stage 9 QC3.5 / Phase A3.6
 | #5067 | `python3 core/deploy/tools/check-label-parity.py` **with the full `--source` union** (grammar doc + all `core/packs/*/pack.toml`) — the bare invocation exits **3** (zero canonical labels parsed) and grades nothing | `auto-promoted-pattern` present as a **`MISSING` row** (proves it parsed into the canonical set, pre-materialization); process exit **1**, not 0 — see CIAC-5. `--emit-fix` renders the operator `gh label create` |
 | #4227 | Replay a recorded `GraphQL 0/5000 + REST 4966/5000` state against the authored rule | DEFER-dominant disjunction fires; healthy pools preserve today's behavior bit-for-bit |
 | #4200 | Replay the observed 3-wide wave's envelope | `W_max` rendered as a second output; verdict enum unchanged |
-| #4974 | Replay a CONFLICTING PR's required-context read at Stage 7 / 8 entry | `0 of 9` required rows classifies `checks-unreadable` → PARTIAL, never PASS |
+| #4200 | **AC3 — grade the RESTATEMENT below, not the card's literal text** | `spoke-launch.md` § Concurrency forecloses the substitution: `W_max` comes from Checkpoint B's remaining-envelope basis and **never** from the stage's parallelism class. **Control:** the bare orthogonality sentence alone cannot discriminate — it is present unchanged on `origin/main` |
+| #4974 | Replay a CONFLICTING PR's required-context read at Stage 7 / 8 entry | P1 fires **Blocker** on the conflict; with P1 suppressed, `0 of 9` required rows fires the **P2 denominator floor** — Blocker at Stage 7, entry-validation failure at Stage 8 — *before* § 5.1 is consulted. `PASS` is unreachable on both paths |
+| #4974 | Replay a still-dispatching roster whose count rises between consecutive polls | Renders **Warning — unsettled**, never a shortfall. The settle poll keys on `status == COMPLETED`, so an empty conclusion cannot short-circuit it into the false collapsed-denominator alarm |
 | #5268 | `automated-closeout.sh --dry-run` on a first-close fixture | Reaches phase 16 exit 0; no pre-mode-branch abort at 9.5 or 15.55 |
 | #5268 | AC3 regression arm in `self_test()` | Fails on a reintroduced pre-branch resolution |
 | #4416 | Never-converging self-test leg at `VERIFY_RECHECK_DELAY=0` | Terminates on the **attempt** bound; renders `PARTIAL … unsettled`, never `PASS`; suite does not hang |
 | #4912 | Conformance fixture across all implementations | Byte-identical output on 198/198 live notes and all edge cases; a deliberately-wrong implementation differs (firing control) |
 | #4912 | Empty-body guard | `gh release edit --notes ""` is unreachable on the strip path |
 | #5253 | `python3 release/tools/check-selftest-coverage.py --reconcile` | Arm E green on arrival with both README rows backfilled; sensitivity arm (inject a fabricated tool) flags; specificity arm does not |
+
+#### AC restatement — #4200 AC3 (Stage 8 grades this wording)
+
+**The card's literal AC3 is satisfied by an unchanged file, so grading it as written measures nothing.** #4200 AC3 reads: *"Assert the protocol states explicitly that parallel-safety is a file-contention property orthogonal to the usage-window envelope, so the coordination property cannot be read as license for width."* The leading clause is already true on `origin/main` — `quota-budget-protocol.md` has carried the **Parallelism Rules orthogonality** bullet since before this release opened, and the card's own Description concedes it (*"The spec is explicit that it is orthogonal"*). A grader working from the literal text returns **MET** without inspecting any delivered work, and would have returned MET before a line was written.
+
+**What Engineering actually built is the second clause, and it is strictly stronger.** The card's real complaint is not that the orthogonality goes unstated; it is that stating it *changes nothing*, because nothing stops a reader deriving width from the parallelism class anyway. The delivered decision (ADR-151) forecloses that derivation at the point width is decided.
+
+**Grade AC3 as: the protocol and § Concurrency FORECLOSE the substitution — `W_max` is sourced from Checkpoint B's remaining-envelope basis and never from the stage's parallelism class — and the orthogonality statement is present as the premise of that foreclosure rather than as a standalone assertion.**
+
+*Method:* assert `spoke-launch.md` § Concurrency carries the not-a-licence-for-width clause naming `W_max`'s Checkpoint B source, **and** that the orthogonality bullet is cited by it rather than left free-standing. **Control (required, and it is what makes this non-vacuous):** run the same assertion against `origin/main`. The orthogonality sentence is present there and the foreclosure clause is absent, so a probe that fires on both is measuring the wrong thing. **`[SOURCE]`** measured 2026-08-28 against `origin/main`, both arms: `quota-budget-protocol.md` returns **1** `orthogonal` match on the mainline (so the literal AC3 discriminates nothing), while `spoke-launch.md` returns **0** foreclosure clauses on the mainline against **1** on this branch (so the restated AC3 discriminates exactly the delivered work).
+
+This restatement lives here and **not** in the issue body: per ADR-062 a shipped card's acceptance criteria are not retro-edited, so the plan carries the sharpened wording and Stage 8 reads the plan. Routed four times before this pass without action; recorded so it is gradeable rather than re-routed.
 
 ### Release-Level Verification
 
