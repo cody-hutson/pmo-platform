@@ -1052,6 +1052,12 @@ run_self_test() {
   # arms are HERMETIC: no network, no issue created. gh is replaced by a recording
   # stub injected through PMO_GH_BIN, which is the same stub-injection idiom
   # automated-closeout.sh already uses for its own gh-dependent phases.
+  # Tests 17-19b bind GH_BIN / GH_PRE_PIN / PMO_GH_BIN / GH_STD_CANDIDATES /
+  # PMO_STUB_ARGV / GH_LABEL_SET inside ( .. ) subshells. Their locality is the
+  # POINT, not an oversight: the bindings must not leak into the next arm, and
+  # die() exits, so an un-subshelled call would tear down the whole suite. The
+  # values the parent needs are returned on stdout or written to a file.
+  # (shellcheck notes SC2030/SC2031 on these by design; the locality is intended.)
   local gh_dir gh_stub gh_argv gh_err
   gh_dir="$(/usr/bin/mktemp -d)" || die "self-test: mktemp -d failed (#5067)"
   gh_stub="$gh_dir/gh"
@@ -1062,19 +1068,23 @@ run_self_test() {
   # assertions read what the tool ACTUALLY passed rather than what it meant to.
   # $GH_LABEL_SET selects which label set `label list` reports, so one stub drives
   # both the missing-label arm and the complete-label arm.
-  {
-    echo '#!/bin/bash'
-    echo 'printf "%s\n" "$*" >> "$PMO_STUB_ARGV"'
-    echo 'if [[ "$1" == "label" ]]; then'
-    echo '  if [[ "${GH_LABEL_SET:-full}" == "full" ]]; then'
-    echo '    printf "%s\n" improvement auto-promoted-pattern "status: proposed" bug'
-    echo '  else'
-    echo '    printf "%s\n" improvement "status: proposed" bug'
-    echo '  fi'
-    echo '  exit 0'
-    echo 'fi'
-    echo 'echo "https://github.test/stub/issues/1"'
-  } > "$gh_stub" || die "self-test: could not write gh stub"
+  # Written via a QUOTED heredoc, not an echo chain: the stub's body contains a
+  # literal backslash-n that its own printf must interpret, and `echo` expands
+  # escapes on some shells and not others. A quoted heredoc is byte-exact on every
+  # shell, so the harness cannot become the flaky thing it is here to test.
+  /bin/cat > "$gh_stub" <<'STUB' || die "self-test: could not write gh stub"
+#!/bin/bash
+printf "%s\n" "$*" >> "$PMO_STUB_ARGV"
+if [[ "$1" == "label" ]]; then
+  if [[ "${GH_LABEL_SET:-full}" == "full" ]]; then
+    printf "%s\n" improvement auto-promoted-pattern "status: proposed" bug
+  else
+    printf "%s\n" improvement "status: proposed" bug
+  fi
+  exit 0
+fi
+echo "https://github.test/stub/issues/1"
+STUB
   /bin/chmod +x "$gh_stub" || die "self-test: could not chmod gh stub"
 
   # Test 17 (RESOLUTION + argv, AC1/AC4): the resolved binary reaches the Python
