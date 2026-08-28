@@ -314,6 +314,19 @@ else
   done < "$B_OUT"
 fi
 
+# B-C0 COMPLETION CONTROL — an instrument must prove it ran.
+# The emptiness test above fires only on NO output. A driver that crashes part-way
+# writes a traceback, which is non-empty, so the guard passes; no traceback line
+# matches the B-* prefix, every line falls to the [driver] echo branch, and that
+# branch increments neither counter. The group then contributes zero arms and zero
+# failures, which the exit gate accepts. Assert the terminal arm reported instead:
+# it is reached only if the driver ran to the end, and unlike a hardcoded total it
+# does not go stale when an arm is added.
+if ! grep -q '^B-7|' "$B_OUT"; then
+  echo "  [FAIL] B-C0 completion control: group B's terminal arm (B-7) is absent — the driver did not run to completion"
+  FAIL=$((FAIL + 1))
+fi
+
 # ─────────────────────────────────────────────────────────────────────────────
 # GROUP C — the ordering invariant
 # ─────────────────────────────────────────────────────────────────────────────
@@ -355,7 +368,23 @@ while IFS='|' read -r name ok detail; do
   esac
 done < "$C_OUT"
 
+# C-C0 COMPLETION CONTROL — group C carried no guard at all, so a crashed driver
+# scored zero arms and zero failures silently. C-0 has a legitimate early exit
+# (anchor phases absent), which reports C-0 with a 0 and is a real failure rather
+# than a broken run — so the control must distinguish the two, or it would double-
+# report every genuine C-0 failure as a crash.
+if [[ ! -s "$C_OUT" ]]; then
+  echo "  [FAIL] C-C0 driver control: the close-out driver produced no output"
+  FAIL=$((FAIL + 1))
+elif ! grep -q '^C-6|' "$C_OUT" && ! grep -q '^C-0|0|' "$C_OUT"; then
+  echo "  [FAIL] C-C0 completion control: group C's terminal arm (C-6) is absent and C-0 reported no controlled early exit — the driver did not run to completion"
+  FAIL=$((FAIL + 1))
+fi
+
 echo ""
 echo "${PASS} passed, ${FAIL} failed"
+# The tally alone cannot gate: a run in which every group driver crashed reports
+# "0 passed, 0 failed" and satisfies FAIL -eq 0. The per-group completion controls
+# above are what make this gate mean something.
 [[ $FAIL -eq 0 ]] || exit 1
 exit 0
