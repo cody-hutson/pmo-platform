@@ -172,7 +172,7 @@ The `structural | judgment` partition already in the **Check** column IS the HAR
 |---|---|---|---|
 | G1-01 title informativeness (no bracket prefix + substance floor) | — (title string, not a body field) | structural FAIL | HARD-STOP (gate) |
 | G1-02 description actionable | presence (`required: true`) | recommend-flag | SOFT-WARN |
-| G1-03 evidence label | presence (`required: true`) | structural FAIL | HARD-STOP |
+| G1-03 evidence present | presence (`required: true`) | structural FAIL | HARD-STOP |
 | G1-04 proposed-change specificity | presence (`required: true`) | recommend-flag | SOFT-WARN |
 | G1-05a AC structural pattern | presence (`required: true`) | structural FAIL | HARD-STOP (gate) |
 | G1-05b AC judgment | — | recommend-flag | SOFT-WARN |
