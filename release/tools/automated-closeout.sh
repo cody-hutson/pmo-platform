@@ -585,12 +585,35 @@ CHORE_PR_SKIPPED=0       # set by phase_create_chore_pr's zero-commit guard so
 MERGE_POLL_STEP=10       # await-merge poll interval (seconds). Not a CLI flag —
                          # internal; the self-test overrides it to keep hermetic
                          # runs fast.
-VERIFY_RECHECK_DELAY=2   # check-5 post-close re-read replication-lag delay, in
-                         # seconds (#3587 D-4). `gh issue close` writes via REST
-                         # while `gh issue list` reads via GraphQL, so a
-                         # milestone-filtered read is not guaranteed
-                         # read-after-write. Not a CLI flag — internal; the
-                         # self-test overrides it to 0 to stay hermetic.
+VERIFY_RECHECK_DELAY=2   # check-5 post-close settle POLL INTERVAL, in seconds
+                         # (#3587 D-4; budget widened by #4416). `gh issue close`
+                         # writes the PRIMARY STORE while `gh issue list
+                         # --milestone` reads GitHub's SEARCH INDEX — gh routes it
+                         # through GraphQL search(type: ISSUE_ADVANCED) — so a
+                         # milestone-filtered read is an asynchronous projection,
+                         # not read-after-write. The interval is UNCHANGED and
+                         # deliberately so: it was never the defect. 29 of 41
+                         # corpus observations converged inside 2s and a live
+                         # read-only probe puts the median catch-up below it. Not a
+                         # CLI flag — internal; the self-test overrides it to 0 to
+                         # stay hermetic.
+VERIFY_RECHECK_ATTEMPTS=15 # check-5 post-close settle BUDGET, in poll attempts
+                         # AFTER the first read (#4416). Budget = DELAY x ATTEMPTS
+                         # = 30s at defaults, and it is SIZED, not chosen: the
+                         # search index was observed still stale at ~3-7s after the
+                         # close-write in 10 observations across 6 Gate-Passage
+                         # Proof comments, every one of them RIGHT-CENSORED by the
+                         # single 2s retry that preceded this — so the true tail was
+                         # never measured and the value is set by cost asymmetry,
+                         # not by fitting a curve nobody can see. 30s is ~4x the
+                         # censored floor, ~15x the measured median (<2s), and 1/10
+                         # of the MERGE_TIMEOUT=300 the same run already tolerates.
+                         # Early exit means it is paid only by a run already in the
+                         # failure state. ATTEMPT-bounded, never deadline-bounded:
+                         # an elapsed-seconds bound accumulated from its own sleep
+                         # never advances at DELAY=0, and the self-test drives a
+                         # never-converging leg at exactly that setting. Not a CLI
+                         # flag — internal; the self-test saves and restores it.
 ATTEST_ACTION_ITEMS=""   # --attest-action-items <cause> (Procedure 7a SURFACE
                          # clause). Closed 2-value enum: no-commitments |
                          # emit-skipped. The gate's SURFACE states resolve
@@ -5756,36 +5779,89 @@ phase_run_verification() {
     collect_open_release_issues "$slug" || _v5_rc=1
     _v5_list="$COLLECTED_OPEN_ISSUES"
 
-    # D-4 bounded replication-lag guard: `gh issue close` writes via REST while
-    # `gh issue list` reads via GraphQL, so the re-read is not guaranteed
-    # read-after-write and could reproduce a smaller instance of the very bug this
-    # fixes. Retry ONCE, and only when every straggler is an issue this run just
-    # attempted to close — a straggler outside that set is real news, report it now.
-    if [[ "$_v5_rc" -eq 0 && -n "$_v5_list" ]]; then
-      _v5_all_ours=1
-      while IFS= read -r _v5_straggler; do
-        [[ -z "$_v5_straggler" ]] && continue
-        /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx "$_v5_straggler" \
-          || { _v5_all_ours=0; break; }
-      done <<< "$_v5_list"
-      if [[ "$_v5_all_ours" -eq 1 ]]; then
-        /bin/sleep "${VERIFY_RECHECK_DELAY:-2}"
-        collect_open_release_issues "$slug" || _v5_rc=1
-        _v5_list="$COLLECTED_OPEN_ISSUES"
+    # D-4 bounded settle POLL (#4416 — supersedes #3587's single retry). `gh issue
+    # close` writes the PRIMARY STORE; `gh issue list --milestone` reads the SEARCH
+    # INDEX (gh routes it through GraphQL search(type: ISSUE_ADVANCED)), so the
+    # re-read is an asynchronous projection and not read-after-write. This is index
+    # lag, NOT a rate limit and NOT primary-store lag — which is why the remedy is a
+    # settle wait rather than a backoff. One 2s retry under-settled on the LAST issue
+    # a run closes: the v4.02 close-out rendered `PARTIAL (1 open: #3586)` against a
+    # verified truth of 0. Poll at VERIFY_RECHECK_DELAY up to VERIFY_RECHECK_ATTEMPTS,
+    # exiting the instant the list drains, so a converging run pays nothing.
+    #
+    # Scoped exactly as before to stragglers this run itself attempted to close — a
+    # straggler outside that set is real news, reported NOW and never waited on. The
+    # scope is re-evaluated EVERY attempt, which strictly generalises the old
+    # semantics: identical on attempt 1, and an out-of-scope straggler surfacing
+    # mid-poll now also breaks immediately instead of being waited out.
+    #
+    # Bound on the ATTEMPT COUNTER, never on elapsed seconds. This is not style: an
+    # elapsed bound accumulated from its own sleep (the shape phase_await_merge_chore_pr
+    # carries) never advances at DELAY=0, and the self-test's leg (b) drives a
+    # NEVER-CONVERGING straggler at exactly DELAY=0. A deadline form hangs the suite.
+    local _v5_polls _v5_observed
+    _v5_polls=0
+    _v5_observed=0
+    [[ "$_v5_rc" -eq 0 ]] && _v5_observed=1
+    while :; do
+      if [[ "$_v5_observed" -eq 1 ]]; then
+        [[ -z "$_v5_list" ]] && break                    # converged — early exit
+        _v5_all_ours=1                                   # set UNCONDITIONALLY per
+        while IFS= read -r _v5_straggler; do             # attempt: bash 3.2 does not
+          [[ -z "$_v5_straggler" ]] && continue          # scope loop-body assignments,
+          /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx "$_v5_straggler" \
+            || { _v5_all_ours=0; break; }                # and a leaked 0 would be sticky
+        done <<< "$_v5_list"
+        [[ "$_v5_all_ours" -eq 1 ]] || break             # out-of-scope — report now
       fi
-    fi
+      [[ "$_v5_polls" -ge "$VERIFY_RECHECK_ATTEMPTS" ]] && break   # budget exhausted
+      if [[ "${VERIFY_RECHECK_DELAY:-2}" -gt 0 ]]; then
+        /bin/sleep "${VERIFY_RECHECK_DELAY:-2}"
+      fi
+      # A failed read is a NON-OBSERVATION, not a termination: it leaves _v5_list
+      # untouched and the poll continues. Going from 2 reads to 16 must not multiply
+      # the chance of tripping the fail-closed path by ~8x — that would trade one
+      # flake class for another inside a release whose whole point is verdict
+      # stability under transient conditions. Fail-closed is preserved exactly where
+      # it bites: PASS remains reachable ONLY from an OBSERVED empty list, and zero
+      # successful observations across the whole sequence still render UNVERIFIED.
+      if collect_open_release_issues "$slug"; then
+        _v5_list="$COLLECTED_OPEN_ISSUES"
+        _v5_observed=1
+      fi
+      _v5_polls=$((_v5_polls+1))   # an ASSIGNMENT, never (( _v5_polls++ )): under
+    done                           # `set -e` a ((...)) whose pre-increment value is
+    _v5_rc=0                       # 0 evaluates to 0 and aborts the script
+    [[ "$_v5_observed" -eq 1 ]] || _v5_rc=1
 
     if [[ "$_v5_rc" -ne 0 ]]; then
       # Fail closed. UNVERIFIED, not FAIL: a query that could not run establishes
       # nothing about whether issues are open — but it must never read as PASS.
       v_subs="UNVERIFIED (post-close re-query failed)"
     elif [[ -z "$_v5_list" ]]; then
-      v_subs="PASS"
+      # Settled. The BARE token is kept byte-identical on the converge-on-first-read
+      # path (the ~85% case), so the `| PASS |` cell every downstream reader matches
+      # is unchanged. The settle figure is appended ONLY when the poll actually did
+      # work — and that figure is the point: it makes the next sizing of this budget
+      # read a MEASURED distribution instead of re-deriving one from a right-censored
+      # sample, which is precisely what the single 2s retry made impossible.
+      if [[ "$_v5_polls" -eq 0 ]]; then
+        v_subs="PASS"
+      else
+        v_subs="PASS (settled after ${_v5_polls} poll(s), ~$(( _v5_polls * ${VERIFY_RECHECK_DELAY:-2} ))s)"
+      fi
     else
       _v5_count="$(/usr/bin/printf '%s\n' "$_v5_list" | /usr/bin/grep -c .)"
       _v5_nums="$(/usr/bin/printf '%s' "$_v5_list" | /usr/bin/tr '\n' ',' | /usr/bin/sed 's/,$//')"
       # Enumerate the numbers so the operator can act without re-querying.
       v_subs="PARTIAL (${_v5_count} open: #${_v5_nums//,/, #})"
+      # Budget exhausted without converging: say so, and say against WHAT budget. Never
+      # PASS — a silent degrade here would contradict the outcome this release exists
+      # to produce. Appended AFTER the enumerated numbers so the substring that every
+      # existing assertion and every historical Gate-Passage Proof matches is untouched.
+      if [[ "$_v5_polls" -gt 0 ]]; then
+        v_subs="${v_subs} — unsettled after $(( VERIFY_RECHECK_ATTEMPTS * ${VERIFY_RECHECK_DELAY:-2} ))s (${_v5_polls} polls)"
+      fi
     fi
   fi
 
@@ -5824,7 +5900,17 @@ phase_run_verification() {
 EOF
 )
 
-  mark_phase "run_verification" "PASS" "9 universal checks evaluated"
+  # The phase DETAIL carries check 5's settle evidence (#4416) so the poll's cost is
+  # auditable from the phase table too, not only from the verification row. RESULT is
+  # deliberately untouched: it is a string literal that no value of check 5 reduces.
+  # Making check 5 GATE is a separate decision with a real blast radius (a 30s-unsettled
+  # close-out would halt at exit 3) and is not smuggled in here. Dry-run fires no poll,
+  # so it carries no settle figure.
+  local _v5_settle_detail=""
+  if [[ "$MODE" != "dry-run" ]]; then
+    _v5_settle_detail="; check-5 settled at poll ${_v5_polls}/${VERIFY_RECHECK_ATTEMPTS}"
+  fi
+  mark_phase "run_verification" "PASS" "9 universal checks evaluated${_v5_settle_detail}"
 
   # ── Gate-passage proof: three-rung target ladder (#3819) ───────────────────
   #
@@ -8943,6 +9029,7 @@ STUB
   local _v5_saved_list="$OPEN_ISSUE_LIST" _v5_saved_count="$OPEN_ISSUE_COUNT"
   local _v5_saved_rowstate="$STATE_LOG_ROW_STATE" _v5_saved_results="$VERIFICATION_RESULTS"
   local _v5_saved_delay="$VERIFY_RECHECK_DELAY" _v5_saved_nomerge="$NO_MERGE"
+  local _v5_saved_attempts="$VERIFY_RECHECK_ATTEMPTS"
   local _v5_row
   local _v5_tmp; _v5_tmp="$(/usr/bin/mktemp -d -t verify5-selftest.XXXXXX)"
   local _v5_stub="$_v5_tmp/gh-stub.sh"
@@ -8959,7 +9046,17 @@ if [[ "$1" == "issue" && "$2" == "list" ]]; then
     printf '%s\t%s\t%s\n' 401 "bug" "Normal auto-close anomaly issue"
     printf '%s\t%s\t%s\n' 402 "bug" "Another auto-close anomaly issue"
   else
-    cat "$_d/post" 2>/dev/null || true
+    # INJECTED SEARCH-INDEX LAG (#4416): the first L POST-close reads return the
+    # STALE fixture; every later one returns ./post. With no ./lag file L=0 and every
+    # post-close read returns ./post — BYTE-IDENTICAL to the pre-#4416 stub, which is
+    # why legs (a)-(e) need no edit and remain the regression arms they always were.
+    n_post=$(( n - 1 ))
+    L="$(cat "$_d/lag" 2>/dev/null || echo 0)"; : "${L:=0}"
+    if [[ "$n_post" -le "$L" ]]; then
+      cat "$_d/stale" 2>/dev/null || true
+    else
+      cat "$_d/post" 2>/dev/null || true
+    fi
   fi
   exit 0
 fi
@@ -9017,11 +9114,119 @@ STUB
   _v5_row="$(/usr/bin/printf '%s\n' "$VERIFICATION_RESULTS" | /usr/bin/grep '^| 5 |')"
   [[ "$_v5_row" == *"PARTIAL (2 open)"* ]] || { echo "FAIL: dry-run check 5 must read the cached pre-close count and fire no query, got '$_v5_row'"; failures=$((failures+1)); }
 
+  # ── #4416 settle-poll legs (f)-(j) ───────────────────────────────────────────
+  # The single 2s retry above is now an attempt-bounded poll. Legs (a)-(e) prove the
+  # re-read is LIVE; these prove it SETTLES, that the proof itself can fail, that the
+  # straggler scope did not widen, and that none of it costs wall-clock. Every leg
+  # runs at VERIFY_RECHECK_DELAY=0, so the poll's own arithmetic is exercised while
+  # the suite stays instant.
+  #
+  # Call arithmetic, stated so the expected poll counts below are DERIVED and not
+  # fitted to whatever the run printed: phase_detect_open_issues makes read #1;
+  # phase_manual_close_release_issues makes no `issue list` read at all (it only
+  # closes); so check 5's FIRST read is #2 and poll k reads #(2+k). The stub serves
+  # stale while n_post = n-1 <= L, so poll k is stale iff k <= L-1 and poll k=L is the
+  # first drained read. _v5_polls therefore settles at exactly L.
+  local _v5_t0=$SECONDS
+  GH="$_v5_stub"; MODE="apply"
+
+  # (f) AC2 — CONVERGENCE UNDER AN INJECTED LAG EXCEEDING THE PRE-CHANGE WINDOW.
+  #     This IS the v4.02 failure reproduced: the index stays stale for the first 5
+  #     post-close reads. The pre-#4416 code reads exactly TWICE (first read + one
+  #     retry), sees only stale fixtures, and renders PARTIAL — so this leg is RED at
+  #     the parent commit and green here. It must also SAY how long it waited, which
+  #     is the AC6 forward instrument: the next sizing of this budget reads a
+  #     measurement instead of re-deriving one from a right-censored sample.
+  /usr/bin/printf '%s\t%s\t%s\n' 401 "bug" "Normal auto-close anomaly issue" > "$_v5_tmp/stale"
+  : > "$_v5_tmp/post"; : > "$_v5_tmp/calls"
+  /usr/bin/printf '%s' 5 > "$_v5_tmp/lag"
+  VERIFY_RECHECK_ATTEMPTS=15
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_detect_open_issues >/dev/null 2>&1
+  phase_manual_close_release_issues >/dev/null 2>&1
+  phase_run_verification >/dev/null 2>&1
+  _v5_row="$(/usr/bin/printf '%s\n' "$VERIFICATION_RESULTS" | /usr/bin/grep '^| 5 |')"
+  [[ "$_v5_row" == *"PASS (settled after 5 poll(s)"* ]] || { echo "FAIL: check 5 must ride out a 5-read index lag and render 'PASS (settled after 5 poll(s), ...)' — a single retry structurally cannot, got '$_v5_row'"; failures=$((failures+1)); }
+  [[ "$_v5_row" == *"PARTIAL"* ]] && { echo "FAIL: check 5 must NOT still read PARTIAL once the injected lag drains inside the budget, got '$_v5_row'"; failures=$((failures+1)); }
+  [[ "${PHASE_DETAILS[*]}" == *"check-5 settled at poll 5/15"* ]] || { echo "FAIL: the run_verification phase DETAIL must carry check 5's settle evidence 'check-5 settled at poll 5/15', got '${PHASE_DETAILS[*]}'"; failures=$((failures+1)); }
+
+  # (g) AC3 — THE NON-VACUITY CONTROL, and it is the criterion, not an optional extra.
+  #     Same fixture, budget shrunk BELOW the injected lag. If leg (f) were incapable
+  #     of failing this leg would go green too and (f) would prove nothing. Exhaustion
+  #     must render PARTIAL and NAME the budget it exhausted — never PASS, never a
+  #     silent degrade: this release exists to eliminate fail-open under transient
+  #     conditions, and a settle wait that quietly gives up would reproduce it.
+  : > "$_v5_tmp/calls"
+  VERIFY_RECHECK_ATTEMPTS=2
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_detect_open_issues >/dev/null 2>&1
+  phase_manual_close_release_issues >/dev/null 2>&1
+  phase_run_verification >/dev/null 2>&1
+  _v5_row="$(/usr/bin/printf '%s\n' "$VERIFICATION_RESULTS" | /usr/bin/grep '^| 5 |')"
+  [[ "$_v5_row" == *"PARTIAL (1 open: #401)"* ]] || { echo "FAIL: CONTROL — a budget below the injected lag must leave check 5 at 'PARTIAL (1 open: #401)'; leg (f) is vacuous unless this fires, got '$_v5_row'"; failures=$((failures+1)); }
+  [[ "$_v5_row" == *"unsettled after"* ]] || { echo "FAIL: budget exhaustion must SAY it exhausted ('unsettled after Ns (N polls)') rather than degrading silently, got '$_v5_row'"; failures=$((failures+1)); }
+  [[ "$_v5_row" == *"| PASS"* ]] && { echo "FAIL: an exhausted settle budget must NEVER read as PASS, got '$_v5_row'"; failures=$((failures+1)); }
+
+  # (h) AC1 — STRUCTURAL, by SYMBOL rather than by behaviour, carrying the AC's own
+  #     control: the pre-change form must be GONE, so the limbs cannot be satisfied by
+  #     the old code. Self-parse phase_run_verification out of this very file (the
+  #     in-file awk extraction idiom) behind an ANTI-VACUITY FLOOR — without the floor
+  #     an empty extraction passes every limb below while measuring nothing.
+  local _v5_fun
+  _v5_fun="$(/usr/bin/awk '/^phase_run_verification\(\) \{$/{f=1} f{print} f&&/^\}$/{exit}' "${BASH_SOURCE[0]}")"
+  [[ -n "$_v5_fun" ]] || { echo "FAIL: check-5 (h) — could not extract phase_run_verification from this file; every structural limb below would pass without asserting anything"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'VERIFY_RECHECK_ATTEMPTS' <<<"$_v5_fun" || { echo "FAIL: check-5 (h) — the settle path must carry the attempt bound VERIFY_RECHECK_ATTEMPTS; an interval with no bound is the single-retry shape #4416 replaces"; failures=$((failures+1)); }
+  # `-e` is load-bearing, not decoration: this needle STARTS WITH A DASH, and without
+  # -e grep parses it as options, exits 2, and the limb fails on every input — an arm
+  # that can never pass is as useless as one that can never fail.
+  /usr/bin/grep -qF -e '-ge "$VERIFY_RECHECK_ATTEMPTS"' <<<"$_v5_fun" || { echo "FAIL: check-5 (h) — the bound must be a LOOP TERMINAL on the attempt counter, not merely a variable mentioned in a rendered message"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'while :; do' <<<"$_v5_fun" || { echo "FAIL: check-5 (h) — the settle path must be a poll LOOP with an early exit, not a lone sleep followed by one re-read"; failures=$((failures+1)); }
+  if /usr/bin/grep -qF 'Retry ONCE' <<<"$_v5_fun"; then
+    echo "FAIL: check-5 (h) CONTROL — the pre-#4416 single-retry form ('Retry ONCE') is still present; the limbs above must not be satisfiable by the old code"; failures=$((failures+1))
+  fi
+
+  # (i) AC4 — THE STRAGGLER SCOPE DID NOT WIDEN. #999 was never in this run's close
+  #     set, so it is real news: reported immediately and never waited on. Asserted on
+  #     the stub's own CALL COUNTER (exactly 2 = the detect read + check 5's first
+  #     read), because a row that merely reads PARTIAL cannot distinguish "reported at
+  #     once" from "reported after burning the entire budget".
+  /usr/bin/printf '%s\t%s\t%s\n' 999 "bug" "An issue this run never attempted to close" > "$_v5_tmp/post"
+  : > "$_v5_tmp/stale"; : > "$_v5_tmp/calls"; : > "$_v5_tmp/lag"
+  VERIFY_RECHECK_ATTEMPTS=15
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_detect_open_issues >/dev/null 2>&1
+  phase_manual_close_release_issues >/dev/null 2>&1
+  phase_run_verification >/dev/null 2>&1
+  _v5_row="$(/usr/bin/printf '%s\n' "$VERIFICATION_RESULTS" | /usr/bin/grep '^| 5 |')"
+  [[ "$_v5_row" == *"PARTIAL (1 open: #999)"* ]] || { echo "FAIL: an out-of-scope straggler must be reported as 'PARTIAL (1 open: #999)', got '$_v5_row'"; failures=$((failures+1)); }
+  #     The poll count is asserted on the CHECK-5-SCOPED instrument (the phase detail
+  #     check 5 itself writes), NOT on the stub's `calls` counter: that counter is
+  #     PHASE-scoped — the gate-passage-proof rung calls resolve_stage13_subtask, which
+  #     issues a third `issue list` after check 5 has already rendered. An arm pinned to
+  #     that counter measures the phase, not the settle scope it claims to measure. Leg
+  #     (f)'s `poll 5/15` is this same instrument's moving control, so a `poll 0/15`
+  #     here is a real zero and not a dead readout.
+  [[ "${PHASE_DETAILS[*]}" == *"check-5 settled at poll 0/15"* ]] || { echo "FAIL: an out-of-scope straggler must be reported WITHOUT spending a single settle poll (expected 'check-5 settled at poll 0/15'), got '${PHASE_DETAILS[*]}'"; failures=$((failures+1)); }
+  #     Independent CEILING arm on the phase-scoped counter, stated as the bound it
+  #     really is: 1 detect + 1 check-5 read + 0 polls + 1 gate-passage-proof resolve.
+  #     A scope regression that waited out the budget would read 18, not 3.
+  [[ "$(/bin/cat "$_v5_tmp/calls" 2>/dev/null || echo 0)" -le 3 ]] || { echo "FAIL: an out-of-scope straggler must be reported without settle polling (phase-scoped issue-list reads must not exceed 3: detect + check-5 + gate-passage-proof), got $(/bin/cat "$_v5_tmp/calls" 2>/dev/null || echo 0)"; failures=$((failures+1)); }
+  [[ "$_v5_row" == *"unsettled after"* ]] && { echo "FAIL: an out-of-scope straggler was never waited on, so its row must carry no settle figure, got '$_v5_row'"; failures=$((failures+1)); }
+
+  # (j) AC5 — THE HERMETIC LEG STAYS INSTANT. The poll must honour DELAY=0 (only
+  #     structurally possible because the bound is an attempt counter, not a clock the
+  #     poll advances itself), and no leg above may have leaked a non-zero interval
+  #     into the group. 5+2 polls at the shipped 2s interval would alone cost ~14s, so
+  #     this arm genuinely can fail.
+  [[ "$VERIFY_RECHECK_DELAY" -eq 0 ]] || { echo "FAIL: check-5 (j) — the settle legs must run at VERIFY_RECHECK_DELAY=0; a leaked non-zero interval buys the suite wall-clock, got '$VERIFY_RECHECK_DELAY'"; failures=$((failures+1)); }
+  [[ $(( SECONDS - _v5_t0 )) -le 2 ]] || { echo "FAIL: check-5 (j) — the #4416 settle legs must add no wall-clock (expected <=2s for legs f-i), took $(( SECONDS - _v5_t0 ))s"; failures=$((failures+1)); }
+
   /bin/rm -rf "$_v5_tmp" 2>/dev/null || true
   GH="$_v5_saved_gh"; MODE="$_v5_saved_mode"; STATE_MILESTONE_SLUG="$_v5_saved_slug"
   OPEN_ISSUE_LIST="$_v5_saved_list"; OPEN_ISSUE_COUNT="$_v5_saved_count"
   STATE_LOG_ROW_STATE="$_v5_saved_rowstate"; VERIFICATION_RESULTS="$_v5_saved_results"
   VERIFY_RECHECK_DELAY="$_v5_saved_delay"; NO_MERGE="$_v5_saved_nomerge"
+  VERIFY_RECHECK_ATTEMPTS="$_v5_saved_attempts"
   EXCLUDE_ISSUES=(); CLOSE_COMMENTS=()
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
@@ -12606,7 +12811,7 @@ EOF
   echo "  phase_inject_velocity_field + phase_append_release_learnings validated (velocity — field ORDER 'Cycle-Time Velocity Result' on a clean block / no sibling leak / idempotent re-run / bolded-numeral value REJECTED writing nothing / empty capture at exit 0 degrades to an explicit N/A never a bare field / non-conformant existing field SKIPs WITH the warning, conformant control WITHOUT it; CO-LOCATION — an archived block's field lands in the SEGMENT beside its own **Result:** and the hot stub stays at 0, cross-surface re-run SKIPs, dry-run names the segment and prints the RESOLVED bytes. learnings — sibling H4 placed IMMEDIATELY after its Deployment Log block / body intact through the sentinel capture / idempotent re-run / whitespace-only render at exit 0 FAILs writing nothing / D-1 zero-source-events BLOCKS the close and prints the capture remedy, >0-events control PASSes / over an ARCHIVED block the block still lands in the HOT ledger and every segment stays at 0 Release Learnings — RECORDS_POLICY KEEP_CLASS. A7 capture gate — the SAME 0-source-event condition read at Phase 2 by _learnings_capture_gap reports a gap, >0-events control does NOT / an already-placed block is NOT a gap even under the 0-event stub, block-removed sensitivity IS / neither a missing synthesizer nor a whitespace-only render escalates to a gap / phase_preflight actually CALLS the predicate and is dispatched before create_chore_branch and transition_release_log, both derived from the shipped text with fabricated-symbol controls / n.1 THE MANDATED WARN SHAPE — the Collective-Review dry-run posture asserted over that same shipped text in three limbs, one per half of the ruling: the WARN result TOKEN (a regression back to PASS reddens here and nowhere else), the NON-BLOCKING return bound to the WARN line BY CONTEXT (phase_preflight carries two bare 'return 0' lines, so an unbound grep measures nothing), and the TAIL CLAUSE naming what FAILS at --apply, with a fabricated-result-token specificity control / GATE-BACKSTOP PARITY over the placed x synth-absent x synth-empty x render-0 x render-N matrix — a gap implies 6.7 returns 3, with a non-vacuity control asserting the antecedent actually fired)" >&2
   echo "  phase_inject_velocity_field EXIT-CLASS contract validated (#4927, group 4c.5b — this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): (p) a producer exit 2 FAILs at --apply, returns 3 so the runner halts, writes NOTHING, and quotes the producer's OWN stderr rather than a generic message — with a control proving the same fixture PASSes and writes exactly one field under a conformant producer, so the arm is not just a phase that always fails / (q) the same exit 2 under --dry-run marks a NON-blocking WARN that names the condition failing at --apply, and still writes nothing / (r) exit 2 is never laundered into the explicit 'N/A' form — a refusal to measure must not be recorded as a measurement — with a SENSITIVITY arm requiring exit 1 to STILL degrade to N/A at PASS, so a blanket fail-on-any-nonzero phase reddens here instead of passing / (s) a successful run's stderr still reaches the run report, so a DEGRADED Phase-A2 planned-recovery (which under-reports 'planned' and makes the ratio look healthier than the truth) is visible rather than discarded, with a control proving a silent producer manufactures no note" >&2
   echo "  phase_inject_close_class_telemetry_field validated (#4437 — clean block PASSes with the field positioned after **Outcome rationale:** and no sibling leak / idempotent re-run SKIPs / fallback anchor lands after **Outcome:** and names which anchor it used / VACUITY PAIR: an all-N/A-but-conformant line is WRITTEN and carries the no-computed-ratio warning WITH the disposition read from the emitted line, measured-line control carries NO warning / a line missing § 3.2 slots FAILs writing nothing / an empty capture at exit 0 FAILs writing nothing / producer exit 2 escalates as a source-integrity condition writing nothing / a non-executable producer SKIPs rather than hand-composing a field that would fabricate its own mechanism claim / dry-run prints the RESOLVED bytes and writes nothing / CO-LOCATION: an archived block's field lands in the SEGMENT beside its own **Result:** with the hot stub at 0, and the cross-surface re-run SKIPs; #5288 AI-028 NOT-PRODUCED MARKER STAGING — j.1 drives the REAL 6.8 call site over an archived block with the producer unavailable and asserts the resolved SEGMENT reaches TOUCHED_ARCHIVE_SEGMENTS, the array files=() consumes, with a sensitivity floor proving the marker genuinely reached the segment (pre-fix the marker still lands on disk, so the differential isolates the LOST APPEND alone) and a HOT-LEDGER control proving the by-design skip is preserved and the recorder is not appending every target it is handed / j.2 STRUCTURAL over the shipped text of BOTH calling phases — neither may invoke the writer inside a command substitution, read from the FUNCTION BODIES so the needle cannot match itself, with per-site vacuity floors and a capability-to-fail arm matching a CONSTRUCTED bad call site so a clean reading is a measurement)" >&2
-  echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache)" >&2
+  echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache); check-5 settle POLL validated (#4416, legs f-j — this clause is the settle group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which legs f-j never executed: f AC2 an injected 5-read search-index lag, longer than the pre-change single-retry window, still converges to PASS and RENDERS its settle figure in both the row and the phase detail — the v4.02 failure reproduced and closed / g AC3 THE NON-VACUITY CONTROL, same fixture with the budget shrunk BELOW the lag: exhaustion must read PARTIAL and NAME the budget, never PASS, so f is proven capable of failing / h AC1 structural self-parse behind an anti-vacuity floor — the attempt bound exists AND is a loop terminal AND the poll loop exists, with the pre-change 'Retry ONCE' form asserted ABSENT so no limb is satisfiable by the old code / i AC4 an out-of-scope straggler is still reported at once, asserted on the stub's CALL COUNTER (exactly 2 reads) because a PARTIAL row alone cannot distinguish reported-now from reported-after-the-whole-budget / j AC5 the group stays hermetic and instant at DELAY=0, which only an ATTEMPT bound makes structurally possible)" >&2
   echo "  post_gate_passage_proof three-rung target ladder validated (#3819 — T-13 rung 1 resolves a CLOSED Stage-13 sub-task via --state all and does NOT fall through to the PR / rung 2 posts to the release PR naming the OBSERVED rung-1 reason / rung 3 MANUAL names BOTH attempted targets; T-14 two collect_open_release_issues calls in one run keep EXCLUDED_DETAIL undoubled, COLLECTED_OPEN_ISSUES identical and resolve_stage13_subtask stable, with a non-empty-exclusion anti-vacuity control)" >&2
   echo "  phase_action_item_gate validated (#4439, group AI — 21 arms; this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all four verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=4 distinct STATEs / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
