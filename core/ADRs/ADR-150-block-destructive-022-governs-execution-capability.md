@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-144 — BLOCK-DESTRUCTIVE-022 governs execution capability, and its widened arm graduates on a repo-derivable deadline"
+title: "ADR-150 — BLOCK-DESTRUCTIVE-022 governs execution capability, and its widened arm graduates on a repo-derivable deadline"
 status: Accepted
 date: 2026-08-24
 release: hooks-block-their-declared-subject
@@ -20,7 +20,7 @@ source_observations:
   - "The false-positive surface of this rule family is shape-not-effect, measured on five independent firings during this release alone: `bash -n <path>` is blocked although -n is POSIX-defined as read-but-do-not-execute; an existing in-repo test suite was blocked while only being verified; BLOCK-SHELL-INJECTION-002 blocked a markdown table row carrying a backticked .sh path; a JSON payload argument carrying force-push TEXT tripped BLOCK-DESTRUCTIVE-001; and 3 of 5 control firings on the sibling slice were -022 itself."
 ---
 
-# ADR-144 — BLOCK-DESTRUCTIVE-022 governs execution capability
+# ADR-150 — BLOCK-DESTRUCTIVE-022 governs execution capability
 
 ## Status
 
@@ -29,6 +29,8 @@ source_observations:
 **Composes with:** [ADR-130](ADR-130-lib-missing-guard-is-mode-coupled.md) (this hook's mode-independence is the basis on which the mode-capable cohort was permitted to degrade, and this record does not disturb it) and the progressive-rollout convention (which owns the ladder; this record adds a forcing function to it, not a new ladder).
 
 **Numbering provenance — `142 → 144`.** Held **ADR-142** branch-local; renumbered to **ADR-144** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 142. In-release citations that read "ADR-142" denote this record.
+
+**Numbering provenance — `144 → 150`.** Held **ADR-144** branch-local; renumbered to **ADR-150** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 144. In-release citations that read "ADR-144" denote this record.
 
 ## Context
 

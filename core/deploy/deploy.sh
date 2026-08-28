@@ -3949,7 +3949,7 @@ LIFECYCLE
 # Label-shape is what separates a body REPORTING a probe from one DISCUSSING
 # probes; the >=2 count then rejects a bare `Verdict:` with no probe behind it.
 # Loosening EITHER half converts a real control into a never-FAIL check — see
-# ADR-144. The negative arm is not optional: --self-test group EV asserts the
+# ADR-150. The negative arm is not optional: --self-test group EV asserts the
 # evidence-free and prose-near-miss bodies still FAIL.
 #
 # Extracted as a function rather than left inline in Check 22 because Check
