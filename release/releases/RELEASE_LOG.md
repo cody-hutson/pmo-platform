@@ -211,7 +211,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v4.39 | selftests-actually-test | #5241, #4441, #4914, #5273, #5272, #4913, #5237, #4443, #5239 | #6119 | `15e6bf01ea411319cc6dd7df01c0e306fa53d186` | `v4.39` | VERIFIED | 2026-08-27 |
 | v4.40 | pipeline-spec-self-consistency | #4732, #4719, #4923, #4978, #5069, #5523, #5816 | #6120 | `0fbf275957f854a23411644879fc7b20c2dd073e` | `v4.40` | VERIFIED | 2026-08-28 |
 | hooks-block-their-declared-subject (version-less) | hooks-block-their-declared-subject | #4977, #5250, #5293, #5515, #5568, #5593, #5812 | #6189 | `b528f47d2a6fcf7ff3813e7634dfa2a81818ceec` | (none) | VERIFIED | 2026-08-28 |
-| v4.41 | checks-see-whole-subject | #4981, #4720, #5260, #5074, #4734, #4992, #4440, #5252, #4931 | #6182 | `0ae7a58321136c8396312bf00ba6a9e41e1d7057` | `v4.41` | DEPLOYED | 2026-08-28 |
+| v4.41 | checks-see-whole-subject | #4981, #4720, #5260, #5074, #4734, #4992, #4440, #5252, #4931 | #6182 | `0ae7a58321136c8396312bf00ba6a9e41e1d7057` | `v4.41` | VERIFIED | 2026-08-28 |
 
 #### Deployment Log v4.41
 **Files deployed:** No install-side copy was made in this run. The propagation target is `core/skills/pmo-qa-auditor/references/cascade-completeness-detection.md` (a references-only skill-surface change) together with the rebuilt `packages/pmo-qa-auditor.skill` and its `.sha256`. Denominator: **55** files changed by the release merge (36 `M` / 19 `A`); exactly **1** touches a `skills/**` surface, **2** touch `packages/**`, and **0** touch `core/rules/` (nothing to sync). Per `core/rules/skill-deployment.md` § References-only change propagation this resolves to disposition **(a) propagate**, and it is **not** a no-op: the installed copy is measurably stale, with `deploy.sh --check` reporting two DRIFT rows (`pmo-qa-auditor — references/ installed copy differs from source` and `pmo-qa-auditor.skill — installed copy differs`). The S-2 copy fell outside this run's authorized scope (renumber / merge / land / version-claim / tag / DEPLOYED row) and is therefore recorded here as **owed and open**, not as done.
@@ -220,6 +220,18 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 **Cycle-Time:** N/A — T_DEPLOY absent (no `deployment-status/deploy-skill` or `deploy-harness` event is recorded for this release, which is the same population the *Files deployed* entry above reports as owed); mechanism: compute-cycle-time.sh
 **Velocity:** planned 30 pts / delivered 30 pts (1.00); files-changed 55; allocation 0/30/0 pts (feature/debt/protocol-slack); class cross-cutting; mechanism: compute-release-velocity.sh
 **Result:** SUCCESS — release PR #6182 merged to main via merge commit (two parents, so the `git revert -m 1` rollback convention remains available). Signed-annotated tag `v4.41` verified at the merge SHA (`objecttype=tag`, SSH signature present, tagged object equal to MERGE_SHA). Two merge-time numbering collisions with concurrent releases were reconciled **before** the merge rather than discovered after it: this release's `deploy.sh` check moved **71 → 72** (the mainline claimed 71 for BLOCK-DESTRUCTIVE-022, #5250) across 18 tokens in 6 files, and **ADR-149 → ADR-153** plus **ADR-150 → ADR-154** (the mainline claimed both). Numbering was re-verified *after* the merge, not inferred from a clean merge: `check-adr-numbers.py` PASS at 154 ADRs contiguous `001..154` with zero duplicates and zero gaps, and `deploy.sh` declares checks `1..72` contiguous — the re-check is load-bearing because a duplicate formed by two different file paths claiming one global slot is structurally invisible to path-level merge logic. Phase B4 (S-2 install propagation) is **owed, not done** — see *Files deployed*.
+**Outcome:** SUCCESS
+**Close-Class-Telemetry:** retro-conformance N/A — no retro register found for v4.41; lessons-population N/A — no lessons register found; carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence N/A — no retro register found; evidence-preservation 40/40 (1.00); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+
+#### Release Learnings v4.41
+
+**Synthesized at:** 2026-08-28T19:36:24Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v4.41`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-08-28T19:18:02Z`
+
+**Surprise:** the defect family reproduced inside its own corrective artifacts
+**Would-change:** 12 population/unit discrepancies, 0 counting errors - each correct on an unnamed population, 3 exact once named
+**Watch-for:** global counters allocated at authoring, collisions seen only at merge - 3 cycles
 
 #### Deployment Log hooks-block-their-declared-subject
 **Files deployed:** `core/hooks/block-autonomy-ceiling.sh`, `core/hooks/block-destructive.sh` and `core/hooks/block-skill-direct-edit.sh` re-deployed to the workspace hook path by the security-hook bundle refresh (22 hooks processed). `core/rules/bypass-mode-readiness.md` and its `block-destructive.md` fragment ship as repo source only — the `.claude/rules/` mirror has no producer, a pre-existing coverage hole documented at `core/deploy/deploy.sh` § deploy-rules-mirror, so those two surfaces take effect on merge rather than on deploy.

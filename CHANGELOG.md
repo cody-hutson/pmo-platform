@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.41] - 2026-08-28
+
+Nine checks that reported clean without measuring what they claimed to measure now measure it, and each can detect its own regression.
+
+[Full notes](release/releases/notes/v4.41_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.41)
+
 ## [v4.40] - 2026-08-28
 
 Seven pipeline rules that contradicted each other, contradicted their own tools, or declared a vocabulary nothing enforced now have one statement each.
