@@ -1,4 +1,4 @@
-# Fixture corpus — `check-issue-body-anchors.sh` (Check 71)
+# Fixture corpus — `check-issue-body-anchors.sh` (Check 72)
 
 Hermetic input for `--self-test`. A corpus of live issue bodies cannot be
 fixtured against `gh api` without depending on a real repository's issue state,

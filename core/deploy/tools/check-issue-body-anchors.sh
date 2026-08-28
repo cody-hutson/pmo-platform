@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# check-issue-body-anchors.sh — Check 71 predicate: section-anchor citations in
+# check-issue-body-anchors.sh — Check 72 predicate: section-anchor citations in
 # OPEN issue bodies, resolved against the actual headings of the file they name.
 #
 # WHAT THIS ASSERTS. A precondition that cites a file plus a numbered section

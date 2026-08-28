@@ -12297,7 +12297,7 @@ sys.stdout.write("".join(out) + "|")
   fi
 
 
-  # Check 71 — issue-body section-anchor drift (ADVISORY ONLY) [#4931]
+  # Check 72 — issue-body section-anchor drift (ADVISORY ONLY) [#4931]
   #
   # A precondition that cites a file plus a numbered section anchor should cite a
   # section that EXISTS in that file. Two things break that silently: a section
@@ -12326,7 +12326,7 @@ sys.stdout.write("".join(out) + "|")
   # 52/53/55. A backlog invariant must never read green because it could not run.
   # Primitive: core/deploy/tools/check-issue-body-anchors.sh (carries --self-test).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 71: Issue-body section-anchor drift (numeric anchors in OPEN issue bodies vs their target's headings; ADVISORY — never enforce-capable)"
+    log "Check 72: Issue-body section-anchor drift (numeric anchors in OPEN issue bodies vs their target's headings; ADVISORY — never enforce-capable)"
     local c71_script="core/deploy/tools/check-issue-body-anchors.sh"
     if [[ ! -f "$c71_script" ]]; then
       flag_not_evaluated "issue-body-anchor-drift" "primitive script missing: $c71_script — the population was not read and no citation was resolved; this is not a clean result"
