@@ -8,6 +8,11 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.41 (2026-08-28) — Nine checks that reported clean without measuring anything now measure
+
+### hooks-block-their-declared-subject (2026-08-28, version-less) — Security controls now cover what they say they cover
+### v4.40 (2026-08-28) — Seven pipeline rules that disagreed with themselves now agree
+
 ### v4.39 (2026-08-28) — The platform's self-checks can now actually fail
 
 ### v4.38 (2026-08-23) — The platform's own working files move out of your personal folder

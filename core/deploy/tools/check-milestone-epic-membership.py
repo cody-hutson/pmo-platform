@@ -128,14 +128,13 @@ phantom `named-not-member`, so it must never be silently accepted.
 
 WHY M4 DOES NOT REUSE THE STAGE-TITLE FETCHER
 ---------------------------------------------
-`fetch_stage_titled()` reads through `gh issue list --search`, and the GitHub
-SEARCH API caps retrieval at 1,000 results regardless of the requested limit —
-asking for more returns the same 1,000. Against this repository's stage-title
-population that cap is live, not hypothetical, and a leg built on that fetcher
-reports the milestone-less count it can SEE rather than the count that exists:
-measured, an order of magnitude and change below the truth, with nothing in the
-output saying so. That defect is disclosed and separately tracked against the
-existing fetcher; M4 does not inherit it.
+The two legs ask different questions of different populations, and each is
+answered cheapest by its own transport. M4's subject is a `no:milestone`
+predicate over the whole repository, which `search/issues` answers with an
+EXACT, uncapped `total_count` in a SINGLE call. `fetch_stage_titled()` walks
+the issues connection, whose subject is every issue in the repository — so
+answering M4's question from that walk would mean filtering 5,391 nodes in
+process for a ~300-row answer, at 54 requests instead of one.
 
 M4 therefore counts with `search/issues` `total_count`, which is EXACT and
 uncapped — only the *item* pagination is capped, and when it binds, M4_SCAN
@@ -213,6 +212,25 @@ OUTPUT (TSV) / EXIT CODES
   SCAFFOLD_MARKER <ms> <marked>/<total>
   COUNT_M3   <n>                              load-bearing scaffold findings
   COUNT_M3_ADV <n>                            advisory scaffold findings
+  M3_SCAN <status> <total> <scanned> <matched> [<note>]
+                                              the stage-title population's own
+                                              measurement state. status ∈
+                                              {fetched, truncated, degraded,
+                                              not-run, fixture}. `truncated`
+                                              means the walk ended short: every
+                                              M3 row and both COUNT_M3* values
+                                              are then a LOWER BOUND.
+                                              `degraded` means the stage-title
+                                              read FAILED — the population is
+                                              UNMEASURED, never 0; every M3 row
+                                              and both COUNT_M3* values are then
+                                              ABSENT, and a consumer MUST branch
+                                              on this row before concluding
+                                              anything. On a non-measuring
+                                              status all three numeric fields
+                                              are `-`, never 0 — absence from a
+                                              source is information, not a
+                                              value.
   M4         <issue>  <title>                 OPEN milestone-less sub-task. Rows
                                               are the GATE-ELIGIBLE subset only;
                                               the closed population is counted,
@@ -259,10 +277,17 @@ OUTPUT (TSV) / EXIT CODES
                                               was found".
 
   exit 0 — no findings on M1 or M2
-  exit 1 — M1/M2 findings present (deploy.sh splits severity by leg). M3 and M4
-           NEVER move the exit code: M3 is advisory by construction, and M4's
-           severity lives entirely in deploy.sh's own mode branch.
-  exit 3 — input failure (API unreadable / malformed fixture)
+  exit 1 — M1/M2 findings present (deploy.sh splits severity by leg). NO M3 or
+           M4 FINDING EVER MOVES THE EXIT CODE: M3 is advisory by construction,
+           and M4's severity lives entirely in deploy.sh's own mode branch.
+  exit 3 — input failure (API unreadable / malformed fixture). A FAILED M3
+           STAGE-TITLE READ IS NOT ONE OF THESE ON deploy.sh's PATH: it is a
+           per-leg measurement outage, reported in band as `M3_SCAN degraded`
+           while M1/M2 emit normally (ADR-134 D5). The `--leg M3` / `--milestone`
+           path classifies the SAME condition as an input failure and exits 3,
+           because there M3 is the whole check and its output feeds a human
+           scaffold gate — see `run_m3_only`'s own comment for why the two
+           callers differ deliberately.
 
 Python 3.9-compatible — matches /usr/bin/python3 on the operator baseline.
 """
@@ -424,6 +449,40 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
         pageInfo{hasNextPage endCursor}
         nodes{ number title body labels(first:40){ nodes{ name } } }
       }
+    }
+  }
+}
+"""
+
+# M3's stage-title population. NOT a search. The GitHub SEARCH API caps ITEM
+# retrieval at 1,000 regardless of the requested limit, and this repository's
+# anchored stage-title population is 3,741 of 5,391 issues — so a search-backed
+# fetch returns an UNSTABLE 25% sample: measured, 2,786 of 3,741 invisible,
+# scattered non-contiguously from #385 to #5628 while the newest issue is #6077.
+# There is no rule that predicts which milestone a run can see, which is why a
+# clean run was never evidence of a working fetch.
+#
+# WHY NOT SHARD THE SEARCH into sub-1,000 slices. The search rate limit is 30
+# requests per MINUTE (measured). Enumerating 3,741 rows costs >=38 pages plus a
+# per-shard count probe — throttled by construction. This walk costs 54 requests
+# against the 5,000-point/hour GraphQL budget, and it FREES the 10 search
+# requests the capped fetch used to spend, which fetch_m4 needs on the same run.
+#
+# THE COMPLETENESS ASSERTION IS IN BAND. `totalCount` rides the SAME payload as
+# the nodes, so "did I see all of it?" is answered without a second call to a
+# second API whose semantics could drift from this one's.
+#
+# Only `number`, `title` and `milestone` are requested: `orphans_for()` and
+# `collect_m3()`'s attachment split read exactly those three fields. Labels and
+# body are deliberately absent — M3's AUTHORITATIVE member detail comes from
+# GRAPHQL_M3_MEMBERS, which is milestone-scoped and already paginated.
+GRAPHQL_STAGE_TITLED = """
+query($owner:String!,$name:String!,$endCursor:String){
+  repository(owner:$owner,name:$name){
+    issues(first:100, states:[OPEN,CLOSED], after:$endCursor){
+      totalCount
+      pageInfo{hasNextPage endCursor}
+      nodes{ number title milestone{ number } }
     }
   }
 }
@@ -674,35 +733,114 @@ def fetch_m3_members(repo, number):
     return slug, nodes
 
 
+def stage_scan_status(total, scanned):
+    """PURE. The stage-title walk's PV-7a Register A status.
+
+    `>=` rather than `==` deliberately, the same idiom `fetch_m4` uses: a 54-page
+    walk takes ~22s, during which an issue can be created, so `scanned` may
+    legitimately overshoot the totalCount the FIRST page reported. Overshoot is
+    completeness; only an undershoot is a sample.
+    """
+    return "fetched" if scanned >= total else "truncated"
+
+
 def fetch_stage_titled(repo):
     """Every stage-titled issue in the repo, ANY state, with its milestone.
 
-    ONE search call, not a per-milestone fan-out and not the repository-wide
-    all-states issue enumeration the module docstring rules out (that was an
-    `issues` walk; this is a title-scoped search). Its output is the
-    attachment-INDEPENDENT limb of the fire predicate: the orphan set is computed
-    from it in memory by slug match, so a milestone whose every sub-task lost its
-    milestone field is still detected — while OPEN — by evidence the defect
-    CREATES rather than by one it destroys.
+    Returns (status, total, scanned, rows).
+
+    Its output is the attachment-INDEPENDENT limb of the fire predicate: the
+    orphan set is computed from it in memory by slug match, so a milestone whose
+    every sub-task lost its milestone field is still detected — while OPEN — by
+    evidence the defect CREATES rather than by one it destroys. That is why this
+    fetch is repository-scoped and cannot be replaced by a per-milestone fan-out.
+
+    THE MODULE DOCSTRING'S "no repository-wide enumeration" RULE IS M2's, AND IT
+    DOES NOT BIND HERE. That measurement (1.3s vs 16.5s) was taken for a leg
+    whose subject is milestone-scoped, so fetching through the milestones is both
+    cheaper and sufficient. This leg's subject is issues whose milestone is WRONG
+    OR ABSENT — the set a milestone-scoped fetch structurally cannot reach.
+
+    STATUS is PV-7a Register A (ADR-134 D2, adopted verbatim, zero renames):
+      fetched    `scanned` reached the connection's own totalCount
+      truncated  the walk ended short — the row set is a SAMPLE, and every M3
+                 finding computed from it is a LOWER BOUND
+      degraded   the read FAILED; the population is UNMEASURED, never 0
+
+    THIS FETCHER DOES NOT RAISE ON A NON-ZERO rc, AND THAT IS A MECHANISM RATHER
+    THAN A DOCSTRING PROMISE: the call below routes through `_gh_partial`, which
+    never inspects `returncode`. `_gh` raises on every non-zero rc, so routing
+    there would make this sentence false with no line enforcing it — the failure
+    shape this file already names in `fetch_ref_milestones`, "A property no line
+    enforces is not a fail-posture." The other two non-gating legs make the same
+    choice for the same reason: `_search_page` ("Routed through `_gh_partial` …
+    the rc is not the signal here") and `fetch_ref_milestones`.
+
+    By the time this runs on `main()`'s path, three raise-on-rc `_gh` fetches
+    have already completed, so a failure HERE cannot be a global input failure —
+    the transport was proven working three calls ago. It is a per-leg
+    MEASUREMENT OUTAGE, and ADR-134 D5 routes that in band, never through the
+    exit code: a consumer that treats it as a hard failure converts an M3 outage
+    into a gate on the M1 and M2 verdicts, which is the fail-open class inverted.
+    `run_m3_only` classifies the SAME return value differently, and correctly —
+    see its own comment.
+
+    WHAT THIS DOES NOT COVER, stated rather than implied: `subprocess.run`
+    itself raising — the `gh` binary absent from PATH — still escapes, because
+    `raw = …` sits outside the guard below. That class is identical for the five
+    remaining `_gh` fetchers, is not introduced here, and on main()'s path is
+    pre-empted three calls earlier by fetch_milestones, which spawns the same
+    binary. It is not the rc-bearing class this routing exists to absorb.
+
+    The title filter calls `stage_tokens()` — the SAME single definition both
+    consumers apply — never a second regex. One predicate, three call sites.
     """
-    raw = _gh(["gh", "issue", "list", "--repo", repo, "--search", "Stage in:title",
-               "--state", "all", "--limit", "1000",
-               "--json", "number,title,labels,milestone"])
+    owner, _, name = repo.partition("/")
+    raw = _gh_partial(["gh", "api", "graphql", "--paginate",
+                       "-f", "query=" + GRAPHQL_STAGE_TITLED,
+                       "-F", "owner=" + owner, "-F", "name=" + name])
+    total, scanned, ndocs, out = 0, 0, 0, []
     try:
-        rows = json.loads(raw or "[]")
-    except ValueError:
-        raise RuntimeError("stage-title search payload was not decodable JSON")
-    out = []
-    for r in rows:
-        out.append({
-            "number": r.get("number"),
-            "title": r.get("title") or "",
-            "body": "",
-            "labels": {"nodes": [{"name": l.get("name", "")}
-                                 for l in (r.get("labels") or [])]},
-            "milestone": (r.get("milestone") or {}).get("number"),
-        })
-    return out
+        for payload in iter_json_docs(raw):
+            ndocs += 1
+            conn = payload["data"]["repository"]["issues"]
+            # BOUND TO THE FIRST PAGE'S totalCount, never max()-accumulated.
+            # `stage_scan_status` justifies its `>=` as tolerance for a walk that
+            # overshoots "the totalCount the FIRST page reported" — an issue
+            # created during the ~22s walk. Under max() that tolerance is
+            # cancelled by the very growth it exists to absorb: a later page
+            # reports the HIGHER count, `scanned` can no longer overshoot it, and
+            # a complete walk reads `truncated` with a LOWER BOUND annotation it
+            # did not earn. The trigger is not hypothetical — Check 56 runs
+            # inside `deploy.sh --check` during releases, which is exactly when
+            # the hub is creating stage sub-tasks.
+            if not total:
+                total = int(conn["totalCount"])
+            for node in conn["nodes"]:
+                scanned += 1
+                title = node.get("title") or ""
+                if not stage_tokens(title)[0]:
+                    continue
+                out.append({
+                    "number": node.get("number"),
+                    "title": title,
+                    "body": "",
+                    "labels": {"nodes": []},
+                    "milestone": (node.get("milestone") or {}).get("number"),
+                })
+    except (KeyError, TypeError, ValueError):
+        return ("degraded", None, None, [])
+    # An rc-0 stream that decoded to NOTHING is a failed read, not an empty
+    # repository. This file guards the identical case twice already — in
+    # `_parse_ref_milestone_payload` and `_search_page`, both
+    # `if not (text or "").strip(): return None` — and the first states the rule:
+    # "Empty-but-decodable means 'the call worked and resolved nothing'; None
+    # means 'the call did not work'." Counting decoded documents catches the
+    # whitespace-only stream too, and it is also where a non-zero rc with empty
+    # stdout lands now that the transport no longer raises on one.
+    if ndocs == 0:
+        return ("degraded", None, None, [])
+    return (stage_scan_status(total, scanned), total, scanned, out)
 
 
 def m4_query(repo):
@@ -1959,6 +2097,166 @@ def self_test():
     check("M3 UNMARKED sub-tasks are reported as unmarked, not coerced",
           mk_unm == [("266", "0/1")])
 
+    # ── M3 stage-title scan status (#4720) ───────────────────────────────
+    # The status is the ONLY thing separating a complete population from a
+    # sample, so it carries BOTH control arms. The specificity arm is a NEAR
+    # MISS — it differs from the sensitivity arm only in the property under test.
+    check("M3 T-S1 sensitivity: a walk short of totalCount reads truncated",
+          stage_scan_status(5391, 5390) == "truncated")
+    check("M3 T-S1c specificity: a walk that reaches totalCount reads fetched",
+          stage_scan_status(5391, 5391) == "fetched")
+    check("M3 T-S1c2 an OVERSHOOTING walk reads fetched — a 22s walk races "
+          "issue creation",
+          stage_scan_status(5391, 5392) == "fetched")
+    check("M3 T-S2 PV-7b: a non-measuring status emits dashes, never a zero",
+          emit_m3_scan("not-run", None, None, None, note="scope:leg-M1")
+          == ["M3_SCAN\tnot-run\t-\t-\t-\tscope:leg-M1"])
+    check("M3 T-S3 a measured scan emits total, scanned and matched",
+          emit_m3_scan("truncated", 5391, 1000, 955)
+          == ["M3_SCAN\ttruncated\t5391\t1000\t955"])
+
+    # TRANSPORT ARMS — the fetcher itself, over a substituted transport. Same
+    # in-process substitution idiom the M2 overlay arm above already uses: no
+    # subprocess, no network, no credentials, so the offline/stdlib-only
+    # invariant holds. `global _gh_partial` is ALREADY declared for that block
+    # and is deliberately not re-declared here; the M2 block restored it in its
+    # own `finally` before this one runs, so the two do not interfere.
+    #
+    # BOTH helper names are pinned, not just the one `fetch_stage_titled` calls
+    # today, and that is a mechanism rather than tidiness. A substitution that
+    # names only the current callee is hermetic only while the call site agrees
+    # with it: move the call site to the other helper and these arms reach the
+    # REAL transport and make a live credentialed call. Measured — restoring
+    # `_gh` at the call site with only `_gh_partial` pinned aborted this suite on
+    # a real API rate-limit error from GitHub. Pinning both makes the hermetic
+    # invariant hold under either callee, which also confines that mutation's
+    # effect to the rc-bearing block below, where the property it breaks lives.
+    global _gh
+    _real_m3_transport, _real_m3_transport_raising = _gh_partial, _gh
+    _PAGE = ('{"data":{"repository":{"issues":{"totalCount":%d,'
+             '"pageInfo":{"hasNextPage":false,"endCursor":null},'
+             '"nodes":[{"number":1,"title":"Stage 5 X — slug","milestone":{"number":7}},'
+             '{"number":2,"title":"not a stage title at all","milestone":null}]}}}}')
+    # ONE node per document, so a two-document stream scans exactly 2 — the shape
+    # the mid-walk population-growth arm needs.
+    _PAGE1 = ('{"data":{"repository":{"issues":{"totalCount":%d,'
+              '"pageInfo":{"hasNextPage":false,"endCursor":null},'
+              '"nodes":[{"number":%d,"title":"Stage 5 X — slug",'
+              '"milestone":{"number":7}}]}}}}')
+    def _pin(fn):
+        """Substitute BOTH transports at once — see the note above."""
+        global _gh, _gh_partial
+        _gh = _gh_partial = fn
+
+    try:
+        _pin(lambda _args: _PAGE % 3)            # totalCount 3, two nodes -> SHORT
+        short_arm = fetch_stage_titled("o/n")
+        _pin(lambda _args: _PAGE % 2)            # totalCount 2, two nodes -> COMPLETE
+        exact_arm = fetch_stage_titled("o/n")
+        _pin(lambda _args: '{"data":{"repository":{"not_issues":1}}}')
+        malformed_arm = fetch_stage_titled("o/n")
+        _pin(lambda _args: "")                   # rc 0, decoded NOTHING
+        empty_arm = fetch_stage_titled("o/n")
+        # POPULATION GREW MID-WALK: page 1 says 2, page 2 says 3, 2 nodes seen.
+        _pin(lambda _args: (_PAGE1 % (2, 1)) + (_PAGE1 % (3, 2)))
+        growth_arm = fetch_stage_titled("o/n")
+        # NEAR MISS for the growth arm: a genuinely short single-page walk, which
+        # must STILL read truncated. Without it the growth arm is satisfiable by
+        # any mutation that makes everything read fetched.
+        _pin(lambda _args: _PAGE1 % (5, 1))
+        short_ctrl_arm = fetch_stage_titled("o/n")
+    finally:
+        _gh_partial = _real_m3_transport
+        _gh = _real_m3_transport_raising
+
+    check("M3 T-S4 sensitivity: a short walk reports truncated with its two counts",
+          short_arm[0] == "truncated" and short_arm[1] == 3 and short_arm[2] == 2)
+    check("M3 T-S4c specificity: a complete walk reports fetched, not truncated",
+          exact_arm[0] == "fetched" and exact_arm[1] == 2 and exact_arm[2] == 2)
+    check("M3 T-S5 PV-5: BOTH arms extracted a non-empty row set (neither is vacuous)",
+          len(short_arm[3]) == 1 and len(exact_arm[3]) == 1)
+    check("M3 T-S6 the non-anchored title is filtered by stage_tokens, not carried",
+          [r["number"] for r in exact_arm[3]] == [1])
+    check("M3 T-S7 a malformed payload reports degraded — never a silently-empty "
+          "population, and never an exception that takes M1/M2 down",
+          malformed_arm == ("degraded", None, None, []))
+    check("M3 T-S8-ctrl an EMPTY rc-0 stream reports degraded, not empty-ok — "
+          "a read that resolved nothing is not a population of zero",
+          empty_arm == ("degraded", None, None, []))
+    # Captured as a VALUE, not asserted inline: moving `degraded` out of the
+    # non-measuring tuple makes this emit RAISE on the None counters rather than
+    # return a wrong row, and an assertion evaluated inline would abort the suite
+    # with a traceback instead of turning this leg red. A mutation must produce a
+    # RED CHECK to be attributable — same reason the rc arms below capture theirs.
+    try:
+        degraded_row = emit_m3_scan("degraded", None, None, None)
+    except Exception as exc:                   # noqa: BLE001 — see the comment
+        degraded_row = "RAISED:" + type(exc).__name__
+    check("M3 T-S9 PV-7b: the degraded status emits dashes, never a zero and "
+          "never an exception",
+          degraded_row == ["M3_SCAN\tdegraded\t-\t-\t-"])
+    check("M3 T-S11 a population that GREW mid-walk still reads fetched — `total` "
+          "binds to the FIRST page, which is what stage_scan_status's `>=` "
+          "tolerance is written against; max() would cancel it",
+          growth_arm[0] == "fetched" and growth_arm[1] == 2
+          and growth_arm[2] == 2 and len(growth_arm[3]) == 2)
+    check("M3 T-S11c specificity near-miss: a genuinely SHORT walk still reads "
+          "truncated, so T-S11 is not satisfied by reading fetched everywhere",
+          short_ctrl_arm[0] == "truncated" and short_ctrl_arm[1] == 5
+          and short_ctrl_arm[2] == 1)
+
+    # ── M3 rc-bearing transport arms (#4720) ─────────────────────────────
+    # These substitute `subprocess`, NOT the helper name, and that is the whole
+    # point: the rc fork lives INSIDE `_gh` / `_gh_partial`, so substituting the
+    # helper by name replaces the thing under test and the arm goes vacuously
+    # green. The sibling M2 arm above ("a raising transport returns degraded
+    # instead of propagating") is the model; this is its rc-bearing form. No
+    # process is spawned.
+    global subprocess                          # restored in the finally below
+    _real_subprocess = subprocess
+
+    class _FakeProc(object):
+        def __init__(self, rc, out):
+            self.returncode, self.stdout, self.stderr = rc, out, ""
+
+    class _RcShim(object):
+        def __init__(self, rc, out):
+            self._rc, self._out = rc, out
+
+        def run(self, *_a, **_k):
+            return _FakeProc(self._rc, self._out)
+
+    def _arm(rc, out):
+        # An ESCAPE is the failure this block names, so it is captured as a
+        # value rather than allowed to abort the suite: the kill-map mutation
+        # must produce a RED CHECK, not a traceback.
+        global subprocess
+        subprocess = _RcShim(rc, out)
+        try:
+            return fetch_stage_titled("o/n")
+        except Exception as exc:               # noqa: BLE001 — see the comment
+            return "ESCAPED:" + type(exc).__name__
+
+    try:
+        dead_arm = _arm(1, "")                 # rc != 0, empty stdout
+        midwalk_arm = _arm(1, _PAGE % 9)       # rc != 0, one COMPLETE page written
+        rc0_ctrl = _arm(0, _PAGE % 2)          # NEAR MISS: same payload, rc == 0
+    finally:
+        subprocess = _real_subprocess
+
+    check("M3 T-S10 a DEAD transport (rc != 0, empty stdout) reports degraded "
+          "instead of propagating — the guarantee is the `_gh_partial` routing, "
+          "not the docstring",
+          dead_arm == ("degraded", None, None, []))
+    check("M3 T-S10b a mid-walk failure that had already written one full page "
+          "returns that page as truncated — a partial measurement, not a "
+          "discarded one",
+          midwalk_arm[0] == "truncated" and midwalk_arm[1] == 9
+          and midwalk_arm[2] == 2 and len(midwalk_arm[3]) == 1)
+    check("M3 T-S10c specificity near-miss: the SAME payload at rc == 0 reads "
+          "fetched, so T-S10/T-S10b isolate the rc, not the payload",
+          rc0_ctrl[0] == "fetched" and rc0_ctrl[1] == 2 and rc0_ctrl[2] == 2)
+
     # ── M4 sub-task milestone orphans ────────────────────────────────────
     # The fixture is SYNTHETIC and constructed inline. It is deliberately NOT a
     # live issue: a live fixture would enter the very population COUNT_M4
@@ -2110,6 +2408,28 @@ def collect_m3(repo, milestones, stage_titled):
     return out
 
 
+def emit_m3_scan(status, total, scanned, matched, note=""):
+    """M3's INPUT-POPULATION measurement row. PURE.
+
+    PV-7b: on a non-measuring status the numeric fields are `-`, never 0. A zero
+    is a measurement; absence from a source is information. A consumer MUST
+    branch on the status before reading COUNT_M3 / COUNT_M3_ADV — those counts
+    are a LOWER BOUND whenever the status is `truncated`, and they are ABSENT
+    entirely whenever it is `degraded`.
+
+    FOUR numeric-bearing fields, where M4_SCAN carries two, and the difference is
+    structural rather than stylistic: M4's subject population and its enumeration
+    are the SAME set, so two numbers close the loop. This walk scans a strict
+    SUPERSET (every issue) and matches a subset (the stage-titled ones), so
+    `total` + `scanned` carry the completeness assertion while `matched` carries
+    the subject size, and none of the three is derivable from the others.
+    """
+    tail = ("\t" + note) if note else ""
+    if status in ("not-run", "degraded", "fixture"):
+        return ["M3_SCAN\t%s\t-\t-\t-%s" % (status, tail)]
+    return ["M3_SCAN\t%s\t%d\t%d\t%d%s" % (status, total, scanned, matched, tail)]
+
+
 def emit_m3(load_bearing, advisory, policy, info, denom, marker, skipped):
     out = []
     for ms_num in skipped:
@@ -2133,6 +2453,9 @@ def emit_m3(load_bearing, advisory, policy, info, denom, marker, skipped):
 
 def run_m3_only(args):
     """The `--leg M3` / `--milestone` path. M1 and M2 are not run and not touched."""
+    m3_input = None
+    m3_scan = ("degraded", None, None, None, "")
+    rc = 0
     if args.fixture:
         try:
             with open(args.fixture, "r", encoding="utf-8") as fh:
@@ -2141,6 +2464,10 @@ def run_m3_only(args):
         except (OSError, ValueError, KeyError) as exc:
             print("ERROR\tM3 fixture unreadable: " + str(exc), file=sys.stderr)
             return 3
+        # The fixture supplies `m3` POST-collect, so no walk occurred and there is
+        # no population to report. `fixture` is the positive name for that, not a
+        # count of zero.
+        m3_scan = ("fixture", None, None, None, "scope:fixture")
     else:
         repo = _derive_repo(args.repo)
         if not repo:
@@ -2149,17 +2476,46 @@ def run_m3_only(args):
             return 3
         try:
             stage_titled = fetch_stage_titled(repo)
-            if args.milestone:
-                ms = fetch_milestone_by_slug(repo, args.milestone)
-                milestones = [ms]
+            if stage_titled[0] == "degraded":
+                # SAME return value, DIFFERENT classification from main() — and
+                # the reason is the CONSUMER, not the call order. On this path
+                # M3 is the whole check, and Step 6.5's scaffold gate blocks on
+                # a `SKIP_MS … not-yet-scaffolded` row (hub-spoke-bridge.md
+                # Procedure 1 Step 6.5). Withheld M3 rows emit no such row, so
+                # returning 0 here would let the human gate read CLEAN over an
+                # unmeasured scaffold — the defect this leg exists to catch,
+                # reproduced inside the catcher. main() has M1/M2 to protect and
+                # a never-escalating emitter to route to; this path has neither.
+                #
+                # THE EMIT STILL RUNS BEFORE THE RETURN. Both documented
+                # consumers of this path are ROW-readers, and returning here
+                # without printing would hand them no TSV at all — an empty
+                # stream reads as "no findings", which is the same false-green
+                # in a different costume. They get `M3_SCAN degraded` instead,
+                # which says the measurement did not happen. The M3 rows and
+                # BOTH COUNT_M3* values stay ABSENT (PV-7b: absence, never a
+                # zero), so `m3_input` is deliberately left None below.
+                print("ERROR\tstage-title population unreadable — the M3 leg has "
+                      "no input", file=sys.stderr)
+                rc = 3
             else:
-                milestones = fetch_milestones(repo)
-            m3_input = collect_m3(repo, milestones, stage_titled)
+                if args.milestone:
+                    ms = fetch_milestone_by_slug(repo, args.milestone)
+                    milestones = [ms]
+                else:
+                    milestones = fetch_milestones(repo)
+                m3_input = collect_m3(repo, milestones, stage_titled[3])
+                m3_scan = (stage_titled[0], stage_titled[1], stage_titled[2],
+                           len(stage_titled[3]), "")
         except RuntimeError as exc:
             print("ERROR\t" + str(exc), file=sys.stderr)
             return 3
 
-    rows = emit_m3(*analyse_m3(m3_input))
+    rows = emit_m3(*analyse_m3(m3_input)) if m3_input is not None else []
+    # M3's INPUT-POPULATION row emits on EVERY path, including the degraded one:
+    # a leg whose population was never measured must say so positively, or the
+    # reader infers it from missing rows.
+    rows.extend(emit_m3_scan(*m3_scan))
     # M4 IS POSITIVELY REPORTED AS NOT RUN ON THIS PATH, never silently absent.
     # This is the Procedure 1 Step 6.5 invocation — the single moment in the
     # pipeline when a milestone-less sub-task is most likely to have JUST been
@@ -2169,11 +2525,15 @@ def run_m3_only(args):
     # is the precise defect M4 exists to catch, reproduced inside the catcher.
     rows.extend(emit_m4("not-run", [], None, 0, 0, note="scope:m3-only"))
     print("\n".join(rows))
-    # M3 NEVER drives the exit code. It routes through deploy.sh's
-    # `flag_advisory_only` emitter, which is structurally incapable of enforcement
-    # (no mode case, no enforce branch, no ISSUES increment) — an exit-1 here would
-    # smuggle enforcement back in through the one door that is supposed to have none.
-    return 0
+    # M3 NEVER drives the exit code ON A MEASURED RUN. It routes through
+    # deploy.sh's `flag_advisory_only` emitter, which is structurally incapable of
+    # enforcement (no mode case, no enforce branch, no ISSUES increment) — an
+    # exit-1 here would smuggle enforcement back in through the one door that is
+    # supposed to have none. `rc` is 3 only when the input itself was unreadable,
+    # which is an input failure rather than a finding, and deploy.sh never invokes
+    # this path — it calls the primitive with no `--leg`, so this exit code
+    # reaches no `flag_*` emitter at all.
+    return rc
 
 
 def _m4_from_fixture(data):
@@ -2259,6 +2619,12 @@ def main():
 
     members_all = None
     m3_input = None
+    # The args `emit_m3_scan` is splatted with, or None when M3 did not run at
+    # all. Held separately from `m3_input` because the two answer different
+    # questions: `m3_input` is "what did the leg find", `m3_scan` is "was the
+    # leg's input ever measured" — and a withheld finding set must still report
+    # the second, or its absence is read as a clean zero.
+    m3_scan = None
     m4_fetched = None
     ref_milestone = None
     ref_resolution = ("not-needed", 0, 0)
@@ -2276,6 +2642,8 @@ def main():
             if ref_milestone is not None:
                 ref_resolution = ("fixture", len(ref_milestone), len(ref_milestone))
             m3_input = data.get("m3")
+            if m3_input is not None:
+                m3_scan = ("fixture", None, None, None, "scope:fixture")
             m4_fetched = _m4_from_fixture(data)
         except (OSError, ValueError, KeyError) as exc:
             print("ERROR\tfixture unreadable: " + str(exc), file=sys.stderr)
@@ -2290,7 +2658,23 @@ def main():
             milestones = fetch_milestones(repo)
             issues = fetch_open_issues(repo)
             members_all = fetch_milestone_members(repo)
-            m3_input = collect_m3(repo, milestones, fetch_stage_titled(repo))
+            stage_titled = fetch_stage_titled(repo)
+            if stage_titled[0] == "degraded":
+                # PV-7c: per-item verdicts are WITHHELD, never guessed, and the
+                # outage emits EXACTLY ONE finding naming the cause — the
+                # M3_SCAN row below. Reusing the `m3_input = None` suppression
+                # the --leg M1|M2 path already uses means the `if m3_input is
+                # not None` guard in the emit block withholds every M3 row and
+                # BOTH COUNT_M3* values by construction. That is PV-7b's
+                # absence-not-zero satisfied with no new control flow and no new
+                # suppression rule — the emit_m4 analogue is already
+                # structurally present here.
+                m3_input = None
+                m3_scan = ("degraded", None, None, None, "")
+            else:
+                m3_input = collect_m3(repo, milestones, stage_titled[3])
+                m3_scan = (stage_titled[0], stage_titled[1], stage_titled[2],
+                           len(stage_titled[3]), "")
         except RuntimeError as exc:
             print("ERROR\t" + str(exc), file=sys.stderr)
             return 3
@@ -2324,6 +2708,7 @@ def main():
         m1 = []
     if args.leg in ("M1", "M2"):
         m3_input = None
+        m3_scan = None
         m4_fetched = None
 
     out = ["MILESTONES\t" + str(len(milestones)), "DECLARED\t" + str(declared)]
@@ -2353,6 +2738,15 @@ def main():
     out.append("M2_REF_RESOLUTION\t%s\t%d\t%d" % ref_resolution)
     if m3_input is not None:
         out.extend(emit_m3(*analyse_m3(m3_input)))
+    # M3's INPUT-POPULATION row emits on EVERY path, mirroring M4's rule directly
+    # below. `not-run` is the leg short-circuit; `degraded` is the walk having
+    # failed, and it is the ONE finding naming that cause — the M3 rows and both
+    # COUNT_M3* values are absent above rather than zeroed.
+    if m3_scan is None:
+        out.extend(emit_m3_scan("not-run", None, None, None,
+                                note="scope:leg-" + args.leg))
+    else:
+        out.extend(emit_m3_scan(*m3_scan))
     # M4 emits on EVERY path, including the ones that do not run it: a leg whose
     # absence has to be inferred from missing rows is a leg whose "no findings"
     # and "never looked" render identically.

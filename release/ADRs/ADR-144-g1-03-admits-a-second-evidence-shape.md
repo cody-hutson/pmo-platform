@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-144 — G1-03 admits a second evidence shape: label-position probe markers, two co-present, Evidence-section-scoped
-status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
+status: Accepted — ratified by the operator at the v4.40 release close gate (2026-08-28). The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
 date: 2026-08-24
 release: pipeline-spec-self-consistency
 deciders: "Workspace owner. Design decision rendered at Stage 5 Solutioning for the G1-03 evidence-shape card and accepted by the hub at Procedure 4; the card deferred the marker set, the co-presence rule, and the layer split, and was silent on predicate scope, which is why this record exists."
@@ -24,7 +24,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the release close gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
+**Accepted** — ratified by the operator at the v4.40 release close gate (2026-08-28). The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
 
 **Numbering.** `144` was derived at Engineering time, immediately before this file was authored, via `release/tools/renumber-adr.py`. The oracle reported `ANCHOR 141 origin/main` and `NEXT-FREE 142`; `--detect` reported `CLAIMED-SET-BRANCH-ONLY 142,143 (detection only — never binds)` with both claims `BINDS`. `142` and `143` are therefore already bound on this same release branch by the records authored in the two earlier builds, and `144` is this branch's contiguous next, with the mainline reaching `ADR-141` and no hole beneath any claim. The number was deliberately **not** reserved at design time — the oracle is a *read*, not a reservation, which is exactly why three Stage-5 spokes in this release independently specified `142`. Sibling unmerged release branches claim overlapping numbers; those claims are **detection-only and do not bind**, and stepping past them to be safe would land a gap. The asymmetry is the whole rule: a duplicate is mechanically renumberable by this same tool at merge time, whereas a **gap blocks the repo**, because the next release's `anchor + 1` lands under a hole.
 

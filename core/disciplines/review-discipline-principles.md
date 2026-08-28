@@ -330,6 +330,111 @@ PV-2  CONTROL — SENSITIVITY ARM.
              rather than delegating to such an entry point, extracting the assertion
              into one is part of the work, not an exemption from this rider.
 
+      PV-2e  ENGINE PARITY.
+             (a) THE MECHANISM. A regex construct is present only if the engine
+             executing the probe implements it. Under `git grep`'s POSIX engines —
+             the default basic regex, and `-E` extended regex — a backslash escape
+             that POSIX does not define is neither rejected nor dropped: it executes
+             as the LITERAL CHARACTER FOLLOWING THE BACKSLASH. `\b` searches for `b`;
+             `\d` for `d`; `\s` for `s`; `\w` for `w`. The failure is BIDIRECTIONAL:
+             where the literalised string is absent the probe returns a clean-looking
+             zero; where it is present the probe returns matches, at rc=0, on text the
+             author never asked for. No output signature separates either case from a
+             correct result — which is why no diagnostic tell may be relied on.
+
+             (b) FORBIDDEN. Passing a POSIX-undefined escape — the Perl shorthand
+             classes and assertions `\b \B \d \D \s \S \w \W` and their kin — to
+             `git grep` under `-E` or a bare pattern. Escapes POSIX DOES define are
+             DIALECT-SPECIFIC rather than literalised (`\(` groups under basic regex
+             and is a literal parenthesis under extended regex); those are governed by
+             (d), not by this prohibition.
+
+             (c) THE OBLIGATION — ASSERT THE ENGINE ONCE, AGAINST A FIXTURE BUILT TO
+             DISCRIMINATE. Before relying on any probe whose pattern uses a construct
+             the executing engine may not implement, run that construct against a
+             purpose-built two-line fixture, ONCE PER (ENGINE x CONSTRUCT) PER SESSION.
+             Record the result in the probe record; it is then reusable by every probe
+             in that session using that engine and that construct.
+
+             The fixture carries a labeled expected-match set in the PV-2d sense, and
+             is DISPOSABLE — it lives in the run directory, never in the corpus:
+               - MUST-FLAG line     carries text the construct matches, and does NOT
+                                    carry the literalised twin text.
+               - MUST-NOT-FLAG line carries the literalised twin text, and nothing the
+                                    construct matches.
+             Worked instance for `\b54\b`: must-flag `alpha 54 omega`; must-not-flag
+             `beta b54b omega`.
+
+             The arms are the arms PV-2 and PV-2c already define, and the verdicts are
+             the ones this section already renders. The construct pattern against the
+             MUST-FLAG line is the PV-2 sensitivity arm (PASS: NON-ZERO) — a
+             literalising engine returns ZERO, which is BROKEN PROBE. The same pattern
+             against the MUST-NOT-FLAG line is the PV-2c specificity arm (PASS: ZERO) —
+             a literalising engine returns NON-ZERO, which is OVER-MATCHING PROBE. Both
+             directions are caught by rules already in force. This rider introduces no
+             new predicate and no new verdict.
+
+             NEVER ESTABLISH ENGINE CAPABILITY BY COMPARING TWO RESULT SETS OVER THE
+             CORPUS BEING MEASURED. A construct that IS implemented may still fail to
+             discriminate on a given corpus — every occurrence of the token may already
+             satisfy the constraint — so identical result sets are the EXPECTED outcome
+             of a working engine on most real tokens, and the ONLY POSSIBLE outcome for
+             a true zero. A comparison over the measured corpus cannot separate "the
+             construct was never executed" from "the construct executed and had nothing
+             to exclude". The fixture separates them by construction.
+
+             Where the literalised twin text is itself inside the construct's own
+             language, no must-not-flag line can be written — `\w\w\w` against `www` is
+             the worked case. Record PV-2c as NOT TRIGGERED, with that reason, per
+             PV-2c's own optional clause, and rely on the must-flag arm.
+
+             (d) WHOLE-TOKEN MATCHING UNDER `git grep` — THE OBLIGATION IS A PROPERTY,
+             NOT A FLAG RECIPE. `-w` is ORTHOGONAL to the pattern dialect: it constrains
+             where a match may begin and end; it does not change how the pattern is
+             parsed. The dialect is chosen by the pattern flag — default = basic regex,
+             `-E` = extended regex, `-F` = fixed string.
+
+               THE PROPERTY: any form that interprets the token as a PATTERN obliges the
+               author to escape every regex metacharacter in the token FOR THAT DIALECT
+               first. `-F` forms do not.
+
+             Because the dialect decides which spelling is wrong, the over-match MIRRORS
+             — the same token is over-matched by OPPOSITE spellings under the two pattern
+             dialects. For token `(20)` against an oracle of 3: `-w '\(20\)'` returns 337
+             and `-w '(20)'` returns 3; `-wE '\(20\)'` returns 3 and `-wE '(20)'` returns
+             337.
+
+               PRIMARY — `-wF`. A literal token is not a pattern. It is the only form
+               correct under raw substitution, and the only one correct across both token
+               edge classes.
+
+               PERMITTED, ESCAPING OBLIGATION DISCHARGED — `-wE`, or the word-class
+               alternation `(^|[^0-9A-Za-z_])TOKEN([^0-9A-Za-z_]|$)` — where the pattern
+               is DELIBERATELY AUTHORED as extended regex and every metacharacter in the
+               substituted token is escaped for it. Worked instance, token `(20)`:
+               `(^|[^0-9A-Za-z_])\(20\)([^0-9A-Za-z_]|$)`.
+
+               PERMITTED — `-F` without `-w`, where the token's own leading and trailing
+               characters are non-word and already bound it.
+
+               PERMITTED — `python3` with a file-scoped line-scan predicate, named as THE
+               mechanism rather than as an instance of "not `git grep`": the plain `grep`
+               on a given workstation may be a shim that returns a plausible zero on a
+               pattern it rejects.
+
+               NOT PERMITTED FOR WHOLE-TOKEN MATCHING — `-P '\b...\b'`. `\b` asserts a
+               word/non-word TRANSITION; a token whose edge character is itself non-word,
+               preceded by whitespace, presents none, so the assertion cannot be satisfied
+               and the probe returns zero over a non-empty population. `-P` is a pattern
+               dialect as well, so both spellings fail: raw `-P '\b(20)\b'` returns 320,
+               escaped `-P '\b\(20\)\b'` returns 0, against an oracle of 3. `-P` remains
+               permitted for genuine PCRE constructs OTHER THAN word boundary.
+
+             An integration criterion that names a permitted-form list grades against the
+             list shipped in this section, NOT against its own inline enumeration. A
+             criterion carrying a closed copy of the list goes stale the moment the list
+             is amended, and then grades a conforming arm as non-conforming.
+
 PV-3  EXTRACTION.   Show that the bytes the probe actually read were non-empty and
                     untruncated — a byte or line count of the input, not of the
                     output. A probe over an empty or truncated input returns zero for
@@ -472,7 +577,61 @@ MAPPING INTO A CONSUMING VERDICT ENUM
              OVER-MATCHING PROBE
 ```
 
-### § 8.3 — Coverage map: the 13 observed shapes against the catching clause
+#### Worked record — a detector repaired mid-claim, and the arm that caught it
+
+The subject was a census of `git … grep` invocations across the tracked tree, run to
+decide whether a defect idiom needed a lint. The first detector keyed on `git` followed
+by whitespace followed by `grep`. It returned a clean-looking zero for the script-class
+population, and the zero was reported before any arm was run.
+
+The pattern cannot see a `git` **global option** standing between the command and the
+subcommand — `git -C <dir> grep …` and `git --no-pager grep …` both defeat it. The
+repaired predicate admits an option run before the subcommand. The census then moved,
+and what it surfaced was a live occurrence inside the platform's own probe-validity
+gate.
+
+```
+Probe:        python3 line-scan over `git ls-files`; two detector versions
+              run over the same populations. python3 is the executing engine
+              deliberately — the local `grep` may be a shim that returns a
+              plausible zero on a pattern it rejects, and `git grep -E`
+              literalises a POSIX-undefined escape (PV-2e).
+Denominator:  231 files / 143,805 lines  (script class: .sh .py .bash .zsh)
+              296 files / 152,375 lines  (that set + workflow YAML)
+
+Control — sensitivity:  5 seeded must-flag lines, each carrying the full defect
+              idiom; 2 of the 5 carry a git global option before the subcommand.
+              v1 flags 2 of 5      <- the blind spot, made visible
+              v3 flags 5 of 5      <- PASS: NON-ZERO
+              arm input 161 bytes, non-empty, every line shown to carry the property
+
+Control — specificity:  6 NEAR-MISS lines, each differing from a true positive in
+              exactly ONE property and no other — not git grep; git grep with an
+              undefined escape but `-P` rather than `-E`; git grep with `-E` but no
+              undefined escape; `-wF`; `-F`; a python3 line carrying the escape.
+              v1 flags 0 of 6, v3 flags 0 of 6   <- PASS: ZERO
+              arm input 178 bytes, non-empty
+
+Census delta: `git … grep` occurrences, script class: v1 = 1, v3 = 2.
+              The occurrence v1 could not see is a live, CONFORMANT invocation in
+              the platform's own probe-validity gate — a character class, no
+              POSIX-undefined escape — so no code change followed. The audited
+              DENOMINATOR changed, and so did the zero.
+Result:       defect idiom = 0 across both script-class populations.
+Verdict:      the v1 zero was INDETERMINATE — repaired and re-run, never CLEAN.
+```
+
+**The repair is the lesson, not the census.** A first specificity arm for this same
+probe was itself mis-designed: it listed near-misses for *"is a git-grep invocation"*
+when the claim being made was about *the defect idiom*, so four of six near-misses
+flagged and the arm read as an over-matching probe. It proved nothing about the
+predicate under test, because it was not a near-miss for that predicate. **A control
+arm must be a near-miss for the CLAIM, not for some adjacent property the probe also
+happens to match** — and an arm built from the same pattern family as the subject
+inherits the subject's blind spot: it shows the extraction is non-empty, never that it
+is complete.
+
+### § 8.3 — Coverage map: the 14 observed shapes against the catching clause
 
 ```
  #  Shape (as observed)                                        Class                        Clause      Caught
@@ -499,17 +658,22 @@ MAPPING INTO A CONSUMING VERDICT ENUM
 13  Instrument emits the same output for a degraded measurement
     and for a clean result                                     unrepresentable
                                                                degraded state               PV-7        yes
+14  POSIX-undefined escape literalised by the executing
+    engine — the probe silently searches for different
+    text; bidirectional, reading CLEAN where the
+    literalised string is absent and as a normal hit
+    where it is present                                        wrong pattern                PV-2        yes
 
-Verdict: 11 of 13 shapes are caught by a self-executable clause; 2 are not (shapes 5, 9).
+Verdict: 12 of 14 shapes are caught by a self-executable clause; 2 are not (shapes 5, 9).
 ```
 
 ### § 8.4 — Declared coverage boundary (state this; do not imply more)
 
 ```
-COVERED — 11 of the 13 observed shapes, across 7 classes:
+COVERED — 12 of the 14 observed shapes, across 7 classes:
   wrong-denominator (2 shapes) . truncated-or-empty-extraction (3) .
   non-discriminating-predicate (2) . wrong-scope (1) . no-probe (1) .
-  wrong-pattern-false-alarm (1) . unrepresentable-degraded-state (1).
+  wrong-pattern, bidirectional (2) . unrepresentable-degraded-state (1).
 The class names are the unit of this list and the shape count is the unit of the
 numeral; both are stated so the two can be reconciled against Section 8.3 in one
 read rather than inferred.
@@ -536,16 +700,19 @@ surface. That is a delivery gap, distinct from the enforcement gap: the rule is 
 merely unenforced there, it is unread. Named here so the coverage claim is not
 larger than the delivery.
 
-ASYMMETRY BY DESIGN. PV-0..PV-3 fire on a zero/clean/absent claim. PV-4 and the
-PV-2c specificity arm are the two clauses extended to the false-alarm direction.
-PV-2c catches an over-matching pattern whenever a discriminating near-miss input is
-available; an over-match the prober could not conceive of remains uncovered — the
-same epistemic boundary PV-1's denominator carries. The observed population for this
-class is a single shape, already caught by PV-4, so no coverage FRACTION is claimed
-for the residual: an "N of M" with no M is exactly what Rule 15 forbids. That shape
-is the false-ALARM direction only. The same wrong-pattern class can also produce a
-false CLEAN — a pattern that misses text it should have matched — a direction not
-observed here and therefore carrying no row in § 8.3: unobserved, not covered.
+ASYMMETRY BY DESIGN. PV-0..PV-3 fire on a zero/clean/absent claim. THREE clauses are
+extended to the false-alarm direction: PV-4, the PV-2c specificity arm, and PV-2 via
+the PV-2e engine-parity rider. PV-2c catches an over-matching pattern whenever a
+discriminating near-miss input is available; an over-match the prober could not
+conceive of remains uncovered — the same epistemic boundary PV-1's denominator
+carries. The observed population for the wrong-pattern class is TWO shapes (11 and
+14), caught by PV-4 and by PV-2, so no coverage FRACTION is claimed for the residual:
+an "N of M" with no M is exactly what Rule 15 forbids. The class is BIDIRECTIONAL.
+Shape 11 is the false-ALARM direction. Shape 14 is the false-CLEAN direction — a
+pattern that searches for text the author never wrote, reading as a clean sweep where
+the substituted text is absent and as an ordinary hit where it is present. That
+second direction was previously recorded here as unobserved and therefore uncovered.
+It is now observed, carries row 14 in § 8.3, and is caught by PV-2 via PV-2e.
 ```
 
 ---

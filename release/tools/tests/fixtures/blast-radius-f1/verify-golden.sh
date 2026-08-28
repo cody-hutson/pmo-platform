@@ -17,11 +17,14 @@ set -uo pipefail
 #   Order is load-bearing: the INPUT corpus is verified FIRST, so a mismatch
 #   localizes to one named corpus file instead of being blamed on the golden.
 #
-#   Size alone cannot discriminate. Four distinct constructions of this artifact
-#   land on exactly 751 bytes with four different digests (unsorted jq, --depth=1,
-#   --depth=3, and the canonical build). Treat SIZE-MATCHES-BUT-DIGEST-DIFFERS as
-#   the HIGHEST-suspicion signal, not the lowest: it is the signature of a missing
-#   `jq -S`, a wrong --depth, or a polluted scan root.
+#   Size alone cannot discriminate. Measured on the 751-byte PREDECESSOR of this
+#   artifact, four distinct constructions landed on exactly that byte count with
+#   four different digests (unsorted jq, --depth=1, --depth=3, and the canonical
+#   build). Treat SIZE-MATCHES-BUT-DIGEST-DIFFERS as the HIGHEST-suspicion signal,
+#   not the lowest: it is the signature of a missing `jq -S`, a wrong --depth, a
+#   polluted scan root, or a GIT-TRACKED scan root where the recipe calls for a
+#   mktemp copy (that last one is a 2-byte gap with a wholly different digest —
+#   quiet by construction, which is exactly why normalize() deletes the reason).
 #
 #   Deliberately changing the tool's doc output is a DIFFERENT door: regenerate via
 #   the --regenerate-golden protocol in README.md, which requires a written reason
@@ -34,8 +37,8 @@ GOLDEN="$HERE/normalized-golden.json"
 CORPUS="$HERE/corpus"
 
 # ---- SPEC CONSTANTS. Do NOT edit these to match an observed output. ----
-expected_sha=2ae110de972f292bc4ecf3a1c7bfa7e8af11f7feca978edc1cf5c44cc5c769c5
-expected_bytes=751
+expected_sha=ec46e8a7cd67b2b9e6bf742340f1272a812374cf302f2390b28ec4c7aa461ecb
+expected_bytes=883
 expected_manifest='b.md
 docs/a.md
 docs/target.md'
@@ -102,6 +105,20 @@ chk '.schema_version'            1     'schema_version'
 chk 'has("cli_version")'         false 'cli_version deleted by normalize()'
 chk 'has("scanned_at")'          false 'scanned_at deleted by normalize()'
 chk 'has("partial")'             false 'no partial-result marker (fan-out cap did not fire)'
+# The MEASUREMENT-STATE rows. The two above them are counts; these say what those counts
+# mean. `second_order_count 0` is only readable as MEASURED EMPTY because the status
+# beside it is `fetched` — the whole point of #5260 — and a measuring status must retain
+# its counter, so the pair is asserted together rather than separately.
+chk '.stats.second_order_status'          fetched   'second_order_status is the MEASURED state at depth 2'
+chk '.stats | has("second_order_count")'  true      'a measuring status RETAINS its counter'
+chk '.stats.unreadable_files'             0         'every scan-listed file was readable'
+# The SCOPE rows. The fixture root is a mktemp copy, so tracked scoping is deliberately
+# not attempted and the count covers the all-files population. Asserting the reason is
+# ABSENT pins that normalize() strips it — without this row a future editor could narrow
+# normalize() and silently re-admit a free-text field to a byte-pinned artifact.
+chk '.stats.scan_scope'                          all-files 'scan_scope names the population the count covers'
+chk '.stats.scan_scope_status'                   not-run   'tracked scoping not attempted on a non-git root'
+chk '.stats | has("scan_scope_status_reason")'   false     'scan_scope_status_reason deleted by normalize()'
 
 if [ -e "$CORPUS/normalized-golden.json" ]; then
   echo "  FAIL — the golden is INSIDE corpus/. normalize() does not delete"

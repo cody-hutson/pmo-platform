@@ -278,7 +278,7 @@ Subtypes outside the lists above are **invalid** — `append-pipeline-event.sh` 
 **Integrity-validation cutover.** `release/tools/check-event-record-integrity.sh` grades rows at or after the instant declared here, and **parses this key rather than carrying its own constant** — the same single-authority pattern `parse_schema_enum` and `parse_schema_labels` already use, and the pattern whose absence let a tool drift from this document once already (§ 11.8). The key is machine-read, so keep it on one line, in this exact shape:
 
 ```
-integrity_cutover: (unset)
+integrity_cutover: 2026-08-28T16:50:03Z
 ```
 
 **Value contract.** An ISO-8601 UTC instant (`YYYY-MM-DDTHH:MM:SSZ`) binds the boundary: rows at or after it are graded and a violation **fails** the tool; rows before it report `LEGACY` and do **not**. The reserved sentinel `(unset)` means **no boundary is bound yet** — every finding reports `LEGACY`, the tool exits 0, and it prints an explicit UNRESOLVED banner. `(unset)` is a declared value with defined semantics, not a placeholder: it carries a parenthesis and no digits, so it can collide with no instant, and it is the same sentinel shape `VERSION_KEY_NONE` already uses for "no release context at all". Any value that is neither the sentinel nor a well-formed instant is a **hard error (exit 2)** — a cutover the tool cannot parse must never silently degrade to "grade everything" or to "grade nothing".

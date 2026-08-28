@@ -1,0 +1,2 @@
+Precondition: `core/deploy/tools/fixtures/issue-body-anchors/targets/fx-alpha.md` @@SEC@@2.1 must hold before this lands.
+Second citation: `core/deploy/tools/fixtures/issue-body-anchors/targets/fx-alpha.md` @@SEC@@9.9 names a section that does not exist.

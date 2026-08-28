@@ -20,6 +20,18 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.41] - 2026-08-28
+
+Nine checks that reported clean without measuring what they claimed to measure now measure it, and each can detect its own regression.
+
+[Full notes](release/releases/notes/v4.41_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.41)
+
+## [v4.40] - 2026-08-28
+
+Seven pipeline rules that contradicted each other, contradicted their own tools, or declared a vocabulary nothing enforced now have one statement each.
+
+[Full notes](release/releases/notes/v4.40_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.40)
+
 ## [v4.39] - 2026-08-28
 
 Nine platform self-checks that reported a pass they could not have withheld now fail when the behaviour they test is broken.
@@ -1112,7 +1124,7 @@ Public-flip depersonalization + path-portability enforcement — the public repo
 ### Changed
 
 - **`operator.toml` lossless round-trip.** The setup writer preserves operator-added sections verbatim instead of dropping them on rewrite.
-- **`[OPERATOR_JIRA]` → `{{JIRA_BASE_URL}}`.** The Jira base is a localized value (DC3), not an identity token.
+- **`[OPERATOR_JIRA]` → `{{JIRA_BASE_URL}}`.** The Jira base is a localized value (DC3), not an identity token. <!-- depersonalization-token: allow — historical narrative about a retired token -->
 - **Orphan path-variable convergence.** The residual `PMO_INSTANCE_PATH` fallthrough converges onto `${CLAUDE_WORKSPACE_ROOT}` per ADR-017/ADR-032.
 
 ## [v2.18] - 2026-06-21

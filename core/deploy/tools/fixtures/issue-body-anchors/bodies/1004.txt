@@ -1,0 +1,1 @@
+Invocation note: `core/deploy/tools/fixtures/issue-body-anchors/targets/fx-gamma.sh` Phase 2 names a shell target, so no verdict is emitted.

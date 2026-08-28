@@ -2441,6 +2441,178 @@ _c32_compute_verdict() {
   return 0
 }
 
+# ─── Skill mode-declaration extraction (D1) — shared by Check 35 and Check 5(d) ──
+# THE SUBJECT BOUND, defined ONCE. A frontmatter mode DECLARATION is a `Modes:` /
+# `Mode:` token appearing INSIDE the YAML frontmatter block — between the opening
+# `---` and its closing `---`. Body prose that merely contains the token (a cross-
+# reference such as `§ Domain-Specific Failure Modes:`) declares nothing, and is
+# unreachable here BY CONSTRUCTION rather than by a pattern hoping prose stays away.
+# That distinction is the whole point: the predicate this replaced asked "does the
+# string appear in this file?" when the question it meant to ask was "does this skill
+# DECLARE modes?", and a single prose sentence was enough to separate the two.
+#
+# Within the block the token is deliberately NOT line-start-anchored: folded YAML
+# (`description: >`) wraps the declaration mid-line, and a `^[[:space:]]*Modes:`
+# anchor was measured to drop 22 genuine multi-mode skills. LOCATION is the bound;
+# line position is not, and never was.
+#
+# ONE awk, NO pipeline. The frontmatter bound and the first-match selection happen in
+# the same pass, so there is no pipe into a short-circuiting reader for the enforcing
+# repo-integrity SIGPIPE-idiom job to match, and no suppression comment is owed. A
+# single process also replaces the two the old two-stage shape needed.
+#
+#   $1  SKILL.md path
+#   $2  awk ERE for the declaration token. Check 35 passes `Modes:`; Check 5(d)
+#       passes `Modes?:`, where the optional `s` is LOAD-BEARING — one role-
+#       Specialist (release/skills/pmo-software-engineer) declares a singular
+#       `Mode: Development`, and folding 5(d) onto a strict `Modes:` would silently
+#       drop that row from a set-equality it is supposed to assert. The reuse unit
+#       is the frontmatter BOUND, not the token: parameterizing the token is what
+#       lets one extractor serve both consumers without either losing a member.
+#
+# Echoes the FIRST matching line inside the block, or nothing at all.
+_skill_fm_decl_line() {
+  /usr/bin/awk -v _tok="$2" '
+    NR==1               { if ($0 !~ /^---[[:space:]]*$/) exit; next }
+    /^---[[:space:]]*$/ { exit }
+    $0 ~ _tok           { print; exit }
+  ' "$1" 2>/dev/null || true
+}
+
+# ─── Mode-invocation drift (Check 35) — #26 ─────────────────────────────────────
+# The mode-declaration predicate, factored to TOP LEVEL so it is shared by two
+# surfaces with ONE body (DD1, like _vf_/_cc_/_c38_/_c32_/_c7_compute_verdict): the
+# lifecycle Check 35 (inside cmd_check, routing the verdict through
+# flag_warn_or_issue / DEPLOY_CHECK_MODE — deploy-time warn-mode unchanged) and the
+# --report mirror (inside cmd_report, mapping the verdict to PASS/FAIL counters under
+# unvarnished enforce semantics). No predicate is re-encoded on either surface
+# (single-engine, CIAC-2). Two-site parity stops being something the next editor has
+# to remember and becomes something the file's shape guarantees.
+#
+# THE SUBJECT. Check 35's subject is a skill that DECLARES >=2 modes. A mode
+# declaration takes exactly two forms, each bound to a location:
+#   D1 — frontmatter declaration: a `Modes:` token INSIDE the YAML frontmatter block,
+#        followed by a `·`-separated list. Extracted by _skill_fm_decl_line above,
+#        which is where that bound is stated and enforced.
+#   D2 — body-heading declaration: >=2 DISTINCT `# Mode <ident><delim>` headings, at
+#        any heading level H1-H6, identifier alphanumeric, anchored to a `:`/`—`/`-`
+#        delimiter immediately after the identifier.
+# The delimiter anchor is the precondition that separates a DECLARATION
+# (`## Mode A — Elicit`) from a SECTION HEADING (`## Mode Selection`, `## Modes`,
+# `## Domain-Specific Failure Modes`). It is load-bearing and must not be dropped:
+# dropping it and matching any heading mentioning "mode" was measured to admit 12
+# files of which 10 are false positives — including the single-mode skill whose
+# misclassification this check was repaired for, which it would re-admit and make
+# spuriously PASS. Widening the LEVEL and the IDENTIFIER CHARSET while KEEPING the
+# anchor admits exactly 2 files, both genuine, with zero new false positives.
+#
+# WHAT THE BOUND DOES NOT REACH, stated rather than left for the next false positive
+# to discover. The recognizer sees declarations in the two forms above and nothing
+# else. `description:` prose inside the frontmatter block remains INSIDE the D1 bound
+# (the bound is the block, not the key), so a prose sentence there that happens to
+# read `Nine modes: full (total sweep)…` is a standing near-miss — one capitalised
+# letter away from being read as a declaration. As of the repairing release, measured
+# with an oracle INDEPENDENT of this recognizer, 5 skills declare >=2 modes wholly
+# outside the scanned population — artifact-generator, daily-status, eval-writer,
+# pmo-skill-refiner, prompt-builder — declaring in natural-language prose or in a
+# `| Mode |` table, and NO heading widening reaches them. Two further skills
+# (pmo-wms-specialist, project-initiator) are in scope via the frontmatter arm but
+# contribute a body-heading enum of 0. That residual is a KNOWN, ENUMERATED class,
+# not an assertion that nothing else declares a mode; core/deploy/tools/
+# check-mode-declaration-residual.py is the checked-in instrument that measures it,
+# and it is expected to report a NON-ZERO count. A run reporting zero means the
+# oracle was re-derived from this recognizer and is broken.
+#
+# body-heading is authoritative when present (the description list can be a stale
+# subset, F-AC3-3); a skill recognizable by EITHER convention PASSes, and only a skill
+# that advertises modes yet exposes no machine-recognizable enum by either path is a
+# finding. It does NOT demand a new frontmatter field — it asserts the EXISTING prose
+# is parseable by a documented rule.
+#
+# Config-drift surface of the mode-invocation composite detection mechanism —
+# companion to the Procedure 3 Spoke Template `### Mode Provenance` block (runtime-
+# drift surface) and the Stage 8 QA LLM-graded review (hub-emit surface). Where Check
+# 27 + the `### Model Provenance` block catch model drift, this check + the
+# `### Mode Provenance` block catch mode drift (a spoke silently skipping or
+# mis-selecting a required mode).
+#
+# Check 35 has no network anchor, so the surface argument does not change the verdict;
+# it is accepted for signature parity with the other _cNN_compute_verdict bodies.
+#
+# Echoes ONE protocol line on stdout (the CALLER maps it to a warn-emit or a PASS/FAIL
+# counter); per-file detail goes to stderr, ALREADY INDENTED, in ONE wording:
+#   FAIL <detail>            population empty — audit-baseline guard; not evaluable
+#   CLEAN <n>                n multi-mode skill(s), all exposing a recognizable enum
+#   INCOMPLETE <f> <n>       f finding(s) across n scanned — detail to stderr
+#
+# The detail string and its indent are defined HERE and only here. Before the
+# factoring the two surfaces emitted DIFFERENT text at DIFFERENT indents for the same
+# finding, and because the finding branch is unreachable on a clean corpus that
+# divergence was invisible. A single-engine collapse that silently reconciles two
+# emission contracts is worth naming: the contract is now one string, one indent, one
+# definition, and a change to either is a change both surfaces see.
+_c35_compute_verdict() {
+  local surface="${1:-lifecycle}"   # accepted for signature parity; verdict is surface-invariant
+  local c35_findings=0 c35_scanned=0 c35_output=""
+  local c35_skill_md c35_body_enum c35_decl_line c35_decl_after c35_decl_dots c35_decl_arity
+  for c35_skill_md in operations/skills/*/SKILL.md release/skills/*/SKILL.md core/skills/*/SKILL.md; do
+    [[ -f "$c35_skill_md" ]] || continue
+    # D2 — body-heading enum: DISTINCT delimiter-anchored mode identifiers, any
+    # heading level, alphanumeric identifier. De-duplication is over the captured
+    # `Mode <ident>` token, unchanged in shape from the narrower form it replaces.
+    c35_body_enum=$(/usr/bin/grep -oE '^#{1,6} Mode [A-Z0-9][A-Za-z0-9]*[[:space:]]*[:—-]' "$c35_skill_md" 2>/dev/null \
+                    | /usr/bin/grep -oE 'Mode [A-Z0-9][A-Za-z0-9]*' | /usr/bin/sort -u | /usr/bin/wc -l | /usr/bin/tr -d ' ') || c35_body_enum=0
+    # D1 — frontmatter declaration, via the single shared extractor. The `·` count is
+    # taken on the substring AFTER the token so `·` separators elsewhere in the
+    # description (a Triggers list, say) cannot inflate the arity.
+    c35_decl_line=$(_skill_fm_decl_line "$c35_skill_md" 'Modes:') || c35_decl_line=""
+    c35_decl_arity=0
+    if [[ -n "$c35_decl_line" ]]; then
+      c35_decl_after=$(printf '%s' "$c35_decl_line" | /usr/bin/sed -E 's/.*Modes:(.*)/\1/')
+      c35_decl_dots=$(printf '%s' "$c35_decl_after" | /usr/bin/grep -oE '·' | /usr/bin/wc -l | /usr/bin/tr -d ' ')
+      c35_decl_arity=$(( c35_decl_dots + 1 ))
+    fi
+    # In scope iff the skill DECLARES modes: a frontmatter declaration is present OR
+    # it carries >=2 delimiter-anchored body headings.
+    if [[ -n "$c35_decl_line" || "$c35_body_enum" -ge 2 ]]; then
+      c35_scanned=$((c35_scanned + 1))
+      # Recognizable iff a clean body-heading enum (>=2) OR a parseable list (>=2).
+      if [[ "$c35_body_enum" -ge 2 || "$c35_decl_arity" -ge 2 ]]; then
+        : # PASS — mode-enum machine-recognizable by at least one convention
+      else
+        # THE MESSAGE MUST DESCRIBE THE RECOGNIZER, NOT ITS PREDECESSOR. This
+        # line used to demand "≥2 delimited \`### Mode X\` headings" — naming an
+        # H3 level and a single-letter identifier — and BOTH of those are exactly
+        # what the D2 recognizer above was widened to stop requiring. The
+        # consequence ran in both directions: an author whose \`## Mode 1\`
+        # headings correctly PASS never learned the level and charset were free,
+        # and an author debugging a real failure was told to change the two
+        # things that were never wrong. The recognizer, its header contract at
+        # the top of this check, and this message are one declaration in three
+        # places; they change together.
+        c35_output+="${c35_skill_md}: advertises modes but exposes no machine-recognizable mode-enum (neither ≥2 delimited \`Mode <ident>\` headings — any level H1-H6, alphanumeric identifier, anchored to a \`:\`/\`—\`/\`-\` delimiter — nor a parseable (≥2 \`·\`-separated) \`Modes:\` list)"$'\n'
+        c35_findings=$((c35_findings + 1))
+      fi
+    fi
+  done
+
+  if [[ "$c35_scanned" -eq 0 ]]; then
+    # Audit-baseline guard: the multi-mode population could be transiently empty if a
+    # refactor moves skills, so an empty scan is itself suspect. `≥9` is a
+    # deliberately conservative FLOOR from the introducing audit, not an equality —
+    # BOTH declaration forms contribute to the population, and re-pinning the floor to
+    # today's exact decomposition would install the same drift trap this check was
+    # repaired for.
+    printf 'FAIL no multi-mode SKILL.md files found — expected ≥9 per the mode-enum audit floor (audit-baseline guard)\n'
+  elif [[ "$c35_findings" -eq 0 ]]; then
+    printf 'CLEAN %s\n' "$c35_scanned"
+  else
+    printf '%s' "$c35_output" | /usr/bin/sed -e '/^$/d' -e 's/^/         /' >&2 || true
+    printf 'INCOMPLETE %s %s\n' "$c35_findings" "$c35_scanned"
+  fi
+  return 0
+}
+
 # ─── Skill package content-freshness (Check 7 / --check-package-freshness) — #2656 ──
 # The content-manifest freshness predicate, factored to TOP LEVEL so it is shared by
 # two surfaces with ONE body (DD1, like _vf_/_cc_/_c38_/_c32_compute_verdict): the
@@ -4210,7 +4382,7 @@ LIFECYCLE
 # Label-shape is what separates a body REPORTING a probe from one DISCUSSING
 # probes; the >=2 count then rejects a bare `Verdict:` with no probe behind it.
 # Loosening EITHER half converts a real control into a never-FAIL check — see
-# ADR-144. The negative arm is not optional: --self-test group EV asserts the
+# ADR-150. The negative arm is not optional: --self-test group EV asserts the
 # evidence-free and prose-near-miss bodies still FAIL.
 #
 # Extracted as a function rather than left inline in Check 22 because Check
@@ -4761,7 +4933,17 @@ cmd_check() {
         #   • modes        → SET-EQUALITY (order-insensitive ` · `-split member
         #                    set) — modes are an exact structural lift of the
         #                    SKILL.md `Modes:`/`Mode:` clause; reuses the Check-35
-        #                    `Modes?:` extraction idiom.
+        #                    `Modes?:` extraction idiom LITERALLY, by calling the
+        #                    same _skill_fm_decl_line extractor Check 35 calls
+        #                    (parameterized on the token, so the singular `Mode:`
+        #                    one role-Specialist declares is preserved). Before
+        #                    that reuse was made literal this line was aspirational:
+        #                    5(d) carried its own unbounded copy, which would read a
+        #                    BODY line as a declaration for any role-Specialist
+        #                    lacking a frontmatter one and diff it against the
+        #                    registry cell — a spurious divergence sourced from
+        #                    prose. Latent rather than live (every role-Specialist
+        #                    currently declares in frontmatter), and closed here.
         #   • dependencies → skill-name-SET-EQUALITY — the registry re-encodes
         #                    `Composes a + b` as `DEPENDS_ON a · DEPENDS_ON b`
         #                    (different surface form, same edge set); compare the
@@ -4796,11 +4978,24 @@ cmd_check() {
 
           if [[ "$_row_kind" == "role-Specialist" ]]; then
             # --- modes: set-equality (registry cell ↔ SKILL.md Modes?: clause) ---
-            # SKILL.md side: text after `Modes:`/`Mode:` on its line, trimmed of
-            # the trailing sentence (`. Use…`/`. Triggers…`/etc.) and any final dot.
-            local _smd_modes _reg_modes_sorted _smd_modes_sorted
-            # sigpipe-idiom: allow — U3. `grep -o` emits N matches per LINE and `-m` counts LINES, so `-m1` would keep every match on the first line, not the first match.
-            _smd_modes=$(/usr/bin/grep -oE 'Modes?:[^.]*' "$_row_skill_md" 2>/dev/null | /usr/bin/head -1 | /usr/bin/sed -E 's/^Modes?:[[:space:]]*//') || _smd_modes=""
+            # SKILL.md side: text after the `Modes:`/`Mode:` DECLARATION — bounded to
+            # the YAML frontmatter block by the shared _skill_fm_decl_line extractor,
+            # so body prose containing the token can never be lifted into a registry
+            # comparison — trimmed of the trailing sentence (`. Use…`/`. Triggers…`)
+            # and any final dot. The `.*` is greedy, matching the arity arithmetic in
+            # _c35_compute_verdict: same idiom, one bound, two consumers.
+            #
+            # The extractor returns exactly ONE line, so the `head -1` that once
+            # selected the first of `grep -o`'s per-line matches has nothing left to
+            # select and is gone. The U3 SIGPIPE-idiom suppression comment that
+            # justified it went with it rather than being carried: `sed` without a
+            # `q` is not a matched reader, so no suppression is owed here, and a
+            # retained one would assert a rationale for a pipeline that no longer
+            # exists — and, because the repo-integrity job matches that comment form
+            # un-anchored, would silently suppress whatever landed beneath it.
+            local _smd_decl _smd_modes _reg_modes_sorted _smd_modes_sorted
+            _smd_decl=$(_skill_fm_decl_line "$_row_skill_md" 'Modes?:') || _smd_decl=""
+            _smd_modes=$(printf '%s' "$_smd_decl" | /usr/bin/sed -E 's/.*Modes?:[[:space:]]*//; s/\..*$//') || _smd_modes=""
             _reg_modes_sorted=$(printf '%s' "$_row_modes" | /usr/bin/tr '·' '\n' | /usr/bin/sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | /usr/bin/grep -v '^$' | /usr/bin/sort -u) || _reg_modes_sorted=""
             _smd_modes_sorted=$(printf '%s' "$_smd_modes" | /usr/bin/tr '·' '\n' | /usr/bin/sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | /usr/bin/grep -v '^$' | /usr/bin/sort -u) || _smd_modes_sorted=""
             if [[ "$_reg_modes_sorted" != "$_smd_modes_sorted" ]]; then
@@ -9219,89 +9414,45 @@ sys.stdout.write("".join(out) + "|")
   fi
 
 
-  # Check 35 — Mode-invocation drift (warn-mode initial, #26). Config-drift
-  # surface of the mode-invocation composite detection mechanism — companion to
-  # the Procedure 3 Spoke Template `### Mode Provenance` block (runtime-drift
-  # surface) and the Stage 8 QA LLM-graded review (hub-emit surface). Where Check
-  # 27 + the `### Model Provenance` block catch model drift, this check + the
-  # `### Mode Provenance` block catch mode drift (a spoke silently skipping or
-  # mis-selecting a required mode).
+  # Check 35 — Mode-invocation drift (warn-mode initial, #26). Scans the SKILL.md
+  # population across all three module skill dirs and asserts every skill that
+  # DECLARES >=2 modes carries a MACHINE-RECOGNIZABLE mode-enum, so the runtime
+  # block's "Invoked mode" can be validated against a real enum rather than free
+  # prose.
   #
-  # Scans the multi-mode SKILL.md population across all three module skill dirs
-  # and asserts each multi-mode skill carries a MACHINE-RECOGNIZABLE mode-enum,
-  # so the runtime block's "Invoked mode" can be validated against a real enum
-  # rather than free prose. It does NOT demand a new frontmatter field — it
-  # asserts the EXISTING prose is parseable by a documented rule.
-  #
-  # Mode declaration is non-uniform across the corpus (the AC3 audit finding), so
-  # the recognizer handles BOTH conventions:
-  #   (1) body-heading enum — DISTINCT mode letters from `### Mode X:` / `### Mode
-  #       X —` section headings, anchored to a `:`/`—`/`-` delimiter immediately
-  #       after the letter so failure-mode anti-pattern headings
-  #       (`### Mode A execution without a Dry-Run Record — PROC`) do NOT match.
-  #   (2) description-list fallback — the `·`-separated list after the `Modes:`
-  #       token inside the frontmatter `description`. NOTE: the `Modes:` token in
-  #       the two desc-only skills (release/skills/pmo-skill-editor,
-  #       operations/skills/project-initiator) is INLINE mid-line in a folded-YAML
-  #       `description: >` block, NOT at line-start — so the match is NOT
-  #       line-start-anchored (a `^[[:space:]]*Modes:` anchor would silently
-  #       false-negative those two multi-mode skills, treating them as
-  #       single-mode). The `·` count is taken on the substring AFTER `Modes:`
-  #       so `·` separators elsewhere in the description (e.g. a Triggers list)
-  #       cannot inflate the arity.
-  # body-heading is authoritative when present (the description list can be a
-  # stale subset, F-AC3-3); the check PASSes a skill recognizable by EITHER
-  # convention and warns only on a skill that advertises modes (a `Modes:` token,
-  # or ≥2 body headings) yet exposes no machine-recognizable enum by either path.
-  # Cutover comment family-standard: applies to ./deploy.sh --check invocations
-  # on/after the introducing release's merge SHA in RELEASE_LOG.md; that release
-  # itself exempt — reflexive-pipeline-loop discipline.
+  # The subject statement, the two declaration forms and their location bounds, the
+  # delimiter-anchor precondition, and the enumerated residual class the recognizer
+  # deliberately does not reach all live at _c35_compute_verdict — read that header
+  # before editing either surface. Cutover comment family-standard: applies to
+  # ./deploy.sh --check invocations on/after the introducing release's merge SHA in
+  # RELEASE_LOG.md; that release itself exempt — reflexive-pipeline-loop discipline.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 35: Mode-invocation drift (multi-mode SKILL.md mode-enum recognizability) (#26)"
-    local c35_findings=0
-    local c35_scanned=0
-    local c35_output=""
-    local c35_skill_md c35_body_enum c35_desc_line c35_desc_after c35_desc_dots c35_desc_arity
-    for c35_skill_md in operations/skills/*/SKILL.md release/skills/*/SKILL.md core/skills/*/SKILL.md; do
-      [[ -f "$c35_skill_md" ]] || continue
-      # (1) body-heading enum — distinct, delimiter-anchored mode letters.
-      c35_body_enum=$(/usr/bin/grep -oE '^### Mode [A-Z][[:space:]]*[:—-]' "$c35_skill_md" 2>/dev/null \
-                      | /usr/bin/grep -oE 'Mode [A-Z]' | /usr/bin/sort -u | /usr/bin/wc -l | /usr/bin/tr -d ' ') || c35_body_enum=0
-      # (2) description-list arity — `Modes:` matched ANYWHERE on the line (folded
-      #     YAML puts it mid-line); `·` counted on the substring after `Modes:`.
-      c35_desc_line=$(/usr/bin/grep -m1 -E 'Modes:' "$c35_skill_md" 2>/dev/null) || c35_desc_line=""
-      c35_desc_arity=0
-      if [[ -n "$c35_desc_line" ]]; then
-        c35_desc_after=$(printf '%s' "$c35_desc_line" | /usr/bin/sed -E 's/.*Modes:(.*)/\1/')
-        c35_desc_dots=$(printf '%s' "$c35_desc_after" | /usr/bin/grep -oE '·' | /usr/bin/wc -l | /usr/bin/tr -d ' ')
-        c35_desc_arity=$(( c35_desc_dots + 1 ))
-      fi
-      # In scope iff the skill advertises modes: a `Modes:` token is present OR it
-      # carries ≥2 delimited body headings.
-      if [[ -n "$c35_desc_line" || "$c35_body_enum" -ge 2 ]]; then
-        c35_scanned=$((c35_scanned + 1))
-        # Recognizable iff a clean body-heading enum (≥2) OR a parseable desc list (≥2).
-        if [[ "$c35_body_enum" -ge 2 || "$c35_desc_arity" -ge 2 ]]; then
-          : # PASS — mode-enum machine-recognizable by at least one convention
-        else
-          c35_output+="${c35_skill_md}: advertises modes but exposes no machine-recognizable mode-enum (neither ≥2 delimited \`### Mode X\` headings nor a parseable (≥2 \`·\`-separated) \`Modes:\` list)"$'\n'
-          c35_findings=$((c35_findings + 1))
-        fi
-      fi
-    done
-    if [[ "$c35_scanned" -eq 0 ]]; then
-      # Audit-baseline guard: the multi-mode population could be transiently empty
-      # if a refactor moves skills. Baseline = ≥9 multi-mode skills (7 body-heading
-      # + 2 desc-only) at the introducing release; an empty scan is itself suspect.
-      flag_warn_or_issue "mode-invocation-drift" \
-        "no multi-mode SKILL.md files found — expected ≥9 per the mode-enum audit (7 body-heading + 2 desc-only)"
-    elif [[ "$c35_findings" -eq 0 ]]; then
-      log "  OK:    all $c35_scanned multi-mode skill(s) expose a machine-recognizable mode-enum"
-    else
-      flag_warn_or_issue "mode-invocation-drift" \
-        "$c35_findings of $c35_scanned multi-mode skill(s) lack a recognizable mode-enum — see release/references/how-to/hub-spoke-bridge.md § Procedure 3 Spoke Template \`### Mode Provenance\`"
-      printf '%s' "$c35_output" | /usr/bin/sed 's/^/         /'
-    fi
+    # Verdict computed by the shared _c35_compute_verdict body (DD1) so the --report
+    # mirror and this lifecycle check cannot diverge. The body emits per-file detail
+    # to stderr, already indented; this block maps the verdict to the deploy-time
+    # emit (warn-mode via flag_warn_or_issue / DEPLOY_CHECK_MODE — unchanged).
+    local c35_verdict c35_tok c35_rest c35_f c35_n
+    c35_verdict="$(_c35_compute_verdict "lifecycle")"
+    c35_tok="${c35_verdict%% *}"
+    case "$c35_tok" in
+      CLEAN)
+        log "  OK:    all ${c35_verdict#CLEAN } multi-mode skill(s) expose a machine-recognizable mode-enum"
+        ;;
+      INCOMPLETE)
+        # "INCOMPLETE <findings> <scanned>" — per-file detail already on stderr.
+        c35_rest="${c35_verdict#INCOMPLETE }"
+        c35_f="${c35_rest%% *}"; c35_n="${c35_rest##* }"
+        flag_warn_or_issue "mode-invocation-drift" \
+          "$c35_f of $c35_n multi-mode skill(s) lack a recognizable mode-enum — see release/references/how-to/hub-spoke-bridge.md § Procedure 3 Spoke Template \`### Mode Provenance\` (per-file detail above)"
+        ;;
+      FAIL)
+        flag_warn_or_issue "mode-invocation-drift" "${c35_verdict#FAIL }"
+        ;;
+      *)
+        flag_warn_or_issue "mode-invocation-drift" "unexpected verdict: $c35_verdict"
+        ;;
+    esac
   fi
 
 
@@ -9369,7 +9520,7 @@ sys.stdout.write("".join(out) + "|")
         while IFS= read -r c36_file; do
           [[ -n "$c36_file" ]] || continue
           # First #N tie per memory file (the eviction-pointer / issue tie).
-          # sigpipe-idiom: allow — U3. Same `grep -o` line-vs-match divergence as the Modes probe: `-m1` would keep every issue ref on the first matching line.
+          # sigpipe-idiom: allow — U3. `grep -o` emits N matches per LINE while `-m` counts LINES, so `-m1` would keep every issue ref on the first matching line rather than the first match.
       c36_n=$(/usr/bin/grep -oE '#[0-9]+' "$c36_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '#') || c36_n=""
           [[ -n "$c36_n" ]] || continue
           # dead-ref tie: probe resolution; NEVER compare magnitude.
@@ -10022,44 +10173,100 @@ sys.stdout.write("".join(out) + "|")
 
   # Check 44 — Depersonalization-token conformance (warn-mode initial) [#323]
   #
-  # Two single-responsibility assertions over the Layer-1 corpus markdown:
+  # Three single-responsibility assertions over the TRACKED corpus:
   #  (a) PVT*-reintroduction ratchet — flag a literal GitHub Projects ID
   #      (PVT_ / PVTI_ / PVTF_ / PVTSSF_ + >=4 ID chars) reintroduced outside the
   #      guide. Part-a (the cleanup) shipped via #600; this is the forward ratchet.
   #      The {4,} floor exempts the guide's bare PVT_ example shapes; the guide file
   #      is additionally exempt.
-  #  (b) bracket-token conformance — flag any [OPERATOR_*] square-bracket token used
-  #      in tracked corpus that is NOT registered in depersonalization-spec.md
-  #      §1/§1.1. Reads the registry (self-updating). Excludes release/releases/
-  #      (release-corpus / ledger surface). A legitimately-illustrative token carries
-  #      a 'depersonalization-token: allow' line marker.
+  #  (b) SQUARE-bracket token conformance — GATING. Flag any [<PREFIX>_*] square token
+  #      used in tracked corpus whose name is absent from the §1/§1.1 tables of
+  #      depersonalization-spec.md. §1.3 declares those two TABLES the closed
+  #      registered set, so for this family "absent" is a finding.
+  #  (d) ANGLE-bracket inventory — ADVISORY, structurally never gating. §4 "Convention
+  #      scope" declares the angle family OPEN and incrementally codified: an
+  #      un-codified angle token INHERITS the resolution-rule convention and is
+  #      sanctioned by the spec, so flagging it would fail correct work. The inventory
+  #      is DERIVED LIVE as (tracked-corpus angle tokens) MINUS (§4 table) and reads no
+  #      stored tolerated-set file. There is deliberately NO arm (c): a stored baseline
+  #      of tolerated tokens is extendable by the very change it would gate, so it buys
+  #      the word "ratchet" and not the property. Per ADR-154.
+  #
+  # SCOPE, and why none of it is hardcoded — this is the defect the check carried until
+  # ADR-154, when it reached one prefix, one file extension and three roots of its own
+  # declared subject. The PREFIX set and BOTH DELIMITER families are DERIVED from the
+  # registry tables at runtime, and the registry read and the usage scan consume ONE
+  # derived value, so the two limbs are structurally incapable of disagreeing. FILE
+  # SCOPE is the tracked file set (git ls-files): no --include extension filter and no
+  # root list, so a new prefix, extension, root or registry row needs zero edits here.
+  # release/releases/ (release-corpus / ledger surface) stays excluded, and a
+  # legitimately-illustrative token carries a 'depersonalization-token: allow' line
+  # marker. When the root is not a git work tree the enumeration cannot run: the check
+  # emits flag_not_evaluated and withholds its verdict — it never narrows the scan
+  # silently, and it never prints OK on an outage.
   # Companion to #324 (token registration); kept SEPARATE from #529's path-portability
   # check (distinct concern). Warn-mode initial per bypass-mode-readiness.md §Shakedown.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 44: Depersonalization-token conformance (PVT* + [OPERATOR_*] vocabulary)"
+    log "Check 44: Depersonalization-token conformance (PVT* + registry-derived vocabulary, both delimiter families, all tracked files)"
     local c44_spec="core/standards/depersonalization-spec.md"
-    local c44_pvt c44_unreg=""
+    local c44_pvt c44_unreg="" c44_uncod="" c44_scanned="no"
     # (a) PVT*-literal reintroduction (exempt the guide + marker lines)
     c44_pvt="$(grep -rEn 'PVT(SSF|F|I)?_[A-Za-z0-9]{4,}' --include='*.md' core release operations 2>/dev/null | grep -vE 'github-projects-guide\.md|depersonalization-token: allow' || true)"
     if [[ -n "$c44_pvt" ]]; then
       flag_warn_or_issue "depersonalization-token" "literal GitHub Projects ID (PVT*) reintroduced outside the guide — tokenize to an [OPERATOR_PROJECT*] token: $(head -3 <<<"$c44_pvt" | tr '\n' ';')"
     fi
-    # (b) [OPERATOR_*] bracket-token conformance against the §1/§1.1 registry
+    # (b)/(d) registry-derived token conformance, both delimiter families
     if [[ -f "$c44_spec" ]]; then
-      local c44_reg c44_tok
-      c44_reg="$(grep -ohE '\[OPERATOR_[A-Z0-9_]+\]' "$c44_spec" | sort -u)"
-      while IFS= read -r c44_tok; do
-        [[ -z "$c44_tok" ]] && continue
-        grep -qxF "$c44_tok" <<<"$c44_reg" || c44_unreg="${c44_unreg}${c44_tok} "
-      done < <(grep -rEn '\[OPERATOR_[A-Z0-9_]+\]' --include='*.md' core release operations 2>/dev/null | grep -vE 'release/releases/' | grep -v 'depersonalization-token: allow' | grep -ohE '\[OPERATOR_[A-Z0-9_]+\]' | sort -u)
-      if [[ -n "$c44_unreg" ]]; then
-        flag_warn_or_issue "depersonalization-token" "unregistered [OPERATOR_*] token(s) in corpus, absent from depersonalization-spec.md §1: ${c44_unreg}— register them (with a config home) or mark an illustrative use 'depersonalization-token: allow'"
+      local c44_sq_reg c44_ang_reg c44_pfx c44_tok c44_ang_hits c44_owned
+      local c44_uncod_n=0 c44_uncod_raw=0
+      # Registry read — TABLE-SCOPED. §1.3 says "the §1 and §1.1 TABLES are the closed
+      # registered set", so only the FIRST CELL of a markdown table row registers. That
+      # excludes §4's schema metavariable (prose, not a row) by construction rather
+      # than by a name-specific exception a future edit would have to remember.
+      c44_sq_reg="$(sed -n 's/^|[[:space:]]*`\(\[[A-Z][A-Z0-9_]*\]\)`[[:space:]]*|.*/\1/p' "$c44_spec" | sort -u)"
+      c44_ang_reg="$(sed -n 's/^|[[:space:]]*`\(<[A-Z][A-Z0-9_]*>\)`[[:space:]]*|.*/\1/p' "$c44_spec" | sort -u)"
+      # Derived prefix alternation — ONE value, read by BOTH limbs below.
+      c44_pfx="$(printf '%s\n%s\n' "$c44_sq_reg" "$c44_ang_reg" | tr -d '[]<>' | sed -n 's/^\([A-Z0-9][A-Z0-9]*\)_.*/\1/p' | sort -u | tr '\n' '|' | sed 's/|$//')"
+      if [[ -z "$c44_pfx" ]]; then
+        flag_not_evaluated "depersonalization-token" "the §1/§1.1/§4 tables of $c44_spec parsed to an EMPTY prefix set, so the derived vocabulary is unavailable and arms (b)/(d) did not run — this is not a clean result"
+      elif ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        flag_not_evaluated "depersonalization-token" "deploy root is not a git work tree, so the tracked-file enumeration (git ls-files) could not run and arms (b)/(d) did not run — a narrowed scan here would be a false clean, so no verdict is issued"
+      else
+        c44_scanned="yes"
+        # (b) SQUARE family — corpus-scoped, GATING against the closed §1/§1.1 set.
+        while IFS= read -r c44_tok; do
+          [[ -z "$c44_tok" ]] && continue
+          grep -qxF "$c44_tok" <<<"$c44_sq_reg" || c44_unreg="${c44_unreg}${c44_tok} "
+        done < <(git ls-files -z -- . ':(exclude)release/releases/' 2>/dev/null | xargs -0 grep -IhE "\[($c44_pfx)_[A-Z0-9_]+\]" 2>/dev/null | grep -v 'depersonalization-token: allow' | grep -ohE "\[($c44_pfx)_[A-Z0-9_]+\]" | sort -u || true)
+        if [[ -n "$c44_unreg" ]]; then
+          flag_warn_or_issue "depersonalization-token" "unregistered square-bracket token(s) in tracked corpus, absent from the closed §1/§1.1 registry tables of depersonalization-spec.md: ${c44_unreg}— register each (with a read-source and a config home) or mark an illustrative use 'depersonalization-token: allow'"
+        fi
+        # (d) ANGLE family — DERIVED LIVE (corpus MINUS §4 table), advisory only. This
+        # arm reads no file but the spec and the tree, so its payload cannot drift from
+        # the registry and its decline as rows are codified IS the progress signal.
+        c44_ang_hits="$(git ls-files -z -- . ':(exclude)release/releases/' 2>/dev/null | xargs -0 grep -IhE "<($c44_pfx)_[A-Z0-9_]+>" 2>/dev/null | grep -v 'depersonalization-token: allow' | grep -ohE "<($c44_pfx)_[A-Z0-9_]+>" || true)"
+        while IFS= read -r c44_tok; do
+          [[ -z "$c44_tok" ]] && continue
+          grep -qxF "$c44_tok" <<<"$c44_ang_reg" || c44_uncod="${c44_uncod}${c44_tok} "
+        done < <(sort -u <<<"$c44_ang_hits")
+        if [[ -n "$c44_uncod" ]]; then
+          # Counts accumulate in a MAIN-SHELL for-loop, never inside a pipeline's
+          # right-hand loop — that body runs in a subshell and the counter reads back 0.
+          for c44_tok in $c44_uncod; do
+            c44_uncod_n=$((c44_uncod_n + 1))
+            c44_uncod_raw=$((c44_uncod_raw + $(grep -cxF "$c44_tok" <<<"$c44_ang_hits" || true)))
+          done
+          c44_owned="<OPERATOR_INSTANCE_RELEASE_LOG_PATH>"  # depersonalization-token: allow — illustrative naming of the one un-codified token that has a tracked owner
+          flag_advisory_only "depersonalization-token" "angle-bracket token inventory: ${c44_uncod_n} un-codified token(s) / ${c44_uncod_raw} raw match(es) in tracked corpus. These are SANCTIONED, not defects — depersonalization-spec.md §4 'Convention scope' states un-codified angle tokens inherit the resolution-rule convention and that codification is incremental. Closure path is the §4 rule itself (a token's row is added when its consumer lands), and this arm's own decline is the progress signal; do NOT hunt for a per-token owner, only ${c44_owned} has one (#5824). Inventory: ${c44_uncod}"
+        fi
       fi
     else
       flag_warn_or_issue "depersonalization-token" "registry missing: $c44_spec"
     fi
-    if [[ -z "$c44_pvt" && -z "$c44_unreg" && -f "$c44_spec" ]]; then
-      log "  OK:    no PVT* reintroduction; all [OPERATOR_*] tokens registered"
+    # Terminal OK is guarded on arm (b) being empty AND the enumeration having RUN.
+    # Arm (d) is an inventory, not a verdict, and deliberately does not participate.
+    if [[ -z "$c44_pvt" && -z "$c44_unreg" && -f "$c44_spec" && "$c44_scanned" == "yes" ]]; then
+      log "  OK:    no PVT* reintroduction; every square-bracket token in tracked corpus is registered"
     fi
   fi
 
@@ -11032,22 +11239,71 @@ sys.stdout.write("".join(out) + "|")
         # `$1=="SKIP_MS"` count silently folds the M1 skips into this denominator —
         # measured live, that is 75 rows instead of 34.
         #
-        # CAVEAT: both counts inherit the primitive's stage-title fetch, which reads
-        # against a 1000-result search cap with no truncation guard (measured population
-        # 3677), so the split is currently APPROXIMATE and varies run to run. Reporting an
-        # approximate denominator is still strictly better than reporting none — the
-        # failure this replaces was silence, not imprecision — but the numbers firm up
-        # only when that fetch paginates.
+        # The primitive's stage-title fetch is now an UNCAPPED, cursor-paginated
+        # issues-connection walk that asserts its own completeness against the
+        # connection's totalCount, so both counts below are EXACT and stable run
+        # to run. The comment this replaces recorded the opposite — an APPROXIMATE
+        # split inherited from a 1000-result search cap — and named its own
+        # retirement condition; that condition is met.
+        #
+        # READ M3_SCAN FIRST (PV-7b). The walk reports its own measurement state,
+        # and the three states get three postures. Branch on the status BEFORE
+        # reading any counter: reading a count without branching consumes "I saw
+        # part of it" as "that is all there is" — the exact defect this check
+        # exists to catch, reproduced inside the catcher.
         local c56_m3 c56_m3_adv c56_marker c56_m3_skipped c56_m3_eval
+        local c56_m3_scan c56_m3_partial=""
         c56_m3=$(echo "$c56_out" | awk -F'\t' '$1=="M3"{print "ms#"$2":"$3" "$4}' | paste -sd'; ' -)
         c56_m3_adv=$(echo "$c56_out" | awk -F'\t' '$1=="COUNT_M3_ADV"{print $2}')
         c56_marker=$(echo "$c56_out" | awk -F'\t' '$1=="SCAFFOLD_MARKER"{print "ms#"$2" "$3}' | paste -sd', ' -)
         c56_m3_skipped=$(echo "$c56_out" | awk -F'\t' '$1=="SKIP_MS" && $3=="not-yet-scaffolded"{n++} END{print n+0}')
         c56_m3_eval=$(echo "$c56_out" | awk -F'\t' '$1=="M3_DENOM"{n++} END{print n+0}')
-        if [[ -n "$c56_m3" ]]; then
-          flag_advisory_only "milestone-scaffold-completeness" "M3 scaffold completeness — load-bearing finding(s): $c56_m3 [${c56_m3_eval} evaluated, ${c56_m3_skipped} not-yet-scaffolded; advisory ${c56_m3_adv:-0}; marker adoption ${c56_marker:-none}]"
+        c56_m3_scan=$(echo "$c56_out" | awk -F'\t' '$1=="M3_SCAN"{print $2}')
+        # degraded  -> NOT measured. flag_not_evaluated is the emitter with the
+        #              structural guarantee PV-7c requires: no mode `case`, no
+        #              resolve_check_mode, no ISSUES increment in its body, and
+        #              its line already carries the mandated "withheld verdict,
+        #              never a clean one". flag_warn_or_issue is the WRONG emitter
+        #              here — its enforce branch increments ISSUES, so an M3
+        #              measurement outage would fail the M1/M2 verdict. The M3
+        #              rows are ABSENT on this path, so this is the ONE finding
+        #              naming the cause (PV-7c fan-in).
+        # truncated -> measured, partially. The Register B human token is
+        #              DEGRADED — not the Register A token, which is the
+        #              machine-readable field, and spelling a sixth human token
+        #              here would coin a member of a closed set. It stays an
+        #              inline annotation on the normal advisory emit.
+        # fetched   -> unchanged.
+        #
+        # The `else` wrapper is LOAD-BEARING, not cosmetic: leaving the
+        # findings-vs-OK branch reachable on a degraded run would print "0
+        # load-bearing finding(s)" over a population that was never read — the
+        # false-green in its purest form.
+        #
+        # EMITTER CLASS, RESTATED HERE ON PURPOSE. Both emitters below are
+        # non-gating by construction: flag_advisory_only carries no mode `case`,
+        # no enforce branch and no ISSUES increment, so the M3 leg reports and
+        # never gates whatever the dial says, and flag_not_evaluated carries the
+        # same structural guarantee on the degraded path.
+        #
+        # The restatement is placed HERE, in the block ADJACENT to the call it
+        # governs, rather than left only in the M3 preamble above — because
+        # adjacency is what makes the claim checkable. The standing regression in
+        # core/deploy/tests/test_check56_m2_advisory.sh (Arm F) reads each
+        # emitter call site's NEAREST PRECEDING CONTIGUOUS comment block; the
+        # `local`/`awk` assignments between the preamble and this point break
+        # that contiguity, so an emitter-class claim stranded on the far side of
+        # them is a claim no probe can verify. Keep any future restatement on
+        # this side of the intervening code.
+        if [[ "$c56_m3_scan" == "degraded" ]]; then
+          flag_not_evaluated "milestone-scaffold-completeness" "M3 stage-title population unreadable (status=degraded) — scaffold completeness was NOT measured this run; every M3 verdict is withheld and no COUNT_M3* row was emitted; this is not a clean result"
         else
-          log "  OK:    milestone scaffold completeness (M3) — 0 load-bearing finding(s) over ${c56_m3_eval} evaluated milestone(s); ${c56_m3_skipped} not-yet-scaffolded (NOT evaluated, non-gating) (${c56_m3_adv:-0} advisory; marker adoption ${c56_marker:-none})"
+          [[ "$c56_m3_scan" == "truncated" ]] && c56_m3_partial=" [DEGRADED — the stage-title scan was truncated, so every count here is a LOWER BOUND; this is not a clean result]"
+          if [[ -n "$c56_m3" ]]; then
+            flag_advisory_only "milestone-scaffold-completeness" "M3 scaffold completeness — load-bearing finding(s): $c56_m3 [${c56_m3_eval} evaluated, ${c56_m3_skipped} not-yet-scaffolded; advisory ${c56_m3_adv:-0}; marker adoption ${c56_marker:-none}]${c56_m3_partial}"
+          else
+            log "  OK:    milestone scaffold completeness (M3) — 0 load-bearing finding(s) over ${c56_m3_eval} evaluated milestone(s); ${c56_m3_skipped} not-yet-scaffolded (NOT evaluated, non-gating) (${c56_m3_adv:-0} advisory; marker adoption ${c56_marker:-none})${c56_m3_partial}"
+          fi
         fi
         # M4 — sub-task milestone orphans. WARN-capable with a real enforce path,
         # so it routes through flag_warn_or_issue behind an EXPLICIT mode branch
@@ -12366,6 +12622,211 @@ sys.stdout.write("".join(out) + "|")
       fi
     fi
   fi
+
+
+  # Check 71 — BLOCK-DESTRUCTIVE-022 exec-arm rollout graduation (MIXED MODE) [#5250]
+  #
+  # WHAT IT ASSERTS. That the -022 exec arm's warn-mode rollout is DECIDED rather
+  # than left running. It reads the arm's four committed constants and, past the
+  # review window, forces a verdict: advance the phase, retreat the phase, or
+  # re-date the arming constant. Every one of those is a one-line edit, and the
+  # edited line IS the audit record of the decision.
+  #
+  # WHY IT EXISTS, AND WHY A REGISTRY ENTRY WOULD NOT HAVE DONE. A warn phase
+  # without a graduation trigger is not a rollout, it is an indefinite fail-open
+  # that reads as working. The in-repo precedent is BLOCK-EGRESS-007: it shipped a
+  # widening drain with a documented intent to graduate on evidence, and that drain
+  # holds two rows in total. Nothing surfaces the stall, so the pipeline stays green
+  # while the control silently permits. A registry entry cannot force a decision
+  # because nothing reads it on a schedule; this check does, on every --check.
+  #
+  # THE SPLIT IS THE WHOLE DESIGN, AND IT IS NOT SYMMETRIC.
+  #   DEADLINE ARM (repo-derivable, ENFORCING): a committed constant plus today's
+  #   date. It needs no drain, so it works in CI and in a fresh clone, and it is the
+  #   real forcing function. This is the arm that answers the flip register's own
+  #   stated blocker — that the shakedown signal is "git-ignored and absent in a
+  #   fresh checkout / CI, so it is not readable by a pull-request agent."
+  #   EVIDENCE ARM (operator-local, ADVISORY): the drain row count. It SKIPs when
+  #   the drain is absent and never touches ISSUES, so a fresh clone and CI see no
+  #   behaviour change from it at all. It informs the decision; it never triggers it.
+  #
+  # A ZERO DRAIN IS A FINDING, NOT A REASON TO WAIT. The three-way verdict is
+  # emitted with the due notice so the reading cannot default to "no evidence yet":
+  # zero rows reads as INSTRUMENTATION-SUSPECT and sends the operator to run the
+  # must-flag control, because a zero whose instrument was never connected measures
+  # the wiring and not the behaviour.
+  #
+  # DECLARED COVERAGE BOUNDARY. It asserts the constants are readable, that the
+  # phase is one of the three enum values, and that the review window has not
+  # elapsed unaddressed. It does NOT assert that the arm behaves as the phase says
+  # — that is the test suite's job (T-EXEC-10 pins the phase gate) — and it does not
+  # read, classify or grade drain CONTENT.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 71: BLOCK-DESTRUCTIVE-022 exec-arm rollout graduation (deadline arm repo-derivable + enforcing; evidence arm operator-local + advisory)"
+    local c71_hook="core/hooks/block-destructive.sh"
+    if [[ ! -f "$c71_hook" ]]; then
+      log "  FAIL:  destructive-022-exec-graduation — hook source missing: $c71_hook (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
+      ISSUES=$((ISSUES + 1))
+    else
+      local c71_phase c71_armed c71_days c71_rows_thr c71_esc
+      c71_phase="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_PHASE=/{s/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p;q;}' "$c71_hook")"
+      c71_armed="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_ARMED=/{s/^readonly DESTRUCTIVE_022_EXEC_ARMED="\([0-9-]*\)".*/\1/p;q;}' "$c71_hook")"
+      c71_days="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_REVIEW_DAYS=/{s/^readonly DESTRUCTIVE_022_EXEC_REVIEW_DAYS=\([0-9]*\).*/\1/p;q;}' "$c71_hook")"
+      c71_rows_thr="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_REVIEW_ROWS=/{s/^readonly DESTRUCTIVE_022_EXEC_REVIEW_ROWS=\([0-9]*\).*/\1/p;q;}' "$c71_hook")"
+      c71_esc="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=/{s/^readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=\([0-9]*\).*/\1/p;q;}' "$c71_hook")"
+
+      # ── control arm FIRST: a probe that cannot be shown to detect proves nothing.
+      # The extractor must return a KNOWN value from a synthetic line and must
+      # return EMPTY for a constant that is not there. Without both, an extractor
+      # silently returning empty would read as "no finding" on every run.
+      local c71_ctrl_hit c71_ctrl_miss
+      c71_ctrl_hit="$(printf 'readonly DESTRUCTIVE_022_EXEC_PHASE="shadow"\n' \
+        | sed -n 's/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p')"
+      c71_ctrl_miss="$(printf 'readonly SOMETHING_ELSE=1\n' \
+        | sed -n 's/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p')"
+      log "  CTRL:  destructive-022-exec-graduation — extractor sensitivity='${c71_ctrl_hit}' (want shadow), specificity='${c71_ctrl_miss}' (want empty)"
+      if [[ "$c71_ctrl_hit" != "shadow" || -n "$c71_ctrl_miss" ]]; then
+        log "  FAIL:  destructive-022-exec-graduation — constant extractor no longer discriminates; every verdict below would be unattributable"
+        ISSUES=$((ISSUES + 1))
+      elif [[ -z "$c71_phase" || -z "$c71_armed" || -z "$c71_days" || -z "$c71_rows_thr" || -z "$c71_esc" ]]; then
+        log "  FAIL:  destructive-022-exec-graduation — one or more rollout constants unreadable in $c71_hook (phase='${c71_phase}' armed='${c71_armed}' days='${c71_days}' rows='${c71_rows_thr}' escalate='${c71_esc}'). A gate that cannot read its own input must not pass."
+        ISSUES=$((ISSUES + 1))
+      else
+        case "$c71_phase" in
+          shadow|warn|enforce) ;;
+          *)
+            log "  FAIL:  destructive-022-exec-graduation — DESTRUCTIVE_022_EXEC_PHASE='${c71_phase}' is not one of shadow|warn|enforce. An unrecognised value falls through to enforce in the hook, so a typo silently hardens a rule firing 28% of the layer's blocks."
+            ISSUES=$((ISSUES + 1))
+            ;;
+        esac
+        local c71_elapsed
+        c71_elapsed="$(python3 -c 'import datetime,sys
+a=datetime.date.fromisoformat(sys.argv[1])
+print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || printf '')"
+        local c71_drain="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/.claude/hooks/destructive-warn-log.jsonl"
+        local c71_rows="SKIP"
+        if [[ -f "$c71_drain" ]]; then
+          # `wc -l`, not `grep -c ''`: on an EMPTY drain grep prints 0 AND exits 1,
+          # so an `|| printf 0` fallback concatenates a second zero and every
+          # numeric comparison below dies on `0\n0`. Caught by running this check
+          # against a zero-row drain — which is the state the graduation verdict
+          # cares most about getting right.
+          c71_rows="$(wc -l < "$c71_drain" 2>/dev/null | tr -d '[:space:]')"
+          [[ -n "$c71_rows" ]] || c71_rows=0
+        fi
+        log "  DENOM: destructive-022-exec-graduation — phase=${c71_phase} armed=${c71_armed} elapsed=${c71_elapsed}d thresholds=${c71_days}d/${c71_rows_thr}rows escalate=${c71_esc}d drain_rows=${c71_rows}"
+
+        if [[ "$c71_phase" == "enforce" ]]; then
+          log "  OK:    destructive-022-exec-graduation — the exec arm has GRADUATED to enforce; the rollout is decided and this gate is discharged"
+        elif [[ -z "$c71_elapsed" ]]; then
+          log "  FAIL:  destructive-022-exec-graduation — DESTRUCTIVE_022_EXEC_ARMED='${c71_armed}' is not a resolvable ISO date, so the deadline arm cannot be evaluated. This is the failure mode a placeholder arming stamp produces."
+          ISSUES=$((ISSUES + 1))
+        else
+          # The three-way verdict, emitted WITH any due notice so a zero drain is
+          # read as a finding rather than as an absence of one.
+          local c71_verdict
+          if [[ "$c71_rows" == "SKIP" ]]; then
+            c71_verdict="drain absent on this instance (operator-local, git-ignored) — the evidence arm SKIPs; read it where the sessions actually ran"
+          elif [[ "$c71_rows" -eq 0 ]]; then
+            c71_verdict="0 rows → INSTRUMENTATION-SUSPECT, not 'no evidence'. Run the must-flag control (block-destructive.test.sh T-EXEC-1). If it writes a row the surface is genuinely quiet — graduate at near-zero risk or remove the arm as dead code. If it does not, the drain is BROKEN and that is a defect."
+          elif [[ "$c71_rows" -lt "$c71_rows_thr" ]]; then
+            c71_verdict="${c71_rows} rows (< ${c71_rows_thr}) → INSUFFICIENT-TRAFFIC. Choose one and record it: graduate on the small sample, retreat to shadow, or extend ONCE by re-dating DESTRUCTIVE_022_EXEC_ARMED."
+          else
+            c71_verdict="${c71_rows} rows (>= ${c71_rows_thr}) → classify the sample true-positive / benign-shape / mandated-tool-blocked with its denominator, then GRADUATE to enforce or NARROW the predicate. Never auto-promoted by count."
+          fi
+
+          if [[ "$c71_elapsed" -ge "$c71_esc" ]]; then
+            log "  FAIL:  destructive-022-exec-graduation — GRADUATION-OVERDUE: ${c71_elapsed} days at phase='${c71_phase}', past the ${c71_esc}-day escalation. ${c71_verdict}"
+            log "         Turn this green by RECORDING A DECISION in core/hooks/block-destructive.sh: advance DESTRUCTIVE_022_EXEC_PHASE, retreat it to shadow, or re-date DESTRUCTIVE_022_EXEC_ARMED. Doing nothing is the one option this gate removes."
+            ISSUES=$((ISSUES + 1))
+          elif [[ "$c71_elapsed" -ge "$c71_days" ]]; then
+            log "  WARN:  destructive-022-exec-graduation — GRADUATION-DUE (deadline): ${c71_elapsed} days since arming (threshold ${c71_days}d; escalates to a finding at ${c71_esc}d). ${c71_verdict}"
+          elif [[ "$c71_rows" != "SKIP" && "$c71_rows" -ge "$c71_rows_thr" ]]; then
+            log "  WARN:  destructive-022-exec-graduation — GRADUATION-DUE (evidence): ${c71_verdict}"
+          else
+            # Silent below threshold: omission IS the non-ceremony signal. Nothing
+            # is emitted beyond the DENOM line above.
+            log "  OK:    destructive-022-exec-graduation — within the review window (${c71_elapsed}d of ${c71_days}d, drain=${c71_rows})"
+          fi
+        fi
+      fi
+    fi
+  fi
+
+
+  # Check 72 — issue-body section-anchor drift (ADVISORY ONLY) [#4931]
+  #
+  # A precondition that cites a file plus a numbered section anchor should cite a
+  # section that EXISTS in that file. Two things break that silently: a section
+  # number that is correct for some OTHER file, and a target restructured long
+  # after the citing issue was written — no signal reaches the issue either way.
+  # Nothing else here asks the question. check-issue-ref-validity.sh is the
+  # INVERSE on both axes (it scans changed repo markdown and resolves #N against
+  # GitHub issues), and check-citation-anchors.sh (Check 66) names this predicate
+  # in its own declared coverage boundary as one it does NOT run.
+  #
+  # *** THIS CHECK IS NEVER ENFORCE-CAPABLE — STRUCTURALLY, NOT BY DEFAULT ***
+  # Note what is absent: no resolve_check_mode call, no mode branch, and no
+  # reference to flag_warn_or_issue anywhere in this block. Both emitters used
+  # here — flag_advisory_only and flag_not_evaluated — are structurally incapable
+  # of reaching ISSUES, so the no-gate property survives a cohort mode flip
+  # without anyone re-reading this comment. That is deliberate and it is the
+  # whole posture: there is no warn->enforce shakedown ladder for this check and
+  # no `.mode` file that controls anything, because no enforce flip is planned.
+  # The residual is STRUCTURAL, not a threshold to tune — the corpus labels
+  # sections in conventions the predicate cannot enumerate (measured: 181 bound
+  # citations behind an unmodelled prefix, 54 of them naming a real heading), so
+  # a citation naming a real-but-unmodelled label is indistinguishable from one
+  # naming nothing. Surfacing is this predicate's correct role; verdicting is not.
+  #
+  # OFFLINE: gh absent => SKIP with a logged reason, mirroring Checks 39/40/51/
+  # 52/53/55. A backlog invariant must never read green because it could not run.
+  # Primitive: core/deploy/tools/check-issue-body-anchors.sh (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 72: Issue-body section-anchor drift (numeric anchors in OPEN issue bodies vs their target's headings; ADVISORY — never enforce-capable)"
+    local c71_script="core/deploy/tools/check-issue-body-anchors.sh"
+    if [[ ! -f "$c71_script" ]]; then
+      flag_not_evaluated "issue-body-anchor-drift" "primitive script missing: $c71_script — the population was not read and no citation was resolved; this is not a clean result"
+    elif ! command -v gh >/dev/null 2>&1; then
+      log "  SKIP:  issue-body-anchor-drift — gh not on PATH; the OPEN-issue population is unreachable offline, so no anchor was resolved (skipped, not clean)"
+    else
+      local c71_out c71_exit=0
+      c71_out=$(bash "$c71_script" --output-format tsv 2>&1) || c71_exit=$?
+      if [[ $c71_exit -eq 3 ]]; then
+        # PV-7c: ONE finding naming ONE root cause, through the emitter that
+        # carries no mode branch and no ISSUES increment. One outage never
+        # becomes one finding per issue. The DETAIL carries the mandated
+        # discriminator clause — flag_not_evaluated's own contract comment
+        # places that obligation on the detail, and its log line does not
+        # supply it, so a detail that omits it ships an unmarked withheld
+        # verdict that nothing downstream can tell from a clean one.
+        flag_not_evaluated "issue-body-anchor-drift" "measurement outage (exit 3): $(head -1 <<<"$c71_out") — status degraded, all per-citation verdicts withheld and no counter emitted; this is not a clean result"
+      else
+        # The coverage counts are emitted on EVERY evaluated run, findings or
+        # not. A leg that measured nothing must render as unmeasured, never as
+        # clean — which is this release's own outcome statement applied to the
+        # check introducing it.
+        local _c71_row
+        while IFS= read -r _c71_row; do
+          [[ -z "$_c71_row" ]] && continue
+          log "  DENOM: issue-body-anchor-drift — ${_c71_row}"
+        done < <(echo "$c71_out" | awk -F'\t' '$1=="STATUS"{printf "%s = %s\n", $2, $3}')
+        if [[ $c71_exit -eq 0 ]]; then
+          local _c71_seen
+          _c71_seen=$(echo "$c71_out" | awk -F'\t' '$1=="DENOM"{print $3}')
+          log "  OK:    issue-body-anchor-drift — no unresolved anchors over ${_c71_seen:-?} citation site(s); see the DENOM rows above for what was NOT evaluated"
+        else
+          local _c71_hit
+          while IFS= read -r _c71_hit; do
+            [[ -z "$_c71_hit" ]] && continue
+            flag_advisory_only "issue-body-anchor-drift" "$_c71_hit"
+          done < <(echo "$c71_out" | awk -F'\t' '$1=="UNRESOLVED"{printf "#%s (body line %s) cites %s section %s, which that file does not carry; it does carry: %s\n", $2, $3, $4, $5, $7}')
+        fi
+      fi
+    fi
+  fi
+
+
 
 
   # Summary
@@ -14680,47 +15141,37 @@ cmd_report() {
   # Mirrors cmd_check's Check 35 (multi-mode SKILL.md mode-enum recognizability,
   # #26) into report PASS/FAIL form. As with Check 18, the report uses unvarnished
   # enforce-mode semantics regardless of cmd_check warn-mode — the "what would
-  # happen in enforce-mode" view, suitable for Stage 13 evidence. Dual-convention
-  # recognizer: delimiter-anchored distinct body-heading enum, with a non-line-
-  # start-anchored `Modes:` description-list fallback (the desc-only skills carry
-  # `Modes:` inline mid-line in folded YAML; `·` counted after `Modes:`). An empty
-  # population reports FAIL (audit-baseline guard — the scan could not be
+  # happen in enforce-mode" view, suitable for Stage 13 evidence. Verdict computed
+  # by the shared _c35_compute_verdict body (DD1) so this mirror and the lifecycle
+  # check cannot diverge; the predicate, the subject statement and the finding-detail
+  # wording all live there and are NOT re-encoded here (single-engine, CIAC-2).
+  # An empty population reports FAIL (audit-baseline guard — the scan could not be
   # evaluated); recognizable-everywhere reports PASS; finding rows report FAIL.
   echo "--- Mode-invocation drift (Check 35) ---"
-  local c35r_findings=0 c35r_scanned=0 c35r_output=""
-  local c35r_skill_md c35r_body_enum c35r_desc_line c35r_desc_after c35r_desc_dots c35r_desc_arity
-  for c35r_skill_md in operations/skills/*/SKILL.md release/skills/*/SKILL.md core/skills/*/SKILL.md; do
-    [[ -f "$c35r_skill_md" ]] || continue
-    c35r_body_enum=$(/usr/bin/grep -oE '^### Mode [A-Z][[:space:]]*[:—-]' "$c35r_skill_md" 2>/dev/null \
-                     | /usr/bin/grep -oE 'Mode [A-Z]' | /usr/bin/sort -u | /usr/bin/wc -l | /usr/bin/tr -d ' ') || c35r_body_enum=0
-    c35r_desc_line=$(/usr/bin/grep -m1 -E 'Modes:' "$c35r_skill_md" 2>/dev/null) || c35r_desc_line=""
-    c35r_desc_arity=0
-    if [[ -n "$c35r_desc_line" ]]; then
-      c35r_desc_after=$(printf '%s' "$c35r_desc_line" | /usr/bin/sed -E 's/.*Modes:(.*)/\1/')
-      c35r_desc_dots=$(printf '%s' "$c35r_desc_after" | /usr/bin/grep -oE '·' | /usr/bin/wc -l | /usr/bin/tr -d ' ')
-      c35r_desc_arity=$(( c35r_desc_dots + 1 ))
-    fi
-    if [[ -n "$c35r_desc_line" || "$c35r_body_enum" -ge 2 ]]; then
-      c35r_scanned=$((c35r_scanned + 1))
-      if [[ "$c35r_body_enum" -ge 2 || "$c35r_desc_arity" -ge 2 ]]; then
-        :
-      else
-        c35r_output+="${c35r_skill_md}: advertises modes but exposes no machine-recognizable mode-enum"$'\n'
-        c35r_findings=$((c35r_findings + 1))
-      fi
-    fi
-  done
-  if [[ "$c35r_scanned" -eq 0 ]]; then
-    echo "[FAIL] mode-invocation-drift — no multi-mode SKILL.md files found — expected ≥9 (audit-baseline guard)"
-    FAIL=$((FAIL + 1))
-  elif [[ "$c35r_findings" -eq 0 ]]; then
-    echo "[PASS] mode-invocation-drift — all $c35r_scanned multi-mode skill(s) expose a machine-recognizable mode-enum"
-    PASS=$((PASS + 1))
-  else
-    echo "[FAIL] mode-invocation-drift — ${c35r_findings} of ${c35r_scanned} multi-mode skill(s) lack a recognizable mode-enum — see release/references/how-to/hub-spoke-bridge.md § Procedure 3 Spoke Template \`### Mode Provenance\`"
-    FAIL=$((FAIL + 1))
-    printf '%s' "$c35r_output" | /usr/bin/sed 's/^/  /' || true
-  fi
+  local c35r_verdict c35r_tok c35r_rest c35r_f c35r_n
+  c35r_verdict="$(_c35_compute_verdict "report")"
+  c35r_tok="${c35r_verdict%% *}"
+  case "$c35r_tok" in
+    CLEAN)
+      echo "[PASS] mode-invocation-drift — all ${c35r_verdict#CLEAN } multi-mode skill(s) expose a machine-recognizable mode-enum"
+      PASS=$((PASS + 1))
+      ;;
+    INCOMPLETE)
+      # "INCOMPLETE <findings> <scanned>" — per-file detail already on stderr.
+      c35r_rest="${c35r_verdict#INCOMPLETE }"
+      c35r_f="${c35r_rest%% *}"; c35r_n="${c35r_rest##* }"
+      echo "[FAIL] mode-invocation-drift — ${c35r_f} of ${c35r_n} multi-mode skill(s) lack a recognizable mode-enum — see release/references/how-to/hub-spoke-bridge.md § Procedure 3 Spoke Template \`### Mode Provenance\` (per-file detail above)"
+      FAIL=$((FAIL + 1))
+      ;;
+    FAIL)
+      echo "[FAIL] mode-invocation-drift — ${c35r_verdict#FAIL }"
+      FAIL=$((FAIL + 1))
+      ;;
+    *)
+      echo "[FAIL] mode-invocation-drift — unexpected verdict: $c35r_verdict"
+      FAIL=$((FAIL + 1))
+      ;;
+  esac
   echo ""
 
   # --- Platform .version drift vs latest published Release (Check 39) ---

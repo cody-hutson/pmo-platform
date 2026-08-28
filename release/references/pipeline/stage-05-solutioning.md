@@ -221,7 +221,8 @@ When a Stage 5 change spec includes a **count update**, **enumeration update**, 
 ### Cascade-Sweep (per § 5.6 cascade-completeness rule)
 
 **Sweep command(s):**
-- `grep -nE '<old-value-regex>' <file>` per (file × value) pair below
+- `<engine> '<old-value-regex>' <file>` per (file × value) pair below — name the engine
+  that executed it (e.g. `grep -nE`, `python3` `re.search`, `git grep -wF`)
 
 | File | OLD value | Line | Context | Disposition | Rationale |
 |---|---|---|---|---|---|
@@ -232,10 +233,61 @@ When a Stage 5 change spec includes a **count update**, **enumeration update**, 
 **Sweep verdict:** <count of UPDATE rows> / <count of PRESERVE rows> / <count of N/A rows>
 ```
 
+**Sweep-command form (the sweep is only as good as the engine that ran it):**
+
+A declared sweep command is reproducible only if it (1) **names the engine that executed
+it** — the declaration is the check's input, so an undeclared engine is an ungradeable
+claim; (2) is **re-runnable by the grader on this platform**, with explicit file scope;
+and (3) does **not rely on a construct the named engine does not implement**. The sweep
+stays file-scoped, as prescribed above. A file-scoped `python3` line-scan predicate is
+admitted alongside `grep -nE`.
+
+**FORBIDDEN.** Passing a POSIX-undefined escape — the Perl shorthand classes and
+assertions `\b \B \d \D \s \S \w \W` and their kin — to `git grep` under `-E` or a bare
+pattern. Under `git grep`'s POSIX engines a backslash escape POSIX does not define is
+neither rejected nor dropped: it executes as the literal character following the
+backslash, so `\b` searches for `b` and `\d` for `d`. Escapes POSIX *does* define are
+dialect-specific rather than literalised (`\(` groups under basic regex and is a literal
+parenthesis under extended regex); those are governed by the permitted set below.
+
+**The permitted set for whole-token matching under `git grep`.** `-w` is orthogonal to
+the pattern dialect: it constrains where a match may begin and end; it does not change
+how the pattern is parsed. The dialect is chosen by the pattern flag — default = basic
+regex, `-E` = extended regex, `-F` = fixed string. *The property:* any form that
+interprets the token as a **pattern** obliges the author to escape every regex
+metacharacter in the token **for that dialect** first; `-F` forms do not.
+
+- **PRIMARY — `-wF`.** A literal token is not a pattern. It is the only form correct
+  under raw substitution, and the only one correct across both token edge classes.
+- **Permitted, escaping obligation discharged — `-wE`, or the word-class alternation
+  `(^|[^0-9A-Za-z_])TOKEN([^0-9A-Za-z_]|$)`** — where the pattern is *deliberately
+  authored as extended regex* and every metacharacter in the substituted token is escaped
+  for it. Worked instance, token `(20)`: `(^|[^0-9A-Za-z_])\(20\)([^0-9A-Za-z_]|$)`.
+- **Permitted — `-F` without `-w`**, where the token's own leading and trailing
+  characters are non-word and already bound it.
+- **Permitted — `python3` with a file-scoped line-scan predicate**, named as *the*
+  mechanism rather than as an instance of "not `git grep`": the plain `grep` on a given
+  workstation may be a shim that returns a plausible zero on a pattern it rejects.
+- **NOT PERMITTED for whole-token matching — `-P '\b…\b'`.** `\b` asserts a word/non-word
+  *transition*; a token whose edge character is itself non-word, preceded by whitespace,
+  presents none, so the assertion cannot be satisfied and the probe returns zero over a
+  non-empty population. `-P` is a pattern dialect as well, so both spellings fail. `-P`
+  remains permitted for genuine PCRE constructs *other than* word boundary.
+
+Rationale, the bidirectional failure mechanism, the engine-parity assertion obligation,
+and the worked probe record live once, in [`review-discipline-principles.md`](../../../core/disciplines/review-discipline-principles.md)
+§ 8 PV-2e. This clause carries the operational form at the point of use.
+
 **Load-bearing test (spec is incomplete if ANY hold):**
 
 - `### Cascade-Sweep` section omitted when a triggering update is in spec scope.
-- Sweep command(s) line missing OR irreproducible (no `grep` invocation cited).
+- Sweep command(s) line missing, or irreproducible under the permitted-invocation set
+  above — the executing engine is not named, the command is not re-runnable by the grader
+  with explicit file scope, or it relies on a construct the named engine does not
+  implement.
+- A declared sweep command in the FORBIDDEN form above. A sweep that concludes "0
+  remaining occurrences" through an engine that literalised its escape has verified
+  nothing, and its output is byte-indistinguishable from a genuine clean result.
 - Sweep table missing rows for OLD-value occurrences that appear in the affected files (verifiable: re-run the grep against the release branch — if grep returns matches the table does not enumerate, the spec is incomplete).
 - Disposition column contains rows without rationale.
 - Any row marked PRESERVE without an explicit reason naming the preservation rationale (e.g., "historical snapshot in an archived release plan — out of cascade scope").
