@@ -106,6 +106,85 @@ readonly SHASUM="/usr/bin/shasum"
 # absolute path inline; a constant here would be unreferenced.
 readonly PYTHON3="/usr/bin/python3"
 
+# --- PATH RESOLUTION (Write/Edit file_path → absolute) ---
+# Defined HERE, above ${PRIMARY_ROOT}, rather than beside the rules that consume it: the
+# anchor and the target must be resolved by the SAME function or they cannot meet. See
+# the ANCHOR/TARGET RESOLUTION PARITY note on PRIMARY_ROOT below.
+
+# resolve_path_shell — dependency-free physical resolution using only the pinned tool
+# path. Resolves the parent chain with `cd … && pwd -P` (which collapses `..` and every
+# symlinked directory component) and then follows a symlinked FINAL component with
+# readlink, up to a stated hop bound.
+#
+# It exists because the python3 arm below has THREE doors to the raw path, not one:
+# python3 absent for an existing target, python3 absent for a not-yet-existing target,
+# and python3 present-but-non-functional — a Mac carrying the Command Line Tools stub at
+# /usr/bin/python3 without the tools installed satisfies `[ -x ]` and still fails to
+# execute. A raw path is the TEXTUAL reading of the target, and every classification in
+# this hook (the -001 governance set, both cross-domain rules, the ceiling's projects/
+# mapping) is a path comparison — so a raw path silently reclassifies an aliased target
+# to whatever domain its string happens to name. That is the difference between a
+# repo-reaching write being an always-block floor and being mode-gated.
+#
+# STATED BOUND, not an implied one: a symlink chain is followed at most
+# RESOLVE_LINK_HOPS times; a longer chain is returned PARTIALLY resolved. Chains of one
+# and two hops are asserted in Suite A of the test file; the bound itself is not, and
+# this comment claims no more than that.
+readonly RESOLVE_LINK_HOPS=16
+resolve_path_shell() {
+  local fp="$1"
+  local hops=0
+  local parent base parent_abs link d_abs
+  while [ "$hops" -le "$RESOLVE_LINK_HOPS" ]; do
+    # A directory resolves whole — this is also what normalizes a trailing `/`, a
+    # trailing `/.`, a relative path and a symlinked alias, which is why ${PRIMARY_ROOT}
+    # can be run through the same function as a file target.
+    if [ -d "$fp" ]; then
+      d_abs="$(cd "$fp" 2>/dev/null && pwd -P)" || d_abs=""
+      if [ -z "$d_abs" ]; then d_abs="$fp"; fi
+      "$PRINTF" '%s' "$d_abs"
+      return 0
+    fi
+    parent="$(/usr/bin/dirname "$fp" 2>/dev/null || "$PRINTF" '.')"
+    base="$(/usr/bin/basename "$fp" 2>/dev/null || "$PRINTF" '%s' "$fp")"
+    if [ -d "$parent" ]; then
+      parent_abs="$(cd "$parent" 2>/dev/null && pwd -P)" || parent_abs=""
+      if [ -z "$parent_abs" ]; then parent_abs="$parent"; fi
+    else
+      # No existing ancestor to stand on — the same give-up point the prior code had.
+      parent_abs="$parent"
+    fi
+    fp="${parent_abs%/}/${base}"
+    if [ ! -L "$fp" ]; then break; fi
+    link="$(/usr/bin/readlink "$fp" 2>/dev/null || "$PRINTF" '')"
+    if [ -z "$link" ]; then break; fi
+    case "$link" in
+      /*) fp="$link" ;;
+      *)  fp="${parent_abs%/}/${link}" ;;
+    esac
+    hops=$((hops + 1))
+  done
+  "$PRINTF" '%s' "$fp"
+}
+
+# resolve_path — python3 os.path.realpath when it is usable, the shell resolver
+# otherwise. The python arm is kept as the primary because it resolves a whole symlink
+# chain in one call and needs no hop bound; the fallback is what stops an unusable
+# python3 from degrading a resolved comparison into a textual one.
+resolve_path() {
+  local fp="$1"
+  [ -z "$fp" ] && return 0
+  local abs=""
+  if [ -e "$fp" ] && [ -x "$PYTHON3" ]; then
+    abs="$("$PYTHON3" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$fp" 2>/dev/null || "$PRINTF" '')"
+  fi
+  case "$abs" in
+    /*) ;;                                   # python3 answered with an absolute path
+    *)  abs="$(resolve_path_shell "$fp")" ;; # absent, unusable, or a non-absolute answer
+  esac
+  "$PRINTF" '%s' "$abs"
+}
+
 # --- METADATA ---
 readonly HOOK_NAME="block-autonomy-ceiling"
 HOOK_DIR_RAW="$(cd "$(dirname "$0")" && pwd -P)"
@@ -118,7 +197,21 @@ readonly MODE_FILE="${HOOK_DIR}/.autonomy-mode"
 
 # Workspace root (the deployed-hook convention — block-destructive PRIMARY_ROOT /
 # block-rm WORKSPACE_ROOT). Governance + cross-domain path detection anchors here.
-readonly PRIMARY_ROOT="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"
+#
+# ANCHOR/TARGET RESOLUTION PARITY. Every anchored comparison in this hook tests a
+# REALPATH-RESOLVED target against this value, so the two must be resolved by the same
+# function or they cannot meet. Consumed RAW, four benign shapes of
+# CLAUDE_WORKSPACE_ROOT — a trailing slash, a trailing `/.`, a relative path, and a
+# symlinked alias — each make EVERY anchored pattern miss. The failure is TOTAL rather
+# than partial: the -001 governance floor, the -002 disclosure floor, -004 and the
+# ceiling's projects/ mapping are all anchored on this one value, so a single trailing
+# slash disables the hook outright while every log line still reads normal. Anchoring the
+# -001 document entries took the anchored-entry count from 3 to 11 and widened that
+# exposure accordingly. An anchored pattern with a mis-resolving anchor is worse than an
+# unanchored one, because it reads as safe. resolve_path() is therefore defined ABOVE
+# this line, and the four shapes are armed in Suite N of the test file.
+PRIMARY_ROOT_RAW="$(resolve_path "${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}")"
+readonly PRIMARY_ROOT="$PRIMARY_ROOT_RAW"
 
 # Runtime config + cache locations (the notify-version-skew.sh runtime-read
 # convention; XDG cache dir).
@@ -275,9 +368,16 @@ log_block() {
     >> "$BLOCK_LOG" 2>/dev/null || true
 }
 
-# apply_block — mode-gated block for the CEILING check (warn / off / enforce).
-# Used ONLY by the ceiling check, NOT by the irreducible Tier-0 floor (the floor
-# uses always_block below, which ignores mode).
+# apply_block — mode-gated block (warn / off / enforce). Used by BOTH mode-gated rules:
+# BLOCK-AUTONOMY-004 (the low-risk cross-domain direction) and the STEP-2 ceiling check
+# (BLOCK-AUTONOMY-003). NOT used by the irreducible Tier-0 floor (BLOCK-AUTONOMY-001/002),
+# which uses always_block below and ignores mode entirely.
+#
+# This comment read "Used ONLY by the ceiling check" until -004 was added as a second
+# caller and the sentence was left behind. It is corrected rather than annotated because a
+# declaration that over-claims what it governs is this milestone's own defect class — the
+# same shape as the -002 comment that asserted a direction was impossible, and the reason
+# a bypass shipped. If a third caller is added, this line changes with it.
 apply_block() {
   local rule_id="$1"; local reason="$2"; local override="$3"
   local mode; mode="$(get_mode)"
@@ -378,33 +478,91 @@ resolve_ceiling_num() {
   level_to_num "$(resolve_level_direct)"
 }
 
-# --- PATH RESOLUTION (Write/Edit file_path → absolute) ---
-# Mirrors block-destructive.sh Write/Edit branch: Python os.path.realpath when
-# available (resolves ../, symlinks; tolerates not-yet-existing files via parent
-# resolution); graceful degradation to the raw path string.
-resolve_path() {
-  local fp="$1"
-  [ -z "$fp" ] && return 0
-  local abs=""
-  if [ -e "$fp" ] && [ -x "$PYTHON3" ]; then
-    abs="$("$PYTHON3" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$fp" 2>/dev/null || echo "$fp")"
-  elif [ -e "$fp" ]; then
-    abs="$fp"
-  elif [ -x "$PYTHON3" ]; then
-    # Not-yet-existing target — resolve parent dir, re-attach basename.
-    local parent base parent_abs
-    parent="$(/usr/bin/dirname "$fp")"
-    base="$(/usr/bin/basename "$fp")"
-    if [ -d "$parent" ]; then
-      parent_abs="$(cd "$parent" 2>/dev/null && pwd -P || echo "$parent")"
-      abs="${parent_abs}/${base}"
-    else
-      abs="$fp"
+# --- REPOSITORY MEMBERSHIP (second stage of the -001 governance set) ---
+# is_platform_worktree <resolved-absolute-path> → 0 when the path sits inside a working
+# tree OF THIS REPOSITORY, wherever on disk that tree happens to live; 1 otherwise.
+# (resolve_path, which this uses for the relative-pointer form, is defined near the top
+# of the file so that ${PRIMARY_ROOT} can be resolved by it.)
+#
+# WHY A SECOND MECHANISM AT ALL. Anchoring the -001 document entries to
+# ${PRIMARY_ROOT}/pmo-platform correctly ended the era when a file merely NAMED CLAUDE.md
+# was blocked wherever on disk it sat — an unrelated product repository's root doc was
+# being treated as this platform's charter, and always_block left no configuration that
+# could permit the write. But the anchor it chose is the platform CHECKOUT, which covers
+# every worktree NESTED under the checkout and no worktree anywhere else. Linked worktrees
+# are routinely created elsewhere: a spawned session receives one under its own scratchpad.
+#
+# The on-disk copy in such a tree is transient, which is what made the gap look tolerable.
+# The COMMIT made from that copy is not, and it pushes to the same public repository this
+# floor exists to guard. Transience of the working tree is not transience of the
+# disclosure, and it is the disclosure axis these rules model.
+#
+# No path prefix can close this, because the whole content of the gap is that the location
+# is arbitrary. What is NOT arbitrary is repository MEMBERSHIP: a linked worktree's `.git`
+# is a one-line pointer at an administrative directory inside the checkout's own .git, and
+# a primary checkout's `.git` IS that directory. That is the invariant tested here.
+#
+# IT DOES NOT REOPEN THE DEFECT THE ANCHORING FIXED. An unrelated repository resolves to
+# its OWN administrative directory and is rejected here exactly as the anchored patterns
+# reject it. NEAREST TREE WINS: the walk stops at the first `.git` it meets and returns a
+# verdict there rather than continuing upward, so a foreign repository checked out inside a
+# platform worktree is allowed — git cannot track its contents through the platform repo,
+# so its root doc is not platform governance. Suite W arms all four shapes: a foreign
+# repo's root doc, a foreign WORKTREE whose .git file is identical in form, a nested
+# foreign repo inside a platform worktree, and a loose copy in no repository at all.
+#
+# COST. This is entered only for a Write/Edit whose resolved basename is already one of
+# the three governance documents AND which the anchored patterns did not match — a handful
+# of calls in a session, never the hot path that every Bash and mcp call takes. The walk
+# itself is a bounded upward loop of `[ -d ]` / `[ -f ]` tests with NO subprocess per
+# level (parameter expansion, not dirname), plus at most one small file read.
+readonly WORKTREE_WALK_MAX=64
+is_platform_worktree() {
+  local platform_gitdir="${PRIMARY_ROOT}/pmo-platform/.git"
+  local dir="${1%/*}"          # start at the target's directory; the target is a file
+  local depth=0
+  local gitdir line
+  # Membership is only decidable for an absolute path. A relative one means resolution
+  # failed outright — in which case the anchored patterns above could not have matched
+  # either, and fall-through is already the pre-existing behaviour. Stated as a guard
+  # rather than left to the walk bound, which would otherwise strip nothing from a
+  # slash-free string and spin to WORKTREE_WALK_MAX.
+  case "$dir" in /*) ;; *) return 1 ;; esac
+  while [ -n "$dir" ] && [ "$depth" -lt "$WORKTREE_WALK_MAX" ]; do
+    if [ -d "${dir}/.git" ]; then
+      # A primary checkout. Nearest tree wins: a foreign repo met first is a REJECTION,
+      # never a "keep looking further up".
+      if [ "${dir}/.git" = "$platform_gitdir" ]; then return 0; fi
+      return 1
     fi
-  else
-    abs="$fp"
-  fi
-  "$PRINTF" '%s' "$abs"
+    if [ -f "${dir}/.git" ] && [ -r "${dir}/.git" ]; then
+      gitdir=""
+      while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+          "gitdir: "*) gitdir="${line#gitdir: }"; break ;;
+        esac
+      done < "${dir}/.git"
+      if [ -n "$gitdir" ]; then
+        # git 2.48+ may write this pointer RELATIVE to the worktree (worktree.
+        # useRelativePaths / `git worktree add --relative-paths`). A membership test that
+        # only understood the absolute form would silently allow every worktree on such an
+        # instance, so both forms are resolved through the same resolver the target used
+        # and the two meet on physical paths. Armed as W-7 rather than assumed.
+        case "$gitdir" in
+          /*) ;;
+          *)  gitdir="${dir}/${gitdir}" ;;   # W7: relative-pointer join
+        esac
+        gitdir="$(resolve_path "$gitdir")"
+        case "$gitdir" in
+          "$platform_gitdir"|"${platform_gitdir}/"*) return 0 ;;
+        esac
+      fi
+      return 1
+    fi
+    dir="${dir%/*}"
+    depth=$((depth + 1))
+  done
+  return 1
 }
 
 # ==========================================================================
@@ -429,13 +587,37 @@ fi
 # --------------------------------------------------------------------------
 # Only the payload-detectable classes are enforced here:
 #   item 6 — governance-file modification (Write/Edit file_path → governance path)
-#   item 7 — cross-domain bridge writes (Write/Edit file_path crossing the
-#            pmo-platform ↔ projects boundary)
+#   item 7 — cross-domain bridge writes, HIGH-RISK DIRECTION ONLY (a projects/ cwd
+#            writing into pmo-platform/). Item 7 is no longer a single symmetric
+#            class: per core/specs/autonomy-tiers.md § Irreducible Human Tasks item 7
+#            it splits by direction, and only the direction that can place operations
+#            content into the tracked public repo is a Tier-0 floor. The converse
+#            direction (a pmo-platform cwd writing into the untracked sibling
+#            projects/ tree) is BLOCK-AUTONOMY-004, a mode-gated layer-discipline
+#            signal evaluated BELOW the master and scope gates — see #5293 and the
+#            comment at that rule.
 # Items 1/2/3 (financial / account-creation / security-permission) and items 4/5
 # (Stage 9 / Stage 12 gates) are NOT mechanically detectable from a tool payload
 # — operator-irreducible by convention, documented, not enforced here.
 # Item 8 (destructive outside the workspace) is ALREADY owned by
 # block-rm-prefer-trash (BLOCK-TRASH-001/003) — C5 does NOT duplicate it.
+
+# --- Cross-domain locals, declared UNCONDITIONALLY (#5293) ---
+# These two are ASSIGNED inside the Write|Edit branch below, but BLOCK-AUTONOMY-004
+# READS them further down — after the master-activation and workspace-scope gates,
+# outside any `case "$TOOL_NAME"` branch. This hook runs `set -euo pipefail` (see the
+# top of the file), so under `nounset` a read of an unassigned name is not an empty
+# string: it aborts the shell. Every Bash call and every mcp__* call skips the Write|Edit
+# branch entirely, which would make the -004 read fatal for the two highest-traffic
+# matchers this hook declares — and an aborted PreToolUse hook does not deny, it fails
+# OPEN. Declaring here costs two lines and closes that class outright.
+#
+# The branch below re-initialises both before its own `case` statements. That is
+# deliberate redundancy, not a leftover: this declaration exists solely to make the
+# read below the gates safe, and the branch stays self-contained so it does not
+# silently depend on a line eighty lines above it.
+target_domain=""   # H1: see above — read below the gates, so it cannot be branch-local
+cwd_domain=""      # H1: see above — read below the gates, so it cannot be branch-local
 
 if [ -n "$ABS_TARGET" ]; then
   case "$TOOL_NAME" in
@@ -469,10 +651,64 @@ if [ -n "$ABS_TARGET" ]; then
       # sentinel. The assertion moves from "no agent may edit a skill" to "no agent may
       # edit a skill outside a sanctioned session" — which is what the surrounding design
       # already assumed was true.
+      #
+      # EVERY ENTRY IS LOCATION-ANCHORED — see #5812.
+      # A governance file is identified by WHERE it sits, never by its basename alone.
+      # The three document entries used to be bare basename globs (*/CLAUDE.md,
+      # */OPERATIONS.md, */RELEASE_PROTOCOL.md) while the settings/hooks/rules entries
+      # were already ${PRIMARY_ROOT}-anchored. That asymmetry was the defect: */CLAUDE.md
+      # matches ANY file so named anywhere on disk, so an unrelated product repository
+      # whose root doc carries the conventional name CLAUDE.md had that file blocked as
+      # though it were this platform's charter — and because always_block ignores mode
+      # and level, no configuration could permit the write. The observable result was the
+      # same broken contract the SKILL.md removal above describes: an agent holding an
+      # approved edit, with no sanctioned path and no bypass it is permitted to take.
+      #
+      # Two anchors, both load-bearing:
+      #   ${PRIMARY_ROOT}              — the workspace root. The charter itself, plus the
+      #                                  deployed .claude/ security surface.
+      #   ${PRIMARY_ROOT}/pmo-platform — the platform checkout. Its in-repo governance
+      #                                  documents at ANY depth, which covers worktrees
+      #                                  NESTED UNDER THE CHECKOUT.
+      # Each in-repo basename therefore carries BOTH a checkout-root and a subpath
+      # pattern, for the reason BLOCK-AUTONOMY-002 below spells out in its own comment:
+      # the trailing-slash glob alone would miss a target sitting directly at the root.
+      #
+      # THE ANCHORS DO NOT COVER EVERY WORKTREE, and this comment used to compose into a
+      # claim that they did. "Worktrees nested under the checkout stay covered" and "a
+      # same-named file anywhere else falls through" are each true in isolation and read
+      # together as "all worktrees are covered" — which is false for any worktree created
+      # outside ${PRIMARY_ROOT}/pmo-platform, the shape a spawned session actually gets.
+      # That case is covered by the SECOND STAGE below (is_platform_worktree), which tests
+      # repository membership rather than location. This floor grants no worktree
+      # exemption; before that stage existed, it silently had one.
+      #
+      # The location anchoring narrows the rule deliberately. A CLAUDE.md that is NOT at
+      # one of these locations AND not inside a working tree of this repository — another
+      # repository's root doc, a backup copy — falls through to the normal mode- and
+      # level-dependent path, where the rest of the hook suite still applies. That
+      # fall-through IS the fix, not a hole.
+      #
+      # THE OPERATIONS CONTEXT ANCHOR IS AN EXPLICIT THIRD LOCATION — see #5293.
+      # ${PRIMARY_ROOT}/projects/CLAUDE.md is the operations context anchor:
+      # installer-produced, pointer-only, and agent-unwritable per operations-bridge.md
+      # § Context-Load Contract. The bare */CLAUDE.md glob had been covering it
+      # incidentally, so anchoring dropped it — and nothing else picks it up.
+      # BLOCK-AUTONOMY-002 does not: -002 guards a projects cwd writing INTO
+      # pmo-platform, whereas editing the anchor is a projects-rooted session writing
+      # inside its OWN domain, which is not a cross-domain write in either direction.
+      # It is therefore named here, at its exact path, rather than left to a prefix:
+      # a project's own ${PRIMARY_ROOT}/projects/<Project>/CLAUDE.md is NOT the anchor
+      # and is correctly outside this set.
       case "$ABS_TARGET" in
-        */CLAUDE.md \
-        | */OPERATIONS.md \
-        | */RELEASE_PROTOCOL.md \
+        "${PRIMARY_ROOT}/CLAUDE.md" \
+        | "${PRIMARY_ROOT}/projects/CLAUDE.md" \
+        | "${PRIMARY_ROOT}/pmo-platform/CLAUDE.md" \
+        | "${PRIMARY_ROOT}/pmo-platform/"*"/CLAUDE.md" \
+        | "${PRIMARY_ROOT}/pmo-platform/OPERATIONS.md" \
+        | "${PRIMARY_ROOT}/pmo-platform/"*"/OPERATIONS.md" \
+        | "${PRIMARY_ROOT}/pmo-platform/RELEASE_PROTOCOL.md" \
+        | "${PRIMARY_ROOT}/pmo-platform/"*"/RELEASE_PROTOCOL.md" \
         | "${PRIMARY_ROOT}/.claude/settings.json" \
         | "${PRIMARY_ROOT}/.claude/hooks/"* \
         | "${PRIMARY_ROOT}/.claude/rules/"*)
@@ -482,13 +718,57 @@ if [ -n "$ABS_TARGET" ]; then
           ;;
       esac
 
-      # --- BLOCK-AUTONOMY-002 — Tier-0 item 7: cross-domain bridge writes ---
-      # Layer separation: Claude Code (a pmo-platform cwd) never writes to
-      # projects/ ; Cowork (a projects/ cwd) never writes to pmo-platform/.
-      # Detected by cwd-domain ↔ target-domain mismatch. Path-boundary match
-      # against the two domain roots under the workspace.
-      # Match the domain ROOT itself OR any subpath (the trailing-slash glob alone
-      # would miss a cwd/target that IS exactly `${ROOT}/pmo-platform`).
+      # --- BLOCK-AUTONOMY-001, SECOND STAGE: working trees of THIS repository that
+      #     live OUTSIDE the checkout anchor ---
+      # The anchored case above is the fast path and settles ${PRIMARY_ROOT} and every path
+      # beneath the checkout. It cannot settle a linked worktree created elsewhere, because
+      # no prefix can name an arbitrary location. This stage asks the one question that
+      # survives relocation — does this working tree belong to THIS repository — and asks
+      # it ONLY for the three governance basenames, so the walk never touches the hot path.
+      #
+      # SCOPE IS THE THREE DOCUMENTS, deliberately, and not the .claude/ entries above.
+      # Those name the DEPLOYED security surface at the workspace root; the repository
+      # tracks no .claude/ files at all, so there is no worktree copy of them to reach.
+      # Stating that here rather than leaving it to be inferred: the coverage this stage
+      # adds is exactly CLAUDE.md, OPERATIONS.md and RELEASE_PROTOCOL.md.
+      case "$ABS_TARGET" in
+        */CLAUDE.md|*/OPERATIONS.md|*/RELEASE_PROTOCOL.md)
+          if is_platform_worktree "$ABS_TARGET"; then
+            always_block "BLOCK-AUTONOMY-001" \
+              "governance-file modification is an irreducible Tier-0 action (operator-only per 'No ungoverned changes'); blocked regardless of automation_level. This target sits in a working tree of the platform repository located outside ${PRIMARY_ROOT}/pmo-platform — the working copy is transient, the commit it feeds is not. Target: ${ABS_TARGET}" \
+              "governance changes require Issue + plan + operator approval — make the change through the governed flow, or set CLAUDE_HOOK_BYPASS=1 only if you ARE the operator acting intentionally"
+          fi
+          ;;
+      esac
+
+      # --- BLOCK-AUTONOMY-002 — Tier-0 item 7, HIGH-RISK DIRECTION ONLY ---
+      # Layer separation between Engineering (pmo-platform) and Operations (projects),
+      # detected by cwd-domain ↔ target-domain mismatch. Path-boundary match against the
+      # two domain roots under the workspace. Match the domain ROOT itself OR any subpath
+      # (the trailing-slash glob alone would miss a cwd/target that IS exactly
+      # `${ROOT}/pmo-platform`).
+      #
+      # THE TWO DIRECTIONS ARE NOT THE SAME CONTROL — see #5293.
+      # The domains are SIBLING directories, not nested: pmo-platform is a git repo and
+      # is public; projects is not a git repo and is not in the repo's path space at all.
+      # Only ONE direction can therefore put content somewhere it can be committed and
+      # pushed:
+      #
+      #   projects cwd -> pmo-platform target  — operations content entering the tracked
+      #       PUBLIC repo. A genuine disclosure control, and an irreducible Tier-0 floor:
+      #       always_block, mode- and level-independent, above the master gate. THIS rule.
+      #
+      #   pmo-platform cwd -> projects target  — an engineering checkout writing into the
+      #       untracked sibling operations tree. git cannot see the target, so nothing can
+      #       reach the repo. This is a layer-discipline signal with no disclosure
+      #       component, and enforcing it at always_block severity made the control
+      #       blunter than the risk it models. It is now BLOCK-AUTONOMY-004, mode-gated,
+      #       below the master and scope gates.
+      #
+      # Narrowing this rule to one direction must not widen it by even one path, which is
+      # why the condition names both domains explicitly rather than testing inequality:
+      # an inequality test would silently re-admit the other direction if a third domain
+      # were ever added.
       target_domain=""
       case "$ABS_TARGET" in
         "${PRIMARY_ROOT}/pmo-platform"|"${PRIMARY_ROOT}/pmo-platform/"*) target_domain="pmo-platform" ;;
@@ -499,10 +779,10 @@ if [ -n "$ABS_TARGET" ]; then
         "${PRIMARY_ROOT}/pmo-platform"|"${PRIMARY_ROOT}/pmo-platform/"*) cwd_domain="pmo-platform" ;;
         "${PRIMARY_ROOT}/projects"|"${PRIMARY_ROOT}/projects/"*) cwd_domain="projects" ;;
       esac
-      if [ -n "$target_domain" ] && [ -n "$cwd_domain" ] && [ "$target_domain" != "$cwd_domain" ]; then
+      if [ "$cwd_domain" = "projects" ] && [ "$target_domain" = "pmo-platform" ]; then
         always_block "BLOCK-AUTONOMY-002" \
-          "cross-domain bridge write is an irreducible Tier-0 action (Layer separation; ${cwd_domain} cwd writing to ${target_domain}); blocked regardless of automation_level. Target: ${ABS_TARGET}" \
-          "Engineering (pmo-platform) and Operations (projects) are separate layers — do not cross-write; route the change through the owning agent, or set CLAUDE_HOOK_BYPASS=1 only if intentional"
+          "cross-domain bridge write into the tracked platform repository is an irreducible Tier-0 action (Layer separation; an Operations cwd writing into pmo-platform/, where the content becomes committable and pushable on a public repository); blocked regardless of automation_level or mode. Target: ${ABS_TARGET}" \
+          "platform-engineering changes belong to an engineering session — relaunch in the pmo-platform checkout and make the change there, where it is reviewable as a diff; if you ARE the operator acting intentionally, CLAUDE_HOOK_BYPASS=1 disables every security hook for this one call"
       fi
       ;;
   esac
@@ -510,10 +790,14 @@ fi
 
 # --- Master-activation gate (#310) — layer 2. CLASS=workflow, but DELIBERATELY placed
 # HERE — after the STEP-1 Tier-0 always-block floor (BLOCK-AUTONOMY-001/002) and before
-# the mode-gated STEP-2 ceiling check — so master-OFF disables ONLY the mode-gated ceiling,
-# NEVER the irreducible floor (D-R9: the Tier-0 floor is always-enforce, like the security
-# class; a governance-file / cross-domain-bridge write stays blocked even under master-OFF).
-# Precedence for this hook: bypass -> floor -> master -> .autonomy-mode -> ceiling.
+# everything mode-gated — so master-OFF disables ONLY the mode-gated rules, NEVER the
+# irreducible floor (D-R9: the Tier-0 floor is always-enforce, like the security class; a
+# governance-file write, or a cross-domain bridge write INTO the tracked repo, stays
+# blocked even under master-OFF).
+# Everything below this line is mode-gated: BLOCK-AUTONOMY-004 as well as the STEP-2
+# ceiling. Under master-OFF neither is reached — see the -004 comment for why that is
+# the intended semantics for the low-risk direction and not a regression (#5293).
+# Precedence for this hook: bypass -> floor -> master -> SCOPE -> -004 -> ceiling.
 # Fail-toward-current-behavior: a missing lib does NOT gate. ---
 readonly MASTER_ENABLE_CLASS="workflow"
 readonly MASTER_LIB="${HOOK_DIR}/lib/master-enable.sh"
@@ -526,13 +810,55 @@ if command -v master_enable_gate >/dev/null 2>&1; then master_enable_gate "$MAST
 # the same reason. The Tier-0 floor is PATH-scoped, not session-scoped: it blocks
 # writes INTO the governed tree (governance files, the Engineering/Operations bridge),
 # so bounding it by the SESSION's working directory would gate it on the wrong axis and
-# open the floor to an out-of-tree session. Scope therefore gates only the mode-gated
-# STEP-2 ceiling. Precedence for this hook: bypass -> floor -> master -> SCOPE ->
-# .autonomy-mode -> ceiling. Inverted fail direction on the cwd axis, NOT on the lib
-# axis. See lib/scope-guard.sh. ---
+# open the floor to an out-of-tree session. Scope therefore gates the mode-gated rules
+# only — BLOCK-AUTONOMY-004 as well as the STEP-2 ceiling (#5293; -004 IS session-scoped
+# by nature, since a session outside the governed tree has no layer boundary to observe).
+# Precedence for this hook: bypass -> floor -> master -> SCOPE -> -004 -> ceiling.
+# Inverted fail direction on the cwd axis, NOT on the lib axis. See lib/scope-guard.sh. ---
 readonly SCOPE_GUARD_LIB="${HOOK_DIR}/lib/scope-guard.sh"
 if [ -r "$SCOPE_GUARD_LIB" ]; then . "$SCOPE_GUARD_LIB" 2>/dev/null || true; fi
 if command -v scope_guard_gate >/dev/null 2>&1; then scope_guard_gate "$CWD"; fi
+
+# --------------------------------------------------------------------------
+# BLOCK-AUTONOMY-004 — cross-domain bridge writes, LOW-RISK DIRECTION (#5293)
+# --------------------------------------------------------------------------
+# Fires when a pmo-platform cwd writes into projects/ — an engineering checkout
+# writing the untracked sibling operations tree. See the BLOCK-AUTONOMY-002 comment
+# in STEP 1 for why the two directions are not one control; in short, this one cannot
+# reach the tracked repository, so it is a layer-discipline signal rather than a
+# disclosure floor. Routed through apply_block, so it honours .autonomy-mode:
+# warn → warn-log + allow · enforce → block · off → allow.
+#
+# THREE PROPERTIES OF THIS PLACEMENT, ALL DELIBERATE, ALL WORTH STATING:
+#
+# 1. It is BELOW the master-activation gate, so master-OFF disables -004 while leaving
+#    -002 (above the gate) fully enforced. That asymmetry is the whole point of the
+#    directional split and is not a regression. Note the consequence honestly: master-OFF
+#    is the SHIPPED default, so on a fresh install -004 contributes nothing at all — not
+#    a block, not a warn, not a log row. The warn-log audit trail this rule offers exists
+#    only where the operator has enabled the security-hook suite.
+#
+# 2. It is also below the WORKSPACE-SCOPE gate, which means -004 is inert for a session
+#    rooted outside the governed tree. Correct for a layer-discipline signal — a session
+#    with no layer has no layer to discipline — but it makes the scope-gate comment
+#    directly above incomplete as written: scope no longer gates ONLY the STEP-2 ceiling.
+#    The hook's full precedence is: bypass -> floor -> master -> SCOPE -> -004 -> ceiling.
+#
+# 3. apply_block exits in every mode branch, so a -004 firing means STEP 2 never runs and
+#    BLOCK-AUTONOMY-003 is structurally unreachable on this path. The observable
+#    divergence is confined to enforce-mode with a permissive ceiling, where a
+#    pmo-platform → projects/ write blocks at -004 though the same target from a projects
+#    cwd would pass the ceiling. That is the layer signal out-ranking the tier ceiling,
+#    which is the intended ordering.
+#
+# target_domain / cwd_domain are read here but ASSIGNED in STEP 1's Write|Edit branch.
+# They are declared unconditionally near the top of STEP 1 because `set -u` would
+# otherwise abort this hook on every Bash and mcp call — see the H1 comment there.
+if [ "$cwd_domain" = "pmo-platform" ] && [ "$target_domain" = "projects" ]; then
+  apply_block "BLOCK-AUTONOMY-004" \
+    "cross-domain bridge write out of the platform checkout (an Engineering cwd writing into projects/, the Cowork-owned operations workspace). The target is outside the repository, so this is a layer-discipline signal, not a disclosure control. Target: ${ABS_TARGET}" \
+    "operations work should be launched from the operations workspace (${PRIMARY_ROOT}/projects/…), not a repo checkout — relaunch there and this write is in-domain; to change the posture instead, set .autonomy-mode to warn"
+fi
 
 # --------------------------------------------------------------------------
 # STEP 2 — CEILING CHECK (mode-gated; permissive default)
