@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-149 — A schema gains a measurement state through one optional merged object, and the library enforces the absence rule"
+title: "ADR-153 — A schema gains a measurement state through one optional merged object, and the library enforces the absence rule"
 status: Proposed — flips to Accepted at this release's operator gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
 date: 2026-08-25
 release: checks-see-whole-subject
@@ -18,13 +18,15 @@ source_observations:
   - "A readability census over the enumerated list cannot see what the enumerator never produced. Measured on one fixture: a file behind a mode-000 directory yields an enumeration of 3 of 4 with a census of 0 — byte-identical to a complete scan."
 ---
 
-# ADR-149 — A schema gains a measurement state through one optional merged object, and the library enforces the absence rule
+# ADR-153 — A schema gains a measurement state through one optional merged object, and the library enforces the absence rule
 
 ## Status
 
 **Proposed.** Authored at Stage 6 Engineering for the `checks-see-whole-subject` release, under the ADR authorization recorded at that release's wave-1 operator gate. It flips to Accepted when the operator ratifies it at the release gate; the flip is recorded in this file's `status:` field.
 
 **Numbering provenance — `143 → 149`.** Held **ADR-143** branch-local; renumbered to **ADR-149** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 143. In-release citations that read "ADR-143" denote this record.
+
+**Numbering provenance — `149 → 153`.** Held **ADR-149** branch-local; renumbered to **ADR-153** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 149. In-release citations that read "ADR-149" denote this record.
 
 ## Context
 
