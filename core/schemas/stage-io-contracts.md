@@ -47,7 +47,7 @@ Stage 1 (Intake) produces the demand artifact (the GitHub Issue) for Stage 2 (Tr
 
 | Artifact | Format | Required | Human Decision | Cognitive Load | Delivery | Validation |
 |----------|--------|----------|----------------|----------------|----------|------------|
-| Proposal artifact | GitHub Issue (`improvement.yml`) | YES | NO | Detail | GitHub Issue in Proposed status with all template fields | All required template fields present (enforced by template validation); evidence section carries ≥1 evidence-labeled claim |
+| Proposal artifact | GitHub Issue (`improvement.yml`) | YES | NO | Detail | GitHub Issue in Proposed status with all template fields | All required template fields present (enforced by template validation); Evidence section satisfies [`gate-criteria-spec.md` § Gate 1 G1-03](gate-criteria-spec.md#gate-1-triage-readiness) — the admissible evidence shapes are stated there, once, and are deliberately not restated here |
 | Structural-premise directionality | Handoff property (stated in stage-01-intake §6 Outputs + stage-02-triage §4 Inputs prose) | NO (informational) | NO | Summary | Issue body Proposed Change + Affected Files fields | Downstream design treats the ticket's structure as a proposal to confirm or overturn at Solutioning — not a binding structure. Not enforced by this contract; enforced at the Stage 5 → 6 design-handoff gate. |
 
 ### Validation Rules

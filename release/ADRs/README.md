@@ -65,6 +65,13 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-133](ADR-133-the-material-edit-test-names-an-effect-not-a-field.md) | The material-edit test names an effect, not a field | Proposed | 2026-08-15 | skill-suite-conformance |
 | [ADR-135](ADR-135-a-gate-ships-armed-by-a-committed-default.md) | A gate ships armed by a committed default; arming is never deferred to a later step that can be forgotten | Proposed | 2026-08-14 | stage9-gate-integrity |
 | [ADR-137](ADR-137-close-out-measurements-reconstruct-what-the-close-removes.md) | A chore-PR-borne close-out measurement reconstructs what the close removes; it does not assume its evidence is invariant | Proposed | 2026-08-21 | closeout-reports-what-shipped |
+| [ADR-142](ADR-142-resolve-the-root-do-not-exempt-the-fixture.md) | Self-test reachability at a destructive-scope boundary is restored by resolving the root, not by exempting the fixture | Accepted | 2026-08-24 | selftests-actually-test |
+| [ADR-143](ADR-143-trigger-b-counts-rule-defining-surfaces-not-the-ledger.md) | A release-class predicate counts rule-defining surfaces, not the ledger the release is mandated to write | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
+| [ADR-144](ADR-144-g1-03-admits-a-second-evidence-shape.md) | G1-03 admits a second evidence shape: label-position probe markers, two co-present, Evidence-section-scoped | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
+| [ADR-145](ADR-145-subtype-payload-vocabulary-registry-disjoint-from-the-source-enum.md) | Subtype payload vocabularies are declared in a registry disjoint from the `--source` enum | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
+| [ADR-146](ADR-146-supersession-is-an-append-and-integrity-is-a-dated-read-only-sweep.md) | Supersession is an append-only event with a two-id vocabulary, and log integrity is validated by a read-only cutover-dated population sweep | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
+| [ADR-147](ADR-147-domain-practice-source-grammar-routes-it-does-not-extend.md) | The domain_practice source grammar is a closed three-form set that ROUTES the unmatched case, and survival across Commit-0 is asserted absolutely rather than only by delta | Proposed | 2026-08-25 | pipeline-spec-self-consistency |
+| [ADR-148](ADR-148-surface-1-emit-provenance-not-existence.md) | A backstop records its pre-mutation observation as a witness token, and the downstream check asks provenance rather than existence | Proposed | 2026-08-24 | pipeline-spec-self-consistency |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.

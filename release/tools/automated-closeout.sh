@@ -49,7 +49,7 @@
 #   13 post_close_milestone gh api -X PATCH state=closed (#2919: DEFERS under --no-merge)
 #   14 manual_close_release_issues operator-authorized D-1 with structured comment (#2919: DEFERS under --no-merge)
 #   15 run_verification + post_gate_passage_proof per the gate-passage-proof template
-#   15.5 publish_github_release gh release create | edit (Layer-1 dual-write Surface 1; #2919: DEFERS under --no-merge, as does 15.6 check_release_body_drift)
+#   15.5 publish_github_release gh release create | edit (Layer-1 dual-write Surface 1; #2919: DEFERS under --no-merge, as does 15.6 check_release_body_drift) — BACKSTOP for Stage 12 Phase B5.5, which owns the emit; records SURFACE1-STATE=CREATED|EDITED|NO-OP
 #   15.55 assert_anchor_hygiene  SET-based annotated-tag <-> published-Release parity + tagger identity (dated exemption sets)
 #   15.6 check_release_body_drift  post-emit §5.1 published-body drift assert (gated genuine drift BLOCKS; #2919: DEFERS under --no-merge)
 #   16 invoke_orphan_cleanup cleanup-orphan-state.sh --release-close <slug> --dry-run
@@ -5959,6 +5959,21 @@ ${_body}" 2>&1)"; then
 #   - State 1 (release exists, body differs) → gh release edit
 #   - State 2 (release at canonical content) → no-op PASS
 #
+# OWNERSHIP: Stage 12 Phase B5.5 owns the Surface-1 emit (stage-12-execute.md
+# § Phase B5.5; release-notes-standard.md § 5.4). This phase is the idempotent
+# BACKSTOP, not the primary producer. It records which path the state machine took
+# as SURFACE1-STATE=<CREATED|EDITED|NO-OP> at the head of its phase detail:
+#   CREATED  -> Surface 1 did NOT exist when this phase ran => Stage 12 omitted it.
+#               A defect, reported at stage-13-close.md § Phase B5.6. Non-blocking.
+#   EDITED   -> Surface 1 existed before this phase ran; body refreshed. Normal.
+#   NO-OP    -> Surface 1 existed and was already canonical. Normal.
+# The token records an observation made STRICTLY BEFORE any mutation (the State-0/1/2
+# discrimination that routes the state machine) — a witness record, not a self-grade.
+# The OUTCOME TOKEN IS DELIBERATELY UNCHANGED. Do not "improve" this by promoting
+# CREATED to a distinct mark_phase result: phase 15.6 branches on
+# `pub_result != "PASS"` (see phase_check_release_body_drift), so a new token there
+# makes a genuinely-created Release report as "Surface 1 not emitted this run".
+#
 # Composes with release-executor Mode F (standalone fix-forward invocation path).
 # Both Phase 15.5 + Mode F share the view-then-create-or-edit guard — safe re-invocation.
 #
@@ -6007,11 +6022,26 @@ phase_publish_github_release() {
   # path below is reached with exactly the control flow it had before. Detail carries
   # no '|' so it cannot break the markdown phase table in --markdown reports.
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "publish_github_release" "DRY-RUN" "would invoke view-then-create-or-edit state machine: gh release view $VERSION → create OR edit OR no-op (per release-notes-standard.md § 5.5). Not evaluated under --dry-run: the tag-on-origin, tag↔merge-SHA and notes-file preflights. Their inputs do not exist yet — Stage 12 Phase B3 has not pushed the tag and the scaffold phase deliberately wrote no note — so checking them here would only fail on this script's own no-op. All three run for real at --apply, before anything is published"
+    mark_phase "publish_github_release" "DRY-RUN" "would invoke view-then-create-or-edit state machine: gh release view $VERSION → create OR edit OR no-op (per release-notes-standard.md § 5.5), and would record its path at --apply as SURFACE1-STATE=CREATED, EDITED or NO-OP (stated, NOT pre-evaluated here — this phase is the Stage-12 Phase B5.5 backstop and a CREATED value at --apply means Stage 12 did not emit Surface 1). Not evaluated under --dry-run: the tag-on-origin, tag↔merge-SHA and notes-file preflights. Their inputs do not exist yet — Stage 12 Phase B3 has not pushed the tag and the scaffold phase deliberately wrote no note — so checking them here would only fail on this script's own no-op. All three run for real at --apply, before anything is published"
     return 0
   fi
 
   local notes_path; notes_path="$(notes_abs_path)"
+
+  # DR-6 (#4732) — the ancestry-repair limb below used to mark_phase and then FALL
+  # THROUGH into the state machine, which marks the same phase again. get_phase and
+  # is_first_phase_occurrence surface the FIRST mark only, so anything added to the
+  # terminal mark was invisible on exactly that path — including the SURFACE1-STATE
+  # token. The repair note and its WARN outcome are therefore CARRIED FORWARD into
+  # the single terminal mark instead of being marked separately.
+  #
+  # NET VERDICT CHANGE: ZERO. Before the fold the visible outcome on that path was
+  # WARN (first mark wins) and pub_result was WARN; after it, still WARN and still
+  # WARN. What changes is only that the phase now marks ONCE and the token survives.
+  # Declared here (function scope, unconditionally initialised) rather than inside
+  # the repair limb so the ${_s1_outcome_override:-...} reads below are safe under
+  # set -u and cannot inherit a stale value from an earlier phase.
+  local _s1_repair_note="" _s1_outcome_override=""
 
   # Preflight 1: tag must exist on origin (Stage 12 Phase B3 push pre-requisite).
   # git_net layers the gh-backed credential helper (locked-Keychain degradation).
@@ -6043,7 +6073,11 @@ phase_publish_github_release() {
       git_net -C "$REPO_ROOT" merge-base --is-ancestor "$MERGE_SHA" "$tag_sha" 2>/dev/null || repair_ancestor=0
       [[ -z "$(git_net -C "$REPO_ROOT" diff --name-only "$MERGE_SHA" "$tag_sha" 2>/dev/null)" ]] || repair_identical=0
       if [[ "$repair_ancestor" -eq 1 && "$repair_identical" -eq 1 ]]; then
-        mark_phase "publish_github_release" "WARN" "tag $VERSION points at $tag_sha, a DESCENDANT of the release-PR merge commit $MERGE_SHA with an identical tree — accepted as a post-merge ancestry repair (#1682 follow-on), not a wrong-commit binding; publishing at the tag"
+        # DR-6 fold: carry the note + the WARN outcome forward to the ONE terminal
+        # mark below rather than marking here and falling through (see the block
+        # comment at the top of this function). Verdict-preserving by construction.
+        _s1_repair_note="tag $VERSION points at $tag_sha, a DESCENDANT of the release-PR merge commit $MERGE_SHA with an identical tree — accepted as a post-merge ancestry repair (#1682 follow-on), not a wrong-commit binding; publishing at the tag. "
+        _s1_outcome_override="WARN"
       else
         mark_phase "publish_github_release" "FAIL" "tag $VERSION points at $tag_sha, not the release-PR merge commit $MERGE_SHA — identity mismatch (#1682); do NOT publish a Release bound to the wrong commit (re-cut the tag at the merge SHA, or re-verify the release PR). Descendant-of-merge=$repair_ancestor identical-tree=$repair_identical"
         return 3
@@ -6065,13 +6099,13 @@ phase_publish_github_release() {
     canonical_body="$(/usr/bin/sed '1,/^---$/d; 1,/^---$/d' "$notes_path" 2>/dev/null)"
 
     if [[ "$existing_body" == "$canonical_body" ]]; then
-      mark_phase "publish_github_release" "SKIPPED" "GitHub Release $VERSION already at canonical content (State 2 no-op per release-notes-standard.md § 5.5)"
+      mark_phase "publish_github_release" "${_s1_outcome_override:-SKIPPED}" "SURFACE1-STATE=NO-OP — Surface 1 was already present and canonical before this backstop ran (Stage 12 Phase B5.5 emitted it). ${_s1_repair_note}GitHub Release $VERSION already at canonical content (State 2 no-op per release-notes-standard.md § 5.5)"
       return 0
     fi
 
     # State 1 → State 2 transition via idempotent gh release edit
     if $GH release edit "$VERSION" --repo "$REPO_SLUG" --notes "$canonical_body" >/dev/null 2>&1; then
-      mark_phase "publish_github_release" "PASS" "edited GitHub Release $VERSION (State 1 → State 2 transition; body refreshed from canonical notes)"
+      mark_phase "publish_github_release" "${_s1_outcome_override:-PASS}" "SURFACE1-STATE=EDITED — Surface 1 was already present before this backstop ran (Stage 12 Phase B5.5 emitted it); body refreshed from the canonical note. ${_s1_repair_note}edited GitHub Release $VERSION (State 1 → State 2 transition; body refreshed from canonical notes)"
       return 0
     fi
     mark_phase "publish_github_release" "FAIL" "gh release edit failed for existing release $VERSION"
@@ -6106,7 +6140,7 @@ phase_publish_github_release() {
     --title "$VERSION — $headline" \
     --notes "$notes_body" \
     --target "$MERGE_SHA" >/dev/null 2>&1; then
-    mark_phase "publish_github_release" "PASS" "created GitHub Release $VERSION bound to merge SHA $MERGE_SHA (Surface 1 of Layer-1 dual-write; title='$VERSION — $headline')"
+    mark_phase "publish_github_release" "${_s1_outcome_override:-PASS}" "SURFACE1-STATE=CREATED — Stage 12 Phase B5.5 did NOT emit Surface 1; this backstop created it. A Stage-12 omission, not the normal path — reported at stage-13-close.md § Phase B5.6. ${_s1_repair_note}created GitHub Release $VERSION bound to merge SHA $MERGE_SHA (Surface 1 of Layer-1 dual-write; title='$VERSION — $headline')"
     return 0
   fi
   mark_phase "publish_github_release" "FAIL" "gh release create failed for new release $VERSION (canonical recovery: re-run Phase 15.5 OR invoke release-executor Mode F standalone)"
@@ -6167,6 +6201,18 @@ _drift_block_in_scope() {
 #
 # Recorded 2026-07-30. Removing an entry once its divergence is remediated is the
 # intended lifecycle — these are not permanent.
+#
+# RELATIONSHIP TO THE SURFACE-1 OWNERSHIP RULING (#4732). Stage 12 Phase B5.5 owns the
+# Surface-1 emit, so the tag->Release window is bounded by Stage 12 itself: the tag is
+# pushed at Phase B3 and the Release is emitted at Phase B5.5, minutes later. A
+# MISSING-RELEASE finding is therefore an ANOMALY, not the normal post-Stage-12 state.
+# It is expected ONLY for (a) a sibling release genuinely in flight inside that
+# Stage-12 window, or (b) a recorded historical exemption above. A MISSING-RELEASE on a
+# tag whose release has already closed is a real gap.
+# NOTE ON REACH: this phase runs AFTER phase 15.5, which converges Surface 1 for THIS
+# release — so this release's own tag can never appear here. This gate reports on
+# siblings and history; the current release's Surface-1 provenance is owned by
+# stage-13-close.md § Phase B5.6.
 ANCHOR_PARITY_EXEMPT_TAGS=(
   v3.31    # annotated tag, no published GitHub Release; Release-publication routed out of this card
   v3.65.1  # annotated tag, no published GitHub Release; Release-publication routed out of this card
@@ -9547,6 +9593,106 @@ STUB
     fi
     [[ "$(get_phase publish_github_release | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: tag↔MERGE_SHA mismatch must mark publish FAIL"; failures=$((failures+1)); }
 
+    # ── (e)-(i) SURFACE-1 PROVENANCE ARMS (#4732) ─────────────────────────────
+    # Phase 15.5 is the BACKSTOP for Stage 12 Phase B5.5, and records which path its
+    # state machine took as SURFACE1-STATE=<CREATED|EDITED|NO-OP> in its phase DETAIL.
+    # Until now the $GH stub above always FAILED `release view`, so only the create
+    # arm was ever exercised — the two found arms did not exist as fixtures at all,
+    # which is precisely the both-arms gap the card reports.
+    #
+    # (h) and (i) are the load-bearing arms. Without (h) a stub that emitted CREATED
+    # unconditionally would satisfy (e) and the suite would be vacuous. Without (i) a
+    # later editor could "improve" this into a distinct mark_phase outcome token and
+    # silently invert :6221, making a genuinely-created Release report as
+    # "Surface 1 not emitted this run" — the rejected Option A, caught by a test
+    # rather than by a reviewer noticing.
+    local _s1_canon_file="$_ms_tmp/canonical-body" _s1_detail=""
+    /usr/bin/sed '1,/^---$/d; 1,/^---$/d' "$_ms_work/release/releases/notes/v9.89_RELEASE_NOTES.md" > "$_s1_canon_file" 2>/dev/null || true
+    # Anti-vacuity floor for (f): an EMPTY canonical body would make the no-op arm a
+    # comparison of "" against "", which passes without discriminating anything. The
+    # body is extracted with the phase's OWN expression, so the fixture is a genuine
+    # State-2 no-op by construction rather than by this test's reasoning about sed.
+    [[ -s "$_s1_canon_file" ]] || { echo "FAIL: 4h(f) fixture — the canonical body extracted from the sandbox note is EMPTY, so the NO-OP arm would compare '' against '' and pass vacuously"; failures=$((failures+1)); }
+
+    MERGE_SHA="$_ms_commit"; VERSION="v9.89"
+    RELEASE_NOTES_DIR="$_ms_work/release/releases/notes"
+
+    # (e) CREATED — the pre-existing create fixture, now asserting the token too.
+    GH="$_ms_pub_stub"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_publish_github_release >/dev/null 2>&1
+    _s1_detail="$(get_phase publish_github_release)"
+    [[ "$_s1_detail" == PASS\|* ]] || { echo "FAIL: 4h(e) — the create path must keep the outcome token PASS (a distinct token silently inverts :6221), got '$_s1_detail'"; failures=$((failures+1)); }
+    /usr/bin/grep -qF 'SURFACE1-STATE=CREATED' <<<"$_s1_detail" || { echo "FAIL: 4h(e) — the create path must record SURFACE1-STATE=CREATED, got '$_s1_detail'"; failures=$((failures+1)); }
+
+    # (f) NO-OP — the Release exists AND its body is already byte-identical to the
+    # canonical note, so the state machine takes State 2 and mutates nothing.
+    local _s1_noop_stub="$_ms_tmp/gh-noop.sh"
+    /bin/cat > "$_s1_noop_stub" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "release" && "\$2" == "view" ]]; then
+  for _a in "\$@"; do [[ "\$_a" == "--json" ]] && { /bin/cat "$_s1_canon_file"; exit 0; }; done
+  exit 0
+fi
+exit 0
+STUB
+    /bin/chmod +x "$_s1_noop_stub"
+    GH="$_s1_noop_stub"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_publish_github_release >/dev/null 2>&1
+    _s1_detail="$(get_phase publish_github_release)"
+    [[ "$_s1_detail" == SKIPPED\|* ]] || { echo "FAIL: 4h(f) — a State-2 no-op must keep the outcome token SKIPPED, got '$_s1_detail'"; failures=$((failures+1)); }
+    /usr/bin/grep -qF 'SURFACE1-STATE=NO-OP' <<<"$_s1_detail" || { echo "FAIL: 4h(f) — the no-op path must record SURFACE1-STATE=NO-OP, got '$_s1_detail'"; failures=$((failures+1)); }
+    if /usr/bin/grep -qF 'SURFACE1-STATE=CREATED' <<<"$_s1_detail"; then
+      echo "FAIL: 4h(h) specificity — a NO-OP run must NOT report SURFACE1-STATE=CREATED; without this arm a stub emitting CREATED unconditionally satisfies (e) and the suite is vacuous"; failures=$((failures+1))
+    fi
+
+    # (g) EDITED — the Release exists but its body DIFFERS, so the state machine
+    # takes the State 1 -> State 2 edit transition.
+    local _s1_edit_stub="$_ms_tmp/gh-edit.sh"
+    /bin/cat > "$_s1_edit_stub" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1" == "release" && "$2" == "view" ]]; then
+  for _a in "$@"; do [[ "$_a" == "--json" ]] && { printf '%s\n' "a body that deliberately differs from the canonical note"; exit 0; }; done
+  exit 0
+fi
+if [[ "$1" == "release" && "$2" == "edit" ]]; then exit 0; fi
+exit 0
+STUB
+    /bin/chmod +x "$_s1_edit_stub"
+    GH="$_s1_edit_stub"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_publish_github_release >/dev/null 2>&1
+    _s1_detail="$(get_phase publish_github_release)"
+    [[ "$_s1_detail" == PASS\|* ]] || { echo "FAIL: 4h(g) — the edit path must keep the outcome token PASS, got '$_s1_detail'"; failures=$((failures+1)); }
+    /usr/bin/grep -qF 'SURFACE1-STATE=EDITED' <<<"$_s1_detail" || { echo "FAIL: 4h(g) — the edit path must record SURFACE1-STATE=EDITED, got '$_s1_detail'"; failures=$((failures+1)); }
+    if /usr/bin/grep -qF 'SURFACE1-STATE=CREATED' <<<"$_s1_detail"; then
+      echo "FAIL: 4h(h) specificity — an EDITED run must NOT report SURFACE1-STATE=CREATED"; failures=$((failures+1))
+    fi
+
+    # (i) AGGREGATION NON-REGRESSION — the arm that fails if anyone later promotes
+    # CREATED to its own outcome token. Phase 15.6 branches on `pub_result != PASS`
+    # (:6221). Drive it on the CREATE arm with a drift tool exiting 3 (note or
+    # Release missing) and assert it reaches the WARN limb (:6224) and NOT the N/A
+    # limb (:6222). Under Option A the create path would carry a non-PASS token,
+    # pub_result would test false, and this fixture would land on N/A instead.
+    local _s1_saved_drift="$DRIFT_CHECK_TOOL"
+    local _s1_drift_stub="$_ms_tmp/drift-exit3.sh"
+    /bin/cat > "$_s1_drift_stub" <<'STUB'
+#!/usr/bin/env bash
+echo "stub: no published Release / note to compare"
+exit 3
+STUB
+    /bin/chmod +x "$_s1_drift_stub"
+    DRIFT_CHECK_TOOL="$_s1_drift_stub"
+    GH="$_ms_pub_stub"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_publish_github_release >/dev/null 2>&1
+    phase_check_release_body_drift >/dev/null 2>&1 || true
+    _s1_detail="$(get_phase check_release_body_drift | /usr/bin/cut -d'|' -f1)"
+    [[ "$_s1_detail" == "WARN" ]] || { echo "FAIL: 4h(i) aggregation non-regression — with the publish phase on its CREATE path, a drift-tool exit 3 must reach the WARN limb at :6224. Got '$_s1_detail'. An N/A here means pub_result is no longer PASS on create, i.e. the outcome token was changed and :6221 has been silently inverted"; failures=$((failures+1)); }
+    DRIFT_CHECK_TOOL="$_s1_saved_drift"
+
     # (c)/(d) REACHABILITY OF THE DRY-RUN LIMB (#5142 F-01; #4765 convention).
     # Phase 15.5's dry-run branch used to sit BELOW three `return 3` preflights, so
     # every --dry-run aborted here before the mode was ever read and the phases after
@@ -12398,6 +12544,7 @@ EOF
   echo "  plan-path resolver validated (#4706 — PL-0 specificity: no plan anywhere returns non-zero AND prints nothing / PL-1 rule 1 nested version-named / PL-2 precedence: rule 1 beats a lingering flat copy / PL-3 rule 0 flat slug-primary / PL-4 the nested SLUG-named form a three-valued reading omits / PL-5 rule 2 _unversioned with an anti-vacuity twin that it is NOT the flat form / PL-6 an unresolvable plan ANNOTATES and the note is still written — no new abort path in a phase that has never had one / PL-7 --dry-run never fails and writes nothing / PL-8 all three emitters carry the SAME resolved string / PL-9 the caller PLUS its predicate: a note-path finding blocks, another release does not, and a plans-path-only finding provably does NOT reach the needle / PL-10 end-to-end: the REAL linter finding piped into the REAL phase_lint_release_notes blocks the close)" >&2
   echo "  plan-identity close gate validated (ADR-092 Phase 9.3 — PI-0 clean PASS / PI-1 a this-version placement finding BLOCKS / PI-1b the expected-path needle carries INDEPENDENT reach (every finding class today also names the version, so PI-1 alone proves nothing about it) / PI-2 audit-baseline control: another release does NOT block / PI-3 exit-3 fails loud / PI-4 THE UNMASKING ARM: a plan NAMED FOR THE WRONG VERSION emits its ACTUAL path, which the expected-path needle cannot match — only the version-keyed needle catches it, so a single-needle caller fails here / PI-4b same shape for MAJOR-DIR / PI-4c both version-needle boundary guards / PI-5 version-less SKIPs / PI-6 + PI-7 needle INDEPENDENCE in both directions — and PI-7 is the standing measurement this phase exists for: a plans-path finding provably does NOT reach the note-path needle, so homing a plan limb inside check_note_content() is fail-open / PI-8 advisories are filtered before the needles, so a known residual cannot false-block / PI-9 missing tooling FAILs / PI-10 the phase is DISPATCHED and in the right window (transition_release_log < 9.3 < commit_chore_pr), with a fabricated-name control / PI-11 the hand-maintained usage()/--help phase roster carries the 9.3 row, with the shipped 9.2 row as its control)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
+  echo "  Surface-1 provenance token validated (#4732 — BOTH ARMS of the detection question, offline on fixtures: (e) CREATED on the State-0 create path / (f) NO-OP on a State-2 fixture whose body is extracted with the phase's OWN expression and asserted non-empty, so the no-op is genuine rather than a '' vs '' comparison / (g) EDITED on a State-1 differing-body fixture / (h) SPECIFICITY: neither found arm reports CREATED, without which a stub emitting CREATED unconditionally satisfies (e) and the suite is vacuous / (i) AGGREGATION NON-REGRESSION, the load-bearing arm: the create path keeps outcome token PASS, so a drift-tool exit 3 still reaches the WARN limb at :6224 and not the N/A limb at :6222 — this arm FAILS if anyone later promotes CREATED to its own mark_phase token and silently inverts :6221)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  close-out report phase set is RECORD-DERIVED validated (#4773 — every recorded phase renders against a denominator parsed from this file's own mark_phase subjects (pre-fix: 3 missing — inject_velocity_field / append_release_learnings / audit_epic_rollup) / a phase in NO enumeration still renders (AC-2) / an unmarked name does NOT render (anti-vacuity) / post_gate_passage_proof renders AND is asserted definition-less, so a definition-derived set cannot silently drop it / a double-marked name renders ONE row carrying the FIRST result / the halted marker fires on a FAIL-terminated run and is absent on a clean one / DISPATCH<->RECORD cross-check: every dispatched phase is a record subject, with vacuity floors on both parses plus sensitivity and specificity arms — the one invariant no seeded arm can reach / JSON twin carries the same de-duplicated set with pre-existing keys intact)" >&2
   echo "  Gate-Passage-Proof **Chore PR:** field renders ONCE on BOTH paths (#4322 — b1 POPULATED path, the path the pre-existing report arms never exercised: exactly one **Chore PR:** line carrying the number once, and the doubled form absent / b2 UNSET path, the previously-covered one, renders the fallback verbatim with no '#' / b3 SPECIFICITY on a NON-numeric fixture, because '#3697' contains '3697' so 'no bare number' is unfalsifiable on a numeric input: the value occurs exactly once on the line, counted in PURE BASH by length-delta rather than by grep_count -o, which counts LINES on this suite's BSD grep and so returns the PASS value on the doubled form — paired with the anti-vacuity control asserting the identical computation returns 2 over the pre-fix expansion / b4 EXECUTABLE SENSITIVITY: the pre-fix construct is expanded from a single-quoted source fixture and must BOTH reproduce the doubling AND be rejected by b1's matcher, without which b1's green result is uninformative / b5 REINTRODUCTION GUARD: the production region above self_test carries ZERO same-variable paired set/unset expansions on CHORE_PR_NUMBER, with an anti-vacuity control asserting the same matcher returns 1 on the known-bad source form, so the zero is a measurement rather than a broken probe / b6 the out-of-scope --no-merge deferral message's solitary set-arm is asserted unchanged in BOTH directions, so the fix did not generalize into a correct site / b7 AC-5: with the **Chore PR:** line stripped, two renders differing only in CHORE_PR_NUMBER are byte-identical, preceded by the anti-vacuity arm that the unstripped renders differ — b7 is invariant to a render-line revert BY DESIGN, so the executed mutation-kill set is b1/b3/b5)" >&2

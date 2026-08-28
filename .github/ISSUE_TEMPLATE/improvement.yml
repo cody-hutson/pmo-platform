@@ -68,16 +68,22 @@ body:
     attributes:
       label: Evidence
       description: |
-        What triggered this? Label every factual claim with one of the five evidence labels:
+        What triggered this? Evidence is admissible in EITHER of two shapes — use either, or both.
+        (a) Evidence-label form — label every factual claim with one of the five evidence labels:
         [SOURCE] — verifiable citation (file path + line range, session date, commit SHA).
         [INFERRED] — reasonable deduction from multiple sources.
         [ASSUMPTION – CONFIRM] — uncertain claim the author wants validated at Triage.
         [CONTEXT] — background fact from persistent governance (CLAUDE.md, rules/).
         [RECOMMENDED] — proposed value the author is introducing (new date, threshold, etc.).
         Mix label types — over-using [SOURCE] on uncertain claims is a calibration failure.
+        (b) Probe-record form — if you measured something, report the measurement: at least two of
+        Probe: / Denominator: / Control: / Sensitivity: / Specificity: / Verdict:, each as a label.
+        A probe record needs no bracket labels. Prose that merely mentions those words is not one.
+        Both shapes are read from THIS section only. See release/references/how-to/intake-style-guide.md §8.
       placeholder: |
         [SOURCE: release/references/pipeline/stage-01-intake.md §5] — auto-logging rule does not enforce minimum fields.
         [ASSUMPTION – CONFIRM] — The frequency is ≥10 instances/week based on scan heuristic; Triage should verify.
+        Probe: swept the tracked corpus for the token. Denominator: 1768 files. Control — specificity: a fabricated token returned 0. Verdict: CLEAN.
     validations:
       required: true
 

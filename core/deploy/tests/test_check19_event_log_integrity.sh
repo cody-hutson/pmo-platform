@@ -44,18 +44,40 @@
 #     real repo is never mutated to exercise the unresolvable-schema arm.
 #
 # Run from repo root:
-#   bash core/deploy/tests/test_check19_event_log_integrity.sh
+#   bash core/deploy/tests/test_check19_event_log_integrity.sh           # full suite
+#   bash core/deploy/tests/test_check19_event_log_integrity.sh --fast    # deploy-free arm
 #
-# RUNTIME: ~25 MINUTES for the FULL suite. It drives 5 full `deploy.sh --check`
-# invocations; one full run measured 4m38s on the reference instance. Budget
+# RUNTIME: ~42 min for the FULL suite (measured 2026-08-23 at 8dc00db1). It drives
+# 5 full `deploy.sh --check` invocations; one full run measured 505 s at that same
+# anchor, roughly double the 4m38s this block previously recorded — so treat the
+# figure as dated, not fixed, and re-measure before relying on it. Budget
 # accordingly; the full suite is not a fast pre-commit test.
 #
-# That cost is real, but it is NOT the reason the standing guard is absent from CI,
-# and it does not cover it: T5 runs no deploy at all (a grep plus a file test), and
+# IT DOES NOT HANG. It terminates, slowly, and emits nothing until each deploy run
+# completes because check19_region() block-buffers a whole run through a sed range
+# filter. A reader who kills it at "about 25 minutes, no output" has stopped it at
+# roughly its own completion time and will read a slow suite as a hung one.
+#
+# WHAT CI REACHES: `--fast` only. The five deploy-driven arms (T1/T4, T2, T3, T6,
+# T7) are DELIBERATELY UNREACHED in CI — at ~42 min they are not a per-pull-request
+# budget on a workflow that has no paths: filter and therefore fires on every pull
+# request in the repo. They stay operator-invocable and remain the default: a bare
+# invocation still runs all seven arms. What CI does reach is T5 — the standing
+# literal assertion that is the actual recurrence guard for the original defect —
+# plus both sandbox guards, at sub-second cost and with no deploy run at all. The
+# disposition is recorded HERE, at the tool, because runtime affinity is a property
+# of the suite, not a coverage decision belonging in an exclusions roster.
+#
+# That cost was never the reason the standing guard sat outside CI, and it does not
+# cover it: T5 runs no deploy at all (a grep plus a file test), and
 # the sibling `append-pipeline-event.sh --self-test` measures under a second. The
 # reason is SCOPE — #3702 owns CI self-test enforcement and requires the tool set be
 # DISCOVERED, not hardcoded, so a step hardcoded here is one that issue would delete.
-# Deferred on scope discipline, not on runtime cost.
+# That trade is now ACCEPTED rather than deferred: the deploy-free arm is wired as a
+# discrete step alongside this workflow's existing hardcoded siblings, on the ground
+# that an unrun guard protects nothing today and a discovery model can absorb one
+# more enumerated step when it lands. What remains deferred is the COST question —
+# the five deploy-driven arms — not the scope one.
 # Per the Stage-5 design (R8), a standalone --check-event-log-integrity dispatch
 # arm was deliberately DEFERRED — it would collide with the dispatch region
 # another slice edits in this same release — so the region-scoped full run is the
@@ -63,6 +85,32 @@
 # the sandbox trips unrelated checks; only the Check-19 region is graded.
 
 set -uo pipefail
+
+# --- Mode selector ------------------------------------------------------------
+# Bare invocation is UNCHANGED: the full suite, all seven arms. `--fast` selects
+# the arm that drives no `deploy.sh --check` at all — Preflight, GUARD 1, T5 and
+# GUARD 2 — which is what CI runs. The suite parsed no arguments before this, so
+# the selector is purely additive; anything other than --fast/-h is a hard error
+# rather than a silently-ignored word, because a typo'd selector that fell through
+# to the full suite would put ~42 min on a pull request without saying so.
+FAST=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --fast) FAST=1 ;;
+    -h|--help)
+      printf 'usage: %s [--fast]\n' "$(basename "$0")"
+      printf '  (no args)  FULL suite — all seven arms, ~42 min (5 x deploy.sh --check)\n'
+      printf '  --fast     deploy-free arm — GUARD 1, T5, GUARD 2; sub-second\n'
+      exit 0
+      ;;
+    *)
+      printf 'FATAL: unrecognized argument: %s\n' "$1" >&2
+      printf 'usage: %s [--fast]\n' "$(basename "$0")" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
@@ -85,6 +133,33 @@ report() {
     printf '  FAIL: %s\n' "${name}"; [ -n "${detail}" ] && printf '        %s\n' "${detail}"
     FAIL=$((FAIL + 1))
   fi
+}
+
+# --- Arm bookkeeping ----------------------------------------------------------
+# ARMS_RUN records which arms actually EXECUTED, so the terminal ARM REACH block
+# can assert reachedness instead of inferring it from the PASS tally. It has to be
+# recorded rather than inferred, because a selector that skips MORE than it should
+# takes that arm's PASS lines away with it and leaves a smaller, wholly green count
+# and a zero exit — which is precisely the "passes without ever reaching its
+# subject" failure this suite exists to make non-recurrable, reproduced inside the
+# suite's own mode selector.
+ARMS_RUN=""
+SKIPPED=0
+
+mark_arm() { ARMS_RUN="${ARMS_RUN}$1 "; }
+
+# slow_arm — the gate on each of the five arms that drive `deploy.sh --check`.
+#   returns 0 -> run this arm (and record it as reached)
+#   returns 1 -> skip it (--fast), announcing the skip in the log so an unreached
+#                arm is visible in CI output rather than merely absent from it
+slow_arm() {
+  if [ "${FAST}" -eq 1 ]; then
+    printf '\n%s: SKIPPED (--fast) — this arm drives deploy.sh --check\n' "$1"
+    SKIPPED=$((SKIPPED + 1))
+    return 1
+  fi
+  mark_arm "$1"
+  return 0
 }
 
 sha_file() { shasum -a 256 "$1" 2>/dev/null | awk '{print $1}'; }
@@ -114,6 +189,7 @@ WLOG="${EVALS_RESULTS_PATH}/pipeline-event-log-write.log"
 
 # --- GUARD 1 (pre-flight): the resolver MUST land inside the sandbox ---
 printf '\nGUARD 1: resolver lands in the sandbox\n'
+mark_arm "GUARD1"
 # shellcheck source=/dev/null
 source "${RESOLVER}"
 RESOLVED="$(pmo_evals_results_path)"
@@ -192,82 +268,92 @@ seed_valid() {   # 3 data rows / 3 write-log lines / header intact
 # ─────────────────────────────────────────────────────────────────────────────
 # T1 + T4 — positive control AND the #4051 regression guard, from one run.
 # ─────────────────────────────────────────────────────────────────────────────
-printf '\nT1/T4: positive control + #4051 regression guard (valid 3/3 fixture)\n'
-seed_valid
-R="$(check19_region)"
+if slow_arm "T1/T4"; then
+  printf '\nT1/T4: positive control + #4051 regression guard (valid 3/3 fixture)\n'
+  seed_valid
+  R="$(check19_region)"
 
-if grep -q 'OK:.*log rows=3, write-log lines=3, header preserved' <<<"${R}"; then
-  report "T1 19b+19c EXECUTE and report OK with real counts (rows=3, lines=3)" 1
-else
-  report "T1 19b+19c EXECUTE and report OK with real counts (rows=3, lines=3)" 0 \
-    "$(printf '%s' "${R}" | tr '\n' '|')"
-fi
+  if grep -q 'OK:.*log rows=3, write-log lines=3, header preserved' <<<"${R}"; then
+    report "T1 19b+19c EXECUTE and report OK with real counts (rows=3, lines=3)" 1
+  else
+    report "T1 19b+19c EXECUTE and report OK with real counts (rows=3, lines=3)" 0 \
+      "$(printf '%s' "${R}" | tr '\n' '|')"
+  fi
 
-if grep -q 'pipeline-event-log-integrity' <<<"${R}"; then
-  report "T1 no integrity finding on a valid fixture" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
-else
-  report "T1 no integrity finding on a valid fixture" 1
-fi
+  if grep -q 'pipeline-event-log-integrity' <<<"${R}"; then
+    report "T1 no integrity finding on a valid fixture" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
+  else
+    report "T1 no integrity finding on a valid fixture" 1
+  fi
 
-# T4 — the three presence-failure messages must be ABSENT, proving all three
-# literals resolve. Any one of them reappearing means a literal regressed.
-t4_ok=1; t4_detail=""
-for msg in 'log file missing' 'write-log missing' 'schema doc missing'; do
-  if grep -q "${msg}" <<<"${R}"; then t4_ok=0; t4_detail="${t4_detail}${msg}; "; fi
-done
-if [ "${t4_ok}" = "1" ]; then
-  report "T4 all three path literals resolve (no presence-failure message)" 1
-else
-  report "T4 all three path literals resolve (no presence-failure message)" 0 "found: ${t4_detail}"
+  # T4 — the three presence-failure messages must be ABSENT, proving all three
+  # literals resolve. Any one of them reappearing means a literal regressed.
+  t4_ok=1; t4_detail=""
+  for msg in 'log file missing' 'write-log missing' 'schema doc missing'; do
+    if grep -q "${msg}" <<<"${R}"; then t4_ok=0; t4_detail="${t4_detail}${msg}; "; fi
+  done
+  if [ "${t4_ok}" = "1" ]; then
+    report "T4 all three path literals resolve (no presence-failure message)" 1
+  else
+    report "T4 all three path literals resolve (no presence-failure message)" 0 "found: ${t4_detail}"
+  fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # T2 — 19b catches a seeded parity break (issue AC #3)
 # ─────────────────────────────────────────────────────────────────────────────
-printf '\nT2: 19b catches a seeded parity break (AC #3)\n'
-seed_valid
-# Append a 4th data row to the LOG with no corresponding write-log line -> 4 / 3.
-printf '| 2026-07-27T00:00:04Z | v0.0 | stage-06 | decision | fixture | spoke:#4051 | hand-edit | CHEAP | resolved | %s fixture:bypass |\n' "${SENTINEL}" >> "${LOG}"
-R="$(check19_region)"
+if slow_arm "T2"; then
+  printf '\nT2: 19b catches a seeded parity break (AC #3)\n'
+  seed_valid
+  # Append a 4th data row to the LOG with no corresponding write-log line -> 4 / 3.
+  printf '| 2026-07-27T00:00:04Z | v0.0 | stage-06 | decision | fixture | spoke:#4051 | hand-edit | CHEAP | resolved | %s fixture:bypass |\n' "${SENTINEL}" >> "${LOG}"
+  R="$(check19_region)"
 
-if grep -q 'row-count parity drift' <<<"${R}"; then
-  report "T2 19b flags row-count parity drift" 1
-else
-  report "T2 19b flags row-count parity drift" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
-fi
-if grep -q 'rows=4' <<<"${R}" && grep -q 'lines=3' <<<"${R}"; then
-  report "T2 the finding names the real counts (rows=4, lines=3)" 1
-else
-  report "T2 the finding names the real counts (rows=4, lines=3)" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
+  if grep -q 'row-count parity drift' <<<"${R}"; then
+    report "T2 19b flags row-count parity drift" 1
+  else
+    report "T2 19b flags row-count parity drift" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
+  fi
+  if grep -q 'rows=4' <<<"${R}" && grep -q 'lines=3' <<<"${R}"; then
+    report "T2 the finding names the real counts (rows=4, lines=3)" 1
+  else
+    report "T2 the finding names the real counts (rows=4, lines=3)" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
+  fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # T3 — 19c catches a mangled header (issue AC #4)
 # ─────────────────────────────────────────────────────────────────────────────
-printf '\nT3: 19c catches a mangled header row (AC #4)\n'
-seed_valid
-# Rewrite the FIRST column header token: '| ts_iso |' -> '| timestamp |'.
-MANGLED="${HEADER/| ts_iso |/| timestamp |}"
-{
-  printf '# Pipeline Event Log\n\n'
-  printf '%s\n' "${MANGLED}"
-  printf '|---|---|---|---|---|---|---|---|---|---|\n'
-  fixture_row 1
-  fixture_row 2
-  fixture_row 3
-} > "${LOG}"
-R="$(check19_region)"
+if slow_arm "T3"; then
+  printf '\nT3: 19c catches a mangled header row (AC #4)\n'
+  seed_valid
+  # Rewrite the FIRST column header token: '| ts_iso |' -> '| timestamp |'.
+  MANGLED="${HEADER/| ts_iso |/| timestamp |}"
+  {
+    printf '# Pipeline Event Log\n\n'
+    printf '%s\n' "${MANGLED}"
+    printf '|---|---|---|---|---|---|---|---|---|---|\n'
+    fixture_row 1
+    fixture_row 2
+    fixture_row 3
+  } > "${LOG}"
+  R="$(check19_region)"
 
-if grep -q 'header row missing or malformed' <<<"${R}"; then
-  report "T3 19c flags the mangled header row" 1
-else
-  report "T3 19c flags the mangled header row" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
+  if grep -q 'header row missing or malformed' <<<"${R}"; then
+    report "T3 19c flags the mangled header row" 1
+  else
+    report "T3 19c flags the mangled header row" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
+  fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# T5 — standing literal assertion (no deploy run; drift-proofing)
+# T5 — standing literal assertion (no deploy run; drift-proofing).
+# ALWAYS RUNS, in both modes: this is the arm `--fast` exists to preserve. It is
+# the standing recurrence guard for the original defect and it costs one grep plus
+# one file test, so no cost argument ever justifies skipping it.
 # ─────────────────────────────────────────────────────────────────────────────
 printf '\nT5: standing assertion that the c19_schema literal resolves\n'
+mark_arm "T5"
 C19_SCHEMA_LITERAL="$(grep -m1 'local c19_schema=' "${DEPLOY}" | sed -e 's/.*local c19_schema="//' -e 's/".*//')"
 if [ -n "${C19_SCHEMA_LITERAL}" ] && [ -f "${REPO_ROOT}/${C19_SCHEMA_LITERAL}" ]; then
   report "T5 c19_schema literal in deploy.sh points at an existing file" 1
@@ -279,19 +365,21 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # T6 — SKIP path: an absent operator-instance log is NOT a drift claim
 # ─────────────────────────────────────────────────────────────────────────────
-printf '\nT6: absent instance log -> SKIP, no flag (fresh install / CI must not fail)\n'
-rm -f "${LOG}" "${WLOG}"
-R="$(check19_region)"
+if slow_arm "T6"; then
+  printf '\nT6: absent instance log -> SKIP, no flag (fresh install / CI must not fail)\n'
+  rm -f "${LOG}" "${WLOG}"
+  R="$(check19_region)"
 
-if grep -q 'SKIP:.*no event log at' <<<"${R}"; then
-  report "T6 absent event log emits SKIP naming the resolved path" 1
-else
-  report "T6 absent event log emits SKIP naming the resolved path" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
-fi
-if grep -q 'pipeline-event-log-integrity' <<<"${R}"; then
-  report "T6 SKIP raises NO integrity finding" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
-else
-  report "T6 SKIP raises NO integrity finding" 1
+  if grep -q 'SKIP:.*no event log at' <<<"${R}"; then
+    report "T6 absent event log emits SKIP naming the resolved path" 1
+  else
+    report "T6 absent event log emits SKIP naming the resolved path" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
+  fi
+  if grep -q 'pipeline-event-log-integrity' <<<"${R}"; then
+    report "T6 SKIP raises NO integrity finding" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
+  else
+    report "T6 SKIP raises NO integrity finding" 1
+  fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -301,61 +389,64 @@ fi
 # finding MUST still fire, proving it is no longer nested behind the Class A arm
 # (the pre-#4051 chain would have short-circuited and never evaluated it).
 # ─────────────────────────────────────────────────────────────────────────────
-printf '\nT7: unresolvable tracked schema -> fail-loud path-resolution failure\n'
-FARM="${SBX}/farm"
-mkdir -p "${FARM}"
-for e in "${REPO_ROOT}"/* "${REPO_ROOT}"/.[!.]*; do
-  [ -e "${e}" ] || continue
-  ln -s "${e}" "${FARM}/$(basename "${e}")"
-done
-shallow_farm() {  # $1 real dir, $2 sandbox dir, $3 basename to omit ("" = omit nothing)
-  rm -f "$2"; mkdir -p "$2"
-  local e
-  for e in "$1"/* "$1"/.[!.]*; do
+if slow_arm "T7"; then
+  printf '\nT7: unresolvable tracked schema -> fail-loud path-resolution failure\n'
+  FARM="${SBX}/farm"
+  mkdir -p "${FARM}"
+  for e in "${REPO_ROOT}"/* "${REPO_ROOT}"/.[!.]*; do
     [ -e "${e}" ] || continue
-    [ "$(basename "${e}")" = "$3" ] && continue
-    ln -s "${e}" "$2/$(basename "${e}")"
+    ln -s "${e}" "${FARM}/$(basename "${e}")"
   done
-}
-shallow_farm "${REPO_ROOT}/release"                      "${FARM}/release"                      ""
-shallow_farm "${REPO_ROOT}/release/references"           "${FARM}/release/references"           ""
-shallow_farm "${REPO_ROOT}/release/references/standards" "${FARM}/release/references/standards" "pipeline-event-log-schema.md"
+  shallow_farm() {  # $1 real dir, $2 sandbox dir, $3 basename to omit ("" = omit nothing)
+    rm -f "$2"; mkdir -p "$2"
+    local e
+    for e in "$1"/* "$1"/.[!.]*; do
+      [ -e "${e}" ] || continue
+      [ "$(basename "${e}")" = "$3" ] && continue
+      ln -s "${e}" "$2/$(basename "${e}")"
+    done
+  }
+  shallow_farm "${REPO_ROOT}/release"                      "${FARM}/release"                      ""
+  shallow_farm "${REPO_ROOT}/release/references"           "${FARM}/release/references"           ""
+  shallow_farm "${REPO_ROOT}/release/references/standards" "${FARM}/release/references/standards" "pipeline-event-log-schema.md"
 
-if [ -f "${FARM}/${SCHEMA_REL}" ]; then
-  report "T7 fixture: schema absent from the farm root" 0 "still present"
-else
-  report "T7 fixture: schema absent from the farm root" 1
-fi
-if [ -f "${REPO_ROOT}/${SCHEMA_REL}" ]; then
-  report "T7 fixture: the REAL repo schema was never touched" 1
-else
-  report "T7 fixture: the REAL repo schema was never touched" 0 "real schema missing!"
-fi
+  if [ -f "${FARM}/${SCHEMA_REL}" ]; then
+    report "T7 fixture: schema absent from the farm root" 0 "still present"
+  else
+    report "T7 fixture: schema absent from the farm root" 1
+  fi
+  if [ -f "${REPO_ROOT}/${SCHEMA_REL}" ]; then
+    report "T7 fixture: the REAL repo schema was never touched" 1
+  else
+    report "T7 fixture: the REAL repo schema was never touched" 0 "real schema missing!"
+  fi
 
-R="$(check19_region "${FARM}")"
-if grep -q 'path-resolution failure' <<<"${R}"; then
-  report "T7 unresolvable schema flags a PATH-RESOLUTION FAILURE" 1
-else
-  report "T7 unresolvable schema flags a PATH-RESOLUTION FAILURE" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
-fi
-if grep -q 'BROKEN CONTROL' <<<"${R}"; then
-  report "T7 the finding names itself a broken control, not a missing artifact" 1
-else
-  report "T7 the finding names itself a broken control, not a missing artifact" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
-fi
-# The decisive non-nesting assertion: the schema finding AND the Class A SKIP
-# both appear in the same run. Under the pre-#4051 flat if/elif chain, arm 1
-# (absent log) fired and the schema arm was never evaluated.
-if grep -q 'path-resolution failure' <<<"${R}" \
-   && grep -q 'SKIP:' <<<"${R}"; then
-  report "T7 schema arm fires INDEPENDENTLY of the absent instance log (not nested)" 1
-else
-  report "T7 schema arm fires INDEPENDENTLY of the absent instance log (not nested)" 0 \
-    "$(printf '%s' "${R}" | tr '\n' '|')"
+  R="$(check19_region "${FARM}")"
+  if grep -q 'path-resolution failure' <<<"${R}"; then
+    report "T7 unresolvable schema flags a PATH-RESOLUTION FAILURE" 1
+  else
+    report "T7 unresolvable schema flags a PATH-RESOLUTION FAILURE" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
+  fi
+  if grep -q 'BROKEN CONTROL' <<<"${R}"; then
+    report "T7 the finding names itself a broken control, not a missing artifact" 1
+  else
+    report "T7 the finding names itself a broken control, not a missing artifact" 0 "$(printf '%s' "${R}" | tr '\n' '|')"
+  fi
+  # The decisive non-nesting assertion: the schema finding AND the Class A SKIP
+  # both appear in the same run. Under the pre-#4051 flat if/elif chain, arm 1
+  # (absent log) fired and the schema arm was never evaluated.
+  if grep -q 'path-resolution failure' <<<"${R}" \
+     && grep -q 'SKIP:' <<<"${R}"; then
+    report "T7 schema arm fires INDEPENDENTLY of the absent instance log (not nested)" 1
+  else
+    report "T7 schema arm fires INDEPENDENTLY of the absent instance log (not nested)" 0 \
+      "$(printf '%s' "${R}" | tr '\n' '|')"
+  fi
 fi
 
 # --- GUARD 2 (post-flight): this suite did not write the live log ---
 printf '\nGUARD 2: the operator live event log was not written by this suite\n'
+mark_arm "GUARD2"
 if [ -n "${LIVE_SHA_BEFORE}" ]; then
   LIVE_SHA_AFTER="$(sha_file "${LIVE_LOG}")"
   LIVE_ROWS_AFTER="$(grep -cE '^\| [0-9]{4}-' "${LIVE_LOG}" 2>/dev/null || echo 0)"
@@ -397,9 +488,72 @@ else
   report "live event log absent on this host — nothing to protect (vacuous PASS)" 1
 fi
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ARM REACH — the selected mode reached the arms it declares.
+#
+# Without this the mode selector would be an UNFALSIFIABLE limb. A guard that
+# skips MORE than it should takes that arm's PASS lines away with it, so the suite
+# still prints an all-green tally and still exits 0; there is no count to compare
+# against, because the count is itself a function of what ran. Follow the exit
+# contract at the foot of this file to see it: a skipped arm makes no report()
+# call, so PASS falls while FAIL stays at zero, and a contract that keys on FAIL
+# alone therefore never fires. So the assertion is on REACHEDNESS, which a
+# shrinking tally cannot fake. Under --fast it asserts the converse too, so a
+# selector that quietly stopped skipping is caught as a failure rather than merely
+# as a slow run.
+#
+# (Deliberately paraphrased rather than quoting that contract line: it must occur
+# EXACTLY ONCE in this file. The CI falsification probe locates it by literal
+# match to inject a failing assertion, and treats a non-unique match as a broken
+# probe — so a second verbatim copy in a comment would disable the probe.)
+# ─────────────────────────────────────────────────────────────────────────────
+printf '\nARM REACH: the selected mode reached the arms it declares\n'
+if [ "${FAST}" -eq 1 ]; then
+  EXPECT_RUN="GUARD1 T5 GUARD2"
+  EXPECT_SKIP="T1/T4 T2 T3 T6 T7"
+else
+  EXPECT_RUN="GUARD1 T1/T4 T2 T3 T5 T6 T7 GUARD2"
+  EXPECT_SKIP=""
+fi
+
+reach_missing=""
+for a in ${EXPECT_RUN}; do
+  case " ${ARMS_RUN}" in
+    *" ${a} "*) ;;
+    *) reach_missing="${reach_missing}${a} " ;;
+  esac
+done
+if [ -z "${reach_missing}" ]; then
+  report "every arm this mode declares actually ran (${EXPECT_RUN})" 1
+else
+  report "every arm this mode declares actually ran" 0 \
+    "never reached: ${reach_missing}| ran: ${ARMS_RUN}"
+fi
+
+# Rendered under --fast only. In full mode the skip set is empty, and an assertion
+# quantified over an empty set is a vacuous PASS, not evidence.
+if [ -n "${EXPECT_SKIP}" ]; then
+  reach_extra=""
+  for a in ${EXPECT_SKIP}; do
+    case " ${ARMS_RUN}" in
+      *" ${a} "*) reach_extra="${reach_extra}${a} " ;;
+      *) ;;
+    esac
+  done
+  if [ -z "${reach_extra}" ]; then
+    report "no deploy-driven arm ran under --fast (${EXPECT_SKIP})" 1
+  else
+    report "no deploy-driven arm ran under --fast" 0 "unexpectedly ran: ${reach_extra}"
+  fi
+fi
+
 printf '\n======================================================================\n'
 printf 'test_check19_event_log_integrity.sh: %d passed, %d failed (bash %s)\n' \
   "${PASS}" "${FAIL}" "${BASH_VERSION:-unknown}"
+if [ "${FAST}" -eq 1 ]; then
+  printf '  --fast: %d deploy-driven arm(s) deliberately unreached: %s\n' \
+    "${SKIPPED}" "${EXPECT_SKIP}"
+fi
 printf '======================================================================\n'
 
 [ "${FAIL}" -ne 0 ] && exit 1
