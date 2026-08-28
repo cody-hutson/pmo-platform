@@ -1223,6 +1223,36 @@ def _selftest() -> int:
     finally:
         fx.close()
 
+    # T-49 / T-49b: doc_population()'s is_file() guard, which until now was graded by
+    # NOTHING. A DIRECTORY whose name ends in .sh or .py matches DOC_COVERAGE_GLOBS,
+    # and only that guard keeps it out of Arm E's population — where it would surface
+    # as a permanent UNDOCUMENTED finding that no README row could ever clear, since
+    # the rule is one row per TOOL and a directory is not one. The mutant survived the
+    # whole suite AND the real tree, so the guard was documented but unfalsifiable.
+    # This is deliberately T-33c's shape, one arm-letter over: the identical property
+    # on Arm D already ships an arm, and the two now move together.
+    fx = _Fixture()
+    try:
+        fx.write("core/deploy/tools/real.sh", _PASS_SH)
+        fx.write("core/deploy/tools/real.py", "#!/usr/bin/env python3\n")
+        (fx.root / "core/deploy/tools/dir_shaped.sh").mkdir(parents=True)
+        (fx.root / "core/deploy/tools/dir_shaped.py").mkdir(parents=True)
+        pop = doc_population(fx.root)
+        # FLOOR FIRST, and it is load-bearing: a population that came back empty
+        # satisfies every "not in" limb below while measuring nothing at all.
+        check(
+            "real.sh" in pop and "real.py" in pop,
+            "T-49 FLOOR: doc_population() sees the real tools, so the exclusion below "
+            "is a measurement and not an empty read",
+        )
+        check(
+            "dir_shaped.sh" not in pop and "dir_shaped.py" not in pop,
+            "T-49b Arm E's population is files-only (a DIRECTORY named *.sh / *.py is "
+            "NOT a tool)",
+        )
+    finally:
+        fx.close()
+
     # T-43: the parse rule. The real README holds TWO further tables after the
     # inventory; the blank-line terminator is what keeps them out, and a backticked
     # token in column 2 is prose, not a key. The decoy below is BACKTICKED in column

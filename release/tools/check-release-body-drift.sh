@@ -374,6 +374,29 @@ STUB
     exec "$0" v0.00 --quiet ) && { printf '  FAIL  %-28s exit 0 (expected 3)\n' "F missing (no note)" >&2; failures=$((failures+1)); } || {
       rc=$?; if [[ "$rc" -eq 3 ]]; then printf '  PASS  %-28s exit 3\n' "F missing (no note)" >&2; else printf '  FAIL  %-28s exit %s (expected 3)\n' "F missing (no note)" "$rc" >&2; failures=$((failures+1)); fi; }
 
+  # Case S-EMPTY — BOTH sides empty → a DETECTED condition (exit 1), never MATCH.
+  # A note carrying no `---` fence strips to empty by S4 (fail-CLOSED) and the stub
+  # publishes an empty body, so the equality test compares "" against "" and — before
+  # the vacuity guard — returned 0. This case is the guard's only reachable driver:
+  # every other case in this suite supplies a well-formed note, so none of them can
+  # produce an empty canonical side, which is exactly how the fail-open survived the
+  # transform repair that was named after it.
+  /bin/mkdir -p "$tmp/vacuous"
+  /usr/bin/printf '%s\n' '# A note that never opens a frontmatter fence' > "$tmp/vacuous/v0.00_RELEASE_NOTES.md"
+  : > "$tmp/empty_body.txt"
+  # ANTI-VACUITY FLOOR: the fixture must genuinely strip to EMPTY. If it does not,
+  # the case never reaches the guard and its exit-1 result would be ordinary drift
+  # wearing the right number — a case green for the wrong reason.
+  if [[ -n "$(strip_frontmatter "$tmp/vacuous/v0.00_RELEASE_NOTES.md")" ]]; then
+    printf '  FAIL  %-28s fixture does not strip to empty, so the case cannot reach the vacuity guard\n' "S-EMPTY floor" >&2
+    failures=$((failures + 1))
+  fi
+  run_case "S double-empty (vacuous)" 1 "STUB_BODY_FILE=$tmp/empty_body.txt" "NOTES_DIR_OVERRIDE=$tmp/vacuous"
+  # SPECIFICITY: the SAME empty published body against the WELL-FORMED note must
+  # still be ordinary drift, not the vacuity branch — proving the guard is scoped to
+  # the DOUBLE empty and has not swallowed the single-empty drift path.
+  run_case "S2 single-empty (drift)" 1 "STUB_BODY_FILE=$tmp/empty_body.txt"
+
   # Case J — FOLDERED note in fixture mode. The note lives ONLY in a subfolder of
   # the search root — the live shape of notes/_unversioned/, and of the
   # notes/v1|v2|v3/… layout at any pre-#3698 ref.
@@ -699,6 +722,40 @@ fi
 PUBLISHED_BODY="$("$GH" release view "$VERSION" ${REPO:+--repo "$REPO"} --json body --jq .body 2>/dev/null || true)"
 # CANONICAL_BODY was resolved above (origin/main in canonical mode, fixture file in
 # fixture mode) — do not re-read the working tree here.
+
+# ─── VACUOUS COMPARE (exit 1): BOTH sides empty ──────────────────────────────
+# Ordered ABOVE the equality test deliberately: after it, the double-empty case
+# has already been consumed by the `==` branch and is unrecoverable.
+#
+# Two empty strings compare equal, so the branch below would report OK — "no
+# drift" established by comparing nothing against nothing. That is not weak
+# evidence for the §5.1 invariant, it is the ABSENCE of evidence, and it is the
+# precise fail-open this tool's own runner-pin header is named after: on the
+# runner where the retired strip degraded, this compare returned 0 for every
+# release with no diagnostic. The transform was repaired; this compare was not,
+# so the tool the repair is named after remained the one caller that could still
+# pass on nothing. Its two siblings (the publisher's EMPTY-BODY GUARD and the
+# re-emitter's ABORT) already refuse the empty case before acting.
+#
+# ONLY the double empty is unfalsifiable. A non-empty published body against an
+# empty canonical one — or the converse — is ordinary drift, and the branch below
+# already reports it correctly with a diff; this guard must not swallow those.
+#
+# The canonical side can never be LEGITIMATELY empty: §5.1's transform is
+# fail-CLOSED (S4 — fewer than two `^---$` fences yields empty), so an empty
+# canonical body means the note is not a §5.1 note, never that its body is
+# genuinely blank. That is a real finding an operator must act on, which is why it
+# takes the FINDING exit rather than an N/A: exit 2 means a required CAPABILITY was
+# absent and both were present here, and exit 3 routes to "Check 32 owns existence"
+# in the standing audit, which would misattribute a malformed note to a missing
+# artifact. Exit 1 keeps the enum's contract — a genuine §5.1 finding, gated by
+# $RELEASE_BODY_DRIFT_MODE and counted — while the message states the real cause.
+if [[ -z "$(trim_trailing_newline "$CANONICAL_BODY")" && -z "$(trim_trailing_newline "$PUBLISHED_BODY")" ]]; then
+  warn "DRIFT: ${VERSION} — VACUOUS COMPARE: the published Release body AND the frontmatter-stripped in-repo note are BOTH EMPTY. Equality here proves nothing about the §5.1 invariant (release-notes-standard.md § 5.1)."
+  warn "       The canonical side cannot be legitimately empty: the § 5.1 strip is fail-CLOSED (S4) and yields empty only when the note carries fewer than two '^---\$' fences."
+  warn "       Repair the note's fences, then re-emit per §5.6 (gh release edit) or release-executor Mode F. This check does not re-emit."
+  exit 1
+fi
 
 if [[ "$(trim_trailing_newline "$PUBLISHED_BODY")" == "$(trim_trailing_newline "$CANONICAL_BODY")" ]]; then
   say "OK: ${VERSION} — published Release body matches the frontmatter-stripped in-repo note (§5.1 invariant holds)"

@@ -612,7 +612,7 @@ This release makes the pipeline's own automation trustworthy under conditions th
 
 ### Cross-references
 
-- Release plan: this file, `release/releases/plans/ci-stable-under-transient-conditions_RELEASE_PLAN.md` — see § Deviation Log for the 40 ratified deltas between the Stage-4 plan of record and what shipped (rows 35–40 are the Stage-7 Dev-Testing remediation).
+- Release plan: this file, `release/releases/plans/ci-stable-under-transient-conditions_RELEASE_PLAN.md` — see § Deviation Log for the ratified deltas between the Stage-4 plan of record and what shipped. The count is deliberately not restated here: it was correct when authored and went stale during the ADR-numbering recovery, which is the same class of defect the log's own rows record. Every row carries a **Source** stamp, so the Stage-7 Dev-Testing remediation entries are identifiable by that column rather than by a row range that re-breaks on the next append.
 - Milestone: `ci-stable-under-transient-conditions` (#353) — https://github.com/cody-hutson/pmo-platform/milestone/353
 - User-facing release note (authored at Stage 13, not by this section): `release/releases/notes/{{RELEASE_VERSION}}_RELEASE_NOTES.md`
 - Architecture records added by this release: ADR-151, ADR-152, ADR-153, ADR-154, ADR-155, ADR-156 — see § ADR Allocation.
