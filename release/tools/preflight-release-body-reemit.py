@@ -226,39 +226,41 @@ def live_body_digest(version):
 
 
 def strip_frontmatter(text):
-    """Byte-faithful model of the shipped two-stage strip.
+    """Byte-faithful mirror of release/tools/lib/frontmatter-strip.sh.
 
-    The shipped transform is
-        sed -n '/^---$/,$p'  |  sed '1,/^---$/d; 1,/^---$/d'
-    in BOTH executables (reemit-release-bodies.sh, check-release-body-drift.sh).
-    A4 exists to predict the bytes the emitter would actually publish, so this
-    models the shipped pair exactly -- never an idealised strip.
+    A4 exists to predict the bytes the emitter would ACTUALLY publish, so this
+    models the shipped transform exactly -- never an idealised strip. The shipped
+    transform is now a single shared shell library sourced by all three release-body
+    tools, so this function mirrors ONE implementation rather than modelling a
+    replicated idiom.
 
-    Stage 1 drops any LEAD-IN before the opening delimiter. Stage 2 is the
-    original idiom: its second command can never re-activate (addr1 is the
-    literal line 1, already passed), so the pair collapses to one deletion range
-    -- line 1 through the first `^---$` at line 2 or later.
+    Frozen semantics S1-S5, contract-bound to the committed fixture at
+    core/deploy/tools/fixtures/frontmatter-strip/:
 
-    Composed, that is: find the opening delimiter, then delete through the first
-    `^---$` strictly after it. When the opening delimiter is line 1, stage 1 is
-    the identity and this is byte-identical to the pre-repair model -- which is
-    why 192 of the 195 corpus notes are unaffected by the repair.
+      S1  any lead-in before the opening fence is dropped
+      S2  the opening fence and every frontmatter line are dropped
+      S3  the closing fence is dropped; everything after it is emitted verbatim,
+          so a `---` horizontal rule inside the body survives
+      S4  fewer than two `^---$` lines anywhere yields "" -- fail-CLOSED, which is
+          the outcome the callers' empty-body guards are waiting for
+      S5  the fence match is EXACT; a fence carrying trailing whitespace does not
+          close the block
 
-    No opening delimiter, or no closing delimiter after it, yields "" -- the
-    fail-closed outcome the callers' empty-body ABORT is waiting for.
+    Counting exact fences and returning at the second is the whole rule: it makes
+    S1 fall out (lines before the first fence are never emitted) rather than
+    needing a separate lead-in stage.
+
+    `text.split("\\n")` -- NOT `splitlines()`. The shell transform emits a trailing
+    newline for the final record; `splitlines()` would drop it and put this mirror
+    one byte away from the bytes it exists to predict.
     """
     lines = text.split("\n")
-    # Stage 1: drop everything before the first `---` (the opening delimiter).
-    for start, ln in enumerate(lines):
+    n = 0
+    for i, ln in enumerate(lines):
         if ln == "---":
-            break
-    else:
-        return ""
-    lines = lines[start:]
-    # Stage 2: delete line 1 through the first `---` at line 2 or later.
-    for i in range(1, len(lines)):
-        if lines[i] == "---":
-            return "\n".join(lines[i + 1:])
+            n += 1
+            if n == 2:
+                return "\n".join(lines[i + 1:])
     return ""
 
 
@@ -1039,6 +1041,39 @@ def self_test():
               not looks_like_frontmatter("Plain prose opening line.\n\nMore text.\n"))
         check("looks_like_frontmatter: a key-like line with no terminator is not frontmatter",
               not looks_like_frontmatter("version: v9.99\n\nprose\n"))
+
+        # Case 5b -- CONFORMANCE FIXTURE. The arms above check this model against
+        # its own author's intuition; this one checks it against the SHARED
+        # contract that also binds release/tools/lib/frontmatter-strip.sh and
+        # core/deploy/tools/lint_release_corpus.py. That is the point: the
+        # invariant "these implementations must agree" used to be a prose comment,
+        # and the copies drifted anyway. Here it is a test that can fail.
+        #
+        # Fails CLOSED when the fixture is absent. A skip would make this arm
+        # report green while measuring nothing -- the exact shape of the defect
+        # this whole change exists to remove.
+        fixture = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "core", "deploy", "tools", "fixtures", "frontmatter-strip")
+        cases_dir = os.path.join(fixture, "cases")
+        check("conformance fixture is present (absent => this arm measures nothing)",
+              os.path.isdir(cases_dir), cases_dir)
+        if os.path.isdir(cases_dir):
+            names = sorted(os.listdir(cases_dir))
+            check("conformance fixture is non-empty (a 0-case iteration passes vacuously)",
+                  len(names) >= 7, "%d case(s)" % len(names))
+            mismatches = []
+            for name in names:
+                with open(os.path.join(cases_dir, name), encoding="utf-8") as fh:
+                    src = fh.read()
+                with open(os.path.join(fixture, "expected", name), encoding="utf-8") as fh:
+                    want = fh.read()
+                got = strip_frontmatter(src)
+                if got != want:
+                    mismatches.append("%s: got %r want %r" % (name, got[:40], want[:40]))
+            check("strip model matches the committed conformance fixture on all "
+                  "%d cases (S1-S5)" % len(names),
+                  not mismatches, "; ".join(mismatches))
 
         # Case 6 -- unresolvable ref halts rather than passing.
         bare = os.path.join(tmp, "norepo")

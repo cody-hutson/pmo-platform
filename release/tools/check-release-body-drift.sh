@@ -158,50 +158,25 @@ find_gh() {
 }
 
 # ─── Transform: strip the YAML frontmatter (the §5.1 deterministic transform) ─
-# Identical to the canonical_body derivation in automated-closeout.sh
-# phase_publish_github_release: drop the leading `---`-fenced frontmatter block.
-
-# "$@" (not "$1") so ONE transform serves both a file arg (fixture mode) and a
-# stream (`git show … | strip_frontmatter`, canonical mode). With zero args sed
-# reads stdin; safe under set -u. Keeps the §5.1 body-equality logic in one place.
+# NOT implemented here. `strip_frontmatter()` is sourced from the shared library
+# below, which is also sourced by automated-closeout.sh (the publisher) and
+# reemit-release-bodies.sh (the re-emitter). There is now ONE shell
+# implementation of the §5.1 transform, not three.
 #
-# ─── TWO STAGES, AND STAGE 1 IS THE LEAD-IN REPAIR ──────────────────────────
-# Stage 2 is the shipped idiom, byte-unchanged. Its deletion range runs from
-# line 1 to the FIRST `^---$` at line 2 or later. When the note's frontmatter
-# opens on line 1 that terminator is the CLOSING delimiter and the strip is
-# correct. When ANY line precedes the opening delimiter — a lint directive, an
-# HTML comment, a blank — the range ends on the OPENING delimiter instead and
-# the whole YAML block survives into the "body". Publishing that writes raw
-# frontmatter onto a public Release page: the §5.1 defect the re-emit exists to
-# repair, reintroduced by the repair.
+# The library carries the frozen S1–S5 semantics and the rationale for the awk
+# form; the committed fixture at core/deploy/tools/fixtures/frontmatter-strip/
+# is the contract all three implementations (this family plus the two Python
+# mirrors) are checked against. That fixture replaces what used to be a prose
+# "SIBLING COPIES … must move together" note here — a note whose own list was
+# incomplete, and which could not fail when the copies drifted anyway.
 #
-# Stage 1 (`-n '/^---$/,$p'`) drops any such lead-in, so stage 2 always sees a
-# stream whose line 1 IS the opening delimiter — the case it already handles
-# correctly. This is a strict COMPOSITION, not a rewrite: when the opening
-# delimiter is already line 1, stage 1 is the identity and the pair is
-# byte-identical to the shipped idiom. Measured over the whole corpus at the
-# branch tip: 192 of 195 notes byte-identical, 3 changed (v1.08 / v1.09 / v1.10
-# — the only notes carrying a lead-in), YAML-leaking bodies 3 → 0, EMPTY bodies
-# 0 → 0.
-#
-# A note carrying NO recognisable frontmatter now yields an EMPTY body, so the
-# caller's empty-body ABORT fires instead of a mis-stripped tail being
-# published. That is a fail-CLOSED change to a case the shipped idiom
-# mis-handled; the live corpus has 0 such notes.
-#
-# NOT the portability defect. The GNU-vs-BSD divergence declared in this file's
-# `selftest-runner` header is a DIFFERENT defect in the same idiom, tracked
-# separately, and is neither fixed nor worsened here: stage 2 retains the
-# shipped idiom verbatim. That residual stands as written.
-#
-# SIBLING COPIES of this transform, which must move together:
-#   release/tools/reemit-release-bodies.sh      (the emitter; same two stages)
-#   release/tools/preflight-release-body-reemit.py `strip_frontmatter()`
-#                                                  (byte-faithful model, A4)
-strip_frontmatter() {
-  /usr/bin/sed -n '/^---$/,$p' "$@" 2>/dev/null \
-    | /usr/bin/sed '1,/^---$/d; 1,/^---$/d'
-}
+# Sourced BASH_SOURCE-relative, never REPO_ROOT-relative: the canonical-mode
+# self-test cases export a sandbox REPO_ROOT across `exec "$0"` (see the process
+# model note on the REPO_ROOT assignment below), so a REPO_ROOT-relative source
+# would break cases G/H/I/L.
+_CRBD_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" && pwd -P)"
+# shellcheck source=lib/frontmatter-strip.sh
+. "${_CRBD_LIB_DIR}/frontmatter-strip.sh"
 
 # ─── Normalize a single trailing newline (GitHub round-trip tolerance) ───────
 # printf '%s' drops a trailing newline; we compare the trimmed forms so a lone
@@ -555,6 +530,42 @@ STUB
     fi
   else
     printf '  SKIP  %-28s (git not available)\n' "G-K canonical-mode cases" >&2
+  fi
+
+  # ─── Case S — §5.1 CONFORMANCE FIXTURE ─────────────────────────────────────
+  # This is the arm that makes the portability claim falsifiable ON THE RUNNER.
+  # Cases A–N compare a body against a stub; they pass whenever the two sides
+  # agree, INCLUDING when both are empty — which is exactly how the GNU-side
+  # fail-open hid here for multiple releases. Case S compares the transform's
+  # output against BYTES COMMITTED IN THE REPO, so an empty strip cannot agree
+  # with a non-empty expectation no matter which host runs it.
+  #
+  # Resolved relative to the sourced library, never REPO_ROOT: the canonical-mode
+  # cases above export REPO_ROOT into a sandbox that has no fixture in it.
+  _fx="${_CRBD_LIB_DIR}/../../../core/deploy/tools/fixtures/frontmatter-strip"
+  if [[ ! -d "$_fx/cases" ]]; then
+    printf '  FAIL  %-28s conformance fixture absent at %s\n' "S fixture" "$_fx/cases" >&2
+    failures=$((failures + 1))
+  else
+    _fx_n=0; _fx_bad=0
+    for _fx_case in "$_fx"/cases/*; do
+      [[ -e "$_fx_case" ]] || continue
+      _fx_n=$((_fx_n + 1))
+      _fx_name="$(/usr/bin/basename "$_fx_case")"
+      if ! /usr/bin/diff -q <(strip_frontmatter "$_fx_case") "$_fx/expected/$_fx_name" >/dev/null 2>&1; then
+        printf '  FAIL  %-28s case %s diverges from its committed expectation\n' "S fixture" "$_fx_name" >&2
+        _fx_bad=$((_fx_bad + 1))
+      fi
+    done
+    failures=$((failures + _fx_bad))
+    # Vacuity floor — an empty or truncated fixture dir iterates zero times and
+    # would otherwise report clean.
+    if [[ "$_fx_n" -lt 7 ]]; then
+      printf '  FAIL  %-28s iterated only %s case(s); a short iteration passes vacuously\n' "S fixture" "$_fx_n" >&2
+      failures=$((failures + 1))
+    elif [[ "$_fx_bad" -eq 0 ]]; then
+      printf '  PASS  %-28s %s/%s cases byte-identical (S1-S5)\n' "S fixture" "$_fx_n" "$_fx_n" >&2
+    fi
   fi
 
   if [[ "$failures" -eq 0 ]]; then

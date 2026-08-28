@@ -120,6 +120,16 @@
 #   4  refused — the pre-execute gate BLOCKED or HALTed; nothing was written
 set -uo pipefail
 
+# ─── Shared §5.1 frontmatter strip (the single shell implementation) ─────────
+# strip_frontmatter() lives in the library, not here, so this emitter and its own
+# post-edit verifier cannot diverge on what a release-note BODY is. Sourced
+# BASH_SOURCE-relative, never REPO_ROOT-relative: the self-test re-execs this
+# script with REPO_ROOT exported to a bare-origin sandbox (see the seam below),
+# so a REPO_ROOT-relative source would resolve into the sandbox and fail.
+_RRB_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" && pwd -P)"
+# shellcheck source=lib/frontmatter-strip.sh
+. "${_RRB_LIB_DIR}/frontmatter-strip.sh"
+
 # ─── Config ──────────────────────────────────────────────────────────────────
 # NOTES_DIR is the repo-root-relative form (the sibling verifier calls this
 # NOTES_REL) — it is what `git show <ref>:<path>` and `git ls-tree` want.
@@ -385,6 +395,39 @@ NOTE
     failures=$((failures + 1))
   fi
 
+  # ─── Case S — §5.1 CONFORMANCE FIXTURE ─────────────────────────────────────
+  # The arm that makes the portability claim falsifiable ON THE RUNNER. This
+  # tool's other strip-related legs hit its own empty-body ABORT when the strip
+  # degrades — a fail-SAFE, but one that reports "availability problem" rather
+  # than "the transform is wrong here". Case S compares the transform against
+  # BYTES COMMITTED IN THE REPO, so a degraded strip is named as a divergence.
+  #
+  # Resolved relative to the sourced library, never REPO_ROOT: the self-test
+  # re-execs with REPO_ROOT pointing into a sandbox that holds no fixture.
+  _fx="${_RRB_LIB_DIR}/../../../core/deploy/tools/fixtures/frontmatter-strip"
+  if [[ ! -d "$_fx/cases" ]]; then
+    printf '  FAIL  %-34s conformance fixture absent at %s\n' "S fixture" "$_fx/cases" >&2
+    failures=$((failures + 1))
+  else
+    _fx_n=0; _fx_bad=0
+    for _fx_case in "$_fx"/cases/*; do
+      [[ -e "$_fx_case" ]] || continue
+      _fx_n=$((_fx_n + 1))
+      _fx_name="$(/usr/bin/basename "$_fx_case")"
+      if ! /usr/bin/diff -q <(strip_frontmatter "$_fx_case") "$_fx/expected/$_fx_name" >/dev/null 2>&1; then
+        printf '  FAIL  %-34s case %s diverges from its committed expectation\n' "S fixture" "$_fx_name" >&2
+        _fx_bad=$((_fx_bad + 1))
+      fi
+    done
+    failures=$((failures + _fx_bad))
+    if [[ "$_fx_n" -lt 7 ]]; then
+      printf '  FAIL  %-34s iterated only %s case(s); a short iteration passes vacuously\n' "S fixture" "$_fx_n" >&2
+      failures=$((failures + 1))
+    elif [[ "$_fx_bad" -eq 0 ]]; then
+      printf '  PASS  %-34s %s/%s cases byte-identical (S1-S5)\n' "S fixture" "$_fx_n" "$_fx_n" >&2
+    fi
+  fi
+
   if [[ "$failures" -eq 0 ]]; then
     printf 'reemit-release-bodies self-test: ALL PASS\n' >&2
     exit 0
@@ -506,21 +549,15 @@ for V in "$@"; do
     rc_final=1
     continue
   fi
-  # ── The §5.1 strip, in TWO stages. Stage 2 is the shipped idiom, byte-
-  #    unchanged; stage 1 drops any LEAD-IN before the opening delimiter so
-  #    stage 2 always sees a stream whose line 1 IS that delimiter — the case it
-  #    handles correctly. Without stage 1, a note with a line before its opening
-  #    `---` (v1.08 / v1.09 / v1.10 carry a lint directive there) ends the
-  #    deletion range on the OPENING delimiter and PUBLISHES its raw YAML block.
-  #    Strict composition: identity when the delimiter is already line 1, so 192
-  #    of the 195 corpus notes compute byte-identical bodies either way.
-  #    /usr/bin/sed is pinned to match check-release-body-drift.sh — this
-  #    emitter's own post-edit verifier — so the two cannot diverge on a host
-  #    with a shimmed sed. Both copies must move together; see the SIBLING
-  #    COPIES note in that file.
-  BODY="$(printf '%s\n' "$RAW" \
-            | /usr/bin/sed -n '/^---$/,$p' \
-            | /usr/bin/sed '1,/^---$/d; 1,/^---$/d')"
+  # ── The §5.1 strip. Sourced from release/tools/lib/frontmatter-strip.sh, the
+  #    single shell implementation, shared with check-release-body-drift.sh
+  #    (this emitter's own post-edit verifier) and automated-closeout.sh (the
+  #    publisher) — so the three cannot diverge on what a body IS. The library
+  #    carries the frozen S1–S5 semantics; the committed fixture at
+  #    core/deploy/tools/fixtures/frontmatter-strip/ is the contract.
+  #    strip_frontmatter reads stdin when called with no arguments, which is the
+  #    form this caller needs: the note has already been read into $RAW.
+  BODY="$(printf '%s\n' "$RAW" | strip_frontmatter)"
   if [[ -z "$BODY" ]]; then
     echo "  ABORT: frontmatter strip produced an EMPTY body — refusing to publish nothing."
     rc_final=1

@@ -266,6 +266,26 @@ git_net() {
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 # Script lives at release/tools/; repo root is two levels up (release/tools → release → root).
 REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
+
+# ─── Shared §5.1 frontmatter strip ──────────────────────────────────────────
+# strip_frontmatter() is sourced, not re-implemented. This tool publishes Surface 1
+# (the GitHub Release body); check-release-body-drift.sh then asserts that what was
+# published equals the same transform of the same note. When those were two copies
+# they drifted — this one kept the pre-repair single-stage form and computed
+# different bytes for three live notes than the verifier that grades it. One
+# implementation makes that class of divergence unrepresentable.
+#
+# Sourced UNGUARDED, unlike the version-grammar source further down. That one
+# tolerates a pre-#1676 checkout and degrades; this one must not. A missing
+# transform yields an EMPTY body, and an empty body reaching Phase 15.5 is the
+# irreversible failure this file's empty-body guards exist to stop — so an absent
+# library is a hard load-time failure, not a silent degrade.
+if [[ ! -r "$SCRIPT_DIR/lib/frontmatter-strip.sh" ]]; then
+  echo "FATAL: release/tools/lib/frontmatter-strip.sh is missing or unreadable — refusing to run a release close-out that cannot derive a Release body." >&2
+  exit 2
+fi
+# shellcheck source=lib/frontmatter-strip.sh
+source "$SCRIPT_DIR/lib/frontmatter-strip.sh"
 # WORKSPACE_ROOT resolution (env-override → operator.toml → default) per the
 # cleanup-orphan-state.sh precedent. workspace_boundary_check() keys on this; the
 # default uses ${HOME} (no embedded operator identity).
@@ -6102,7 +6122,19 @@ phase_publish_github_release() {
     # State 1 or 2 — release exists; compare body
     local existing_body canonical_body
     existing_body="$($GH release view "$VERSION" --repo "$REPO_SLUG" --json body --jq .body 2>/dev/null)"
-    canonical_body="$(/usr/bin/sed '1,/^---$/d; 1,/^---$/d' "$notes_path" 2>/dev/null)"
+    canonical_body="$(strip_frontmatter "$notes_path" 2>/dev/null)"
+
+    # EMPTY-BODY GUARD — the one irreversible path in this script.
+    # `gh release edit --notes ""` blanks a PUBLISHED Release body, and GitHub keeps
+    # no body history for a Release: no revert recovers it. The §5.1 transform is
+    # fail-CLOSED by design (S4: fewer than two fences yields empty), so an empty
+    # result here means the note is malformed or unreadable — never that the body is
+    # legitimately empty. Refuse, and say which note. Both sibling tools already
+    # carry this test; this call site was the one that did not.
+    if [[ -z "$canonical_body" ]]; then
+      mark_phase "publish_github_release" "FAIL" "frontmatter strip produced an EMPTY body from $notes_path — refusing to overwrite the published Release body of $VERSION with nothing (gh release edit is irreversible; GitHub keeps no body history). Check the note has an opening AND closing --- fence per release-notes-standard.md § 5.1"
+      return 3
+    fi
 
     if [[ "$existing_body" == "$canonical_body" ]]; then
       mark_phase "publish_github_release" "SKIPPED" "GitHub Release $VERSION already at canonical content (State 2 no-op per release-notes-standard.md § 5.5)"
@@ -6130,7 +6162,16 @@ phase_publish_github_release() {
   # file is the source of record; the Release page is the rendered copy people
   # read). See release-notes-standard.md § 5.1.
   local notes_body
-  notes_body="$(/usr/bin/sed '1,/^---$/d; 1,/^---$/d' "$notes_path" 2>/dev/null)"
+  notes_body="$(strip_frontmatter "$notes_path" 2>/dev/null)"
+
+  # EMPTY-BODY GUARD — same rule on the create path. Less severe than the edit
+  # path (nothing published is overwritten), but a Release created with an empty
+  # body is still a broken public artifact that the drift gate will then compare
+  # against, and the cause is identical: a note that does not satisfy § 5.1.
+  if [[ -z "$notes_body" ]]; then
+    mark_phase "publish_github_release" "FAIL" "frontmatter strip produced an EMPTY body from $notes_path — refusing to create GitHub Release $VERSION with no body. Check the note has an opening AND closing --- fence per release-notes-standard.md § 5.1"
+    return 3
+  fi
 
   # MERGE_SHA --target is NON-OPTIONAL on create (#1682): the Release is explicitly
   # bound to the release-PR merge commit (the identity assertion above proved the
@@ -9902,6 +9943,109 @@ STUB
     _pg_detail="$(get_phase publish_github_release)"
     /usr/bin/grep -qF 'not present on origin' <<<"$_pg_detail" || { echo "FAIL: F-01-T-apply — the --apply tag preflight must be the abort under test and its message preserved verbatim, got '$_pg_detail'"; failures=$((failures+1)); }
 
+    # (e)/(f) EMPTY-BODY GUARD (#4912) — the one IRREVERSIBLE path in this script.
+    # `gh release edit --notes ""` blanks a published Release body and GitHub keeps
+    # no body history, so the assertion that matters is not "the phase failed" but
+    # "the mutation was never issued". Each arm therefore checks the argv-capture
+    # file stayed ABSENT, and each is paired with an anti-vacuity control that runs
+    # the SAME stub against a WELL-FORMED note and must reach the mutation. Without
+    # the control, both arms would pass on a stub that can never invoke gh at all.
+    local _eb_dir="$_ms_tmp/empty-body-notes" _gb_dir="$_ms_tmp/good-body-notes"
+    /bin/mkdir -p "$_eb_dir" "$_gb_dir"
+    # Unclosed fence => S4 fail-closed => empty strip. NOT a note with no fence at
+    # all: this is the shape a truncated or mid-edit note actually takes.
+    /usr/bin/printf -- '---\nversion: v9.89\n\n# Headline\n\nbody\n' > "$_eb_dir/v9.89_RELEASE_NOTES.md"
+    /usr/bin/printf -- '---\nversion: v9.89\n---\n\n# Headline\n\nbody\n' > "$_gb_dir/v9.89_RELEASE_NOTES.md"
+
+    local _eb_editfile="$_ms_tmp/edit-args" _eb_createfile="$_ms_tmp/create-args-2"
+    local _eb_stub="$_ms_tmp/gh-edit.sh"
+    /bin/cat > "$_eb_stub" <<STUB
+#!/usr/bin/env bash
+# release view -> exists (State 1); --json body returns a NON-empty prior body so
+# the equality test cannot short-circuit into the State-2 no-op.
+if [[ "\$1" == "release" && "\$2" == "view" ]]; then
+  if [[ "\$*" == *"--json body"* ]]; then printf '%s\n' "PREVIOUSLY PUBLISHED BODY"; fi
+  exit 0
+fi
+if [[ "\$1" == "release" && "\$2" == "edit" ]]; then printf '%s\n' "\$*" > "$_eb_editfile"; exit 0; fi
+if [[ "\$1" == "release" && "\$2" == "create" ]]; then printf '%s\n' "\$*" > "$_eb_createfile"; exit 0; fi
+exit 0
+STUB
+    /bin/chmod +x "$_eb_stub"
+
+    MERGE_SHA="$_ms_commit"; VERSION="v9.89"; MODE="apply"; GH="$_eb_stub"
+
+    # (e) EDIT path, empty body — must FAIL and must NOT have issued the edit.
+    RELEASE_NOTES_DIR="$_eb_dir"
+    /bin/rm -f "$_eb_editfile"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
+    phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
+    [[ "$_pg_rc" -ne 0 ]] || { echo "FAIL: 4h-e — an EMPTY frontmatter strip must abort the publish phase, got rc=0"; failures=$((failures+1)); }
+    [[ "$(get_phase publish_github_release | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: 4h-e — an empty strip must mark publish FAIL, got '$(get_phase publish_github_release)'"; failures=$((failures+1)); }
+    [[ ! -f "$_eb_editfile" ]] || { echo "FAIL: 4h-e — gh release edit WAS invoked with an empty body ($(/bin/cat "$_eb_editfile")); the guard must block the irreversible mutation, not merely report after it"; failures=$((failures+1)); }
+
+    # (f) ANTI-VACUITY for (e): the SAME stub and the SAME version with a
+    # WELL-FORMED note must REACH gh release edit. If this arm does not fire, (e)
+    # proved nothing — it would be satisfied by a stub that cannot invoke gh.
+    RELEASE_NOTES_DIR="$_gb_dir"
+    /bin/rm -f "$_eb_editfile"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
+    phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
+    [[ "$_pg_rc" -eq 0 ]] || { echo "FAIL: 4h-f anti-vacuity — a well-formed note must publish through the SAME stub, got rc=$_pg_rc; arm (e) cannot be trusted while this fails"; failures=$((failures+1)); }
+    [[ -f "$_eb_editfile" ]] || { echo "FAIL: 4h-f anti-vacuity — gh release edit was never reached even for a well-formed note, so arm (e)'s absent-argv-file assertion is vacuous"; failures=$((failures+1)); }
+    /usr/bin/grep -qF -- '# Headline' "$_eb_editfile" 2>/dev/null || { echo "FAIL: 4h-f — the edited body must be the STRIPPED note body (expected the H1 to survive the strip), got '$(/bin/cat "$_eb_editfile" 2>/dev/null)'"; failures=$((failures+1)); }
+    # Negated form, not `grep && { … }`: this file runs under `set -e`, and a bare
+    # `grep && block` statement returns 1 on the PASSING (no-match) path, which
+    # would abort the suite exactly when the arm is satisfied.
+    ! /usr/bin/grep -qF -- 'version: v9.89' "$_eb_editfile" 2>/dev/null || { echo "FAIL: 4h-f — the edited body still contains frontmatter ('version:'), so the strip did not run; this is the raw-YAML-publish defect"; failures=$((failures+1)); }
+
+    # (g) CREATE path, empty body — the second call site, same rule.
+    local _eb_create_stub="$_ms_tmp/gh-create-empty.sh"
+    /bin/cat > "$_eb_create_stub" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "release" && "\$2" == "view" ]]; then exit 1; fi
+if [[ "\$1" == "release" && "\$2" == "create" ]]; then printf '%s\n' "\$*" > "$_eb_createfile"; exit 0; fi
+exit 0
+STUB
+    /bin/chmod +x "$_eb_create_stub"
+    GH="$_eb_create_stub"; RELEASE_NOTES_DIR="$_eb_dir"
+    /bin/rm -f "$_eb_createfile"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
+    phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
+    [[ "$_pg_rc" -ne 0 ]] || { echo "FAIL: 4h-g — an EMPTY strip must abort the CREATE path too, got rc=0"; failures=$((failures+1)); }
+    [[ ! -f "$_eb_createfile" ]] || { echo "FAIL: 4h-g — gh release create WAS invoked with an empty body ($(/bin/cat "$_eb_createfile")); the create-path guard did not block it"; failures=$((failures+1)); }
+
+    # (h) ANTI-VACUITY for (g): same stub, well-formed note, must reach create.
+    RELEASE_NOTES_DIR="$_gb_dir"
+    /bin/rm -f "$_eb_createfile"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
+    phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
+    [[ -f "$_eb_createfile" ]] || { echo "FAIL: 4h-h anti-vacuity — gh release create was never reached even for a well-formed note (rc=$_pg_rc), so arm (g) is vacuous"; failures=$((failures+1)); }
+
+    # (i) §5.1 CONFORMANCE FIXTURE (#4912). Binds the sourced shell transform to
+    # the same committed fixture that binds the two Python mirrors
+    # (preflight-release-body-reemit.py, lint_release_corpus.py). Resolved from
+    # SCRIPT_DIR, never REPO_ROOT — the arms above reassign REPO_ROOT to a sandbox.
+    local _fx="$SCRIPT_DIR/../../core/deploy/tools/fixtures/frontmatter-strip"
+    if [[ ! -d "$_fx/cases" ]]; then
+      echo "FAIL: 4h-i — conformance fixture absent at $_fx/cases; the shell transform is bound to nothing"; failures=$((failures+1))
+    else
+      local _fx_case _fx_name _fx_n=0 _fx_bad=0
+      for _fx_case in "$_fx"/cases/*; do
+        [[ -e "$_fx_case" ]] || continue
+        _fx_n=$((_fx_n + 1))
+        _fx_name="$(/usr/bin/basename "$_fx_case")"
+        if ! /usr/bin/diff -q <(strip_frontmatter "$_fx_case") "$_fx/expected/$_fx_name" >/dev/null 2>&1; then
+          echo "FAIL: 4h-i — strip_frontmatter diverges from the committed fixture on case '$_fx_name'"; _fx_bad=$((_fx_bad + 1))
+        fi
+      done
+      failures=$((failures + _fx_bad))
+      # Vacuity floor: an empty or truncated fixture directory would iterate zero
+      # times and report clean, which is the shape of a green suite proving nothing.
+      [[ "$_fx_n" -ge 7 ]] || { echo "FAIL: 4h-i — fixture iterated only $_fx_n case(s); a short iteration passes vacuously"; failures=$((failures+1)); }
+    fi
+
+    GH="$_ms_pub_stub"
     NO_MERGE="$_pg_saved_nomerge"
     REPO_ROOT="$_ms_saved_root"; MODE="$_ms_saved_mode"; VERSION="$_ms_saved_version"; RELEASE_NOTES_DIR="$_ms_saved_notesdir"
   else
