@@ -80,6 +80,14 @@
 
 set -euo pipefail
 
+# Capture the caller's own `gh` BEFORE the pin removes its directory from search.
+# Non-fatal by design: gh is needed ONLY on the --apply promotion path, and this
+# tool's --self-test is CI-discovered on the ubuntu partition, where a load-time
+# exit would make the suite unreachable — the cost automated-closeout.sh already
+# paid as a `# selftest-runner: macos` pin. Resolution proper is lazy; see
+# resolve_gh_bin below.
+GH_PRE_PIN="$(command -v gh 2>/dev/null || true)"
+
 # Pin PATH to system tools per bypass-mode-readiness.md (BLOCK-DESTRUCTIVE-020).
 export PATH="/usr/bin:/bin"
 
@@ -109,6 +117,54 @@ fi
 export PMO_REPO_SLUG="$REPO_SLUG"
 
 die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
+
+# ─── gh resolution — ABSOLUTE path, LAZY ─────────────────────────────────────
+# The pinned PATH above cannot see the Homebrew prefixes, so the bare `gh` this
+# tool used to hand subprocess.run() failed command-not-found on every machine —
+# the reason --apply had never once succeeded. Resolution is deliberately LAZY:
+# it happens at the point of USE, never at load, so the script still loads (and
+# therefore --self-tests) on a runner with no gh installed. Mirrors the lazy
+# sibling in audit-epic-rollup-close.sh, widened by an explicit override and the
+# pre-pin capture so a nix / asdf / ~/.local/bin install resolves too.
+# Ladder: $PMO_GH_BIN -> pre-pin `command -v` -> the three standard locations.
+GH_BIN=""
+# The standard install locations, as a rebindable array rather than three inline
+# literals. Production never rebinds it — the default IS the ladder's third rung.
+# It is a variable so the self-test can exhaust the ladder in-process on a host
+# that HAS a real gh; without that seam the fail-loud arm below could only ever
+# run on a gh-less runner, i.e. never on the authoring machine. Test 17 asserts
+# this default and the die message stay in step.
+GH_STD_CANDIDATES=(/opt/homebrew/bin/gh /usr/local/bin/gh /usr/bin/gh)
+resolve_gh_bin() {
+  [[ -n "$GH_BIN" ]] && return 0
+  local c
+  for c in "${PMO_GH_BIN:-}" "$GH_PRE_PIN" "${GH_STD_CANDIDATES[@]}"; do
+    if [[ -n "$c" && -x "$c" ]]; then GH_BIN="$c"; return 0; fi
+  done
+  die "gh CLI not found. Looked at: \$PMO_GH_BIN, the pre-pin PATH resolution, /opt/homebrew/bin/gh, /usr/local/bin/gh, /usr/bin/gh. Install with 'brew install gh' (or your platform's package manager), or set PMO_GH_BIN to its absolute path. --apply cannot run without it; re-run without --apply for the dry-run report."
+}
+
+# ─── Label pre-flight — one call, before any create ──────────────────────────
+# Auto-promotion APPLIES labels; it never CREATES them. Per label-taxonomy.md
+# § Instance Model, reconciliation DETECTS but does not MATERIALIZE — a declared
+# row is not a live label. Without this gate the outcome depends on an unpinned
+# gh behavior and BOTH branches are bad: either N clusters fail with N identical
+# errors, or the create reaches the API with an unknown label and GitHub brings
+# it into existence with the default grey and no description — the ungoverned
+# path that produces exactly the malformed row Check 51's name-only diff is
+# structurally blind to. One list call closes both branches deterministically.
+preflight_labels() {
+  local missing=() want=(improvement auto-promoted-pattern "status: proposed") l live
+  live="$("$GH_BIN" label list --repo "$REPO_SLUG" --limit 500 --json name --jq '.[].name' 2>/dev/null || true)"
+  [[ -z "$live" ]] && die "could not read the live label set from $REPO_SLUG via $GH_BIN; --apply cannot verify the labels it would apply"
+  for l in "${want[@]}"; do
+    /usr/bin/grep -qxF "$l" <<<"$live" || missing+=("$l")
+  done
+  if (( ${#missing[@]} )); then
+    die "label(s) not present in $REPO_SLUG: ${missing[*]}. Auto-promotion applies labels it does not create. Render the create commands with: python3 core/deploy/tools/check-label-parity.py --source core/specs/label-taxonomy.md --source core/packs/_common/pack.toml --emit-fix"
+  fi
+  return 0
+}
 
 usage() {
   /usr/bin/sed -n '4,66p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
@@ -661,7 +717,7 @@ if apply_mode:
         try:
             result = subprocess.run(
                 [
-                    "gh", "issue", "create",
+                    os.environ.get("PMO_GH_BIN") or "gh", "issue", "create",
                     "--repo", os.environ.get("PMO_REPO_SLUG", ""),
                     "--title", title,
                     "--body", body,
@@ -674,7 +730,10 @@ if apply_mode:
             else:
                 print(f"  FAILED to create issue for cluster '{c['token']}': {result.stderr.strip()}")
         except (subprocess.SubprocessError, FileNotFoundError) as e:
-            print(f"  FAILED to invoke gh: {e}")
+            # Defense-in-depth. The bash gate resolved gh to an absolute path
+            # before this ran, so reaching here means the binary vanished or is
+            # not executable — name it, so the message is diagnosable.
+            print(f"  FAILED to invoke gh at {os.environ.get('PMO_GH_BIN') or 'gh'}: {e}")
 else:
     print(f"**Dry-run mode (default):** would create {len(qualifying)} Issue(s); re-run with --apply to actually create.")
     for c in qualifying:
@@ -682,6 +741,18 @@ else:
         print(f"  - title: {title}")
 PY
 )"
+  # --apply dependency gate. Resolving gh and checking the labels HERE — once,
+  # before the Python runs — matches this tool's documented exit contract
+  # ("1 = invalid args / dependency missing") and collapses what would otherwise
+  # be N identical per-cluster failures into one message. `rate` mode is excluded
+  # because the header already states --apply is ignored there. The dry-run path
+  # never enters this branch, so its output is unchanged by construction.
+  if [[ "$apply" == "true" && "$emit" != "rate" ]]; then
+    resolve_gh_bin
+    preflight_labels
+    export PMO_GH_BIN="$GH_BIN"
+  fi
+
   echo "$rows" | "$PY" -c "$pattern_py" "$window" "$cluster_min" "$by_row" "$apply" "$emit" "$source"
 }
 
@@ -975,6 +1046,139 @@ run_self_test() {
     || die "self-test: the near-threshold band did NOT render in the zero-qualifying case — the insertion point regressed below the early exit (#3121)"
   /usr/bin/grep -q "No clusters meet the auto-promotion criteria" <<<"$ntz_report" \
     || die "self-test: the zero-cluster footer must still render after the band (#3121)"
+  # ── Tests 17-19 (#5067 AUTO-PROMOTION): the --apply path had NEVER been able to
+  # fire. Two independent defects blocked it — a bare `gh` argv under a PATH pinned
+  # to /usr/bin:/bin, and a label that does not exist in the live set. All three
+  # arms are HERMETIC: no network, no issue created. gh is replaced by a recording
+  # stub injected through PMO_GH_BIN, which is the same stub-injection idiom
+  # automated-closeout.sh already uses for its own gh-dependent phases.
+  local gh_dir gh_stub gh_argv gh_err
+  gh_dir="$(/usr/bin/mktemp -d)" || die "self-test: mktemp -d failed (#5067)"
+  gh_stub="$gh_dir/gh"
+  gh_argv="$gh_dir/argv.txt"
+  gh_err="$gh_dir/err.txt"
+  # The stub answers both calls the --apply path makes: `label list` (pre-flight)
+  # and `issue create` (promotion). Every invocation appends its full argv, so the
+  # assertions read what the tool ACTUALLY passed rather than what it meant to.
+  # $GH_LABEL_SET selects which label set `label list` reports, so one stub drives
+  # both the missing-label arm and the complete-label arm.
+  {
+    echo '#!/bin/bash'
+    echo 'printf "%s\n" "$*" >> "$PMO_STUB_ARGV"'
+    echo 'if [[ "$1" == "label" ]]; then'
+    echo '  if [[ "${GH_LABEL_SET:-full}" == "full" ]]; then'
+    echo '    printf "%s\n" improvement auto-promoted-pattern "status: proposed" bug'
+    echo '  else'
+    echo '    printf "%s\n" improvement "status: proposed" bug'
+    echo '  fi'
+    echo '  exit 0'
+    echo 'fi'
+    echo 'echo "https://github.test/stub/issues/1"'
+  } > "$gh_stub" || die "self-test: could not write gh stub"
+  /bin/chmod +x "$gh_stub" || die "self-test: could not chmod gh stub"
+
+  # Test 17 (RESOLUTION + argv, AC1/AC4): the resolved binary reaches the Python
+  # argv, and the create call carries all three labels. Asserted on the stub's
+  # CAPTURED ARGV — the only surface that proves what was actually invoked.
+  # Guard first: the die message and the default candidate array must stay in step.
+  local std
+  for std in "${GH_STD_CANDIDATES[@]}"; do
+    /usr/bin/grep -qF "$std" <<<"$(declare -f resolve_gh_bin)" \
+      || die "self-test: die message does not name standard candidate $std — message and GH_STD_CANDIDATES have drifted"
+  done
+  # PMO_GH_BIN is deliberately left EMPTY here. The stub is reachable only via the
+  # candidate array, which is a shell variable the Python child cannot inherit — so
+  # the only path from stub to argv runs through the gate's resolve-then-export.
+  # Pre-setting PMO_GH_BIN instead would let the child inherit it directly and the
+  # arm would pass with the gate deleted (verified by mutation).
+  : > "$gh_argv"
+  local ap_report
+  ap_report="$( GH_BIN=""; GH_PRE_PIN=""; PMO_GH_BIN=""; \
+                GH_STD_CANDIDATES=("$gh_stub"); \
+                export PMO_STUB_ARGV="$gh_argv"; export GH_LABEL_SET=full; \
+                EVALS_RESULTS_PATH="$nt_dir" emit_pattern_detect_report 5 3 false true )" \
+    || die "self-test: --apply against the gh stub failed (#5067 AC1)"
+  /usr/bin/grep -qF "issue create" "$gh_argv" \
+    || die "self-test: the resolved gh was never invoked with 'issue create' — PMO_GH_BIN did not reach the Python argv (#5067 AC1)"
+  /usr/bin/grep -qF "improvement,auto-promoted-pattern,status: proposed" "$gh_argv" \
+    || die "self-test: the create call did not carry all three labels (#5067 AC4)"
+  /usr/bin/grep -qF "https://github.test/stub/issues/1" <<<"$ap_report" \
+    || die "self-test: --apply did not report the created issue URL (#5067 AC1)"
+  if /usr/bin/grep -q 'Errno 2' <<<"$ap_report"; then
+    die "self-test: --apply still reports the bare-gh Errno 2 — the resolution fix regressed (#5067 AC1)"
+  fi
+
+  # Test 18 (FAIL-LOUD, AC2): when the ladder exhausts, the tool exits 1 with a
+  # message naming every location searched — not a bare Errno 2 swallowed inside
+  # the per-cluster loop. Exhaustion is forced by rebinding the candidate array in
+  # a SUBSHELL (die() exits, so an un-subshelled call would tear down the suite).
+  local nx="$gh_dir/nonexistent"
+  if ( GH_BIN=""; GH_PRE_PIN=""; PMO_GH_BIN="$nx/gh"; \
+       GH_STD_CANDIDATES=("$nx/a" "$nx/b" "$nx/c"); resolve_gh_bin ) 2>"$gh_err"; then
+    die "self-test: resolve_gh_bin succeeded with every candidate absent (#5067 AC2)"
+  fi
+  for std in "${GH_STD_CANDIDATES[@]}" 'PMO_GH_BIN' 'pre-pin'; do
+    /usr/bin/grep -qF "$std" "$gh_err" \
+      || die "self-test: fail-loud message does not name '$std' (#5067 AC2)"
+  done
+  if /usr/bin/grep -q 'Errno 2' "$gh_err"; then
+    die "self-test: fail-loud message degraded to a bare Errno 2 (#5067 AC2)"
+  fi
+  # Control: the SAME resolver must SUCCEED when one candidate is executable, so
+  # the arm above cannot be greened by a resolver that always dies.
+  local ok_bin
+  ok_bin="$( GH_BIN=""; GH_PRE_PIN=""; PMO_GH_BIN=""; \
+             GH_STD_CANDIDATES=("$nx/a" "$gh_stub"); resolve_gh_bin && echo "$GH_BIN" )" \
+    || die "self-test: resolve_gh_bin control arm failed — an executable candidate was not selected (#5067 AC2)"
+  [[ "$ok_bin" == "$gh_stub" ]] \
+    || die "self-test: resolve_gh_bin selected '$ok_bin', expected the executable candidate (#5067 AC2)"
+
+  # Test 19 (LABEL PRE-FLIGHT): a missing label fails ONCE, by name, with the
+  # --emit-fix remedy — not N repeats and not a silently-created malformed label.
+  # This is the second half of the defect: even a resolved gh cannot promote until
+  # the label exists, because the promoter APPLIES labels and never creates them.
+  : > "$gh_argv"
+  if ( GH_BIN="$gh_stub"; PMO_STUB_ARGV="$gh_argv"; export PMO_STUB_ARGV; \
+       GH_LABEL_SET=partial; export GH_LABEL_SET; preflight_labels ) 2>"$gh_err"; then
+    die "self-test: preflight_labels passed with auto-promoted-pattern absent (#5067)"
+  fi
+  /usr/bin/grep -qF "auto-promoted-pattern" "$gh_err" \
+    || die "self-test: pre-flight failure did not name the missing label (#5067)"
+  /usr/bin/grep -qF -- "--emit-fix" "$gh_err" \
+    || die "self-test: pre-flight failure did not cite the --emit-fix remedy (#5067)"
+  # Specificity: it must name ONLY the absent label, not the two that are present.
+  if /usr/bin/grep -qE 'not present in [^:]*: .*(improvement|status)' "$gh_err"; then
+    die "self-test: pre-flight reported a PRESENT label as missing (#5067)"
+  fi
+  # One call, not N: the pre-flight reads the label set exactly once.
+  local ll_calls
+  ll_calls="$(/usr/bin/grep -c '^label list' "$gh_argv" || true)"
+  [[ "$ll_calls" == "1" ]] \
+    || die "self-test: pre-flight made $ll_calls label-list calls, expected exactly 1 (#5067)"
+  # Control: the SAME pre-flight must PASS on a complete label set.
+  ( GH_BIN="$gh_stub"; PMO_STUB_ARGV="$gh_argv"; export PMO_STUB_ARGV; \
+    GH_LABEL_SET=full; export GH_LABEL_SET; preflight_labels ) 2>/dev/null \
+    || die "self-test: pre-flight rejected a COMPLETE label set — the check is not discriminating (#5067)"
+
+  # Test 19b (END-TO-END, the arm that makes the GATE load-bearing): --apply over a
+  # real qualifying cluster with the label absent must ABORT BEFORE any create.
+  # Testing preflight_labels in isolation is not enough — it passes even when the
+  # gate never calls it (verified by mutation), which is precisely the shape of the
+  # defect being fixed: a promotion path that fails only at the point of no return.
+  : > "$gh_argv"
+  if ( GH_BIN=""; GH_PRE_PIN=""; PMO_GH_BIN=""; \
+       GH_STD_CANDIDATES=("$gh_stub"); \
+       export PMO_STUB_ARGV="$gh_argv"; export GH_LABEL_SET=partial; \
+       EVALS_RESULTS_PATH="$nt_dir" emit_pattern_detect_report 5 3 false true ) >/dev/null 2>"$gh_err"; then
+    die "self-test: --apply proceeded with auto-promoted-pattern absent — the gate does not pre-flight (#5067)"
+  fi
+  if /usr/bin/grep -qF "issue create" "$gh_argv"; then
+    die "self-test: --apply reached 'issue create' despite a missing label — a malformed label would have been created (#5067)"
+  fi
+  /usr/bin/grep -qF "auto-promoted-pattern" "$gh_err" \
+    || die "self-test: end-to-end --apply abort did not name the missing label (#5067)"
+  /bin/rm -rf "$gh_dir"
+
   /bin/rm -rf "$nt_dir" "$ntz_dir"
 
   echo "self-test: PASS"
@@ -992,6 +1196,9 @@ run_self_test() {
   echo "  #3121 Arm B (specificity): a 2-event/1-version token is blocked by the band's >=2-version limb"
   echo "  #3121 Arm C (AC4 regression): the qualifying cluster + promotion title are byte-unchanged"
   echo "  #3121 placement guard: the band renders in the zero-qualifying case (above the early exit)"
+  echo "  #5067 Test 17 (AC1/AC4): the resolved gh reaches the Python argv; the create carries all three labels"
+  echo "  #5067 Test 18 (AC2): an exhausted ladder fails loud naming all five locations, never a bare Errno 2"
+  echo "  #5067 Test 19: a missing label fails ONCE by name with the --emit-fix remedy (1 label-list call)"
   exit 0
 }
 

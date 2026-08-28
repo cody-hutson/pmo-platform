@@ -283,13 +283,14 @@ Re-verified at Engineering Commit 0: `renumber-adr.py --detect` → `ANCHOR 141 
 
 | Slot | Status | Claimed by |
 |---|---|---|
-| ADR-142 | reserved | *(unclaimed)* |
-| ADR-143 | reserved | *(unclaimed)* |
+| ADR-142 | **withdrawn — no longer allocatable** | Taken on `origin/main`: sibling PR #6119 **merged during Engineering** (`15e6bf01`), landing `release/ADRs/ADR-142-…`. The claim that was advisory at Commit 0 is now real, and the oracle re-anchored `ANCHOR 142 / NEXT-FREE 143` accordingly. See Deviation Log 21 |
+| ADR-143 | **claimed** | #5067 — `core/ADRs/ADR-143-provenance-is-the-eighth-label-group.md` (slice 2) |
 | ADR-144 | reserved | *(unclaimed)* |
 | ADR-145 | reserved | *(unclaimed)* |
 | ADR-146 | reserved | *(unclaimed)* |
+| ADR-147 | reserved | *(unclaimed)* — table extended by one to preserve five allocatable slots after 142's withdrawal, per the `[ASSUMPTION – CONFIRM]` extension rule below |
 
-**Allocation rule — collision-safe under P0 serial.** `renumber-adr.py --next-free` anchors on `origin/main`, so it returns **142 for every spoke on this branch** regardless of what earlier slices already committed. Do **not** re-derive the number per spoke. Instead: each ADR-warranted spoke, in Implementation-Sequence order, claims the **lowest unclaimed slot in the table above**, writes its ADR file on the branch, and updates the row in the same commit. A spoke whose proposal deduplicates into an ADR already written on the branch **cites it and claims no slot**.
+**Allocation rule — collision-safe under P0 serial.** `renumber-adr.py --next-free` anchors on `origin/main`, so it returns the **same** number for every spoke on this branch regardless of what earlier slices already committed — and that number is **not stable across the release**: it re-anchors whenever a sibling merges to `origin/main`, which is exactly what happened to 142 mid-Engineering. Do **not** re-derive the number per spoke and do **not** treat a fresh oracle reading as your allocation. Instead: each ADR-warranted spoke, in Implementation-Sequence order, claims the **lowest unclaimed slot in the table above**, writes its ADR file on the branch, and updates the row in the same commit. A spoke whose proposal deduplicates into an ADR already written on the branch **cites it and claims no slot**.
 
 **Warranted set (Stage 5): six proposals — #5067, #4227, #4200, #5268, #5253, #4912 — resolving to five distinct decisions after dedup**, which is why five slots are reserved. The scope-lock record does **not** name which two proposals merge; that determination belongs to the second of the two merging spokes at its own commit. `[ASSUMPTION – CONFIRM]` If a sixth *distinct* decision emerges, the spoke extends the table by re-running the oracle against `origin/main` **and** scanning the branch's own `core/ADRs/` ∪ `release/ADRs/`, and records the extension in the Deviation Log. **Not warranted:** #4974 (adopts a shipped classifier rather than re-deciding it), #4416 (bounded parameter, one function, revertable).
 
@@ -419,6 +420,24 @@ The binding quantity is *cumulative* consumption inside the sliding five-hour wi
 
 **Step 3 is D-CR3 and is not discharge-able inside the PR.** `label-taxonomy.md` states it in one sentence: *reconciliation DETECTS; it does not MATERIALIZE.* Declaration and materialization are two obligations. #5067's AC3 is satisfied by the operator step, not by the merge — and CIAC-5's label limb is gated on it.
 
+**Step 3 — exact invocation.** Rendered read-only by `--emit-fix` at Engineering and reproduced verbatim; run it from the repo root so `gh` resolves the repo from the remote (no `--repo` literal, per the path-portability rule):
+
+```bash
+# Re-render first, then run ONLY the auto-promoted-pattern CREATE line:
+python3 core/deploy/tools/check-label-parity.py \
+  --source core/specs/label-taxonomy.md \
+  --source core/packs/_common/pack.toml \
+  --emit-fix
+
+gh label create 'auto-promoted-pattern' --color 'D4C5F9' --description 'Filed automatically by the release-learnings synthesizer'\''s cross-release pattern detector; awaiting triage. Persists through close (the schema-maintenance trigger counts it).'
+```
+
+**Effect:** creates one GitHub label. **Reversibility: MODERATE** — a label is repository *state*; `git revert` does not remove it, and deletion is a separate `gh label delete 'auto-promoted-pattern' --yes`. **Rollback ordering:** revert the merge **first**, then delete the label, so the parity checker does not immediately re-flag the deletion as fresh drift.
+
+**Verification after execution:** re-read the live set (`gh label list --limit 500 --json name`) and assert the name is present against a non-zero control arm (`improvement` must also return present); then re-run `check-label-parity.py` and assert the row has left MISSING.
+
+**Expected-until-executed, not a defect.** Between merge and Step 3, Check 51 reports `auto-promoted-pattern` as MISSING. That report is the gate working correctly — a check that cannot create a label cannot clear a MISSING it reports. It moves the MISSING set from 3 entries to 4; it **cannot** turn `deploy.sh --check` red, because `label-parity` resolves to `warn` (no `.mode` file is tracked) and the warn arm does not increment `ISSUES`. Three pre-existing entries (`triage: stale`, `triage: duplicate`, `triage: quick-win`) are already in that set at HEAD and are **not** this release's scope.
+
 ### Schema Migrations
 
 None. No schema change, no data migration, no destructive operation in this release.
@@ -464,6 +483,8 @@ None. No schema change, no data migration, no destructive operation in this rele
 | 18 | Contention map is complete over in-release members + open PRs | **#4714** (OPEN issue, milestone `note-resolver-and-corpus-lint`) edits `release/tools/check-release-body-drift.sh` and appears in **neither** the Stage-4 Contention Map nor the hub's per-wave pre-spawn check — that check queries open **PRs**, not open **issues** on shared paths. Recorded as **R15**; Engineering must re-check before touching that file | Collective Review, carried into Engineering |
 | 19 | ADR numbering unresolved (ADR-142 double-claimed by two unmerged siblings) | **Follow the oracle — allocate from 142.** Unmerged claims are advisory: a numbering **gap** blocks the repo, a **duplicate** is tooled. All five ADR-proposing spokes recommended 148+; the operator followed the oracle instead. Re-verified at Commit 0: `ANCHOR 141 (origin/main)` · `NEXT-FREE 142` | **D-CR2**, Collective Review |
 | 20 | D-Version recorded as **v4.39** at Stage 4 | **Re-verified at Engineering Commit 0 → PROCEED, and deliberately NOT baked into this file.** Three claimed-set arms each with sensitivity + specificity controls return `v4.39` × 0; `claim-version.sh --dry-run` independently recomputes `v4.39`. The plan is slug-primary per ADR-092 and carries `{{RELEASE_VERSION}}`, so a concurrent sibling claiming the slot costs a re-version at Stage 12 and **no edit to this file** | Engineering Commit 0, #6146 |
+
+| 21 | ADR slots reserved as **142–146**; ADR-142 allocatable because the two sibling claims on it were unmerged and therefore advisory | **ADR-142 withdrawn; #5067 takes ADR-143; table extended to 147.** Sibling PR #6119 **merged to `origin/main` during Engineering** (`15e6bf01`), landing `release/ADRs/ADR-142-…`. Its claim stopped being advisory at that moment, and the oracle re-anchored: `ANCHOR 142 (origin/main)` · `NEXT-FREE 143`. Taking 142 would now duplicate **merged mainline**, not an unmerged claim — a materially different thing from the case D-CR2 ratified. Following the oracle (D-CR2's operative instruction) therefore yields **143**. Verified free in BOTH ADR dirs on the branch and on `origin/main` before claiming; `--detect` confirms `CLAIM ADR-143 … BINDS`. Table extended by one slot to preserve five allocatable slots, per the extension rule in § ADR Allocation | Engineering slice 2, #6145 |
 
 ## Verification Evidence
 
