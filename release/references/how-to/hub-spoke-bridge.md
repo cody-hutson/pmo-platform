@@ -843,7 +843,7 @@ A skipped **release-scoped** sub-task uses the same format with the milestone na
 
    **Release-scoped stages omitted from the table by design:** Stage 4 (Planning), Stage 9 (Plan Review — gate, no spoke), Stage 12 (Execute) each run as a single per-release spoke/gate; there is no cross-issue parallelism axis at these stages, so they do not need an explicit rule. The table covers the per-issue stages (5/6/7/8) plus Close (release-scoped but with internal-mutation serialization concerns).
 
-   **Parallel-safe is coordination semantics, not usage-window semantics (orthogonality note).** "Parallel-safe" in the table above is a *coordination*/file-contention property — it means the stage's output channel has no shared write surface, so concurrent spokes do not race on a commit or file. It is **orthogonal** to the per-account 5-hour usage-window envelope: concurrent Agent-tool spokes still draw *cumulatively* against the shared usage window even when they have no file-contention surface (see § Per-Account Usage Window Constraint). The two gates compose — a stage marked parallel-safe here may still require SERIALIZE / DEFER / REDUCE-scope under the usage-window gate (Step 5.5 below). Do not read "parallel-safe" as "usage-window-free."
+   **Parallel-safe is coordination semantics, not usage-window semantics (orthogonality note).** "Parallel-safe" in the table above is a *coordination*/file-contention property — it means the stage's output channel has no shared write surface, so concurrent spokes do not race on a commit or file. It is **orthogonal** to the per-account 5-hour usage-window envelope: concurrent Agent-tool spokes still draw *cumulatively* against the shared usage window even when they have no file-contention surface (see § Per-Account Usage Window Constraint). The two gates compose — a stage marked parallel-safe here may still require SERIALIZE / DEFER / REDUCE-scope under the usage-window gate (Step 5.5 below). Do not read "parallel-safe" as "usage-window-free." And do not read it as a licence for **width**: how many spokes go in flight at once is set by the wave-width guidance at [`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4.3c, never by this table.
 
    #### Step 5.5: Quota check before parallel launch
 
@@ -855,7 +855,7 @@ A skipped **release-scoped** sub-task uses the same format with the milestone na
 
    | Verdict | Hub action |
    |---|---|
-   | **PROCEED** | Launch all N in parallel (existing behavior) |
+   | **PROCEED** | Launch `min(N, W_max)` in parallel — all N when `W_max = N` (the existing behavior); when `W_max < N`, split into `⌈N/W_max⌉` sub-waves and re-run this check before each. Width guidance: [`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4.3c |
    | **SERIALIZE** | Launch one spoke at a time, halt on first usage-limit failure (reduces simultaneous-draw count) |
    | **DEFER** | Hold the batch for the next window; surface a reset-time estimate (reduces cumulative draw entirely) |
    | **REDUCE-scope** | Launch with a smaller per-wave footprint — compact prompts, narrower scope, fewer canonical reads (reduces per-wave consumption) |
@@ -2513,10 +2513,12 @@ window-aware-timing / serialize-on-failure mitigations, see
 § Per-Account Usage Window Constraint below. Before issuing the
 batch, the hub runs Checkpoint B of the quota-budget gate
 (Procedure 2 Step 5.5 / [`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md))
-and acts on its verdict — PROCEED launches all N; SERIALIZE
-launches one at a time; DEFER holds the batch for the next
-window (with an operator override-to-PROCEED exit); REDUCE-scope
-launches with a smaller per-wave footprint. STAGGER is a
+and acts on its verdict — PROCEED launches `min(N, W_max)`: all
+N when `W_max = N`, otherwise `⌈N/W_max⌉` re-gated sub-waves per
+the protocol § 4.3c; SERIALIZE launches one at a time; DEFER
+holds the batch for the next window (with an operator
+override-to-PROCEED exit); REDUCE-scope launches with a smaller
+per-wave footprint. STAGGER is a
 secondary rate-limit-only defense, not a usage-window mitigation.
 
 **Composition with  Agent Handoff Framework:** 's

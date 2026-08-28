@@ -92,7 +92,7 @@ Checkpoint B fires before the hub issues **any** `Agent` invocation — whether 
 2. Estimate cumulative cost: `N_planned × per-spoke-cost-estimate` (from the Checkpoint A baseline, refined by observed actuals from prior launches this release where available).
 3. Compare against the *remaining* window envelope (operator-stated state at hub start, adjusted for elapsed-window time and any per-batch override).
 4. Read the host-API pool state per § 4.1 and render the **host-API axis** verdict per § 4.3b.
-5. **Combine the two axes — DEFER-dominant disjunction.** If the host-API axis renders `DEFER`, Checkpoint B renders `DEFER`; otherwise Checkpoint B renders the usage-window verdict **unchanged**. The usage-window verdict is the one rendered by § 4.3 when `N_planned ≥ 2` and by § 4.3a when `N_planned = 1`. **The pass-through is opaque**: on a host-API `PROCEED` this step neither inspects, reformats, nor restates what the usage-window branch produced — whatever that branch renders is carried through as-is. That opacity is load-bearing, and it is why this rule needs no edit when the usage-window branch's own output grows.
+5. **Combine the two axes — DEFER-dominant disjunction.** If the host-API axis renders `DEFER`, Checkpoint B renders `DEFER`; otherwise Checkpoint B renders the usage-window verdict **unchanged**. The usage-window verdict is the one rendered by § 4.3 when `N_planned ≥ 2` and by § 4.3a when `N_planned = 1`, and that branch renders the wave-width output `W_max` (§ 4.3c) on the same line as its verdict. **The pass-through is opaque**: on a host-API `PROCEED` this step neither inspects, reformats, nor restates what the usage-window branch produced — whatever that branch renders is carried through as-is. That opacity is load-bearing, and it is why this rule needs no edit when the usage-window branch's own output grows.
 6. On any non-PROCEED verdict: produce a Decision Briefing surfacing the verdict + recommendation to the operator **BEFORE** launching any spoke.
 
 ### 4.3 Verdict hierarchy (usage-window axis)
@@ -101,7 +101,7 @@ The verdict hierarchy is the binding output. Each verdict names the surface it r
 
 | Verdict | Meaning | Surface reduced |
 |---|---|---|
-| **PROCEED** | Cumulative estimate fits the remaining envelope comfortably | none — launch all N in parallel (existing behavior) |
+| **PROCEED** | Cumulative estimate fits the remaining envelope comfortably | the simultaneous in-flight **count**, bounded at `W_max` per § 4.3c (`W_max = N` ⇒ every spoke goes in flight at once, the existing behavior). Disambiguated against SERIALIZE below: SERIALIZE reduces the count to exactly one; § 4.3c bounds it at `W_max` |
 | **SERIALIZE** | Envelope is tight; launch one spoke at a time, halt on first usage-limit failure | the simultaneous-spawn/draw **count** (one in-flight draw at a time) |
 | **DEFER** | Remaining envelope cannot absorb the batch | the batch is held for the next window; cumulative draw deferred entirely (see the operator-override exit, § 4.5) |
 | **REDUCE-scope** | The batch can fit only with a smaller per-wave footprint | the per-wave **consumption** (compact prompts, narrower scope, fewer canonical reads per spoke) |
@@ -115,7 +115,7 @@ A singleton launch renders from a **reduced two-value enum drawn from the same v
 | **PROCEED** | The stated band, decayed for elapsed time, is not `near-tail` | Launch proceeds. The verdict is still **rendered**, not skipped — see the rendering obligation below |
 | **DEFER** | The stated band is `near-tail`, or decays into `near-tail` | Inherits § 4.5's operator-override-to-PROCEED exit unchanged, so the deadlock escape already designed for waves applies to singletons for free |
 
-**SERIALIZE is structurally meaningless at N = 1** — the launch is already serial. **REDUCE-scope is not a singleton verdict**: it remains available as a hub-side *mitigation* (compact the prompt, narrow the scope, cut canonical reads) applied **before** re-rendering, which is a different act from returning it as a verdict.
+**SERIALIZE is structurally meaningless at N = 1** — the launch is already serial. **Wave-width guidance (§ 4.3c) is inert at N = 1 for the same reason** — no wave is narrower than one — and renders `W_max n/a (N=1)`; the singleton enum below is unchanged. **REDUCE-scope is not a singleton verdict**: it remains available as a hub-side *mitigation* (compact the prompt, narrow the scope, cut canonical reads) applied **before** re-rendering, which is a different act from returning it as a verdict.
 
 **Cost, and why per-launch firing is affordable — stated per axis, because the two differ.** The **usage-window** axis is **zero tool calls**: a hub-side reasoning step over state the hub already holds (§ 6's session-start capture) plus in-session elapsed time. It is not an instrument, so it cannot itself draw against the envelope it protects. The **host-API** axis costs **one read per routing turn** — not one per spoke — and that read is free against the pools it measures, because the rate-limit endpoint is not itself metered. Its only cost is **cross-axis**: the one call spends the *usage-window* axis to read the *host-API* axis, which is stated here rather than hidden. Both figures stay small enough that the original conclusion survives intact: **per-launch firing is affordable, and there is no launch shape too small to gate.**
 
@@ -145,6 +145,92 @@ The endpoint returns a **wider resource map** than the two pools modelled here �
 **Probe failure fails OPEN, and the reason is evidentiary — not convenience.** An exhausted pool does **not** make the probe fail: the rate-limit endpoint is unmetered, so exhaustion presents as a *successful* read returning zero remaining. A probe **failure** therefore evidences an instrument or authentication fault and carries **no exhaustion signal at all**. Failing closed there would deadlock the pipeline on a fault that says nothing about capacity. So: basis → `UNSTATED` (§ 6.1's existing basis token, reused — a *basis* token, not a verdict token); axis → `PROCEED`; and the failure reason is **rendered**, never swallowed. The residual risk this leaves — a launch proceeding blind to the pool state — is discharged by the write-early discipline, which is why the two belong together.
 
 **Rendering obligation extension.** § 4.3a's rendering obligation applies unchanged and widens by one requirement: with two axes, a verdict naming no basis cannot tell a reader which axis produced it. The rendered line therefore names **both bases** and, for the host-API axis, the observed `remaining/limit` per modelled pool. Cite § 4.3a for the obligation itself; it is not restated here.
+
+### 4.3c Wave-width guidance (second output — not a verdict)
+
+The verdict decides **whether** to launch. It does not decide **how many at once**, and those are
+different questions because they reduce different quantities:
+
+- **Cumulative draw is invariant under width.** N spokes draw N spokes' worth against the window
+  whether they run nine-at-once or one-at-a-time. Width buys nothing on the envelope — which is
+  why the verdict, correctly, does not read it.
+- **Interruption cost is linear in width.** A wave of `W` that dies mid-flight destroys up to `W`
+  in-flight spoke-runs; the same interruption in a narrower arrangement destroys fewer and banks
+  the rest. Width is the only lever on that loss.
+
+Checkpoint B therefore renders a second output alongside its verdict: **`W_max`**, the maximum
+spokes it may put in flight simultaneously. `W_max` is **not a verdict**, mints no new token, and
+never converts a PROCEED into a non-launch. The existing hierarchy already brackets it —
+**PROCEED is `W_max = N`, SERIALIZE is `W_max = 1`** — and this section supplies the interior
+those endpoints leave undefined.
+
+**Which axis it belongs to.** `W_max` is an output of the **usage-window** axis (§ 4.3 / § 4.3a),
+not of the host-API axis and not of the combination step. § 4.2's combination of the two axes is
+an opaque pass-through: on a host-API `PROCEED` it carries the usage-window branch's output
+through as-is, `W_max` included, without inspecting or restating it. Nothing in this section
+changes that rule.
+
+**What it keys on.** The same basis the verdict already reads: the operator-stated band (§ 6),
+decayed for elapsed time. No new input, no new tool call, and nothing measured that § 6.1 forbids
+on this axis.
+
+| Verdict basis (stated band, decayed) | Verdict | `W_max` |
+|---|---|---|
+| `fresh` | PROCEED | **`N`** — uncapped; no split |
+| `partial-N%` | PROCEED | **3** |
+| **`UNSTATED`** (§ 6.1 conservative default) | PROCEED | **2** |
+| Envelope tight | SERIALIZE | **1** (definitionally) |
+| `near-tail` | DEFER | **0** — nothing launches. On the § 4.5 override-to-PROCEED exit, `W_max = 1` |
+
+`UNSTATED` sits **tighter than** `partial-N%` deliberately: the conservative default is the
+assume-less-headroom posture, so it cannot buy more width than a band the operator actually
+stated. The consequence is intended — **stating the band is what buys width** — which turns § 6's
+standing request for a stated band into a live incentive rather than a recommendation.
+
+**Observed-interruption demotion — the one usage-window input that is measured, not declared.**
+§ 6.1 forbids the check from *projecting* remaining quota on this axis. It does not forbid it from
+reading an event the hub witnessed. When a spoke has already died at the account session limit
+during this release, each such death **demotes the basis one step** down the table above
+(`fresh` → `partial-N%` → `UNSTATED` → SERIALIZE), floor `W_max = 1`. A death at the limit
+falsifies whatever band was stated before it; launching on against the stale declaration is the
+failure this closes. Demotion is used rather than arithmetic because the basis is an **ordinal**,
+and halving an ordinal is a category error.
+
+**Splitting, and why narrowing compounds.** When `W_max < N`, the wave splits into
+`⌈N / W_max⌉` sub-waves launched in sequence. Because § 4 gates **every** `Agent`-tool launch,
+Checkpoint B fires again before each sub-wave. Narrowing therefore bounds the loss **and**
+multiplies how often the envelope is re-read: a nine-wide wave is gated once; the same nine spokes
+at `W_max = 2` are gated five times, each against a fresher basis.
+
+**Rendering.** The width output rides the § 4.3a rendering obligation on the same line as the
+verdict — it is not separately announced. The line already names both axes' bases per § 4.3b's
+rendering-obligation extension; the width field joins it. For example:
+
+`Checkpoint B: PROCEED · W_max 2 · N=9 → 5 sub-waves, re-gated · usage-window basis UNSTATED — conservative default [ASSUMPTION – CONFIRM] · host-API basis MEASURED [SOURCE] core 4966/5000, graphql 4780/5000`
+
+At `N = 1` width guidance is **structurally inert** — no wave is narrower than one — exactly as
+SERIALIZE is structurally meaningless at `N = 1` (§ 4.3a). Render `W_max n/a (N=1)`.
+
+**This is not the fixed batch-size count § 7 rejects.** § 7 rules out a fixed concurrent-count as
+the predictor of *envelope overrun*, and that ruling stands untouched: the **verdict** remains the
+sole envelope gate and still reads cumulative draw against the remaining window. `W_max` predicts
+nothing about the envelope. It bounds *exposure to a single interruption* — a quantity literally
+counted in spokes — and it is **not fixed**: it moves with the same basis the verdict moves with.
+Two questions, two units.
+
+**Neither coordination-safety nor host-API health is a licence for width.** A stage marked
+parallel-safe has no file-contention surface; a healthy host-API pool has requests available.
+Both are **availability** properties. Neither says anything about how much work one interruption
+would destroy, and reading either as permission to go wide is the substitution this section exists
+to foreclose. Width comes from `W_max` above — never from a stage's parallelism class (Procedure 2
+Step 5), and never from the host-API reading. The converse is stated at § 4.3b and holds jointly
+with this one: narrowing a wave is not a host-API *mitigation* either, because a depleted pool
+blocks every spoke equally regardless of how the batch is arranged. Width and pool health are
+independent in both directions.
+
+**Calibration.** The `W_max` values are provisional, `[CALIBRATE-AFTER-3]` (MEDIUM confidence).
+No release has yet recorded the distribution of *work destroyed per interruption*, which is the
+quantity they bound; until one does, they calibrate against § 7's registered trigger.
 
 ### 4.4 Secondary — STAGGER (rate-limit only, not load-bearing for the usage window)
 
@@ -234,13 +320,14 @@ The following are provisional with one empirical datum and carry the `[CALIBRATE
 - the **§ 5.1 cutover predicate's own thresholds** — `n_B ≥ 3`, `rMAD_B ≤ 0.50`, confidence `≥ MEDIUM`, best-effort token fraction `≤ 0.50`, and leave-one-out median absolute percentage error `≤ 50 %`. These are the calibration target for the band→telemetry cutover, and the **calibrating instrument is the leave-one-out backtest** (`estimate-usage.sh --delta`), which is the only one of the five that measures accuracy rather than self-consistency. Recalibrate per bucket, never globally;
 - the **cumulative-draw budget** threshold — the per-spoke cost estimate combined with the batch-vs-remaining-window threshold at which Checkpoint B renders SERIALIZE / DEFER / REDUCE-scope;
 - the **host-API `20 %`-remaining floor** (§ 4.3b) — the fraction of a pool's `limit` below which the host-API axis renders DEFER. Its **successor form is recorded now** so the fixed floor is not mistaken for a permanent answer: `remaining < N_planned × per-spoke gh-call estimate × safety` supersedes it, per the same conditioned-cutover discipline § 5.1 applies, **once a per-spoke `gh`-call figure exists** — which it does not today, which is exactly why the draw-relative form was not taken first. As in § 5.1, **the fixed floor is the retained FLOOR, not a thing being deleted**: until the successor's precondition holds, the floor binds.
+- the **§ 4.3c `W_max` values** — the wave widths the usage-window basis maps to. They are provisional and bound a quantity no release has yet recorded: the distribution of *work destroyed per interruption*. The verdict bands above calibrate against cumulative draw; these calibrate against that loss distribution, which is a different measurement and needs a different instrument. Until one exists they ride § 7's registered trigger unchanged.
 
 **The calibration target is the cumulative-draw budget — NOT a stagger-delay value and NOT a fixed batch-size count.** A fixed concurrent-count is not the binding predictor: a small batch on a near-tail window can overrun while a large batch on a fresh window succeeds — and at the limit, a *single* spoke on a near-tail window can overrun, which is why § 1's scope covers every launch rather than every batch. The binding variable is the *remaining* window envelope against cumulative draw, which a count does not read. The calibration trigger is registered at Stage 13 on the release log; recalibrate after this protocol's introducing release plus two further post-cutover releases supply an outcome distribution.
 
 ## 8. Composition
 
 - **Per-Account Usage Window Constraint** ([`../how-to/hub-spoke-bridge.md`](../how-to/hub-spoke-bridge.md) § Per-Account Usage Window Constraint) — this protocol is the active gate that operationalizes that subsection's documented constraint and load-bearing mitigations (pre-flight check / quota-budgeting / window-aware timing / serialize-on-failure / reduce-consumption). The subsection documents the *what*; this protocol defines the *gate*.
-- **Parallelism Rules orthogonality** ([`../how-to/hub-spoke-bridge.md`](../how-to/hub-spoke-bridge.md) Procedure 2 Step 5) — parallel-safe is a *coordination*/file-contention property, orthogonal to the usage-window envelope. The two gates compose: a stage marked parallel-safe has no file-contention surface but may still require SERIALIZE / DEFER / REDUCE-scope under the usage-window gate.
+- **Parallelism Rules orthogonality** ([`../how-to/hub-spoke-bridge.md`](../how-to/hub-spoke-bridge.md) Procedure 2 Step 5) — parallel-safe is a *coordination*/file-contention property, orthogonal to the usage-window envelope. The two gates compose: a stage marked parallel-safe has no file-contention surface but may still require SERIALIZE / DEFER / REDUCE-scope under the usage-window gate. It is not a licence for **width** either: how many spokes go in flight at once is set by § 4.3c's `W_max`, never by the stage's parallelism class.
 - **Hub action tracking** ([`../../../core/standards/hub-action-tracking.md`](../../../core/standards/hub-action-tracking.md)) — when DEFER fires, the hub MAY emit an action-item entry (e.g., "Resume Stage 5 batch after window-reset at HH:MM") so the deferred batch is tracked and resumed.
 - **Autonomy Tier (no downgrade).** The usage-window verdicts are decisions about *whether and when* to launch; they do not reclassify any stage's Autonomy Tier (Stage 5 / 7 / 8 remain auto-launch). The gate applies at the write-serialized stages (6 / 13) too — being serial by design bounds the *batch* surface, not the remaining envelope, and gating a singleton launch is not an autonomy downgrade any more than gating a wave is.
 

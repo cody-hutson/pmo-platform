@@ -67,6 +67,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-137](ADR-137-close-out-measurements-reconstruct-what-the-close-removes.md) | A chore-PR-borne close-out measurement reconstructs what the close removes; it does not assume its evidence is invariant | Proposed | 2026-08-21 | closeout-reports-what-shipped |
 | [ADR-142](ADR-142-resolve-the-root-do-not-exempt-the-fixture.md) | Self-test reachability at a destructive-scope boundary is restored by resolving the root, not by exempting the fixture | Proposed | 2026-08-24 | selftests-actually-test |
 | [ADR-144](ADR-144-checkpoint-b-second-axis-is-measured-not-declared.md) | Checkpoint B's second axis is measured, not declared: scoping refuse-to-synthesize to the usage-window axis | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
+| [ADR-145](ADR-145-wave-width-is-a-second-checkpoint-b-output-not-a-verdict.md) | Wave width is a second Checkpoint B output, not a verdict | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
