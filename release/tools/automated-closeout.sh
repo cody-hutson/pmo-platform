@@ -5809,8 +5809,15 @@ phase_run_verification() {
         _v5_all_ours=1                                   # set UNCONDITIONALLY per
         while IFS= read -r _v5_straggler; do             # attempt: bash 3.2 does not
           [[ -z "$_v5_straggler" ]] && continue          # scope loop-body assignments,
-          /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx "$_v5_straggler" \
-            || { _v5_all_ours=0; break; }                # and a leaked 0 would be sticky
+          # A HERE-STRING, never a pipe. `grep -q` exits on its FIRST match, so a writer
+          # piped into it takes SIGPIPE — and under this file's `set -o pipefail` that
+          # status can surface as the PIPELINE's, reporting a successful membership match
+          # as a failure and silently widening the straggler scope to issues this run
+          # never touched. The test now has no writer to kill. Empty-list safe: `<<<""`
+          # yields one empty line, the needle is never empty (guarded one line above),
+          # and `-qx` requires a whole-line match.
+          /usr/bin/grep -qx "$_v5_straggler" <<<"$OPEN_ISSUE_LIST" \
+            || { _v5_all_ours=0; break; }                # a leaked 0 would be sticky
         done <<< "$_v5_list"
         [[ "$_v5_all_ours" -eq 1 ]] || break             # out-of-scope — report now
       fi
