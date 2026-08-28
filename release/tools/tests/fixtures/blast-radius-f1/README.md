@@ -32,8 +32,13 @@ That design had three defects, all of them live:
    The empty-comparison path emitted `ok` — a PASS for an assertion whose subject
    never ran.
 
-A committed golden removes the git dependency outright rather than hardening it. The
-suite now makes **zero** `git` calls.
+A committed golden removes the git-**history** dependency outright rather than hardening
+it: the suite makes **zero** `git log` and **zero** `git show` calls, so no arm depends on
+a deep clone. It is not zero `git` calls — the tool under test asks `rev-parse
+--is-inside-work-tree` whether its scan root is a work tree, and `--regenerate-golden`
+stamps `rev-parse --short HEAD` into the log row below. Both are index/HEAD reads that
+resolve in a shallow clone; neither walks history. The precise accounting lives in the
+suite's own file header.
 
 ## Layout
 
@@ -46,7 +51,7 @@ fixtures/blast-radius-f1/
 │   └── docs/
 │       ├── a.md
 │       └── target.md
-└── normalized-golden.json # 751 B — deliberately OUTSIDE corpus/
+└── normalized-golden.json # 883 B — deliberately OUTSIDE corpus/
 ```
 
 **`normalized-golden.json` must never live inside `corpus/`.** `normalize()` does not
@@ -68,22 +73,35 @@ corpus file rather than being blamed on the golden.
 
 | Artifact | Bytes | sha256 |
 |---|---|---|
-| `normalized-golden.json` | **751** (trailing newline included) | `2ae110de972f292bc4ecf3a1c7bfa7e8af11f7feca978edc1cf5c44cc5c769c5` |
+| `normalized-golden.json` | **883** (trailing newline included) | `ec46e8a7cd67b2b9e6bf742340f1272a812374cf302f2390b28ec4c7aa461ecb` |
 
 Structural expectations: `stats.total_files_scanned = 3`, `stats.first_order_count = 2`,
-`stats.second_order_count = 0`, `schema_version = "1"`, and `cli_version` **absent**
-(deleted by `normalize()`).
+`stats.second_order_count = 0`, `stats.second_order_status = "fetched"`,
+`stats.unreadable_files = 0`, `stats.scan_scope = "all-files"`,
+`stats.scan_scope_status = "not-run"`, `schema_version = "1"`, and both `cli_version`
+and `stats.scan_scope_status_reason` **absent** (deleted by `normalize()`).
+
+Two of those are worth reading together, because they are the point of the fields.
+`second_order_status = "fetched"` beside `second_order_count = 0` says the depth-2 run
+**measured** the second-order surface and found it empty — a claim the bare `0` could not
+make and which a `--depth=1` run, whose counter is now **absent**, cannot be confused
+with. `scan_scope_status = "not-run"` says tracked scoping was deliberately not attempted
+here, because the runtime root is a `mktemp` copy and not a work tree; `scan_scope`
+records that the count therefore covers the **all-files** population.
 
 ## Generation command — every degree of freedom is pinned
 
 ```bash
-# $CORPUS = fixtures/blast-radius-f1/corpus   $OUT = any directory OUTSIDE $CORPUS
+# $CORPUS = a mktemp COPY of fixtures/blast-radius-f1/corpus  (see the scan-root bullet)
+#   WORK="$(mktemp -d)"; cp -R release/tools/tests/fixtures/blast-radius-f1/corpus "$WORK/corpus"
+#   CORPUS="$WORK/corpus"
+# $OUT = any directory OUTSIDE $CORPUS
 release/tools/blast-radius.sh \
     --format=json \
     --depth=2 \
     --root="$CORPUS" \
     "docs/target.md" \
-  | jq -S 'del(.scanned_at, .scan_root, .stats.elapsed_seconds, .cli_version)' \
+  | jq -S 'del(.scanned_at, .scan_root, .stats.elapsed_seconds, .cli_version, .stats.scan_scope_status_reason)' \
   > "$OUT/normalized-golden.json"
 ```
 
@@ -95,7 +113,20 @@ Each flag is load-bearing, because each one is inside the compared surface:
   each produce a different digest at the same byte count.
 - **`$OUT` must be outside `$CORPUS`.** A stray file in the scan root moves
   `total_files_scanned`.
-- **The file ends with a trailing newline** (`jq`'s default). 751 bytes includes it.
+- **The scan root must be a `mktemp` COPY, not the in-repo `corpus/`.** This is the sixth
+  degree of freedom and the newest. `blast-radius.sh` now scopes its enumeration to
+  git-tracked files when the scan root is a work tree, and emits `stats.scan_scope` /
+  `stats.scan_scope_status` saying which population it measured. Run against the in-repo
+  path the tool sees a tracked root and emits `tracked` / `fetched`; run against the copy
+  — which is what `regenerate_golden()` and the F1 test both do — it sees a non-git root
+  and emits `all-files` / `not-run`. Those are different goldens. Pointing the recipe at
+  the in-repo corpus produces an **881 B** artifact against a sanctioned **883 B** one,
+  and the mismatch diagnostic below names `jq -S`, `--depth`, and a polluted scan root —
+  none of which is the cause.
+- **The deletion set must match `normalize()` in the test.** It carries five fields, not
+  four; `stats.scan_scope_status_reason` is the fifth. An unwidened set here emits a
+  **982 B** golden against the sanctioned 883 B.
+- **The file ends with a trailing newline** (`jq`'s default). The byte count includes it.
 - **Generate from the current `blast-radius.sh`.** Byte-equality with the pre-refactor
   blob is a verified property, not a build dependency — `git show` is not required.
 
@@ -125,10 +156,11 @@ Exits non-zero on any mismatch and prints the localizing diff.
 > **Verify, do not adopt.** The spec is the authority; the generated artifact is the
 > claim under test. If a generated golden does not match the byte count **and** digest
 > above, that is a **finding to report** — never a constant to update. Size alone cannot
-> discriminate: four distinct constructions of this artifact land on exactly 751 bytes
-> with four different digests. Treat *size matches but digest differs* as the
-> **highest**-suspicion signal, not the lowest — it is the signature of a missing
-> `jq -S`, a wrong `--depth`, or a polluted scan root.
+> discriminate: measured on the 751-byte predecessor of this artifact, four distinct
+> constructions landed on exactly that byte count with four different digests. Treat
+> *size matches but digest differs* as the **highest**-suspicion signal, not the lowest —
+> it is the signature of a missing `jq -S`, a wrong `--depth`, a polluted scan root, or
+> (since [#5074](#provenance)) a **git-tracked scan root where the recipe calls for a `mktemp` copy**.
 
 ## Regeneration protocol
 
@@ -154,3 +186,20 @@ reason, a golden diff, and a log row, all in the same diff.
 | Date | Reason | Producing SHA | Bytes | sha256 (16) |
 |---|---|---|---|---|
 | 2026-08-06 | Initial fixture creation — replaces the `git show <sha>:…` history recovery. Golden generated from current `blast-radius.sh`; verified byte-identical to the pre-refactor blob and to the pre-fan-out-cap tool on the same corpus, 30/30 across 3 unrelated scan roots. | (this PR) | 751 | `2ae110de972f292b` |
+| 2026-08-25 | [#5260](#provenance) + [#5074](#provenance) — blast-radius.sh now emits stats.second_order_status (PV-7a Register A) so a not-computed second-order result is distinguishable from a measured-empty one, plus stats.unreadable_files, stats.scan_scope and stats.scan_scope_status (tracked-vs-all-files enumeration scoping). The F1 corpus is a non-git mktemp copy, so it correctly reports scan_scope=all-files / scan_scope_status=not-run; the depth-2 run is MEASURED, so second_order_status=fetched and second_order_count stays present at 0, and total_files_scanned stays 3. normalize() now also deletes the scan-root-class-dependent scan_scope_status_reason. | b39a8dc7 | 883 | `ec46e8a7cd67b2b9` |
+
+## Provenance
+
+The issues whose `blast-radius.sh` behaviour changes this fixture records. Each is
+referenced inline above and links here; this block is their designated home.
+
+- **#5074 — git-ignored-tree enumeration inflating every impact denominator.** Made the
+  scan-root class observable in the tool's output (`stats.scan_scope`,
+  `stats.scan_scope_status`). That is why *size matches but digest differs* now carries a
+  fourth candidate cause: a git-tracked scan root where the recipe calls for a `mktemp`
+  copy. The F1 corpus is a non-git `mktemp` copy, so it reports
+  `scan_scope=all-files` / `scan_scope_status=not-run`.
+- **#5260 — `second_order_count` 0 at depth 1, indistinguishable from a measured empty
+  set.** Added `stats.second_order_status`, so a not-computed second-order result is
+  distinguishable from a measured-empty one. The F1 depth-2 run is MEASURED, so it
+  reports `second_order_status=fetched` with `second_order_count` present at 0.

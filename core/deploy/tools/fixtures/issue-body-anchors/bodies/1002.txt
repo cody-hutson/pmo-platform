@@ -1,0 +1,2 @@
+See `core/deploy/tools/fixtures/issue-body-anchors/targets/fx-beta.md` Phase 4 for the ladder.
+And `core/deploy/tools/fixtures/issue-body-anchors/targets/fx-beta.md` Section 7 is absent from that file.

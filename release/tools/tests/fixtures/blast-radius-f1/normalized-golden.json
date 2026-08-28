@@ -31,8 +31,12 @@
   "stats": {
     "filtered_mirrors": 0,
     "first_order_count": 2,
+    "scan_scope": "all-files",
+    "scan_scope_status": "not-run",
     "second_order_count": 0,
-    "total_files_scanned": 3
+    "second_order_status": "fetched",
+    "total_files_scanned": 3,
+    "unreadable_files": 0
   },
   "target": "docs/target.md"
 }

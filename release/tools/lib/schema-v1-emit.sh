@@ -33,6 +33,23 @@
 readonly SCHEMA_V1_EMIT_VERSION="1"
 
 # ---------------------------------------------------------------------------
+# CLOSED registry of the keys a caller may merge into `stats` via build_json_v1's
+# optional trailing `stats_extra` object ($16). An object seam buys one parameter
+# for every present and future measurement-state field, at the cost a positional
+# parameter does not have: a typo'd key would emit silently. The registry is what
+# bounds that freedom by shape — an unregistered key is a loud EXIT_INTERNAL, not a
+# quiet extra member.
+#
+# A card that adds a measurement-state field appends its key NAMES here. That is a
+# data change, not a signature change: build_json_v1's parameter list does not grow
+# again for this class of field.
+# ---------------------------------------------------------------------------
+SCHEMA_V1_STATS_EXTRA_KEYS=(
+  second_order_status second_order_status_reason second_order_count unreadable_files  # <- #5260
+  scan_scope scan_scope_status scan_scope_status_reason                               # <- #5074
+)
+
+# ---------------------------------------------------------------------------
 # aggregate_matches_v1 — roll a first-order match TSV up into the schema-v1
 # first_order[] array, splitting out mirror-partner entries.
 #
@@ -214,6 +231,25 @@ EOF
 #   $15 schema_version        schema version to stamp (defaults to SCHEMA_V1_EMIT_VERSION
 #                             when omitted); a caller passes its own SCHEMA_VERSION so a
 #                             skew is caught by its pre-emit assertion, not here
+#   $16 stats_extra           OPTIONAL JSON object merged into `stats` (default "{}").
+#                             Every key must be in SCHEMA_V1_STATS_EXTRA_KEYS above; an
+#                             unregistered key exits EXIT_INTERNAL. A member whose value
+#                             is JSON null DELETES the corresponding `stats` member rather
+#                             than emitting it, so a caller can realize PV-7b absence for
+#                             the counter IT owns without the library knowing anything
+#                             caller-specific. A caller that omits $16 — or passes "" —
+#                             gets a BYTE-IDENTICAL envelope to the pre-$16 library.
+#
+# PV-7b invariant, enforced here rather than by caller convention: after the merge, any
+# member whose key ends `_status` and whose value is in the frozen non-measuring set
+# {degraded, not-run} forces its governed counter — `<stem>_count` — out of the emit.
+# The non-measuring set is corpus-frozen (review-discipline-principles.md §8.1 PV-7a/PV-7b;
+# check-milestone-epic-membership.py's emit_m4 omits counters on exactly those two), and
+# the `_status` suffix is the ratified discriminator, so the library needs NO per-caller
+# knowledge. A `_reason` member whose value is the empty string is dropped, not emitted:
+# an empty reason means the caller failed to compute one, and dropping it keeps
+# `has("<field>_reason") == false` a sound absence test instead of a silently-truthy
+# empty string.
 #
 # Emits (stdout): the complete schema-v1 JSON document.
 # ---------------------------------------------------------------------------
@@ -233,8 +269,33 @@ build_json_v1() {
   local second_order_json="${13}"
   local filtered_mirrors_json="${14}"
   local schema_version="${15:-$SCHEMA_V1_EMIT_VERSION}"
+  # TWO lines, deliberately. The compact `local stats_extra="${16:-\{\}}"` is BROKEN:
+  # bash retains the backslashes and yields the literal `\{\}`, which --argjson rejects.
+  # It fails ONLY on the default path — i.e. on exactly the legacy 15-argument call this
+  # parameter must keep byte-identical. Do not "simplify" it back.
+  local stats_extra="${16-}"
+  [ -z "$stats_extra" ] && stats_extra='{}'
+
+  # Closed-registry check. Skipped entirely on the legacy `{}` path so a 15-argument
+  # caller pays no extra process. An unregistered key is an internal error, never a
+  # silent extra member.
+  if [ "$stats_extra" != "{}" ]; then
+    local _sx_key _sx_known _sx_reg
+    for _sx_key in $(printf '%s' "$stats_extra" | jq -r 'keys_unsorted[]'); do
+      _sx_known=0
+      for _sx_reg in "${SCHEMA_V1_STATS_EXTRA_KEYS[@]}"; do
+        if [ "$_sx_key" = "$_sx_reg" ]; then _sx_known=1; break; fi
+      done
+      if [ "$_sx_known" != "1" ]; then
+        printf 'schema-v1-emit: unregistered stats_extra key: %s\n' "$_sx_key" >&2
+        printf '  registered: %s\n' "${SCHEMA_V1_STATS_EXTRA_KEYS[*]}" >&2
+        exit "${EXIT_INTERNAL:-1}"
+      fi
+    done
+  fi
 
   jq -n \
+    --argjson stats_extra "$stats_extra" \
     --arg schema_version "$schema_version" \
     --arg cli_version "$cli_version" \
     --arg target "$target" \
@@ -258,13 +319,22 @@ build_json_v1() {
       scan_root: $scan_root,
       depth: $depth,
       include_mirrors: $include_mirrors,
-      stats: {
+      stats: (({
         total_files_scanned: $total_files_scanned,
         first_order_count: $first_order_count,
         second_order_count: $second_order_count,
         filtered_mirrors: $filtered_mirrors,
         elapsed_seconds: ($elapsed_seconds | tonumber)
-      },
+      } + $stats_extra)
+        | with_entries(select(
+            .value != null
+            and ((.key | endswith("_reason") | not) or .value != "")
+          ))
+        | . as $m
+        | reduce ($m | keys_unsorted[]
+                  | select(endswith("_status"))
+                  | select($m[.] == "degraded" or $m[.] == "not-run")
+                  | rtrimstr("_status") + "_count") as $c (.; del(.[$c]))),
       first_order: $first_order,
       second_order: $second_order,
       filtered_mirrors_detail: $filtered_mirrors_detail

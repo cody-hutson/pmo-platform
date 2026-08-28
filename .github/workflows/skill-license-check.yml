@@ -1,27 +1,52 @@
 name: Skill license check
 
-# gate-efficacy: posture=advisory  enforcement=path-filtered  skip-semantics=absent-is-pass
-#   invariant: every .skill package carries the canonical BSL LICENSE member —
-#              asserted by check-skill-licenses.py over the changed packages.
-#   falsification: on a PR touching packages/**, strip the LICENSE from a .skill ->
-#                  this gate fails; on a PR touching no package path it is skipped
-#                  and absence is treated as pass.
-# Path-filtered (paths: packages/**), so ADVISORY by skip-semantics. (Per gate-efficacy-standard.md (b).)
+# gate-efficacy: posture=advisory  enforcement=ci-enforce  always-reports=yes
+#   invariant: EVERY .skill package in packages/ carries a LICENSE member that is
+#              BYTE-IDENTICAL to repo-root LICENSE — asserted by
+#              check-skill-licenses.py, which reads repo-root LICENSE as the canonical
+#              (ROOT_LICENSE, :31 / :61) and globs PACKAGES_DIR for *.skill (:63). The
+#              scope is EVERY package, not the changed ones: the step is a bare
+#              invocation with no argv, so no diff-scoping exists anywhere in this file.
+#   falsification: strip or alter the LICENSE inside any .skill -> this gate fails
+#                  naming that package; EDIT REPO-ROOT LICENSE without rebuilding the
+#                  packages -> this gate fails on every package at once, which is the
+#                  case the previous packages/**-scoped filter could not see.
+#
+# NO PATH FILTER, BY DESIGN — the reason is A CANONICAL OUTSIDE THE SUBJECT TREE.
+#
+# This gate's subject is packages/**, but its canonical is repo-root LICENSE: the
+# checker reads that one file's bytes and asserts every package's embedded copy equals
+# them. Editing it — a licence-text fix, a copyright-year bump — makes every committed
+# package non-conformant AT ONCE. Under the previous roster, repo-root LICENSE was
+# ABSENT (the roster was packages/**, the packager, the checker, and this file), so the
+# single edit that breaks every package simultaneously was the one edit that could not
+# trigger the gate built to catch it, and skip-semantics reported that absence as a pass.
+#
+# THIS IS LIVE, NOT LATENT — MEASURED, because the tree's own prose says otherwise.
+# release/tools/check-skill-licenses.py:14 and packages/README.md:11 both describe
+# packages/ as intentionally empty between releases, which would have made the gap
+# harmless. That is not the current state: 55 tracked .skill packages / 111 tracked
+# files under packages/, 0 untracked-and-unignored, and a live run reports 55/55 OK in
+# 0.05 s. A repo-root LICENSE edit therefore stales 55 committed packages TODAY. Those
+# two stale self-descriptions are outside this file's scope to repair and are routed
+# separately; do not read either as current when reasoning about this gate.
+#
+# ROSTER-WIDENING WAS CONSIDERED AND REJECTED. One line ('LICENSE') closes the measured
+# gap exactly, and for a finite named gap that is the cheaper disposition — it is what
+# the sibling gates in this sweep took. It is rejected HERE because the gap is not that
+# shape: a canonical living outside the subject tree is the injected-canonical class the
+# skill-package-freshness precedent ruled a roster cannot be trusted with, that
+# precedent is on the same subject, and the run costs 0.05 s on one ubuntu runner.
+# (Per core/standards/gate-efficacy-standard.md (b) and § Verdict-Input Closure.)
 
 on:
+  # NO paths: key on EITHER event — deliberate, not an omission. See NO PATH FILTER,
+  # BY DESIGN above. The event/types shape is the tree's established filter-free form
+  # (link-check.yml, skill-package-freshness.yml, skill-registry-currency-check.yml).
   pull_request:
-    paths:
-      - 'packages/**'
-      - 'release/skills/pmo-skill-refiner/scripts/package_skill.py'
-      - 'release/tools/check-skill-licenses.py'
-      - '.github/workflows/skill-license-check.yml'
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
-    paths:
-      - 'packages/**'
-      - 'release/skills/pmo-skill-refiner/scripts/package_skill.py'
-      - 'release/tools/check-skill-licenses.py'
-      - '.github/workflows/skill-license-check.yml'
 
 permissions:
   contents: read

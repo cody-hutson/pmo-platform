@@ -1118,7 +1118,7 @@ Public-flip depersonalization + path-portability enforcement — the public repo
 ### Changed
 
 - **`operator.toml` lossless round-trip.** The setup writer preserves operator-added sections verbatim instead of dropping them on rewrite.
-- **`[OPERATOR_JIRA]` → `{{JIRA_BASE_URL}}`.** The Jira base is a localized value (DC3), not an identity token.
+- **`[OPERATOR_JIRA]` → `{{JIRA_BASE_URL}}`.** The Jira base is a localized value (DC3), not an identity token. <!-- depersonalization-token: allow — historical narrative about a retired token -->
 - **Orphan path-variable convergence.** The residual `PMO_INSTANCE_PATH` fallthrough converges onto `${CLAUDE_WORKSPACE_ROOT}` per ADR-017/ADR-032.
 
 ## [v2.18] - 2026-06-21

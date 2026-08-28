@@ -401,6 +401,23 @@ core/deploy/tools/build-skill-packages.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-issue-ref-validity.sh
 ./core/deploy/tools/check-issue-ref-validity.sh
 core/deploy/tools/check-issue-ref-validity.sh
+# check-issue-body-anchors.sh — the Check 72 issue-body section-anchor predicate.
+# NOT CI-wired, deliberately: its population is GitHub issue bodies, which are not
+# in a PR diff, so no `paths:` filter can select them and an `issues:`-event
+# workflow would fire at authoring time, when the body is still moving. Its two
+# declared callers are `deploy.sh --check` (Check 72) and Stage-2 Triage A4.8 via
+# pipeline-triage. Agent-side it is invoked as `bash <path> --self-test` (the
+# fixture matrix plus both control arms), bare (the live open-issue scan), and
+# `--census` (the out-of-model prefix residual the header block declares a count
+# for). The self-test is the ONLY path that exercises the fixture resolver, and
+# the census is the only path that reproduces the declared boundary counts, so
+# without these rows the two obligations this tool carries are both unverifiable
+# agent-side. All four invocation forms per the per-tool convention above. (CI
+# runs no Claude hooks, so these rows are for the agent-side path.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-issue-body-anchors.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-issue-body-anchors.sh
+./core/deploy/tools/check-issue-body-anchors.sh
+core/deploy/tools/check-issue-body-anchors.sh
 # check-pv7-vocabulary.sh — the PV-7a Register B spelling gate (deploy.sh Check 69 +
 # the `pv7-vocabulary` job in .github/workflows/repo-integrity.yml). Executed
 # agent-side as `bash <path> --self-test` (the 5-case fixture set), bare (the corpus
