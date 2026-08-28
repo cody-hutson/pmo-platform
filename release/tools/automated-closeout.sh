@@ -7826,7 +7826,7 @@ cat <<INNER
 #### Release Learnings $V
 
 **Synthesized at:** 2026-06-28T00:00:00Z
-**Source events:** 2 \`release-synthesis/learnings-triple\` row(s) from \`pipeline-event-log.md\` (filter: version=\`$V\`)
+**Source events:** 2 \`release-synthesis/learnings-triple\` row(s) from \`pipeline-event-log.md\` (filter: release=\`$V\`)
 **Source-row anchors:** row 41; row 42
 
 **Surprise:** the archival sweep moved which file the record lives in.
@@ -7843,7 +7843,7 @@ cat <<INNER
 #### Release Learnings $V
 
 **Synthesized at:** 2026-06-28T00:00:00Z
-**Source events:** 0 \`release-synthesis/learnings-triple\` row(s) from \`pipeline-event-log.md\` (filter: version=\`$V\`)
+**Source events:** 0 \`release-synthesis/learnings-triple\` row(s) from \`pipeline-event-log.md\` (filter: release=\`$V\`)
 **Source-row anchors:** N/A
 
 **Surprise:** N/A — no novel learning this release

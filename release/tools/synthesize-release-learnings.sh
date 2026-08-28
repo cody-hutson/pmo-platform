@@ -22,7 +22,7 @@
 #                    auto-promotion predicate is unaffected by either.
 #
 # Usage:
-#   ./synthesize-release-learnings.sh --mode per-release --version v2.10
+#   ./synthesize-release-learnings.sh --mode per-release --version v2.10   # event-log-key: allow — display argument for the § 11.3 H4 heading; row selection uses --release
 #   ./synthesize-release-learnings.sh --mode pattern-detect --window 5
 #   ./synthesize-release-learnings.sh --mode pattern-detect --window 5 --cluster-min 3 --apply
 #   ./synthesize-release-learnings.sh --mode pattern-detect --window 5 --emit rate

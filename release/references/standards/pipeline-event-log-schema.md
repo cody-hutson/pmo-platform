@@ -143,6 +143,46 @@ real releases than N. Use `--release` (which resolves through this ladder) when 
 question is "which rows belong to release X"; `--version` remains the raw-column
 filter.
 
+#### 2a.1 Marking a deliberately version-keyed site
+
+A read site that binds this column to the release-version form instead of the slug
+join key is a defect by default. A site where the version form is genuinely correct —
+the raw-column filter this section retains, or an argument whose surviving role is
+display rather than row selection — is marked **on its own line**:
+
+```
+event-log-key: allow — <one-line reason>
+```
+
+**The reason is mandatory.** A bare `event-log-key: allow`, or one whose reason is
+whitespace, does NOT suppress and remains a finding. This is the whole point of the
+marker: a site that is merely unconverted must never read as deliberate.
+
+**There is no file-scoped tier.** The marker binds one line. A whole-file suppressor
+would let a single intentional site silence an unconverted sibling in the same file,
+which is the failure the marker exists to prevent.
+
+**A `--release` on the same statement is a structural exemption, not a marker.** An
+invocation that routes through the READ ladder proves its own conformance, so it needs
+no decoration and carries none. A marker therefore always means *deliberate*, and never
+*false positive suppressed*.
+
+**What is scanned.** Four enumerated shapes, and nothing else: a query invocation
+carrying the raw-column flag with no `--release` on the same statement; a documented
+read recipe that filters the log on the backticked version column; the § 11.3 rendered
+contract string when its filter is keyed on version rather than release; and a
+per-release synthesis invocation whose release argument is a version literal.
+
+**What is out of class.** A fixture event-log **data row** is the input a read site
+consumes, not a read site. Such rows are counted and reported on the denominator line
+rather than flagged, so they are never silently dropped from the population.
+
+**Reproducible probe.** `bash core/deploy/tools/check-convention.sh` — the
+`[event-log-key]` dimension. It emits one `FAIL:` per unmarked finding and one `OK:`
+denominator line stating files scanned, lines scanned, marked sites suppressed, and
+fixture rows out of class, so "zero found" is always distinguishable from "nothing
+examined". An empty scan scope exits 3 (scan-surface error), never 0.
+
 ## 3. Event-Type Enum (12 values) with Subtypes
 
 | `event_type` | Description | Allowed `event_subtype` values |
@@ -430,7 +470,7 @@ Per D-SchemaAdditivity (A) operator-approved at the D-Gate Resolution 2026-05-23
 #### Release Learnings vX.Y
 
 **Synthesized at:** <YYYY-MM-DDTHH:MM:SSZ>
-**Source events:** N `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: version=`vX.Y`)
+**Source events:** N `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`<release-key>`)
 **Source-row anchors:** `pipeline-event-log.md` row(s) at ts `<ts1>`[, `<ts2>`, …]
 
 **Surprise:** <verbatim `surprise:` field from event payload(s); if N=1 single field; if N>1 joined with `; ` separator + per-row attribution `[from <ts>]`>

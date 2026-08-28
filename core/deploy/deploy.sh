@@ -10198,11 +10198,13 @@ sys.stdout.write("".join(out) + "|")
 
   # ─── Check 49: platform-convention linter (warn-mode initial) [#228] ──────────
   #
-  # The convention-linter for the FOUR residual platform-convention dimensions no
+  # The convention-linter for the FIVE residual platform-convention dimensions no
   # existing gate covers — (1) [topic]-[type].md file-naming, (2) a Layer-2 path
   # (projects/…) in a git-tracked file, (3) evidence-quality-label presence on a
   # dated factual claim in a (non-process-spec) governance file, (4) [TBD]/[INSERT]/
-  # [TODO] placeholder leakage outside backticks. The predicate lives ONCE in the
+  # [TODO] placeholder leakage outside backticks, (5) an event-log read site keyed
+  # on the release-version form rather than the milestone-slug join key. The
+  # predicate lives ONCE in the
   # shared invokable core/deploy/tools/check-convention.sh (single source; an
   # optional PR-time job can invoke the same script). This is NOT a pre-commit hook
   # — CLAUDE.md forbids normalizing --no-verify, so platform-convention enforcement
@@ -10216,10 +10218,18 @@ sys.stdout.write("".join(out) + "|")
   # bypass-mode-readiness.md): in warn-mode they annotate + jsonl-log without
   # incrementing ISSUES; flip $(pmo_instance_path)/check-convention.mode or
   # .claude/hooks/check-convention.mode — the two tiers resolve_check_mode reads,
-  # in that order — to 'enforce' after the shakedown window (or the shared
-  # deploy-check.mode, to move every check at once). A non-zero exit with no
-  # parsed FAIL (scan-surface error, exit 3) still flags so a broken predicate
+  # in that order — to 'enforce' after the shakedown window. A non-zero exit with
+  # no parsed FAIL (scan-surface error, exit 3) still flags so a broken predicate
   # run never reads green.
+  #
+  # COMMITTED warn DEFAULT — the second argument to resolve_check_mode, the Check 47
+  # `release-body-drift` / Check 61 `decision-emission` precedent. It ships `warn`
+  # regardless of the shared cohort's deploy-check.mode, so the posture this block's
+  # header declares is a property of the CODE, not of an operator-instance runtime
+  # file. The shared mode still gates the block wholesale (the `!= "off"` guard
+  # below), but it can no longer silently promote this check to enforce. Graduation
+  # to `enforce` is an OPERATOR DECISION recorded in gate-efficacy-standard.md's flip
+  # ledger, never auto-promoted by hit count.
   #
   # RETIRED IDENTIFIER: this check formerly emitted findings under
   # `convention-linter` while resolving its mode under `check-convention` — two
@@ -10230,9 +10240,9 @@ sys.stdout.write("".join(out) + "|")
   # Cutover discipline: applies to ./deploy.sh --check on or after this release's
   # merge SHA in RELEASE_LOG.md.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 49: platform-convention linter (naming / layer-2 / evidence-label / placeholder) (#228)"
+    log "Check 49: platform-convention linter (naming / layer-2 / evidence-label / placeholder / event-log-key) (#228)"
     local c49_mode
-    c49_mode=$(resolve_check_mode "check-convention")
+    c49_mode=$(resolve_check_mode "check-convention" "warn")
     local c49_script="core/deploy/tools/check-convention.sh"
     if [[ ! -f "$c49_script" ]]; then
       flag_warn_or_issue "check-convention" "predicate script missing: $c49_script"

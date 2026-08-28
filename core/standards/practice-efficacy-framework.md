@@ -188,7 +188,7 @@ Detail per signal follows. Each signal is one third-level subsection so the veri
 
 **Class:** lagging.
 **Definition:** Number of pipeline-event-log entries with `event_subtype: practice-failure` AND payload citing the practice ID, measured over a 5-release rolling window.
-**Measurement mechanism:** `grep "event_subtype:practice-failure" <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md | grep "practice:<practice-id>"` filtered by `version:` column within 5-release window.
+**Measurement mechanism:** `query-pipeline-event.sh --event-subtype practice-failure --window 5 | grep "practice:<practice-id>"`. The release join key is the milestone slug per `pipeline-event-log-schema.md` § 2a; scope a single release with `--release <milestone-slug>` rather than matching the raw column, which is polymorphic and not uniquely resolvable.
 **Cadence:** 5-release rolling window.
 **Threshold bands:**
 
