@@ -55,7 +55,7 @@ This skill has 7 modes. **Trigger-match heuristic auto-routes when the request c
 
 ### Step 1 — Check for chained invocation
 
-If this invocation was chained from ppm-agent (detected when the Skill-tool `args` string contains the token `chained=true`), read the `mode=<value>` token from the same `args` string (pre-filled from the Handoff Manifest action entry per [OPERATIONS.md § Skill Chaining Protocol](../../OPERATIONS.md)) and skip directly to Step 4.
+If this invocation was chained from ppm-agent — detected when the Skill-tool `args` string carries a chained-invocation signal in **either** encoding defined at [OPERATIONS.md § Skill Chaining Protocol](../../OPERATIONS.md) → *Chained-invocation arg encoding*: the legacy token `chained=true`, or a JSON object whose `chained` key is `true` — read the `mode` value from the same `args` string (`mode=<value>` in the legacy form; pre-filled from the Handoff Manifest action entry) and skip directly to Step 4.
 
 > **Live chain-skip.** delivery-engine IS on the 4-skill cascade allowlist (per Skill Chaining Protocol rule C7 — PPM `[DELIVERY]` + complete context → delivery-engine (Tier 2 tracker)). See [§ Chained Invocation Contract](#chained-invocation-contract) below for the full integration: upstream invokers, chained-context pre-fill from the Handoff Manifest, and `chained=true` arg semantics. When chained, AUQ is suppressed per the Contract's suppress-opening-AskUserQuestion clause.
 
@@ -503,8 +503,11 @@ schema):
 | `cascade_depth_remaining` | Depth budget (C1); decrement on invocation |
 | `deadline` | Action deadline (sprint end, gate date, escalation deadline) |
 
-**`chained=true` arg semantics.** When ppm-agent invokes via the Skill tool with arg
-`chained=true`:
+**Chained-arg semantics.** When ppm-agent invokes via the Skill tool with a
+chained-invocation `args` string in **either** encoding defined at
+[OPERATIONS.md § Skill Chaining Protocol](../../OPERATIONS.md) →
+*Chained-invocation arg encoding* — the legacy token `chained=true`, or a JSON
+object with `"chained": true`:
 
 1. **Suppress opening AskUserQuestion** — do not open a clarifying dialog before producing
    output. Contract owned by the Mode Selection Protocol.

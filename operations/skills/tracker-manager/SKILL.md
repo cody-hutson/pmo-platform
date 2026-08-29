@@ -82,8 +82,11 @@ the primary input. The Handoff Manifest action entry
 | `cascade_depth_remaining` | Depth budget (C1); decrement on invocation |
 | `deadline` | Typically null for tracker updates |
 
-**`chained=true` arg semantics.** When ppm-agent invokes via the Skill tool with arg
-`chained=true`:
+**Chained-arg semantics.** When ppm-agent invokes via the Skill tool with a
+chained-invocation `args` string in **either** encoding defined at
+[OPERATIONS.md § Skill Chaining Protocol](../../OPERATIONS.md) →
+*Chained-invocation arg encoding* — the legacy token `chained=true`, or a JSON
+object with `"chained": true`:
 
 1. **Suppress opening AskUserQuestion** — do not open a clarifying dialog. Contract owned
    by the Mode Selection Protocol.
