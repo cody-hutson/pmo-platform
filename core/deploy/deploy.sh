@@ -2270,6 +2270,365 @@ _c38_compute_verdict() {
   esac
 }
 
+# ─── Bundle-metrics gate integrity (Check 73 / --check-required-subset) — #6298 ──
+#
+# G3-14 (Mode-A combined-clean parse-rate floor) and G3-15 (per-milestone
+# risk-weighted size bound) were shipped as PROSE-DECLARED normative predicates
+# with NO RUNNER ON ANY SURFACE — measured at introduction of this check: zero
+# executable artifacts implemented either predicate and zero computed
+# effective_pts. Their declared `warn -> enforce` ladder therefore had no rung to
+# stand on, and Requirement (b') blocked `posture: required` permanently.
+#
+# WHAT THIS CHECK ASSERTS, AND WHAT IT DELIBERATELY DOES NOT.
+# Both gates' SUBJECT is out-of-tree GitHub state — issue bodies for G3-14, a
+# milestone's bundled membership for G3-15. Under § Verdict-Input Closure, VIC(W)
+# is defined over REPO PATHS, so that subject class is empty in-tree: a merge gate
+# on the LIVE evaluation would go red for reasons no PR author can see or fix, and
+# G3-15 has no PR-time subject at all ("which milestone?" is undefined outside a
+# Stage-3 Bundle event). The predicate is therefore SPLIT BY LOCUS OF INPUT:
+#
+#   TREE-RESIDENT half (this check)  — the gate MACHINERY, as committed on this
+#       branch, computes its declared predicate and FIRES on a breach. Every input
+#       is a committed file. `posture: required (warn-mode-initial)`.
+#   BACKLOG-RESIDENT half (NOT here) — the live parse rate / the live
+#       effective_pts. Stays advisory PERMANENTLY on architectural grounds, at its
+#       declared Stage-3 -> 4 boundary runner. That is a recorded residual, not an
+#       open gap. See core/ADRs/ADR-162-split-predicate-gate-graduation.md.
+#
+# NOT A PROXY (Requirement (a)). This check does NOT claim "the backlog parse rate
+# >= 0.90". It claims the narrower, fully tree-resident thing its id names: the
+# G3-14/G3-15 gate machinery discriminates. The committed fixtures ARE the content
+# embodying that invariant — the test_version_freeness_injection.sh shape, where
+# the gate's sensitivity is tested on every run rather than assumed.
+#
+# NO MEASUREMENT-OUTAGE CLASS, BY CONSTRUCTION. Every input is a committed file:
+# two fixture pairs, core/schemas/gate-criteria-spec.md, the platform-config
+# template, and the doctrine's definitional home. There is no network read, no gh,
+# no detect_install_path dependency, and no python3 dependency. An unreadable input
+# is therefore a REPO DEFECT and fail-closes as FAIL — it is never degraded to a
+# not-evaluated arm, because there is no outage this check can suffer that is not
+# also a defect. That is what admits it to the --check-required-subset allowlist
+# under that runner's own selection predicate { network-free AND
+# install-independent AND posture:required AND NOT already covered by a dedicated
+# CI mirror }, and it is why the verdict enum below is drawn ONLY from tokens the
+# runner's aggregation rule already recognises: a bespoke token would fall to that
+# rule's `*)` arm and fail-close on a healthy tree.
+#
+# Echoes ONE protocol line on stdout (the CALLER maps it to a FAIL or an exit code):
+#   PASS <detail>          all three conjuncts hold for BOTH gates
+#   FAIL <gate> <conjunct> <detail>   a conjunct failed, or an input is unreadable
+
+# _bm_src_root — repo root, BASH_SOURCE-derived with a cwd-relative fallback.
+# Same locator shape as resolve_platform_config, so this family and the config
+# resolver agree on where the tree is.
+_bm_src_root() {
+  # PMO_BM_SRC_ROOT re-points the whole input set at a sandbox, which is what lets
+  # the fixture suite drive THIS body rather than a re-encoded copy of it (the
+  # CC_*/C32_*/RR_*/CP_* fixture-override convention already in this file). CI sets
+  # none of these, so the shipped verdict reads the shipped tree.
+  if [[ -n "${PMO_BM_SRC_ROOT:-}" ]]; then printf '%s' "$PMO_BM_SRC_ROOT"; return 0; fi
+  local _sr
+  _sr="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd || echo "")"
+  if [[ -n "$_sr" && -r "${_sr}/core/deploy/deploy.sh" ]]; then
+    printf '%s' "$_sr"
+  else
+    printf '%s' "."
+  fi
+}
+
+# _bm_config_template — the COMMITTED platform-config template, rung 1 only.
+#
+# Deliberately NOT resolve_platform_config. That resolver walks five rungs and
+# rung 5 is the operator's own ~/.config copy, so its answer varies by machine. A
+# pre-merge gate must assert the CONFIG THIS PR SHIPS, not the config the reviewer
+# happens to have installed — an operator-local override is not the pull request's
+# subject, and letting one move this verdict would make the gate install-dependent
+# and disqualify it from the required subset. Rung 1 is also the only rung that
+# exists on a CI runner, so this is what the gate reads there regardless.
+_bm_config_template() {
+  if [[ -n "${C73_CONFIG_TEMPLATE:-}" ]]; then printf '%s' "$C73_CONFIG_TEMPLATE"; return 0; fi
+  local _sr; _sr="$(_bm_src_root)"
+  if [[ -r "${_sr}/core/config/platform-config.toml.template" ]]; then
+    printf '%s' "${_sr}/core/config/platform-config.toml.template"
+  elif [[ -r "core/config/platform-config.toml.template" ]]; then
+    printf '%s' "core/config/platform-config.toml.template"
+  fi
+}
+
+# _bm_config_line <key> — the raw committed `key = value` right-hand side, with a
+# trailing comment stripped. Returns empty on a miss or an unreadable template.
+# Handles the inline-table values resolve_platform_config's _toml_field cannot:
+# its greedy `.*=` matches the LAST `=` on the line, so on
+# `release_class_capacity_weights = { routine = 1.0, ... hotfix = 0.9 }` it returns
+# `0.9 }`. This reader takes the first `=` instead and leaves the value intact.
+_bm_config_line() {
+  local _k="$1" _tmpl _raw
+  _tmpl="$(_bm_config_template)"
+  [[ -n "$_tmpl" ]] || { printf ''; return 0; }
+  _raw="$(/usr/bin/grep -m1 -E "^[[:space:]]*${_k}[[:space:]]*=" "$_tmpl" 2>/dev/null || true)"
+  [[ -n "$_raw" ]] || { printf ''; return 0; }
+  printf '%s' "$_raw" | /usr/bin/sed -E -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//'
+}
+
+# _bm_dec_scale <decimal> <digits> — fixed-point scale, integer-only.
+# "0.90" 4 -> 9000 · "1.15" 2 -> 115 · "1" 2 -> 100. Empty on a non-numeric input,
+# which every caller treats as UNRESOLVED rather than as zero (a zero would silently
+# satisfy a >= comparison; an empty string cannot).
+_bm_dec_scale() {
+  local _v="${1//[[:space:]]/}" _d="$2" _int _frac
+  case "$_v" in ''|*[!0-9.]*) printf ''; return 0 ;; esac
+  _int="${_v%%.*}"
+  if [[ "$_v" == *.* ]]; then _frac="${_v#*.}"; else _frac=""; fi
+  case "$_frac" in *.*) printf ''; return 0 ;; esac
+  [[ -z "$_int" ]] && _int=0
+  while [[ ${#_frac} -lt $_d ]]; do _frac="${_frac}0"; done
+  _frac="${_frac:0:$_d}"
+  printf '%s' "$(( 10#${_int} * (10 ** _d) + 10#${_frac} ))"
+}
+
+# _bm_class_weight <release_class> — the capacity multiplier in HUNDREDTHS, read
+# by key from the committed inline table. Empty when the class has no key, which
+# the caller renders as the DEGRADED path (weight 1.0 + a loud unweighted marker),
+# never as a silent pass.
+_bm_class_weight() {
+  local _cls="$1" _tbl _raw
+  case "$_cls" in ''|*[!A-Za-z0-9_-]*) printf ''; return 0 ;; esac
+  _tbl="$(_bm_config_line release_class_capacity_weights)"
+  [[ -n "$_tbl" ]] || { printf ''; return 0; }
+  _raw="$(printf '%s' "$_tbl" | /usr/bin/sed -E "s/.*[{,][[:space:]]*${_cls}[[:space:]]*=[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/")"
+  [[ "$_raw" == "$_tbl" ]] && { printf ''; return 0; }
+  _bm_dec_scale "$_raw" 2
+}
+
+# _bm_size_pts <size_label> — the size-check point scale, pinned at G3-15's own
+# declaration (XS=1 / S=2 / M=4 / L=8 / XL=16). Empty on an unrecognised label.
+_bm_size_pts() {
+  case "$1" in
+    XS) printf '1'  ;; S)  printf '2'  ;; M) printf '4' ;;
+    L)  printf '8'  ;; XL) printf '16' ;;
+    *)  printf ''   ;;
+  esac
+}
+
+# ── G3-14 evaluator ─────────────────────────────────────────────────────────────
+# combined_clean_parse_rate = |{group-1 : clean}| / |{group-1 : clean or failed}|
+# asserted >= [bundling].mode_a_parse_rate_floor. `deferred` bodies are EXCLUDED
+# from the denominator (set aside, not failed) so a deferral-marker can neither
+# inflate nor deflate the rate; groups 2 (type-excluded) and 3 (needs-body-repair)
+# are excluded from BOTH numerator and denominator per the Step-1.5 partition.
+# Trivial-PASS on an empty determinate denominator — that is G3-14's own declared
+# divide-by-zero guard, not a shortcut.
+#
+# Fixture grammar (TSV, `#` starts a comment):  <id> \t <partition_group> \t <parse_status>
+#
+#   PASS   <rate4> >= <floor4> ... | BREACH <rate4> < <floor4> ... | ERROR <reason>
+_g3_14_compute_verdict() {
+  local _fx="$1"
+  [[ -r "$_fx" ]] || { printf 'ERROR fixture-unreadable:%s\n' "$_fx"; return 0; }
+  local _floor4; _floor4="$(_bm_dec_scale "$(_bm_config_line mode_a_parse_rate_floor)" 4)"
+  [[ -n "$_floor4" ]] || { printf 'ERROR floor-unresolved:[bundling].mode_a_parse_rate_floor\n'; return 0; }
+  local _clean=0 _failed=0 _deferred=0 _repair=0 _excluded=0
+  local _id _grp _st
+  while IFS=$'\t' read -r _id _grp _st || [[ -n "$_id" ]]; do
+    case "$_id" in ''|'#'*) continue ;; esac
+    case "$_grp" in
+      1) case "$_st" in
+           clean)    _clean=$((_clean + 1)) ;;
+           failed)   _failed=$((_failed + 1)) ;;
+           deferred) _deferred=$((_deferred + 1)) ;;
+           *) printf 'ERROR fixture-bad-parse-status:%s (row %s)\n' "$_st" "$_id"; return 0 ;;
+         esac ;;
+      2) _excluded=$((_excluded + 1)) ;;
+      3) _repair=$((_repair + 1)) ;;
+      *) printf 'ERROR fixture-bad-partition-group:%s (row %s)\n' "$_grp" "$_id"; return 0 ;;
+    esac
+  done < "$_fx"
+  local _den=$((_clean + _failed))
+  local _tail
+  _tail="clean=${_clean} failed=${_failed} deferred-excluded=${_deferred} type-excluded=${_excluded} needs-body-repair=${_repair} floor=${_floor4}/10000"
+  if [[ $_den -eq 0 ]]; then
+    printf 'PASS trivial-empty-determinate-denominator %s\n' "$_tail"
+    return 0
+  fi
+  local _rate4=$(( _clean * 10000 / _den ))
+  # >= is the declared comparator. Mutating it to > flips the at-floor fixture to
+  # BREACH, which is this gate's seeded-failure arm.
+  if [[ $_rate4 -ge $_floor4 ]]; then
+    printf 'PASS rate=%s/10000 den=%s %s\n' "$_rate4" "$_den" "$_tail"
+  else
+    printf 'BREACH rate=%s/10000 den=%s %s\n' "$_rate4" "$_den" "$_tail"
+  fi
+}
+
+# ── G3-15 evaluator ─────────────────────────────────────────────────────────────
+# effective_pts = round_half_up(SUM(member.pts) * class_weight) asserted <= the
+# UPPER bound of [bundling].release_size_target_pts. The rounding mode is taken BY
+# REFERENCE from bundle-composition-doctrine.md § 3 Step 5 Risk-Weighting (that
+# anchor's resolvability is conjunct C73-c), not re-derived here; the integer form
+# (x*w + 50)/100 IS round-half-up on hundredths.
+#
+# DEGRADED PATH (G3-15's own safety contract): an unresolved weight does not
+# silently pass. It computes raw SUM with class_weight = 1.0 and carries a loud
+# `unweighted-degraded` marker in the detail, so a cross-cutting bundle can never
+# quiet-pass as routine.
+#
+# Fixture grammar (TSV, `#` starts a comment):
+#   class  \t <release_class>
+#   member \t <id> \t <size_label>
+#
+#   PASS <eff> <= <bound> ... | BREACH <eff> > <bound> ... | ERROR <reason>
+_g3_15_compute_verdict() {
+  local _fx="$1"
+  [[ -r "$_fx" ]] || { printf 'ERROR fixture-unreadable:%s\n' "$_fx"; return 0; }
+  local _band; _band="$(_bm_config_line release_size_target_pts)"
+  local _bound; _bound="$(printf '%s' "$_band" | /usr/bin/sed -E 's/^[0-9]+[[:space:]]*-[[:space:]]*([0-9]+)$/\1/')"
+  case "$_bound" in ''|*[!0-9]*) printf 'ERROR band-unresolved:[bundling].release_size_target_pts=[%s]\n' "$_band"; return 0 ;; esac
+  local _cls="" _sum=0 _members=0
+  local _kind _a _b _pts
+  while IFS=$'\t' read -r _kind _a _b || [[ -n "$_kind" ]]; do
+    case "$_kind" in ''|'#'*) continue ;; esac
+    case "$_kind" in
+      class)  _cls="$_a" ;;
+      member)
+        _pts="$(_bm_size_pts "$_b")"
+        [[ -n "$_pts" ]] || { printf 'ERROR fixture-bad-size-label:%s (member %s)\n' "$_b" "$_a"; return 0; }
+        _sum=$((_sum + _pts)); _members=$((_members + 1)) ;;
+      *) printf 'ERROR fixture-bad-row-kind:%s\n' "$_kind"; return 0 ;;
+    esac
+  done < "$_fx"
+  [[ -n "$_cls" ]] || { printf 'ERROR fixture-no-class-row\n'; return 0; }
+  local _w _degraded=""
+  _w="$(_bm_class_weight "$_cls")"
+  if [[ -z "$_w" ]]; then
+    _w=100
+    _degraded=" unweighted-degraded=YES(class '${_cls}' has no capacity weight; raw sum asserted at class_weight=1.0 — operator confirmation required, never a silent pass)"
+  fi
+  local _eff=$(( (_sum * _w + 50) / 100 ))
+  local _tail
+  _tail="members=${_members} raw_sum=${_sum} class=${_cls} weight=${_w}/100 bound=${_bound}${_degraded}"
+  # <= is the declared comparator. Mutating it to < flips the at-bound fixture to
+  # BREACH, which is this gate's seeded-failure arm.
+  if [[ $_eff -le $_bound ]]; then
+    printf 'PASS effective_pts=%s %s\n' "$_eff" "$_tail"
+  else
+    printf 'BREACH effective_pts=%s %s\n' "$_eff" "$_tail"
+  fi
+}
+
+# ── Check 73 — the three-conjunct integrity verdict ─────────────────────────────
+# C73-a  DISCRIMINATION.  For each gate, the evaluator returns BREACH on the
+#        committed out-of-threshold fixture and PASS on the committed
+#        within-threshold fixture. An evaluator that answers the same way to both
+#        has lost sensitivity or specificity and is not a gate.
+# C73-b  SINK COHERENCE.  For each gate, every sink declaration in
+#        gate-criteria-spec.md agrees byte-for-byte, AND every in-tree emitter
+#        writing that sink's basename writes that identical path. The emitter
+#        population is REPORTED on every run, so a zero-emitter tree renders as
+#        `emitters=0` rather than as an anonymous pass — the declaration-agreement
+#        limb is what carries this conjunct today, and the emitter limb arms
+#        itself the moment a warn-log emit for either gate lands.
+# C73-c  CONFIG RESOLVABILITY.  The three [bundling] fields resolve to enum-valid
+#        values from the COMMITTED template, and G3-15's rounding mode resolves at
+#        its declared definitional home.
+_c73_compute_verdict() {
+  local surface="${1:-lifecycle}"   # accepted for signature parity; verdict is surface-invariant
+  local _sr; _sr="$(_bm_src_root)"
+  local _fxr="${_sr}/core/deploy/tests/fixtures/bundle-metrics"
+  local _spec="${_sr}/core/schemas/gate-criteria-spec.md"
+  local _doct="${_sr}/release/references/standards/bundle-composition-doctrine.md"
+  local _self="${_sr}/core/deploy/deploy.sh"
+  # Fixture/spec overrides exist for the hermetic fixture suite ONLY. They are read
+  # here rather than in the suite so the suite drives the SHIPPED body instead of a
+  # re-encoded copy of it (single-engine discipline).
+  [[ -n "${C73_FIXTURE_ROOT:-}"  ]] && _fxr="$C73_FIXTURE_ROOT"
+  [[ -n "${C73_SPEC_FILE:-}"     ]] && _spec="$C73_SPEC_FILE"
+  [[ -n "${C73_EMITTER_FILE:-}"  ]] && _self="$C73_EMITTER_FILE"
+  [[ -n "${C73_DOCTRINE_FILE:-}" ]] && _doct="$C73_DOCTRINE_FILE"
+
+  # ---- C73-a — discrimination, 4 arms, 2 opposite-verdict pairs ----------------
+  local _arms=0 _v
+  local _pair
+  for _pair in "g3-14:below-floor.tsv:BREACH" "g3-14:at-floor.tsv:PASS" \
+               "g3-15:above-band.tsv:BREACH" "g3-15:in-band.tsv:PASS"; do
+    local _g="${_pair%%:*}" _rest="${_pair#*:}"
+    local _file="${_rest%%:*}" _want="${_rest#*:}"
+    case "$_g" in
+      g3-14) _v="$(_g3_14_compute_verdict "${_fxr}/g3-14/${_file}")" ;;
+      g3-15) _v="$(_g3_15_compute_verdict "${_fxr}/g3-15/${_file}")" ;;
+    esac
+    if [[ "${_v%% *}" != "$_want" ]]; then
+      printf 'FAIL %s C73-a expected %s on %s, got: %s\n' "$_g" "$_want" "$_file" "$_v"
+      return 0
+    fi
+    _arms=$((_arms + 1))
+  done
+
+  # ---- C73-b — sink coherence -------------------------------------------------
+  [[ -r "$_spec" ]] || { printf 'FAIL both C73-b gate-criteria-spec unreadable:%s\n' "$_spec"; return 0; }
+  local _emitters_total=0 _decls_total=0 _g _base _base_re _decls _n _uniq _sink
+  for _g in g3-14 g3-15; do
+    _base="gate-${_g}-warn-log.jsonl"
+    # The literal dot is escaped: an unescaped `.` in ERE matches any character,
+    # which would let `gate-g3-14-warn-logXjsonl` satisfy a coherence assertion.
+    _base_re="gate-${_g}-warn-log\\.jsonl"
+    # Every declared path carrying this basename, prefix included.
+    _decls="$(/usr/bin/grep -oE "[A-Za-z0-9_./\$()-]*${_base_re}" "$_spec" 2>/dev/null || true)"
+    _n="$(printf '%s\n' "$_decls" | /usr/bin/grep -c . || true)"; _n="${_n:-0}"
+    if [[ "$_n" -eq 0 ]]; then
+      printf 'FAIL %s C73-b no sink declaration for %s in %s (a warn-mode gate that names no sink cannot be advanced by anything)\n' "$_g" "$_base" "$_spec"
+      return 0
+    fi
+    _uniq="$(printf '%s\n' "$_decls" | /usr/bin/sort -u | /usr/bin/grep -c . || true)"; _uniq="${_uniq:-0}"
+    if [[ "$_uniq" -ne 1 ]]; then
+      printf 'FAIL %s C73-b %s sink declarations disagree across %s distinct paths: %s\n' \
+        "$_g" "$_uniq" "$_n" "$(printf '%s\n' "$_decls" | /usr/bin/sort -u | /usr/bin/tr '\n' ' ')"
+      return 0
+    fi
+    _decls_total=$((_decls_total + _n))
+    _sink="$(printf '%s\n' "$_decls" | /usr/bin/sort -u)"
+    # Emitter limb: every in-tree write of this basename must write the SAME path.
+    if [[ -r "$_self" ]]; then
+      local _emits _ebad
+      _emits="$(/usr/bin/grep -oE "[A-Za-z0-9_./\$(){}-]*${_base_re}" "$_self" 2>/dev/null || true)"
+      _ebad="$(printf '%s\n' "$_emits" | /usr/bin/grep -c . || true)"; _ebad="${_ebad:-0}"
+      if [[ "$_ebad" -gt 0 ]]; then
+        _emitters_total=$((_emitters_total + _ebad))
+        local _emit_uniq
+        _emit_uniq="$(printf '%s\n' "$_emits" | /usr/bin/sort -u)"
+        if [[ "$_emit_uniq" != "$_sink" ]]; then
+          printf 'FAIL %s C73-b declaration/emitter disagree — declared [%s], emitted [%s]\n' \
+            "$_g" "$_sink" "$(printf '%s' "$_emit_uniq" | /usr/bin/tr '\n' ' ')"
+          return 0
+        fi
+      fi
+    fi
+  done
+
+  # ---- C73-c — config resolvability + the rounding-mode definitional home ------
+  local _f4 _band _bound _w
+  _f4="$(_bm_dec_scale "$(_bm_config_line mode_a_parse_rate_floor)" 4)"
+  if [[ -z "$_f4" || "$_f4" -le 0 || "$_f4" -gt 10000 ]]; then
+    printf 'FAIL g3-14 C73-c [bundling].mode_a_parse_rate_floor does not resolve to a rate in (0,1]: [%s]\n' "$(_bm_config_line mode_a_parse_rate_floor)"
+    return 0
+  fi
+  _band="$(_bm_config_line release_size_target_pts)"
+  _bound="$(printf '%s' "$_band" | /usr/bin/sed -E 's/^[0-9]+[[:space:]]*-[[:space:]]*([0-9]+)$/\1/')"
+  case "$_bound" in ''|*[!0-9]*) printf 'FAIL g3-15 C73-c [bundling].release_size_target_pts is not an N-M band: [%s]\n' "$_band"; return 0 ;; esac
+  local _dc; _dc="$(_bm_config_line default_release_class)"
+  _w="$(_bm_class_weight "${_dc:-routine}")"
+  if [[ -z "$_w" || "$_w" -le 0 ]]; then
+    printf 'FAIL g3-15 C73-c [bundling].release_class_capacity_weights carries no positive weight for the default class [%s]\n' "${_dc:-routine}"
+    return 0
+  fi
+  if [[ ! -r "$_doct" ]] || ! /usr/bin/grep -qE '^#+[[:space:]]*Step 5 — Risk-Weighting' "$_doct" 2>/dev/null; then
+    printf "FAIL g3-15 C73-c the round-half-up definitional home is unresolvable — %s carries no 'Step 5 — Risk-Weighting' heading, so effective_pts is defined nowhere this gate can cite\n" "$_doct"
+    return 0
+  fi
+
+  printf 'PASS c73a=%s/4-arms c73b=%s-declarations/%s-emitters c73c=floor+band+weights+rounding-home surface=%s\n' \
+    "$_arms" "$_decls_total" "$_emitters_total" "$surface"
+}
+
 # ─── Release-corpus completeness (Check 32 / --check-release-corpus) — #1484 ─────
 # The LOG-row-driven completeness predicate, factored to TOP LEVEL so it is shared
 # by two surfaces with ONE body (DD1, like _vf_/_cc_/_c38_compute_verdict): the
@@ -12025,7 +12384,7 @@ sys.stdout.write("".join(out) + "|")
   # coverage claim can never be read as larger than its delivery.
   #
   # NOT ON THE REQUIRED-SUBSET ROSTER. Check 63 is deliberately absent from
-  # --check-required-subset. That roster is seeded with Check 38 alone; joining it is a
+  # --check-required-subset. That roster carries Checks 38 and 73; joining it is a
   # separate, later, evidence-gated decision, and staying off it is what makes shipping
   # enforcing safe today (no CI workflow runs the full --check suite).
   #
@@ -13016,6 +13375,48 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
 
 
 
+
+  # Check 73 — bundle-metrics gate integrity (G3-14 / G3-15) [#6298]
+  #
+  # The DEPLOY-TIME half of the DD1 pair. The predicate body _c73_compute_verdict
+  # is TOP-LEVEL and shared verbatim with the --check-required-subset runner, so no
+  # predicate is re-encoded on either surface (single-engine, CIAC-2) and the CI
+  # gate and this lifecycle surface can never disagree about what the gate asserts.
+  #
+  # This block asserts the TREE-RESIDENT half only — that the G3-14/G3-15 machinery
+  # discriminates, that their sink declarations cohere, and that their config
+  # resolves. It does NOT assert the live backlog parse rate or a live milestone's
+  # effective_pts: that half's subject is out-of-tree GitHub state, has no repo-path
+  # Verdict-Input Closure, and stays advisory at its Stage-3 -> 4 boundary runner
+  # PERMANENTLY, on architectural grounds (ADR-162). Reading a green here as
+  # evidence about the live backlog would be exactly the proxy Requirement (a)
+  # forbids, which is why the id is `-gate-integrity` and not `bundle-metrics`.
+  #
+  # Warn-mode initial via flag_warn_or_issue: the per-check knob is
+  # resolve_check_mode "bundle-metrics-gate-integrity", the proven one-token
+  # decouple. The CI surface's warn-vs-enforce is a SEPARATE sentinel
+  # (.github/deploy-check-ci.enforce), and neither is flipped by this release.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 73: Bundle-metrics gate integrity (G3-14 / G3-15 machinery discriminates, sinks cohere, config resolves; tree-resident half only)"
+    local c73_verdict c73_tok
+    c73_verdict="$(_c73_compute_verdict "lifecycle")"
+    c73_tok="${c73_verdict%% *}"
+    case "$c73_tok" in
+      PASS)
+        log "  OK:    bundle-metrics-gate-integrity — ${c73_verdict#PASS }"
+        ;;
+      FAIL)
+        flag_warn_or_issue "bundle-metrics-gate-integrity" "${c73_verdict#FAIL }"
+        ;;
+      *)
+        # No not-evaluated arm exists by construction, so an unrecognised token is
+        # a tooling defect rather than an outage — report it loudly rather than
+        # letting an unreadable verdict read as clean.
+        flag_warn_or_issue "bundle-metrics-gate-integrity" \
+          "unexpected verdict token '$c73_tok' from _c73_compute_verdict (this check has no measurement-outage class; an unrecognised token is a defect in the verdict body): $c73_verdict"
+        ;;
+    esac
+  fi
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
@@ -14823,10 +15224,12 @@ cmd_check_decision_emission() {
 # Check 7 (skill-package-freshness.yml #2656), Check 32 (release-corpus-completeness.yml
 # #1484), Check 41 (version-freeness.yml), Check 48 (close-completeness.yml).
 #
-# TODAY the predicate resolves to exactly ONE member — Check 38
-# (hook-registry-index-freshness), the only explicit posture:required check lacking
-# a dedicated mirror. New members are appended here as future posture:required
-# checks are back-filled (#1036 / #313).
+# TODAY the predicate resolves to TWO members — Check 38
+# (hook-registry-index-freshness) and Check 73 (bundle-metrics-gate-integrity).
+# New members are appended here as future posture:required checks are back-filled
+# (#1036 / #313). Check 73 is the first back-fill against that declaration: #313 is
+# the milestone this runner's own header named as its back-fill vehicle, so the
+# roster grew through the mechanism it declared rather than around it.
 #
 # Surface = "gate": fail-closed. Warn-vs-enforce at the CI surface is decided by the
 # committed .github/deploy-check-ci.enforce sentinel — during the warn-mode window an
@@ -14853,10 +15256,17 @@ cmd_check_required_subset() {
     [[ "$_rs_tok_line" == "enforce" ]] && rs_enforce="enforce"
   fi
 
-  # Enumerated allowlist: "check-id:verdict-body". TODAY: Check 38 only. Append a
-  # row per future posture:required check that lacks a dedicated CI mirror.
+  # Enumerated allowlist: "check-id:verdict-body". TODAY: Checks 38 and 73. Append
+  # a row per future posture:required check that lacks a dedicated CI mirror.
+  #
+  # Every member's verdict enum MUST be drawn from the tokens the case below
+  # recognises. A bespoke token falls to the `*)` arm and fail-closes on a healthy
+  # tree regardless of the sentinel, which is why Check 73 emits only PASS/FAIL and
+  # carries no not-evaluated arm (it has no measurement-outage class — every input
+  # is a committed file).
   local -a rs_checks=(
     "hook-registry-index-freshness:_c38_compute_verdict"
+    "bundle-metrics-gate-integrity:_c73_compute_verdict"
   )
 
   local rs_fail=0 rs_err=0 rs_pass=0 _entry _id _fn _verdict _tok
@@ -15543,7 +15953,7 @@ main() {
       echo "  --check-lifecycle            List retired/dormant checks + dispositions + reactivation anchors"
       echo "  --check-version-freeness     Pre-merge version-freeness probe (Check 41 only; exits 1 on a claimed/undecidable candidate) (#1677)"
       echo "  --check-close-completeness   Close-completeness probe (Check 48 only; exits 1 on a VERIFIED row missing a Stage-13 output) (#1290)"
-      echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (seeded: Check 38); honors .github/deploy-check-ci.enforce (#1485)"
+      echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
       echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; advisory/deploy-time-only; exits 1 on INCOMPLETE/NOSET when enforce) (#4026)"
       echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, unexpected=1) (#2656)"

@@ -2,10 +2,19 @@
 #
 # This committed marker governs whether the required-subset CI gate
 # (`deploy.sh --check-required-subset`, the enumerated load-bearing check subset —
-# today seeded with Check 38 hook-registry-index-freshness) BLOCKS or merely
-# REPORTS when an in-scope check FAILs. The runner reads this file directly, so the
-# sentinel is load-bearing on its own; the thin CI workflow (deploy-check-ci.yml)
-# additionally consumes the runner's exit code.
+# today Check 38 hook-registry-index-freshness and Check 73
+# bundle-metrics-gate-integrity) BLOCKS or merely REPORTS when an in-scope check
+# FAILs. The runner reads this file directly, so the sentinel is load-bearing on
+# its own; the thin CI workflow (deploy-check-ci.yml) additionally consumes the
+# runner's exit code. One token governs ALL members: flipping it arms every check
+# on the roster at once, so a new member joins at whatever posture this token
+# already carries.
+#
+# SCOPE BOUNDARY — this token does NOT govern the whole of Check 73. Check 73's
+# discrimination fixtures also run as an enumerated step in install-tests.yml,
+# which carries no continue-on-error and no paths: filter, so a discrimination
+# failure is a red check-run REGARDLESS of the token below. Reading `warn` here as
+# "nothing about G3-14/G3-15 can block a merge" is wrong.
 #
 # The first non-comment, non-blank line is the mode token:
 #   warn      → report only (exit-0); an in-scope FAIL is surfaced but does not block.

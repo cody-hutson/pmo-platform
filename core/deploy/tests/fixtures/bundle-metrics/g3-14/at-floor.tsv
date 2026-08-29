@@ -1,0 +1,37 @@
+# G3-14 SPECIFICITY fixture — the combined-clean parse rate sits EXACTLY AT the
+# configured floor, so the declared `>=` comparator must return PASS.
+#
+# This fixture is the boundary case ON PURPOSE. A gate whose specificity arm sits
+# comfortably above the floor cannot tell a correct `>=` from an incorrect `>`;
+# only the at-floor row makes that mutation observable, which is why the seeded-
+# failure arm for G3-14 is exactly `>=` -> `>` against this file.
+#
+# Grammar (TSV):  <id> \t <partition_group> \t <parse_status>
+#   partition_group  1 = conformant-bundleable (the gated denominator)
+#                    2 = type-excluded          (Step-1.5 group 2 — never counted)
+#                    3 = needs-body-repair      (Step-1.5 group 3 — never counted;
+#                                                surfaced as the co-gate count)
+#   parse_status     clean | failed | deferred  (deferred is EXCLUDED from the
+#                                                denominator — set aside, not failed)
+#
+# Determinate denominator = 9 clean + 1 failed = 10 -> rate 0.90 == floor 0.90.
+1001	1	clean
+1002	1	clean
+1003	1	clean
+1004	1	clean
+1005	1	clean
+1006	1	clean
+1007	1	clean
+1008	1	clean
+1009	1	clean
+1010	1	failed
+# A deferred body. If it were counted the denominator would be 11 and the rate
+# 0.818, flipping this fixture to BREACH — so its presence is what asserts the
+# deferral-exclusion rule rather than assuming it.
+1011	1	deferred
+# Group-2 and group-3 rows. Both must stay out of numerator AND denominator; the
+# group-3 count is reported as the denominator-coverage co-gate figure.
+2001	2	clean
+2002	2	failed
+3001	3	failed
+3002	3	failed

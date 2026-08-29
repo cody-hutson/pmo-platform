@@ -561,6 +561,24 @@ core/deploy/tests/test_package_freshness_exit_codes.sh
 ./core/deploy/tests/test_check45_governing_doc_name_match.sh
 core/deploy/tests/test_check45_governing_doc_name_match.sh
 
+# Check 73 bundle-metrics discrimination fixture suite
+# (test_check73_bundle_metrics_discrimination.sh) — new in-tree bash CLI. Drives the
+# G3-14 / G3-15 verdict bodies, EXTRACTED FROM deploy.sh AT RUN TIME, against
+# committed boundary fixtures in BOTH directions per gate, plus a C73-b
+# declaration/emitter discrimination pair and an anti-vacuity control that fails
+# unless all four arms executed and each gate produced an opposite-verdict pair.
+# Exit contract: non-zero on a wrong arm verdict (an instrument regression gates);
+# exit 0 carrying an explicit unevaluated marker on a measurement outage (an
+# environment condition must never gate a merge). Executed agent-side at Stage 6
+# self-verification and Stage 7 Dev Testing, and by the install-tests shell-tests
+# job; all four invocation forms so BLOCK-DESTRUCTIVE-022 does not block the
+# agent-side path. (CI runs no Claude hooks, so this entry is for the agent-side
+# path, not the workflow.)
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_check73_bundle_metrics_discrimination.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_check73_bundle_metrics_discrimination.sh
+./core/deploy/tests/test_check73_bundle_metrics_discrimination.sh
+core/deploy/tests/test_check73_bundle_metrics_discrimination.sh
+
 # Targeted composition-surface refresh regression (test_refresh_surfaces.sh) — new
 # in-tree bash CLI. Asserts that `deploy.sh --deploy` CANNOT heal a regressed
 # composition surface (it never sources the composition-surface manifest), that its

@@ -51,6 +51,17 @@ name: Install tests
 #                                  the mis-pin, unresolvable and empty-name branches
 #                                  are distinguishable, reproduces the pre-fix silent
 #                                  pass, and drift-guards the live predicate (#4177)
+#   - test_check73_bundle_metrics_discrimination.sh  deploy.sh Check 73: the
+#                                  G3-14 / G3-15 gate machinery must DISCRIMINATE.
+#                                  Extracts the verdict bodies from deploy.sh at
+#                                  run time and drives both directions of each
+#                                  gate against committed boundary fixtures, plus
+#                                  a C73-b declaration/emitter pair and an
+#                                  anti-vacuity control requiring an
+#                                  opposite-verdict pair per gate. Lives in THIS
+#                                  job because it must not be path-filtered: it is
+#                                  the unconditionally-blocking half of a check
+#                                  whose other half honours a warn sentinel (#6298)
 #   - core/deploy/tools/tests/test-status-label-invariant.sh  deploy.sh Check 16
 #                                  status-label invariant fixture self-test: the four
 #                                  arms (mutex / presence / proposed+milestone /
@@ -537,6 +548,33 @@ jobs:
         # fixture and requires it to FAIL, so a fixture that stopped reproducing the
         # defect fails the test rather than passing it vacuously.
         run: bash core/deploy/tests/test_check31_marker_probe_determinism.sh
+
+      - name: Run Check 73 bundle-metrics discrimination fixtures (test_check73_bundle_metrics_discrimination.sh)
+        # #6298: G3-14 (Mode-A combined-clean parse-rate floor) and G3-15
+        # (per-milestone risk-weighted size bound) shipped as prose-declared
+        # predicates with NO RUNNER ON ANY SURFACE — zero executable artifacts
+        # implemented either one. Building the runner is only half the job: a
+        # runner that answers the same way to a breaching and a conforming
+        # population is not a gate, it is a constant that reads green. This suite
+        # extracts the verdict bodies from deploy.sh AT RUN TIME (no re-encoded
+        # copy to drift) and drives both directions of each gate against committed
+        # boundary fixtures — the parse rate sits exactly AT the floor and
+        # effective_pts exactly AT the band bound, so a `>=`->`>` or `<=`->`<`
+        # mutation flips exactly one arm. Its assert_arms_ran control fails unless
+        # all four arms executed AND each gate produced an opposite-verdict pair,
+        # so deleting the arm that contradicts another cannot green the suite.
+        #
+        # THIS STEP IS THE UNCONDITIONALLY-BLOCKING HALF of Check 73. It carries no
+        # continue-on-error and this workflow carries no paths: filter, so a
+        # discrimination failure is a genuine red check-run on every pull request,
+        # independent of the .github/deploy-check-ci.enforce sentinel that governs
+        # the required-subset half. That is what lets this milestone ship a real
+        # blocking pre-merge assertion about these gates WITHOUT flipping any gate
+        # warn -> enforce.
+        #
+        # Security: consumes NO github.event.* input — a static invocation against
+        # workspace files, no ${{ }} interpolation inside the run: block.
+        run: bash core/deploy/tests/test_check73_bundle_metrics_discrimination.sh
 
       - name: Run Check 22 G1-06 priority-carrier regression (test_g1_06_priority_carrier.sh)
         # Check 22's G1-06 criterion used to bind one priority carrier and was
