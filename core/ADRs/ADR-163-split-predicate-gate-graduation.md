@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-162 — A gate whose subject is out-of-tree state graduates by splitting its predicate, CI-gating only the tree-resident half"
+title: "ADR-163 — A gate whose subject is out-of-tree state graduates by splitting its predicate, CI-gating only the tree-resident half"
 status: Proposed — flips to Accepted when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
 date: 2026-08-29
 release: warn-mode-gate-graduation
@@ -15,13 +15,15 @@ source_observations:
   - "The corpus already carried the shape of the answer in a THIRD disposition it had minted for a different reason: the `version-freeness` row records a flip DECLINED on architectural grounds rather than postponed on evidence, and states plainly that flipping would `declare an enforcement the surface cannot deliver, which Requirement (b) forbids`."
 ---
 
-# ADR-162 — Split-predicate gate graduation
+# ADR-163 — Split-predicate gate graduation
 
 ## Status
 
 **Proposed** — flips to **Accepted** when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified.
 
 **Numbering provenance.** Allocated at Engineering Commit 0 by `release/tools/renumber-adr.py --next-free`, which returned **162** against a mainline anchor of ADR-161 across both ADR directories. A concurrent unmerged branch (`release/declarations-have-a-firing-surface`) also claims 162; that claim is advisory until it merges, and the platform's rule is that a duplicate is tooled at merge time by `renumber-adr.py` while a gap blocks the repo. If this record renumbers at merge, the provenance note is appended here rather than rewritten.
+
+**Numbering provenance — `162 → 163`.** Held **ADR-162** branch-local; renumbered to **ADR-163** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 162. In-release citations that read "ADR-162" denote this record.
 
 ## Context
 

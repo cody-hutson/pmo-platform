@@ -2293,7 +2293,7 @@ _c38_compute_verdict() {
 #   BACKLOG-RESIDENT half (NOT here) — the live parse rate / the live
 #       effective_pts. Stays advisory PERMANENTLY on architectural grounds, at its
 #       declared Stage-3 -> 4 boundary runner. That is a recorded residual, not an
-#       open gap. See core/ADRs/ADR-162-split-predicate-gate-graduation.md.
+#       open gap. See core/ADRs/ADR-163-split-predicate-gate-graduation.md.
 #
 # NOT A PROXY (Requirement (a)). This check does NOT claim "the backlog parse rate
 # >= 0.90". It claims the narrower, fully tree-resident thing its id names: the
@@ -13388,7 +13388,7 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
   # resolves. It does NOT assert the live backlog parse rate or a live milestone's
   # effective_pts: that half's subject is out-of-tree GitHub state, has no repo-path
   # Verdict-Input Closure, and stays advisory at its Stage-3 -> 4 boundary runner
-  # PERMANENTLY, on architectural grounds (ADR-162). Reading a green here as
+  # PERMANENTLY, on architectural grounds (ADR-163). Reading a green here as
   # evidence about the live backlog would be exactly the proxy Requirement (a)
   # forbids, which is why the id is `-gate-integrity` and not `bundle-metrics`.
   #

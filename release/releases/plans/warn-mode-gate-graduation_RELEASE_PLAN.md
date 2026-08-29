@@ -253,7 +253,7 @@ CIAC-1 is the highest-value of the three: it is the only predicate that prevents
 
 | Scope | Author | Allocation |
 |---|---|---|
-| A stage gate whose subject is out-of-tree GitHub state is made (b′)-`required` by splitting its predicate and CI-gating only the tree-resident half | **#6298** (D-11 as revised by D-16 — #4751's ADR folds into this one record, covering both altitudes) | `python3 release/tools/renumber-adr.py --next-free`; never hand-reserved. Mainline anchor is ADR-161 across both ADR directories. PR #6353's ADR-162 claim is **unmerged and advisory only**. |
+| A stage gate whose subject is out-of-tree GitHub state is made (b′)-`required` by splitting its predicate and CI-gating only the tree-resident half | **#6298** (D-11 as revised by D-16 — #4751's ADR folds into this one record, covering both altitudes) | `python3 release/tools/renumber-adr.py --next-free`; never hand-reserved. Mainline anchor is ADR-161 across both ADR directories. PR #6353's ADR-163 claim is **unmerged and advisory only**. |
 
 ## Baseline Pin
 
@@ -290,7 +290,7 @@ All five are marked as closed at Stage 13 by the automated close-out. The releas
 ### Key decisions
 
 - **D-8 — evaluator ownership.** Two specs each assumed the other would build the G3-14 / G3-15 evaluator, so under both as written nobody built it. Ownership resolved to #6298, which therefore lands **first** rather than second.
-- **The predicate is split by locus of input** (ADR-162). Both gates' subject is out-of-tree GitHub state, so a merge gate on the live evaluation would go red for reasons no PR author can see or repair. The tree-resident machinery is gated at `required`; the backlog-resident half is recorded as a **permanent** advisory residual on architectural grounds — not deferred, not awaiting evidence.
+- **The predicate is split by locus of input** (ADR-163). Both gates' subject is out-of-tree GitHub state, so a merge gate on the live evaluation would go red for reasons no PR author can see or repair. The tree-resident machinery is gated at `required`; the backlog-resident half is recorded as a **permanent** advisory residual on architectural grounds — not deferred, not awaiting evidence.
 - **Extend, do not create.** Two existing filter-free workflows absorbed the new check. Zero new workflows, sentinels, branch-protection contexts, or macOS jobs.
 - **A disposition must name its blocker, not its schedule.** The register's `shakedown continues` shape names a schedule and is unfalsifiable; the replacement rows name conditions a reader can check.
 
@@ -309,7 +309,7 @@ The **expensive** half of this release is #5588's rotation, still pending: recor
 
 ### Cross-references
 
-- `core/ADRs/ADR-162-split-predicate-gate-graduation.md` — the reusable decision, both altitudes
+- `core/ADRs/ADR-163-split-predicate-gate-graduation.md` — the reusable decision, both altitudes
 - `core/standards/gate-efficacy-standard.md` — Requirements (a) / (b) / (b′), § Verdict-Input Closure, and both registers this release writes into
 - `core/schemas/gate-criteria-spec.md` — G3-14 / G3-15 definitional home (read-only for #6298; edited by #4214)
 - `core/standards/progressive-rollout-convention.md` — owns the `warn → enforce → removed` ladder; advance is an operator decision, never auto-promoted by hit count
