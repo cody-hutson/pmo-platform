@@ -8,6 +8,8 @@ reversibility: CHEAP
 consumers:
   - hub-spoke-bridge.md § Procedure 5 Gate Handling (Stage 9 Decision Briefing)
   - pipeline/stage-09-plan-review.md § 5 Phase A6 + § 11 Audit-Trail Capture
+  - pipeline/stage-07-dev-testing.md § 5 Phase A required-gate + mergeability read (cites § 5.1)
+  - pipeline/stage-08-qa-testing.md § 5 Phase A required-gate + mergeability read (cites § 5.1)
   - gate-criteria-spec.md § Gate 9 G-PR1
   - engagement-charter.md § 2 Stage 9 GO worked example
   - pmo-qa-auditor (downstream consumer; Stage 13 retrospective)
@@ -92,7 +94,7 @@ The 4-value enum follows hub-spoke-bridge.md Procedure 7 verification-table prec
 | 11 | Fix-verification consistency | All fixes verified to same level on all passes | Read Stage 7 § DT iteration loop (per Stage 7 DT iteration loop spec) pass-N log — assert each pass re-executed the original AV-N assertion set | structural-auto | Stage 7 |
 | 12 | Agent separation | Proper separation (prevents excessive agency; promotes quality) | Read hub-spoke-bridge.md § Spoke vs Hub assertions + per-stage persona declarations in release-personas.md + autonomy-tiers.md per-stage anchor — assert no hub-side spoke work + no spoke-side hub work | structural-auto | All stages |
 | 13 | Comprehensive package review | Comprehensive review (nothing missed) | Stage 8 QA + Stage 9 Phase A1-A5 + Stage 13 G-CL6 + completion-verification check — escape detection absorbed here (items that traversed Stage 7-8 without being caught) | judgment-recommend | Stage 8 + Stage 9 + Stage 13 |
-| 14 | Required-gate + mergeability | The release PR carries green required CI gates and is in a state that can merge when the time comes | `gh pr checks <PR> --required --json name,state,bucket,link` (ONE call, no poll; in this `--json` form it exits **0** even when a row is failing or pending — the exit code signals only an unresolvable PR or an auth failure — so branch on the parsed rows, never on the exit code) PLUS `gh pr view <PR> --json isDraft,mergeable,mergeStateStatus` PLUS the branch-protection required-context count as the denominator floor. Classify to exactly one state per the precedence table in section 5.1 and record the state name in Notes | structural-auto | Stage 6 + Stage 9 |
+| 14 | Required-gate + mergeability | The release PR carries green required CI gates and is in a state that can merge when the time comes | `gh pr checks <PR> --required --json name,state,bucket,link` (ONE call, no poll; in this `--json` form it exits **0** even when a row is failing or pending, so branch on the parsed rows, never on the exit code; the exit code carries THREE conditions, not two — an unresolvable PR, an auth failure, and an **empty required roster**, where `gh` exits **1** with non-JSON stdout `no required checks reported on the '<branch>' branch`, so classify a non-zero exit by reading stdout rather than recording it as unreadable: both enter at state 2 below, so the cost is attribution, not safety) PLUS `gh pr view <PR> --json isDraft,mergeable,mergeStateStatus` PLUS the branch-protection required-context count as the denominator floor. Classify to exactly one state per the precedence table in section 5.1 and record the state name in Notes | structural-auto | Stage 6 + Stage 9 |
 
 **Mechanism split summary (per D-PerDimMechanism = HYBRID):**
 

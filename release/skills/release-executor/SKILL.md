@@ -426,7 +426,18 @@ Mode F publishes the canonical public release-notes surface (Surface 1 of the La
    # the STRIPPED body, so a raw-file write can never satisfy the test that
    # triggered it, and Mode F would re-edit the same Release on every invocation
    # without ever reaching State 2.
-   CANONICAL_BODY=$(sed '1,/^---$/d; 1,/^---$/d' "$NOTES_PATH" 2>/dev/null)
+   # Source the shared § 5.1 transform; never inline a copy. Inline copies of this
+   # strip drifted across four call sites, and one form returns an EMPTY body on
+   # GNU userlands while returning the body on BSD.
+   . "$REPO_ROOT/release/tools/lib/frontmatter-strip.sh"
+   CANONICAL_BODY=$(strip_frontmatter "$NOTES_PATH" 2>/dev/null)
+
+   # EMPTY-BODY GUARD (§ 5.1 S4). The strip is fail-closed, so empty means the note
+   # is malformed. Publishing it would blank a live Release body irreversibly.
+   if [[ -z "$CANONICAL_BODY" ]]; then
+     echo "HALT — frontmatter strip produced an EMPTY body from $NOTES_PATH; refusing to publish nothing"
+     exit 1
+   fi
 
    # Read current state via gh release view
    if gh release view "v<X.Y>" --repo {REPO} >/dev/null 2>&1; then

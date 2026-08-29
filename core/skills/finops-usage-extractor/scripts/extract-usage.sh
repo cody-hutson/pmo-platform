@@ -22,9 +22,20 @@
 #     --self-test    run built-in assertions against the synthetic test-fixtures; no
 #                    source or operator-store access.
 #
-# Exit codes: 0 ok · 2 usage error · 3 source unreadable, or incremental carry-forward
-#             read failure (store left unchanged) · 4 store-not-git-ignored
-#             (fail-closed public-repo exfil guard) · 5 missing dependency (jq/git).
+# Exit codes: 0 ok · 2 usage error · 3 fail-closed read failure (four causes, below)
+#             · 4 store-not-git-ignored (fail-closed public-repo exfil guard)
+#             · 5 missing dependency (jq/git).
+#
+# Exit 3 has FOUR distinct causes, not one. Every one leaves an existing store
+# UNCHANGED, and every one prints its own `FATAL (exit 3):` line naming itself — so
+# the cause is READ OFF STDERR and never inferred from the code alone:
+#     - session-data source root unreadable            (both modes, pre-dispatch)
+#     - --incremental drop-set read failed over the re-extracted records
+#     - --incremental drop-set could not be assembled
+#     - --incremental carry-forward could not read the store
+# The carry-forward cause came from #4188; the two drop-set causes are new in #5240.
+# A caller that branches on the exit code alone cannot tell "there was nothing to
+# read" from "the store is intact but now stale" — match the message, not just 3.
 
 set -uo pipefail
 
@@ -346,10 +357,37 @@ do_incremental() {
   while IFS= read -r f; do
     extract_file "$f" "$now" >> "$body"
   done < "$changed"
-  jq -r 'select(.record=="session") | .session_id' "$body" 2>/dev/null | sort -u > "$ids"
+  # The drop-set is the SAME class of read as the carry-forward below, and it fails in
+  # the OPPOSITE direction: an unread drop-set is an EMPTY drop-set, so carry-forward
+  # drops NOTHING and the `cat "$body" >> "$merged"` append below re-adds every
+  # re-extracted session on top of the copy already carried forward — DUPLICATING
+  # session records instead of superseding them. Silently wrong, and just as
+  # data-affecting as the truncation the carry-forward guard closes. Fail closed and
+  # leave the existing store untouched. Never `2>/dev/null` on this path.
+  local ids_err="${ids}.err"
+  if ! jq -r 'select(.record=="session") | .session_id' "$body" 2>"$ids_err" | sort -u > "$ids"; then
+    printf 'FATAL (exit 3): incremental drop-set read failed over the re-extracted records; the store is left UNCHANGED at %s\n' "$store_file" >&2
+    sed 's/^/  jq: /' "$ids_err" >&2
+    printf 'Recover with: bash %s --rebuild\n' "${BASH_SOURCE[0]}" >&2
+    rm -f "$changed" "$body" "$ids" "$ids_err"
+    return 3
+  fi
+  rm -f "$ids_err"
   # Carry forward existing records whose session_id is NOT in the changed set.
-  local drop_json
-  drop_json="$(jq -R . "$ids" 2>/dev/null | jq -s -c '.' 2>/dev/null || echo '[]')"
+  # Same class, same direction: the shipped `|| echo '[]'` WAS the fail-open — it
+  # converted a failed read into an empty drop-set, which carry-forward then honours
+  # as "drop nothing". A legitimately empty "$ids" still yields `[]` on the SUCCESS
+  # path (both stages exit 0 on empty input), so this guard fires only on real failure.
+  local drop_json drop_err="${ids}.drop.err"
+  : > "$drop_err"
+  if ! drop_json="$(jq -R . "$ids" 2>>"$drop_err" | jq -s -c '.' 2>>"$drop_err")"; then
+    printf 'FATAL (exit 3): incremental drop-set could not be assembled; the store is left UNCHANGED at %s\n' "$store_file" >&2
+    sed 's/^/  jq: /' "$drop_err" >&2
+    printf 'Recover with: bash %s --rebuild\n' "${BASH_SOURCE[0]}" >&2
+    rm -f "$changed" "$body" "$ids" "$drop_err"
+    return 3
+  fi
+  rm -f "$drop_err"
   merged="$(mktemp "${TMPDIR:-/tmp}/finops-merge.XXXXXX")"
   local merged_err="${merged}.err"
   # Carry-forward is a READ of an already-written store; there is no benign failure
@@ -595,6 +633,165 @@ self_test() {
     fi
   fi
   rm -rf "$cf_src" "$cf_store"
+
+  # 10) DROP-SET fail-closed arms (#5240). Sub-test 9 proves the carry-forward SURVIVES a
+  #     HEALTHY run; it cannot distinguish "guard present" from "guard absent", because
+  #     both look identical when nothing fails. These are MUTATION arms: they induce the
+  #     failure and assert the new behaviour is loud. The direction is why they are
+  #     needed — an unread drop-set is an EMPTY drop-set, so the pre-fix code carried
+  #     everything forward AND appended the re-extracted records, silently DUPLICATING
+  #     sessions. A duplicate store still parses, still has a plausible length, and still
+  #     passes every shape assertion above; only an induced failure can catch it.
+  #
+  #     Mechanism: shadow `jq` on PATH for the duration of ONE do_incremental call, in a
+  #     SUBSHELL so neither PATH nor the fail-selector can leak into later assertions.
+  #     The stub matches the ONE failing invocation by an exact argv element, so no other
+  #     jq call inside do_incremental is affected — the arms are precise, not blanket.
+  #     INVARIANT: every failure message below contains the literal "drop-set"; each arm
+  #     greps its OWN guard's wording, so arm (a) cannot be satisfied by arm (b)'s guard.
+  local ds_src ds_store ds_bin ds_realjq ds_pick ds_file ds_err ds_rc ds_n
+  ds_realjq="$(command -v jq 2>/dev/null || true)"
+  ds_src="$(mktemp -d "${TMPDIR:-/tmp}/finops-dssrc.XXXXXX")"
+  ds_store="$(mktemp -d "${TMPDIR:-/tmp}/finops-dsstore.XXXXXX")"
+  ds_bin="$(mktemp -d "${TMPDIR:-/tmp}/finops-dsbin.XXXXXX")"
+  cp -R "$FIXTURES_DIR/." "$ds_src/" 2>/dev/null
+  STORE="$ds_store" FINOPS_SOURCE_ROOT="$ds_src" do_rebuild "$ds_store" "$ds_src" 2>/dev/null
+  cp -f "$ds_store/usage.jsonl" "$ds_store/usage.baseline.jsonl" 2>/dev/null
+  ds_n="$(jq -s '[.[] | select(.record=="session")] | length' "$ds_store/usage.jsonl" 2>/dev/null)"
+  # The stub is written with a QUOTED heredoc — nothing expands at author time; the real
+  # jq path and the fail-selector arrive through the environment, so the stub text is
+  # inert until it runs.
+  cat > "$ds_bin/jq" <<'DSSTUBEOF'
+#!/bin/bash
+# finops-usage-extractor --self-test stub. Fails exactly ONE jq invocation, selected by
+# FINOPS_SELFTEST_JQ_FAIL, and delegates every other call to the real jq unchanged.
+_dsfail=0
+# `dropset-slurp` matches the WHOLE argv, not a member: `-s` and `-c` each appear in
+# extract_file's and write_store's invocations too, so a member match would over-fire
+# and the arm would stop proving anything about the drop-set specifically.
+if [ "${FINOPS_SELFTEST_JQ_FAIL:-}" = "dropset-slurp" ] && [ "$#" -eq 3 ] \
+   && [ "$1" = "-s" ] && [ "$2" = "-c" ] && [ "$3" = "." ]; then
+  _dsfail=1
+fi
+for _a in "$@"; do
+  case "${FINOPS_SELFTEST_JQ_FAIL:-}" in
+    dropset-ids)  [ "$_a" = 'select(.record=="session") | .session_id' ] && _dsfail=1 ;;
+    dropset-json) [ "$_a" = "-R" ] && _dsfail=1 ;;
+  esac
+done
+if [ "$_dsfail" -eq 1 ]; then
+  printf 'finops-selftest-stub: induced failure for %s\n' "${FINOPS_SELFTEST_JQ_FAIL}" >&2
+  exit 5
+fi
+exec "$FINOPS_SELFTEST_REAL_JQ" "$@"
+DSSTUBEOF
+  chmod +x "$ds_bin/jq"
+  if [ -z "$ds_realjq" ] || [ "${ds_n:-0}" -lt 2 ]; then
+    echo "FAIL: drop-set sub-test cannot run — needs a resolvable jq and >=2 fixture session records (jq='${ds_realjq}', sessions=${ds_n:-0})"; fail=1
+  else
+    # Same deterministic mtime staging as sub-test 9: all sources OLD, store MIDDLE,
+    # exactly one source NEW, so the mtime gate fires and the drop-set code is reached
+    # rather than the no-source-change early return.
+    find "$ds_src" -type f -name '*.jsonl' -exec touch -t 202001010000 {} + 2>/dev/null
+    touch -t 202006010000 "$ds_store/usage.jsonl" 2>/dev/null
+    ds_pick="$(head -1 <<<"$( { jq -r 'select(.record=="session") | .session_id' "$ds_store/usage.jsonl" 2>/dev/null || true; } | sort)")"
+    ds_file="$(find "$ds_src" -type f -name "${ds_pick:-__none__}.jsonl" -print -quit 2>/dev/null || true)"
+    if [ -z "$ds_pick" ] || [ -z "$ds_file" ]; then
+      echo "FAIL: drop-set sub-test cannot resolve a source file for session '${ds_pick:-}'"; fail=1
+    else
+      touch -t 202101010000 "$ds_file" 2>/dev/null
+      ds_err="$ds_store/dropset.err"
+      # (10a) MUTATION — the session_id read that builds "$ids".
+      (
+        export PATH="$ds_bin:$PATH"
+        export FINOPS_SELFTEST_REAL_JQ="$ds_realjq"
+        export FINOPS_SELFTEST_JQ_FAIL="dropset-ids"
+        do_incremental "$ds_store" "$ds_src"
+      ) 2>"$ds_err"; ds_rc=$?
+      [ "$ds_rc" -eq 3 ] \
+        || { echo "FAIL: drop-set id-read failure did not fail closed (expected exit 3, got $ds_rc)"; fail=1; }
+      grep -q 'drop-set read failed over the re-extracted records' "$ds_err" \
+        || { echo "FAIL: drop-set id-read guard did not report its own failure (message missing from stderr)"; fail=1; }
+      diff -q "$ds_store/usage.jsonl" "$ds_store/usage.baseline.jsonl" >/dev/null 2>&1 \
+        || { echo "FAIL: drop-set id-read failure rewrote the store; fail-closed must leave it UNCHANGED"; fail=1; }
+      [ ! "$ds_store/usage.jsonl" -nt "$ds_file" ] \
+        || { echo "FAIL: drop-set id-read failure touched the store (mtime advanced past the staged source)"; fail=1; }
+
+      # (10b) MUTATION — the `jq -R` stage that assembles $drop_json. The store is still
+      #       unstaged because (10a) returned before write_store, so no re-staging is
+      #       needed.
+      #       KEEP THE MESSAGE ASSERTION. Measured against the pre-fix code, the exit-code
+      #       limb ALONE does not discriminate here: the shipped `|| echo '[]'` captures
+      #       BOTH the surviving second stage's `[]` AND the fallback's `[]`, so
+      #       $drop_json becomes two concatenated documents, --argjson rejects it, and the
+      #       carry-forward guard returns 3 for a DIFFERENT reason. Exit 3 alone would
+      #       therefore pass against the defect. The wording limb is what fails it.
+      (
+        export PATH="$ds_bin:$PATH"
+        export FINOPS_SELFTEST_REAL_JQ="$ds_realjq"
+        export FINOPS_SELFTEST_JQ_FAIL="dropset-json"
+        do_incremental "$ds_store" "$ds_src"
+      ) 2>"$ds_err"; ds_rc=$?
+      [ "$ds_rc" -eq 3 ] \
+        || { echo "FAIL: drop-set assembly failure did not fail closed (expected exit 3, got $ds_rc)"; fail=1; }
+      grep -q 'drop-set could not be assembled' "$ds_err" \
+        || { echo "FAIL: drop-set assembly guard did not report its own failure (message missing from stderr)"; fail=1; }
+      diff -q "$ds_store/usage.jsonl" "$ds_store/usage.baseline.jsonl" >/dev/null 2>&1 \
+        || { echo "FAIL: drop-set assembly failure rewrote the store; fail-closed must leave it UNCHANGED"; fail=1; }
+      [ ! "$ds_store/usage.jsonl" -nt "$ds_file" ] \
+        || { echo "FAIL: drop-set assembly failure touched the store (mtime advanced past the staged source)"; fail=1; }
+
+      # (10b2) MUTATION — the SLURP stage of the same statement. This is the genuinely
+      #        SILENT variant of the defect and the reason (10b) is not sufficient on its
+      #        own: when only the second stage fails, the shipped fail-open produces a
+      #        CLEAN `[]`, --argjson accepts it, carry-forward drops nothing, the append
+      #        duplicates every re-extracted session, and the run exits 0. Nothing
+      #        downstream catches it. Under the guard it is exit 3 and loud.
+      (
+        export PATH="$ds_bin:$PATH"
+        export FINOPS_SELFTEST_REAL_JQ="$ds_realjq"
+        export FINOPS_SELFTEST_JQ_FAIL="dropset-slurp"
+        do_incremental "$ds_store" "$ds_src"
+      ) 2>"$ds_err"; ds_rc=$?
+      [ "$ds_rc" -eq 3 ] \
+        || { echo "FAIL: drop-set slurp failure did not fail closed (expected exit 3, got $ds_rc) — this is the SILENT variant, exit 0 here means the store was duplicated"; fail=1; }
+      grep -q 'drop-set could not be assembled' "$ds_err" \
+        || { echo "FAIL: drop-set slurp guard did not report its own failure (message missing from stderr)"; fail=1; }
+      diff -q "$ds_store/usage.jsonl" "$ds_store/usage.baseline.jsonl" >/dev/null 2>&1 \
+        || { echo "FAIL: drop-set slurp failure rewrote the store; fail-closed must leave it UNCHANGED"; fail=1; }
+      [ ! "$ds_store/usage.jsonl" -nt "$ds_file" ] \
+        || { echo "FAIL: drop-set slurp failure touched the store (mtime advanced past the staged source)"; fail=1; }
+
+      # (10c) CONTROL — identical harness, identical stub on PATH, NO fail selector. If
+      #       this arm did not pass, (10a)/(10b)/(10b2) would prove nothing: the harness
+      #       itself would be the cause. Runs LAST because it legitimately rewrites the
+      #       store.
+      #       Non-vacuity is asserted on MTIME, not on bytes. A byte-difference assertion
+      #       is a flake: the incremental write preserves created_utc and re-derives
+      #       last_extract_utc / extracted_utc from a SECOND-resolution clock, so when the
+      #       whole block runs inside one second a successful run legitimately reproduces
+      #       the rebuild byte-for-byte. Observed red on exactly that path while authoring
+      #       this arm. `write_store` mv's a fresh temp file into place, so mtime advances
+      #       unconditionally — the same wording-independent probe sub-test 9 uses.
+      (
+        export PATH="$ds_bin:$PATH"
+        export FINOPS_SELFTEST_REAL_JQ="$ds_realjq"
+        do_incremental "$ds_store" "$ds_src"
+      ) 2>"$ds_err"; ds_rc=$?
+      [ "$ds_rc" -eq 0 ] \
+        || { echo "FAIL: drop-set control arm did not succeed (exit $ds_rc) — the harness, not the guard, is failing the mutation arms"; fail=1; }
+      grep -q 'incremental upsert complete' "$ds_err" \
+        || { echo "FAIL: drop-set control arm did not reach the carry-forward branch — the mutation arms tested the early return, not the guards"; fail=1; }
+      [ "$ds_store/usage.jsonl" -nt "$ds_file" ] \
+        || { echo "FAIL: drop-set control arm did not rewrite the store — the store-unchanged assertions above are vacuous"; fail=1; }
+      # The defect this card closes, asserted directly: a healthy run must not duplicate.
+      local ds_dups
+      ds_dups="$(jq -r 'select(.record=="session") | .session_id' "$ds_store/usage.jsonl" 2>/dev/null | sort | uniq -d)"
+      [ -z "$ds_dups" ] \
+        || { echo "FAIL: drop-set control arm produced duplicate session_id(s): $ds_dups"; fail=1; }
+    fi
+  fi
+  rm -rf "$ds_src" "$ds_store" "$ds_bin"
 
   rm -rf "$st_store"
   if [ "$fail" -eq 0 ]; then

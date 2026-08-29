@@ -39,7 +39,7 @@ THE PREDICATE IS DELIBERATELY RECALL-BIASED — DO NOT "TIGHTEN" IT
     Precision is the exclusions file's job, not the predicate's. Narrowing the regex
     to kill a false positive re-opens the silent class.
 
-THE FOUR ARMS
+THE ARMS
     A  EXECUTION       HARD   every discovered tool's `--self-test` exits 0
     B  MANIFEST FLOOR  HARD   (i) every manifest path still on disk is discovered
                               (ii) every discovered path is in the manifest
@@ -47,6 +47,13 @@ THE FOUR ARMS
                               discovered, invoked by a named workflow step, or
                               excluded WITH a reason
     D  TEST SUITES     WARN   every tests/ suite is referenced by >=1 workflow
+    E  DOC COVERAGE    HARD   every top-level *.py/*.sh in core/deploy/tools/ carries
+                              exactly one core/deploy/tools/README.md inventory row,
+                              and every row names a tool that exists
+
+    Arm E's population is a SECOND, independently-declared one: the DIRECTORY, never
+    the self-test manifest, whose population is smaller by design. See the ARM E
+    constants block for the four measured sources and why three of them are refused.
 
     Arms A and B are sourced INDEPENDENTLY — A's set comes from a runtime glob, B's
     from a committed artifact. That independence is what stops "advertises but is not
@@ -131,6 +138,36 @@ TEST_SUITE_GLOBS = (
 SELF_TEST_TOKEN = "--self-test"
 
 PER_TOOL_TIMEOUT_S = 300
+
+# --------------------------------------------------------------------------------
+# ARM E — documentation coverage for core/deploy/tools/README.md
+# --------------------------------------------------------------------------------
+# These globs are declared HERE, literally. They are NOT read from the manifest's
+# '# scope:' directives, NOT filtered by advertises(), and NOT filtered by the
+# exclusions file. Arm E's population is the DIRECTORY, because the rule it enforces
+# (core/deploy/tools/README.md § Coverage rule) is stated over the directory:
+# "every file matching core/deploy/tools/*.py or *.sh (top level only)".
+#
+# Measured on this branch — the four candidate sources are NOT interchangeable:
+#     directory globs (this)      36     <- the rule's own population
+#     ctx.discovered              33     <- advertisers minus exclusions
+#     ctx.expected (manifest)     33     <- same set, committed
+#     ctx.scope_members           36     <- equal TODAY, but manifest-derived:
+#                                           deleting a '# scope: core/deploy/tools/*'
+#                                           directive silently shrinks it, and the two
+#                                           NON-dispatchers in this directory were never
+#                                           on the manifest floor, so Arm B(i) cannot
+#                                           catch their loss.
+# Routing Arm E through any of the other three under-enforces over a 33-tool population
+# while reporting green over a 36-tool one — reproducing, inside the enforcement
+# mechanism, the exact defect class the coverage rule exists to close. The exclusions
+# file is refused for a second reason: a --self-test suppression is not a documentation
+# exemption, and applying it would drop build-skill-packages.sh, which IS documented,
+# manufacturing an orphan-row false positive.
+DOC_COVERAGE_README_REL = "core/deploy/tools/README.md"
+DOC_COVERAGE_GLOBS = ("core/deploy/tools/*.py", "core/deploy/tools/*.sh")
+DOC_TABLE_HEADER_PREFIX = "| Tool | Used by"
+_DOC_ROW_KEY_RE = re.compile(r"^\|\s*`([^`]+)`")
 
 # --------------------------------------------------------------------------------
 # ADVERTISE — the predicate
@@ -411,6 +448,55 @@ def tracked_scripts(root: Path) -> list[str]:
     return sorted(rels)
 
 
+def doc_population(root: Path) -> list[str]:
+    """Arm E's population: basenames of every top-level *.py/*.sh in the tools dir.
+
+    Basenames, because the README table is keyed by exact backticked basename.
+    is_file() mirrors Ctx.scope_members: a directory named '*.sh' must not enter.
+    """
+    found: set[str] = set()
+    for glob in DOC_COVERAGE_GLOBS:
+        for p in root.glob(glob):
+            if p.is_file():
+                found.add(p.name)
+    return sorted(found)
+
+
+def doc_rows(text: str) -> list[str]:
+    r"""Row keys from the README inventory table, in file order (duplicates KEPT).
+
+    Byte-equivalent to the derivation the README itself publishes:
+        sed -n '/^| Tool | Used by/,/^$/p' … | sed -nE 's/^\| `([^`]+)`.*/\1/p'
+    Same start marker, same blank-line terminator, same first-backticked-token-in-
+    column-1 key. Re-implemented in Python rather than shelled out because BSD/GNU
+    sed diverge and this engine runs on two runners (module docstring, WHY PYTHON
+    AND NOT BASH); the equivalence is ASSERTED, not assumed — see T-43.
+
+    Duplicates are kept rather than set()-ed here: the README's rule is EXACTLY one
+    row per basename, so a second row for a basename the table already contains is a
+    finding, and de-duplicating in the parser would delete the evidence.
+    """
+    rows: list[str] = []
+    in_table = False
+    for line in text.splitlines():
+        if not in_table:
+            if line.startswith(DOC_TABLE_HEADER_PREFIX):
+                in_table = True
+            continue
+        if not line.strip():
+            # The table ends at the first blank line — this file holds 2 more tables.
+            # Measured: NEITHER trailing table backticks its first column today, so
+            # removing this break currently changes nothing on the live README. It is
+            # kept because the published derivation has it and because the next table
+            # added could be keyed differently; T-43/T-41 grade it on a fixture whose
+            # decoy IS backticked, which is the only shape where its removal shows.
+            break
+        m = _DOC_ROW_KEY_RE.match(line)
+        if m:
+            rows.append(m.group(1))
+    return rows
+
+
 # --------------------------------------------------------------------------------
 # Reporting helpers
 # --------------------------------------------------------------------------------
@@ -681,6 +767,89 @@ def mode_reconcile(ctx: Ctx) -> int:
         parts = ", ".join(f"{k}={len(v)}" for k, v in buckets.items())
         print(f"Runner partition total and disjoint ({parts}).")
 
+    # ---- Arm E (HARD): tool <-> README row, bidirectional, over the DIRECTORY.
+    # The rule lives at core/deploy/tools/README.md § Coverage rule and shipped with no
+    # mechanical enforcement; it reopened twice before this arm existed.
+    doc_readme = root / DOC_COVERAGE_README_REL
+    is_real_tree = root == Path(__file__).resolve().parents[2]
+    if not doc_readme.is_file():
+        if is_real_tree:
+            failed = True
+            err(
+                f"Arm E DOC COVERAGE — {DOC_COVERAGE_README_REL} is missing from the real "
+                f"checkout. The rule it states is what this arm enforces; with the file "
+                f"absent the arm cannot measure, and an arm that cannot measure must not "
+                f"report a pass."
+            )
+        else:
+            # PV-7 Register A: NOT-EVALUATED is emitted POSITIVELY and the counters are
+            # OMITTED rather than zeroed, so a fixture tree can never read as 'clean'.
+            print(
+                f"ARM E SCAN not-run — no {DOC_COVERAGE_README_REL} under --root {root}; "
+                f"population and row counts are ABSENT, not zero."
+            )
+    else:
+        population = doc_population(root)
+        rows = doc_rows(doc_readme.read_text(encoding="utf-8", errors="replace"))
+        undocumented = sorted(set(population) - set(rows))
+        orphan = sorted(set(rows) - set(population))
+        duplicate = sorted({r for r in rows if rows.count(r) > 1})
+        print(
+            f"ARM E SCAN fetched — population={len(population)} rows={len(rows)} "
+            f"unique={len(set(rows))}"
+        )
+        if undocumented or orphan or duplicate:
+            failed = True
+            err(
+                f"Arm E DOC COVERAGE — {DOC_COVERAGE_README_REL} § Coverage rule is "
+                f"violated: {len(undocumented)} undocumented tool(s), {len(orphan)} orphan "
+                f"row(s), {len(duplicate)} duplicate row(s). A tool added to "
+                f"core/deploy/tools/ is not complete until its row lands in the same change."
+            )
+            for name in undocumented:
+                print(f"  UNDOCUMENTED: {name}")
+            for name in orphan:
+                print(f"  ORPHAN ROW: {name}")
+            for name in duplicate:
+                print(f"  DUPLICATE ROW: {name}")
+        else:
+            print(f"ARM E PASSED — {len(population)} of {len(population)} tools documented.")
+
+        # ---- Arm E denominators (AC-3). The two populations differ BY DESIGN; what must
+        # hold is the identity that EXPLAINS the difference. It is non-vacuous exactly
+        # where Arm B(i) stops: a narrowing carried out CORRECTLY — directive deleted AND
+        # its manifest lines deleted in the same diff — greens Arm B and lands here.
+        manifest_here = {
+            Path(p).name
+            for p in ctx.expected
+            if p.startswith("core/deploy/tools/") and p.count("/") == 3
+        }
+        excluded_here = {
+            Path(p).name
+            for p in ctx.exclusions
+            if p.startswith("core/deploy/tools/") and p.count("/") == 3
+        }
+        non_dispatchers = {
+            n for n in population if not advertises(root / "core/deploy/tools" / n)
+        }
+        delta = set(population) - manifest_here
+        print(
+            f"ARM E DENOMINATORS — directory={len(population)} "
+            f"selftest-manifest={len(manifest_here)} delta={len(delta)} "
+            f"(excluded={len(excluded_here)} non-dispatchers={len(non_dispatchers)})"
+        )
+        unexplained = delta - (excluded_here | non_dispatchers)
+        if unexplained:
+            failed = True
+            err(
+                f"Arm E DENOMINATOR IDENTITY — {len(unexplained)} tool(s) sit in the "
+                f"directory but not in the self-test manifest for a reason that is neither "
+                f"a written exclusion nor a missing --self-test dispatch. The two "
+                f"denominators have diverged in a way nothing accounts for — most likely a "
+                f"'# scope: core/deploy/tools/*' directive was removed together with its "
+                f"manifest lines: {', '.join(sorted(unexplained))}"
+            )
+
     return 1 if failed else 0
 
 
@@ -756,6 +925,27 @@ class _Fixture:
     def manifest(self, scopes, paths):
         body = "\n".join(f"# scope: {g}" for g in scopes) + "\n" + "\n".join(paths) + "\n"
         self.write(MANIFEST_REL, body)
+
+    def readme(self, rows):
+        """Arm E's README. NOT written by __init__ — its ABSENCE is T-44's subject.
+
+        The trailing decoy table's first column is BACKTICKED on purpose. A decoy
+        whose column 1 is un-backticked (`| 1 | `x` |`) is never a row-key candidate
+        in the first place, so it would grade nothing: the parse returns the same
+        list with the terminator honoured or ignored. Measured — the live README's
+        two trailing tables are of exactly that harmless shape, so the terminator is
+        belt-and-braces there and this fixture is the ONLY place its removal is
+        detectable. That is what makes T-43 (and T-41) able to fail.
+        """
+        body = (
+            "# core/deploy/tools/\n\n"
+            "| Tool | Used by | Mode(s) | Purpose |\n"
+            "|---|---|---|---|\n"
+            + "".join(f"| `{r}` | x | y | z |\n" for r in rows)
+            + "\nA second table follows, and must NOT be parsed:\n\n"
+            "| Fixture | Verifies |\n|---|---|\n| `decoy.sh` | nothing |\n"
+        )
+        self.write(DOC_COVERAGE_README_REL, body)
 
     def close(self):
         shutil.rmtree(self.root, ignore_errors=True)
@@ -943,6 +1133,211 @@ def _selftest() -> int:
             and len(buckets["macos"]) == 1
             and len(buckets["ubuntu"]) == 1,
             "T-20 runner partition is total and disjoint",
+        )
+    finally:
+        fx.close()
+
+    # ---- Arm E: documentation coverage, over the DIRECTORY.
+    # Every fixture below keeps Arms A-D green so a non-zero exit is attributable to
+    # Arm E alone; the paired CONTROL differs from its subject by ONE fact.
+
+    # T-40 / T-41: a tool with no README row.
+    fx = _Fixture()
+    try:
+        fx.write("core/deploy/tools/undocumented.sh", _PASS_SH)
+        fx.manifest(["core/deploy/tools/*.sh"], ["core/deploy/tools/undocumented.sh"])
+        fx.readme([])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 1 and "UNDOCUMENTED: undocumented.sh" in out,
+            "T-40 a tool with no README row FAILS Arm E and is NAMED",
+        )
+    finally:
+        fx.close()
+
+    fx = _Fixture()
+    try:
+        fx.write("core/deploy/tools/undocumented.sh", _PASS_SH)
+        fx.manifest(["core/deploy/tools/*.sh"], ["core/deploy/tools/undocumented.sh"])
+        fx.readme(["undocumented.sh"])
+        check(
+            mode_reconcile(Ctx(fx.root)) == 0,
+            "T-41 CONTROL: the identical tree WITH the row passes, so T-40 is attributable",
+        )
+    finally:
+        fx.close()
+
+    # T-42: the reverse direction — a row naming no tool.
+    fx = _Fixture()
+    try:
+        fx.write("core/deploy/tools/real.sh", _PASS_SH)
+        fx.manifest(["core/deploy/tools/*.sh"], ["core/deploy/tools/real.sh"])
+        fx.readme(["real.sh", "ghost.sh"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 1 and "ORPHAN ROW: ghost.sh" in out and "UNDOCUMENTED:" not in out,
+            "T-42 a README row naming no tool FAILS as ORPHAN ROW (the reverse direction)",
+        )
+    finally:
+        fx.close()
+
+    # T-47 / T-48: the "exactly one row" limb. doc_rows() deliberately KEEPS
+    # duplicates so this is detectable at all; de-duplicating in the parser would
+    # delete the evidence and leave this leg permanently green.
+    fx = _Fixture()
+    try:
+        fx.write("core/deploy/tools/real.sh", _PASS_SH)
+        fx.manifest(["core/deploy/tools/*.sh"], ["core/deploy/tools/real.sh"])
+        fx.readme(["real.sh", "real.sh"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 1
+            and "DUPLICATE ROW: real.sh" in out
+            and "UNDOCUMENTED:" not in out
+            and "ORPHAN ROW:" not in out,
+            "T-47 a second row for a basename the table already contains FAILS as "
+            "DUPLICATE ROW, with neither other leg firing",
+        )
+    finally:
+        fx.close()
+
+    fx = _Fixture()
+    try:
+        fx.write("core/deploy/tools/real.sh", _PASS_SH)
+        fx.manifest(["core/deploy/tools/*.sh"], ["core/deploy/tools/real.sh"])
+        fx.readme(["real.sh"])
+        check(
+            mode_reconcile(Ctx(fx.root)) == 0,
+            "T-48 CONTROL: the same tree with ONE row passes, so T-47 is attributable "
+            "to the duplicate and not to the tree",
+        )
+    finally:
+        fx.close()
+
+    # T-49 / T-49b: doc_population()'s is_file() guard, which until now was graded by
+    # NOTHING. A DIRECTORY whose name ends in .sh or .py matches DOC_COVERAGE_GLOBS,
+    # and only that guard keeps it out of Arm E's population — where it would surface
+    # as a permanent UNDOCUMENTED finding that no README row could ever clear, since
+    # the rule is one row per TOOL and a directory is not one. The mutant survived the
+    # whole suite AND the real tree, so the guard was documented but unfalsifiable.
+    # This is deliberately T-33c's shape, one arm-letter over: the identical property
+    # on Arm D already ships an arm, and the two now move together.
+    fx = _Fixture()
+    try:
+        fx.write("core/deploy/tools/real.sh", _PASS_SH)
+        fx.write("core/deploy/tools/real.py", "#!/usr/bin/env python3\n")
+        (fx.root / "core/deploy/tools/dir_shaped.sh").mkdir(parents=True)
+        (fx.root / "core/deploy/tools/dir_shaped.py").mkdir(parents=True)
+        pop = doc_population(fx.root)
+        # FLOOR FIRST, and it is load-bearing: a population that came back empty
+        # satisfies every "not in" limb below while measuring nothing at all.
+        check(
+            "real.sh" in pop and "real.py" in pop,
+            "T-49 FLOOR: doc_population() sees the real tools, so the exclusion below "
+            "is a measurement and not an empty read",
+        )
+        check(
+            "dir_shaped.sh" not in pop and "dir_shaped.py" not in pop,
+            "T-49b Arm E's population is files-only (a DIRECTORY named *.sh / *.py is "
+            "NOT a tool)",
+        )
+    finally:
+        fx.close()
+
+    # T-43: the parse rule. The real README holds TWO further tables after the
+    # inventory; the blank-line terminator is what keeps them out, and a backticked
+    # token in column 2 is prose, not a key. The decoy below is BACKTICKED in column
+    # 1 deliberately — see _Fixture.readme(): an un-backticked decoy is not a
+    # candidate at all, so an arm built on one grades nothing.
+    _terminator_body = (
+        "| Tool | Used by | Mode(s) | Purpose |\n"
+        "|---|---|---|---|\n"
+        "| `a.sh` | x | y | z |\n"
+        "| `b.sh` | x | y | z |\n"
+        "\n"
+        "| Fixture | Verifies |\n"
+        "|---|---|\n"
+        "| `decoy.sh` | nothing |\n"
+    )
+    _col2_body = (
+        "| Tool | Used by | Mode(s) | Purpose |\n"
+        "|---|---|---|---|\n"
+        "| `c.sh` | sourced by `d.sh` | y | z |\n"
+    )
+    _stops_at_blank = doc_rows(_terminator_body) == ["a.sh", "b.sh"]
+    _col1_only = doc_rows(_col2_body) == ["c.sh"]
+    check(
+        _stops_at_blank and _col1_only,
+        "T-43 doc_rows() stops at the blank line (the decoy table is NOT captured) "
+        "and keys on column 1 only (a backticked token in column 2 is NOT a key)",
+    )
+
+    # T-44: the guard that keeps T-16/T-19/T-25 green. _Fixture writes NO README, so
+    # without this branch every existing mode_reconcile fixture would go red.
+    fx = _Fixture()
+    try:
+        fx.write("core/deploy/tools/lonely.sh", _PASS_SH)
+        fx.manifest(["core/deploy/tools/*.sh"], ["core/deploy/tools/lonely.sh"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 0 and "ARM E SCAN not-run" in out and "ARM E PASSED" not in out,
+            "T-44 a missing README under --root reports not-run (ABSENT, not zero) "
+            "and does not move the exit code",
+        )
+    finally:
+        fx.close()
+
+    # T-45 / T-46: the denominator identity — the one narrowing shape Arm B(i)
+    # permits. The scope directive covering core/deploy/tools/ is gone AND its
+    # manifest line with it, so Arm B is green; only the identity catches it.
+    fx = _Fixture()
+    try:
+        fx.write("release/tools/a.sh", _PASS_SH)
+        fx.write("core/deploy/tools/dropped.sh", _PASS_SH)
+        fx.manifest(["release/tools/*.sh"], ["release/tools/a.sh"])
+        fx.readme(["dropped.sh"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 1
+            and "DENOMINATOR IDENTITY" in out
+            and "dropped.sh" in out
+            and "ARM B PASSED" in out
+            and "ARM E PASSED" in out,
+            "T-45 a directory tool that dispatches, is documented, is NOT excluded and "
+            "is NOT on the manifest FAILS the denominator identity while Arms B and E "
+            "pass — the correctly-executed narrowing",
+        )
+    finally:
+        fx.close()
+
+    fx = _Fixture()
+    try:
+        fx.write("release/tools/a.sh", _PASS_SH)
+        fx.write("core/deploy/tools/dropped.sh", _PASS_SH)
+        fx.manifest(
+            ["release/tools/*.sh", "core/deploy/tools/*.sh"],
+            ["core/deploy/tools/dropped.sh", "release/tools/a.sh"],
+        )
+        fx.readme(["dropped.sh"])
+        check(
+            mode_reconcile(Ctx(fx.root)) == 0,
+            "T-46 CONTROL: the same tool ON the manifest floor passes, so T-45 is "
+            "attributable to the identity and not to the tree",
         )
     finally:
         fx.close()
@@ -1141,7 +1536,11 @@ def main(argv=None) -> int:
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--list", action="store_true", help="print the discovered set")
     g.add_argument("--run", action="store_true", help="Arm A — execute every discovered --self-test")
-    g.add_argument("--reconcile", action="store_true", help="Arms B/C/D — the meta-assertions")
+    g.add_argument(
+        "--reconcile",
+        action="store_true",
+        help="the meta-assertions (every arm except A)",
+    )
     g.add_argument("--emit-manifest", action="store_true", help="regenerate the committed manifest")
     g.add_argument("--self-test", action="store_true", help="this engine's own hermetic fixtures")
     ap.add_argument("--runner", choices=RUNNERS, help="partition the discovered set by runner")
