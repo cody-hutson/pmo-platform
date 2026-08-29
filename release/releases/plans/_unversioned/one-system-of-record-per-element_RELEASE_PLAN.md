@@ -4,6 +4,7 @@
 version: one-system-of-record-per-element
 date: 2026-08-28
 type: plan
+status: ACTIVE
 issues: ["#5837", "#5839", "#5844", "#5846"]
 pr: null
 links:
@@ -11,8 +12,17 @@ links:
   log_anchor: "#one-system-of-record-per-element"
 reversibility-tier: MODERATE
 themes: ["cluster:templates-schemas", "cluster:knowledge-architecture"]
-domain_practice: "{ source: N/A — pipeline-internal release, date: 2026-08-29, domain: governance }"
 ---
+
+<!--
+The `domain_practice` provenance label has ONE home in this file — the
+`### Release Class declaration` H3 below, which is the placement the Phase A1.5
+schema names. It is deliberately not duplicated into this frontmatter block: a
+second copy is a shadow source that drifts the moment one of the two is edited,
+and the provenance-survival coverage limb reports a multi-label plan as a visible
+ambiguity rather than resolving it silently.
+-->
+
 
 # Release Plan — one-system-of-record-per-element
 
@@ -148,7 +158,7 @@ Five beats. Beats 1 and 2a may run concurrently; everything else is ordered. Con
 Intent markers use the `add | edit | delete` enum. Path-first columnar form inside the fence.
 
 ```
-# ── Unconditional edits ──
+# ── Edits ──
 core/governance/OPERATIONS.md                                     edit
 core/schemas/tracker-schemas.md                                   edit
 core/schemas/project-schema.md                                    edit
@@ -164,11 +174,11 @@ operations/skills/health-check/SKILL.md                           edit
 operations/skills/health-check/references/evidence-matrix.md      edit
 operations/skills/file-router/SKILL.md                            edit
 
-# ── Unconditional adds ──
+# ── Adds ──
 release/releases/plans/_unversioned/one-system-of-record-per-element_RELEASE_PLAN.md   add
 core/ADRs/ADR-NNN-system-of-record-per-mirrored-element.md        add
 
-# ── Conditional adds ──
+# ── Add pending slug binding ──
 core/ADRs/ADR-NNN-project-health-home.md   add   CONDITIONAL:health-record-slug-pending-stage-5
 
 # ── Release-wide explicit non-scope ──
@@ -265,9 +275,9 @@ The roster is a **pinned measurement and carries no verdict**. Stage 9 re-measur
 | #5844 | AC-7 | file-content | `grep -c "superseded in part" core/ADRs/ADR-051-health-check-mcp-primary-source-set.md` ≥ 1 | ADR-051's own `status:` line carries the partial-supersession pointer. Read the line directly — a merged pull request, a green close-out, or a citation elsewhere is not evidence. |
 | #5846 | AC-1 | file-content | `[DEFERRED — Beat 4; blocked on #5839's Stage 5 decision]` | Deferred until the health-field home is decided. |
 | #5846 | AC-2 | file-content | `grep -c "V-CORE-02" core/standards/portfolio-writeback-contract.md` ≥ 1 | The exemption sentence names the validation rule explicitly (R4). Baseline at plan time: zero occurrences; control — the file resolves and is non-empty. |
-| #5846 | AC-3 | file-content | `grep -c "project_id" core/schemas/project-schema.md` ≥ 1 | One governed sentence states the identifier-to-folder-name relationship as a declared mapping **with its resolution direction** (R5). Verify by reading the sentence, not by matching the stance wording. |
-| #5846 | AC-4 | regression | `core/deploy/deploy.sh --check` clean | Regression guard only (R9) — a green self-test is explicitly not evidence the card's defect is fixed. |
-| #5846 | AC-5 | file-content | `grep -c "lifecycle_state" operations/templates/project-rollup-template.md` ≥ 1 | The rollup template carries the two Core-required fields it lacks. Baseline at plan time: absent. |
+| #5846 | AC-3 | file-content | `grep -c "folder basename" core/schemas/project-schema.md` ≥ 1 | One governed sentence states the identifier-to-folder-name relationship as a declared mapping **with its resolution direction**. Two arms, because the criterion is not fully mechanizable (R5). *Mechanical arm:* `folder basename` measures **0** in that file today, so the probe discriminates against unedited state — unlike a bare `project_id` probe, which measures **1** today and would pass with no edit made. Control: `resolves` measures 18 in the same file, so the file resolves and the matcher fires. *Reviewer arm, required:* Stage 8 reads the sentence and confirms it states the direction a consumer resolves in — a token match is not sufficient evidence for this criterion. |
+| #5846 | AC-4 | regression | `core/deploy/deploy.sh --check` clean — regression guard | Regression guard only (R9) — a green self-test is explicitly not evidence the card's defect is fixed. |
+| #5846 | AC-5 | file-content | `grep -c "^lifecycle_state:" operations/templates/project-rollup-template.md` ≥ 1 | The rollup template carries the two Core-required **frontmatter fields** it lacks. The probe is anchored to a frontmatter key declaration: baseline today is **1** unanchored occurrence of `lifecycle_state`, inside an unrelated `milestone_delta` source cell, so an unanchored probe is a false PASS against unedited state. Control: the unanchored form returns 1 on the same file. |
 
 ### Release-Level Verification
 
@@ -282,7 +292,7 @@ The roster is a **pinned measurement and carries no verdict**. Stage 9 re-measur
 
 - [ ] **CIAC-1 (#5837 × #5844 on the three citing surfaces):** #5837 produces the decision record and #5844 makes the operations governance file, the tracker schema, and ADR-051 each cite it. Neither issue can be accepted alone — #5837 can produce a record nobody cites, and #5844 cannot cite a record that does not exist. *Method:* `grep -c "system-of-record-per-mirrored-element" core/governance/OPERATIONS.md core/schemas/tracker-schemas.md core/ADRs/ADR-051-health-check-mcp-primary-source-set.md` at least 3. *Graded at Stage 9 on the merged pull request.*
 - [ ] **CIAC-2 (#5837 × #5844 on `core/ADRs/ADR-051-health-check-mcp-primary-source-set.md`):** the disposition is stated once and honoured twice — #5837's record states ADR-051's disposition, and ADR-051's own `status:` line carries it. Both must say *in part* and name which decisions survive. A green close-out, a merged pull request, or a citation of ADR-051 elsewhere is not evidence; the file read is the only authority. *Method:* `grep -c "superseded in part" core/ADRs/ADR-051-health-check-mcp-primary-source-set.md` at least 1. *Graded at Stage 9 on the merged pull request.*
-- [ ] **CIAC-3 (#5839 × #5844 × #5846 on `core/disciplines/project-entity-model.md`):** one Tier-2 amendment, not two. Both delivery children carry a Tier-2 scope change on the same two files and #5839's record requires the change be batched. Exactly one amendment note carrying both changes, with one re-freeze sentence and one authorization. Two notes means the surface was reopened twice. *Method:* `grep -c "SCOPE CHANGE — RESOLVED" core/disciplines/project-entity-model.md` at most 5. *Graded at Stage 9 on the merged pull request; the count is read against the pre-release baseline in the same diff.*
+- [ ] **CIAC-3 (#5839 × #5844 × #5846 on `core/disciplines/project-entity-model.md`):** one Tier-2 amendment, not two. Both delivery children carry a Tier-2 scope change on the same two files and #5839's record requires the change be batched. Exactly one amendment note carrying both changes, with one re-freeze sentence and one authorization. Two notes means the surface was reopened twice. *Method:* `grep -c "SCOPE CHANGE — RESOLVED" core/disciplines/project-entity-model.md` at most 8. *Graded at Stage 9 on the merged pull request.* **The threshold is baseline-derived, not chosen:** the pre-release baseline measured on the Commit-0 base is **7** amendment notes, so "exactly one note added by this milestone" mechanizes as at most 8. A threshold set without measuring the baseline produces a false verdict in whichever direction it misses by; this one is pinned to a measurement and must be re-pinned if the baseline moves.
 - [ ] **CIAC-4 (#5844 × #5846 on `core/standards/portfolio-writeback-contract.md`):** the source-of-record rule #5844 establishes is the rule #5846's rollup obeys. The rollup publishes a status value that is by construction a mirrored or composed value; it must not introduce a second master for a value #5844 has already assigned. *Method:* `grep -c "V-CORE-02" core/standards/portfolio-writeback-contract.md` at least 1. *Graded at Stage 9 on the merged pull request, together with a read of the cited field's declared home against the decision record's table.*
 - [ ] **CIAC-5 (#5844 × #5846 on external-identifier carriage):** a consistency check, not a gate — the soft edge to the sibling milestone's key-scheme card. Record the carriage form this release ships so the sibling can reconcile against it. Do not block on the sibling and do not pre-adopt its unmerged grammar. *Method:* `declared, verification deferred to the sibling key-scheme card` — recorded, not gated. *Graded at Stage 9 as a recorded observation.*
 
@@ -319,6 +329,8 @@ Revert the merge commit. **Reversibility MODERATE · confidence HIGH.** The one 
 | b | The Stage-4 comment's cross-issue criteria were authored with a non-parser identifier prefix; they are transcribed here under the `CIAC-N` identifier the verification executor parses. | The plan file is the machine-read surface; the comment was the working reference. Substance is preserved verbatim in meaning. | Transcribed; no criterion added, removed or narrowed. |
 | c | The Stage-4 comment's File Change Matrix was a bare path list with no intent markers. It is transcribed here with explicit `add`/`edit` markers and a labelled non-scope block. | A marker-less path parses as `unknown`, never `edit`, so a bare list would leave the matrix uninterpreted and unable to reach a pass. | Markers added; no path added or removed except the three restated-decision surfaces pulled into scope at the plan-review and design gates, and the explicit non-scope row. |
 | d | `core/CLAUDE.md.template` appears in an earlier statement of #5846's affected files but is **not edited** by this release. | The acceptance criterion accepts either that file or the project schema as the home for the declared-mapping sentence; the sentence is routed to the project schema, which is already open in Beat 2a and is not contended with a concurrent unmerged release. | Declared as explicit non-scope in the File Change Matrix. |
+| e | Three Verification-Plan / cross-issue probes were **tightened at Commit-0 self-verification** after the executor graded them against live state. Two (#5846 AC-3 and AC-5) returned PASS against **unedited** files — false passes of exactly the shape risks R4/R5 name; one (CIAC-3) carried a threshold set without measuring its baseline and returned a false FAIL. | A probe that passes against unedited state grades a conforming release and an unworked one identically, and the false-PASS direction is the one that survives downstream as inherited green. The baseline-free threshold is the mirror defect. | AC-3 re-keyed onto the direction clause; AC-5 anchored to a frontmatter key declaration; CIAC-3 re-pinned to the measured baseline of 7 with the measurement stated on the row. Each row now carries its baseline and its control arm. |
+| f | The File Change Matrix block labels avoid the substring *conditional* inside the word *unconditional*. | The matrix parser marks a block conditional on a label matching that word case-insensitively, so a block labelled "Unconditional adds" silently converts its rows into conditional ones — which downgrades a delivery FAIL to a WARN-tier SKIP. Observed directly at Commit-0 self-verification: the first authoring reported `obligations=0`. | Labels rewritten; the row-level `CONDITIONAL:<token>` marker is the only conditionality signal in the matrix. |
 
 ## Change Description
 
