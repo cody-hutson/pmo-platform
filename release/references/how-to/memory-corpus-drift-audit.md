@@ -11,7 +11,7 @@
 
 ## 1. Purpose
 
-The memory↔corpus boundary contract assigns codified (toolkit-encodeable) knowledge to the corpus as its single source of truth, and permits the auto-memory store to hold codified knowledge only as a temporary eviction-pointer. Over time five drift conditions accumulate against that contract — three at the issue-tie boundary, plus two reference-integrity conditions (a downstream dangling wikilink and an upstream stranded ledger pointer) closed alongside the RE-POINT lifecycle step and the close-time absorption reconciliation. This procedure detects all five, reproducibly, so an operator (or a reviewer reading a memory audit) can confirm the store is in contract — or generate the exact remediation list.
+The memory↔corpus boundary contract assigns codified (toolkit-encodeable) knowledge to the corpus as its single source of truth, and permits the auto-memory store to hold codified knowledge only as a temporary eviction-pointer. Over time six drift conditions accumulate against that contract — three at the issue-tie boundary; two reference-integrity conditions (a downstream dangling wikilink and an upstream stranded ledger pointer) closed alongside the RE-POINT lifecycle step and the close-time absorption reconciliation; and one external-target-scope condition (a resolved target-side referent held as a value rather than read live). This procedure detects all six, reproducibly, so an operator (or a reviewer reading a memory audit) can confirm the store is in contract — or generate the exact remediation list.
 
 The audit is **read-only**. It deletes nothing and edits nothing. Remediation (eviction, re-tie, or filing an encode issue) is a separate, operator-authorized step routed per §4.
 
@@ -19,7 +19,7 @@ The audit is **read-only**. It deletes nothing and edits nothing. Remediation (e
 
 Re-versioning renumbers issues. An eviction-pointer that cited a given issue number last quarter may now point at a renumbered or retired number. **A dead reference is therefore detected by reference-resolution-failure — never by comparing issue-number magnitude.** Probing whether an issue number is "below the current max" is meaningless: a low number can be live and a high number can be retired. Only a resolution probe (`gh issue view N`) is load-bearing. Every command below probes resolution; none compares digits.
 
-## 3. The five drift classes
+## 3. The six drift classes
 
 | Class | Definition | Detection (reproducible) |
 |---|---|---|
@@ -28,6 +28,7 @@ Re-versioning renumbers issues. An eviction-pointer that cited a given issue num
 | **untied-encodeable** | a memory the §1 Q1 classifier marks K1-encodeable, but carrying no issue tie and no corpus pointer | memory body matches encodeable signatures (discipline / reference / methodology / gate / CI) with no `#N` tie and no corpus-path pointer ⇒ flag for operator routing |
 | **dangling-wikilink-to-evicted-memory** | a surviving memory body links a `[[target]]` whose `<target>.md` no longer exists — left dangling by an EVICT that did not RE-POINT (downstream gap) | for each `[[target]]` wikilink → if `$MEM/<target>.md` is absent ⇒ flag (re-point to its corpus home or drop, per §7 RE-POINT). Local-only (no `gh`); warn-only routing signal, never a FAIL |
 | **ledger-pointer-to-closed-issue** | a `MEMORY.md` ledger ("Temporary enhancement pointers") row ties a `#N` that is CLOSED yet the memory was not absorbed/evicted — the partial-absorption residue (upstream gap) | scan the ledger section; for each row's resolving `#N` tie where `gh issue view N --json state` == `CLOSED` ⇒ flag (re-home to a live issue per Phase B-OPS5). Disambiguated from `deployed-but-not-evicted` by file-section (ledger row vs standalone topic file) |
+| **external-target-referent-stored** | a surface of this install holds a resolved target-side referent as a value instead of reading it live, in breach of the §7.1 external-target scope | **declaration-scoped, never content-scoped** — a stored target referent and an operator-side practice statement are not lexically distinguishable, so the check holds an artifact to its own declaration rather than judging content. **Arm 1 (memory store):** the file must carry a live-read declaration (`ADR-109`, else a closed fallback phrase set); the declaration's own parenthetical names the referent **kinds**, and each kind is probed for a value-bearing occurrence outside the declaration window ⇒ flag. A declaring file with no extractable kind list is not evaluated (tallied only). **Arm 2 (operator config):** any key in a `[trackers.<id>]` subtable outside `{id, platform, identifier, scope}` ⇒ flag; the sanctioned `identifier` is *on* the whitelist and cannot flag. Local-only (no `gh`), read-only on both roots |
 
 ### 3a. Per-class commands
 
@@ -104,7 +105,42 @@ awk '/^## Temporary enhancement pointers/{b=1;next} /^## /{b=0} b&&/^- /{print}'
 done
 ```
 
-`gh` unavailable or unauthenticated ⇒ the three resolution-probing classes (deployed-but-not-evicted, dead-ref tie, ledger-pointer-to-closed-issue) degrade to SKIP (same posture as Check 36); the two local-only scans (untied-encodeable, dangling-wikilink-to-evicted-memory) still run.
+**external-target-referent-stored** — hold each declaring memory to its own declaration, and hold `operator.toml`'s tracker subtables to their closed schema (the §7.1 external-target backstop; local-only, no `gh`):
+
+```bash
+# Arm 1 — memory store. A file is IN the population only if it declares a
+# live-read obligation; the declaration's own parenthetical names the referent
+# kinds, and only those kinds are probed for a value-bearing occurrence. Probing
+# the declared kinds ONLY is what keeps a correctly-reconciled note clean: such a
+# note still carries the ADR citation and incidental digit-bearing practice
+# tokens, and flagging the fix would be worse than flagging nothing.
+find "$MEM" -type f -name '*.md' | while read -r f; do
+  decl="$(grep -n -m1 'ADR-109' "$f")" \
+    || decl="$(grep -n -m1 -iE 'read (it )?live|live read|derive live|do not cache|never cache|not be cached' "$f")" \
+    || continue
+  # Read the kind list out of the declaration's first parenthetical, then look for
+  # each kind followed by a value connector (: = — -) and a literal, on any other
+  # line. A declaration with no extractable kind list is NOT evaluated — record it
+  # in the tally rather than emitting a per-file advisory.
+  echo "$f: declares a live-read obligation — verify no declared kind appears in value position"
+done
+
+# Arm 2 — operator config. Any key in a [trackers.<id>] subtable outside the
+# closed schema is a relocated referent cache (ADR-109 Alternative C). The
+# sanctioned `identifier` is ON the whitelist and therefore cannot flag.
+awk '
+  /^[ \t]*#/ { next }
+  /^[ \t]*\[trackers\.[^]]+\][ \t]*$/ { sec=$0; sub(/^[ \t]*\[/,"",sec); sub(/\][ \t]*$/,"",sec); next }
+  /^[ \t]*\[/ { sec=""; next }
+  sec != "" && match($0, /^[ \t]*[A-Za-z0-9_.-]+[ \t]*=/) {
+    key=substr($0,RSTART,RLENGTH); sub(/[ \t]*=$/,"",key); gsub(/^[ \t]+/,"",key)
+    if (key!="id" && key!="platform" && key!="identifier" && key!="scope")
+      print "external-target-referent-stored: [" sec "] key \"" key "\" at line " NR " is outside the closed schema"
+  }
+' "${PMO_PLATFORM_CONFIG_ROOT:-$HOME/.config/pmo-platform}/operator.toml"
+```
+
+`gh` unavailable or unauthenticated ⇒ the three resolution-probing classes (deployed-but-not-evicted, dead-ref tie, ledger-pointer-to-closed-issue) degrade to SKIP (same posture as Check 36); the three local-only scans (untied-encodeable, dangling-wikilink-to-evicted-memory, external-target-referent-stored) still run.
 
 ## 4. Routing per class
 
@@ -115,6 +151,7 @@ done
 | **untied-encodeable** | File an encode issue (the `improvement.yml` intake) so the rule gets a corpus home; until then the memory legitimately remains the SSOT. |
 | **dangling-wikilink-to-evicted-memory** | RE-POINT the surviving memory's `[[wikilink]]` to the corpus location now owning the evicted knowledge (the durable cross-reference form), or DROP the link (leaving prose intact) when the knowledge was split/absorbed with no single citable home. Operator-authorized memory edit (the §7 RE-POINT step), never a deploy-check action. |
 | **ledger-pointer-to-closed-issue** | Re-home the stranded memory: re-tie its ledger pointer to a still-open codification issue, or file a new encode issue. The close-time gate (Phase B-OPS5) blocks a release's close until each unmatched memory is re-homed. |
+| **external-target-referent-stored** | **Decompose, then delete the referent half.** Split the fused fact per the §7.1 Q0 rule: the operator-side practice (the operator's own decision about working with that target, stated *without* the referent) stays and homes normally; the target-side referent is removed outright and read live from the target at every use. Do NOT relocate it to `operator.toml` or to any other surface — that is the Alternative C the decision record rejected, and it leaves the drift class intact. If the practice cannot be stated without the referent, the whole fact is target-side and nothing is retained. Operator-authorized memory or config edit; never a deploy-check action. |
 
 ## 5. Reproduce this session's findings (worked run)
 
@@ -130,7 +167,7 @@ grep -rlE 'No-shadow-SSOT|Universal Preference|core/rules|deploy\.sh Check' "$ME
 #    the 2026-06-07 session flagged — confirming the procedure detects real drift.
 ```
 
-A clean store returns no rows from §3a and only legitimate pointers from §5; a drifted store returns the remediation list §4 consumes. Check 36 emits the identical five classes continuously, so this manual run and the standing backstop agree by construction — the fixture self-test (`core/deploy/tests/test_check36_drift_classes.sh`) pins the two reference-integrity detectors against labeled fixtures.
+A clean store returns no rows from §3a and only legitimate pointers from §5; a drifted store returns the remediation list §4 consumes. Check 36 emits the identical six classes continuously, so this manual run and the standing backstop agree by construction — the fixture self-test (`core/deploy/tests/test_check36_drift_classes.sh`) pins the two reference-integrity detectors and both arms of the external-target-scope detector against labeled fixtures.
 
 ## 6. Composition
 
