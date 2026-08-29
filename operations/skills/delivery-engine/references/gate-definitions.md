@@ -308,21 +308,23 @@ The `T(n→n+1)` transition-identifier convention — the 14 ordered transitions
 
 The binding (inherited from [`lifecycle-stages.md §3`](lifecycle-stages.md) — copied, not re-derived):
 
-| Gate | Stage boundary (inherited from `lifecycle-stages.md §3`) | `T(n→n+1)` binding | Altitude |
-|---|---|---|---|
-| **LG-3** Plan Baseline | Stage 5 (Plan & Sequence) → Stage 6 (Design / Solution) | **T(5→6)** | project |
-| **LG-4** Sprint DoR | Stage 6 (Design / Solution) → Stage 7 (Build / Develop) | **T(6→7)** | work-item |
-| **LG-5** Dev Complete (DoD) | Stage 8 (Developer Testing) → Stage 9 (QA / Acceptance) | **T(8→9)** | work-item |
-| **LG-6** QA Gate | Stage 9 (QA / Acceptance) → Stage 10 (Plan Review) | **T(9→10)** | work-item *(the built case — `lifecycle-stages.md §5.1`)* |
-| **LG-7** Release Readiness | Stage 10 (Plan Review) → Stage 11 (Release Preparation) | **T(10→11)** | project |
-| **LG-8** Go-Live | Stage 11 (Release Preparation) → Stage 12 (Deploy / Execute) | **T(11→12)** | project |
-| **LG-9** PIR | Stage 14 (Clean / Stabilize) → Stage 15 (Close) | **T(14→15)** | project |
-| **LG-0** Idea Screen | lifecycle entry, Stages 1–2 → entry to Prepare | **boundary-point** (entry — spans `T(1→2)`/`T(2→3)`; no single `T`) | portfolio |
-| **LG-1** Business Case | project-altitude, after Stage 3 | **boundary-point** (no single `T`) | portfolio |
-| **LG-2** Initiation | project-altitude, before plan baseline | **boundary-point** (no single `T`) | project |
-| **LG-10** Closure | terminal at Stage 15 | **terminal** (no successor `T`) | project |
+| Gate | Stage boundary (inherited from `lifecycle-stages.md §3`) | `T(n→n+1)` binding | Altitude | Axis-1 edge advanced (§3.10) |
+|---|---|---|---|---|
+| **LG-3** Plan Baseline | Stage 5 (Plan & Sequence) → Stage 6 (Design / Solution) | **T(5→6)** | project | — |
+| **LG-4** Sprint DoR | Stage 6 (Design / Solution) → Stage 7 (Build / Develop) | **T(6→7)** | work-item | `WorkItem-backlog → WorkItem-ready` (at exit) |
+| **LG-5** Dev Complete (DoD) | Stage 8 (Developer Testing) → Stage 9 (QA / Acceptance) | **T(8→9)** | work-item | `WorkItem-in-progress → WorkItem-in-review` (at open) · `WorkItem-in-review → WorkItem-done` (at exit) |
+| **LG-6** QA Gate | Stage 9 (QA / Acceptance) → Stage 10 (Plan Review) | **T(9→10)** | work-item *(the built case — `lifecycle-stages.md §5.1`)* | — |
+| **LG-7** Release Readiness | Stage 10 (Plan Review) → Stage 11 (Release Preparation) | **T(10→11)** | project | — |
+| **LG-8** Go-Live | Stage 11 (Release Preparation) → Stage 12 (Deploy / Execute) | **T(11→12)** | project | — |
+| **LG-9** PIR | Stage 14 (Clean / Stabilize) → Stage 15 (Close) | **T(14→15)** | project | — |
+| **LG-0** Idea Screen | lifecycle entry, Stages 1–2 → entry to Prepare | **boundary-point** (entry — spans `T(1→2)`/`T(2→3)`; no single `T`) | portfolio | — |
+| **LG-1** Business Case | project-altitude, after Stage 3 | **boundary-point** (no single `T`) | portfolio | — |
+| **LG-2** Initiation | project-altitude, before plan baseline | **boundary-point** (no single `T`) | project | — |
+| **LG-10** Closure | terminal at Stage 15 | **terminal** (no successor `T`) | project | — |
 
-**Boundary-point honesty (do not fabricate a coordinate).** The §3 seam is "intentionally **not** one-gate-per-stage-boundary" ([`lifecycle-stages.md §3`](lifecycle-stages.md)): LG-0/LG-1/LG-2 are project-/portfolio-altitude decisions that do **not** sit on a single work-item stage transition, and LG-10 is terminal. For these gates the BLOCK still cites the violated `[LG-N-EX-k]` for every gate (they all have exit criteria in §2), but it notes **"project-altitude boundary-point — no single `T(n→n+1)`"** rather than forcing a transition coordinate the seam does not assert.
+**Boundary-point honesty (do not fabricate a coordinate).** The §3 seam is "intentionally **not** one-gate-per-stage-boundary" ([`lifecycle-stages.md §3`](lifecycle-stages.md)): LG-0/LG-1/LG-2 are project-/portfolio-altitude decisions that do **not** sit on a single work-item stage transition, and LG-10 is terminal. For these gates the BLOCK still cites the violated `[LG-N-EX-k]` for every gate (they all have exit criteria in §2), but it notes **"project-altitude boundary-point — no single `T(n→n+1)`"** rather than forcing a transition coordinate the seam does not assert. **The same honesty binds the Axis-1 column:** a project-altitude gate advances **no** work-item Axis-1 edge, so its cell reads `—`. Do not fabricate one — the Work Item machine is a work-item-altitude object, and LG-6 is a work-item gate that §3.10 simply assigns no edge to.
+
+**The Axis-1 emission is downstream of the verdict, never an input to it.** The §4 transition rule and the §4.1 verdict render from the gate's `[LG-N-EX-k]` exit block alone; the Axis-1 advance is emitted *after* a `PASS` / `CONDITIONAL PASS` and is emitted *not at all* on `FAIL` / `NO-EVIDENCE`. It therefore joins no scored set and can neither create nor suppress a verdict this table could not already render. The transition it emits is validated downstream (`../../../../core/schemas/work-item-type-schema.md` §5.2) — that is where an illegal edge is caught, not here.
 
 **No-advance-past-unmet-gate / no-skip-a-gate rule (normative).** Composing with [`lifecycle-stages.md §5.2`](lifecycle-stages.md) (which makes every transition predicate BLOCKING):
 

@@ -72,6 +72,8 @@ If the answer is unclear, default to the gate type matching the decision authori
 
 **Note -- bounding forms.** Criterion 3 tests that the work is *bounded*, not that a human estimated it. A size estimate, a time-box, and a scope-box are three forms of one control. A scope-box is a bound only when it carries **both** stated acceptance criteria **and** an explicit out-of-scope boundary -- a stated line of the form "Out of scope: the upstream API contract; migration of existing records." Scope with no out-of-scope boundary is unbounded and fails criterion 3. Criterion 6 is the separate *smallness* test and stays INVEST-anchored: the "fits one iteration" clause applies under a time-boxed approach, where an iteration exists to fit inside; an item bounded by a scope-box is judged small by INVEST alone, never by its own scope statement (an item always fits the scope it declares, so that would test nothing). An item admitted on a scope-box carries no estimate of record, so no calibration admission row is emitted for it at DoR exit. **Vocabulary:** the platform glossary defines TIME-BOXED / SCOPE-BOXED / DEPLOYMENT-BOXED at the *container* tier (Sprint / Milestone / Release); "time-box" and "scope-box" are used here at the *work-item* tier for the same bounding senses -- the same distinction, one altitude down.
 
+**Axis-1 advance this PASS authorizes.** A DoR exit `PASS` / `CONDITIONAL PASS` authorizes the Work Item Axis-1 advance `WorkItem-backlog → WorkItem-ready`, projected by the label row `work-status: ready`. The advance is **emitted, not applied** -- delivery-engine emits the transition and Tracker Manager performs the validated write; the label is **named, never applied** by this skill. The machine and its qualifying evidence are owned by `../../../../core/standards/entity-lifecycle-protocol.md` §3.10. **This is a footer on the template, not a criterion** -- the checklist items above are unchanged, and the advance is downstream of the verdict rather than an input to it.
+
 #### Definition of Done (DoD) -- Exit from Execution
 
 | # | Criterion | Pass Criteria |
@@ -83,6 +85,8 @@ If the answer is unclear, default to the gate type matching the decision authori
 | 5 | Documentation updated | API docs, user docs, runbooks updated as applicable |
 | 6 | Deployable | Artifact builds cleanly; deployment pipeline green |
 | 7 | PO accepted | Product Owner has inspected and accepted the increment |
+
+**Axis-1 advance this PASS authorizes.** A DoD exit `PASS` / `CONDITIONAL PASS` authorizes the Work Item Axis-1 advance `WorkItem-in-review → WorkItem-done`, projected by the label row `work-status: done` (the preceding `WorkItem-in-progress → WorkItem-in-review` advance fires at gate-open, when the completion claim is raised). `WorkItem-done` is **terminal** in §3.10, so this advance carries the evidence bar of a terminal action. The advance is **emitted, not applied** -- delivery-engine emits the transition and Tracker Manager performs the validated write; the label is **named, never applied** by this skill. **This is a footer on the template, not a criterion** -- the checklist items above are unchanged.
 
 ### 2.3 Flow Gate Checklist
 
