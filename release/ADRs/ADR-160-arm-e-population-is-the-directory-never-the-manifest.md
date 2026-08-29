@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-154 — The tool-coverage engine hosts a second invariant whose population is the directory, never the manifest"
+title: "ADR-160 — The tool-coverage engine hosts a second invariant whose population is the directory, never the manifest"
 status: Accepted
 date: 2026-08-28
 release: ci-stable-under-transient-conditions
@@ -16,13 +16,15 @@ source_observations:
   - "A mutation routing the new arm's population through ctx.scope_members was written and run. It is detected by exactly one of nine arms; without that arm the trap ships green."
 ---
 
-# ADR-154 — The tool-coverage engine hosts a second invariant whose population is the directory, never the manifest
+# ADR-160 — The tool-coverage engine hosts a second invariant whose population is the directory, never the manifest
 
 ## Status
 
 **Accepted.** Authored at Engineering for the `ci-stable-under-transient-conditions` release, alongside the arm it governs.
 
 **Numbering provenance — `148 → 154`.** Held **ADR-148** branch-local; renumbered to **ADR-154** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 148. In-release citations that read "ADR-148" denote this record.
+
+**Numbering provenance — `154 → 160`.** Held **ADR-154** branch-local; renumbered to **ADR-160** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 154. In-release citations that read "ADR-154" denote this record.
 
 ## Context
 
