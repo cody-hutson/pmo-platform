@@ -608,7 +608,7 @@ never re-derive an authoritative value the source entity owns:**
 
 | Contract field | READS source entity (`project-entity-model.md` §4) |
 |---|---|
-| `status` | Project (entity 1) `status` |
+| `status` | Project (entity 1) `health_rag` |
 | `top_risks[]` | RAID Item (entity 6) `impact` / `owner_person_id` / `action_plan` (≤ 5) |
 | `key_dependencies[]` | Cross-Project Dependency / XPD (entity 15) |
 | `capacity_signal` | Resource (entity 8) — **cite** the `weekly-status-rollup` §7.5 + `capacity-model.md` synthesis, do not re-derive it |

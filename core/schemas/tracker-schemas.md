@@ -118,7 +118,7 @@ The Daily Status Log is a carry-forward tracker organized by category. It is the
    - Status: DEFERRED / REACTIVATED
 
 6. **Retest Queue** — Items requiring retesting. Each entry:
-   - Ticket: Jira ticket ID
+   - Ticket: the retest item's external work-item identifier — the `source_system` + `external_id` pair per `entity-field-schemas.md` §3.0c (e.g. a Jira key, a GitHub issue number, a Smartsheet row id). Jira is one source system, not the only one.
    - Description: What to retest
    - Fix date: When the fix was applied
    - Assigned to: Who will retest
@@ -308,7 +308,7 @@ If any sentence has no content, use "None identified."
 
 ### Confluence Dual-Format Model
 The RAID Log maintains two representations:
-- **Local CSV (source of truth):** Full 15-column schema including RAID_ID, Date_Opened, Date_Closed, source_ref, and Section. This is the operational version used by all skills for processing, querying, and lifecycle management.
+- **Local CSV (source of truth):** Full 15-column schema including RAID_ID, Date_Opened, Date_Closed, source_ref, and Section. This is the operational version used by all skills for processing, querying, and lifecycle management. It is the **system of record for RAID content** per [ADR-164](../ADRs/ADR-164-system-of-record-per-mirrored-element.md) (element **E1**): the Confluence view is a one-way render, and a Confluence-side edit is superseded by the next render rather than merged back.
 - **Confluence (stakeholder-facing):** Manually uploaded by the workspace owner. Excludes internal operational fields (RAID_ID, Date_Opened, Date_Closed, source_ref, Section). Matches the stakeholder-visible format used before this schema overhaul.
 
 **Rules:**
