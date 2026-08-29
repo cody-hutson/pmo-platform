@@ -8,6 +8,12 @@ consumers: authors of any deploy-check, hook, or release-executor quality gate; 
 ---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
+<!-- repo-integrity: allow-memory-ref -->
+<!-- The class-3 non-coverage enumeration names the operator-local memory store as the concrete
+     case of a surface `runner-def:` resolution cannot reach. Naming it is the point: an
+     unstated limit is the failure this standard exists to close, and the sibling surfaces that
+     govern that store (knowledge-architecture.md, memory-architecture.md, ADR-109) carry the
+     same deliberately-documented exception. -->
 # Gate-Efficacy Standard
 
 ## Purpose

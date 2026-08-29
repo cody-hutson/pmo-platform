@@ -1,4 +1,8 @@
 <!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-memory-ref -->
+<!-- CIAC-1 requires both members to NAME the operator-local memory store and give consistent
+     answers on whether it is reached, so the plan's non-coverage section and its CIAC predicate
+     both cite it. Same deliberately-documented exception the prior release plans carry. -->
 ---
 title: Release Plan — declarations-have-a-firing-surface (a governed procedure that declares a trigger acquires a named runner or a named gap)
 type: release-plan
