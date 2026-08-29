@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.42] - 2026-08-29
+
+Nine checks that could report success while measuring nothing now either measure what they name or say plainly that they could not.
+
+[Full notes](release/releases/notes/v4.42_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.42)
+
 ## [v4.41] - 2026-08-28
 
 Nine checks that reported clean without measuring what they claimed to measure now measure it, and each can detect its own regression.
