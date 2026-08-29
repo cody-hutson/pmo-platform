@@ -481,11 +481,15 @@ jobs:
         run: bash core/deploy/tests/test_agent_tools_conformance.sh
 
       - name: Run Check 36 drift-classes fixture self-test (test_check36_drift_classes.sh)
-        # Hermetic: builds a synthetic memory store + a canned `gh` stub in a
-        # tmpdir, exercises the two new Check 36 detectors (Class 4 dangling-
-        # wikilink local-only; Class 5 ledger-pointer-to-closed-issue), and
-        # drift-guards them against the live deploy.sh predicate. Never touches a
-        # real operator memory store (none exists in CI; the test self-contains).
+        # Hermetic: builds a synthetic memory store, a synthetic operator.toml and
+        # a canned `gh` stub in a tmpdir, exercises the Check 36 detectors that
+        # carry fixtures (Class 4 dangling-wikilink, local-only; Class 5
+        # ledger-pointer-to-closed-issue, resolution-probing; Class 6
+        # external-target-referent-stored, local-only, both arms), and drift-guards
+        # each against the live deploy.sh predicate. Never touches a real operator
+        # memory store or a real operator.toml (neither exists in CI; the test
+        # self-contains). Enumerated rather than counted on purpose — a bare count
+        # goes stale silently the next time a class is added.
         run: bash core/deploy/tests/test_check36_drift_classes.sh
 
       - name: Run package-freshness exit-code regression (test_package_freshness_exit_codes.sh)

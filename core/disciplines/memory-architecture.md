@@ -21,7 +21,7 @@ This document is the **single cross-surface SSOT contract** for platform memory:
 It **composes with — and does not restate —** its neighbors:
 
 - [`knowledge-architecture.md`](knowledge-architecture.md) classifies *knowledge* by universality (the K1–K5 axis) and names the four-memory-type model; its [§2.1 four-memory-type model and four-axis reconciliation](knowledge-architecture.md#four-type-reconciliation) is the **type-axis authority** this contract cites (single-home — the type definitions and the four-axis composition live there, not here).
-- [`knowledge-architecture.md §7`](knowledge-architecture.md#memory-corpus-boundary) is the **Knowledge cut** — the corpus↔memory boundary, the encode-and-evict lifecycle, the five drift classes, and the [§7.1 external-target scope](knowledge-architecture.md#external-target-scope).
+- [`knowledge-architecture.md §7`](knowledge-architecture.md#memory-corpus-boundary) is the **Knowledge cut** — the corpus↔memory boundary, the encode-and-evict lifecycle, the six drift classes, and the [§7.1 external-target scope](knowledge-architecture.md#external-target-scope).
 - [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md) (superseded by [ADR-045](../ADRs/ADR-045-cross-surface-memory-contract.md)) ratified the Knowledge cut; **ADR-045** generalizes that cut into this cross-surface contract across all four memory types.
 
 The pairing is deliberate: `knowledge-architecture.md` **classifies** knowledge; this document **governs cross-surface read/write flow** over the four memory types it classifies. They are sibling disciplines.
@@ -111,7 +111,7 @@ This contract is the cross-surface **index**, not the union of every surface's f
 ## §7 Related references + provenance {#references}
 
 - **Type-axis authority** — [`knowledge-architecture.md §2.1`](knowledge-architecture.md#four-type-reconciliation): the four-memory-type model (Work / Knowledge / People / Learning) and the four-axis reconciliation (type × K1–K5 × Context-Tier × Document-Tier). This contract's `memory-type(s)` column draws from there.
-- **Knowledge cut** — [`knowledge-architecture.md §7`](knowledge-architecture.md#memory-corpus-boundary): the corpus↔memory SSOT assignment, the no-shadow invariant origin, the encode-and-evict lifecycle, the five drift classes.
+- **Knowledge cut** — [`knowledge-architecture.md §7`](knowledge-architecture.md#memory-corpus-boundary): the corpus↔memory SSOT assignment, the no-shadow invariant origin, the encode-and-evict lifecycle, the six drift classes.
 - **External-target scope** — [`knowledge-architecture.md §7.1`](knowledge-architecture.md#external-target-scope): the decomposition gate, the target-SSOT rule, and the read requirements for a fact whose source of truth is a repository other than this install's platform. Ratified by [ADR-109](../ADRs/ADR-109-external-target-knowledge-scope.md), which extends ADR-045 with a third scope.
 - **Ratifying ADRs** — [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md) (the Knowledge cut, superseded) and [ADR-045](../ADRs/ADR-045-cross-surface-memory-contract.md) (this cross-surface contract; supersedes ADR-029).
 - **Write-authority enum** — [`autonomy-tiers.md`](../specs/autonomy-tiers.md): the Autonomy Tier 0–3 definitions the `write-authority` column binds to.

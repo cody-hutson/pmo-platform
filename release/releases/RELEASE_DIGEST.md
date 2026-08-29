@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### declarations-have-a-firing-surface (2026-08-29, version-less) — Governed rules now name what enforces them, or record that nothing does
+
 ### v4.43 (2026-08-29) — Release plans now show when they're done, and reports count every release
 
 ### v4.42 (2026-08-29) — Checks now say when they could not measure, instead of reading green

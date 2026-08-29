@@ -9469,9 +9469,11 @@ sys.stdout.write("".join(out) + "|")
   # The RE-POINT (re-point/drop dangling wikilinks) and close-time absorption
   # reconciliation steps the §7 lifecycle defines are OPERATOR-AUTHORIZED Phase
   # B-OPS executor actions — this check only DETECTS their omission, never enacts
-  # them (the new classes 4/5 below are detectors, not mutators).
+  # them (the new classes 4/5/6 below are detectors, not mutators). Class 6 adds a
+  # SECOND READ ROOT (operator.toml) — a new read, never a new write; the
+  # mutation invariant above is unaffected by it.
   #
-  # Five drift classes (knowledge-architecture.md §7 The five drift classes):
+  # Six drift classes (knowledge-architecture.md §7 The six drift classes):
   #   deployed-but-not-evicted — a memory's #N tie is CLOSED, the corpus encoding
   #     is present, but the memory file still exists.
   #   dead-ref tie — a memory's #N tie no longer RESOLVES (re-versioning renumbered
@@ -9491,6 +9493,49 @@ sys.stdout.write("".join(out) + "|")
   #     memories naming it, stranding the rest). Resolution-probing (requires gh).
   #     Disambiguated from deployed-but-not-evicted by file-section: a ledger row
   #     under MEMORY.md → class 5; a standalone topic memory file → class 1.
+  #   external-target-referent-stored — a surface of this install holds a resolved
+  #     target-side referent (a value observable in an external target) instead of
+  #     reading it live. DECLARATION-SCOPED, not content-scoped, and the
+  #     distinction is the whole design: a resolved target-side referent is not
+  #     lexically distinguishable from an operator-side practice statement,
+  #     because the discriminator is WHOSE fact it is — which is semantic, not
+  #     textual. `size:S = 1 point` is prohibited when the scale belongs to a
+  #     target and permitted when it is this platform's own; the two are
+  #     byte-identical. A content scan therefore either misses the class or
+  #     floods it, and a flooding detector gets muted, which restores the
+  #     undetected state with added noise. ADR-109 §1 assigns the target-side /
+  #     operator-side split to a decomposition step performed by the AUTHOR at
+  #     write time; this detector never performs that split — it verifies that a
+  #     decomposition the author already declared actually held. Two arms, both
+  #     local-only (no gh) and both read-only:
+  #       declared-live-read-with-stored-value (memory store) — a file enters the
+  #         population only by carrying a live-read declaration (the canonical
+  #         ADR-109 citation, else a closed fallback phrase set). The
+  #         declaration's own parenthetical enumerates the referent KINDS; each
+  #         kind is probed for a value-bearing occurrence elsewhere in the file.
+  #         Probing only the kinds the declaration itself names is what keeps a
+  #         correctly-reconciled note clean: such a note still carries the
+  #         citation and incidental digit-bearing practice tokens (step numbers,
+  #         thresholds, dates), and flagging the fix would be worse than flagging
+  #         nothing. A declaring file whose declaration yields no kind list is NOT
+  #         evaluated and contributes only to a summary tally line — a per-file
+  #         advisory would re-create the noise problem, and silence would hide the
+  #         coverage bound.
+  #       unsanctioned-tracker-key (operator config) — [trackers.<id>] carries a
+  #         CLOSED schema {id, platform, identifier, scope} (operator.toml.template),
+  #         plus [trackers].default_id. Any OTHER key in that subtable is the
+  #         relocated referent cache ADR-109 Alternative C predicted and rejected
+  #         ("storing conventions is storing a cache; the drift class survives
+  #         intact, merely relocated from a memory file to a configuration file").
+  #         The sanctioned `identifier` address does not flag because it is ON the
+  #         whitelist — a positive structural exemption, not a heuristic carve-out.
+  #     NOT reached, stated rather than discovered later: write time (the detector
+  #     is invocation-triggered, so a violation authored today is undetected until
+  #     the next ./deploy.sh --check); an UNDECLARED cache in the memory store
+  #     (declaration-scoped population — the accepted price of eliminating false
+  #     positives); operator config outside [trackers.*] (no closed key schema
+  #     exists elsewhere to whitelist against); and the codified corpus (scanning
+  #     it for referent-shaped text IS the content scan rejected above).
   #
   # Degrades gracefully: SKIP when ~/.claude/memory/ is absent (fresh install / CI
   # — mirror the Check 8 SKIP idiom, never FAIL); the resolution-probing classes
@@ -9614,6 +9659,149 @@ sys.stdout.write("".join(out) + "|")
           fi
         done < <(/usr/bin/grep -oE '\[\[[a-z0-9_]+\]\]' "$c36_file" 2>/dev/null | /usr/bin/sort -u || true)
       done < <(/usr/bin/grep -rlE '\[\[[a-z0-9_]+\]\]' "$c36_mem_dir" 2>/dev/null || true)
+      # Class 6 — external-target-referent-stored (ADR-109 §7.1; the class ADR-109
+      # §8 named and deferred). Declaration-scoped, local-only, read-only. Arm 1
+      # over the memory store; Arm 2 over operator config. Rationale, both arms'
+      # predicates, and the enumerated non-coverage are in the header block above.
+      # Predicates mirrored verbatim in the fixture self-test (drift-guarded there).
+      local c36_c6_out c36_c6_declared=0 c36_c6_unscoped=0 c36_kind c36_kindline
+      while IFS= read -r c36_file; do
+        [[ -n "$c36_file" ]] || continue
+        # Arm 1 predicate: find the live-read declaration, read the referent KINDS
+        # out of the declaration's own parenthetical, then probe each kind for a
+        # value-bearing occurrence on a line outside the declaration window.
+        # Emits "<lineno> <kind>" per violation, or the bare token UNSCOPED.
+        c36_c6_out=$(/usr/bin/awk '
+          function strip(t) {
+            gsub(/^[ \t*_`"\-]+/, "", t); gsub(/[ \t*_`".:;|]+$/, "", t); return t
+          }
+          function has_literal(s) {
+            if (s ~ /[0-9]/) return 1
+            if (s ~ /"/) return 1
+            if (s ~ /[A-Za-z0-9_-]+:[A-Za-z0-9_-]+/) return 1
+            return 0
+          }
+          { line[NR] = $0 }
+          END {
+            decl = 0
+            for (i = 1; i <= NR && decl == 0; i++) if (line[i] ~ /ADR-109/) decl = i
+            if (decl == 0) {
+              for (i = 1; i <= NR && decl == 0; i++) {
+                l = tolower(line[i])
+                if (l ~ /read (it )?live/ || l ~ /live read/ || l ~ /derive live/ ||
+                    l ~ /do not cache/ || l ~ /never cache/ || l ~ /not be cached/) decl = i
+              }
+            }
+            if (decl == 0) exit 0
+            # Declaration WINDOW: a live-read declaration is prose and wraps, so its
+            # kind list routinely lands on a following line. Window lines are
+            # excluded from the value scan (the declaration naming a kind is the
+            # obligation, never a violation of it).
+            win = line[decl]; wend = decl
+            for (i = decl + 1; i <= NR && i <= decl + 2; i++) { win = win " " line[i]; wend = i }
+            # Take the first parenthetical that is a KIND LIST. A markdown link
+            # target — "(" immediately preceded by "]" — is skipped, else a linked
+            # declaration row yields its link path as the only "kind".
+            nk = 0; off = 0
+            while (nk == 0) {
+              p = index(substr(win, off + 1), "(")
+              if (p == 0) break
+              p = off + p
+              rest = substr(win, p + 1); q = index(rest, ")")
+              if (q == 0) break
+              off = p + q
+              if (p > 1 && substr(win, p - 1, 1) == "]") continue
+              inner = substr(rest, 1, q - 1)
+              gsub(/·/, ",", inner); gsub(/;/, ",", inner); gsub(/\//, ",", inner)
+              n = split(inner, a, ",")
+              for (k = 1; k <= n; k++) {
+                t = strip(a[k])
+                if (length(t) >= 4 && t !~ /[0-9]/ && t !~ /\.(md|sh|py|toml|txt|ya?ml)$/) {
+                  nk++; kind[nk] = t
+                }
+              }
+            }
+            if (nk == 0) { print "UNSCOPED"; exit 0 }
+            for (k = 1; k <= nk; k++) {
+              kk = tolower(kind[k]); hitline = 0
+              for (i = 1; i <= NR && hitline == 0; i++) {
+                if (i >= decl && i <= wend) continue
+                ll = tolower(line[i])
+                pos = index(ll, kk)
+                if (pos == 0) continue
+                tail = substr(ll, pos + length(kk))
+                conn = substr(tail, 1, 6)
+                if (conn ~ /^[ \t]*[:=]/ || conn ~ /^[ \t]*-[ \t]/ ||
+                    conn ~ /^[ \t]*—/ || conn ~ /^[ \t]*→/) {
+                  if (has_literal(substr(tail, 1, 100))) hitline = i
+                }
+                if (hitline == 0 && substr(ll, 1, 1) == "|") {
+                  nc = split(ll, cells, "|")
+                  for (c = 1; c <= nc && hitline == 0; c++)
+                    if (index(cells[c], kk) == 0 && has_literal(cells[c])) hitline = i
+                }
+              }
+              if (hitline > 0) { print hitline " " kind[k]; hits++ }
+            }
+            if (hits == 0) print "CLEAN"
+          }
+        ' "$c36_file" 2>/dev/null || true)
+        # Output contract — every branch is DISTINGUISHABLE, deliberately. Silence
+        # means "not in the population"; it must never also mean "evaluated and
+        # clean", or the coverage-bound tally below silently reads zero on a store
+        # whose declaring files all held. (It did, on the first run of this code.)
+        [[ -n "$c36_c6_out" ]] || continue
+        c36_c6_declared=$((c36_c6_declared + 1))
+        if [[ "$c36_c6_out" == "UNSCOPED" ]]; then
+          c36_c6_unscoped=$((c36_c6_unscoped + 1))
+          continue
+        fi
+        [[ "$c36_c6_out" == "CLEAN" ]] && continue
+        while read -r c36_kindline c36_kind; do
+          [[ -n "$c36_kind" ]] || continue
+          flag_warn_or_issue "memory-corpus-tie-drift" \
+            "external-target-referent-stored (declared-live-read-with-stored-value): $(basename "$c36_file") declares a live-read obligation over \"${c36_kind}\" yet holds it as a value at line ${c36_kindline} (decompose per knowledge-architecture.md §7.1; read live per ADR-109 requirement 1 — fresh at every use)"
+          c36_findings=$((c36_findings + 1))
+        done < <(printf '%s\n' "$c36_c6_out")
+      done < <(/usr/bin/find "$c36_mem_dir" -type f -name '*.md' 2>/dev/null || true)
+      # Arm 2 — operator config. Config-root resolution mirrors the operator.toml
+      # rung-reader idiom used elsewhere in this script.
+      local c36_op_toml="${PMO_PLATFORM_CONFIG_ROOT:-$HOME/.config/pmo-platform}/operator.toml"
+      if [[ -r "$c36_op_toml" ]]; then
+        local c36_sec c36_key c36_ln
+        while read -r c36_ln c36_sec c36_key; do
+          [[ -n "$c36_key" ]] || continue
+          flag_warn_or_issue "memory-corpus-tie-drift" \
+            "external-target-referent-stored (unsanctioned-tracker-key): operator.toml [${c36_sec}] carries key \"${c36_key}\" at line ${c36_ln}, outside the closed {id, platform, identifier, scope} schema (a stored target convention is a relocated referent cache — ADR-109 Alternative C; read live per knowledge-architecture.md §7.1)"
+          c36_findings=$((c36_findings + 1))
+        done < <(/usr/bin/awk '
+          /^[ \t]*#/ { next }
+          /^[ \t]*\[trackers\][ \t]*$/ { sec = "trackers"; next }
+          /^[ \t]*\[trackers\.[^]]+\][ \t]*$/ {
+            sec = $0; sub(/^[ \t]*\[/, "", sec); sub(/\][ \t]*$/, "", sec); next
+          }
+          /^[ \t]*\[/ { sec = ""; next }
+          sec != "" {
+            if (match($0, /^[ \t]*[A-Za-z0-9_.-]+[ \t]*=/)) {
+              key = substr($0, RSTART, RLENGTH)
+              sub(/[ \t]*=$/, "", key); gsub(/^[ \t]+/, "", key)
+              if (sec == "trackers") { if (key != "default_id") print NR " " sec " " key }
+              else if (key != "id" && key != "platform" && key != "identifier" && key != "scope")
+                print NR " " sec " " key
+            }
+          }
+        ' "$c36_op_toml" 2>/dev/null || true)
+      fi
+      # Coverage-bound tally. Reported whenever the population is non-empty, so the
+      # declaration-scoped bound is VISIBLE rather than inferred from silence: a
+      # reader can tell "no declaring files" from "declaring files, all in
+      # contract" from "declaring files, some unevaluable". A per-file advisory on
+      # each unscoped declaration would re-create the noise this class is designed
+      # to avoid; dropping them silently would hide the bound. One line is the
+      # honest middle.
+      if [[ "$c36_c6_declared" -gt 0 ]]; then
+        log "  INFO:  external-target-referent-stored: ${c36_c6_declared} memory file(s) carry a live-read declaration; ${c36_c6_unscoped} of those carried no extractable kind list and were NOT evaluated (declaration-scoped coverage bound)"
+      fi
       if [[ "$c36_findings" -eq 0 ]]; then
         log "  OK:    memory store in contract — no tie-drift detected"
       else
