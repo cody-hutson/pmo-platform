@@ -9325,10 +9325,13 @@ STUB
   fi
 
   # (i) AC4 — THE STRAGGLER SCOPE DID NOT WIDEN. #999 was never in this run's close
-  #     set, so it is real news: reported immediately and never waited on. Asserted on
-  #     the stub's own CALL COUNTER (exactly 2 = the detect read + check 5's first
-  #     read), because a row that merely reads PARTIAL cannot distinguish "reported at
-  #     once" from "reported after burning the entire budget".
+  #     set, so it is real news: reported immediately and never waited on. A row that
+  #     merely reads PARTIAL cannot distinguish "reported at once" from "reported after
+  #     burning the entire budget", so the property is asserted TWICE: on the
+  #     CHECK-5-SCOPED instrument ("check-5 settled at poll 0/15"), and on an
+  #     independent CEILING over the stub's phase-scoped call counter. The counter is
+  #     NOT the primary arm — see the note below the PARTIAL assertion for why a
+  #     phase-scoped counter measures the phase rather than the settle scope.
   /usr/bin/printf '%s\t%s\t%s\n' 999 "bug" "An issue this run never attempted to close" > "$_v5_tmp/post"
   : > "$_v5_tmp/stale"; : > "$_v5_tmp/calls"; : > "$_v5_tmp/lag"
   VERIFY_RECHECK_ATTEMPTS=15
@@ -9386,7 +9389,7 @@ STUB
   #     into the group. 5+2 polls at the shipped 2s interval would alone cost ~14s, so
   #     this arm genuinely can fail.
   [[ "$VERIFY_RECHECK_DELAY" -eq 0 ]] || { echo "FAIL: check-5 (j) — the settle legs must run at VERIFY_RECHECK_DELAY=0; a leaked non-zero interval buys the suite wall-clock, got '$VERIFY_RECHECK_DELAY'"; failures=$((failures+1)); }
-  [[ $(( SECONDS - _v5_t0 )) -le 2 ]] || { echo "FAIL: check-5 (j) — the #4416 settle legs must add no wall-clock (expected <=2s for legs f-i), took $(( SECONDS - _v5_t0 ))s"; failures=$((failures+1)); }
+  [[ $(( SECONDS - _v5_t0 )) -le 2 ]] || { echo "FAIL: check-5 (j) — the #4416 settle legs must add no wall-clock (expected <=2s across the six-arm settle group, legs f-j plus i.2), took $(( SECONDS - _v5_t0 ))s"; failures=$((failures+1)); }
 
   /bin/rm -rf "$_v5_tmp" 2>/dev/null || true
   GH="$_v5_saved_gh"; MODE="$_v5_saved_mode"; STATE_MILESTONE_SLUG="$_v5_saved_slug"

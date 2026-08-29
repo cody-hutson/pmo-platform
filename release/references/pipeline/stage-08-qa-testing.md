@@ -64,8 +64,19 @@ length'`, resolving `<baseRefName>` from the pull request rather than hardcoding
 default branch. Then read every required row with `gh pr checks <PR> --required --json
 name,state,bucket,link`;
 in this `--json` form the command exits **0** even when a required row is failing or
-pending — the exit code signals only an unresolvable PR or an authentication failure —
-so branch on the parsed rows and never on the exit code.
+pending, so branch on the parsed rows and never on the exit code. **The exit code
+carries three conditions, not two.** Besides an unresolvable PR and an
+authentication failure, `gh` exits **1** with non-JSON stdout — `no required
+checks reported on the '<branch>' branch` — when the required roster is
+**empty**, which is precisely the zero-row collapse this predicate exists to
+detect. Observed on this release's own pull request while its head was
+conflicted; the positive control on a healthy pull request returns exit 0 with
+the full JSON roster. A non-zero exit must therefore be classified by **reading
+stdout**, never assumed to be a failed read. The safety invariant holds either
+way — an unparseable read and an empty roster both enter at § 5.1 state 2, same
+severity — so the cost is **attribution, not safety**: without this clause the
+release is told *the read was unreadable* when the truth is *the population
+collapsed*.
 **Settle the count before comparing it, and compare it BEFORE classifying.** The required
 roster is dispatch-dependent, so poll on `status` — settled means no check reports a status
 other than `COMPLETED`, and an incomplete check returns an *empty* conclusion, so a
