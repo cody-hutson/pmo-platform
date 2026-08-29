@@ -308,7 +308,7 @@ If any sentence has no content, use "None identified."
 
 ### Confluence Dual-Format Model
 The RAID Log maintains two representations:
-- **Local CSV (source of truth):** Full 15-column schema including RAID_ID, Date_Opened, Date_Closed, source_ref, and Section. This is the operational version used by all skills for processing, querying, and lifecycle management. It is the **system of record for RAID content** per [ADR-162](../ADRs/ADR-162-system-of-record-per-mirrored-element.md) (element **E1**): the Confluence view is a one-way render, and a Confluence-side edit is superseded by the next render rather than merged back.
+- **Local CSV (source of truth):** Full 15-column schema including RAID_ID, Date_Opened, Date_Closed, source_ref, and Section. This is the operational version used by all skills for processing, querying, and lifecycle management. It is the **system of record for RAID content** per [ADR-164](../ADRs/ADR-164-system-of-record-per-mirrored-element.md) (element **E1**): the Confluence view is a one-way render, and a Confluence-side edit is superseded by the next render rather than merged back.
 - **Confluence (stakeholder-facing):** Manually uploaded by the workspace owner. Excludes internal operational fields (RAID_ID, Date_Opened, Date_Closed, source_ref, Section). Matches the stakeholder-visible format used before this schema overhaul.
 
 **Rules:**

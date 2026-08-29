@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: ADR-162 — System of record per mirrored data element — authority follows authorship
+title: ADR-164 — System of record per mirrored data element — authority follows authorship
 status: Proposed — flips to Accepted when the operator ratifies it at this release's Stage 9 Plan Review gate. The flip is recorded in this file's own `status:` field, which is where it must be verified — never inferred from milestone closure, from a merged pull request, or from a review comment.
 date: 2026-08-29
 release: one-system-of-record-per-element
@@ -19,7 +19,7 @@ source_observations:
   - "A census of the ADR corpus found that the partial-supersession pointer is carried in the body Status block alone by the large majority of partially-superseded records, and on the frontmatter status line by exactly one. The delivery child's acceptance criterion reads the status LINE, so the majority convention would have shipped a defect that looks correct."
 ---
 
-# ADR-162 — System of record per mirrored data element — authority follows authorship
+# ADR-164 — System of record per mirrored data element — authority follows authorship
 
 ## Status
 
@@ -28,6 +28,8 @@ source_observations:
 **Supersedes in part [ADR-051](ADR-051-health-check-mcp-primary-source-set.md)** (Decision 1 only). ADR-051 remains `Accepted`, editable, and in force for its other decisions; the disposition is stated in full under `## Decision` below.
 
 **Numbering.** ADR numbers are platform-global monotonic across both homes (`core/ADRs/` and `release/ADRs/`). This record was allocated from the binding oracle at authorship time and is **claimed at merge, never reserved**. A concurrent unmerged sibling release has claimed the same number on its own branch; an unmerged claim is advisory, a gap blocks the repository while a duplicate is tooled, and whichever release merges second renumbers via the platform's renumbering tool.
+
+**Numbering provenance — `162 → 164`.** Held **ADR-162** branch-local; renumbered to **ADR-164** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 162. In-release citations that read "ADR-162" denote this record.
 
 ## Context
 

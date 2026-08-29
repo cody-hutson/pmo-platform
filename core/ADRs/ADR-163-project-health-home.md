@@ -160,7 +160,7 @@ Split, because the halves genuinely differ.
 - [ADR-040](ADR-040-leadership-owner-person-ref.md) — the field-list amendment precedent: a per-entity field list amended, an optional companion field added, the surface re-frozen with the roster count untouched. The amendment class this record adopts.
 - [ADR-044](ADR-044-skill-output-ownership-model.md) — the roster-extension precedent, and the record that re-froze the roster at 19. The amendment class this record deliberately does **not** adopt, and the source of the count that stays unchanged.
 - [ADR-019](ADR-019-specialists-compose-not-absorb.md) — cited by the writeback contract as the architectural basis for the rollup being a composed read-surface rather than a roster entity; the framing this record's roster exemption makes explicit.
-- [ADR-162](ADR-162-system-of-record-per-mirrored-element.md) — this release's sibling decision record. Disjoint subject matter — externally-mirrored data authority, versus where a locally-composed value is mastered — and no edge between them; their delivery children share the frozen surface this record's sequencing clause batches.
+- [ADR-164](ADR-164-system-of-record-per-mirrored-element.md) — this release's sibling decision record. Disjoint subject matter — externally-mirrored data authority, versus where a locally-composed value is mastered — and no edge between them; their delivery children share the frozen surface this record's sequencing clause batches.
 
 ### Provenance
 
