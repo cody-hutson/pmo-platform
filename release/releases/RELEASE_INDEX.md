@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.43 | release-identity-and-plan-lifecycle | 2026-08-28 | — | #6188 | [notes/v4.43_RELEASE_NOTES.md](notes/v4.43_RELEASE_NOTES.md) |
 | v4.42 | ci-stable-under-transient-conditions | 2026-08-28 | — | #6169 | [notes/v4.42_RELEASE_NOTES.md](notes/v4.42_RELEASE_NOTES.md) |
 | v4.41 | checks-see-whole-subject | 2026-08-28 | — | #6182 | [notes/v4.41_RELEASE_NOTES.md](notes/v4.41_RELEASE_NOTES.md) |
 | hooks-block-their-declared-subject (version-less) | hooks-block-their-declared-subject | 2026-08-28 | Seven security controls whose declared scope had drifted from what they actually adjudicate — a single-level skill-gate pattern, direct script execution outside the allowlist, a cross-domain block applied in both directions when only one carries the risk, a spec naming a file its hook never covered, path matching defeated by quoting and argument order, an operand filter defeated by trailing punctuation, and a governance matcher that identified files by name rather than by location | #6189 | [notes/_unversioned/hooks-block-their-declared-subject_RELEASE_NOTES.md](notes/_unversioned/hooks-block-their-declared-subject_RELEASE_NOTES.md) |
