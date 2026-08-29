@@ -414,6 +414,7 @@ parse_verification_plan() {
     function reset_cols() {
       have_issue_col = 0; col_issue = 0
       col_ac = 0; col_pred = 0; col_method = 0; col_expected = 0; hdr_n = 0
+      block_row = 0
     }
     BEGIN { cur_issue = ""; reset_cols() }
     # (b) enriched form: a bold per-issue subsection header supplies grouping.
@@ -441,17 +442,66 @@ parse_verification_plan() {
     {
       # Heal escape-split cells BEFORE anything reads a column (see AWK_HEAL_FIELDS).
       n = heal_fields($0, F)
-      # Header row: locate columns by name.
+      block_row++
+      # HEADER DETECTION IS STRUCTURAL, NEVER KEYWORD CONTAMINATION OF A DATA ROW.
+      #
+      # NOTE TO THE NEXT EDITOR: this awk program is a SHELL SINGLE-QUOTED string,
+      # so an apostrophe anywhere in it — including in a comment — terminates the
+      # string and breaks the script. Write possessives around it, as below.
+      #
+      # The prior form tested EVERY row and accepted it as a header the moment ANY
+      # single cell contained `predicate`, `expected` or `verification method`, or
+      # lowercased to exactly `issue` / `ac` / `method`. A data row matching any one
+      # of those was consumed as a header and next-ed — no record, no
+      # `parity-error`, no ERROR verdict, and the plan still reported all-PASS on
+      # whatever survived. That is the SILENT-DROP class the design notes for this
+      # tool record rejecting in another candidate (an unparseable, absent, empty or
+      # truncated input must NEVER read as "nothing declared, therefore no
+      # violations"), reintroduced one level up and pointed at the surface that
+      # grades acceptance criteria. It is not hypothetical: two acceptance-criterion
+      # rows of a live release plan vanished to it, both because a cell used the
+      # word "predicate" — a word an author writing about gate predicates uses
+      # constantly. The vocabulary of the schema was a trap for plans written in it.
+      #
+      # A header is now identified by WHERE IT IS, with a name check only as a
+      # secondary filter:
+      #   (1) POSITIONAL — it must be the FIRST row of a table block. A markdown
+      #       table ends at the first non-table line, and `block_row` is reset with
+      #       the column map, so this is exact. Every later row in the block is a
+      #       data row, whatever words it contains.
+      #   (2) NAME — it must name at least ONE of the schema columns, which is
+      #       also what decides whether the table is a per-issue table at all. A
+      #       header naming none (the release-scoped check table, whose columns
+      #       are deliberately distinct) leaves col_method at 0 and its rows are
+      #       skipped, exactly as before.
+      # The POSITIONAL clause is the one that closes F-6, and it closes it
+      # completely: a data row is never header-eligible, whatever words it
+      # contains. A stricter quorum of TWO was tried and REJECTED against the
+      # corpus — it silently zeroed five plans whose real headers name only one
+      # schema column (`| Card | Check | Method |`), turning a false-drop of two
+      # rows into a false-drop of every row in those plans. Measured, not assumed.
+      # Each cell maps to at most ONE column (else-if, not independent ifs), so
+      # the ordering below is the tie-break for a cell matching two patterns.
       is_header = 0
-      for (i = 1; i <= n; i++) {
-        c = lc(trim(F[i]))
-        if (c == "issue") { have_issue_col = 1; col_issue = i; is_header = 1 }
-        if (c == "ac")    { col_ac = i; is_header = 1 }
-        if (c ~ /predicate/) { col_pred = i; is_header = 1 }
-        if (c ~ /verification method/ || c == "method") { col_method = i; is_header = 1 }
-        if (c ~ /expected/) { col_expected = i; is_header = 1 }
+      if (block_row == 1) {
+        h_issue = 0; h_ac = 0; h_pred = 0; h_method = 0; h_expected = 0; h_hits = 0
+        for (i = 1; i <= n; i++) {
+          c = lc(trim(F[i]))
+          if (c == "issue")                                   { h_issue = i;    h_hits++ }
+          else if (c == "ac")                                 { h_ac = i;       h_hits++ }
+          else if (c ~ /verification method/ || c == "method") { h_method = i;   h_hits++ }
+          else if (c ~ /expected/)                            { h_expected = i; h_hits++ }
+          else if (c ~ /predicate/)                           { h_pred = i;     h_hits++ }
+        }
+        if (h_hits >= 1) {
+          is_header = 1
+          have_issue_col = (h_issue > 0) ? 1 : 0
+          col_issue = h_issue; col_ac = h_ac; col_pred = h_pred
+          col_method = h_method; col_expected = h_expected
+          hdr_n = n
+        }
       }
-      if (is_header) { hdr_n = n; next }
+      if (is_header) next
       # Separator row (|---|---|).
       if ($0 ~ /^[ \t]*\|[ \t:-]+\|/ && $0 ~ /-/) {
         stripped = $0; gsub(/[ \t|:-]/, "", stripped)
