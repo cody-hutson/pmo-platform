@@ -294,8 +294,14 @@ These checks verify skill-unique behaviors and output contracts.
 
 ### Category 7: Registered Corpus Predicates (RCP-01 through RCP-03)
 
-**Applies to:** any edit touching a corpus document named by a **class-3 row** of the
-gate-coverage register in `core/standards/gate-efficacy-standard.md`.
+**Applies to:** any edit touching one of the corpus documents the **Trigger table** below
+enumerates — the documents named by those **class-3-V rows** of the gate-coverage register
+in `core/standards/gate-efficacy-standard.md` whose runner is `pmo-skill-editor` Mode C,
+and no others. A class-3 row whose predicate is encoded somewhere else puts **no** RCP
+check in scope: the register's other class-3 rows resolve against their own
+runner-definition files, so an edit touching one of *those* documents runs whatever that
+row's runner defines, not the checks below. Read the scope off the trigger table, never off
+the class-3 population.
 
 **Why these live here, and why deleting one is a defect.** The register names
 `pmo-skill-editor` **Mode C** as the runner for three prose-declared predicates. A
@@ -303,11 +309,14 @@ register row whose named runner does not itself carry the predicate is a runner 
 cannot fail — it satisfies the convention's letter while asserting nothing, which is the
 `unresolvable-runner` defect `gate-efficacy-standard.md` § *Runner resolution* defines.
 Encoding the three predicates here is what makes that register claim **true rather than
-asserted**. The check IDs below are the register's **resolution anchors**: each class-3
-row declares `runner-def:` pointing at this file plus the anchor it must contain, and
-`deploy.sh --check` Check 62 recomputes that resolution on every run. Deleting or
-renaming `RCP-01`, `RCP-02`, or `RCP-03` therefore turns Check 62 red rather than
-silently re-opening the gap.
+asserted**. The check IDs below are the register's **resolution anchors for those three
+rows**: each class-3-V row that names Mode C declares `runner-def:` pointing at this file
+plus the anchor it must contain, and `deploy.sh --check` Check 62 recomputes that
+resolution on every run. This file is **one** resolution target in the register, never the
+whole set — a class-3-O row resolves against whatever file defines *its* runner, and a
+named-gap row correctly carries no pointer at all. Deleting or renaming `RCP-01`,
+`RCP-02`, or `RCP-03` therefore turns Check 62 red rather than silently re-opening the
+gap.
 
 **Trigger table** — keyed on the **edited file**, not on a skill, because each predicate
 is a property of a corpus document rather than of a skill's output:
