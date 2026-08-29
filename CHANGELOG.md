@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.43] - 2026-08-29
+
+A release plan now shows whether its work is finished and keeps one name from draft to close, and the counters that report on releases stopped skipping unversioned ones.
+
+[Full notes](release/releases/notes/v4.43_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.43)
+
 ## [v4.42] - 2026-08-29
 
 Nine checks that could report success while measuring nothing now either measure what they name or say plainly that they could not.
