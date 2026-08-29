@@ -31,15 +31,15 @@ source_observations:
 
 ## Context
 
-The platform mirrors data between its own local artifacts and external systems — a work tracker, a wiki, a spreadsheet service, a document store. For any element that exists on both sides, two questions arise the moment the two copies disagree, and the corpus had been answering them as though they were one question.
+The platform mirrors data between its own local artifacts and the external systems of engagement it reads — Jira, Confluence, Smartsheet, SharePoint, Google Drive, GitHub. For any element that exists on both sides, two questions arise the moment the two copies disagree, and the corpus had been answering them as though they were one question.
 
 **The two questions are different.** *Authority* asks whose value wins on disagreement. *Mutation direction* asks which system this platform is permitted to write. A surface that answers one and uses the vocabulary of the other reads as a contradiction of every surface that answered the opposite question.
 
 That is exactly what had happened. Three governance surfaces each declared a "source of truth" for the same mirrored data and none cited either of the others:
 
 - The operations governance rule states that truth lives locally until sync completes. Read on its own axis this is a **write-direction** statement: an edit made locally and not yet pushed is held locally, and the local copy is what the platform acts on until the push lands. It says nothing about who wins a genuine disagreement.
-- The tracker schema names the local register file the source of truth for the stakeholder-facing rendered view. Read on its own axis this is a **render-source** statement: the rendered page is a projection, and the projection has a source.
-- ADR-051's first decision states that the mirrored external sources are canonical and local is fallback. This is a genuine **authority** claim, and it is the only one of the three that is.
+- The tracker schema's Confluence dual-format model names the RAID Log's local CSV the source of truth for the stakeholder-facing Confluence view. Read on its own axis this is a **render-source** statement: the rendered page is a projection, and the projection has a source.
+- ADR-051's first decision states that the MCP-read sources are canonical and local is fallback or supplement. This is a genuine **authority** claim, and it is the only one of the three that is.
 
 A fourth surface — the external-sync path contract — uses the phrase in the write-direction sense inside the same sentence in which it describes the authority sense.
 
@@ -61,9 +61,9 @@ The table below is the rule applied, not a second rule. An element absent from i
 
 | # | Mirrored data element | Authored in | System of record | Mirror direction | On disagreement |
 |---|---|---|---|---|---|
-| **E1** | **Risk-register content** — the rows of the project risk/action/issue/decision register | the platform (agents and the operator author rows) | **Local** — the register file in the project's operations folder | local to wiki, **one-way render** | **Local wins.** The stakeholder view is regenerated from the local register; a wiki-side edit is superseded by the next render and reported as render-drift. It is never merged back. |
-| **E2** | **External work-item state** — status, assignee and due date of an item in an external tracker | the external tracker (people working outside the platform) | **External** — the system named by the item's source-system field | external to local, **read and poll only** | **External wins.** The local copy is corrected to the external value. A *more recent local* value is reported to the operator as an unpushed human action; the platform never writes the external system. |
-| **E3** | **Wiki-rendered artifacts** — a stakeholder page produced from a local source artifact | the local source artifact | **Local source** | local to wiki, **one-way render** | **Local wins**, as E1. The render contract's existing orphan guard is the enforcement: a render whose source artifact does not resolve **halts**; it does not publish. |
+| **E1** | **RAID content** — the rows of the RAID Log's full-schema local CSV | the platform (agents and the operator author rows) | **Local** — the project's `[Project]_RAID_Log.csv` | local to Confluence, **one-way render** | **Local wins.** The Confluence view is regenerated from the local CSV; a Confluence-side edit is superseded by the next render and reported as render-drift. It is never merged back. |
+| **E2** | **External ticket state** — status, assignee and due date of a work item in Jira, Smartsheet, GitHub or a comparable tracker | the external tracker (people working outside the platform) | **External** — the system named by the item's `source_system` | external to local, **read and poll only** | **External wins.** The local copy is corrected to the external value. A *more recent local* value is reported to the operator as an unpushed human action; the platform never writes the external system. |
+| **E3** | **Confluence-rendered artifacts** — a stakeholder page produced from a local source artifact | the local source artifact | **Local source** | local to Confluence, **one-way render** | **Local wins**, as E1. The dual-format render contract's existing orphan guard is the enforcement: a render whose source artifact does not resolve **halts**; it does not publish. |
 
 E1 and E3 share a branch; E2 is its inverse. That asymmetry **is** the reconciliation contract, and it is the reason a single system-level winner was never available.
 
