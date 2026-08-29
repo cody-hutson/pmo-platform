@@ -733,6 +733,25 @@ core/deploy/tests/test_deploy_sandbox.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_version_freeness_injection.sh
 ./core/deploy/tests/test_version_freeness_injection.sh
 core/deploy/tests/test_version_freeness_injection.sh
+
+# Check 36 drift-classes fixture self-test (test_check36_drift_classes.sh) — in-tree
+# bash CLI. Asserts each Check 36 drift-class detector discriminates correctly against
+# a synthetic tmpdir memory store (a FLAG case and a CLEAN case per class), plus a
+# drift guard that greps deploy.sh so a silent Check 36 edit fails this test rather
+# than passing it stale. Hermetic: the live ~/.claude/memory store is never read or
+# written; the test builds its own fixtures and a canned `gh` stub in a tmpdir.
+# <!-- repo-integrity: allow-memory-ref -->  this comment names the store the test deliberately does NOT touch.
+# Executed agent-side at Stage 6 self-verification and Stage 7 Dev Testing, and by the
+# install-tests shell-tests job; all four invocation forms so BLOCK-DESTRUCTIVE-022
+# does not block the agent-side path. (CI runs no Claude hooks, so this entry is for
+# the agent-side path, not the workflow.) Named row rather than a
+# core/deploy/tests/* glob, per the entries above: a pattern would auto-admit any
+# future file dropped into that directory.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_check36_drift_classes.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_check36_drift_classes.sh
+./core/deploy/tests/test_check36_drift_classes.sh
+core/deploy/tests/test_check36_drift_classes.sh
+
 # start-skill-editor-session.sh — mints the pmo-skill-editor session sentinel that
 # block-skill-direct-edit.sh (Gate 2) requires. Allowlisted because the gate's own deny
 # message instructs an agent to start a session, and an unrunnable minter reproduces the

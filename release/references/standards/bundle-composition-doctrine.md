@@ -99,6 +99,8 @@ The frame-pluggability discipline allows the platform to switch to F2, F3, a hyb
 
 The method applies per **proposed milestone**. Steps 1-7 in fixed order. Output is a milestone description ready for Stage 3 Phase B3 creation.
 
+**Runner (named, because a procedure nobody executes is indistinguishable in the artifact from one that ran):** [`release-hub`](../../skills/release-hub/SKILL.md) **Mode R group 6** (Bundle coherence), whose trigger is a proposed milestone entering readiness assessment; re-verified at **Stage 7 Dev Testing** ([`pmo-qa-auditor`](../../../core/skills/pmo-qa-auditor/SKILL.md) Mode G) on the PR that carries the composition. **No CI job executes this method** — stated, not implied. This passage is a **class 3-O** prose-declared normative predicate per [`gate-efficacy-standard.md`](../../../core/standards/gate-efficacy-standard.md) § *Scope boundary* (obligation limb: the trigger is a proposed milestone, the act is running Steps 1-7, and no verdict is stated for the negation); its gate-coverage register row, its resolution pointer, and its declared observable live in that standard's register, which is the single home for all three.
+
 ### Step 1 — Name the user capability (AFTER/BEFORE contrast)
 
 > *"After this slice ships, what can a user do that they couldn't before?"*
