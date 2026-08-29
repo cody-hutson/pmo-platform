@@ -126,6 +126,57 @@ STRICT=true
 # should_full_roster(). Initialized here so it is always defined under set -u.
 FORCE_ALL=false
 
+# ─── Warn-log lifecycle + gate-rollout constants ─────────────────────────────
+# THE SINGLE DECLARATION SITE for the warn-log retention window and the
+# skill-suite gate-rollout deadline. Declared HERE and nowhere else; every
+# consumer reads the symbol, never a copy of the number. The two are coupled,
+# and the coupling is the point:
+#
+#   INVARIANT:  WARN_LOG_RETENTION_DAYS >= SKILL_SUITE_GATE_ESCALATE_DAYS
+#
+# The escalation horizon is when the deadline arm FORCES the decision that reads
+# the drain. A retention ceiling below it discards the rows that decision is
+# about to read — a rotation policy that fixes log growth by breaking the
+# graduation it was meant to enable. Records dropped at a rotation boundary are
+# IRREVERSIBLE; verify this relation BEFORE the first rotation runs, not after.
+#
+# WARN_LOG_RETENTION_DAYS's VALUE belongs to the warn-log lifecycle card, not to
+# this one. The value below is the FLOOR this rollout requires, so a larger
+# ceiling needs no edit here; a smaller one breaks the invariant and the two
+# changes must reconcile before either merges.
+#
+# WHY `readonly` IN A TRACKED SCRIPT AND NOT OPERATOR CONFIG. The deadline arm's
+# whole purpose is to be repo-derivable — evaluable in CI and in a fresh clone,
+# where no operator config and no drain exist. A locally-overridable value makes
+# CI and the operator disagree about whether the deadline has passed, the one
+# thing this mechanism must never do. Same reasoning as the Check-71 constants.
+#
+# THE SPLIT IS THE DESIGN, AND IT IS NOT SYMMETRIC.
+#   DEADLINE ARM (repo-derivable, ENFORCING): committed constants + today's date.
+#   EVIDENCE ARM (operator-local, ADVISORY):  drain rows; SKIPs when absent and
+#   never touches ISSUES, so CI observes no behaviour change from it at all.
+#
+# WHAT THE DEADLINE IS ARMED AGAINST — stated so it is not widened by accident.
+# The subject is the G3-14 / G3-15 SPLIT DISPOSITION's integrity limb (limb (i)):
+# its residual `warn -> enforce` flip is one committed .enforce sentinel token
+# plus one branch-protection registration, and it was recorded with no date. The
+# live-rate limb (ii) is advisory PERMANENTLY on architectural grounds
+# (core/ADRs/ADR-163-split-predicate-gate-graduation.md) and is NOT a shakedown,
+# so it is deliberately outside this arm's subject. Arming a deadline against a
+# declined flip would manufacture the inverse defect this constant exists to
+# close: a permanent advisory wearing the shape of a temporary one.
+#
+# Turn a GRADUATION-OVERDUE finding green by RECORDING A DECISION: advance
+# SKILL_SUITE_GATE_PHASE, retreat it, or re-date SKILL_SUITE_GATE_ARMED — the
+# edited line IS the audit record. Advance is an operator decision, never
+# auto-promoted by row count (core/standards/progressive-rollout-convention.md
+# owns the ladder and this phase enum).
+readonly WARN_LOG_RETENTION_DAYS=90          # owner: warn-log lifecycle card
+readonly SKILL_SUITE_GATE_PHASE="warn"       # shadow|warn|enforce
+readonly SKILL_SUITE_GATE_ARMED="2026-08-29"
+readonly SKILL_SUITE_GATE_REVIEW_DAYS=60
+readonly SKILL_SUITE_GATE_ESCALATE_DAYS=90
+
 # ─── Governance-audit tracker repo ──────────────────────────────────────────
 # Checks 14/15/21/22 (+ their --report reruns) query the issue tracker for
 # pipeline invariants. The repo is resolved per-clone, never hardcoded:
@@ -13416,6 +13467,129 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
           "unexpected verdict token '$c73_tok' from _c73_compute_verdict (this check has no measurement-outage class; an unrecognised token is a defect in the verdict body): $c73_verdict"
         ;;
     esac
+  fi
+
+  # Check 74 — gate-rollout graduation (MIXED MODE) [#4214]
+  # gate-efficacy: posture=advisory  enforcement-surface=deploy-time-only
+  #   invariant: the G3-14/G3-15 SPLIT DISPOSITION's INTEGRITY limb (limb (i)) has a
+  #              repo-derivable exit criterion, and that criterion has not elapsed
+  #              unaddressed (W2 of gate-efficacy-standard.md § Written sink and
+  #              terminable shakedown).
+  #   falsification: re-date SKILL_SUITE_GATE_ARMED more than
+  #                  SKILL_SUITE_GATE_ESCALATE_DAYS into the past -> GRADUATION-OVERDUE
+  #                  and `--check --strict` exits 1; restore -> OK.
+  #
+  # WHAT IT ASSERTS. That limb (i)'s residual `warn -> enforce` flip — one committed
+  # .github/deploy-check-ci.enforce token plus one branch-protection registration — is
+  # DECIDED rather than left running. It reads four committed constants and today's
+  # date and, past the review window, forces a verdict: advance the phase, retreat it,
+  # or re-date the arming constant. Each is a one-line edit, and the edited line IS the
+  # audit record of the decision.
+  #
+  # WHAT IT DELIBERATELY DOES NOT ASSERT — the scope boundary is the whole defence
+  # against widening this into something it must not be:
+  #   * NOT the LIVE limb (ii). That limb declines the flip on architectural grounds
+  #     (ADR-163) and is advisory PERMANENTLY, so it is not a shakedown. Arming a
+  #     deadline against a declined flip would produce a permanent advisory wearing the
+  #     shape of a temporary one — the exact defect #4214 exists to close, inverted.
+  #   * NOT whether the gate machinery works. Check 73 owns that and is the required
+  #     pre-merge subset member; this check reads no fixture and evaluates no predicate.
+  #   * NOT drain CONTENT. The evidence arm counts rows and classifies the count. It
+  #     never grades what is in them.
+  #
+  # THE SPLIT IS THE DESIGN, AND IT IS NOT SYMMETRIC (the Check 71 shape, reused).
+  #   DEADLINE ARM (repo-derivable, ENFORCING): committed constants + today's date. It
+  #   needs no drain, so it works in CI and in a fresh clone — which is precisely the
+  #   blocker the flip-decision register names for every undated row.
+  #   EVIDENCE ARM (operator-local, ADVISORY): the drain row count for Check 73's own
+  #   warn id. It SKIPs when the drain is unreadable and touches ISSUES on NO PATH, so
+  #   a fresh clone and CI observe no behaviour change from it at all. The absence of an
+  #   increment below is a STRUCTURAL guarantee, not a default a later edit may flip.
+  #
+  # A ZERO DRAIN IS A FINDING, NOT A REASON TO WAIT. The three-way verdict is emitted
+  # WITH the due notice so the reading cannot default to "no evidence yet": zero rows
+  # reads as INSTRUMENTATION-SUSPECT, because a zero whose instrument was never
+  # connected measures the wiring and not the behaviour.
+  #
+  # THE DRAIN IS READ THROUGH THE SEGMENT SET, NEVER THE HOT FILE. Once the warn-log
+  # lifecycle card lands its rotation, the hot path holds only the CURRENT segment, so
+  # opening it directly returns a PLAUSIBLE WRONG ANSWER rather than an error — the
+  # failure ADR-106 measured, where a control returned 2 where the true count was 10.
+  # warn_log_segment_set() is that card's symbol and does not exist yet, so the arm is
+  # guarded and SKIPs until it lands. That SKIP is honest; opening the hot file to avoid
+  # it would not be.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 74: gate-rollout graduation (deadline arm repo-derivable + enforcing; evidence arm operator-local + advisory)"
+
+    # ── control arm FIRST: a probe that cannot be shown to discriminate proves
+    # nothing. Both arms exercise the SAME indirect-expansion path the verdict below
+    # uses, so a resolution path that silently returned empty — which would read as
+    # "no finding" on every run — cannot pass this pair.
+    local c74_ref c74_ctrl_hit c74_ctrl_miss
+    c74_ref="SKILL_SUITE_GATE_PHASE";           c74_ctrl_hit="${!c74_ref:-}"
+    c74_ref="SKILL_SUITE_GATE_ZZZ_FABRICATED";  c74_ctrl_miss="${!c74_ref:-}"
+    log "  CTRL:  gate-rollout-graduation — constant sensitivity='${c74_ctrl_hit}' (want non-empty), specificity='${c74_ctrl_miss}' (want empty)"
+
+    if [[ -z "$c74_ctrl_hit" || -n "$c74_ctrl_miss" ]]; then
+      log "  FAIL:  gate-rollout-graduation — the constant resolution path no longer discriminates; every verdict below would be unattributable"
+      ISSUES=$((ISSUES + 1))
+    elif [[ -z "${SKILL_SUITE_GATE_ARMED:-}" || -z "${SKILL_SUITE_GATE_REVIEW_DAYS:-}" || -z "${SKILL_SUITE_GATE_ESCALATE_DAYS:-}" ]]; then
+      log "  FAIL:  gate-rollout-graduation — one or more rollout constants are unreadable (phase='${SKILL_SUITE_GATE_PHASE:-}' armed='${SKILL_SUITE_GATE_ARMED:-}' review='${SKILL_SUITE_GATE_REVIEW_DAYS:-}' escalate='${SKILL_SUITE_GATE_ESCALATE_DAYS:-}'). A gate that cannot read its own input must not pass."
+      ISSUES=$((ISSUES + 1))
+    else
+      case "$SKILL_SUITE_GATE_PHASE" in
+        shadow|warn|enforce) ;;
+        *)
+          log "  FAIL:  gate-rollout-graduation — SKILL_SUITE_GATE_PHASE='${SKILL_SUITE_GATE_PHASE}' is not one of shadow|warn|enforce (the ladder core/standards/progressive-rollout-convention.md owns). An unrecognised value has no defined rung, so the rollout state is undefined rather than merely wrong."
+          ISSUES=$((ISSUES + 1))
+          ;;
+      esac
+
+      local c74_elapsed
+      c74_elapsed="$(python3 -c 'import datetime,sys
+a=datetime.date.fromisoformat(sys.argv[1])
+print((datetime.datetime.utcnow().date()-a).days)' "$SKILL_SUITE_GATE_ARMED" 2>/dev/null || printf '')"
+
+      # EVIDENCE ARM. Segment-set read only. No path below touches ISSUES.
+      local c74_rows="SKIP"
+      if declare -f warn_log_segment_set >/dev/null 2>&1; then
+        c74_rows="$(warn_log_segment_set 2>/dev/null \
+          | while IFS= read -r _c74_seg; do [[ -n "$_c74_seg" && -f "$_c74_seg" ]] && /usr/bin/cat "$_c74_seg"; done \
+          | /usr/bin/grep -c 'bundle-metrics-gate-integrity' || true)"
+        c74_rows="$(printf '%s' "$c74_rows" | /usr/bin/tr -d '[:space:]')"
+        [[ -n "$c74_rows" ]] || c74_rows=0
+      fi
+
+      log "  DENOM: gate-rollout-graduation — subject=g3-14/g3-15-integrity-limb phase=${SKILL_SUITE_GATE_PHASE} armed=${SKILL_SUITE_GATE_ARMED} elapsed=${c74_elapsed}d thresholds=${SKILL_SUITE_GATE_REVIEW_DAYS}d/${SKILL_SUITE_GATE_ESCALATE_DAYS}d drain_rows=${c74_rows}"
+
+      if [[ "$SKILL_SUITE_GATE_PHASE" == "enforce" ]]; then
+        log "  OK:    gate-rollout-graduation — the integrity limb has GRADUATED to enforce; the rollout is decided and this gate is discharged"
+      elif [[ -z "$c74_elapsed" ]]; then
+        log "  FAIL:  gate-rollout-graduation — SKILL_SUITE_GATE_ARMED='${SKILL_SUITE_GATE_ARMED}' is not a resolvable ISO date, so the deadline arm cannot be evaluated. This is the failure mode a placeholder arming stamp produces."
+        ISSUES=$((ISSUES + 1))
+      else
+        # Three-way evidence verdict, emitted WITH any due notice so a zero drain is
+        # read as a finding rather than as an absence of one.
+        local c74_verdict
+        if [[ "$c74_rows" == "SKIP" ]]; then
+          c74_verdict="drain unreadable here — warn_log_segment_set() is not defined on this tree, so the evidence arm SKIPs rather than opening the hot warn log (a direct read returns a plausible wrong answer after the first rotation, per ADR-106). It informs the decision; it never triggers it."
+        elif [[ "$c74_rows" -eq 0 ]]; then
+          c74_verdict="0 rows -> INSTRUMENTATION-SUSPECT, not 'no evidence'. Check 73 emits under this id via flag_warn_or_issue, so a genuine zero means the gate has not fired since the drain was cut. Confirm by running the Check 73 seeded-failure arm (core/deploy/tests/test_check73_bundle_metrics_discrimination.sh); if that writes no row, the drain is BROKEN and that is a defect."
+        else
+          c74_verdict="${c74_rows} rows -> classify the sample with its denominator (true-positive vs fixture-churn), then FLIP the .github/deploy-check-ci.enforce sentinel and register the job context, or NARROW the predicate. Never auto-promoted by count."
+        fi
+
+        if [[ "$c74_elapsed" -ge "$SKILL_SUITE_GATE_ESCALATE_DAYS" ]]; then
+          log "  FAIL:  gate-rollout-graduation — GRADUATION-OVERDUE: ${c74_elapsed} days at phase='${SKILL_SUITE_GATE_PHASE}', past the ${SKILL_SUITE_GATE_ESCALATE_DAYS}-day escalation. ${c74_verdict}"
+          log "         Turn this green by RECORDING A DECISION in core/deploy/deploy.sh: advance SKILL_SUITE_GATE_PHASE, retreat it, or re-date SKILL_SUITE_GATE_ARMED. Doing nothing is the one option this gate removes."
+          ISSUES=$((ISSUES + 1))
+        elif [[ "$c74_elapsed" -ge "$SKILL_SUITE_GATE_REVIEW_DAYS" ]]; then
+          log "  WARN:  gate-rollout-graduation — GRADUATION-DUE (deadline): ${c74_elapsed} days since arming (threshold ${SKILL_SUITE_GATE_REVIEW_DAYS}d; escalates to a finding at ${SKILL_SUITE_GATE_ESCALATE_DAYS}d). ${c74_verdict}"
+        else
+          log "  OK:    gate-rollout-graduation — within the review window (${c74_elapsed}d of ${SKILL_SUITE_GATE_REVIEW_DAYS}d, drain=${c74_rows})"
+        fi
+      fi
+    fi
   fi
 
   # Summary
