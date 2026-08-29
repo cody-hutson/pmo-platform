@@ -74,7 +74,7 @@ The Daily Status Log is a carry-forward tracker organized by category. It is the
    - Status: DEFERRED / REACTIVATED
 
 6. **Retest Queue** — Items requiring retesting. Each entry:
-   - Ticket: Jira ticket ID
+   - Ticket: the retest item's external work-item identifier — the `source_system` + `external_id` pair per `entity-field-schemas.md` §3.0c (e.g. a Jira key, a GitHub issue number, a Smartsheet row id). Jira is one source system, not the only one.
    - Description: What to retest
    - Fix date: When the fix was applied
    - Assigned to: Who will retest

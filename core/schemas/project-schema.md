@@ -31,7 +31,7 @@ The schema is **methodology-aware**. Prior to this release, a co-management bool
 
 ## 2. Scope
 
-**In scope.** All fields in the `PROJECT.md` frontmatter YAML block. Values, types, presence rules, and the reconciliation rules between legacy and new fields. The additions — `delivery_approach` and `custom_methodology_definition` — with full validation rules (V1-V17) and worked examples.
+**In scope.** All fields in the `PROJECT.md` frontmatter YAML block. Values, types, presence rules, and the reconciliation rules between legacy and new fields. The additions — `delivery_approach` and `custom_methodology_definition` — with full validation rules (V1-V24) and worked examples.
 
 **Out of scope.** Per-skill consumption rules (those live in each skill's own output-contract and in `methodology-parameterization-v1.md § Skill Consumption Pattern`). The matrix of per-archetype variation columns (lifecycle / ceremonies / artifacts / cadence) lives in `methodology-archetype-matrix.md`. Canonical term definitions for Process / Methodology / Framework live in `terminology-glossary.md`.
 
@@ -49,6 +49,18 @@ status: ACTIVE | CLOSING | CLOSED          # REQUIRED — lifecycle state (per C
 
 # Dual-framing co-management trigger (decoupled from delivery_approach — orthogonal)
 dual_framing_enabled: bool                 # OPTIONAL — true triggers dual Agile/Waterfall co-management framing (OPERATIONS.md § Dual-Framing Bridge). See §7 Migration Notes.
+
+# External connector configuration — the per-project keys naming this project's
+# external systems. Roster indexed at OPERATIONS.md § Connector Configuration;
+# defined and validated HERE (V18-V24). All optional.
+jira_project_key: string                   # OPTIONAL — Jira project key this project files to
+jira_query_scope: string                   # OPTIONAL — JQL filter for backlog queries (opaque; not parsed)
+confluence_space: string                   # OPTIONAL — Confluence space key
+confluence_page_ids: [string, ...]         # OPTIONAL — governed Confluence page ids (may be [])
+gdrive_folder: string                      # OPTIONAL — Google Drive folder id for transcript ingest
+co_management_sharepoint_folder: string | null
+                                           # CONDITIONAL — non-null iff dual_framing_enabled: true
+co_management_smartsheet_id: string | null # CONDITIONAL — non-null iff dual_framing_enabled: true
 
 # Methodology classification — NEW
 delivery_approach: Scrum | Kanban | XP | Waterfall | PRINCE2 | SAFe | Hybrid | Custom
@@ -123,6 +135,13 @@ Field presence rules summary:
 | `project_owner_external` | ⚪ Conditional | populated iff the owner is not in the roster; mutually exclusive with `project_owner` |
 | `status` | ✅ Always | — |
 | `dual_framing_enabled` | ⚪ Optional | — |
+| `jira_project_key` | ⚪ Optional | — |
+| `jira_query_scope` | ⚪ Optional | — |
+| `confluence_space` | ⚪ Optional | — |
+| `confluence_page_ids` | ⚪ Optional | — |
+| `gdrive_folder` | ⚪ Optional | — |
+| `co_management_sharepoint_folder` | ⚪ Conditional | non-null iff `dual_framing_enabled: true`; null-or-absent otherwise |
+| `co_management_smartsheet_id` | ⚪ Conditional | non-null iff `dual_framing_enabled: true`; null-or-absent otherwise |
 | `delivery_approach` | ✅ Always | — (new) |
 | `custom_methodology_definition` | Conditional | ✅ iff `delivery_approach: Custom`; ❌ otherwise |
 | `operational_methodology` | ⚪ Optional | when present: one of the 6 composable archetypes OR `[A, B]` per the V2 array sub-assertions (V16); absent → the operational space falls back to `delivery_approach` (new) |
@@ -177,6 +196,8 @@ A compound value (a state token followed by a parenthetical or dash-qualifier) c
 
 **Owner rule.** V-PRJ-02 requires exactly one of `project_owner` / `project_owner_external`, and V-PRJ-08 makes an unresolved `project_owner` **BLOCK-WRITE**. The dialect resolves this to `project_owner` = the operator's `person_id`, on the ground that the operator is the PMO owner of record for every project in their own operational corpus. `project_owner_external` is **never** written by a seeding run: its value is a named human, and writing engagement-derived personal data into the corpus is the exact hazard the one-Person cap exists to prevent. A project whose owner is genuinely someone else is an operator-supplied value, not a derived one.
 
+**Project-identity resolution rule.** `project_id` — the kebab-case slug carried in `PROJECT.md` frontmatter — is the **sole join key** by which a record resolves to a project; a consumer that must associate a record with a project reads that project's `project_id` and joins on it. The folder basename under `projects/` is a Title-case **display projection**: it is **never parsed**, case-folded, or string-transformed **into a `project_id`**, and a consumer that derives a `project_id` from a basename is malformed even when the derived string happens to match. The two are **not required to be equal**, and equality is never assumed. *Scope:* this rule governs `project_id` **derivation only**. A folder basename may legitimately populate a **display-name** field — `project_name`, or the doc-index `project` column ([`frontmatter-schema.md`](frontmatter-schema.md) § Category 6: Classification, typed *"Project name"*) — and display-name-keyed joins **within that namespace** are unaffected; what the rule forbids is crossing from the display namespace into the identifier namespace. The charter's cosmetic-projection stance is preserved unchanged: the human display name and folder basename remain cosmetic projections of the slug, free to change without breaking an edge.
+
 ## 4. Field Reference
 
 One subsection per field. Values, semantics, and consumer expectations. Evidence labels: `[SOURCE]` indicates the authoring file or grep result; `[INFERRED]` indicates derivation from observed skill behavior.
@@ -200,6 +221,40 @@ Boolean. When `true`, activates the **Dual-Framing Bridge** — dual Agile/Water
 This field is the dual-framing co-management trigger, **orthogonal** to `delivery_approach`: it is **NOT implied by, and does not imply, `delivery_approach: Hybrid`** — see §7 Collision Check for reconciliation rules. The trigger is the operational co-management dual-framing capability; `Hybrid` (and the `[A, B]` array form) is a methodology classification — the two combine freely.
 
 **Renamed field.** The dual-framing trigger was renamed to `dual_framing_enabled`; the legacy key it replaced was **retired in v2.19** and is no longer accepted on read. See §7 Migration Notes for the rename and the one-line migration.
+
+### External connector keys — `jira_project_key` · `jira_query_scope` · `confluence_space` · `confluence_page_ids` · `gdrive_folder` · `co_management_sharepoint_folder` · `co_management_smartsheet_id`
+
+These seven keys, together with `dual_framing_enabled` above, are the **per-project connector configuration**: the fields that name *which* external systems this project is mirrored against and *under what key there*. [`OPERATIONS.md § Connector Configuration`](../governance/OPERATIONS.md) carries the **name index** and a worked example; this section and V18–V24 are the **definitional home** — types, requiredness, conditional rules and validation are stated here and restated nowhere else.
+
+**Every value in this group is opaque to the platform.** A connector key is passed through to the connector that reads it; it is never parsed into an identifier, split on a separator, or interpreted for meaning. A skill that needs a component of one asks the connector, never the string.
+
+#### `jira_project_key`
+
+Optional. The Jira project key this project files work items to (e.g. `PROJ`). Consumed by the Jira MCP connector when resolving this project's backlog. Opaque — never parsed into a prefix or a numbering scheme. Validated by **V18**.
+
+#### `jira_query_scope`
+
+Optional. A JQL fragment scoping backlog queries for this project (e.g. `Sprint >= 5`). **Opaque — the platform does not parse or validate it as JQL**; an invalid fragment surfaces as a connector-side query error, not a schema failure. Consumed by the Jira MCP connector. Validated by **V19**.
+
+#### `confluence_space`
+
+Optional. The Confluence space key holding this project's governed pages. Consumed by the Confluence MCP connector. Opaque. Validated by **V20**.
+
+#### `confluence_page_ids`
+
+Optional. A list of governed Confluence page ids — the pages this project publishes to or reads from (RAID view, FDD index, process flows). May be the empty list `[]`, which declares "Confluence is configured but no page is governed yet" and is distinct from absence. Each member is opaque. Consumed by the Confluence MCP connector and by the dual-format render path. Validated by **V21**.
+
+#### `gdrive_folder`
+
+Optional. The Google Drive folder id this project's transcripts are ingested from. Consumed by the Google Drive MCP connector and the transcript-ingest path. Opaque. Validated by **V22**.
+
+#### `co_management_sharepoint_folder`
+
+**Conditional on `dual_framing_enabled`.** The SharePoint folder holding the co-management artifacts when dual-framing is active. Non-null when `dual_framing_enabled: true`; `null` or absent otherwise — a non-null value with `dual_framing_enabled` false-or-absent is a defect, not a harmless leftover, because it declares a co-management surface the project is not co-managed on. Consumed by the Dual-Framing Bridge (`OPERATIONS.md § Dual-Framing Bridge`). Opaque. Validated by **V23**.
+
+#### `co_management_smartsheet_id`
+
+**Conditional on `dual_framing_enabled`**, with the identical shape as `co_management_sharepoint_folder`. The Smartsheet grid id carrying the co-managed milestone view. Consumed by the Dual-Framing Bridge and cited as this project's Smartsheet identity by [`c3-external-sync-path-b.md`](../standards/c3-external-sync-path-b.md). Opaque. Validated by **V24**.
 
 ### `delivery_approach`
 
@@ -357,7 +412,7 @@ Optional. A list of project-team membership entries — the **project-record-lev
 
 ## 5. Validation Rules
 
-Seventeen rules governing schema conformance. Enforcement level `structural (auto)` means the rule is machine-verifiable from the frontmatter alone — no human judgment required. `[AC-R2]` annotations indicate the rule operationalizes the Stage-5-locked AC-R2.
+Twenty-four rules governing schema conformance. Enforcement level `structural (auto)` means the rule is machine-verifiable from the frontmatter alone — no human judgment required. `[AC-R2]` annotations indicate the rule operationalizes the Stage-5-locked AC-R2.
 
 | ID | Rule | Blocks | Level |
 |---|---|---|---|
@@ -378,8 +433,15 @@ Seventeen rules governing schema conformance. Enforcement level `structural (aut
 | **V15** | `team_roster`, when present, is a list where **every** entry is an object with EXACTLY the keys `{person_ref, role_on_project}` and no others — `person_ref` is a `ref → Person.person_id` and `role_on_project` is a non-empty string. **(V15-a)** no entry carries any key outside `{person_ref, role_on_project}` (no inline `name`/`allocation_pct`/Person-or-Resource attribute — the no-inline-PII invariant). **(V15-b)** each `person_ref` resolves against the people-roster `person_id` anchor: an unresolved ref → **BLOCK-WRITE**; a ref flagged external (not in roster) → **WARN-HEALTH** (per ADR-040 L2 disposition). | schema parse + skill branch | structural (auto) for V15-a (closed key-set, frontmatter-only); ref-resolution (V15-b) is a write-time check |
 | **V16** | `operational_methodology`, when present, is EITHER (a) a single value in `{Scrum, Kanban, XP, Waterfall, PRINCE2, SAFe}` (case-sensitive, title-case — the 6 composable archetypes; the meta-archetypes `Hybrid` and `Custom` are NOT valid per-space values), OR (b) a 2-element YAML sequence `[A, B]` satisfying the V2 array sub-assertions (V2-a length == 2 · V2-b members distinct · V2-c each member ∈ the 6-set). Absent is valid — the operational space falls back to `delivery_approach` (§4). | skill branch | structural (auto) |
 | **V17** | `release_methodology`, when present, follows the identical grammar as V16 (single value ∈ the 6-set OR a 2-element `[A, B]` per the V2 array sub-assertions; meta-archetypes excluded). Absent is valid — the release space falls back to `delivery_approach` (§4). | skill branch | structural (auto) |
+| **V18** | `jira_project_key`, when present, is a non-empty string. Absent is valid. | skill branch | structural (auto) |
+| **V19** | `jira_query_scope`, when present, is a non-empty string (an opaque JQL fragment — **not** parsed or validated as JQL). Absent is valid. | skill branch | structural (auto) |
+| **V20** | `confluence_space`, when present, is a non-empty string. Absent is valid. | skill branch | structural (auto) |
+| **V21** | `confluence_page_ids`, when present, is a list of non-empty strings (may be `[]`). Absent is valid. | skill branch | structural (auto) |
+| **V22** | `gdrive_folder`, when present, is a non-empty string. Absent is valid. | skill branch | structural (auto) |
+| **V23** | `co_management_sharepoint_folder` is a non-empty string when `dual_framing_enabled: true`; `null` or absent otherwise. A non-null value with `dual_framing_enabled` false-or-absent is a defect (mirrors the V3/V4 conditional pair). | skill branch | structural (auto) |
+| **V24** | `co_management_smartsheet_id` follows the identical conditional shape as V23. | skill branch | structural (auto) |
 
-**V-table coordination note.** The `delivery_approach` array form (the Hybrid-Two `[A, B]` case) is validated by the **amended V2 (v2.18)** — it does NOT introduce a new V-rule. The `deliverable_type` deliverable-domain axis is defined by **V13** (appended to the V12 tail; no existing rule renumbered). The org-structure shape and the project-altitude people-graph index are defined by **V14 + V15** — `org_structure_type` (V14) and `team_roster` (V15) — appended to the post-V13 tail (see References). `delivery_model` is **not** a field — it resolves to the existing required `delivery_approach`, so no rule is added for it. The per-space methodology split is defined by **V16 + V17** — `operational_methodology` (V16) and `release_methodology` (V17) — appended to the post-V15 tail; their grammar reuses the V2 array sub-assertions by reference, and the meta-archetype exclusion keeps V3/V4 (Custom-block presence) keyed off `delivery_approach` only. No existing rule is renumbered.
+**V-table coordination note.** The `delivery_approach` array form (the Hybrid-Two `[A, B]` case) is validated by the **amended V2 (v2.18)** — it does NOT introduce a new V-rule. The `deliverable_type` deliverable-domain axis is defined by **V13** (appended to the V12 tail; no existing rule renumbered). The org-structure shape and the project-altitude people-graph index are defined by **V14 + V15** — `org_structure_type` (V14) and `team_roster` (V15) — appended to the post-V13 tail (see References). `delivery_model` is **not** a field — it resolves to the existing required `delivery_approach`, so no rule is added for it. The per-space methodology split is defined by **V16 + V17** — `operational_methodology` (V16) and `release_methodology` (V17) — appended to the post-V15 tail; their grammar reuses the V2 array sub-assertions by reference, and the meta-archetype exclusion keeps V3/V4 (Custom-block presence) keyed off `delivery_approach` only. The **external connector keys** are defined by **V18–V24** — `jira_project_key` (V18), `jira_query_scope` (V19), `confluence_space` (V20), `confluence_page_ids` (V21), `gdrive_folder` (V22), `co_management_sharepoint_folder` (V23), `co_management_smartsheet_id` (V24) — appended to the post-V17 tail; V23/V24 reuse the V3/V4 conditional-pair shape keyed off `dual_framing_enabled`, which keeps its own row and gains no new rule. No existing rule is renumbered.
 
 ### 5.1 Custom Block Completeness (operationalizes AC-R2)
 
@@ -396,7 +458,7 @@ This block-completeness assertion is the single-test AC-R2 gate. Stage 8 QA runs
 
 ### 5.2 Validation-failure handling
 
-A PROJECT.md that fails any V1-V17 assertion is **malformed** (V13/V14/V15/V16/V17 join the malformed-file set with the same surface-the-failing-rule-ID + route-to-`project-initiator` Mode C handling; absence of an optional field — `deliverable_type` on a legacy file, `org_structure_type`, `team_roster`, `operational_methodology`, or `release_methodology` — is conformance per its rule, not a failure). Consumer skills encountering a malformed PROJECT.md MUST:
+A PROJECT.md that fails any V1-V24 assertion is **malformed** (V13/V14/V15/V16/V17 join the malformed-file set with the same surface-the-failing-rule-ID + route-to-`project-initiator` Mode C handling; absence of an optional field — `deliverable_type` on a legacy file, `org_structure_type`, `team_roster`, `operational_methodology`, or `release_methodology` — is conformance per its rule, not a failure). Consumer skills encountering a malformed PROJECT.md MUST:
 
 1. Refuse to produce methodology-parameterized output.
 2. Surface the specific failing rule ID to the operator.
@@ -412,7 +474,7 @@ Skills MUST NOT silently work around validation failures by defaulting to an arc
 
 ## 6. Examples
 
-Six worked examples covering the representative cases. Each is a valid PROJECT.md frontmatter block that passes all V1-V17 assertions applicable to its `delivery_approach` value.
+Six worked examples covering the representative cases. Each is a valid PROJECT.md frontmatter block that passes all V1-V24 assertions applicable to its `delivery_approach` value.
 
 ### 6.1 Scrum (minimal — enum-matched, no Custom block)
 
@@ -523,7 +585,7 @@ delivery_approach: [Scrum, Kanban]
 
 ### 6.6 `org_structure_type` + `team_roster` (the additive org-shape + people-graph-index fields)
 
-A balanced-matrix project declaring its org shape and a 3-member team by `person_id` ref. Both fields are additive — the example also passes all V1-V17 rules applicable to its `delivery_approach`.
+A balanced-matrix project declaring its org shape and a 3-member team by `person_id` ref. Both fields are additive — the example also passes all V1-V24 rules applicable to its `delivery_approach`.
 
 ```yaml
 ---

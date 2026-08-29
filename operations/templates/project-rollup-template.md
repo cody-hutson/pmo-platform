@@ -15,7 +15,7 @@ content_lifecycle_pattern: Living          # Axis-2 → frontmatter-schema §Cat
 project_id: {{PROJECT_ID}}                 # kebab-case project slug (operational tier-taxonomy DD-2 *_id convention)
 last_published: {{LAST_PUBLISHED}}         # ISO 8601 datetime — drives [STALE]; age = today − last_published, BUSINESS days
 # ── The 7 contract fields, each annotated with the source entity it READS ──
-status: {{STATUS}}                         # ← Project (entity 1).status — RAG {green|yellow|red}; worst-component dominance
+status: {{STATUS}}                         # ← Project (entity 1) — health_rag; ppm-agent derives + maintains. RAG {green|yellow|red}; worst-component dominance
 top_risks: {{TOP_RISKS}}                   # ← RAID Item (entity 6) — ≤5 × {risk, owner, mitigation}
 key_dependencies: {{KEY_DEPENDENCIES}}     # ← Cross-Project Dependency / XPD (entity 15) — {from, to, state}
 capacity_signal: {{CAPACITY_SIGNAL}}       # ← Resource (entity 8) — {utilization, gap_rag}; synthesis CITED from weekly-status-rollup §7.5 + capacity-model.md, not re-derived
@@ -33,7 +33,7 @@ _Freshness: age = `today − last_published` in **business days** — `> 3 bd` r
 
 | Field | Composes from | Feeds PORTFOLIO.md section |
 |---|---|---|
-| `status` | Project (entity 1) `status` | S1 Health · S2 Health Indicators |
+| `status` | Project (entity 1) `health_rag` | S1 Health · S2 Health Indicators |
 | `top_risks[]` | RAID Item (entity 6) `impact` / `owner_person_id` / `action_plan` | S5 Top Risks · S6 Cross-Project RAID |
 | `key_dependencies[]` | Cross-Project Dependency / XPD (entity 15) | S6 · S7 Cross-Project Dependencies |
 | `capacity_signal` | Resource (entity 8) `allocation_pct` (synthesis cited, not re-derived) | S3 Capacity Dashboard |
