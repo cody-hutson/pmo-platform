@@ -106,6 +106,30 @@ Engineering does **not** free-author 17×5 rules. The frozen surface mechanicall
 
 > **House style (from the FROZEN RAID exemplar).** Per-entity V-tables are *curated*: they enumerate the discriminating rules (Axis-1 membership, each entity-specific field, each FK, each date, conditional tightenings) + `created_date`. The 6 Core presence rules (V-CORE-01..02, 04, 05) are inherited (§3.0), not re-listed. RAID Item (§3.6) is transcribed **verbatim** from the frozen Tables A–F (Option-A-amended) — it sets the house style and keeps its own self-contained numbering.
 
+### 3.0c External-identity field group (optional; adopted per-entity)
+
+The **external-identity group** is carried by an entity record that **mirrors** an element authored in another system. Per [ADR-162](../ADRs/ADR-162-system-of-record-per-mirrored-element.md) a mirrored element's system of record is the system in which it is authored; these three fields record *which* system that is and *under what key*, so the rule is applicable per record. The group is **optional in whole** — absence means the record is not a mirror, which is the correct and common state. It is **defined here once and not re-listed per entity** (duplicate-source-discipline, per §3.0); each adopting entity's §3.N declares its adoption. **Adopting entities: Work Item (§3.18), RAID Item (§3.6).** The roster is unchanged at 19 and the Entity Core (§3.0) is untouched — this is a field-list amendment, not a Core-field or roster change.
+
+| Field | Type | Req | Card | Default | references: | Notes |
+|---|---|---|---|---|---|---|
+| `source_system` | enum | ⚪ | 1 | — | — | the system that **authors** this element, i.e. its system of record under [ADR-162](../ADRs/ADR-162-system-of-record-per-mirrored-element.md). Value domain = the `source_system` enum in [`frontmatter-schema.md`](frontmatter-schema.md) § Category 3 — **referenced, not restated**. **Dialect projection:** `c3-external-sync-path-b.md` names this same value `source_adapter` in the poll snapshot; that is a *view of* `source_system`, **NOT a separate field** (the same relation as `RAID_ID`→`id`, §3.6) |
+| `external_id` | string | ⚪ | 1 | — | — | the record's key **in `source_system`** (a Jira key, a GitHub issue number, a Smartsheet row id). Deliberately **`string`, not `typed-ref`**: the target is outside the entity graph, so it declares no FK and is outside §4's `ref`/`typed-ref` coverage population. **Opaque — never parsed**; a deep link is *rendered* from `(source_system, external_id)` plus the project's connector keys ([`project-schema.md`](project-schema.md)), never stored |
+| `mirrored_date` | ISO `YYYY-MM-DD` | ⚪ | 1 | — | — | when the local copy was last refreshed from `source_system`. The local-side recency anchor ADR-051 Decision 2 and [ADR-162](../ADRs/ADR-162-system-of-record-per-mirrored-element.md) element **E2** compare against. Day-grain, matching the entity layer's `_date` convention and the platform's business-day staleness unit; **not** `_at` (that form is reserved for machine surfaces such as the c3 snapshot's `polled_at`) |
+
+**V-rules — inherited by the adopting entities only** (derived by the §3.0b D4 generation rule: 1 enum ⇒ 1 L1 membership rule; 1 date ⇒ 1 L1 ISO + ordering rule; 1 conditional tightening):
+
+| ID | Rule | Level | on-unresolved | Blocks | AC |
+|---|---|---|---|---|---|
+| **V-EXT-01** | `source_system`, if present, ∈ the [`frontmatter-schema.md`](frontmatter-schema.md) § Category 3 `source_system` enum | L1 | — | schema parse | AC-2 |
+| **V-EXT-02** | `external_id` present ⟹ `source_system` present — an external key with no naming system is unresolvable and cannot render a link | L1 | — | schema parse | AC-2 |
+| **V-EXT-03** | `mirrored_date`, if present, matches `^\d{4}-\d{2}-\d{2}$` ∧ ≤ today ∧ `external_id` present | L1 | — | schema parse | AC-2 |
+
+**Negative tests (1:1 from rules):** **NT-EXT-1** `source_system: slack` → **V-EXT-01 FAIL** (out-of-enum). *Control:* `source_system: jira` → PASS. *Specificity:* all three fields absent → PASS (the group is optional in whole). · **NT-EXT-2** `external_id: PROJ-123` with `source_system` absent → **V-EXT-02 FAIL** (unqualified external key). *Control:* the same record with `source_system: jira` → PASS.
+
+> **Inheritance is conditional, unlike §3.0.** V-CORE-01..07 are inherited by all 19; V-EXT-01..03 are inherited **only** by the entities in the adoption roster above. A non-adopting entity carrying these fields is malformed. Because these rules are *inherited*, they are **not** counted in any §3.N in-section rule total — the same treatment V-CORE-01..07 receive, which is why no in-section rule count moves with this amendment.
+
+> **Asymmetry with the Project health group (§3.1), stated because both ship in one pass.** `health_derived_date` ⟺ `health_rag` is a **biconditional** (V-PRJ-11): an undated derived value cannot be told from a stale one, so both directions are malformed. `mirrored_date` ⟹ `external_id` is **one-way** (V-EXT-03): an as-yet-unrefreshed linkage is legitimate — recorded at intake, first poll not yet run — and forcing a date at linkage would force a fabricated one.
+
 ---
 
 ### Project-scoped entities (live in `[Project]/`)
@@ -123,6 +147,8 @@ Engineering does **not** free-author 17×5 rules. The frozen surface mechanicall
 | `delivery_approach` | enum(8) | ✅ | 1 | — | — | value domain = `methodology-parameterization-v1.md` (referenced, not redefined) |
 | `portfolio_id` | ref | ⚪ | 1 | — | `Portfolio.portfolio_id` | L2 |
 | `program_id` | ref | ⚪ | 1 | — | `Program.program_id` | L2 |
+| `health_rag` | enum | ⚪ | 1 | — | — | project-level **composed scalar** health RAG. **Materialized projection, never self-reported** (`comms-writer/references/channel-formats.md` § RAG Threshold Standards): bands + the transparent worst-component roll-up rule are owned by that section (ADR-065, retained owner); the metric→band index is `weekly-status-rollup/references/metric-registry.md` § Project Metrics; composition is executed in `weekly-status-rollup` Section 1; the value is produced by `ppm-agent`. **Not per-dimension** — the five Health Indicators are derivation *inputs*, mapped **non-1:1** (Quality composes Risk + Integration Risk; Stakeholders is an optional `UNSOURCED-DOMAIN` row). Home decided by [ADR-163](../ADRs/ADR-163-project-health-home.md) |
+| `health_derived_date` | date | ⚪ | 1 | — | — | ISO `YYYY-MM-DD`; when the `health_rag` derivation last ran. **Required companion** of `health_rag` (V-PRJ-11). Distinct from the rollup's `last_published`, which stamps publish time rather than derivation time |
 
 **V-rules** (inherits V-CORE-01..07; Axis-1 `ACTIVE → CLOSING → CLOSED`):
 
@@ -136,8 +162,11 @@ Engineering does **not** free-author 17×5 rules. The frozen surface mechanicall
 | **V-PRJ-06** | `program_id`, if present, resolves to a **Program** entity | L2 | WARN-HEALTH | cross-entity integrity | AC-4 |
 | **V-PRJ-07** | `created_date` ISO `^\d{4}-\d{2}-\d{2}$` ∧ ≤ today (= V-CORE-06 instance) | L1 | — | schema parse | AC-2 |
 | **V-PRJ-08** | `project_owner`, when populated, resolves to an existing **Person** entity (`Person.person_id`) → unresolved **BLOCK-WRITE** (a mis-typed internal owner is malformed); `project_owner_external`, when populated, is a non-empty string → **WARN-HEALTH** on any health-orphan (field-conditional disposition, FM-2 / X-30) | L2 | BLOCK-WRITE (ref) / WARN-HEALTH (external) | cross-entity integrity | AC-4 |
+| **V-PRJ-09** | `health_rag`, if present, ∈ {green, yellow, red} | L1 | — | schema parse | AC-2 |
+| **V-PRJ-10** | `health_derived_date`, if present, matches `^\d{4}-\d{2}-\d{2}$` ∧ ≤ today | L1 | — | schema parse | AC-2 |
+| **V-PRJ-11** | `health_derived_date` present **⟺** `health_rag` present — the derivation-stamp invariant. A `health_rag` with no stamp is a **self-reported** value, which `channel-formats.md` § RAG Threshold Standards forbids; a stamp with no value is a stamp for nothing. Both directions malformed (record-level conditional tightening, same shape as V-PRJ-02) | L1 | — | schema parse | AC-2 |
 
-**Negative tests:** **NT-PRJ-1** `status: ARCHIVED` → V-PRJ-03 FAIL (out-of-enum). · **NT-PRJ-2** `portfolio_id: port-ghost` (no Portfolio has that id) → V-PRJ-05 FAIL (L2 unresolved → WARN-HEALTH). · **NT-PRJ-3** `project_owner: person-ghost` (ref populated, unresolved) → V-PRJ-08 FAIL (L2 ref → BLOCK-WRITE — mis-typed internal owner is malformed). · **NT-PRJ-4** both `project_owner: per-001` and `project_owner_external: [EXTERNAL_OWNER_NAME]` populated → V-PRJ-02 FAIL (mutual-exclusion). · **NT-PRJ-5** `lifecycle_state:` absent ∧ `status: ACTIVE` present → **V-CORE-03 PASS** (the carrier is `status` for this entity). *Control:* the same record with `status: ARCHIVED` → V-CORE-03 FAIL. *Specificity:* a Milestone record with `lifecycle_state:` absent → V-CORE-03 FAIL (§3.2 annotates no alternate carrier, so the default carrier applies). The V-CORE-03 PASS is **not** a whole-record PASS — V-CORE-03b independently FAILs the same record on `lifecycle_state` presence, which is exactly the enforcement path D-42 preserves.
+**Negative tests:** **NT-PRJ-1** `status: ARCHIVED` → V-PRJ-03 FAIL (out-of-enum). · **NT-PRJ-2** `portfolio_id: port-ghost` (no Portfolio has that id) → V-PRJ-05 FAIL (L2 unresolved → WARN-HEALTH). · **NT-PRJ-3** `project_owner: person-ghost` (ref populated, unresolved) → V-PRJ-08 FAIL (L2 ref → BLOCK-WRITE — mis-typed internal owner is malformed). · **NT-PRJ-4** both `project_owner: per-001` and `project_owner_external: [EXTERNAL_OWNER_NAME]` populated → V-PRJ-02 FAIL (mutual-exclusion). · **NT-PRJ-5** `lifecycle_state:` absent ∧ `status: ACTIVE` present → **V-CORE-03 PASS** (the carrier is `status` for this entity). *Control:* the same record with `status: ARCHIVED` → V-CORE-03 FAIL. *Specificity:* a Milestone record with `lifecycle_state:` absent → V-CORE-03 FAIL (§3.2 annotates no alternate carrier, so the default carrier applies). The V-CORE-03 PASS is **not** a whole-record PASS — V-CORE-03b independently FAILs the same record on `lifecycle_state` presence, which is exactly the enforcement path D-42 preserves. · **NT-PRJ-6** `health_rag: amber` → V-PRJ-09 FAIL (out-of-enum). *Control:* `health_rag: yellow` + `health_derived_date: 2026-08-29` → PASS. *Specificity:* a record with **both** absent → PASS (the pair is optional). · **NT-PRJ-7** `health_rag: green` with `health_derived_date` absent → V-PRJ-11 FAIL. *Control:* the same record with `health_derived_date: 2026-08-29` → PASS. *Reverse arm:* `health_derived_date: 2026-08-29` with `health_rag` absent → V-PRJ-11 FAIL.
 
 #### 3.2 Milestone (MIL)
 
@@ -297,7 +326,7 @@ Every Plan edge uses **only** the 7 MVP relationship types (`frontmatter-schema.
 | `BLOCKS` | Milestone | many:many | L2 | WARN-HEALTH |
 | `ASSIGNED_TO` | Person | many:1 | L2 | BLOCK-WRITE |
 
-**D. V-rules (13 — exceeds AC-2 ≥5; each: level · on-unresolved · blocks · [AC]):**
+**D. V-rules (13 — exceeds AC-2 ≥5; each: level · on-unresolved · blocks · [AC]) — plus the inherited V-CORE-01..07 **and the §3.0c external-identity group — `source_system`⚪ · `external_id`⚪ · `mirrored_date`⚪, V-EXT-01..03**:**
 
 | ID | Rule | Level | on-unresolved | Blocks | AC |
 |---|---|---|---|---|---|
@@ -314,6 +343,8 @@ Every Plan edge uses **only** the 7 MVP relationship types (`frontmatter-schema.
 | **V-RAID-11** | when `lifecycle_state = closed`, closure metadata is present (dialect:  `date_closed`+`closure_comments`; entity-level: the →closed transition is timestamped — mechanism DEFER-G8) | L1 (conditional) / DEFER-G8 | DEFER-G8 | — | AC-4 |
 | **V-RAID-12** | `impact` present ∧ non-empty string (**Option-A amendment** — `impact` is a frozen required field; legacy-required, irreducible primary DATA) | L1 | — | schema parse | AC-2 |
 | **V-RAID-13** | `action_plan`, if present, is a non-empty string (**Option-A amendment** — format check for the frozen optional field; empty-string is malformed) | L1 | — | — (warn) | AC-2 |
+
+> **External-identity group (§3.0c) — adopted, entity-level only.** RAID Item carries `source_system`⚪ · `external_id`⚪ · `mirrored_date`⚪ (V-EXT-01..03). Under [ADR-162](../ADRs/ADR-162-system-of-record-per-mirrored-element.md) element **E1** RAID content is locally authored, so the group is **absent on the ordinary row**; it is populated only for a row mirrored inbound from an external register. These fields are **not dialect-projected**: the RAID CSV stays a **15-column** artifact and [`raid-log.schema.json`](raid-log.schema.json) gains no property, so its EAD derivation from this section remains true and every existing row still validates. A CSV projection would be a live-instance migration and is out of scope for this release. Precedent for an entity field with no row column: `project_id`, serialized out-of-band per `x-pmo-context-implicit`.
 
 **E. Negative tests (4 — exceeds AC-3 ≥2; 1:1 from rules):**
 
@@ -624,7 +655,7 @@ Field schema for the generic `Work Item` entity (`project-entity-model.md` §4 e
 | `work_item_type` | string (discriminator) | ✅ | 1 | — | the declarative type registry (external, OPEN) | the kind (methodology-projected per D2); **value domain deferred to the C2 type layer** — `[ASSUMPTION–CONFIRM @ C2 type layer]`; presence enforceable now, membership is the type layer's (same OPEN-discriminator family as `Plan.plan_type` (resolved .34, §3.4a) / `XPD.dependency_kind`@G3-G4) |
 | `parent_ref` | typed-ref (polymorphic) | ✅ | 1 | — | `Milestone.id` OR `Workstream.id` | L2 — `BELONGS_TO` parent; polymorphic target tagged in the typed-ref value (precedent: `XPD.{from,to}_entity_ref`) |
 
-**V-rules** (inherits V-CORE-01..07; Axis-1 `backlog → ready → in-progress → in-review → done | cancelled`):
+**V-rules** (inherits V-CORE-01..07 **and the §3.0c external-identity group — `source_system`⚪ · `external_id`⚪ · `mirrored_date`⚪, V-EXT-01..03**; Axis-1 `backlog → ready → in-progress → in-review → done | cancelled`):
 
 | ID | Rule | Level | on-unresolved | Blocks | AC |
 |---|---|---|---|---|---|
@@ -718,6 +749,8 @@ The consolidated cross-entity checklist (D3 hybrid mechanism). Each `references:
 | **X-35** | `Plan.relationships[type=DEPENDS_ON] → Plan ∨ Milestone` (plan sequencing edge — §3.4b; added by ADR-059) | many:1 | L2 | WARN-HEALTH | AC-4 |
 | **X-36** | `Finding.project_id → Project.id` (added by ADR-044) | many:1 | L2 | BLOCK-WRITE | AC-4 |
 | **X-37** | `Finding.source_artifact_id → Artifact.id` (optional ref; added by ADR-044) | many:1 | L2 | WARN-HEALTH | AC-4 |
+
+> **No referential rule for the external-identity group (explicit).** `external_id` (§3.0c) names a record in a system **outside** the entity graph, so it declares no `references:` FK and takes **no X-rule row**: the X-resolver walks entity ids and has nothing to resolve an external key against. An X-row asserting resolution here would be a check that can never fire — the silent-pass shape §7 exists to prevent. The pair's only enforceable constraint is **intra-entity** (`external_id` ⟹ `source_system`, **V-EXT-02**), which is where it lives. This blockquote is the explicit `no referential rule` note that stands in place of an X-row for this group. The coverage assertion below is unaffected: `external_id` is typed `string`, not `ref`/`typed-ref`, so it is outside that assertion's population by construction.
 
 > **Coverage assertion.** Every `ref` / `typed-ref` field in every §3 field table appears as exactly one X-rule row (or is covered by the generic X-07 / X-08). Person (§3.10) is the only entity with **no outbound FK** — it is the pure resolution target (the graph root). (Portfolio (§3.13) now carries the leadership-owner `portfolio_owner` ref — X-31 — so it is no longer FK-free.) **Work Item (§3.18) has an outbound polymorphic FK (`parent_ref`) covered by X-28; its rollup `BELONGS_TO` edge is covered by X-29** (the polymorphic Milestone-or-Workstream target warrants its own explicit rows rather than folding into the generic X-07). **The 4 leadership-owner refs (X-30..X-33, ADR-040) ground the `project_owner`/`portfolio_owner`/`program_owner`/`sponsor` fields on `person_id` — each is field-conditional (ref-unresolved → BLOCK-WRITE; `*_external` populated → WARN-HEALTH per FM-2). The 4 `*_owner_external` / `sponsor_external` fallback fields are deliberately non-ref free-text and carry NO X-rule** — they are governed by the per-entity L1 mutual-exclusion V-rule (V-PRJ-02 / V-PORT-03 / V-PROG-04 / V-INIT-03), which is single-record-decidable and so does not belong in this referential pass. **Plan (§3.4) carries the two typed relationship edges X-34 (`GENERATES`) / X-35 (`DEPENDS_ON`) — the §3.4b matrix edges that make the plan→comms→RAID chain machine-resolvable (the `BELONGS_TO`/`SUPERSEDES` Plan FKs remain on X-13/X-06); both are WARN-HEALTH because a plan generation/sequencing edge is a health signal, not a write-blocking invariant.** **Finding (§3.19) carries two refs — the required `project_id` (X-36, BLOCK-WRITE) and the optional `source_artifact_id` (X-37, WARN-HEALTH because it is an optional back-reference to the artifact the finding was raised against); its typed relationship edges (`BLOCKS` Milestone/Work Item, `GENERATES` Work Item) are health signals covered by the generic V-CORE-07 relationships[] pass, not enumerated as separate X-rows.** X-08 (`DEFER-G8`) is the single deliberate non-enforced-here rule: cascade-on-delete is lifecycle automation, declared but owned by G8.
 
