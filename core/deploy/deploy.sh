@@ -13707,10 +13707,22 @@ a=datetime.date.fromisoformat(sys.argv[1])
 print((datetime.datetime.utcnow().date()-a).days)' "$SKILL_SUITE_GATE_ARMED" 2>/dev/null || printf '')"
 
       # EVIDENCE ARM. Segment-set read only. No path below touches ISSUES.
+      #
+      # `/bin/cat`, NOT `/usr/bin/cat`. On macOS there is no /usr/bin/cat, so the
+      # original absolute path resolved to nothing on the one platform the drain
+      # actually lives on: every member of the family failed to open, the `|| true`
+      # swallowed the pipeline status, and `grep -c` counted 0 over an empty
+      # stream. That reported `drain_rows=0`, which this gate's own verdict prose
+      # then explains as INSTRUMENTATION-SUSPECT — a broken probe wearing the
+      # exact shape of a real measurement. It was unobservable until the warn-log
+      # lifecycle card landed warn_log_segment_set() and made this arm reachable
+      # at all; before that the arm SKIPped and the path was never executed.
+      # /bin/cat resolves on macOS and on Linux (where /bin is a usr/bin symlink),
+      # so the absolute-path convention is kept rather than traded away.
       local c74_rows="SKIP"
       if declare -f warn_log_segment_set >/dev/null 2>&1; then
         c74_rows="$(warn_log_segment_set 2>/dev/null \
-          | while IFS= read -r _c74_seg; do [[ -n "$_c74_seg" && -f "$_c74_seg" ]] && /usr/bin/cat "$_c74_seg"; done \
+          | while IFS= read -r _c74_seg; do [[ -n "$_c74_seg" && -f "$_c74_seg" ]] && /bin/cat "$_c74_seg"; done \
           | /usr/bin/grep -c 'bundle-metrics-gate-integrity' || true)"
         c74_rows="$(printf '%s' "$c74_rows" | /usr/bin/tr -d '[:space:]')"
         [[ -n "$c74_rows" ]] || c74_rows=0
