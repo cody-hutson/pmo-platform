@@ -23,7 +23,7 @@ role = "base"                   # widened §1.1 (ADR-070 D1): non-kind-bearing s
 # (ADR-018 D1 "project labels over the base"; widened §1.1.1 / ADR-070 D2). These are the
 # archetype-INVARIANT rows (the ~80% shared surface) the label-cleave slice relocated out
 # of label-taxonomy.md into this base. Colors are lifted verbatim from the pre-cleave doc
-# rows. `group` ∈ {category|status|work-status|cluster|initiative|triage-flag|disposition}
+# rows. `group` ∈ {category|status|work-status|cluster|initiative|triage-flag|disposition|provenance}
 # (grammar-owned; listed in label-taxonomy.md's own section order).
 
 # --- Category (archetype-invariant content-classification rows; the two-tier intake model
@@ -322,3 +322,14 @@ group = "disposition"
 name = "wontfix"
 color = "ffffff"
 description = "This will not be worked on"
+
+# --- Provenance (how a work item ENTERED the tracker — not what it is, and not where
+#     it sits. Machine-applied at creation; PERSISTS through close, because the
+#     schema-maintenance trigger in pipeline-event-log-schema.md § 11.6 counts it on
+#     CLOSED issues. No `removed_at`: persistence is the point — § Provenance Labels)
+[[labels]]
+group = "provenance"
+name = "auto-promoted-pattern"
+color = "D4C5F9"
+description = "Filed automatically by the release-learnings synthesizer's cross-release pattern detector; awaiting triage. Persists through close (the schema-maintenance trigger counts it)."
+applied_at = "Auto-promotion (synthesizer pattern-detect --apply)"

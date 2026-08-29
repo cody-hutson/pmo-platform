@@ -1,20 +1,31 @@
 #!/usr/bin/env bash
 # selftest-runner: macos
-#   Read by release/tools/check-selftest-coverage.py. This suite's frontmatter-strip
-#   path is NOT portable: on the Linux runner the strip yields an EMPTY body, so the
-#   DRIFT legs (B, I) compare nothing against nothing and return 0 where 1 is
-#   expected. Measured at the discovery gate's first enablement; the same invocation
-#   is green on macOS, and was green for many releases as a named step in this repo's
-#   macOS smoke job. So the tool stays IN SCOPE and stays ENFORCED — on the runner
-#   where it is known good — rather than being dropped from discovery, which is the
-#   one disposition the enforcement card forbids.
+#   Read by release/tools/check-selftest-coverage.py.
 #
-#   RESIDUAL, stated because a runner declaration must not be mistaken for a fix:
-#   the non-portability is real. On Linux this tool reports "no drift" when drift
-#   exists — a FAIL-OPEN in a Stage-13 gate, not a cosmetic difference. Repairing
-#   the strip (here, and in the sibling tools that share the idiom) is separate,
-#   tracked work owned by this tool's card. This declaration buys enforcement today;
-#   it does not discharge that defect.
+#   THE ORIGINAL REASON FOR THIS PIN IS DISCHARGED. The strip was non-portable: on
+#   the Linux runner it yielded an EMPTY body, so the DRIFT legs (B, I) compared
+#   nothing against nothing and returned 0 where 1 was expected — a FAIL-OPEN in a
+#   live Stage-13 gate. That is repaired: the transform is now the shared awk state
+#   machine in lib/frontmatter-strip.sh, which carries no host-divergent construct,
+#   and Case S below binds it to committed bytes so an empty strip can no longer
+#   agree with a non-empty expectation on any host.
+#
+#   THE PIN NEVERTHELESS STAYS, for a different and narrower reason: moving this
+#   suite to the ubuntu partition is a change to WHERE IT HAS NEVER RUN, and the
+#   falsification that would license it — does this suite degrade under the ubuntu
+#   job's depth-1 checkout? — was NOT EXECUTED. Two in-repo sources disagree: the
+#   smoke workflow's fetch-depth justification asserts this suite exits 0 while
+#   degrading its git arms to N/A, while every canonical-mode case here (G/H/I,
+#   N1/N2, K) exports REPO_ROOT into a bare-origin sandbox it builds in $tmp and so
+#   reads no ambient ref at all. A static sweep of the suite found zero ambient
+#   history reads, which favours the second reading — but a static sweep is not the
+#   falsification, and removing a runner pin on unexecuted evidence would trade one
+#   fail-open for another.
+#
+#   TO LIFT IT: run this suite under a depth-1 single-branch checkout with
+#   origin/main absent. If every arm executes and passes, delete this block; the
+#   tool then joins the ubuntu partition automatically (the partition is DERIVED
+#   from this declaration — no manifest or workflow edit participates).
 # check-release-body-drift.sh — Release body-source-of-record drift check.
 # Per release/references/standards/release-notes-standard.md § 5.1 / § 5.6.
 #
@@ -158,50 +169,25 @@ find_gh() {
 }
 
 # ─── Transform: strip the YAML frontmatter (the §5.1 deterministic transform) ─
-# Identical to the canonical_body derivation in automated-closeout.sh
-# phase_publish_github_release: drop the leading `---`-fenced frontmatter block.
-
-# "$@" (not "$1") so ONE transform serves both a file arg (fixture mode) and a
-# stream (`git show … | strip_frontmatter`, canonical mode). With zero args sed
-# reads stdin; safe under set -u. Keeps the §5.1 body-equality logic in one place.
+# NOT implemented here. `strip_frontmatter()` is sourced from the shared library
+# below, which is also sourced by automated-closeout.sh (the publisher) and
+# reemit-release-bodies.sh (the re-emitter). There is now ONE shell
+# implementation of the §5.1 transform, not three.
 #
-# ─── TWO STAGES, AND STAGE 1 IS THE LEAD-IN REPAIR ──────────────────────────
-# Stage 2 is the shipped idiom, byte-unchanged. Its deletion range runs from
-# line 1 to the FIRST `^---$` at line 2 or later. When the note's frontmatter
-# opens on line 1 that terminator is the CLOSING delimiter and the strip is
-# correct. When ANY line precedes the opening delimiter — a lint directive, an
-# HTML comment, a blank — the range ends on the OPENING delimiter instead and
-# the whole YAML block survives into the "body". Publishing that writes raw
-# frontmatter onto a public Release page: the §5.1 defect the re-emit exists to
-# repair, reintroduced by the repair.
+# The library carries the frozen S1–S5 semantics and the rationale for the awk
+# form; the committed fixture at core/deploy/tools/fixtures/frontmatter-strip/
+# is the contract all three implementations (this family plus the two Python
+# mirrors) are checked against. That fixture replaces what used to be a prose
+# "SIBLING COPIES … must move together" note here — a note whose own list was
+# incomplete, and which could not fail when the copies drifted anyway.
 #
-# Stage 1 (`-n '/^---$/,$p'`) drops any such lead-in, so stage 2 always sees a
-# stream whose line 1 IS the opening delimiter — the case it already handles
-# correctly. This is a strict COMPOSITION, not a rewrite: when the opening
-# delimiter is already line 1, stage 1 is the identity and the pair is
-# byte-identical to the shipped idiom. Measured over the whole corpus at the
-# branch tip: 192 of 195 notes byte-identical, 3 changed (v1.08 / v1.09 / v1.10
-# — the only notes carrying a lead-in), YAML-leaking bodies 3 → 0, EMPTY bodies
-# 0 → 0.
-#
-# A note carrying NO recognisable frontmatter now yields an EMPTY body, so the
-# caller's empty-body ABORT fires instead of a mis-stripped tail being
-# published. That is a fail-CLOSED change to a case the shipped idiom
-# mis-handled; the live corpus has 0 such notes.
-#
-# NOT the portability defect. The GNU-vs-BSD divergence declared in this file's
-# `selftest-runner` header is a DIFFERENT defect in the same idiom, tracked
-# separately, and is neither fixed nor worsened here: stage 2 retains the
-# shipped idiom verbatim. That residual stands as written.
-#
-# SIBLING COPIES of this transform, which must move together:
-#   release/tools/reemit-release-bodies.sh      (the emitter; same two stages)
-#   release/tools/preflight-release-body-reemit.py `strip_frontmatter()`
-#                                                  (byte-faithful model, A4)
-strip_frontmatter() {
-  /usr/bin/sed -n '/^---$/,$p' "$@" 2>/dev/null \
-    | /usr/bin/sed '1,/^---$/d; 1,/^---$/d'
-}
+# Sourced BASH_SOURCE-relative, never REPO_ROOT-relative: the canonical-mode
+# self-test cases export a sandbox REPO_ROOT across `exec "$0"` (see the process
+# model note on the REPO_ROOT assignment below), so a REPO_ROOT-relative source
+# would break cases G/H/I/L.
+_CRBD_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" && pwd -P)"
+# shellcheck source=lib/frontmatter-strip.sh
+. "${_CRBD_LIB_DIR}/frontmatter-strip.sh"
 
 # ─── Normalize a single trailing newline (GitHub round-trip tolerance) ───────
 # printf '%s' drops a trailing newline; we compare the trimmed forms so a lone
@@ -388,6 +374,29 @@ STUB
     exec "$0" v0.00 --quiet ) && { printf '  FAIL  %-28s exit 0 (expected 3)\n' "F missing (no note)" >&2; failures=$((failures+1)); } || {
       rc=$?; if [[ "$rc" -eq 3 ]]; then printf '  PASS  %-28s exit 3\n' "F missing (no note)" >&2; else printf '  FAIL  %-28s exit %s (expected 3)\n' "F missing (no note)" "$rc" >&2; failures=$((failures+1)); fi; }
 
+  # Case S-EMPTY — BOTH sides empty → a DETECTED condition (exit 1), never MATCH.
+  # A note carrying no `---` fence strips to empty by S4 (fail-CLOSED) and the stub
+  # publishes an empty body, so the equality test compares "" against "" and — before
+  # the vacuity guard — returned 0. This case is the guard's only reachable driver:
+  # every other case in this suite supplies a well-formed note, so none of them can
+  # produce an empty canonical side, which is exactly how the fail-open survived the
+  # transform repair that was named after it.
+  /bin/mkdir -p "$tmp/vacuous"
+  /usr/bin/printf '%s\n' '# A note that never opens a frontmatter fence' > "$tmp/vacuous/v0.00_RELEASE_NOTES.md"
+  : > "$tmp/empty_body.txt"
+  # ANTI-VACUITY FLOOR: the fixture must genuinely strip to EMPTY. If it does not,
+  # the case never reaches the guard and its exit-1 result would be ordinary drift
+  # wearing the right number — a case green for the wrong reason.
+  if [[ -n "$(strip_frontmatter "$tmp/vacuous/v0.00_RELEASE_NOTES.md")" ]]; then
+    printf '  FAIL  %-28s fixture does not strip to empty, so the case cannot reach the vacuity guard\n' "S-EMPTY floor" >&2
+    failures=$((failures + 1))
+  fi
+  run_case "S double-empty (vacuous)" 1 "STUB_BODY_FILE=$tmp/empty_body.txt" "NOTES_DIR_OVERRIDE=$tmp/vacuous"
+  # SPECIFICITY: the SAME empty published body against the WELL-FORMED note must
+  # still be ordinary drift, not the vacuity branch — proving the guard is scoped to
+  # the DOUBLE empty and has not swallowed the single-empty drift path.
+  run_case "S2 single-empty (drift)" 1 "STUB_BODY_FILE=$tmp/empty_body.txt"
+
   # Case J — FOLDERED note in fixture mode. The note lives ONLY in a subfolder of
   # the search root — the live shape of notes/_unversioned/, and of the
   # notes/v1|v2|v3/… layout at any pre-#3698 ref.
@@ -557,6 +566,42 @@ STUB
     printf '  SKIP  %-28s (git not available)\n' "G-K canonical-mode cases" >&2
   fi
 
+  # ─── Case S — §5.1 CONFORMANCE FIXTURE ─────────────────────────────────────
+  # This is the arm that makes the portability claim falsifiable ON THE RUNNER.
+  # Cases A–N compare a body against a stub; they pass whenever the two sides
+  # agree, INCLUDING when both are empty — which is exactly how the GNU-side
+  # fail-open hid here for multiple releases. Case S compares the transform's
+  # output against BYTES COMMITTED IN THE REPO, so an empty strip cannot agree
+  # with a non-empty expectation no matter which host runs it.
+  #
+  # Resolved relative to the sourced library, never REPO_ROOT: the canonical-mode
+  # cases above export REPO_ROOT into a sandbox that has no fixture in it.
+  _fx="${_CRBD_LIB_DIR}/../../../core/deploy/tools/fixtures/frontmatter-strip"
+  if [[ ! -d "$_fx/cases" ]]; then
+    printf '  FAIL  %-28s conformance fixture absent at %s\n' "S fixture" "$_fx/cases" >&2
+    failures=$((failures + 1))
+  else
+    _fx_n=0; _fx_bad=0
+    for _fx_case in "$_fx"/cases/*; do
+      [[ -e "$_fx_case" ]] || continue
+      _fx_n=$((_fx_n + 1))
+      _fx_name="$(/usr/bin/basename "$_fx_case")"
+      if ! /usr/bin/diff -q <(strip_frontmatter "$_fx_case") "$_fx/expected/$_fx_name" >/dev/null 2>&1; then
+        printf '  FAIL  %-28s case %s diverges from its committed expectation\n' "S fixture" "$_fx_name" >&2
+        _fx_bad=$((_fx_bad + 1))
+      fi
+    done
+    failures=$((failures + _fx_bad))
+    # Vacuity floor — an empty or truncated fixture dir iterates zero times and
+    # would otherwise report clean.
+    if [[ "$_fx_n" -lt 7 ]]; then
+      printf '  FAIL  %-28s iterated only %s case(s); a short iteration passes vacuously\n' "S fixture" "$_fx_n" >&2
+      failures=$((failures + 1))
+    elif [[ "$_fx_bad" -eq 0 ]]; then
+      printf '  PASS  %-28s %s/%s cases byte-identical (S1-S5)\n' "S fixture" "$_fx_n" "$_fx_n" >&2
+    fi
+  fi
+
   if [[ "$failures" -eq 0 ]]; then
     printf 'check-release-body-drift self-test: ALL PASS\n' >&2
     exit 0
@@ -677,6 +722,40 @@ fi
 PUBLISHED_BODY="$("$GH" release view "$VERSION" ${REPO:+--repo "$REPO"} --json body --jq .body 2>/dev/null || true)"
 # CANONICAL_BODY was resolved above (origin/main in canonical mode, fixture file in
 # fixture mode) — do not re-read the working tree here.
+
+# ─── VACUOUS COMPARE (exit 1): BOTH sides empty ──────────────────────────────
+# Ordered ABOVE the equality test deliberately: after it, the double-empty case
+# has already been consumed by the `==` branch and is unrecoverable.
+#
+# Two empty strings compare equal, so the branch below would report OK — "no
+# drift" established by comparing nothing against nothing. That is not weak
+# evidence for the §5.1 invariant, it is the ABSENCE of evidence, and it is the
+# precise fail-open this tool's own runner-pin header is named after: on the
+# runner where the retired strip degraded, this compare returned 0 for every
+# release with no diagnostic. The transform was repaired; this compare was not,
+# so the tool the repair is named after remained the one caller that could still
+# pass on nothing. Its two siblings (the publisher's EMPTY-BODY GUARD and the
+# re-emitter's ABORT) already refuse the empty case before acting.
+#
+# ONLY the double empty is unfalsifiable. A non-empty published body against an
+# empty canonical one — or the converse — is ordinary drift, and the branch below
+# already reports it correctly with a diff; this guard must not swallow those.
+#
+# The canonical side can never be LEGITIMATELY empty: §5.1's transform is
+# fail-CLOSED (S4 — fewer than two `^---$` fences yields empty), so an empty
+# canonical body means the note is not a §5.1 note, never that its body is
+# genuinely blank. That is a real finding an operator must act on, which is why it
+# takes the FINDING exit rather than an N/A: exit 2 means a required CAPABILITY was
+# absent and both were present here, and exit 3 routes to "Check 32 owns existence"
+# in the standing audit, which would misattribute a malformed note to a missing
+# artifact. Exit 1 keeps the enum's contract — a genuine §5.1 finding, gated by
+# $RELEASE_BODY_DRIFT_MODE and counted — while the message states the real cause.
+if [[ -z "$(trim_trailing_newline "$CANONICAL_BODY")" && -z "$(trim_trailing_newline "$PUBLISHED_BODY")" ]]; then
+  warn "DRIFT: ${VERSION} — VACUOUS COMPARE: the published Release body AND the frontmatter-stripped in-repo note are BOTH EMPTY. Equality here proves nothing about the §5.1 invariant (release-notes-standard.md § 5.1)."
+  warn "       The canonical side cannot be legitimately empty: the § 5.1 strip is fail-CLOSED (S4) and yields empty only when the note carries fewer than two '^---\$' fences."
+  warn "       Repair the note's fences, then re-emit per §5.6 (gh release edit) or release-executor Mode F. This check does not re-emit."
+  exit 1
+fi
 
 if [[ "$(trim_trailing_newline "$PUBLISHED_BODY")" == "$(trim_trailing_newline "$CANONICAL_BODY")" ]]; then
   say "OK: ${VERSION} — published Release body matches the frontmatter-stripped in-repo note (§5.1 invariant holds)"

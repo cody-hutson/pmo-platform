@@ -627,24 +627,45 @@ def extract_body(text: str) -> str:
     """Return the frontmatter-stripped body — the exact bytes that publish to
     the GitHub Release page (Surface 1).
 
-    Mirrors the emit transform `sed '1,/^---$/d; 1,/^---$/d'` (release-notes-
-    standard.md §5.1 / stage-12-execute.md): drop every line through the SECOND
-    `---` delimiter. If the file does not open with a `---` frontmatter fence,
-    the whole text is the body (no stripping) — matching the sed behaviour when
-    the second address is never found is NOT relied upon here; absent a leading
-    fence the published body is the file verbatim, which is what we lint.
+    Byte-faithful mirror of release/tools/lib/frontmatter-strip.sh, the single
+    shell implementation of the release-notes-standard.md § 5.1 transform, and
+    contract-bound to the same committed fixture at
+    core/deploy/tools/fixtures/frontmatter-strip/.
+
+    Frozen semantics S1-S5: any lead-in before the opening fence is dropped (S1);
+    the opening fence and the frontmatter are dropped (S2); the closing fence is
+    dropped and everything after it is emitted verbatim, so a `---` horizontal
+    rule inside the body survives (S3); fewer than two exact fences yields "" —
+    fail-CLOSED (S4); the fence match is EXACT (S5).
+
+    Two divergences from the previous implementation, both deliberate:
+
+      * Fences are matched EXACTLY, not `.strip()`-tolerant. A fence carrying
+        trailing whitespace does not close the block for the emitter, so a
+        linter that treats it as closing is linting bytes that never publish.
+      * A file with no recognisable frontmatter yields "" rather than the whole
+        text. This mirrors the emitter, which is the point of a mirror: what
+        this function returns is a PREDICTION of the published body, and the
+        emitter publishes nothing in that case (its callers' empty-body guards
+        refuse it). Returning the whole file here made the linter scan a body
+        that provably cannot exist.
+
+    Re-derived at the time of this change, over the live 199-note corpus: Check 13
+    (NOTE-BODY-RELATIVE-LINK) findings 86 -> 86, with 0 notes flipping — the
+    correction is behaviourally inert today and removes a latent divergence.
+
+    `text.split("\\n")` — NOT `splitlines()`. The shell transform emits a trailing
+    newline for the final record; `splitlines()` drops it, which is what put this
+    mirror one byte away from the emitter on every note in the corpus.
     """
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return text
-    # Find the closing fence of the frontmatter (second '---').
-    for i in range(1, len(lines)):
-        if lines[i].strip() == "---":
-            return "\n".join(lines[i + 1 :])
-    # Opened a fence that never closed — degenerate; treat as no body stripped
-    # so a malformed note still gets its links scanned rather than silently
-    # passing on an empty body.
-    return text
+    lines = text.split("\n")
+    n = 0
+    for i, ln in enumerate(lines):
+        if ln == "---":
+            n += 1
+            if n == 2:
+                return "\n".join(lines[i + 1 :])
+    return ""
 
 
 def check_body_link_purity(rel: str, body: str) -> list[str]:
@@ -2160,6 +2181,55 @@ def _self_test() -> int:
             and "advisory limb 1 unresolved of 1 examined below it" in h_tally
             and "2 note(s) with unreadable frontmatter" in h_tally,
             "2 pointers at/above the floor (1 dangling), 1 below it (dangling), 2 unreadable")
+
+    # ── Scenario F — extract_body CONFORMANCE (#4912) ────────────────────────
+    # extract_body() is one of three implementations of the release-notes-
+    # standard.md § 5.1 transform; the other two are
+    # release/tools/lib/frontmatter-strip.sh and
+    # release/tools/preflight-release-body-reemit.py. The invariant that they
+    # agree used to be a prose comment in a sibling file — a comment cannot fail,
+    # and the copies drifted anyway. These arms bind this implementation to the
+    # committed fixture that also binds the other two.
+    print("\nlint_release_corpus.py --self-test — extract_body conformance (§ 5.1)")
+    fixture = Path(__file__).resolve().parent / "fixtures" / "frontmatter-strip"
+    cases_dir = fixture / "cases"
+    # Fails CLOSED on an absent fixture. A skip would report green while
+    # measuring nothing, which is the defect class this change exists to remove.
+    arm("F-1 the conformance fixture is present",
+        cases_dir.is_dir(), str(cases_dir))
+    if cases_dir.is_dir():
+        case_names = sorted(p.name for p in cases_dir.iterdir() if p.is_file())
+        arm("F-2 the fixture is non-empty — a 0-case iteration would pass vacuously",
+            len(case_names) >= 7, f"{len(case_names)} case(s): {', '.join(case_names)}")
+        bad = []
+        for cname in case_names:
+            src = (cases_dir / cname).read_text(encoding="utf-8")
+            want = (fixture / "expected" / cname).read_text(encoding="utf-8")
+            got = extract_body(src)
+            if got != want:
+                bad.append(f"{cname}: got {got[:32]!r} want {want[:32]!r}")
+        arm("F-3 extract_body matches the committed fixture on every case (S1-S5)",
+            not bad, "; ".join(bad) if bad else f"{len(case_names)}/{len(case_names)} byte-identical")
+        # F-4 is the anti-vacuity arm for F-3. The previous implementation is
+        # reproduced here and MUST disagree with the fixture; if it did not, F-3
+        # would be passing on a fixture too weak to distinguish the two models,
+        # and the correction would be unmeasured.
+        def _pre_change_extract_body(text: str) -> str:
+            lines = text.splitlines()
+            if not lines or lines[0].strip() != "---":
+                return text
+            for i in range(1, len(lines)):
+                if lines[i].strip() == "---":
+                    return "\n".join(lines[i + 1:])
+            return text
+
+        disagreed = [c for c in case_names
+                     if _pre_change_extract_body((cases_dir / c).read_text(encoding="utf-8"))
+                     != (fixture / "expected" / c).read_text(encoding="utf-8")]
+        arm("F-4 anti-vacuity — the PRE-CHANGE model fails this fixture, so F-3 discriminates",
+            len(disagreed) >= 1,
+            f"pre-change model disagrees on {len(disagreed)}/{len(case_names)}: "
+            f"{', '.join(disagreed) if disagreed else 'NOTHING — fixture cannot tell the models apart'}")
 
     print(f"\n{checked} arm(s) run, {len(failures)} failure(s)"
           + (f": {failures}" if failures else ""))

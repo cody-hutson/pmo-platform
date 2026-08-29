@@ -845,22 +845,24 @@ A skipped **release-scoped** sub-task uses the same format with the milestone na
 
    **Release-scoped stages omitted from the table by design:** Stage 4 (Planning), Stage 9 (Plan Review — gate, no spoke), Stage 12 (Execute) each run as a single per-release spoke/gate; there is no cross-issue parallelism axis at these stages, so they do not need an explicit rule. The table covers the per-issue stages (5/6/7/8) plus Close (release-scoped but with internal-mutation serialization concerns).
 
-   **Parallel-safe is coordination semantics, not usage-window semantics (orthogonality note).** "Parallel-safe" in the table above is a *coordination*/file-contention property — it means the stage's output channel has no shared write surface, so concurrent spokes do not race on a commit or file. It is **orthogonal** to the per-account 5-hour usage-window envelope: concurrent Agent-tool spokes still draw *cumulatively* against the shared usage window even when they have no file-contention surface (see § Per-Account Usage Window Constraint). The two gates compose — a stage marked parallel-safe here may still require SERIALIZE / DEFER / REDUCE-scope under the usage-window gate (Step 5.5 below). Do not read "parallel-safe" as "usage-window-free."
+   **Parallel-safe is coordination semantics, not usage-window semantics (orthogonality note).** "Parallel-safe" in the table above is a *coordination*/file-contention property — it means the stage's output channel has no shared write surface, so concurrent spokes do not race on a commit or file. It is **orthogonal** to the per-account 5-hour usage-window envelope: concurrent Agent-tool spokes still draw *cumulatively* against the shared usage window even when they have no file-contention surface (see § Per-Account Usage Window Constraint). The two gates compose — a stage marked parallel-safe here may still require SERIALIZE / DEFER / REDUCE-scope under the usage-window gate (Step 5.5 below). Do not read "parallel-safe" as "usage-window-free." And do not read it as a licence for **width**: how many spokes go in flight at once is set by the wave-width guidance at [`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4.3c, never by this table.
 
    #### Step 5.5: Quota check before parallel launch
 
-   Before issuing **any** Agent invocation — N in one hub response, or a single one at any stage including the write-serialized 6 / 13 — the hub runs **Checkpoint B** of the quota-budget protocol ([`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4) against the *remaining* per-account 5-hour usage-window envelope. This is the load-bearing, ongoing check — it fires before *every launch*, not once at Stage 4, because each launch faces a potentially different remaining envelope (mid-release quota drift; 5-hour boundary crosses; per-spoke costs varying from the Stage 4 baseline). A singleton is gated too: being serial bounds the concurrent-batch surface, not the envelope, and a lone spoke on a near-tail window dies mid-run exactly the way the gate exists to prevent. Verdict depth varies by launch shape — the full PROCEED / SERIALIZE / DEFER / REDUCE-scope hierarchy for a wave (§ 4.3), the reduced PROCEED / DEFER form for a singleton (§ 4.3a). The check costs zero tool calls, which is what makes per-launch firing affordable.
+   Before issuing **any** Agent invocation — N in one hub response, or a single one at any stage including the write-serialized 6 / 13 — the hub runs **Checkpoint B** of the quota-budget protocol ([`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4) against the *remaining* per-account 5-hour usage-window envelope. This is the load-bearing, ongoing check — it fires before *every launch*, not once at Stage 4, because each launch faces a potentially different remaining envelope (mid-release quota drift; 5-hour boundary crosses; per-spoke costs varying from the Stage 4 baseline). A singleton is gated too: being serial bounds the concurrent-batch surface, not the envelope, and a lone spoke on a near-tail window dies mid-run exactly the way the gate exists to prevent. Verdict depth varies by launch shape — the full PROCEED / SERIALIZE / DEFER / REDUCE-scope hierarchy for a wave (§ 4.3), the reduced PROCEED / DEFER form for a singleton (§ 4.3a).
+
+   **Two axes, either sufficient to block.** Checkpoint B weighs **two independent axes**: the per-account usage-window envelope (above) and the **host-API quota** — the host's separate REST (`core`) and GraphQL pools, read with `gh api rate_limit` once per routing turn and reused for every launch issued in that turn. The host-API axis renders PROCEED / DEFER on a 20 %-remaining floor (protocol § 4.3b) and combines with the usage-window verdict by **DEFER-dominant disjunction**: a host-API DEFER makes Checkpoint B render DEFER; otherwise the usage-window verdict passes through unchanged. **No new verdict token is minted**, so behavior is unchanged whenever the pools are healthy. The axis matters because a depleted GraphQL pool does not slow a Stage 5 / 7 / 8 spoke down — it destroys the deliverable, whose entire output channel is a GitHub Issue comment, *after* the usage-window draw is already spent. A probe that fails **fails open** (basis `UNSTATED`, axis PROCEED, reason rendered): a failed read evidences an instrument or auth fault and carries no exhaustion signal at all, and failing closed would deadlock the pipeline on a fault that says nothing about capacity. **A successful read can also carry no signal** — exhaustion has *two* successful-read presentations, and the unstarted-window one (a full pool, `used = 0`) renders PROCEED wrongly and is not detectable from a single sample, so the fail-open residual is wider than "probe failed" (protocol § 4.3b). **Cost:** the usage-window axis is zero tool calls — a hub-side reasoning step, not an instrument. The host-API axis is one read per routing turn; whether that read is *also* free against the pools it measures is **unverified** and no longer claimed, and its certain cost is **cross-axis** — one call spends the usage-window axis to read the host-API axis. Even bounding the self-cost at one whole request per routing turn, per-launch firing stays affordable, so no launch shape is too small to gate.
 
    The hub computes `N_planned × per-spoke-cost-estimate` (Checkpoint A baseline refined by observed per-spoke actuals from prior waves this release) and compares it against the remaining envelope (operator-stated state at hub start, adjusted for elapsed-window time and any per-batch override — see the protocol § 6), then renders one verdict on the usage-window axis:
 
    | Verdict | Hub action |
    |---|---|
-   | **PROCEED** | Launch all N in parallel (existing behavior) |
+   | **PROCEED** | Launch `min(N, W_max)` in parallel — all N when `W_max = N` (the existing behavior); when `W_max < N`, split into `⌈N/W_max⌉` sub-waves and re-run this check before each. Width guidance: [`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4.3c |
    | **SERIALIZE** | Launch one spoke at a time, halt on first usage-limit failure (reduces simultaneous-draw count) |
    | **DEFER** | Hold the batch for the next window; surface a reset-time estimate (reduces cumulative draw entirely) |
    | **REDUCE-scope** | Launch with a smaller per-wave footprint — compact prompts, narrower scope, fewer canonical reads (reduces per-wave consumption) |
 
-   On **SERIALIZE / DEFER / REDUCE-scope**, the hub produces a Decision Briefing surfacing the verdict + recommendation to the operator **BEFORE** launching any spoke in the wave. **STAGGER** (an in-prompt `sleep` stagger) is a *labeled secondary* rate-limit-only defense — it does not change cumulative consumption and is never the mitigation for a usage-window overrun (§ Per-Account Usage Window Constraint).
+   On **SERIALIZE / DEFER / REDUCE-scope**, the hub produces a Decision Briefing surfacing the verdict + recommendation to the operator **BEFORE** launching any spoke in the wave. A **host-API DEFER routes into this same briefing path with no new token** — it renders as DEFER, which this rule already enumerates, so nothing here changes to accommodate the second axis. **STAGGER** (an in-prompt `sleep` stagger) is a *labeled secondary* rate-limit-only defense — it does not change cumulative consumption and is never the mitigation for a usage-window overrun (§ Per-Account Usage Window Constraint).
 
    On **DEFER**, the hub offers the operator an explicit **override-to-PROCEED exit** — the escape hatch for a wrong-stated-envelope deadlock. The override is operator-initiated (the hub renders DEFER as *recommended*; the operator chooses to override), is **deviation-logged** as a recorded auditable choice, and is a one-batch exit (it does not reopen the gate at every wave). When DEFER holds, the hub MAY emit an action-item entry per [`../../../core/standards/hub-action-tracking.md`](../../../core/standards/hub-action-tracking.md) (e.g., "Resume Stage N batch after window-reset at HH:MM") so the deferred batch is tracked and resumed.
 
@@ -1269,7 +1271,7 @@ When the hub authors a Stage 12 Execute chip prompt, the prompt MUST prescribe t
 
 Required chip-prompt content — Stage 12 chip prompts MUST embed these three additions:
 
-1. **Step-by-step item** (numbered step within the chip's "Step-by-step (in order)" block): *"After Phase B5 chore PR merge verified, execute Phase B5.5 Surface 1 emit per [`pipeline/stage-12-execute.md § Phase B5.5`](../pipeline/stage-12-execute.md): verify tag exists on remote (`git ls-remote --tags origin v<X.Y>`); compute the §5.1 frontmatter-stripped body ONCE — `BODY=\"$(sed '1,/^---$/d; 1,/^---$/d' release/releases/notes/v<X.Y>_RELEASE_NOTES.md)\"`; run view-then-create-or-edit state machine — `gh release view v<X.Y> --repo {REPO}`; if release exists AND body matches `$BODY` → PASS; if release exists AND body differs → `gh release edit v<X.Y> --notes \"$BODY\"`; if release does NOT exist → `gh release create v<X.Y> --repo {REPO} --title 'v<X.Y> — <H1-headline>' --notes \"$BODY\" --target \"$MERGE_SHA\"`. Verify final state via `gh release view v<X.Y>` returns 0."*
+1. **Step-by-step item** (numbered step within the chip's "Step-by-step (in order)" block): *"After Phase B5 chore PR merge verified, execute Phase B5.5 Surface 1 emit per [`pipeline/stage-12-execute.md § Phase B5.5`](../pipeline/stage-12-execute.md): verify tag exists on remote (`git ls-remote --tags origin v<X.Y>`); compute the §5.1 frontmatter-stripped body ONCE, using the shared transform — `. release/tools/lib/frontmatter-strip.sh; BODY=\"$(strip_frontmatter release/releases/notes/v<X.Y>_RELEASE_NOTES.md)\"` — and HALT if `$BODY` is empty (§5.1 S4: the strip is fail-closed, and publishing an empty body blanks a live Release page irreversibly); run view-then-create-or-edit state machine — `gh release view v<X.Y> --repo {REPO}`; if release exists AND body matches `$BODY` → PASS; if release exists AND body differs → `gh release edit v<X.Y> --notes \"$BODY\"`; if release does NOT exist → `gh release create v<X.Y> --repo {REPO} --title 'v<X.Y> — <H1-headline>' --notes \"$BODY\" --target \"$MERGE_SHA\"`. Verify final state via `gh release view v<X.Y>` returns 0."*
 
    **The emit MUST pass `--notes \"$BODY\"`, never `--notes-file <note path>`.** `--notes-file` publishes the note's YAML frontmatter as raw text on the public Release page, which `release-notes-standard.md` §5.1 forbids and which the §5.1 drift gate (deploy.sh Check 47) then reports as a finding. The comparison arm of the state machine already tests against the frontmatter-stripped body, so a raw-file write can never satisfy the test that triggered it — the emit would be non-convergent, re-writing the same Release on every run. Compute `$BODY` once, above the state branch, and emit the same value on both branches.
 2. **Output deliverables block** (entry in the chip's required-deliverables list): *"Surface 1 emit: GitHub Release v<X.Y> exists per `gh release view v<X.Y> --repo {REPO}` exit 0; final state machine state (CREATED / EDITED / NO-OP) recorded; merge SHA used for `--target` recorded."*
@@ -1748,6 +1750,33 @@ that will catch you.
 
 **Cutover discipline:** Applies to all releases going forward.
 
+## Write-Early Discipline (all spokes)
+
+Produce output early and bank it as you go. A spoke that front-loads its reading
+and writes only at the end produces **nothing** when interrupted; a spoke that
+wrote early survives the same interruption with work banked. Order your work so
+an interruption costs you the least-valuable part.
+
+The form depends on your output channel:
+
+- **Commit channel (Stages 6 / 12 / 13)** — commit and push each coherent slice
+  rather than saving one terminal push. A pushed commit is durable, and a
+  re-spawn resumes from the release branch with your banked work present.
+- **Comment channel (Stages 5 / 7 / 8)** — your output comment is ONE atomic
+  write by design, and post-then-edit is wrong on a public repository (edit
+  history is permanent and unscrubable). Your form is **ordering, not
+  incrementality**: finish the load-bearing analysis before the elaborative
+  reads, and accrue composed output into `$SPOKE_OUT` as evidence lands.
+
+**Honest scope — a discipline, not an interlock, and bounded.** Nothing asserts
+this per launch. For a comment-channel spoke it bounds loss **within a resumable
+session only** — it does not bank work across a re-spawn, because a fresh spawn
+resolves a fresh run directory and § Run-Directory Discipline forbids reading
+another run's artifacts. Full rule and the observed failure it encodes:
+§ Per-Account Usage Window Constraint, mitigation 6.
+
+**Cutover discipline:** Applies to all releases going forward.
+
 ## Output
 Post your output as a comment on sub-task #{SUB_TASK_NUMBER}:
 
@@ -2021,7 +2050,7 @@ A spoke that spawns its own next chip bypasses the Hub's orchestration role and 
 1. Do NOT generate a spoke prompt — gates are operator decisions
 2. Read all prior stage outputs for the issue (release plan from Stage 4, sub-task comments from Stages 5-8)
 2a. **Action-item scan (per [`hub-action-tracking.md` § 4 routing point 4](../../../core/standards/hub-action-tracking.md)):** Scan `action-items.md` in the release's resolved hub-state directory (orchestration playbook § 4a.3 — slug-keyed first, version-keyed read-only fallback) if present for `status:open` rows with `trigger_type:stage-boundary` whose `trigger_detail` matches the current gate's stage (e.g., "Stage 9", "Stage 12"). Surface triggered rows in the gate Decision Briefing per the Operating Principle "Action items surfaced this routing point" subsection format; operator MAY resolve action item as part of the gate decision.
-2b. **Required-gate + mergeability read (Stage 9 ONLY):** Before authoring the Release Readiness Scan, read the release PR required-gate and mergeability state — the evidence anchor for the scan's required-gate dimension. Run `gh pr checks <PR> --required --json name,state,bucket,link` (one call, no poll; in this `--json` form it exits **0** even when a row is failing or pending — the exit code signals only an unresolvable PR or an auth failure — so branch on the parsed rows, not the exit code) together with `gh pr view <PR> --json isDraft,mergeable,mergeStateStatus`, and read the branch-protection required-context count as the denominator floor. Classify the result to exactly one state — `checks-failing`, `checks-unreadable`, `checks-unresolved`, `draft-blocked`, `clean`, or `merge-blocked-other` — using the precedence order in [`release-readiness-scan-spec.md § 5.1`](../specs/release-readiness-scan-spec.md), where `checks-failing` is evaluated BEFORE `draft-blocked` so a draft PR cannot mask a failing required check, and where an unreadable or incomplete read is never rendered as clean. Record the state name plus every failing or unresolved check by name in the Stage 9 sub-task output and carry it into the Decision Briefing at Step 3. A `checks-failing` state is a NO-GO **recommendation** input, not a block: branch protection remains the authoritative gate and the operator may override with recorded rationale. **Cutover discipline:** Applies to all releases going forward.
+2b. **Required-gate + mergeability read (Stage 9 ONLY):** Before authoring the Release Readiness Scan, read the release PR required-gate and mergeability state — the evidence anchor for the scan's required-gate dimension. Run `gh pr checks <PR> --required --json name,state,bucket,link` (one call, no poll; in this `--json` form it exits **0** even when a row is failing or pending, so branch on the parsed rows, not the exit code; the exit code carries THREE conditions, not two — an unresolvable PR, an auth failure, and an **empty required roster**, where `gh` exits **1** with non-JSON stdout `no required checks reported on the '<branch>' branch`, so classify a non-zero exit by reading stdout rather than recording it as unreadable: an empty roster and an unparseable read enter at the same state, so the cost is attribution, not safety) together with `gh pr view <PR> --json isDraft,mergeable,mergeStateStatus`, and read the branch-protection required-context count as the denominator floor. Classify the result to exactly one state — `checks-failing`, `checks-unreadable`, `checks-unresolved`, `draft-blocked`, `clean`, or `merge-blocked-other` — using the precedence order in [`release-readiness-scan-spec.md § 5.1`](../specs/release-readiness-scan-spec.md), where `checks-failing` is evaluated BEFORE `draft-blocked` so a draft PR cannot mask a failing required check, and where an unreadable or incomplete read is never rendered as clean. Record the state name plus every failing or unresolved check by name in the Stage 9 sub-task output and carry it into the Decision Briefing at Step 3. A `checks-failing` state is a NO-GO **recommendation** input, not a block: branch protection remains the authoritative gate and the operator may override with recorded rationale. **Cutover discipline:** Applies to all releases going forward.
 
 2c. **Release Readiness Scan (Stage 9 ONLY) per [release-readiness-scan-spec.md](../specs/release-readiness-scan-spec.md):** Hub authors the scan at Stage 9 Phase A6 of evidence assembly per [stage-09-plan-review.md § 5 Phase A](../pipeline/stage-09-plan-review.md). For each of the scan's dimensions, hub computes status (PASS / FAIL / PARTIAL / N/A) using the per-dim Evidence command per the spec § 5 table. Scan output is dual-surfaced: (a) markdown table posted as a comment on the Stage 9 Plan Review sub-task per spec § 6.1; (b) one `gate-outcome` row with subtype `plan-review-readiness-scan` appended to [`pipeline-event-log.md`](<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md) per spec § 6.2. The aggregate verdict (ALL-PASS recommends GO / ANY-FAIL recommends NO-GO / ANY-PARTIAL recommends GO-WITH-CONDITIONS) surfaces in the Decision Briefing at Step 3 below as ONE input to the operator GO/NO-GO. The scan is a briefing, not a binding gate — operator may override per the Tier 3 (Human-only) discipline at Stage 9. **Cutover discipline:** Applies to all releases going forward.
 3. Present the decision to the operator as a Decision Briefing **in main-thread chat, via `AskUserQuestion` or equivalent in-chat mechanism** (per the Pre-condition above), applying mechanisms per `core/disciplines/decision-discipline.md` § 3 triage table:
@@ -2486,10 +2515,12 @@ window-aware-timing / serialize-on-failure mitigations, see
 § Per-Account Usage Window Constraint below. Before issuing the
 batch, the hub runs Checkpoint B of the quota-budget gate
 (Procedure 2 Step 5.5 / [`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md))
-and acts on its verdict — PROCEED launches all N; SERIALIZE
-launches one at a time; DEFER holds the batch for the next
-window (with an operator override-to-PROCEED exit); REDUCE-scope
-launches with a smaller per-wave footprint. STAGGER is a
+and acts on its verdict — PROCEED launches `min(N, W_max)`: all
+N when `W_max = N`, otherwise `⌈N/W_max⌉` re-gated sub-waves per
+the protocol § 4.3c; SERIALIZE launches one at a time; DEFER
+holds the batch for the next window (with an operator
+override-to-PROCEED exit); REDUCE-scope launches with a smaller
+per-wave footprint. STAGGER is a
 secondary rate-limit-only defense, not a usage-window mitigation.
 
 **Composition with  Agent Handoff Framework:** 's
@@ -2872,11 +2903,15 @@ canonical anchor for the cumulative-draw failure mode.
 
 1. **Pre-flight quota check.** Before launching N parallel spokes, the hub
    checks the remaining-window quota and defers the batch if it would be
-   insufficient for the estimated cumulative consumption. *(Note: remaining-
-   window quota is not queryable from within a session today; this is the check
-   the state-aware usage-window gate — sister work that references this
-   constraint — is designed to provide. Until it is queryable, the hub relies on
-   the budgeting and timing mitigations below plus serialize-on-failure.)*
+   insufficient for the estimated cumulative consumption. *(Note: the remaining
+   **platform usage-window** quota is not queryable from within a session today;
+   this is the check the state-aware usage-window gate — sister work that
+   references this constraint — is designed to provide. Until it is queryable,
+   the hub relies on the budgeting and timing mitigations below plus
+   serialize-on-failure. The **host-API** quota is a different matter and IS
+   queryable today — `gh api rate_limit` returns the REST and GraphQL pools —
+   which is why the quota-budget protocol's second axis can measure where this
+   one can only project.)*
 2. **Quota-budgeting per release.** Estimate `tokens_per_spoke × N` against the
    typical 5-hour-window allotment. If that estimate exceeds a fresh window's
    allotment, split the batch across multiple windows rather than launching all
@@ -2891,6 +2926,41 @@ canonical anchor for the cumulative-draw failure mode.
 5. **Reduce per-spoke consumption.** Lower `tokens_per_spoke` with more compact
    prompts, fewer canonical reads, and narrower analysis scope, so a given
    window absorbs more spokes.
+6. **Write early, bank incrementally.** Mitigations 1–5 all try to prevent an
+   interruption. This one bounds what an interruption *costs* once it happens
+   anyway, and it is the residual mitigation for **both** axes — including the
+   case where the host-API probe returned basis `UNSTATED` and the gate could
+   not see the pool state at all (quota-budget protocol § 4.3b).
+
+   **The observed failure it prevents.** Spokes that front-loaded their reading
+   before producing any output produced **nothing** when interrupted — the whole
+   draw was spent and no work survived. Spokes that had written early survived
+   the same interruption **with work banked**. That contrast, not a general
+   preference for efficiency, is what this mitigation encodes: a generic "be
+   efficient" instruction does not produce it, because the failing spokes were
+   being efficient — they were reading before writing, which is ordinarily
+   correct.
+
+   **The form differs by output channel, and the difference is load-bearing.**
+
+   - **Commit-channel spokes (Stages 6 / 12 / 13).** Commit and push each
+     coherent slice rather than saving one terminal push. A pushed commit is
+     durable: a re-spawn resumes from `origin/release/<milestone>` with the
+     banked work already present. This is the strong form.
+   - **Comment-channel spokes (Stages 5 / 7 / 8).** The output comment is **one
+     atomic write by design**, and post-then-edit is the wrong remedy on a
+     public repository — a partial comment's edit history is permanent and
+     unscrubable. The applicable form is therefore **ordering, not
+     incrementality**: finish the load-bearing analysis before the elaborative
+     reads, and accrue the composed output into the run directory as each piece
+     of evidence lands, so an interruption costs formatting rather than
+     findings.
+
+   **Honest boundary — what the comment-channel form does NOT buy.** For a
+   comment-channel spoke this bounds loss **within a resumable session only**.
+   It does not bank work across a re-spawn: a fresh spawn resolves a fresh run
+   directory, and § Run-Directory Discipline forbids reading another run's
+   artifacts. Claiming otherwise would be false, so it is not claimed.
 
 **Secondary note — in-prompt `sleep` stagger (rate-limit only, not load-bearing
 here).** A hub may add an in-prompt `sleep <position × delay>` stagger to spread

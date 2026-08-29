@@ -38,33 +38,83 @@ From the runtime-suite contract: [`runtime-suite-selection-map.md`](../standards
 Set at Stage 8: per-criterion verdict, acceptance score, Stage 7 escape count, overall verdict (ACCEPT/CONDITIONAL ACCEPT/REJECT/HOLD).
 
 ## 5. Process
-**Phase A — Entry Validation (Tier 1):** 4 steps — verify Stage 7 verdict (PASS or CONDITIONAL PASS required), PR still mergeable, quality report present with conformant Handoff Payload (per [DT↔QA Handoff Protocol §Forward Handoff](stage-07-dev-testing.md#dtqa-handoff-protocol)), all AC extractable from issues. Missing or malformed Handoff Payload → post [ADJUST] signal per the inter-stage feedback protocol Tier 1; DT amends in-place (no full re-review required for format-only corrections).
+**Phase A — Entry Validation (Tier 1):** 5 steps — verify Stage 7 verdict (PASS or CONDITIONAL PASS required), PR still mergeable, quality report present with conformant Handoff Payload (per [DT↔QA Handoff Protocol §Forward Handoff](stage-07-dev-testing.md#dtqa-handoff-protocol)), all AC extractable from issues, and PR gate-state clean per the required-gate + mergeability read below. Missing or malformed Handoff Payload → post [ADJUST] signal per the inter-stage feedback protocol Tier 1; DT amends in-place (no full re-review required for format-only corrections).
 
-#### Required-gate spot-check (advisory, informational — never an acceptance verdict)
+#### Required-gate + mergeability read (entry-validation input — never an acceptance verdict)
 
-Phase A already reads whether the PR is still mergeable. This sub-block adds the
-adjacent read that the mergeability read alone does not surface: the verdicts of the
-required branch-protection checks on the current PR head. Stage 8 does not
-re-implement their detection — it consumes their own results, the same
-evidence-consumption posture this stage takes toward the Stage-7 runtime suites.
+Phase A reads the pull request's own state — `gh pr view <PR> --json
+isDraft,mergeable,mergeStateStatus` — and the verdicts of the required
+branch-protection checks on the current head. Stage 8 does not re-implement their
+detection; it consumes their own results, the same evidence-consumption posture this
+stage takes toward the Stage-7 runtime suites. Two predicates, evaluated in this order,
+first match wins.
 
-Read every required row with `gh pr checks <PR> --required --json name,state,bucket,link`;
+**P1 — Mergeability.** `mergeable` of `CONFLICTING`, or `mergeStateStatus` of `DIRTY`,
+is terminal for this block — do not go on to classify checks. A conflicting pull request
+has no computable merge ref, so the host dispatches none of the gates triggered on
+`pull_request`, and a reading that inspects only conclusions reports the collapsed
+rollup green. Mirrors the pre-merge conflict check at
+[`stage-12-execute.md`](stage-12-execute.md) Phase A.6.3 rather than authoring a second
+conflict predicate.
+
+**P2 — Denominator floor, count stability, then classification.** Read the denominator first: the
+branch-protection required-context count for the pull request's own base branch, `gh api
+repos/{REPO}/branches/<baseRefName>/protection --jq '.required_status_checks.contexts |
+length'`, resolving `<baseRefName>` from the pull request rather than hardcoding the
+default branch. Then read every required row with `gh pr checks <PR> --required --json
+name,state,bucket,link`;
 in this `--json` form the command exits **0** even when a required row is failing or
-pending — the exit code signals only an unresolvable PR or an authentication failure —
-so branch on the parsed rows and never on the exit code.
+pending, so branch on the parsed rows and never on the exit code. **The exit code
+carries three conditions, not two.** Besides an unresolvable PR and an
+authentication failure, `gh` exits **1** with non-JSON stdout — `no required
+checks reported on the '<branch>' branch` — when the required roster is
+**empty**, which is precisely the zero-row collapse this predicate exists to
+detect. Observed on this release's own pull request while its head was
+conflicted; the positive control on a healthy pull request returns exit 0 with
+the full JSON roster. A non-zero exit must therefore be classified by **reading
+stdout**, never assumed to be a failed read. The safety invariant holds either
+way — an unparseable read and an empty roster both enter at § 5.1 state 2, same
+severity — so the cost is **attribution, not safety**: without this clause the
+release is told *the read was unreadable* when the truth is *the population
+collapsed*.
+**Settle the count before comparing it, and compare it BEFORE classifying.** The required
+roster is dispatch-dependent, so poll on `status` — settled means no check reports a status
+other than `COMPLETED`, and an incomplete check returns an *empty* conclusion, so a
+predicate waiting on `PENDING` / `IN_PROGRESS` / `QUEUED` matches nothing and exits early —
+and require the count stable across consecutive polls, against the same head. A count still
+rising is unsettled, not a shortfall. Once settled, a row count below the required-context
+count fails entry here, terminally, without consulting § 5.1: § 5.1's state 1
+`checks-failing` is evaluated first and is *existential*, so a collapsed population holding
+one red row would match it and be recorded as merely informational. See
+[`stage-07-dev-testing.md`](stage-07-dev-testing.md) § Required-gate + mergeability read for
+the full statement of that inversion; Stage 8 mirrors the ordering rather than restating it.
+Otherwise classify to exactly one state per the six-state precedence table in
+[`release-readiness-scan-spec.md`](../specs/release-readiness-scan-spec.md) § 5.1,
+applying its settle allowance and its `isDraft`-only draft predicate; Stage 8 authors no
+new state name and no new precedence order.
 The `Issue-reference validity gate` is the worked example: the two classes it enforces
 are a bare `#N`-form issue reference placed outside a designated reference block with no
-inline provenance marker, and a deprecated `IMP-NNN` reference. A `bucket` of `fail` on
-any required row is recorded in the Acceptance Report as an informational finding naming
-that gate — and, for the issue-reference gate, both classes — following the row link for
-file-and-line detail; a `bucket` of `pending`, `cancel`, or `skipping`, a missing row, or
-a failed read is recorded as NOT clean rather than passed over.
+inline provenance marker, and a deprecated `IMP-NNN` reference.
 
-**This spot-check renders no per-criterion verdict and gates nothing.** It produces no
-MET / NOT MET / PARTIAL, does not key the Step-0 precedence gate, and does not route a
-lane. Branch protection on the default branch is the authoritative gate for every
-required check; this read exists so a red required gate is visible at acceptance
-rather than first surfacing at the merge attempt.
+**Disposition.** A P1 conflict, a settled row count below the required-context count (the
+predicate above, evaluated ahead of § 5.1), or § 5.1 state 2 `checks-unreadable` — a read
+that did not complete — **fails Phase A entry validation** and routes per the Inter-Stage
+Feedback Protocol. Stage 8 does
+not open Phase B against a pull request whose gates did not run. States 1, 3 and 6 do not
+fail entry and are recorded in the Acceptance Report as informational findings: a
+`bucket` of `fail` on any required row names that gate — and, for the issue-reference
+gate, both classes — following the row link for file-and-line detail; a `bucket` of
+`pending`, `cancel`, or `skipping`, or a merge-state value § 5.1 does not model, is
+recorded as NOT clean rather than passed over.
+
+**The authority here is entry validation, and it is never an acceptance verdict.** This
+read produces no MET / NOT MET / PARTIAL, does not key the Step-0 precedence gate, and
+does not route a lane — Step 0 keys on per-criterion acceptance verdicts, which this read
+does not render, so the Operator Override Record machinery is untouched. What it can do
+is refuse entry, as the fifth conjunct of Phase A above. Branch protection on the default
+branch remains the authoritative gate for a red required check; this read exists so a red
+gate is visible at acceptance rather than first surfacing at the merge attempt, and so a
+required population that never reported is distinguishable from one that passed.
 
 **Cutover discipline:** Applies to all releases going forward.
 
