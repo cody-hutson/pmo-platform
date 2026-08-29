@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-163 — Post-merge skill deployment is a local git hook in the existing hook home, installed by the existing install function"
+title: "ADR-165 — Post-merge skill deployment is a local git hook in the existing hook home, installed by the existing install function"
 status: Proposed — flips to Accepted when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
 date: 2026-08-29
 release: skill-surface-sync
@@ -16,11 +16,13 @@ source_observations:
   - "No hook entrypoint carries a script-execution-allowlist row. Measured at authoring: 0 of the 22 `core/hooks/*.sh` entrypoints appear among the 281 non-comment allowlist entries; sensitivity arm fires (`deploy.sh` 4, `build-skill-packages.sh` 4, `blast-radius.sh` 8); specificity arm returns 0. The population is hook entrypoints, not the single-file precedent."
 ---
 
-# ADR-163 — Post-merge skill deployment is a local git hook
+# ADR-165 — Post-merge skill deployment is a local git hook
 
 ## Status
 
 **Proposed.** Authored at Stage 6 for the `skill-surface-sync` release as the first commit of the post-merge-deploy card, against the operator's standing authorization to record this decision. Ratification is the Stage 9 Plan Review gate, recorded in the `status:` field above.
+
+**Numbering provenance — `163 → 165`.** Held **ADR-163** branch-local; renumbered to **ADR-165** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 163. In-release citations that read "ADR-163" denote this record.
 
 ## Context
 
