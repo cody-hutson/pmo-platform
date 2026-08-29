@@ -63,6 +63,7 @@ core/deploy/tools/check-host-binding.py
 core/deploy/tools/check-identity-conformance.py
 core/deploy/tools/check-label-parity.py
 core/deploy/tools/check-milestone-epic-membership.py
+core/deploy/tools/check-mode-declaration-residual.py
 core/deploy/tools/check-ownership-collision.py
 core/deploy/tools/check-skill-count-imp.py
 core/deploy/tools/check-version-anchors.py
@@ -77,6 +78,7 @@ core/deploy/tools/check-canonical-structure.sh
 core/deploy/tools/check-citation-anchors.sh
 core/deploy/tools/check-convention.sh
 core/deploy/tools/check-enum-parity.sh
+core/deploy/tools/check-issue-body-anchors.sh
 core/deploy/tools/check-issue-ref-validity.sh
 core/deploy/tools/check-operator-toml-schema.sh
 core/deploy/tools/check-pv7-vocabulary.sh

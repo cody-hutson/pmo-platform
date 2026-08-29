@@ -1,0 +1,1 @@
+Operator-local target: `roadmaps/fx-not-tracked.md` @@SEC@@2 names a file outside the tracked tree, so the measurement degrades.

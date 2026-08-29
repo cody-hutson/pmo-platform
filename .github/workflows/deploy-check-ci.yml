@@ -1,6 +1,6 @@
 name: Deploy-check required subset (pre-merge load-bearing gate)
 
-# gate-efficacy: posture=required(warn-mode-initial)  enforcement=path-filtered  skip-semantics=absent-is-pass
+# gate-efficacy: posture=required(warn-mode-initial)  enforcement=branch-protection:"Pre-merge load-bearing check subset"  always-reports=yes
 #   invariant: every load-bearing deploy.sh --check member in the enumerated
 #              required-subset (network-free AND install-independent AND
 #              posture:required AND lacking a dedicated CI mirror) holds pre-merge —
@@ -14,13 +14,41 @@ name: Deploy-check required subset (pre-merge load-bearing gate)
 #                  core/rules/bypass-mode-readiness/ without regenerating the index
 #                  -> this gate reports STALE (warn-mode: summary + exit 0; enforce:
 #                  red + exit 1). A fresh index -> green.
-# Path-filtered, so ADVISORY by skip-semantics: absence on an unrelated PR MUST NOT
-# block. Ships warn-mode-initial (reports, does not block) until the operator flips
-# the committed .github/deploy-check-ci.enforce sentinel token to `enforce` AND adds
-# this job to required_status_checks (branch protection — the out-of-tree
-# enforcement surface, R3).
-# (Per core/standards/gate-efficacy-standard.md (b)/(b'); warn-mode-initial per
-# core/rules/git-workflow.md § Repository-Integrity Gates.)
+# NO PATH FILTER, BY DESIGN — and for this gate the reason is TEMPORAL, which is what
+# separates it from its three path-filtered siblings.
+#
+# A paths: roster is only ever an approximation of a verdict's real input surface, and
+# under skip-semantics=absent-is-pass an under-approximation turns the miss into a
+# false statement. Measured at conversion time, this gate's roster did NOT
+# under-approximate: the single subset member is Check 38, whose only engine dependency
+# is build-hook-registry.py, and both the sources and the generated index sat inside
+# the roster. Verdict-Input Closure HELD on that day. The gap is that it cannot be
+# relied on to keep holding: the subset is declared to GROW as posture:required checks
+# lacking a mirror are back-filled, and the roster's own annotation said it grows with
+# it. Two rosters obliged to widen together with NOTHING binding them is the exact
+# mechanism the injected-canonical precedent recorded — every new arm widening the gap
+# without anyone noticing. A roster bound to a roster designed to grow reproduces the
+# defect on a delay, so binding was rejected and the filter deleted instead. Adding a
+# subset member now costs nothing and can silently cost nothing.
+#
+# ALWAYS-REPORTS IS A PREREQUISITE OF THE DECLARED FLIP, NOT A COST DECISION.
+# This gate declares posture=required and its graduation clause names
+# required_status_checks. A path-filtered context registered in branch protection
+# leaves every NON-matching pull request permanently PENDING, so the declared
+# enforcement was unreachable while the filter existed — the surface could not deliver
+# what the header claimed. Removing the filter is part of the flip.
+#
+# COST, STATED NOT HIDDEN: this adds an unconditional macOS job — billed at 10x — to
+# every pull request, to run a single regenerate-and-diff. That was an operator call,
+# taken explicitly, on the ground that a workflow declaring itself required owes
+# always-reports before it owes runner minutes.
+#
+# Ships warn-mode-initial (reports, does not block) until the operator flips the
+# committed .github/deploy-check-ci.enforce sentinel token to `enforce` AND adds this
+# job to required_status_checks (branch protection — the out-of-tree enforcement
+# surface, R3). Those two steps are now the WHOLE flip; the third is already done.
+# (Per core/standards/gate-efficacy-standard.md (b)/(b') and § Verdict-Input Closure;
+# warn-mode-initial per core/rules/git-workflow.md § Repository-Integrity Gates.)
 #
 # THIN caller of the single engine. --check-required-subset runs each subset
 # member's shared _cNN_compute_verdict "gate" body and aggregates the verdict;
@@ -36,24 +64,16 @@ name: Deploy-check required subset (pre-merge load-bearing gate)
 # pattern (no ${{ }} interpolation inside a run: block).
 
 on:
+  # NO paths: key on EITHER event — deliberate, not an omission. See the NO PATH
+  # FILTER, BY DESIGN paragraph above: the subset this gate runs is declared to GROW,
+  # so any roster enumerating "the surfaces the current members assert" is correct only
+  # until the next member lands. The event/types shape below is the tree's established
+  # filter-free form (link-check.yml, skill-package-freshness.yml,
+  # skill-registry-currency-check.yml), so this workflow now always reports a result.
   pull_request:
-    paths:
-      # The union of surfaces the current subset members assert, plus the engine and
-      # the gate's own switch. Grows as members are added.
-      - 'core/rules/bypass-mode-readiness.md'
-      - 'core/rules/bypass-mode-readiness/**'
-      - 'core/hooks/**'
-      - 'core/deploy/tools/build-hook-registry.py'
-      - 'core/deploy/deploy.sh'
-      - '.github/workflows/deploy-check-ci.yml'
-      - '.github/deploy-check-ci.enforce'
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
-    paths:
-      - 'core/rules/bypass-mode-readiness.md'
-      - 'core/rules/bypass-mode-readiness/**'
-      - 'core/hooks/**'
-      - 'core/deploy/tools/build-hook-registry.py'
 
 permissions:
   contents: read

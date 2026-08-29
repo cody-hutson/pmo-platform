@@ -93,7 +93,7 @@ A capped run signals itself on **both** limbs: exit `6` **and** `partial: true` 
 
 ### Hook compliance
 
-The CLI uses only `grep`, `find`, `jq`, `sort`, `awk`, `sed` — all permitted under the `bypass-mode-readiness.md` hook layer. **However**, BLOCK-DESTRUCTIVE-022 (subprocess script execution) requires the CLI's path to be present in `core/config/allowlists/script-execution-allowlist.txt` before bash invocation succeeds **wherever that guard is in force**. This is a one-time operator/deployment step; the entry covers absolute, worktree, and relative invocation forms. See [`core/rules/bypass-mode-readiness.md`](../../../core/rules/bypass-mode-readiness.md) §"Allowlist Maintenance".
+The CLI uses only `grep`, `find`, `jq`, `sort`, `awk`, `sed`, `tr`, `wc` and — for tracked-file scoping — `git rev-parse` / `git ls-files`, all permitted under the `bypass-mode-readiness.md` hook layer. `git` is an **optional** dependency, guarded by `command -v`: when it is absent the CLI falls back to the `find` enumeration and says so in `stats.scan_scope_status`. **However**, BLOCK-DESTRUCTIVE-022 (subprocess script execution) requires the CLI's path to be present in `core/config/allowlists/script-execution-allowlist.txt` before bash invocation succeeds **wherever that guard is in force**. This is a one-time operator/deployment step; the entry covers absolute, worktree, and relative invocation forms. See [`core/rules/bypass-mode-readiness.md`](../../../core/rules/bypass-mode-readiness.md) §"Allowlist Maintenance".
 
 **Coverage boundary — four conditions.** BLOCK-DESTRUCTIVE-022 is enforced by a PreToolUse hook, and such a control is in force only when **all four** hold, and not when any one fails: (1) **loading** — the session resolved a settings surface declaring the hook wiring (any session, main or spawned, whose working directory is under the governed workspace root; a session resolving no such surface loads no hooks at all, and one outside the root is excluded by the scope guard); (2) **bypass** — `CLAUDE_HOOK_BYPASS` was not set in the launching environment (layer 1, which exits **both** hook classes, so the security/workflow asymmetry does **not** exist there); (3) **master-activation class** — `security` always enforces, `workflow` is inert while master activation is off; (4) **mode** — most block hooks warn-and-allow in warn mode, a minority are mode-independent. A citation naming fewer than four overstates the coverage. Canonical statement: [`core/standards/subagent-security-posture.md` § 3.1](../../../core/standards/subagent-security-posture.md).
 
@@ -116,8 +116,12 @@ The CLI emits a JSON v1 document (or a table/markdown rendering of it). Schema:
   "include_mirrors": false,
   "stats": {
     "total_files_scanned": 593,
+    "scan_scope": "tracked",
+    "scan_scope_status": "fetched",
     "first_order_count": 16,
+    "second_order_status": "fetched",
     "second_order_count": 24,
+    "unreadable_files": 0,
     "filtered_mirrors": 0,
     "elapsed_seconds": 4.2
   },
@@ -159,6 +163,51 @@ The CLI emits a JSON v1 document (or a table/markdown rendering of it). Schema:
 - **`stats.first_order_count`** — Distinct files in `first_order`. **This is the AC2 metric.**
 - **`stats.filtered_mirrors`** — Count of mirror-partner files suppressed from `first_order` (when `--include-mirrors` is unset). Detail lives in `filtered_mirrors_detail`.
 - **`partial`** / **`partial_reason`** / **`stats.partial`** — **OPTIONAL; present ONLY on a run whose second-order expansion was capped by `--max-expand`.** `partial` is `true`, `partial_reason` names both the cap and the true first-order total, and `stats.partial` mirrors the boolean for consumers reading the stats block. On a complete run all three keys are **absent**, so output is unchanged for every existing consumer and no `schema_version` bump is required. A consumer that does not know these keys still cannot misread a capped run, because the process also exits `6`. Treat their presence as "this analysis is incomplete", never as "this analysis found nothing".
+- **`stats.second_order_status`** — the MEASUREMENT STATE of `second_order_count`, drawn verbatim from the PV-7a **Register A** closed set. Emitted on every path: `fetched` (the traversal ran to completion), `truncated` (the `--max-expand` cap fired, so the enumeration is a sample), `degraded` (a scan-listed file could not be read), `not-run` (`--depth < 2`, or `--mode=structural`). `fixture` is not emitted — this tool has no fixture-vs-live distinction in its emit path.
+- **`stats.second_order_status_reason`** — present on `not-run` and `degraded`, naming which cause fired. **Absent** on a clean status; never an empty string.
+- **`stats.unreadable_files`** — count of scan-listed files that could not be read, measured on every path, including as a genuine `0`. It is the checkable basis for `fetched`; read its scope limit under *Reading a count* below.
+- **`stats.scan_scope`** — a **POPULATION LABEL**, `tracked` or `all-files`, naming which population `total_files_scanned` covers. Deliberately **not** a Register A member: Register A can say *whether* a measurement happened, but has no member for *"measured, over a different population."*
+- **`stats.scan_scope_status`** — Register A verbatim, reporting whether **tracked** scoping was achieved: `fetched`, `degraded` (git present and the read failed, or the tracked enumeration was measurably short), `not-run` (git absent, the root is not a work tree, or the work tree has no tracked files under it).
+- **`stats.scan_scope_status_reason`** — present whenever `scan_scope_status` is not `fetched`; absent otherwise, never `""`.
+
+### Reading a count
+
+**A consumer MUST branch on a counter's sibling status field before reading the counter.** Both counters in `stats` that carry one are governed by this rule, and it is the same rule for each:
+
+```
+For a counter C in .stats with sibling status field C_status:
+
+  0. If .stats has no C_status  -> this tool publishes no measurement warrant
+                                   for C. Do not infer one.
+  1. Read .stats.C_status FIRST. Never read C before branching on it.
+       fetched    -> C is PRESENT. C == 0 means MEASURED EMPTY.
+       truncated  -> C is PRESENT, measured over a SAMPLED enumeration.
+       not-run    -> C is ABSENT. Never attempted.
+       degraded   -> C is ABSENT. Attempted, and incomplete.
+  2. The discriminator is the counter's ABSENCE, not any of its values.
+     `has("C") == false` is the only sound not-computed test. There is no
+     value to misread, because on a non-measuring status there is no value.
+```
+
+| `second_order_status` | `stats.second_order_count` | Means |
+|---|---|---|
+| `fetched` | **present** — `0` here means **measured empty** | the traversal examined the scan list |
+| `truncated` | **present** — over the sampled expansion | the `--max-expand` cap fired |
+| `degraded` | **ABSENT** | attempted, but a scan-listed file could not be read |
+| `not-run` | **ABSENT** | `--depth < 2`, or `--mode=structural` |
+
+**What `fetched` does and does not warrant.** `fetched` warrants that every **scan-listed** member was read — **not** that the scan list is complete. `stats.unreadable_files` counts scan-listed files that could not be read; it is a read-completeness measure over the scan list, **never** an enumeration-completeness measure. **Scan-list completeness is reported by `stats.scan_scope_status`, not by `unreadable_files`:** a member dropped because an ancestor directory could not be traversed yields `degraded` with a count in the reason; drops caused by the type filter, by an exclusion prefix, or by a path deleted from the working tree are intentional and leave the status `fetched`. A residual remains on the `all-files` fallback, where `find` cannot descend an untraversable directory at all — under the tool's `set -euo pipefail` that aborts the run rather than under-reporting, but the diagnostic naming the directory is discarded. Capturing it is a tracked follow-on; **this tool does not detect enumeration incompleteness on that path.**
+
+**A count is comparable only against another count over the same population.** Read `stats.scan_scope` **before** comparing any count across runs — `tracked` and `all-files` are different populations, and a `degraded` scope status means the tracked population was never established. `stats.total_files_scanned` is the one counter that is **never** deleted and never null: it is measured on every path, because the `all-files` fallback genuinely counts a population — just a different one, which is exactly what `scan_scope` exists to name.
+
+**Legal `scan_scope` / `scan_scope_status` pairs** — any other pair is a bug:
+
+| `scan_scope` | `scan_scope_status` | reason | Meaning |
+|---|---|---|---|
+| `tracked` | `fetched` | absent | tracked enumeration, complete |
+| `tracked` | `degraded` | present | tracked enumeration, N members unreachable |
+| `all-files` | `not-run` | present | git absent, root not a work tree, or no tracked files under it |
+| `all-files` | `degraded` | present | git present, `ls-files` failed — the tracked population is UNMEASURED |
 
 ### `first_order` vs. `second_order` vs. `filtered_mirrors_detail`
 
@@ -264,7 +313,7 @@ The CLI detects mirror pairs from a **canonical table** (a faithful shadow of `c
 
 - **Adding new mirror pairs:** Add the pair to BOTH `core/deploy/deploy.sh` Check 9 `MIRROR_PAIRS` and the mirror table in `blast-radius.sh::detect_mirror_pairs` (keep the two in sync — the CLI table is a faithful shadow of the canonical Check 9 array, not an auto-detector). Check 9 enforces byte-identity for the new pair.
 - **Adding new scanned file types:** Edit the `SCANNED_TYPES` array in `blast-radius.sh` and commit per standard release process.
-- **Adding new default exclusions:** Edit the `DEFAULT_EXCLUSIONS` array in `blast-radius.sh`. Prefer operator-passed `--exclude` flags over hardcoded defaults when the exclusion is contextual.
+- **Adding new default exclusions:** Edit the `DEFAULT_EXCLUSIONS` array in `blast-radius.sh`. Prefer operator-passed `--exclude` flags over hardcoded defaults when the exclusion is contextual. **This is no longer the only way a tree leaves the scan.** On a git work tree the CLI enumerates from the index, so a git-ignored tree never becomes a candidate and needs no `DEFAULT_EXCLUSIONS` entry — adding one would be a second home for a fact `.gitignore` already owns. Reserve the array for trees that are tracked but must not count as referrers (mirror copies, packaged artifacts), and note that it still applies to **both** enumeration paths, because `--exclude=GLOB` and the `*.lock` filter must keep working under either scope.
 - **Re-deriving the `--max-expand` default:** the default is set above the largest first-order fan-out in the corpus so it cannot fire on normal targets. Re-derive it when the corpus maximum approaches the current default — a default that starts firing on real targets silently converts complete analyses into partials. Lowering it to bound latency is an operator-visible trade (it truncates second-order expansion on the most-referenced files), not a bug fix.
 - **Changing the traversal or the grep invocation:** `blast-radius.sh --self-test` group T1 asserts the *shape* of `grep_token`'s scan (batched, not one process per file), because the per-file form is a silent performance regression that no output diff would catch. If that function is refactored, keep the assertion pointed at the real invocation rather than relaxing it.
 - **Schema bumps to v2:** Backward-incompatible changes (renaming fields, restructuring arrays) require a 1-release transition window where v1 readers and v2 readers must coexist. Document v1→v2 migration in `blast-radius-protocol-v2-migration.md` at the time of the bump.
@@ -352,7 +401,7 @@ blast-radius.sh --mode=structural [OPTIONS] <old_path>
 
 - `<old_path>` is a **path string to search for**, not a file to resolve. It may be a **directory prefix** (`release/releases/notes` or `release/releases/notes/`), a single file path, or a path that **no longer exists on disk** (it was moved away — the whole point). Unlike the default mode, structural mode does NOT require the target to be an existing regular file and does NOT reject a target under an exclusion (a moved-FROM path under an excluded tree is still a valid query).
 - A directory-prefix input matches any hard-coded reference containing that prefix (via `grep -F` literal-substring match). A trailing slash is normalized off, so `notes/` and `notes` behave identically.
-- The scan runs over the same corpus, `DEFAULT_EXCLUSIONS` (including the `.claude/worktrees/` exclusion), and `SCANNED_TYPES` as the default tracer — it is a NEW query over the SAME scan list, not a new scanner. The default doc-tracer path is untouched.
+- The scan runs over the same corpus, the same enumeration (tracked-file scoping where the root is a git work tree, `find` otherwise), the same `DEFAULT_EXCLUSIONS` (including the `.claude/worktrees/` exclusion) and the same `SCANNED_TYPES` as the default tracer — it is a NEW query over the SAME scan list, not a new scanner. Both modes therefore emit `stats.scan_scope` and `stats.scan_scope_status`, and both are read the same way. The default doc-tracer path is untouched.
 
 ### Output semantics (schema-v1)
 
@@ -362,8 +411,8 @@ The mode emits the full schema-v1 envelope via the shared library, with three fi
 - `first_order[].reference_count` — count of distinct `(file, line)` hits of the old-path literal in that file.
 - `first_order[].matches[]` — up to 5 `{line, snippet}` of the hard-coded references.
 - `first_order[].is_mirror` — **always `false`** (a path sweep has no mirror concept; a deliberate documented constant, exactly as the software domain does).
-- `second_order` / `stats.second_order_count` — **`[]` / `0`** (scoped out): a path-literal consumer sweep is first-order by nature — "who hard-codes this path?" has no transitive depth-2.
-- `stats.total_files_scanned` — the whole doc-corpus denominator (same as the default tracer — it scans the same list).
+- `second_order` / `stats.second_order_status` / `stats.second_order_count` — **`[]`** / **`not-run`** / **ABSENT** (scoped out): a path-literal consumer sweep is first-order by nature — "who hard-codes this path?" has no transitive depth-2. The scope-out is stated **positively** rather than as a zero: the counter is deleted from the emit and `second_order_status_reason` names the mode. A `0` here would have been a not-computed value in a measured value's slot, indistinguishable from a depth-2 run that examined the corpus and found nothing.
+- `stats.total_files_scanned` — the doc-corpus denominator over the population `stats.scan_scope` names (same as the default tracer — it scans the same list, built by the same enumeration).
 
 Because `grep -F` is a literal-substring match, the mode deliberately **over-includes**: it will surface references that legitimately need no update (a path named in a historical comment, an archived plan, a coincidental substring, prose documenting the OLD layout). That is by design — see the update-or-accept workflow below.
 

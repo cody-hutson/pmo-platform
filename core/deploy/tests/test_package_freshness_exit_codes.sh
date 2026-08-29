@@ -120,9 +120,24 @@
 # a detector bug. PF-8 asserts that no `paths:` key has been reintroduced. The
 # predicate is LINE-ANCHORED: a substring test for `paths` would match the word
 # in the workflow's own prose and pass vacuously. And it carries its own
-# sensitivity arm -- the identical predicate is run against a workflow that DOES
-# carry a `paths:` key and must report it PRESENT, because a probe that cannot
-# see a paths: key would report the population clean while asserting nothing.
+# sensitivity arm, because a probe that cannot see a paths: key would report the
+# population clean while asserting nothing.
+#
+# PF-8 NEVER HARDCODES ITS SENSITIVITY FIXTURE. It scans .github/workflows/ and
+# takes the first workflow that CURRENTLY carries a paths:/paths-ignore: key,
+# excluding the gate itself so the control can never be satisfied by the very
+# defect it guards. Naming one exemplar instead silently invalidates the control
+# the day that workflow is legitimately converted -- which is exactly how this
+# arm broke once: it pinned release-link-check.yml, that workflow's two filters
+# were correctly removed, and the arm went red for naming a stale fixture rather
+# than for anything true about the gate. Converting path-filtered workflows is
+# ongoing governed work, so the fixture is derived from live state.
+#
+# The discrimination is established BY THE SCAN: a predicate that matches nothing
+# anywhere yields an empty selection, which is a LOUD FAILURE, never a skip --
+# the same doctrine PF-6 applies to its own derived target. The report arm then
+# re-runs the predicate against the selected path, which guards the selection
+# step itself (a clobbered or mis-quoted candidate) rather than the regex.
 #
 # WHY IT NORMALIZES THE SANDBOX FIRST
 # The contract under test is the verdict->exit MAPPING, not the freshness of the
@@ -521,20 +536,37 @@ fi
 
 # --- PF-8: anti-narrowing floor — the gate workflow declares no `paths:` key ---
 printf '\nPF-8: skill-package-freshness declares no paths: key -> expect ABSENT\n'
-PF8_GATE_WF="${REPO_ROOT}/.github/workflows/skill-package-freshness.yml"
-PF8_SENSITIVITY_WF="${REPO_ROOT}/.github/workflows/release-link-check.yml"
+PF8_WF_DIR="${REPO_ROOT}/.github/workflows"
+PF8_GATE_WF="${PF8_WF_DIR}/skill-package-freshness.yml"
 PF8_PATHS_RE='^[[:space:]]+paths(-ignore)?:'
 
 [ -f "${PF8_GATE_WF}" ] \
   || die_loud "gate workflow missing: .github/workflows/skill-package-freshness.yml"
-[ -f "${PF8_SENSITIVITY_WF}" ] \
-  || die_loud "PF-8 sensitivity arm missing: .github/workflows/release-link-check.yml — without a workflow known to carry a paths: key, the predicate cannot be shown to work and a clean result would be unfalsifiable"
 
+# Derive the sensitivity fixture from live state rather than naming an exemplar:
+# any workflow that currently carries a paths:/paths-ignore: key proves the
+# predicate discriminates. The gate is excluded so that a paths: key reintroduced
+# ON THE GATE can never supply the control that is meant to validate the probe
+# used against it. Deterministic first-match keeps the failure text reproducible.
+PF8_SENSITIVITY_WF=""
+for PF8_CANDIDATE in "${PF8_WF_DIR}"/*.yml "${PF8_WF_DIR}"/*.yaml; do
+  [ -f "${PF8_CANDIDATE}" ] || continue
+  [ "${PF8_CANDIDATE}" = "${PF8_GATE_WF}" ] && continue
+  if grep -qE "${PF8_PATHS_RE}" "${PF8_CANDIDATE}"; then
+    PF8_SENSITIVITY_WF="${PF8_CANDIDATE}"
+    break
+  fi
+done
+
+[ -n "${PF8_SENSITIVITY_WF}" ] \
+  || die_loud "PF-8 sensitivity arm has no fixture: no workflow under .github/workflows/ other than the gate itself carries a paths:/paths-ignore: key — without one the predicate cannot be shown to discriminate, so a clean result on the gate would be unfalsifiable. If every path filter has been legitimately removed, this arm needs a purpose-built fixture, not a weakened assertion."
+
+PF8_SENSITIVITY_REL="${PF8_SENSITIVITY_WF#${REPO_ROOT}/}"
 if grep -qE "${PF8_PATHS_RE}" "${PF8_SENSITIVITY_WF}"; then
-  report "PF-8 sensitivity: the anchored paths: predicate sees a key where one exists" 1
+  report "PF-8 sensitivity: the anchored paths: predicate sees a key where one exists (fixture: ${PF8_SENSITIVITY_REL})" 1
 else
-  report "PF-8 sensitivity: the anchored paths: predicate sees a key where one exists" 0 \
-    "release-link-check.yml carries a paths: key and the predicate did not see it — PF-8 is a BROKEN PROBE, not a clean population"
+  report "PF-8 sensitivity: the anchored paths: predicate sees a key where one exists (fixture: ${PF8_SENSITIVITY_REL})" 0 \
+    "${PF8_SENSITIVITY_REL} was selected BY the paths: predicate and then did not satisfy it — the selection step is broken, so PF-8 is a BROKEN PROBE, not a clean population"
 fi
 
 if grep -qE "${PF8_PATHS_RE}" "${PF8_GATE_WF}"; then

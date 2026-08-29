@@ -1,29 +1,63 @@
 name: Release link check
 
-# gate-efficacy: posture=advisory  enforcement=path-filtered  skip-semantics=absent-is-pass
+# gate-efficacy: posture=advisory  enforcement=ci-enforce  always-reports=yes
 #   invariant: every intra-repo link in release/**/*.md resolves — asserted by
-#              check-release-links.py over the changed release corpus.
-#   falsification: on a PR that touches release/**/*.md, add "[x](missing.md)" ->
-#                  this gate fails; add a "../"-relative link to a plan directly in
-#                  release/releases/plans/ -> the depth-invariance step fails; on a
-#                  PR touching no release path it is skipped and absence is treated
-#                  as pass (never blocks required-but-absent).
+#              check-release-links.py over the WHOLE release corpus on every pull
+#              request (the bare invocation is a full --roots release walk, not a
+#              changed-file delta).
+#   falsification: add "[x](missing.md)" to any file under release/ -> this gate
+#                  fails; add a "../"-relative link to a plan directly in
+#                  release/releases/plans/ -> the depth-invariance step fails; DELETE
+#                  OR RENAME A FILE ANYWHERE IN THE REPO that a release/ document
+#                  links to -> this gate fails, which is the case the previous
+#                  release/**-scoped filter could not see and which no other
+#                  filter-free workflow covers.
 #   invariant (2): every intra-repo link in a pre-claim release plan is written
 #              workspace-rooted, so it survives the ADR-092 claim-time rename.
-# Path-filtered (paths: release/**), so it is ADVISORY by skip-semantics: GitHub may
-# report it absent on an unrelated PR, and absence MUST NOT block. (Per gate-efficacy-standard.md (b).)
+#
+# NO PATH FILTER, BY DESIGN — the reason is TARGET RESOLUTION, and it is a property of
+# the engine rather than a preference.
+#
+# check-release-links.py walks release/ for link SOURCES but resolves every target
+# against REPO_ROOT. Its verdict-input surface is therefore every tracked file
+# ANYWHERE that the release corpus links to — a set no roster over release/** can
+# enumerate, because it is the whole repository minus whatever happens to be
+# unreferenced today. Under the previous roster, deleting or renaming a file under
+# core/ broke an inbound link from release/ and this gate did not run; skip-semantics
+# turned that miss into a reported pass.
+#
+# THE TWO SIBLING GATES DO NOT CLOSE IT, and the union had an exact hole. The
+# Dead-file-reference gate in repo-integrity.yml is filter-free and is a live required
+# context, but it scans the CHANGED DELTA — it cannot see an unchanged referencing
+# file, which is precisely this case. link-check.yml is filter-free and whole-corpus
+# but DELIBERATELY EXCLUDES release/releases/ (core/deploy/allowlists/
+# doc-link-target-paths.txt, under its DELIBERATELY EXCLUDED heading) on the recorded
+# ground that this workflow already walks it — true only on the pull requests where
+# this workflow ran. This conversion is what makes that recorded ground true
+# unconditionally.
+#
+# COST, MEASURED NOT ESTIMATED: 0.32 s real over the release corpus, on one ubuntu
+# runner. The platform has already accepted this same cost for the LARGER corpus —
+# link-check.yml's own header states it runs on EVERY pull request with no paths
+# filter so the status check always reports a result.
+#
+# SCOPE BOUNDARY, stated because an engine CAPABILITY is easy to mistake for a verdict
+# INPUT: check-release-links.py can resolve heading anchors inside a target file, but
+# only behind --check-anchors, which its own help text marks "Default OFF" and which
+# this workflow's three run: steps do not pass — 0 occurrences in this file, measured
+# against a control of 6 for the tool's own name. A heading RENAME is therefore NOT in
+# this gate's verdict scope under the invocation it actually uses. Enabling anchor
+# coverage is a separate decision, not an implication of this conversion.
+# (Per core/standards/gate-efficacy-standard.md (b) and § Verdict-Input Closure.)
 
 on:
+  # NO paths: key on EITHER event — deliberate, not an omission. See NO PATH FILTER,
+  # BY DESIGN above. The event/types shape is the tree's established filter-free form
+  # (link-check.yml, skill-package-freshness.yml, skill-registry-currency-check.yml).
   pull_request:
-    paths:
-      - 'release/**/*.md'
-      - 'release/tools/check-release-links.py'
-      - '.github/workflows/release-link-check.yml'
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
-    paths:
-      - 'release/**/*.md'
-      - 'release/tools/check-release-links.py'
 
 permissions:
   contents: read

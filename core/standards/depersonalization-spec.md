@@ -32,6 +32,7 @@ The token vocabulary is:
 | Token | Resolves to | Source-of-truth | Used in |
 |---|---|---|---|
 | `[OPERATOR_NAME]` | Workspace owner's full name | `/CLAUDE.md § Workspace Owner` | Doc prose, frontmatter `owner:`, signature blocks |
+| `[OPERATOR_FIRST_NAME]` | Workspace owner's first name — **derived, never stored** (first whitespace-separated word of `[OPERATOR_NAME]`) | Derived at compose time by `core/deploy/compose.py`; there is no `operator.toml` field and none should be added | `core/CLAUDE.md.template` prose (second-person-familiar address) |
 | `[OPERATOR_ROLE_TITLE]` | Workspace owner's role title | `/CLAUDE.md § Workspace Owner` | Signature blocks, person-role-tied prose |
 | `[OPERATOR_ORGANIZATION]` | Workspace owner's organization | `/CLAUDE.md § Workspace Owner` | Doc prose where org name appears |
 | `[OPERATOR_EMAIL]` | Workspace owner's email | `/CLAUDE.md § Workspace Owner` | Signature blocks, contact-line prose |
@@ -85,6 +86,26 @@ The `[trackers.<id>]` subtables in `operator.toml` (`platform` / `identifier` / 
 
 The scope-segregation guardrail ([`core/hooks/block-scope-segregation.sh`](../hooks/block-scope-segregation.sh)) reuses this spec's PII-needle substrate — the same gitignored localized-context needle file that `git-pre-commit-pii.sh` consumes (resolved by `lib-instance-path.sh` `pmo_localized_needles`). Per the scope-segregation A6.5 design review (**CD-4**), that operator-fillable surface is **extended beyond operator-identity to private-PROJECT content**: the `localized-context-needles.txt.example` template now carries a **client / project-code / internal-system needle class** alongside the coworker/org class. The **coverage boundary** is explicit and does not over-claim: public-destination filing is guarded for operator-identity PII (home-path / phone / personal-email) unconditionally, and for private-project content **only to the extent the operator has declared those needles** — undeclared private-project prose is caught by the CD-1 routing fail-closed (never route a private-scope project to a public destination), not by content-scan. This boundary is the depersonalization-side statement of the same residual recorded in [`ADR-091`](../ADRs/ADR-091-scope-segregation-action-gating-hook.md) and the taxonomy scope section.
 
+### §1.5 Declared scope of the conformance gate
+
+The conformance gate over this vocabulary is `core/deploy/deploy.sh` Check 44. Its scope is declared here so the registry and the gate cannot drift apart again — the gate reached one prefix, one file extension and three roots of its own declared subject until the scope below was stated.
+
+| Axis | What the gate enumerates |
+|---|---|
+| Prefix | **Derived at runtime** from the registry tables, never hardcoded. Every prefix appearing in a §1, §1.1 or §4 table row is in scope; a prefix appearing in no table row is out of reach by construction, and that bound shrinks as the registry grows. |
+| Delimiter | **Both families** — square and angle. Each is matched by its own extraction, so neither family shares the other's blind spot. |
+| Registry extraction | **Table-scoped** — only the first cell of a markdown table row registers, per §1.3's "the §1 and §1.1 tables are the closed registered set". Prose mentions, including §4's schema metavariable, do not register. |
+| File scope | **Every tracked file**, enumerated from the git index. No extension allowlist and no root list, so `.md.template`, `.toml.template`, `.sh`, `.json` and the `docs/` tree are all in scope. |
+| Exclusions | `release/releases/` (release-corpus / ledger surface), and any line carrying the `depersonalization-token: allow` marker. |
+| Degradation | When the root is not a git work tree the enumeration cannot run, and the gate withholds its verdict rather than reporting a narrowed scan as clean. |
+
+**The two families carry different verdict semantics, and the gate is family-aware.** This is the load-bearing half of the declaration:
+
+- **Square `[TOKEN]` — closed, and gating.** §1.3 makes the §1 and §1.1 tables the closed registered set, so a square token in tracked corpus whose name carries no table row is a finding.
+- **Angle `<TOKEN>` — open, and reported but not gated.** §4's Convention scope states that un-codified angle tokens inherit the resolution-rule convention and that codification is incremental. An un-codified angle token is therefore **sanctioned by this spec**, and a gate that failed on it would fail correct work. The gate emits a live-derived inventory of them through a structurally non-escalating channel instead.
+
+§4's one gateable obligation — that a **newly authored** angle token carries a table row in the same change — is a property of a diff, not of a working tree. It is not enforced at deploy time, and this spec does not claim otherwise; a stored list of tolerated tokens was considered for that job and rejected, because such a list is editable by the very change it would gate.
+
 ---
 
 ## §2 Parameterization seam location
@@ -127,9 +148,11 @@ A parallel-but-distinct angle-bracket convention exists for paths to operator-in
 
 **Why a separate vocabulary:** Identity tokens (`[OPERATOR_*]`) substitute *values* (operator name, GitHub handle, email). Operator-instance path tokens substitute *paths to artifacts* (release log, hub-state runtime, projects directory). They share the parameterization-seam principle but have different read-sources, different resolution rules, and different consumers — keeping them in separate vocabularies prevents collision and surfaces the semantic distinction at authoring time.
 
-**Resolution rule:** Each `<OPERATOR_INSTANCE_X_PATH>` resolves to either (a) the explicit operator.toml `[paths]` override if set, or (b) the canonical default below. The angle-bracket form renders as-is in markdown documentation; resolution happens in code (deploy.sh, hooks, hub) that reads the operator config.
+**Resolution rule:** Each `<OPERATOR_INSTANCE_X_PATH>` resolves to either (a) the explicit operator.toml `[paths]` override if set, or (b) the canonical default below. The angle-bracket form renders as-is in markdown documentation; resolution happens in code (deploy.sh, hooks, hub) that reads the operator config. <!-- depersonalization-token: allow — the X is a schema metavariable standing for any token stem, not a token -->
 
-**Canonical defaults:** All operator-instance paths default to subpaths under `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/`, which is `.gitignored` per the public-repo discipline. The default suffix follows the token stem — `<OPERATOR_INSTANCE_X_PATH>` defaults to `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/<x>/`. Exceptions to this rule (e.g., `<OPERATOR_INSTANCE_CLAUDE_DIR>` → `${CLAUDE_WORKSPACE_ROOT}/.claude`) are documented in the vocabulary table.
+**The `X` in the two lines below is a schema metavariable, not a token.** Both lines carry the `depersonalization-token: allow` marker for that reason: the conformance gate's registry read is table-scoped, so the metavariable never registers, and without the marker its literal prose occurrences would surface in the gate's un-codified inventory as though a token by that name existed.
+
+**Canonical defaults:** All operator-instance paths default to subpaths under `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/`, which is `.gitignored` per the public-repo discipline. The default suffix follows the token stem — `<OPERATOR_INSTANCE_X_PATH>` defaults to `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/<x>/`. Exceptions to this rule (e.g., `<OPERATOR_INSTANCE_CLAUDE_DIR>` → `${CLAUDE_WORKSPACE_ROOT}/.claude`) are documented in the vocabulary table. <!-- depersonalization-token: allow — schema metavariable plus one illustrative exception, both prose not rows -->
 
 **Why the home sits at the workspace root, not inside `personal/`:** this family is platform-written *runtime state*, and it is a first-class sibling of the other non-repo workspace members rather than a tenant of the operator's own area. `personal/` is operator-owned: the platform neither homes runtime state there nor creates it for that purpose. The distinction that decides placement is authored content versus machine-written state — the same cut applied when the roadmaps instance moved. The single resolver in `core/deploy/lib-instance-path.sh` is the only site that spells this leaf; every consumer calls it rather than inlining a default, so a future relocation is one edit and not a corpus sweep.
 

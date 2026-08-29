@@ -20,6 +20,27 @@ name: Release-corpus completeness (pre-merge Stage-13 corpus gate)
 # before enforce. Flips when the committed .github/release-corpus-completeness.enforce
 # token -> `enforce` AND the job is added to required_status_checks (branch protection,
 # out-of-tree — R3).
+#
+# GRADUATION CLAUSE — THE FLIP ALSO REQUIRES DELETING THE paths: FILTER BELOW, and
+# that third step is not optional. A path-filtered context registered in branch
+# protection leaves every non-matching PR permanently PENDING, so the two steps above
+# cannot by themselves deliver the enforcement this header declares: always-reports is
+# a PREREQUISITE of a required posture, not a later optimization. Stated here because
+# a graduation clause naming only the sentinel and the registration is incomplete, and
+# whoever performs the flip reads this clause rather than the standard.
+# (Per core/standards/gate-efficacy-standard.md § Verdict-Input Closure.)
+#
+# VIC CLOSURE BASIS — this filter IS a legitimate cost control, and that is a
+# MEASUREMENT rather than an assumption. Check 32's _c32_compute_verdict reads
+# RELEASE_LOG.md, RELEASE_INDEX.md, RELEASE_DIGEST.md and release/releases/notes/ —
+# all four under release/releases/**, already rostered — plus the deploy.sh engine and
+# the .enforce sentinel, both rostered. Its remaining inputs (`gh release view`, git
+# tags) are NETWORK state, which no paths: filter can carry by construction. The
+# residual verdict-input set outside this roster is therefore EMPTY: unlike its
+# siblings this gate needs no roster widening, which is why its disposition is
+# declaration-only. That is a point-in-time closure and it comes with an obligation:
+# ANY widening of Check 32's input set obliges a matching roster widening in the SAME
+# COMMIT, or this closure basis becomes a false statement.
 # (Per core/standards/gate-efficacy-standard.md (b)/(b'); warn-mode-initial per
 # core/rules/git-workflow.md § Repository-Integrity Gates.)
 #

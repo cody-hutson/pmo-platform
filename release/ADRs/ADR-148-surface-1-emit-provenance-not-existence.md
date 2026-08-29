@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-148 — A backstop records its pre-mutation observation as a witness token, and the downstream check asks provenance rather than existence
-status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
+status: Accepted — ratified by the operator at the v4.40 release close gate (2026-08-28). The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
 date: 2026-08-24
 release: pipeline-spec-self-consistency
 deciders: "Workspace owner (Surface-1 ownership ruled 2026-08-15 at the release-hub Mode R milestone-readiness pre-flight for milestone 350: Stage 12 Phase B5.5 owns the emit). Design decisions D-1 and D-2 rendered at Stage 5 Solutioning for the Surface-1 emit-provenance card and accepted by the hub at Procedure 4."
@@ -21,7 +21,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the release close gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
+**Accepted** — ratified by the operator at the v4.40 release close gate (2026-08-28). The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
 
 **Numbering.** `142` is the mainline anchor plus one, re-derived against `origin/main` at Engineering time across **both** ADR directories via `release/tools/renumber-adr.py --next-free`, immediately before this file was authored. The union of the two directories reaches `ADR-141` on the mainline with zero gaps and zero duplicates over a denominator of 141 numbered records. The number was deliberately **not** allocated at design time: the oracle is a *read*, not a reservation, so three Stage-5 spokes in this release independently resolved the same `142`. A duplicate is mechanically renumberable by the same tool at merge time; a **gap blocks the repo**, because the next release's `anchor + 1` lands under a hole. That asymmetry is why allocation happens here and never reserves high.
 

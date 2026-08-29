@@ -276,6 +276,26 @@ on:
       # sentinel exists to close. Same residual-path-filter reasoning as the CIAC-3
       # and selftest-discovery entries above, and closed here rather than deferred.
       - '.github/corpus-home-tolerance.arming'
+      # VIC engine member — THE LAST RESIDUAL PATH-FILTER GAP IN THIS ROSTER, and the
+      # one this workflow had already ADMITTED rather than closed (see the note above
+      # the release/tools/tests/ steps below). Three suites this workflow invokes read
+      # deploy.sh as their SUBJECT: automated-closeout.sh (42 references),
+      # tests/test_structural_blast_radius.sh (4) and tests/test_verify_release_plan.sh
+      # (5), all measured at the commit that added this line against a control that
+      # returned 0. A deploy.sh edit therefore changes what this job asserts while —
+      # until this line — not triggering it, which is exactly the trigger-vs-verdict
+      # disagreement the CIAC-3, selftest-discovery and R8 entries above each close for
+      # their own inputs. Closed here on the same reasoning rather than worked around a
+      # fourth time.
+      #
+      # COST, STATED NOT HIDDEN: deploy.sh is among the most frequently edited files in
+      # the tree, so this workflow's three jobs — one of them macOS — now run on those
+      # pull requests too. That is the largest single cost consequence of the
+      # disposition sweep that added this line, and it belongs to a roster widening
+      # rather than to a conversion. It is accepted deliberately: the alternative was
+      # converting a 3-job workflow to filter-free to close a ONE-FILE gap that one
+      # roster line closes completely.
+      - 'core/deploy/deploy.sh'
   push:
     branches: [main]
     paths:
@@ -304,6 +324,8 @@ on:
       - '.github/workflows/repo-integrity.yml'
       # R8 arming-declaration input — see the pull_request block above.
       - '.github/corpus-home-tolerance.arming'
+      # VIC engine member — see the pull_request block above.
+      - 'core/deploy/deploy.sh'
 
 permissions:
   contents: read
@@ -732,8 +754,15 @@ jobs:
       # A suite nothing exercises is indistinguishable in the artifact from a passing
       # one, which is the same failure the precision-probe steps above exist to rule
       # out. (A sixth suite in the same class, core/deploy/tools/tests/
-      # test-status-label-invariant.sh, is wired in install-tests.yml instead — its
-      # subject is deploy.sh, which THIS workflow's paths: filter does not list.)
+      # test-status-label-invariant.sh, is wired in install-tests.yml instead. That
+      # placement STANDS, but ONE of the two grounds originally given for it no longer
+      # holds and is corrected here rather than left to read as current: the trigger
+      # ground — "its subject is deploy.sh, which THIS workflow's paths: filter does
+      # not list" — was retired when core/deploy/deploy.sh was added to both rosters
+      # above, so this workflow now does fire on a deploy.sh edit. What still decides
+      # the placement is GENRE: install-tests.yml's shell-tests job is the established
+      # home for deploy.sh check-fixture suites, and "close-out automation smoke" is
+      # not. The suite is NOT moved; only the stale half of its rationale is removed.)
       #
       # ONE STEP PER SUITE, deliberately. A single grouped `run:` block would stop at
       # the first failure under `set -e` (leaving the remaining suites unrun on that
