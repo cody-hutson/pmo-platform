@@ -115,6 +115,15 @@ from _frontmatter import read_frontmatter, _strip_quotes  # noqa: E402
 # `type:` field.
 ROLLUP_ENTITY_TYPE = "Project Rollup (composed)"
 
+# The rollup's JOIN KEY to its Project record (contract §2; project-schema.md
+# § Project-identity resolution rule). It is READ and VALIDATED, never defaulted:
+# an absent or empty `project_id` is contract drift (-> exit 1), not a value to be
+# synthesized. The `id:` frontmatter key is NOT a fallback for it -- the shipped
+# template stamps `id: {{PROJECT_ID}}-rollup`, so falling back to `id` yields a
+# WRONG join key rather than a missing one, and the rel-path fallback below it
+# yielded a filename. Both fallbacks are removed; see read_rollup().
+JOIN_KEY_FIELD = "project_id"
+
 # The 7 contract fields (§2). Two scalars + five structured (3 lists + 2 objects).
 SCALAR_FIELDS = ("status", "last_published")
 LIST_FIELDS = ("top_risks", "key_dependencies", "cross_project_conflicts")
@@ -377,9 +386,17 @@ def read_rollup(doc_path: Path, root: Path) -> Rollup:
         raise ContractDrift(f"{rel}: no frontmatter block")
     structured = parse_structured_fields(_frontmatter_body(doc_path),
                                           LIST_FIELDS + OBJECT_FIELDS)
-    project_id = scalars.get("project_id") or scalars.get("id") or rel
     drift: list = []
     fields: dict = {}
+
+    # `project_id` is the rollup's JOIN KEY to its Project record (contract §2;
+    # project-schema.md § Project-identity resolution rule). Validated, never
+    # defaulted: the former `or scalars.get("id") or rel` fallback resolved to
+    # `<slug>-rollup` (the template's own `id:`) -- a WRONG key, not a missing one.
+    project_id = (scalars.get(JOIN_KEY_FIELD) or "").strip()
+    if not project_id:
+        drift.append("project_id absent or empty — the rollup's join key to its "
+                     "Project record (contract §2); no fallback is applied")
 
     # --- scalars ---
     rag = (scalars.get("status") or "").strip().lower()
@@ -443,7 +460,7 @@ def read_rollup(doc_path: Path, root: Path) -> Rollup:
             drift.append(f"capacity_signal.utilization={cs['utilization']!r} is not a float")
 
     if drift:
-        raise ContractDrift(f"{rel} (project {project_id}): " + "; ".join(drift))
+        raise ContractDrift(f"{rel} (project {project_id or '<unset>'}): " + "; ".join(drift))
     return Rollup(project_id, rel, fields)
 
 
@@ -802,6 +819,10 @@ def run_self_test() -> int:
                      does not — proving the anchor discriminates.
       (exit-sep)     a clean compose with [STALE] present is exit 0 (NOT a finding).
       (drift)        a type-violating field raises ContractDrift (-> exit 1 halt).
+      (join-key)     an ABSENT project_id raises ContractDrift (-> exit 1) instead of
+                     silently resolving a fallback. The removed `or scalars.get("id")`
+                     chain resolved the template's own `id: <slug>-rollup`, i.e. a
+                     WRONG join key, and composed exit 0. This case fails pre-fix.
       ([DRIFT] render) a risk-bearing row missing an owner/mitigation renders the
                      inline `[DRIFT: incomplete risk record]` repair flag and STILL
                      composes (exit 0) — the soft path, distinct from the hard halt.
@@ -877,6 +898,27 @@ def run_self_test() -> int:
         if rc_drift != 1:
             failures.append(f"(drift) type violation returned exit {rc_drift}, expected 1")
 
+        # (join-key) an absent project_id is contract drift, NOT a silent fallback.
+        # Pre-fix, the `or scalars.get("id")` chain resolved `<slug>-rollup` — a WRONG
+        # join key — and composed exit 0. This case fails on the pre-fix tree.
+        jk_root = Path(td) / "joinkey"
+        shutil.copytree(fixture, jk_root)
+        victim3 = discover_rollups(jk_root)[0]
+        txt3 = victim3.read_text(encoding="utf-8")
+        victim3.write_text("\n".join(l for l in txt3.split("\n")
+                                     if not l.startswith("project_id:")), encoding="utf-8")
+        try:
+            ids = [read_rollup(p, jk_root).project_id for p in discover_rollups(jk_root)]
+            failures.append(f"(join-key) an absent project_id did NOT raise "
+                            f"ContractDrift; resolved keys = {ids}")
+        except ContractDrift as e:
+            if "project_id" not in str(e):
+                failures.append(f"(join-key) ContractDrift raised but does not "
+                                f"name project_id: {e}")
+        rc_jk = _quiet_main(["--root", str(jk_root), "--as-of", as_of.isoformat()])
+        if rc_jk != 1:
+            failures.append(f"(join-key) absent project_id returned exit {rc_jk}, expected 1")
+
         # ([DRIFT] render) a risk-bearing row (RAID / XRC) missing an owner is a SOFT
         # incompleteness — it renders the S6 `[DRIFT: incomplete risk record]` repair
         # flag INLINE and STILL composes (exit 0), distinct from the hard type-drift
@@ -907,7 +949,7 @@ def run_self_test() -> int:
         return 1
     print("compose-portfolio self-test OK "
           "(idempotency byte-identical / S1-S8+meta rendered / staleness discriminates / "
-          "exit-0-with-[STALE] / drift->exit-1 / projects-guard)")
+          "exit-0-with-[STALE] / drift->exit-1 / join-key->exit-1 / projects-guard)")
     return 0
 
 
