@@ -132,18 +132,34 @@ FORCE_ALL=false
 # consumer reads the symbol, never a copy of the number. The two are coupled,
 # and the coupling is the point:
 #
-#   INVARIANT:  WARN_LOG_RETENTION_DAYS >= SKILL_SUITE_GATE_ESCALATE_DAYS
+#   INVARIANT:  WARN_LOG_RETENTION_DAYS >= GATE_ROLLOUT_ESCALATE_DAYS
 #
 # The escalation horizon is when the deadline arm FORCES the decision that reads
-# the drain. A retention ceiling below it discards the rows that decision is
+# the drain. A retention ceiling below it would discard the rows that decision is
 # about to read — a rotation policy that fixes log growth by breaking the
-# graduation it was meant to enable. Records dropped at a rotation boundary are
-# IRREVERSIBLE; verify this relation BEFORE the first rotation runs, not after.
+# graduation it was meant to enable.
 #
-# WARN_LOG_RETENTION_DAYS's VALUE belongs to the warn-log lifecycle card, not to
-# this one. The value below is the FLOOR this rollout requires, so a larger
-# ceiling needs no edit here; a smaller one breaks the invariant and the two
-# changes must reconcile before either merges.
+# THE INVARIANT IS HELD BY DERIVATION, NOT BY TWO HAND-MAINTAINED NUMBERS.
+# WARN_LOG_RETENTION_DAYS is assigned FROM the floor symbol below rather than
+# from a literal, so no edit can put the two out of order and no runtime
+# assertion is owed. That is deliberate: the previous shape declared a number
+# that nothing read and nothing enforced — a declaration with no firing surface,
+# which is the exact defect class this release exists to close.
+#
+# WHAT THE RETENTION WINDOW ACTUALLY IS. It is a declared LOWER BOUND that the
+# implementation exceeds without limit, NOT a disposition clock. The warn-log
+# lifecycle bounds the HOT FILE by relocating it whole into a numbered
+# same-directory segment; nothing is ever discarded, so effective retention is
+# permanent and no age-out path exists for a warn record. Nothing in this script
+# deletes a warn-log byte, and a reader must not infer from the day count that
+# something does.
+#
+# THEREFORE A ROTATION BOUNDARY IS RECOVERABLE, NOT IRREVERSIBLE. The boundary is
+# a rename: an in-flight append follows the INODE into the segment, and the whole
+# family is reconstituted by `cat`-ing warn_log_segment_set() in order. The
+# rotation change is MODERATE / HIGH, and the earlier IRREVERSIBLE reading —
+# written here when a DISCARDING rotation was still the expected design — is
+# superseded rather than merely qualified.
 #
 # WHY `readonly` IN A TRACKED SCRIPT AND NOT OPERATOR CONFIG. The deadline arm's
 # whole purpose is to be repo-derivable — evaluable in CI and in a fresh clone,
@@ -171,11 +187,35 @@ FORCE_ALL=false
 # edited line IS the audit record. Advance is an operator decision, never
 # auto-promoted by row count (core/standards/progressive-rollout-convention.md
 # owns the ladder and this phase enum).
-readonly WARN_LOG_RETENTION_DAYS=90          # owner: warn-log lifecycle card
+#
+# The warn-log lifecycle decision this block's WARN_LOG_* half implements — why
+# the hot file is bounded by relocation rather than by discard, and where the
+# 16 MiB magnitude comes from — is recorded in
+# core/ADRs/ADR-165-bounded-by-relocation-not-by-discard.md.
+#
+# WHERE THE FUNCTIONS LIVE, AND WHY THEY ARE NOT HERE. The two warn-log helpers
+# — warn_log_segment_set() (the drain's ONLY read surface) and warn_log_path()
+# (the rotating choke point both writer variables assign from) — are defined
+# immediately after lib-instance-path.sh is sourced further down, because both
+# call pmo_instance_path() and that resolver does not exist until that line.
+# Only the CONSTANTS are declared here, which is what keeps this the single
+# declaration site.
 readonly SKILL_SUITE_GATE_PHASE="warn"       # shadow|warn|enforce
 readonly SKILL_SUITE_GATE_ARMED="2026-08-29"
 readonly SKILL_SUITE_GATE_REVIEW_DAYS=60
-readonly SKILL_SUITE_GATE_ESCALATE_DAYS=90
+readonly GATE_ROLLOUT_ESCALATE_DAYS=90
+# Basename of the whole warn-log family — the hot file and every segment share
+# it. Stated once so a consumer pattern cannot drift from the writer's spelling.
+readonly WARN_LOG_BASENAME="deploy-check-warn-log"
+# 16 MiB. The rule SHAPE is byte-denominated and the retained segment count is an
+# OUTPUT of the rule, never an input — adopted from the shipped precedent this
+# extends (release/tools/sweep-release-corpus.py, read by Check 65). The
+# MAGNITUDE is set from the measured append rate so rotation fires on roughly a
+# fortnightly cadence, and above the worst observed single day so even a peak day
+# rotates at most once. Derivation and its measurements: see the ADR named above.
+readonly WARN_LOG_HOT_BUDGET_BYTES=16777216
+# Assigned FROM the floor symbol, never from a literal — see the invariant above.
+readonly WARN_LOG_RETENTION_DAYS=$GATE_ROLLOUT_ESCALATE_DAYS
 
 # ─── Governance-audit tracker repo ──────────────────────────────────────────
 # Checks 14/15/21/22 (+ their --report reruns) query the issue tracker for
@@ -215,6 +255,122 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib-instance-path.sh"
 # script's own dir so it resolves regardless of the caller's cwd.
 # shellcheck source=lib-template-sync-source.sh disable=SC1091
 source "$(dirname "${BASH_SOURCE[0]}")/lib-template-sync-source.sh"
+
+# ─── Warn-log family: the read surface and the bounded-append choke point ────
+# The constants these two read, and the invariant binding them to the
+# gate-rollout deadline, are declared ONCE at the single declaration site above.
+# The FUNCTIONS live here because both call pmo_instance_path(), which the
+# lib-instance-path.sh source line above defines; keeping the call adjacent to
+# its resolver is what makes the ordering readable instead of load-bearing by
+# accident.
+
+# Echo the whole warn-log family, oldest -> newest, one absolute path per line:
+#
+#   <instance>/deploy-check-warn-log.00000.jsonl   <- oldest segment
+#   ...
+#   <instance>/deploy-check-warn-log.NNNNN.jsonl
+#   <instance>/deploy-check-warn-log.jsonl         <- hot file, ALWAYS last
+#
+# EVERY DRAIN MUST READ THROUGH HERE AND MUST NOT OPEN THE HOT PATH DIRECTLY.
+# That is a correctness rule, not a style one: after the first rotation a
+# hot-only read returns a PLAUSIBLE WRONG ANSWER rather than an error, because
+# the rows it is counting have moved into a segment. ADR-106 measured exactly
+# that failure on the release ledger — a control returning 2 against a true
+# population-wide count of 10, because an archival sweep had moved 8 rows into
+# segments. A drain that under-counts this way reports "drain drained" when the
+# log has merely rotated, which arms a gate on evidence nobody reviewed.
+#
+# SEGMENT KEY: a zero-padded 5-digit monotonic sequence, so lexical order EQUALS
+# numeric order and a plain glob sorts correctly without `sort -n` (whose
+# interaction with `comm` produces silently wrong set differences on this host).
+# Residual, stated rather than left to be discovered: at 100,000 segments the
+# lexical-equals-numeric property breaks. At the measured append rate that is
+# roughly 26-52 segments a year.
+#
+# CONSUMER PATTERNS MUST ADMIT DIGITS. Segment filenames carry digits, and a
+# character class of [a-z-] is blind to every one of them. Any pattern written
+# against this family uses a digit-admitting class.
+#
+# Only files that EXIST are echoed, so a fresh instance with no log emits
+# nothing and a consumer's read loop is a clean no-op rather than an error.
+warn_log_segment_set() {
+  local _wl_dir _wl_seg _wl_hot
+  _wl_dir="$(pmo_instance_path)"
+  for _wl_seg in "${_wl_dir}/${WARN_LOG_BASENAME}".[0-9][0-9][0-9][0-9][0-9].jsonl; do
+    if [[ -f "$_wl_seg" ]]; then printf '%s\n' "$_wl_seg"; fi
+  done
+  _wl_hot="${_wl_dir}/${WARN_LOG_BASENAME}.jsonl"
+  if [[ -f "$_wl_hot" ]]; then printf '%s\n' "$_wl_hot"; fi
+  return 0
+}
+
+# Echo the hot warn-log path, rotating it FIRST if it is over budget. Both
+# writer variables in cmd_check assign from here, so all 12 append sites are
+# bounded by one choke point and none of them changed.
+#
+# ROTATION IS A MOVE, NEVER A DELETION. The hot file is renamed whole into the
+# next numbered segment in the SAME directory. Nothing is discarded; retention
+# is permanent. Four properties carry that, and each is load-bearing:
+#
+#   1. `mv` within one directory is atomic and CANNOT LOSE A RECORD. An append
+#      whose file descriptor is already open follows the INODE into the segment;
+#      the next `>>` re-opens by path and creates a fresh hot file.
+#      Copy-then-truncate has a window in which appended records are destroyed.
+#      This is the single property that makes the boundary recoverable by `cat`
+#      — and therefore the property that makes this change MODERATE rather than
+#      IRREVERSIBLE.
+#   2. Idempotent with NO process-global flag. This runs inside `$(...)`, i.e. a
+#      SUBSHELL, so an "already rotated this run" variable would not propagate to
+#      the parent and a flag-based guard would be silently broken. None is
+#      needed: after the mv the hot file is absent, the size test fails, and a
+#      second call is a natural no-op.
+#   3. Concurrency-safe by the same property. Two concurrent runs may both
+#      observe over-budget; one mv wins and the other fails on a missing source.
+#      No record is lost in either ordering.
+#   4. No headroom/hysteresis constant, and the divergence from the precedent is
+#      reasoned rather than careless. sweep-release-corpus.py needs a floor
+#      because it moves PART of a file and would otherwise re-breach on the next
+#      append. This moves the WHOLE file, so post-rotation size is 0 by
+#      construction and hysteresis is structurally unnecessary.
+#
+# THE FAILURE NOTICE GOES TO STDERR, DELIBERATELY. This function is consumed via
+# command substitution, so anything written to stdout is captured into the
+# caller's variable — a stdout emit would corrupt the very path it is warning
+# about. The notice does not touch ISSUES on any path, so `--check --strict`
+# cannot newly exit 1 because of it: the aggregate is computed solely from the
+# ISSUES counter.
+warn_log_path() {
+  local _wl_dir _wl_hot _wl_bytes _wl_seg _wl_last _wl_idx _wl_next
+  _wl_dir="$(pmo_instance_path)"
+  _wl_hot="${_wl_dir}/${WARN_LOG_BASENAME}.jsonl"
+  if [[ -f "$_wl_hot" ]]; then
+    _wl_bytes="$(/usr/bin/wc -c < "$_wl_hot" 2>/dev/null | /usr/bin/tr -d '[:space:]' || printf '')"
+    if [[ -n "$_wl_bytes" && "$_wl_bytes" -gt "$WARN_LOG_HOT_BUDGET_BYTES" ]]; then
+      # Highest existing index + 1. Lexical order equals numeric order (see the
+      # zero-padding note above), so the LAST matching glob entry is the highest.
+      _wl_last=""
+      for _wl_seg in "${_wl_dir}/${WARN_LOG_BASENAME}".[0-9][0-9][0-9][0-9][0-9].jsonl; do
+        if [[ -f "$_wl_seg" ]]; then _wl_last="$_wl_seg"; fi
+      done
+      if [[ -z "$_wl_last" ]]; then
+        _wl_idx=0
+      else
+        _wl_last="${_wl_last##*/}"
+        _wl_last="${_wl_last#"${WARN_LOG_BASENAME}."}"
+        _wl_last="${_wl_last%.jsonl}"
+        # 10# forces base 10 — without it a zero-padded 00008 parses as octal.
+        _wl_idx=$((10#${_wl_last} + 1))
+      fi
+      _wl_next="$(printf '%s/%s.%05d.jsonl' "$_wl_dir" "$WARN_LOG_BASENAME" "$_wl_idx")"
+      if ! mv "$_wl_hot" "$_wl_next" 2>/dev/null; then
+        if [[ -f "$_wl_hot" ]]; then
+          log "  WARN:  warn-log rotation failed — ${_wl_hot} is ${_wl_bytes} B, over its ${WARN_LOG_HOT_BUDGET_BYTES} B budget, and could not be moved to ${_wl_next}. Appends continue and no record is lost, but the file is unbounded until this is resolved. Check the instance directory's permissions and free space." >&2
+        fi
+      fi
+    fi
+  fi
+  printf '%s\n' "$_wl_hot"
+}
 
 # User-local skills mirror — exposes every PMO skill as a plain /skill-name
 # slash command in Claude Code (matching prompt-builder's pre-existing presence).
@@ -5226,7 +5382,7 @@ cmd_check() {
         enforce|warn|off) REGISTRY_FIELD_MODE="$_rfc_mode" ;;
       esac
     fi
-    local _rfc_warn_log="$(pmo_instance_path)/deploy-check-warn-log.jsonl"
+    local _rfc_warn_log="$(warn_log_path)"
     # flag_registry_field — field-layer gating emit (clone of flag_g1_enforcement
     # semantics). enforce → FAIL + ISSUES; warn → WARN + jsonl, no increment;
     # off → silent (parity with the cohort helpers).
@@ -5632,7 +5788,7 @@ cmd_check() {
       enforce|warn|off) DEPLOY_CHECK_MODE="$_mode" ;;
     esac
   fi
-  local WARN_LOG="$(pmo_instance_path)/deploy-check-warn-log.jsonl"
+  local WARN_LOG="$(warn_log_path)"
 
   # flag_warn_or_issue — Checks 8-10 helper. In enforce-mode, acts like a normal
   # FAIL (increments ISSUES). In warn-mode, logs a WARN + appends to jsonl but
@@ -13476,7 +13632,7 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
   #              unaddressed (W2 of gate-efficacy-standard.md § Written sink and
   #              terminable shakedown).
   #   falsification: re-date SKILL_SUITE_GATE_ARMED more than
-  #                  SKILL_SUITE_GATE_ESCALATE_DAYS into the past -> GRADUATION-OVERDUE
+  #                  GATE_ROLLOUT_ESCALATE_DAYS into the past -> GRADUATION-OVERDUE
   #                  and `--check --strict` exits 1; restore -> OK.
   #
   # WHAT IT ASSERTS. That limb (i)'s residual `warn -> enforce` flip — one committed
@@ -13533,8 +13689,8 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
     if [[ -z "$c74_ctrl_hit" || -n "$c74_ctrl_miss" ]]; then
       log "  FAIL:  gate-rollout-graduation — the constant resolution path no longer discriminates; every verdict below would be unattributable"
       ISSUES=$((ISSUES + 1))
-    elif [[ -z "${SKILL_SUITE_GATE_ARMED:-}" || -z "${SKILL_SUITE_GATE_REVIEW_DAYS:-}" || -z "${SKILL_SUITE_GATE_ESCALATE_DAYS:-}" ]]; then
-      log "  FAIL:  gate-rollout-graduation — one or more rollout constants are unreadable (phase='${SKILL_SUITE_GATE_PHASE:-}' armed='${SKILL_SUITE_GATE_ARMED:-}' review='${SKILL_SUITE_GATE_REVIEW_DAYS:-}' escalate='${SKILL_SUITE_GATE_ESCALATE_DAYS:-}'). A gate that cannot read its own input must not pass."
+    elif [[ -z "${SKILL_SUITE_GATE_ARMED:-}" || -z "${SKILL_SUITE_GATE_REVIEW_DAYS:-}" || -z "${GATE_ROLLOUT_ESCALATE_DAYS:-}" ]]; then
+      log "  FAIL:  gate-rollout-graduation — one or more rollout constants are unreadable (phase='${SKILL_SUITE_GATE_PHASE:-}' armed='${SKILL_SUITE_GATE_ARMED:-}' review='${SKILL_SUITE_GATE_REVIEW_DAYS:-}' escalate='${GATE_ROLLOUT_ESCALATE_DAYS:-}'). A gate that cannot read its own input must not pass."
       ISSUES=$((ISSUES + 1))
     else
       case "$SKILL_SUITE_GATE_PHASE" in
@@ -13560,7 +13716,7 @@ print((datetime.datetime.utcnow().date()-a).days)' "$SKILL_SUITE_GATE_ARMED" 2>/
         [[ -n "$c74_rows" ]] || c74_rows=0
       fi
 
-      log "  DENOM: gate-rollout-graduation — subject=g3-14/g3-15-integrity-limb phase=${SKILL_SUITE_GATE_PHASE} armed=${SKILL_SUITE_GATE_ARMED} elapsed=${c74_elapsed}d thresholds=${SKILL_SUITE_GATE_REVIEW_DAYS}d/${SKILL_SUITE_GATE_ESCALATE_DAYS}d drain_rows=${c74_rows}"
+      log "  DENOM: gate-rollout-graduation — subject=g3-14/g3-15-integrity-limb phase=${SKILL_SUITE_GATE_PHASE} armed=${SKILL_SUITE_GATE_ARMED} elapsed=${c74_elapsed}d thresholds=${SKILL_SUITE_GATE_REVIEW_DAYS}d/${GATE_ROLLOUT_ESCALATE_DAYS}d drain_rows=${c74_rows}"
 
       if [[ "$SKILL_SUITE_GATE_PHASE" == "enforce" ]]; then
         log "  OK:    gate-rollout-graduation — the integrity limb has GRADUATED to enforce; the rollout is decided and this gate is discharged"
@@ -13579,12 +13735,12 @@ print((datetime.datetime.utcnow().date()-a).days)' "$SKILL_SUITE_GATE_ARMED" 2>/
           c74_verdict="${c74_rows} rows -> classify the sample with its denominator (true-positive vs fixture-churn), then FLIP the .github/deploy-check-ci.enforce sentinel and register the job context, or NARROW the predicate. Never auto-promoted by count."
         fi
 
-        if [[ "$c74_elapsed" -ge "$SKILL_SUITE_GATE_ESCALATE_DAYS" ]]; then
-          log "  FAIL:  gate-rollout-graduation — GRADUATION-OVERDUE: ${c74_elapsed} days at phase='${SKILL_SUITE_GATE_PHASE}', past the ${SKILL_SUITE_GATE_ESCALATE_DAYS}-day escalation. ${c74_verdict}"
+        if [[ "$c74_elapsed" -ge "$GATE_ROLLOUT_ESCALATE_DAYS" ]]; then
+          log "  FAIL:  gate-rollout-graduation — GRADUATION-OVERDUE: ${c74_elapsed} days at phase='${SKILL_SUITE_GATE_PHASE}', past the ${GATE_ROLLOUT_ESCALATE_DAYS}-day escalation. ${c74_verdict}"
           log "         Turn this green by RECORDING A DECISION in core/deploy/deploy.sh: advance SKILL_SUITE_GATE_PHASE, retreat it, or re-date SKILL_SUITE_GATE_ARMED. Doing nothing is the one option this gate removes."
           ISSUES=$((ISSUES + 1))
         elif [[ "$c74_elapsed" -ge "$SKILL_SUITE_GATE_REVIEW_DAYS" ]]; then
-          log "  WARN:  gate-rollout-graduation — GRADUATION-DUE (deadline): ${c74_elapsed} days since arming (threshold ${SKILL_SUITE_GATE_REVIEW_DAYS}d; escalates to a finding at ${SKILL_SUITE_GATE_ESCALATE_DAYS}d). ${c74_verdict}"
+          log "  WARN:  gate-rollout-graduation — GRADUATION-DUE (deadline): ${c74_elapsed} days since arming (threshold ${SKILL_SUITE_GATE_REVIEW_DAYS}d; escalates to a finding at ${GATE_ROLLOUT_ESCALATE_DAYS}d). ${c74_verdict}"
         else
           log "  OK:    gate-rollout-graduation — within the review window (${c74_elapsed}d of ${SKILL_SUITE_GATE_REVIEW_DAYS}d, drain=${c74_rows})"
         fi
