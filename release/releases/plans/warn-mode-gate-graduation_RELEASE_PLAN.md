@@ -261,6 +261,55 @@ Every Engineering spoke branches from this SHA. It is the Stage-5 pin and the Co
 
 **Verdict:** WARN. Parallel-eligible spokes per parallel stage: Stage 5: 5 · Stage 7: 5 · Stage 8: 5. Worst parallel batch = 5 spokes. The usage-window envelope is **UNSTATED**, so the conservative default applies — the resulting band is a projection of an assumed envelope, **never a measurement**. Routing: window-aware launch timing; split the 5-spoke batch. Checkpoint B re-validates at every launch and is the operative gate; this Checkpoint A estimate is advisory.
 
+## Change Description
+
+> **Authoring state.** This section is authored incrementally across the release's five Engineering commits, one block per card, in the D-8 sequence. It is complete when the last Engineering spoke fills the final block, and it is committed on the release branch **before** the PR is transitioned draft → ready at the Stage 9 gate.
+
+### Outcome
+
+The warn-mode gate cohort can terminate. Before this release, a gate in the cohort advanced only on "drain evidence" — rows in a per-gate warn log that is git-ignored, unreadable by a pull-request agent, and in two cases never written at all. That made `shakedown continues` a disposition with no observation that could ever end it, and the cohort accumulated rows that could not be closed. After this release, every gate in the cohort either has an advance signal a pull-request agent can read, or carries a recorded disposition whose blocker is named and checkable.
+
+**No gate flips `warn → enforce` in this release, and that is the intended outcome, not a shortfall.** The premature-flip blast radius was classified EXPENSIVE at the plan gate. The release buys a real blocking pre-merge assertion without arming a single flip.
+
+### Issues delivered
+
+| Issue | What landed | State |
+|---|---|---|
+| **#6298** | Check 73 `bundle-metrics-gate-integrity` — the G3-14 / G3-15 evaluators, their boundary fixtures, a discrimination suite, and the two workflow extensions that make Requirement (b′) derive `required` for the tree-resident half. | **LANDED** |
+| #4214 | warn-mode declarations must name a written sink | PENDING |
+| #5588 | shared warn-log lifecycle — live file + orphan disposal | PENDING |
+| #4751 | enforce-flip disposition for Checks 66 / 67 + the sibling-id cohort | PENDING |
+| #1686 | `g1-enforcement` flip decision | PENDING |
+
+All five are marked as closed at Stage 13 by the automated close-out. The release PR carries no auto-close keywords, so the merge itself closes nothing.
+
+### Key decisions
+
+- **D-8 — evaluator ownership.** Two specs each assumed the other would build the G3-14 / G3-15 evaluator, so under both as written nobody built it. Ownership resolved to #6298, which therefore lands **first** rather than second.
+- **The predicate is split by locus of input** (ADR-162). Both gates' subject is out-of-tree GitHub state, so a merge gate on the live evaluation would go red for reasons no PR author can see or repair. The tree-resident machinery is gated at `required`; the backlog-resident half is recorded as a **permanent** advisory residual on architectural grounds — not deferred, not awaiting evidence.
+- **Extend, do not create.** Two existing filter-free workflows absorbed the new check. Zero new workflows, sentinels, branch-protection contexts, or macOS jobs.
+- **A disposition must name its blocker, not its schedule.** The register's `shakedown continues` shape names a schedule and is unfalsifiable; the replacement rows name conditions a reader can check.
+
+### Reversibility
+
+**CHEAP** for everything landed so far. Check 73 is additive: reverting the two commits removes a roster row, a lifecycle block, three verdict bodies, four fixtures, one suite and one workflow step, and leaves every pre-existing gate at exactly its prior posture. No gate posture was flipped, so there is no armed enforcement to stand down. The single merge commit is revertable with `git revert -m 1`.
+
+The **expensive** half of this release is #5588's rotation, still pending: records discarded by a rotation boundary are IRREVERSIBLE, which is why CIAC-1 pins the rotation ceiling to the drain horizon and why #5588 is sequenced before both register-editing cards.
+
+### Downstream impact
+
+- **`--check-required-subset` now has two members.** Its aggregate is ANY-FAIL, so it can now go red for a bundle-metrics integrity failure where previously only a hook-registry staleness could redden it. The sentinel still reads `warn`, so an in-scope FAIL reports without blocking.
+- **`install-tests.yml` gains one unconditionally-blocking step.** A discrimination failure reddens every PR regardless of any sentinel. This is the arm that makes the assertion real.
+- **The gate-coverage register gained three rows and one permanent-residual row**, and the Check-38 row's stale `paths-filtered` surface declaration was reconciled in passing — a contradicted row sitting next to rows being edited is the annotate-don't-reconcile failure.
+- **Stage-3 → 4 bundling behaviour is unchanged.** Nothing in this card evaluates a live backlog or a live milestone.
+
+### Cross-references
+
+- `core/ADRs/ADR-162-split-predicate-gate-graduation.md` — the reusable decision, both altitudes
+- `core/standards/gate-efficacy-standard.md` — Requirements (a) / (b) / (b′), § Verdict-Input Closure, and both registers this release writes into
+- `core/schemas/gate-criteria-spec.md` — G3-14 / G3-15 definitional home (read-only for #6298; edited by #4214)
+- `core/standards/progressive-rollout-convention.md` — owns the `warn → enforce → removed` ladder; advance is an operator decision, never auto-promoted by hit count
+
 ## Change Log
 
 | Date | Change | Source |
