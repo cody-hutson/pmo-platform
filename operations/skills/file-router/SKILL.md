@@ -265,12 +265,13 @@ trust_category: evidence     # a raw source artifact is evidence
 evidence_quality: source
 created_date: <YYYY-MM-DD>
 created_by: file-router
-source_system: <teams | jira | email | confluence | manual>
+source_system: <teams | jira | email | confluence | manual | agent-generated | smartsheet | sharepoint | gdrive | github>
 tags: [project/<slug>, delivery/<domain>, artifact/<type>]
 ```
 
 Rules:
 - **`domain: source`** for raw evidence — never the deprecated `A`. Use the human-readable value the schema tells writers to emit.
+- **`source_system`** — the value set above is the canonical enum **restated for the emitter's convenience**; [`frontmatter-schema.md`](../../../core/schemas/frontmatter-schema.md) § Category 3 owns it. Extend that row first, then this one — never only this one.
 - **`folder`** is the resolved bin's **closed-set enum value** — the capitalized form (`1-Governance` … `5-Reference`, or `_generated`), which the `folder` enum validates. Never the deprecated legacy `0N-…` value.
 - **Idempotent:** identity/provenance fields (`type`, `project`, `created_date`, `created_by`) are written once and not churned on re-encounter; volatile fields (`lifecycle_changed`) refresh. Do not double-stamp a file that already carries file-router frontmatter.
 - The stamp and the `BELONGS_TO` edge are **one write** — see § `BELONGS_TO` Edge Emission.

@@ -1221,13 +1221,13 @@ Monitor for:
 | **Smartsheet** | Manual export | No | Waterfall milestone tracking, gate approvals | Weekly (Friday) |
 | **Email / Teams** | User-provided digest | No | Comms tracking, leadership notes | As-provided |
 
-**Local copy principle:** Workspace maintains local copies of all artifacts. MCP refreshes cloud source; discrepancies flagged in drift detection. Truth lives locally until sync completes.
+**Local copy principle:** Workspace maintains local copies of all artifacts. MCP refreshes cloud source; discrepancies flagged in drift detection. Truth lives locally until sync completes. The scope of this principle is the **write direction**, not source authority: it states that an un-pushed local edit is held locally until sync completes. Which system is authoritative for a given data element is decided per element by [ADR-162](../ADRs/ADR-162-system-of-record-per-mirrored-element.md).
 
 ---
 
 ## Connector Configuration (per PROJECT.md)
 
-Each project includes these connector settings in PROJECT.md. Do NOT assume defaults; read the project's context file first.
+Each project declares these connector settings in PROJECT.md. Do NOT assume defaults; read the project's context file first. **The block below is an illustrative example; the eight keys' types, requiredness, conditional rules and validation are owned by [`core/schemas/project-schema.md`](../schemas/project-schema.md) § Root Schema + § Field Reference + V18–V24 — referenced here, never restated.**
 
 ```yaml
 jira_project_key: "[PROJECT_KEY]"                    # Required for Jira MCP

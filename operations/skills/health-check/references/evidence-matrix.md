@@ -7,7 +7,7 @@ The source map per mode and the drift-resolution rule the modes apply. The canon
 
 | Tier | Sources | Role |
 |---|---|---|
-| **MCP-primary** (audience-facing → authoritative) | Confluence (plans, on-call, hypercare) · Jira (ticket state, due dates, assignees) · Smartsheet (live operational trackers) · SharePoint (test trackers, scoreboards — **when an MCP exists**) | The source of truth. Audience-facing drift is the worst drift. |
+| **MCP-primary** (audience-facing → authoritative **for the elements those systems author**) | Confluence (plans, on-call, hypercare) · Jira (ticket state, due dates, assignees) · Smartsheet (live operational trackers) · SharePoint (test trackers, scoreboards — **when an MCP exists**) | The **system of record for the elements these systems author** — assigned per data element, not per system, by [ADR-162](../../../../core/ADRs/ADR-162-system-of-record-per-mirrored-element.md). Audience-facing drift is the worst drift. An artifact this platform authors and merely *renders* to one of these systems (the RAID log) is mastered locally; a divergence on it is **render-drift**, not authoritative drift. |
 | **Local fallback / supplement** | `04-PMO-Operations/*` trackers · `PROJECT.md` · `PORTFOLIO.md` · `05-Transcripts/` · `06-Emails/` · `08-Generated/` | Fallback + cross-validation. Two locals agreeing can reach HIGH. |
 
 ## Source map per mode

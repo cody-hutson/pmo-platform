@@ -1,6 +1,6 @@
 ---
 title: health-check MCP-primary / local-fallback canonical source set + graceful-degradation contract
-status: Accepted
+status: Accepted — Decision 1 (the system-level MCP-canonical source-set assignment) superseded in part by ADR-162 (system-of-record-per-mirrored-element), which assigns source authority per data element rather than per system; for every element an external system authors, MCP remains authoritative and the outcome is unchanged. Decisions 2, 3, 4 and 5 — drift-resolution by recency, both-stale-to-operator, the unreachable-MCP degradation envelope including its MEDIUM auto-action cap, and SharePoint degradation — remain in force and are unchanged.
 tags: [health-check, mcp-source-set, graceful-degradation, drift-resolution, integration-boundary]
 ---
 <!-- reference-durability: allow-link -->
@@ -11,6 +11,8 @@ tags: [health-check, mcp-source-set, graceful-degradation, drift-resolution, int
 ## Status
 
 Accepted — ratified at the 06-HEALTH-project-health-check Stage 5 Decision Gate (operator: Approve & route to Stage 6, 2026-06-29). Authored at Stage 6 alongside the skill it governs, per the core-ADR convention (a decision captured as a committed ADR document written in the same release as the artifact it governs).
+
+**Superseded in part by [ADR-162](ADR-162-system-of-record-per-mirrored-element.md)** (system of record per mirrored data element). Decision 1's *system-level* canonical assignment is replaced by an *element-level* assignment resolved by where the element is authored. Decision 1 was over-broad rather than wrong: for every element an external system authors — ticket state, externally-authored plans and schedules, assignees, due dates — MCP remains authoritative and this skill's behaviour is unchanged. **Decisions 2, 3, 4 and 5 remain in force and are unchanged**, and this record remains `Accepted` and editable so they keep a live home. Decision 2's recency rule now ranges over the elements whose system of record is external — the population it was written for; its text is unchanged.
 
 **Deciders:** operator · **Date:** 2026-06-29
 
@@ -56,6 +58,7 @@ The skill projects findings onto the canonical `S0-NONE..S3-STRUCTURAL` stalenes
 - `core/specs/staleness-confidence-standard.md` (ADR-043) — the S0–S3 band scale this skill projects onto.
 - `operations/skills/health-check/SKILL.md` — the skill this ADR governs.
 - `operations/skills/health-check/references/evidence-matrix.md` — the per-mode source map that applies this contract.
+- [ADR-162](ADR-162-system-of-record-per-mirrored-element.md) — supersedes Decision 1 in part (element-level source authority); Decisions 2-5 unaffected.
 
 ### Provenance
 
