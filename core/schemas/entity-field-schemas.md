@@ -326,7 +326,7 @@ Every Plan edge uses **only** the 7 MVP relationship types (`frontmatter-schema.
 | `BLOCKS` | Milestone | many:many | L2 | WARN-HEALTH |
 | `ASSIGNED_TO` | Person | many:1 | L2 | BLOCK-WRITE |
 
-**D. V-rules (13 — exceeds AC-2 ≥5; each: level · on-unresolved · blocks · [AC]) — plus the inherited V-CORE-01..07 **and the §3.0c external-identity group — `source_system`⚪ · `external_id`⚪ · `mirrored_date`⚪, V-EXT-01..03**:**
+**D. V-rules (13 — exceeds AC-2 ≥5; each: level · on-unresolved · blocks · [AC]) — plus the inherited V-CORE-01..07 and the §3.0c external-identity group (`source_system`⚪ · `external_id`⚪ · `mirrored_date`⚪, V-EXT-01..03):**
 
 | ID | Rule | Level | on-unresolved | Blocks | AC |
 |---|---|---|---|---|---|
