@@ -596,7 +596,30 @@ None. No schema change, no data migration, no destructive operation in this rele
 
 ## Verification Evidence
 
-*(Populated after Stage 12 execution — see `verification-checklist.md` for format.)*
+**The Stage-12 re-verify set — FIVE members, not four.** The set ratified at Stage 9 (#6128) named
+four: `check-adr-numbers.py` PASS on the merge tree, `generate-adr-index.py --verify` → `COUNT 0`,
+`automated-closeout.sh --self-test` exit 0, and required contexts 9/9. Stage 9 also recorded, as its
+own first condition, that this was **incomplete**: `check-selftest-coverage.py --reconcile` was absent
+from the ratified set, and the arm is RED on the merge tree because `origin/main` carries tools this
+release's own new gate requires a README row for. A re-verify set that omits the gate the release
+ships is the same class of blind spot the release exists to close — a green run over an incomplete
+denominator. The set is therefore:
+
+| # | Command | Expected |
+|---|---|---|
+| 1 | `release/tools/check-adr-numbers.py` | PASS, contiguous, no duplicates |
+| 2 | `release/tools/generate-adr-index.py --verify` | `COUNT 0` |
+| 3 | `release/tools/automated-closeout.sh --self-test` | exit 0, zero `FAIL:` lines |
+| 4 | `release/tools/check-selftest-coverage.py --reconcile` | exit 0; Arm E documents every tool in the directory |
+| 5 | Required-context count at the PR head | denominator and check-run count both read, reported as a ratio |
+
+**Member 5 is a ratio, never a conclusion.** Read the branch-protection required-context count for the
+PR's *own* base and the actual check-run count at the head, and report both. Before integration this
+release's own PR read **4 against 9** with all four `success` — a conclusion-only read of that state
+says "all green" while five required gates were never dispatched, which is precisely the collapsed
+denominator this release exists to detect.
+
+*(Results populated after Stage 12 execution — see `verification-checklist.md` for format.)*
 
 ## Deployment Execution Log
 
