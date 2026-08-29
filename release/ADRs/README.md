@@ -72,11 +72,11 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-146](ADR-146-supersession-is-an-append-and-integrity-is-a-dated-read-only-sweep.md) | Supersession is an append-only event with a two-id vocabulary, and log integrity is validated by a read-only cutover-dated population sweep | Accepted | 2026-08-24 | pipeline-spec-self-consistency |
 | [ADR-147](ADR-147-domain-practice-source-grammar-routes-it-does-not-extend.md) | The domain_practice source grammar is a closed three-form set that ROUTES the unmatched case, and survival across Commit-0 is asserted absolutely rather than only by delta | Accepted | 2026-08-25 | pipeline-spec-self-consistency |
 | [ADR-148](ADR-148-surface-1-emit-provenance-not-existence.md) | A backstop records its pre-mutation observation as a witness token, and the downstream check asks provenance rather than existence | Accepted | 2026-08-24 | pipeline-spec-self-consistency |
-| [ADR-152](ADR-152-dry-run-predicts-apply-asserts-mode-branch-placement.md) | Dry-run predicts, apply asserts: mode-branch placement in phased close-out tooling | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
 | [ADR-153](ADR-153-one-frontmatter-strip-bound-to-a-conformance-fixture.md) | One frontmatter-strip transform: a shared library bound to a committed conformance fixture, over replication governed by a registry comment | Accepted | 2026-08-28 | ci-stable-under-transient-conditions |
 | [ADR-154](ADR-154-arm-e-population-is-the-directory-never-the-manifest.md) | The tool-coverage engine hosts a second invariant whose population is the directory, never the manifest | Accepted | 2026-08-28 | ci-stable-under-transient-conditions |
 | [ADR-156](ADR-156-checkpoint-b-second-axis-is-measured-not-declared.md) | Checkpoint B's second axis is measured, not declared: scoping refuse-to-synthesize to the usage-window axis | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
 | [ADR-157](ADR-157-wave-width-is-a-second-checkpoint-b-output-not-a-verdict.md) | Wave width is a second Checkpoint B output, not a verdict | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
+| [ADR-158](ADR-158-dry-run-predicts-apply-asserts-mode-branch-placement.md) | Dry-run predicts, apply asserts: mode-branch placement in phased close-out tooling | Accepted | 2026-08-27 | ci-stable-under-transient-conditions |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
