@@ -128,7 +128,7 @@ FORCE_ALL=false
 
 # ─── Warn-log lifecycle + gate-rollout constants ─────────────────────────────
 # THE SINGLE DECLARATION SITE for the warn-log retention window and the
-# skill-suite gate-rollout deadline. Declared HERE and nowhere else; every
+# gate-rollout deadline. Declared HERE and nowhere else; every
 # consumer reads the symbol, never a copy of the number. The two are coupled,
 # and the coupling is the point:
 #
@@ -183,7 +183,7 @@ FORCE_ALL=false
 # close: a permanent advisory wearing the shape of a temporary one.
 #
 # Turn a GRADUATION-OVERDUE finding green by RECORDING A DECISION: advance
-# SKILL_SUITE_GATE_PHASE, retreat it, or re-date SKILL_SUITE_GATE_ARMED — the
+# GATE_ROLLOUT_PHASE, retreat it, or re-date GATE_ROLLOUT_ARMED — the
 # edited line IS the audit record. Advance is an operator decision, never
 # auto-promoted by row count (core/standards/progressive-rollout-convention.md
 # owns the ladder and this phase enum).
@@ -200,9 +200,9 @@ FORCE_ALL=false
 # call pmo_instance_path() and that resolver does not exist until that line.
 # Only the CONSTANTS are declared here, which is what keeps this the single
 # declaration site.
-readonly SKILL_SUITE_GATE_PHASE="warn"       # shadow|warn|enforce
-readonly SKILL_SUITE_GATE_ARMED="2026-08-29"
-readonly SKILL_SUITE_GATE_REVIEW_DAYS=60
+readonly GATE_ROLLOUT_PHASE="warn"       # shadow|warn|enforce
+readonly GATE_ROLLOUT_ARMED="2026-08-29"
+readonly GATE_ROLLOUT_REVIEW_DAYS=60
 readonly GATE_ROLLOUT_ESCALATE_DAYS=90
 # Basename of the whole warn-log family — the hot file and every segment share
 # it. Stated once so a consumer pattern cannot drift from the writer's spelling.
@@ -12915,10 +12915,25 @@ sys.stdout.write("".join(out) + "|")
   # relying on it.
   #
   # WARN-MODE INITIAL via resolve_check_mode "citation-anchor" — the Check 51-65
-  # deploy-check precedent, NOT the PreToolUse-hook .mode surface. Flip to enforce with
-  # a `citation-anchor.mode` file after the >=3-day warn-log review. The reintroduction
+  # deploy-check precedent, NOT the PreToolUse-hook .mode surface. The reintroduction
   # of a line anchor is a signal to correct a citation, never a reason to block a
   # deploy, so the first posture is a report.
+  #
+  # FLIP SURFACE — the COMMITTED default, NOT a `.mode` file. This block previously
+  # named "a `citation-anchor.mode` file" as the flip mechanism. That names something
+  # a reviewer, CI and a fresh clone cannot see: all three rungs resolve_check_mode
+  # reads are operator-local or deployment-target surfaces ($(pmo_instance_path), its
+  # legacy twin, and .claude/hooks/, which carries zero tracked files), and ZERO .mode
+  # files are tracked anywhere in the repo. Naming a git-invisible surface as the exit
+  # criterion is the same not-repo-derivable defect the warn-mode-gate-graduation
+  # milestone exists to close, reproduced inside this gate's own declaration. The flip
+  # is instead the one-token COMMITTED default — resolve_check_mode "citation-anchor"
+  # "enforce" — the shape live at Check 47 (`_c47_default="enforce"`), which a pull
+  # request shows and a reviewer can approve. The flip DECISION itself is recorded in
+  # core/standards/gate-efficacy-standard.md § Flip-decision status, which holds this
+  # check DEFERRED — precondition-blocked, NOT evidence-blocked; read that row before
+  # changing the posture here. Advance is an operator decision, never auto-promoted by
+  # hit count (core/standards/progressive-rollout-convention.md owns the ladder).
   #
   # THE CHECK CARRIES ITS OWN RECORD (PV-6). Its denominator and BOTH control arms are
   # fields of its own emitted output, so a reader can distinguish "zero found" from
@@ -12998,7 +13013,23 @@ sys.stdout.write("".join(out) + "|")
   # "reconcile" them to a single number.
   #
   # WARN-MODE INITIAL via resolve_check_mode "trigger-collision", per the Check 51-66
-  # precedent; enforce-flip deferred to bypass-mode-readiness.md § Warn-Mode Initial.
+  # deploy-check precedent, NOT the PreToolUse-hook .mode surface — the same boundary
+  # Check 66 states explicitly.
+  #
+  # FLIP DEFERRAL — re-pointed to a reference that resolves. This block previously
+  # deferred the flip to "bypass-mode-readiness.md § Warn-Mode Initial". No such
+  # section exists: a heading census of that file returns 0 of 44 headings matching,
+  # and all 5 occurrences of the phrase are prose or table cells, 4 of which point at
+  # a DIFFERENT section (§ Shakedown -> Enforce Transition Checklist) governing the
+  # PreToolUse-hook `.mode` layer rather than deploy-check modes. So the citation was
+  # dangling AND cross-layer, and this check disagreed with its own sibling about its
+  # own flip surface. The flip decision is recorded in
+  # core/standards/gate-efficacy-standard.md § Flip-decision status, which holds this
+  # check DEFERRED — precondition-blocked, NOT evidence-blocked; the flip mechanism
+  # when unblocked is the one-token COMMITTED default resolve_check_mode
+  # "trigger-collision" "enforce" (the Check 47 shape), never a `.mode` file, which is
+  # not repo-derivable. Advance is an operator decision, never auto-promoted by hit
+  # count (core/standards/progressive-rollout-convention.md owns the ladder).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 67: Composition-aware cross-skill trigger collision (registry-linked pairs exempt from WATCH, never from ESCALATE; warn-mode initial; enforce-flip deferred)"
     local c67_script="release/skills/pmo-skill-refiner/scripts/run_eval_audit.py"
@@ -13631,7 +13662,7 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
   #              repo-derivable exit criterion, and that criterion has not elapsed
   #              unaddressed (W2 of gate-efficacy-standard.md § Written sink and
   #              terminable shakedown).
-  #   falsification: re-date SKILL_SUITE_GATE_ARMED more than
+  #   falsification: re-date GATE_ROLLOUT_ARMED more than
   #                  GATE_ROLLOUT_ESCALATE_DAYS into the past -> GRADUATION-OVERDUE
   #                  and `--check --strict` exits 1; restore -> OK.
   #
@@ -13682,21 +13713,21 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
     # uses, so a resolution path that silently returned empty — which would read as
     # "no finding" on every run — cannot pass this pair.
     local c74_ref c74_ctrl_hit c74_ctrl_miss
-    c74_ref="SKILL_SUITE_GATE_PHASE";           c74_ctrl_hit="${!c74_ref:-}"
-    c74_ref="SKILL_SUITE_GATE_ZZZ_FABRICATED";  c74_ctrl_miss="${!c74_ref:-}"
+    c74_ref="GATE_ROLLOUT_PHASE";           c74_ctrl_hit="${!c74_ref:-}"
+    c74_ref="GATE_ROLLOUT_ZZZ_FABRICATED";  c74_ctrl_miss="${!c74_ref:-}"
     log "  CTRL:  gate-rollout-graduation — constant sensitivity='${c74_ctrl_hit}' (want non-empty), specificity='${c74_ctrl_miss}' (want empty)"
 
     if [[ -z "$c74_ctrl_hit" || -n "$c74_ctrl_miss" ]]; then
       log "  FAIL:  gate-rollout-graduation — the constant resolution path no longer discriminates; every verdict below would be unattributable"
       ISSUES=$((ISSUES + 1))
-    elif [[ -z "${SKILL_SUITE_GATE_ARMED:-}" || -z "${SKILL_SUITE_GATE_REVIEW_DAYS:-}" || -z "${GATE_ROLLOUT_ESCALATE_DAYS:-}" ]]; then
-      log "  FAIL:  gate-rollout-graduation — one or more rollout constants are unreadable (phase='${SKILL_SUITE_GATE_PHASE:-}' armed='${SKILL_SUITE_GATE_ARMED:-}' review='${SKILL_SUITE_GATE_REVIEW_DAYS:-}' escalate='${GATE_ROLLOUT_ESCALATE_DAYS:-}'). A gate that cannot read its own input must not pass."
+    elif [[ -z "${GATE_ROLLOUT_ARMED:-}" || -z "${GATE_ROLLOUT_REVIEW_DAYS:-}" || -z "${GATE_ROLLOUT_ESCALATE_DAYS:-}" ]]; then
+      log "  FAIL:  gate-rollout-graduation — one or more rollout constants are unreadable (phase='${GATE_ROLLOUT_PHASE:-}' armed='${GATE_ROLLOUT_ARMED:-}' review='${GATE_ROLLOUT_REVIEW_DAYS:-}' escalate='${GATE_ROLLOUT_ESCALATE_DAYS:-}'). A gate that cannot read its own input must not pass."
       ISSUES=$((ISSUES + 1))
     else
-      case "$SKILL_SUITE_GATE_PHASE" in
+      case "$GATE_ROLLOUT_PHASE" in
         shadow|warn|enforce) ;;
         *)
-          log "  FAIL:  gate-rollout-graduation — SKILL_SUITE_GATE_PHASE='${SKILL_SUITE_GATE_PHASE}' is not one of shadow|warn|enforce (the ladder core/standards/progressive-rollout-convention.md owns). An unrecognised value has no defined rung, so the rollout state is undefined rather than merely wrong."
+          log "  FAIL:  gate-rollout-graduation — GATE_ROLLOUT_PHASE='${GATE_ROLLOUT_PHASE}' is not one of shadow|warn|enforce (the ladder core/standards/progressive-rollout-convention.md owns). An unrecognised value has no defined rung, so the rollout state is undefined rather than merely wrong."
           ISSUES=$((ISSUES + 1))
           ;;
       esac
@@ -13704,7 +13735,7 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
       local c74_elapsed
       c74_elapsed="$(python3 -c 'import datetime,sys
 a=datetime.date.fromisoformat(sys.argv[1])
-print((datetime.datetime.utcnow().date()-a).days)' "$SKILL_SUITE_GATE_ARMED" 2>/dev/null || printf '')"
+print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/null || printf '')"
 
       # EVIDENCE ARM. Segment-set read only. No path below touches ISSUES.
       #
@@ -13728,12 +13759,12 @@ print((datetime.datetime.utcnow().date()-a).days)' "$SKILL_SUITE_GATE_ARMED" 2>/
         [[ -n "$c74_rows" ]] || c74_rows=0
       fi
 
-      log "  DENOM: gate-rollout-graduation — subject=g3-14/g3-15-integrity-limb phase=${SKILL_SUITE_GATE_PHASE} armed=${SKILL_SUITE_GATE_ARMED} elapsed=${c74_elapsed}d thresholds=${SKILL_SUITE_GATE_REVIEW_DAYS}d/${GATE_ROLLOUT_ESCALATE_DAYS}d drain_rows=${c74_rows}"
+      log "  DENOM: gate-rollout-graduation — subject=g3-14/g3-15-integrity-limb phase=${GATE_ROLLOUT_PHASE} armed=${GATE_ROLLOUT_ARMED} elapsed=${c74_elapsed}d thresholds=${GATE_ROLLOUT_REVIEW_DAYS}d/${GATE_ROLLOUT_ESCALATE_DAYS}d drain_rows=${c74_rows}"
 
-      if [[ "$SKILL_SUITE_GATE_PHASE" == "enforce" ]]; then
+      if [[ "$GATE_ROLLOUT_PHASE" == "enforce" ]]; then
         log "  OK:    gate-rollout-graduation — the integrity limb has GRADUATED to enforce; the rollout is decided and this gate is discharged"
       elif [[ -z "$c74_elapsed" ]]; then
-        log "  FAIL:  gate-rollout-graduation — SKILL_SUITE_GATE_ARMED='${SKILL_SUITE_GATE_ARMED}' is not a resolvable ISO date, so the deadline arm cannot be evaluated. This is the failure mode a placeholder arming stamp produces."
+        log "  FAIL:  gate-rollout-graduation — GATE_ROLLOUT_ARMED='${GATE_ROLLOUT_ARMED}' is not a resolvable ISO date, so the deadline arm cannot be evaluated. This is the failure mode a placeholder arming stamp produces."
         ISSUES=$((ISSUES + 1))
       else
         # Three-way evidence verdict, emitted WITH any due notice so a zero drain is
@@ -13748,13 +13779,13 @@ print((datetime.datetime.utcnow().date()-a).days)' "$SKILL_SUITE_GATE_ARMED" 2>/
         fi
 
         if [[ "$c74_elapsed" -ge "$GATE_ROLLOUT_ESCALATE_DAYS" ]]; then
-          log "  FAIL:  gate-rollout-graduation — GRADUATION-OVERDUE: ${c74_elapsed} days at phase='${SKILL_SUITE_GATE_PHASE}', past the ${GATE_ROLLOUT_ESCALATE_DAYS}-day escalation. ${c74_verdict}"
-          log "         Turn this green by RECORDING A DECISION in core/deploy/deploy.sh: advance SKILL_SUITE_GATE_PHASE, retreat it, or re-date SKILL_SUITE_GATE_ARMED. Doing nothing is the one option this gate removes."
+          log "  FAIL:  gate-rollout-graduation — GRADUATION-OVERDUE: ${c74_elapsed} days at phase='${GATE_ROLLOUT_PHASE}', past the ${GATE_ROLLOUT_ESCALATE_DAYS}-day escalation. ${c74_verdict}"
+          log "         Turn this green by RECORDING A DECISION in core/deploy/deploy.sh: advance GATE_ROLLOUT_PHASE, retreat it, or re-date GATE_ROLLOUT_ARMED. Doing nothing is the one option this gate removes."
           ISSUES=$((ISSUES + 1))
-        elif [[ "$c74_elapsed" -ge "$SKILL_SUITE_GATE_REVIEW_DAYS" ]]; then
-          log "  WARN:  gate-rollout-graduation — GRADUATION-DUE (deadline): ${c74_elapsed} days since arming (threshold ${SKILL_SUITE_GATE_REVIEW_DAYS}d; escalates to a finding at ${GATE_ROLLOUT_ESCALATE_DAYS}d). ${c74_verdict}"
+        elif [[ "$c74_elapsed" -ge "$GATE_ROLLOUT_REVIEW_DAYS" ]]; then
+          log "  WARN:  gate-rollout-graduation — GRADUATION-DUE (deadline): ${c74_elapsed} days since arming (threshold ${GATE_ROLLOUT_REVIEW_DAYS}d; escalates to a finding at ${GATE_ROLLOUT_ESCALATE_DAYS}d). ${c74_verdict}"
         else
-          log "  OK:    gate-rollout-graduation — within the review window (${c74_elapsed}d of ${SKILL_SUITE_GATE_REVIEW_DAYS}d, drain=${c74_rows})"
+          log "  OK:    gate-rollout-graduation — within the review window (${c74_elapsed}d of ${GATE_ROLLOUT_REVIEW_DAYS}d, drain=${c74_rows})"
         fi
       fi
     fi
