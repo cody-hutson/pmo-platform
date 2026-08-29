@@ -11,7 +11,7 @@
 # Usage:
 #   ./query-pipeline-event.sh --release <milestone-slug>                       # all events in a release (join-key aware)
 #   ./query-pipeline-event.sh --release v2.07a                                 # same, resolved vX.Y -> slug via RELEASE_LOG
-#   ./query-pipeline-event.sh --version v2.07a                                 # RAW version-column filter: matches ONLY rows literally keyed 'v2.07a' (legacy rows)
+#   ./query-pipeline-event.sh --version v2.07a                                 # RAW version-column filter: matches ONLY rows literally keyed 'v2.07a' (legacy rows) — event-log-key: allow — raw version-column filter, retained by § 2a so legacy rows stay askable; the slug-resolving flag documented above is the join-key path
 #   ./query-pipeline-event.sh --release <milestone-slug> --stage 12            # release + stage filter
 #   ./query-pipeline-event.sh --subject "<id>"                                  # all events for a given subject
 #   ./query-pipeline-event.sh --event-type self-repair                         # all retries/escalates/rollbacks

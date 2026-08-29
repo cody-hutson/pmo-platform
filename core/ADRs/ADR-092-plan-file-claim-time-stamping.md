@@ -2,10 +2,10 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: ADR-092 — Plan-file identity binds at claim-time stamping (post-CAS), extending ADR-088
-status: Proposed
+status: Accepted — ratified by the workspace owner at the `release-identity-and-plan-lifecycle` Collective Review scope-lock (the Stage 5→6 boundary), 2026-08-24. The flip was promised at the `release-identity-and-plan-naming` review, which shipped v3.93 on 2026-07-25 without the ratification on its agenda; it is re-anchored here rather than backdated to a ratification the record does not evidence.
 date: 2026-07-25
 release: release-identity-and-plan-naming (version binds at the Stage-12 claim)
-deciders: "Workspace owner (to ratify at the release-identity-and-plan-naming Collective Review scope-lock); design resolved at the plan-file-naming Stage-5 Solutioning + its adversarial review"
+deciders: "Workspace owner (ratified at the release-identity-and-plan-lifecycle Collective Review scope-lock, 2026-08-24); design resolved at the plan-file-naming Stage-5 Solutioning + its adversarial review"
 tags: [architecture, release-pipeline, versioning, claim-time-binding, slug-primary, reversibility, adr-036, adr-088]
 source_observations:
   - "#2548 Stage-5 Solutioning (#3994): ADR-036 killed the early-binding collision for the git TAG (defer-to-claim + atomic CAS), but the versioned plan-file name and branch name still bind a concrete vX.Y at plan time — re-creating, for those identifiers, the exact HALT+re-version churn ADR-036 eliminated for the tag."
@@ -17,9 +17,16 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at #2548 Stage 6 per the Stage-6 ADR-authoring precedent
-(ADR-031 / ADR-007 / ADR-028). Flips to **Accepted** when the workspace owner
-ratifies at the #279 Collective Review scope-lock (Stage 9). It references issues
+**Accepted.** Ratified by the workspace owner at the `release-identity-and-plan-lifecycle`
+Collective Review scope-lock, 2026-08-24. Authored at #2548 Stage 6 per the Stage-6
+ADR-authoring precedent (ADR-031 / ADR-007 / ADR-028). The flip was originally promised
+at the #279 `release-identity-and-plan-naming` Collective Review scope-lock; that review
+ran and shipped v3.93 on 2026-07-25 with the ratification never placed on its agenda, and
+because the close-gate criterion that owns promised flips is scoped to the ratifying
+release, no later release inherited the escaped promise. The promise is therefore
+re-anchored to this release's review rather than backdated to a ratification the record
+does not evidence. The superseded promise wording placed Collective Review at Stage 9;
+it is the Stage 5→6 checkpoint, and that is corrected here. It references issues
 and ADRs as bare `#N` / `ADR-NNN` with the file-level `allow-issue-ref` /
 `allow-link` markers above.
 

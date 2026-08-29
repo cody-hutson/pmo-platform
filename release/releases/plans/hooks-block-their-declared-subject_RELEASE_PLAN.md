@@ -2,7 +2,7 @@
 title: Release Plan — hooks-block-their-declared-subject (make each hook rule's enforced scope match its declared scope)
 type: release-plan
 plan_type: release
-status: ACTIVE
+status: CLOSED
 release: version-less (capability-slug identity; no tag claimed)
 milestone: hooks-block-their-declared-subject
 release_class: routine

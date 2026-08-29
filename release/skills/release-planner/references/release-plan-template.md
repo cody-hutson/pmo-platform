@@ -193,10 +193,17 @@ Dependency-ordered implementation plan. Each issue includes file-level change sp
 
 ### Per-Issue Verification
 
-| Issue | Verification Method | Expected Result |
-|-------|-------------------|----------------|
-| #N | [How to verify this issue's changes] | [What correct looks like] |
-| #M | [How to verify] | [Expected result] |
+| Issue | AC | Verification Method | Expected Result |
+|-------|----|-------------------|----------------|
+| #N | AC-1 | [Reproducible probe — a command, or a named read of a named surface. Never a restatement of the criterion.] | [What correct looks like] |
+| #N | AC-2 | [Reproducible probe] | [Null expectation: zero / none / absent] · control: [same instrument, same target, a pattern that must hit] → [observed non-zero] |
+| #M | AC-1 | [Reproducible probe] | [Expected result] |
+
+One row per acceptance criterion, in the criterion list's order; the `AC` cell holds the identifier only. A criterion this release deliberately will not verify still carries its row, with the method cell reading `[DEFERRED — <reason>]`.
+
+**AC baseline** — per-issue criterion counts as read at plan time, and the commit SHA read against. Stage 9's AC-coverage read compares the emitted `AC-<n>` set against this line; **without it that read has nothing to compare and emits `N/A — no baseline recorded`**, so an omitted baseline silently forfeits the check rather than failing it.
+
+`ac_baseline: { #N: <count>, #M: <count>, read_at: <commit-sha> }`
 
 ### Release-Level Verification
 
@@ -296,7 +303,7 @@ Layer 2 file propagation targets for Stage 12/13:
 
 ## Template Usage Rules
 
-1. **All sections required.** If a section is not applicable (e.g., no schema migrations), include the section header with "N/A — no [items] in this release."
+1. **All sections required, and a null declaration names the population it enumerated.** If a section is not applicable (e.g., no schema migrations), include the section header with "N/A — enumerated over [the classes reasoned over]; none present in this release." State the enumerated set, not just the absence: a bare "N/A — no [items]" reads identically whether the author reasoned over every class or over three of four, so it hides the class nobody considered rather than exposing it.
 2. **Status field must be maintained** throughout the release lifecycle.
 3. **Verification Evidence section** is blank at creation and populated after execution.
 4. **Deployment Execution Log** is blank at creation and populated during execution.

@@ -945,7 +945,7 @@ jobs:
         # 'Verify prerequisites' confirms, so running them after an upstream red
         # produces a real verdict, not cascade noise.
         #
-        # SCOPE, stated because it is a real residual: this unmasks the three trailing
+        # SCOPE, stated because it is a real residual: this unmasks the four trailing
         # suites only. Steps above still short-circuit on the first red, so the job is
         # not yet fully union-reporting; widening that is a larger change to the setup
         # steps' semantics and is deliberately not made here.
@@ -1018,6 +1018,36 @@ jobs:
         # Arm D relationship: warn-only. Arm D annotates an unwired suite and exits 0;
         # it does not gate. This step is what actually runs the suite.
         run: python3 release/tools/tests/test_native_dep_mirror.py
+
+      - name: plan-status lifecycle regression
+        # UNMASKED — see the rationale on the verify-release-plan step above. This
+        # suite is hermetic (mktemp fixtures only) and owes nothing to any step before
+        # it.
+        if: always()
+        # Invokes release/tools/tests/test_plan_status_terminal_transition.sh
+        # (23 assertions across three groups).
+        #
+        # WIRED LATE, and the reason is the point: the suite shipped in this release
+        # with NO executor at all — zero references across every workflow file — so a
+        # commit message claiming "first real verification is CI" was false. It had no
+        # scheduled verification event. Caught at Stage 8 QA of the card that ships it.
+        #
+        # What rots without it: the suite pins the close-out write primitive that moves
+        # a release plan's status to its terminal value, the two lint limbs that police
+        # the result, and the Phase 6.9 ordering interlock that makes Phase 9.3 a
+        # completeness backstop. Its Group-A arms EXTRACT the shipped primitive and
+        # re-evaluate a MUTATED copy, and its Group-B arms drive the lint against a
+        # seeded fixture corpus — because after this release's sweep the live corpus
+        # holds zero positives, so a green run over real data proves nothing and only
+        # the seeded arms can discriminate. Unrun, the transition silently stops
+        # transitioning and every plan keeps reading ACTIVE, which looks exactly like
+        # a corpus that was already correct.
+        #
+        # Hermetic: mktemp fixtures only; no network, no gh, no write to the checkout.
+        #
+        # Arm D relationship: warn-only. Arm D annotates an unwired suite and exits 0;
+        # it does not gate. This step is what actually runs the suite.
+        run: bash release/tools/tests/test_plan_status_terminal_transition.sh
 
   selftest-discovery:
     name: Discovered tool self-tests (Ubuntu)

@@ -2,7 +2,7 @@
 title: Release Plan — pda-rollup-and-portfolio (deterministic PORTFOLIO rollup)
 type: release-plan
 plan_type: release
-status: ACTIVE
+status: CLOSED
 release: version-agnostic (binds at Stage 12)
 milestone: 264-pda-rollup-and-portfolio
 release_class: cross-cutting

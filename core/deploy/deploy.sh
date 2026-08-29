@@ -963,6 +963,126 @@ _vf_compute_verdict() {
 # driven — a close that never wrote its `RELEASE_LOG` row is invisible to it. LOG-row
 # presence is the close-time Step 4 table's responsibility, not this gate's.
 
+# ─── RELEASE_LOG data-row reader — the ONE row selector (Checks 26/32/47/48/61) ──
+#
+# WHY THIS EXISTS. Five close-out enumerators each carried their own copy of
+# `^\|[[:space:]]*v[0-9]+\.[0-9]+`, and that single expression was silently doing
+# THREE different jobs at once:
+#   (1) DATA-ROW filter   — exclude the header row and the `|---|` separator row;
+#   (2) ROW-CLASS filter  — exclude version-less releases;
+#   (3) RESOLUTION-KEY derivation — field 1 of the matched line became the key every
+#       downstream path and grep pattern was then built from.
+#
+# Fusing the three is what made the resulting blindness unfixable by widening. A
+# version-less row's first cell is `<slug> (version-less)`, so admitting it under job
+# (1) ALSO changes the key produced by job (3) — and that key carries un-escaped ERE
+# metacharacters `(` and `)` which the checks' `${_ver//./\\.}` escaping does not
+# neutralise. Widening the regex alone converts satisfied INDEX rows into false
+# findings: strictly worse than the silent absence it was meant to fix.
+#
+# THE FIX IS SEPARATION, NOT WIDENING. The version-shaped predicate is RETAINED
+# verbatim — relocated from the line selector to a `class` FIELD, which is what it was
+# always correct as. `_vf_deployed_rows_from_log` above keeps `ver ~ /^v[0-9]/` for
+# exactly that reason: version-freeness is about CLAIMING a version slot, which a
+# version-less release never does. It is a sound semantic filter and an unsound row
+# selector, and this reader is that distinction made structural.
+#
+# TWO KEYS, AND THEY ARE COMPLEMENTARY RATHER THAN ALTERNATIVES. Measured against the
+# corpus: the INDEX carries the SAME marked cell the LOG does, while the DIGEST,
+# CHANGELOG, notes and `#### ` block headings all carry the BARE slug. So:
+#   row_key    = the Version cell verbatim   — resolves LOG-internal + INDEX
+#   corpus_key = row_key minus a trailing ` (version-less)` marker — resolves the rest
+# FOR A VERSIONED ROW THE TWO ARE BYTE-IDENTICAL, which is the no-regression guarantee
+# by construction rather than by test: nothing about a `vX.Y` row's resolution moves.
+#
+# Columns are pinned BY HEADER NAME, never by ordinal, and an unreadable header fails
+# LOUD rather than yielding a silently-empty set. Both idioms are taken from
+# _vf_deployed_rows_from_log rather than invented here — see its block comment for why
+# ordinal resolution was abandoned. A silently-empty row set is the precise shape of
+# the defect this reader exists to close, so it must never be a reachable outcome.
+#
+# Emits one pipe-delimited record per data row, in LOG FILE ORDER (the corpus's only
+# real ordering — the cutoff latches in every consumer depend on it):
+#
+#     class | row_key | corpus_key | milestone | tag | state
+#
+# `class` is `versioned` or `version-less`. Consumers resolve enumerate-vs-exclude PER
+# LIMB against that field; they do not re-derive it. See
+# release/references/standards/release-corpus-schema.md § Row classes for the
+# governing contract and for which limbs enumerate which classes.
+
+# _rl_regex_escape <string> — echo the string with every ERE metacharacter escaped.
+#
+# `${_ver//./\\.}` escaped ONLY `.`. That is sufficient for a `vX.Y` key and actively
+# wrong for a slug key: `public-flip-install-blockers (version-less)` otherwise reaches
+# `grep -E` with its parentheses live, where they become a capturing group and the
+# pattern silently matches nothing at all. A key that fails to resolve produces a
+# finding, so an unescaped metacharacter reads as a corpus defect rather than as a
+# tooling defect — which is the worst available failure mode.
+_rl_regex_escape() {
+  local _s="$1" _out="" _i _c
+  for (( _i = 0; _i < ${#_s}; _i++ )); do
+    _c="${_s:_i:1}"
+    case "$_c" in
+      '\'|'.'|'['|']'|'('|')'|'{'|'}'|'*'|'+'|'?'|'|'|'^'|'$') _out+="\\${_c}" ;;
+      *) _out+="$_c" ;;
+    esac
+  done
+  printf '%s' "$_out"
+}
+
+# _rl_data_rows <release-log-file> — echo one `class|row_key|corpus_key|milestone|tag|state`
+# record per RELEASE_LOG data row, in file order. Returns non-zero (awk exit 3) with a
+# stderr diagnostic when the header row carries no Version+State columns.
+_rl_data_rows() {
+  local _log="$1"
+  [[ -f "$_log" ]] || return 1
+  /usr/bin/awk -F'|' '
+    function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+    function bt(s)   { gsub(/`/, "", s); return trim(s) }
+    /^\|/ {
+      # The release table is the FIRST pipe table carrying both a Version and a State
+      # column header. Prose pipes and stray tables above it are skipped rather than
+      # misread; `done` stops the walk at the table end so a LATER table in the same
+      # file cannot inflate the row set.
+      if (done) next
+      if (!have) {
+        v = 0; m = 0; t = 0; s = 0
+        for (i = 1; i <= NF; i++) {
+          c = trim($i)
+          if (c == "Version")   v = i
+          if (c == "Milestone") m = i
+          if (c == "Tag")       t = i
+          if (c == "State")     s = i
+        }
+        if (v && s) { vcol = v; mcol = m; tcol = t; scol = s; have = 1 }
+        next
+      }
+      # `|---|---|` separator. The old version-anchored selector excluded it as a side
+      # effect of requiring a `v<digit>` first cell; a data-row selector must exclude it
+      # deliberately, or the separator becomes a phantom row.
+      if ($0 ~ /^[| \t:-]+$/) next
+      ver = trim($vcol)
+      if (ver == "") next
+      cls = (ver ~ /^v[0-9]+\.[0-9]+/) ? "versioned" : "version-less"
+      ck = ver
+      sub(/[ \t]*\(version-less\)[ \t]*$/, "", ck)
+      # mcol/tcol/scol are guarded because a ledger may legitimately omit an optional
+      # column; an unguarded $0-fallback would silently emit the WHOLE LINE as a field.
+      print cls "|" ver "|" ck "|" \
+            (mcol ? bt($mcol) : "") "|" (tcol ? bt($tcol) : "") "|" (scol ? bt($scol) : "")
+      next
+    }
+    { if (have) done = 1 }
+    END {
+      if (!have) {
+        print "deploy.sh: _rl_data_rows — RELEASE_LOG header row carries no Version+State columns; ZERO rows were enumerated. This is a hard failure, not an empty ledger." > "/dev/stderr"
+        exit 3
+      }
+    }
+  ' "$_log"
+}
+
 # ─── Deployment-Log / Release-Learnings block primitives (sub-checks j + k) ────
 #
 # Sets CC_DL_FILES to the hot ledger followed by its same-directory archive
@@ -1022,7 +1142,8 @@ _cc_next_h4_after() {
   ' "$1" 2>/dev/null
 }
 
-# _cc_row_findings <surface> <version> <milestone> <tag> <net-in-scope> <outputs-in-scope>
+# _cc_row_findings <surface> <row-key> <milestone> <tag> <net-in-scope> <outputs-in-scope>
+#                  <telemetry-in-scope> <class> <corpus-key>
 #   THE PER-ROW ASSERTION. Pure-ish: takes the row fields + the surface; reads
 #   in-repo corpus files (and, for the network sub-checks, the repo's own published
 #   Release via the delegated tools). Echoes ZERO or more finding lines on stdout
@@ -1046,6 +1167,17 @@ _cc_row_findings() {
   # Same caller-computed file-order latch as $5 and $6. DEFAULTED to 0 so a stale
   # 5- or 6-argument call degrades to "not eligible" rather than erroring.
   local _telemetry_in_scope="${7:-0}"
+  # $8 — the row CLASS ("versioned" | "version-less"), supplied by _rl_data_rows via
+  # the caller. DEFAULTED to "versioned" so a stale 5/6/7-argument call behaves exactly
+  # as it did before the class model existed.
+  local _class="${8:-versioned}"
+  # $9 — the CORPUS key: the row key minus a trailing ` (version-less)` marker. It
+  # resolves the DIGEST / CHANGELOG / notes / `#### ` heading surfaces, which carry the
+  # bare slug, while $2 (`_ver`, the ROW key) resolves the LOG and the INDEX, which
+  # carry the marked cell. DEFAULTED to $2 — for a versioned row the two ARE equal, so
+  # the default is not a fallback but the identity, and an un-migrated caller keeps its
+  # exact prior behaviour.
+  local _ckey="${9:-$_ver}"
   local _log="${CC_LOG:-release/releases/RELEASE_LOG.md}"
   local _index="${CC_INDEX:-release/releases/RELEASE_INDEX.md}"
   local _digest="${CC_DIGEST:-release/releases/RELEASE_DIGEST.md}"
@@ -1054,29 +1186,54 @@ _cc_row_findings() {
   local _lint="${CC_LINT:-core/deploy/tools/lint_release_corpus.py}"
   local _drift="${CC_DRIFT:-release/tools/check-release-body-drift.sh}"
 
-  # (a) NOTES file present (version stem OR milestone slug — Check 32's resolution)
-  local _notes_ok=0
-  [[ -f "${_notes_dir}/${_ver}_RELEASE_NOTES.md" ]] && _notes_ok=1
-  [[ -n "$_ms" && -f "${_notes_dir}/${_ms}_RELEASE_NOTES.md" ]] && _notes_ok=1
+  # Both keys, pre-escaped once. Every pattern below goes through _rl_regex_escape
+  # rather than `${_ver//./\\.}`: the old form escaped only `.`, which silently fails
+  # on a slug key carrying `(` `)`. For a `vX.Y` key the two produce the identical
+  # string (`v4\.38`), so no versioned row's resolution changes.
+  local _ver_re _ckey_re
+  _ver_re="$(_rl_regex_escape "$_ver")"
+  _ckey_re="$(_rl_regex_escape "$_ckey")"
+
+  # (a) NOTES file present. Rungs, in order: corpus key (flat) → milestone slug (flat)
+  # → corpus key under `notes/_unversioned/`. The subdirectory rung is NOT invented
+  # here — check-release-body-drift.sh already resolves a note "flat path first, then
+  # any subfolder", and this adopts that shipped resolver's shape rather than minting a
+  # second one that can disagree with it. It also makes this limb independent of where
+  # the version-less notes physically live: it resolves them flat or nested, so a later
+  # tidy-up of that layout neither breaks nor is required by this check.
+  local _notes_ok=0 _note_path=""
+  if [[ -f "${_notes_dir}/${_ckey}_RELEASE_NOTES.md" ]]; then
+    _note_path="${_notes_dir}/${_ckey}_RELEASE_NOTES.md"
+  elif [[ -n "$_ms" && -f "${_notes_dir}/${_ms}_RELEASE_NOTES.md" ]]; then
+    _note_path="${_notes_dir}/${_ms}_RELEASE_NOTES.md"
+  elif [[ -f "${_notes_dir}/_unversioned/${_ckey}_RELEASE_NOTES.md" ]]; then
+    _note_path="${_notes_dir}/_unversioned/${_ckey}_RELEASE_NOTES.md"
+  fi
+  [[ -n "$_note_path" ]] && _notes_ok=1
   if [[ $_notes_ok -eq 0 ]]; then
-    printf '%s: missing notes file (%s_RELEASE_NOTES.md or %s_RELEASE_NOTES.md)\n' "$_ver" "$_ver" "$_ms"
+    printf '%s: missing notes file (%s_RELEASE_NOTES.md, %s_RELEASE_NOTES.md, or _unversioned/%s_RELEASE_NOTES.md)\n' \
+      "$_ver" "$_ckey" "$_ms" "$_ckey"
   fi
 
-  # (b) INDEX row present (version is the first table cell)
-  if ! /usr/bin/grep -qE "^\|[[:space:]]*${_ver//./\\.}[[:space:]]*\|" "$_index" 2>/dev/null; then
+  # (b) INDEX row present — keyed on the ROW key, because the INDEX carries the SAME
+  # first cell the LOG does (measured: the marked form resolves every version-less row
+  # here, and the bare slug resolves none of them).
+  if ! /usr/bin/grep -qE "^\|[[:space:]]*${_ver_re}[[:space:]]*\|" "$_index" 2>/dev/null; then
     printf '%s: missing RELEASE_INDEX.md row\n' "$_ver"
   fi
 
-  # (c) DIGEST entry present (### vX.YZ heading)
-  if ! /usr/bin/grep -qE "^### ${_ver//./\\.}[[:space:](]" "$_digest" 2>/dev/null; then
-    printf '%s: missing RELEASE_DIGEST.md entry (### %s ...)\n' "$_ver" "$_ver"
+  # (c) DIGEST entry present (### <corpus key> heading) — keyed on the CORPUS key; the
+  # DIGEST carries the bare slug, which is the exact inverse of the INDEX above.
+  if ! /usr/bin/grep -qE "^### ${_ckey_re}[[:space:](]" "$_digest" 2>/dev/null; then
+    printf '%s: missing RELEASE_DIGEST.md entry (### %s ...)\n' "$_ver" "$_ckey"
   fi
 
   # (d) CHANGELOG section present — N/A (no finding) pre-CHANGELOG (file absent),
   # mirroring automated-closeout.sh phase_append_changelog pre-CHANGELOG SKIP.
+  # Corpus-keyed, same as the DIGEST.
   if [[ -f "$_changelog" ]]; then
-    if ! /usr/bin/grep -qE "^## \[?${_ver//./\\.}\]?[[:space:]]" "$_changelog" 2>/dev/null; then
-      printf '%s: missing CHANGELOG.md ## [%s] section\n' "$_ver" "$_ver"
+    if ! /usr/bin/grep -qE "^## \[?${_ckey_re}\]?[[:space:]]" "$_changelog" 2>/dev/null; then
+      printf '%s: missing CHANGELOG.md ## [%s] section\n' "$_ver" "$_ckey"
     fi
   fi
 
@@ -1086,9 +1243,20 @@ _cc_row_findings() {
   # equality check would false-positive). Not a per-row finding here.
 
   # (f) signed-tag presence — read from the LOG Tag column (in-corpus; no network).
-  # Empty / em-dash / unrecoverable Tag column => missing tag for a VERIFIED row.
-  if [[ -z "$_tag" || "$_tag" == "—" || "$_tag" == "-" || "$_tag" == *unrecoverable* ]]; then
-    printf '%s: VERIFIED row has no tag recorded in RELEASE_LOG Tag column\n' "$_ver"
+  # Empty / em-dash / (none) / unrecoverable Tag column => missing tag for a VERIFIED row.
+  #
+  # VERSION-ONLY LIMB — class `version-less` is DECLARED EXCLUDED, not silently skipped.
+  # A version-less release is produced by the D-Version condition-(B) determination:
+  # the milestone title carries no `vX.Y`, so no version is claimed, NO signed tag is
+  # cut and NO GitHub Release is published. Asserting a tag on such a row asserts the
+  # existence of a thing the governing determination forbids from existing — the
+  # finding would be correct about the corpus and wrong about the contract. The
+  # exclusion is COUNTED and reported in the caller's DENOM line, so a zero here is
+  # distinguishable from nothing having looked.
+  if [[ "$_class" == "versioned" ]]; then
+    if [[ -z "$_tag" || "$_tag" == "—" || "$_tag" == "-" || "$_tag" == "(none)" || "$_tag" == *unrecoverable* ]]; then
+      printf '%s: VERIFIED row has no tag recorded in RELEASE_LOG Tag column\n' "$_ver"
+    fi
   fi
 
   # (g) §3.2 note-content — DELEGATE to lint_release_corpus.py (version-scoped, the
@@ -1099,9 +1267,13 @@ _cc_row_findings() {
     if [[ $_lint_exit -eq 3 ]]; then
       printf '%s: §3.2 note-content lint path-unresolved (exit 3; corpus unverifiable)\n' "$_ver"
     elif [[ $_lint_exit -ne 0 ]]; then
-      local _note_rel="${_notes_dir}/${_ver}_RELEASE_NOTES.md"
-      # U1 checked: `_note_rel` is "<dir>/<ver>_RELEASE_NOTES.md", never empty, so
-      # the fixed-string needle cannot match the empty line a here-string emits
+      # The RESOLVED note path from (a) — not a re-derived one. Re-deriving it would be
+      # a second resolver that can disagree with the first, and it would look for the
+      # note under a rung (a) already determined was not the one that matched.
+      local _note_rel="${_note_path:-${_notes_dir}/${_ckey}_RELEASE_NOTES.md}"
+      # U1 checked: `_note_rel` is a "<dir>/…_RELEASE_NOTES.md" path, never empty (the
+      # fallback above guarantees it even when (a) resolved nothing), so the
+      # fixed-string needle cannot match the empty line a here-string emits
       # where `printf '%s'` emitted nothing.
       if /usr/bin/grep -qF "$_note_rel" <<<"$_lint_out" 2>/dev/null; then
         printf '%s: §3.2 note-content finding for this version (lint_release_corpus.py)\n' "$_ver"
@@ -1130,7 +1302,17 @@ _cc_row_findings() {
   # automated-closeout.sh's _drift_block_in_scope both already latch on. The
   # caller walks the LOG once and latches this flag in the same pass, so there is
   # one ordering idiom in this file rather than two that disagree.
-  if [[ "$_net_in_scope" == "1" ]]; then
+  #
+  # CLASS GATE — the network pair (h)+(i) are VERSION-ONLY limbs and class
+  # `version-less` is DECLARED EXCLUDED, for the same structural reason as (f): the
+  # condition-(B) determination that produces a version-less release publishes no
+  # GitHub Release, so there is no Surface-1 object to look up and no published body to
+  # diff. The gate is placed BEFORE the delegated tools rather than inside them so a
+  # slug key can never reach `gh release view` or check-release-body-drift.sh at all —
+  # that tool's exit contract enumerates 0/1/2/3, and an unexpected exit is mapped to a
+  # finding by its callers, so an untested code path there converts directly into a
+  # spurious finding. Excluded rows are counted in the caller's DENOM line.
+  if [[ "$_net_in_scope" == "1" && "$_class" == "versioned" ]]; then
     local _gh_ok=0
     if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then _gh_ok=1; fi
     if [[ $_gh_ok -eq 0 ]]; then
@@ -1173,8 +1355,9 @@ _cc_row_findings() {
   # reasons in the header block above. Both are STRUCTURAL assertions: they read
   # the shape of a mandated Stage-13 output, never its content.
   if [[ "$_outputs_in_scope" == "1" ]]; then
-    local _dl_head="#### Deployment Log ${_ver}"
-    local _rl_head="#### Release Learnings ${_ver}"
+    # Corpus-keyed: `#### ` block headings carry the BARE slug, not the marked cell.
+    local _dl_head="#### Deployment Log ${_ckey}"
+    local _rl_head="#### Release Learnings ${_ckey}"
 
     # ── (j) the Phase-B `**Velocity:**` field ──────────────────────────────────
     #
@@ -1522,34 +1705,37 @@ _cc_compute_verdict() {
   _cc_is_allowlisted() {
     local _v="$1"
     [[ -f "$cc_allowlist" ]] || return 1
-    /usr/bin/grep -qE "^[[:space:]]*${_v//./\\.}[[:space:]]*(#.*)?\$" "$cc_allowlist"
+    /usr/bin/grep -qE "^[[:space:]]*$(_rl_regex_escape "$_v")[[:space:]]*(#.*)?\$" "$cc_allowlist"
   }
 
-  # Enumerate logged releases in LOG file order, emitting "version|milestone|tag|state"
-  # for each `| vX.Y | <ms> | ... | <tag> | <state> | <date> |` row. The 8-col schema
-  # is Version(1) Milestone(2) Issues(3) ReleasePR(4) MergeSHA(5) Tag(6) State(7)
-  # Date(8) — so field 6 = Tag, field 7 = State (the VERIFIED filter).
-  local cc_rows
-  cc_rows=$(/usr/bin/grep -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$cc_log" 2>/dev/null \
-    | /usr/bin/awk -F ' \\| ' '{
-        v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v);
-        ms=$2; sub(/^[[:space:]]*/,"",ms); sub(/[[:space:]]*$/,"",ms);
-        tg=$6; gsub(/`/,"",tg); sub(/^[[:space:]]*/,"",tg); sub(/[[:space:]]*$/,"",tg);
-        st=$7; gsub(/`/,"",st); sub(/^[[:space:]]*/,"",st); sub(/[[:space:]]*$/,"",st);
-        print v "|" ms "|" tg "|" st
-      }') || cc_rows=""
+  # Enumerate ALL logged releases in LOG file order via the ONE shared row reader,
+  # which emits "class|row_key|corpus_key|milestone|tag|state". Columns are resolved by
+  # header NAME inside the reader, so this call site no longer encodes an ordinal map —
+  # and it no longer encodes a row-CLASS filter either. See _rl_data_rows.
+  local cc_rows cc_rows_rc=0
+  cc_rows="$(_rl_data_rows "$cc_log")" || cc_rows_rc=$?
+  if [[ $cc_rows_rc -ne 0 ]]; then
+    # Fail LOUD. An unreadable ledger schema previously degraded to an empty row set,
+    # which verdicts CLEAN 0 — a pass produced by not looking. That is precisely the
+    # failure this gate exists to make impossible, so it is reported as its own verdict.
+    printf 'SKIP %s could not be parsed (RELEASE_LOG header carries no Version+State columns); ZERO rows enumerated — this is a parse failure, not a clean ledger\n' "$cc_log"
+    return 0
+  fi
+
+  # Total data-row count — the DENOMINATOR. Emitted below so a zero-finding result is
+  # distinguishable from a row class never having been enumerated.
+  local cc_rows_total=0
+  [[ -n "$cc_rows" ]] && cc_rows_total=$(printf '%s\n' "$cc_rows" | /usr/bin/grep -c .)
 
   local cc_past_cutoff=false cc_targets=0 cc_findings=0 cc_detail="" _last_verified="" _cc_arm_row=""
+  local cc_vl_targets=0
   local cc_past_release_cutoff=false _cc_net_arm_row="" _cc_net_targets=0
   local cc_past_outputs_cutoff=false _cc_outputs_arm_row="" _cc_outputs_targets=0
   local cc_past_telemetry_cutoff=false _cc_telemetry_arm_row="" _cc_telemetry_targets=0
-  local _row _ver _ms _tag _state _rf _net _outputs _telemetry
+  local _row _cls _ver _ckey _ms _tag _state _rf _net _outputs _telemetry
   while IFS= read -r _row; do
     [[ -n "$_row" ]] || continue
-    _ver="${_row%%|*}"
-    _ms="${_row#*|}"; _ms="${_ms%%|*}"
-    _tag="${_row%|*}"; _tag="${_tag##*|}"
-    _state="${_row##*|}"
+    IFS='|' read -r _cls _ver _ckey _ms _tag _state <<<"$_row"
 
     # Cutover gate (walk LOG order; arm on first cutoff-prefix match).
     if [[ "$cc_past_cutoff" == "false" && "$_ver" == "$cc_cutoff"* ]]; then
@@ -1602,7 +1788,16 @@ _cc_compute_verdict() {
     [[ "$_state" == "VERIFIED" ]] || continue
     _cc_is_allowlisted "$_ver" && continue
     cc_targets=$((cc_targets + 1))
-    _last_verified="$_ver"   # LOG file order is chronological ⇒ last wins
+    [[ "$_cls" == "version-less" ]] && cc_vl_targets=$((cc_vl_targets + 1))
+
+    # CLASS-PINNED. `_last_verified` feeds the (e-aggregate) `.version` stamp equality
+    # below, and `.version` holds a `vX.Y` value by definition. Before the class field
+    # existed the version-anchored row selector pinned this implicitly; now that
+    # version-less rows are enumerated, the pin has to be explicit or a version-less
+    # row landing last would make the aggregate compare `.version` against a slug and
+    # report a stamp mismatch on every run. This closes a latent defect the old
+    # selector was masking rather than preventing.
+    [[ "$_cls" == "versioned" ]] && _last_verified="$_ver"   # LOG file order is chronological ⇒ last wins
 
     _net=0
     if [[ "$cc_past_release_cutoff" == "true" ]]; then _net=1; _cc_net_targets=$((_cc_net_targets + 1)); fi
@@ -1617,7 +1812,7 @@ _cc_compute_verdict() {
       _telemetry=1; _cc_telemetry_targets=$((_cc_telemetry_targets + 1))
     fi
 
-    _rf="$(_cc_row_findings "$surface" "$_ver" "$_ms" "$_tag" "$_net" "$_outputs" "$_telemetry")"
+    _rf="$(_cc_row_findings "$surface" "$_ver" "$_ms" "$_tag" "$_net" "$_outputs" "$_telemetry" "$_cls" "$_ckey")"
     if [[ -n "$_rf" ]]; then
       cc_detail+="$_rf"$'\n'
       cc_findings=$((cc_findings + $(printf '%s\n' "$_rf" | /usr/bin/grep -c . )))
@@ -1708,6 +1903,19 @@ _cc_compute_verdict() {
     printf 'close-completeness: WARNING — cutoff %s matched NO LOG row; zero rows asserted (the gate is vacuously clean).\n' \
       "$cc_cutoff" >&2
   fi
+
+  # DENOMINATOR EMIT. `enumerated` + `not in scope` == `total`, by arithmetic — so every
+  # data row in the ledger is accounted for by exactly one of the two, and a row that
+  # fell into NEITHER would show up as a broken identity rather than as an absence
+  # nobody notices. The version-less count is called out separately because that class
+  # is enumerated for the class-independent limbs and DECLARED EXCLUDED for the
+  # version-only ones ((f) tag, (h) published Release, (i) body-drift); without this
+  # figure, "no findings on version-less rows" and "nothing looked at version-less
+  # rows" produce byte-identical output.
+  # STDERR ONLY — the stdout protocol line (CLEAN/INCOMPLETE/SKIP) is parsed by string
+  # surgery at all three call sites.
+  printf 'close-completeness: DENOM — %s row(s) enumerated (of which %s version-less: version-only limbs declared EXCLUDED, not silently skipped) / %s row(s) not in scope (pre-cutoff, non-VERIFIED, or allowlisted) / %s total LOG data row(s)\n' \
+    "$cc_targets" "$cc_vl_targets" "$((cc_rows_total - cc_targets))" "$cc_rows_total" >&2
 
   # (e-aggregate) .version stamp — must exist AND equal the most-recent VERIFIED
   # in-scope release. N/A (no finding) when .version is absent (version-less /
@@ -1939,24 +2147,25 @@ _de_compute_verdict() {
   local de_data
   de_data="$(/usr/bin/grep -E '^\| [0-9]{4}-[0-9]{2}-' "$de_log" 2>/dev/null || true)"
 
-  # RELEASE_LOG rows in file order → "version|milestone|state" (8-col schema:
-  # Version(1) Milestone(2) Issues(3) ReleasePR(4) MergeSHA(5) Tag(6) State(7) Date(8)).
-  local de_rows
-  de_rows=$(/usr/bin/grep -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$de_rlog" 2>/dev/null \
-    | /usr/bin/awk -F ' \\| ' '{
-        v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v);
-        ms=$2; gsub(/`/,"",ms); sub(/^[[:space:]]*/,"",ms); sub(/[[:space:]]*$/,"",ms);
-        st=$7; gsub(/`/,"",st); sub(/^[[:space:]]*/,"",st); sub(/[[:space:]]*$/,"",st);
-        print v "|" ms "|" st
-      }') || de_rows=""
+  # RELEASE_LOG rows in file order, via the ONE shared row reader. This gate is
+  # milestone-KEYED (see the rung-1 resolution below), so it takes `milestone` from the
+  # reader and needs neither of the two version keys — but it must see the same ROW
+  # POPULATION as its four sibling enumerators, which is what the reader guarantees.
+  local de_rows de_rows_rc=0
+  de_rows="$(_rl_data_rows "$de_rlog")" || de_rows_rc=$?
+  if [[ $de_rows_rc -ne 0 ]]; then
+    printf 'SKIP %s could not be parsed (RELEASE_LOG header carries no Version+State columns); ZERO rows enumerated — a parse failure, not an empty ledger\n' "$de_rlog"
+    return 0
+  fi
 
-  local de_past=false de_targets=0 de_findings=0 de_detail=""
-  local _row _ver _ms _state _rrows _cls _t _s _n
+  local de_rows_total=0
+  [[ -n "$de_rows" ]] && de_rows_total=$(printf '%s\n' "$de_rows" | /usr/bin/grep -c .)
+
+  local de_past=false de_targets=0 de_findings=0 de_detail="" de_vl_targets=0
+  local _row _rcls _ver _ckey _ms _tag _state _rrows _cls _t _s _n
   while IFS= read -r _row; do
     [[ -n "$_row" ]] || continue
-    _ver="${_row%%|*}"
-    _ms="${_row#*|}"; _ms="${_ms%%|*}"
-    _state="${_row##*|}"
+    IFS='|' read -r _rcls _ver _ckey _ms _tag _state <<<"$_row"
 
     # Cutover: arm ON the anchor row, then `continue` so the anchor itself is EXCLUDED —
     # in scope means STRICTLY AFTER (the introducing release never gates its own close).
@@ -1977,6 +2186,15 @@ _de_compute_verdict() {
     fi
 
     de_targets=$((de_targets + 1))
+    [[ "$_rcls" == "version-less" ]] && de_vl_targets=$((de_vl_targets + 1))
+
+    # EVENT-KEY RESOLUTION IS DELIBERATELY UNCHANGED — still the Milestone cell, never
+    # a version key. Whether a version-less row's event key should be its Milestone
+    # cell or its corpus key cannot be settled from the ledger alone: 2 of the 11
+    # version-less rows carry a Milestone cell that differs from their corpus key, and
+    # the event log is operator-instance state absent from a clean checkout. This
+    # change widens the row POPULATION and hands that question a defined denominator;
+    # it does not answer it.
     _rrows="$(_de_release_rows "$de_data" "$_ms")"
 
     while IFS= read -r _cls; do
@@ -1990,6 +2208,11 @@ _de_compute_verdict() {
       fi
     done <<<"$de_classes"
   done <<<"$de_rows"
+
+  # DENOMINATOR EMIT — enumerated + not-in-scope == total, by arithmetic.
+  # STDERR ONLY (the stdout protocol line is parsed by string surgery downstream).
+  printf 'decision-emission: DENOM — %s row(s) enumerated (of which %s version-less) / %s row(s) not in scope (pre-cutover, non-VERIFIED, or no resolvable Milestone slug) / %s total LOG data row(s)\n' \
+    "$de_targets" "$de_vl_targets" "$((de_rows_total - de_targets))" "$de_rows_total" >&2
 
   if [[ $de_targets -eq 0 ]]; then
     printf 'SKIP no VERIFIED RELEASE_LOG row strictly after the cutover anchor %s — nothing to assert yet (the gate arms at the next post-cutover close)\n' "$de_cutover"
@@ -2091,27 +2314,26 @@ _c32_compute_verdict() {
   _c32_is_allowlisted() {
     local _v="$1"
     [[ -f "$c32_allowlist" ]] || return 1
-    /usr/bin/grep -qE "^[[:space:]]*${_v//./\\.}[[:space:]]*(#.*)?\$" "$c32_allowlist"
+    /usr/bin/grep -qE "^[[:space:]]*$(_rl_regex_escape "$_v")[[:space:]]*(#.*)?\$" "$c32_allowlist"
   }
 
-  # Enumerate logged releases in LOG file order: emit "version|milestone|tag".
-  local c32_rows
-  c32_rows=$(/usr/bin/grep -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$c32_log" 2>/dev/null \
-    | /usr/bin/awk -F ' \\| ' '{
-        v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v);
-        ms=$2; sub(/^[[:space:]]*/,"",ms); sub(/[[:space:]]*$/,"",ms);
-        tg=$6; gsub(/`/,"",tg); sub(/^[[:space:]]*/,"",tg); sub(/[[:space:]]*$/,"",tg);
-        print v "|" ms "|" tg
-      }') || c32_rows=""
+  # Enumerate ALL logged releases in LOG file order via the ONE shared row reader.
+  local c32_rows c32_rows_rc=0
+  c32_rows="$(_rl_data_rows "$c32_log")" || c32_rows_rc=$?
+  if [[ $c32_rows_rc -ne 0 ]]; then
+    printf 'SKIP %s could not be parsed (RELEASE_LOG header carries no Version+State columns); ZERO rows enumerated — a parse failure, not an empty ledger\n' "$c32_log"
+    return 0
+  fi
+
+  local c32_rows_total=0
+  [[ -n "$c32_rows" ]] && c32_rows_total=$(printf '%s\n' "$c32_rows" | /usr/bin/grep -c .)
 
   local c32_past_cutoff=false c32_past_release_cutoff=false
-  local c32_targets=0 c32_findings=0 c32_output=""
-  local _row _ver _ms _tag _notes_ok _release_eligible
+  local c32_targets=0 c32_findings=0 c32_output="" c32_vl_targets=0
+  local _row _cls _ver _ckey _ms _tag _state _notes_ok _release_eligible _ver_re _ckey_re
   while IFS= read -r _row; do
     [[ -n "$_row" ]] || continue
-    _ver="${_row%%|*}"
-    _ms="${_row#*|}"; _ms="${_ms%%|*}"
-    _tag="${_row##*|}"
+    IFS='|' read -r _cls _ver _ckey _ms _tag _state <<<"$_row"
 
     if [[ "$c32_past_cutoff" == "false" && "$_ver" == "$c32_cutoff"* ]]; then
       c32_past_cutoff=true
@@ -2119,30 +2341,49 @@ _c32_compute_verdict() {
     [[ "$c32_past_cutoff" == "true" ]] || continue
     _c32_is_allowlisted "$_ver" && continue
     c32_targets=$((c32_targets + 1))
+    [[ "$_cls" == "version-less" ]] && c32_vl_targets=$((c32_vl_targets + 1))
 
-    # (a) INDEX row present (version is the first table cell)
-    if ! /usr/bin/grep -qE "^\|[[:space:]]*${_ver//./\\.}[[:space:]]*\|" "$c32_index" 2>/dev/null; then
+    # Both keys, escaped across the FULL ERE metacharacter set. `${_ver//./\\.}` escaped
+    # only `.`; a version-less row key carries `(` `)`, which reach grep -E as a group
+    # and make the pattern match nothing — turning a satisfied surface into a finding.
+    _ver_re="$(_rl_regex_escape "$_ver")"
+    _ckey_re="$(_rl_regex_escape "$_ckey")"
+
+    # (a) INDEX row present — ROW key (the INDEX carries the same marked first cell the
+    # LOG does; the bare slug resolves no INDEX row at all).
+    if ! /usr/bin/grep -qE "^\|[[:space:]]*${_ver_re}[[:space:]]*\|" "$c32_index" 2>/dev/null; then
       c32_output+="${_ver}: missing RELEASE_INDEX.md row"$'\n'
       c32_findings=$((c32_findings + 1))
     fi
-    # (b) DIGEST entry present (### vX.YZ H3 heading)
-    if ! /usr/bin/grep -qE "^### ${_ver//./\\.}[[:space:](]" "$c32_digest" 2>/dev/null; then
-      c32_output+="${_ver}: missing RELEASE_DIGEST.md entry (### ${_ver} ...)"$'\n'
+    # (b) DIGEST entry present (### <corpus key> H3 heading) — CORPUS key; the DIGEST
+    # carries the bare slug, the exact inverse of the INDEX above.
+    if ! /usr/bin/grep -qE "^### ${_ckey_re}[[:space:](]" "$c32_digest" 2>/dev/null; then
+      c32_output+="${_ver}: missing RELEASE_DIGEST.md entry (### ${_ckey} ...)"$'\n'
       c32_findings=$((c32_findings + 1))
     fi
-    # (c) NOTES file present under EITHER version stem OR milestone slug
+    # (c) NOTES file present — corpus key (flat) OR milestone slug (flat) OR corpus key
+    # under `notes/_unversioned/`. The subdirectory rung mirrors the resolver
+    # check-release-body-drift.sh already ships, so this limb resolves a note wherever
+    # it legitimately lives rather than depending on a particular layout.
     _notes_ok=0
-    [[ -f "${c32_notes_dir}/${_ver}_RELEASE_NOTES.md" ]] && _notes_ok=1
+    [[ -f "${c32_notes_dir}/${_ckey}_RELEASE_NOTES.md" ]] && _notes_ok=1
     [[ -n "$_ms" && -f "${c32_notes_dir}/${_ms}_RELEASE_NOTES.md" ]] && _notes_ok=1
+    [[ -f "${c32_notes_dir}/_unversioned/${_ckey}_RELEASE_NOTES.md" ]] && _notes_ok=1
     if [[ $_notes_ok -eq 0 ]]; then
-      c32_output+="${_ver}: missing notes file (${_ver}_RELEASE_NOTES.md or ${_ms}_RELEASE_NOTES.md)"$'\n'
+      c32_output+="${_ver}: missing notes file (${_ckey}_RELEASE_NOTES.md, ${_ms}_RELEASE_NOTES.md, or _unversioned/${_ckey}_RELEASE_NOTES.md)"$'\n'
       c32_findings=$((c32_findings + 1))
     fi
 
     # Stricter post-Release-cutover assertions (tag + published Release). Dormant
     # when c32_release_cutoff is the __none__ sentinel.
+    #
+    # CLASS GATE — (d) and (e) are VERSION-ONLY limbs and class `version-less` is
+    # DECLARED EXCLUDED. The condition-(B) determination that produces a version-less
+    # release cuts no signed tag and publishes no GitHub Release, so both limbs would be
+    # asserting the existence of objects that determination forbids. The exclusion is
+    # counted and reported in the DENOM line below rather than left as a silent skip.
     _release_eligible=0
-    if [[ "$c32_release_cutoff" != "__none__" ]]; then
+    if [[ "$c32_release_cutoff" != "__none__" && "$_cls" == "versioned" ]]; then
       if [[ "$c32_past_release_cutoff" == "false" && "$_ver" == "$c32_release_cutoff"* ]]; then
         c32_past_release_cutoff=true
       fi
@@ -2170,6 +2411,26 @@ _c32_compute_verdict() {
       fi
     fi
   done <<<"$c32_rows"
+
+  # DENOMINATOR EMIT — enumerated + not-in-scope == total, by arithmetic, so a row that
+  # landed in neither shows as a broken identity rather than as an unnoticed absence.
+  # STDERR ONLY: the stdout protocol lines below are parsed by string surgery at three
+  # call sites (the lifecycle check, the CI probe, and the self-test).
+  # The "declared EXCLUDED" clause is only true of the version-less rows if limbs (d)+(e)
+  # actually ran for the versioned ones. They are gated on a release cutoff that DEFAULTS
+  # to the __none__ sentinel, and under that default _release_eligible stays 0 for EVERY
+  # row — so the limbs assert nothing at all. Emitting the unconditional clause there
+  # tells a reader that the version-less rows were selectively excluded and the remaining
+  # rows were asserted, when in fact nothing was asserted: a silent skip wearing the
+  # label of a deliberate exclusion, which is the precise failure this check exists to
+  # prevent. Report the unrun case as unrun.
+  if [[ "$c32_release_cutoff" == "__none__" ]]; then
+    _c32_vl_clause="version-less; limbs (d)+(e) DID NOT RUN for any row — no release cutoff is set, so they are inapplicable here rather than selectively excluded"
+  else
+    _c32_vl_clause="version-less: version-only limbs (d)+(e) declared EXCLUDED, not silently skipped"
+  fi
+  printf 'release-corpus: DENOM — %s row(s) enumerated (of which %s %s) / %s row(s) not in scope (pre-cutoff or allowlisted) / %s total LOG data row(s)\n' \
+    "$c32_targets" "$c32_vl_targets" "$_c32_vl_clause" "$((c32_rows_total - c32_targets))" "$c32_rows_total" >&2
 
   if [[ $c32_findings -eq 0 ]]; then
     printf 'CLEAN %s\n' "$c32_targets"
@@ -8030,18 +8291,33 @@ sys.stdout.write("".join(out) + "|")
       flag_warn_or_issue "release-note-presence" \
         "RELEASE_LOG.md not found at $c26_log; cannot enumerate target releases"
     else
-      # Enumerate DEPLOYED/VERIFIED versions from RELEASE_LOG.md
-      # (one row per release; version in column 1; state in trailing pipe-separated column)
-      local c26_versions
-      c26_versions=$(/usr/bin/grep -oE '^\|[[:space:]]*v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?[[:space:]]*\|.*\b(DEPLOYED|VERIFIED)\b' "$c26_log" 2>/dev/null \
-        | /usr/bin/sed -E 's/^\|[[:space:]]*//; s/[[:space:]]*\|.*$//' \
-        | /usr/bin/sort -u || true)
+      # Enumerate DEPLOYED/VERIFIED releases from RELEASE_LOG.md via the ONE shared row
+      # reader, keeping the ledger's own FILE ORDER. Two things changed here and both
+      # are deliberate:
+      #   (1) the row selector no longer encodes a version shape, so version-less
+      #       releases are enumerated rather than being invisible to this check;
+      #   (2) the previous `sort -u` is dropped. It sorted the version list
+      #       LEXICOGRAPHICALLY and then fed it to a FILE-ORDER cutoff latch, so the
+      #       latch was walking a different order from the one it assumes. File order is
+      #       the corpus's only real ordering — the same conclusion the network/outputs
+      #       latches record at length in _cc_row_findings — and all five enumerators
+      #       now share it. LOG rows are unique per release, so nothing needed deduping.
+      # The note key is the CORPUS key: notes carry the bare slug, never the marked cell.
+      local c26_rows c26_rows_rc=0
+      c26_rows="$(_rl_data_rows "$c26_log")" || c26_rows_rc=$?
+      if [[ $c26_rows_rc -ne 0 ]]; then
+        flag_warn_or_issue "release-note-presence" \
+          "$c26_log could not be parsed (header carries no Version+State columns); ZERO rows enumerated — a parse failure, not an empty ledger"
+        c26_rows=""
+      fi
+      local c26_rows_total=0
+      [[ -n "$c26_rows" ]] && c26_rows_total=$(printf '%s\n' "$c26_rows" | /usr/bin/grep -c .)
 
       # Allowlist filter (exact version match; supports trailing # comment in allowlist file)
       c26_is_allowlisted() {
         local _v="$1"
         [[ -f "$c26_allowlist" ]] || return 1
-        /usr/bin/grep -qE "^[[:space:]]*${_v//./\\.}[[:space:]]*(#.*)?\$" "$c26_allowlist"
+        /usr/bin/grep -qE "^[[:space:]]*$(_rl_regex_escape "$_v")[[:space:]]*(#.*)?\$" "$c26_allowlist"
       }
 
       # Cutoff filter (RELEASE_LOG order — chronological deploy order).
@@ -8051,19 +8327,35 @@ sys.stdout.write("".join(out) + "|")
       local c26_past_cutoff=false
       local c26_missing=()
       local c26_targets=0
-      local _ver
-      while IFS= read -r _ver; do
-        [[ -n "$_ver" ]] || continue
+      local c26_vl_targets=0
+      local _row _cls _ver _ckey _ms _tag _state
+      while IFS= read -r _row; do
+        [[ -n "$_row" ]] || continue
+        IFS='|' read -r _cls _ver _ckey _ms _tag _state <<<"$_row"
+        # DEPLOYED/VERIFIED only — the state filter the old `\b(DEPLOYED|VERIFIED)\b`
+        # tail performed inline, now read from the named State column.
+        [[ "$_state" == "DEPLOYED" || "$_state" == "VERIFIED" ]] || continue
         if [[ "$c26_past_cutoff" == "false" && "$_ver" == "$c26_cutoff"* ]]; then
           c26_past_cutoff=true
         fi
         [[ "$c26_past_cutoff" == "true" ]] || continue
         c26_is_allowlisted "$_ver" && continue
         c26_targets=$((c26_targets + 1))
-        if [[ ! -f "${c26_notes_dir}/${_ver}_RELEASE_NOTES.md" ]]; then
+        [[ "$_cls" == "version-less" ]] && c26_vl_targets=$((c26_vl_targets + 1))
+        # Flat path first, then the `_unversioned/` subfolder — the same two-rung shape
+        # check-release-body-drift.sh already ships, so a note resolves wherever it
+        # legitimately lives.
+        if [[ ! -f "${c26_notes_dir}/${_ckey}_RELEASE_NOTES.md" \
+              && ! -f "${c26_notes_dir}/_unversioned/${_ckey}_RELEASE_NOTES.md" ]]; then
           c26_missing+=("$_ver")
         fi
-      done <<<"$c26_versions"
+      done <<<"$c26_rows"
+
+      # DENOMINATOR EMIT. Check 26's cutoff default matches no row in some ledgers, in
+      # which case it enumerates nothing and still logs `OK: All 0 …` — a pass produced
+      # by not looking. This line makes that state legible instead of reporting it as
+      # success; it does not change what the check gates.
+      log "  DENOM: release-note-presence — $c26_targets row(s) enumerated (of which $c26_vl_targets version-less) / $((c26_rows_total - c26_targets)) row(s) not in scope (pre-cutoff, non-DEPLOYED/VERIFIED, or allowlisted) / $c26_rows_total total LOG data row(s)"
 
       if [[ "${#c26_missing[@]}" -eq 0 ]]; then
         log "  OK:    All $c26_targets released versions on/after $c26_cutoff have user-facing notes"
@@ -8755,24 +9047,46 @@ sys.stdout.write("".join(out) + "|")
       flag_release_body_drift "release-body-drift" \
         "$c47_log not found; cannot enumerate logged releases for the §5.1 drift check"
     else
-      # Enumerate post-cutover release versions from the LOG (LOG file order).
-      local c47_rows
-      c47_rows=$(/usr/bin/grep -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$c47_log" 2>/dev/null \
-        | /usr/bin/awk -F ' \\| ' '{
-            v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v); print v
-          }') || c47_rows=""
+      # Enumerate post-cutover releases from the LOG (LOG file order) via the ONE
+      # shared row reader.
+      local c47_rows c47_rows_rc=0
+      c47_rows="$(_rl_data_rows "$c47_log")" || c47_rows_rc=$?
+      if [[ $c47_rows_rc -ne 0 ]]; then
+        flag_release_body_drift "release-body-drift" \
+          "$c47_log could not be parsed (header carries no Version+State columns); ZERO rows enumerated — a parse failure, not an empty ledger"
+        c47_rows=""
+      fi
+      local c47_rows_total=0
+      [[ -n "$c47_rows" ]] && c47_rows_total=$(printf '%s\n' "$c47_rows" | /usr/bin/grep -c .)
 
       local c47_past_cutoff=false
       local c47_targets=0
       local c47_findings=0
+      local c47_excluded=0
       local c47_output=""
-      local _v47 _d47_out _d47_exit
-      while IFS= read -r _v47; do
-        [[ -n "$_v47" ]] || continue
+      local _row47 _c47cls _v47 _c47key _c47ms _c47tag _c47state _d47_out _d47_exit
+      while IFS= read -r _row47; do
+        [[ -n "$_row47" ]] || continue
+        IFS='|' read -r _c47cls _v47 _c47key _c47ms _c47tag _c47state <<<"$_row47"
         if [[ "$c47_past_cutoff" == "false" && "$_v47" == "$c47_cutoff"* ]]; then
           c47_past_cutoff=true
         fi
         [[ "$c47_past_cutoff" == "true" ]] || continue
+
+        # CLASS GATE — DECLARED EXCLUDED for class `version-less`, and this is the one
+        # place in the change where the gate PREVENTS a new blocking outcome rather than
+        # merely not causing one. Check 47 is the only enforce-default member of the five
+        # enumerators, so a finding here increments ISSUES and reds a `--check --strict`
+        # run. A version-less release publishes no GitHub Release by construction, so
+        # handing its slug key to check-release-body-drift.sh would take an untested path
+        # in a tool whose exit contract enumerates only 0/1/2/3 — and the `*)` arm below
+        # maps ANY unexpected exit to a finding. Gating before the tool is invoked removes
+        # that path rather than handling its output. Excluded rows are counted and named
+        # in the OK line, so the exclusion is visible rather than silent.
+        if [[ "$_c47cls" == "version-less" ]]; then
+          c47_excluded=$((c47_excluded + 1))
+          continue
+        fi
         c47_targets=$((c47_targets + 1))
 
         _d47_exit=0
@@ -8792,8 +9106,11 @@ sys.stdout.write("".join(out) + "|")
         esac
       done <<<"$c47_rows"
 
+      # DENOMINATOR EMIT — enumerated + declared-excluded + not-in-scope == total.
+      log "  DENOM: release-body-drift — $c47_targets row(s) enumerated / $c47_excluded declared-excluded (version-less: publishes no GitHub Release by construction) / $((c47_rows_total - c47_targets - c47_excluded)) row(s) not in scope (pre-cutoff) / $c47_rows_total total LOG data row(s)"
+
       if [[ $c47_findings -eq 0 ]]; then
-        log "  OK:    all $c47_targets logged release(s) on/after $c47_cutoff have a published Release body matching their in-repo note (§5.1 invariant holds)"
+        log "  OK:    all $c47_targets logged release(s) on/after $c47_cutoff have a published Release body matching their in-repo note (§5.1 invariant holds; $c47_excluded version-less row(s) declared out of scope, not skipped)"
       else
         flag_release_body_drift "release-body-drift" \
           "$c47_findings §5.1 body-drift finding(s) across $c47_targets logged release(s) — a published Release body diverged from its source-of-record note; re-emit per release-notes-standard.md §5.6"
@@ -10171,11 +10488,13 @@ sys.stdout.write("".join(out) + "|")
 
   # ─── Check 49: platform-convention linter (warn-mode initial) [#228] ──────────
   #
-  # The convention-linter for the FOUR residual platform-convention dimensions no
+  # The convention-linter for the FIVE residual platform-convention dimensions no
   # existing gate covers — (1) [topic]-[type].md file-naming, (2) a Layer-2 path
   # (projects/…) in a git-tracked file, (3) evidence-quality-label presence on a
   # dated factual claim in a (non-process-spec) governance file, (4) [TBD]/[INSERT]/
-  # [TODO] placeholder leakage outside backticks. The predicate lives ONCE in the
+  # [TODO] placeholder leakage outside backticks, (5) an event-log read site keyed
+  # on the release-version form rather than the milestone-slug join key. The
+  # predicate lives ONCE in the
   # shared invokable core/deploy/tools/check-convention.sh (single source; an
   # optional PR-time job can invoke the same script). This is NOT a pre-commit hook
   # — CLAUDE.md forbids normalizing --no-verify, so platform-convention enforcement
@@ -10189,10 +10508,18 @@ sys.stdout.write("".join(out) + "|")
   # bypass-mode-readiness.md): in warn-mode they annotate + jsonl-log without
   # incrementing ISSUES; flip $(pmo_instance_path)/check-convention.mode or
   # .claude/hooks/check-convention.mode — the two tiers resolve_check_mode reads,
-  # in that order — to 'enforce' after the shakedown window (or the shared
-  # deploy-check.mode, to move every check at once). A non-zero exit with no
-  # parsed FAIL (scan-surface error, exit 3) still flags so a broken predicate
+  # in that order — to 'enforce' after the shakedown window. A non-zero exit with
+  # no parsed FAIL (scan-surface error, exit 3) still flags so a broken predicate
   # run never reads green.
+  #
+  # COMMITTED warn DEFAULT — the second argument to resolve_check_mode, the Check 47
+  # `release-body-drift` / Check 61 `decision-emission` precedent. It ships `warn`
+  # regardless of the shared cohort's deploy-check.mode, so the posture this block's
+  # header declares is a property of the CODE, not of an operator-instance runtime
+  # file. The shared mode still gates the block wholesale (the `!= "off"` guard
+  # below), but it can no longer silently promote this check to enforce. Graduation
+  # to `enforce` is an OPERATOR DECISION recorded in gate-efficacy-standard.md's flip
+  # ledger, never auto-promoted by hit count.
   #
   # RETIRED IDENTIFIER: this check formerly emitted findings under
   # `convention-linter` while resolving its mode under `check-convention` — two
@@ -10203,9 +10530,9 @@ sys.stdout.write("".join(out) + "|")
   # Cutover discipline: applies to ./deploy.sh --check on or after this release's
   # merge SHA in RELEASE_LOG.md.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 49: platform-convention linter (naming / layer-2 / evidence-label / placeholder) (#228)"
+    log "Check 49: platform-convention linter (naming / layer-2 / evidence-label / placeholder / event-log-key) (#228)"
     local c49_mode
-    c49_mode=$(resolve_check_mode "check-convention")
+    c49_mode=$(resolve_check_mode "check-convention" "warn")
     local c49_script="core/deploy/tools/check-convention.sh"
     if [[ ! -f "$c49_script" ]]; then
       flag_warn_or_issue "check-convention" "predicate script missing: $c49_script"
@@ -13135,6 +13462,204 @@ EOF
 
   /bin/rm -rf "$_d" 2>/dev/null || true
 
+  # ─── Assertion group RC — RELEASE_LOG row classes (Checks 26/32/47/48/61) [#5234] ──
+  #
+  # Offline, hermetic, sandbox-only. Every corpus path is re-pointed through C32_*/CC_*
+  # overrides at a mktemp tree, and no arm arms a network limb — so nothing here can
+  # read the live release corpus or reach `gh`.
+  #
+  # RC-3, RC-6 and RC-7 are the ANTI-VACUITY arms, and each names the mutant it kills.
+  # Without RC-6 this group would stay green on an implementation that quietly changed
+  # what an ordinary versioned row resolves to — a silent regression across every
+  # versioned row in the ledger. Without RC-7 it would stay green on the fail-open,
+  # where an unreadable header yields an EMPTY row set that verdicts CLEAN: a pass
+  # produced by not looking, which is the exact failure class this change closes.
+  # Without RC-3 a sixth divergent row selector could be added tomorrow and every other
+  # arm would still pass.
+  echo "self-test: starting assertion group RC (RELEASE_LOG row classes, #5234)" >&2
+  local _rct; _rct="$(/usr/bin/mktemp -d -t releaserowclass-selftest.XXXXXX)"
+  local _rclog="$_rct/RELEASE_LOG.md"
+  local _rcindex="$_rct/RELEASE_INDEX.md"
+  local _rcdigest="$_rct/RELEASE_DIGEST.md"
+  local _rcnotes="$_rct/notes"
+  local _rcbad="$_rct/RELEASE_LOG_badheader.md"
+  /bin/mkdir -p "$_rcnotes/_unversioned"
+
+  # Fixture ledger: ONE versioned row and ONE version-less row, both VERIFIED. The
+  # version-less first cell carries the `(version-less)` marker — including the ERE
+  # metacharacters that are the whole reason _rl_regex_escape exists.
+  /bin/cat > "$_rclog" <<'EOF'
+# RELEASE_LOG (RC self-test fixture)
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.80 | rc-versioned | #1 | #2 | `aaa` | `v9.80` | VERIFIED | 2026-08-24 |
+| rc-slug-release (version-less) | rc-slug-release | #3 | #4 | `bbb` | (none) | VERIFIED | 2026-08-24 |
+EOF
+
+  # INDEX carries the MARKED cell (row_key); DIGEST carries the BARE slug (corpus_key).
+  # That inversion is measured corpus behaviour, and encoding it in the fixture is what
+  # makes RC-1 fail if either limb is re-keyed to the wrong one.
+  /bin/cat > "$_rcindex" <<'EOF'
+| Version | Milestone | Date | Release PR | Release Notes | Theme |
+|---|---|---|---|---|---|
+| v9.80 | rc-versioned | 2026-08-24 | #2 | notes | rc |
+| rc-slug-release (version-less) | rc-slug-release | 2026-08-24 | #4 | notes | rc |
+EOF
+
+  /bin/cat > "$_rcdigest" <<'EOF'
+### v9.80 (2026-08-24)
+### rc-slug-release (2026-08-24)
+EOF
+
+  # The versioned note sits flat; the version-less note sits under `_unversioned/`, so
+  # RC-1 also exercises the subdirectory rung rather than assuming the flat layout.
+  /usr/bin/printf '# v9.80\n' > "$_rcnotes/v9.80_RELEASE_NOTES.md"
+  /usr/bin/printf '# rc-slug-release\n' > "$_rcnotes/_unversioned/rc-slug-release_RELEASE_NOTES.md"
+
+  _rc_verdict() {
+    C32_LOG="$_rclog" C32_INDEX="$_rcindex" C32_DIGEST="$_rcdigest" \
+    C32_NOTES_DIR="$_rcnotes" C32_ALLOWLIST="$_rct/no-such-allowlist.txt" \
+    RELEASE_CORPUS_CHECK_CUTOFF="${1:-v9.80}" RELEASE_CORPUS_RELEASE_CUTOFF="__none__" \
+      _c32_compute_verdict lifecycle 2>/dev/null
+  }
+  _rc_denom() {
+    # The DENOM line is emitted on stderr, so the stream is swapped and stdout dropped.
+    # Read that stream into a variable FIRST, then match from a here-string: a
+    # `producer | grep -m1` stops reading the instant the match lands, the producer's
+    # next write takes EPIPE, and `pipefail` promotes that to the pipeline's status —
+    # a SUCCESSFUL match reporting failure under this file's `set -euo pipefail`.
+    # Measured here at 141. Respelling `-m1` as `-m 1` / `--max-count=1` does NOT help
+    # (every bounded read short-circuits identically); removing the PIPE is the fix.
+    # repo-integrity GATE 10.
+    local _dn
+    _dn="$(C32_LOG="$_rclog" C32_INDEX="$_rcindex" C32_DIGEST="$_rcdigest" \
+      C32_NOTES_DIR="$_rcnotes" C32_ALLOWLIST="$_rct/no-such-allowlist.txt" \
+      RELEASE_CORPUS_CHECK_CUTOFF="${1:-v9.80}" RELEASE_CORPUS_RELEASE_CUTOFF="__none__" \
+        _c32_compute_verdict lifecycle 2>&1 >/dev/null)"
+    /usr/bin/grep -m1 'DENOM' <<<"$_dn"
+  }
+
+  local _rcv _rcd _rce _rcn _rcrc _rct_total
+
+  # RC-1 — a version-less VERIFIED row IS enumerated, and every class-independent limb
+  # resolves it. KILLS: a selector regression back to the version anchor (which would
+  # verdict CLEAN 1), and either key being wired to the wrong surface.
+  _rcv="$(_rc_verdict)"
+  [[ "$_rcv" == "CLEAN 2" ]] || { echo "FAIL: RC-1 both row classes must be enumerated and resolve clean ('CLEAN 2'), got '$_rcv'"; failures=$((failures+1)); }
+
+  # RC-2 — the union invariant: enumerated + not-in-scope == total data rows. A row
+  # landing in NEITHER bucket breaks the arithmetic rather than vanishing quietly.
+  # KILLS: a row silently dropped by the reader (header/separator mis-detection).
+  _rcd="$(_rc_denom)"
+  _rce="$(/usr/bin/sed -E 's/.*DENOM — ([0-9]+) row\(s\) enumerated.*/\1/' <<<"$_rcd")"
+  _rcn="$(/usr/bin/sed -E 's/.*\/ ([0-9]+) row\(s\) not in scope.*/\1/' <<<"$_rcd")"
+  _rct_total="$(/usr/bin/sed -E 's/.*\/ ([0-9]+) total LOG data row\(s\).*/\1/' <<<"$_rcd")"
+  [[ "$_rct_total" == "2" ]] || { echo "FAIL: RC-2 total data rows must be 2 (header and separator excluded), got '$_rct_total' from '$_rcd'"; failures=$((failures+1)); }
+  [[ $((_rce + _rcn)) -eq ${_rct_total:-0} ]] || { echo "FAIL: RC-2 union invariant broken — enumerated($_rce) + not-in-scope($_rcn) != total($_rct_total)"; failures=$((failures+1)); }
+  # RC-2b — the SAME invariant across a NON-TRIVIAL partition. The measurement above
+  # has every row in scope, so its not-in-scope term is 0 and a broken computation of
+  # that term would be invisible. Re-arming the cutoff at the SECOND row splits the
+  # ledger 1/1, which is the only configuration in which the union arithmetic actually
+  # constrains anything.
+  local _rcd2 _rce2 _rcn2 _rct2
+  _rcd2="$(_rc_denom "rc-slug-release")"
+  _rce2="$(/usr/bin/sed -E 's/.*DENOM — ([0-9]+) row\(s\) enumerated.*/\1/' <<<"$_rcd2")"
+  _rcn2="$(/usr/bin/sed -E 's/.*\/ ([0-9]+) row\(s\) not in scope.*/\1/' <<<"$_rcd2")"
+  _rct2="$(/usr/bin/sed -E 's/.*\/ ([0-9]+) total LOG data row\(s\).*/\1/' <<<"$_rcd2")"
+  [[ "$_rce2" == "1" && "$_rcn2" == "1" ]] || { echo "FAIL: RC-2b a cutoff arming at the second row must split the ledger 1 enumerated / 1 not-in-scope, got $_rce2 / $_rcn2 from '$_rcd2'"; failures=$((failures+1)); }
+  [[ $((_rce2 + _rcn2)) -eq ${_rct2:-0} ]] || { echo "FAIL: RC-2b union invariant broken under a split partition — enumerated($_rce2) + not-in-scope($_rcn2) != total($_rct2)"; failures=$((failures+1)); }
+
+  # RC-3 — exactly ZERO version-anchored LOG-row selectors survive outside the shared
+  # reader, in EXECUTABLE source (comment lines excluded — the reader's own block
+  # comment quotes the retired pattern in order to explain it). KILLS: a divergent sixth
+  # selector. This is the card's AC3 specificity arm, enforced mechanically against this
+  # script's own source rather than by review.
+  local _rcsrc _rcsel _rcsel_all
+  _rcsrc="${BASH_SOURCE[0]}"
+  _rcsel="$(/usr/bin/grep -nE '\^\\\|\[\[:space:\]\]\*v\[0-9\]' "$_rcsrc" 2>/dev/null | /usr/bin/grep -vE '^[0-9]+:[[:space:]]*#' | /usr/bin/grep -c . || true)"
+  _rcsel_all="$(/usr/bin/grep -cE '\^\\\|\[\[:space:\]\]\*v\[0-9\]' "$_rcsrc" 2>/dev/null || true)"
+  [[ "${_rcsel:-0}" -eq 0 ]] || { echo "FAIL: RC-3 a version-anchored LOG-row selector survives in executable source ($_rcsel occurrence(s)) — every enumerator must route through _rl_data_rows"; failures=$((failures+1)); }
+  # Sensitivity control for RC-3: the detector must be able to SEE the pattern at all.
+  # A zero from a pattern that matches nothing anywhere is a broken probe, not a pass.
+  [[ "${_rcsel_all:-0}" -ge 1 ]] || { echo "FAIL: RC-3 control — the selector detector matched NOWHERE in $_rcsrc (including comments); the probe is broken, so its zero above proves nothing"; failures=$((failures+1)); }
+
+  # RC-4 — a key carrying ERE metacharacters resolves its INDEX row, and the OLD
+  # dot-only escaping does NOT. KILLS: reverting _rl_regex_escape to `${k//./\\.}`.
+  local _rckey="rc-slug-release (version-less)" _rcesc
+  _rcesc="$(_rl_regex_escape "$_rckey")"
+  /usr/bin/grep -qE "^\|[[:space:]]*${_rcesc}[[:space:]]*\|" "$_rcindex" \
+    || { echo "FAIL: RC-4 a fully-escaped metacharacter key must resolve its INDEX row"; failures=$((failures+1)); }
+  if /usr/bin/grep -qE "^\|[[:space:]]*${_rckey//./\\.}[[:space:]]*\|" "$_rcindex" 2>/dev/null; then
+    echo "FAIL: RC-4 control — the OLD dot-only escaping matched, so this arm cannot detect the unescaped-metacharacter regression"; failures=$((failures+1))
+  fi
+  if /usr/bin/grep -qE "^\|[[:space:]]*$(_rl_regex_escape "zz-not-a-release")[[:space:]]*\|" "$_rcindex" 2>/dev/null; then
+    echo "FAIL: RC-4 specificity — an unrelated key must NOT resolve an INDEX row"; failures=$((failures+1))
+  fi
+
+  # RC-5 — the version-only tag limb is DECLARED EXCLUDED for class `version-less`, and
+  # FIRES for class `versioned` on the identical input. KILLS: deleting the class gate.
+  # Network latches are passed 0, so this arm is offline by construction.
+  local _rc_vl _rc_ctl
+  _rc_vl="$(CC_INDEX="$_rcindex" CC_DIGEST="$_rcdigest" CC_NOTES_DIR="$_rcnotes" \
+            CC_CHANGELOG="$_rct/no-such-changelog.md" CC_LINT="$_rct/no-such-lint.py" \
+            CC_LOG="$_rclog" \
+            _cc_row_findings lifecycle "$_rckey" "rc-slug-release" "(none)" 0 0 0 "version-less" "rc-slug-release" 2>/dev/null \
+            | /usr/bin/grep -c 'no tag recorded' || true)"
+  [[ "${_rc_vl:-0}" -eq 0 ]] || { echo "FAIL: RC-5 the tag limb must be class-gated OUT for a version-less row (such a release cuts no tag by construction), got $_rc_vl finding(s)"; failures=$((failures+1)); }
+  _rc_ctl="$(CC_INDEX="$_rcindex" CC_DIGEST="$_rcdigest" CC_NOTES_DIR="$_rcnotes" \
+             CC_CHANGELOG="$_rct/no-such-changelog.md" CC_LINT="$_rct/no-such-lint.py" \
+             CC_LOG="$_rclog" \
+             _cc_row_findings lifecycle "v9.80" "rc-versioned" "(none)" 0 0 0 "versioned" "v9.80" 2>/dev/null \
+             | /usr/bin/grep -c 'no tag recorded' || true)"
+  [[ "${_rc_ctl:-0}" -ge 1 ]] || { echo "FAIL: RC-5 control — the SAME empty-tag input on a VERSIONED row must produce a tag finding; it produced none, so the arm above proves nothing"; failures=$((failures+1)); }
+
+  # RC-6 — no-regression on ordinary versioned rows, asserted at its root cause: for a
+  # versioned row `row_key` and `corpus_key` are BYTE-IDENTICAL, so nothing about such a
+  # row's resolution can move. KILLS: any marker-stripping rule that also rewrites a
+  # `vX.Y` key.
+  local _rcrow _rck1 _rck2 _rcrows
+  # Read the rows into a variable, then match from a here-string — the same shape the
+  # five other `_rl_data_rows` callers in this file already use. Piping a producer into
+  # a bounded read lets the reader stop early, EPIPEs the producer's next write, and
+  # `pipefail` promotes that to the pipeline's status, so a FOUND row reports failure.
+  # `-m` instead of `-m1` short-circuits identically; dropping the PIPE is the fix.
+  # repo-integrity GATE 10.
+  _rcrows="$(_rl_data_rows "$_rclog")"
+  _rcrow="$(/usr/bin/grep -m1 '^versioned|' <<<"$_rcrows")"
+  _rck1="$(/usr/bin/cut -d'|' -f2 <<<"$_rcrow")"
+  _rck2="$(/usr/bin/cut -d'|' -f3 <<<"$_rcrow")"
+  [[ "$_rck1" == "v9.80" && "$_rck2" == "v9.80" ]] || { echo "FAIL: RC-6 a versioned row's row_key and corpus_key must both be the verbatim cell 'v9.80', got '$_rck1' / '$_rck2'"; failures=$((failures+1)); }
+  _rcv="$(_rc_verdict "v9.99")"
+  [[ "$_rcv" == "CLEAN 0" ]] || { echo "FAIL: RC-6 a cutoff matching no row must enumerate nothing ('CLEAN 0'), got '$_rcv'"; failures=$((failures+1)); }
+
+  # RC-7 — an unreadable header FAILS LOUD: non-zero rc AND a stderr diagnostic, never a
+  # silently-empty row set. KILLS: the fail-open that makes a parse failure verdict
+  # CLEAN. The well-formed control below is what makes the non-zero meaningful.
+  /bin/cat > "$_rcbad" <<'EOF'
+# RELEASE_LOG (RC self-test fixture — header column renamed)
+| Release | Milestone | Issues | Release PR | Merge SHA | Tag | Status | Date |
+|---|---|---|---|---|---|---|---|
+| v9.80 | rc-versioned | #1 | #2 | `aaa` | `v9.80` | VERIFIED | 2026-08-24 |
+EOF
+  _rcrc=0
+  _rl_data_rows "$_rcbad" >/dev/null 2>"$_rct/rc7.err" || _rcrc=$?
+  [[ $_rcrc -ne 0 ]] || { echo "FAIL: RC-7 an unreadable RELEASE_LOG header must return non-zero, got rc 0 (fail-open)"; failures=$((failures+1)); }
+  /usr/bin/grep -q 'Version+State' "$_rct/rc7.err" || { echo "FAIL: RC-7 an unreadable header must emit a stderr diagnostic naming the missing columns"; failures=$((failures+1)); }
+  _rcrc=0; _rl_data_rows "$_rclog" >/dev/null 2>&1 || _rcrc=$?
+  [[ $_rcrc -eq 0 ]] || { echo "FAIL: RC-7 control — the WELL-FORMED fixture must return 0; it returned $_rcrc, so the non-zero above is not evidence of header detection"; failures=$((failures+1)); }
+
+  # RC-8 — the denominator is COMPUTED, not remembered: adding exactly one data row moves
+  # the emitted total by exactly 1. KILLS: a hardcoded or stale denominator — the defect
+  # that let this card's own quoted row count go stale before it was ever implemented.
+  local _rcd_after _rct_after
+  /usr/bin/printf '| v9.82 | rc-added | #5 | #6 | `ccc` | `v9.82` | VERIFIED | 2026-08-24 |\n' >> "$_rclog"
+  _rcd_after="$(_rc_denom)"
+  _rct_after="$(/usr/bin/sed -E 's/.*\/ ([0-9]+) total LOG data row\(s\).*/\1/' <<<"$_rcd_after")"
+  [[ $((_rct_after - _rct_total)) -eq 1 ]] || { echo "FAIL: RC-8 adding one data row must move the emitted denominator by exactly 1 (was $_rct_total, now $_rct_after)"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_rct" 2>/dev/null || true
+  unset -f _rc_verdict _rc_denom
+
   # ─── Assertion group VF — version-freeness claimed-set column pinning [#3724] ──
   #
   # Offline, hermetic, sandbox-only. Guards the DEPLOYED arm of _vf_build_claimed_set
@@ -13945,6 +14470,8 @@ EOF
     Close-Class-Telemetry sub-check (l) (#4437): OS-14 GENUINE FAILURE — a row with velocity+learnings and no telemetry field fires (l) alone / OS-15 control — the same fixture with a measured field raises nothing / OS-16 slot-short field fails the ordered eight-slot grammar while presence passes / OS-17 ANTI-VACUITY — a byte-perfect all-N/A field is a finding, with OS-15 as its control / OS-18 split record (field in the hot stub, body in the segment) / OS-19 __none__ re-dormants (l) and ONLY (l) — the SHIPPED configuration / OS-20 no-match telemetry cutoff WARNs vacuous in its own voice / OS-21 prefix mis-arm WARNs naming the row it actually armed at." >&2
   echo "  decision-emission minimum set validated (#4026, group DE):" >&2
   echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-4b sibling-typed omission INCOMPLETE (kills the subtype-conjunct mutant) / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET" >&2
+  echo "  RELEASE_LOG row classes validated (#5234, group RC):" >&2
+  echo "    RC-1 both row classes enumerated and resolving clean / RC-2 union invariant enumerated + declared-excluded + not-in-scope == total / RC-2b the same invariant holds under a cutoff-split partition / RC-3 zero version-anchored LOG-row selectors survive in executable source outside _rl_data_rows, with a matched-nowhere detector control / RC-4 a fully-escaped metacharacter key resolves its INDEX row, with a dot-only-escaping control and an unrelated-key specificity arm / RC-5 the tag limb is class-gated OUT for a version-less row, with a VERSIONED control that must still fire / RC-6 a versioned row's row_key and corpus_key are both the verbatim cell (byte-identical — the no-regression guarantee for the versioned population) + a no-match cutoff enumerates nothing / RC-7 an unreadable header returns non-zero AND emits a stderr diagnostic, with a well-formed control returning 0 / RC-8 adding one data row moves the emitted denominator by exactly 1 — the arm that kills a hardcoded or stale denominator." >&2
   echo "  complementary-pair ownership validated (#4178, group CP):" >&2
   echo "    CP-4 absent registry NOSET / CP-1 intact pair PASS / CP-2 leaked owned-section OWNERSHIP-DRIFT / CP-5 missing shared-section OWNERSHIP-DRIFT / CP-6 divergent shared-section SHARED-DIVERGENCE / CP-3 unregistered cross-tree pair UNREGISTERED-PAIR / CP-3b named README.md exclusion holds / CP-7 malformed record MALFORMED" >&2
   echo "  register runner-resolution validated (#4208, group RR):" >&2

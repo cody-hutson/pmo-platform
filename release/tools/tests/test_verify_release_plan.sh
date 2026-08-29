@@ -32,6 +32,41 @@ set -euo pipefail
 #        mutation of the thing it claims to check is not a control — it is a
 #        control-shaped assertion, and this release exists because ten of those
 #        were found in one milestone.
+#   (G9) MARKDOWN PIPE ESCAPE — field parity across both split sites, plus the
+#        boundary question of WHERE the escape may be resolved. A `\|` inside a
+#        table cell is markdown (the cell is split on pipes, so an author who
+#        needs a literal one has no alternative) and is healed; a `\|` inside a
+#        scaffold BULLET is matcher syntax (a bullet is never split) and is
+#        passed through byte-intact. A row that still misses its header's field
+#        count after healing carries an unescaped bare pipe and is a named ERROR
+#        rather than a verdict read at shifted column indices. Carries a control
+#        twin, a bullet-passthrough guard, and a non-synthetic corpus replay.
+#   (G8) MATCHER COUNT-MODE FIDELITY — count mode versus match mode read from the
+#        command's own flags, a strict-integer guard, and an UNCONDITIONAL
+#        exit-status guard. The last of these closes a false PASS: a matcher
+#        exiting 2 produced empty output, a fabricated count of 0, and an
+#        "expect zero" criterion rendering PASS — inside the tool that grades the
+#        release's own verification plan.
+#   (G9-M / G8-M) Mutation arms for both groups. Each proves its mutation TOOK
+#        (the mutant bytes differ), proves the mutant RAN (it emitted records),
+#        and then names the specific answer the assertion must move to. A
+#        negation alone is not enough: "no longer PASS" is satisfied by a mutant
+#        that never ran, which is a green arm testing nothing.
+#
+#   NOTE — DUPLICATE GROUP ID, RESOLVED. Two branches allocated "G7" (and "G7-M")
+#        independently from the same base, so the merge briefly documented and ran
+#        TWO distinct G7 groups. The merge left both standing because renumbering
+#        exceeds a merge's remit; it was resolved immediately afterwards, at
+#        operator direction, on the same precedence rule the ADR number space
+#        uses — the incumbent keeps the id and the newcomer yields. The
+#        provenance-survival group had already merged to the mainline, so THIS
+#        branch's markdown-pipe-escape group moved: G7* -> G9* (G7-1..G7-10,
+#        G7-R, G7-M1..G7-M3 and the `G7M2_PARITY` shell identifier all shifted
+#        with it). G8 is this branch's too but was uncontended, so it did not
+#        move — which is why the group headings above read G9, G8, G9-M/G8-M
+#        rather than in numeric order. The ids are cosmetic echo labels that feed
+#        no pass/fail tally, and a repo-wide sweep at the time of the move found
+#        ZERO references to the compound ids outside this file.
 #   (G7) PROVENANCE SURVIVAL — the `domain_practice` label across the Commit-0
 #        transcription boundary. The P1–P12 ladder, plus five mutation arms.
 #
@@ -561,6 +596,323 @@ mutant_differs "M8 Deviation-Log read removed" \
       "$M8" fcm-deviation-recorded.md "$DIFF_ABSENT" FCM-1 "deviation-recorded"
 
 rm -rf "$MUTD"
+
+# ===========================================================================
+# G9 — MARKDOWN PIPE ESCAPE: field parity, and where the escape may be resolved
+# G8 — MATCHER COUNT-MODE FIDELITY: a count that cannot be read is not a zero
+#
+# Both groups exist because a parser produced a CONFIDENT WRONG NUMBER, which is
+# the failure mode this suite is least able to notice without a paired control:
+# a false FAIL looks like a finding and a false PASS looks like success.
+# ===========================================================================
+FIX_ESC="release/tools/tests/fixtures/verify-plan-escaped-pipe.md"
+FIX_ESCCTL="release/tools/tests/fixtures/verify-plan-escaped-pipe-control.md"
+FIX_COUNT="release/tools/tests/fixtures/verify-plan-count-modes.md"
+
+# vrp_run <tool> <fixture-path> — sets VRP_JSON + VRP_RC in the CURRENT shell.
+# Deliberately not `$(...)`-capturable, for the same reason fcm_run is not: a
+# subshell would assign VRP_RC and discard it, and every exit-code assertion
+# below would silently grade a stale 0.
+VRP_JSON=""
+VRP_RC=0
+vrp_run() {
+  local tool="$1" fx="$2"
+  set +e
+  VRP_JSON="$("$tool" --format=json --root "$REPO_ROOT" "$REPO_ROOT/$fx" 2>/dev/null)"
+  VRP_RC=$?
+  set -e
+}
+# count_verdict <json> <VERDICT> — how many records carry that verdict.
+count_verdict() { grep -c "\"verdict\":\"$2\"" <<<"$1" || true; }
+
+echo
+echo "G9 — markdown pipe escape: field parity + resolution boundary"
+
+# --- G9-1..G9-3: the three SPLIT sites heal and their rows execute. ---
+vrp_run "$VERIFY" "$FIX_ESC"; J_ESC="$VRP_JSON"; RC_ESC="$VRP_RC"
+[ "$(verdict_of "$J_ESC" AC-1)" = PASS ] \
+  && ok "G9-1 Verification-Plan table: an escaped-pipe row heals to its header's field count and executes" \
+  || bad "G9-1 expected PASS for the escaped VP row, got '$(verdict_of "$J_ESC" AC-1)'"
+[ "$(verdict_of "$J_ESC" AC-2)" = PASS ] \
+  && ok "G9-2 ROW-LEVEL CONTROL — the unescaped row in the same table is unaffected" \
+  || bad "G9-2 expected PASS for the unescaped sibling row, got '$(verdict_of "$J_ESC" AC-2)'"
+[ "$(verdict_of "$J_ESC" CIAC-2)" = PASS ] \
+  && ok "G9-3 CIAC table form: the same heal applies at the second split site" \
+  || bad "G9-3 expected PASS for the escaped CIAC table row, got '$(verdict_of "$J_ESC" CIAC-2)'"
+
+# --- G9-4/5/6: the parity guard is an ERROR, is attributable, and is observed. ---
+[ "$(verdict_of "$J_ESC" ROW)" = ERROR ] \
+  && ok "G9-4 PARITY GUARD — an UNESCAPED bare pipe is ERROR, not a verdict read at shifted indices" \
+  || bad "G9-4 expected ERROR for the malformed row, got '$(verdict_of "$J_ESC" ROW)'"
+case "$(observed_of "$J_ESC" ROW)" in
+  *table-row-field-parity*fields=7*header=6*)
+    ok "G9-5 the parity ERROR is ATTRIBUTABLE — it names both field counts" ;;
+  *) bad "G9-5 parity ERROR does not carry its field counts: '$(observed_of "$J_ESC" ROW)'" ;;
+esac
+[ "$RC_ESC" -eq 3 ] \
+  && ok "G9-6 the parity ERROR reaches the exit predicate (exit 3)" \
+  || bad "G9-6 expected exit 3 on the malformed row, got $RC_ESC"
+
+# --- G9-7..G9-9: the CONTROL TWIN. Without this the group proves only that the
+#     parser became permissive, not that it became correct. ---
+vrp_run "$VERIFY" "$FIX_ESCCTL"; J_CTL="$VRP_JSON"; RC_CTL="$VRP_RC"
+[ "$(count_verdict "$J_CTL" ERROR)" -eq 0 ] \
+  && ok "G9-7 CONTROL TWIN — the escape-free twin raises ZERO errors (the guard is inert without its trigger)" \
+  || bad "G9-7 control twin raised $(count_verdict "$J_CTL" ERROR) ERROR record(s); the guard fires on clean input"
+[ "$(count_verdict "$J_CTL" FAIL)" -eq 0 ] \
+  && ok "G9-8 CONTROL TWIN — and zero failures" \
+  || bad "G9-8 control twin raised $(count_verdict "$J_CTL" FAIL) FAIL record(s)"
+[ "$RC_CTL" -eq 0 ] && ok "G9-9 CONTROL TWIN exits 0" || bad "G9-9 control twin expected exit 0, got $RC_CTL"
+
+# --- G9-10: THE RESOLUTION BOUNDARY. The escape is resolved by the SPLITTER, at
+#     the point a split created it — never on a string that was never split.
+#     A scaffold bullet is line-based, so a `\|` inside one is matcher syntax,
+#     not markdown, and under a BRE matcher it is the alternation operator.
+#     Resolving it there was implemented and then falsified against the corpus:
+#     of the 5 CIAC bullet methods carrying `\|`, 4 are BRE alternations and the
+#     5th deliberately matches a literal pipe — all 5 broke. This arm is what
+#     catches the substitution being re-introduced.
+[ "$(verdict_of "$J_ESC" CIAC-1)" = PASS ] \
+  && ok "G9-10 BULLET PASSTHROUGH — a BRE alternation in a bullet reaches the matcher byte-intact" \
+  || bad "G9-10 the bullet's escaped pipe was rewritten before it reached the matcher, got '$(verdict_of "$J_ESC" CIAC-1)'"
+
+# --- G9-R: NON-SYNTHETIC replay against a live corpus plan. ---
+REALESC="release/releases/plans/v4/v4.07_RELEASE_PLAN.md"
+if [ ! -f "$REPO_ROOT/$REALESC" ]; then
+  bad "G9-R PRECONDITION — replay target absent: $REALESC (relocated or renamed? the arm below cannot grade)"
+else
+  # DENOMINATOR FIRST. An escaped-pipe replay over a plan carrying no escaped
+  # pipe is vacuous, and a vacuous arm that reports "ok" is worse than no arm.
+  ESC_LINES="$(grep -cF '\|' "$REPO_ROOT/$REALESC" || true)"
+  printf '       replay: %s carries %s escaped-pipe line(s)\n' "$REALESC" "$ESC_LINES"
+  if [ "$ESC_LINES" -lt 1 ]; then
+    bad "G9-R VACUOUS — the replay target carries no escaped pipe; this arm asserts nothing"
+  else
+    vrp_run "$VERIFY" "$REALESC"; J_REAL="$VRP_JSON"
+    REAL_RECORDS="$(grep -c '"verdict":"' <<<"$J_REAL" || true)"
+    REAL_PARITY="$(grep -c 'table-row-field-parity' <<<"$J_REAL" || true)"
+    printf '       replay: records=%s parity-errors=%s\n' "$REAL_RECORDS" "$REAL_PARITY"
+    [ "$REAL_RECORDS" -ge 1 ] \
+      && ok "G9-R the replay actually graded the plan (records=$REAL_RECORDS, not a silent no-parse)" \
+      || bad "G9-R the replay produced no records at all; nothing was graded"
+    [ "$REAL_PARITY" -eq 0 ] \
+      && ok "G9-R NON-SYNTHETIC — every escaped row on a live plan heals to header parity (0 parity errors)" \
+      || bad "G9-R $REAL_PARITY row(s) on a live plan still fail field parity after healing"
+  fi
+fi
+
+echo
+echo "G8 — matcher count-mode fidelity + absence-vs-zero"
+
+vrp_run "$VERIFY" "$FIX_COUNT"; J_CNT="$VRP_JSON"; RC_CNT="$VRP_RC"
+# G8-1/G8-2 are the CONTROLS: these two shapes returned the right answer before
+# the fix and must still return it, so a green match-mode arm is evidence of a
+# repair rather than of a counter that now reports whatever is needed.
+[ "$(verdict_of "$J_CNT" AC-1)" = PASS ] \
+  && ok "G8-1 CONTROL — count mode, single file (grep -c) still reads a genuine count" \
+  || bad "G8-1 expected PASS, got '$(verdict_of "$J_CNT" AC-1)'"
+[ "$(verdict_of "$J_CNT" AC-2)" = PASS ] \
+  && ok "G8-2 CONTROL — count mode, multi-file (path:n per line) still sums correctly" \
+  || bad "G8-2 expected PASS, got '$(verdict_of "$J_CNT" AC-2)'"
+[ "$(verdict_of "$J_CNT" AC-3)" = PASS ] \
+  && ok "G8-3 match mode (grep -n): real hits are counted, not coerced to 0 by trailing text" \
+  || bad "G8-3 expected PASS for the grep -n row, got '$(verdict_of "$J_CNT" AC-3)'"
+[ "$(verdict_of "$J_CNT" AC-4)" = PASS ] \
+  && ok "G8-4 match mode (plain grep): matching LINES are the hit count" \
+  || bad "G8-4 expected PASS for the plain-grep row, got '$(verdict_of "$J_CNT" AC-4)'"
+
+# G8-5/G8-6 — THE FALSE PASS. A matcher exiting 2 produced empty output, a
+# fabricated count of 0, and an "expect zero" criterion rendering PASS: a silent
+# false pass inside the tool that grades the release's own verification plan.
+[ "$(verdict_of "$J_CNT" AC-5)" = ERROR ] \
+  && ok "G8-5 FALSE PASS CLOSED — an unreadable target is ERROR, and an expect-zero criterion no longer PASSes on it" \
+  || bad "G8-5 expected ERROR for the unreadable-target row, got '$(verdict_of "$J_CNT" AC-5)' (a false PASS is back)"
+case "$(observed_of "$J_CNT" AC-5)" in
+  *matcher-exit-2*) ok "G8-6 the error NAMES the exit status that produced it" ;;
+  *) bad "G8-6 the error does not name the matcher exit status: '$(observed_of "$J_CNT" AC-5)'" ;;
+esac
+[ "$RC_CNT" -eq 3 ] && ok "G8-7 the count ERROR reaches the exit predicate (exit 3)" || bad "G8-7 expected exit 3, got $RC_CNT"
+
+# --- Unit arms on the shared reader, extracted from the shipped file. ---
+eval "$(sed -n '/^tokenize_cmd()/,/^}/p'      "$VERIFY")"
+eval "$(sed -n '/^count_mode_cmd()/,/^}/p'    "$VERIFY")"
+eval "$(sed -n '/^count_from_output()/,/^}/p' "$VERIFY")"
+
+if count_mode_cmd "grep -c x f" && count_mode_cmd "grep -cE x f" \
+   && count_mode_cmd "grep -rc x f" && count_mode_cmd "grep --count x f"; then
+  ok "G8-8 count mode is detected from every flag shape (-c, -cE, -rc, --count)"
+else
+  bad "G8-8 count mode missed one of the flag shapes (-c / -cE / -rc / --count)"
+fi
+# CONTROL — without this, a detector that simply returns true always would pass.
+if ! count_mode_cmd "grep -n x f" && ! count_mode_cmd "grep -i x f" && ! count_mode_cmd "grep x f"; then
+  ok "G8-9 CONTROL — match-mode invocations are NOT read as count mode (the detector discriminates)"
+else
+  bad "G8-9 the count-mode detector fires on a match-mode invocation; it is stuck on"
+fi
+[ "$(count_from_output 'grep -c x f' '' 2   | cut -f1)" = ERROR ] \
+  && ok "G8-10 exit >= 2 is an ERROR regardless of output (the matcher could not run)" \
+  || bad "G8-10 an exit-2 matcher did not produce ERROR"
+[ "$(count_from_output 'grep -c x f' '0' 1  | cut -f2)" = "0" ] \
+  && ok "G8-11 CONTROL — exit 1 is a LEGITIMATE zero, not an error (absence and failure stay distinct)" \
+  || bad "G8-11 exit 1 was not treated as a legitimate zero"
+[ "$(count_from_output 'grep -c x a b' 'a:3
+b:4' 0 | cut -f2)" = "7" ] \
+  && ok "G8-12 count mode sums the last colon field across files (3 + 4 = 7)" \
+  || bad "G8-12 count mode did not sum multi-file counts"
+[ "$(count_from_output 'grep -n x f' '12:some trailing prose
+19:more prose' 0 | cut -f2)" = "2" ] \
+  && ok "G8-13 match mode counts LINES — the shape that used to sum prose to 0" \
+  || bad "G8-13 match mode did not count lines"
+[ "$(count_from_output 'grep -c x f' 'not-a-number' 0 | cut -f1)" = ERROR ] \
+  && ok "G8-14 a non-integer count field is an ERROR, never a silent 0" \
+  || bad "G8-14 a non-integer count field was coerced instead of raising ERROR"
+
+# ===========================================================================
+# G9-M / G8-M — MUTATION ARMS.
+#
+# Each arm reverts ONE fix and asserts the paired assertion CHANGES ITS ANSWER.
+# Every arm first proves the mutation TOOK: a sed that matches nothing yields a
+# byte-identical copy, the arm reads green, and it has tested nothing. That is
+# not hypothetical — it is the failure this release caught four separate times,
+# including a mutation arm that was green while never mutating anything.
+# ===========================================================================
+echo
+echo "G9-M / G8-M — mutation arms (each reverts one fix; each proves it took)"
+MUTD2="$(mktemp -d -t verify-plan-esc-mut.XXXXXX)"
+
+# mutate_proved <name> <sed-expr>... — mutate the tool, ASSERT THE BYTES MOVED,
+# and publish the mutant path in the global MUT_PATH.
+#
+# It sets a GLOBAL rather than printing the path, and that is not a style choice.
+# Printing it would force every caller to use `$(...)`, which (a) runs the
+# function in a subshell where the ok/bad counters are incremented and then
+# discarded, and (b) captures the ok/bad TEXT into the path string, so the
+# "mutant" the caller then executes is not a file at all. Every arm downstream
+# would grade an empty result — and three of the arms below assert "the verdict
+# is no longer PASS", which an empty result satisfies. That is a vacuous green:
+# the arm passes precisely because the mutation never ran. This was caught by the
+# two arms whose assertion names a SPECIFIC expected value instead of a negation,
+# which is why every arm below now does both: it requires the mutant to have
+# produced output, and then names what the answer must become.
+MUT_PATH=""
+mutate_proved() {
+  local name="$1"; shift
+  local dst="$MUTD2/$name.sh" e
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  if cmp -s "$VERIFY" "$dst"; then
+    bad "$name — MUTATION DID NOT TAKE (mutant is byte-identical); the paired arm would pass vacuously"
+  else
+    ok "$name — mutation applied (mutant bytes differ from the shipped tool)"
+  fi
+}
+
+# mutant_ran <label> — assert the mutant actually produced a graded record set.
+# Absence of a verdict is not evidence that a verdict changed.
+mutant_ran() {
+  if [ -n "$(grep -c '"verdict":"' <<<"$VRP_JSON" || true)" ] && grep -q '"verdict":"' <<<"$VRP_JSON"; then
+    return 0
+  fi
+  bad "$1 NOT GRADEABLE — the mutant emitted no records at all; nothing was measured"
+  return 1
+}
+
+# G9-M1 — revert the heal: the re-join never fires, so the splitter is a plain
+# split on `|` again and the escaped row mis-parses.
+PARITY_LIVE="$(grep -c 'table-row-field-parity' <<<"$J_ESC" || true)"
+mutate_proved g9-m1-no-heal 's/bs % 2 == 1 && i < m/0 == 1/'
+vrp_run "$MUT_PATH" "$FIX_ESC"
+if mutant_ran "G9-M1"; then
+  PARITY_MUT="$(grep -c 'table-row-field-parity' <<<"$VRP_JSON" || true)"
+  printf '       g9-m1: parity errors with the heal = %s ; without it = %s\n' "$PARITY_LIVE" "$PARITY_MUT"
+  [ "$PARITY_MUT" -gt "$PARITY_LIVE" ] \
+    && ok "G9-M1 heal reverted — correctly-escaped rows now break field parity ($PARITY_LIVE -> $PARITY_MUT)" \
+    || bad "G9-M1 SURVIVED — removing the re-join changed no parity count ($PARITY_LIVE -> $PARITY_MUT); G9-1 observes nothing"
+fi
+
+# G9-M2 — revert the parity guard: the malformed row is parsed at shifted
+# indices again instead of being named.
+mutate_proved g9-m2-no-parity-guard 's/hdr_n > 0 && n != hdr_n/0 == 1/g'
+vrp_run "$MUT_PATH" "$FIX_ESC"
+if mutant_ran "G9-M2"; then
+  G9M2_PARITY="$(grep -c 'table-row-field-parity' <<<"$VRP_JSON" || true)"
+  printf '       g9-m2: parity errors with the guard = %s ; without it = %s\n' "$PARITY_LIVE" "$G9M2_PARITY"
+  [ "$G9M2_PARITY" -eq 0 ] && [ "$PARITY_LIVE" -ge 1 ] \
+    && ok "G9-M2 parity guard reverted — the malformed row stops being named and is parsed at shifted indices again" \
+    || bad "G9-M2 SURVIVED — parity errors went $PARITY_LIVE -> $G9M2_PARITY with the guard removed; G9-4 observes nothing"
+fi
+
+# G9-M3 — revert the per-table-block column reset. A markdown table ends at the
+# first non-table line, so its column map must end with it. Without the reset the
+# map is STICKY and a later PROSE table in the same section is parsed as check
+# rows at the earlier table's column index — cells read against a header that is
+# not theirs, which is the same defect as the escaped split one level up.
+STICKY_FIX="$(mktemp -t verify-plan-sticky.XXXXXX.md)"
+cat > "$STICKY_FIX" <<'EOF'
+# vTEST sticky-column-map plan
+
+## Verification Plan
+
+**#931 — a real check table**
+
+| AC | Predicate class | Verification method | Expected result |
+|---|---|---|---|
+| AC-1 | file-path+state | `test -f release/tools/verify-release-plan.sh` | exists |
+
+A prose evidence table follows, in the same section. It declares no Verification
+method column, so it must not be graded as if it did.
+
+| Field | Value |
+|---|---|
+| Denominator | 224 issues read at a pinned anchor |
+| Partition | F1 123 / F2 39 / F3 62 |
+EOF
+set +e
+STICKY_LIVE="$("$VERIFY" --format=json --root "$REPO_ROOT" "$STICKY_FIX" 2>/dev/null)"
+set -e
+STICKY_LIVE_N="$(grep -c '"verdict":"' <<<"$STICKY_LIVE" || true)"
+mutate_proved g9-m3-sticky-columns 's/\{ reset_cols\(\); next \}/{ next }/'
+set +e
+STICKY_MUT="$("$MUT_PATH" --format=json --root "$REPO_ROOT" "$STICKY_FIX" 2>/dev/null)"
+set -e
+STICKY_MUT_N="$(grep -c '"verdict":"' <<<"$STICKY_MUT" || true)"
+rm -f "$STICKY_FIX"
+printf '       sticky: records with the reset = %s ; without it = %s\n' "$STICKY_LIVE_N" "$STICKY_MUT_N"
+[ "$STICKY_MUT_N" -gt "$STICKY_LIVE_N" ] \
+  && ok "G9-M3 per-table-block reset reverted — the prose table is graded as checks again ($STICKY_LIVE_N -> $STICKY_MUT_N records)" \
+  || bad "G9-M3 SURVIVED — removing the reset changed no record count ($STICKY_LIVE_N -> $STICKY_MUT_N); the reset observes nothing"
+
+# G8-M1 — revert count-mode discrimination: every matcher is read as match mode,
+# so `grep -c`'s single integer line counts as one hit.
+mutate_proved g8-m1-no-count-mode 's/if count_mode_cmd "\$cmd"; then/if false; then/'
+vrp_run "$MUT_PATH" "$FIX_COUNT"
+if mutant_ran "G8-M1"; then
+  G8M1_GOT="$(verdict_of "$VRP_JSON" AC-1)"
+  [ "$G8M1_GOT" = FAIL ] \
+    && ok "G8-M1 count-mode detection reverted — grep -c's single integer line is miscounted as one hit, so a real count FAILs" \
+    || bad "G8-M1 SURVIVED — with its detector removed the count still reads correctly (got '$G8M1_GOT'); G8-1 observes nothing"
+fi
+
+# G8-M2 — THE DECISIVE ARM. Revert the unconditional exit-status guard and the
+# false PASS must come back. If this arm cannot re-open the false pass, the guard
+# was never what was closing it.
+mutate_proved g8-m2-no-exit-guard 's/if \[ "\$rc" -ge 2 \]; then/if false; then/'
+vrp_run "$MUT_PATH" "$FIX_COUNT"
+if mutant_ran "G8-M2"; then
+  G8M2_GOT="$(verdict_of "$VRP_JSON" AC-5)"
+  [ "$G8M2_GOT" = PASS ] \
+    && ok "G8-M2 exit-status guard reverted — THE FALSE PASS RETURNS (expect-zero PASSes on a matcher that exited 2)" \
+    || bad "G8-M2 SURVIVED — removing the exit guard did not restore the false PASS, so G8-5 is not what closes it (got '$G8M2_GOT')"
+  [ "$VRP_RC" -eq 0 ] \
+    && ok "G8-M2 CONTROL — and the neutered build exits 0, so the false PASS reaches the roll-up too" \
+    || bad "G8-M2 control — the neutered build still exits $VRP_RC"
+fi
+
+rm -rf "$MUTD2"
 
 # ---------------------------------------------------------------------------
 # G7 — PROVENANCE SURVIVAL (the domain_practice label across Commit-0).

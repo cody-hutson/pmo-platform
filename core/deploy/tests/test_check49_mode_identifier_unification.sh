@@ -251,7 +251,7 @@ while IFS= read -r _frag; do
     FAIL_COUNT=$((FAIL_COUNT + 1))
   fi
 done <<'FRAGS'
-c49_mode=$(resolve_check_mode "check-convention")
+c49_mode=$(resolve_check_mode "check-convention" "warn")
 flag_warn_or_issue "check-convention" "predicate script missing: $c49_script"
 log "  FAIL:  Check 49 — check-convention scan-surface error (exit 3)"
 FRAGS

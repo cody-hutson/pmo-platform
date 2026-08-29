@@ -471,7 +471,7 @@ if [[ "$SELF_TEST" == "true" ]]; then
 #### Release Learnings v0.00
 
 **Synthesized at:** 2026-01-01T00:00:00Z
-**Source events:** 2 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: version=`v0.00`)
+**Source events:** 2 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v0.00`)
 **Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-01-01T00:00:00Z`, `2026-01-02T00:00:00Z`
 
 **Surprise:** SURPRISE-FIXTURE-ALPHA

@@ -162,6 +162,23 @@ CUTOVER_RELEASES = {"v11.04b-3", "v11.04b-3-doc-cleanup"}
 REQUIRED_FIELDS = {"version", "date", "type", "issues", "pr", "links"}
 TYPE_VALUES = {"plan", "note", "abandoned-plan", "phase-plan", "audit-plan"}
 
+# Plan-status lifecycle (release-corpus-schema.md § Plan-status lifecycle).
+#
+# THE SCHEMA IS THE HOME; these names are the executable projection of the enum
+# stated there, not a second declaration of it. UPPERCASE by the corpus's own
+# frequency dominance, matching the ledger's own State vocabulary.
+#
+# The enum is CLOSED at three members and jointly exhaustive over how a plan
+# stops being a live working reference: it closed, or it was abandoned. A value
+# outside the set is an enum violation, never an extension.
+#
+# DELIBERATELY SEPARATE FROM TYPE_VALUES ABOVE. Widening that set is a distinct
+# piece of work (the `type: release-plan` dialect the plan corpus actually
+# carries) and is out of scope here; these constants are additive and are read
+# by one limb.
+PLAN_STATUS_VALUES = ("ACTIVE", "CLOSED", "ABANDONED")
+PLAN_STATUS_TERMINAL = "CLOSED"
+
 # Note-content lint (release-notes-standard.md §3.2 checks 9-12).
 #
 # Cutover floor reset to (1, 0, "", 0) for the re-versioned modular-monolith
@@ -1369,6 +1386,10 @@ def check_plan_identity(
     reversions = _reversion_pairs(reversions_path)
 
     n_plans = n_declaring = n_joined = n_unverifiable = 0
+    # E1/E2 denominators — reported unconditionally by the PLAN-STATUS-DENOM
+    # advisory below, so a zero-finding run is distinguishable from a run that
+    # walked no status-carrying plans at all.
+    n_status = n_status_closed = n_status_joined = 0
     unverifiable_above_floor: list[str] = []
     declared_seen: dict[str, list[str]] = {}
 
@@ -1384,6 +1405,68 @@ def check_plan_identity(
         rel = _rel(path)
         stem = path.name[: -len("_RELEASE_PLAN.md")]
         m = PLAN_STEM_VERSION_RE.match(stem)
+        text = path.read_text(encoding="utf-8")
+
+        # ── E1 / E2: plan-status lifecycle ───────────────────────────────────
+        #
+        # Placed BEFORE the version-declaring antecedent below, and that is
+        # load-bearing rather than stylistic: the status-carrying cohort
+        # includes SLUG-named plans (a version-less release's plan, and a
+        # pre-claim plan not yet renamed), none of which declare a version. A
+        # limb homed after the `if not m: continue` would silently exempt every
+        # one of them — the same shrunken-denominator failure this file's own
+        # DENOM lines exist to make visible.
+        #
+        # READ COMMENT-TOLERANTLY via _fm_for_identity(). parse_frontmatter()
+        # returns None whenever line 1 is not the fence, and the plan corpus
+        # carries files opening with `<!-- … -->` marker comments above it.
+        # Measured on the live corpus, a strict reader sees 28 of the 33
+        # status-carrying plans — a green result over a population five files
+        # short. The schema states this reader requirement unconditionally.
+        #
+        # BOTH LIMBS ARE CONDITIONAL, which is what preserves the field's
+        # OPTIONAL / forward-only tier: a plan carrying no `status:` reaches
+        # neither, and a plan joining to no ledger row reaches only E1.
+        fm_status = _fm_for_identity(text).get("status")
+        if isinstance(fm_status, str) and fm_status.strip():
+            fm_status = fm_status.strip()
+            n_status += 1
+            if fm_status not in PLAN_STATUS_VALUES:
+                # E1 — enum membership. Fail loudly on an unrecognised value
+                # rather than treating it as a silent non-terminal.
+                findings.append(
+                    f"PLAN-STATUS-ENUM: {rel} carries status: '{fm_status}' — the enum is "
+                    f"{'|'.join(PLAN_STATUS_VALUES)} (release-corpus-schema.md "
+                    f"§ Plan-status lifecycle)"
+                )
+            else:
+                if fm_status == PLAN_STATUS_TERMINAL:
+                    n_status_closed += 1
+                # E2 — terminal coherence. THE ANTECEDENT IS THE LEDGER ROW, so
+                # a plan that joins to nothing asserts nothing.
+                #
+                # THIS LIMB FILTERS ON `State`, and that does NOT contradict the
+                # placement limb's "never filter on State" contract below. That
+                # contract protects an EXISTENCE assertion whose reach would be
+                # blinded by a transient State; this is a COHERENCE assertion
+                # whose whole content is "the ledger says shipped, the plan says
+                # live" — State is the antecedent, not a filter narrowing a
+                # population. Reading it here cannot shrink any denominator: a
+                # non-VERIFIED row simply leaves the assertion vacuous, and the
+                # DENOM line below reports how often that happened.
+                s_row, s_ambiguous = resolve_plan_identity(
+                    text, (m.group(2) or "") if m else stem, rows
+                )
+                if s_row is not None and not s_ambiguous:
+                    n_status_joined += 1
+                    if s_row["state"] == "VERIFIED" and fm_status != PLAN_STATUS_TERMINAL:
+                        findings.append(
+                            f"PLAN-STATUS-NOT-TERMINAL: {rel} reads status: {fm_status} but "
+                            f"{_rel(log_path)}:{s_row['line']} records State VERIFIED — a "
+                            f"released plan carries status: {PLAN_STATUS_TERMINAL} "
+                            f"(release-corpus-schema.md § Plan-status lifecycle)"
+                        )
+
         if not m:
             # Antecedent vacuous — the filename declares no version. Nested
             # slug-named, _unversioned/ and flat pre-claim plans all land here
@@ -1394,7 +1477,6 @@ def check_plan_identity(
         declared_seen.setdefault(declared, []).append(rel)
 
         ver = version_tuple(declared)
-        text = path.read_text(encoding="utf-8")
         row, ambiguous = resolve_plan_identity(text, slug_tail, rows)
 
         if ambiguous:
@@ -1513,6 +1595,19 @@ def check_plan_identity(
     # INTERPRETABLE. It states the glob expression and the denominators, because
     # a zero over a collapsed denominator is not a pass and the output is the
     # only place a reader can tell the two apart.
+    # The E1/E2 counterpart of the DENOM line below, and it exists for the same
+    # reason: the status-carrying cohort is a SUBSET of the walked population,
+    # so "no status findings" is uninterpretable without knowing how many files
+    # carried the field and how many of those reached the E2 antecedent. Carried
+    # under ADVISORY_PREFIX, so it is filtered out of the blocking list by
+    # construction and contributes nothing to any verdict — that inertness is
+    # the point.
+    advisories.append(
+        f"{ADVISORY_PREFIX}: PLAN-STATUS-DENOM — {n_status} of {n_plans} plan file(s) carry a "
+        f"frontmatter status: (read comment-tolerantly); {n_status_closed} read "
+        f"{PLAN_STATUS_TERMINAL}, {n_status_joined} joined to a ledger row and so reached the "
+        f"terminal-coherence antecedent; enum {'|'.join(PLAN_STATUS_VALUES)}"
+    )
     advisories.append(
         f'{ADVISORY_PREFIX}: PLAN-IDENTITY-DENOM — {n_plans} plan file(s) walked via '
         f'plans_dir.rglob("*_RELEASE_PLAN.md") under {_rel(plans_dir)}; {n_declaring} declare a '
@@ -1575,6 +1670,39 @@ def _write(root: Path, rel: str, milestone: str | None = None, lead: str = "") -
         fm += f"milestone: {milestone}\n"
     fm += "---\n"
     path.write_text(lead + fm + "\n# Fixture plan\n", encoding="utf-8")
+    return path
+
+
+def _write_status_plan(
+    root: Path, rel: str, milestone: str, status: str | None, lead: str = ""
+) -> Path:
+    """Fixture plan carrying a frontmatter `status:` — the E1/E2 seed.
+
+    SEPARATE from _write() because `status=None` must produce a plan with NO
+    status key at all, which is the forward-only specificity arm, and because
+    `lead` here is load-bearing in its own right: bytes above the `---` fence
+    are what make a strict reader blind to the frontmatter. The live corpus
+    carries that shape on 5 of its status-bearing plans, so an arm that never
+    exercises it would pass a reader that silently under-enforces on them.
+
+    The body carries a `| **Status** | … |` row deliberately. It is the
+    registered non-authoritative narrative surface, and its presence here is
+    the regression lock for "rewrite only the frontmatter line": a limb that
+    read the body row instead would see a value the enum does not contain and
+    misreport it.
+    """
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fm = f"---\ntype: plan\nmilestone: {milestone}\n"
+    if status is not None:
+        fm += f"status: {status}\n"
+    fm += "---\n"
+    body = (
+        "\n# Fixture plan\n\n"
+        "| Field | Value |\n|---|---|\n"
+        "| **Status** | Executing (Stage 6 Engineering) |\n"
+    )
+    path.write_text(lead + fm + body, encoding="utf-8")
     return path
 
 
@@ -1877,6 +2005,82 @@ def _self_test() -> int:
         arm("S-22c specificity — the conformant at/above-floor row is neither counted nor flagged",
             fires(fj, "PLAN-MISSING-FOR-LEDGER-ROW", "v4.09") == 0,
             "a row whose plan sits at its nested home contributes to neither figure")
+
+        # ── Scenario K — E1/E2 plan-status lifecycle ────────────────────────
+        #
+        # SEEDED FIXTURE, AND THAT IS THE POINT. After this release's sweep the
+        # live corpus contains ZERO non-terminal shipped plans, so a green run
+        # over it proves nothing about whether these limbs discriminate — it is
+        # the unsatisfiable-control trap the card itself named. Every arm below
+        # therefore seeds the positive it asserts on.
+        k = root / "K"
+        kp = k / "plans"
+        klog = _write_ledger(k / "RELEASE_LOG.md", [
+            ("v9.50", "widget-k-closed", "VERIFIED"),
+            ("v9.51", "widget-k-active", "VERIFIED"),
+            ("v9.52", "widget-k-flight", "DEPLOYED"),
+            ("v9.53", "widget-k-bogus", "VERIFIED"),
+            ("v9.54", "widget-k-nofield", "VERIFIED"),
+            ("v9.55", "widget-k-marker", "VERIFIED"),
+        ])
+        k_ok = _write_status_plan(kp, "v9/v9.50-widget-k-closed_RELEASE_PLAN.md",
+                                  "widget-k-closed", "CLOSED")
+        k_bad = _write_status_plan(kp, "v9/v9.51-widget-k-active_RELEASE_PLAN.md",
+                                   "widget-k-active", "ACTIVE")
+        k_flight = _write_status_plan(kp, "v9/v9.52-widget-k-flight_RELEASE_PLAN.md",
+                                      "widget-k-flight", "ACTIVE")
+        k_enum = _write_status_plan(kp, "v9/v9.53-widget-k-bogus_RELEASE_PLAN.md",
+                                    "widget-k-bogus", "SHIPPED")
+        k_none = _write_status_plan(kp, "v9/v9.54-widget-k-nofield_RELEASE_PLAN.md",
+                                    "widget-k-nofield", None)
+        k_mark = _write_status_plan(kp, "v9/v9.55-widget-k-marker_RELEASE_PLAN.md",
+                                    "widget-k-marker", "ACTIVE",
+                                    lead="<!-- reference-durability: allow-link -->\n")
+        fk = check_plan_identity(plans_dir=kp, log_path=klog,
+                                 reversions_path=root / "none.md")
+        r_ok, r_bad = _rel(k_ok), _rel(k_bad)
+        r_flight, r_enum = _rel(k_flight), _rel(k_enum)
+        r_none, r_mark = _rel(k_none), _rel(k_mark)
+        k_denom = next((f for f in fk if "PLAN-STATUS-DENOM" in f), "")
+
+        arm("S-23 anti-vacuity — the marker-lead fixture really IS invisible to a strict reader",
+            parse_frontmatter(k_mark.read_text(encoding="utf-8")) is None
+            and _fm_for_identity(k_mark.read_text(encoding="utf-8")).get("status") == "ACTIVE",
+            "parse_frontmatter -> None while the comment-tolerant reader still sees ACTIVE; "
+            "without this, S-24b could pass on a shape the corpus never produces")
+        arm("S-24 sensitivity — a VERIFIED release whose plan still reads ACTIVE BLOCKS",
+            fires(fk, "PLAN-STATUS-NOT-TERMINAL", r_bad) == 1,
+            f"exactly one blocking PLAN-STATUS-NOT-TERMINAL naming {r_bad}")
+        arm("S-24b sensitivity — the SAME defect below a marker comment blocks identically",
+            fires(fk, "PLAN-STATUS-NOT-TERMINAL", r_mark) == 1,
+            "the regression lock for the comment-tolerant reader: a strict reader scores 0 here "
+            "while every other arm in this scenario stays green")
+        arm("S-24c specificity — a shipped plan reading CLOSED fires nothing",
+            names(blocking(fk), r_ok) == 0,
+            f"{r_ok} joins a VERIFIED row and carries the terminal value — no finding")
+        arm("S-24d specificity — an IN-FLIGHT release's plan may still read ACTIVE",
+            fires(fk, "PLAN-STATUS-NOT-TERMINAL", r_flight) == 0,
+            "the ledger row reads DEPLOYED, not VERIFIED, so the antecedent is unmet — this is "
+            "what stops the limb demanding a terminal value from a live release")
+        arm("S-25 sensitivity — a status: outside the enum BLOCKS rather than passing silently",
+            fires(fk, "PLAN-STATUS-ENUM", r_enum) == 1,
+            "SHIPPED is a plausible-looking value and is NOT an enum member; it fails loudly")
+        arm("S-25b specificity — the enum limb does not fire on any legal member",
+            fires(fk, "PLAN-STATUS-ENUM", r_ok) == 0
+            and fires(fk, "PLAN-STATUS-ENUM", r_bad) == 0
+            and fires(fk, "PLAN-STATUS-ENUM", r_flight) == 0,
+            "CLOSED and ACTIVE both pass E1; only the non-member trips it")
+        arm("S-26 forward-only — a plan carrying NO status: reaches neither limb",
+            names(blocking(fk), r_none) == 0,
+            f"{r_none} joins a VERIFIED row but declares no status — the OPTIONAL tier is "
+            "preserved, which is what keeps 146 historical plans out of the finding list")
+        # S-27 grades the DENOMINATORS. A limb that examined nothing and a limb
+        # that found nothing read identically from a finding count alone.
+        arm("S-27 denominator — the tally reports the partition the fixture actually produced",
+            "5 of 6 plan file(s) carry a frontmatter status:" in k_denom
+            and "1 read CLOSED" in k_denom,
+            "6 plans walked, 5 carrying the field, 1 terminal — a counter mutated to `+= 0` "
+            "reports 0 beside five live carriers and reddens here")
 
         # ── Scenario H — check_note_content()'s Tier-1 links.plan limb ───────
         #

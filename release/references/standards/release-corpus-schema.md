@@ -40,6 +40,8 @@ The release corpus records one fact per release — *release X shipped, containi
 | `core/ADRs/ADR-*.md` + `release/ADRs/ADR-*.md` — filename + frontmatter | **SOURCE — decision record** | an ADR's number, title, status, decision date and originating release | The record owns every fact about itself. `status:` is enum-prefixed with an optional prose tail per the ADR schema; the **leading token** is the fact, the tail is a ratification anchor that lives on the record. |
 | `release/ADRs/README.md` — the `ADR-INDEX` region | **DERIVED (all 5 columns) · whole-table** | — | Verified **region-scoped**: the README's prose sections are hand-authored and outside the projection. No hybrid column — unlike the INDEX's `Theme`, every column here is derivable, so there is no round-trip limb. |
 | `core/ADRs/README.md` | **NEITHER — curated thematic document** | its own curation | Deliberately not an index and deliberately not projected. Registered here so the negative is explicit and the question is not re-opened. |
+| `release/releases/plans/*_RELEASE_PLAN.md` — frontmatter `status:` | **SOURCE — plan-document lifecycle** | whether the plan file is still a live working reference (`ACTIVE`) or has stopped being one (`CLOSED` / `ABANDONED`) | A **different fact** from the LOG row's `State`, not a copy of it: the LOG column records the RELEASE's deployment state, this field records the DOCUMENT's working life. That is why the terminal value is `CLOSED` and not `VERIFIED` — see [Plan-status lifecycle](#plan-status-lifecycle) for the enum, the transition points, and the writer. |
+| `release/releases/plans/*_RELEASE_PLAN.md` — body `\| **Status** \| … \|` header-table row | **NEITHER — non-authoritative narrative annotation** | nothing | A free-prose progress note in the plan's own header table. It is **not** the plan-lifecycle field, it carries no enum the corpus obeys, and no tool reads it. Registered here per the register-or-remove rule so the second surface is **named and demoted** rather than left to silently contradict the frontmatter enum. Retirement is routed to a follow-up; until then, on any disagreement the frontmatter `status:` governs. |
 
 ### Per-field provenance
 
@@ -93,6 +95,32 @@ A hand-edit to any of the INDEX's five derived columns **fails** Check 23. A han
 
 **A projector must never silently regenerate to clear a finding.** `--verify` is read-only; the remedy is a separate `--write` invocation the author runs and commits. A check that repaired what it measured could not distinguish a stale index from a corrupted one.
 
+### Row classes
+
+A `RELEASE_LOG.md` table row belongs to exactly one of two **row classes**, determined by its Version cell: **`versioned`** when the cell is a `vX.Y` token, **`version-less`** when it is a slug carrying the ` (version-less)` marker. Both classes are release records of equal standing. A version-less release is the ordinary product of the D-Version determination when a milestone title claims no version — it ships, it closes, and it earns the same close-out output set as any other release, minus the outputs a version is required to produce.
+
+**Every enumerator over this table resolves enumerate-versus-exclude per LIMB, against the row's class — never by filtering the class out of the row selector.** The distinction is load-bearing, because a row selector that encodes the class is also, unavoidably, deriving the resolution key: a version-less row's first cell is not a version, so a selector written to match `v[0-9]` is simultaneously the data-row filter, the class filter, and the key. Fusing the three is what makes the exclusion invisible — and what makes widening the selector break the key rather than fix the coverage.
+
+**Two keys, and they are complementary rather than alternatives:**
+
+| Key | Value | Resolves |
+|---|---|---|
+| **row key** | the Version cell verbatim, marker included | the LOG table itself and `RELEASE_INDEX.md`, which carry the same marked cell |
+| **corpus key** | the row key with a trailing ` (version-less)` marker removed | `RELEASE_DIGEST.md`, `CHANGELOG.md`, the notes file, and every `#### ` block heading — all of which carry the bare slug |
+
+For a `versioned` row the two keys are **byte-identical**, so a reader that derives both changes nothing about how a `vX.Y` row resolves. Any key reaching a regular-expression matcher is escaped across the full metacharacter set first: a slug key carries parentheses, and escaping only `.` leaves them live, where they silently match nothing and a satisfied surface reads as a missing one.
+
+**Which limbs enumerate, and which declare exclusion:**
+
+| Limb | Class `version-less` |
+|---|---|
+| INDEX row · DIGEST entry · notes file · CHANGELOG section · `#### ` Deployment-Log block · note-content lint | **ENUMERATED** — asserted identically for both classes |
+| signed tag · published GitHub Release · published-body drift · `.version` stamp equality | **DECLARED EXCLUDED** — counted and reported, never silently skipped |
+
+The four exclusions are structural, not conveniences. The determination that produces a version-less release assigns no version, and therefore cuts no signed tag, publishes no GitHub Release, and stamps no `.version`. A check asserting those on such a row asserts the existence of something that determination forbids — the finding would be accurate about the corpus and wrong about the contract.
+
+**An excluded class is reported, never absent.** Every enumerator over this table emits its denominator alongside its findings, in the form *enumerated / declared-excluded / not-in-scope / total*, such that the parts sum to the total. This is what makes a zero-finding result readable: without the denominator, "no findings on version-less rows" and "no version-less row was examined" produce identical output, and a reader has no way to tell a clean class from an unexamined one. A row that fell into no bucket at all shows up as arithmetic that does not balance, rather than as an absence nobody notices.
+
 ## Archive Segments
 
 An **archive segment** is a same-directory, same-schema continuation of a ledger, holding block bodies that have aged out of that ledger's hot working set. It is a fourth artifact class alongside SOURCE and DERIVED surfaces, and it is neither: it is the **same record as its parent, relocated**.
@@ -126,7 +154,7 @@ Mechanism owned by `release/tools/sweep-release-corpus.py`; disposition classifi
 | `pr` | string or `null` | `"#PRN"` or `null` | Integration PR. `null` for plans authored before PR creation; populated at PR creation. Notes always reference a merged PR. |
 | `links` | object | See [Links shape](#links-shape) below | Bidirectional cross-references (plan ↔ note ↔ log_anchor) — the substrate for INDEX/DIGEST generation |
 
-### Optional fields (7)
+### Optional fields (8)
 
 | Field | Type | Format | When to set |
 |---|---|---|---|
@@ -137,6 +165,7 @@ Mechanism owned by `release/tools/sweep-release-corpus.py`; disposition classifi
 | `breaking` | bool | `true` or `false` | True when the release ships any Voice-Rule-3 review-surface trigger per [release-notes-standard.md](release-notes-standard.md): deprecation, breaking change, state-mutating default change, removal of capability, or new restriction. Enables queries like "any breaking changes in the last 5 releases?" |
 | `components` | list of strings | `["<canonical-name>", ...]` | Platform components touched by this release. Free-form initially; canonical-naming convention published in `release-notes-standard.md` §2.3. Complements `themes` (broad) with entity-level specifics. Enables queries like "when did `release-planner` last change?" |
 | `followups` | list of strings | `["#N", "#M", ...]` (each `#`-prefixed) | Follow-up issues filed during this release for future remediation (residual register). Enables queries like "what's still open from vX.Y?" without parsing the body. |
+| `status` | enum | One of: `ACTIVE`, `CLOSED`, `ABANDONED` (UPPERCASE) | **Plan files only.** The plan document's own working-life state. Set `ACTIVE` when the plan is authored; the Stage-13 close-out transitions it to `CLOSED`. OPTIONAL and forward-only — a plan carrying no `status:` asserts nothing and is not a finding. Promotable to required once utility is proven, matching the `reversibility-tier` / `summary` pattern above. Full contract: [Plan-status lifecycle](#plan-status-lifecycle). |
 
 ### Type discriminator
 
@@ -148,11 +177,33 @@ The `type:` field discriminates artifact classes for the schema validator and fo
 | `note` | `vX.Y[suffix]_RELEASE_NOTES.md` under `releases/notes/` | All 6 | — |
 | `phase-plan` | `vX.Y-{Z\|I}_PHASE_PLAN.md` under `releases/plans/` (filename grandfathered) | All 6; `pr:` may be `null` if phase plan never reached PR | INDEX rows (phase plans appear in DIGEST footnotes only) |
 | `audit-plan` | `vX.Y-{audit-name}_RELEASE_PLAN.md` under `releases/plans/` | All 6 | — |
-| `abandoned-plan` | Any plan moved to `releases/archive/plans/` | All 6; add `status: abandoned` and `abandonment-reason` in body | INDEX rows; DIGEST per-version-family entries |
+| `abandoned-plan` | Any plan moved to `releases/archive/plans/` | All 6; add `status: ABANDONED` (the enum member — see [Plan-status lifecycle](#plan-status-lifecycle)) and `abandonment-reason` in body | INDEX rows; DIGEST per-version-family entries |
 
-**Pre-claim naming lifecycle (additive — the filename patterns above are the *shipped-corpus* form).** The `vX.Y…` filename patterns are the **post-claim** canonical form: a shipped release *is* version-named, and these are the names the corpus carries. While a release is **in flight (pre-claim)**, its plan is authored **slug-primary** — `release/releases/plans/<slug>_RELEASE_PLAN.md`, carrying no version stem, with in-file version references held as the `{{RELEASE_VERSION}}` placeholder. For a `versioned` release the plan is renamed to its `vX.Y_RELEASE_PLAN.md` shipped-corpus form at the Stage-12 atomic claim (the CAS-win rename + placeholder resolution, per ADR-092); a `version-less` release keeps the slug form. This is the corpus-schema projection of the two-phase identity binding in [`../../governance/RELEASE_PROTOCOL.md`](../../governance/RELEASE_PROTOCOL.md) § Versioning — the shipped-corpus filenames above are unchanged.
+**Pre-claim naming lifecycle (additive — the filename patterns above are the *shipped-corpus* form).** The `vX.Y…` filename patterns are the **post-claim** canonical form: a shipped release *is* version-named, and these are the names the corpus carries. While a release is **in flight (pre-claim)**, its plan is authored **slug-primary** — `release/releases/plans/<slug>_RELEASE_PLAN.md`, carrying no version stem, with in-file version references held as the `{{RELEASE_VERSION}}` placeholder. For a `versioned` release the plan is renamed to its `vX.Y_RELEASE_PLAN.md` shipped-corpus form at the Stage-12 atomic claim (the CAS-win rename + placeholder resolution, per ADR-092); a `version-less` release keeps the slug form. This is the corpus-schema projection of the **canonical statement** of that convention, which lives at [`../../governance/RELEASE_PROTOCOL.md`](../../governance/RELEASE_PROTOCOL.md) § Versioning → Phase 1 and registers this surface as one of its projections. The rule is stated once at that home; this paragraph carries it as a projection, not as an independent naming authority, and states no rule that home does not. The shipped-corpus filenames above are unchanged.
 
 Validator MUST discriminate by `type:` value and apply the type-specific required-fields subset before flagging missing-field errors.
+
+### Plan-status lifecycle
+
+**This subsection is the single home of the plan-file `status:` enum.** No other file states these values, and a surface that restates them is a defect under the Derived-Surface Contract above rather than a second authority.
+
+The field records the **plan document's own working life** — whether the file is still a live working reference or has stopped being one. It is deliberately *not* a restatement of the release's deployment state: that fact is owned by the `RELEASE_LOG.md` row's `State` column, and copying it here would put a second, staler copy of a ledger fact into a second file.
+
+| Value | Meaning | Written when |
+|---|---|---|
+| `ACTIVE` | The plan is a live working reference for a release still in flight. | At plan authorship (Stage 6 Commit 0). |
+| `CLOSED` | The plan's working life ended — the release it plans reached its close. | At Stage 13 close-out, by `automated-closeout.sh` Phase 6.9 `phase_transition_plan_status`. |
+| `ABANDONED` | The plan was never fulfilled; the release it planned did not ship. | By hand, when the plan is moved to `releases/archive/plans/` as `type: abandoned-plan`. Pairs with `abandonment-reason` in the body. |
+
+**The enum is closed at three members and jointly exhaustive** over how a plan stops being a live working reference: it closed, or it was abandoned. There is no fourth terminal state, and a value outside this set is an enum violation rather than an extension.
+
+**Why `CLOSED` and not `VERIFIED` or `SHIPPED`.** Both name the *release's* outcome, which the ledger's `State` column already owns. Reusing either word would place the same fact, keyed on the same event, in a second file — the exact restatement the Derived-Surface Contract exists to prevent. `CLOSED` names a different fact (the document's lifecycle event at Stage 13 Close), so no restatement occurs. `SUPERSEDED` and `DEPRECATED` are likewise not used: a fulfilled plan was *completed*, not deprecated, and the platform doc-frontmatter standard that owns those words scopes release plans out of its own enum.
+
+**Transition points.** `ACTIVE` → `CLOSED` is performed by the close-out phase named above, never by hand. The phase is idempotent (a plan already reading `CLOSED` is skipped), it rewrites only the frontmatter `status:` line, and it fails loudly on a value outside the enum rather than overwriting it. A plan reading `ABANDONED` while its release is closing is a contradiction the phase refuses to resolve silently.
+
+**Field tier: OPTIONAL, forward-only.** The majority of the historical plan corpus carries no `status:` at all. A plan without the field asserts nothing and is never a finding; the assertions below are conditional on the field being present.
+
+**Reader requirement, stated unconditionally.** Any tool reading this field MUST locate the frontmatter block **comment-tolerantly** — skipping leading HTML comment lines before the opening `---` fence. Plan files in this corpus carry marker comments above the fence, so a reader keying on "the file opens with a fence" silently under-reads the population and returns a green result over a shrunken denominator. This is the same defect class the `NOTE-PLAN-LINK-NO-FRONTMATTER` failure mode records for notes, on the plan side.
 
 ### Links shape
 
@@ -178,6 +229,7 @@ links:
   note: release/releases/notes/v1.04b-3_RELEASE_NOTES.md
   log_anchor: "#v1-04b-3-doc-cleanup"
 themes: ["cluster:documentation", "cluster:process-protocol"]
+status: ACTIVE
 ---
 ```
 
@@ -245,6 +297,8 @@ Promote `components` to controlled vocabulary if drift bites within 5 post-cutov
 - `version:` matches the parent Milestone exactly.
 - `links.log_anchor` resolves to an existing fragment in `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`.
 - `links.plan` resolves to an existing file under `release/releases/plans/`. The plan's home is whichever of the documented dispositions applies (see `release/releases/plans/README.md` § Disposition rule); this criterion asserts only that the value names a file that is there. A `null` value is permitted and asserts nothing; an absent `links.plan` is a missing-required-field finding under the rule above, not a resolution finding.
+- **Plan `status:` enum membership.** A plan file's `status:`, **when present**, is one of `ACTIVE` / `CLOSED` / `ABANDONED` per [Plan-status lifecycle](#plan-status-lifecycle). An absent field asserts nothing — the assertion is conditional, so the forward-only tier is preserved. Finding token: `PLAN-STATUS-ENUM:`.
+- **Plan terminal coherence.** A plan whose `RELEASE_LOG.md` row records `State: VERIFIED` carries `status: CLOSED`. The antecedent is the ledger row, so a plan that joins to no row asserts nothing. Finding token: `PLAN-STATUS-NOT-TERMINAL:`.
 
 ### Tier 2 — Cross-reference symmetry (bidirectional)
 
@@ -272,6 +326,8 @@ A Python validator at `core/deploy/tools/lint_release_corpus.py` (authored along
 | `links.plan` unreadable | Validator flags `NOTE-PLAN-LINK-NO-FRONTMATTER: <note> …` — the file does not open with a `---` fence on line 1, so the value could not be read and the pointer is UNVERIFIED rather than clean | Tier 1 presence check | Move any leading marker comment below the frontmatter block, so the fence opens the file |
 | Frontmatter absent (forward-only file) | Validator flags `NO FRONTMATTER: file is post-cutover but lacks `---` block` | Tier 1 presence check | Add frontmatter per spec |
 | Frontmatter present on pre-cutover file | No-op — schema is forward-only; pre-cutover files exempt | N/A | N/A — backfill via F-3 backfill executes |
+| Plan `status:` outside the enum | Validator flags `PLAN-STATUS-ENUM: <plan> carries status: '<value>' — the enum is ACTIVE\|CLOSED\|ABANDONED` | Tier 1 enum membership, inside the plan-identity check so every live caller reaches it | Correct the value to an enum member; do not extend the enum in a plan file |
+| Shipped release's plan still reads `ACTIVE` | Validator flags `PLAN-STATUS-NOT-TERMINAL: <plan> reads status: ACTIVE but its RELEASE_LOG row records VERIFIED` | Tier 1 terminal coherence, same check | Let the close-out's plan-status transition phase write `CLOSED`; a finding here on the closing release means that phase returned without writing |
 
 ## Composition with adjacent standards
 

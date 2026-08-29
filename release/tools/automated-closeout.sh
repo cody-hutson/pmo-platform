@@ -24,6 +24,7 @@
 #   6.6 inject_velocity_field **Velocity:** field after **Cycle-Time:** in that block (stage-13-close.md Phase B-velocity; surface-resolved)
 #   6.7 append_release_learnings  sibling H4 `#### Release Learnings v<X.Y>` after the Deployment Log block (stage-13-close.md Phase A7; hot ledger only)
 #   6.8 inject_close_class_telemetry_field  **Close-Class-Telemetry:** field after **Outcome rationale:**/**Outcome:** in that block (close-class-telemetry.md § 3.2; surface-resolved; anchor STRING resolved through the same shared field-key grammar as 6.5, #4222)
+#   6.9 transition_plan_status  release-plan frontmatter `status:` ACTIVE → CLOSED (release-corpus-schema.md § Plan-status lifecycle; comment-tolerant reader, bounded to the leading fence). ORDERED AFTER 6 and BEFORE 9.3 — 9.3 is its completeness backstop
 #   7  append_release_index    new row in RELEASE_INDEX.md
 #   8  append_release_digest   new entry under v<MAJOR>.* H2 in RELEASE_DIGEST.md
 #   8.5 append_reversions   append re-version row(s) to RELEASE_REVERSIONS.md (#1679; N/A on the common no-collision path)
@@ -3206,6 +3207,159 @@ phase_inject_close_class_telemetry_field() {
   _record_touched_archive_segment "$target_log"
 
   mark_phase "inject_close_class_telemetry_field" "PASS" "injected the **Close-Class-Telemetry:** field $_anchor_desc in the $VERSION Deployment Log block ($target_name): '$_line'${_vac}"
+  return 0
+}
+
+# ─── Phase 6.9: transition_plan_status (release-plan lifecycle ACTIVE→CLOSED) ─
+#
+# Reads or rewrites the LEADING FRONTMATTER `status:` line of a plan file, and
+# nothing else. One function, one `action` argument, driven by BOTH the dry-run
+# and the apply path — the same shape log_row_match() carries above and for the
+# same stated reason: a green dry-run cannot mask a red apply when both call the
+# identical predicate.
+#
+# BOUNDED TO THE FENCE, and this is not defensive garnish. 22 of the plans in
+# scope also carry a BODY `| **Status** | … |` row and one carries a body
+# `Status:` prose line; an unbounded line rewrite would silently corrupt
+# narrative content that exists nowhere else. The rewrite therefore refuses
+# unless it finds exactly ONE `status:` line INSIDE the leading block.
+#
+# COMMENT-TOLERANT, per release-corpus-schema.md § Plan-status lifecycle. Plan
+# files in this corpus open with `<!-- … -->` marker comments above the fence; a
+# reader keying on "the file opens with `---`" is blind to 5 of the corpus's
+# status-bearing plans and would report a clean no-op on every one of them.
+#
+# actions:  read   -> echoes the current frontmatter status value ("" if none); exit 0
+#           apply  -> rewrites ACTIVE -> CLOSED, re-reads, echoes the post-write
+#                     value; exit 0 only when the re-read confirms CLOSED
+plan_status_rw() {
+  local path="$1" action="$2"
+  /usr/bin/python3 - "$path" "$action" <<'PY'
+import sys
+
+path, action = sys.argv[1], sys.argv[2]
+with open(path, "r", encoding="utf-8") as fh:
+    lines = fh.read().split("\n")
+
+def fence_span(ls):
+    i = 0
+    while i < len(ls):
+        s = ls[i].strip()
+        if s == "" or (s.startswith("<!--") and s.endswith("-->")):
+            i += 1
+            continue
+        break
+    if i >= len(ls) or ls[i].strip() != "---":
+        return None
+    for j in range(i + 1, len(ls)):
+        if ls[j].strip() == "---":
+            return (i, j)
+    return None
+
+span = fence_span(lines)
+if span is None:
+    print("")
+    sys.exit(0 if action == "read" else 1)
+lo, hi = span
+hits = [k for k in range(lo + 1, hi) if lines[k].startswith("status:")]
+if len(hits) != 1:
+    print("")
+    sys.exit(0 if action == "read" else 1)
+k = hits[0]
+current = lines[k].split(":", 1)[1].strip()
+if action == "read":
+    print(current)
+    sys.exit(0)
+if current != "ACTIVE":
+    print(current)
+    sys.exit(1)
+lines[k] = "status: CLOSED"
+with open(path, "w", encoding="utf-8") as fh:
+    fh.write("\n".join(lines))
+# Write-then-re-read: report what is ON DISK, never what we intended to write.
+with open(path, "r", encoding="utf-8") as fh:
+    back = fh.read().split("\n")
+sp2 = fence_span(back)
+ok = sp2 is not None and sp2[0] < k < sp2[1] and back[k].strip() == "status: CLOSED"
+print(back[k].split(":", 1)[1].strip() if ok else "")
+sys.exit(0 if ok else 1)
+PY
+}
+
+# Transitions THIS release's plan from ACTIVE to CLOSED at the close.
+#
+# WHY A SEPARATE PHASE rather than folding the write into an adjacent one. The
+# reasoning Phase 6.5 records verbatim at its own extraction applies unchanged:
+# a second writer folded into phase_transition_release_log would re-create the
+# 3-writer collision that extraction removed. Folding it into Phase 9.3 is worse
+# still — that phase is a read-only GATE whose FAIL paths `return 1` before any
+# write could occur, and its is_version_less early-SKIP would silently skip the
+# transition for exactly the version-less releases whose plans need it.
+#
+# WHY POSITION 6.9 — the ordering is load-bearing, not cosmetic. It sits after
+# the 6.5-6.8 Deployment-Log cluster and BEFORE Phase 9.3. Phase 6 flips the LOG
+# row DEPLOYED -> VERIFIED; 6.9 flips the plan ACTIVE -> CLOSED; Phase 9.3 then
+# runs the plan-identity lint, which asserts that a plan whose LOG row reads
+# VERIFIED carries status: CLOSED. If this phase ever returned 0 WITHOUT writing
+# — the silent-no-op this whole card exists to close — Phase 9.3 observes
+# LOG=VERIFIED with plan=ACTIVE for THIS version and halts the close before the
+# chore PR is created. Both edits are on disk and uncommitted at that point (the
+# commit is Phase 10), so 9.3 reads them. Moving this phase after 9.3 forfeits
+# that interlock entirely and requires a new output-set manifest member.
+#
+# The silent no-op is ALSO caught here, independently: the apply path re-reads
+# from disk and FAILs when the re-read does not say CLOSED. Phase 9.3 is the
+# backstop, not the only defence — which matters because the 9.3 assertion is
+# conditional on the plan joining to its ledger row.
+phase_transition_plan_status() {
+  local plan
+  if ! plan="$(plan_rel_path)"; then
+    mark_phase "transition_plan_status" "SKIPPED" "no plan file resolves for ${VERSION} — nothing to transition"
+    return 0
+  fi
+
+  local current
+  current="$(plan_status_rw "${REPO_ROOT}/${plan}" read)"
+
+  case "$current" in
+    "")
+      mark_phase "transition_plan_status" "SKIPPED" "${plan} carries no frontmatter status: field — the schema is forward-only, so a pre-cutover plan is exempt rather than a finding"
+      return 0
+      ;;
+    CLOSED)
+      mark_phase "transition_plan_status" "SKIPPED" "${plan} already reads status: CLOSED — idempotent re-run"
+      return 0
+      ;;
+    ABANDONED)
+      mark_phase "transition_plan_status" "FAIL" "${plan} reads status: ABANDONED but ${VERSION} is closing — a contradictory state this phase will not resolve silently; reconcile the plan by hand"
+      return 3
+      ;;
+    ACTIVE)
+      : # the transition — falls through below
+      ;;
+    *)
+      mark_phase "transition_plan_status" "FAIL" "${plan} carries an unrecognised status: '${current}' — the enum is ACTIVE|CLOSED|ABANDONED (release-corpus-schema.md § Plan-status lifecycle); refusing to overwrite a value the schema does not define"
+      return 3
+      ;;
+  esac
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    # Dry-run/apply parity: the classification above is the SAME predicate the
+    # apply path re-uses, so a green dry-run cannot mask a red apply.
+    mark_phase "transition_plan_status" "DRY-RUN" "would rewrite the frontmatter status: line of ${plan} from ACTIVE to CLOSED (1 line; body content untouched)"
+    return 0
+  fi
+
+  local after
+  if ! after="$(plan_status_rw "${REPO_ROOT}/${plan}" apply)"; then
+    mark_phase "transition_plan_status" "FAIL" "frontmatter status: rewrite of ${plan} did not verify on re-read (got '${after:-<unreadable>}', expected CLOSED) — the plan was NOT transitioned"
+    return 3
+  fi
+  if [[ "$after" != "CLOSED" ]]; then
+    mark_phase "transition_plan_status" "FAIL" "post-write re-read of ${plan} returned '${after}', not CLOSED"
+    return 3
+  fi
+  mark_phase "transition_plan_status" "PASS" "transitioned ${plan} ACTIVE → CLOSED"
   return 0
 }
 
@@ -8137,7 +8291,7 @@ cat <<INNER
 #### Release Learnings $V
 
 **Synthesized at:** 2026-06-28T00:00:00Z
-**Source events:** 2 \`release-synthesis/learnings-triple\` row(s) from \`pipeline-event-log.md\` (filter: version=\`$V\`)
+**Source events:** 2 \`release-synthesis/learnings-triple\` row(s) from \`pipeline-event-log.md\` (filter: release=\`$V\`)
 **Source-row anchors:** row 41; row 42
 
 **Surprise:** the archival sweep moved which file the record lives in.
@@ -8154,7 +8308,7 @@ cat <<INNER
 #### Release Learnings $V
 
 **Synthesized at:** 2026-06-28T00:00:00Z
-**Source events:** 0 \`release-synthesis/learnings-triple\` row(s) from \`pipeline-event-log.md\` (filter: version=\`$V\`)
+**Source events:** 0 \`release-synthesis/learnings-triple\` row(s) from \`pipeline-event-log.md\` (filter: release=\`$V\`)
 **Source-row anchors:** N/A
 
 **Surprise:** N/A — no novel learning this release
@@ -13511,6 +13665,7 @@ phase_inject_outcome_field || { generate_report; exit 3; }            # Phase 6.
 phase_inject_velocity_field || { generate_report; exit 3; }           # Phase 6.6 — **Velocity:** field after **Cycle-Time:** (stage-13-close.md Phase B-velocity); ordered AFTER 6.5 so the write surface is already proven to resolve
 phase_append_release_learnings || { generate_report; exit 3; }        # Phase 6.7 — `#### Release Learnings v<X.Y>` sibling H4 (stage-13-close.md Phase A7); hot ledger only per RECORDS_POLICY KEEP_CLASS
 phase_inject_close_class_telemetry_field || { generate_report; exit 3; }  # Phase 6.8 — **Close-Class-Telemetry:** field (close-class-telemetry.md § 3.2); ordered AFTER 6.5 so the **Outcome:** insert anchor already exists
+phase_transition_plan_status || { generate_report; exit 3; }          # Phase 6.9 — plan frontmatter status: ACTIVE → CLOSED (release-corpus-schema.md § Plan-status lifecycle). ORDERING IS LOAD-BEARING: this line MUST stay after Phase 6 (which flips the LOG row to VERIFIED) and BEFORE Phase 9.3 (which asserts a VERIFIED row's plan reads CLOSED). Moving it after 9.3 forfeits the completeness interlock
 phase_append_release_index || { generate_report; exit 3; }
 phase_append_release_digest || { generate_report; exit 3; }
 phase_append_reversions || { generate_report; exit 3; }                # Phase 8.5 — re-version ledger (#1679; N/A on the common no-collision path)

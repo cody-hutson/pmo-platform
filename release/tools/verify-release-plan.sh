@@ -34,7 +34,7 @@ set -euo pipefail
 # silent break. Bump SCHEMA_VERSION whenever the evidence-table shape, the
 # verdict enum, or the check-record fields change.
 # ---------------------------------------------------------------------------
-readonly CLI_VERSION="0.2.0"
+readonly CLI_VERSION="0.2.1"
 # 1 -> 2: the `fcm-delivery` check family enters the emitted stream from a THIRD
 # record source, so every consumer now sees records it has never seen before.
 # That is exactly what this constant exists to make detectable rather than silent.
@@ -342,6 +342,64 @@ classify_family() {
   echo "unclassified"
 }
 
+# ---------------------------------------------------------------------------
+# AWK_HEAL_FIELDS — the markdown table-cell splitter, defined ONCE and consumed
+# by both parser sites (parse_verification_plan and parse_ciac's table form).
+#
+# WHY THIS IS NOT `awk -F'|'`. In GFM a table cell is bounded by an UNESCAPED
+# pipe; `\|` renders a LITERAL pipe inside a cell and is the only correct way to
+# author one. `awk -F'|'` cannot express that distinction, so an escaped row
+# split at NF=7 or NF=8 against a 6-column header, every cell after the escape
+# read at a shifted index, the Method cell truncated mid-content, and the orphan
+# fragment executed as a bare command. Measured over the corpus: 25 rows across
+# the release-plan corpus carry an escaped pipe and every one of them mis-split.
+#
+# WHY NOT THE PLATFORM'S OWN PRIOR-ART FIX (widening the separator to ' [|] ').
+# It was measured and REJECTED, on evidence rather than taste: it scores full
+# parity on today's rows but (a) breaks header detection outright, because `$1`
+# becomes the leading-pipe fragment `"| Issue"` and the `trim($i) == "issue"`
+# test never matches without a new border-strip step, and (b) introduces a
+# SILENT-DROP class — an unspaced but perfectly valid GFM table (`|a|b|c|`)
+# collapses to NF=1 and every row vanishes. This file's stated doctrine is that
+# an unparseable, absent, empty or truncated input must NEVER read as "nothing
+# declared, therefore no violations"; that candidate introduces exactly that.
+# It is the right fix for a template that GUARANTEES ` | ` around every cell,
+# and release-plan tables carry no such guarantee.
+#
+# WHAT THIS DOES INSTEAD. Split on `|`, then walk the pieces and RE-JOIN any
+# piece whose trailing backslash run is ODD — that backslash escaped the pipe
+# that split it — substituting the literal `|` the author meant. An EVEN run is
+# a real backslash and is left alone. The escape is therefore resolved exactly
+# once, at the markdown -> data boundary, which is why the same change also
+# fixes the leakage of a raw `\|` into a matcher's regex downstream.
+#
+# EDITOR NOTE: assigned in SINGLE quotes so `"\\"` reaches awk as one backslash,
+# and used as "$AWK_HEAL_FIELDS"'<rest>' so the two halves concatenate into the
+# single program argument awk accepts. Keep this body apostrophe-free.
+# ---------------------------------------------------------------------------
+readonly AWK_HEAL_FIELDS='
+function heal_fields(line, F,   raw, m, i, k, cur, pend, bs) {
+  m = split(line, raw, "|")
+  k = 0; pend = 0; cur = ""
+  for (i = 1; i <= m; i++) {
+    if (pend) cur = cur "|" raw[i]; else cur = raw[i]
+    pend = 0
+    bs = 0
+    while (substr(cur, length(cur) - bs, 1) == "\\") bs++
+    # An odd trailing backslash run escaped the pipe that split here — drop the
+    # escaping backslash and keep joining. Never on the LAST piece: there is no
+    # following pipe for it to have escaped, so it is a real trailing backslash.
+    if (bs % 2 == 1 && i < m) {
+      cur = substr(cur, 1, length(cur) - 1)
+      pend = 1
+      continue
+    }
+    k++; F[k] = cur
+  }
+  return k
+}
+'
+
 # Parse the Verification-Plan per-issue tables into check records.
 # Emits TAB-separated: issue \t ac \t family \t method \t expected
 parse_verification_plan() {
@@ -350,34 +408,50 @@ parse_verification_plan() {
   body="$(_extract_section "$file" "Verification Plan")"
   if [ -z "$body" ]; then return 0; fi
 
-  printf '%s\n' "$body" | awk -F'|' '
+  printf '%s\n' "$body" | awk "$AWK_HEAL_FIELDS"'
     function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
     function lc(s)   { return tolower(s) }
-    BEGIN { cur_issue = ""; have_issue_col = 0; col_ac = 0; col_pred = 0; col_method = 0; col_expected = 0 }
+    function reset_cols() {
+      have_issue_col = 0; col_issue = 0
+      col_ac = 0; col_pred = 0; col_method = 0; col_expected = 0; hdr_n = 0
+    }
+    BEGIN { cur_issue = ""; reset_cols() }
     # (b) enriched form: a bold per-issue subsection header supplies grouping.
     # Matches a bold per-issue header line like: **#<issue> — <title>**
     /^\*\*#[0-9]+/ {
       line = $0
       match(line, /#[0-9]+/)
       cur_issue = substr(line, RSTART, RLENGTH)
-      have_issue_col = 0
-      col_ac = 0; col_pred = 0; col_method = 0; col_expected = 0
+      reset_cols()
       next
     }
-    # A markdown table row starts with a leading pipe (after optional spaces).
-    /^[ \t]*\|/ {
-      n = NF
+    # PER-TABLE-BLOCK COLUMN RESET. A markdown table ends at the first non-table
+    # line, so the column map must end with it. Without this the map is STICKY:
+    # once a Verification-Plan header sets col_method, every later table in the
+    # same section — including a prose evidence table with an entirely different
+    # shape — was parsed as check rows at THAT column index. Measured over the
+    # corpus, the sticky map produced 53 spurious check records (302 emitted vs
+    # 249 real), which surfaced as ERROR and FAIL verdicts on prose. It is the
+    # same defect as the escaped-pipe split, one level up: cells read at indices
+    # that belong to a different header. Fixing it is also what makes the parity
+    # guard below safe — measured against the sticky map the guard fired on 43 of
+    # 302 rows; against the reset map it fires on 1 of 249, the single genuinely
+    # malformed row in the corpus.
+    !/^[ \t]*\|/ { reset_cols(); next }
+    {
+      # Heal escape-split cells BEFORE anything reads a column (see AWK_HEAL_FIELDS).
+      n = heal_fields($0, F)
       # Header row: locate columns by name.
       is_header = 0
       for (i = 1; i <= n; i++) {
-        c = lc(trim($i))
+        c = lc(trim(F[i]))
         if (c == "issue") { have_issue_col = 1; col_issue = i; is_header = 1 }
         if (c == "ac")    { col_ac = i; is_header = 1 }
         if (c ~ /predicate/) { col_pred = i; is_header = 1 }
         if (c ~ /verification method/ || c == "method") { col_method = i; is_header = 1 }
         if (c ~ /expected/) { col_expected = i; is_header = 1 }
       }
-      if (is_header) { next }
+      if (is_header) { hdr_n = n; next }
       # Separator row (|---|---|).
       if ($0 ~ /^[ \t]*\|[ \t:-]+\|/ && $0 ~ /-/) {
         stripped = $0; gsub(/[ \t|:-]/, "", stripped)
@@ -385,11 +459,31 @@ parse_verification_plan() {
       }
       # Data row — only emit when we know where method + expected live.
       if (col_method == 0) next
-      method   = (col_method   <= n) ? trim($col_method)   : ""
-      expected = (col_expected <= n && col_expected > 0) ? trim($col_expected) : ""
-      pred     = (col_pred     <= n && col_pred     > 0) ? trim($col_pred)     : ""
-      ac       = (col_ac       <= n && col_ac       > 0) ? trim($col_ac)       : ""
-      issue    = have_issue_col && (col_issue <= n) ? trim($col_issue) : cur_issue
+      # HEADER/ROW FIELD-PARITY GUARD. A row that still does not carry its
+      # header field count after healing carries an UNESCAPED bare pipe, which
+      # is malformed GFM. Parsing it anyway reads every cell past the break at a
+      # shifted index and executes whatever fragment lands in the method slot —
+      # which is how this parser produced a silent false FAIL. Emit an
+      # attributable ERROR naming the row instead. Fail loud; never mis-index.
+      if (hdr_n > 0 && n != hdr_n) {
+        printf "%s\t%s\tparity-error\t%s\t%s\n", \
+          (cur_issue == "" ? "(plan)" : cur_issue), "ROW", \
+          trim(substr($0, 1, 160)), ("fields=" n " header=" hdr_n)
+        next
+      }
+      method   = (col_method   <= n) ? trim(F[col_method])   : ""
+      expected = (col_expected <= n && col_expected > 0) ? trim(F[col_expected]) : ""
+      # NOTE — col_pred is resolved here and DELIBERATELY not emitted. The
+      # classifier accepts a predicate-class hint as its first argument and its
+      # single call site passes the empty string, so that branch is unreachable
+      # while 17 plans author the column that would feed it. Wiring it is a
+      # BEHAVIOUR change, not this repair: measured over the corpus it moves 42
+      # of 298 classifications, 9 of them between two live handlers, and it adds
+      # a field to this record contract. Left resolved and named so the next
+      # editor sees the seam rather than rediscovering it.
+      pred     = (col_pred     <= n && col_pred     > 0) ? trim(F[col_pred])     : ""
+      ac       = (col_ac       <= n && col_ac       > 0) ? trim(F[col_ac])       : ""
+      issue    = have_issue_col && (col_issue <= n) ? trim(F[col_issue]) : cur_issue
       if (issue == "") issue = cur_issue
       if (method == "") next
       # Skip a row whose AC cell is itself the word "AC" (defensive).
@@ -541,9 +635,21 @@ handle_per_issue() {
   rc=$?
   set -e
 
+  # Read the count through the shared reader. Called UNCONDITIONALLY — including
+  # on the threshold-free path — because its exit-status guard is what stops a
+  # matcher that could not run from being graded as if it had.
+  local cres cstatus cval
+  cres="$(count_from_output "$cmd" "$out" "$rc")"
+  cstatus="$(printf '%s' "$cres" | cut -f1)"
+  cval="$(printf '%s' "$cres" | cut -f2)"
+  if [ "$cstatus" != "OK" ]; then
+    printf '%s\t%s\n' "$VERDICT_ERROR" \
+      "count-unreadable:$cval (the matcher produced no readable result; this is NOT a zero)"
+    return
+  fi
+
   if [ -n "$threshold" ]; then
-    # Interpret output as a count (grep -c prints an integer per file; sum).
-    count="$(printf '%s\n' "$out" | awk -F: '{ s += $NF } END { print s+0 }')"
+    count="$cval"
     if [ "$(compare_threshold "$count" "$op" "$want")" = PASS ]; then
       printf '%s\t%s\n' "$VERDICT_PASS" "count=$count ($op $want)"
     else
@@ -552,7 +658,9 @@ handle_per_issue() {
     return
   fi
 
-  # No threshold: PASS iff the command succeeded (rc 0), else FAIL.
+  # No threshold: rc 0 -> PASS, rc 1 -> FAIL (a legitimate no-match). rc >= 2 was
+  # already converted to ERROR above, so a probe that could not run no longer
+  # reads as a plain failed assertion.
   if [ "$rc" -eq 0 ]; then
     printf '%s\t%s\n' "$VERDICT_PASS" "command-succeeded"
   else
@@ -619,6 +727,82 @@ eval_free_run() {
   esac
 }
 
+# count_mode_cmd — TRUE when the matcher was asked to PRINT A COUNT rather than
+# print matching lines. Read from the command's own FLAG tokens, not inferred
+# from the output shape: a `grep -n` line whose matched text is itself an integer
+# (`42:7`) is genuinely ambiguous under shape inference, and guessing wrong is
+# precisely how a row with real hits came to report zero. Covers the long form
+# and every short-option cluster carrying `c` (-c, -cE, -rc, -ch). Scanning stops
+# at `--`, after which a token is an operand rather than a flag.
+count_mode_cmd() {
+  local cmd="$1" t
+  tokenize_cmd "$cmd" || return 1
+  [ "${#TOKENS[@]}" -ge 2 ] || return 1
+  for t in "${TOKENS[@]:1}"; do
+    case "$t" in
+      --)      return 1 ;;
+      --count) return 0 ;;
+      --*)     : ;;
+      -*)      case "${t#-}" in *c*) return 0 ;; esac ;;
+    esac
+  done
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# count_from_output — the SINGLE hit-count reader, shared by the per-issue and
+# integration handlers.
+#
+# WHY IT IS SHARED. Both handlers carried their own copy of
+# `awk -F: '{ s += $NF }'`, and that duplication is exactly why one defect
+# shipped twice. This file's stated design is a thin dispatcher over shared
+# primitives; reading a count is one of those primitives.
+#
+# THREE DEFECTS IT CLOSES, each of which presented as a confident number:
+#
+#  1. SUMMING $NF OF COLON-SPLIT OUTPUT IS VALID ONLY IN COUNT MODE. `grep -c`
+#     prints `<n>` or `<path>:<n>`, so the last colon field IS the count. Plain
+#     `grep` and `grep -n` print matching TEXT, and awk coerces trailing prose to
+#     0 — so a row with real hits reported zero. Mode is therefore derived from
+#     the command's flags (count_mode_cmd) and match-mode counts non-empty LINES.
+#
+#  2. A NON-INTEGER COUNT FIELD IS AN ERROR, NEVER A SILENT ZERO. `s += $NF`
+#     turns anything unparseable into 0, and 0 is itself a legitimate answer, so
+#     the failure was indistinguishable from a real result.
+#
+#  3. THE EXIT STATUS IS CONSULTED UNCONDITIONALLY — the load-bearing one. The
+#     old code discarded rc whenever a threshold was present, so a matcher
+#     exiting 2 (bad path, bad regex) yielded empty output, a fabricated count of
+#     0, and an "expect zero" criterion rendering PASS. A silent FALSE PASS
+#     inside the tool that grades the release's own verification plan. grep's
+#     codes discriminate exactly: 0 matched, 1 a LEGITIMATE zero, >= 2 the
+#     matcher could not run (as does eval_free_run's own 3 refusal).
+#
+# Prints "OK<TAB><count>" or "ERROR<TAB><reason>". Never returns non-zero.
+# ---------------------------------------------------------------------------
+count_from_output() {
+  local cmd="$1" out="$2" rc="$3" t line count=0
+  case "$rc" in ''|*[!0-9]*) printf 'ERROR\tnon-numeric-exit-status'; return 0 ;; esac
+  if [ "$rc" -ge 2 ]; then printf 'ERROR\tmatcher-exit-%s' "$rc"; return 0; fi
+  if count_mode_cmd "$cmd"; then
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      t="${line##*:}"
+      case "$t" in
+        ''|*[!0-9]*) printf 'ERROR\tnon-integer-count-field'; return 0 ;;
+      esac
+      count=$(( count + t ))
+    done <<<"$out"
+    printf 'OK\t%s' "$count"
+    return 0
+  fi
+  while IFS= read -r line; do
+    [ -n "$line" ] && count=$(( count + 1 ))
+  done <<<"$out"
+  printf 'OK\t%s' "$count"
+  return 0
+}
+
 # integration: run a Cross-Issue AC entry's declared method (SOLE runner — this
 # executor is the sole runner of CIAC methods and the sole emitter of their
 # verdicts; Stage-9 reads the emitted verdict read-only, never re-running it).
@@ -650,8 +834,20 @@ handle_integration() {
   set -e
   threshold="$(extract_threshold "$method")"
   op="$(printf '%s' "$threshold" | cut -f1)"; want="$(printf '%s' "$threshold" | cut -f2)"
+  # Same shared reader, same unconditional exit-status guard as handle_per_issue.
+  # These two handlers each carried their own copy of the count expression, which
+  # is how one defect came to ship twice; there is now one copy.
+  local cres cstatus cval
+  cres="$(count_from_output "$cmd" "$out" "$rc")"
+  cstatus="$(printf '%s' "$cres" | cut -f1)"
+  cval="$(printf '%s' "$cres" | cut -f2)"
+  if [ "$cstatus" != "OK" ]; then
+    printf '%s\t%s\n' "$VERDICT_ERROR" \
+      "count-unreadable:$cval (the matcher produced no readable result; this is NOT a zero)"
+    return
+  fi
   if [ -n "$threshold" ]; then
-    count="$(printf '%s\n' "$out" | awk -F: '{ s += $NF } END { print s+0 }')"
+    count="$cval"
     if [ "$(compare_threshold "$count" "$op" "$want")" = PASS ]; then
       printf '%s\t%s\n' "$VERDICT_PASS" "co-occurrence count=$count ($op $want)"
     else
@@ -769,6 +965,11 @@ dispatch_check() {
   local family="$1" method="$2" expected="$3" version="$4"
   case "$family" in
     deferred)       printf '%s\t%s\n' "$VERDICT_SKIP" "declared-deferred" ;;
+    # A row the parser REFUSED to index. It is an ERROR and never a SKIP: a skip
+    # says "nothing to assert here", whereas this row declares a check that
+    # cannot be read. Carrying the field counts makes it attributable.
+    parity-error)   printf '%s\t%s\n' "$VERDICT_ERROR" \
+                      "table-row-field-parity ($expected) — row does not carry its header's field count after escape healing; an unescaped bare pipe makes every cell past the break read at a shifted index" ;;
     per-issue)      handle_per_issue "$method" "$expected" ;;
     integration)    handle_integration "$method" ;;
     sync)           handle_deploy_check "sync" ;;
@@ -835,6 +1036,23 @@ parse_ciac() {
       } else if (match(line, /`[^`]*`/)) {
         method = substr(line, RSTART, RLENGTH)   # keep the backticks
       }
+      # DO NOT RESOLVE THE PIPE ESCAPE HERE, and this is load-bearing rather
+      # than an omission. The escape is resolved by the SPLITTER, at exactly the
+      # point where a split created it — never on a string that was never split.
+      #
+      # This form is LINE-BASED: a bullet is never divided on pipes, so a `\|`
+      # inside it was never a markdown escape. It is verbatim matcher syntax and
+      # it belongs to the matcher. Resolving it here was drafted, implemented,
+      # and then falsified by measurement against the live corpus: of the 5 CIAC
+      # bullet methods carrying `\|`, 4 are BRE patterns (`grep -n "a\|b"`) in
+      # which `\|` IS the alternation operator, and the 5th is an ERE pattern
+      # deliberately matching a LITERAL pipe (it searches for a shell pipeline).
+      # All 5 are correct as authored; a blanket substitution broke all 5, and
+      # turned three passing cross-issue criteria on a real plan into failures.
+      #
+      # The table forms are the opposite case and are healed, correctly: a cell
+      # IS split on pipes, so an author who needs a literal pipe there has no
+      # choice but to escape it, and the escape is unambiguously markdown.
       # predicate: strip the leading list-marker for a short text.
       pred = line
       sub(/^[-*[ \]]*/, "", pred)
@@ -843,26 +1061,40 @@ parse_ciac() {
   '
 
   # (ii) table-row form: rows whose first cell contains CIAC-N with a Method cell.
-  printf '%s\n' "$body" | awk -F'|' '
+  printf '%s\n' "$body" | awk "$AWK_HEAL_FIELDS"'
     function trim(s){ gsub(/^[ \t]+|[ \t]+$/,"",s); return s }
     function lc(s){ return tolower(s) }
-    BEGIN { col_method = 0; have_header = 0 }
-    /^[ \t]*\|/ {
-      n = NF
+    BEGIN { col_method = 0; col_pred = 0; have_header = 0; hdr_n = 0 }
+    # Per-table-block reset, for the same reason as parse_verification_plan: a
+    # column map that outlives its table indexes later rows against a header
+    # that is not theirs.
+    !/^[ \t]*\|/ { col_method = 0; col_pred = 0; hdr_n = 0; next }
+    {
+      # Heal escape-split cells BEFORE any column is read (see AWK_HEAL_FIELDS).
+      n = heal_fields($0, F)
       is_header = 0
-      for (i=1;i<=n;i++){ c = lc(trim($i)); if (c ~ /method/){ col_method = i; is_header=1 } ; if (c ~ /predicate/){ col_pred = i; is_header=1 } }
-      if (is_header) { have_header = 1; next }
+      for (i=1;i<=n;i++){ c = lc(trim(F[i])); if (c ~ /method/){ col_method = i; is_header=1 } ; if (c ~ /predicate/){ col_pred = i; is_header=1 } }
+      if (is_header) { have_header = 1; hdr_n = n; next }
       if ($0 ~ /^[ \t]*\|[ \t:-]+\|/ && $0 ~ /-/) { s=$0; gsub(/[ \t|:-]/,"",s); if (s=="") next }
       # Only treat as CIAC table if a cell names CIAC-N.
       rowline = $0
       if (rowline !~ /CIAC-[0-9]+/) next
       if (col_method == 0) next
       match(rowline, /CIAC-[0-9]+/); id = substr(rowline, RSTART, RLENGTH)
+      # HEADER/ROW FIELD-PARITY GUARD — same contract as the Verification-Plan
+      # parser. A CIAC row still off its header count after healing carries an
+      # unescaped bare pipe; grading it at shifted indices would run whatever
+      # fragment landed in the method slot and report the result as a
+      # cross-issue verdict. Name the row and ERROR instead.
+      if (hdr_n > 0 && n != hdr_n) {
+        printf "%s\t%s\tparity-error\t%s\t%s\n", id, "", trim(substr(rowline, 1, 160)), ("fields=" n " header=" hdr_n)
+        next
+      }
       issues = ""
       tmp = rowline
       while (match(tmp, /#[0-9]+/)) { issues = issues (issues==""?"":",") substr(tmp,RSTART,RLENGTH); tmp = substr(tmp,RSTART+RLENGTH) }
-      method = (col_method<=n)? trim($col_method) : ""
-      pred   = (col_pred>0 && col_pred<=n)? trim($col_pred) : ""
+      method = (col_method<=n)? trim(F[col_method]) : ""
+      pred   = (col_pred>0 && col_pred<=n)? trim(F[col_pred]) : ""
       # Pull a backticked command out of the method cell if present.
       m2 = method
       if (match(method, /`[^`]*`/)) { m2 = substr(method, RSTART+1, RLENGTH-2) }
@@ -1800,7 +2032,14 @@ main() {
   if [ -n "$per_issue_records" ]; then
     while IFS=$'\t' read -r issue id _pending method expected; do
       [ -z "$issue$method" ] && continue
-      family="$(classify_family "" "$method")"
+      # The parser marks a row it refused to index with an explicit family rather
+      # than the PENDING marker, so the shell classifier is never handed cells it
+      # would be reading at shifted column indices.
+      if [ "$_pending" = "parity-error" ]; then
+        family="parity-error"
+      else
+        family="$(classify_family "" "$method")"
+      fi
       verdict_observed="$(dispatch_check "$family" "$method" "$expected" "$plan_version")"
       verdict="$(printf '%s' "$verdict_observed" | cut -f1)"
       observed="$(printf '%s' "$verdict_observed" | cut -f2)"
@@ -1813,16 +2052,18 @@ main() {
   if [ -n "$ciac_records" ]; then
     while IFS=$'\t' read -r id issue family method expected; do
       [ -z "$id" ] && continue
-      # family is already "integration"; group CIAC rows under an "integration"
-      # pseudo-issue label carrying the spanned issues for the evidence table.
-      verdict_observed="$(dispatch_check "integration" "$method" "$expected" "$plan_version")"
+      # family is "integration", or "parity-error" for a row the parser refused
+      # to index; group CIAC rows under an "integration" pseudo-issue label
+      # carrying the spanned issues for the evidence table.
+      if [ "$family" != "parity-error" ]; then family="integration"; fi
+      verdict_observed="$(dispatch_check "$family" "$method" "$expected" "$plan_version")"
       verdict="$(printf '%s' "$verdict_observed" | cut -f1)"
       observed="$(printf '%s' "$verdict_observed" | cut -f2)"
       # Emit under a stable "CIAC (integration)" issue bucket so the evidence
       # section shows cross-issue checks together; the id carries CIAC-N and the
       # spanned issues ride in the Expected column for traceability.
       local span_note="spans ${issue}"
-      stream="${stream}CIAC (integration)	${id}	integration	${method}	${span_note}	${verdict}	${observed}
+      stream="${stream}CIAC (integration)	${id}	${family}	${method}	${span_note}	${verdict}	${observed}
 "
     done <<< "$ciac_records"
   fi
