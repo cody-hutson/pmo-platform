@@ -51,8 +51,13 @@ change). The poll set degrades per-adapter so C3 ships against the live adapter 
 blocking on a config-schema change.
 
 ## 3. The snapshot artifact (poll-state persistence)
-- **Format:** JSON. One object per polled external entity, keyed by stable external ID, carrying
-  `{ external_id, source_adapter, status, last_modified, polled_at }`. JSON (not markdown)
+- **Format:** JSON. One object per polled external entity, carrying
+  `{ external_id, source_adapter, status, last_modified, polled_at }`. The snapshot is
+  **keyed on the composite `(source_adapter, external_id)`** and is **unique on** that pair —
+  `external_id` alone is not a key, because two adapters may issue the same identifier and the
+  platform polls several. `source_adapter` is the **persistence-dialect name** for the
+  entity-level `source_system` field (`core/schemas/entity-field-schemas.md` §3.0c) — one value
+  domain, two dialect names, **not two fields**. JSON (not markdown)
   because the diff is a structural field-compare, not a prose read — matching the repo's
   structured-state convention (config is TOML-parsed; the lifecycle machine is field-typed).
 - **Location:** operator-instance path token `<OPERATOR_INSTANCE_EXTERNAL_SYNC_SNAPSHOT_PATH>`
