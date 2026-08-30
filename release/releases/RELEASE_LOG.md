@@ -214,7 +214,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v4.41 | checks-see-whole-subject | #4981, #4720, #5260, #5074, #4734, #4992, #4440, #5252, #4931 | #6182 | `0ae7a58321136c8396312bf00ba6a9e41e1d7057` | `v4.41` | VERIFIED | 2026-08-28 |
 | v4.42 | ci-stable-under-transient-conditions | #5240, #5067, #4227, #4200, #4974, #5268, #4416, #4912, #5253 | #6169 | `06962b3cbf721008977d7d734c41fe72fa98e0bb` | `v4.42` | VERIFIED | 2026-08-28 |
 | v4.43 | release-identity-and-plan-lifecycle | #4562, #4749, #5549, #5234, #4445, #4713, #4218, #5092, #4563 | #6188 | `7a25c4d0e93d5525aecc39c37e6023532f02c506` | `v4.43` | VERIFIED | 2026-08-28 |
-| v4.44 | skill-surface-sync | #5236, #5056, #4975, #192, #196, #4442 | #6406 | `7289b7ff1c2d6313d9d6242ffcb9489f46ef73e7` | `v4.44` | DEPLOYED | 2026-08-30 |
+| v4.44 | skill-surface-sync | #5236, #5056, #4975, #192, #196, #4442 | #6406 | `7289b7ff1c2d6313d9d6242ffcb9489f46ef73e7` | `v4.44` | VERIFIED | 2026-08-30 |
 | declarations-have-a-firing-surface (version-less) | declarations-have-a-firing-surface | #5825, #5826 | #6353 | `6fd4e66e85434880573c2851aea8611263fab06a` | (none) | VERIFIED | 2026-08-29 |
 | one-system-of-record-per-element (version-less) | one-system-of-record-per-element | #5837, #5839, #5844, #5846 | #6393 | `d7dc7898d106324714dfcae5bca04873bb936a22` | (none) | VERIFIED | 2026-08-29 |
 
@@ -265,8 +265,21 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 **Mechanism:** git merge-commit (PR #6406 → main at `7289b7ff1c2d6313d9d6242ffcb9489f46ef73e7`), **versioned**, git-native. Version `v4.44` claimed atomically at the merge SHA by `release/tools/claim-version.sh --sha 7289b7ff --bump minor --stamp-slug skill-surface-sync`, which won the compare-and-swap, pushed the annotated tag `v4.44` at that commit, and stamped the plan to `release/releases/plans/v4/v4.44_RELEASE_PLAN.md`. Freeness was re-verified immediately pre-claim across all three surfaces — RELEASE_LOG rows, git tags, published GitHub Releases — each reading 0 for `v4.44` against a control of `v4.43` reading taken on all three.
 **Timestamp:** 2026-08-30 (Sunday) (PR #6406 merge 2026-08-30T06:08:58Z UTC = 2026-08-30 01:08:58 -0500; MERGE_SHA `7289b7ff1c2d6313d9d6242ffcb9489f46ef73e7`; annotated tag `v4.44` pushed at that commit)
 **Cycle-Time:** 36m 14s — T_GO `gate-outcome`/`plan-review-go` emitted 2026-08-30T05:32:44Z, merge 2026-08-30T06:08:58Z. Both anchors are present for this release, so the figure is measured rather than N/A.
+**Velocity:** planned 20 pts / delivered 20 pts (1.00); files-changed 45; allocation 4/16/0 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
 **Result:** SUCCESS — release PR #6406 merged to main via merge commit (two parents, so the `git revert -m 1` rollback convention remains available). Annotated tag `v4.44` verified at the merge SHA. Version freeness was re-checked immediately pre-claim across RELEASE_LOG rows, git tags and published Releases, each reading 0 for `v4.44` against a `v4.43` control reading taken on all three. No re-version was required.
+**Outcome:** SUCCESS
+**Close-Class-Telemetry:** retro-conformance N/A — no retro register found for v4.44; lessons-population N/A — no lessons register found; carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence N/A — no retro register found; evidence-preservation 27/28 (0.96); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
 **Gate evidence:** Stage 8 QA Acceptance returned **6 of 6 ACCEPT**, zero conditional, zero reject. CI ran **74 check-runs, 0 failures** at the merge head; the branch carried **zero** check-runs until PR #6406 was opened, and the first run caught two blocking failures that were fixed forward before merge. The differential `deploy.sh --check` FAIL set was **2 — both pre-existing and both unmoved** against the Stage-4 pin (`release-body-drift` at 13 findings across 67 logged releases; `count-structure` at three locations in files this release does not touch). Check 7 read 55/55 packages content-fresh.
+
+#### Release Learnings v4.44
+
+**Synthesized at:** 2026-08-30T06:39:47Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v4.44`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-08-30T06:27:06Z`
+
+**Surprise:** seven grading instruments broke and every one passed its own control arm
+**Would-change:** open the release PR first, not at Stage 9 - no CI ran on 73 commits
+**Watch-for:** probes that fire correctly but are aimed at the wrong population
 
 #### Deployment Log v4.43
 **Files deployed:** No install-side copy was made in this run. The propagation targets are the two `skills/**` surfaces the release merge touched — `release/skills/release-planner/SKILL.md` and `release/skills/release-planner/references/release-plan-template.md` — together with the two rebuilt `packages/**` artifacts they stale (`release-planner`, as `.skill` plus `.sha256`). Denominator: **67** files changed by the release merge (61 `M` / 6 `A`), measured at the merge commit against its first parent rather than carried over from the plan; exactly **2** touch a `skills/**` surface, **2** touch `packages/**`, and **0** touch `core/rules/` (nothing to sync). The second package rebuild was induced by the `release-plan-template.md` edit, which the plan had declared as a single-package change; the discrepancy was disclosed in the authoring commit rather than reconciled silently. The S-2 install propagation fell outside this run's authorized scope — bounded to the merge tail (version re-check, merge, atomic claim, signed tag, this DEPLOYED row) — and is recorded here as **owed and open**, not as done.
