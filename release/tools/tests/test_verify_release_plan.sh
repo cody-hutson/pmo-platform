@@ -1273,6 +1273,7 @@ FIX_HIJACK="release/tools/tests/fixtures/verify-plan-runtime-hijack.md"
 FIX_NOTABLE="release/tools/tests/fixtures/verify-plan-no-table.md"
 
 # rows_of <json> — the roll-up denominator. acs_of <json> — emitted AC-N records.
+# sigpipe-idiom: allow — here-string writer, no upstream producer to signal.
 rows_of() { sed -n 's/.*"per_issue_rows": \([0-9]*\).*/\1/p' <<<"$1" | head -1; }
 acs_of()  { grep -c '"id":"AC-' <<<"$1" || true; }
 
@@ -1402,7 +1403,9 @@ R_NT="$(rows_of "$J_NT")"
 [ "${R_NT:-x}" = "0" ] && [ "${R_TRAP:-0}" -gt 0 ] && [ "$R_NT" != "$R_TRAP" ] \
   && ok "D-1 a plan with a per-issue table and one without report DIFFERENT denominators ($R_TRAP vs $R_NT)" \
   || bad "D-1 denominators did not separate: with-table '$R_TRAP', without-table '${R_NT:-<none>}'"
+# sigpipe-idiom: allow — here-string writer, no upstream producer to signal.
 E_NT="$(sed -n 's/.*"error": \([0-9]*\).*/\1/p' <<<"$J_NT" | head -1)"
+# sigpipe-idiom: allow — here-string writer, no upstream producer to signal.
 E_TRAP="$(sed -n 's/.*"error": \([0-9]*\).*/\1/p' <<<"$J_TRAP" | head -1)"
 [ "$E_NT" = "0" ] && [ "$E_TRAP" = "0" ] \
   && ok "D-1b BOTH report 0 ERROR — which is exactly why 0 ERROR alone was uninterpretable, and why the denominator is the fix" \
