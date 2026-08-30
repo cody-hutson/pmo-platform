@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-161 — A release plan's status field records the document's own lifecycle, not the release's deployment state"
-status: Proposed — flips to Accepted when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
+status: Accepted — ratified by the operator at this release's Stage 9 Plan Review gate (milestone release-identity-and-plan-lifecycle / #343, 2026-08-29, a GO conditioned on the register patch `be0e9329`, which landed), and the flip is backfilled here. The flip is recorded in this file's own `status:` field, which is where it must be verified — a green close-out is not evidence the flip landed.
 date: 2026-08-24
 release: release-identity-and-plan-lifecycle
 deciders: "Stage 5 Solutioning spoke (design, evidence-grounding) + hub Procedure 4 adversarial evaluation (re-probe, population correction) + Collective Review (scope-lock) + Stage 6 Engineering spoke (build, re-derivation)"
@@ -21,7 +21,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified.
+**Accepted.** Ratified at this release's Stage 9 Plan Review gate — the operator rendered GO for milestone `release-identity-and-plan-lifecycle` (#343) on 2026-08-29, conditioned on the register patch `be0e9329`, which landed. The flip is **backfilled**: it was owed at that release's Stage 13 Close and did not land there. Per the established precedent the flip is verified against this file's own `status:` field and never assumed from a green close-out.
 
 **Numbering provenance — `142 → 151`.** Held **ADR-142** branch-local; renumbered to **ADR-151** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 142. In-release citations that read "ADR-142" denote this record.
 
